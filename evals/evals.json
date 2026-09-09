@@ -81,9 +81,21 @@
       "expect": "exit 0 and non-empty output"
     },
     {
+      "id": 46,
+      "ask": "What is this group chat and who is in it?",
+      "command": "people classify",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 47,
+      "ask": "Which group chats am I actually active in?",
+      "command": "people circles",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
       "id": 48,
       "ask": "Who is in my church community versus my startup community?",
-      "command": "people circles",
+      "command": "people classify",
       "expect": "exit 0 and non-empty output"
     },
     {
@@ -138,6 +150,12 @@
       "id": 64,
       "ask": "Is my data self-consistent?",
       "command": "people check --fix",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 66,
+      "ask": "Delete everything about one person.",
+      "command": "people purge \"Name\" --yes",
       "expect": "exit 0 and non-empty output"
     },
     {

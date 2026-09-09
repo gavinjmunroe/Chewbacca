@@ -6,9 +6,9 @@ not assumed.
 
 | Verdict | Count |
 | --- | --- |
-| `works` | 69 |
-| `partial` | 17 |
-| `build` | 13 |
+| `works` | 72 |
+| `partial` | 15 |
+| `build` | 12 |
 | `blocked` | 1 |
 
 ## What the gaps have in common

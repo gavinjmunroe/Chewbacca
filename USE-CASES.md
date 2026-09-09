@@ -160,17 +160,18 @@ in Sept 2026 Caleb texted eleven designers the same question by hand.
 **45. Which people do I know only through one group chat?**  `build`  
 What is missing: circle membership exists; the exclusivity query does not.  
 
-## Groups  <sub>3/6 working</sub>
+## Groups  <sub>4/6 working</sub>
 
 **46. What is this group chat and who is in it?**  `works`  
-`people circle show "<name>"`  
+`people classify`  
+classify records what each chat actually is; show lists members.  
 
-**47. Which group chats am I actually active in?**  `partial`  
+**47. Which group chats am I actually active in?**  `works`  
 `people circles`  
-What is missing: no per-circle recency ranking.  
 
 **48. Who is in my church community versus my startup community?**  `works`  
-`people circles`  
+`people classify`  
+kind and one-sentence description per circle.  
 
 **49. Which groups have gone quiet?**  `build`  
 What is missing: circles have no activity scoring.  
@@ -209,7 +210,7 @@ What is missing: rank is weighted, not a raw time tally.
 **59. Remind me to check on someone in two weeks.**  `works`  
 `people task add <name> "check in" --due <date>`  
 
-## Integrity  <sub>5/8 working</sub>
+## Integrity  <sub>7/8 working</sub>
 
 **60. Is anyone in here duplicated?**  `works`  
 `people dedupe`  
@@ -231,12 +232,13 @@ a bug found on 2026-09-09 had 23% of messages attributed to nobody.
 `people search inferred`  
 What is missing: source is recorded per observation but not summarised.  
 
-**66. Delete everything about one person.**  `partial`  
-`people update <name> --delete`  
-What is missing: soft delete only; message rows survive.  
+**66. Delete everything about one person.**  `works`  
+`people purge "Name" --yes`  
+hard delete, refuses without --yes, prints what it will destroy.  
 
-**67. Which facts are stale?**  `build`  
-What is missing: observations decay in scoring but facts have no freshness surface.  
+**67. Which facts are stale?**  `works`  
+`people show <name>`  
+temporary facts past their window are marked [expired] or [long gone], ported from Amber.  
 
 ## About me  <sub>6/8 working</sub>
 

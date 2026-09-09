@@ -409,17 +409,17 @@
     "category": "Groups",
     "ask": "What is this group chat and who is in it?",
     "status": "works",
-    "command": "people circle show \"<name>\"",
+    "command": "people classify",
     "needs": "",
-    "note": ""
+    "note": "classify records what each chat actually is; show lists members."
   },
   {
     "id": 47,
     "category": "Groups",
     "ask": "Which group chats am I actually active in?",
-    "status": "partial",
+    "status": "works",
     "command": "people circles",
-    "needs": "no per-circle recency ranking.",
+    "needs": "",
     "note": ""
   },
   {
@@ -427,9 +427,9 @@
     "category": "Groups",
     "ask": "Who is in my church community versus my startup community?",
     "status": "works",
-    "command": "people circles",
+    "command": "people classify",
     "needs": "",
-    "note": ""
+    "note": "kind and one-sentence description per circle."
   },
   {
     "id": 49,
@@ -588,19 +588,19 @@
     "id": 66,
     "category": "Integrity",
     "ask": "Delete everything about one person.",
-    "status": "partial",
-    "command": "people update <name> --delete",
-    "needs": "soft delete only; message rows survive.",
-    "note": ""
+    "status": "works",
+    "command": "people purge \"Name\" --yes",
+    "needs": "",
+    "note": "hard delete, refuses without --yes, prints what it will destroy."
   },
   {
     "id": 67,
     "category": "Integrity",
     "ask": "Which facts are stale?",
-    "status": "build",
-    "command": "",
-    "needs": "observations decay in scoring but facts have no freshness surface.",
-    "note": ""
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": "temporary facts past their window are marked [expired] or [long gone], ported from Amber."
   },
   {
     "id": 68,

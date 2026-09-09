@@ -1,0 +1,902 @@
+[
+  {
+    "id": 1,
+    "category": "Recall",
+    "ask": "What is my friend into, musically?",
+    "status": "works",
+    "command": "people show \"Jeremy Karkafi\"",
+    "needs": "",
+    "note": "quick_facts carries a music slot; distill fills it from their own messages."
+  },
+  {
+    "id": 2,
+    "category": "Recall",
+    "ask": "Who is this person and how do I know them?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": "how_we_met plus the first message exchanged."
+  },
+  {
+    "id": 3,
+    "category": "Recall",
+    "ask": "What does this person do for work right now?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": "works_on slot, refreshed by distill as their messages change."
+  },
+  {
+    "id": 4,
+    "category": "Recall",
+    "ask": "What are they studying, and where?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 5,
+    "category": "Recall",
+    "ask": "Who is in their family?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": "family slot; also relationships table for people both of us know."
+  },
+  {
+    "id": 6,
+    "category": "Recall",
+    "ask": "What are they worried about at the moment?",
+    "status": "partial",
+    "command": "people texts --who <name> --days 30",
+    "needs": "distill deliberately skips distress; that is a policy, not a gap.",
+    "note": ""
+  },
+  {
+    "id": 7,
+    "category": "Recall",
+    "ask": "What did they ask me for that I never did?",
+    "status": "works",
+    "command": "people tasks",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 8,
+    "category": "Recall",
+    "ask": "What advice have they given me?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": "advice_they_gave slot."
+  },
+  {
+    "id": 9,
+    "category": "Recall",
+    "ask": "What is their faith background?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 10,
+    "category": "Recall",
+    "ask": "Do they have any health thing I should be gentle about?",
+    "status": "partial",
+    "command": "people show <name>",
+    "needs": "only recorded when they volunteered it and it is not a crisis.",
+    "note": ""
+  },
+  {
+    "id": 11,
+    "category": "Recall",
+    "ask": "What food do they like or avoid?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 12,
+    "category": "Recall",
+    "ask": "What is their sport or their exercise?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 13,
+    "category": "Recall",
+    "ask": "Where did they grow up?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 14,
+    "category": "Recall",
+    "ask": "What is one thing they said that I should not forget?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": "every fact carries the verbatim quote and its date."
+  },
+  {
+    "id": 15,
+    "category": "Recall",
+    "ask": "Have they ever mentioned wanting to be introduced to someone?",
+    "status": "partial",
+    "command": "people search \"intro\"",
+    "needs": "a can_introduce slot exists; the inverse ask is not modelled.",
+    "note": ""
+  },
+  {
+    "id": 16,
+    "category": "Recall",
+    "ask": "What are they good at that I would not guess?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 17,
+    "category": "Before you see them",
+    "ask": "I am getting coffee with someone in an hour. Brief me.",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 18,
+    "category": "Before you see them",
+    "ask": "What did we talk about last time?",
+    "status": "works",
+    "command": "people texts --who <name> --days 30",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 19,
+    "category": "Before you see them",
+    "ask": "What has changed in their life since we last spoke?",
+    "status": "partial",
+    "command": "people history <name>",
+    "needs": "history tracks score movement, not a change log of facts.",
+    "note": ""
+  },
+  {
+    "id": 20,
+    "category": "Before you see them",
+    "ask": "What should I ask them about?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": "ask_about slot exists for exactly this."
+  },
+  {
+    "id": 21,
+    "category": "Before you see them",
+    "ask": "What do we have in common?",
+    "status": "build",
+    "command": "",
+    "needs": "no overlap query across two people's facts.",
+    "note": ""
+  },
+  {
+    "id": 22,
+    "category": "Before you see them",
+    "ask": "Is there anything I promised them?",
+    "status": "works",
+    "command": "people tasks <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 23,
+    "category": "Before you see them",
+    "ask": "Do I owe them money, or they me?",
+    "status": "works",
+    "command": "people loans",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 24,
+    "category": "Before you see them",
+    "ask": "What is the last thing they were excited about?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 25,
+    "category": "Before you see them",
+    "ask": "Am I about to meet someone they have a history with?",
+    "status": "build",
+    "command": "",
+    "needs": "relationships table is sparse and undirected.",
+    "note": ""
+  },
+  {
+    "id": 26,
+    "category": "Drift and reconnection",
+    "ask": "Who am I losing touch with?",
+    "status": "works",
+    "command": "people reconnect",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 27,
+    "category": "Drift and reconnection",
+    "ask": "Who was I close to two years ago and never talk to now?",
+    "status": "works",
+    "command": "people trend --days 730",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 28,
+    "category": "Drift and reconnection",
+    "ask": "Who is warming up?",
+    "status": "works",
+    "command": "people trend",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 29,
+    "category": "Drift and reconnection",
+    "ask": "Who reached out to me and I never replied?",
+    "status": "build",
+    "command": "",
+    "needs": "needs last-inbound versus last-outbound per person.",
+    "note": ""
+  },
+  {
+    "id": 30,
+    "category": "Drift and reconnection",
+    "ask": "Who have I been meaning to call?",
+    "status": "works",
+    "command": "people tasks",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 31,
+    "category": "Drift and reconnection",
+    "ask": "Which friendships are one-sided right now?",
+    "status": "build",
+    "command": "",
+    "needs": "inbound/outbound message ratio is computable but unimplemented.",
+    "note": ""
+  },
+  {
+    "id": 32,
+    "category": "Drift and reconnection",
+    "ask": "Who did I meet this semester and never followed up with?",
+    "status": "partial",
+    "command": "people list --since 2026-08-24",
+    "needs": "created_at exists; the follow-up gate does not.",
+    "note": ""
+  },
+  {
+    "id": 33,
+    "category": "Drift and reconnection",
+    "ask": "Give me five people to text today.",
+    "status": "works",
+    "command": "people today",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 34,
+    "category": "Drift and reconnection",
+    "ask": "Who should I see in person this week rather than text?",
+    "status": "build",
+    "command": "",
+    "needs": "no channel-preference model.",
+    "note": ""
+  },
+  {
+    "id": 35,
+    "category": "Drift and reconnection",
+    "ask": "Which of my closest people am I overdue with?",
+    "status": "works",
+    "command": "people reconnect",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 36,
+    "category": "Network",
+    "ask": "Who do I know at a given company?",
+    "status": "works",
+    "command": "people intro <company>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 37,
+    "category": "Network",
+    "ask": "Who could introduce me to someone at Anthropic?",
+    "status": "works",
+    "command": "people intro Anthropic",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 38,
+    "category": "Network",
+    "ask": "Who in my network works in health tech in LA?",
+    "status": "works",
+    "command": "people search \"health\"",
+    "needs": "",
+    "note": "PeopleRank does this properly in Amber; here it is FTS plus fields."
+  },
+  {
+    "id": 39,
+    "category": "Network",
+    "ask": "Who are the most connected people I know?",
+    "status": "partial",
+    "command": "people rank",
+    "needs": "rank scores closeness to me, not their centrality.",
+    "note": ""
+  },
+  {
+    "id": 40,
+    "category": "Network",
+    "ask": "Who did I meet through a given person?",
+    "status": "build",
+    "command": "",
+    "needs": "how_we_met is prose, not a foreign key.",
+    "note": ""
+  },
+  {
+    "id": 41,
+    "category": "Network",
+    "ask": "Which YC founders do I know?",
+    "status": "works",
+    "command": "people search \"YC\"",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 42,
+    "category": "Network",
+    "ask": "Who do I know who has done what I am about to do?",
+    "status": "partial",
+    "command": "people search \"<thing>\"",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 43,
+    "category": "Network",
+    "ask": "Who should I ask about design?",
+    "status": "works",
+    "command": "people search design",
+    "needs": "",
+    "note": "in Sept 2026 Caleb texted eleven designers the same question by hand."
+  },
+  {
+    "id": 44,
+    "category": "Network",
+    "ask": "Who have I asked for mentorship before?",
+    "status": "partial",
+    "command": "people search mentor",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 45,
+    "category": "Network",
+    "ask": "Which people do I know only through one group chat?",
+    "status": "build",
+    "command": "",
+    "needs": "circle membership exists; the exclusivity query does not.",
+    "note": ""
+  },
+  {
+    "id": 46,
+    "category": "Groups",
+    "ask": "What is this group chat and who is in it?",
+    "status": "works",
+    "command": "people circle show \"<name>\"",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 47,
+    "category": "Groups",
+    "ask": "Which group chats am I actually active in?",
+    "status": "partial",
+    "command": "people circles",
+    "needs": "no per-circle recency ranking.",
+    "note": ""
+  },
+  {
+    "id": 48,
+    "category": "Groups",
+    "ask": "Who is in my church community versus my startup community?",
+    "status": "works",
+    "command": "people circles",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 49,
+    "category": "Groups",
+    "ask": "Which groups have gone quiet?",
+    "status": "build",
+    "command": "",
+    "needs": "circles have no activity scoring.",
+    "note": ""
+  },
+  {
+    "id": 50,
+    "category": "Groups",
+    "ask": "Who is in a group with me but I have never texted one to one?",
+    "status": "build",
+    "command": "",
+    "needs": "computable from circle_members minus direct threads.",
+    "note": ""
+  },
+  {
+    "id": 51,
+    "category": "Groups",
+    "ask": "Name everyone from a trip or an event.",
+    "status": "works",
+    "command": "people circle show \"<name>\"",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 52,
+    "category": "Occasions",
+    "ask": "Whose birthday is coming up?",
+    "status": "works",
+    "command": "people birthdays",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 53,
+    "category": "Occasions",
+    "ask": "What should I get them?",
+    "status": "partial",
+    "command": "people show <name>",
+    "needs": "",
+    "note": "interests and food slots make this answerable by an agent."
+  },
+  {
+    "id": 54,
+    "category": "Occasions",
+    "ask": "What happened on this day in previous years?",
+    "status": "works",
+    "command": "people today",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 55,
+    "category": "Occasions",
+    "ask": "When did we meet?",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 56,
+    "category": "Occasions",
+    "ask": "What anniversaries or hard dates should I remember for someone?",
+    "status": "works",
+    "command": "people dates",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 57,
+    "category": "Occasions",
+    "ask": "Who did I spend the most time with last month?",
+    "status": "partial",
+    "command": "people rank --limit 20",
+    "needs": "rank is weighted, not a raw time tally.",
+    "note": ""
+  },
+  {
+    "id": 58,
+    "category": "Occasions",
+    "ask": "What did I do last Saturday and who with?",
+    "status": "works",
+    "command": "people events scan --days 7",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 59,
+    "category": "Occasions",
+    "ask": "Remind me to check on someone in two weeks.",
+    "status": "works",
+    "command": "people task add <name> \"check in\" --due <date>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 60,
+    "category": "Integrity",
+    "ask": "Is anyone in here duplicated?",
+    "status": "works",
+    "command": "people dedupe",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 61,
+    "category": "Integrity",
+    "ask": "Are all my messages attributed to the right person?",
+    "status": "works",
+    "command": "people check",
+    "needs": "",
+    "note": "a bug found on 2026-09-09 had 23% of messages attributed to nobody."
+  },
+  {
+    "id": 62,
+    "category": "Integrity",
+    "ask": "Which senders does the store not recognise?",
+    "status": "works",
+    "command": "people alias",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 63,
+    "category": "Integrity",
+    "ask": "Work out who an unknown number is from context.",
+    "status": "works",
+    "command": "people identify",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 64,
+    "category": "Integrity",
+    "ask": "Is my data self-consistent?",
+    "status": "works",
+    "command": "people check --fix",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 65,
+    "category": "Integrity",
+    "ask": "What is in here that I never confirmed?",
+    "status": "partial",
+    "command": "people search inferred",
+    "needs": "source is recorded per observation but not summarised.",
+    "note": ""
+  },
+  {
+    "id": 66,
+    "category": "Integrity",
+    "ask": "Delete everything about one person.",
+    "status": "partial",
+    "command": "people update <name> --delete",
+    "needs": "soft delete only; message rows survive.",
+    "note": ""
+  },
+  {
+    "id": 67,
+    "category": "Integrity",
+    "ask": "Which facts are stale?",
+    "status": "build",
+    "command": "",
+    "needs": "observations decay in scoring but facts have no freshness surface.",
+    "note": ""
+  },
+  {
+    "id": 68,
+    "category": "About me",
+    "ask": "What do I actually know about myself in here?",
+    "status": "works",
+    "command": "people me",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 69,
+    "category": "About me",
+    "ask": "What story do I tell about a given thing?",
+    "status": "works",
+    "command": "people me --search <topic>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 70,
+    "category": "About me",
+    "ask": "What are my own verified numbers?",
+    "status": "works",
+    "command": "people me --search caution",
+    "needs": "",
+    "note": "four resume metrics are flagged as invented on purpose."
+  },
+  {
+    "id": 71,
+    "category": "About me",
+    "ask": "What have I said I want to do with my life?",
+    "status": "works",
+    "command": "people me --search mission",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 72,
+    "category": "About me",
+    "ask": "What did I try that failed?",
+    "status": "works",
+    "command": "people me --search failed",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 73,
+    "category": "About me",
+    "ask": "What is my writing voice?",
+    "status": "partial",
+    "command": "people me --search how_he_works",
+    "needs": "second-brain core/voice.md is the real home for this.",
+    "note": ""
+  },
+  {
+    "id": 74,
+    "category": "About me",
+    "ask": "Which of my claims cannot be sourced?",
+    "status": "works",
+    "command": "people me --search caution",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 75,
+    "category": "About me",
+    "ask": "What did I believe a year ago that I no longer believe?",
+    "status": "build",
+    "command": "",
+    "needs": "self-facts are dated but never diffed.",
+    "note": ""
+  },
+  {
+    "id": 76,
+    "category": "Writing",
+    "ask": "Draft a text to this person that sounds like me.",
+    "status": "partial",
+    "command": "people show <name>",
+    "needs": "voice lives in second-brain, not the store; an agent must read both.",
+    "note": ""
+  },
+  {
+    "id": 77,
+    "category": "Writing",
+    "ask": "Write a birthday message that references something real.",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 78,
+    "category": "Writing",
+    "ask": "Who did I send the same copy-pasted message to?",
+    "status": "partial",
+    "command": "people texts search \"<phrase>\"",
+    "needs": "",
+    "note": "in March 2026 one message went to hundreds of people."
+  },
+  {
+    "id": 79,
+    "category": "Writing",
+    "ask": "Thank someone specifically rather than generically.",
+    "status": "works",
+    "command": "people show <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 80,
+    "category": "Retrieval",
+    "ask": "Find the conversation where we talked about a thing.",
+    "status": "works",
+    "command": "people texts search \"<phrase>\"",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 81,
+    "category": "Retrieval",
+    "ask": "What did this person say about a topic, ever?",
+    "status": "works",
+    "command": "people texts search \"<topic>\" --who <name>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 82,
+    "category": "Retrieval",
+    "ask": "Search everything I know for a keyword.",
+    "status": "works",
+    "command": "people search \"<term>\"",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 83,
+    "category": "Retrieval",
+    "ask": "Ask a question in plain English.",
+    "status": "works",
+    "command": "people ask \"<question>\"",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 84,
+    "category": "Retrieval",
+    "ask": "Export what I know as markdown I can read.",
+    "status": "works",
+    "command": "people export",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 85,
+    "category": "Retrieval",
+    "ask": "Show me a dashboard of my whole network.",
+    "status": "works",
+    "command": "people dashboard",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 86,
+    "category": "Retrieval",
+    "ask": "Pull the full history with one person as a file.",
+    "status": "works",
+    "command": "people texts --who <name> --days 99999",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 87,
+    "category": "Keeping it alive",
+    "ask": "Turn this week's new messages into facts automatically.",
+    "status": "works",
+    "command": "people distill",
+    "needs": "",
+    "note": "runs nightly at 21:30 via launchd."
+  },
+  {
+    "id": 88,
+    "category": "Keeping it alive",
+    "ask": "Notice a life event in the messages without me logging it.",
+    "status": "works",
+    "command": "people events scan",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 89,
+    "category": "Keeping it alive",
+    "ask": "Keep scores current as conversations happen.",
+    "status": "works",
+    "command": "people score",
+    "needs": "",
+    "note": "the nightly job handles it."
+  },
+  {
+    "id": 90,
+    "category": "Keeping it alive",
+    "ask": "Back up the store somewhere private.",
+    "status": "works",
+    "command": "people sync push",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 91,
+    "category": "Keeping it alive",
+    "ask": "Tell me when the store has drifted from reality.",
+    "status": "works",
+    "command": "people check",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 92,
+    "category": "Keeping it alive",
+    "ask": "Import a new contact source without creating duplicates.",
+    "status": "works",
+    "command": "people import --mac",
+    "needs": "",
+    "note": "dedupe catches exact name and email collisions only."
+  },
+  {
+    "id": 93,
+    "category": "Keeping it alive",
+    "ask": "Learn a person's second phone number or email.",
+    "status": "works",
+    "command": "people alias <name> <handle>",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 94,
+    "category": "Keeping it alive",
+    "ask": "Never re-read a message I have already extracted from.",
+    "status": "works",
+    "command": "people distill",
+    "needs": "",
+    "note": "watermark in sync_state."
+  },
+  {
+    "id": 95,
+    "category": "Keeping it alive",
+    "ask": "Run the whole maintenance pass unattended.",
+    "status": "works",
+    "command": "launchctl kickstart gui/$UID/com.calebnewton.people-sync",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 96,
+    "category": "Care",
+    "ask": "Who is going through something hard right now?",
+    "status": "blocked",
+    "command": "",
+    "needs": "deliberately not extracted. Facts about other people's crises are not the store's business.",
+    "note": ""
+  },
+  {
+    "id": 97,
+    "category": "Care",
+    "ask": "Who showed up for me this year?",
+    "status": "partial",
+    "command": "people events scan",
+    "needs": "",
+    "note": "events capture meals, hangouts and calls."
+  },
+  {
+    "id": 98,
+    "category": "Care",
+    "ask": "Who did I let down, and did I make it right?",
+    "status": "build",
+    "command": "",
+    "needs": "apologies are in the messages but nothing indexes them.",
+    "note": ""
+  },
+  {
+    "id": 99,
+    "category": "Care",
+    "ask": "Who is new in my life and worth investing in?",
+    "status": "works",
+    "command": "people list --recent",
+    "needs": "",
+    "note": ""
+  },
+  {
+    "id": 100,
+    "category": "Care",
+    "ask": "Am I giving more attention to people who need it or people who are easy?",
+    "status": "build",
+    "command": "",
+    "needs": "the most interesting question here and the least tractable.",
+    "note": ""
+  }
+]

@@ -6,6 +6,8 @@ real commit; nothing here is written by hand.
 ## Unreleased
 
 ### Added
+- chewbacca open puts the whole kit on one screen
+- finished work pushes itself to your own fork at end of turn
 - claude-tab, so Chewbacca can hold a conversation with another Claude
 - craft-gate, so the demo rules fire instead of sitting in a file
 - land the four process skills that had been sitting untracked
@@ -36,6 +38,7 @@ real commit; nothing here is written by hand.
 - hud demo
 
 ### Fixed
+- settings rules were silently skipped, prereq check looked for a command named CLI
 - doctor judges the last 24 hours, not the whole log
 - claude-tab says what is wrong instead of hanging 90s and dumping a traceback
 - stop every write to second-brain blocking on a git push
@@ -101,6 +104,7 @@ real commit; nothing here is written by hand.
 - send the root early
 
 ### Other
+- fix(people): Clay search returned current roles only, not work history
 - tools: export every people-db record to one CSV
 - tools: export the whole people db to one wide CSV and XLSX
 - locate one named person, and read the balance with the stored key

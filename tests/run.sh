@@ -136,6 +136,34 @@ if group "people"; then
     "${P[@]}" note "Evidence Two" "we both rowed crew at university" >/dev/null 2>&1
     expect "who says when the evidence ruled nobody out" "ruled nobody out" \
            "${P[@]}" who "founders who rowed crew"
+    # RECONNECT USED TO SORT BY NOTHING. Urgency was importance times how far
+    # past cadence somebody is, and importance is zero for anyone with no
+    # hand-written observations, which on an imported store is nearly everyone
+    # (944 of 945 on the machine where this was found). Zero times anything is
+    # zero, every row tied, and the list came back in alphabetical order.
+    #
+    # So: two people with no observations, one four years stale and one a month
+    # stale, named so that alphabetical order is the WRONG order. If the floor
+    # in overdueList() is ever removed, the stale one stops coming first.
+    "${P[@]}" add "Zeno Stale" >/dev/null 2>&1
+    "${P[@]}" add "Aaron Recent" >/dev/null 2>&1
+    "${P[@]}" log "Zeno Stale" --channel call --at "2021-01-01T00:00:00Z" >/dev/null 2>&1
+    "${P[@]}" log "Aaron Recent" --channel call --at "$(date -u -v-400d +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '400 days ago' +%Y-%m-%dT%H:%M:%SZ)" >/dev/null 2>&1
+    expect "reconnect ranks by overdue, not alphabetically" "Zeno Stale" \
+           bash -c "'$ROOT/bin/people' reconnect | grep -m1 -oE 'Zeno Stale|Aaron Recent'"
+    # A SHALLOW SYNC MADE "NOBODY IS OVERDUE" A LIE. The first `texts sync`
+    # pulls 90 days, so every last-contact date lands inside the window and
+    # nobody can be past cadence. reconnect printed the good news in green and
+    # gave no hint that it had only looked back three months.
+    #
+    # Own store, because the one above deliberately has an overdue person in it.
+    SHALLOW="$TMP/shallow"
+    PEOPLE_DIR="$SHALLOW" "${P[@]}" add "Fresh Contact" >/dev/null 2>&1
+    PEOPLE_DIR="$SHALLOW" "${P[@]}" log "Fresh Contact" --channel text >/dev/null 2>&1
+    sqlite3 "$SHALLOW/people.db" \
+      "INSERT INTO sync_state (key,value,updated_at) VALUES ('messages_horizon_days','90',datetime('now'))" 2>/dev/null
+    expect "reconnect admits how far back it can see" "only go back 90 days" \
+           bash -c "PEOPLE_DIR='$SHALLOW' '$ROOT/bin/people' reconnect"
     check  "the database validates" bash -c "sqlite3 '$PEOPLE_DIR/people.db' 'pragma integrity_check' | grep -q ok"
     # A second add of the same name must not silently create a duplicate row.
     "${P[@]}" add "Test Person" >/dev/null 2>&1

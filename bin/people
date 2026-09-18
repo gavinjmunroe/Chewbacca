@@ -6013,7 +6013,21 @@ function overdueList(limit = 20) {
       cadence,
       over,
       score,
-      urgency: days === null ? score : score * (1 + over / cadence),
+      // IMPORTANCE IS A MULTIPLIER, AND IT USED TO BE ALLOWED TO BE ZERO.
+      // base_score is only non-zero for someone with hand-written
+      // observations, which on a machine whose store came from an import is
+      // almost nobody: 944 of 945 people here scored exactly 0. Zero times any
+      // amount of overdue is zero, so every urgency tied at 0, the sort below
+      // did nothing, and `people reconnect` printed the first rows of the
+      // table in alphabetical order. Four of the first five were names
+      // starting with A.
+      //
+      // The floor keeps score as a tie-breaker between people you know things
+      // about, while letting how far past cadence somebody is decide the order
+      // when nobody has a score yet, which is the state every new install is
+      // in. Raising it flattens the difference a real score makes; lowering it
+      // does nothing, since the term it guards is a product.
+      urgency: days === null ? score : (0.1 + score) * (1 + over / cadence),
     });
   }
   out.sort((a, b) => b.urgency - a.urgency);
@@ -6159,9 +6173,19 @@ function cmdReconnect(argv) {
           c.dim("  This ranks people you know things about, so start with:\n") +
           `    people note <name> "..." --dim social`,
       );
+    // "Nobody is overdue" is only true as far back as the store has looked.
+    // A first `texts sync` pulls 90 days, which puts every last-contact date
+    // inside the window and makes everyone look recently spoken to. Saying so
+    // costs one line and is the difference between an answer and a shrug.
+    const horizon = Number(syncState("messages_horizon_days") || 0);
+    const SHALLOW_DAYS = 365;
     return say(
       c.grn("  nobody is overdue") +
-        (known ? c.dim(`\n  ${known} people have recent contact on file`) : ""),
+        (known ? c.dim(`\n  ${known} people have recent contact on file`) : "") +
+        (horizon && horizon < SHALLOW_DAYS
+          ? c.dim(`\n  but your messages only go back ${horizon} days, so this cannot see further:\n`) +
+            "    people texts sync --days 3200"
+          : ""),
     );
   }
   say("");
@@ -7076,6 +7100,14 @@ function cmdTexts(argv) {
 
     syncState("messages_max_id", maxId);
     syncState("messages_last_sync", nowISO());
+    // How far back the store has ever actually looked. Everything downstream
+    // that says "you last spoke N days ago" is bounded by this number and has
+    // no way to know it: after a first sync, every date on file falls inside
+    // 90 days, so `reconnect` concluded nobody was overdue and said so in
+    // green. That answer was wrong for 945 people and read as reassurance.
+    // The deepest window wins, because a later `--days 30` top-up does not
+    // un-see the history a backfill already imported.
+    syncState("messages_horizon_days", Math.max(Number(syncState("messages_horizon_days") || 0), days));
 
     // The whole point: a real conversation counts as contact, so warmth and
     // reconnect stop depending on the user remembering to log by hand.

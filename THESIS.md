@@ -3,109 +3,98 @@
 **Caleb, 2026-09-20:** *"Chewbacca has to be the first system to ever engineer
 taste into ai."*
 
-This file states the claim precisely enough to be wrong, and records what
-would have to be true for it to hold. **Nothing here is settled.** A prior-art
-pass is running and this file gets rewritten by whatever it finds.
+**The adversarial prior-art pass came back on the same day and killed it.**
+This file records what died, why, and what survived, because a claim that
+cannot survive a search is worse than no claim.
 
-## The claim as stated is puncturable
+## What died
 
-"First system to engineer taste into AI" does not survive a knowledgeable
-reader, because aesthetic scoring is old:
+**The mechanism is not new.** Three projects ship executable deny lists for
+generated UI, and the closest one shipped **18 days before this was written**:
 
-- **LAION-Aesthetics** and Google's **NIMA** both train on human ratings and
-  output a beauty score. They are used to filter diffusion training sets.
-- **RLHF is preference-encoding at industrial scale.** That is arguably
-  "engineering taste" already, and it is how every frontier model is tuned.
-- Style transfer, layout-generation models, and the whole v0 / Lovable / Bolt
-  / Galileo class of design tools all encode *something* about what looks good.
+- **`@shadcn/lint`** (2026-09-02, **2,226 stars**): per-component `allow`/`deny`
+  contracts, errors written for an agent to read and fix, rules "developed by
+  studying production design systems", **and published agent evals this repo
+  does not have.**
+- **`ux-skill`** (2026-05-24): **152 executable regex refusals**, `--fail-on
+  high` exits non-zero, plus **160 brand specs** each with an `ai_slop_avoided`
+  list, **and the identical centroid thesis.**
+- **`auteur`** (1,022 stars) fails builds on the purple-blue AI gradient.
+  **`tinte`** (621) exits 1 on any colour bypassing the tokens.
 
-Say the sentence as written and one of those gets named back at you.
+And `stylelint-polaris` and `@atlaskit/eslint-plugin-design-system` have done
+this for years. **This repo's README cites them as examples. They are prior art
+to it.**
 
-## The distinction that actually holds
+**The framing is also taken and funded.** **Taste Labs raised $18.5M** in June
+2026 explicitly to "end AI slop, starting with design", with a 1,000-expert
+judging network. Framing this as taste engineering makes it the unfunded solo
+version of a well-capitalized company.
 
-**Every one of those systems learns a preference and moves toward it. That is
-the machine that produces slop, not the cure for it.**
+**And the centroid argument is published, not ours.** Kirk et al.
+(arXiv:2310.06452) found RLHF *"significantly reduces output diversity."* The
+2026 LAION-Aesthetics audit found the scorer measures photorealism, not
+quality: **Picasso scores 5.51 and loses to cityscape painter Edouard Cortes
+at 7.09, and not one African, Oceanian, Native American, Islamic, Egyptian or
+West Asian work scored above 6.5.** That is a devastating citation. It is not
+an insight of ours.
 
-A model trained to maximize an aesthetic score produces the
-most-liked-on-average output. The most-liked-on-average interface is the
-indigo gradient, the rounded card and the three-column feature grid. Optimizing
-a learned aesthetic score does not escape the median. **It is the fastest known
-route to it.**
+## What survived
 
-This is the same conclusion the constraint research reached from the other
-direction: *the generated look is not bad taste, it is an empty deny list.*
+Two seams, found by reading a competitor's source rather than its README.
 
-## The defensible version
+### 1. Nobody ships a corpus of what many named real systems refuse, with provenance
 
-> **The first system that encodes taste as executable refusals rather than as a
-> learned preference score.**
+`ux-skill`'s 152 rules have **no provenance field at all**. They are
+hand-authored regexes against generic tells, derived from no system. Its brand
+specs are **English prose observed off marketing pages** (the Stripe entry
+opens *"An inspired interpretation of Stripi's design language"*, their typo).
 
-Narrower, checkable, and harder. The differences that matter:
+`@shadcn/lint` ships six generic rules and expects **you** to author the
+contracts. It offers no library of other people's systems.
 
-| | Learned preference | Executable refusal |
-|---|---|---|
-| Shape | a score to maximize | a list of things that fail |
-| Failure mode | regression to the mean | too restrictive, which is visible and fixable |
-| Provenance | a training set nobody can inspect | a named system with a citation |
-| Output | the average of everything | recognizably one thing |
-| Auditable | no | yes, line by line |
+### 2. Everywhere else, the executable rules and the design-system rules are different objects
 
-`bin/ux-lint` is a primitive instance: it does not score a page, it fails
-twenty specific choices and names the replacement for each. `SYSTEMS.md` is the
-other half: 64 real systems indexed by **what they forbid**, so a generator can
-adopt a coherent set of refusals instead of averaging them.
+What is enforced is generic. What is system-specific is advisory prose.
+**Making a named system's own refusals executable and selectable, "lint this
+page as Bugatti", is unclaimed.**
 
-## What would have to be true
+## The claim, rewritten to be true
 
-For the claim to hold, all four:
+> **Not the first system to engineer taste. The first citable index of what 74
+> named design systems refuse, where every constant traces to a source and
+> nothing is invented.**
 
-1. **No existing system does this.** Being tested now. The closest known prior
-   art is design linting: `stylelint-polaris` bans hex and every length unit,
-   `@atlaskit/eslint-plugin-design-system` bans raw `<button>` and
-   `placeholder`. **Those are real and they are genuinely the same shape.** The
-   distinction, if there is one, is that they enforce *one house system* for
-   people already inside it, rather than letting a generator adopt any of 64
-   and be held to it.
-2. **Refusals actually produce better output than scores.** Untested. It is a
-   hypothesis, and the honest experiment is a head-to-head.
-3. **The refusals have to be derived, not invented.** Extracted from real
-   systems with citations, which is what `tools/extract.py` does.
-4. **It has to fire.** Caleb's own rule: *"I don't want this to be just
-   knowledge somewhere in chewbacca I want it to actually be applied."*
-   Enforcement is code that runs. A markdown file of good advice is worth zero.
+Smaller, checkable, and actually ours. It is also what the repo already is: an
+extractor, a provenance discipline, and a research corpus that marks
+`[UNVERIFIED]` where the trail ran out.
 
-## Prior art found so far, before the dedicated pass lands
+**Provenance, not taste.**
 
-**Primer already ships agent-targeted metadata inside their design tokens**
-(found 2026-09-20 in the tokens research):
+## What this repo has to do to earn even that
 
-```json5
-'org.primer.llm': {
-  usage: ['page-background', 'main-content', 'card-background'],
-  rules: 'Use as the primary background for pages and content areas. Do NOT use for emphasis or highlighting.'
-}
-```
+1. **Publish evals.** `@shadcn/lint` has 150+ agent task runs showing errors
+   going 42-117 to 0 after one correction round. This repo has 12 unit tests.
+   Until there is an eval showing generated output measurably improves, the
+   linter is an assertion.
+2. **Put provenance in the data.** Every rule in `ux-lint` should carry the
+   system and the source it came from. Right now several are generic tells with
+   no citation, which is the exact criticism levelled at `ux-skill` above.
+3. **Make the 74 systems' refusals actually executable**, not just indexed.
+   `ux-pick` prints Bugatti's refusals as prose. Nothing checks them.
+4. **Cite the neighbours in the README**, including the ones that got there
+   first. A repo that pretends `@shadcn/lint` does not exist is not credible.
 
-**That is a deny list, written for a model, shipped in production, by GitHub.**
-It arrives at the same idea from the token layer rather than the lint layer,
-and it is the closest prior art found anywhere so far.
+## The objection still standing
 
-What it does not do: it is per-token guidance inside one house system, not a
-selectable set of coherent refusals extracted from many. But it is real, it
-predates this, and any novelty claim has to name it.
+Bourdieu: **taste classifies, and it classifies the classifier.** A deny list
+built from Bugatti, Stripe and GOV.UK encodes one professional class's
+preferences.
 
-## The strongest objection, kept in view
+The LAION audit is the empirical version of exactly that objection, and it
+lands on this repo too: **74 systems drawn overwhelmingly from Western tech and
+luxury brands is a narrow corpus, and calling it "taste" is the move Bourdieu
+described.**
 
-Bourdieu's, and it is not a technicality: **taste classifies, and it classifies
-the classifier.** A deny list derived from Bugatti, Stripe and GOV.UK encodes
-the preferences of a particular professional class, and calling that "taste"
-rather than "one aesthetic" is exactly the move Bourdieu is describing.
-
-The honest answer is probably that this system does not encode *taste*. It
-encodes **coherence**: the property of having committed to one thing rather
-than averaging several. Coherence is measurable, defensible across cultures,
-and it happens to be what the award corpus independently concluded too: *the
-corpus does not say 3D wins, it says one committed mechanism wins.*
-
-**If the claim has to shrink, it shrinks to that, and that version is still
-worth building and still appears to be unbuilt.**
+Which is another reason **coherence and provenance are the honest words, and
+taste is not.**

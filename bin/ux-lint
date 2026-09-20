@@ -1,0 +1,200 @@
+#!/usr/bin/env python3
+"""Fail a UI file that carries the generated look.
+
+    ux-lint src/                 scan a tree
+    ux-lint page.tsx --fix-help  print the replacement for each hit
+    ux-lint src/ --max 0         exit 1 on any hit, for a hook or CI
+
+THE FAILURE THIS EXISTS FOR. Caleb's rule, 2026-09-16: "I don't want this to be
+just knowledge somewhere in chewbacca I want it to actually be applied." The
+kit holds 84 skills of good judgement that mostly never fire. The slop rules
+fire, and the only reason is that prose-check runs in a hook and refuses the
+turn.
+
+So the research in ../research/04-constraints-and-tells.md is here as regexes
+rather than as advice. Every rule cites the tell it came from and carries the
+replacement, because a gate that only says "no" gets satisfied and then ignored.
+
+Deliberately not a formatter. It finds the handful of choices that make a page
+look generated, and says what to do instead.
+"""
+import argparse
+import pathlib
+import re
+import sys
+
+# (id, severity, pattern, what it is, what to do instead)
+RULES = [
+    ("indigo", "high",
+     r"\b(?:bg|text|from|to|via|border|ring|shadow)-(?:indigo|violet|purple|fuchsia)-(?:4|5|6|7)\d{2}\b",
+     "Tailwind indigo/violet, the single most recognizable generated-UI tell",
+     "Pick a system from SYSTEMS.md and use its accent. Adam Wathan apologized for this default by name."),
+
+    ("gradient-brand", "high",
+     r"(?:bg-gradient-to-\w+[^\"'`]*\bfrom-(?:indigo|violet|purple|blue|pink)-\d+)"
+     r"|(?:linear-gradient\([^)]*#6366f1)|(?:linear-gradient\([^)]*#a855f7)",
+     "The indigo-to-violet diagonal gradient (#6366f1 to #a855f7)",
+     "Use one flat accent. 3 of the 64 indexed systems have no accent at all and none of them ship this gradient."),
+
+    ("gradient-text", "high",
+     r"bg-clip-text[^\"'`]*\btext-transparent|\btext-transparent[^\"'`]*\bbg-clip-text",
+     "Gradient headline text",
+     "Set the headline in one colour. Let size and weight carry the hierarchy."),
+
+    ("glass", "high",
+     r"backdrop-blur[^\"'`]*\bbg-(?:white|black)/(?:5|10|20|30)\b|bg-(?:white|black)/(?:5|10|20)[^\"'`]*\bbackdrop-blur",
+     "Glassmorphism card",
+     "Use a solid surface colour from the chosen system."),
+
+    ("pulse-dot", "med",
+     r"animate-pulse[^\"'`]*\brounded-full|rounded-full[^\"'`]*\banimate-pulse",
+     "The glowing pulsing status dot",
+     "A static dot, or no dot. If nothing is actually live, do not imply it is."),
+
+    ("transition-all", "high",
+     r"\btransition-all\b|transition:\s*all\b",
+     "transition: all, which animates unintended properties off the GPU",
+     "Transition only the property that changes. Animate transform and opacity only."),
+
+    ("hover-scale", "med",
+     r"hover:scale-1(?:05|10)\b",
+     "The springy hover scale",
+     "120 to 200ms on the one property that changes, standard ease."),
+
+    ("scale-zero", "med",
+     r"scale-0\b|scale\(0\)",
+     "Animating from scale(0). Nothing in the real world appears from nothing.",
+     "Start at scale(0.9) to scale(0.97) with opacity 0."),
+
+    ("big-radius", "med",
+     r"\brounded-(?:2xl|3xl)\b",
+     "Max-radius cards",
+     "Pick the radius profile of your chosen system. Bugatti has 0 and pill and nothing between."),
+
+    ("soft-shadow", "med",
+     r"shadow-(?:xl|2xl)\b|box-shadow:[^;]*rgba\([^)]*,\s*0?\.1\s*\)",
+     "The oversized low-opacity drop shadow (opacity 0.1, big blur, no offset)",
+     "A 1px contact shadow, or none. 39 of the indexed systems refuse shadows outright."),
+
+    ("left-border-card", "low",
+     r"border-l-4[^\"'`]*\brounded|rounded[^\"'`]*\bborder-l-4",
+     "Rounded card with a thick left border on every list item",
+     "One border treatment for the list, not a coloured rail per row."),
+
+    ("icon-tint", "low",
+     r"bg-(\w+)-\d+/10[^\"'`]*\btext-\1-\d+|text-(\w+)-\d+[^\"'`]*\bbg-\2-\d+/10",
+     "An icon sitting in a 10% tint of its own colour",
+     "Let the icon sit on the page surface."),
+
+    ("uniform-gap", "med",
+     r"(?s)(?:\b(?:gap|p|space-y|space-x)-4\b.*?){6,}",
+     "One spacing value everywhere (gap-4, p-4, space-y-4)",
+     "Tight inside a group, generous between groups. Real scales are dense at the bottom and sparse at the top."),
+
+    ("invented-stats", "high",
+     r"\b(?:10k\+|99\.9%|24/7|500\+|1M\+)\b",
+     "The invented stat trio, with nothing measured behind it",
+     "Use a number you can source, or delete the strip. Caleb's own rule: never ship an unverified specific."),
+
+    ("emoji-heading", "high",
+     r"^\s*#{1,4}\s*[\U0001F300-\U0001FAFF☀-➿]",
+     "Emoji section header",
+     "Write the heading."),
+
+    ("slop-copy", "high",
+     r"(?i)\b(?:empower your team|built for modern teams|ship smarter|say goodbye to|"
+     r"unlock (?:your |the )?(?:full )?potential|take it to the next level|"
+     r"let'?s build something (?:together|amazing))\b",
+     "Marketing filler that appears in every generated page",
+     "Say what the thing does. Names, numbers, mechanisms."),
+
+    ("ordinals", "low",
+     r"\b0[1-9]\s*/\s*[A-Z]{3,}",
+     "The giant faint 01 / SECTION ordinal label",
+     "Delete it. It is decoration pretending to be structure."),
+
+    ("placeholder-as-label", "med",
+     r"<input(?![^>]*aria-label)(?![^>]*id=)[^>]*\bplaceholder=",
+     "A placeholder doing a label's job",
+     "Atlassian lints this out entirely: use a real label or a helper message."),
+
+    ("arbitrary-value", "low",
+     r"(?:text|bg|border)-\[#[0-9a-fA-F]{3,8}\]|\bp-\[\d+px\]",
+     "An arbitrary hex or pixel value inline",
+     "GOV.UK bans pasted hex outright and Polaris lints it as an error. Use a token."),
+
+    ("will-change-static", "med",
+     r"will-change\s*:\s*(?!auto)",
+     "will-change in a stylesheet",
+     "MDN: a last resort for a measured problem. Toggle it in JS and set it back to auto."),
+]
+
+EXT = {".tsx", ".jsx", ".ts", ".js", ".css", ".scss", ".html", ".vue", ".svelte", ".md", ".mdx", ".astro"}
+SKIP = {"node_modules", ".git", "dist", "build", ".next", "vendor", "systems", "research", ".venv"}
+
+
+def scan(path):
+    hits = []
+    text = path.read_text(errors="ignore")
+    lines = text.split("\n")
+    for rid, sev, pat, what, fix in RULES:
+        flags = re.M if rid == "emoji-heading" else 0
+        for m in re.finditer(pat, text, flags):
+            line_no = text[: m.start()].count("\n") + 1
+            hits.append((sev, rid, path, line_no, lines[line_no - 1].strip()[:90], what, fix))
+    return hits
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("paths", nargs="+")
+    ap.add_argument("--max", type=int, default=None, help="exit 1 above this many hits")
+    ap.add_argument("--fix-help", action="store_true", help="print the replacement for each rule that fired")
+    a = ap.parse_args()
+
+    files = []
+    for p in a.paths:
+        p = pathlib.Path(p)
+        if p.is_file():
+            files.append(p)
+        else:
+            files += [f for f in p.rglob("*") if f.suffix in EXT and not (SKIP & set(f.parts))]
+
+    hits = []
+    for f in sorted(set(files)):
+        hits += scan(f)
+
+    order = {"high": 0, "med": 1, "low": 2}
+    hits.sort(key=lambda h: (order[h[0]], h[1]))
+
+    if not hits:
+        print(f"clean. {len(files)} file(s), no generated-UI tells.")
+        return 0
+
+    for sev, rid, path, line, src, what, _ in hits:
+        print(f"{sev.upper():4s} {path}:{line}  [{rid}]  {what}")
+        print(f"       {src}")
+
+    fired = []
+    for h in hits:
+        if h[1] not in [f[0] for f in fired]:
+            fired.append((h[1], h[6]))
+
+    if a.fix_help:
+        print("\nwhat to do instead:")
+        for rid, fix in fired:
+            print(f"  {rid}: {fix}")
+
+    high = sum(1 for h in hits if h[0] == "high")
+    print(f"\n{len(hits)} hit(s) across {len(files)} file(s), {high} high. "
+          f"{len(fired)} distinct tell(s).")
+    if not a.fix_help:
+        print("run with --fix-help for the replacement for each.")
+
+    if a.max is not None and len(hits) > a.max:
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

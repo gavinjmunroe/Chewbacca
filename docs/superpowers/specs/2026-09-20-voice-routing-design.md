@@ -16,11 +16,11 @@ Chewbacca reads the screen and its own memory and picks.
 
 ## Destinations, to start
 
-| Destination | What arrives there                                             | How                                                                                                                        |
-| ----------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `terminal` | a drafted prompt, placed in the Claude Code input and never submitted by Chewbacca | the assistant drafts it, `chewie terminal draft` pastes it into the tab running `claude`, the person presses Return or says send |
-| `browser`   | a search or a URL opened in the person's real Chrome           | `open -a "Google Chrome" <url>`; page reading stays with the assistant, which already gets the page URL from `hud-context` |
-| `assistant` | the existing voice agent with `mac` tools                      | unchanged path, now with memory in its context                                                                             |
+| Destination | What arrives there                                                                 | How                                                                                                                              |
+| ----------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `terminal`  | a drafted prompt, placed in the Claude Code input and never submitted by Chewbacca | the assistant drafts it, `chewie terminal draft` pastes it into the tab running `claude`, the person presses Return or says send |
+| `browser`   | a search or a URL opened in the person's real Chrome                               | `open -a "Google Chrome" <url>`; page reading stays with the assistant, which already gets the page URL from `hud-context`       |
+| `assistant` | the existing voice agent with `mac` tools                                          | unchanged path, now with memory in its context                                                                                   |
 
 Other apps are added later by adding a row, not by changing the router.
 
@@ -39,8 +39,8 @@ Three tiers, cheapest first. Stop at the first that decides.
 **Tier 1, correction.** If the sentence is a correction of the previous
 decision and the previous decision is under fifteen seconds old: "no, the
 terminal", "no, to you", "no, chrome", "other one". Re-route the previous
-utterance. If it already went to the terminal it was submitted and cannot be
-recalled; say so instead.
+utterance. If it went to the terminal, the draft is cleared first: nothing was
+submitted, so nothing is lost.
 
 **Tier 2, rules.** In order:
 
@@ -133,14 +133,25 @@ the draft are collapsed to spaces so the input holds one paragraph. Prints
 
 **`submit [--tty TTY]`**: selects the tab if it is not already selected, brings
 Terminal front if it is not, presses Return through System Events `key code 36`.
-This is the only thing that runs a prompt, and only a person triggers it.
+This is the only thing that runs a prompt, and only a person triggers it. It
+refuses with exit 3 unless `CHEWIE_TERMINAL_SUBMIT=1` is in its environment:
+`hud-listen`'s draft-word path is the only caller that sets it, and only in
+answer to a person saying "send it" with a draft outstanding. `bin/hud-agent.md`
+still tells the model never to run it, but the gate is what actually stops it.
 
 **`clear [--tty TTY]`**: same focus dance, then Control-U to clear the input.
 Used by "scrap that" and by the "no, to you" correction after a draft.
 
-Secure Input: `draft` and `clear` synthesize a paste and a keystroke, so
-`chewie type`'s existing Secure Input check runs first and the assistant says
-which app holds it if it is on.
+`submit` and `clear`, called from `hud-listen`'s draft-word path, act on the
+tty `draft` recorded in `draft.json`, not on whatever tab is
+front-and-selected at the moment: that can move between the draft landing and
+the person reading it, and "send it" pressing Return in an unreviewed tab is
+the exact failure this whole design exists to prevent.
+
+Secure Input: `draft`, `submit` and `clear` all synthesize input to
+Terminal, a paste or a keystroke, so `chewie type`'s existing Secure Input
+check runs first on all three and the assistant says which app holds it if it
+is on.
 
 ### Voice words the bridge handles itself
 
@@ -211,26 +222,30 @@ sentences, not the file.
 
 ## Feedback in the pill
 
-The pill already carries one line and six phases. On a route decision it shows
-`to terminal` or `to chrome: <query>` for 1.2 seconds. While a draft is
-outstanding it shows `draft in terminal, say send` and stays there until the
-draft is submitted, cleared, or five minutes pass. Assistant-bound sentences
-show nothing new.
+The pill already carries one line and six phases. A terminal decision shows
+`to terminal`; a browser decision shows the label `browser_url` built,
+`chrome: <query>` (no "to", since the label already names the destination).
+Once a terminal turn is done, if a draft is still outstanding the pill adds
+`draft in terminal, say send`. That line holds for as long as the turn's own
+`done`/`failed` state does, the ordinary `settle()` hold (`LEAVE_AFTER`, ten
+seconds guessed) rather than a separate five-minute timer: the draft itself
+is visible in the terminal the whole time it is outstanding, so the pill only
+needs to say so once. Assistant-bound sentences show nothing new.
 
 ## Changes by file
 
-| File                               | Change                                                                                                                              |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `bin/lib/route.py`                 | new: the router, pure                                                                                                               |
-| `bin/hud-listen` | call the router in `handle()` before dispatch; tag terminal-bound turns; the outstanding-draft words; write memory; drive the pill line |
-| `mac/lib/terminal.py` | new: tab discovery, ensure, draft, submit, clear |
-| `mac/bin/chewie` | new verb `terminal {tabs,ensure,draft,submit,clear}` |
-| `bin/hud-agent.md` | the drafting rules, the memory line, never submit |
-| `hud/Sources/BobHUDKit/Pill.swift` | only if the existing line op cannot hold a transient message; expected no change                                                    |
-| `tests/test_route.py`              | the routing table                                                                                                                   |
-| `tests/test_memory.py`             | round-trip and rotation                                                                                                             |
-| `tests/test_terminal.py` | tab discovery and tab choice against a fixture; paste, submit and clear are manual and opt-in because they open a window |
-| `docs/VOICE-DESIGN.md`             | a section on routing, with the thresholds and why                                                                                   |
+| File                               | Change                                                                                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `bin/lib/route.py`                 | new: the router, pure                                                                                                                   |
+| `bin/hud-listen`                   | call the router in `handle()` before dispatch; tag terminal-bound turns; the outstanding-draft words; write memory; drive the pill line |
+| `mac/lib/terminal.py`              | new: tab discovery, ensure, draft, submit, clear                                                                                        |
+| `mac/bin/chewie`                   | new verb `terminal {tabs,ensure,draft,submit,clear}`                                                                                    |
+| `bin/hud-agent.md`                 | the drafting rules, the memory line, never submit                                                                                       |
+| `hud/Sources/BobHUDKit/Pill.swift` | only if the existing line op cannot hold a transient message; expected no change                                                        |
+| `tests/test_route.py`              | the routing table                                                                                                                       |
+| `tests/test_memory.py`             | round-trip and rotation                                                                                                                 |
+| `tests/test_terminal.py`           | tab discovery and tab choice against a fixture; paste, submit and clear are manual and opt-in because they open a window                |
+| `docs/VOICE-DESIGN.md`             | a section on routing, with the thresholds and why                                                                                       |
 
 ## Error handling
 
@@ -243,8 +258,10 @@ show nothing new.
   `reason: "classifier timeout"`.
 - Memory unwritable: log and continue; routing degrades to rules plus
   frontmost app, which is most of the value anyway.
-- Secure Input on: irrelevant to `do script`; relevant only to the fallback
-  typing path, where `chewie type` already warns.
+- Secure Input on: `draft`, `submit` and `clear` refuse with exit 2 and name
+  the holder; `ensure` is unaffected because `do script` is not a keystroke.
+- `submit` run without `CHEWIE_TERMINAL_SUBMIT=1`: refuses with exit 3 and
+  presses nothing. Only `hud-listen`'s draft-word path sets it.
 
 ## Constants, and what set them
 

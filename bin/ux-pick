@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Pick a design system from a plain-English brief, and print its constraints.
+
+    ux-pick "dark serious finance dashboard"
+    ux-pick --mode dark --no-accent
+    ux-pick --show bugatti
+
+THE FAILURE THIS EXISTS FOR. Choosing a visual direction used to mean the model
+inventing one, which is why every generated page arrived with the same violet
+gradient and the same rounded cards. Choosing from 74 real systems is better,
+but only if choosing is cheaper than inventing. This makes it one command.
+
+It prints the refusals, not just the name, because the refusals are the part
+that has to reach the code.
+"""
+import argparse
+import json
+import pathlib
+import re
+import sys
+
+REPO = pathlib.Path(__file__).resolve().parent.parent
+ROWS = json.loads((REPO / "data" / "systems.json").read_text())
+
+# Words a brief uses, mapped to what they imply about the tokens. Deliberately
+# small: a thesaurus here would match everything to everything.
+MOOD = {
+    "dark": {"mode": "dark"}, "light": {"mode": "light"},
+    "serious": {"max_weight": 500}, "austere": {"max_weight": 500, "radius": "sharp"},
+    "luxury": {"max_weight": 500}, "premium": {"max_weight": 500},
+    "minimal": {"max_weight": 500}, "restrained": {"max_weight": 500},
+    "sharp": {"radius": "sharp"}, "brutal": {"radius": "sharp"},
+    "brutalist": {"radius": "sharp"}, "editorial": {"radius": "sharp"},
+    "monochrome": {"no_accent": True}, "mono": {"no_accent": True},
+    "friendly": {"radius": "round"}, "playful": {"radius": "round"},
+    "soft": {"radius": "soft"}, "rounded": {"radius": "round"},
+}
+
+
+def score(row, terms, want):
+    if not row["has_frontmatter"]:
+        return -1
+    s = 0
+    hay = f"{row['name']} {row['title']} {row['description']} {' '.join(row['fonts'])}".lower()
+    for t in terms:
+        if t in row["name"].lower():
+            s += 8
+        elif re.search(rf"\b{re.escape(t)}", hay):
+            s += 3
+    if want.get("mode") and row["mode"] == want["mode"]:
+        s += 4
+    if want.get("radius") and row["radius_profile"] == want["radius"]:
+        s += 4
+    if want.get("no_accent") and not row["accent"]:
+        s += 6
+    if want.get("max_weight") and row["weight_max"] and row["weight_max"] <= want["max_weight"]:
+        s += 3
+    # A system that refuses things is a system that will not look generated.
+    s += len(row["forbids"])
+    return s
+
+
+def show(row, verbose=True):
+    a = row["accent"]
+    print(f"\n  {row['name']}   {row['mode'] or '?'} · canvas {row['canvas'] or '?'} · "
+          f"accent {a['hex'] if a else 'NONE'} · {row['radius_profile']} corners · "
+          f"max weight {row['weight_max'] or '?'}")
+    if row["fonts"]:
+        print(f"  type: {', '.join(row['fonts'])}")
+    if row["forbids"]:
+        print("  REFUSES:")
+        for f in row["forbids"]:
+            print(f"    - {f}")
+    if verbose and row["description"]:
+        d = row["description"]
+        print(f"  {d[:300]}{'...' if len(d) > 300 else ''}")
+    print(f"  full tokens: {row['path']}")
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=True)
+    ap.add_argument("query", nargs="*", help="plain-english brief")
+    ap.add_argument("--mode", choices=["dark", "light"])
+    ap.add_argument("--radius", choices=["sharp", "tight", "soft", "round"])
+    ap.add_argument("--no-accent", action="store_true")
+    ap.add_argument("--show", metavar="NAME", help="print one system by name")
+    ap.add_argument("-n", type=int, default=3, help="how many to print (default 3)")
+    a = ap.parse_args()
+
+    if a.show:
+        row = next((r for r in ROWS if r["name"] == a.show), None)
+        if not row:
+            print(f"no system named '{a.show}'. see SYSTEMS.md", file=sys.stderr)
+            return 1
+        show(row)
+        return 0
+
+    terms = [t.lower() for t in " ".join(a.query).replace(",", " ").split() if len(t) > 2]
+    want = {}
+    for t in terms:
+        want.update(MOOD.get(t, {}))
+    if a.mode:
+        want["mode"] = a.mode
+    if a.radius:
+        want["radius"] = a.radius
+    if a.no_accent:
+        want["no_accent"] = True
+
+    if not terms and not want:
+        ap.print_help()
+        return 2
+
+    ranked = sorted(ROWS, key=lambda r: -score(r, terms, want))
+    top = [r for r in ranked if score(r, terms, want) > 0][: a.n]
+    if not top:
+        print("nothing matched. see SYSTEMS.md for the full table.", file=sys.stderr)
+        return 1
+    for r in top:
+        show(r, verbose=(len(top) == 1))
+    print()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

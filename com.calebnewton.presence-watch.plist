@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.calebnewton.presence-watch</string>
+
+  <!-- The judge. Reads local sensors, decides whether anything has earned a
+       surface, and draws at most two per hour. Makes no model calls and no
+       network calls. See presence/docs/PHASE-3-ARCHITECTURE.md -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>exec "$HOME/.local/bin/hud-watch"</string>
+  </array>
+
+  <!-- 20 minutes. Fast enough that time-to-know beats noticing on your own,
+       slow enough that it is not a poll storm. The hourly budget inside
+       hud-watch is the real governor, not this interval. -->
+  <key>StartInterval</key><integer>1200</integer>
+
+  <!-- Deliberately NOT KeepAlive. com.claude.mac-endpoint had KeepAlive with a
+       missing module and launchd restarted it 811,640 times into a 37MB log.
+       This runs, decides, and exits. -->
+  <key>RunAtLoad</key><false/>
+
+  <key>StandardOutPath</key><string>/Users/joelnewton/.chewbacca/logs/presence-watch.log</string>
+  <key>StandardErrorPath</key><string>/Users/joelnewton/.chewbacca/logs/presence-watch.log</string>
+  <key>ProcessType</key><string>Background</string>
+  <key>LowPriorityIO</key><true/>
+</dict>
+</plist>

@@ -87,6 +87,22 @@ And the best single rule found, which is about frequency rather than taste:
 an interaction seen **100+ times a day gets no animation at all**. Raycast
 ships no open/close animation, and that is correct.
 
+## One measured finding worth the whole repo
+
+33 award-winning sites were fetched and 131 JS bundles grepped.
+**Framer Motion appears on 0 of them. React Three Fiber on 0. Spline on 0.**
+Lenis is on 18 of 23, more common than GSAP itself, and Nuxt beats Next 10 to 2.
+
+That contradicts `~/.claude/rules/design-system.md`, which mandates Framer
+Motion and React. The house rule is fine for product UI, where React really
+does dominate, and it is measurably wrong as a description of award-grade work.
+
+The synthesis is better than the stack, though: **the corpus does not say 3D
+wins, it says one committed mechanism wins.** Dropbox Brand took CSSDA Website
+of the Year, Best UX and a Webby with no WebGL at all, by turning its brand
+guidelines into toys. Don't Board Me won Site of the Year Users' Choice on
+copywriting and a funny 404.
+
 ## Honesty about the sources
 
 `research/` marks `[UNVERIFIED]` on every claim whose trail ran out, and those

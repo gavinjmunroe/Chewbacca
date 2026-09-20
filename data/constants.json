@@ -392,5 +392,55 @@
   "make the timing asymmetric",
   "polish",
   "accessibility and cohesion"
- ]
+ ],
+ "award_corpus": {
+  "_": "Measured, not recalled: 33 winner sites fetched, 131 JS and 65 CSS files grepped. All counts are floors. See research/01.",
+  "awwwards_weights": {
+   "design": 0.4,
+   "usability": 0.3,
+   "creativity": 0.2,
+   "content": 0.1
+  },
+  "awwwards_score_range_observed": [
+   7.45,
+   8.25
+  ],
+  "awwwards_note": "Nobody cleared 8.3 in three years. Plan to a 7.9, not a 9.",
+  "no_rubric_publishes": [
+   "a performance budget",
+   "a Core Web Vitals threshold",
+   "a WCAG conformance level"
+  ],
+  "library_frequency": {
+   "lenis": "18/23",
+   "scrolltrigger": "13/23",
+   "gsap": "12/23",
+   "splittext": "11/23",
+   "nuxt": "10/23",
+   "webflow": "6/23",
+   "threejs": "5/23 strict",
+   "nextjs": "2/23"
+  },
+  "zero_footprint": {
+   "framer_motion": "0/32",
+   "react_three_fiber": "0/32",
+   "spline": "0/32",
+   "_": "Contradicts ~/.claude/rules/design-system.md, which mandates Framer Motion."
+  },
+  "winning_stack": "Nuxt or Webflow, Lenis driven from gsap.ticker, ScrollTrigger normalising scroll to 0-1, that value into Three.js shader uniforms, SplitText on type, Draco glTF, Web Audio coupled to visuals.",
+  "the_rule": "Pick one mechanism, couple everything to it, skip the rest. The corpus does not say 3D wins; it says a single committed mechanism wins.",
+  "counter_evidence": {
+   "reduced_motion_referenced": "11/23 sites only",
+   "under_60_words_initial_html": "8/32",
+   "no_h1_in_initial_html": "13/32",
+   "largest_single_bundle_mb": 4.7,
+   "median_first_response_js_kb": 555
+  },
+  "winners_without_webgl": [
+   "Dropbox Brand (CSSDA WOTY 2025 + Best UX + Webby)",
+   "Terminal Industries (SOTM)",
+   "Zentry (SOTM + Developer Award, deliberately DOM/CSS)",
+   "Don't Board Me (SOTY Users' Choice, copywriting and a funny 404)"
+  ]
+ }
 }

@@ -34,7 +34,7 @@ as `partial`.
 | 07 | ~~Accessibility~~ **done** | 57 primary-source fetches. [research/07](research/07-accessibility.md) |
 | 08 | ~~Component source~~ **done** | **~110 source files read.** 38 edge cases documented nowhere else. This is the method bar. [research/08](research/08-component-source.md) |
 | 09 | **Data visualization and dashboards** | Cleveland & McGill, chart selection, colour in viz, tables. Nothing. |
-| 10 | **Design tokens and theming** | The DTCG spec, three-tier architecture, colour-scale generation, Tailwind v4. Nothing. |
+| 10 | ~~Design tokens~~ **done** | 46 fetches. Found Primer already shipping LLM-targeted token metadata. [research/10](research/10-design-tokens.md) |
 
 ## Wave 3, taste, launched 2026-09-20 (in flight)
 

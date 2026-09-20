@@ -74,6 +74,26 @@ For the claim to hold, all four:
    knowledge somewhere in chewbacca I want it to actually be applied."*
    Enforcement is code that runs. A markdown file of good advice is worth zero.
 
+## Prior art found so far, before the dedicated pass lands
+
+**Primer already ships agent-targeted metadata inside their design tokens**
+(found 2026-09-20 in the tokens research):
+
+```json5
+'org.primer.llm': {
+  usage: ['page-background', 'main-content', 'card-background'],
+  rules: 'Use as the primary background for pages and content areas. Do NOT use for emphasis or highlighting.'
+}
+```
+
+**That is a deny list, written for a model, shipped in production, by GitHub.**
+It arrives at the same idea from the token layer rather than the lint layer,
+and it is the closest prior art found anywhere so far.
+
+What it does not do: it is per-token guidance inside one house system, not a
+selectable set of coherent refusals extracted from many. But it is real, it
+predates this, and any novelty claim has to name it.
+
 ## The strongest objection, kept in view
 
 Bourdieu's, and it is not a technicality: **taste classifies, and it classifies

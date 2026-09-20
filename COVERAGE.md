@@ -36,6 +36,16 @@ as `partial`.
 | 09 | **Data visualization and dashboards** | Cleveland & McGill, chart selection, colour in viz, tables. Nothing. |
 | 10 | **Design tokens and theming** | The DTCG spec, three-tier architecture, colour-scale generation, Tailwind v4. Nothing. |
 
+## Wave 3, taste, launched 2026-09-20 (in flight)
+
+| # | Domain | Why |
+|---|---|---|
+| 11 | **The theory of taste** | Hume, Kant, Bourdieu, Rams, Vignelli, Paul Graham. What taste *is*, including the strongest case that it is class signalling |
+| 12 | **Empirical aesthetics** | Processing fluency, MAYA/prototypicality, Reinecke's complexity model, the aesthetic-usability effect, golden-ratio debunking |
+| 13 | **AI slop across every medium** | The *mechanism*: mode collapse, RLHF diversity loss, model collapse. And the escape |
+| 14 | **How taste is developed** | Deliberate practice, critique culture, constraints, and the Nature 2021 subtraction-neglect result |
+| 15 | **Prior art on engineering taste** | Adversarial: has this been built already? Gates the claim in [THESIS.md](THESIS.md) |
+
 ## Not yet started
 
 | Domain | Note |

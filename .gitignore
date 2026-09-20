@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+
+# Extracted full texts of copyrighted papers. Reproducible via
+# research/papers/fetch.sh; the findings and citations live in research/.
+research/papers/*.txt

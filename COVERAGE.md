@@ -33,7 +33,7 @@ as `partial`.
 | 06 | ~~Forms~~ **done** | 40 fetches. Opens with where the authorities conflict. [research/06](research/06-forms.md) |
 | 07 | ~~Accessibility~~ **done** | 57 primary-source fetches. [research/07](research/07-accessibility.md) |
 | 08 | ~~Component source~~ **done** | **~110 source files read.** 38 edge cases documented nowhere else. This is the method bar. [research/08](research/08-component-source.md) |
-| 09 | **Data visualization and dashboards** | Cleveland & McGill, chart selection, colour in viz, tables. Nothing. |
+| 09 | ~~Data viz~~ **done** | **18 papers downloaded, 15 read as full text.** Overturned three things everyone repeats. [research/09](research/09-dataviz.md) |
 | 10 | ~~Design tokens~~ **done** | 46 fetches. Found Primer already shipping LLM-targeted token metadata. [research/10](research/10-design-tokens.md) |
 
 ## Wave 3, taste, launched 2026-09-20 (in flight)

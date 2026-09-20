@@ -31,7 +31,7 @@ as `partial`.
 |---|---|---|
 | 05 | **Academic HCI foundations** | Fitts, Hick-Hyman, GOMS/KLM, Steering, Miller. Wave 1 cited these **secondhand through blog posts**. No paper was read. |
 | 06 | **Forms, inputs, validation, checkout** | Almost certainly higher ROI than everything in wave 1. Untouched. |
-| 07 | **Accessibility, comprehensively** | Wave 1 covered only motion accessibility. No WCAG A/AA enumeration, no ARIA APG patterns, no screen-reader behaviour. |
+| 07 | ~~Accessibility~~ **done** | 57 primary-source fetches. [research/07](research/07-accessibility.md) |
 | 08 | **Component library source** | Radix, Base UI, React Aria, Zag, Floating UI. The hard primitives: focus trap, scroll lock, positioning, roving tabindex. |
 | 09 | **Data visualization and dashboards** | Cleveland & McGill, chart selection, colour in viz, tables. Nothing. |
 | 10 | **Design tokens and theming** | The DTCG spec, three-tier architecture, colour-scale generation, Tailwind v4. Nothing. |

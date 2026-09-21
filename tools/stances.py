@@ -84,9 +84,30 @@ STANCES = {
 }
 
 
+# Refusals that hold regardless of stance.
+#
+# MEASURED 2026-09-20. Across 10 unguided samples and 4 stance-guided pages,
+# 83 of all blocking findings were a single rule: emoji standing in for an
+# icon. Stance guidance did not reduce findings at all (unguided mean 7.5
+# blocking, guided 7.8), because every refusal list was about colour and
+# layout and none of them mentioned emoji. The model reaches for emoji by
+# default and nothing was telling it not to.
+#
+# A per-stance refusal is a craft decision and belongs to that stance. A
+# universal ban is not a craft decision and has to be carried by every prompt,
+# or it is carried by none of them.
+BASELINE_REFUSE = [
+    "emoji used as an icon or a bullet, anywhere, for any reason",
+    "invented statistics, user counts, or 'trusted by N' social proof",
+    "fabricated testimonials with invented names",
+    "em dashes in any copy",
+    "placeholder copy such as lorem ipsum or 'Feature one'",
+]
+
+
 def prompt_for(stance_key, brief):
     s = STANCES[stance_key]
-    refusals = "\n".join(f"- {r}" for r in s["refuse"])
+    refusals = "\n".join(f"- {r}" for r in list(s["refuse"]) + BASELINE_REFUSE)
     return (
         f"{brief}\n\n"
         f"Follow this organizing principle exactly:\n{s['principle']}\n\n"

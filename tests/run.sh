@@ -219,6 +219,35 @@ check "motion/ reduces rather than deleting" bash -c \
 check "ux-motion refuses to invent a primitive" bash -c \
   "! '$ROOT/bin/ux-motion' teleport 2>/dev/null"
 
+# Measured 2026-09-20: 83 of all blocking findings across the corpus were a
+# single rule, emoji-as-icon, and stance guidance did not reduce findings at
+# all because no refusal list mentioned emoji. Universal bans must reach every
+# prompt or they reach none.
+check "every stance prompt carries the universal bans" python3 -c "
+import sys; sys.path.insert(0,'$ROOT/tools')
+import stances
+for k in stances.STANCES:
+    p = stances.prompt_for(k, 'a page')
+    for ban in ('emoji', 'em dashes', 'invented statistics'):
+        assert ban in p, (k, ban)
+"
+
+check "derived variants carry the universal bans too" python3 -c "
+import sys; sys.path.insert(0,'$ROOT/tools')
+import tension
+p = tension.prompt_for({'principle':'x','refuse':['a','b'],'resolves':'y'}, 'a page')
+assert 'emoji' in p and 'em dashes' in p
+"
+
+check "emoji as an icon is a blocking finding" bash -c '
+  d=$(mktemp -d); printf "<div><span>\xf0\x9f\x93\x85</span>Calendar</div>" > "$d/e.html"
+  "$ROOT/bin/ux-lint" "$d/e.html" | grep -q "emoji-as-icon"; rc=$?; rm -rf "$d"; [ $rc -eq 0 ]'
+
+check "invented social proof is a blocking finding" bash -c '
+  d=$(mktemp -d); printf "<p>Trusted by 14,000+ marketers</p>" > "$d/p.html"
+  "$ROOT/bin/ux-lint" "$d/p.html" | grep -q "invented-social-proof"; rc=$?; rm -rf "$d"; [ $rc -eq 0 ]'
+
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

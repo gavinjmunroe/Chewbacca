@@ -1,0 +1,1667 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notification Preferences</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --black: #111111;
+        --white: #f7f3ec;
+        --yellow: #ffd100;
+        --red: #d92b2b;
+        --green: #1a7a3f;
+        --blue: #1640d4;
+        --mid: #e8e2d8;
+        --shadow: 4px 4px 0px var(--black);
+        --shadow-sm: 3px 3px 0px var(--black);
+        --shadow-lg: 6px 6px 0px var(--black);
+        --border: 2px solid var(--black);
+      }
+
+      html,
+      body {
+        background: var(--white);
+        color: var(--black);
+        font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+        min-height: 100vh;
+      }
+
+      /* ---- LAYOUT ---- */
+      .page {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+      }
+
+      /* ---- PAGE HEADER ---- */
+      .page-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 40px;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .page-title-block {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+
+      .label-tag {
+        display: inline-block;
+        background: var(--yellow);
+        border: var(--border);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        padding: 3px 8px;
+        box-shadow: var(--shadow-sm);
+        width: fit-content;
+      }
+
+      h1 {
+        font-size: clamp(26px, 5vw, 36px);
+        font-weight: 900;
+        line-height: 1.05;
+        letter-spacing: -0.02em;
+      }
+
+      .page-sub {
+        font-size: 14px;
+        font-weight: 400;
+        color: #555;
+        margin-top: 4px;
+        line-height: 1.5;
+      }
+
+      .save-btn {
+        background: var(--black);
+        color: var(--white);
+        border: var(--border);
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 12px 24px;
+        cursor: pointer;
+        box-shadow: var(--shadow);
+        transition:
+          transform 80ms,
+          box-shadow 80ms;
+        border-radius: 0;
+        flex-shrink: 0;
+        align-self: flex-end;
+        margin-bottom: 4px;
+      }
+
+      .save-btn:hover {
+        transform: translate(-1px, -1px);
+        box-shadow: 5px 5px 0px var(--black);
+      }
+
+      .save-btn:active {
+        transform: translate(3px, 3px);
+        box-shadow: 1px 1px 0px var(--black);
+      }
+
+      .save-btn.saved {
+        background: var(--green);
+      }
+
+      /* ---- SECTION ---- */
+      .section {
+        border: var(--border);
+        box-shadow: var(--shadow-lg);
+        margin-bottom: 28px;
+        background: var(--white);
+      }
+
+      .section-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 20px;
+        border-bottom: var(--border);
+        background: var(--mid);
+      }
+
+      .section-icon {
+        width: 32px;
+        height: 32px;
+        border: var(--border);
+        background: var(--black);
+        box-shadow: var(--shadow-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .section-icon svg {
+        fill: var(--yellow);
+        width: 16px;
+        height: 16px;
+      }
+
+      .section-head-text {
+        flex: 1;
+      }
+
+      .section-title {
+        font-size: 13px;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .section-desc {
+        font-size: 11px;
+        color: #666;
+        margin-top: 1px;
+        font-weight: 400;
+      }
+
+      .section-all {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 2px 0;
+      }
+
+      .section-all-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #555;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      /* ---- ROW ---- */
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        gap: 16px;
+        border-bottom: 1px solid var(--mid);
+        transition: background 120ms;
+      }
+
+      .row:last-child {
+        border-bottom: none;
+      }
+
+      .row:hover {
+        background: #f0ebe1;
+      }
+
+      .row-left {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .row-dot {
+        width: 8px;
+        height: 8px;
+        background: var(--mid);
+        border: 1.5px solid #999;
+        margin-top: 5px;
+        flex-shrink: 0;
+      }
+
+      .row-dot.active {
+        background: var(--green);
+        border-color: var(--green);
+      }
+
+      .row-text {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .row-name {
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.3;
+      }
+
+      .row-hint {
+        font-size: 12px;
+        color: #666;
+        margin-top: 2px;
+        line-height: 1.4;
+      }
+
+      .row-badge {
+        display: inline-block;
+        font-size: 9px;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        padding: 2px 6px;
+        border: 1.5px solid;
+        margin-left: 6px;
+        vertical-align: middle;
+      }
+
+      .row-badge.critical {
+        border-color: var(--red);
+        color: var(--red);
+      }
+
+      .row-badge.new {
+        border-color: var(--blue);
+        color: var(--blue);
+      }
+
+      /* ---- TOGGLE ---- */
+      .toggle-wrap {
+        position: relative;
+        flex-shrink: 0;
+      }
+
+      .toggle-input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .toggle-track {
+        display: flex;
+        align-items: center;
+        width: 52px;
+        height: 28px;
+        background: var(--mid);
+        border: var(--border);
+        box-shadow: var(--shadow-sm);
+        cursor: pointer;
+        position: relative;
+        transition:
+          background 120ms,
+          box-shadow 120ms,
+          transform 80ms;
+        border-radius: 0;
+      }
+
+      .toggle-track:hover {
+        transform: translate(-1px, -1px);
+        box-shadow: 4px 4px 0px var(--black);
+      }
+
+      .toggle-track:active {
+        transform: translate(2px, 2px);
+        box-shadow: 1px 1px 0px var(--black);
+      }
+
+      .toggle-thumb {
+        position: absolute;
+        left: 3px;
+        width: 18px;
+        height: 18px;
+        background: #888;
+        border: 1.5px solid var(--black);
+        transition:
+          left 120ms,
+          background 120ms;
+      }
+
+      .toggle-input:checked + .toggle-track {
+        background: var(--green);
+      }
+
+      .toggle-input:checked + .toggle-track .toggle-thumb {
+        left: 27px;
+        background: var(--white);
+      }
+
+      .toggle-input:focus-visible + .toggle-track {
+        outline: 3px solid var(--blue);
+        outline-offset: 2px;
+      }
+
+      /* disabled toggle */
+      .toggle-input:disabled + .toggle-track {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+
+      /* ---- FREQUENCY ROW ---- */
+      .freq-row {
+        padding: 14px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        background: #f0ebe1;
+        border-bottom: var(--border);
+        flex-wrap: wrap;
+      }
+
+      .freq-label {
+        font-size: 12px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #555;
+      }
+
+      .freq-options {
+        display: flex;
+        gap: 0;
+      }
+
+      .freq-btn {
+        background: var(--white);
+        border: var(--border);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 6px 14px;
+        cursor: pointer;
+        box-shadow: none;
+        border-right: none;
+        transition: background 80ms;
+        border-radius: 0;
+      }
+
+      .freq-btn:last-child {
+        border-right: var(--border);
+      }
+
+      .freq-btn:hover {
+        background: var(--mid);
+      }
+
+      .freq-btn.active {
+        background: var(--black);
+        color: var(--white);
+      }
+
+      /* ---- CHANNEL TABS ---- */
+      .channel-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 28px;
+        border: var(--border);
+        box-shadow: var(--shadow);
+        width: fit-content;
+      }
+
+      .channel-tab {
+        padding: 10px 20px;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        cursor: pointer;
+        border: none;
+        border-right: var(--border);
+        background: var(--mid);
+        color: #666;
+        transition:
+          background 80ms,
+          color 80ms;
+        border-radius: 0;
+      }
+
+      .channel-tab:last-child {
+        border-right: none;
+      }
+
+      .channel-tab:hover {
+        background: #ddd8ce;
+      }
+
+      .channel-tab.active {
+        background: var(--yellow);
+        color: var(--black);
+      }
+
+      .channel-panel {
+        display: none;
+      }
+
+      .channel-panel.active {
+        display: block;
+      }
+
+      /* ---- QUIET HOURS ---- */
+      .quiet-block {
+        border: var(--border);
+        box-shadow: var(--shadow-lg);
+        margin-bottom: 28px;
+        background: var(--white);
+      }
+
+      .quiet-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 20px;
+        border-bottom: var(--border);
+        background: var(--black);
+        color: var(--white);
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .quiet-head-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .quiet-title {
+        font-size: 13px;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .quiet-subtitle {
+        font-size: 11px;
+        color: #aaa;
+        margin-top: 1px;
+      }
+
+      .quiet-icon {
+        width: 28px;
+        height: 28px;
+        background: var(--yellow);
+        border: 1.5px solid var(--yellow);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+
+      .quiet-icon svg {
+        fill: var(--black);
+        width: 14px;
+        height: 14px;
+      }
+
+      .quiet-body {
+        padding: 20px;
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+
+      .time-field-group {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .time-label {
+        font-size: 11px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #555;
+      }
+
+      .time-input {
+        border: var(--border);
+        background: var(--white);
+        box-shadow: var(--shadow-sm);
+        padding: 8px 12px;
+        font-size: 16px;
+        font-weight: 700;
+        font-family: inherit;
+        color: var(--black);
+        cursor: pointer;
+        border-radius: 0;
+        width: 120px;
+      }
+
+      .time-input:focus {
+        outline: 3px solid var(--blue);
+        outline-offset: 1px;
+      }
+
+      .time-sep {
+        font-size: 16px;
+        font-weight: 900;
+        color: #aaa;
+      }
+
+      /* ---- DIGEST CALLOUT ---- */
+      .callout {
+        border: var(--border);
+        box-shadow: var(--shadow);
+        padding: 16px 20px;
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        background: var(--yellow);
+        margin-bottom: 28px;
+      }
+
+      .callout-bar {
+        width: 4px;
+        background: var(--black);
+        align-self: stretch;
+        flex-shrink: 0;
+      }
+
+      .callout-text strong {
+        display: block;
+        font-size: 12px;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 4px;
+      }
+
+      .callout-text p {
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.5;
+        color: #333;
+      }
+
+      /* ---- DANGER ZONE ---- */
+      .danger-zone {
+        border: 2px solid var(--red);
+        box-shadow: 4px 4px 0px var(--red);
+        background: var(--white);
+        margin-top: 40px;
+      }
+
+      .danger-head {
+        background: var(--red);
+        color: var(--white);
+        padding: 12px 20px;
+        font-size: 12px;
+        font-weight: 900;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      .danger-body {
+        padding: 18px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+
+      .danger-body p {
+        font-size: 13px;
+        color: #555;
+        line-height: 1.5;
+        flex: 1;
+        min-width: 180px;
+      }
+
+      .danger-btn {
+        background: var(--white);
+        color: var(--red);
+        border: 2px solid var(--red);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 10px 20px;
+        cursor: pointer;
+        box-shadow: 3px 3px 0px var(--red);
+        transition:
+          transform 80ms,
+          box-shadow 80ms;
+        border-radius: 0;
+        flex-shrink: 0;
+      }
+
+      .danger-btn:hover {
+        background: var(--red);
+        color: var(--white);
+        transform: translate(-1px, -1px);
+        box-shadow: 4px 4px 0px #8b0000;
+      }
+
+      .danger-btn:active {
+        transform: translate(2px, 2px);
+        box-shadow: 1px 1px 0px var(--red);
+      }
+
+      /* ---- TOAST ---- */
+      .toast {
+        position: fixed;
+        bottom: 32px;
+        right: 32px;
+        background: var(--black);
+        color: var(--white);
+        padding: 14px 22px;
+        border: var(--border);
+        box-shadow: var(--shadow-lg);
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0;
+        transform: translateY(16px);
+        transition:
+          opacity 200ms,
+          transform 200ms;
+        pointer-events: none;
+        z-index: 100;
+        max-width: 280px;
+      }
+
+      .toast.show {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .toast-accent {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        background: var(--green);
+        border: 1.5px solid var(--green);
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+
+      /* ---- CONFIRM MODAL ---- */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(17, 17, 17, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 200;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 150ms;
+        padding: 16px;
+      }
+
+      .modal-backdrop.open {
+        opacity: 1;
+        pointer-events: all;
+      }
+
+      .modal {
+        background: var(--white);
+        border: var(--border);
+        box-shadow: 8px 8px 0px var(--black);
+        width: 100%;
+        max-width: 400px;
+        transform: translateY(12px);
+        transition: transform 150ms;
+      }
+
+      .modal-backdrop.open .modal {
+        transform: translateY(0);
+      }
+
+      .modal-head {
+        background: var(--red);
+        color: var(--white);
+        padding: 14px 20px;
+        font-size: 13px;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .modal-body {
+        padding: 24px 20px;
+      }
+
+      .modal-body p {
+        font-size: 14px;
+        line-height: 1.6;
+        color: #333;
+        margin-bottom: 20px;
+      }
+
+      .modal-actions {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+      }
+
+      .modal-cancel {
+        background: var(--white);
+        color: var(--black);
+        border: var(--border);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 10px 18px;
+        cursor: pointer;
+        box-shadow: var(--shadow-sm);
+        transition:
+          transform 80ms,
+          box-shadow 80ms;
+        border-radius: 0;
+      }
+
+      .modal-cancel:hover {
+        background: var(--mid);
+      }
+
+      .modal-confirm {
+        background: var(--red);
+        color: var(--white);
+        border: 2px solid var(--red);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 10px 18px;
+        cursor: pointer;
+        box-shadow: 3px 3px 0px #8b0000;
+        transition:
+          transform 80ms,
+          box-shadow 80ms;
+        border-radius: 0;
+      }
+
+      .modal-confirm:hover {
+        background: #b52222;
+        transform: translate(-1px, -1px);
+        box-shadow: 4px 4px 0px #8b0000;
+      }
+
+      /* ---- RESPONSIVE ---- */
+      @media (max-width: 480px) {
+        .page {
+          padding: 28px 16px 60px;
+        }
+
+        .channel-tabs {
+          width: 100%;
+        }
+
+        .channel-tab {
+          flex: 1;
+          text-align: center;
+          padding: 10px 10px;
+        }
+
+        .freq-options {
+          width: 100%;
+        }
+
+        .freq-btn {
+          flex: 1;
+          text-align: center;
+        }
+
+        .time-input {
+          width: 100px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <!-- PAGE HEADER -->
+      <div class="page-header">
+        <div class="page-title-block">
+          <span class="label-tag">Account Settings</span>
+          <h1>Notifications</h1>
+          <p class="page-sub">
+            Control what we send and when. Changes apply immediately.
+          </p>
+        </div>
+        <button class="save-btn" id="saveBtn" onclick="handleSave()">
+          Save changes
+        </button>
+      </div>
+
+      <!-- CALLOUT -->
+      <div class="callout">
+        <div class="callout-bar"></div>
+        <div class="callout-text">
+          <strong>Heads up</strong>
+          <p>
+            Security alerts are always on. We will contact you for suspicious
+            sign-ins and payment failures regardless of your settings below.
+          </p>
+        </div>
+      </div>
+
+      <!-- CHANNEL TABS -->
+      <div
+        class="channel-tabs"
+        role="tablist"
+        aria-label="Notification channels"
+      >
+        <button
+          class="channel-tab active"
+          role="tab"
+          aria-selected="true"
+          onclick="switchTab('email', this)"
+        >
+          Email
+        </button>
+        <button
+          class="channel-tab"
+          role="tab"
+          aria-selected="false"
+          onclick="switchTab('push', this)"
+        >
+          Push
+        </button>
+        <button
+          class="channel-tab"
+          role="tab"
+          aria-selected="false"
+          onclick="switchTab('sms', this)"
+        >
+          SMS
+        </button>
+      </div>
+
+      <!-- EMAIL PANEL -->
+      <div class="channel-panel active" id="panel-email">
+        <!-- Account activity -->
+        <div class="section">
+          <div class="section-head">
+            <div class="section-icon">
+              <svg viewBox="0 0 16 16">
+                <path
+                  d="M1 3a1 1 0 011-1h12a1 1 0 011 1v.5L8 8.5 1 3.5V3zm0 2.5l7 4.5 7-4.5V13a1 1 0 01-1 1H2a1 1 0 01-1-1V5.5z"
+                />
+              </svg>
+            </div>
+            <div class="section-head-text">
+              <div class="section-title">Account activity</div>
+              <div class="section-desc">Sign-ins, security events, billing</div>
+            </div>
+            <div class="section-all">
+              <span
+                class="section-all-label"
+                onclick="toggleAll('account-email')"
+                >All</span
+              >
+              <div class="toggle-wrap">
+                <input
+                  type="checkbox"
+                  class="toggle-input section-master"
+                  id="master-account-email"
+                  checked
+                  onchange="masterToggle('account-email', this)"
+                />
+                <label
+                  class="toggle-track"
+                  for="master-account-email"
+                  aria-label="Toggle all account activity"
+                  ><span class="toggle-thumb"></span
+                ></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot active" id="dot-signin-email"></div>
+              <div class="row-text">
+                <div class="row-name">
+                  New sign-in detected
+                  <span class="row-badge critical">Required</span>
+                </div>
+                <div class="row-hint">
+                  Sent any time your account is accessed from a new device or
+                  location.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-account-email"
+                id="signin-email"
+                checked
+                disabled
+                onchange="syncDot('signin-email')"
+              />
+              <label
+                class="toggle-track"
+                for="signin-email"
+                aria-label="New sign-in detected"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot active" id="dot-password-email"></div>
+              <div class="row-text">
+                <div class="row-name">Password or email changed</div>
+                <div class="row-hint">
+                  Confirmation after any credential update.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-account-email"
+                id="password-email"
+                checked
+                onchange="syncDot('password-email')"
+              />
+              <label
+                class="toggle-track"
+                for="password-email"
+                aria-label="Password or email changed"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot" id="dot-billing-email"></div>
+              <div class="row-text">
+                <div class="row-name">Billing receipts and failures</div>
+                <div class="row-hint">
+                  Receipts on each charge, plus alerts if a payment does not go
+                  through.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-account-email"
+                id="billing-email"
+                onchange="syncDot('billing-email')"
+              />
+              <label
+                class="toggle-track"
+                for="billing-email"
+                aria-label="Billing receipts and failures"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activity and updates -->
+        <div class="section">
+          <div class="section-head">
+            <div class="section-icon">
+              <svg viewBox="0 0 16 16">
+                <path
+                  d="M8 1a7 7 0 100 14A7 7 0 008 1zM7 4h2v5H7V4zm0 6h2v2H7v-2z"
+                />
+              </svg>
+            </div>
+            <div class="section-head-text">
+              <div class="section-title">Activity and updates</div>
+              <div class="section-desc">Comments, mentions, product news</div>
+            </div>
+            <div class="section-all">
+              <span
+                class="section-all-label"
+                onclick="toggleAll('activity-email')"
+                >All</span
+              >
+              <div class="toggle-wrap">
+                <input
+                  type="checkbox"
+                  class="toggle-input section-master"
+                  id="master-activity-email"
+                  checked
+                  onchange="masterToggle('activity-email', this)"
+                />
+                <label
+                  class="toggle-track"
+                  for="master-activity-email"
+                  aria-label="Toggle all activity"
+                  ><span class="toggle-thumb"></span
+                ></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="freq-row">
+            <span class="freq-label">Digest frequency</span>
+            <div
+              class="freq-options"
+              role="group"
+              aria-label="Digest frequency"
+            >
+              <button
+                class="freq-btn active"
+                onclick="setFreq(this, 'activity-email')"
+              >
+                Instant
+              </button>
+              <button
+                class="freq-btn"
+                onclick="setFreq(this, 'activity-email')"
+              >
+                Daily
+              </button>
+              <button
+                class="freq-btn"
+                onclick="setFreq(this, 'activity-email')"
+              >
+                Weekly
+              </button>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot active" id="dot-mention-email"></div>
+              <div class="row-text">
+                <div class="row-name">Mentions and replies</div>
+                <div class="row-hint">
+                  When someone tags you or responds to your comment.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-activity-email"
+                id="mention-email"
+                checked
+                onchange="syncDot('mention-email')"
+              />
+              <label
+                class="toggle-track"
+                for="mention-email"
+                aria-label="Mentions and replies"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot active" id="dot-assign-email"></div>
+              <div class="row-text">
+                <div class="row-name">
+                  Assigned to you <span class="row-badge new">New</span>
+                </div>
+                <div class="row-hint">
+                  Tasks, issues, or requests routed to your account.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-activity-email"
+                id="assign-email"
+                checked
+                onchange="syncDot('assign-email')"
+              />
+              <label
+                class="toggle-track"
+                for="assign-email"
+                aria-label="Assigned to you"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot" id="dot-product-email"></div>
+              <div class="row-text">
+                <div class="row-name">Product changelog</div>
+                <div class="row-hint">
+                  Feature releases and notable fixes. Roughly twice a month.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-activity-email"
+                id="product-email"
+                onchange="syncDot('product-email')"
+              />
+              <label
+                class="toggle-track"
+                for="product-email"
+                aria-label="Product changelog"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot" id="dot-tips-email"></div>
+              <div class="row-text">
+                <div class="row-name">Tips and how-tos</div>
+                <div class="row-hint">
+                  Occasional short guides based on how you use the product.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-activity-email"
+                id="tips-email"
+                onchange="syncDot('tips-email')"
+              />
+              <label
+                class="toggle-track"
+                for="tips-email"
+                aria-label="Tips and how-tos"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PUSH PANEL -->
+      <div class="channel-panel" id="panel-push">
+        <div class="section">
+          <div class="section-head">
+            <div class="section-icon">
+              <svg viewBox="0 0 16 16">
+                <path
+                  d="M8 1a5 5 0 00-5 5v3.5L1.5 11v1h13v-1L13 9.5V6a5 5 0 00-5-5zM6 12.5a2 2 0 004 0H6z"
+                />
+              </svg>
+            </div>
+            <div class="section-head-text">
+              <div class="section-title">Push notifications</div>
+              <div class="section-desc">Sent to your browser or mobile app</div>
+            </div>
+            <div class="section-all">
+              <span class="section-all-label" onclick="toggleAll('push')"
+                >All</span
+              >
+              <div class="toggle-wrap">
+                <input
+                  type="checkbox"
+                  class="toggle-input section-master"
+                  id="master-push"
+                  checked
+                  onchange="masterToggle('push', this)"
+                />
+                <label
+                  class="toggle-track"
+                  for="master-push"
+                  aria-label="Toggle all push"
+                  ><span class="toggle-thumb"></span
+                ></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot active" id="dot-alerts-push"></div>
+              <div class="row-text">
+                <div class="row-name">
+                  Security alerts
+                  <span class="row-badge critical">Required</span>
+                </div>
+                <div class="row-hint">
+                  Immediate push for suspicious account activity.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-push"
+                id="alerts-push"
+                checked
+                disabled
+                onchange="syncDot('alerts-push')"
+              />
+              <label
+                class="toggle-track"
+                for="alerts-push"
+                aria-label="Security alerts"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot active" id="dot-mentions-push"></div>
+              <div class="row-text">
+                <div class="row-name">Mentions and replies</div>
+                <div class="row-hint">
+                  Real-time push when someone responds to you.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-push"
+                id="mentions-push"
+                checked
+                onchange="syncDot('mentions-push')"
+              />
+              <label
+                class="toggle-track"
+                for="mentions-push"
+                aria-label="Mentions and replies"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot" id="dot-reminders-push"></div>
+              <div class="row-text">
+                <div class="row-name">Reminders</div>
+                <div class="row-hint">
+                  Scheduled nudges for tasks with upcoming due dates.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-push"
+                id="reminders-push"
+                onchange="syncDot('reminders-push')"
+              />
+              <label
+                class="toggle-track"
+                for="reminders-push"
+                aria-label="Reminders"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot" id="dot-updates-push"></div>
+              <div class="row-text">
+                <div class="row-name">Product updates</div>
+                <div class="row-hint">
+                  Major feature announcements and downtime notices.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-push"
+                id="updates-push"
+                onchange="syncDot('updates-push')"
+              />
+              <label
+                class="toggle-track"
+                for="updates-push"
+                aria-label="Product updates"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SMS PANEL -->
+      <div class="channel-panel" id="panel-sms">
+        <div class="section">
+          <div class="section-head">
+            <div class="section-icon">
+              <svg viewBox="0 0 16 16">
+                <path
+                  d="M2 2h12a1 1 0 011 1v8a1 1 0 01-1 1H5l-3 3V3a1 1 0 011-1z"
+                />
+              </svg>
+            </div>
+            <div class="section-head-text">
+              <div class="section-title">SMS notifications</div>
+              <div class="section-desc">
+                Text messages to your verified number
+              </div>
+            </div>
+            <div class="section-all">
+              <span class="section-all-label" onclick="toggleAll('sms')"
+                >All</span
+              >
+              <div class="toggle-wrap">
+                <input
+                  type="checkbox"
+                  class="toggle-input section-master"
+                  id="master-sms"
+                  onchange="masterToggle('sms', this)"
+                />
+                <label
+                  class="toggle-track"
+                  for="master-sms"
+                  aria-label="Toggle all SMS"
+                  ><span class="toggle-thumb"></span
+                ></label>
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot" id="dot-auth-sms"></div>
+              <div class="row-text">
+                <div class="row-name">Two-factor codes</div>
+                <div class="row-hint">
+                  Verification codes for sign-in when two-factor is enabled.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-sms"
+                id="auth-sms"
+                onchange="syncDot('auth-sms')"
+              />
+              <label
+                class="toggle-track"
+                for="auth-sms"
+                aria-label="Two-factor codes"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="row-left">
+              <div class="row-dot" id="dot-critical-sms"></div>
+              <div class="row-text">
+                <div class="row-name">Critical account alerts</div>
+                <div class="row-hint">
+                  Payment failures and account suspension notices only.
+                </div>
+              </div>
+            </div>
+            <div class="toggle-wrap">
+              <input
+                type="checkbox"
+                class="toggle-input group-sms"
+                id="critical-sms"
+                onchange="syncDot('critical-sms')"
+              />
+              <label
+                class="toggle-track"
+                for="critical-sms"
+                aria-label="Critical account alerts"
+                ><span class="toggle-thumb"></span
+              ></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUIET HOURS -->
+      <div class="quiet-block">
+        <div class="quiet-head">
+          <div class="quiet-head-left">
+            <div class="quiet-icon">
+              <svg viewBox="0 0 16 16">
+                <path
+                  d="M8 2a6 6 0 100 12A6 6 0 008 2zm.75 3v3.5l2.25 1.5-.75 1.12-2.75-1.87V5h1.25z"
+                />
+              </svg>
+            </div>
+            <div>
+              <div class="quiet-title">Quiet hours</div>
+              <div class="quiet-subtitle">
+                No push or SMS during this window
+              </div>
+            </div>
+          </div>
+          <div class="toggle-wrap">
+            <input
+              type="checkbox"
+              class="toggle-input"
+              id="quiet-toggle"
+              onchange="toggleQuietBody()"
+            />
+            <label
+              class="toggle-track"
+              for="quiet-toggle"
+              aria-label="Enable quiet hours"
+              style="background: #333; border-color: #666"
+            >
+              <span class="toggle-thumb"></span>
+            </label>
+          </div>
+        </div>
+        <div
+          class="quiet-body"
+          id="quiet-body"
+          style="opacity: 0.4; pointer-events: none"
+        >
+          <div class="time-field-group">
+            <span class="time-label">From</span>
+            <input
+              type="time"
+              class="time-input"
+              id="quiet-start"
+              value="22:00"
+              aria-label="Quiet hours start"
+            />
+          </div>
+          <div class="time-sep">to</div>
+          <div class="time-field-group">
+            <span class="time-label">Until</span>
+            <input
+              type="time"
+              class="time-input"
+              id="quiet-end"
+              value="07:00"
+              aria-label="Quiet hours end"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- DANGER ZONE -->
+      <div class="danger-zone">
+        <div class="danger-head">Unsubscribe all</div>
+        <div class="danger-body">
+          <p>
+            Turn off every non-required notification at once. You can re-enable
+            individual types above at any time.
+          </p>
+          <button class="danger-btn" onclick="openModal()">Turn off all</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TOAST -->
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <span class="toast-accent"></span>Changes saved
+    </div>
+
+    <!-- CONFIRM MODAL -->
+    <div
+      class="modal-backdrop"
+      id="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      <div class="modal">
+        <div class="modal-head" id="modal-title">Confirm: Turn off all</div>
+        <div class="modal-body">
+          <p>
+            This will disable every optional notification across email, push,
+            and SMS. Required security alerts will remain on.
+          </p>
+          <div class="modal-actions">
+            <button class="modal-cancel" onclick="closeModal()">Cancel</button>
+            <button class="modal-confirm" onclick="confirmUnsubAll()">
+              Turn off all
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      /* ---- TABS ---- */
+      function switchTab(name, btn) {
+        document
+          .querySelectorAll(".channel-panel")
+          .forEach((p) => p.classList.remove("active"));
+        document.querySelectorAll(".channel-tab").forEach((b) => {
+          b.classList.remove("active");
+          b.setAttribute("aria-selected", "false");
+        });
+        document.getElementById("panel-" + name).classList.add("active");
+        btn.classList.add("active");
+        btn.setAttribute("aria-selected", "true");
+      }
+
+      /* ---- FREQ BUTTONS ---- */
+      function setFreq(btn, group) {
+        const parent = btn.closest(".freq-options");
+        parent
+          .querySelectorAll(".freq-btn")
+          .forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+      }
+
+      /* ---- SYNC STATUS DOT ---- */
+      function syncDot(id) {
+        const input = document.getElementById(id);
+        const dot = document.getElementById("dot-" + id);
+        if (!dot) return;
+        if (input.checked) {
+          dot.classList.add("active");
+        } else {
+          dot.classList.remove("active");
+        }
+      }
+
+      /* ---- MASTER TOGGLE ---- */
+      function masterToggle(group, masterInput) {
+        document.querySelectorAll(".group-" + group).forEach((input) => {
+          if (!input.disabled) {
+            input.checked = masterInput.checked;
+            syncDot(input.id);
+          }
+        });
+      }
+
+      /* ---- TOGGLE ALL (label click) ---- */
+      function toggleAll(group) {
+        const master = document.getElementById("master-" + group);
+        if (!master) return;
+        master.checked = !master.checked;
+        masterToggle(group, master);
+      }
+
+      /* ---- QUIET HOURS ---- */
+      function toggleQuietBody() {
+        const tog = document.getElementById("quiet-toggle");
+        const body = document.getElementById("quiet-body");
+        if (tog.checked) {
+          body.style.opacity = "1";
+          body.style.pointerEvents = "auto";
+        } else {
+          body.style.opacity = "0.4";
+          body.style.pointerEvents = "none";
+        }
+      }
+
+      /* ---- SAVE ---- */
+      function handleSave() {
+        const btn = document.getElementById("saveBtn");
+        btn.textContent = "Saved";
+        btn.classList.add("saved");
+        showToast();
+        setTimeout(() => {
+          btn.textContent = "Save changes";
+          btn.classList.remove("saved");
+        }, 2400);
+      }
+
+      function showToast() {
+        const t = document.getElementById("toast");
+        t.classList.add("show");
+        setTimeout(() => t.classList.remove("show"), 2800);
+      }
+
+      /* ---- MODAL ---- */
+      function openModal() {
+        document.getElementById("modal").classList.add("open");
+        document
+          .getElementById("modal")
+          .querySelector(".modal-confirm")
+          .focus();
+      }
+
+      function closeModal() {
+        document.getElementById("modal").classList.remove("open");
+      }
+
+      function confirmUnsubAll() {
+        document.querySelectorAll(".toggle-input").forEach((input) => {
+          if (!input.disabled && input.id !== "quiet-toggle") {
+            const wasChecked = input.checked;
+            input.checked = false;
+            if (wasChecked) syncDot(input.id);
+          }
+        });
+        document.querySelectorAll(".section-master").forEach((m) => {
+          m.checked = false;
+        });
+        closeModal();
+        showToast();
+      }
+
+      /* ---- CLOSE MODAL ON BACKDROP CLICK ---- */
+      document.getElementById("modal").addEventListener("click", function (e) {
+        if (e.target === this) closeModal();
+      });
+
+      /* ---- CLOSE MODAL ON ESC ---- */
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape") closeModal();
+      });
+
+      /* ---- INIT DOTS ---- */
+      document.querySelectorAll(".toggle-input").forEach((input) => {
+        if (input.id) syncDot(input.id);
+      });
+    </script>
+  </body>
+</html>

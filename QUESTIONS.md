@@ -421,11 +421,27 @@ is one whose answer would make most of the other work irrelevant.**
      output 40 get good, get insane, or get good THEN insane? The shape of that
      curve says more about where creativity lives than any rule list.
 
-114. `OPEN` **Is the bottleneck generation, selection, or the brief?**
-     Q102 asked the first two. The third is missing and is probably the answer:
-     if the brief is underspecified, no amount of generation or selection
-     recovers it, and the leverage is entirely upstream of everything built
-     tonight.
+114. `MEASURED, AND THE ANSWER WAS NONE OF THEM.` **Is the bottleneck
+     generation, selection, or the brief?**
+     Six stances, one notification-settings brief, 2026-09-20. Structural
+     divergence 0.634 against 0.371 for repeated sampling, so generation is
+     producing genuinely different artifacts. Misreads came back 0, 0, 0, 0,
+     1, 2 and blocking findings were 0 across all six. Four of six tied on the
+     hard metric. The only separation was friction count, 3 to 7.
+
+     Generation works. Selection can rank, barely. But there was almost
+     nothing to rank, because all six were equally competent.
+
+     THE THIRD ANSWER, which was not in this file: every instrument built here
+     measures the ABSENCE of defects. Zero blocking, zero misreads, low
+     friction. None of them carries a positive signal for good. So the whole
+     stack converges on fine, and "value" in the Boden sense is implemented
+     here as nothing more than "not broken."
+
+     *Changes everything:* the work is not a better generator or a better
+     ranker. It is an instrument that can tell competent from remarkable, and
+     nothing in this repo is one. See Q108, which asked whether a system can
+     exceed its own evaluator. It cannot, and this one tops out at no-defects.
 
 115. `OPEN` **Does interface design have reliable devices, the way music has a
      key change?** Music has a small set of moves that produce a predictable

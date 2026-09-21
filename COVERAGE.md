@@ -41,8 +41,8 @@ as `partial`.
 | # | Domain | Why |
 |---|---|---|
 | 11 | ~~The theory of taste~~ **done** | Primary texts read. Yields an operational definition and 13 testable rules. [research/05](research/05-taste.md) |
-| 12 | **Empirical aesthetics** | Processing fluency, MAYA/prototypicality, Reinecke's complexity model, the aesthetic-usability effect, golden-ratio debunking |
-| 13 | **AI slop across every medium** | The *mechanism*: mode collapse, RLHF diversity loss, model collapse. And the escape |
+| 12 | ~~Empirical aesthetics~~ **done** | 9 papers in full text. Complexity peak 4.2/10, asymmetric 3:1. [research/13](research/13-empirical-aesthetics.md) |
+| 13 | ~~AI slop mechanism~~ **done** | The typicality term quantified, and post-editing shown not to work. [research/14](research/14-slop-mechanism.md) |
 | 14 | **How taste is developed** | Deliberate practice, critique culture, constraints, and the Nature 2021 subtraction-neglect result |
 | 15 | **Prior art on engineering taste** | Adversarial: has this been built already? Gates the claim in [THESIS.md](THESIS.md) |
 

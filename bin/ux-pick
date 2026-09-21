@@ -24,6 +24,28 @@ ROWS = json.loads((REPO / "data" / "systems.json").read_text())
 
 # Words a brief uses, mapped to what they imply about the tokens. Deliberately
 # small: a thesaurus here would match everything to everything.
+# INSTRUMENTAL vs EXPRESSIVE.
+#
+# The scorer used to add len(forbids) to every row unconditionally, which is
+# Rams-by-default: it always preferred the most restrained system available.
+# research/05-taste.md names that as a real error rather than a safe one.
+# Venturi's "less is a bore" was not a losing position; minimal-by-default is
+# correct for an artifact someone operates and wrong for one that has to say
+# something, and he beat Ulm in the market for twenty years.
+#
+# So restraint is now a bonus for instrumental briefs and neutral for
+# expressive ones. A landing page is not a worse dashboard.
+INSTRUMENTAL = re.compile(
+    r"dashboard|admin|console|table|settings|tool|internal|analytics|report"
+    r"|form|crud|panel|monitor|ops|editor|ide|terminal|data|workflow",
+    re.I,
+)
+EXPRESSIVE = re.compile(
+    r"landing|marketing|brand|campaign|portfolio|editorial|launch|hero"
+    r"|storytell|magazine|gallery|showcase|manifesto|film|fashion|luxury|art",
+    re.I,
+)
+
 MOOD = {
     "dark": {"mode": "dark"}, "light": {"mode": "light"},
     "serious": {"max_weight": 500}, "austere": {"max_weight": 500, "radius": "sharp"},
@@ -55,8 +77,13 @@ def score(row, terms, want):
         s += 6
     if want.get("max_weight") and row["weight_max"] and row["weight_max"] <= want["max_weight"]:
         s += 3
-    # A system that refuses things is a system that will not look generated.
-    s += len(row["forbids"])
+    # Restraint counts for an instrumental brief and not for an expressive one.
+    # Weighted, not absolute: a refusal still means the system committed to
+    # something, which is what keeps output off the median either way.
+    if want.get("kind") == "expressive":
+        s += min(len(row["forbids"]), 1)
+    else:
+        s += len(row["forbids"])
     return s
 
 
@@ -83,6 +110,8 @@ def main():
     ap.add_argument("--mode", choices=["dark", "light"])
     ap.add_argument("--radius", choices=["sharp", "tight", "soft", "round"])
     ap.add_argument("--no-accent", action="store_true")
+    ap.add_argument("--kind", choices=["instrumental", "expressive"],
+                    help="override the instrumental/expressive guess")
     ap.add_argument("--show", metavar="NAME", help="print one system by name")
     ap.add_argument("-n", type=int, default=3, help="how many to print (default 3)")
     a = ap.parse_args()
@@ -95,8 +124,15 @@ def main():
         show(row)
         return 0
 
-    terms = [t.lower() for t in " ".join(a.query).replace(",", " ").split() if len(t) > 2]
+    brief = " ".join(a.query)
+    terms = [t.lower() for t in brief.replace(",", " ").split() if len(t) > 2]
     want = {}
+    if a.kind:
+        want["kind"] = a.kind
+    elif EXPRESSIVE.search(brief):
+        want["kind"] = "expressive"
+    elif INSTRUMENTAL.search(brief):
+        want["kind"] = "instrumental"
     for t in terms:
         want.update(MOOD.get(t, {}))
     if a.mode:
@@ -115,6 +151,11 @@ def main():
     if not top:
         print("nothing matched. see SYSTEMS.md for the full table.", file=sys.stderr)
         return 1
+    if want.get("kind"):
+        note = ("expressive brief: restraint is not being rewarded"
+                if want["kind"] == "expressive"
+                else "instrumental brief: restraint is being rewarded")
+        print(f"\n  ({note})")
     for r in top:
         show(r, verbose=(len(top) == 1))
     print()

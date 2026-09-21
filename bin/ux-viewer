@@ -138,6 +138,133 @@ def render(html_path, out_png, width=1280, height=900, full=False, settle=3500):
     return out.exists() and out.stat().st_size > 0
 
 
+MOTION_JS = """
+(() => {
+  const seen = [];
+  const grab = () => {
+    for (const a of document.getAnimations()) {
+      let t = {};
+      try { t = a.effect ? a.effect.getTiming() : {}; } catch (e) {}
+      let target = "";
+      try {
+        const el = a.effect && a.effect.target;
+        if (el) target = (el.tagName || "").toLowerCase() +
+          (el.className && el.className.baseVal === undefined && typeof el.className === "string"
+            ? "." + el.className.split(" ").slice(0, 2).join(".") : "");
+      } catch (e) {}
+      seen.push({
+        id: a.id || "", target: target,
+        dur: typeof t.duration === "number" ? t.duration : null,
+        delay: t.delay || 0,
+        easing: t.easing || "",
+        iterations: t.iterations === Infinity ? "infinite" : t.iterations,
+        kind: a.constructor ? a.constructor.name : "",
+        prop: (a.transitionProperty || a.animationName || "")
+      });
+    }
+  };
+  grab();
+  return seen;
+})()
+"""
+
+
+def motion_report(url, out_dir, frames=10, span=4000, width=1280, height=900):
+    """Watch it move. A still frame cannot tell you whether motion is any good.
+
+    Caleb, 2026-09-20: "you should be able to know how gas the animations are
+    here." Every instrument in this repo until now read one frame, which is
+    the same mistake as judging a song from a spectrogram slice.
+
+    Two things get captured, because neither alone is enough:
+
+      THE NUMBERS, from document.getAnimations(). Every running animation with
+      its real duration, delay and easing, as the browser resolved it. This is
+      what the page actually does, not what the source says it intends. It
+      catches durations a minified bundle hides and it catches animations
+      injected by a library.
+
+      THE FRAMES, one strip across the entrance. Consecutive frames get
+      differenced so the motion envelope is visible as a number per frame: how
+      much of the page was still changing, and when it settled.
+
+    A page that is still moving at the last frame has not settled, and that is
+    both a craft finding and the reason every screenshot before this was
+    unreliable.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("BLOCKED: pip3 install playwright", file=sys.stderr)
+        return None
+    out = pathlib.Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    shots, anims = [], []
+    step = span / max(frames - 1, 1)
+
+    with sync_playwright() as pw:
+        try:
+            b = pw.chromium.launch(channel="chrome", args=["--hide-scrollbars"])
+        except Exception:
+            b = pw.chromium.launch(args=["--hide-scrollbars"])
+        page = b.new_page(viewport={"width": width, "height": height})
+        target = url if str(url).startswith("http") else pathlib.Path(url).resolve().as_uri()
+        try:
+            page.goto(str(target), wait_until="commit", timeout=45000)
+        except Exception as e:                            # noqa: BLE001
+            print(f"navigation failed: {e}", file=sys.stderr)
+            b.close()
+            return None
+        for i in range(frames):
+            f = out / f"f{i:02d}.png"
+            page.screenshot(path=str(f))
+            shots.append((i * step, f))
+            try:
+                anims.extend(page.evaluate(MOTION_JS) or [])
+            except Exception:
+                pass
+            page.wait_for_timeout(step)
+        # prefers-reduced-motion, asked of the same page
+        reduced = None
+        try:
+            page.emulate_media(reduced_motion="reduce")
+            page.reload(wait_until="load", timeout=30000)
+            page.wait_for_timeout(1200)
+            reduced = len(page.evaluate(MOTION_JS) or [])
+        except Exception:
+            pass
+        b.close()
+
+    # De-duplicate: the same animation is seen on many polls.
+    uniq = {}
+    for a in anims:
+        k = (a.get("target"), a.get("dur"), a.get("easing"), a.get("prop"))
+        uniq[k] = a
+    return {"frames": shots, "animations": list(uniq.values()),
+            "reduced_motion_count": reduced}
+
+
+def frame_deltas(shots):
+    """Fraction of bytes changed between consecutive frames, as a motion envelope.
+
+    Crude on purpose and dependency-free: PNG size and byte difference track
+    visual change closely enough to say WHEN the page was moving and when it
+    stopped, which is the question being asked.
+    """
+    out = []
+    prev = None
+    for t, f in shots:
+        b = f.read_bytes()
+        if prev is None:
+            out.append((t, None))
+        else:
+            n = min(len(b), len(prev))
+            diff = sum(1 for i in range(0, n, 97) if b[i] != prev[i])
+            out.append((t, diff / max(n // 97, 1)))
+        prev = b
+    return out
+
+
 def probe(png_path, model="sonnet"):
     """Hand the image to a fresh process that knows nothing else about it."""
     png = pathlib.Path(png_path).resolve()
@@ -228,6 +355,10 @@ def main():
     p = sub.add_parser("probe"); p.add_argument("png"); p.add_argument("--intent")
     p.add_argument("--model", default="sonnet"); p.add_argument("--json", action="store_true")
 
+    mo = sub.add_parser("motion"); mo.add_argument("url")
+    mo.add_argument("--out", default=None); mo.add_argument("--frames", type=int, default=10)
+    mo.add_argument("--span", type=int, default=4000)
+
     c = sub.add_parser("check"); c.add_argument("html"); c.add_argument("--intent", required=True)
     c.add_argument("--model", default="sonnet"); c.add_argument("--json", action="store_true")
     c.add_argument("--full", action="store_true")
@@ -236,6 +367,58 @@ def main():
 
     if a.cmd == "render":
         return 0 if render(a.html, a.out, a.width, a.height, a.full) else 1
+
+    if a.cmd == "motion":
+        out = a.out or tempfile.mkdtemp(prefix="uxmotion-")
+        r = motion_report(a.url, out, a.frames, a.span)
+        if not r:
+            return 1
+        deltas = frame_deltas(r["frames"])
+        print("MOTION ENVELOPE   how much of the page was still changing")
+        for t, d in deltas:
+            if d is None:
+                print(f"  {int(t):>5}ms   (first frame)")
+            else:
+                bar = "#" * int(round(d * 60))
+                print(f"  {int(t):>5}ms   {d*100:5.1f}%  {bar}")
+        settled = [t for t, d in deltas if d is not None and d < 0.01]
+        if settled:
+            print(f"\n  settles around {int(settled[0])}ms")
+        else:
+            print("\n  NEVER SETTLES in the window. Either a long entrance or "
+                  "something loops forever.")
+
+        A = r["animations"]
+        print(f"\n{len(A)} DISTINCT ANIMATION(S), as the browser resolved them")
+        durs = sorted({a["dur"] for a in A if isinstance(a.get("dur"), (int, float))})
+        eas = {}
+        for a in A:
+            if a.get("easing"):
+                eas[a["easing"]] = eas.get(a["easing"], 0) + 1
+        inf = sum(1 for a in A if a.get("iterations") == "infinite")
+        if durs:
+            print(f"  durations  {', '.join(str(int(d)) + 'ms' for d in durs[:12])}")
+            print(f"  tiers      {len(durs)} distinct. One tier for everything means "
+                  f"the frequent motion is too slow or the rare motion too fast.")
+        for e, n in sorted(eas.items(), key=lambda kv: -kv[1])[:6]:
+            print(f"  {n:>4}x  {e}")
+        if inf:
+            print(f"  {inf} infinite loop(s). At that repetition any personality "
+                  f"in the curve becomes a tic.")
+
+        rc = r.get("reduced_motion_count")
+        print()
+        if rc is None:
+            print("REDUCED MOTION   could not be tested")
+        elif rc == 0:
+            print("REDUCED MOTION   respected: 0 animations under reduce")
+        else:
+            print(f"REDUCED MOTION   NOT RESPECTED: {rc} animation(s) still run "
+                  f"under prefers-reduced-motion: reduce.")
+            print("  research/03: reduce, do not delete. Keep opacity and colour, "
+                  "drop transforms, shorten rather than setting animation: none.")
+        print(f"\nframes in {out}")
+        return 0
 
     if a.cmd == "probe":
         rep = probe(a.png, a.model)

@@ -287,6 +287,87 @@ def probe(png_path, model="sonnet"):
         return {"error": f"bad json: {e}", "raw": m.group(0)[:500]}
 
 
+PREDICT = """Here is the source of a page that is about to be shown to someone
+who has never seen it and knows nothing about it.
+
+<source>
+{src}
+</source>
+
+PREDICT what that first-time viewer will report. Do not evaluate the design
+and do not say what the page intends. Say what you expect a person to actually
+perceive in the first seconds.
+
+Strict JSON, no fence, exactly these keys:
+
+{{
+  "first_look": "the single element you predict their eye lands on first",
+  "purpose": "what you predict they will say this is for, one sentence",
+  "primary_action": "what you predict they will name as the main action, or null",
+  "friction_count": "how many things you predict they will hesitate over, as a number",
+  "confidence": "high | medium | low"
+}}"""
+
+
+def predict(html_path, model="sonnet"):
+    """Form an expectation BEFORE looking. Without one there is no surprise.
+
+    Schultz: dopamine neurons fire for UNPREDICTED reward, not for reward. The
+    signal driving learning is the gap between expected and received, and a
+    system that never predicts has no gap to learn from. Every probe in this
+    repo until now was reported at equal weight, so a result confirming what
+    was already obvious counted the same as one that overturned it.
+
+    This half sees the SOURCE, unlike bin/ux-viewer's probe which sees only a
+    screenshot. That asymmetry is the point: the prediction is what someone
+    who built the thing believes about it, and the probe is what a stranger
+    actually perceives. Where they disagree is the finding.
+    """
+    src = pathlib.Path(html_path).read_text(errors="ignore")
+    if len(src) > 60000:
+        src = src[:60000] + "\n<!-- truncated -->"
+    with tempfile.TemporaryDirectory() as work:
+        r = subprocess.run(["claude", "-p", "--model", model,
+                            PREDICT.format(src=src)],
+                           capture_output=True, text=True, timeout=600, cwd=work)
+    m = re.search(r"\{.*\}", r.stdout, re.S)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
+def surprise(pred, report):
+    """Only the disagreements. Confirmations are not findings."""
+    if not pred or report.get("error"):
+        return None
+    out = []
+
+    def cmp(key, label):
+        a = (pred.get(key) or "").lower().strip()
+        b = (report.get(key) or "").lower().strip()
+        if not a and not b:
+            return
+        if bool(a) != bool(b) or not _overlap(a, b):
+            out.append({"field": label, "expected": pred.get(key),
+                        "observed": report.get(key)})
+
+    cmp("first_look", "where the eye lands")
+    cmp("primary_action", "the main action")
+    cmp("purpose", "what it reads as")
+
+    try:
+        want = int(str(pred.get("friction_count", 0)).strip() or 0)
+    except ValueError:
+        want = 0
+    got = len(report.get("friction") or []) + len(report.get("unreadable") or [])
+    if abs(got - want) >= 2:
+        out.append({"field": "friction", "expected": want, "observed": got})
+    return out
+
+
 def diff(intent, report):
     """Where the viewer's report and the declared intent disagree.
 
@@ -362,6 +443,8 @@ def main():
     c = sub.add_parser("check"); c.add_argument("html"); c.add_argument("--intent", required=True)
     c.add_argument("--model", default="sonnet"); c.add_argument("--json", action="store_true")
     c.add_argument("--full", action="store_true")
+    c.add_argument("--predict", action="store_true",
+                   help="predict the probe first and report only the surprises")
 
     a = ap.parse_args()
 
@@ -436,6 +519,23 @@ def main():
                 return 1
             rep = probe(png, a.model)
         gaps = diff(intent, rep)
+        if a.predict:
+            pre = predict(a.html, a.model)
+            sur = surprise(pre, rep)
+            if sur is None:
+                print("prediction failed; reporting the probe alone\n")
+            elif not sur:
+                print("NO SURPRISE. The probe said what was predicted, so this "
+                      "run taught nothing.\nThat is a result: the page behaves "
+                      "as its source suggests.\n")
+            else:
+                print(f"{len(sur)} SURPRISE(S). Predicted from the source, "
+                      f"contradicted by a viewer who only saw pixels.")
+                for x in sur:
+                    print(f"  {x['field']}")
+                    print(f"      expected  {x['expected']}")
+                    print(f"      observed  {x['observed']}")
+                print()
         return _emit(rep, gaps, a.json)
 
 

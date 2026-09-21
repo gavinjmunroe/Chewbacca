@@ -258,6 +258,24 @@ check "ux-crawl reads computed styles, not the stylesheet" bash -c \
 check "ux-crawl refuses to emit a style guide" bash -c \
   "grep -q 'No style guide was written' '$ROOT/bin/ux-crawl'"
 
+# Schultz: dopamine neurons fire for UNPREDICTED reward, not reward. A system
+# that never predicts has no error signal and therefore cannot learn from a
+# probe. See research/18.
+check "the predictor sees source and the probe does not" python3 -c "
+import pathlib
+s = pathlib.Path('$ROOT/bin/ux-viewer').read_text()
+i_pred = s.index('def predict(')
+i_probe = s.index('def probe(')
+pred = s[i_pred:s.index('def surprise(')]
+probe = s[i_probe:s.index('def diff(')] if 'def diff(' in s[i_probe:] else s[i_probe:i_probe+3000]
+assert 'read_text' in pred, 'predictor must read the source'
+assert 'read_text' not in probe, 'the probe must stay blind to the source'
+"
+
+check "no surprise is reported as a result, not as silence" bash -c \
+  "grep -q 'NO SURPRISE' '$ROOT/bin/ux-viewer' && \
+   grep -q 'taught nothing' '$ROOT/bin/ux-viewer'"
+
 # Measured 2026-09-20: 83 of all blocking findings across the corpus were a
 # single rule, emoji-as-icon, and stance guidance did not reduce findings at
 # all because no refusal list mentioned emoji. Universal bans must reach every

@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Score the two axes creativity actually requires, and refuse to collapse them.
+
+    ux-boden page.html --intent intent.json
+    ux-boden a.html b.html c.html --intent intent.json
+
+Boden's criteria are novelty, value AND surprise (Boden, "Creativity in a
+nutshell"). This repo had been treating its two halves as rivals: the log-odds
+prior pushing away from the mode, the blind viewer pulling toward
+comprehensibility. They are not rivals. They are the two axes, and neither one
+alone is creativity.
+
+    SURPRISE   how improbable these design choices are under data/prior.json,
+               which is an expectation model, so violating it is mechanically
+               what surprise means here
+    VALUE      how much of the declared intent a first-time viewer actually
+               recovered, from bin/ux-viewer
+
+Four quadrants, and three of them are failures:
+
+    high surprise, low value     weird. Novelty with nothing under it.
+    low surprise, high value     competent. This is the mode, done properly,
+                                 and it is where every generator lands.
+    low surprise, low value      slop.
+    high surprise, high value    the only one worth shipping.
+
+WHY NOT ONE NUMBER. Averaging them produces a score that a merely competent
+page and a merely weird page can both earn, which is exactly the judgement the
+typicality bias already makes for free. The whole point is that the axes
+disagree and the disagreement is the information.
+
+BOUNDED, NOT MAXIMISED. Warren & Campbell (JCR 41(2), 2014): autonomy reads as
+cool only when deviation is bounded and only when the broken norm was
+unnecessary. So surprise is not a thing to maximise. A page that violates
+everything is not four times as good as one that violates a few things well,
+and this tool says so rather than ranking on surprise alone.
+"""
+import argparse
+import importlib.util
+import json
+import pathlib
+import subprocess
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+spec = importlib.util.spec_from_file_location("uxslop", ROOT / "bin" / "ux-slop")
+uxslop = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(uxslop)
+
+HARD = {"primary-action-invisible", "primary-action-wrong", "attention-misdirected",
+        "purpose-unclear", "probe-failed"}
+
+
+def surprise(path, prior):
+    """Negative mean log-odds: how unlike a real system's choices this is.
+
+    Reported as the raw axis, NOT as goodness. A page can be surprising
+    because it is inventive or because it is broken, and this number cannot
+    tell the difference. That is what the value axis is for.
+    """
+    s, hits, _ = uxslop.score(path, prior)
+    return (None, []) if s is None else (-s, hits[:4])
+
+
+def value(path, intent_path, model):
+    r = subprocess.run([sys.executable, str(ROOT / "bin" / "ux-viewer"), "check",
+                        str(path), "--intent", str(intent_path),
+                        "--model", model, "--json"],
+                       capture_output=True, text=True, timeout=1200)
+    try:
+        d = json.loads(r.stdout)
+    except json.JSONDecodeError:
+        return None, None, []
+    gaps = d.get("gaps", [])
+    hard = sum(1 for g in gaps if g["kind"] in HARD)
+    return hard, len(gaps), gaps
+
+
+def quadrant(surp, hard, surp_median):
+    hi_s = surp > surp_median
+    hi_v = hard == 0
+    if hi_s and hi_v:
+        return "WORTH SHIPPING   surprising, and the viewer still got it"
+    if hi_s:
+        return "WEIRD            surprising, and the viewer did not get it"
+    if hi_v:
+        return "COMPETENT        the mode, done properly. Where generators land"
+    return "SLOP             neither surprising nor understood"
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("files", nargs="+")
+    ap.add_argument("--intent", required=True)
+    ap.add_argument("--model", default="sonnet")
+    a = ap.parse_args()
+
+    prior = uxslop.load_prior()
+    rows = []
+    for f in a.files:
+        p = pathlib.Path(f)
+        if not p.exists():
+            print(f"missing: {f}", file=sys.stderr)
+            continue
+        su, drivers = surprise(p, prior)
+        if su is None:
+            print(f"{p.name}: no recognised design tokens", file=sys.stderr)
+            continue
+        hard, total, gaps = value(p, a.intent, a.model)
+        rows.append((p, su, hard, total, gaps, drivers))
+
+    if not rows:
+        return 1
+
+    # Median of THIS set. There is no absolute surprise threshold and
+    # inventing one would be exactly the kind of unsourced number this repo
+    # refuses elsewhere.
+    med = sorted(r[1] for r in rows)[len(rows) // 2]
+
+    print(f"{'FILE':<28} {'SURPRISE':>9} {'MISREAD':>8} {'GAPS':>5}   QUADRANT")
+    for p, su, hard, total, _g, _d in sorted(rows, key=lambda r: (r[2], -r[1])):
+        h = "?" if hard is None else hard
+        t = "?" if total is None else total
+        print(f"{p.name:<28} {su:>9.3f} {h:>8} {t:>5}   {quadrant(su, hard or 0, med)}")
+
+    print(f"\nSurprise is relative to the median of these {len(rows)} file(s), "
+          f"{med:.3f}. There is no absolute scale and this tool will not invent one.")
+    print("Surprise is an axis, not a score. A page can be surprising because it "
+          "is inventive or because it is broken.")
+
+    best = [r for r in rows if (r[2] or 0) == 0 and r[1] > med]
+    if best:
+        p, su, _h, _t, _g, drivers = max(best, key=lambda r: r[1])
+        print(f"\nONLY QUADRANT WORTH SHIPPING: {p.name}")
+        print("  what makes it improbable:")
+        for f, w in drivers:
+            print(f"    {w:+6.2f}  {f}")
+    else:
+        print("\nNOTHING IN THE SHIPPING QUADRANT.")
+        print("  Every candidate is either the mode done well, or not understood.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

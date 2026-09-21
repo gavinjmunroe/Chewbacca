@@ -211,9 +211,11 @@ is somebody confidently answering it later from a vibe.
     expected. Stance-guided pages averaged 7.8 blocking findings against 7.5
     for unguided. No separation. 83 of all blocking findings were one rule,
     emoji-as-icon, and no stance mentioned emoji.
-67. `ANSWERED` Why did that happen? Per-stance refusals are craft decisions;
+67. `MEASURED` Why did that happen? Per-stance refusals are craft decisions;
     universal bans are not, and have to ride on every prompt or none.
-    BASELINE_REFUSE added 2026-09-20. Re-measurement pending.
+    BASELINE_REFUSE added 2026-09-20 and re-measured the same night: the same
+    brief, same stance and same model went from 26 emoji and 26 blocking
+    findings to 0 and 0. n=1, but nothing else varied, so it is causal.
 68. `OPEN` How many refusals can a prompt carry before the model starts
     dropping them? There is a limit and nobody here knows it.
 69. `OPEN` Do refusals stated as consequences outperform refusals stated as
@@ -285,12 +287,20 @@ is somebody confidently answering it later from a vibe.
 
 ## L. Creativity as such
 
-95. `OPEN` What is the standard definition, and does it survive scrutiny?
-    Novel and appropriate is the textbook pair; verify against primary sources
-    rather than repeating it.
-96. `OPEN` Boden's taxonomy separates exploratory, combinational and
-    transformational creativity. Verify it, then ask which one this repo does.
-    Stances are exploratory at best. Analogy would be transformational.
+95. `ANSWERED` What is the standard definition? Not the textbook pair. Boden
+    requires THREE: novelty, value and SURPRISE. Surprise needs an expectation
+    to violate, which means it is only definable against a model of what was
+    expected. ("Creativity in a nutshell")
+    *Changed:* the repo had treated its prior and its viewer as rivals pulling
+    in opposite directions. They are the two required axes. bin/ux-boden.
+96. `ANSWERED` Boden's taxonomy verified: combinational (unfamiliar
+    combinations of familiar ideas, the least interesting), exploratory
+    (search within a fixed conceptual space), transformational (alter the
+    rules of the space, the most radical surprise).
+    Where this repo sits: stances and tensions are EXPLORATORY. The flow
+    transformations are the only TRANSFORMATIONAL thing here, because they
+    change what the artifact is rather than what it looks like. Nothing is
+    combinational yet; distant-domain analogy (Q11) would be.
 97. `OPEN` Can a system be creative if it cannot be surprised? Is there any
     mechanism here that can be surprised by its own output?
 98. `OPEN` Is the ability to abandon an idea part of creativity? Nothing here
@@ -317,3 +327,149 @@ leave a question marked `ANSWERED` without something citable next to it.
 
 Question 102 is the one to answer first, because the answer reorders
 everything else.
+
+---
+
+# M. The questions that could overturn the frame
+
+Caleb, 2026-09-20: *"You're not being creative or outside of the box enough to
+create high enough leverage questions."* Correct. Sections A through L ask for
+parameters inside an assumed frame: what is the false positive rate, how many
+steps before abandonment. Every one of them takes for granted that the frame is
+right. None could overturn anything.
+
+The test that should have been used from the start: **a high-leverage question
+is one whose answer would make most of the other work irrelevant.**
+
+103. `OPEN` **Is there a design that only an agent could make?**
+     Every line in this repo tries to make a model match a human designer, and
+     matching is by definition regurgitation with extra steps. A human cannot
+     hold ten thousand constraints, cannot regenerate the layout when the data
+     changes shape, cannot produce a different interface per viewer, cannot
+     re-derive the whole system when one token moves. Those are not weaker
+     versions of human design; they are things humans structurally cannot do.
+     *If the answer is yes:* the entire goal is wrong, and the target is not
+     "as good as a designer" but a category of artifact that has no human
+     equivalent. Everything in this repo becomes a subroutine.
+     **This is the highest-leverage question in the file.**
+
+104. `OPEN` **Is slop a property of the artifact, or only of its position in
+     time?** If every site looked like Stripe's, Stripe's would read as slop.
+     The gradient headline was a good idea before it was everywhere. If slop is
+     purely positional, then a detector trained today decays predictably, the
+     corpus has a half-life, and the right architecture is continuous
+     retraining rather than a rule list.
+     *If yes:* every hand-written rule in ux-lint is a dated artifact and
+     should carry an expiry.
+
+105. `OPEN` **Is slop a property of the output, or of the process?**
+     Two identical pages, one produced by a designer who considered and
+     rejected twenty alternatives. Is there any respect in which those are
+     different objects? If a reader cannot tell, then all process-based
+     defences of this repo are vanity. If they can, the thing to capture and
+     ship is the rejected alternatives, not the winner.
+
+106. `OPEN` **Why is the deliverable a page?**
+     The agent produces HTML, which is the least reusable thing it could
+     produce. The alternative deliverable is a constraint file plus a
+     generator, so the artifact regenerates when anything changes. A page is a
+     photograph of a decision; the decision is the asset.
+     *If right:* `ux-gen` outputs the wrong object.
+
+107. `OPEN` **Should the tool argue with the brief?**
+     A designer's first real move is often rejecting the brief. This whole
+     pipeline treats the brief as ground truth and optimises inside it. The
+     highest-value output might be "you asked for a pricing page and the
+     problem is that nobody trusts the pricing, so build the calculator."
+     Nothing here can ever say that.
+
+108. `OPEN` **Can a system exceed its own evaluator?**
+     Every selection here is capped by what the blind probe can perceive.
+     Quality is therefore bounded above by the probe, forever. Is there any
+     mechanism by which a generator produces something its own judge cannot
+     recognise as good, and survives? If not, the ceiling is fixed and should
+     be stated out loud.
+
+109. `OPEN` **Whose taste?**
+     Three designers agreed at kappa = 0.112. If there is no consensus, then
+     every design decision is a choice of WHOSE taste, and this tool silently
+     picks one and calls it quality. It has never asked. Naming the person
+     whose judgement is being encoded may be the only honest version of this.
+
+110. `OPEN` **Who is the design for when the viewer and the buyer are different
+     people?** Most interfaces are paid for by someone who will not use them.
+     The tool models one viewer and no conflict. A dark pattern is not a
+     failure of taste; it is a correct solution to a different objective
+     function. Does this repo have any way to represent that the objective is
+     contested?
+
+111. `OPEN` **What is the measured cost of being boring?**
+     Everyone treats conventional as the safe default, including this repo's
+     entire deny-list architecture. If boring has a real and large cost, then
+     refusal-first is backwards and the whole thing should be inverted.
+
+112. `OPEN` **Does the agent need a portfolio?**
+     A designer's taste comes from having made things, shipped them, and lived
+     with what went wrong. This agent starts empty every session. Would an
+     accumulated body of its own work, with its own recorded regrets, produce
+     different output than a rule file? That is a testable difference between
+     memory and instruction.
+
+113. `OPEN` **What if it is forbidden from repeating itself?**
+     Design the same brief fifty times, each forbidden from reusing any
+     structural decision from the previous forty-nine. OuLiPo constraint. Does
+     output 40 get good, get insane, or get good THEN insane? The shape of that
+     curve says more about where creativity lives than any rule list.
+
+114. `OPEN` **Is the bottleneck generation, selection, or the brief?**
+     Q102 asked the first two. The third is missing and is probably the answer:
+     if the brief is underspecified, no amount of generation or selection
+     recovers it, and the leverage is entirely upstream of everything built
+     tonight.
+
+115. `OPEN` **Does interface design have reliable devices, the way music has a
+     key change?** Music has a small set of moves that produce a predictable
+     effect on almost anyone. If interfaces have those, they are enumerable and
+     worth more than any amount of style guidance. If they do not, that is a
+     real and interesting negative result about the medium.
+
+116. `PARTLY BUILT` **Can the agent be surprised by its own output?**
+     Boden lists surprise alongside novelty and value. Surprise requires an
+     expectation to violate. `data/prior.json` IS an expectation model, so
+     surprise is mechanically available here: low probability under the prior,
+     high value under the probe. bin/ux-boden now computes both axes and
+     refuses to average them, because averaging reproduces exactly the
+     judgement the typicality bias already makes for free. What is still
+     missing is the agent ACTING on its own surprise rather than reporting it.
+
+117. `OPEN` **What would this repo look like if it were designed for an agent
+     with no aesthetic sense at all?** Possibly identical, which would be
+     damning, and worth knowing.
+
+118. `OPEN` **Is imitating a human designer's PROCESS a mistake?**
+     Tension-naming, stances, critique loops: all of it reverse-engineers how a
+     person works, and a person works that way because of working memory
+     limits, a career's worth of exposure, and one pair of eyes. An agent has
+     none of those constraints. Copying the workarounds of a different
+     substrate may be the deepest error in the whole design.
+
+119. `OPEN` **What happens if the user is shown the losing variants?**
+     Every tool ships the winner. The rejected five may be worth more, because
+     they show the space and let the person pick against a real alternative
+     instead of judging one thing in isolation.
+
+120. `OPEN` **Is "looks AI-generated" going to stop mattering?**
+     If in two years most interfaces are generated, the tell stops being a
+     tell, and a detector for it becomes a period piece. What is the thing that
+     still matters then, and is this repo building any of it?
+
+---
+
+## The honest ranking
+
+103 first, because a yes reframes everything else as a subroutine.
+Then 114, because if the brief is the bottleneck, tonight's work was aimed at
+the wrong stage.
+Then 116, because it is cheap, the machinery already exists, and Boden says
+surprise is not optional.
+Then 104, because if slop is positional every rule here needs an expiry date.

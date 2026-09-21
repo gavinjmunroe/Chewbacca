@@ -1,0 +1,1072 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relay &mdash; Pricing</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #f9f9f8;
+        --fg: #111;
+        --mid: #444;
+        --muted: #888;
+        --faint: #bbb;
+        --border: #d8d8d5;
+        --accent: #1a40c4;
+        --rule: 1px solid var(--border);
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --mono: "SF Mono", "Fira Code", "Cascadia Mono", monospace;
+        --xs: 11px;
+        --sm: 12px;
+        --base: 13px;
+      }
+
+      html {
+        font-size: var(--base);
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--sans);
+      }
+
+      /* ── layout ── */
+      .wrap {
+        max-width: 1020px;
+        margin: 0 auto;
+        padding: 0 16px;
+      }
+
+      /* ── sticky header ── */
+      header {
+        position: sticky;
+        top: 0;
+        background: var(--bg);
+        border-bottom: var(--rule);
+        z-index: 50;
+      }
+      .hdr {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 7px 0;
+      }
+      .logo {
+        font-size: var(--sm);
+        font-weight: 700;
+        letter-spacing: 0.03em;
+        color: var(--fg);
+        text-decoration: none;
+      }
+      .logo b {
+        color: var(--accent);
+      }
+
+      /* billing toggle */
+      .billing {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: var(--xs);
+        color: var(--muted);
+      }
+      .sw {
+        position: relative;
+        width: 34px;
+        height: 18px;
+        flex-shrink: 0;
+      }
+      .sw input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .track {
+        position: absolute;
+        inset: 0;
+        background: #ccc;
+        border-radius: 2px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .track::before {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 14px;
+        height: 14px;
+        background: #fff;
+        border-radius: 1px;
+        transition: transform 0.15s;
+      }
+      .sw input:checked + .track {
+        background: var(--accent);
+      }
+      .sw input:checked + .track::before {
+        transform: translateX(16px);
+      }
+      .badge {
+        background: #d4edda;
+        color: #1a5c2a;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 1px 4px;
+        border-radius: 2px;
+      }
+
+      /* ── section label ── */
+      .section-hd {
+        font-size: var(--xs);
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding: 10px 0 5px;
+        border-top: var(--rule);
+      }
+      .section-hd:first-child {
+        margin-top: 0;
+      }
+
+      /* ── plans table ── */
+      .plans {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--sm);
+        table-layout: fixed;
+      }
+      .plans col.label {
+        width: 32%;
+      }
+      .plans col.tier {
+        width: 17%;
+      }
+
+      /* header row */
+      .plans thead th {
+        text-align: right;
+        vertical-align: bottom;
+        padding: 8px 0 6px 8px;
+        border-bottom: 2px solid var(--border);
+        font-weight: 600;
+      }
+      .plans thead th.label-col {
+        text-align: left;
+        padding-left: 0;
+      }
+
+      .tier-name {
+        font-size: var(--base);
+        font-weight: 700;
+      }
+      .tier-sub {
+        display: block;
+        font-size: var(--xs);
+        color: var(--muted);
+        font-weight: 400;
+        margin-top: 1px;
+      }
+
+      /* price cell */
+      .price-int {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        font-size: 22px;
+        font-weight: 700;
+        line-height: 1;
+      }
+      .price-dec {
+        font-size: 14px;
+        font-weight: 700;
+        font-family: var(--mono);
+      }
+      .price-mo {
+        display: block;
+        font-size: 10px;
+        color: var(--muted);
+        font-family: var(--sans);
+        font-weight: 400;
+        margin-top: 2px;
+      }
+      .price-annual-note {
+        display: none;
+      }
+
+      /* body rows */
+      .plans tbody td {
+        padding: 5px 0 5px 8px;
+        border-bottom: var(--rule);
+        vertical-align: middle;
+        text-align: right;
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        font-size: 11px;
+      }
+      .plans tbody td.label-col {
+        text-align: left;
+        padding-left: 0;
+        font-family: var(--sans);
+        font-size: var(--sm);
+        color: var(--mid);
+      }
+      .plans tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      /* group header */
+      .grp td {
+        padding: 9px 0 3px !important;
+        font-size: var(--xs) !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase !important;
+        color: var(--muted) !important;
+        font-family: var(--sans) !important;
+        border-bottom: none !important;
+      }
+
+      /* CTA row */
+      .cta td {
+        padding: 8px 0 8px 8px !important;
+        font-family: var(--sans) !important;
+      }
+      .cta td.label-col {
+        padding-left: 0 !important;
+      }
+
+      /* feature values */
+      .yes {
+        color: var(--fg);
+      }
+      .no {
+        color: var(--faint);
+      }
+      .hl {
+        color: var(--accent);
+        font-weight: 600;
+      }
+
+      /* ── buttons ── */
+      .btn {
+        display: inline-block;
+        font-family: var(--sans);
+        font-size: var(--xs);
+        font-weight: 600;
+        padding: 5px 11px;
+        border-radius: 3px;
+        cursor: pointer;
+        border: none;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: #1535a8;
+      }
+      .btn-outline {
+        background: transparent;
+        color: var(--fg);
+        border: 1px solid var(--border);
+      }
+      .btn-outline:hover {
+        background: #efefed;
+      }
+      .btn-ghost {
+        background: transparent;
+        color: var(--muted);
+        padding: 5px 0;
+        font-weight: 400;
+      }
+      .btn-ghost:hover {
+        color: var(--fg);
+      }
+
+      /* ── data tables ── */
+      .dtable {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: var(--sm);
+        table-layout: fixed;
+      }
+      .dtable th {
+        text-align: left;
+        font-size: var(--xs);
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--muted);
+        padding: 5px 0;
+        border-bottom: 2px solid var(--border);
+      }
+      .dtable td {
+        padding: 5px 0;
+        border-bottom: var(--rule);
+        vertical-align: top;
+      }
+      .dtable tr:last-child td {
+        border-bottom: none;
+      }
+      .dtable .num {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        text-align: right;
+      }
+      .dtable .note {
+        color: var(--muted);
+        font-size: var(--xs);
+      }
+      .dtable col.label {
+        width: 30%;
+      }
+      .dtable col.n {
+        width: 16%;
+      }
+      .dtable col.note-col {
+        width: 24%;
+      }
+
+      /* ── annotation ── */
+      .ann {
+        font-size: var(--xs);
+        color: var(--muted);
+        padding: 5px 0 0;
+      }
+
+      /* ── FAQ ── */
+      .faq-item {
+        border-bottom: var(--rule);
+      }
+      .faq-item:first-child {
+        border-top: var(--rule);
+      }
+      .faq-q {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 0;
+        font-size: var(--sm);
+        font-weight: 600;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+      }
+      .faq-q::-webkit-details-marker {
+        display: none;
+      }
+      .faq-q::after {
+        content: "+";
+        color: var(--muted);
+        font-size: 15px;
+        font-weight: 300;
+        flex-shrink: 0;
+      }
+      details[open] .faq-q::after {
+        content: "\2212";
+      }
+      .faq-a {
+        padding: 0 0 9px;
+        color: var(--mid);
+        font-size: var(--sm);
+        line-height: 1.6;
+        max-width: 580px;
+      }
+
+      /* ── footer ── */
+      footer {
+        border-top: var(--rule);
+        padding: 8px 0;
+        margin-top: 14px;
+      }
+      .ftr {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: var(--xs);
+        color: var(--muted);
+      }
+      .ftr-links {
+        display: flex;
+        gap: 14px;
+      }
+      .ftr-links a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .ftr-links a:hover {
+        color: var(--fg);
+      }
+
+      /* ── spacing ── */
+      .mt {
+        margin-top: 14px;
+      }
+
+      /* ── annual toggle state ── */
+      body.annual .price-annual-note {
+        display: block;
+      }
+      body.annual .price-mo-label {
+        display: none;
+      }
+
+      /* ── responsive minimum ── */
+      @media (max-width: 680px) {
+        .plans col.label {
+          width: 30%;
+        }
+        .plans col.tier {
+          width: 17.5%;
+        }
+        .tier-sub {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap">
+        <div class="hdr">
+          <a class="logo" href="#"><b>relay</b></a>
+          <div class="billing">
+            <span>Monthly</span>
+            <label class="sw">
+              <input type="checkbox" id="btoggle" autocomplete="off" />
+              <span class="track"></span>
+            </label>
+            <span>Annual <span class="badge">20% off</span></span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap">
+        <!-- ── Plans ── -->
+        <div class="section-hd" style="border-top: none; margin-top: 10px">
+          Plans
+        </div>
+
+        <table class="plans">
+          <colgroup>
+            <col class="label" />
+            <col class="tier" />
+            <col class="tier" />
+            <col class="tier" />
+            <col class="tier" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="label-col"></th>
+              <th>
+                <div class="tier-name">Free</div>
+                <span class="tier-sub">Evaluate</span>
+              </th>
+              <th>
+                <div class="tier-name">Solo</div>
+                <span class="tier-sub">One developer</span>
+              </th>
+              <th>
+                <div class="tier-name">Pro</div>
+                <span class="tier-sub">Power users</span>
+              </th>
+              <th>
+                <div class="tier-name">Team</div>
+                <span class="tier-sub">Up to 5 seats</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- price -->
+            <tr>
+              <td
+                class="label-col"
+                style="color: var(--muted); font-size: var(--xs)"
+              >
+                Price / month
+              </td>
+              <td>
+                <span class="price-int">$0</span>
+                <span class="price-mo">no card required</span>
+              </td>
+              <td>
+                <span class="price-int" data-mo="9" data-yr="7">$9</span>
+                <span class="price-mo price-mo-label">billed monthly</span>
+                <span class="price-mo price-annual-note">billed $86 / yr</span>
+              </td>
+              <td>
+                <span class="price-int" data-mo="19" data-yr="15">$19</span>
+                <span class="price-mo price-mo-label">billed monthly</span>
+                <span class="price-mo price-annual-note">billed $183 / yr</span>
+              </td>
+              <td>
+                <span class="price-int" data-mo="49" data-yr="39">$49</span>
+                <span class="price-mo price-mo-label">billed monthly</span>
+                <span class="price-mo price-annual-note">billed $470 / yr</span>
+              </td>
+            </tr>
+
+            <!-- CTA -->
+            <tr class="cta">
+              <td class="label-col"></td>
+              <td><a href="#" class="btn btn-outline">Get started</a></td>
+              <td><a href="#" class="btn btn-primary">Subscribe</a></td>
+              <td><a href="#" class="btn btn-primary">Subscribe</a></td>
+              <td><a href="#" class="btn btn-primary">Subscribe</a></td>
+            </tr>
+
+            <!-- ── Usage limits ── -->
+            <tr class="grp">
+              <td class="label-col" colspan="5">Usage limits</td>
+            </tr>
+
+            <tr>
+              <td class="label-col">Requests / month</td>
+              <td>500</td>
+              <td class="hl">5,000</td>
+              <td class="hl">50,000</td>
+              <td class="hl">250,000</td>
+            </tr>
+            <tr>
+              <td class="label-col">Storage</td>
+              <td>100 MB</td>
+              <td>2 GB</td>
+              <td>20 GB</td>
+              <td>100 GB</td>
+            </tr>
+            <tr>
+              <td class="label-col">API keys</td>
+              <td>1</td>
+              <td>5</td>
+              <td>25</td>
+              <td>100</td>
+            </tr>
+            <tr>
+              <td class="label-col">Read rate limit</td>
+              <td style="color: var(--muted)">60 / hr</td>
+              <td>600 / hr</td>
+              <td>3,600 / hr</td>
+              <td>18,000 / hr</td>
+            </tr>
+            <tr>
+              <td class="label-col">Write rate limit</td>
+              <td style="color: var(--muted)">20 / hr</td>
+              <td>200 / hr</td>
+              <td>1,200 / hr</td>
+              <td>6,000 / hr</td>
+            </tr>
+            <tr>
+              <td class="label-col">Max payload</td>
+              <td>64 KB</td>
+              <td>512 KB</td>
+              <td>4 MB</td>
+              <td>16 MB</td>
+            </tr>
+            <tr>
+              <td class="label-col">Log retention</td>
+              <td style="color: var(--muted)">3 days</td>
+              <td>30 days</td>
+              <td>90 days</td>
+              <td>365 days</td>
+            </tr>
+            <tr>
+              <td class="label-col">Concurrent connections</td>
+              <td>2</td>
+              <td>10</td>
+              <td>50</td>
+              <td>250</td>
+            </tr>
+
+            <!-- ── Core features ── -->
+            <tr class="grp">
+              <td class="label-col" colspan="5">Core features</td>
+            </tr>
+
+            <tr>
+              <td class="label-col">REST API</td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">CLI access</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">Webhooks</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">Scheduled jobs</td>
+              <td><span class="no">&ndash;</span></td>
+              <td>5</td>
+              <td>50</td>
+              <td>250</td>
+            </tr>
+            <tr>
+              <td class="label-col">Environment variables</td>
+              <td>5</td>
+              <td>50</td>
+              <td>500</td>
+              <td>2,000</td>
+            </tr>
+            <tr>
+              <td class="label-col">Custom domains</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">CI/CD integrations</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">GraphQL endpoint</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+
+            <!-- ── Observability ── -->
+            <tr class="grp">
+              <td class="label-col" colspan="5">Observability</td>
+            </tr>
+
+            <tr>
+              <td class="label-col">Request logs</td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">Error traces</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">Performance metrics</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">Custom alerts</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">Audit log export</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">Status page</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+
+            <!-- ── Security ── -->
+            <tr class="grp">
+              <td class="label-col" colspan="5">Security</td>
+            </tr>
+
+            <tr>
+              <td class="label-col">TLS 1.3 in transit</td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">AES-256 at rest</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">IP allowlist</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">SSO / SAML 2.0</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">Role-based access</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+
+            <!-- ── Support ── -->
+            <tr class="grp">
+              <td class="label-col" colspan="5">Support</td>
+            </tr>
+
+            <tr>
+              <td class="label-col">Docs and changelog</td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">Community forum</td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+            <tr>
+              <td class="label-col">Email support SLA</td>
+              <td><span class="no">&ndash;</span></td>
+              <td style="color: var(--mid); font-family: var(--sans)">
+                5 business days
+              </td>
+              <td style="color: var(--mid); font-family: var(--sans)">
+                2 business days
+              </td>
+              <td style="color: var(--mid); font-family: var(--sans)">
+                4 hours
+              </td>
+            </tr>
+            <tr>
+              <td class="label-col">Priority ticket queue</td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="no">&ndash;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+              <td><span class="yes">&#10003;</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="ann">
+          14-day free trial on Solo and Pro. No card required. Overages billed
+          at $2.00 per 1,000 requests above plan limit.
+        </div>
+
+        <!-- ── Add-ons ── -->
+        <div class="section-hd mt">Add-ons</div>
+
+        <table class="dtable">
+          <colgroup>
+            <col class="label" />
+            <col class="n" />
+            <col class="n" />
+            <col class="note-col" />
+            <col />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th style="text-align: right">Unit</th>
+              <th style="text-align: right">Price</th>
+              <th>Available on</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Extra storage</td>
+              <td class="num">per 10 GB / mo</td>
+              <td class="num">$2.00</td>
+              <td class="note">Solo and above</td>
+              <td class="note">Counted against daily average</td>
+            </tr>
+            <tr>
+              <td>Additional API keys</td>
+              <td class="num">per key / mo</td>
+              <td class="num">$1.00</td>
+              <td class="note">Solo and above</td>
+              <td class="note">Up to 4x plan key cap</td>
+            </tr>
+            <tr>
+              <td>Extended log retention</td>
+              <td class="num">per 30 days</td>
+              <td class="num">$3.00</td>
+              <td class="note">Pro and above</td>
+              <td class="note">Max 5 years total</td>
+            </tr>
+            <tr>
+              <td>Overage requests</td>
+              <td class="num">per 1,000</td>
+              <td class="num">$2.00</td>
+              <td class="note">All paid plans</td>
+              <td class="note">Or set hard cap to reject</td>
+            </tr>
+            <tr>
+              <td>Dedicated egress IP</td>
+              <td class="num">per IP / mo</td>
+              <td class="num">$8.00</td>
+              <td class="note">Pro and above</td>
+              <td class="note">Static, single region</td>
+            </tr>
+            <tr>
+              <td>Extra seat</td>
+              <td class="num">per seat / mo</td>
+              <td class="num">$12.00</td>
+              <td class="note">Team only</td>
+              <td class="note">Subject to per-account limit</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <!-- ── Rate limits reference ── -->
+        <div class="section-hd mt">Rate limits reference</div>
+
+        <table class="dtable">
+          <colgroup>
+            <col class="label" />
+            <col class="n" />
+            <col class="n" />
+            <col class="n" />
+            <col class="n" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Endpoint class</th>
+              <th style="text-align: right">Free</th>
+              <th style="text-align: right">Solo</th>
+              <th style="text-align: right">Pro</th>
+              <th style="text-align: right">Team</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>GET / read</td>
+              <td class="num" style="color: var(--muted)">60 / hr</td>
+              <td class="num">600 / hr</td>
+              <td class="num">3,600 / hr</td>
+              <td class="num">18,000 / hr</td>
+            </tr>
+            <tr>
+              <td>POST / write</td>
+              <td class="num" style="color: var(--muted)">20 / hr</td>
+              <td class="num">200 / hr</td>
+              <td class="num">1,200 / hr</td>
+              <td class="num">6,000 / hr</td>
+            </tr>
+            <tr>
+              <td>DELETE</td>
+              <td class="num" style="color: var(--muted)">10 / hr</td>
+              <td class="num">100 / hr</td>
+              <td class="num">600 / hr</td>
+              <td class="num">3,000 / hr</td>
+            </tr>
+            <tr>
+              <td>Bulk / batch</td>
+              <td class="num" style="color: var(--muted)">none</td>
+              <td class="num">50 / day</td>
+              <td class="num">500 / day</td>
+              <td class="num">2,500 / day</td>
+            </tr>
+            <tr>
+              <td>Webhook delivery</td>
+              <td class="num" style="color: var(--muted)">none</td>
+              <td class="num">100 / hr</td>
+              <td class="num">1,000 / hr</td>
+              <td class="num">5,000 / hr</td>
+            </tr>
+            <tr>
+              <td>Max payload size</td>
+              <td class="num">64 KB</td>
+              <td class="num">512 KB</td>
+              <td class="num">4 MB</td>
+              <td class="num">16 MB</td>
+            </tr>
+            <tr>
+              <td>Response timeout</td>
+              <td class="num">10 s</td>
+              <td class="num">30 s</td>
+              <td class="num">60 s</td>
+              <td class="num">120 s</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="ann">
+          Limits are per API key, not per account. Burst allowance of 2x for up
+          to 10 seconds. 429 response with
+          <code style="font-size: 10px">Retry-After</code> header when exceeded.
+        </div>
+
+        <!-- ── FAQ ── -->
+        <div class="section-hd mt">FAQ</div>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            Does the free trial require a credit card?
+          </summary>
+          <div class="faq-a">
+            No card required for the 14-day trial on Solo or Pro. Team trials
+            require a card on file, charged only at conversion. The Free plan
+            has no trial period and no card, ever.
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            What happens when I exceed my monthly request limit?
+          </summary>
+          <div class="faq-a">
+            Requests above the plan ceiling are queued and billed at $2.00 per
+            1,000 at the next cycle. You can set a hard cap in account settings
+            to reject overages with a 429 instead. No automatic plan upgrades.
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">Can I switch plans mid-cycle?</summary>
+          <div class="faq-a">
+            Upgrades take effect immediately and are prorated to the day.
+            Downgrades apply at next renewal. Data and keys are preserved across
+            changes within a tier. Downgrading below a feature tier disables but
+            does not delete those resources for 30 days.
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">How does annual billing work?</summary>
+          <div class="faq-a">
+            Annual plans are charged once upfront at a 20% discount against the
+            monthly rate. Prorated refunds for unused months are available on
+            request within 60 days of payment. Add-ons remain on monthly billing
+            regardless of base plan cadence.
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            Is there a discount for open-source projects or students?
+          </summary>
+          <div class="faq-a">
+            Solo is free for verified maintainers of open-source projects with
+            250 or more GitHub stars. Students with a .edu address receive Solo
+            at 50% off. Both require annual re-verification. Apply in account
+            settings under Billing.
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            Where is data stored, and what law governs it?
+          </summary>
+          <div class="faq-a">
+            Default region is us-east-1. EU customers may select eu-west-1 at
+            signup; region cannot be changed after account creation without
+            migration support. Data processing is governed by the DPA linked in
+            the footer. SOC 2 Type II report available under NDA on request.
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            Can I export all my data before canceling?
+          </summary>
+          <div class="faq-a">
+            Full account exports in JSON and CSV are available in settings on
+            all plans. Free plan exports are limited to 90 days of history.
+            Exports are delivered by email within 24 hours. After cancellation,
+            data is retained for 30 days before deletion.
+          </div>
+        </details>
+
+        <details class="faq-item">
+          <summary class="faq-q">
+            What counts as a "request" against the monthly limit?
+          </summary>
+          <div class="faq-a">
+            Every authenticated API call to any endpoint counts as one request,
+            regardless of payload size or response size. Webhook deliveries do
+            not count. Health checks to
+            <code style="font-size: 11px">/ping</code> do not count. Failed
+            requests due to client error (4xx) do count.
+          </div>
+        </details>
+      </div>
+      <!-- .wrap -->
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <div class="ftr">
+          <span>Prices in USD. VAT added where applicable.</span>
+          <div class="ftr-links">
+            <a href="#">Terms</a>
+            <a href="#">Privacy</a>
+            <a href="#">DPA</a>
+            <a href="#">Security</a>
+            <a href="#">Status</a>
+            <a href="#">Changelog</a>
+            <a href="#">Contact</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        var toggle = document.getElementById("btoggle");
+        var prices = document.querySelectorAll("[data-mo]");
+
+        function update(annual) {
+          document.body.classList.toggle("annual", annual);
+          prices.forEach(function (el) {
+            el.textContent = "$" + (annual ? el.dataset.yr : el.dataset.mo);
+          });
+        }
+
+        toggle.addEventListener("change", function () {
+          update(this.checked);
+        });
+
+        update(false);
+      })();
+    </script>
+  </body>
+</html>

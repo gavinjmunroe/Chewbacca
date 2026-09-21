@@ -62,7 +62,12 @@ YAML_FAMILY = re.compile(r"fontFamily:\s*[\"']?([^\"'\n,]+)")
 YAML_ROUNDED_BLOCK = re.compile(r"^rounded:\n((?:[ \t]+.*\n)+)", re.M)
 YAML_PX = re.compile(r":\s*[\"']?([\d.]+)px")
 
-SERIF = re.compile(r"serif|georgia|times|garamond|playfair|merriweather|lora|charter", re.I)
+# (?<!sans-) matters more than the rest of this regex put together. Without
+# it every `font-family: system-ui, sans-serif` fallback registered as a
+# serif face, and the learned prior reported that 8 of 9 generated pages
+# were set in serif against 3 of 74 real systems, which is backwards.
+SERIF = re.compile(r"(?<!sans-)\bserif\b|georgia|times new roman|garamond"
+                   r"|playfair|merriweather|\blora\b|charter|\bcambria\b", re.I)
 MONO = re.compile(r"mono|courier|consolas|menlo|jetbrains|ibm plex mono|roboto mono", re.I)
 SYSTEM = re.compile(r"-apple-system|system-ui|blinkmacsystemfont|segoe ui", re.I)
 

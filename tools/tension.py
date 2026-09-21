@@ -122,8 +122,15 @@ def prompt_for(variant, brief):
         f"It exists to resolve a specific tension: {variant.get('resolves','')}\n\n"
         f"This design MUST NOT contain any of the following. Each one is a hard "
         f"failure, not a preference:\n{refusals}\n\n"
-        f"Commit to the principle completely. A half-committed version is worse "
-        f"than not using it at all, because it reads as neither position."
+        f"BOUNDED DEVIATION. Break the conventions this principle names and "
+        f"keep every other convention intact. Warren & Campbell (JCR 2014) "
+        f"measured that autonomy reads as cool only when the deviation is "
+        f"BOUNDED, small or occasional rather than large or perpetual, and "
+        f"only when the norm it breaks was unnecessary in the first place. "
+        f"Deviating from everything at once reads as weird, not as cool. So "
+        f"break the arbitrary norms hard, and leave the functional ones "
+        f"alone: a button still has to look pressable, text still has to "
+        f"pass contrast, a form still has to say what went wrong."
     )
 
 

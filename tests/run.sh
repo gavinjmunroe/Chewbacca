@@ -91,6 +91,18 @@ check "ux-preset refuses to invent one" bash -c \
   "! '$ROOT/bin/ux-preset' wizard 2>/dev/null"
 
 check "the guard routes a form to its preset" "$ROOT/tests/guard_routes.sh" "$ROOT"
+check "ux-trial refuses a single artifact" bash -c \
+  "! '$ROOT/bin/ux-trial' run '$ROOT/tests/fixtures/clean.tsx' --brief x 2>/dev/null"
+
+check "ux-trial requires a named feature" bash -c \
+  "! '$ROOT/bin/ux-trial' judge deadbeef --worse A --feature '' 2>/dev/null"
+
+check "headless render is available" bash -c \
+  "[ -x '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' ] || command -v chromium"
+
+check "the trial log survives and reports" bash -c \
+  "'$ROOT/bin/ux-trial' log >/dev/null"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

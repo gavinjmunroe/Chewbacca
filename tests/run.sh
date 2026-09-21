@@ -173,8 +173,24 @@ check "the viewer probe never sees the intent" bash -c \
 check "the viewer stages a neutral filename" bash -c \
   "grep -q 'screenshot.png' '$ROOT/bin/ux-viewer'"
 
-check "the viewer uses headless=new, which is the mode that does not hang" bash -c \
-  "grep -q -- '--headless=new' '$ROOT/bin/ux-viewer'"
+# The renderer used to screenshot the instant the page loaded, which captured
+# uselemma.ai as a nearly blank page because all six of its plots animate in.
+# Everything probed before that fix could have been an unfinished page.
+check "the viewer waits for the page to settle before capturing" bash -c \
+  "grep -q 'networkidle' '$ROOT/bin/ux-viewer' && \
+   grep -q 'wait_for_timeout(settle)' '$ROOT/bin/ux-viewer'"
+
+# Tried and rejected: it fast-forwards the clock and froze the same page
+# mid-headline, which is worse than a blank capture because it looks deliberate.
+# Matches the flag as it would actually be PASSED, quoted and dash-prefixed.
+# Grepping for the bare phrase flagged the comment explaining why it is not
+# used, which is a test failing on its own documentation.
+check "the viewer never passes virtual-time-budget" bash -c \
+  "! grep -qE '[\"'\''“]--virtual-time-budget' '$ROOT/bin/ux-viewer'"
+
+# Intersection-triggered entrances never fire on a page that never scrolls.
+check "the viewer nudges the scroll so entrance animations fire" bash -c \
+  "grep -q 'mouse.wheel' '$ROOT/bin/ux-viewer'"
 
 check "diversity of identical files is zero" python3 -c "
 import sys, pathlib, tempfile; sys.path.insert(0,'$ROOT/tools')

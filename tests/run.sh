@@ -261,15 +261,18 @@ check "ux-crawl refuses to emit a style guide" bash -c \
 # Schultz: dopamine neurons fire for UNPREDICTED reward, not reward. A system
 # that never predicts has no error signal and therefore cannot learn from a
 # probe. See research/18.
+# Slice each function at the NEXT top-level def, not at a named one: probe
+# sits before predict in the file, so slicing probe->diff swallowed predict
+# and the test failed on its own arithmetic rather than on the code.
 check "the predictor sees source and the probe does not" python3 -c "
-import pathlib
+import pathlib, re
 s = pathlib.Path('$ROOT/bin/ux-viewer').read_text()
-i_pred = s.index('def predict(')
-i_probe = s.index('def probe(')
-pred = s[i_pred:s.index('def surprise(')]
-probe = s[i_probe:s.index('def diff(')] if 'def diff(' in s[i_probe:] else s[i_probe:i_probe+3000]
-assert 'read_text' in pred, 'predictor must read the source'
-assert 'read_text' not in probe, 'the probe must stay blind to the source'
+def body(name):
+    i = s.index('def ' + name + '(')
+    m = re.search(r'^def ', s[i+4:], re.M)
+    return s[i:i+4+m.start()] if m else s[i:]
+assert 'read_text' in body('predict'), 'predictor must read the source'
+assert 'read_text' not in body('probe'), 'the probe must stay blind to the source'
 "
 
 check "no surprise is reported as a result, not as silence" bash -c \

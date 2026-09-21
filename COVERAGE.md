@@ -40,7 +40,7 @@ as `partial`.
 
 | # | Domain | Why |
 |---|---|---|
-| 11 | **The theory of taste** | Hume, Kant, Bourdieu, Rams, Vignelli, Paul Graham. What taste *is*, including the strongest case that it is class signalling |
+| 11 | ~~The theory of taste~~ **done** | Primary texts read. Yields an operational definition and 13 testable rules. [research/05](research/05-taste.md) |
 | 12 | **Empirical aesthetics** | Processing fluency, MAYA/prototypicality, Reinecke's complexity model, the aesthetic-usability effect, golden-ratio debunking |
 | 13 | **AI slop across every medium** | The *mechanism*: mode collapse, RLHF diversity loss, model collapse. And the escape |
 | 14 | **How taste is developed** | Deliberate practice, critique culture, constraints, and the Nature 2021 subtraction-neglect result |

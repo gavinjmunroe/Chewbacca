@@ -85,6 +85,43 @@ extractor, a provenance discipline, and a research corpus that marks
 4. **Cite the neighbours in the README**, including the ones that got there
    first. A repo that pretends `@shadcn/lint` does not exist is not credible.
 
+## The operational definition, which the philosophy pass actually produced
+
+From [research/05](research/05-taste.md), defended against Hume, Kant,
+Bourdieu, Rams, Vignelli, Graham and the fluency literature:
+
+> **Taste is trained discrimination: the ability, acquired by high-volume
+> comparison within a domain, to detect which of two near-identical artifacts
+> is worse, and to name the specific feature responsible.**
+
+**The last clause is the one that matters here.** Sancho's kinsmen in Hume were
+right about the wine before the key was found, and could not prove it. *An
+unarticulated preference is a preference. An articulated one is a judgment.*
+
+**That is exactly what `ux-lint` does and a preference score cannot: it names
+the feature.** Not "this scores 6.2", but "`rounded-2xl` on line 14, and
+Bugatti's radius scale is 0 or pill with nothing between." **Nameability is the
+difference between taste and class signalling, because it is the part that can
+be checked.**
+
+### And one finding that sharpens the centroid argument
+
+Rule 6 of that research: **maximum prototypicality predicts high novice
+ratings and low expert ratings** (Smith and Melara 1990, via Reber et al.
+2004). So median output is **the cause of the generated look, not a symptom**,
+and optimizing a crowd-rated aesthetic score optimizes for the novice end of
+that split by construction.
+
+### A governance rule this repo now has to pass
+
+Rule 11, and it is aimed straight at us: **"A rule whose only justification is
+how the artifact reflects on the evaluator is a class marker. Every rule must
+cite an effect on the user."**
+
+Several `ux-lint` rules currently fail that. "Max-radius cards" and "the
+springy hover" are taste claims with no stated user cost. **They need a reason
+or they need to go.**
+
 ## The objection still standing
 
 Bourdieu: **taste classifies, and it classifies the classifier.** A deny list

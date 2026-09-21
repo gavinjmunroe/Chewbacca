@@ -1,0 +1,6 @@
+{
+  "purpose": "A page where users control which notifications they receive and how",
+  "primary_action": "toggle notification preferences on or off",
+  "first_look": "the list of notification categories",
+  "audience": "an existing user who wants to reduce or customize their alerts"
+}

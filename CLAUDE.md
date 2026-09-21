@@ -15,6 +15,19 @@ The generated look comes from an empty deny list. So when you pick a system,
 uses Bugatti's colours but keeps `rounded-2xl` and a violet gradient has taken
 the decoration and left the identity.
 
+## Removal is free
+
+Say it out loud before every review pass, because the cue is what was
+measured. Adams et al., *Nature* 592 (2021): only **41%** of people removed
+anything when removal was free and additions cost money. Told *"removing
+pieces is free and costs nothing"*, **61%** did. **The price was already in
+the task. The sentence is what worked.**
+
+**Deleting an element is always an allowed answer and never needs
+justifying.** Make a second pass whose only permitted move is removal.
+
+See [research/12](research/12-developing-taste.md).
+
 ## Before writing any UI
 
 1. `ux-pick "<the brief>"` and read the refusals it prints.
@@ -22,6 +35,7 @@ the decoration and left the identity.
 3. Read `data/constants.json` for anything timed, animated or loading.
 4. Generate.
 5. `ux-lint <path> --fix-help` and clear it.
+6. **Removal pass.** Go back through and take things out. Nothing else.
 
 `craft-gate web-ux --why` prints the distilled rules if you are working inside
 the kit rather than here.

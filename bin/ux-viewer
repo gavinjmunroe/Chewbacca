@@ -72,38 +72,70 @@ def find_chrome():
     return None
 
 
-def render(html_path, out_png, width=1280, height=900, full=False):
-    chrome = find_chrome()
-    if not chrome:
-        print("BLOCKED: no Chrome or Chromium found for rendering", file=sys.stderr)
-        return False
-    src = pathlib.Path(html_path).resolve()
+def render(html_path, out_png, width=1280, height=900, full=False, settle=3500):
+    """Render AFTER the page has finished animating in.
+
+    THE BUG THIS FIXES, 2026-09-20. The previous version screenshotted the
+    instant Chrome finished loading. On uselemma.ai that captured a nearly
+    empty page: every wireframe plot animates in, so the screenshot caught
+    blank frames, and the analysis written from it described "massive negative
+    space" on a page that is actually dense. Caleb caught it.
+
+    Every blind probe run before this fix may have been reading an unfinished
+    page, which makes its findings unreliable rather than merely noisy.
+
+    --virtual-time-budget is NOT the fix and was tried: it fast-forwards the
+    clock and froze the same page mid-headline, which is worse because it
+    looks deliberate.
+
+    What works is a real browser and real wall-clock time: wait for network
+    idle, then wait again for entrance animations that start on load or on
+    intersection. `settle` is that second wait.
+    """
+    src = pathlib.Path(html_path)
     out = pathlib.Path(out_png).resolve()
     out.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory() as profile:
-        # --headless=new, not --headless. The old mode hangs indefinitely here
-        # (measured: still running at 180s on a 13KB static page), and adding
-        # --virtual-time-budget makes it worse rather than bounding it.
-        cmd = [chrome, "--headless=new", "--disable-gpu", "--no-sandbox",
-               "--hide-scrollbars", "--no-first-run", "--disable-extensions",
-               "--no-default-browser-check", f"--user-data-dir={profile}",
-               f"--window-size={width},{height}",
-               f"--screenshot={out}", src.as_uri()]
-        if full:
-            cmd.insert(-1, "--full-page-screenshot")
-        try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        except subprocess.TimeoutExpired:
-            # Chrome sometimes writes the file and then fails to exit. A
-            # screenshot on disk is a success regardless of what the process did.
-            if out.exists() and out.stat().st_size > 0:
-                return True
-            print("render timed out after 60s", file=sys.stderr)
-            return False
-    if not out.exists() or out.stat().st_size == 0:
-        print(f"render failed: {r.stderr[-400:]}", file=sys.stderr)
+    url = src if str(src).startswith("http") else src.resolve().as_uri()
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("BLOCKED: pip3 install playwright && playwright install chromium",
+              file=sys.stderr)
         return False
-    return True
+
+    with sync_playwright() as pw:
+        # Use the Chrome already on the machine rather than making the user
+        # download Playwright's 150MB bundle. Falls back to the bundle if the
+        # system channel is missing.
+        try:
+            browser = pw.chromium.launch(channel="chrome",
+                                         args=["--hide-scrollbars"])
+        except Exception:
+            browser = pw.chromium.launch(args=["--hide-scrollbars"])
+        page = browser.new_page(viewport={"width": width, "height": height})
+        try:
+            page.goto(str(url), wait_until="networkidle", timeout=45000)
+        except Exception:
+            # networkidle never settles on a page with polling or live sockets.
+            # A page that keeps talking is still a page worth looking at.
+            try:
+                page.goto(str(url), wait_until="load", timeout=45000)
+            except Exception as e:                       # noqa: BLE001
+                print(f"navigation failed: {e}", file=sys.stderr)
+                browser.close()
+                return False
+        page.wait_for_timeout(settle)
+        # Scroll-triggered entrances never fire if nothing ever scrolls, so
+        # nudge the page and come back before capturing the fold.
+        if not full:
+            page.mouse.wheel(0, height // 2)
+            page.wait_for_timeout(600)
+            page.mouse.wheel(0, -height // 2)
+            page.wait_for_timeout(900)
+        page.screenshot(path=str(out), full_page=full)
+        browser.close()
+    return out.exists() and out.stat().st_size > 0
 
 
 def probe(png_path, model="sonnet"):
@@ -189,6 +221,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     r = sub.add_parser("render"); r.add_argument("html"); r.add_argument("--out", required=True)
+    r.add_argument("--settle", type=int, default=3500)
     r.add_argument("--width", type=int, default=1280); r.add_argument("--height", type=int, default=900)
     r.add_argument("--full", action="store_true")
 

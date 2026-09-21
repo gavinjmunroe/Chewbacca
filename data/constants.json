@@ -2,7 +2,7 @@
  "_": "Numbers a generator should not re-derive. Every value traces to research/. Where a widely-repeated figure has no primary source it is absent from this file rather than guessed; see research/ for the list of what was rejected and why.",
  "response_budget_ms": {
   "instant": 100,
-  "instant_source": "Nielsen/Miller 1968; Paul Buchheit; web.dev RAIL",
+  "instant_source": "web.dev RAIL; Paul Buchheit. NOT Miller 1968 (see _attribution_correction).",
   "input_handling_only": 50,
   "input_handling_note": "Half of the 100ms is reserved: idle work runs in 50ms chunks and input can queue behind one.",
   "flow_of_thought": 1000,
@@ -10,7 +10,25 @@
   "inp_good_p75": 200,
   "inp_poor_p75": 500,
   "doherty": 400,
-  "doherty_caveat": "Provenance contested. Do not present as settled empirical fact."
+  "doherty_caveat": "Provenance contested. Do not present as settled empirical fact.",
+  "_attribution_correction": "The 0.1 / 1 / 10 second triad is NIELSEN 1993 (Usability Engineering), citing Miller 1968 AND Card/Robertson/Mackinlay 1991. Miller's own numbers are 0.1, 2, 4 and 15 seconds, given PER TASK TYPE across 17 task types. His paper opens by arguing the opposite of a universal threshold: 'It will be shown that two-second response is not a universal requirement.' He also states the numbers are 'the best calculated guesses by the author' and 'indicative rather than conclusive'. An earlier version of this file cited the triad to Miller and told the reader NOT to cite Nielsen. That was backwards.",
+  "miller_1968_actual": {
+   "control_activation": 100,
+   "keyboard_echo": [
+    100,
+    200
+   ],
+   "routine_request": 2000,
+   "understand_confirmation": [
+    2000,
+    4000
+   ],
+   "complex_inquiry_tabular": 4000,
+   "conversation_ends": 15000,
+   "_shape": "Miller's claim is not a slope. 'Sudden drops in mental efficiency occur when delays exceed a given point... psychological step-down discontinuities.'",
+   "_closure_rule": "More extended delays may be made AFTER a closure than in the process of obtaining one. Place an unavoidable wait between tasks, never inside one.",
+   "_past_15s": "Free the user from captivity: hand the work back with an estimate rather than holding them."
+  }
  },
  "frame_budget_ms": {
   "total_at_60fps": 16.66,

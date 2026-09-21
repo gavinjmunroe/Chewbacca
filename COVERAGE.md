@@ -29,7 +29,7 @@ as `partial`.
 
 | # | Domain | Why it matters |
 |---|---|---|
-| 05 | **Academic HCI foundations** | Fitts, Hick-Hyman, GOMS/KLM, Steering, Miller. Wave 1 cited these **secondhand through blog posts**. No paper was read. |
+| 05 | ~~Academic HCI~~ **done** | Papers read, several OCR'd from scans. **Caught a wrong attribution this repo had shipped.** [research/15](research/15-hci-foundations.md) |
 | 06 | ~~Forms~~ **done** | 40 fetches. Opens with where the authorities conflict. [research/06](research/06-forms.md) |
 | 07 | ~~Accessibility~~ **done** | 57 primary-source fetches. [research/07](research/07-accessibility.md) |
 | 08 | ~~Component source~~ **done** | **~110 source files read.** 38 edge cases documented nowhere else. This is the method bar. [research/08](research/08-component-source.md) |

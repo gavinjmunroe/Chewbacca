@@ -14,7 +14,7 @@ confident wrong number.
 | 0.1s is the limit for "reacting instantaneously". Below it the user feels they caused the outcome. | **100ms** | [NN/g](https://www.nngroup.com/articles/response-times-3-important-limits/) |
 | 1.0s is the limit for uninterrupted flow of thought. | **1,000ms** | same |
 | 10s is the limit for keeping attention on the dialogue. | **10,000ms** | same |
-| Cite these to Miller (1968) and Card/Robertson/Mackinlay (1991), not to Nielsen, who popularized them. | | [ACM](https://dl.acm.org/doi/10.1145/1476589.1476628) |
+| **CORRECTION, 2026-09-20: this triad is Nielsen 1993, not Miller 1968.** Miller's paper does not contain it. See [research/15](15-hci-foundations.md). | | |
 | Complete a transition initiated by user input within 100ms. | **100ms** | [web.dev RAIL](https://web.dev/articles/rail) |
 | Budget only 50ms of that for your own handling. The other 50ms is reserved, because idle work runs in 50ms chunks and input can queue behind one. | **50/50 split** | same |
 | Hold p75 Interaction to Next Paint at or below 200ms. 200-500ms needs improvement, above 500ms is poor. | **200 / 500ms** | [web.dev INP](https://web.dev/articles/inp) |

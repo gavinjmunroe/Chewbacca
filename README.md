@@ -39,6 +39,18 @@ as Bugatti instead of as every other generated page.
 A library that only says what to use reproduces the median. The forbidding is
 the signal, so the index is built on it.
 
+## It fires by itself
+
+`ux-guard.sh` runs as a `PostToolUse` hook on every `Write` and `Edit` of a
+`.tsx`, `.jsx`, `.vue`, `.svelte`, `.astro`, `.html`, `.css` or `.scss` file. On
+a high-severity hit it **exits 2, which blocks the turn** and hands the model
+the findings plus the user cost of each one.
+
+This exists because on 2026-09-20 the repo held 5,537 lines of researched craft
+and a linter nobody ran. Caleb: *"Chewbacca should be smart enough to ALWAYS
+apply what it knows."* It was not. A rule that depends on being remembered is a
+rule that does not fire.
+
 ## Use it
 
 ```

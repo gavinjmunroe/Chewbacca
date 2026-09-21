@@ -54,6 +54,18 @@ check "detector catches indigo specifically" bash -c \
 check "detector never scans the vendored corpus" bash -c \
   "! '$ROOT/bin/ux-lint' '$ROOT' 2>/dev/null | grep -q 'systems/'"
 
+# Bourdieu's test, made executable. See tools/check_rules.py.
+check "every rule names a user cost and cites a source" python3 "$ROOT/tools/check_rules.py"
+
+check "ux-lint prints the user cost, not just the rule" bash -c \
+  "'$ROOT/bin/ux-lint' '$ROOT/tests/fixtures/slop.tsx' | grep -q 'COSTS:'"
+
+check "ux-guard blocks a slop file" "$ROOT/tests/guard_blocks.sh" "$ROOT"
+check "ux-guard passes a clean file" "$ROOT/tests/guard_passes.sh" "$ROOT"
+
+check "ux-pick branches instrumental vs expressive" bash -c \
+  "'$ROOT/bin/ux-pick' 'fashion brand landing page' -n 1 | grep -q 'restraint is not being rewarded'"
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

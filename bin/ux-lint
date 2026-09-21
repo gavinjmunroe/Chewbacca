@@ -23,111 +23,239 @@ import pathlib
 import re
 import sys
 
-# (id, severity, pattern, what it is, what to do instead)
+# Every rule carries WHY (the user cost) and SRC (where the number came from).
+#
+# Both fields are mandatory and tests/run.sh fails the build if either is
+# missing. The reason is Bourdieu's, recorded in research/05-taste.md:
+# "a rule whose only justification is how the artifact reflects on the
+# evaluator is a class marker." A rule that cannot name a cost to the person
+# using the thing is taste policing, and it gets deleted rather than shipped.
+#
+# SRC is what separates this from every other anti-slop linter. research/11
+# found that the closest competitor's 152 rules carry no provenance field at
+# all. If a rule here cannot cite a source, it is an opinion and it says so.
+
+# (id, severity, pattern, what it is, what to do instead, user cost, source)
 RULES = [
+    # ---- The generated look. research/04 ------------------------------------
     ("indigo", "high",
      r"\b(?:bg|text|from|to|via|border|ring|shadow)-(?:indigo|violet|purple|fuchsia)-(?:4|5|6|7)\d{2}\b",
-     "Tailwind indigo/violet, the single most recognizable generated-UI tell",
-     "Pick a system from SYSTEMS.md and use its accent. Adam Wathan apologized for this default by name."),
+     "Tailwind indigo/violet, the most recognizable generated-UI tell",
+     "Pick a system from SYSTEMS.md and use its accent.",
+     "Once a viewer can name the style as generated, they have an attribution for why it read easily, and the fluency-to-liking path is cut. Naming is the damage.",
+     "research/14; Winkielman & Fazendeiro 2003 misattribution dissociation. Adam Wathan apologized for the default by name."),
 
     ("gradient-brand", "high",
      r"(?:bg-gradient-to-\w+[^\"'`]*\bfrom-(?:indigo|violet|purple|blue|pink)-\d+)"
      r"|(?:linear-gradient\([^)]*#6366f1)|(?:linear-gradient\([^)]*#a855f7)",
      "The indigo-to-violet diagonal gradient (#6366f1 to #a855f7)",
-     "Use one flat accent. 3 of the 64 indexed systems have no accent at all and none of them ship this gradient."),
+     "One flat accent from the chosen system.",
+     "Same naming cost as above, and it adds visual complexity, where overshooting costs about 3x what undershooting costs.",
+     "research/13; Reinecke & Gajos 2014, N~40,000: peak appeal at complexity 4.2/10, d=0.6 low side vs d=2.0 high side."),
 
     ("gradient-text", "high",
      r"bg-clip-text[^\"'`]*\btext-transparent|\btext-transparent[^\"'`]*\bbg-clip-text",
      "Gradient headline text",
-     "Set the headline in one colour. Let size and weight carry the hierarchy."),
+     "One colour. Let size and weight carry hierarchy.",
+     "Gradient text lowers effective contrast across its own run, so part of the headline fails WCAG 1.4.3 even when the sampled colour passes.",
+     "research/07; WCAG 1.4.3 requires 4.5:1, or 3:1 at 24px+."),
 
     ("glass", "high",
      r"backdrop-blur[^\"'`]*\bbg-(?:white|black)/(?:5|10|20|30)\b|bg-(?:white|black)/(?:5|10|20)[^\"'`]*\bbackdrop-blur",
      "Glassmorphism card",
-     "Use a solid surface colour from the chosen system."),
+     "A solid surface colour from the chosen system.",
+     "Text over a translucent blur has a contrast ratio that changes with whatever scrolls behind it, so it cannot be verified and fails for low-vision users somewhere on the page.",
+     "research/07; WCAG 1.4.3. Low contrast is the #1 failure on the web at 83.9% of pages (WebAIM Million 2026)."),
 
     ("pulse-dot", "med",
      r"animate-pulse[^\"'`]*\brounded-full|rounded-full[^\"'`]*\banimate-pulse",
      "The glowing pulsing status dot",
-     "A static dot, or no dot. If nothing is actually live, do not imply it is."),
-
-    ("transition-all", "high",
-     r"\btransition-all\b|transition:\s*all\b",
-     "transition: all, which animates unintended properties off the GPU",
-     "Transition only the property that changes. Animate transform and opacity only."),
-
-    ("hover-scale", "med",
-     r"hover:scale-1(?:05|10)\b",
-     "The springy hover scale",
-     "120 to 200ms on the one property that changes, standard ease."),
-
-    ("scale-zero", "med",
-     r"scale-0\b|scale\(0\)",
-     "Animating from scale(0). Nothing in the real world appears from nothing.",
-     "Start at scale(0.9) to scale(0.97) with opacity 0."),
+     "A static dot, or none. If nothing is live, do not imply it is.",
+     "Anything moving that starts automatically and runs alongside other content needs a pause control at WCAG Level A, and a decorative pulse will not have one.",
+     "research/07; WCAG 2.2.2 Pause Stop Hide, Level A, triggers above 5 seconds."),
 
     ("big-radius", "med",
      r"\brounded-(?:2xl|3xl)\b",
      "Max-radius cards",
-     "Pick the radius profile of your chosen system. Bugatti has 0 and pill and nothing between."),
+     "Use the radius profile of the chosen system.",
+     "A uniform exaggerated radius across cards, buttons, inputs and badges removes the shape cue that distinguishes control types, leaving colour and position as the only affordance signals.",
+     "research/04; noqta.tn fix is --radius-card 6px and --radius-pill 999px with nothing between. Bugatti ships 0 and pill only."),
+
+    ("nested-radius", "med",
+     r"rounded-(?:xl|2xl|3xl)[^\"'`]{0,80}\bp-(?:6|8|10|12)\b",
+     "A large radius on a container with large padding, where the inner radius will not nest",
+     "inner radius = outer radius - padding. It is arithmetic, not taste.",
+     "Mismatched nesting reads as a rendering fault rather than a style, which costs the viewer a moment deciding whether the page is broken.",
+     "research/04, tell #21."),
 
     ("soft-shadow", "med",
      r"shadow-(?:xl|2xl)\b|box-shadow:[^;]*rgba\([^)]*,\s*0?\.1\s*\)",
-     "The oversized low-opacity drop shadow (opacity 0.1, big blur, no offset)",
-     "A 1px contact shadow, or none. 39 of the indexed systems refuse shadows outright."),
-
-    ("left-border-card", "low",
-     r"border-l-4[^\"'`]*\brounded|rounded[^\"'`]*\bborder-l-4",
-     "Rounded card with a thick left border on every list item",
-     "One border treatment for the list, not a coloured rail per row."),
-
-    ("icon-tint", "low",
-     r"bg-(\w+)-\d+/10[^\"'`]*\btext-\1-\d+|text-(\w+)-\d+[^\"'`]*\bbg-\2-\d+/10",
-     "An icon sitting in a 10% tint of its own colour",
-     "Let the icon sit on the page surface."),
-
-    ("uniform-gap", "med",
-     r"(?s)(?:\b(?:gap|p|space-y|space-x)-4\b.*?){6,}",
-     "One spacing value everywhere (gap-4, p-4, space-y-4)",
-     "Tight inside a group, generous between groups. Real scales are dense at the bottom and sparse at the top."),
+     "The oversized low-opacity drop shadow",
+     "A 1px contact shadow, or none.",
+     "In forced-colors mode the UA forces box-shadow to none, so any affordance carried only by a shadow disappears entirely for high-contrast users.",
+     "research/10; MDN forced-colors, widely available since Sept 2022."),
 
     ("invented-stats", "high",
      r"\b(?:10k\+|99\.9%|24/7|500\+|1M\+)\b",
      "The invented stat trio, with nothing measured behind it",
-     "Use a number you can source, or delete the strip. Caleb's own rule: never ship an unverified specific."),
+     "Use a number you can source, or delete the strip.",
+     "An unverifiable specific is the claim a reader checks first, and finding it hollow discredits the numbers next to it that were true.",
+     "Caleb's standing rule: never ship an unverified specific. research/04, tell #29."),
 
     ("emoji-heading", "high",
-     r"^\s*#{1,4}\s*[\U0001F300-\U0001FAFF☀-➿]",
+     r"^\s*#{1,4}\s*[\U0001F300-\U0001FAFF\u2600-\u27BF]",
      "Emoji section header",
-     "Write the heading."),
+     "Write the heading.",
+     "Screen readers announce the emoji name before the heading text, so heading navigation, which 71.6% of screen reader users rely on, gets a garbled first word.",
+     "research/07; WebAIM Screen Reader Survey #10: headings are the primary navigation for 71.6% of users."),
 
     ("slop-copy", "high",
      r"(?i)\b(?:empower your team|built for modern teams|ship smarter|say goodbye to|"
      r"unlock (?:your |the )?(?:full )?potential|take it to the next level|"
      r"let'?s build something (?:together|amazing))\b",
      "Marketing filler that appears in every generated page",
-     "Say what the thing does. Names, numbers, mechanisms."),
+     "Say what the thing does. Names, numbers, mechanisms.",
+     "Filler occupies the position where a reader looks for the value proposition, so the page costs a scan and returns nothing.",
+     "research/04 microcopy tells; research/14 on zero indexicality."),
 
     ("ordinals", "low",
      r"\b0[1-9]\s*/\s*[A-Z]{3,}",
      "The giant faint 01 / SECTION ordinal label",
-     "Delete it. It is decoration pretending to be structure."),
+     "Delete it.",
+     "It is decoration shaped like structure, so it competes for the scan that should land on the real heading.",
+     "research/04, tell #30."),
 
-    ("placeholder-as-label", "med",
-     r"<input(?![^>]*aria-label)(?![^>]*id=)[^>]*\bplaceholder=",
-     "A placeholder doing a label's job",
-     "Atlassian lints this out entirely: use a real label or a helper message."),
+    ("uniform-gap", "med",
+     r"(?s)(?:\b(?:gap|p|space-y|space-x)-4\b.*?){6,}",
+     "One spacing value everywhere",
+     "Tight inside a group, generous between groups.",
+     "Uniform spacing removes the proximity cue that signals grouping, so the reader has to parse relationships from content instead of layout.",
+     "research/04; internal-less-than-external rule. Real scales are dense at the bottom and sparse at the top."),
 
     ("arbitrary-value", "low",
      r"(?:text|bg|border)-\[#[0-9a-fA-F]{3,8}\]|\bp-\[\d+px\]",
      "An arbitrary hex or pixel value inline",
-     "GOV.UK bans pasted hex outright and Polaris lints it as an error. Use a token."),
+     "Use a token.",
+     "A hardcoded colour cannot be re-pointed, so it survives into dark mode and high-contrast as the wrong value.",
+     "research/10; GOV.UK bans pasted hex outright, Polaris lints it as an error."),
+
+    # ---- Motion. research/03 ------------------------------------------------
+    ("transition-all", "high",
+     r"\btransition-all\b|transition:\s*all\b",
+     "transition: all, which animates unintended properties off the GPU",
+     "Transition only the property that changes.",
+     "Animating a layout property forces style, layout, paint and composite every frame, dropping frames on a 10ms budget and reading as jank.",
+     "research/03; web.dev: you get 10ms of a 16.66ms frame, the browser takes the rest."),
+
+    ("layout-animation", "high",
+     r"transition(?:-property)?:\s*[^;]*\b(?:width|height|top|left|margin|padding)\b"
+     r"|\btransition-\[(?:width|height|top|left|margin|padding)",
+     "Animating a layout property",
+     "Animate transform and opacity only.",
+     "Same frame-budget cost as transition: all, but deliberate rather than accidental.",
+     "research/03; the compositor-only list is exactly transform and opacity."),
+
+    ("hover-scale", "med",
+     r"hover:scale-1(?:05|10)\b",
+     "The springy hover scale",
+     "120 to 200ms on the one property that changes.",
+     "Hover transforms fire on touch devices as a false hover on tap, so mobile users see a state change they did not cause.",
+     "research/03; gate hover behind @media (hover: hover) and (pointer: fine)."),
+
+    ("scale-zero", "med",
+     r"scale-0\b|scale\(0\)",
+     "Animating from scale(0)",
+     "Start at scale(0.9) to scale(0.97) with opacity 0.",
+     "A zero-scale origin gives no positional cue about where the element came from, so the user re-locates it on every open.",
+     "research/03; Kowalski: nothing in the real world appears from nothing."),
+
+    ("long-duration", "med",
+     r"duration-(?:700|1000)\b|transition-duration:\s*(?:0\.[7-9]|[1-9])\d*m?s",
+     "A UI transition over 500ms",
+     "Under 300ms for anything the user triggers and waits on.",
+     "Past 400ms the motion itself becomes the wait, and Material's own ceiling is 400ms for exactly this reason.",
+     "research/03; Material 2. Shipped counter-example: Vaul's drawer is 500ms for a large surface."),
 
     ("will-change-static", "med",
      r"will-change\s*:\s*(?!auto)",
      "will-change in a stylesheet",
-     "MDN: a last resort for a measured problem. Toggle it in JS and set it back to auto."),
+     "Toggle it in JS and set it back to auto.",
+     "A permanent will-change holds a compositor layer for the element's whole life, costing memory and GPU upload bandwidth on low-end devices.",
+     "research/03; MDN calls it a last resort for a measured problem."),
+
+    ("no-reduced-motion", "med",
+     r"(?s)@keyframes\b(?!.*prefers-reduced-motion)",
+     "A keyframe animation with no prefers-reduced-motion branch anywhere in the file",
+     "Shorten durations under reduce rather than setting animation: none.",
+     "Vestibular triggers cause nausea and migraine, and WCAG 2.3.3 requires interaction-triggered motion be disableable.",
+     "research/03; only 11 of 23 award-winning sites reference prefers-reduced-motion at all."),
+
+    # ---- Accessibility. research/07 -----------------------------------------
+    ("placeholder-as-label", "high",
+     r"<input(?![^>]*aria-label)(?![^>]*id=)[^>]*\bplaceholder=",
+     "A placeholder doing a label's job",
+     "Use a real label, or a helper message.",
+     "The hint vanishes on focus, so the user cannot verify their answer before submitting and cannot re-read the question while fixing an error.",
+     "research/06; NN/g documents seven independent failures. Missing form labels are on 51% of pages."),
+
+    ("outline-none", "high",
+     r"outline:\s*none|outline:\s*0\b|\boutline-none\b",
+     "Removing the focus outline",
+     ":focus-visible with a 3:1 outline and a @supports fallback.",
+     "A keyboard user loses all knowledge of where they are on the page, which fails WCAG 2.4.7 at Level AA.",
+     "research/07; WCAG 2.4.7 Focus Visible and 1.4.11 at 3:1."),
+
+    ("positive-tabindex", "high",
+     r'tabindex=["\x27]?[1-9]',
+     "A positive tabindex",
+     "0 to add to the sequence, -1 for a programmatic target.",
+     "A positive value jumps ahead of every other element on the page, so tab order stops matching visual order for everyone.",
+     "research/08; Radix ignores positive tabindex deliberately: it hinders accessibility to have tab order differ from visual order."),
+
+    ("div-onclick", "high",
+     r"<div[^>]*\bonClick|<span[^>]*\bonClick",
+     "A click handler on a div or span",
+     "Use a button.",
+     "A div is not focusable, fires on neither Enter nor Space, and exposes no role, so the control does not exist for keyboard or screen reader users.",
+     "research/07; the First Rule of ARIA. Pages with ARIA average 59.1 errors against 42.0 without."),
+
+    ("img-no-alt", "high",
+     r"<img(?![^>]*\balt=)[^>]*>",
+     "An img with no alt attribute",
+     'alt="" if decorative, a real description if not.',
+     "Missing alt is the second most common failure on the web and leaves the screen reader announcing a filename.",
+     "research/07; WebAIM Million 2026: 53.1% of home pages."),
+
+    ("tiny-target", "med",
+     r"\b(?:w|h)-(?:1|2|3|4)\b[^\"'`]{0,40}\b(?:w|h)-(?:1|2|3|4)\b",
+     "A tap target under 24 CSS px",
+     "48x48 with 8px separation satisfies every standard at once.",
+     "Below 24px the target fails WCAG 2.5.8 at Level AA, and 66% of mobile sites already place targets too close together.",
+     "research/06; WCAG 2.5.8 is 24px, Material is 48dp, Apple is 44pt."),
+
+    ("color-only-state", "low",
+     r"(?:text|border)-(?:red|green)-\d+(?![^\"'`]{0,60}(?:aria-|role=|<svg|icon))",
+     "State signalled by colour with no second cue nearby",
+     "Add an icon, a label, or a shape.",
+     "Red-green is indistinguishable for about 8% of men, so the state is invisible to one in twenty male readers.",
+     "research/09; deuteranomaly alone is ~5% of men."),
+
+    # ---- Structure ----------------------------------------------------------
+    ("skipped-heading", "med",
+     r"(?s)<h1[^>]*>.*?<h[45]\b(?![^<]*</h[45]>[^<]*<h[23])",
+     "A heading level skipped after h1",
+     "Do not skip levels.",
+     "71.6% of screen reader users navigate by heading, and a broken outline removes the page's only navigation surface for them.",
+     "research/07; 41.8% of home pages skip levels."),
+
+    ("empty-list-flash", "low",
+     r"(?s)\.length\s*===?\s*0[^}]{0,120}(?:No results|Nothing found|empty)",
+     "Rendering an empty state without checking a loading flag first",
+     "Render a loading state until data arrives.",
+     "The user sees 'No results' for the duration of the fetch and leaves before the data lands.",
+     "research/02; Raycast names this their most common extension bug."),
 ]
+
 
 EXT = {".tsx", ".jsx", ".ts", ".js", ".css", ".scss", ".html", ".vue", ".svelte", ".md", ".mdx", ".astro"}
 SKIP = {"node_modules", ".git", "dist", "build", ".next", "vendor", "systems", "research", ".venv"}
@@ -137,11 +265,11 @@ def scan(path):
     hits = []
     text = path.read_text(errors="ignore")
     lines = text.split("\n")
-    for rid, sev, pat, what, fix in RULES:
+    for rid, sev, pat, what, fix, why, src in RULES:
         flags = re.M if rid == "emoji-heading" else 0
         for m in re.finditer(pat, text, flags):
             line_no = text[: m.start()].count("\n") + 1
-            hits.append((sev, rid, path, line_no, lines[line_no - 1].strip()[:90], what, fix))
+            hits.append((sev, rid, path, line_no, lines[line_no - 1].strip()[:90], what, fix, why, src))
     return hits
 
 
@@ -171,19 +299,21 @@ def main():
         print(f"clean. {len(files)} file(s), no generated-UI tells.")
         return 0
 
-    for sev, rid, path, line, src, what, _ in hits:
+    for sev, rid, path, line, snippet, what, _f, why, _s in hits:
         print(f"{sev.upper():4s} {path}:{line}  [{rid}]  {what}")
-        print(f"       {src}")
+        print(f"       {snippet}")
+        print(f"       COSTS: {why}")
 
     fired = []
     for h in hits:
         if h[1] not in [f[0] for f in fired]:
-            fired.append((h[1], h[6]))
+            fired.append((h[1], h[6], h[8]))
 
     if a.fix_help:
         print("\nwhat to do instead:")
-        for rid, fix in fired:
+        for rid, fix, src in fired:
             print(f"  {rid}: {fix}")
+            print(f"    source: {src}")
 
     high = sum(1 for h in hits if h[0] == "high")
     print(f"\n{len(hits)} hit(s) across {len(files)} file(s), {high} high. "

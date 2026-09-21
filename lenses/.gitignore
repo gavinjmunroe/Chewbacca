@@ -1,0 +1,6 @@
+# Crawl output is large binary screenshots plus multi-MB JSON, regenerable
+# with `ux-crawl <url>`. The LENS (contrastive pairs and assertions) is the
+# artifact worth committing; the raw capture is not.
+*/f*.png
+*/*.png
+*/raw.json

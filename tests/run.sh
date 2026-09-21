@@ -235,6 +235,29 @@ check "motion/ reduces rather than deleting" bash -c \
 check "ux-motion refuses to invent a primitive" bash -c \
   "! '$ROOT/bin/ux-motion' teleport 2>/dev/null"
 
+# ux-crawl. The first version silently dropped EVERY focus state because
+# ElementHandle.focus() takes no timeout kwarg, and the run still printed a
+# clean summary. A capture tool that swallows errors reports success over
+# missing data, which is worse than crashing.
+check "ux-crawl never passes a timeout to ElementHandle.focus" bash -c \
+  "! grep -qE '\.focus\(timeout' '$ROOT/bin/ux-crawl'"
+
+check "ux-crawl reports skipped states instead of swallowing them" bash -c \
+  "grep -q 'skipped.append' '$ROOT/bin/ux-crawl' && \
+   grep -q 'printed rather than swallowed' '$ROOT/bin/ux-crawl'"
+
+check "ux-crawl drives past the entrance" bash -c \
+  "grep -q 'el.hover' '$ROOT/bin/ux-crawl' && \
+   grep -q 'reduced_motion' '$ROOT/bin/ux-crawl' && \
+   grep -q 'set_viewport_size' '$ROOT/bin/ux-crawl'"
+
+check "ux-crawl reads computed styles, not the stylesheet" bash -c \
+  "grep -q 'getComputedStyle' '$ROOT/bin/ux-crawl'"
+
+# SCRAPE-PLAN.md: prose is the worst-measured format for procedural knowledge.
+check "ux-crawl refuses to emit a style guide" bash -c \
+  "grep -q 'No style guide was written' '$ROOT/bin/ux-crawl'"
+
 # Measured 2026-09-20: 83 of all blocking findings across the corpus were a
 # single rule, emoji-as-icon, and stance guidance did not reduce findings at
 # all because no refusal list mentioned emoji. Universal bans must reach every

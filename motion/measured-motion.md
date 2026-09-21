@@ -55,12 +55,22 @@ being sold. Not defensible on a page whose job is to be read.
   with it; a system that cannot say WHEN each duration applies has 8 accidents
   rather than 8 tiers.
 
-## The defect, measured
+## Reduced motion, corrected
 
-**`prefers-reduced-motion: reduce` is not respected.** Re-loaded under the
-reduce preference, **4 animations still run**. Continuous small-element motion
-is precisely the vestibular case research/03 flags, and this is the one thing
-to do better than the reference.
+An earlier version of this file said reduced motion was "NOT RESPECTED"
+because 4 animations still ran under `prefers-reduced-motion: reduce`. That
+was a number without its denominator.
+
+`ux-crawl` captured both sides: **214 animations at load, 4 under reduce.**
+That is 98% suppressed, which is respected, not ignored. Reporting the 4
+without the 214 turned a good result into an accusation.
+
+The 4 that remain are worth a look, since research/03's rule is reduce rather
+than delete and keeping a few opacity transitions is the correct reading of
+the spec. Whether these 4 are transforms or opacity is not yet extracted.
+
+**The lesson is the process one:** a count with no denominator is not a
+measurement. It is the shape of a measurement.
 
 ## Benchmarks to compare against
 

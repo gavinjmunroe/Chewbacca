@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Drive the interface and record what it does, not what it looks like.
+
+    ux-crawl https://example.com
+    ux-crawl https://example.com --out lenses/example --states hover,focus,submit,narrow
+
+WHY THIS IS DIFFERENT FROM EVERY EXTRACTOR I COULD FIND. HTTP Archive parses
+CSS statically across 17.2M sites. slicer.dev extracts one page at load.
+Chrome's animation panel is manual. Every one of them reads the ENTRANCE.
+
+Most of an interface's motion and nearly all of its state handling lives past
+the entrance: on hover, on focus, on an empty form submit, at 375px wide.
+A tool that only loads the page cannot see any of it, which is why presets/
+in this repo had to be written by hand from papers instead of extracted.
+
+WHAT IT RECORDS AT EACH STATE. document.getAnimations() as the browser
+resolved it, the computed styles that actually applied, and a screenshot.
+Computed, not authored: a stylesheet says what was written, a computed style
+says what won.
+
+WHAT IT DELIBERATELY DOES NOT DO. It does not emit a style guide. See
+SCRAPE-PLAN.md: prose is the worst-measured format for procedural knowledge
+(SOPBench: compiled structure gained up to 16.0 points over official prose;
+FlowBench: flowcharts reduce planning hallucination most). This writes raw
+observations, and tools/lens.py turns them into contrastive pairs and
+executable assertions.
+"""
+import argparse
+import json
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+ANIMS_JS = """() => {
+  const out = [];
+  for (const a of document.getAnimations()) {
+    let t = {};
+    try { t = a.effect ? a.effect.getTiming() : {}; } catch (e) {}
+    let sel = "";
+    try {
+      const el = a.effect && a.effect.target;
+      if (el && el.tagName) {
+        sel = el.tagName.toLowerCase();
+        if (typeof el.className === "string" && el.className)
+          sel += "." + el.className.trim().split(/\\s+/).slice(0, 2).join(".");
+      }
+    } catch (e) {}
+    out.push({sel, dur: typeof t.duration === "number" ? t.duration : null,
+              delay: t.delay || 0, easing: t.easing || "",
+              iter: t.iterations === Infinity ? "infinite" : t.iterations});
+  }
+  return out;
+}"""
+
+# Computed styles of what is actually VISIBLE, capped so one page cannot
+# produce a hundred megabytes of JSON.
+STYLES_JS = """(cap) => {
+  const props = ["color","background-color","border-radius","font-family",
+    "font-size","font-weight","letter-spacing","line-height","box-shadow",
+    "border-color","border-width","outline","outline-offset","transition",
+    "transition-duration","transition-timing-function","gap","padding",
+    "text-transform","backdrop-filter","opacity","cursor"];
+  const out = [];
+  const els = document.querySelectorAll("body *");
+  for (let i = 0; i < els.length && out.length < cap; i++) {
+    const el = els[i];
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === "hidden" || cs.display === "none") continue;
+    const rec = {tag: el.tagName.toLowerCase(),
+                 w: Math.round(r.width), h: Math.round(r.height)};
+    for (const p of props) {
+      const v = cs.getPropertyValue(p);
+      if (v && v !== "none" && v !== "normal" && v !== "auto" && v !== "0px")
+        rec[p] = v.slice(0, 90);
+    }
+    out.push(rec);
+  }
+  return out;
+}"""
+
+FOCUSABLE = ("a[href]", "button", "input", "select", "textarea", "[tabindex]",
+             "[role=button]", "summary")
+
+
+def capture(page, name, out_dir, cap=900):
+    """One state: what animates, what computed, what it looks like."""
+    shot = out_dir / f"{name}.png"
+    try:
+        page.screenshot(path=str(shot))
+    except Exception:
+        shot = None
+    try:
+        anims = page.evaluate(ANIMS_JS)
+    except Exception:
+        anims = []
+    try:
+        styles = page.evaluate(STYLES_JS, cap)
+    except Exception:
+        styles = []
+    return {"state": name, "animations": anims, "styles": styles,
+            "shot": shot.name if shot else None}
+
+
+def drive(page, out_dir, states, settle, skipped):
+    """The part nobody else does: put the interface into each state.
+
+    Every failure appends to `skipped` and is printed. A capture tool that
+    swallows errors reports a clean run over missing data, which is worse than
+    crashing. The first version of this silently dropped EVERY focus state,
+    because ElementHandle.focus() takes no timeout kwarg, and the run still
+    looked successful.
+    """
+    obs = [capture(page, "load", out_dir)]
+
+    if "hover" in states:
+        # Most motion in a real system lives on hover, and a load-only crawl
+        # never sees a frame of it.
+        try:
+            els = page.query_selector_all("button, a[href], [role=button]")[:6]
+        except Exception as e:                            # noqa: BLE001
+            els = []
+            skipped.append(f"hover: query {type(e).__name__}")
+        for i, el in enumerate(els):
+            try:
+                el.hover(timeout=2500)
+                page.wait_for_timeout(450)
+                obs.append(capture(page, f"hover-{i}", out_dir, cap=250))
+            except Exception as e:                        # noqa: BLE001
+                skipped.append(f"hover {i}: {type(e).__name__} {str(e)[:50]}")
+
+    if "focus" in states:
+        # Focus rings are the most common accessibility defect and are
+        # invisible to every static extractor.
+        for sel in FOCUSABLE:
+            try:
+                el = page.query_selector(sel)
+            except Exception as e:                        # noqa: BLE001
+                skipped.append(f"focus {sel}: query {type(e).__name__}")
+                continue
+            if not el:
+                continue
+            try:
+                el.focus()          # no timeout kwarg on ElementHandle.focus
+                page.wait_for_timeout(250)
+                safe = re.sub(r"[^a-z0-9]+", "-", sel.lower()).strip("-")
+                obs.append(capture(page, f"focus-{safe}", out_dir, cap=250))
+            except Exception as e:                        # noqa: BLE001
+                skipped.append(f"focus {sel}: {type(e).__name__} {str(e)[:50]}")
+
+    if "submit" in states:
+        # An empty submit is the cheapest way to see the error design, which
+        # is the part of a system that never appears in a style guide.
+        try:
+            form = page.query_selector("form")
+            if form:
+                btn = form.query_selector("button, input[type=submit]")
+                if btn:
+                    btn.click(timeout=2500)
+                    page.wait_for_timeout(900)
+                    obs.append(capture(page, "submit-empty", out_dir))
+                else:
+                    skipped.append("submit: form has no submit control")
+            else:
+                skipped.append("submit: no form on page")
+        except Exception as e:                            # noqa: BLE001
+            skipped.append(f"submit: {type(e).__name__} {str(e)[:50]}")
+
+    if "narrow" in states:
+        try:
+            page.set_viewport_size({"width": 375, "height": 812})
+            page.wait_for_timeout(settle)
+            obs.append(capture(page, "narrow-375", out_dir))
+        except Exception as e:                            # noqa: BLE001
+            skipped.append(f"narrow: {type(e).__name__} {str(e)[:50]}")
+
+    if "reduced" in states:
+        try:
+            page.emulate_media(reduced_motion="reduce")
+            page.reload(wait_until="load", timeout=30000)
+            page.wait_for_timeout(settle)
+            obs.append(capture(page, "reduced-motion", out_dir, cap=120))
+        except Exception as e:                            # noqa: BLE001
+            skipped.append(f"reduced: {type(e).__name__} {str(e)[:50]}")
+    return obs
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("url")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--states", default="hover,focus,submit,narrow,reduced")
+    ap.add_argument("--settle", type=int, default=3000)
+    ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--height", type=int, default=900)
+    a = ap.parse_args()
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("BLOCKED: pip3 install playwright", file=sys.stderr)
+        return 1
+
+    slug = a.url.replace("https://", "").replace("http://", "")
+    slug = "".join(c if c.isalnum() else "-" for c in slug).strip("-")[:40]
+    out_dir = pathlib.Path(a.out) if a.out else ROOT / "lenses" / slug
+    out_dir.mkdir(parents=True, exist_ok=True)
+    states = {s.strip() for s in a.states.split(",") if s.strip()}
+
+    with sync_playwright() as pw:
+        try:
+            b = pw.chromium.launch(channel="chrome", args=["--hide-scrollbars"])
+        except Exception:
+            b = pw.chromium.launch(args=["--hide-scrollbars"])
+        page = b.new_page(viewport={"width": a.width, "height": a.height})
+        try:
+            page.goto(a.url, wait_until="networkidle", timeout=45000)
+        except Exception:
+            try:
+                page.goto(a.url, wait_until="load", timeout=45000)
+            except Exception as e:                        # noqa: BLE001
+                print(f"navigation failed: {e}", file=sys.stderr)
+                b.close()
+                return 1
+        page.wait_for_timeout(a.settle)
+        skipped = []
+        obs = drive(page, out_dir, states, a.settle, skipped)
+        b.close()
+
+    raw = {"url": a.url, "states": sorted(states),
+           "skipped": skipped, "observations": obs}
+    (out_dir / "raw.json").write_text(json.dumps(raw, indent=1))
+
+    n_anim = sum(len(o["animations"]) for o in obs)
+    n_style = sum(len(o["styles"]) for o in obs)
+    print(f"{len(obs)} STATE(S) CAPTURED")
+    for o in obs:
+        print(f"  {o['state']:<16} {len(o['animations']):>4} animation(s)  "
+              f"{len(o['styles']):>4} element(s)")
+    if skipped:
+        print(f"\n{len(skipped)} STATE(S) SKIPPED, printed rather than swallowed")
+        for x in skipped[:8]:
+            print(f"  {x}")
+    print(f"\n{n_anim} animation observations, {n_style} element observations")
+    print(f"raw -> {out_dir / 'raw.json'}")
+    print("\nNo style guide was written. See SCRAPE-PLAN.md: prose is the "
+          "worst-measured\nformat for this. Next: tools/lens.py for "
+          "contrastive pairs and assertions.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

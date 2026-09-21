@@ -313,7 +313,63 @@ def load_project_rules(start):
 
 
 EXT = {".tsx", ".jsx", ".ts", ".js", ".css", ".scss", ".html", ".vue", ".svelte", ".md", ".mdx", ".astro"}
-SKIP = {"node_modules", ".git", "dist", "build", ".next", "vendor", "systems", "research", ".venv"}
+# corpus/ is deliberately-slop training data and runs/ is generated variants.
+# Linting either one reports findings the repo put there on purpose.
+SKIP = {"node_modules", ".git", "dist", "build", ".next", "vendor", "systems",
+        "research", ".venv", "corpus", "runs"}
+
+
+# ---- Rules that a regex cannot express ------------------------------------
+#
+# WHY THESE EXIST. Measured 2026-09-20 against corpus/slop/saas-landing-0.html,
+# a page with a violet-to-pink gradient headline, a pill announcement badge and
+# an avatar stack: THE REGEX RULES RETURNED ZERO HIGH FINDINGS. Every headline
+# rule above matches Tailwind syntax (bg-indigo-600, bg-clip-text) and that page
+# is written in plain CSS with variables, so `background-clip: text` and
+# `#7c6dff` slid straight past a detector built to catch exactly them.
+#
+# A rule keyed to one framework's dialect only catches slop written in that
+# dialect. These work on the computed value instead, so #7c6dff, rgb(124,109,255)
+# and bg-indigo-600 are all the same finding.
+
+VIOLET_LO, VIOLET_HI = 228, 295   # indigo through purple, in HSL degrees
+
+
+def _saturated_violets(text):
+    """Hex accents in the indigo-violet band, however they were written."""
+    import colorsys
+    out = []
+    for m in re.finditer(r"#([0-9a-fA-F]{6})\b", text):
+        raw = m.group(1)
+        r, g, b = (int(raw[i:i + 2], 16) / 255 for i in (0, 2, 4))
+        h, l, sat = colorsys.rgb_to_hls(r, g, b)
+        if sat >= 0.45 and 0.25 <= l <= 0.75 and VIOLET_LO <= h * 360 <= VIOLET_HI:
+            out.append((m.start(), f"#{raw}"))
+    return out
+
+
+def _gradient_text(text):
+    """Gradient headline text in CSS, which the Tailwind rule cannot see."""
+    out = []
+    for m in re.finditer(r"(?:-webkit-)?background-clip\s*:\s*text", text):
+        window = text[max(0, m.start() - 400):m.start() + 400]
+        if "linear-gradient" in window or "gradient" in window:
+            out.append((m.start(), "background-clip: text over a gradient"))
+    return out
+
+
+COMPUTED = [
+    ("violet-accent-hex", "high", _saturated_violets,
+     "An indigo/violet accent written as a raw hex, which the Tailwind rules cannot see",
+     "Pick a system from SYSTEMS.md and use its accent, or derive one with ux-constrain.",
+     "Once a viewer can name the style as generated, they have an attribution for why it read easily, and the fluency-to-liking path is cut. Naming is the damage.",
+     "research/14; Winkielman & Fazendeiro 2003. Measured: this fired on corpus/slop/saas-landing-0.html where every regex rule missed."),
+    ("gradient-text-css", "high", _gradient_text,
+     "Gradient headline text via CSS background-clip rather than Tailwind",
+     "One colour. Let size and weight carry hierarchy.",
+     "Gradient text lowers effective contrast across its own run, so part of the headline fails WCAG 1.4.3 even when the sampled colour passes.",
+     "WCAG 2.2 SC 1.4.3. Measured: 4 occurrences in corpus/slop/saas-landing-0.html, 0 findings from the Tailwind rule."),
+]
 
 
 def scan(path):
@@ -324,6 +380,14 @@ def scan(path):
         flags = re.M if rid == "emoji-heading" else 0
         for m in re.finditer(pat, text, flags):
             line_no = text[: m.start()].count("\n") + 1
+            hits.append((sev, rid, path, line_no, lines[line_no - 1].strip()[:90], what, fix, why, src))
+    for rid, sev, fn, what, fix, why, src in COMPUTED:
+        seen = set()
+        for off, _detail in fn(text):
+            line_no = text[:off].count("\n") + 1
+            if line_no in seen:
+                continue
+            seen.add(line_no)
             hits.append((sev, rid, path, line_no, lines[line_no - 1].strip()[:90], what, fix, why, src))
     return hits
 
@@ -350,7 +414,11 @@ def main():
     order = {"high": 0, "med": 1, "low": 2}
     hits.sort(key=lambda h: (order[h[0]], h[1]))
 
+    # COMPUTED rules carry the same 7-field shape, so authority() reads them
+    # identically. Leaving them out of this map was a KeyError on any file
+    # that only a computed rule fired on.
     by_id = {r[0]: r for r in RULES}
+    by_id.update({r[0]: r for r in COMPUTED})
     blocking = [h for h in hits if authority(by_id[h[1]]) == "EXTERNAL" and h[0] == "high"]
     advisory = [h for h in hits if h not in blocking]
 

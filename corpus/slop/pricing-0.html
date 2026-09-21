@@ -1,0 +1,823 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pricing</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #0a0a0f;
+        --surface: #111118;
+        --surface-2: #16161f;
+        --border: rgba(255, 255, 255, 0.07);
+        --border-active: rgba(255, 255, 255, 0.15);
+        --text: #f0f0f5;
+        --muted: #6b6b80;
+        --subtle: #2a2a38;
+        --accent: #7c5cfc;
+        --accent-light: #9f82ff;
+        --accent-glow: rgba(124, 92, 252, 0.25);
+        --green: #22c55e;
+        --radius: 16px;
+        --transition: 0.2s ease;
+      }
+
+      html {
+        font-size: 16px;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      /* ---- noise texture overlay ---- */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+        pointer-events: none;
+        z-index: 0;
+        opacity: 0.4;
+      }
+
+      .page {
+        position: relative;
+        z-index: 1;
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 80px 24px 120px;
+      }
+
+      /* ---- header ---- */
+      .header {
+        text-align: center;
+        margin-bottom: 56px;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--accent-light);
+        background: rgba(124, 92, 252, 0.1);
+        border: 1px solid rgba(124, 92, 252, 0.2);
+        padding: 6px 14px;
+        border-radius: 100px;
+        margin-bottom: 20px;
+      }
+
+      .eyebrow span {
+        font-size: 10px;
+      }
+
+      h1 {
+        font-size: clamp(36px, 5vw, 56px);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
+        color: var(--text);
+        margin-bottom: 16px;
+      }
+
+      h1 em {
+        font-style: normal;
+        background: linear-gradient(135deg, #a78bfa, #7c5cfc, #4f46e5);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+
+      .subtitle {
+        font-size: 18px;
+        color: var(--muted);
+        max-width: 480px;
+        margin: 0 auto 36px;
+        line-height: 1.6;
+      }
+
+      /* ---- toggle ---- */
+      .toggle-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: 100px;
+        padding: 4px;
+      }
+
+      .toggle-option {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--muted);
+        padding: 7px 16px;
+        border-radius: 100px;
+        cursor: pointer;
+        transition: var(--transition);
+        user-select: none;
+        position: relative;
+      }
+
+      .toggle-option.active {
+        background: var(--accent);
+        color: #fff;
+      }
+
+      .toggle-option .badge {
+        position: absolute;
+        top: -8px;
+        right: -6px;
+        background: var(--green);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 100px;
+        white-space: nowrap;
+      }
+
+      /* ---- grid ---- */
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      @media (max-width: 860px) {
+        .grid {
+          grid-template-columns: 1fr;
+          max-width: 420px;
+          margin: 0 auto;
+        }
+        .card.featured {
+          transform: none;
+        }
+      }
+
+      /* ---- cards ---- */
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 32px 28px 28px;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        transition:
+          border-color var(--transition),
+          box-shadow var(--transition);
+        position: relative;
+        overflow: hidden;
+      }
+
+      .card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: var(--radius);
+        opacity: 0;
+        transition: opacity var(--transition);
+        background: radial-gradient(
+          ellipse at 50% 0%,
+          rgba(124, 92, 252, 0.12) 0%,
+          transparent 70%
+        );
+        pointer-events: none;
+      }
+
+      .card:hover {
+        border-color: var(--border-active);
+      }
+      .card:hover::before {
+        opacity: 1;
+      }
+
+      .card.featured {
+        border-color: rgba(124, 92, 252, 0.5);
+        background: linear-gradient(
+          180deg,
+          rgba(124, 92, 252, 0.06) 0%,
+          var(--surface) 40%
+        );
+        transform: translateY(-8px);
+        box-shadow:
+          0 0 0 1px rgba(124, 92, 252, 0.3),
+          0 32px 64px -16px rgba(0, 0, 0, 0.6),
+          0 0 40px -10px var(--accent-glow);
+      }
+
+      .card.featured::before {
+        opacity: 1;
+      }
+
+      .popular-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--accent-light);
+        background: rgba(124, 92, 252, 0.15);
+        border: 1px solid rgba(124, 92, 252, 0.25);
+        padding: 4px 10px;
+        border-radius: 100px;
+        margin-bottom: 20px;
+        width: fit-content;
+      }
+
+      .popular-badge::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        background: var(--accent-light);
+        border-radius: 50%;
+        box-shadow: 0 0 6px var(--accent-light);
+      }
+
+      .plan-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--muted);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+
+      .plan-desc {
+        font-size: 14px;
+        color: var(--muted);
+        line-height: 1.5;
+        margin-bottom: 28px;
+      }
+
+      .price-row {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        margin-bottom: 4px;
+      }
+
+      .price-amount {
+        font-size: 48px;
+        font-weight: 700;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        color: var(--text);
+        transition: var(--transition);
+      }
+
+      .price-currency {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--muted);
+        align-self: flex-start;
+        padding-top: 6px;
+      }
+
+      .price-period {
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .price-note {
+        font-size: 13px;
+        color: var(--muted);
+        margin-bottom: 28px;
+        min-height: 18px;
+      }
+
+      .price-note .savings {
+        color: var(--green);
+        font-weight: 600;
+      }
+
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin-bottom: 24px;
+      }
+
+      .features-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 14px;
+      }
+
+      .features {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 11px;
+        margin-bottom: 32px;
+        flex: 1;
+      }
+
+      .features li {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 14px;
+        color: #c0c0d0;
+        line-height: 1.4;
+      }
+
+      .features li .check {
+        flex-shrink: 0;
+        width: 18px;
+        height: 18px;
+        background: rgba(34, 197, 94, 0.12);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 1px;
+      }
+
+      .features li .check svg {
+        width: 10px;
+        height: 10px;
+        stroke: var(--green);
+        fill: none;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .features li.dim {
+        opacity: 0.35;
+      }
+
+      .features li.dim .check {
+        background: var(--subtle);
+      }
+
+      .features li.dim .check svg {
+        stroke: var(--muted);
+      }
+
+      .cta {
+        display: block;
+        width: 100%;
+        padding: 13px 20px;
+        border-radius: 10px;
+        font-size: 15px;
+        font-weight: 600;
+        text-align: center;
+        cursor: pointer;
+        border: none;
+        transition:
+          transform var(--transition),
+          box-shadow var(--transition),
+          background var(--transition),
+          opacity var(--transition);
+        text-decoration: none;
+      }
+
+      .cta:active {
+        transform: scale(0.98) !important;
+      }
+
+      .cta-ghost {
+        background: transparent;
+        border: 1px solid var(--border-active);
+        color: var(--text);
+      }
+
+      .cta-ghost:hover {
+        background: var(--subtle);
+        transform: translateY(-1px);
+      }
+
+      .cta-primary {
+        background: var(--accent);
+        color: #fff;
+        box-shadow: 0 4px 20px -4px rgba(124, 92, 252, 0.5);
+      }
+
+      .cta-primary:hover {
+        background: var(--accent-light);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 30px -4px rgba(124, 92, 252, 0.6);
+      }
+
+      .cta-dark {
+        background: var(--subtle);
+        color: var(--text);
+      }
+
+      .cta-dark:hover {
+        background: #333345;
+        transform: translateY(-1px);
+      }
+
+      /* ---- footer note ---- */
+      .footer-note {
+        text-align: center;
+        margin-top: 48px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .footer-note p {
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .footer-note p a {
+        color: var(--accent-light);
+        text-decoration: none;
+      }
+
+      .trust-row {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+
+      .trust-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      .trust-item svg {
+        width: 14px;
+        height: 14px;
+        stroke: var(--muted);
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex-shrink: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header class="header">
+        <div class="eyebrow"><span>✦</span> Simple, transparent pricing</div>
+        <h1>Pick the plan that<br /><em>fits your work</em></h1>
+        <p class="subtitle">
+          No hidden fees. Cancel anytime. Start with a 14-day free trial on any
+          plan.
+        </p>
+
+        <div class="toggle-wrap" id="toggle">
+          <div
+            class="toggle-option active"
+            data-period="monthly"
+            onclick="setPeriod('monthly')"
+          >
+            Monthly
+          </div>
+          <div
+            class="toggle-option"
+            data-period="annual"
+            onclick="setPeriod('annual')"
+          >
+            Annually
+            <span class="badge">Save 20%</span>
+          </div>
+        </div>
+      </header>
+
+      <div class="grid">
+        <!-- Starter -->
+        <div class="card">
+          <p class="plan-name">Starter</p>
+          <p class="plan-desc">
+            Everything you need to get off the ground. No credit card required.
+          </p>
+          <div class="price-row">
+            <span class="price-currency">$</span>
+            <span class="price-amount" id="price-starter">0</span>
+            <span class="price-period">/ mo</span>
+          </div>
+          <p class="price-note" id="note-starter">&nbsp;</p>
+          <div class="divider"></div>
+          <p class="features-label">What's included</p>
+          <ul class="features">
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Up to 3 projects
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              5 GB storage
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Basic analytics
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Community support
+            </li>
+            <li class="dim">
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Team collaboration
+            </li>
+            <li class="dim">
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Custom integrations
+            </li>
+            <li class="dim">
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Priority support
+            </li>
+          </ul>
+          <a class="cta cta-ghost" href="#">Get started free</a>
+        </div>
+
+        <!-- Pro -->
+        <div class="card featured">
+          <div class="popular-badge">Most popular</div>
+          <p class="plan-name">Pro</p>
+          <p class="plan-desc">
+            For teams that move fast and need the full toolkit.
+          </p>
+          <div class="price-row">
+            <span class="price-currency">$</span>
+            <span class="price-amount" id="price-pro">49</span>
+            <span class="price-period">/ mo</span>
+          </div>
+          <p class="price-note" id="note-pro">&nbsp;</p>
+          <div class="divider"></div>
+          <p class="features-label">Everything in Starter, plus</p>
+          <ul class="features">
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Unlimited projects
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              100 GB storage
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Advanced analytics &amp; reports
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Team collaboration (up to 10)
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              10 custom integrations
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Priority email support
+            </li>
+            <li class="dim">
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              SSO &amp; audit logs
+            </li>
+          </ul>
+          <a class="cta cta-primary" href="#">Start 14-day trial</a>
+        </div>
+
+        <!-- Enterprise -->
+        <div class="card">
+          <p class="plan-name">Enterprise</p>
+          <p class="plan-desc">
+            Custom contracts, SLAs, and white-glove onboarding for large orgs.
+          </p>
+          <div class="price-row">
+            <span class="price-currency" id="enterprise-currency">$</span>
+            <span class="price-amount" id="price-enterprise">199</span>
+            <span class="price-period" id="enterprise-period">/ mo</span>
+          </div>
+          <p class="price-note" id="note-enterprise">&nbsp;</p>
+          <div class="divider"></div>
+          <p class="features-label">Everything in Pro, plus</p>
+          <ul class="features">
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Unlimited everything
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              1 TB storage
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Dedicated account manager
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Unlimited team members
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              Unlimited custom integrations
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              24/7 phone &amp; Slack support
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg
+              ></span>
+              SSO, SAML &amp; audit logs
+            </li>
+          </ul>
+          <a class="cta cta-dark" href="#">Contact sales</a>
+        </div>
+      </div>
+
+      <footer class="footer-note">
+        <div class="trust-row">
+          <div class="trust-item">
+            <svg viewBox="0 0 16 16">
+              <path
+                d="M8 1l1.8 3.6L14 5.3l-3 2.9.7 4.1L8 10.4l-3.7 1.9.7-4.1-3-2.9 4.2-.7z"
+              />
+            </svg>
+            14-day free trial
+          </div>
+          <div class="trust-item">
+            <svg viewBox="0 0 16 16">
+              <rect x="2" y="7" width="12" height="8" rx="1.5" />
+              <path d="M5 7V5a3 3 0 016 0v2" />
+            </svg>
+            SOC 2 Type II
+          </div>
+          <div class="trust-item">
+            <svg viewBox="0 0 16 16">
+              <circle cx="8" cy="8" r="6" />
+              <path d="M8 5v3l2 2" />
+            </svg>
+            99.9% uptime SLA
+          </div>
+          <div class="trust-item">
+            <svg viewBox="0 0 16 16">
+              <path d="M2 3h12v2H2zM2 7h8v2H2zM2 11h5v2H2z" />
+            </svg>
+            Cancel anytime
+          </div>
+        </div>
+        <p>
+          Questions? <a href="#">Talk to a human</a> or read the
+          <a href="#">full FAQ</a>.
+        </p>
+      </footer>
+    </div>
+
+    <script>
+      const prices = {
+        monthly: { starter: 0, pro: 49, enterprise: 199 },
+        annual: { starter: 0, pro: 39, enterprise: 159 },
+      };
+
+      let currentPeriod = "monthly";
+
+      function setPeriod(period) {
+        currentPeriod = period;
+        document.querySelectorAll(".toggle-option").forEach((el) => {
+          el.classList.toggle("active", el.dataset.period === period);
+        });
+        updatePrices();
+      }
+
+      function animateValue(el, from, to, duration) {
+        if (from === to) return;
+        const start = performance.now();
+        function step(now) {
+          const t = Math.min((now - start) / duration, 1);
+          const eased = 1 - Math.pow(1 - t, 3);
+          el.textContent = Math.round(from + (to - from) * eased);
+          if (t < 1) requestAnimationFrame(step);
+        }
+        requestAnimationFrame(step);
+      }
+
+      function updatePrices() {
+        const p = prices[currentPeriod];
+        const prev = prices[currentPeriod === "annual" ? "monthly" : "annual"];
+
+        const starterEl = document.getElementById("price-starter");
+        const proEl = document.getElementById("price-pro");
+        const entEl = document.getElementById("price-enterprise");
+
+        animateValue(
+          starterEl,
+          parseInt(starterEl.textContent),
+          p.starter,
+          280,
+        );
+        animateValue(proEl, parseInt(proEl.textContent), p.pro, 280);
+        animateValue(entEl, parseInt(entEl.textContent), p.enterprise, 280);
+
+        const noteStarter = document.getElementById("note-starter");
+        const notePro = document.getElementById("note-pro");
+        const noteEnterprise = document.getElementById("note-enterprise");
+
+        if (currentPeriod === "annual") {
+          noteStarter.innerHTML = "&nbsp;";
+          notePro.innerHTML = `<span class="savings">Save $${(prev.pro - p.pro) * 12}/yr</span> vs monthly`;
+          noteEnterprise.innerHTML = `<span class="savings">Save $${(prev.enterprise - p.enterprise) * 12}/yr</span> vs monthly`;
+        } else {
+          noteStarter.innerHTML = "&nbsp;";
+          notePro.innerHTML = "Billed monthly &mdash; or save 20% annually";
+          noteEnterprise.innerHTML =
+            "Billed monthly &mdash; or save 20% annually";
+        }
+      }
+
+      updatePrices();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analytics Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222538;
+    --border: #2e3148;
+    --accent: #6366f1;
+    --accent2: #8b5cf6;
+    --green: #22d3a0;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --card-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem;
+  }
+
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 2rem;
+  }
+
+  header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  header p {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: 0.25rem;
+  }
+
+  .badge {
+    background: rgba(99,102,241,0.15);
+    border: 1px solid rgba(99,102,241,0.35);
+    color: #a5b4fc;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+  }
+
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.4rem 1.5rem;
+    box-shadow: var(--card-shadow);
+  }
+
+  .card-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    margin-bottom: 0.6rem;
+  }
+
+  .card-value {
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1;
+  }
+
+  .card-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.6rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .delta {
+    font-weight: 700;
+    font-size: 0.8rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 6px;
+  }
+
+  .delta.up   { color: var(--green); background: rgba(34,211,160,0.1); }
+  .delta.down { color: var(--red);   background: rgba(248,113,113,0.1); }
+
+  .sparkline-wrap {
+    margin-top: 0.75rem;
+    height: 36px;
+  }
+
+  .charts {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  @media (max-width: 860px) {
+    .charts { grid-template-columns: 1fr; }
+  }
+
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 1.5rem;
+    box-shadow: var(--card-shadow);
+  }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.25rem;
+  }
+
+  .chart-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+
+  .chart-sub {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-top: 0.2rem;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .tab {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.3rem 0.65rem;
+    border-radius: 7px;
+    border: none;
+    cursor: pointer;
+    background: transparent;
+    color: var(--muted);
+    transition: all 0.15s;
+  }
+
+  .tab.active {
+    background: var(--surface2);
+    color: var(--text);
+  }
+
+  .chart-wrap {
+    position: relative;
+    width: 100%;
+  }
+
+  .bottom-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 1rem; }
+    .bottom-row { grid-template-columns: 1fr; }
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  th {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    text-align: left;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    font-size: 0.82rem;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid rgba(46,49,72,0.5);
+    color: var(--muted);
+  }
+
+  td:first-child { color: var(--text); font-weight: 500; }
+
+  .bar-inline {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 5px;
+    background: var(--surface2);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+  }
+
+  .activity-list { list-style: none; }
+
+  .activity-item {
+    display: flex;
+    gap: 0.85rem;
+    padding: 0.7rem 0;
+    border-bottom: 1px solid rgba(46,49,72,0.5);
+    align-items: flex-start;
+  }
+
+  .activity-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-top: 0.35rem;
+    flex-shrink: 0;
+  }
+
+  .activity-text { font-size: 0.82rem; line-height: 1.4; }
+  .activity-time { font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Analytics</h1>
+    <p>September 2026 &mdash; all channels</p>
+  </div>
+  <span class="badge">Live</span>
+</header>
+
+<div class="metrics">
+  <div class="card">
+    <div class="card-label">Total Revenue</div>
+    <div class="card-value">$84,291</div>
+    <div class="card-meta">
+      <span class="delta up">+12.4%</span>
+      vs last month
+    </div>
+    <div class="sparkline-wrap"><canvas id="spark1"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Active Users</div>
+    <div class="card-value">14,830</div>
+    <div class="card-meta">
+      <span class="delta up">+8.1%</span>
+      vs last month
+    </div>
+    <div class="sparkline-wrap"><canvas id="spark2"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Conversion Rate</div>
+    <div class="card-value">3.72%</div>
+    <div class="card-meta">
+      <span class="delta down">-0.3%</span>
+      vs last month
+    </div>
+    <div class="sparkline-wrap"><canvas id="spark3"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-label">Avg Session</div>
+    <div class="card-value">4m 18s</div>
+    <div class="card-meta">
+      <span class="delta up">+22s</span>
+      vs last month
+    </div>
+    <div class="sparkline-wrap"><canvas id="spark4"></canvas></div>
+  </div>
+</div>
+
+<div class="charts">
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">Revenue over time</div>
+        <div class="chart-sub">Daily totals, past 30 days</div>
+      </div>
+      <div class="tabs">
+        <button class="tab active">30d</button>
+        <button class="tab">90d</button>
+        <button class="tab">1y</button>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="revenueChart"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">Traffic sources</div>
+        <div class="chart-sub">Session share</div>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="donutChart"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-row">
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">Top pages</div>
+        <div class="chart-sub">By unique visitors</div>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Page</th>
+          <th>Visitors</th>
+          <th style="width:120px">Share</th>
+        </tr>
+      </thead>
+      <tbody id="pagesTable"></tbody>
+    </table>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="chart-title">Recent activity</div>
+        <div class="chart-sub">System events</div>
+      </div>
+    </div>
+    <ul class="activity-list" id="activityList"></ul>
+  </div>
+</div>
+
+<script>
+const ACCENT   = '#6366f1';
+const ACCENT2  = '#8b5cf6';
+const GREEN    = '#22d3a0';
+const SURFACE2 = '#222538';
+const MUTED    = '#475569';
+const TEXT     = '#f1f5f9';
+
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif";
+
+// ---- Sparklines ----
+function makeSparkline(id, data, color) {
+  const ctx = document.getElementById(id).getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map((_,i) => i),
+      datasets: [{ data, borderColor: color, borderWidth: 2,
+        pointRadius: 0, fill: true,
+        backgroundColor: (ctx) => {
+          const g = ctx.chart.ctx.createLinearGradient(0,0,0,36);
+          g.addColorStop(0, color + '33');
+          g.addColorStop(1, color + '00');
+          return g;
+        },
+        tension: 0.4 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+      scales: { x: { display: false }, y: { display: false } }
+    }
+  });
+}
+
+makeSparkline('spark1', [48,52,47,55,60,58,63,70,66,72,75,68,80,84], '#6366f1');
+makeSparkline('spark2', [90,85,92,88,95,100,97,105,110,108,115,112,120,125], GREEN);
+makeSparkline('spark3', [4.1,3.9,4.0,3.8,3.7,3.9,3.8,3.7,3.6,3.8,3.7,3.72], '#fbbf24');
+makeSparkline('spark4', [200,210,205,215,225,220,230,240,235,245,255,258], ACCENT2);
+
+// ---- Revenue chart ----
+(function() {
+  const labels = [];
+  const data = [];
+  const now = new Date(2026, 8, 20);
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now); d.setDate(d.getDate() - i);
+    labels.push(d.toLocaleDateString('en-US',{month:'short',day:'numeric'}));
+    data.push(Math.round(2000 + Math.random()*1500 + i*30));
+  }
+
+  const ctx = document.getElementById('revenueChart').getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 220);
+  grad.addColorStop(0, ACCENT + '44');
+  grad.addColorStop(1, ACCENT + '00');
+
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Revenue',
+        data,
+        borderColor: ACCENT,
+        borderWidth: 2.5,
+        pointRadius: 0,
+        pointHoverRadius: 5,
+        pointHoverBackgroundColor: ACCENT,
+        fill: true,
+        backgroundColor: grad,
+        tension: 0.4
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ' $' + ctx.parsed.y.toLocaleString()
+          },
+          backgroundColor: '#1a1d27',
+          borderColor: '#2e3148',
+          borderWidth: 1,
+          padding: 10,
+          titleColor: TEXT,
+          bodyColor: '#94a3b8'
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: MUTED + '22', drawBorder: false },
+          ticks: { maxTicksLimit: 6, font: { size: 11 } }
+        },
+        y: {
+          grid: { color: MUTED + '22', drawBorder: false },
+          ticks: {
+            font: { size: 11 },
+            callback: v => '$' + (v/1000).toFixed(0) + 'k'
+          }
+        }
+      }
+    }
+  });
+})();
+
+// ---- Donut chart ----
+(function() {
+  const ctx = document.getElementById('donutChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Organic', 'Direct', 'Referral', 'Social', 'Email'],
+      datasets: [{
+        data: [38, 24, 18, 12, 8],
+        backgroundColor: ['#6366f1','#8b5cf6','#22d3a0','#fbbf24','#f87171'],
+        borderColor: '#1a1d27',
+        borderWidth: 3,
+        hoverOffset: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      cutout: '68%',
+      plugins: {
+        legend: {
+          position: 'bottom',
+          labels: { padding: 12, font: { size: 11 }, boxWidth: 10, boxHeight: 10 }
+        },
+        tooltip: {
+          callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed}%` },
+          backgroundColor: '#1a1d27',
+          borderColor: '#2e3148',
+          borderWidth: 1,
+          padding: 10,
+          titleColor: TEXT,
+          bodyColor: '#94a3b8'
+        }
+      }
+    }
+  });
+})();
+
+// ---- Top pages table ----
+const pages = [
+  { name: '/dashboard',    visitors: 8420 },
+  { name: '/pricing',      visitors: 5130 },
+  { name: '/docs/start',   visitors: 3870 },
+  { name: '/blog',         visitors: 2940 },
+  { name: '/integrations', visitors: 1820 },
+];
+const maxV = pages[0].visitors;
+const tbody = document.getElementById('pagesTable');
+pages.forEach(p => {
+  const pct = Math.round((p.visitors / maxV) * 100);
+  tbody.innerHTML += `
+    <tr>
+      <td>${p.name}</td>
+      <td>${p.visitors.toLocaleString()}</td>
+      <td>
+        <div class="bar-inline">
+          <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+          <span style="font-size:0.7rem;color:#475569;width:28px;text-align:right">${pct}%</span>
+        </div>
+      </td>
+    </tr>`;
+});
+
+// ---- Activity feed ----
+const events = [
+  { color: GREEN,   text: 'New signup: charlie@acme.io joined Pro plan', time: '2 min ago' },
+  { color: ACCENT,  text: 'Deployment #482 completed in 1m 12s', time: '14 min ago' },
+  { color: '#fbbf24', text: 'Alert: conversion rate dipped below 3.5%', time: '1 hr ago' },
+  { color: GREEN,   text: 'Monthly report exported by admin@company.io', time: '3 hrs ago' },
+  { color: '#f87171', text: 'Webhook delivery failed: endpoint timeout', time: '5 hrs ago' },
+  { color: ACCENT,  text: 'API key rotated for workspace "production"', time: '8 hrs ago' },
+];
+const ul = document.getElementById('activityList');
+events.forEach(e => {
+  ul.innerHTML += `
+    <li class="activity-item">
+      <span class="activity-dot" style="background:${e.color}"></span>
+      <div>
+        <div class="activity-text">${e.text}</div>
+        <div class="activity-time">${e.time}</div>
+      </div>
+    </li>`;
+});
+
+// ---- Tab switching ----
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.closest('.tabs').querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

@@ -3,7 +3,9 @@
 # A linter that flags everything gets turned off in a week, which is the same
 # failure as not having one.
 set -uo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# export, not just assign. Without it every `bash -c '... "$ROOT" ...'` test
+# ran with ROOT empty, so a whole class of them was passing vacuously.
+export ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PASS=0; FAIL=0
 check() {
   local name="$1"; shift
@@ -66,8 +68,11 @@ check "detector is quiet on the clean fixture" bash -c \
   "'$ROOT/bin/ux-lint' '$ROOT/tests/fixtures/clean.tsx' --max 0"
 check "detector catches indigo specifically" bash -c \
   "'$ROOT/bin/ux-lint' '$ROOT/tests/fixtures/slop.tsx' | grep -q indigo"
+# Asserts on the FINDING PATH, not on any text containing "systems/".
+# The old form matched SYSTEMS.md's own index table and was failing on its
+# own generated output the moment ROOT started being exported.
 check "detector never scans the vendored corpus" bash -c \
-  "! '$ROOT/bin/ux-lint' '$ROOT' 2>/dev/null | grep -q 'systems/'"
+  "! '$ROOT/bin/ux-lint' '$ROOT' 2>/dev/null | grep -qE '\] +[^ ]*/(systems|corpus|runs)/'"
 
 # Bourdieu's test, made executable. See tools/check_rules.py.
 check "every rule names a user cost and cites a source" python3 "$ROOT/tools/check_rules.py"
@@ -117,6 +122,102 @@ check "headless render is available" bash -c \
 
 check "the trial log survives and reports" bash -c \
   "'$ROOT/bin/ux-trial' log >/dev/null"
+
+# ---- the generative half. Added 2026-09-20 -------------------------------
+# Everything above tests refusal. These test proposing, looking and measuring,
+# which is the half the repo was missing.
+
+check "tokens: a tailwind class and a raw hex land on the same axis" python3 -c "
+import sys; sys.path.insert(0,'$ROOT/tools')
+import tokens
+a = tokens.features('<div class=\'rounded-2xl\'>', 'html')
+b = tokens.features('.x{border-radius:16px}', 'html')
+assert 'radius:16' in a and 'radius:16' in b, (a, b)
+"
+
+check "tokens: radius comes from the rounded block, not every px value" python3 -c "
+import sys; sys.path.insert(0,'$ROOT/tools')
+import tokens
+f = tokens.features(open('$ROOT/systems/airbnb/DESIGN.md').read(), 'design')
+r = {x for x in f if x.startswith('radius:')}
+assert r == {'radius:0','radius:4','radius:8','radius:14','radius:20','radius:32','radius:9999'}, r
+"
+
+check "tokens: neutrals do not register as a hue" python3 -c "
+import sys; sys.path.insert(0,'$ROOT/tools')
+import tokens
+f = tokens.features('<a class=\'bg-zinc-800\'>', 'html')
+assert 'neutral' in f and not any(x.startswith('hue:') for x in f), f
+"
+
+check "every stance carries hard refusals" python3 -c "
+import sys; sys.path.insert(0,'$ROOT/tools')
+import stances
+assert len(stances.STANCES) >= 6
+for k, v in stances.STANCES.items():
+    assert v['refuse'], k          # a stance with no refusals is a mood board
+    assert len(v['refuse']) >= 3, k
+    assert v['principle'] and v['from'], k
+"
+
+check "a stance prompt states the refusals as hard failures" python3 -c "
+import sys; sys.path.insert(0,'$ROOT/tools')
+import stances
+p = stances.prompt_for('one-voltage', 'a settings page')
+assert 'MUST NOT' in p and 'hard failure' in p and 'settings page' in p
+"
+
+check "the viewer probe never sees the intent" bash -c \
+  "! grep -nE 'PROBE.*intent|intent.*\\{PROBE' '$ROOT/bin/ux-viewer'"
+
+check "the viewer stages a neutral filename" bash -c \
+  "grep -q 'screenshot.png' '$ROOT/bin/ux-viewer'"
+
+check "the viewer uses headless=new, which is the mode that does not hang" bash -c \
+  "grep -q -- '--headless=new' '$ROOT/bin/ux-viewer'"
+
+check "diversity of identical files is zero" python3 -c "
+import sys, pathlib, tempfile; sys.path.insert(0,'$ROOT/tools')
+import diversity
+d = pathlib.Path(tempfile.mkdtemp())
+for n in ('a-0.html','a-1.html'):
+    (d/n).write_text('<html><div class=\'bg-indigo-600 rounded-2xl\'>hi</div></html>')
+assert diversity.score_group(sorted(d.glob('*.html'))) == 0.0
+"
+
+check "diversity of disjoint files is one" python3 -c "
+import sys, pathlib, tempfile; sys.path.insert(0,'$ROOT/tools')
+import diversity
+d = pathlib.Path(tempfile.mkdtemp())
+(d/'a-0.html').write_text('<html><div class=\'bg-indigo-600\'>x</div></html>')
+(d/'a-1.html').write_text('<html><p style=\'font-weight:300\'>x</p></html>')
+s = diversity.score_group(sorted(d.glob('*.html')))
+assert s == 1.0, s
+"
+
+check "ux-gen refuses an unknown stance" bash -c \
+  "! '$ROOT/bin/ux-gen' 'x' --stances no-such-stance 2>/dev/null"
+
+check "ux-slop says how to build the prior rather than crashing" bash -c \
+  "'$ROOT/bin/ux-slop' '$ROOT/tests/fixtures/clean.tsx' 2>&1 | grep -q 'build_prior' || [ -f '$ROOT/data/prior.json' ]"
+
+check "every motion primitive names what to refuse" bash -c '
+  for f in "$ROOT"/motion/*.md; do
+    case "$f" in */README.md) continue;; esac
+    grep -qi "## Refuse" "$f" || exit 1
+  done'
+
+check "every motion primitive handles prefers-reduced-motion" bash -c '
+  for f in "$ROOT"/motion/*.md; do
+    case "$f" in */README.md) continue;; esac
+    grep -q "prefers-reduced-motion" "$f" || exit 1
+  done'
+
+check "motion/ reduces rather than deleting" bash -c \
+  "grep -qi 'Reduce, do not delete' '$ROOT/motion/README.md'"
+
+check "ux-motion refuses to invent a primitive" bash -c \
+  "! '$ROOT/bin/ux-motion' teleport 2>/dev/null"
 
 echo
 echo "$PASS passed, $FAIL failed"

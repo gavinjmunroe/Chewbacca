@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""Look at the thing the way the person using it will, and report back blind.
+
+    ux-viewer render page.html --out shot.png
+    ux-viewer probe shot.png --intent intent.json
+    ux-viewer check page.html --intent intent.json      render + probe + diff
+
+WHY THIS EXISTS. Every generator in research/11 writes markup and never sees
+the result. A designer's actual loop is: make it, look at it, notice what your
+eye did first, fix that. The looking is the craft. This closes that loop.
+
+WHY THE VIEWER IS BLIND. research/13: reward models overweight typical outputs,
+alpha-hat 0.57, p < 1e-14. So an LLM asked "is this design good" rates the most
+median candidate highest, and a critic that can see the intent will confirm the
+intent. Both failures come from asking for a judgement.
+
+This asks for a REPORT instead: where did your eye land, what is this for, what
+are you meant to do, what made you stop. Those have correct answers relative to
+declared intent, and none of them is an aesthetic preference, so typicality bias
+has no purchase on them.
+
+The probe process is given the image and nothing else. No brief, no code, no
+intent, no filename that gives it away. What it says is evidence about the
+artifact rather than agreement with the author.
+
+ANY GRAIN. A button, a page, one step of a flow, four steps side by side. The
+probe does not care; it asks a viewer's questions about whatever is in frame.
+"""
+import argparse
+import json
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+CHROME_CANDIDATES = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    shutil.which("chromium") or "",
+    shutil.which("google-chrome") or "",
+]
+
+# Asked of the image alone. Deliberately a viewer's questions, not a critic's.
+PROBE = """Look at this screenshot. You are seeing it for the first time, the way
+someone would who just landed on it. Answer from that position only. Do not
+evaluate the design and do not say whether you like it.
+
+Answer as strict JSON, no markdown fence, with exactly these keys:
+
+{
+  "first_look": "the single element your eye lands on first",
+  "look_order": ["the next 3 to 5 things you look at, in order"],
+  "purpose": "what this is for, in one sentence, as far as you can tell",
+  "primary_action": "the one thing this wants you to do, or null if unclear",
+  "primary_action_confidence": "high | medium | low",
+  "clickable": ["everything that reads as pressable or interactive"],
+  "friction": ["anything you had to re-read, could not parse, or would hesitate over"],
+  "unreadable": ["any text too small or too low contrast to read comfortably"],
+  "guess_at_audience": "who this appears to be built for"
+}
+
+Report what you actually perceive, including when that is 'I cannot tell'.
+An honest 'unclear' is more useful than a confident guess."""
+
+
+def find_chrome():
+    for c in CHROME_CANDIDATES:
+        if c and pathlib.Path(c).exists():
+            return c
+    return None
+
+
+def render(html_path, out_png, width=1280, height=900, full=False):
+    chrome = find_chrome()
+    if not chrome:
+        print("BLOCKED: no Chrome or Chromium found for rendering", file=sys.stderr)
+        return False
+    src = pathlib.Path(html_path).resolve()
+    out = pathlib.Path(out_png).resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory() as profile:
+        # --headless=new, not --headless. The old mode hangs indefinitely here
+        # (measured: still running at 180s on a 13KB static page), and adding
+        # --virtual-time-budget makes it worse rather than bounding it.
+        cmd = [chrome, "--headless=new", "--disable-gpu", "--no-sandbox",
+               "--hide-scrollbars", "--no-first-run", "--disable-extensions",
+               "--no-default-browser-check", f"--user-data-dir={profile}",
+               f"--window-size={width},{height}",
+               f"--screenshot={out}", src.as_uri()]
+        if full:
+            cmd.insert(-1, "--full-page-screenshot")
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        except subprocess.TimeoutExpired:
+            # Chrome sometimes writes the file and then fails to exit. A
+            # screenshot on disk is a success regardless of what the process did.
+            if out.exists() and out.stat().st_size > 0:
+                return True
+            print("render timed out after 60s", file=sys.stderr)
+            return False
+    if not out.exists() or out.stat().st_size == 0:
+        print(f"render failed: {r.stderr[-400:]}", file=sys.stderr)
+        return False
+    return True
+
+
+def probe(png_path, model="sonnet"):
+    """Hand the image to a fresh process that knows nothing else about it."""
+    png = pathlib.Path(png_path).resolve()
+    with tempfile.TemporaryDirectory() as work:
+        # Neutral filename: 'pricing-page-variant-3.png' would leak the answer
+        # to the two questions the probe exists to ask.
+        staged = pathlib.Path(work) / "screenshot.png"
+        shutil.copy(png, staged)
+        r = subprocess.run(
+            ["claude", "-p", "--model", model,
+             f"Read the image at {staged} and then answer.\n\n{PROBE}"],
+            capture_output=True, text=True, timeout=600, cwd=work)
+    txt = r.stdout.strip()
+    m = re.search(r"\{.*\}", txt, re.S)
+    if not m:
+        return {"error": "no json from probe", "raw": txt[-500:]}
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        return {"error": f"bad json: {e}", "raw": m.group(0)[:500]}
+
+
+def diff(intent, report):
+    """Where the viewer's report and the declared intent disagree.
+
+    Each gap names a location, because a finding with nowhere to go gets read
+    once and ignored. research/16: a reviewer that cannot say where is a
+    dashboard, and dashboards get turned off.
+    """
+    gaps = []
+    if report.get("error"):
+        return [{"kind": "probe-failed", "detail": report["error"]}]
+
+    want_action = (intent.get("primary_action") or "").lower().strip()
+    got_action = (report.get("primary_action") or "").lower().strip()
+    if want_action:
+        if not got_action:
+            gaps.append({"kind": "primary-action-invisible", "where": "the page as a whole",
+                         "detail": f"nothing read as the main action; intended {want_action!r}"})
+        elif not _overlap(want_action, got_action):
+            gaps.append({"kind": "primary-action-wrong", "where": got_action,
+                         "detail": f"viewer read {got_action!r} as the main action, "
+                                   f"intended {want_action!r}"})
+        elif report.get("primary_action_confidence") == "low":
+            gaps.append({"kind": "primary-action-weak", "where": got_action,
+                         "detail": "found, but the viewer was unsure it was the main action"})
+
+    want_first = (intent.get("first_look") or "").lower().strip()
+    got_first = (report.get("first_look") or "").lower().strip()
+    if want_first and got_first and not _overlap(want_first, got_first):
+        gaps.append({"kind": "attention-misdirected", "where": got_first,
+                     "detail": f"eye went to {got_first!r}, intended {want_first!r}"})
+
+    want_purpose = (intent.get("purpose") or "").lower()
+    got_purpose = (report.get("purpose") or "").lower()
+    if want_purpose and got_purpose and not _overlap(want_purpose, got_purpose, need=2):
+        gaps.append({"kind": "purpose-unclear", "where": "the page as a whole",
+                     "detail": f"viewer read it as {got_purpose!r}"})
+
+    for f in report.get("friction") or []:
+        gaps.append({"kind": "friction", "where": f, "detail": "viewer hesitated here"})
+    for u in report.get("unreadable") or []:
+        gaps.append({"kind": "unreadable", "where": u,
+                     "detail": "too small or too low contrast to read comfortably"})
+    return gaps
+
+
+STOP = {"the", "a", "an", "to", "of", "for", "and", "or", "your", "this",
+        "that", "with", "on", "in", "is", "it", "button", "page", "up"}
+
+
+def _overlap(a, b, need=1):
+    wa = {w for w in re.findall(r"[a-z]+", a) if w not in STOP and len(w) > 2}
+    wb = {w for w in re.findall(r"[a-z]+", b) if w not in STOP and len(w) > 2}
+    return len(wa & wb) >= need
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    r = sub.add_parser("render"); r.add_argument("html"); r.add_argument("--out", required=True)
+    r.add_argument("--width", type=int, default=1280); r.add_argument("--height", type=int, default=900)
+    r.add_argument("--full", action="store_true")
+
+    p = sub.add_parser("probe"); p.add_argument("png"); p.add_argument("--intent")
+    p.add_argument("--model", default="sonnet"); p.add_argument("--json", action="store_true")
+
+    c = sub.add_parser("check"); c.add_argument("html"); c.add_argument("--intent", required=True)
+    c.add_argument("--model", default="sonnet"); c.add_argument("--json", action="store_true")
+    c.add_argument("--full", action="store_true")
+
+    a = ap.parse_args()
+
+    if a.cmd == "render":
+        return 0 if render(a.html, a.out, a.width, a.height, a.full) else 1
+
+    if a.cmd == "probe":
+        rep = probe(a.png, a.model)
+        if a.intent:
+            gaps = diff(json.loads(pathlib.Path(a.intent).read_text()), rep)
+            return _emit(rep, gaps, a.json)
+        print(json.dumps(rep, indent=2))
+        return 0
+
+    if a.cmd == "check":
+        intent = json.loads(pathlib.Path(a.intent).read_text())
+        with tempfile.TemporaryDirectory() as t:
+            png = pathlib.Path(t) / "shot.png"
+            if not render(a.html, png, full=a.full):
+                return 1
+            rep = probe(png, a.model)
+        gaps = diff(intent, rep)
+        return _emit(rep, gaps, a.json)
+
+
+def _emit(rep, gaps, as_json):
+    if as_json:
+        print(json.dumps({"report": rep, "gaps": gaps}, indent=2))
+    else:
+        print("WHAT A FIRST-TIME VIEWER SAW")
+        print(f"  first look      {rep.get('first_look')}")
+        print(f"  look order      {' -> '.join(rep.get('look_order') or []) or '-'}")
+        print(f"  read it as      {rep.get('purpose')}")
+        print(f"  main action     {rep.get('primary_action')} "
+              f"({rep.get('primary_action_confidence')})")
+        print(f"  built for       {rep.get('guess_at_audience')}")
+        print()
+        if not gaps:
+            print("NO GAPS. The viewer saw what was intended.")
+        else:
+            print(f"{len(gaps)} GAP(S) BETWEEN INTENT AND WHAT WAS SEEN")
+            for g in gaps:
+                print(f"  [{g['kind']}] {g.get('where','')}")
+                print(f"      {g['detail']}")
+    hard = [g for g in gaps if g["kind"].startswith("primary-action")
+            or g["kind"] in ("attention-misdirected", "purpose-unclear", "probe-failed")]
+    return 1 if hard else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

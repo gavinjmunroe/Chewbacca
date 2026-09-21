@@ -49,9 +49,13 @@ research/**. Do not improvise the behaviour.
 
 ## Before writing any UI
 
-1. `ux-pick "<the brief>"` and read the refusals it prints.
-2. Read that one `DESIGN.md`.
-2b. `ux-preset <thing>` for the behaviour, states and keyboard.
+1. **`ux-constrain`** and answer it. Derive the deny list for THIS project.
+   Do not borrow one. Copying a system produces the maximally prototypical
+   artifact, which novices prefer and experts reject, so copying to escape the
+   median lands you on a different median. See research/12 and /13.
+2. `ux-preset <thing>` for the behaviour, states and keyboard.
+2b. `ux-pick "<brief>"` only to SEE the shape of a coherent refusal set.
+   Read one as a worked example. Do not adopt its answers.
 3. Read `data/constants.json` for anything timed, animated or loading.
 4. Generate.
 5. `ux-lint <path> --fix-help` and clear it.

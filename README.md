@@ -41,10 +41,16 @@ the signal, so the index is built on it.
 
 ## It fires by itself
 
-`ux-guard.sh` runs as a `PostToolUse` hook on every `Write` and `Edit` of a
-`.tsx`, `.jsx`, `.vue`, `.svelte`, `.astro`, `.html`, `.css` or `.scss` file. On
-a high-severity hit it **exits 2, which blocks the turn** and hands the model
-the findings plus the user cost of each one.
+`ux-guard.sh` runs as a **`PreToolUse`** hook on every `Write` and `Edit` of a
+`.tsx`, `.jsx`, `.vue`, `.svelte`, `.astro`, `.html`, `.css` or `.scss` file. It
+lints the **content before it is written**, and on a high-severity hit it exits
+2, which **blocks the tool call**. The file is never created.
+
+**It was a `PostToolUse` hook and that did not work.** The docs are explicit:
+*"PostToolUse | No | Exit code 2 isn't honored for this event. The tool already
+ran."* This README claimed it blocked the turn. It did not, and the test
+asserted the exit code rather than the blocking, so it passed while proving
+nothing. Caught by an adversarial prior-art review reading the hooks reference.
 
 This exists because on 2026-09-20 the repo held 5,537 lines of researched craft
 and a linter nobody ran. Caleb: *"Chewbacca should be smart enough to ALWAYS

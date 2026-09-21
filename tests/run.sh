@@ -90,14 +90,7 @@ check "ux-preset resolves an alias" bash -c \
 check "ux-preset refuses to invent one" bash -c \
   "! '$ROOT/bin/ux-preset' wizard 2>/dev/null"
 
-check "the guard routes a form to its preset" bash -c '
-  T=$(mktemp /tmp/uxp-XXXXXX).tsx
-  printf "<form className=\"bg-indigo-600\"><input placeholder=\"Email\" /></form>" > "$T"
-  out=$(printf "{\"tool_input\":{\"file_path\":\"%s\"}}" "$T" \
-        | UX_ENGINE_DIR="'$ROOT'" "$HOME/.claude/hooks/ux-guard.sh" 2>&1)
-  rm -f "$T"
-  printf "%s" "$out" | grep -q "ux-preset form"'
-
+check "the guard routes a form to its preset" "$ROOT/tests/guard_routes.sh" "$ROOT"
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

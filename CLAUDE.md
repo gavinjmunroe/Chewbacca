@@ -28,10 +28,30 @@ justifying.** Make a second pass whose only permitted move is removal.
 
 See [research/12](research/12-developing-taste.md).
 
+## systems/ is the look. presets/ is the behaviour. Load both.
+
+A census of all 64 machine-readable systems found roughly **64 product-UI
+components against 365 marketing ones**. **Every one was extracted from a
+marketing site**, so even `linear.app` carries `pricing-card` and
+`testimonial-card`: that is the website, not the application.
+
+**So `systems/` cannot describe a table, a form, an empty state or a keyboard
+interaction, and it never could.** `presets/` does, compiled from `research/`
+rather than scraped.
+
+```
+ux-pick "<brief>"     what it should look like
+ux-preset <thing>     what it should do
+```
+
+If there is no preset for what you are building, **say so and build one from
+research/**. Do not improvise the behaviour.
+
 ## Before writing any UI
 
 1. `ux-pick "<the brief>"` and read the refusals it prints.
 2. Read that one `DESIGN.md`.
+2b. `ux-preset <thing>` for the behaviour, states and keyboard.
 3. Read `data/constants.json` for anything timed, animated or loading.
 4. Generate.
 5. `ux-lint <path> --fix-help` and clear it.

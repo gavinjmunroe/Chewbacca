@@ -66,6 +66,38 @@ check "ux-guard passes a clean file" "$ROOT/tests/guard_passes.sh" "$ROOT"
 check "ux-pick branches instrumental vs expressive" bash -c \
   "'$ROOT/bin/ux-pick' 'fashion brand landing page' -n 1 | grep -q 'restraint is not being rewarded'"
 
+check "every preset cites its research" bash -c '
+  for f in "'$ROOT'"/presets/*.md; do
+    case "$f" in */README.md) continue ;; esac
+    grep -q "^Compiled from" "$f" || exit 1
+  done'
+
+check "every preset covers states" bash -c '
+  for f in "'$ROOT'"/presets/*.md; do
+    case "$f" in */README.md) continue ;; esac
+    grep -qiE "loading|empty|error" "$f" || exit 1
+  done'
+
+check "every preset names its failure mode" bash -c '
+  for f in "'$ROOT'"/presets/*.md; do
+    case "$f" in */README.md) continue ;; esac
+    grep -qi "failure mode" "$f" || exit 1
+  done'
+
+check "ux-preset resolves an alias" bash -c \
+  "'$ROOT/bin/ux-preset' modal | head -1 | grep -q Dialog"
+
+check "ux-preset refuses to invent one" bash -c \
+  "! '$ROOT/bin/ux-preset' wizard 2>/dev/null"
+
+check "the guard routes a form to its preset" bash -c '
+  T=$(mktemp /tmp/uxp-XXXXXX).tsx
+  printf "<form className=\"bg-indigo-600\"><input placeholder=\"Email\" /></form>" > "$T"
+  out=$(printf "{\"tool_input\":{\"file_path\":\"%s\"}}" "$T" \
+        | UX_ENGINE_DIR="'$ROOT'" "$HOME/.claude/hooks/ux-guard.sh" 2>&1)
+  rm -f "$T"
+  printf "%s" "$out" | grep -q "ux-preset form"'
+
 echo
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

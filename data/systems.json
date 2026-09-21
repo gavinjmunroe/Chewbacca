@@ -20,6 +20,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 33,
   "has_frontmatter": true,
   "lines": 546,
   "path": "systems/airbnb/DESIGN.md"
@@ -45,6 +46,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.16,
   "forbids": [],
+  "component_count": 26,
   "has_frontmatter": true,
   "lines": 555,
   "path": "systems/airtable/DESIGN.md"
@@ -69,6 +71,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.231,
   "forbids": [],
+  "component_count": 24,
   "has_frontmatter": true,
   "lines": 563,
   "path": "systems/apple/DESIGN.md"
@@ -93,6 +96,7 @@
   "weight_max": 700,
   "tracking_max_px": -0.3,
   "forbids": [],
+  "component_count": 35,
   "has_frontmatter": true,
   "lines": 635,
   "path": "systems/binance/DESIGN.md"
@@ -118,6 +122,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 26,
   "has_frontmatter": true,
   "lines": 545,
   "path": "systems/bmw/DESIGN.md"
@@ -142,6 +147,7 @@
   "weight_max": 700,
   "tracking_max_px": 1.5,
   "forbids": [],
+  "component_count": 21,
   "has_frontmatter": true,
   "lines": 504,
   "path": "systems/bmw-m/DESIGN.md"
@@ -168,6 +174,7 @@
    "display type never bolder than 400",
    "wide display tracking up to 6px"
   ],
+  "component_count": 17,
   "has_frontmatter": true,
   "lines": 455,
   "path": "systems/bugatti/DESIGN.md"
@@ -195,6 +202,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 26,
   "has_frontmatter": true,
   "lines": 543,
   "path": "systems/cal/DESIGN.md"
@@ -223,6 +231,7 @@
    "no gradients",
    "display type never bolder than 500"
   ],
+  "component_count": 29,
   "has_frontmatter": true,
   "lines": 590,
   "path": "systems/claude/DESIGN.md"
@@ -247,6 +256,7 @@
   "weight_max": 600,
   "tracking_max_px": 1.5,
   "forbids": [],
+  "component_count": 28,
   "has_frontmatter": true,
   "lines": 542,
   "path": "systems/clay/DESIGN.md"
@@ -271,6 +281,7 @@
   "weight_max": 700,
   "tracking_max_px": 1.5,
   "forbids": [],
+  "component_count": 27,
   "has_frontmatter": true,
   "lines": 545,
   "path": "systems/clickhouse/DESIGN.md"
@@ -298,6 +309,7 @@
   "forbids": [
    "display type never bolder than 500"
   ],
+  "component_count": 14,
   "has_frontmatter": true,
   "lines": 452,
   "path": "systems/cohere/DESIGN.md"
@@ -325,6 +337,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 28,
   "has_frontmatter": true,
   "lines": 571,
   "path": "systems/coinbase/DESIGN.md"
@@ -349,6 +362,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.88,
   "forbids": [],
+  "component_count": 21,
   "has_frontmatter": true,
   "lines": 507,
   "path": "systems/composio/DESIGN.md"
@@ -375,6 +389,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 25,
   "has_frontmatter": true,
   "lines": 538,
   "path": "systems/cursor/DESIGN.md"
@@ -402,6 +417,7 @@
   "forbids": [
    "no rounded corners, 0px or pill only"
   ],
+  "component_count": 33,
   "has_frontmatter": true,
   "lines": 633,
   "path": "systems/dell-1996/DESIGN.md"
@@ -426,6 +442,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.96,
   "forbids": [],
+  "component_count": 20,
   "has_frontmatter": true,
   "lines": 505,
   "path": "systems/elevenlabs/DESIGN.md"
@@ -450,6 +467,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.88,
   "forbids": [],
+  "component_count": 22,
   "has_frontmatter": true,
   "lines": 527,
   "path": "systems/expo/DESIGN.md"
@@ -473,6 +491,7 @@
   "weight_max": 700,
   "tracking_max_px": 1.4,
   "forbids": [],
+  "component_count": 24,
   "has_frontmatter": true,
   "lines": 532,
   "path": "systems/ferrari/DESIGN.md"
@@ -497,6 +516,7 @@
   "weight_max": 700,
   "tracking_max_px": 0.6,
   "forbids": [],
+  "component_count": 23,
   "has_frontmatter": true,
   "lines": 579,
   "path": "systems/figma/DESIGN.md"
@@ -523,6 +543,7 @@
   "weight_max": 700,
   "tracking_max_px": -0.01,
   "forbids": [],
+  "component_count": 21,
   "has_frontmatter": true,
   "lines": 545,
   "path": "systems/framer/DESIGN.md"
@@ -546,6 +567,7 @@
   "weight_max": 700,
   "tracking_max_px": 0.6,
   "forbids": [],
+  "component_count": 22,
   "has_frontmatter": true,
   "lines": 576,
   "path": "systems/hashicorp/DESIGN.md"
@@ -571,6 +593,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 31,
   "has_frontmatter": true,
   "lines": 671,
   "path": "systems/hp/DESIGN.md"
@@ -594,6 +617,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.32,
   "forbids": [],
+  "component_count": 22,
   "has_frontmatter": true,
   "lines": 551,
   "path": "systems/ibm/DESIGN.md"
@@ -620,6 +644,7 @@
   "forbids": [
    "display type never bolder than 500"
   ],
+  "component_count": 20,
   "has_frontmatter": true,
   "lines": 547,
   "path": "systems/intercom/DESIGN.md"
@@ -637,6 +662,7 @@
   "weight_max": null,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 0,
   "has_frontmatter": false,
   "lines": 126,
   "path": "systems/kraken/DESIGN.md"
@@ -654,6 +680,7 @@
   "weight_max": null,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 0,
   "has_frontmatter": false,
   "lines": 289,
   "path": "systems/lamborghini/DESIGN.md"
@@ -679,6 +706,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.4,
   "forbids": [],
+  "component_count": 21,
   "has_frontmatter": true,
   "lines": 549,
   "path": "systems/linear.app/DESIGN.md"
@@ -696,6 +724,7 @@
   "weight_max": null,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 0,
   "has_frontmatter": false,
   "lines": 299,
   "path": "systems/lovable/DESIGN.md"
@@ -713,6 +742,7 @@
   "weight_max": null,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 0,
   "has_frontmatter": false,
   "lines": 366,
   "path": "systems/mastercard/DESIGN.md"
@@ -738,6 +768,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 38,
   "has_frontmatter": true,
   "lines": 684,
   "path": "systems/meta/DESIGN.md"
@@ -761,6 +792,7 @@
   "weight_max": 700,
   "tracking_max_px": -0.5,
   "forbids": [],
+  "component_count": 44,
   "has_frontmatter": true,
   "lines": 747,
   "path": "systems/minimax/DESIGN.md"
@@ -785,6 +817,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.5,
   "forbids": [],
+  "component_count": 51,
   "has_frontmatter": true,
   "lines": 853,
   "path": "systems/mintlify/DESIGN.md"
@@ -810,6 +843,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 48,
   "has_frontmatter": true,
   "lines": 826,
   "path": "systems/miro/DESIGN.md"
@@ -835,6 +869,7 @@
   "weight_max": 600,
   "tracking_max_px": 1.0,
   "forbids": [],
+  "component_count": 42,
   "has_frontmatter": true,
   "lines": 774,
   "path": "systems/mistral.ai/DESIGN.md"
@@ -859,6 +894,7 @@
   "weight_max": 600,
   "tracking_max_px": 1.0,
   "forbids": [],
+  "component_count": 44,
   "has_frontmatter": true,
   "lines": 768,
   "path": "systems/mongodb/DESIGN.md"
@@ -887,6 +923,7 @@
   "forbids": [
    "display type never bolder than 500"
   ],
+  "component_count": 24,
   "has_frontmatter": true,
   "lines": 576,
   "path": "systems/nike/DESIGN.md"
@@ -911,6 +948,7 @@
   "weight_max": 900,
   "tracking_max_px": 0.5,
   "forbids": [],
+  "component_count": 41,
   "has_frontmatter": true,
   "lines": 650,
   "path": "systems/nintendo-2001/DESIGN.md"
@@ -936,6 +974,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 50,
   "has_frontmatter": true,
   "lines": 822,
   "path": "systems/notion/DESIGN.md"
@@ -959,6 +998,7 @@
   "weight_max": 700,
   "tracking_max_px": 0.144,
   "forbids": [],
+  "component_count": 25,
   "has_frontmatter": true,
   "lines": 641,
   "path": "systems/nvidia/DESIGN.md"
@@ -984,6 +1024,7 @@
   "weight_max": 600,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 22,
   "has_frontmatter": true,
   "lines": 540,
   "path": "systems/ollama/DESIGN.md"
@@ -1007,6 +1048,7 @@
   "weight_max": 700,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 21,
   "has_frontmatter": true,
   "lines": 522,
   "path": "systems/opencode.ai/DESIGN.md"
@@ -1032,6 +1074,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 25,
   "has_frontmatter": true,
   "lines": 598,
   "path": "systems/pinterest/DESIGN.md"
@@ -1055,6 +1098,7 @@
   "weight_max": 700,
   "tracking_max_px": 0.45,
   "forbids": [],
+  "component_count": 29,
   "has_frontmatter": true,
   "lines": 662,
   "path": "systems/playstation/DESIGN.md"
@@ -1080,6 +1124,7 @@
   "weight_max": 800,
   "tracking_max_px": -0.5,
   "forbids": [],
+  "component_count": 30,
   "has_frontmatter": true,
   "lines": 691,
   "path": "systems/posthog/DESIGN.md"
@@ -1103,6 +1148,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.4,
   "forbids": [],
+  "component_count": 28,
   "has_frontmatter": true,
   "lines": 670,
   "path": "systems/raycast/DESIGN.md"
@@ -1126,6 +1172,7 @@
   "weight_max": 700,
   "tracking_max_px": 0.144,
   "forbids": [],
+  "component_count": 19,
   "has_frontmatter": true,
   "lines": 590,
   "path": "systems/renault/DESIGN.md"
@@ -1151,6 +1198,7 @@
   "weight_max": 700,
   "tracking_max_px": -0.3,
   "forbids": [],
+  "component_count": 20,
   "has_frontmatter": true,
   "lines": 617,
   "path": "systems/replicate/DESIGN.md"
@@ -1177,6 +1225,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.35,
   "forbids": [],
+  "component_count": 19,
   "has_frontmatter": true,
   "lines": 586,
   "path": "systems/resend/DESIGN.md"
@@ -1201,6 +1250,7 @@
   "weight_max": 700,
   "tracking_max_px": 0.24,
   "forbids": [],
+  "component_count": 21,
   "has_frontmatter": true,
   "lines": 637,
   "path": "systems/revolut/DESIGN.md"
@@ -1218,6 +1268,7 @@
   "weight_max": null,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 0,
   "has_frontmatter": false,
   "lines": 245,
   "path": "systems/runwayml/DESIGN.md"
@@ -1235,6 +1286,7 @@
   "weight_max": null,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 0,
   "has_frontmatter": false,
   "lines": 358,
   "path": "systems/sanity/DESIGN.md"
@@ -1262,6 +1314,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 21,
   "has_frontmatter": true,
   "lines": 552,
   "path": "systems/sentry/DESIGN.md"
@@ -1289,6 +1342,7 @@
   "forbids": [
    "wide display tracking up to 2.4px"
   ],
+  "component_count": 18,
   "has_frontmatter": true,
   "lines": 517,
   "path": "systems/shopify/DESIGN.md"
@@ -1313,6 +1367,7 @@
   "weight_max": 700,
   "tracking_max_px": 0.96,
   "forbids": [],
+  "component_count": 16,
   "has_frontmatter": true,
   "lines": 483,
   "path": "systems/slack/DESIGN.md"
@@ -1337,6 +1392,7 @@
   "weight_max": 700,
   "tracking_max_px": 1.6,
   "forbids": [],
+  "component_count": 10,
   "has_frontmatter": true,
   "lines": 364,
   "path": "systems/spacex/DESIGN.md"
@@ -1354,6 +1410,7 @@
   "weight_max": null,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 0,
   "has_frontmatter": false,
   "lines": 247,
   "path": "systems/spotify/DESIGN.md"
@@ -1371,6 +1428,7 @@
   "weight_max": null,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 0,
   "has_frontmatter": false,
   "lines": 581,
   "path": "systems/starbucks/DESIGN.md"
@@ -1396,6 +1454,7 @@
   "forbids": [
    "display type never bolder than 400"
   ],
+  "component_count": 15,
   "has_frontmatter": true,
   "lines": 488,
   "path": "systems/stripe/DESIGN.md"
@@ -1422,6 +1481,7 @@
   "forbids": [
    "display type never bolder than 500"
   ],
+  "component_count": 16,
   "has_frontmatter": true,
   "lines": 463,
   "path": "systems/supabase/DESIGN.md"
@@ -1445,6 +1505,7 @@
   "weight_max": 700,
   "tracking_max_px": -0.135,
   "forbids": [],
+  "component_count": 16,
   "has_frontmatter": true,
   "lines": 449,
   "path": "systems/superhuman/DESIGN.md"
@@ -1462,6 +1523,7 @@
   "weight_max": null,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 0,
   "has_frontmatter": false,
   "lines": 287,
   "path": "systems/tesla/DESIGN.md"
@@ -1479,6 +1541,7 @@
   "weight_max": null,
   "tracking_max_px": null,
   "forbids": [],
+  "component_count": 0,
   "has_frontmatter": false,
   "lines": 340,
   "path": "systems/theverge/DESIGN.md"
@@ -1505,6 +1568,7 @@
   "forbids": [
    "display type never bolder than 500"
   ],
+  "component_count": 35,
   "has_frontmatter": true,
   "lines": 634,
   "path": "systems/together.ai/DESIGN.md"
@@ -1527,6 +1591,7 @@
   "forbids": [
    "no accent color, monochrome only"
   ],
+  "component_count": 39,
   "has_frontmatter": true,
   "lines": 637,
   "path": "systems/uber/DESIGN.md"
@@ -1551,6 +1616,7 @@
   "weight_max": 600,
   "tracking_max_px": 0.0,
   "forbids": [],
+  "component_count": 40,
   "has_frontmatter": true,
   "lines": 737,
   "path": "systems/vercel/DESIGN.md"
@@ -1574,6 +1640,7 @@
   "weight_max": 800,
   "tracking_max_px": 0.5691,
   "forbids": [],
+  "component_count": 26,
   "has_frontmatter": true,
   "lines": 539,
   "path": "systems/vodafone/DESIGN.md"
@@ -1600,6 +1667,7 @@
   "forbids": [
    "wide display tracking up to 2.52px"
   ],
+  "component_count": 25,
   "has_frontmatter": true,
   "lines": 522,
   "path": "systems/voltagent/DESIGN.md"
@@ -1627,6 +1695,7 @@
   "forbids": [
    "display type never bolder than 500"
   ],
+  "component_count": 26,
   "has_frontmatter": true,
   "lines": 527,
   "path": "systems/warp/DESIGN.md"
@@ -1653,6 +1722,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 31,
   "has_frontmatter": true,
   "lines": 589,
   "path": "systems/webflow/DESIGN.md"
@@ -1677,6 +1747,7 @@
    "no accent color, monochrome only",
    "no rounded corners, 0px or pill only"
   ],
+  "component_count": 25,
   "has_frontmatter": true,
   "lines": 498,
   "path": "systems/wired/DESIGN.md"
@@ -1703,6 +1774,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 28,
   "has_frontmatter": true,
   "lines": 545,
   "path": "systems/wise/DESIGN.md"
@@ -1729,6 +1801,7 @@
   "forbids": [
    "display type never bolder than 400"
   ],
+  "component_count": 23,
   "has_frontmatter": true,
   "lines": 466,
   "path": "systems/x.ai/DESIGN.md"
@@ -1755,6 +1828,7 @@
   "forbids": [
    "no gradients"
   ],
+  "component_count": 29,
   "has_frontmatter": true,
   "lines": 538,
   "path": "systems/zapier/DESIGN.md"

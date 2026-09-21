@@ -198,6 +198,27 @@ def signature(name, text):
     tracking = [px(t) for t in re.findall(r"letterSpacing:\s*\"?(-?[\d.]+px)", text)]
     tracking = [t for t in tracking if t is not None]
 
+    # HOW MANY COMPONENTS THIS SYSTEM DOCUMENTS, and nothing more.
+    #
+    # An earlier version tried to classify each system as product or
+    # marketing from its component names, and it does not work. A bare
+    # "row-" matched "eyebrow-mono"; tightening it to "-row" then matched
+    # every marketing layout row. Two attempts, two different wrong answers,
+    # because the signal is not in the data.
+    #
+    # The real finding stands and does not need a classifier: a census of all
+    # 64 machine-readable systems found roughly 64 product-UI components
+    # against 365 marketing ones. EVERY system here was extracted from a
+    # marketing site. Even linear.app carries pricing-card and
+    # testimonial-card, because that is the website, not the application.
+    #
+    # So this corpus answers "what should it look like" and cannot answer
+    # "what should it do". presets/ answers the second, compiled from
+    # research/ rather than scraped. The two do not overlap and neither
+    # pretends to be the other.
+    comps = fm.get("components")
+    component_count = len(comps) if isinstance(comps, dict) else 0
+
     # What it refuses. This is the whole point of the file.
     #
     # Only derived for a system whose token schema actually parsed. Ten of the
@@ -212,7 +233,8 @@ def signature(name, text):
             "mode": None, "canvas": None, "accent": None,
             "radius_profile": "unparsed", "radius_max_px": None,
             "fonts": [], "weight_max": None, "tracking_max_px": None,
-            "forbids": [], "has_frontmatter": False,
+            "forbids": [], "component_count": 0,
+            "has_frontmatter": False,
             "lines": text.count("\n") + 1,
             "path": f"systems/{name}/DESIGN.md",
         }
@@ -243,6 +265,7 @@ def signature(name, text):
         "weight_max": max(weights) if weights else None,
         "tracking_max_px": max(tracking) if tracking else None,
         "forbids": forbids,
+        "component_count": component_count,
         "has_frontmatter": bool(fm),
         "lines": text.count("\n") + 1,
         "path": f"systems/{name}/DESIGN.md",
@@ -266,6 +289,7 @@ def main():
     print(f"  {sum(1 for r in rows if not r['accent'])} with no accent color")
     for p in ("sharp", "tight", "soft", "round"):
         print(f"  {sum(1 for r in rows if r['radius_profile'] == p):3d} {p}")
+    print("  all extracted from marketing sites: load presets/ for behaviour")
     print(f"wrote data/systems.json ({sum(r['lines'] for r in rows):,} source lines indexed)")
     return 0
 

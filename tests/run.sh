@@ -45,8 +45,23 @@ check "selector finds bugatti from a brief" bash -c \
   "'$ROOT/bin/ux-pick' 'austere luxury dark' -n 1 | grep -q bugatti"
 
 # The detector, both directions.
+# --max counts BLOCKING findings only, since research/16: a build-breaking
+# gate made of house opinion runs ~3.4x over the threshold where tools get
+# switched off. So the fixture must trip at least one EXTERNAL rule.
 check "detector fires on the slop fixture" bash -c \
-  "'$ROOT/bin/ux-lint' '$ROOT/tests/fixtures/slop.tsx' --max 5; [ \$? -eq 1 ]"
+  "'$ROOT/bin/ux-lint' '$ROOT/tests/fixtures/slop.tsx' --max 0; [ \$? -eq 1 ]"
+
+check "house opinion never blocks" bash -c \
+  "'$ROOT/bin/ux-lint' '$ROOT/tests/fixtures/slop.tsx' | grep -q ADVISORY"
+
+check "blocking findings cite an outside standard" bash -c \
+  "! '$ROOT/bin/ux-lint' '$ROOT/tests/fixtures/slop.tsx' | grep '^HIGH \[EXTERNAL\]' -A2 | grep -q 'AUTHORITY: research/[0-9]*;\s*\$'"
+
+check "ux-constrain --init then --check rejects the scaffold" bash -c '
+  d=$(mktemp -d); cd "$d"
+  "'$ROOT'/bin/ux-constrain" --init >/dev/null
+  "'$ROOT'/bin/ux-constrain" --check DENY.md >/dev/null 2>&1
+  rc=$?; cd /; rm -rf "$d"; [ $rc -eq 1 ]' 
 check "detector is quiet on the clean fixture" bash -c \
   "'$ROOT/bin/ux-lint' '$ROOT/tests/fixtures/clean.tsx' --max 0"
 check "detector catches indigo specifically" bash -c \

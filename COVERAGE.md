@@ -46,6 +46,8 @@ as `partial`.
 | 14 | **How taste is developed** | Deliberate practice, critique culture, constraints, and the Nature 2021 subtraction-neglect result |
 | 15 | **Prior art on engineering taste** | Adversarial: has this been built already? Gates the claim in [THESIS.md](THESIS.md) |
 
+| 16 | ~~Why this category dies~~ **done** | The postmortem. Changed the architecture the same day. [research/16](research/16-why-this-category-dies.md) |
+
 ## Not yet started
 
 | Domain | Note |

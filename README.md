@@ -23,6 +23,40 @@ before picking a direction, so it invents one instead.
 
 So this caches the method, not the pixels.
 
+## Whose rule is this?
+
+**The question that decides whether a tool in this category survives.** A
+postmortem of every dead AI design tool ([research/16](research/16-why-this-category-dies.md))
+found one cause underneath all of them:
+
+> There is no external, published, machine-checkable standard for "good
+> design," so every tool invents the standard it enforces, and **a tool that
+> invents its own standard cannot survive contact with a designer who
+> disagrees.**
+
+axe-core survived by enforcing WCAG, which Deque did not write. Prettier
+survived by abolishing the decision and freezing its options permanently.
+
+So `ux-lint` splits its rules by **authority**:
+
+| | Cites | Blocks? |
+|---|---|---|
+| **EXTERNAL** | WCAG, MDN, W3C, NIST | **yes** |
+| **HOUSE** | this repo's reading | **never.** It advises |
+| **PROJECT** | the project's own `DENY.md` | **yes** |
+
+On a real page that is **4 blocking and 30 advisory**, where it used to be 34
+build-breaking findings of mixed authority.
+
+`PROJECT` is the escape the postmortem identified: **a convention the project
+declared is, from the tool's point of view, an external standard.** Run
+`ux-constrain --init`, fill in `DENY.md`, and what you declare becomes
+enforceable while this repo's opinions stay advisory.
+
+The thresholds this respects: Google requires **under 10% effective false
+positives** for a review check and **zero** for anything build-breaking.
+Measured LLM design critique runs near **34%**.
+
 ## The thesis
 
 **The generated look is not bad taste. It is an empty deny list.**

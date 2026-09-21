@@ -28,6 +28,7 @@ So this asks the questions that produce a deny list, shows how real systems
 answered them, and makes you commit. The 74 stay in the repo as worked
 examples of what a coherent refusal set looks like. They are not costumes.
 
+    ux-constrain --init           write a DENY.md scaffold for this project
     ux-constrain                  the questions
     ux-constrain --examples       how real systems answered each one
     ux-constrain --check FILE     does this deny list hold together
@@ -148,8 +149,14 @@ def _wrap(s, w):
 
 def check(path):
     """A deny list holds together when it forbids, substitutes, and costs."""
-    text = pathlib.Path(path).read_text().lower()
+    raw = pathlib.Path(path).read_text()
+    text = raw.lower()
     problems = []
+    # Reject the unfilled scaffold. Caught by running --check on a fresh
+    # --init and watching it pass, which it should never do.
+    if "no ...  instead: ..." in text or text.count("<!--") > 3:
+        problems.append("this is still the scaffold. The placeholders and the "
+                        "guidance comments are both untouched")
     forbids = sum(text.count(w) for w in ("no ", "never", "forbidden", "not ", "only "))
     if forbids < 5:
         problems.append("fewer than 5 prohibitions: this reads as a preference list")
@@ -172,12 +179,84 @@ def check(path):
     return 0
 
 
+SCAFFOLD = """# DENY.md
+
+**What this project refuses.** Written here rather than borrowed, because a
+constraint that came from somewhere else is a costume.
+
+This file is the only thing `ux-lint` treats as enforceable beyond the rules
+that cite an outside standard. The reason is the one cause underneath every
+dead tool in this category: a tool that invents the standard it enforces
+cannot survive a designer who disagrees. axe-core survived by enforcing WCAG,
+which Deque did not write.
+
+**A convention you declared is, from the tool's point of view, an external
+standard.** So what you write here has standing that this repo's own opinions
+do not.
+
+---
+
+## The real constraint
+
+<!-- What is true about this project that is not true about most projects?
+     A budget, a device, a deadline, a regulation, a reader, a room.
+     If the honest answer is "nothing", write that, and expect generic output. -->
+
+## The one mechanism
+
+<!-- The single thing this interface does that nothing else does. One. -->
+
+## Forbidden
+
+<!-- Each line: what is refused, then what takes its place. A deny list with
+     no substitute produces paralysis, not style (Stokes). Write the
+     workaround into the rule the way Dogme's parentheticals do. -->
+
+- No ...  Instead: ...
+- No ...  Instead: ...
+- No ...  Instead: ...
+- No ...  Instead: ...
+- No ...  Instead: ...
+
+## What this costs
+
+<!-- Name what these refusals make worse. A constraint that costs nothing was
+     not a constraint. -->
+
+## Suppressions
+
+<!-- Rules from ux-lint that are wrong FOR THIS PROJECT, with the reason.
+     61 to 68 percent of real-world lint suppressions are "unactionable",
+     meaning the rule was right in general and wrong here. That is legitimate
+     and it should be written down rather than worked around silently. -->
+
+- `rule-id` — why it does not apply here
+"""
+
+
+def init():
+    f = pathlib.Path("DENY.md")
+    if f.exists():
+        print(f"{f} already exists. Edit it, or run --check on it.", file=sys.stderr)
+        return 1
+    f.write_text(SCAFFOLD)
+    print(f"wrote {f.resolve()}")
+    print("\nFill it in before generating. Then: ux-constrain --check DENY.md")
+    print("Anything you declare here is enforceable. Anything ux-lint says on")
+    print("its own authority is advisory.")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(add_help=True)
     ap.add_argument("--examples", action="store_true",
                     help="show how real systems answered each question")
     ap.add_argument("--check", metavar="FILE", help="check a DENY.md")
+    ap.add_argument("--init", action="store_true",
+                    help="write a DENY.md scaffold in the current directory")
     a = ap.parse_args()
+    if a.init:
+        return init()
     if a.check:
         return check(a.check)
     show(a.examples)

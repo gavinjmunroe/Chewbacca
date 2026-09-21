@@ -257,6 +257,61 @@ RULES = [
 ]
 
 
+# WHOSE RULE IS THIS? The question that decides whether a tool survives.
+#
+# A postmortem of this category (research/16) found one cause underneath every
+# death: there is no external, published, machine-checkable standard for good
+# design, so every tool invents the standard it enforces, and a tool that
+# invents its own standard cannot survive contact with a designer who
+# disagrees.
+#
+# Every survivor escapes that. axe-core enforces WCAG, which Deque did not
+# write, so the argument is with the W3C. Prettier abolishes the decision and
+# froze its options permanently. Google's Tricorder restricts itself to the
+# provable subset.
+#
+# The 30 rules below are an invented standard. Some of them cite WCAG and are
+# therefore borrowed authority; the rest are this repo's opinion, however well
+# sourced. So they are split, and only borrowed authority is allowed to block:
+#
+#   EXTERNAL  cites WCAG, a spec, or a measured study    -> may block
+#   HOUSE     this repo's reading, defensible but ours   -> advises, never blocks
+#   PROJECT   the project's own DENY.md                  -> may block
+#
+# PROJECT is the real answer and it is the one opening the postmortem found:
+# a convention the project declared is, from the tool's point of view, an
+# external standard. That is the axe-core move applied to design.
+#
+# Google's thresholds, which this must respect: under 10% effective false
+# positives for a review check, ZERO for anything build-breaking. Measured LLM
+# design critique runs near 34%. A build-breaking gate made of house opinion is
+# roughly 3.4x over the line where tools get switched off, and the suppression
+# literature is blunt about what happens next: false positives are only 4-5%
+# of why rules get silenced, while 61-68% is "unactionable", meaning the rule
+# was right in general and wrong here because the tool did not know the intent.
+EXTERNAL_AUTHORITY = re.compile(r"WCAG|W3C|MDN|NIST|web\.dev|Material|APG", re.I)
+
+
+def authority(rule):
+    """EXTERNAL if the rule cites a standard somebody else published."""
+    return "EXTERNAL" if EXTERNAL_AUTHORITY.search(rule[6]) else "HOUSE"
+
+
+def load_project_rules(start):
+    """A DENY.md in the project is the only thing here with real standing.
+
+    Walk up from the linted file looking for one. Its rules block, because the
+    project declared them, which makes them external from this tool's point of
+    view. This is the escape from the graveyard.
+    """
+    d = pathlib.Path(start).resolve()
+    for parent in [d] + list(d.parents):
+        f = parent / "DENY.md"
+        if f.exists():
+            return f
+    return None
+
+
 EXT = {".tsx", ".jsx", ".ts", ".js", ".css", ".scss", ".html", ".vue", ".svelte", ".md", ".mdx", ".astro"}
 SKIP = {"node_modules", ".git", "dist", "build", ".next", "vendor", "systems", "research", ".venv"}
 
@@ -295,14 +350,29 @@ def main():
     order = {"high": 0, "med": 1, "low": 2}
     hits.sort(key=lambda h: (order[h[0]], h[1]))
 
+    by_id = {r[0]: r for r in RULES}
+    blocking = [h for h in hits if authority(by_id[h[1]]) == "EXTERNAL" and h[0] == "high"]
+    advisory = [h for h in hits if h not in blocking]
+
     if not hits:
         print(f"clean. {len(files)} file(s), no generated-UI tells.")
         return 0
 
-    for sev, rid, path, line, snippet, what, _f, why, _s in hits:
-        print(f"{sev.upper():4s} {path}:{line}  [{rid}]  {what}")
-        print(f"       {snippet}")
-        print(f"       COSTS: {why}")
+    def render(group, header):
+        if not group:
+            return
+        print(f"\n{header}\n")
+        for sev, rid, path, line, snippet, what, _f, why, src in group:
+            tag = authority(by_id[rid])
+            print(f"{sev.upper():4s} [{tag}] {path}:{line}  [{rid}]  {what}")
+            print(f"       {snippet}")
+            print(f"       COSTS: {why}")
+            if tag == "EXTERNAL":
+                print(f"       AUTHORITY: {src}")
+
+    render(blocking, "BLOCKING. These cite a standard this tool did not write.")
+    render(advisory, "ADVISORY. This repo's reading. Disagree and move on; "
+                     "put it in DENY.md if you want it enforced.")
 
     fired = []
     for h in hits:
@@ -321,7 +391,13 @@ def main():
     if not a.fix_help:
         print("run with --fix-help for the replacement for each.")
 
-    if a.max is not None and len(hits) > a.max:
+    print(f"\n{len(blocking)} blocking, {len(advisory)} advisory.")
+    if advisory:
+        print("Advisory findings never fail a build. If one is right for this "
+              "project, add it to DENY.md and it becomes enforceable.")
+
+    # Only borrowed or declared authority can fail anything.
+    if a.max is not None and len(blocking) > a.max:
         return 1
     return 0
 

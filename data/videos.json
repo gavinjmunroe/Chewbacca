@@ -451,8 +451,8 @@
   "queries": 1,
   "tier": "ai",
   "url": "https://youtu.be/Ot582-E61ac",
-  "words": 0,
-  "transcript": "pending"
+  "words": 3047,
+  "transcript": "whisper"
  },
  {
   "id": "HE4rLEQpiXY",
@@ -801,8 +801,8 @@
   "date": "NA",
   "queries": 1,
   "url": "https://youtu.be/vdAm50t_4nU",
-  "words": 0,
-  "transcript": "pending"
+  "words": 4685,
+  "transcript": "whisper"
  },
  {
   "id": "u9XSmlZhYq4",
@@ -1108,19 +1108,6 @@
   "tier": "taste",
   "url": "https://youtu.be/WR0gw2Jnkag",
   "words": 5893,
-  "transcript": "captions"
- },
- {
-  "id": "EbYH9j5NTsw",
-  "title": "Open and Closed Taste determination in Human Design",
-  "channel": "AERA",
-  "dur": 478,
-  "views": 1394,
-  "date": "NA",
-  "queries": 1,
-  "tier": "taste",
-  "url": "https://youtu.be/EbYH9j5NTsw",
-  "words": 1414,
   "transcript": "captions"
  },
  {

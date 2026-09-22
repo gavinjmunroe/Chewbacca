@@ -88,6 +88,80 @@ of a change to the distribution itself.**
 **Step 4.** On Tulu-3-70B, direct prompting retains **23.8%** of base-model
 diversity. Verbalized Sampling recovers **66.8%**.
 
+### The same conclusion, reached from the other end
+
+**2026-09-22.** Thais Castello Branco of Taste Labs, in a conference talk
+called "Ending AI Slop" ([corpus/video/transcripts/lCBf9slCanI.txt](../corpus/video/transcripts/lCBf9slCanI.txt),
+Whisper transcription, see the ASR caveat below), states this section's central
+claim in a sentence, with no maths on screen and no citation of any of the
+literature above:
+
+> "The reason why this feels like slop and that we have this feeling that we're
+> surrounded by slop is exactly because of this collapse to the mean and this
+> repetition."
+
+And the premise it rests on:
+
+> "The average, meaning the most likely, does not necessarily coincide with the
+> optimal."
+> "a lot of greatness in creativity happens actually at the ends of the
+> distribution. It's not the most likely outcome."
+
+**This file reached that from Holtzman, Meister and a measured α̂. She reached
+it from building evaluation infrastructure and watching judges reward-hack.**
+A theoretical result and a practitioner's operational diagnosis landing on the
+same sentence, independently, is the strongest form this claim has been stated
+in here, and it is why it is recorded rather than folded in as another citation.
+
+**Four things she has that this repo does not.**
+
+**1. The substitution move.** "Make it great" is unverifiable, and this repo has
+been trying to verify it anyway. Her move is to route around the contest instead
+of resolving it: "if I just ask you to be like, okay, create something great,
+that's very hard. But suddenly if I'm like, okay, make something that is on
+brand, that is a much easier problem to define, and a brand is something that
+can become decomposable." The decomposition is colours, typography, motion,
+animation, textures, and the critical detail is that the judge is asked per
+element rather than holistically, because "Verifying in general of some things
+on brand, and you can try this by prompting an LLM as a judge to do it, is quite
+hard." The grader is then the decomposition, never the source artifact, so a
+genuinely new page can still pass: "You don't necessarily want to just see if
+it's replicating the original."
+
+**2. Design standards expire and code standards do not.** "What is considered
+good today is different than five years ago and different than five years from
+now. In code, that's not necessarily true, or in math." Every value in
+[data/constants.json](../data/constants.json) inherits this and not one of them
+carries a date for decay. That is a defect in this repo, found by a video.
+
+**3. Preference data collapses too, and the fix is a schema change.**
+[research/13](13-empirical-aesthetics.md) diagnoses the multi-preference problem
+and stops at "pick deliberately and say which." She proposes attaching a
+preference vector to each rater so disagreement survives aggregation as signal:
+"it doesn't mean that the best answer is the average of what two people might
+like." And she partitions disagreement by layer, which is a better use of
+[research/12](12-developing-taste.md)'s kappa instability than research/12
+currently makes: disagreement on alignment is a data bug because alignment is
+objective, disagreement on style "is not necessarily bad data. That's actually
+good data."
+
+**4. Breaking from the mode has to be steered.** This file already ranks
+"randomise at the input, not the output" and notes that temperature is a
+coherence knob. She adds the positive requirement in four words: "In a way
+that's also intentional." That is the difference between `tools/stances.py` and
+turning temperature up.
+
+**Treat her as convergent testimony, not as evidence.** She gives no effect
+size, no n and no baseline, she is describing her own company's method on stage,
+and she has a commercial interest in the claim that this problem needs a data
+vendor. She also never addresses the finding at the top of this file, that
+post-editing fails invisibly, because her pipeline is entirely upstream of it.
+The honest note there stands unchanged.
+
+**ASR caveat.** The transcript is local Whisper on an accented speaker. Its body
+contains zero digits, every quantity is spoken as a word, so no number from this
+talk is quoted anywhere in this repo.
+
 ### Why the median is recognizable *as* the median
 
 The formal answer predates the slop discourse by five years.

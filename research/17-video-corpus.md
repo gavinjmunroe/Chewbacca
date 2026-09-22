@@ -168,6 +168,63 @@ things."
 `ujcEXPm1GpE` at 8:23, which reaches the same conclusion from the other side: the
 recommendation feed is selecting what you think you like.
 
+## How to judge, which is the part this repo actually needs
+
+Batch 6 turned out to be the most directly useful of the six, and not because it
+is about pixels. It is about critique, and **every failure mode the art schools
+name is one an agent scoring its own output has.** These are protocol rules, not
+style rules, and they are cheap to implement.
+
+**Randomise the order.** RISD faculty describe a teacher who unknowingly
+critiqued best to worst and produced a 20-minute versus 5-minute attention gap
+along the sequence (`bT5wTnRz_v4`, 13:47). The fix is stated plainly: "What I
+tried to do is critique the students in completely random order." Any batch of
+generated candidates scored in sequence has this bug.
+
+**An ensemble that sees itself is not an ensemble.** 21:09: "One person says
+something that was like kind of negative. It changed the whole atmosphere of the
+critique and everybody started piling on to that." Judges must not read each
+other's output before writing their own.
+
+**Discard the first and last comment.** 21:57: "People really hang on to the
+first thing that was said and the last thing that was said." Serial position
+distorts what survives.
+
+**Blind read before intent.** 11:41: "I just say, what do you see? If what they
+see matches what I want the audiences to see, I know I've done a good job." The
+same video then argues both sides of whether the critic should hear the intent
+first, 21 seconds apart (12:18 against 12:39), which is stronger evidence for
+withholding it than either statement alone.
+
+**Praise-only feedback is a defect.** 6:50: "I would just praise people too much.
+The kids really didn't have a barometer for how to improve." An evaluator that
+never refuses supplies no gradient, which is the same finding as
+[[feedback_a_silent_guard_proves_nothing]] reached from the other side.
+
+**Effort must be excluded from the score.** `BIznnPt0aRQ`, 7:54: "try really hard
+not to consider how hard you worked on it or how much time you spent on it," and
+8:26: "it really is only the amount that you add." The translation for an agent is
+exact: token spend is not quality.
+
+**Manufacture distance from your own authorship.** Four methods, all cheap:
+audit work over a year old, because the defect class shows up exaggerated;
+mirror the layout, but only about five times at fixed checkpoints, because
+continuous mirroring restores the blindness (6:49); leave at least a three-hour
+gap before self-review (7:36); and run the mirror check immediately before the
+irreversible step.
+
+**Forced choice with a scored answer.** `pCyeIwyV0Dg` is the only mechanism in
+the corpus with a loss signal attached: a daily few-minute drill asking "which
+design is the most correct?", scored, with the difficulty gap narrowing as you
+improve. The discriminations he actually voices are lintable ones, border-radius
+consistency across siblings and asymmetric trailing whitespace.
+
+**And one ready-made anti-signature**, from the person being interviewed about
+taste, describing what people point at when they say a company has taste
+(`RaKFP_DuqpA`, 22:52): "that's a company with taste because it's minimal and it
+has a left-aligned bold font with like clean typography below that." He is
+rejecting it. That sentence is a slop detector rule as written.
+
 ## What the corpus cannot decide, and this repo must
 
 These are kept rather than resolved, because a contradiction between two
@@ -222,6 +279,7 @@ Recorded so nobody quotes these later as though they were measured.
 | [batch 3](video-findings/batch-3-apple-principles-slop-tells.md) | Apple's principles, the slop tells, taste frameworks |
 | [batch 4](video-findings/batch-4-laws-spacing-hierarchy.md) | The 19 UX laws, spacing, hierarchy, the 50 mistakes |
 | [batch 5](video-findings/batch-5-color-type-systems.md) | Colour recipes, type scales, dashboards, design systems |
+| [batch 6](video-findings/batch-6-critique-taste-judgment.md) | Critique protocol, self-blindness, taste versus style |
 
 Search the corpus with `ux-video "<term>"`, which returns the quote and a
 `youtu.be` link that jumps to the second it was said.

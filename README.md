@@ -29,6 +29,12 @@ Two findings mattered more than the model choice:
 biggest win**, worth more on the dev set than changing the embedding model.
 A file whose every chunk is mildly relevant beats a file with one lucky chunk.
 
+**The ablations were almost all negative, which is the useful part.** Swapping
+the embedding model does nothing for recall. Stripping the filepath prefix
+costs 12 points, so it is load-bearing. Shrinking chunks to 75 words looks like
++20 on the dev set and loses 10 points on the sealed one, because small chunks
+and mean aggregation fix the same problem and do not stack.
+
 **Abstention works.** Top cosine below 0.55 means the answer is not in the
 corpus. On the sealed set that correctly refused 8 of 8 questions whose answers
 do not exist, while wrongly refusing 2 of 65 real ones.

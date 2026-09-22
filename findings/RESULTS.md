@@ -214,3 +214,51 @@ full DB build, 2398 chunks + FTS + blobs   310ms, 13.2MB
 ```
 
 Load average was 9-23 throughout, so the ollama figures are pessimistic.
+
+## Ablations, and the chunk-size trap
+
+Run on the dev set against the **untuned** 300w/max-agg baseline (60%).
+
+| variant | recall@5 | delta | MRR | index_s | MB |
+| --- | --- | --- | --- | --- | --- |
+| nomic-embed-text 300w, prefix on | 60% | base | 0.430 | 81 | 7.4 |
+| mxbai-embed-large (1024d) | 60% | +0 | 0.484 | 162 | 9.9 |
+| embeddinggemma (768d) | 60% | +0 | 0.503 | 83 | 7.4 |
+| all-minilm (384d) | 56% | -4 | 0.328 | 20 | 3.7 |
+| 600 target words | 60% | +0 | 0.434 | 72 | 6.5 |
+| 150 target words | 76% | +16 | 0.511 | 87 | 10.9 |
+| 75 target words | 80% | +20 | 0.566 | 125 | 19.2 |
+| 300w, overlap 240 (count control) | 64% | +4 | 0.451 | 112 | 9.0 |
+| **no filepath/description prefix** | **48%** | **-12** | 0.388 | 72 | 7.4 |
+| task prefixes (search_query/document) | 64% | +4 | 0.526 | 80 | 7.4 |
+| vec top-20 reranked by RRF | 68% | +8 | 0.535 | 81 | 7.4 |
+| 75w + task prefixes + RRF | 76% | +16 | 0.592 | 130 | 19.2 |
+
+**Every embedding model swap was a wash on recall.** mxbai costs 2x index time
+and 33% more disk for 0 points. MRR moves, the top-5 set does not.
+
+**The prefix is load-bearing in the opposite direction from the hypothesis.**
+Stripping `filepath | frontmatter description` before embedding costs 12
+points. The queries it carries are the ones where the filename is the answer.
+Keep it.
+
+### The chunk-size trap, measured on the sealed set
+
+The +20 from 75-word chunks was measured against the untuned max-agg baseline.
+Re-run against the tuned config it reverses:
+
+```
+                        dev          SEALED (n=65)
+300w mean (shipped)     80%          68%
+75w  mean               80%          58%
+75w  max                80%          65%
+75w  top3               80%          63%
+```
+
+Small chunks and mean aggregation are **substitutes, not complements**. Both
+fix the same failure, a file with one lucky chunk outranking a file that is
+broadly relevant. Applying both costs 2.6x the disk (19.2MB vs 7.4MB) and 1.5x
+the index time to lose 10 points on held-out data.
+
+Dev could not see this: all four variants tie at 80% there. Only the sealed set
+separated them. `bench/final75.py` reproduces it.

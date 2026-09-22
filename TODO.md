@@ -57,20 +57,27 @@ model-not-resident 460ms. Cache query vectors keyed on the normalized string.
 
 ## P1, worth doing, measurable
 
-### 5. Beat 68%. The ablations are not finished.
-An agent was mid-run on these when the investigation stopped:
-- **Context prefix ablation.** `index.py` prepends `filepath | frontmatter
-  description` to every chunk before embedding. This is the most suspicious
-  design choice in the harness and may be doing much of the work. Ablate it.
-- **Embedding model.** Only `nomic-embed-text` (768d) was tested. Try
-  `mxbai-embed-large` (1024d), `embeddinggemma`, `all-minilm` (384d, as a floor).
-- **Chunk size.** 300 words is untested against 150 and 600.
-- **Query prefix.** nomic was trained with `search_query:` / `search_document:`
-  and the harness uses neither. Dev sweep showed no gain, which is surprising
-  enough to be worth confirming properly (document-side prefix was never tested).
-- **Reranking.** Vector top-20 reranked by a cross-encoder. Untested.
-- **Accept:** a table of variant / recall@5 / MRR / index time / size, and a
-  negative result reported as loudly as a positive one.
+### 5. Beat 68%. Mostly done, and mostly negative.
+Ablations ran. Full table in findings/RESULTS.md. Summary of what is now closed:
+- **Context prefix: keep it.** Stripping `filepath | frontmatter description`
+  costs 12 points. It was the most suspicious choice in the harness and it
+  turned out load-bearing in the opposite direction.
+- **Embedding model: do not bother.** mxbai-embed-large, embeddinggemma and
+  all-minilm were all a wash or worse on recall@5. Bigger models move MRR and
+  leave the top-5 set alone.
+- **Chunk size: do not shrink.** 75 words looks like +20 on dev against the
+  untuned baseline and loses 10 points on the sealed set against the tuned one.
+  Small chunks and mean aggregation are substitutes. See the chunk-size trap.
+- **Task prefixes: no.** +4 on the coarse baseline, negative once chunks shrink.
+
+Still open and still worth trying:
+- **A real cross-encoder rerank.** Only a BM25 reorder of vector top-20 was
+  tested (+8 on the untuned baseline, 0 once tuned). No cross-encoder was run.
+- **Query expansion / agentic retry.** The measured grep number is single-shot.
+  Nobody tested letting the retriever reformulate after a miss, which is the
+  mechanism Anthropic's agentic-search argument actually rests on.
+- **Accept:** any change must beat 68% on the sealed set, not on dev. Four
+  variants tied at 80% on dev and spread across 10 points on the sealed set.
 
 ### 6. Fix the 16 broken wikilinks and the contradiction regex
 `bench/graph0.py` found 1,495 resolved links and 16 broken. Separately its

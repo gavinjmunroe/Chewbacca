@@ -224,7 +224,8 @@ RULES = [
      "An img with no alt attribute",
      'alt="" if decorative, a real description if not.',
      "Missing alt is the second most common failure on the web and leaves the screen reader announcing a filename.",
-     "research/07; WebAIM Million 2026: 53.1% of home pages."),
+     "research/07; WCAG 1.1.1 Non-text Content at Level A. "
+     "WebAIM Million 2026: 53.1% of home pages."),
 
     ("tiny-target", "med",
      r"\b(?:w|h)-(?:1|2|3|4)\b[^\"'`]{0,40}\b(?:w|h)-(?:1|2|3|4)\b",
@@ -420,8 +421,17 @@ def scan(path):
     lines = text.split("\n")
     for rid, sev, pat, what, fix, why, src in RULES:
         flags = re.M if rid == "emoji-heading" else 0
+        # One finding per rule per line. A pattern can match twice on one line
+        # (`from-indigo-600 to-purple-600` matches `indigo` at both ends) and
+        # the finding text is rule-level, so the second copy is identical noise
+        # that also inflates the --max count a CI gate is set against. COMPUTED
+        # below already deduped this way; RULES did not.
+        seen = set()
         for m in re.finditer(pat, text, flags):
             line_no = text[: m.start()].count("\n") + 1
+            if line_no in seen:
+                continue
+            seen.add(line_no)
             hits.append((sev, rid, path, line_no, lines[line_no - 1].strip()[:90], what, fix, why, src))
     for rid, sev, fn, what, fix, why, src in COMPUTED:
         seen = set()

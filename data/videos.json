@@ -504,7 +504,8 @@
   "tier": "ai",
   "url": "https://youtu.be/PsE9u37gJjU",
   "words": 0,
-  "transcript": "pending"
+  "transcript": "unavailable",
+  "why": "no captions; local transcription abandoned, low value (AI website builder promo)"
  },
  {
   "id": "Gfsd8NNuD9g",
@@ -905,7 +906,8 @@
   "queries": 2,
   "url": "https://youtu.be/bWffMLkBQLU",
   "words": 0,
-  "transcript": "pending"
+  "transcript": "unavailable",
+  "why": "no captions; audio download returned HTTP 403, retry later (Thiago Costa on cultivating taste)"
  },
  {
   "id": "nqepPcYxouY",
@@ -1094,8 +1096,8 @@
   "date": "NA",
   "queries": 1,
   "url": "https://youtu.be/gd2Sf4NdnSU",
-  "words": 0,
-  "transcript": "pending"
+  "words": 6833,
+  "transcript": "whisper"
  },
  {
   "id": "WR0gw2Jnkag",

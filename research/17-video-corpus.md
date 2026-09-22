@@ -1,7 +1,7 @@
 # 17. The video corpus
 
 **Built 2026-09-22.** Caleb sent two YouTube videos on how to think like a
-designer and asked for a lot more like them. What came back is 94 videos, 89
+designer and asked for a lot more like them. What came back is 94 videos, 92
 transcribed, mined by six parallel passes into
 [video-findings/](video-findings/), where every rule carries a video id and a
 timestamp.
@@ -15,7 +15,9 @@ applying it.**
 
 Forty-two `yt-dlp` search queries returned 573 unique videos. Filtering to
 topical relevance left 380, from which 108 were selected across four tiers and
-transcribed. Eight had no captions and went to local Whisper. One (`EbYH9j5NTsw`)
+transcribed. Eight had no captions and went to local Whisper, which recovered six of them.
+Two stayed unavailable and `data/videos.json` says which and why: one was
+abandoned as low value, and one returns HTTP 403 on its audio. One (`EbYH9j5NTsw`)
 turned out to be Human Design astrology that matched on the word "taste" and was
 dropped.
 
@@ -23,7 +25,7 @@ dropped.
 be used.** [COVERAGE.md](../COVERAGE.md) sets this repo's bar: reading source and
 counting things beat reading articles, every time. A video is a practitioner's
 claim. Almost none of it was measured by the person saying it, and exactly one
-source in 89 cites where his numbers came from (Tim Gabe, who measures Google,
+source in 92 cites where his numbers came from (Tim Gabe, who measures Google,
 Dropbox and Uber before giving a line-height range, and attributes the 50-to-75
 character measure to Baymard).
 

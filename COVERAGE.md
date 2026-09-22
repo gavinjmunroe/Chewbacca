@@ -48,6 +48,18 @@ as `partial`.
 
 | 16 | ~~Why this category dies~~ **done** | The postmortem. Changed the architecture the same day. [research/16](research/16-why-this-category-dies.md) |
 
+## Wave 4, the video corpus, 2026-09-22 (complete)
+
+| # | Domain | Status | Method | File |
+|---|---|---|---|---|
+| 17 | Practitioner video, UI craft and taste acquisition | done | 42 searches, 573 unique videos, 89 transcribed, six parallel extraction passes, every rule carries a video id and a timestamp | [research/17](research/17-video-corpus.md) |
+
+**Read its opening limit before using any rule from it.** A video is a
+practitioner's claim, not a measurement. One source in 89 cites where his
+numbers came from. Nothing in that wave is allowed to block, and its real
+contribution is acquisition mechanisms rather than pixel rules, which is the
+half this repo was weakest on.
+
 ## Not yet started
 
 | Domain | Note |

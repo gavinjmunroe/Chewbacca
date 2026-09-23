@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""Check how a page's effects compose, not whether each one is good alone.
+
+    ux-compose --effects parallax,sticky-pin,draw-on,accent-cta
+    ux-compose --spec page.json
+    ux-compose --list
+
+WHY THIS EXISTS. Every other check in this repo judges things in isolation.
+ux-lint refuses generated-look tells, ux-ink bounds coverage, ux-film
+classifies one element at a time, the stance files bound style. Not one of
+them can say whether parallax plus scale plus a sticky reveal fight each
+other. Caleb, 2026-09-23: "There has to be some framework of assesment for how
+all the ui ux and animations work together."
+
+THE MODEL. Effects conflict when they claim the same perceptual resource,
+because a reader has one of each and cannot spend it twice. There is one place
+the eye goes first. There is one depth encoding that reads as depth rather
+than as a mistake. There is one scroll input. Conflict is resource contention,
+which is checkable, rather than a taste opinion, which is not.
+
+This is why it can refuse things: "two effects claim FOCUS" is a fact about a
+declaration, not a judgement about whether the page is pretty.
+"""
+import argparse
+import json
+import pathlib
+import sys
+from collections import defaultdict
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+CATALOG = json.loads((ROOT / "effects" / "catalog.json").read_text())
+BY_ID = {e["id"]: e for e in CATALOG["effects"]}
+
+
+def check(active, static_share=None):
+    """active: list of effect ids in ONE viewport / scroll position."""
+    unknown = [a for a in active if a not in BY_ID]
+    effects = [BY_ID[a] for a in active if a in BY_ID]
+
+    claims = defaultdict(list)
+    for e in effects:
+        for r in e["claims"]:
+            claims[r].append(e["id"])
+
+    findings = []
+
+    def fire(rule_id, detail):
+        rule = next(r for r in CATALOG["rules"] if r["id"] == rule_id)
+        findings.append({"rule": rule_id, "detail": detail,
+                         "why": rule["why"], "fix": rule["fix"]})
+
+    if len(claims["FOCUS"]) > 1:
+        fire("one-focus", ", ".join(claims["FOCUS"]))
+    if len(claims["DEPTH"]) > 2:
+        fire("one-depth-encoding", ", ".join(claims["DEPTH"]))
+
+    constant = [e["id"] for e in effects if e["motion"] == "CONSTANT"]
+    reading = [e["id"] for e in effects if "READING" in e["claims"]]
+    if reading:
+        fire("reading-is-quiet", ", ".join(reading))
+
+    linked = [e["id"] for e in effects if e["motion"] == "SCROLL-LINKED"]
+    if len(linked) > 3:
+        fire("scroll-has-one-input", ", ".join(linked))
+    elif len(linked) > 1:
+        # Not a failure, but the thing most likely to be left undone.
+        findings.append({
+            "rule": "pace-must-differ", "detail": ", ".join(linked),
+            "why": next(r for r in CATALOG["rules"] if r["id"] == "pace-must-differ")["why"],
+            "fix": "Confirm these run at DIFFERENT rates. Same rate is a sheet of paper sliding.",
+            "advisory": True,
+        })
+
+    staggers = [e["id"] for e in effects if "TIME" in e["claims"] and e["motion"] == "SPAWN"]
+    if len(staggers) > 1:
+        fire("one-time-axis", ", ".join(staggers))
+
+    vest = [e["id"] for e in effects if e.get("vestibular")]
+    if len(vest) > 1:
+        fire("vestibular-budget", ", ".join(vest))
+
+    if len(claims["POINTER"]) > 1:
+        fire("pointer-answers-once", ", ".join(claims["POINTER"]))
+
+    if len(claims["SURFACE"]) > 1:
+        fire("one-focus", "SURFACE contested by " + ", ".join(claims["SURFACE"]))
+
+    if static_share is not None and static_share < 0.6:
+        fire("static-is-the-default", f"only {static_share:.0%} of elements are STATIC")
+
+    return findings, unknown, claims
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--effects", help="comma-separated effect ids in one viewport")
+    ap.add_argument("--spec", help="json: {\"viewports\": {\"hero\": [ids], ...}}")
+    ap.add_argument("--static-share", type=float,
+                    help="fraction of substantial elements that never move")
+    ap.add_argument("--list", action="store_true", help="every effect and what it claims")
+    a = ap.parse_args()
+
+    if a.list:
+        print(f"{'effect':<20} {'motion':<14} claims")
+        for e in CATALOG["effects"]:
+            v = " (vestibular)" if e.get("vestibular") else ""
+            print(f"{e['id']:<20} {e['motion']:<14} {'+'.join(e['claims'])}{v}")
+        print("\nresources:")
+        for k, v in CATALOG["_resources"].items():
+            print(f"  {k:<9} {v}")
+        return 0
+
+    groups = {}
+    if a.spec:
+        groups = json.loads(pathlib.Path(a.spec).read_text()).get("viewports", {})
+    elif a.effects:
+        groups = {"page": [s.strip() for s in a.effects.split(",") if s.strip()]}
+    else:
+        ap.print_help()
+        return 2
+
+    worst = 0
+    for name, active in groups.items():
+        findings, unknown, claims = check(active, a.static_share)
+        print(f"\n{name}: {len(active)} effect(s)")
+        for r, who in sorted(claims.items()):
+            mark = "  <-- contested" if len(who) > 1 else ""
+            print(f"  {r:<9} {', '.join(who)}{mark}")
+        if unknown:
+            print(f"  unknown ids (not in catalog): {', '.join(unknown)}")
+        hard = [f for f in findings if not f.get("advisory")]
+        for f in findings:
+            tag = "note" if f.get("advisory") else "CONFLICT"
+            print(f"\n  {tag}  {f['rule']}: {f['detail']}")
+            print(f"        {f['why']}")
+            print(f"        fix: {f['fix']}")
+        if not findings:
+            print("  composes cleanly.")
+        worst = max(worst, len(hard))
+
+    return 1 if worst else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

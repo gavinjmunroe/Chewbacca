@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""Classify what a page's motion actually DOES, from a constant-rate scroll.
+
+    ux-film lenses/lemma-film/film.json
+    ux-film lenses/a/film.json lenses/b/film.json    # compare two
+
+WHY THIS EXISTS. Chewbacca could measure UI (colours, radii, type, durations)
+and could not describe UX (what motion does in response to a person). Caleb,
+2026-09-23: "chewbacca should be able to apply its design theory knowledge
+towards these! I think we have somewhat made it able to apply that towards ui,
+but not ux at ALLLL."
+
+The vocabulary below is his list, made measurable:
+
+  SPAWN        fires once near arrival, then holds. Entrance choreography.
+  CONSTANT     changes with no relationship to scroll. A loop.
+  SCROLL-LINKED  tracks scroll position monotonically. The value IS the
+                 scroll offset, mapped. This is the one that reads as magic,
+                 and the one a fixed CSS keyframe can never produce.
+  STATE-SWAP   steps between plateaus. The page re-rendered rather than
+                 animated, which is how uselemma.ai's trace grid works and
+                 why an animation-only capture reports that scene as static.
+  STATIC       never moves.
+
+PACE is reported separately, because two scroll-linked elements moving at
+different rates against the same scroll is the effect people call parallax and
+is what makes depth read. A single rate for everything reads as a sheet of
+paper sliding.
+"""
+import json
+import pathlib
+import sys
+
+
+def series(frames, el_id, key):
+    """One element's value per frame, None where it was off screen."""
+    out = []
+    for fr in frames:
+        rec = next((e for e in fr["el"] if e["id"] == el_id), None)
+        out.append(rec[key] if rec and rec.get("vis") else None)
+    return out
+
+
+def ty(transform):
+    """Vertical translate out of a matrix string, which is where scroll-linked
+    motion almost always lives."""
+    if not transform or not transform.startswith("matrix"):
+        return None
+    try:
+        parts = [float(x) for x in transform[transform.index("(") + 1:transform.rindex(")")].split(",")]
+    except (ValueError, IndexError):
+        return None
+    # matrix(a,b,c,d,tx,ty) and matrix3d(...,tx,ty,tz,1)
+    if len(parts) == 6:
+        return parts[5]
+    if len(parts) == 16:
+        return parts[13]
+    return None
+
+
+def classify(ys, vals):
+    """ys and vals are paired and already filtered to frames where visible."""
+    pts = [(y, v) for y, v in zip(ys, vals) if v is not None]
+    if len(pts) < 8:
+        return "STATIC", 0.0
+    vs = [v for _, v in pts]
+    spread = max(vs) - min(vs)
+    if spread < 0.02:
+        return "STATIC", 0.0
+
+    # Pearson against scroll. A scroll-linked value is a function of scroll,
+    # so |r| is near 1; a loop wanders independently and r collapses.
+    n = len(pts)
+    sy = sum(y for y, _ in pts); sv = sum(vs)
+    my = sy / n; mv = sv / n
+    num = sum((y - my) * (v - mv) for y, v in pts)
+    dy = sum((y - my) ** 2 for y, _ in pts) ** 0.5
+    dv = sum((v - mv) ** 2 for v in vs) ** 0.5
+    r = abs(num / (dy * dv)) if dy and dv else 0.0
+
+    # How much of the travel is spent at a plateau. A re-render sits still and
+    # then jumps; a tween is moving almost every frame.
+    flat = sum(1 for a, b in zip(vs, vs[1:]) if abs(b - a) < spread * 0.01)
+    plateau = flat / max(1, len(vs) - 1)
+
+    if r > 0.82:
+        return "SCROLL-LINKED", r
+    if plateau > 0.9:
+        return "STATE-SWAP", r
+    # Moving, not tracking scroll: either an entrance that ran once or a loop.
+    first_third = vs[: max(1, len(vs) // 3)]
+    rest = vs[max(1, len(vs) // 3):]
+    if rest and (max(rest) - min(rest)) < spread * 0.15:
+        return "SPAWN", r
+    return "CONSTANT", r
+
+
+def report(path):
+    data = json.loads(pathlib.Path(path).read_text())
+    frames = data["frames"]
+    tracked = {t["id"]: t for t in data["tracked"]}
+    ys = [f["y"] for f in frames]
+
+    print(f"\n{path}")
+    print(f"  {len(frames)} frames, {ys[-1]}px travelled, "
+          f"{frames[0]['anims']} animations at load")
+
+    # The density rhythm. This is composition, not motion, and it is the thing
+    # a uniformly dense page never has.
+    text = [f["textOn"] for f in frames]
+    lo, hi = min(text), max(text)
+    print(f"  on-screen text elements: {lo} to {hi}  "
+          f"({hi / max(1, lo):.1f}x swing)")
+    svg = [f["svg"] for f in frames]
+    print(f"  svg nodes: {svg[0]} to {max(svg)}  "
+          f"({'accumulates, never unmounts' if svg[-1] >= max(svg) * 0.95 else 'mounts and unmounts'})")
+
+    counts = {}
+    rows = []
+    for el_id, meta in tracked.items():
+        best = ("STATIC", 0.0, "")
+        for key, label in (("o", "opacity"), ("t", "translateY")):
+            raw = series(frames, el_id, key)
+            vals = [ty(v) if key == "t" else v for v in raw]
+            kind, r = classify(ys, vals)
+            order = {"SCROLL-LINKED": 4, "STATE-SWAP": 3, "CONSTANT": 2, "SPAWN": 1, "STATIC": 0}
+            if order[kind] > order[best[0]]:
+                best = (kind, r, label)
+        counts[best[0]] = counts.get(best[0], 0) + 1
+        if best[0] != "STATIC":
+            rows.append((best[0], best[1], best[2], meta["tag"], meta["cls"]))
+
+    print("\n  behaviour of 26 tracked elements:")
+    for k in ("SCROLL-LINKED", "STATE-SWAP", "CONSTANT", "SPAWN", "STATIC"):
+        if counts.get(k):
+            print(f"    {k:<14} {counts[k]:>3}")
+
+    if rows:
+        print("\n  the moving ones:")
+        rows.sort(key=lambda x: -x[1])
+        for kind, r, prop, tag, cls in rows[:12]:
+            print(f"    {kind:<14} r={r:.2f}  {prop:<10} {tag:<6} {cls[:26]}")
+
+
+def main():
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    if not args:
+        print(__doc__)
+        return 2
+    for a in args:
+        report(a)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

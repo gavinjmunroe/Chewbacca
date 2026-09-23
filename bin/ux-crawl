@@ -2,7 +2,7 @@
 """Drive the interface and record what it does, not what it looks like.
 
     ux-crawl https://example.com
-    ux-crawl https://example.com --out lenses/example --states hover,focus,submit,narrow
+    ux-crawl https://example.com --out lenses/example --states film,hover,focus,narrow
 
 WHY THIS IS DIFFERENT FROM EVERY EXTRACTOR I COULD FIND. HTTP Archive parses
 CSS statically across 17.2M sites. slicer.dev extracts one page at load.
@@ -82,6 +82,123 @@ STYLES_JS = """(cap) => {
   return out;
 }"""
 
+
+# What the page IS at a scroll position, as opposed to what is animating.
+# Needed because the strongest scroll choreography does not animate at all:
+# uselemma.ai holds 42 rects constant through its pinned scene while the text
+# count goes 33 to 51 and the filled count goes 0 to 9. Scroll drives state
+# and the state decides what renders. An animation-only capture sees none of
+# that and reports the scene as static.
+SHAPE_JS = """() => {
+  const vh = window.innerHeight;
+  const onScreen = [...document.querySelectorAll("body *")].filter(el => {
+    const r = el.getBoundingClientRect();
+    return r.bottom > 0 && r.top < vh && r.width > 2 && r.height > 2;
+  });
+  const sticky = [...document.querySelectorAll("body *")].filter(
+    el => getComputedStyle(el).position === "sticky");
+  const tally = {};
+  for (const el of onScreen) {
+    const t = el.tagName.toLowerCase();
+    tally[t] = (tally[t] || 0) + 1;
+  }
+  return {
+    scrollY: Math.round(window.scrollY),
+    docHeight: document.documentElement.scrollHeight,
+    onScreen: onScreen.length,
+    text: onScreen.filter(e => e.children.length === 0
+                           && e.textContent.trim().length).length,
+    svgNodes: document.querySelectorAll("svg *").length,
+    tagTally: tally,
+    stickyPinned: sticky.filter(el => Math.abs(el.getBoundingClientRect().top) < 2).length,
+    stickyTotal: sticky.length,
+  };
+}"""
+
+
+# A continuous scroll, sampled every frame, run entirely inside the page.
+#
+# Caleb, 2026-09-23: "Could we make it do a constant scroll so you can extract
+# the exact animations?" He is right and it is the better instrument. Discrete
+# jumps sample N points and miss everything between them, so a scroll-linked
+# transform reads as N unrelated values rather than as a curve. Stepping the
+# scroll a few pixels per animation frame and recording each one gives the
+# actual interpolation, which is what you need to tell a scroll-LINKED
+# animation from one that merely fired somewhere during the scroll.
+#
+# It runs as a single evaluate rather than a round trip per sample, because
+# 600 round trips would take minutes and the driving would dominate the
+# measurement. Smooth-scroll libraries interpolate toward a target, so the
+# recorded scrollY is what the page actually reached, never what was asked for.
+FILM_JS = """(opts) => new Promise((resolve) => {
+  const { perFrame, maxFrames, trackN } = opts;
+  const frames = [];
+
+  // A stable sample of sizeable elements, picked once so the same elements
+  // are followed the whole way down. Re-querying per frame would follow
+  // whatever happens to be on screen and make the columns meaningless.
+  const tracked = [...document.querySelectorAll("body *")]
+    .filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.width > 80 && r.height > 40;
+    })
+    .slice(0, trackN)
+    .map((el, i) => ({ el, id: i, tag: el.tagName.toLowerCase(),
+                       cls: (el.className || "").toString().slice(0, 28) }));
+
+  let n = 0;
+  const step = () => {
+    const cs = tracked.map(t => {
+      const st = getComputedStyle(t.el);
+      const r = t.el.getBoundingClientRect();
+      return {
+        id: t.id,
+        o: +(+st.opacity).toFixed(3),
+        t: st.transform === "none" ? null : st.transform.slice(0, 44),
+        top: Math.round(r.top),
+        vis: r.bottom > 0 && r.top < window.innerHeight ? 1 : 0,
+      };
+    });
+
+    frames.push({
+      f: n,
+      y: Math.round(window.scrollY),
+      anims: document.getAnimations().length,
+      // Cheap shape signal: how much text is on screen. This is what catches
+      // a scene that re-renders instead of animating.
+      textOn: [...document.querySelectorAll("body *")].filter(e => {
+        if (e.children.length) return false;
+        const r = e.getBoundingClientRect();
+        return r.top < window.innerHeight && r.bottom > 0 && e.textContent.trim();
+      }).length,
+      svg: document.querySelectorAll("svg *").length,
+      el: cs,
+    });
+
+    n += 1;
+    const atEnd = window.scrollY + window.innerHeight >=
+                  document.documentElement.scrollHeight - 2;
+    if (n >= maxFrames || atEnd) {
+      resolve({ frames, tracked: tracked.map(t => ({ id: t.id, tag: t.tag, cls: t.cls })) });
+      return;
+    }
+    window.scrollBy(0, perFrame);
+    requestAnimationFrame(step);
+  };
+
+  window.scrollTo(0, 0);
+  requestAnimationFrame(() => requestAnimationFrame(step));
+})"""
+
+FILM_PX_PER_FRAME = 9      # ~540px/sec at 60fps: slow enough that a 300ms
+                           # transition spans ~18 frames and reads as a curve.
+FILM_MAX_FRAMES = 2600     # ~23kpx of travel, past the tallest page measured.
+FILM_TRACK_N = 26          # Columns in the film. More is unreadable, fewer
+                           # misses the element carrying the effect.
+
+SCROLL_STEPS = 12          # 13 samples end to end, enough to see a pinned
+                           # scene build without a screenshot per pixel.
+
 FOCUSABLE = ("a[href]", "button", "input", "select", "textarea", "[tabindex]",
              "[role=button]", "summary")
 
@@ -101,8 +218,12 @@ def capture(page, name, out_dir, cap=900):
         styles = page.evaluate(STYLES_JS, cap)
     except Exception:
         styles = []
+    try:
+        shape = page.evaluate(SHAPE_JS)
+    except Exception:
+        shape = {}
     return {"state": name, "animations": anims, "styles": styles,
-            "shot": shot.name if shot else None}
+            "shape": shape, "shot": shot.name if shot else None}
 
 
 def drive(page, out_dir, states, settle, skipped):
@@ -115,6 +236,62 @@ def drive(page, out_dir, states, settle, skipped):
     looked successful.
     """
     obs = [capture(page, "load", out_dir)]
+
+    if "film" in states:
+        # The continuous version. Produces one row per animation frame rather
+        # than one per stop, so a scroll-linked curve is visible as a curve.
+        try:
+            film = page.evaluate(
+                FILM_JS,
+                {"perFrame": FILM_PX_PER_FRAME, "maxFrames": FILM_MAX_FRAMES,
+                 "trackN": FILM_TRACK_N},
+            )
+            (out_dir / "film.json").write_text(json.dumps(film))
+            f = film.get("frames", [])
+            print(f"  film            {len(f):>4} frames   "
+                  f"{f[-1]['y'] if f else 0}px travelled")
+        except Exception as e:                            # noqa: BLE001
+            skipped.append(f"film: {type(e).__name__} {str(e)[:60]}")
+        try:
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(300)
+        except Exception:
+            pass
+
+    if "scroll" in states:
+        # The hole this tool documented about itself and then kept.
+        # motion/measured-motion.md: "ux-viewer motion currently has exactly
+        # this hole: it watches the entrance and nothing else." Everything
+        # interesting about a modern landing page happens past the entrance,
+        # and on 2026-09-23 the whole of uselemma.ai's scroll choreography had
+        # to be reverse-engineered by hand because this could not reach it.
+        #
+        # Walks the document in even steps and captures at each. Settle is
+        # longer than the other states because smooth-scroll libraries like
+        # Lenis interpolate, so sampling immediately reads the previous frame.
+        try:
+            doc_h = page.evaluate("document.documentElement.scrollHeight")
+            vh = page.evaluate("window.innerHeight")
+            span = max(0, doc_h - vh)
+        except Exception as e:                            # noqa: BLE001
+            span = 0
+            skipped.append(f"scroll: measure {type(e).__name__}")
+        if span > 0:
+            for i in range(SCROLL_STEPS + 1):
+                y = round(span * i / SCROLL_STEPS)
+                try:
+                    page.evaluate(f"window.scrollTo(0, {y})")
+                    page.wait_for_timeout(max(settle, 500))
+                    obs.append(capture(page, f"scroll-{i:02d}", out_dir, cap=220))
+                except Exception as e:                    # noqa: BLE001
+                    skipped.append(f"scroll {y}: {type(e).__name__} {str(e)[:50]}")
+            try:
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(300)
+            except Exception:
+                pass
+        else:
+            skipped.append("scroll: page does not scroll")
 
     if "hover" in states:
         # Most motion in a real system lives on hover, and a load-only crawl
@@ -193,7 +370,7 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("url")
     ap.add_argument("--out", default=None)
-    ap.add_argument("--states", default="hover,focus,submit,narrow,reduced")
+    ap.add_argument("--states", default="film,hover,focus,submit,narrow,reduced")
     ap.add_argument("--settle", type=int, default=3000)
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--height", type=int, default=900)

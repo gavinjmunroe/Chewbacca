@@ -134,44 +134,177 @@ FILM_JS = """(opts) => new Promise((resolve) => {
   const { perFrame, maxFrames, trackN } = opts;
   const frames = [];
 
-  // A stable sample of sizeable elements, picked once so the same elements
-  // are followed the whole way down. Re-querying per frame would follow
-  // whatever happens to be on screen and make the columns meaningless.
-  const tracked = [...document.querySelectorAll("body *")]
-    .filter(el => {
-      const r = el.getBoundingClientRect();
-      return r.width > 80 && r.height > 40;
-    })
-    .slice(0, trackN)
-    .map((el, i) => ({ el, id: i, tag: el.tagName.toLowerCase(),
-                       cls: (el.className || "").toString().slice(0, 28) }));
+  // ---- WHAT ANIMATES, not how many things animate ----------------------
+  // The first version recorded document.getAnimations().length: a count.
+  // A count cannot tell you that 48 paths are running a stroke-dashoffset
+  // draw at 800ms linear with an 18ms stagger, which is the entire mechanism
+  // behind a site resolving 214 animations at load. Caleb, 2026-09-23: "your
+  // scraper is completely missing the svg animations."
+  const animDigest = () => {
+    const byName = {};
+    let dash = 0, transform = 0, opacity = 0, infinite = 0;
+    for (const a of document.getAnimations()) {
+      const t = a.effect && a.effect.getComputedTiming ? a.effect.getComputedTiming() : {};
+      const name = a.animationName || a.transitionProperty || a.constructor.name;
+      const el = a.effect && a.effect.target;
+      const rec = byName[name] || (byName[name] = {
+        n: 0, dur: t.duration, iter: t.iterations, ease: t.easing,
+        delays: [], tags: {}, props: {},
+      });
+      rec.n += 1;
+      if (rec.delays.length < 6) rec.delays.push(Math.round(t.delay || 0));
+      if (t.iterations === null || t.iterations === Infinity) infinite += 1;
+      if (el && el.tagName) {
+        const tag = el.tagName.toLowerCase();
+        rec.tags[tag] = (rec.tags[tag] || 0) + 1;
+      }
+      // Which properties the keyframes actually touch. This is the part that
+      // names a draw-on as a draw-on.
+      try {
+        for (const kf of a.effect.getKeyframes()) {
+          for (const k in kf) {
+            if (k === "offset" || k === "computedOffset" || k === "easing") continue;
+            rec.props[k] = 1;
+            if (k === "strokeDashoffset" || k === "strokeDasharray") dash += 1;
+            if (k === "transform") transform += 1;
+            if (k === "opacity") opacity += 1;
+          }
+        }
+      } catch (e) { /* CSS animations can refuse getKeyframes */ }
+    }
+    for (const k in byName) byName[k].props = Object.keys(byName[k].props);
+    return { total: document.getAnimations().length, infinite, dash, transform, opacity, byName };
+  };
+
+  // ---- WHICH ELEMENTS TO FOLLOW ----------------------------------------
+  // The first version took the first N elements over 80x40px, which selects
+  // headers, nav bars and section wrappers: exactly the things that do not
+  // move. SVG primitives are almost always under that threshold, so the
+  // sampler could not see a single one.
+  //
+  // Now: everything currently animating, first, then SVG primitives, then
+  // large boxes to fill the rest. Animating elements are the point.
+  const animatingEls = new Set();
+  for (const a of document.getAnimations()) {
+    const el = a.effect && a.effect.target;
+    if (el && el.nodeType === 1) animatingEls.add(el);
+  }
+  const svgPrims = [...document.querySelectorAll("svg path, svg circle, svg line, svg rect, svg polyline, svg g")];
+  const boxes = [...document.querySelectorAll("body *")].filter(el => {
+    const r = el.getBoundingClientRect();
+    return r.width > 80 && r.height > 40;
+  });
+
+  const picked = [];
+  const seen = new Set();
+  const take = (list, cap) => {
+    // Stride rather than slice, so a 2,800-primitive drawing contributes a
+    // spread across the whole figure instead of its first few paths.
+    const stride = Math.max(1, Math.floor(list.length / cap));
+    for (let i = 0; i < list.length && picked.length < trackN; i += stride) {
+      const el = list[i];
+      if (seen.has(el)) continue;
+      seen.add(el);
+      picked.push(el);
+    }
+  };
+  take([...animatingEls], Math.round(trackN * 0.5));
+  take(svgPrims, Math.round(trackN * 0.3));
+  take(boxes, trackN);
+
+  const tracked = picked.map((el, i) => ({
+    el, id: i,
+    tag: el.tagName.toLowerCase(),
+    cls: (el.getAttribute && el.getAttribute("class") || "").toString().slice(0, 28),
+    svg: !!el.ownerSVGElement,
+  }));
 
   let n = 0;
   const step = () => {
     const cs = tracked.map(t => {
       const st = getComputedStyle(t.el);
       const r = t.el.getBoundingClientRect();
-      return {
+      const rec = {
         id: t.id,
         o: +(+st.opacity).toFixed(3),
         t: st.transform === "none" ? null : st.transform.slice(0, 44),
         top: Math.round(r.top),
         vis: r.bottom > 0 && r.top < window.innerHeight ? 1 : 0,
       };
+      // SVG-only channels. Without these a draw-on is invisible to the
+      // capture, because nothing about opacity or transform changes while a
+      // path draws itself in.
+      if (t.svg) {
+        const off = parseFloat(st.strokeDashoffset);
+        if (!Number.isNaN(off)) rec.dashOff = +off.toFixed(4);
+        const w = parseFloat(st.strokeWidth);
+        if (!Number.isNaN(w)) rec.sw = +w.toFixed(3);
+        if (st.fill && st.fill !== "none") rec.fill = st.fill.slice(0, 24);
+        if (st.stroke && st.stroke !== "none") rec.stroke = st.stroke.slice(0, 24);
+
+        // GEOMETRY. The channel that was missing entirely, and the reason a
+        // six-stage transformation read as nothing: a grid of rects that
+        // SPREAD APART, then SHRINK AND ROTATE INTO DIAMONDS, changes none of
+        // opacity, transform or dashoffset. It changes its own width, height,
+        // radius and position, and those live on the element's own geometry
+        // rather than in its computed style. A capture blind to them reports
+        // a shape morph as a static element.
+        try {
+          const b = t.el.getBBox ? t.el.getBBox() : null;
+          if (b) {
+            rec.bw = +b.width.toFixed(2);
+            rec.bh = +b.height.toFixed(2);
+            rec.bx = +b.x.toFixed(2);
+            rec.by = +b.y.toFixed(2);
+          }
+        } catch (e) { /* getBBox throws on an unrendered element */ }
+        // The authored attributes too, because an animated `width` attribute
+        // and an animated transform produce the same bbox and are different
+        // techniques to copy.
+        for (const a of ["width", "height", "rx", "ry", "r", "x", "y", "d", "points"]) {
+          const v = t.el.getAttribute && t.el.getAttribute(a);
+          if (v != null) rec["a_" + a] = a === "d" || a === "points"
+            ? v.length                 // path data: track its LENGTH, since a
+                                       // morph changes it and storing every
+                                       // frame's full path blows the file up
+            : (isNaN(+v) ? v.slice(0, 16) : +(+v).toFixed(2));
+        }
+      }
+
+      // Colour, for any element. The reference's grid goes solid-fill, then
+      // outline, then a red bloom, then a wash: four states that are pure
+      // fill and border changes with no motion at all.
+      if (st.backgroundColor && st.backgroundColor !== "rgba(0, 0, 0, 0)")
+        rec.bg = st.backgroundColor.slice(0, 24);
+      if (st.borderTopColor && st.borderTopWidth !== "0px")
+        rec.bc = st.borderTopColor.slice(0, 24);
+      return rec;
     });
 
     frames.push({
       f: n,
       y: Math.round(window.scrollY),
-      anims: document.getAnimations().length,
-      // Cheap shape signal: how much text is on screen. This is what catches
-      // a scene that re-renders instead of animating.
+      a: animDigest(),
       textOn: [...document.querySelectorAll("body *")].filter(e => {
         if (e.children.length) return false;
         const r = e.getBoundingClientRect();
         return r.top < window.innerHeight && r.bottom > 0 && e.textContent.trim();
       }).length,
       svg: document.querySelectorAll("svg *").length,
+      // Per-SVG child census. The reference holds 42 rects constant while its
+      // text count goes 33 to 51: one number per svg is what makes that
+      // legible, and the page-wide total hides it.
+      svgs: [...document.querySelectorAll("svg")].slice(0, 8).map(sv => ({
+        r: sv.querySelectorAll("rect").length,
+        p: sv.querySelectorAll("path").length,
+        c: sv.querySelectorAll("circle").length,
+        t: sv.querySelectorAll("text").length,
+        g: sv.querySelectorAll("g").length,
+        vb: sv.getAttribute("viewBox"),
+      })),
+      // A scene that unmounts is a scroll effect, and counting live nodes is
+      // the only way to see it.
+      nodes: document.querySelectorAll("body *").length,
       el: cs,
     });
 
@@ -179,7 +312,7 @@ FILM_JS = """(opts) => new Promise((resolve) => {
     const atEnd = window.scrollY + window.innerHeight >=
                   document.documentElement.scrollHeight - 2;
     if (n >= maxFrames || atEnd) {
-      resolve({ frames, tracked: tracked.map(t => ({ id: t.id, tag: t.tag, cls: t.cls })) });
+      resolve({ frames, tracked: tracked.map(t => ({ id: t.id, tag: t.tag, cls: t.cls, svg: t.svg })) });
       return;
     }
     window.scrollBy(0, perFrame);
@@ -193,8 +326,9 @@ FILM_JS = """(opts) => new Promise((resolve) => {
 FILM_PX_PER_FRAME = 9      # ~540px/sec at 60fps: slow enough that a 300ms
                            # transition spans ~18 frames and reads as a curve.
 FILM_MAX_FRAMES = 2600     # ~23kpx of travel, past the tallest page measured.
-FILM_TRACK_N = 26          # Columns in the film. More is unreadable, fewer
-                           # misses the element carrying the effect.
+FILM_TRACK_N = 60          # Half animating elements, then SVG primitives, then
+                           # large boxes. 26 was too few once SVG children were
+                           # eligible, and the drawing is where the effect lives.
 
 SCROLL_STEPS = 12          # 13 samples end to end, enough to see a pinned
                            # scene build without a screenshot per pixel.

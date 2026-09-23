@@ -36,6 +36,7 @@ everything is not four times as good as one that violates a few things well,
 and this tool says so rather than ranking on surprise alone.
 """
 import argparse
+import importlib.machinery
 import importlib.util
 import json
 import pathlib
@@ -43,7 +44,14 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("uxslop", ROOT / "bin" / "ux-slop")
+spec = importlib.util.spec_from_file_location(
+    "uxslop", ROOT / "bin" / "ux-slop",
+    # Tools in bin/ are extensionless on purpose, and spec_from_file_location
+    # infers its loader from the extension. Without naming the loader it
+    # returns None and the next line dies on NoneType.loader, which is how
+    # both of these tools were dead on arrival.
+    loader=importlib.machinery.SourceFileLoader("uxslop", str(ROOT / "bin" / "ux-slop")),
+)
 uxslop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(uxslop)
 

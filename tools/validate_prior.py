@@ -22,9 +22,16 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "bin"))
 sys.path.insert(0, str(ROOT / "tools"))
+import importlib.machinery
 import importlib.util  # noqa: E402
 
-spec = importlib.util.spec_from_file_location("uxslop", ROOT / "bin" / "ux-slop")
+spec = importlib.util.spec_from_file_location(
+    "uxslop", ROOT / "bin" / "ux-slop",
+    # Same bug as bin/ux-boden: bin/ tools are extensionless on purpose, and
+    # spec_from_file_location infers its loader from the extension, so without
+    # this it returns None and the next line dies on NoneType.loader.
+    loader=importlib.machinery.SourceFileLoader("uxslop", str(ROOT / "bin" / "ux-slop")),
+)
 uxslop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(uxslop)
 

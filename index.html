@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ux-engine</title>
+<meta name="description" content="Extract what a website actually does, not what its stylesheet says." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="src/styles.css" />
+</head>
+<body>
+
+<!-- Chrome. Their nav is a plain bar and the announcement strip sits UNDER it,
+     which is the opposite of the usual order and keeps the brand line at the
+     very top of the document. -->
+<nav class="nav">
+  <a class="brand" href="#top">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <span class="brand-name">ux-engine</span>
+  </a>
+  <div class="nav-links">
+    <a href="#what">Docs</a><a href="#what">Corpus</a><a href="#proof">Findings</a><a href="#close">Changelog</a>
+  </div>
+  <div class="nav-cta">
+    <a class="btn btn-ghost" href="#close">Read the notes</a>
+    <a class="btn btn-solid" href="#close">Run it</a>
+  </div>
+</nav>
+
+<div class="strip" role="status">
+  <span class="strip-dot" aria-hidden="true"></span>
+  <span>Film mode records every animation frame. <a href="#what">See what it found</a></span>
+</div>
+
+<!-- THE PINNED RUN.
+     Their first sticky container has a parent of 10,800px against a 900px
+     viewport, so twelve screens of scroll with one screen held still. 81% of
+     their page is pinned. This is 12 viewports for the same reason: the scene
+     machine is the whole reason their page catches you off guard, and a short
+     pin just reads as a sticky header. -->
+<main id="top" class="run" data-scenes="4">
+  <div class="pin">
+
+    <!-- Scene 0. Entrance order follows READING order: badge, headline line
+         one, line two, subhead, buttons, then the plates last. -->
+    <section class="scene scene-hero" data-scene="0">
+      <!-- Scattered, overlapping, size-varied, bleeding off the right edge.
+           Occlusion is the depth cue, so the plates must cross each other
+           rather than sit in a grid. -->
+      <div class="scatter" data-enter="5" aria-hidden="true"></div>
+
+      <div class="col col-centre hero-col">
+        <p class="eyebrow" data-enter="0">Runtime, not stylesheets</p>
+        <h1 class="display centre">
+          <span data-enter="1">Stop reading</span>
+          <span data-enter="2">what a site claims</span>
+        </h1>
+        <p class="lede centre" data-enter="3">
+          Drive the interface, record every frame, and label what each element
+          actually does. Grepping a stylesheet gave two tidy durations. The
+          runtime had eight, and three infinite loops.
+        </p>
+        <div class="row row-centre" data-enter="4">
+          <a class="btn btn-solid" href="#what">See a capture</a>
+          <a class="btn btn-ghost" href="#proof">Read the findings</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Scene 1. The field. Theirs holds 42 rects constant while the text
+         count goes 33 to 51 and the filled count goes 0 to 9: scroll drives
+         state, nothing animates, and an animation-only capture calls it
+         static. -->
+    <section class="scene" data-scene="1">
+      <div class="col col-wide">
+        <h2 class="display sm">Most of an interface is not on load.</h2>
+        <p class="lede">
+          It is on hover, on press, on scroll, on a failed submit. Every
+          extractor reads the entrance. This one reads the rest.
+        </p>
+      </div>
+      <div class="field" aria-hidden="true"></div>
+    </section>
+
+    <!-- Scene 2. The density trough. Theirs collapses from 124 visible blocks
+         to 8. One idea, enormous, alone. This is the beat a uniformly dense
+         page can never have. -->
+    <section class="scene scene-sparse" data-scene="2">
+      <div class="col col-centre">
+        <p class="eyebrow">The number that started it</p>
+        <p class="giant" data-count="214">214</p>
+        <p class="lede centre">
+          animations resolved on one page at load, against three on ours. Not
+          canvas and not a library: one CSS animation per SVG primitive.
+        </p>
+      </div>
+    </section>
+
+    <!-- Scene 3. Resolution, and density climbs back. -->
+    <section class="scene" data-scene="3">
+      <div class="col">
+        <h2 class="display sm">Five labels, per element.</h2>
+        <p class="lede">
+          Every element gets one: it fires once and holds, it loops on its own
+          clock, it tracks your scroll, it steps because the page re-rendered,
+          or it never moves. Most should never move.
+        </p>
+        <ul class="labels"></ul>
+      </div>
+      <div class="plates plates-small" aria-hidden="true"></div>
+    </section>
+
+  </div>
+
+  <!-- The progress rail. Theirs runs a pulse; this states the beat count so
+       the reader knows how long the pin lasts. -->
+  <div class="rail" aria-hidden="true"></div>
+</main>
+
+<!-- Past the pin, the page resumes normal flow. Their second sticky is 4
+     viewports; this section is the unpinned counterweight that makes the pin
+     legible as a deliberate device rather than as the whole site. -->
+<section id="what" class="band">
+  <div class="wrap">
+    <p class="eyebrow">What a capture holds</p>
+    <h2 class="display sm">Four states, then every frame of a scroll.</h2>
+    <div class="cards"></div>
+  </div>
+</section>
+
+<section id="proof" class="band band-quiet">
+  <div class="wrap">
+    <p class="eyebrow">Measured, not claimed</p>
+    <h2 class="display sm">What the runtime disagreed about.</h2>
+    <dl class="facts"></dl>
+  </div>
+</section>
+
+<section id="close" class="band band-close">
+  <div class="wrap wrap-narrow">
+    <h2 class="display sm">It reads what the browser resolved.</h2>
+    <p class="lede">
+      A stylesheet says what was written. A computed style says what won. The
+      two disagree often enough that the difference is the whole product.
+    </p>
+    <a class="btn btn-solid" href="#top">Run a capture</a>
+  </div>
+</section>
+
+<footer class="foot">
+  <div class="wrap foot-row">
+    <span>ux-engine</span>
+    <span class="foot-note">
+      A study build. Mechanisms rebuilt from measurement; all copy and artwork
+      original.
+    </span>
+  </div>
+</footer>
+
+<script type="module" src="src/app.js"></script>
+</body>
+</html>

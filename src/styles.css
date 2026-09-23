@@ -1,0 +1,342 @@
+/* Tokens at their measured values.
+ *
+ * Structural numbers were read off the live page with ux-crawl and direct
+ * runtime inspection. The accent hue is ours; everything about how the accent
+ * is USED is theirs, because that is where the lesson lives.
+ */
+:root {
+  /* Canvas is 242, not 255. Every extracted system in the corpus refuses pure
+   * white and pure black independently. */
+  --canvas: #f2f2f2;
+  --ink: #16151c;
+  --ink-2: #55525f;
+  --ink-3: #8b8797;
+
+  /* One accent, in four named places: brand mark, primary CTA, focus ring,
+   * and the generative line work. Nowhere else. */
+  --accent: #2f6d4f;
+  --accent-soft: color-mix(in srgb, var(--accent) 45%, transparent);
+  --accent-faint: color-mix(in srgb, var(--accent) 16%, transparent);
+
+  --line: color-mix(in srgb, var(--ink) 12%, transparent);
+
+  /* 4px scale. Picking from eight options is reproducible; picking from
+   * infinite pixels is not. */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 96px;
+
+  --gutter: clamp(20px, 5vw, 56px);
+
+  /* Display stays at weight 400-600 and never 700+. Heavy display type is the
+   * loudest amateur tell, and Warp, Cursor and Supabase all ban it outright. */
+  --display: clamp(2.6rem, 1.4rem + 4.6vw, 5.2rem);
+  --display-sm: clamp(1.8rem, 1.2rem + 2.2vw, 3rem);
+  --giant: clamp(6rem, 3rem + 14vw, 15rem);
+
+  --sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 17px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ===== Type ===== */
+.display {
+  font-size: var(--display);
+  font-weight: 500;
+  line-height: 0.98;
+  letter-spacing: -0.032em;
+  margin: 0;
+  text-wrap: balance;
+}
+.display.sm { font-size: var(--display-sm); letter-spacing: -0.026em; line-height: 1.04; }
+.display span { display: block; }
+
+.lede { max-width: 58ch; color: var(--ink-2); margin: var(--s5) 0 0; }
+.lede.centre { margin-inline: auto; text-align: center; }
+
+/* Their label spec, exactly: 9px, weight 400, 0.32px tracking, lowercase, and
+ * coloured with the accent rather than a muted grey. The grey is what makes a
+ * caption read as a caption instead of as part of the instrument. */
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0.32px;
+  text-transform: none;
+  color: var(--accent);
+  margin: 0;
+}
+
+.giant {
+  font-size: var(--giant);
+  font-weight: 500;
+  line-height: 0.82;
+  letter-spacing: -0.05em;
+  margin: var(--s5) 0 var(--s4);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* ===== Chrome ===== */
+.nav {
+  display: flex; align-items: center; gap: var(--s6);
+  padding: var(--s4) var(--gutter);
+  position: relative; z-index: 20;
+}
+.brand { display: flex; align-items: center; gap: var(--s2); text-decoration: none; color: inherit; }
+.brand-mark {
+  width: 14px; height: 14px; border-radius: 3px;
+  background: var(--accent);
+}
+.brand-name { font-weight: 600; letter-spacing: -0.01em; }
+.nav-links { display: flex; gap: var(--s5); margin-right: auto; font-size: 15px; }
+.nav-links a { color: var(--ink-2); text-decoration: none; }
+.nav-cta { display: flex; gap: var(--s2); }
+@media (max-width: 52rem) { .nav-links { display: none; } }
+
+/* Press feedback: 100-160ms, scale(0.97), ease-out, and press and release do
+ * not share a duration. Hover gated, or touch fires a false hover on tap. */
+.btn {
+  display: inline-flex; align-items: center;
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.06em;
+  padding: 10px 16px;
+  border-radius: 4px;           /* square-ish. Pills are the generated look. */
+  text-decoration: none;
+  transition: background-color 120ms ease-out, color 120ms ease-out,
+              transform 140ms ease-out;
+}
+.btn-solid { background: var(--ink); color: var(--canvas); }
+.btn-ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-solid:hover { background: var(--accent); }
+  .btn-ghost:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+}
+.btn:active { transform: scale(0.97); transition-duration: 90ms; }
+
+.strip {
+  display: flex; align-items: center; justify-content: center; gap: var(--s2);
+  background: var(--ink); color: var(--canvas);
+  padding: 10px var(--gutter);
+  font-size: 14px;
+  position: relative; z-index: 19;
+}
+.strip a { color: var(--canvas); text-underline-offset: 3px; }
+.strip-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  animation: pulse 2.4s linear infinite;   /* linear: an eased loop pulses */
+}
+@keyframes pulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+/* ===== The pinned run =====
+ * 12 viewports of parent against a one-viewport sticky child, which is their
+ * ratio. Scroll stays one to one and nothing intercepts the wheel. */
+.run { position: relative; height: 1200vh; }
+.pin {
+  position: sticky; top: 0; height: 100vh;
+  display: grid; place-items: center; overflow: hidden;
+}
+.scene {
+  grid-area: 1 / 1;
+  width: min(1200px, 100%);
+  padding-inline: var(--gutter);
+  display: grid; gap: var(--s7);
+  align-content: center;
+  will-change: opacity, transform, filter;
+}
+@media (min-width: 62rem) {
+  /* The plates were `auto` and took 696px of 1040, squeezing the text column
+   * to 344px, so an 83px headline wrapped to four lines. Text leads; the
+   * plates take the remainder and are capped. */
+  .scene { grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr); align-items: center; }
+  .scene > .col { grid-column: 1; }
+  .col-wide, .col-centre { grid-column: 1 / -1; }
+}
+.col-centre { justify-items: center; }
+.col-wide { max-width: 68ch; }
+
+.row { display: flex; gap: var(--s2); margin-top: var(--s6); flex-wrap: wrap; }
+
+.labels { list-style: none; margin: var(--s5) 0 0; padding: 0; display: grid; gap: 1px; }
+.labels li {
+  display: grid; grid-template-columns: 8.5rem 1fr; gap: var(--s4);
+  padding: 10px 0; border-top: 1px solid var(--line);
+  font-size: 15px;
+}
+.labels b {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+  color: var(--accent); font-weight: 500; align-self: center;
+}
+.labels span { color: var(--ink-2); }
+
+.rail {
+  position: sticky; top: 50vh; left: var(--gutter);
+  width: 0; height: 0;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.rail i { display: block; width: 2px; height: 20px; background: var(--accent); transition: opacity 240ms ease; }
+@media (max-width: 62rem) { .rail { display: none; } }
+
+/* ===== Plates =====
+ * No border, no radius, no background, no shadow, 18px padding. The visible
+ * rectangle is drawn inside the SVG. Everything that says "card" removed. */
+.plates { display: grid; gap: var(--s5); grid-template-columns: repeat(2, 1fr);
+          max-width: 460px; margin-left: auto; }
+.plates-small { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 62rem) { .plates { display: none; } }
+
+.plate { padding: 18px; margin: 0; cursor: crosshair; }
+.plate-box {
+  position: relative;
+  box-shadow: inset 0 0 0 1px var(--accent-faint);
+  transition: box-shadow 220ms ease-out, transform 340ms cubic-bezier(.22,.61,.36,1);
+  will-change: transform;
+}
+@media (hover: hover) and (pointer: fine) {
+  .plate:hover .plate-box { box-shadow: inset 0 0 0 1px var(--accent-soft); }
+}
+.plate svg {
+  display: block; width: 100%; height: auto; aspect-ratio: 1; overflow: hidden;
+  /* Their polish detail: the drawing dissolves at the frame instead of being
+   * cut by it. */
+  -webkit-mask-image: linear-gradient(transparent 0%, #000 18%, #000 82%, transparent 100%);
+  mask-image: linear-gradient(transparent 0%, #000 18%, #000 82%, transparent 100%);
+}
+.plate path, .plate line {
+  fill: none; stroke: var(--accent); stroke-width: 0.16;
+  stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  opacity: 0.42;
+}
+.plate circle { fill: var(--accent); opacity: 0; }
+.plate.drawn path, .plate.drawn line {
+  /* 700ms linear. Each line snaps and the stagger does the work: theirs runs
+   * 600-800ms and a 1500ms eased version reads mushy. */
+  animation: draw 700ms linear forwards;
+}
+.plate.drawn circle { animation: pop 380ms ease-out forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+@keyframes pop { from { opacity: 0; transform: scale(.3); transform-origin: center; }
+                 to { opacity: .72; transform: none; } }
+.plate figcaption {
+  display: flex; gap: 8px; margin-top: 10px; align-items: baseline;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 0.32px;
+  color: var(--accent);
+}
+.plate figcaption .code { opacity: 0.55; white-space: nowrap; }
+.plate figcaption .label { opacity: 0.85; }
+
+/* ===== The field ===== */
+.field { grid-column: 1 / -1; }
+.field svg { display: block; width: 100%; height: auto; }
+.field rect {
+  fill: transparent; stroke: var(--accent-soft); stroke-width: 2;
+  transition: fill 240ms ease-out, stroke 240ms ease-out;
+}
+.field rect.on { fill: var(--accent); stroke: var(--accent); }
+.field text { font-family: var(--mono); dominant-baseline: middle; }
+.field .code { font-size: 21px; letter-spacing: 1.4px; fill: var(--accent-soft); }
+.field .word { font-family: var(--sans); font-size: 25px; fill: var(--ink-3); }
+.field .tag  { font-size: 19px; letter-spacing: 2.2px; fill: color-mix(in srgb, #fff 76%, transparent); }
+.field .said { font-family: var(--sans); font-size: 27px; fill: #fff; }
+
+/* ===== Bands past the pin ===== */
+.band { padding-block: var(--s8); border-top: 1px solid var(--line); }
+.band-quiet { background: color-mix(in srgb, var(--ink) 3%, var(--canvas)); }
+.band-close { text-align: center; }
+.wrap { width: min(1200px, 100%); margin-inline: auto; padding-inline: var(--gutter); }
+.wrap-narrow { max-width: 62ch; }
+.band .display { margin-top: var(--s3); }
+.band-close .btn { margin-top: var(--s6); }
+
+.cards { display: grid; gap: 1px; margin-top: var(--s7);
+         grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+         background: var(--line); border: 1px solid var(--line); }
+.cards article { background: var(--canvas); padding: var(--s5); }
+.cards h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.cards p { margin: 0; color: var(--ink-2); font-size: 14px; }
+
+.facts { margin: var(--s7) 0 0; display: grid; gap: 0; }
+.facts > div { display: grid; grid-template-columns: minmax(0, 1fr) auto auto;
+               gap: var(--s5); padding: 14px 0; border-top: 1px solid var(--line);
+               align-items: baseline; }
+.facts dt { color: var(--ink-2); font-size: 15px; }
+.facts dd { margin: 0; font-family: var(--mono); font-size: 14px;
+            font-variant-numeric: tabular-nums; }
+.facts .was { color: var(--ink-3); text-decoration: line-through; }
+.facts .is { color: var(--accent); }
+
+.foot { border-top: 1px solid var(--line); padding-block: var(--s6); }
+.foot-row { display: flex; justify-content: space-between; gap: var(--s5);
+            flex-wrap: wrap; font-size: 13px; color: var(--ink-3); }
+.foot-note { max-width: 46ch; }
+
+/* Entrance: transform and opacity only, under 300ms, ordered by READING
+   order rather than DOM position. */
+[data-enter] { opacity: 0; transform: translateY(14px); }
+[data-enter].in { opacity: 1; transform: none;
+  transition: opacity 280ms ease-out, transform 280ms cubic-bezier(.22,.61,.36,1); }
+
+/* Reduce, do not delete. The fade stays, the travel goes, the pin unpins. */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .run { height: auto; }
+  .pin { position: static; height: auto; display: block; }
+  .scene { padding-block: var(--s8); opacity: 1 !important;
+           filter: none !important; transform: none !important; }
+  .rail { display: none; }
+  [data-enter] { opacity: 1; transform: none; }
+  .strip-dot, .plate.drawn path, .plate.drawn line { animation: none; }
+  .plate path, .plate line { stroke-dashoffset: 0; }
+  .plate circle { opacity: .72; }
+  .plate-box, .btn { transition: none; }
+}
+
+
+/* ===== The scatter =====
+ * Their hero is centred text with plates thrown across BOTH margins at
+ * different sizes, overlapping each other, several running off the right
+ * edge. Three things a grid cannot do:
+ *
+ *   OCCLUSION. Plates crossing each other is the depth cue. Two overlapping
+ *   frames read as two planes; two tidy neighbours read as one surface.
+ *   SCALE VARIANCE. Theirs run roughly 2.3x from largest to smallest. Equal
+ *   sizes read as a catalogue, and a catalogue has no focal point.
+ *   BLEED. A plate cut by the viewport edge says the field continues past the
+ *   frame. Everything contained inside the frame reads as an illustration of
+ *   a thing rather than a window onto it.
+ */
+.scene-hero { position: relative; grid-template-columns: 1fr !important; }
+.hero-col { position: relative; z-index: 2; max-width: 46rem; margin-inline: auto; text-align: center; }
+.display.centre span { display: block; }
+.row-centre { justify-content: center; }
+
+.scatter { position: absolute; inset: -12vh -6vw; z-index: 1; pointer-events: none; }
+.scatter .plate {
+  position: absolute;
+  pointer-events: auto;
+  /* Each sits on its own plane. The later ones in the DOM are nearer. */
+}
+@media (max-width: 68rem) { .scatter { display: none; } }
+
+/* The header bar above each frame: a second thin rule, offset, which is what
+ * makes a plate read as a plate rather than as a bordered div. */
+.plate-bar {
+  height: 10px;
+  box-shadow: inset 0 0 0 1px var(--accent-faint);
+  border-bottom: 0;
+  margin-bottom: -1px;
+}

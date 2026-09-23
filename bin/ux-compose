@@ -88,6 +88,19 @@ def check(active, static_share=None):
     if static_share is not None and static_share < 0.6:
         fire("static-is-the-default", f"only {static_share:.0%} of elements are STATIC")
 
+    # An effect that claims a contested resource and exploits no principle is
+    # paying a real cost for nothing, which is the checkable definition of
+    # untasteful.
+    contested = {r for r, who in claims.items() if len(who) > 1}
+    for e in effects:
+        if not e.get("exploits") and (set(e["claims"]) & contested):
+            findings.append({
+                "rule": "pays-nothing-back",
+                "detail": f"{e['id']} contends for {'+'.join(set(e['claims']) & contested)} and exploits no principle",
+                "why": "It costs a contested resource and buys no known effect on a reader.",
+                "fix": "Cut it, or name the principle it is there to exploit.",
+            })
+
     return findings, unknown, claims
 
 
@@ -134,6 +147,10 @@ def main():
             print(f"\n  {tag}  {f['rule']}: {f['detail']}")
             print(f"        {f['why']}")
             print(f"        fix: {f['fix']}")
+        bought = sorted({p for e in [BY_ID[a] for a in active if a in BY_ID]
+                           for p in e.get("exploits", [])})
+        if bought:
+            print(f"\n  principles in play: {', '.join(bought)}")
         if not findings:
             print("  composes cleanly.")
         worst = max(worst, len(hard))

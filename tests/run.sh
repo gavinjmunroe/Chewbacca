@@ -91,6 +91,19 @@ if group "chewbacca CLI"; then
   exits  "completion with no shell exits 2" 2 bash "$ROOT/bin/chewbacca" completion
 fi
 
+# Offline reusable math, graphs, and UX evidence. No live service calls.
+if group "learning tools"; then
+  for tool in gtme-math gtme-graph gtme-learning gtme-library clay-fixture-check task-graph ux-learning; do
+    expect "$tool appears in help" "chewbacca $tool" bash "$ROOT/bin/chewbacca" --help
+    check "$tool dispatches" bash "$ROOT/bin/chewbacca" "$tool" --help
+    ln -s "$ROOT/bin/$tool" "$TMP/$tool"
+    check "$tool resolves installed symlink" "$TMP/$tool" --help
+    module="${tool//-/_}"
+    check "$tool unit tests" python3 "$ROOT/tests/test_$module.py"
+  done
+  check "agent-neutral export is current" python3 "$ROOT/tools/agents_md.py" --check
+fi
+
 # ── people ────────────────────────────────────────────────────────────────────
 if group "people"; then
   if ! command -v node >/dev/null 2>&1; then

@@ -36,3 +36,22 @@ Update the relevant map or procedure only from observed behavior. Distinguish do
 Use `clay-fixture-check` to compare an exported CSV with a frozen synthetic fixture. It checks content, not export authenticity or workspace identity. Use `gtme-learning evaluate` for paired holdout results and regression preservation before proposing promotion. Its local declarations do not prove evaluator independence or that a test was sealed in advance. Obtain those receipts separately.
 
 Training note, 2026-09-23: user required mathematical, creative and proprietary standards throughout the workflow after recorded lessons failed to establish reliable transfer. Measure changed behavior and preserve private evidence, rather than equating added instructions with expertise.
+
+
+## Clay correction retained — 2026-09-23
+
+The user requires native Clay enrichment and dynamic, per-row personalized copy
+through the built-in UX engine. Never use Sculptor. Do not replace configured
+Clay columns with agent research or manually drafted copy. Inspect the live UI,
+insert actual source-column tokens, disable each column's Auto-run before saving,
+and verify the saved configuration. Test no more than five selected rows per
+live test; inspect scope before running. Do not send, launch, activate, or
+schedule campaigns. Keep incomplete configuration and unverified outputs explicit.
+
+Retrieve the Clay navigation skill, map, and procedure before exploring again.
+Reuse the existing `docs/LEARNING-TO-ACT.md` design: retain procedure, map,
+preference, and strategy separately; replay before promoting a procedure; infer
+parameters only from multiple observed instances. A UX receipt or graph route
+is a partial learning aid, not a free-form recorder, automatic distiller,
+retrieval engine, registry, or proof of mastery. Preserve failed attempts and
+corrections with private evidence, and share only reviewed generalized lessons.

@@ -20,6 +20,11 @@ can be skipped. Installation is not proof that a hook ran. A successful command
 after a write establishes execution, not correctness. Verify a representative
 refusal and a permitted operation in the actual host before claiming enforcement.
 
+Honor disabled lifecycle hooks and explicit connection choices. Do not run setup,
+re-enable hooks, or change global runtime configuration to apply shared methods.
+A disabled hook stays disabled until the user authorizes its targeted repair and
+live verification. Use ordinary task-scoped checks without claiming enforcement.
+
 Other local agents and browser apps can receive an explicit public instruction
 export. Their hooks, tools and skill discovery remain unverified until adapted.
 A skill's requirements still apply after registration; missing tools need an
@@ -129,6 +134,24 @@ Use the deep-research skill to inspect code, tests and issues alongside papers,
 documentation, videos and practitioner evidence. Record coverage and access gaps;
 downloaded or indexed material must not be reported as read, tested or applied.
 
+## Evidence, math, graphs, and durable learning
+
+Apply `methods/learning.md` across research, coding, UI work, and operations,
+proportional to the decision: a simple action needs an observation and outcome,
+not a formal model. For consequential comparisons state units, assumptions,
+baseline, denominator, uncertainty, and a cheap test that could change the choice.
+Keep source/provenance, entity identity, task dependencies, and UI transitions as
+distinct graphs; use stable IDs and evidence-backed edges when graphs help.
+
+Record useful successes, failures, recovery steps, and proposed improvements in
+private task evidence. Transfer only sanitized, tested recipes with scope and
+failure conditions into shared packages. Verified once does not mean mastered;
+recheck stale UI observations and test transfer on heldout tasks. Use the offline
+`gtme-math`, `gtme-graph`, `gtme-learning`, `gtme-library`, `task-graph`,
+`clay-fixture-check`, and `ux-learning` commands through `chewbacca` or directly.
+See `docs/MATH-GRAPH-CAPABILITIES.md` for their assumptions and platform limits.
+These methods grant no sending, publication, spending, or hook permissions.
+
 ## Private context and second brain
 
 `second-brain/README.md` describes the public operational context and private
@@ -141,10 +164,10 @@ for collaborators, and the voice profile before writing as the user. Facts the u
 provides now take precedence over stale notes. Record completed work only after it
 has happened. Update private notes only within the task's authorized scope, and
 keep secrets and personal facts out of public instructions and generated exports.
-Codex's native SessionStart hook loads the shared live identity, current priorities,
-people, voice, and memory index on startup, resume, and compaction. Global startup
-instructions retain `tools/codex_context.py read` as a fallback when the hook has
-not loaded the briefing. Follow relevant index links for deeper context.
+When enabled and verified, Codex's SessionStart adapter can load shared context.
+Do not assume it ran or re-enable it to obtain context. Read relevant private files
+on demand when the task needs them; do not reread an existing briefing just to
+satisfy a startup convention. Follow relevant index links for deeper context.
 The adapter translates multi-file patches and reply-check feedback to Codex's
 event formats. Private-repository syncs, commits, and pushes require their own
 authorized workflow outside the adapter.

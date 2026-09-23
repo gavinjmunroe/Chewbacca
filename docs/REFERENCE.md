@@ -744,6 +744,8 @@ fires, which is the thing that matters most.
 
 | Extension                                                                                                                  | Layer  | What it does                                                                                    |
 | -------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
+| [skills/gtm-engineering](../skills/gtm-engineering) | Skill | Build and evaluate GTM workflows in Clay: ICP, signals, list building, qualification,… |
+| [skills/clay-navigation](../skills/clay-navigation) | Skill | Navigate Clay directly with the built-in UX engine, configure native enrichment and dynamic… |
 | [skills/agent-setup](../skills/agent-setup)                                                                                | Skill  | Finishing the install steps that need a browser or a permission dialog                          |
 | [skills/asa](../skills/asa)                                                                                                | Skill  | Answer from the A2A Spring 2026 course, 108 hours of workshops on building a business out of…   |
 | [skills/audio-brief](../skills/audio-brief)                                                                                | Skill  | Turn a piece of work into something the user can listen to instead of read.                     |

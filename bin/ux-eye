@@ -90,6 +90,12 @@ DOM_JS = """() => {
       x: r.left, y: r.top, w: r.width, h: r.height,
       tag: el.tagName.toLowerCase(),
       cls: (el.getAttribute("class") || "").slice(0, 30),
+      fs: parseFloat(st.fontSize) || 0,
+      // Stable across shots, so an element can be followed and its
+      // viewport-relative motion measured.
+      key: el.tagName.toLowerCase() + "|" +
+           (el.getAttribute("class") || "") + "|" +
+           (el.textContent || "").trim().slice(0, 24),
     };
     // A text LEAF: has text of its own and no element children.
     const own = el.children.length === 0 && el.textContent.trim().length > 0;
@@ -200,6 +206,7 @@ def analyse(png, dom):
     bad.sort(key=lambda d: d["purity"])
 
     return {
+        "vw": vw, "vh": vh,
         "ink": round(ink, 4),
         "balance": round(bal, 3),
         "centroid": [round(cx), round(cy)],
@@ -207,7 +214,73 @@ def analyse(png, dom):
         "squint_regions": int(nb),
         "illegible": bad,
         "overlaps": overlaps(dom["painted"])[:12],
+        "texts": [{"key": t["key"], "x": round(t["x"], 1), "y": round(t["y"], 1),
+                   "w": round(t["w"], 1), "h": round(t["h"], 1),
+                   "fs": t.get("fs", 0), "text": t["text"]}
+                  for t in dom["texts"]],
     }
+
+
+def pinned_and_clipped(results):
+    """INVARIANT: a pinned element must be contained in the viewport.
+
+    Caleb, 2026-09-23, on a headline cut in half by the top of the screen:
+    "math and design should be able to figure out a way to make ts never
+    happen again."
+
+    It can, because this one is exact. Text clipped by the viewport edge is
+    NORMAL while scrolling: everything is half on screen on its way past. It
+    is a bug only when the element is not moving relative to the viewport,
+    because then it never scrolls into view and simply stays cut forever.
+
+    Pinned is measurable without asking the DOM about `position`: an element
+    whose viewport rect is the same at two different scroll positions is
+    being held there, whatever CSS achieved it. Containment is then just
+    0 <= top and bottom <= viewport height.
+    """
+    seen = {}
+    for m in results:
+        for t in m["texts"]:
+            seen.setdefault(t["key"], []).append((m["y"], t, m["vh"]))
+    out = []
+    for key, obs in seen.items():
+        if len(obs) < 2:
+            continue
+        for (y1, a, vh), (y2, b, _) in zip(obs, obs[1:]):
+            if y2 == y1:
+                continue
+            # Held in place: its viewport y barely moved while the page did.
+            if abs(b["y"] - a["y"]) > 4:
+                continue
+            top, bot = b["y"], b["y"] + b["h"]
+            if top < -1 or bot > vh + 1:
+                cut = max(0 - top, bot - vh)
+                out.append({"key": key, "text": b["text"], "y": y2,
+                            "cut": round(cut, 1), "fs": b.get("fs", 0)})
+                break
+    # Big type first: a clipped headline is the one that reads as broken.
+    return sorted(out, key=lambda d: -d.get("fs", 0))
+
+
+def dead_runs(results, lo):
+    """INVARIANT: no long run of screens with nothing on them.
+
+    A single low-ink screen can be deliberate breathing room. Several in a
+    row is a hole nobody decided on, and ux-eye already flagged one of these
+    as EMPTY while the gate let it through.
+    """
+    runs, cur = [], []
+    for m in results:
+        if m["ink"] < lo:
+            cur.append(m)
+        else:
+            if len(cur) >= 2:
+                runs.append(cur)
+            cur = []
+    if len(cur) >= 2:
+        runs.append(cur)
+    return [{"from": r[0]["y"], "to": r[-1]["y"],
+             "screens": len(r), "ink": min(x["ink"] for x in r)} for r in runs]
 
 
 def verdict(m):

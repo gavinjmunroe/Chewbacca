@@ -31,6 +31,7 @@ of taste at all: unreadable type, collided scenes, a page with no focal
 point. Passing it means the page is not broken, never that it is good.
 """
 
+import importlib.machinery, importlib.util
 import subprocess, sys, os, pathlib, json
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -60,6 +61,12 @@ def main():
         return 2
 
     res = json.loads(data.read_text())
+    sys.path.insert(0, str(HERE))
+    import importlib.util
+    spec = importlib.util.spec_from_loader(
+        "ux_eye", importlib.machinery.SourceFileLoader("ux_eye", str(HERE / "ux-eye")))
+    ux_eye = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ux_eye)
     # Only the failures that are never a matter of taste.
     hard = []
     for m in res:
@@ -71,6 +78,13 @@ def main():
         if bad:
             hard.append(f"y={m['y']}: {bad[0]['a']} collides with "
                         f"{bad[0]['b']} over {int(bad[0]['share']*100)}%")
+
+    for c in ux_eye.pinned_and_clipped(res):
+        hard.append(f"y={c['y']}: PINNED AND CLIPPED, cut {c['cut']}px "
+                    f"at {c['fs']:.0f}px: \"{c['text'][:44]}\"")
+    for d in ux_eye.dead_runs(res, ux_eye.INK_LO):
+        hard.append(f"y={d['from']}-{d['to']}: {d['screens']} screens of "
+                    f"dead space, min ink {d['ink']}")
 
     if hard:
         print("\nREFUSED. This is not a taste call, these are broken:",

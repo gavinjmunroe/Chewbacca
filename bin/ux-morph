@@ -1,0 +1,193 @@
+#!/usr/bin/env python3
+"""One set of points, rebuilt into meaning after meaning, calculated.
+
+Caleb, 2026-09-23, naming the bar: "Basic fade and move is not tasteful! The
+svgs moving around in seamless calculated ways to build different things each
+representative of something important to the story the page was telling."
+
+That is a HOMOTOPY OVER A SHARED POINT SET, and it is buildable exactly.
+
+  N points exist for the whole page and are never created or destroyed.
+  K configurations, each produced by a different generator and each MEANING
+  something in the argument the page is making. Scroll interpolates between
+  consecutive ones.
+
+Nothing is faded. Nothing is swapped. The same points are always on screen,
+and what changes is what they are arranged INTO. That is why it does not read
+as an animation: it reads as one object thinking.
+
+THE WHOLE DIFFICULTY IS THE CORRESPONDENCE, and it is where taste lives.
+Given configuration A and configuration B, WHICH point becomes which? Pair
+them in index order and the paths cross each other chaotically, every point
+travels further than it needs to, and it reads as noise no matter how good
+both endpoints are. Pair them to minimise total squared travel and every
+point takes the shortest route consistent with the whole set arriving. The
+motion then looks inevitable, which is the feeling being chased.
+
+That is the assignment problem, solved exactly by Hungarian in O(n^3), which
+is the discrete case of optimal transport (Monge, 1781; Kantorovich, 1942).
+
+PROCRUSTES FIRST, WHICH IS THE OTHER HALF. Two configurations can differ by
+nothing but a rotation, and an unaligned morph then spins the entire figure
+for no reason while every point travels a long arc. Solving for the optimal
+rotation first (orthogonal Procrustes, via the SVD of the cross-covariance,
+Kabsch 1976) removes exactly the part of the difference that carries no
+meaning, leaving only the shape change visible.
+
+STAGGER IS DERIVED, NEVER PICKED. A point that must travel twice as far
+starts earlier, so every point ARRIVES together. A uniform stagger makes the
+far points still moving after the near ones have settled, which is what makes
+a morph look like it is buffering.
+"""
+
+import argparse, json, math, sys
+import numpy as np
+from scipy.optimize import linear_sum_assignment
+
+# ---------------------------------------------------------------------------
+# GENERATORS. Each returns N points in [-1, 1]^2 and each MEANS something.
+# A configuration nobody can state the meaning of does not belong in the
+# sequence: that is the difference between this and a screensaver.
+# ---------------------------------------------------------------------------
+
+def grid(n, cols=None):
+    """Order imposed from outside. The catalogue, the table, the known."""
+    cols = cols or max(int(math.sqrt(n)), 1)
+    rows = math.ceil(n / cols)
+    p = []
+    for i in range(n):
+        r, c = divmod(i, cols)
+        p.append([(c / max(cols - 1, 1)) * 2 - 1, (r / max(rows - 1, 1)) * 2 - 1])
+    return np.array(p)
+
+
+def phyllotaxis(n):
+    """Order that emerges from a rule. Vogel 1979, the golden angle.
+
+    137.507 degrees is the only angle giving uniform density with no radial
+    seams, because the golden ratio is the irrational hardest to approximate
+    by rationals, so no arm ever repeats.
+    """
+    g = math.pi * (3 - math.sqrt(5))
+    i = np.arange(n)
+    r = np.sqrt(i / max(n - 1, 1))
+    return np.stack([r * np.cos(i * g), r * np.sin(i * g)], axis=1)
+
+
+def ring(n):
+    """A closed set. Agreement, completion, the loop that returns."""
+    t = np.linspace(0, 2 * math.pi, n, endpoint=False)
+    return np.stack([np.cos(t), np.sin(t)], axis=1)
+
+
+def wave(n, k=3):
+    """A signal in time. Measurement, the thing that varies and is read."""
+    x = np.linspace(-1, 1, n)
+    return np.stack([x, 0.62 * np.sin(x * math.pi * k)], axis=1)
+
+
+def scatter(n, seed=7):
+    """Before the rule is found. Raw observation, unsorted."""
+    rs = np.random.RandomState(seed)
+    return rs.uniform(-1, 1, size=(n, 2))
+
+
+def lens(n, mass=0.34):
+    """A field bending what passes through it. Influence, distortion."""
+    p = phyllotaxis(n)
+    r = np.linalg.norm(p, axis=1, keepdims=True) + 1e-6
+    return p * (1 + mass / (r ** 2 + 0.28))
+
+
+GENS = {"grid": grid, "phyllotaxis": phyllotaxis, "ring": ring,
+        "wave": wave, "scatter": scatter, "lens": lens}
+
+
+def procrustes_align(A, B):
+    """Rotate B onto A. Removes the difference that carries no meaning.
+
+    Kabsch: the optimal rotation is U V^T from the SVD of A^T B, with the
+    determinant corrected so it is a rotation and never a reflection. A
+    reflection would flip the figure, which reads as a completely different
+    object rather than as the same one turning.
+    """
+    Ac = A - A.mean(0)
+    Bc = B - B.mean(0)
+    U, _, Vt = np.linalg.svd(Ac.T @ Bc)
+    d = np.sign(np.linalg.det(U @ Vt))
+    D = np.diag([1.0, d])
+    R = U @ D @ Vt
+    return Bc @ R.T + A.mean(0)
+
+
+def correspond(A, B):
+    """Which point becomes which, minimising total squared travel."""
+    C = ((A[:, None, :] - B[None, :, :]) ** 2).sum(-1)
+    _, col = linear_sum_assignment(C)
+    return col, float(np.sqrt(C[np.arange(len(A)), col]).sum())
+
+
+def build(names, n):
+    cfgs, meanings = [], []
+    for nm in names:
+        cfgs.append(GENS[nm](n))
+        meanings.append(GENS[nm].__doc__.strip().split("\n")[0])
+    # Align every configuration to the one before it, then solve the pairing
+    # and reindex so consecutive arrays are already in morph order.
+    out = [cfgs[0]]
+    total = []
+    for k in range(1, len(cfgs)):
+        aligned = procrustes_align(out[-1], cfgs[k])
+        col, cost = correspond(out[-1], aligned)
+        out.append(aligned[col])
+        # What the pairing bought, against pairing by index.
+        naive = float(np.linalg.norm(out[-2] - aligned, axis=1).sum())
+        total.append((names[k], cost, naive))
+    return out, meanings, total
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--n", type=int, default=260)
+    ap.add_argument("--seq", default="scatter,phyllotaxis,lens,ring,grid",
+                    help="comma-separated configurations, in scroll order")
+    ap.add_argument("--out", default="morph.json")
+    a = ap.parse_args()
+
+    names = [s.strip() for s in a.seq.split(",") if s.strip()]
+    bad = [x for x in names if x not in GENS]
+    if bad:
+        print(f"unknown: {bad}. have: {sorted(GENS)}", file=sys.stderr)
+        return 2
+
+    cfgs, meanings, costs = build(names, a.n)
+
+    print(f"{a.n} points, {len(names)} configurations, "
+          f"{len(names)-1} transitions\n")
+    for nm, mean in zip(names, meanings):
+        print(f"  {nm:<13} {mean}")
+    print("\n  transition          optimal   by index   saved")
+    for nm, cost, naive in costs:
+        save = (1 - cost / naive) * 100 if naive else 0
+        print(f"  -> {nm:<15} {cost:>7.1f}   {naive:>7.1f}   {save:>4.0f}%")
+
+    # Per-point stagger, derived from distance so everything ARRIVES together.
+    payload = {"n": a.n, "seq": names, "meanings": meanings,
+               "configs": [c.round(4).tolist() for c in cfgs], "stagger": []}
+    for k in range(len(cfgs) - 1):
+        d = np.linalg.norm(cfgs[k + 1] - cfgs[k], axis=1)
+        far = d.max() or 1.0
+        # Longest traveller starts at 0 and takes the whole window; the
+        # shortest starts latest. Everyone lands on the same frame.
+        payload["stagger"].append((1 - d / far).round(4).tolist())
+
+    with open(a.out, "w") as f:
+        json.dump(payload, f)
+    print(f"\nwrote {a.out}")
+    print("Every point persists across every configuration. Nothing fades.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

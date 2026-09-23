@@ -284,7 +284,27 @@ function sceneMachine(field) {
    * layout entirely rather than sitting at 0.3 on top of the next thing.
    *
    * d runs 0 at this scene's centre to 1 at its neighbour's. */
-  const RAMP = 0.12;
+  /* PARTITION OF UNITY. Two scenes may be mid-crossfade; their opacities
+   * must SUM TO 1 at every scroll position. This has now been wrong twice in
+   * opposite directions, so the constraint is written down rather than tuned.
+   *
+   * Neighbouring scenes always satisfy d_i + d_next = 1 by construction.
+   *
+   *   V1 centred the ramp on d = 1. A scene a full step away sat at 0.5 and
+   *   drew through its neighbour: sum 1.5.
+   *   V2 "fixed" it with a plateau holding full opacity out to d = 0.76.
+   *   But then d_i = 0.4 and d_next = 0.6 are BOTH inside the plateau, so
+   *   both scenes painted at opacity 1: sum 2.0, over half of every
+   *   transition. That is the hero and the next scene rendered on top of
+   *   each other, which is what shipped.
+   *
+   * Centring the crossfade on d = 0.5 makes the sum identically 1. With a
+   * linear ramp of half-width W:
+   *   a_i + a_next = (0.5+W-d)/(2W) + (0.5+W-(1-d))/(2W) = 2W/2W = 1
+   * The plateau survives: a scene is whole until d = 0.5-W and gone by
+   * d = 0.5+W, and its neighbour is exactly the complement.
+   */
+  const W = 0.15;
   const presence = (i, p) => {
     // Centres span END TO END, i/(n-1), not the centre of an equal slice.
     // With slice centres the first scene sits at 12.5% of the run, so at
@@ -292,13 +312,26 @@ function sceneMachine(field) {
     // renders blank. The first scene must be whole before anyone scrolls.
     const centre = i / (n - 1);
     const d = Math.abs(p - centre) * (n - 1);
-    // The ramp must FINISH at d = 1, not straddle it. Centred on d = 1, a
-    // scene one full step away sits at 0.5 and draws straight through its
-    // neighbour, which is what put a 42-cell field behind the headline.
-    if (d <= 1 - RAMP * 2) return 1;
-    if (d >= 1) return 0;
-    return (1 - d) / (RAMP * 2);
+    if (d <= 0.5 - W) return 1;
+    if (d >= 0.5 + W) return 0;
+    return (0.5 + W - d) / (2 * W);
   };
+
+  // The invariant, asserted rather than trusted. Both previous versions
+  // looked correct while reading them; only summing them exposes the fault.
+  if (!STILL) {
+    let worst = 0;
+    for (let k = 0; k <= 400; k++) {
+      const p = k / 400;
+      let sum = 0;
+      for (let i = 0; i < n; i++) sum += presence(i, p);
+      worst = Math.max(worst, Math.abs(sum - 1));
+    }
+    if (worst > 0.01) {
+      throw new Error(`scene presence is not a partition of unity: ` +
+                      `worst |sum-1| = ${worst.toFixed(3)}`);
+    }
+  }
 
   const parallaxEls = STILL ? [] : [...document.querySelectorAll("[data-par]")];
 

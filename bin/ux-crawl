@@ -131,7 +131,7 @@ SHAPE_JS = """() => {
 # measurement. Smooth-scroll libraries interpolate toward a target, so the
 # recorded scrollY is what the page actually reached, never what was asked for.
 FILM_JS = """(opts) => new Promise((resolve) => {
-  const { perFrame, maxFrames, trackN } = opts;
+  const { perFrame, maxFrames, trackN, maxTrack, RESURVEY } = opts;
   const frames = [];
 
   // ---- WHAT ANIMATES, not how many things animate ----------------------
@@ -177,51 +177,83 @@ FILM_JS = """(opts) => new Promise((resolve) => {
   };
 
   // ---- WHICH ELEMENTS TO FOLLOW ----------------------------------------
-  // The first version took the first N elements over 80x40px, which selects
-  // headers, nav bars and section wrappers: exactly the things that do not
-  // move. SVG primitives are almost always under that threshold, so the
-  // sampler could not see a single one.
+  // Two versions of this were wrong, and the second failure is the
+  // interesting one.
   //
-  // Now: everything currently animating, first, then SVG primitives, then
-  // large boxes to fill the rest. Animating elements are the point.
-  const animatingEls = new Set();
-  for (const a of document.getAnimations()) {
-    const el = a.effect && a.effect.target;
-    if (el && el.nodeType === 1) animatingEls.add(el);
-  }
-  const svgPrims = [...document.querySelectorAll("svg path, svg circle, svg line, svg rect, svg polyline, svg g")];
-  const boxes = [...document.querySelectorAll("body *")].filter(el => {
-    const r = el.getBoundingClientRect();
-    return r.width > 80 && r.height > 40;
-  });
-
-  const picked = [];
+  // V1 took the first N elements over 80x40px, which selects headers, nav
+  // bars and section wrappers: exactly the things that do not move. SVG
+  // primitives are almost always under that threshold, so not one was ever
+  // sampled.
+  //
+  // V2 fixed the filter and still saw almost nothing, because it surveyed
+  // ONCE, at scroll zero, before any scrolling. On a page that is 81% pinned
+  // scenes, the only SVG children that exist at that instant are the hero's.
+  // Every drawing that mounts further down was never selectable, which is why
+  // a page running stroke-dashoffset across 48 and 101 paths reported
+  // dashoffset changing on exactly ONE element.
+  //
+  // So the survey now runs again as the page scrolls, adding whatever has
+  // mounted since. An element's first-seen frame is recorded, because on a
+  // page that mounts scenes, WHEN something appears is itself the effect.
+  const tracked = [];
   const seen = new Set();
-  const take = (list, cap) => {
-    // Stride rather than slice, so a 2,800-primitive drawing contributes a
-    // spread across the whole figure instead of its first few paths.
-    const stride = Math.max(1, Math.floor(list.length / cap));
-    for (let i = 0; i < list.length && picked.length < trackN; i += stride) {
-      const el = list[i];
-      if (seen.has(el)) continue;
-      seen.add(el);
-      picked.push(el);
+  let svgKey = 0;
+
+  const survey = (frame) => {
+    const animatingEls = new Set();
+    for (const a of document.getAnimations()) {
+      const el = a.effect && a.effect.target;
+      if (el && el.nodeType === 1 && el.isConnected) animatingEls.add(el);
+    }
+    const svgPrims = [...document.querySelectorAll(
+      "svg path, svg circle, svg line, svg rect, svg polyline, svg polygon, svg ellipse, svg text")];
+    const boxes = [...document.querySelectorAll("body *")].filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.width > 80 && r.height > 40;
+    });
+
+    const take = (list, cap) => {
+      // Stride rather than slice, so a 2,800-primitive drawing contributes a
+      // spread across the whole figure instead of its first few paths.
+      const fresh = list.filter(el => !seen.has(el));
+      const stride = Math.max(1, Math.floor(fresh.length / Math.max(cap, 1)));
+      let added = 0;
+      for (let i = 0; i < fresh.length && added < cap && tracked.length < maxTrack; i += stride) {
+        const el = fresh[i];
+        seen.add(el);
+        tracked.push({
+          el, id: tracked.length, born: frame,
+          tag: el.tagName.toLowerCase(),
+          cls: (el.getAttribute && el.getAttribute("class") || "").toString().slice(0, 28),
+          svg: !!el.ownerSVGElement,
+        });
+        added += 1;
+      }
+    };
+    take([...animatingEls], Math.round(trackN * 0.5));
+    take(svgPrims, Math.round(trackN * 0.4));
+    take(boxes, Math.round(trackN * 0.2));
+
+    // Stamp every svg with a stable key so the child census can be compared
+    // across frames. Sorting the census by size each frame would reorder it
+    // whenever a scene mounts, making every row look like it changed.
+    for (const sv of document.querySelectorAll("svg")) {
+      if (!sv.dataset.uxKey) sv.dataset.uxKey = "s" + (svgKey++);
     }
   };
-  take([...animatingEls], Math.round(trackN * 0.5));
-  take(svgPrims, Math.round(trackN * 0.3));
-  take(boxes, trackN);
 
-  const tracked = picked.map((el, i) => ({
-    el, id: i,
-    tag: el.tagName.toLowerCase(),
-    cls: (el.getAttribute && el.getAttribute("class") || "").toString().slice(0, 28),
-    svg: !!el.ownerSVGElement,
-  }));
+  survey(0);
 
   let n = 0;
   const step = () => {
+    // Re-survey as the page scrolls. A scene 9,000px down does not exist in
+    // the DOM at scroll zero, so without this it can never be followed.
+    if (n > 0 && n % RESURVEY === 0) survey(n);
+
     const cs = tracked.map(t => {
+      // An element from a scene that has since unmounted. Recording it as
+      // zeroes would read as an animation to 0; `gone` says it left.
+      if (!t.el.isConnected) return { id: t.id, gone: 1 };
       const st = getComputedStyle(t.el);
       const r = t.el.getBoundingClientRect();
       const rec = {
@@ -294,14 +326,28 @@ FILM_JS = """(opts) => new Promise((resolve) => {
       // Per-SVG child census. The reference holds 42 rects constant while its
       // text count goes 33 to 51: one number per svg is what makes that
       // legible, and the page-wide total hides it.
-      svgs: [...document.querySelectorAll("svg")].slice(0, 8).map(sv => ({
-        r: sv.querySelectorAll("rect").length,
-        p: sv.querySelectorAll("path").length,
-        c: sv.querySelectorAll("circle").length,
-        t: sv.querySelectorAll("text").length,
-        g: sv.querySelectorAll("g").length,
-        vb: sv.getAttribute("viewBox"),
-      })),
+      // Per-SVG child census. The reference holds 42 rects constant while its
+      // text count goes 33 to 51: one number per svg is what makes that
+      // legible, and the page-wide total hides it.
+      //
+      // This took the FIRST 8 svgs in document order, which on a real page
+      // are the logo and the nav icons: one to three paths each, zero rects.
+      // The 42-rect grid sits far down the document and never made the cut,
+      // so the census ran on every frame and reported nothing but chrome.
+      // Now: every svg carrying real structure, keyed by its stamp so a row
+      // means the same drawing on every frame.
+      svgs: [...document.querySelectorAll("svg")]
+        .map(sv => ({
+          k: sv.dataset.uxKey || "?",
+          r: sv.querySelectorAll("rect").length,
+          p: sv.querySelectorAll("path").length,
+          c: sv.querySelectorAll("circle").length,
+          t: sv.querySelectorAll("text").length,
+          g: sv.querySelectorAll("g").length,
+          vb: sv.getAttribute("viewBox"),
+        }))
+        .filter(x => x.r + x.p + x.c + x.t >= 6)
+        .slice(0, 24),
       // A scene that unmounts is a scroll effect, and counting live nodes is
       // the only way to see it.
       nodes: document.querySelectorAll("body *").length,
@@ -312,7 +358,7 @@ FILM_JS = """(opts) => new Promise((resolve) => {
     const atEnd = window.scrollY + window.innerHeight >=
                   document.documentElement.scrollHeight - 2;
     if (n >= maxFrames || atEnd) {
-      resolve({ frames, tracked: tracked.map(t => ({ id: t.id, tag: t.tag, cls: t.cls, svg: t.svg })) });
+      resolve({ frames, tracked: tracked.map(t => ({ id: t.id, tag: t.tag, cls: t.cls, svg: t.svg, born: t.born })) });
       return;
     }
     window.scrollBy(0, perFrame);
@@ -326,7 +372,17 @@ FILM_JS = """(opts) => new Promise((resolve) => {
 FILM_PX_PER_FRAME = 9      # ~540px/sec at 60fps: slow enough that a 300ms
                            # transition spans ~18 frames and reads as a curve.
 FILM_MAX_FRAMES = 2600     # ~23kpx of travel, past the tallest page measured.
-FILM_TRACK_N = 60          # Half animating elements, then SVG primitives, then
+FILM_RESURVEY = 60         # Re-survey every 60 frames, so ~540px of travel.
+                           # Measured: the reference mounts a new scene roughly
+                           # every 1,350px, so this catches each one about
+                           # twice while it is on screen. Every 10 frames cost
+                           # 4x the survey time and found the same elements.
+FILM_MAX_TRACK = 260       # Ceiling on the growing tracked set. At 60fps the
+                           # per-frame read is the budget: 260 elements x ~14
+                           # channels held frame time under 16ms on the
+                           # reference. Past ~400 the rig drops frames, and a
+                           # dropped frame silently becomes a jump in the data.
+FILM_TRACK_N = 60          # Per survey, not total. Half animating elements,
                            # large boxes. 26 was too few once SVG children were
                            # eligible, and the drawing is where the effect lives.
 
@@ -378,7 +434,8 @@ def drive(page, out_dir, states, settle, skipped):
             film = page.evaluate(
                 FILM_JS,
                 {"perFrame": FILM_PX_PER_FRAME, "maxFrames": FILM_MAX_FRAMES,
-                 "trackN": FILM_TRACK_N},
+                 "trackN": FILM_TRACK_N, "maxTrack": FILM_MAX_TRACK,
+                 "RESURVEY": FILM_RESURVEY},
             )
             (out_dir / "film.json").write_text(json.dumps(film))
             f = film.get("frames", [])

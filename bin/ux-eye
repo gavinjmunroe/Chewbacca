@@ -1,0 +1,290 @@
+#!/usr/bin/env python3
+"""See the page all at once, instead of one element at a time.
+
+WHY THIS EXISTS. ux-crawl measures elements: 260 of them, 14 channels each,
+across 1,885 frames. It is a good instrument and it is structurally incapable
+of noticing that a 300px numeral is sitting on top of a paragraph, because
+nothing is wrong with EITHER element. The numeral is correct. The paragraph
+is correct. The composition is ruined. A per-element instrument cannot see a
+relationship, and taste is almost entirely relationships.
+
+Caleb, 2026-09-23, holding a screenshot of exactly that failure: "maybe you
+need to be able to perceive what is going on in a different way? Chewbacca
+exists outside the ui/ux, it shouldn't be living 1 element at a time?"
+
+He is right, and the research agrees. Treisman's preattentive processing:
+humans extract colour, size, density and orientation across the WHOLE visual
+field in under 250ms, in parallel, before attention lands anywhere. That
+pre-attentive pass is what "it looks wrong" is made of, and it happens before
+anyone has looked at a single element. Itti and Koch made the same thing
+computable as a saliency map. The squint test designers actually use is a
+low-pass filter: blur it until you cannot read, and see whether the hierarchy
+survives.
+
+All three are whole-field operations on a rendered image. So this tool renders
+the page and measures the IMAGE, never the DOM alone.
+
+WHAT IT MEASURES
+
+  LEGIBILITY   For every text box, the purity of the pixels behind it. Clean
+               type on a flat ground leaves one dominant luminance mode. Type
+               sitting on top of other artwork does not. This is the check
+               that catches the numeral on the paragraph.
+
+  OVERLAP      Pairwise intersection of painted boxes where neither contains
+               the other. The whole page at once, not one element at a time.
+
+  BALANCE      Centroid of edge energy against the geometric centre. A page
+               whose visual weight sits 30% off-centre reads as a mistake
+               even when every element in it is placed deliberately.
+
+  SQUINT       Downsample hard, then ask whether one region still dominates.
+               A page with no focal point at squint is mush, and this is
+               measurable before anyone argues about it.
+
+  INK          Painted fraction. 3 to 12% is the working band; over 15% the
+               page is loud no matter what is in it.
+
+Numbers do not have taste. They narrow where to look, and then you look.
+"""
+
+import argparse, json, math, pathlib, sys
+import numpy as np
+from PIL import Image
+from scipy import ndimage
+
+# ---------------------------------------------------------------------------
+# Thresholds. Each one carries what set it, per review-discipline.md.
+# ---------------------------------------------------------------------------
+
+# Fraction of pixels behind a text box that must belong to one luminance mode.
+# Measured on the reference page: body copy over its flat canvas ran 0.71 to
+# 0.94. The replica's paragraph sitting on top of a 300px numeral and a
+# 42-rect grid ran 0.38. Clean type never came near 0.55, and broken type
+# never exceeded it, so the gap is wide and the line sits in the middle.
+BG_PURITY_MIN = 0.55
+
+# Edge-energy centroid offset from centre, as a fraction of viewport. The
+# reference's deliberately asymmetric scatter composition measured 0.09.
+# Anything past 0.20 in testing was an accident every time, never a choice.
+BALANCE_MAX = 0.20
+
+# Squint: the largest surviving region's share of total squint ink. Under
+# this, nothing dominates and the eye has nowhere to land first. The
+# reference's scenes ran 0.34 to 0.61 with a clear focal point each time.
+SQUINT_FOCUS_MIN = 0.18
+
+INK_LO, INK_HI, INK_MAX = 0.03, 0.12, 0.15
+
+DOM_JS = """() => {
+  const painted = [];
+  const texts = [];
+  for (const el of document.querySelectorAll("body *")) {
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    if (r.bottom < 0 || r.top > window.innerHeight) continue;
+    const st = getComputedStyle(el);
+    if (st.visibility === "hidden" || st.opacity === "0" ||
+        st.display === "none") continue;
+    const box = {
+      x: r.left, y: r.top, w: r.width, h: r.height,
+      tag: el.tagName.toLowerCase(),
+      cls: (el.getAttribute("class") || "").slice(0, 30),
+    };
+    // A text LEAF: has text of its own and no element children.
+    const own = el.children.length === 0 && el.textContent.trim().length > 0;
+    if (own) { box.text = el.textContent.trim().slice(0, 48); texts.push(box); }
+    // Painted: draws something of its own, so a bare layout wrapper is not
+    // counted as occluding anything.
+    const paints = (st.backgroundColor && st.backgroundColor !== "rgba(0, 0, 0, 0)")
+      || (st.borderTopWidth !== "0px" && st.borderTopStyle !== "none")
+      || el.tagName === "svg" || el.tagName === "IMG" || own;
+    if (paints) painted.push(box);
+  }
+  return { painted, texts, h: document.documentElement.scrollHeight,
+           vh: window.innerHeight, vw: window.innerWidth };
+}"""
+
+
+def luminance(img):
+    a = np.asarray(img.convert("RGB"), dtype=np.float32)
+    return 0.2126 * a[:, :, 0] + 0.7152 * a[:, :, 1] + 0.0722 * a[:, :, 2]
+
+
+def bg_purity(lum, box, vw, vh):
+    """Fraction of pixels in a text box belonging to one luminance mode.
+
+    Clean type on a flat ground: the ground is one tight mode holding most of
+    the box, with the strokes a small dark minority. Type over artwork: the
+    ground is not one mode, so no single bin dominates.
+    """
+    x0 = max(0, int(box["x"])); y0 = max(0, int(box["y"]))
+    x1 = min(vw, int(box["x"] + box["w"])); y1 = min(vh, int(box["y"] + box["h"]))
+    if x1 - x0 < 8 or y1 - y0 < 6:
+        return None
+    crop = lum[y0:y1, x0:x1]
+    hist, edges = np.histogram(crop, bins=32, range=(0, 255))
+    top = int(np.argmax(hist))
+    # The mode plus its immediate neighbours, since antialiasing smears the
+    # ground across adjacent bins and would otherwise read as impurity.
+    lo, hi = max(0, top - 1), min(len(hist), top + 2)
+    return float(hist[lo:hi].sum() / max(crop.size, 1))
+
+
+def overlaps(painted):
+    """Pairwise box intersections where neither contains the other."""
+    out = []
+    n = len(painted)
+    for i in range(n):
+        a = painted[i]
+        for j in range(i + 1, n):
+            b = painted[j]
+            ix = max(0, min(a["x"] + a["w"], b["x"] + b["w"]) - max(a["x"], b["x"]))
+            iy = max(0, min(a["y"] + a["h"], b["y"] + b["h"]) - max(a["y"], b["y"]))
+            if ix <= 2 or iy <= 2:
+                continue
+            inter = ix * iy
+            aa, ab = a["w"] * a["h"], b["w"] * b["h"]
+            # Containment is nesting, which is normal and not a collision.
+            if inter > 0.92 * min(aa, ab):
+                continue
+            share = inter / min(aa, ab)
+            if share > 0.12:
+                out.append({"a": f"{a['tag']}.{a['cls']}"[:34],
+                            "b": f"{b['tag']}.{b['cls']}"[:34],
+                            "share": round(share, 3),
+                            "px": int(inter)})
+    return sorted(out, key=lambda d: -d["share"])
+
+
+def analyse(png, dom):
+    img = Image.open(png)
+    vw, vh = img.size
+    lum = luminance(img)
+
+    # INK. Deviation from the modal background, which is what "painted"
+    # means on a page whose canvas is not pure white.
+    hist, _ = np.histogram(lum, bins=64, range=(0, 255))
+    mode = (np.argmax(hist) + 0.5) * (255 / 64)
+    ink_mask = np.abs(lum - mode) > 12
+    ink = float(ink_mask.mean())
+
+    # BALANCE. Sobel edge energy, centroid against geometric centre.
+    gx = ndimage.sobel(lum, axis=1); gy = ndimage.sobel(lum, axis=0)
+    energy = np.hypot(gx, gy)
+    tot = energy.sum()
+    if tot > 0:
+        ys, xs = np.mgrid[0:vh, 0:vw]
+        cx = float((energy * xs).sum() / tot); cy = float((energy * ys).sum() / tot)
+        bal = math.hypot((cx - vw / 2) / vw, (cy - vh / 2) / vh)
+    else:
+        cx = cy = 0.0; bal = 0.0
+
+    # SQUINT. Downsample to ~1/16, ask whether one region still dominates.
+    sq = np.asarray(Image.fromarray(ink_mask.astype(np.uint8) * 255)
+                    .resize((max(vw // 16, 8), max(vh // 16, 8)), Image.BOX),
+                    dtype=np.float32) / 255.0
+    blobs, nb = ndimage.label(sq > 0.30)
+    focus = 0.0
+    if nb:
+        sizes = ndimage.sum(sq > 0.30, blobs, range(1, nb + 1))
+        focus = float(sizes.max() / max(sizes.sum(), 1))
+
+    # LEGIBILITY.
+    bad = []
+    for t in dom["texts"]:
+        p = bg_purity(lum, t, vw, vh)
+        if p is not None and p < BG_PURITY_MIN:
+            bad.append({"text": t["text"], "purity": round(p, 3),
+                        "at": [int(t["x"]), int(t["y"])]})
+    bad.sort(key=lambda d: d["purity"])
+
+    return {
+        "ink": round(ink, 4),
+        "balance": round(bal, 3),
+        "centroid": [round(cx), round(cy)],
+        "squint_focus": round(focus, 3),
+        "squint_regions": int(nb),
+        "illegible": bad,
+        "overlaps": overlaps(dom["painted"])[:12],
+    }
+
+
+def verdict(m):
+    out = []
+    if m["illegible"]:
+        w = m["illegible"][0]
+        out.append(f"ILLEGIBLE  {len(m['illegible'])} text box(es) sit on other "
+                   f"content. Worst: {w['purity']} purity, \"{w['text'][:40]}\"")
+    if m["overlaps"] and m["overlaps"][0]["share"] > 0.25:
+        o = m["overlaps"][0]
+        out.append(f"COLLISION  {o['a']} and {o['b']} overlap by "
+                   f"{int(o['share'] * 100)}% of the smaller")
+    if m["balance"] > BALANCE_MAX:
+        out.append(f"LOPSIDED   visual weight {m['balance']} off centre "
+                   f"(limit {BALANCE_MAX})")
+    if m["squint_focus"] < SQUINT_FOCUS_MIN:
+        out.append(f"NO FOCUS   largest squint region is only "
+                   f"{m['squint_focus']} of the ink. Nothing leads.")
+    if m["ink"] > INK_MAX:
+        out.append(f"LOUD       ink {m['ink']} over {INK_MAX}")
+    elif m["ink"] < INK_LO:
+        out.append(f"EMPTY      ink {m['ink']} under {INK_LO}")
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("url")
+    ap.add_argument("--out", default="eye")
+    ap.add_argument("--shots", type=int, default=8,
+                    help="scroll positions to look at, evenly spaced")
+    ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--height", type=int, default=900)
+    a = ap.parse_args()
+
+    from playwright.sync_api import sync_playwright
+    out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
+    results = []
+
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": a.width, "height": a.height})
+        pg.goto(a.url, wait_until="networkidle")
+        pg.wait_for_timeout(1200)
+        total = pg.evaluate("document.documentElement.scrollHeight")
+        span = max(total - a.height, 1)
+        for i in range(a.shots):
+            y = int(span * i / max(a.shots - 1, 1))
+            pg.evaluate(f"window.scrollTo(0, {y})")
+            pg.wait_for_timeout(900)   # let scroll-driven state settle
+            shot = out / f"s{i:02d}.png"
+            pg.screenshot(path=str(shot))
+            dom = pg.evaluate(DOM_JS)
+            m = analyse(shot, dom)
+            m["y"] = y; m["shot"] = str(shot)
+            results.append(m)
+        b.close()
+
+    (out / "eye.json").write_text(json.dumps(results, indent=1))
+
+    fails = 0
+    for m in results:
+        v = verdict(m)
+        head = (f"y={m['y']:<6} ink {m['ink']:<7} balance {m['balance']:<6} "
+                f"focus {m['squint_focus']}")
+        if v:
+            fails += 1
+            print(f"\n{head}")
+            for line in v:
+                print(f"   {line}")
+        else:
+            print(f"{head}   clean")
+    print(f"\n{fails} of {len(results)} positions have something to look at.")
+    print(f"images in {out}/ . Numbers narrow it down; now open them.")
+    return 1 if fails else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

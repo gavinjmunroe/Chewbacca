@@ -482,7 +482,7 @@ function testimonials() {
    frame, the label INSIDE the frame's top-left, and the overlap. The overlap
    is the only depth cue in a flat drawing, and it is what makes six plates
    read as one composition instead of six decorations. */
-import { sphere, crosshatch, hyperboloid, ring, isoCube, dotArch, fit } from "./geometry.js";
+import { sphere, crosshatch, hyperboloid, ring, isoCube, dotField, fit } from "./geometry.js";
 
 const PLATES = [
   { id: "LEM. 1.1", left: "8%",    top: 0,   w: 281, h: 186, fig: "hyper" },
@@ -600,11 +600,9 @@ function figure(kind) {
        them individually: the field fades in as ONE group. A per-circle
        animation on a dense field is invisible anyway, and 700 of them is
        700 compositor entries buying nothing. */
-    /* 2,046 circles on their plate. The count is what makes the arch edge
-       feather instead of ending in a hard line. */
-    inner = `<g data-draw-group>` + dotArch({ cols: 78, rows: 62, w: 80, h: 74 })
-      .map(([x, y, r]) => `<circle cx="${(x + 50).toFixed(2)}" cy="${(y + 50).toFixed(2)}"
-        r="${(r * 0.26).toFixed(2)}" fill="${A}"/>`).join("") + `</g>`;
+    /* Their exact grid: 2,000 circles, both radii, the recovered dither. */
+    inner = `<g data-draw-group>` + dotField({ cols: 40, rows: 50 })
+      .map(([cx, cy, r]) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${A}"/>`).join("") + `</g>`;
   }
   return `<svg viewBox="${VB}" preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
 }

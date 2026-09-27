@@ -284,6 +284,41 @@ export function isoCube({ s = 42 } = {}) {
 /* A dotted field masked to an arch. Dot SIZE carries the gradient, not
    opacity, because the reference's dots stay individually countable at the
    top of the arch where they thin out. */
+/* RECOVERED from the reference's own 2,000 circles, not designed.
+
+   Parsing their plate showed the construction is nothing like what was here
+   before. There is NO arch mask. It is a complete 40 x 50 rectangular grid
+   covering the whole viewBox, x pitch 2.5 from 1.25, y pitch 1.84 from 8.92,
+   and the half-width is 48.75 at every single row.
+
+   The radius takes exactly TWO values, 0.221 and 0.589, split 1158 to 842.
+   The arch you see is a DITHER: the probability of a dot being large rises
+   with depth, from 0.025 in the top row to 0.65 in the bottom, and falls off
+   away from the centre column. The shape is made of probability.
+
+   Fitting individual dots gets R^2 0.117 and 59% classification, barely over
+   chance, because each dot is a random draw. So this reproduces the PROCESS
+   and not the sample: matching their exact dots would be overfitting to one
+   seed of their random number generator, and would look no better.
+
+   p(d) = -1.0125d^2 + 1.4126d + 0.0556 by depth, R^2 0.79 on row means. */
+export function dotField({ cols = 40, rows = 50, seed = 7 } = {}) {
+  const rnd = rng(seed);
+  const out = [];
+  for (let j = 0; j < rows; j++) {
+    const d = j / (rows - 1);                       // depth, 0 top
+    const pDepth = -1.0125 * d * d + 1.4126 * d + 0.0556;
+    for (let i = 0; i < cols; i++) {
+      const u = Math.abs(i - (cols - 1) / 2) / ((cols - 1) / 2);
+      // Falls off from the centre column; clamped because a fitted quadratic
+      // leaves the valid range at the edges.
+      const p = Math.max(0, Math.min(1, pDepth * (1 - 0.55 * u * u)));
+      out.push([1.25 + i * 2.5, 8.92 + j * 1.84, rnd() < p ? 0.589 : 0.221]);
+    }
+  }
+  return out;
+}
+
 export function dotArch({ cols = 30, rows = 24, w = 200, h = 170 } = {}) {
   const out = [];
   for (let r = 0; r < rows; r++) {

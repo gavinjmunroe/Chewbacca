@@ -66,6 +66,19 @@ TABLE = [
     ("good morning what's on my calendar", None),
     ("Give me an entire review on the Holocaust", None),
     ("", None),
+    # The slow "open" requests in the voice log to 2026-09-27, 6.8 s median.
+    ("Open up Google sheets", "open"),
+    ("Open up a Google Chrome window on my monitor screen", "open"),
+    ("Open a chrome window on my laptop screen", "open"),
+    ("Open up a new Google Chrome window and pull up sheets", "open"),
+    ("Open up a new chrome window to get a Google sheet going", "open"),
+    ("Open a new terminal window", "open"),
+    ("Open a new terminal war", "open"),
+    ("Open a new terminal", "open"),
+    # Same verb, and a task or a second half no opener can do.
+    ("OK now open Google sheets and label it Valencia", None),
+    ("Open new Claude window", None),
+    ("Open a bubble", None),
 ]
 
 

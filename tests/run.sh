@@ -1134,6 +1134,8 @@ if group "hud"; then
   check  "ux-do acts on what was meant, asks when unsure, never presses send" python3 "$ROOT/tests/test_ux.py"
   check  "every named Jev decision is logged and joined to what happened" python3 "$ROOT/tests/test_decision_log.py"
   check  "math, time, conversions and weather are computed, never guessed" python3 "$ROOT/tests/test_quick.py"
+  check  "open takes a new terminal, Chrome or Sheets and refuses a task" python3 "$ROOT/tests/test_opener.py"
+  check  "agenda reads today or the week aloud and refuses a task" python3 "$ROOT/tests/test_agenda.py"
   check  "a replayed sentence takes the path the voice would take" python3 "$ROOT/tests/test_fast_path.py"
   check  "reflect harvests both logs, replays them, and writes only when told" python3 "$ROOT/tests/test_reflect.py"
   check  "held-out cases stay hidden from the proposer and can fail a fix" python3 "$ROOT/tests/test_holdout.py"

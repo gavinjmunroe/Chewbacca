@@ -537,6 +537,48 @@ export function rose({ copies = 60, stepDeg = 6.10 } = {}) {
    filled, faded or lifted, which is what the reference does to them. */
 export const ISO_U = [4.0, 1.118];
 export const ISO_V = [-2.237, 1.592];
+/* LEM 2.1, recovered exactly from the reference's 378 tile paths.
+
+   This plate was `isoTiles({cols:36, rows:24})`: a flat rectangular sheet of
+   864 rhombi spanning x -48.8 to 148.8 in a 0..100 box, so more than half of
+   it rendered outside the plate and was clipped. Theirs is not a sheet.
+
+   Reading every tile's `d` attribute and grouping by row gives the whole
+   construction with no fitting involved:
+
+       tile        rhombus, half-width 4, half-height 2
+       rows        y = 29 to 99, one every 2 units, 36 rows
+       rows 0-12   row r holds r+1 tiles, centred on x=50, step 8
+       rows 13-35  full width, alternating 13 tiles from x=2 and 12 from x=6
+       total       91 + 144 + 143 = 378
+
+   So it is an apex at (50,29) widening at a constant 4 units per row until
+   it reaches the plate edge at row 12, then continuing straight down. That
+   is the same pentagon silhouette as 1.3 (60 rotated pentagons) and 2.3 (the
+   automaton's dot field). The pentagon is the motif of the whole plate
+   series, and this plate was the one place we had not noticed it.
+
+   Row 12 needs no special case: the triangle formula at r=12 gives 13 tiles
+   from x=2 to x=98, which is exactly the wide row the lattice then alternates
+   with. The two halves meet without a seam because they are the same lattice. */
+export function meshPentagon() {
+  const HW = 4, HH = 2, ROWS = 36, APEX_ROWS = 12;
+  const centres = [];
+  for (let r = 0; r < ROWS; r++) {
+    const y = 29 + r * 2;
+    if (r <= APEX_ROWS) {
+      for (let i = 0; i <= r; i++) centres.push([50 - 4 * r + 8 * i, y]);
+    } else {
+      const wide = r % 2 === 0;
+      const x0 = wide ? 2 : 6, n = wide ? 13 : 12;
+      for (let i = 0; i < n; i++) centres.push([x0 + 8 * i, y]);
+    }
+  }
+  return centres.map(([x, y]) => [
+    [x, y], [x + HW, y + HH], [x, y + 2 * HH], [x - HW, y + HH], [x, y],
+  ]);
+}
+
 export function isoTiles({ cols = 44, rows = 26, ox = 50, oy = 62 } = {}) {
   const out = [];
   for (let b = 0; b < rows; b++) {

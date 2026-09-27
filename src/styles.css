@@ -280,8 +280,12 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
 .backed .yc { background: #f26625; color: #fff; font-family: var(--sans);
   font-weight: 700; font-size: 10px; width: 13px; height: 13px;
   display: grid; place-items: center; }
-.backed .ycw { color: #f26625; font-family: var(--sans); font-weight: 600;
-  font-size: 11px; letter-spacing: 0; text-transform: none; }
+.backed .ycw { color: var(--muted); font-family: var(--mono); font-weight: 400;
+  font-size: var(--t-10); letter-spacing: 0.08em; text-transform: uppercase; }
+/* A 5px accent dot where the mark used to sit, so the pill keeps the two-part
+   rhythm theirs has instead of collapsing into a single run of text. */
+.backed .dot { width: 5px; height: 5px; border-radius: 50%;
+               background: var(--accent); display: block; }
 
 /* 5. Plates are FRAMED: a hairline purple box with the mono label inside its
       top-left corner. Unframed figures with captions underneath read as

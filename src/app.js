@@ -590,7 +590,7 @@ import { registerHero, registerReveals, startScroll } from "./scroll.js";
 import { sphere, isoTiles, isoCube, fit, rose, rng,
   extrudedCube, cubeSpinAt, CUBE_POINTER_LERP, CUBE_POINTER_YAW, CUBE_POINTER_PITCH,
   rule30, caX, caY, CA_R_LIVE, CA_R_DEAD, CA_R_HIT, caClipHeight, CA_MS_PER_GEN,
-  gravLens, pentagon, sphere3d, tileField } from "./geometry.js";
+  gravLens, pentagon, sphere3d, tileField, meshPentagon } from "./geometry.js";
 
 /* MEASURED 2026-09-27 off the reference at 1280, 1600 and 2456 wide.
 
@@ -649,12 +649,12 @@ function plateScale(vw) {
 }
 
 const PLATES = [
-  { id: "SFT. 1.1", x: 178,  top: -15,  w: 282, h: 202, fig: "lens",   sw: 0.12, op: 0.7  },
-  { id: "SFT. 1.2", x: 1288, top: 39,  w: 158, h: 220, fig: "cube",   sw: 0.25, op: 0.85 },
-  { id: "SFT. 1.3", x: 1111, top: 66,  w: 202, h: 202, fig: "harmo",  sw: 0.15, op: 0.6  },
-  { id: "SFT. 2.1", x: 149,  top: 336, w: 176, h: 202, fig: "mesh",   sw: 0.15, op: 0.5  },
-  { id: "SFT. 2.2", x: 275,  top: 408, w: 202, h: 211, fig: "sphere", sw: 0.2,  op: 0.5  },
-  { id: "SFT. 2.3", x: 1140, top: 354, w: 229, h: 202, fig: "dots",   sw: 1,    op: 0.3  },
+  { id: "SFT. 1.1", pad: "5px 0 0 0", x: 178,  top: -15,  w: 282, h: 202, fig: "lens",   sw: 0.12, op: 0.7  },
+  { id: "SFT. 1.2", pad: "52px 18px 47px", x: 1288, top: 39,  w: 158, h: 220, fig: "cube",   sw: 0.25, op: 0.85 },
+  { id: "SFT. 1.3", pad: "5px 0 0 0", x: 1111, top: 66,  w: 202, h: 202, fig: "harmo",  sw: 0.15, op: 0.6  },
+  { id: "SFT. 2.1", pad: "23px 18px 18px", x: 149,  top: 336, w: 176, h: 202, fig: "mesh",   sw: 0.15, op: 0.5  },
+  { id: "SFT. 2.2", pad: "23px 18px 18px", x: 275,  top: 408, w: 202, h: 211, fig: "sphere", sw: 0.13, op: 0.5  },
+  { id: "SFT. 2.3", pad: "5px 0 0 0", x: 1140, top: 354, w: 229, h: 202, fig: "dots",   sw: 1,    op: 0.3  },
 ];
 
 const A = "#755cfe";
@@ -713,13 +713,30 @@ const VB = "0 0 100 100";
    above it they read the field emerging. */
 const DRAW_PER_ELEMENT_MAX = 60;
 
-function polys(list, sw = 0.55, step = 18, extra = "") {
+/* OPACITY GOES ON THE SHAPE, NEVER ON THE SVG.
+
+   The reference sets it per shape on all six plates and leaves every <svg>
+   at 1. We set the same six values (0.7, 0.85, 0.6, 0.5, 0.5, 0.3) on the
+   <svg> instead, so every number matched and every plate rendered wrong.
+
+   It is a compositing difference, not a bookkeeping one. Per shape, two
+   crossing strokes at 0.6 give 1-(1-0.6)^2 = 0.84, so crossings are darker
+   than single strokes and the lattice is visible. Group opacity composites
+   all 60 shapes into one layer at full alpha FIRST, where every crossing
+   saturates to the same value, then fades the finished layer. The moire is
+   destroyed before the fade is applied.
+
+   That is why the rosette read as a smooth airbrushed donut against their
+   crosshatched one at identical geometry, identical stroke width and
+   identical effective opacity. Measuring the effective value said 0.6 on
+   both sides and could never have found this; the pixels did. */
+function polys(list, sw = 0.55, step = 18, extra = "", op = 1) {
   const shapes = list.map((pts, i) => {
     const pt = pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
     const per = list.length <= DRAW_PER_ELEMENT_MAX
       ? ` data-draw style="animation-delay:${(i * step).toFixed(0)}ms"` : "";
     return `<polyline points="${pt}" pathLength="100"${per} ${extra}
-       fill="none" stroke="${A}" stroke-width="${sw}"/>`;
+       fill="none" stroke="${A}" stroke-width="${sw}" opacity="${op}"/>`;
   }).join("");
   return list.length <= DRAW_PER_ELEMENT_MAX
     ? shapes
@@ -763,7 +780,7 @@ function figure(kind, sw, op) {
        Recovered generator: 48 rays deflected by a Gaussian centred on the
        plate, sigma^2 = 784. Measured waist spread across all 48 midpoints
        was 0.000000, so the crossing is exact rather than approximate. */
-    inner = polys(gravLens({ rays: 48, seg: 60 }), sw, 24);
+    inner = polys(gravLens({ rays: 48, seg: 60 }), sw, 24, "", op);
   } else if (kind === "harmo") {
     /* LEM 1.3: 60 paths. Not a harmonograph trace in the usual sense but 60
        IDENTICAL copies of one closed 5 vertex figure, each rotated 6.10deg
@@ -779,7 +796,8 @@ function figure(kind, sw, op) {
     inner = "<g>" + rose({ copies: 60, stepDeg: 6.10 }).map((r, i) =>
       `<polygon points="${r.pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}"
          transform="rotate(${r.rot} 50 50)" pathLength="100" data-draw fill="none"
-         stroke="${A}" stroke-width="${sw}" style="animation-delay:${i * 19}ms"/>`).join("") + "</g>";
+         stroke="${A}" stroke-width="${sw}" opacity="${op}"
+         style="animation-delay:${i * 19}ms"/>`).join("") + "</g>";
   } else if (kind === "cube") {
     /* Orthographic, 35 deg of yaw and 22 of pitch to start, from the
        reference's own projector. The top face doubles as a clip region.
@@ -800,7 +818,7 @@ function figure(kind, sw, op) {
     const c = extrudedCube({ spin: 35, tilt: 22 });
     const edges = c.edges.map(e =>
       `<line x1="${e.x1.toFixed(2)}" y1="${e.y1.toFixed(2)}" x2="${e.x2.toFixed(2)}" y2="${e.y2.toFixed(2)}"`
-      + ` stroke="${A}" stroke-width="${sw}" pathLength="100" class="cube-edge"/>`).join("");
+      + ` stroke="${A}" stroke-width="${sw}" opacity="${op}" pathLength="100" class="cube-edge"/>`).join("");
     const top = c.topVerts.map(v => `${v.x.toFixed(2)},${v.y.toFixed(2)}`).join(" ");
     inner = `<defs>
         <clipPath id="cube-top"><polygon class="cube-topface" points="${top}"/></clipPath>
@@ -838,9 +856,42 @@ function figure(kind, sw, op) {
        So this is placed at natural scale and allowed to overflow, which is
        also what makes the plane read as continuing past the frame rather
        than as an object sitting inside one. */
-    inner = polys(isoTiles({ cols: 36, rows: 24 }), sw, 1);
+    inner = polys(meshPentagon(), sw, 1, "", op);
   } else if (kind === "sphere") {
-    inner = polys(sphere({ lats: 51, longs: 50, seg: 30 }), sw, 15);
+    /* LEM 2.2. Their path count is 100 plus one <circle>, and ours is 101, so
+       the wireframe itself was never the problem. Three things were:
+
+         stroke     theirs 0.13, ours 0.20. On 101 overlapping curves a 54%
+                    heavier stroke is what turns a wireframe into a dark mat,
+                    and it reads as "too dense" rather than as "too thick".
+         shape      theirs is a true circle: a literal <circle r="38"> at
+                    (50,52), with the wireframe inscribed in it. Ours came out
+                    of fit() as an 80 x 84 ellipse, taller than wide.
+         outline    that circle is a drawn element in its own right at stroke
+                    0.2 and opacity 0.5, heavier than the wireframe inside it.
+                    Without it the globe has no silhouette and the meridians
+                    just stop.
+
+       So the wireframe is inscribed rather than fitted: mapped onto the same
+       r=38 circle at (50,52) the outline uses, which is the only way the two
+       cannot disagree. */
+    const R = 38, CX = 50, CY = 52;
+    const raw = sphere({ lats: 16, longs: 28, seg: 30 });
+    // fit() leaves the set spanning 0..100 on its longer axis; rescale the
+    // whole SET (never each curve) onto the r=38 circle, so relative
+    // positions survive and only the envelope changes.
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const pts of raw) for (const [x, y] of pts) {
+      if (x < x0) x0 = x; if (x > x1) x1 = x;
+      if (y < y0) y0 = y; if (y > y1) y1 = y;
+    }
+    const k = (2 * R) / Math.max(x1 - x0, y1 - y0);
+    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+    const fitted = raw.map((pts) =>
+      pts.map(([x, y]) => [CX + (x - mx) * k, CY + (y - my) * k]));
+    inner = `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${A}"`
+          + ` stroke-width="0.2" opacity="${op}"/>`
+          + polys(fitted, sw, 15, "", op);
   } else if (kind === "dots") {
     /* Rule 30. Recovered from the reference's bundle, where the component is
        named CellularAutomataFigure. 842 live cells and 1158 dead, which is
@@ -863,7 +914,7 @@ function figure(kind, sw, op) {
     inner = `<defs><clipPath id="sift-ca-clip"><rect class="ca-clip" x="0" y="0" width="100" height="0"/></clipPath></defs>`
           + `<g clip-path="url(#sift-ca-clip)">${dead}${live}</g>`;
   }
-  return `<svg viewBox="${VB}" preserveAspectRatio="xMidYMid meet" opacity="${op}">${inner}</svg>`;
+  return `<svg viewBox="${VB}" preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
 }
 
 function plates() {
@@ -875,8 +926,24 @@ function plates() {
     // Positioned inside a centred PLATE_BOX rather than as a percentage of
     // the viewport, so the overlaps hold their pixel relationships at any width.
     const off = (p.x - PLATE_BOX / 2) * plateScale(window.innerWidth);
+    /* THE PLATES ARE NOT ALL THE SAME KIND OF PLATE.
+
+       Ours all had the figure filling the frame, inset only by the 1px
+       border. Measuring the svg box inside each plate on the reference shows
+       two classes and one special case:
+
+           1.1 1.3 2.3   l1  t6  r1  b1    the figure bleeds to the frame,
+                                           with 6px at the top for the caption
+           2.1 2.2       l19 t24 r19 b19   the figure sits in a padded well
+           1.2           l19 t53 r19 b48   a 120x120 square, floated high
+
+       Missing 19px on each side of a 202px plate draws the figure 19% too
+       large, which is why the sphere and the tile field read as oversized
+       and crowded while their internal geometry measured correct. The svg
+       scales to its box, so padding the box is the whole fix. */
     d.style.cssText = `left:calc(50% + ${off.toFixed(1)}px);`
-                    + `top:${p.top}px;width:${p.w}px;height:${p.h}px`;
+                    + `top:${p.top}px;width:${p.w}px;height:${p.h}px;`
+                    + `padding:${p.pad};box-sizing:border-box`;
     /* Exactly ONE plate rotates forever and ONE drifts forever. The
        reference runs 1 infinite transform and 2 infinite dashes across the
        whole page, not a loop per figure: an ambient layer is a background

@@ -777,3 +777,22 @@ section.band h2, .demo-copy h2, .news h2, .cta h2, .issue-title,
   .cube-drawing .cube-edge,
   .cube-drawing g[clip-path] { animation: none; }
 }
+
+/* ---- THE LABEL BOX ----------------------------------------------------
+   Every reference plate carries a div pinned to its top-left corner, 40px
+   tall, holding the label. Mine was bare text at an 8px offset, which is
+   why the plates read as bordered rectangles instead of as labelled panels.
+   Measured off all six of their plates: identical geometry on each. */
+.cap-box {
+  position: absolute; left: 0; top: 0; z-index: 20;
+  height: 40px; padding: 8px; display: flex; align-items: flex-start;
+  pointer-events: auto;
+}
+.cap-box .cap {
+  position: static; margin: 0;
+  font-family: var(--mono);
+  /* 8px, not 10. Read off their span, which also sets the brand colour on
+     the label rather than the muted ink I had been using. */
+  font-size: 8px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--accent);
+}

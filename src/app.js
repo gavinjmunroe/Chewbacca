@@ -529,12 +529,12 @@ import { sphere, isoTiles, isoCube, fit, rose,
 const PLATE_BOX = 1600;
 
 const PLATES = [
-  { id: "LEM. 1.1", x: 178,  top: -9,  w: 282, h: 196, fig: "lens"   },
-  { id: "LEM. 1.2", x: 1288, top: 45, w: 158, h: 214, fig: "cube"   },
-  { id: "LEM. 1.3", x: 1111, top: 72, w: 202, h: 196, fig: "harmo"  },
-  { id: "LEM. 2.1", x: 149,  top: 342, w: 176, h: 196, fig: "mesh"   },
-  { id: "LEM. 2.2", x: 275,  top: 414, w: 202, h: 205, fig: "sphere" },
-  { id: "LEM. 2.3", x: 1140, top: 360, w: 229, h: 196, fig: "dots"   },
+  { id: "LEM. 1.1", x: 178,  top: -9,  w: 282, h: 196, fig: "lens",   sw: 0.12, op: 0.7  },
+  { id: "LEM. 1.2", x: 1288, top: 45,  w: 158, h: 214, fig: "cube",   sw: 0.25, op: 0.85 },
+  { id: "LEM. 1.3", x: 1111, top: 72,  w: 202, h: 196, fig: "harmo",  sw: 0.15, op: 0.6  },
+  { id: "LEM. 2.1", x: 149,  top: 342, w: 176, h: 196, fig: "mesh",   sw: 0.15, op: 0.5  },
+  { id: "LEM. 2.2", x: 275,  top: 414, w: 202, h: 205, fig: "sphere", sw: 0.2,  op: 0.5  },
+  { id: "LEM. 2.3", x: 1140, top: 360, w: 229, h: 196, fig: "dots",   sw: 1,    op: 0.3  },
 ];
 
 const A = "#755cfe";
@@ -586,7 +586,20 @@ function polys(list, sw = 0.55, step = 18, extra = "") {
    rule holds for all of them without exception. */
 function norm(list) { return fit(list); }
 
-function figure(kind) {
+/* WEIGHT IS MEASURED, NOT CHOSEN.
+
+   Every figure here previously rendered at group opacity 1 with a stroke
+   width picked per branch by eye. The reference runs each plate at its own
+   measured pair, and the group opacities are the whole reason their page
+   reads as faint instrument marks while an identical element count reads as
+   a dense black scribble:
+
+     1.1  0.12px @ 0.70     1.2  0.25px @ 0.85     1.3  0.15px @ 0.60
+     2.1  0.15px @ 0.50     2.2  0.20px @ 0.50     2.3  fill  @ 0.30
+
+   Identical node counts with the wrong weight is a different drawing. Weight
+   is not a finishing pass. */
+function figure(kind, sw, op) {
   let inner = "";
   if (kind === "lens") {
     /* LEM 1.1: 48 paths, counted off their live DOM per plate.
@@ -605,7 +618,7 @@ function figure(kind) {
        Recovered generator: 48 rays deflected by a Gaussian centred on the
        plate, sigma^2 = 784. Measured waist spread across all 48 midpoints
        was 0.000000, so the crossing is exact rather than approximate. */
-    inner = polys(gravLens({ rays: 48, seg: 60 }), 0.18, 24);
+    inner = polys(gravLens({ rays: 48, seg: 60 }), sw, 24);
   } else if (kind === "harmo") {
     /* LEM 1.3: 60 paths. Not a harmonograph trace in the usual sense but 60
        IDENTICAL copies of one closed 5 vertex figure, each rotated 6.10deg
@@ -621,7 +634,7 @@ function figure(kind) {
     inner = "<g>" + rose({ copies: 60, stepDeg: 6.10 }).map((r, i) =>
       `<polygon points="${r.pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}"
          transform="rotate(${r.rot} 50 50)" pathLength="100" data-draw fill="none"
-         stroke="${A}" stroke-width="0.18" style="animation-delay:${i * 19}ms"/>`).join("") + "</g>";
+         stroke="${A}" stroke-width="${sw}" style="animation-delay:${i * 19}ms"/>`).join("") + "</g>";
   } else if (kind === "cube") {
     /* Orthographic, 35 deg of yaw and 22 of pitch to start, from the
        reference's own projector. The top face doubles as a clip region.
@@ -642,7 +655,7 @@ function figure(kind) {
     const c = extrudedCube({ spin: 35, tilt: 22 });
     const edges = c.edges.map(e =>
       `<line x1="${e.x1.toFixed(2)}" y1="${e.y1.toFixed(2)}" x2="${e.x2.toFixed(2)}" y2="${e.y2.toFixed(2)}"`
-      + ` stroke="${A}" stroke-width="0.25" opacity="0.85" pathLength="100" class="cube-edge"/>`).join("");
+      + ` stroke="${A}" stroke-width="${sw}" pathLength="100" class="cube-edge"/>`).join("");
     const top = c.topVerts.map(v => `${v.x.toFixed(2)},${v.y.toFixed(2)}`).join(" ");
     inner = `<defs>
         <clipPath id="cube-top"><polygon class="cube-topface" points="${top}"/></clipPath>
@@ -662,9 +675,27 @@ function figure(kind) {
        At 864 tiles the strokes stop reading as strokes and the plane
        emerges, which is the same density effect I had previously filed
        against the wrong plate. */
-    inner = polys(isoTiles({ cols: 36, rows: 24 }), 0.14, 1);
+    /* fit() normalises into the shared 0-100 box with ONE scale factor
+       taken from the larger span, so the aspect survives and the field
+       centres. Without it this plate rendered as a horizontal streak: the
+       basis is 3.58:1 by construction, so 36 columns span ~198 units of x
+       against ~78 of y, and xMidYMid meet shrinks that until the mesh is a
+       few pixels tall. Every other figure here already goes through fit and
+       this one did not, which is the entire bug. */
+    /* NOT fitted, deliberately. The basis gives a 4.15 unit cell edge, which
+       is 4% of the 100 unit box and reads as a cell. Running 864 of them
+       through fit() compresses 198 units of x into 84 and takes each cell
+       under 2 units, where the strokes merge into a solid wash: 864 paths
+       rendering as one grey parallelogram.
+
+       The reference shows 864 cells that are individually legible, which is
+       only possible if its field is LARGER than the plate and cropped by it.
+       So this is placed at natural scale and allowed to overflow, which is
+       also what makes the plane read as continuing past the frame rather
+       than as an object sitting inside one. */
+    inner = polys(isoTiles({ cols: 36, rows: 24 }), sw, 1);
   } else if (kind === "sphere") {
-    inner = polys(sphere({ lats: 51, longs: 50, seg: 30 }), 0.5, 15);
+    inner = polys(sphere({ lats: 51, longs: 50, seg: 30 }), sw, 15);
   } else if (kind === "dots") {
     /* Rule 30. Recovered from the reference's bundle, where the component is
        named CellularAutomataFigure. 842 live cells and 1158 dead, which is
@@ -687,7 +718,7 @@ function figure(kind) {
     inner = `<defs><clipPath id="lemma-ca-clip"><rect class="ca-clip" x="0" y="0" width="100" height="0"/></clipPath></defs>`
           + `<g clip-path="url(#lemma-ca-clip)">${dead}${live}</g>`;
   }
-  return `<svg viewBox="${VB}" preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
+  return `<svg viewBox="${VB}" preserveAspectRatio="xMidYMid meet" opacity="${op}">${inner}</svg>`;
 }
 
 function plates() {
@@ -705,7 +736,10 @@ function plates() {
        whole page, not a loop per figure: an ambient layer is a background
        hum, and a hum on every element is noise. */
     d.dataset.fig = p.fig;
-    d.innerHTML = figure(p.fig) + `<div class="cap">${p.id}</div>`;
+    // The label lives in a 40px box pinned to the frame's top-left corner on
+    // every reference plate. Mine was bare text, which is why the plates read
+    // as bordered rectangles rather than as labelled instrument panels.
+    d.innerHTML = figure(p.fig, p.sw, p.op) + `<div class="cap-box"><span class="cap">${p.id}</span></div>`;
     host.appendChild(d);
   }
 }

@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""Write a fix for the failures reflect found, here, with a headless Claude.
+
+    propose --shapes open,make       fix these shapes in this checkout
+    propose --top 3                  the three reflect ranks highest
+    propose --dry-run --top 3        print the prompt, run nothing
+    propose --model sonnet           any model `claude --model` accepts
+
+MEANT TO RUN INSIDE `evolve`, never in the checkout you work in:
+
+    evolve --cmd "bin/propose --shapes open" \\
+           --expect "python3 tests/voice_cases.py --shapes open" --gate
+
+evolve makes a throwaway worktree, runs this there, and keeps the result only
+if the judge failed before and passes after, the full suite passes, and no
+eval case regressed. Nothing here commits, pushes or merges.
+
+WHY A MODEL WRITES THE PATCH AND CODE JUDGES IT. evolve took a patch and
+nothing had ever written one, so the archive stayed empty from the day it was
+built. A model is good at writing the patch and bad at grading its own work,
+so it writes and `tests/voice_cases.py` grades, and the model is refused any
+change to the grader. The Darwin Godel Machine paper (arXiv 2505.22954)
+records the failure this prevents: its agent scored a perfect result on
+hallucination by deleting the markers the checker looked for.
+
+ISOLATED FROM THE PERSON'S SETUP. `--setting-sources local` drops the user
+settings and with them every personal hook. Without it the auto-push Stop hook
+would fire inside an experiment, and the session briefing would add tens of
+thousands of tokens to every turn (hud-listen's agent_flags measured 75k).
+
+THE REFUSALS ARE CODE, NOT PROMPT. After the run the diff is checked: a change
+to a protected path, or a deleted line in any test, is reverted and the
+proposal exits 3, which evolve records as a change that did not run.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import hashlib
+import json
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import learnloop as L  # noqa: E402
+
+TEMPLATE = ROOT / "bin" / "propose-voice.md"
+# The judge, the loop itself, and tier C from docs/SELF-LEARNING.md.
+PROTECTED = ("tests/voice_cases.py", "tests/evolve.sh", "tests/fitness.sh",
+             "bin/evolve", "bin/fitness", "bin/propose", "bin/propose-voice.md",
+             "bin/reflect", "bin/lib/learnloop.py", ".claude/", "settings/",
+             "setup.sh", "install.sh", ".github/")
+TOOLS = "Read,Edit,Write,Grep,Glob,Bash"
+ALLOWED = ["Bash(python3 tests/*)", "Bash(python3 bin/*)", "Bash(bash tests/*)",
+           "Bash(git diff*)", "Bash(git status*)"]
+# A run that has not finished in this long is stuck, not thorough. evolve
+# gives its --cmd 1800 s, and this leaves room to score after. Guessed.
+TIMEOUT_S = 1500
+DECLINE = re.compile(r"^\W*DECLINE\s+(case\s+(?P<case>[0-9a-f]{12})|(?P<shape>[a-z']+))\s*:\s*(?P<why>.+)$",
+                     re.I | re.M)
+
+
+def git(*args: str) -> str:
+    return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True).stdout
+
+
+def render(groups: list[dict]) -> str:
+    rows = []
+    for g in groups:
+        rows.append(f"### `{g['shape']}`: {g['count']} requests, {g['median_s']} s at the median\n")
+        rows.append("| case | said | seconds | the model answered |")
+        rows.append("| --- | --- | --- | --- |")
+        for c in g["cases"]:
+            said = c["said"].replace("|", "/").replace("\n", " ")[:140]
+            answer = c["answer"].replace("|", "/").replace("\n", " ")[:120]
+            rows.append(f"| {c['id']} | {said} | {c['seconds']:.1f} | {answer} |")
+        rows.append("")
+    return "\n".join(rows)
+
+
+def scars(shapes: list[str]) -> str:
+    """The kit's own past failures most like this task, as questions."""
+    try:
+        r = subprocess.run([sys.executable, str(ROOT / "bin" / "scars"), "find",
+                            "voice fast path parser " + " ".join(shapes), "--terse"],
+                           capture_output=True, text=True, timeout=60, cwd=str(ROOT))
+        text = r.stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        text = ""
+    return f"## Past failures in this kit most like this one\n\n{text}\n" if text else ""
+
+
+def prompt_for(groups: list[dict]) -> str:
+    shapes = ",".join(g["shape"] for g in groups)
+    return (TEMPLATE.read_text(encoding="utf-8")
+            .replace("{cases}", render(groups))
+            .replace("{shapes}", shapes)
+            .replace("{scars}", scars([g["shape"] for g in groups])))
+
+
+def violations() -> list[str]:
+    """Protected paths touched, and test lines deleted, in the working tree."""
+    bad = []
+    changed = git("status", "--porcelain").splitlines()
+    for line in changed:
+        path = line[3:].strip().split(" -> ")[-1]
+        if any(path == p or path.startswith(p) for p in PROTECTED):
+            bad.append(f"touched {path}")
+    for line in git("diff", "--numstat").splitlines():
+        added, deleted, path = (line.split("\t") + ["", "", ""])[:3]
+        if path.startswith("tests/") and deleted not in ("0", "-"):
+            bad.append(f"deleted {deleted} line(s) from {path}")
+    return bad
+
+
+def revert(bad: list[str]) -> None:
+    for item in bad:
+        path = item.split(" ", 1)[1].rsplit(" from ", 1)[-1]
+        if path in git("ls-files", "--", path):
+            git("checkout", "--", path)
+        else:
+            (ROOT / path).unlink(missing_ok=True)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--shapes", default="")
+    ap.add_argument("--top", type=int, default=3)
+    ap.add_argument("--model", default="")
+    ap.add_argument("--dry-run", action="store_true")
+    a = ap.parse_args()
+
+    shapes = [s.strip() for s in a.shapes.split(",") if s.strip()]
+    groups = L.select("voice", a.top, shapes or None)
+    if not groups:
+        print("no live cases to fix. Run `reflect --write` first.", file=sys.stderr)
+        return 2
+    prompt = prompt_for(groups)
+    if a.dry_run:
+        print(prompt)
+        return 0
+
+    argv = ["claude", "-p", prompt, "--output-format", "json",
+            "--setting-sources", "local", "--strict-mcp-config",
+            "--mcp-config", json.dumps({"mcpServers": {}}),
+            "--tools", TOOLS, "--permission-mode", "acceptEdits",
+            "--allowedTools", *ALLOWED]
+    if a.model:
+        argv += ["--model", a.model]
+    started = time.time()
+    try:
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=TIMEOUT_S, cwd=str(ROOT))
+        raw, code = r.stdout, r.returncode
+    except subprocess.TimeoutExpired as err:
+        raw, code = (err.stdout or b"").decode() if isinstance(err.stdout, bytes) else (err.stdout or ""), 124
+    try:
+        out = json.loads(raw)
+    except ValueError:
+        out = {"result": raw[-2000:]}
+    result = out.get("result") or ""
+
+    declines = []
+    for m in DECLINE.finditer(result):
+        row = {"at": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+               "why": m.group("why").strip()[:300], "by": "propose"}
+        row.update({"case": m.group("case")} if m.group("case") else {"shape": m.group("shape").lower()})
+        declines.append(row)
+    if declines:
+        L.write_jsonl(L.DECLINED, declines, append=True)
+
+    bad = violations()
+    if bad:
+        revert(bad)
+    else:
+        # Bookkeeping the model should not be trusted with. tools/checksums.py
+        # hashes tracked files only, so new files are marked intent-to-add
+        # first; without this a new parser module fails "checksums are
+        # current" and the gate refuses a correct change for a stale hash.
+        new = [p for p in git("ls-files", "--others", "--exclude-standard").splitlines() if p]
+        if new:
+            git("add", "--intent-to-add", "--", *new)
+        if (ROOT / "tools" / "checksums.py").exists() and git("status", "--porcelain"):
+            subprocess.run([sys.executable, str(ROOT / "tools" / "checksums.py")],
+                           capture_output=True, cwd=str(ROOT))
+    files = [line[3:] for line in git("status", "--porcelain").splitlines()]
+    pid = hashlib.sha1(f"{started}{prompt}".encode()).hexdigest()[:10]
+    L.write_jsonl(L.PROPOSALS / f"{pid}.json", [{
+        "id": pid, "at": started, "seconds": round(time.time() - started, 1),
+        "shapes": [g["shape"] for g in groups], "model": a.model or "default",
+        "prompt_sha": hashlib.sha1(TEMPLATE.read_bytes()).hexdigest()[:10],
+        "exit": code, "cost_usd": out.get("total_cost_usd"), "turns": out.get("num_turns"),
+        "files": files, "declines": declines, "refused": bad, "result": result[-4000:],
+    }])
+
+    print(result[-3000:])
+    print(f"\nproposal {pid}: {len(files)} file(s) changed, {len(declines)} decline(s), "
+          f"{round(time.time() - started)} s")
+    if bad:
+        print("REFUSED and reverted: " + "; ".join(bad), file=sys.stderr)
+        return 3
+    if code != 0:
+        print(f"claude exited {code}", file=sys.stderr)
+        return 1
+    return 0 if files or declines else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

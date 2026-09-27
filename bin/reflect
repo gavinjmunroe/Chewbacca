@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Read what went wrong, and keep only what today's code still gets wrong.
+
+    reflect                  the last 14 days, printed, nothing written
+    reflect --days 30        a longer window
+    reflect --write          keep the episodes and rewrite the live cases
+    reflect --json           the same, for a machine
+
+THE FIRST STEP OF THE LOOP. Every piece after it already existed on
+2026-09-27 and none of it had ever run, because nothing turned a failure into
+something the rest could act on:
+
+    reflect  -> cases  -> propose  -> evolve --expect  -> learn/<id> branch
+    (this)     (this)    (a model)   (the judge)         (a person merges)
+
+WHERE THE FAILURES ARE. Two logs nobody read:
+
+  the voice      superassistant/questions.jsonl and ~/.bob/listen.log. A
+                 request that went to the model and took 3 s or more, in a
+                 shape asked for three or more times, is a verb that does not
+                 exist yet: "Open up Google sheets" and its kin went to the
+                 model 13 times in the week to 2026-09-27, 5.6 s at the median,
+                 for an action a fast path does in a fraction of a second.
+  Claude Code    every transcript under ~/.claude*/projects. An interrupt and
+                 the sentence typed after it, and a correction as
+                 tools/mine_asks.py defines one. In that same week there were
+                 46 interrupts and only 13 typed corrections, so an interrupt
+                 is the stronger signal and is read first.
+
+REPLAY BEFORE BELIEVING. A logged failure may have been fixed since. The
+router's 16 logged mistakes had all been fixed by hand, and the voice log held
+eleven slow "bubble" requests for a bubble removed five days earlier. So every
+voice failure is replayed through `fast_path` in bin/hud-listen, and only the
+ones today's code still sends to the model become cases. The rest are counted
+as fixed, which is the loop's own evidence that something worked.
+
+WHAT IT NEVER DOES. It never edits code, a rule, a skill or a memory. Without
+--write it writes nothing at all. With it, it writes only under
+~/.chewbacca/learn/, which is private: the learned trajectory is what a fork of
+this public repo cannot copy.
+"""
+from __future__ import annotations
+
+import argparse
+import collections
+import importlib.util
+import json
+import os
+import sys
+import time
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import learnloop as L  # noqa: E402
+
+
+def _load(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path, loader=SourceFileLoader(name, str(path)))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def fast_path():
+    """`fast_path` from this checkout's bin/hud-listen, so a worktree judges
+    its own code and never the installed copy."""
+    return _load("hud_listen", ROOT / "bin" / "hud-listen").fast_path
+
+
+def harvest(days: float) -> dict:
+    mine_asks = _load("mine_asks", ROOT / "tools" / "mine_asks.py")
+    voice = L.voice_rows()
+    v_eps = L.voice_episodes(voice, days)
+    asks = L.human_asks(days)
+    c_eps = L.claude_episodes(asks, mine_asks)
+    live, fixed = L.voice_cases(v_eps, fast_path())
+    cut = time.time() - days * 86400
+    recent = [r for r in voice if not r["t"] or r["t"] >= cut]
+    return {"days": days, "voice_rows": recent, "voice_episodes": v_eps,
+            "asks": asks, "claude_episodes": c_eps, "live": live, "fixed": fixed,
+            "ranked": L.rank(live), "declined": L.declined()}
+
+
+def digest(h: dict) -> str:
+    out = []
+    rows, v_eps = h["voice_rows"], h["voice_episodes"]
+    kinds = collections.Counter(e["kind"] for e in v_eps)
+    out.append(f"VOICE, last {h['days']:g} days: {len(rows)} requests, "
+               f"{sum(r['model'] for r in rows)} went to the model")
+    out.append(f"  failed {kinds['failed']}   cancelled {kinds['cancelled']}   "
+               f"slow model turns (>= {L.SLOW_S:g} s) {kinds['slow']}")
+    if h["ranked"]:
+        out.append("  Still slow on today's code, by the time a fix would give back:")
+        for g in h["ranked"][:8]:
+            eg = g["cases"][0]["said"]
+            out.append(f"    {g['shape']:<10} {g['count']:>3}x  median {g['median_s']:>5.1f} s  "
+                       f"{g['cost_s']:>6.0f} s   e.g. \"{eg[:48]}\"")
+    else:
+        out.append("  Nothing recurring is still slow on today's code.")
+    if h["fixed"]:
+        by = collections.Counter(c["path"] for c in h["fixed"])
+        out.append(f"  Fixed since they were logged: {len(h['fixed'])} "
+                   f"({', '.join(f'{p} {n}' for p, n in by.most_common())})")
+    for s, row in h["declined"].items():
+        out.append(f"  Declined: {s}, {row.get('why', 'no reason given')}")
+
+    asks, c_eps = h["asks"], h["claude_episodes"]
+    typed = [a for a in asks if not a["interrupt"]]
+    ck = collections.Counter(e["kind"] for e in c_eps)
+    out.append("")
+    out.append(f"CLAUDE CODE, last {h['days']:g} days: {len(typed)} typed messages "
+               f"in {len({a['session'] for a in typed})} sessions")
+    out.append(f"  interrupts {ck['interrupt']}   corrections {ck['correction']}")
+    where = collections.Counter(Path(e["cwd"]).name or "?" for e in c_eps if e["kind"] == "interrupt")
+    if where:
+        out.append("  Where the interrupts land: "
+                   + ", ".join(f"{d} {n}" for d, n in where.most_common(5)))
+    shown = [e for e in c_eps if e["then_said"]][-5:]
+    if shown:
+        out.append("  Latest, what was asked and what came next:")
+        for e in shown:
+            out.append(f"    [{e['kind']}] \"{e['asked'][:50]}\"")
+            out.append(f"        then \"{e['then_said'][:66]}\"")
+    return "\n".join(out)
+
+
+def write(h: dict) -> dict:
+    """Append new episodes, rewrite the live cases, and record the run."""
+    have = {e.get("id") for e in L.read_jsonl(L.EPISODES)}
+    fresh = [e for e in h["voice_episodes"] + h["claude_episodes"] if e["id"] not in have]
+    L.write_jsonl(L.EPISODES, fresh, append=True)
+    # Rewritten, never appended: a case is a claim about today's code, and a
+    # case that today's code passes is no longer true.
+    L.write_jsonl(L.CASES / "voice.jsonl", h["live"])
+    kinds = collections.Counter(e["kind"] for e in h["voice_episodes"] + h["claude_episodes"])
+    run = {"at": time.time(), "days": h["days"], "new_episodes": len(fresh),
+           "live_cases": len(h["live"]), "fixed": len(h["fixed"]),
+           "slow_model_s": round(sum(e["seconds"] for e in h["voice_episodes"] if e["kind"] == "slow"), 1),
+           **{f"n_{k}": v for k, v in kinds.items()}}
+    # The trend line. If the loop works, slow_model_s and n_interrupt fall
+    # across these rows; if they do not, it is churn, whatever else it merged.
+    L.write_jsonl(L.LEARN / "reflect.jsonl", [run], append=True)
+    return run
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--days", type=float, default=14)
+    ap.add_argument("--write", action="store_true", help="keep episodes and cases under ~/.chewbacca/learn")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+
+    h = harvest(a.days)
+    run = write(h) if a.write else None
+    if a.json:
+        print(json.dumps({"voice_episodes": h["voice_episodes"], "claude_episodes": h["claude_episodes"],
+                          "live": h["live"], "fixed": h["fixed"],
+                          "ranked": [{k: v for k, v in g.items() if k != "cases"} for g in h["ranked"]],
+                          "run": run}, indent=2, ensure_ascii=False))
+        return 0
+    print(digest(h))
+    if run:
+        print(f"\nkept {run['new_episodes']} new episodes and {run['live_cases']} live cases in {L.LEARN}")
+    else:
+        print(f"\nNothing written. --write keeps this in {L.LEARN}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

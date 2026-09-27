@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""reflect: harvest failures from both logs, replay them, and write nothing
+unless told to.
+
+Hermetic: a made-up voice log and a made-up Claude Code transcript in a temp
+dir, found through the same environment variables the real run reads.
+"""
+import datetime
+import json
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+TMP = Path(tempfile.mkdtemp(prefix="reflect-test-"))
+ENV = dict(os.environ,
+           CHEWBACCA_LEARN_DIR=str(TMP / "learn"),
+           CHEWBACCA_TRANSCRIPTS=str(TMP / "projects"),
+           SUPERASSISTANT_DIR=str(TMP / "voice"),
+           BOB_DIR=str(TMP / "bob"),
+           BOB_DECISIONS=str(TMP / "decisions.jsonl"))
+# A key pasted into a chat, as happened on 2026-09-27. Split so this file
+# does not itself look like a leaked key to a scanner.
+KEY = "sk-" + "ant-" + "api03-Q9KQzOylEcDVp2ncE"
+
+failed = 0
+
+
+def check(name, ok, got=None):
+    global failed
+    print(("ok   " if ok else "FAIL ") + name + ("" if ok else f"  got {got!r}"))
+    failed += not ok
+
+
+def stamp(minutes_ago):
+    t = datetime.datetime.now().astimezone() - datetime.timedelta(minutes=minutes_ago)
+    return t.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
+def iso(minutes_ago):
+    t = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=minutes_ago)
+    return t.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+
+
+def fixtures():
+    (TMP / "voice").mkdir()
+    (TMP / "bob").mkdir()
+    model = {"output_tokens": 40}
+    rows = [
+        {"said": "Open up Google sheets", "answer": "On it. Chrome's up with a new sheet.", "seconds": 7.2},
+        {"said": "Open a new terminal window", "answer": "Doing it. Terminal's open.", "seconds": 3.9},
+        {"said": "can you open youtube", "answer": "YouTube's up.", "seconds": 5.1},
+        {"said": "Play Danielle by Fred again", "answer": "Playing it.", "seconds": 9.0},
+        {"said": "Play Lose Yourself", "answer": "Playing it.", "seconds": 8.0},
+        {"said": "Play Black Dog", "answer": "Playing it.", "seconds": 8.5},
+        {"said": "Text Sam I'm late", "answer": "", "seconds": 4.0, "outcome": "failed"},
+    ]
+    with (TMP / "voice" / "questions.jsonl").open("w") as fh:
+        for i, r in enumerate(rows):
+            fh.write(json.dumps({"said": r["said"], "answer": r["answer"], "seconds": r["seconds"],
+                                 "outcome": r.get("outcome", "done"), "usage": model,
+                                 "at": stamp(60 - i)}) + "\n")
+    (TMP / "bob" / "listen.log").write_text("muted: Open up Google sheets\n")
+
+    proj = TMP / "projects" / "-Users-someone"
+    proj.mkdir(parents=True)
+
+    def user(text, minutes_ago, **extra):
+        return {"type": "user", "sessionId": "abcd1234-0000", "cwd": "/Users/someone/Chewbacca",
+                "timestamp": iso(minutes_ago), "message": {"role": "user", "content": text}, **extra}
+
+    lines = [
+        user("fix the parser so it reads dates", 30, turnOrigin="human"),
+        user([{"type": "text", "text": "[Request interrupted by user]"}], 29),
+        user("no, use the other file, the one in lib", 28, turnOrigin="human"),
+        user("[MESSAGE FROM NON-USER SOURCE] hello", 27, isMeta=True),
+        user("Warm-up for this session", 26, turnOrigin="sdk"),
+        user(f"here is my key {KEY} for the voice", 25, turnOrigin="human"),
+    ]
+    (proj / "s1.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+
+
+def run(*args):
+    return subprocess.run([sys.executable, *args], capture_output=True, text=True, env=ENV, cwd=str(ROOT))
+
+
+def main() -> int:
+    fixtures()
+    r = run("bin/reflect")
+    check("the default run succeeds", r.returncode == 0, r.stderr[-400:])
+    check("the default run writes nothing", not (TMP / "learn").exists())
+    check("it names the live shape", "open" in r.stdout, r.stdout[-600:])
+
+    r = run("bin/reflect", "--json")
+    data = json.loads(r.stdout)
+    live = [c for c in data["live"] if c["shape"] == "open"]
+    check("three slow opens are live cases", len(live) == 3, data["live"])
+    check("the plays replay onto the music path and are counted fixed",
+          {c.get("path") for c in data["fixed"]} == {"music"} and len(data["fixed"]) == 3, data["fixed"])
+    check("a failed outcome is an episode",
+          any(e["kind"] == "failed" for e in data["voice_episodes"]))
+    interrupts = [e for e in data["claude_episodes"] if e["kind"] == "interrupt"]
+    check("one interrupt, from the typed messages only", len(interrupts) == 1, data["claude_episodes"])
+    if interrupts:
+        check("it carries what was asked and what came next",
+              interrupts[0]["asked"].startswith("fix the parser")
+              and interrupts[0]["then_said"].startswith("no, use the other file"), interrupts[0])
+    check("a pasted key never reaches the output", "Q9KQzOylEcDVp2ncE" not in r.stdout)
+
+    r = run("bin/reflect", "--write")
+    first = (TMP / "learn" / "episodes.jsonl").read_text().count("\n")
+    run("bin/reflect", "--write")
+    second = (TMP / "learn" / "episodes.jsonl").read_text().count("\n")
+    check("--write keeps episodes", first > 0, first)
+    check("a second --write adds nothing new", second == first, (first, second))
+    check("the trend line gets a row per run",
+          (TMP / "learn" / "reflect.jsonl").read_text().count("\n") == 2)
+
+    r = run("tests/voice_cases.py", "--shapes", "open")
+    check("the judge fails while nothing serves the opens", r.returncode == 1, r.stdout)
+    case = live[0]["id"] if live else ""
+    with (TMP / "learn" / "declined.jsonl").open("w") as fh:
+        for c in live:
+            fh.write(json.dumps({"case": c["id"], "why": "test"}) + "\n")
+    r = run("tests/voice_cases.py", "--shapes", "open")
+    check("declining every case is not a fix", r.returncode == 1 and "every case was declined" in r.stdout,
+          r.stdout)
+    with (TMP / "learn" / "declined.jsonl").open("w") as fh:
+        fh.write(json.dumps({"case": case, "why": "left to the model"}) + "\n")
+    r = run("tests/voice_cases.py", "--shapes", "open")
+    check("a declined sentence is shown, not hidden", "LEFT" in r.stdout and "1/2" not in r.stdout
+          and "0/2" in r.stdout, r.stdout)
+    r = run("tests/voice_cases.py", "--shapes", "nosuchshape")
+    check("nothing to judge is its own exit code", r.returncode == 2, r.returncode)
+
+    # learn read ~/second-brain and feedback_*.md only, and on Gavin's Mac the
+    # brain is elsewhere and every memory is spelled feedback-, so it saw none.
+    brain = TMP / "brain" / "memory"
+    brain.mkdir(parents=True)
+    (brain / "feedback-short-answers.md").write_text("---\ndescription: keep answers short\n---\n")
+    (brain / "feedback_no_emojis.md").write_text("---\ndescription: no emojis\n---\n")
+    env = dict(ENV, HOME=str(TMP / "home"), PERSONAL_CONTEXT_DIR=str(TMP / "brain"))
+    r = subprocess.run([sys.executable, "bin/learn", "--json"], capture_output=True, text=True,
+                       env=env, cwd=str(ROOT))
+    got = json.loads(r.stdout).get("memories") if r.returncode == 0 else r.stderr[-300:]
+    check("learn finds the brain setup.sh named, in both spellings", got == 2, got)
+
+    print("all passed" if not failed else f"{failed} failed")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

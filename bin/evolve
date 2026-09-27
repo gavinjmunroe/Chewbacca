@@ -5,8 +5,17 @@
     evolve --cmd "python3 x.py"      run a mutator in isolation, score, report
     evolve --archive                 every attempt ever made, kept or not
     evolve --show <id>               the diff and the score for one attempt
+    evolve --cmd "bin/propose --shapes open" \\
+           --expect "python3 tests/voice_cases.py --shapes open" --gate --branch
+                                     the learning loop: see bin/reflect
 
-WHY IT NEVER COMMITS. The Darwin Godel Machine (Zhang et al., ICLR 2026,
+--expect names a judge that must FAIL before the change and PASS after it.
+That flip is the only evidence a change fixed what it was written for; a
+score can rise for a change that fixed nothing. --branch keeps a change that
+passed the gate as a commit on learn/<id>, a branch nobody works on, for a
+person to read and merge. Without --branch nothing is ever committed.
+
+WHY IT NEVER MERGES. The Darwin Godel Machine (Zhang et al., ICLR 2026,
 arXiv 2505.22954) self-modifies and validates each change on a benchmark, and
 the part people skip when they retell it is the ARCHIVE: it keeps every
 variant, not only the winners, because open-ended exploration beats greedy
@@ -21,7 +30,9 @@ how much they cost when ignored:
      wanted.
   2. This repo has had two sessions running in it on the same day, and one
      commit already absorbed another's staged files. A loop that commits by
-     itself in that environment is a data-loss machine.
+     itself in that environment is a data-loss machine. --branch commits
+     only inside its own worktree, only the files the change touched, onto
+     a new branch, so no session's index is ever in reach.
   3. A losing attempt is evidence. Deleting it throws away the only record of
      what was tried, which is the archive DGM says you need.
 
@@ -34,6 +45,7 @@ import hashlib
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -79,7 +91,6 @@ def score_in(path):
                         "--no-tests"], capture_output=True, text=True,
                        timeout=900, cwd=str(path), env=env)
     out = r.stdout + r.stderr
-    import re
     m = re.search(r"structural\s+([\d.]+)", out)
     if not m:
         return None, out[-400:]
@@ -109,7 +120,57 @@ def cases_from(ledger_path):
     return {c.get("id") for c in newest["failed_cases"] if c.get("id")}
 
 
-def gate(worktree, base, after):
+def expect(worktree, cmd):
+    """Run the judge in the worktree. (passed, last lines of its output)."""
+    r = subprocess.run(cmd, shell=True, cwd=str(worktree), capture_output=True,
+                       text=True, timeout=600)
+    return r.returncode == 0, (r.stdout + r.stderr).strip()[-1500:]
+
+
+def full_diff(worktree):
+    """The change, including files it created.
+
+    `git diff` alone shows tracked files only, so a proposal that added a
+    parser module and its test archived as a diff with neither in it, and
+    `git apply` of that diff produced a call to a module that did not exist.
+    Intent-to-add makes new files show up in the diff without staging their
+    content, inside a worktree that is about to be removed anyway.
+    """
+    new = git("ls-files", "--others", "--exclude-standard", cwd=worktree).splitlines()
+    new = [p for p in new if not p.startswith(".evolve-")]
+    if new:
+        git("add", "--intent-to-add", "--", *new, cwd=worktree)
+    return git("diff", cwd=worktree)
+
+
+def commit_branch(worktree, aid, note):
+    """Keep a change that passed the gate as a branch a person can read.
+
+    A branch and not a merge: tier B in docs/SELF-LEARNING.md is "a branch
+    with a test, Gavin merges". The branch outlives the worktree, so the
+    change survives this run without ever touching the tree anyone works in.
+    Files are staged by name, never with -A, per the kit's git rule.
+    """
+    name = f"learn/{aid}"
+    files = [p for p in git("diff", "--name-only", cwd=worktree).splitlines()
+             if p and not p.startswith(".evolve-")]
+    if not files:
+        return None
+    try:
+        git("checkout", "-q", "-b", name, cwd=worktree, check=True)
+        git("add", "--", *files, cwd=worktree, check=True)
+        # Named paths: the repo's pre-commit hook refuses a bare commit while
+        # more than one session is live, which is exactly when this runs.
+        git("commit", "-q", "-m",
+            f"feat: {note or 'a change the learning loop proposed'} (learned, evolve {aid})",
+            "--", *files, cwd=worktree, check=True)
+    except RuntimeError as e:
+        print(f"  could not keep the change on {name}: {e}")
+        return None
+    return name
+
+
+def gate(worktree, base, after, judged=None, suite_before=None):
     """Should this change be allowed to land?
 
     THE RETENTION STEP THIS TOOL HAS NEVER HAD. `evolve` proposes and
@@ -131,18 +192,30 @@ def gate(worktree, base, after):
 
     if after is None:
         return False, ["the change did not score, so there is nothing to judge"]
+    # The check that says the change fixed what it was written for. A score
+    # can rise for a change that fixed nothing; this cannot.
+    if judged is not None and not judged:
+        reasons.append("the judge (--expect) still fails after the change")
     if after < base["structural_score"]:
         reasons.append(
             f"structural score fell {base['structural_score']:.2f} -> {after:.2f}")
 
     # The suite, run in the worktree. No model calls, and a change that
-    # breaks a test is refused whatever it did to the score.
-    r = subprocess.run(["bash", str(worktree / "tests/run.sh")],
-                       capture_output=True, text=True, timeout=2400,
-                       cwd=str(worktree))
-    if r.returncode != 0:
-        tail = (r.stdout + r.stderr).strip().splitlines()[-3:]
-        reasons.append("the test suite failed: " + " / ".join(tail))
+    # breaks a test is refused whatever it did to the score. Judged against
+    # the same suite on the unchanged commit, because a machine can fail a
+    # check before any change: on 2026-09-27 a pristine upstream main failed
+    # `counts --check` on Gavin's Mac, and demanding a green suite would have
+    # refused every change forever for a failure none of them caused.
+    failing, finished, tail = suite_failures(worktree)
+    if not finished:
+        reasons.append("the test suite failed without naming a check: " + tail)
+    elif suite_before is None:
+        if failing:
+            reasons.append("the test suite failed: " + ", ".join(sorted(failing)[:6]))
+    else:
+        newly = sorted(failing - suite_before)
+        if newly:
+            reasons.append("tests that passed and now fail: " + ", ".join(newly[:6]))
 
     # Per-case regression, when both sides recorded cases.
     before_ids = cases_from(pathlib.Path.home() / ".chewbacca" / "fitness.jsonl")
@@ -162,6 +235,48 @@ def gate(worktree, base, after):
     return (not hard), reasons
 
 
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def suite_failures(path):
+    """Run tests/run.sh in `path`: (names of failed checks, finished, tail).
+
+    `finished` is False when the runner died without its summary, which is
+    different from a clean run and must never read as one.
+    """
+    try:
+        r = subprocess.run(["bash", str(path / "tests/run.sh")], capture_output=True,
+                           text=True, timeout=2400, cwd=str(path))
+    except subprocess.TimeoutExpired:
+        return set(), False, "timed out after 2400 s"
+    out = ANSI.sub("", r.stdout + r.stderr)
+    failing = set(re.findall(r"^\s+FAIL\s+(.+?)\s*$", out, re.M))
+    finished = r.returncode == 0 or bool(failing)
+    return failing, finished, " / ".join(out.strip().splitlines()[-3:])
+
+
+def suite_before(worktree):
+    """The suite's failures on the unchanged commit, run once per commit.
+
+    Cached by sha because the suite takes minutes and HEAD does not move
+    between attempts; a second proposal against the same commit reuses it.
+    """
+    sha = git("rev-parse", "HEAD", cwd=worktree)
+    cache = ARCHIVE / f"suite-{sha[:12]}.json"
+    if cache.exists():
+        try:
+            return set(json.loads(cache.read_text())["failing"])
+        except (ValueError, KeyError):
+            pass
+    failing, finished, tail = suite_failures(worktree)
+    if not finished:
+        print(f"  the suite did not finish on the unchanged commit: {tail}")
+        return None
+    cache.write_text(json.dumps({"sha": sha, "failing": sorted(failing)}))
+    return failing
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -170,6 +285,10 @@ def main():
     ap.add_argument("--archive", action="store_true")
     ap.add_argument("--gate", action="store_true",
                     help="judge the change against the merge gate; never merges")
+    ap.add_argument("--expect", default="",
+                    help="a command that must fail before the change and pass after")
+    ap.add_argument("--branch", action="store_true",
+                    help="if the gate passes, commit the change to learn/<id>; never merges")
     ap.add_argument("--show")
     a = ap.parse_args()
 
@@ -207,7 +326,7 @@ def main():
         if not d.is_dir():
             print(f"no attempt {a.show}", file=sys.stderr)
             return 1
-        for f in ("note.txt", "change.diff", "score.txt"):
+        for f in ("note.txt", "expect.txt", "change.diff", "score.txt"):
             p = d / f
             if p.exists():
                 print(f"----- {f} -----")
@@ -239,8 +358,24 @@ def main():
         return 1
 
     ok, detail = True, ""
+    after, delta, branch = None, None, None
+    judged = {"cmd": a.expect, "before": None, "after": None} if a.expect else None
     try:
-        if a.patch:
+        if a.expect:
+            # Before the change, on a clean HEAD. A judge that already passes
+            # cannot tell a fix from a no-op, so there is nothing to try.
+            judged["before"], out = expect(wt, a.expect)
+            (dest / "expect.txt").write_text(f"BEFORE (must fail)\n{out}\n")
+            if judged["before"]:
+                print("  the judge already passes before any change: nothing to fix")
+                ok = False
+        baseline_suite = None
+        if ok and a.gate:
+            print("  running the suite on the unchanged commit (cached per commit)")
+            baseline_suite = suite_before(wt)
+        if not ok:
+            pass
+        elif a.patch:
             r = subprocess.run(["git", "-C", str(wt), "apply",
                                 str(pathlib.Path(a.patch).resolve())],
                                capture_output=True, text=True)
@@ -251,10 +386,15 @@ def main():
             ok, detail = r.returncode == 0, (r.stderr or r.stdout)[-400:]
 
         if not ok:
-            print(f"  the change did not apply/run:\n  {detail}")
-            after, delta = None, None
+            if detail:
+                print(f"  the change did not apply/run:\n  {detail}")
         else:
-            (dest / "change.diff").write_text(git("diff", cwd=wt))
+            (dest / "change.diff").write_text(full_diff(wt))
+            if a.expect:
+                judged["after"], out = expect(wt, a.expect)
+                with (dest / "expect.txt").open("a") as fh:
+                    fh.write(f"\nAFTER (must pass)\n{out}\n")
+                print(f"  judge: failed before, {'PASSES' if judged['after'] else 'still FAILS'} after")
             after, out = score_in(wt)
             (dest / "score.txt").write_text(out or "")
             delta = (round(after - base["structural_score"], 2)
@@ -266,16 +406,23 @@ def main():
                            "WORSE" if delta < 0 else "NO MEASURABLE CHANGE")
                 print(f"  delta {delta:+g}   {verdict}")
             if a.gate:
-                allowed, reasons = gate(wt, base, after)
+                allowed, reasons = gate(wt, base, after,
+                                        judged["after"] if judged else None,
+                                        baseline_suite)
                 print()
                 if allowed:
                     print("  GATE: passes.")
                     for why in reasons:
                         print(f"    note: {why}")
+                    if a.branch:
+                        branch = commit_branch(wt, aid, a.note)
                     print(f"\n  Nothing has been merged. The diff is at:")
                     print(f"    {dest / 'change.diff'}")
-                    print("  Read it, then apply it yourself:")
-                    print(f"    git apply {dest / 'change.diff'}")
+                    if branch:
+                        print(f"  and committed on {branch}, for a person to read and merge.")
+                    else:
+                        print("  Read it, then apply it yourself:")
+                        print(f"    git apply {dest / 'change.diff'}")
                 else:
                     print("  GATE: refused.")
                     for why in reasons:
@@ -290,6 +437,7 @@ def main():
             "id": aid, "at": time.time(), "applied": ok,
             "base": base["structural_score"], "base_sha": base["sha"],
             "after": after, "delta": delta, "note": a.note,
+            "expect": judged, "branch": branch,
         }) + "\n")
 
     print(f"\narchived: {dest}")

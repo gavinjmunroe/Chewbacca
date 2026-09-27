@@ -94,6 +94,50 @@ as self learning."*
 
 ---
 
+## What closed on 2026-09-27
+
+Gavin asked how to make the kit and his own setup improve themselves, and an
+audit of his Mac found every part above present and the loop still open:
+`fitness` had never recorded a score, `evolve` had never tried a change,
+`maintain` was not scheduled, and `learn` read a brain path and a file name
+pattern that did not exist there. Nothing wrote a patch, so nothing reached
+`evolve`. Step 5 above was the gap, and this closes it:
+
+```
+reflect --write        harvest the voice log and every Claude Code transcript,
+                       replay each voice failure against today's code, keep
+                       the ones it still makes as cases
+propose --shapes X     a headless Claude writes a fix for those cases, with
+                       the person's hooks off and the judge out of reach
+evolve --cmd "bin/propose --shapes X" \
+       --expect "python3 tests/voice_cases.py --shapes X" --gate --branch
+                       keep the fix only if the judge failed before and passes
+                       after, no test newly fails, no eval case regresses; then
+                       commit it to learn/<id> for a person to merge
+```
+
+| Piece                           | What it adds                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `bin/reflect`                   | Episodes from both logs, redacted; live cases by replay; a trend row per run in `~/.chewbacca/learn/reflect.jsonl` |
+| `fast_path` in `bin/hud-listen` | The voice's no-model checks with no side effects, so a logged sentence can be replayed                             |
+| `tests/voice_cases.py`          | The judge. Every case not explicitly declined must reach a fast path                                               |
+| `bin/propose`                   | The patch writer. Refusals are code: a touched judge or a deleted test line is reverted                            |
+| `evolve --expect --branch`      | The flip test, suite regression against the unchanged commit, and a branch for review                              |
+| `bin/learn`                     | Finds the brain setup.sh named, both memory spellings, and reads transcripts when asks.jsonl is absent             |
+
+What replay showed on the first run: the router's 16 logged mistakes were all
+fixed already, and the live failures were elsewhere. Spoken "open" requests
+went to the model 15 times in two weeks at 6.8 s each.
+
+Still open: a verb can only be judged on whether it takes the model out of the
+path, not on whether the action was right, so every `learn/` branch is read by
+a person before it merges. The recursion, where the proposer's own prompt is
+scored by how many of its branches merged, has its data (`prompt_sha` on every
+proposal) and no runner yet. Nothing is scheduled until the loop has run clean,
+supervised, more than once.
+
+---
+
 ## The hard line
 
 A kit that optimises its own score will optimise the score. Goodhart is the

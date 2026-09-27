@@ -32,11 +32,38 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
+import sys
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parent.parent
 ASKS = Path.home() / ".chewbacca" / "asks.jsonl"
-MEM = Path.home() / "second-brain" / "memory"
+CONFIG = Path.home() / ".claude" / "d1-config.sh"
+
+
+def brain_memory() -> Path:
+    """The memory folder of the brain setup.sh wired, wherever it lives.
+
+    Hard-coded to ~/second-brain until 2026-09-27, and on Gavin's Mac the brain
+    is ~/dev/gavin-context, so this read nothing and reported every correction
+    as new. Same lookup as bin/superassistant's brain_dir: the environment,
+    then d1-config.sh, expandvars before expanduser.
+    """
+    value = os.environ.get("PERSONAL_CONTEXT_DIR", "")
+    if not value:
+        try:
+            m = re.search(r'^(?:export\s+)?PERSONAL_CONTEXT_DIR=(?:"([^"]*)"|\'([^\']*)\'|(\S*))\s*$',
+                          CONFIG.read_text(encoding="utf-8"), re.M)
+            value = next((g for g in m.groups() if g is not None), "") if m else ""
+        except OSError:
+            value = ""
+    if value:
+        return Path(os.path.expandvars(value)).expanduser() / "memory"
+    return Path.home() / "second-brain" / "memory"
+
+
+MEM = brain_memory()
 STOP = {
     "that", "this", "with", "from", "have", "what", "when", "your", "just",
     "make", "need", "want", "like", "they", "them", "should", "would", "could",
@@ -56,7 +83,9 @@ def memories():
     out = []
     if not MEM.is_dir():
         return out
-    for p in sorted(MEM.glob("feedback_*.md")):
+    # Both spellings are in the wild: setup.sh's template writes feedback_,
+    # Gavin's brain has 14 files written as feedback-.
+    for p in sorted(set(MEM.glob("feedback_*.md")) | set(MEM.glob("feedback-*.md"))):
         body = p.read_text(encoding="utf-8", errors="ignore")
         desc = ""
         m = re.search(r"^description:\s*(.+)$", body, re.M)
@@ -67,16 +96,27 @@ def memories():
     return out
 
 
-def corrections():
-    """Repair pairs, reusing the detector in tools/mine_asks.py."""
+def corrections(days):
+    """Repair pairs, reusing the detector in tools/mine_asks.py.
+
+    From asks.jsonl when the capture hook is installed, else straight from
+    the Claude Code transcripts. The hook was never registered on Gavin's Mac,
+    so asks.jsonl did not exist there and this found zero corrections while
+    the transcripts held every prompt he had typed.
+    """
     import importlib.machinery
     import importlib.util
-    here = Path(__file__).resolve().parent.parent / "tools" / "mine_asks.py"
+    here = ROOT / "tools" / "mine_asks.py"
     loader = importlib.machinery.SourceFileLoader("mine_asks", str(here))
     spec = importlib.util.spec_from_loader(loader.name, loader)
     mod = importlib.util.module_from_spec(spec)
     loader.exec_module(mod)
-    return mod.repairs(mod.load(ASKS))
+    rows = mod.load(ASKS)
+    if not rows:
+        sys.path.insert(0, str(ROOT / "bin" / "lib"))
+        import learnloop
+        rows = [r for r in learnloop.human_asks(days) if not r["interrupt"]]
+    return mod.repairs(rows)
 
 
 def match(correction, mems, floor):
@@ -97,10 +137,12 @@ def main():
     ap.add_argument("--floor", type=int, default=3,
                     help="shared terms before a memory counts as covering it")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--days", type=float, default=30,
+                    help="how far back to read transcripts when asks.jsonl is absent")
     a = ap.parse_args()
 
     mems = memories()
-    reps = corrections()
+    reps = corrections(a.days)
     covered, uncovered = [], []
     for r in reps:
         hits = match(r["then_said"], mems, a.floor)

@@ -1073,6 +1073,49 @@ def read_names() -> list[str]:
         return []
 
 
+# The paths at the top of `Listener.ask` that answer with no model turn and need
+# no state to decide. `fast_path` checks exactly these, and
+# tests/test_fast_path.py fails if `ask` grows a path that is in neither list.
+FAST_PATHS = ("stop", "pleasantry", "quick", "music", "agents")
+# These need a pending draft, a waiting agent or a live terminal to decide, and
+# a replayed sentence has none of those, so `fast_path` cannot say.
+STATEFUL_PATHS = ("handle_agent_answer", "handle_draft_word", "handle_terminal_word")
+
+
+def fast_path(said: str) -> str | None:
+    """Which no-model path would answer `said` with nothing running, or None.
+
+    The checks at the top of `Listener.ask`, in the same order, with no side
+    effects, so a sentence from the log can be replayed against today's code.
+    `bin/reflect` uses it to tell a failure the kit still makes from one it has
+    outgrown: on 2026-09-27 every one of the router's 16 logged mistakes had
+    already been fixed by hand, and only a replay could show it.
+    """
+    words = normalise(said)
+    if not words:
+        return None
+    if words in STOP_WORDS:
+        return "stop"
+    if words in Listener.GREETINGS | Listener.FAREWELLS | Listener.THANKS:
+        return "pleasantry"
+    if QUICK:
+        try:
+            if quick.answer(said):
+                return "quick"
+        except Exception:  # noqa: BLE001  the bridge falls through on the same error
+            pass
+    module = music()
+    if module is not None:
+        try:
+            if module.parse(said) is not None:
+                return "music"
+        except Exception:  # noqa: BLE001
+            pass
+    if ROUTE and route.agent_status_word(said):
+        return "agents"
+    return None
+
+
 class Listener:
     def __init__(
         self,

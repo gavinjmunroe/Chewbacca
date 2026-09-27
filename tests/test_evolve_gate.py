@@ -180,6 +180,51 @@ def test_gate_ALLOWS_a_clean_change():
     assert allowed is True, f"a clean change must pass: {reasons}"
 
 
+def gate_with_suite(tmp, fail_lines, before, judged=None):
+    """The gate over a stub suite that prints FAIL lines the way run.sh does."""
+    e = load()
+    wt = fake_worktree(tmp, suite_exits=1 if fail_lines else 0, failed_ids=[])
+    lines = "".join(f"echo -e '  \\033[0;31mFAIL\\033[0m  {n}'\n" for n in fail_lines)
+    (wt / "tests/run.sh").write_text(f"#!/bin/bash\n{lines}exit {1 if fail_lines else 0}\n")
+    home = Path(tmp) / "home"
+    (home / ".chewbacca").mkdir(parents=True)
+    (home / ".chewbacca/fitness.jsonl").write_text(json.dumps({"failed_cases": []}) + "\n")
+    real_home = e.pathlib.Path.home
+    e.pathlib.Path.home = staticmethod(lambda: home)
+    try:
+        return e.gate(wt, {"structural_score": 90.0}, 90.0, judged, before)
+    finally:
+        e.pathlib.Path.home = real_home
+
+
+def test_gate_ALLOWS_a_failure_the_commit_already_had():
+    """2026-09-27: a pristine upstream main failed `counts --check` on Gavin's
+    Mac. A gate that demanded a green suite would refuse every change there
+    for a failure none of them caused."""
+    with tempfile.TemporaryDirectory() as tmp:
+        allowed, reasons = gate_with_suite(tmp, ["counts --check passes on a clean tree"],
+                                           {"counts --check passes on a clean tree"})
+    assert allowed is True, reasons
+
+
+def test_gate_REFUSES_a_test_that_newly_fails():
+    with tempfile.TemporaryDirectory() as tmp:
+        allowed, reasons = gate_with_suite(tmp, ["counts --check passes on a clean tree",
+                                                 "a greeting costs no model turn"],
+                                           {"counts --check passes on a clean tree"})
+    assert allowed is False
+    assert any("a greeting costs no model turn" in r for r in reasons), reasons
+
+
+def test_gate_REFUSES_a_change_the_judge_still_fails():
+    """A change that scores and breaks nothing but did not fix what it was
+    written for is not a fix."""
+    with tempfile.TemporaryDirectory() as tmp:
+        allowed, reasons = gate_with_suite(tmp, [], set(), judged=False)
+    assert allowed is False
+    assert any("--expect" in r for r in reasons), reasons
+
+
 def test_gate_checks_the_suite_and_the_cases():
     src = (ROOT / "bin/evolve").read_text(encoding="utf-8")
     i = src.index("def gate")

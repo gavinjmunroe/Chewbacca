@@ -294,6 +294,10 @@ wants. The first candidates are already visible in the log.
 
 Everything after that is the loop running.
 
+Built 2026-09-27 as `bin/reflect`, `bin/propose` and `evolve --expect`, with the
+voice's slow requests as the first surface. What it does and what is still open
+is in [LEARNING.md](LEARNING.md#what-closed-on-2026-09-27).
+
 ## What this is not
 
 It is not fine-tuning, not a vector store, not a second model, and not an

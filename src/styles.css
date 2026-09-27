@@ -295,3 +295,76 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
 .hero { padding: 84px 0 150px; min-height: 760px; }
 .hero h1 { max-width: 15ch; }
 @media (max-width: 900px) { .hero { min-height: 0; padding: 48px 0 40px; } }
+
+/* ---- testimonials and newsletter, rebuilt after looking -------------
+   These two were built blind, from the text content alone, and came out as
+   generic bordered cards in a three-column grid. The reference does neither
+   thing. Two structural facts, both visible only in a screenshot:
+
+   The cards are WHITE ON GREY with no heavy border, in a horizontal
+   CAROUSEL that fades at both edges. Bordering every card is the reflex
+   that makes a page look like a template; the reference separates by
+   surface and by hairline, almost never by box.
+
+   And the newsletter splits into two columns divided by a VERTICAL
+   HAIRLINE, with the subscribe form on the RIGHT. I had it inverted. */
+
+.carousel { position: relative; margin-top: 28px; }
+.ctrack {
+  display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
+  padding: 4px 56px 8px; scrollbar-width: none;
+  /* Fade at both edges, so the row reads as continuing rather than stopping.
+     A hard cut at the viewport edge is what makes a carousel look broken. */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+}
+.ctrack::-webkit-scrollbar { display: none; }
+.tcard {
+  flex: 0 0 340px; scroll-snap-align: center; background: var(--white);
+  border: 1px solid #ececf2; padding: 18px 20px; min-height: 190px;
+  display: flex; flex-direction: column; gap: 10px; margin: 0;
+}
+.tcard .nm { font-size: var(--t-sm); font-weight: 500; }
+.tcard .hd { font-size: var(--t-xs); color: var(--muted); }
+.tcard .q  { font-size: var(--t-sm); line-height: 1.6; }
+.tcard .q a, .tcard .hd a { color: var(--accent); }
+.cbtn {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--bg); color: var(--muted); cursor: pointer; font-size: 14px;
+}
+.cbtn:hover { color: var(--ink); border-color: var(--muted); }
+.cbtn.prev { left: 10px; } .cbtn.next { right: 10px; }
+.cdots { display: flex; gap: 7px; justify-content: center; margin-top: 22px; }
+.cdots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line); }
+.cdots i.on { background: var(--accent); }
+
+.news-band { border-top: 1px solid var(--line); background: #efeff1; }
+.news { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.news-left  { padding-right: 56px; }
+.news-right { padding-left: 56px; border-left: 1px solid var(--line); }
+.news h2 { font-size: var(--t-h2); font-weight: 400; letter-spacing: -0.02em;
+           line-height: 1.15; margin: 10px 0 0; }
+.rule { border: 0; border-top: 1px solid var(--line); margin: 26px 0 18px; }
+.issue-meta { font-family: var(--mono); font-size: var(--t-10); color: var(--muted);
+              text-transform: uppercase; letter-spacing: 0.08em; }
+.issue-title { font-size: var(--t-lg); font-weight: 400; margin: 10px 0; }
+.issue-body { font-size: var(--t-md); color: var(--muted); line-height: 1.6; margin: 0 0 14px; }
+.issue-links { display: flex; gap: 20px; font-size: var(--t-sm); }
+.issue-links a { text-decoration: underline; text-underline-offset: 3px; }
+.sub-h { font-size: var(--t-lg); font-weight: 400; margin: 0 0 8px; }
+.sub-p { font-size: var(--t-sm); color: var(--muted); margin: 0 0 16px; line-height: 1.55; }
+/* The button is ATTACHED to the input on the reference. A gap between them
+   is the default flex instinct and it reads as two unrelated controls. */
+.field { gap: 0; max-width: 420px; }
+.field input { border-right: 0; }
+.sub-note { font-size: var(--t-xs); color: var(--muted); margin-top: 10px; }
+
+@media (max-width: 900px) {
+  .news { grid-template-columns: 1fr; }
+  .news-left { padding-right: 0; }
+  .news-right { padding-left: 0; border-left: 0; border-top: 1px solid var(--line);
+                margin-top: 32px; padding-top: 32px; }
+  .tcard { flex-basis: 84vw; }
+  .ctrack { padding: 4px 16px 8px; }
+}

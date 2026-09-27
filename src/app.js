@@ -428,11 +428,27 @@ const TESTIMONIALS = [
 function testimonials() {
   const g = document.getElementById("tgrid");
   if (!g) return;
+  /* @handles render as accent links inline in the quote, which is how the
+     reference reads: these are real posts, not pull-quotes, and the handle
+     being live is what says so. */
+  const at = t => t.replace(/(@[A-Za-z0-9_]+)/g, '<a href="#">$1</a>');
   g.innerHTML = TESTIMONIALS.map(([n, h, q]) =>
-    `<figure class="tcard" style="margin:0 0 16px">
-       <div class="who"><span class="nm">${n}</span><span class="hd">${h}</span></div>
-       <blockquote class="q" style="margin:0">${q}</blockquote>
+    `<figure class="tcard">
+       <div class="who"><span class="nm">${n}</span><span class="hd">${at(h)}</span></div>
+       <blockquote class="q" style="margin:0">${at(q)}</blockquote>
      </figure>`).join("");
+
+  const dots = document.getElementById("cdots");
+  if (dots) dots.innerHTML = TESTIMONIALS.map(() => "<i></i>").join("");
+  const mark = () => {
+    const i = Math.round(g.scrollLeft / (g.scrollWidth / TESTIMONIALS.length));
+    [...(dots ? dots.children : [])].forEach((d, k) => d.classList.toggle("on", k === i));
+  };
+  const page = dir => g.scrollBy({ left: dir * 356, behavior: "smooth" });
+  document.querySelector(".cbtn.prev")?.addEventListener("click", () => page(-1));
+  document.querySelector(".cbtn.next")?.addEventListener("click", () => page(1));
+  g.addEventListener("scroll", mark, { passive: true });
+  mark();
 }
 
 /* Hero plates. Positions, sizes and stacking are MEASURED off the reference

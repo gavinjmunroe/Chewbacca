@@ -139,33 +139,39 @@
   </section>
 
   <!-- TESTIMONIALS -->
-  <section class="band wrap">
-    <div class="label">Testimonials</div>
-    <h2>What people are saying.</h2>
-    <div class="tgrid" id="tgrid"></div>
+  <section class="band">
+    <div class="wrap"><div class="label">Testimonials</div>
+      <h2>What people are saying.</h2></div>
+    <div class="carousel">
+      <button class="cbtn prev" aria-label="Previous slide">&larr;</button>
+      <div class="ctrack" id="tgrid"></div>
+      <button class="cbtn next" aria-label="Next slide">&rarr;</button>
+    </div>
+    <div class="cdots" id="cdots"></div>
   </section>
 
   <!-- NEWSLETTER -->
-  <section class="band wrap">
-    <div class="news">
-      <div>
+  <section class="band news-band">
+    <div class="wrap news">
+      <div class="news-left">
         <div class="label">Lemma Weekly</div>
-        <h2 style="font-size:var(--t-h2);font-weight:400;letter-spacing:-0.02em;margin:10px 0 14px;line-height:1.15">
-          The Friday briefing on AI agent observability and reliability.</h2>
-        <p style="font-size:var(--t-sm);color:var(--muted);margin:0">
-          One email every Friday on what actually mattered in agent reliability.</p>
+        <h2>The Friday briefing on AI agent observability and reliability.</h2>
+        <hr class="rule">
+        <div class="issue-meta">Latest &mdash; Issue 003 &middot; August 14, 2026</div>
+        <h3 class="issue-title">Found in Retrospect</h3>
+        <p class="issue-body">Anthropic found three real-world compromises only after
+          reviewing 141,006 stored evaluation runs. Meta disclosed another
+          testing-boundary failure. A new benchmark&hellip;</p>
+        <div class="issue-links"><a href="#">Read the latest issue</a><a href="#">View all issues</a></div>
+      </div>
+      <div class="news-right">
+        <h3 class="sub-h">Subscribe</h3>
+        <p class="sub-p">One email every Friday on what actually mattered in agent reliability.</p>
         <form class="field" onsubmit="return false">
-          <input type="email" placeholder="Email address" aria-label="Email address">
+          <input type="email" placeholder="you@work.com" aria-label="Email address">
           <button class="btn btn-primary" type="submit">Get Weekly</button>
         </form>
-        <p style="font-size:var(--t-xs);color:var(--muted);margin-top:10px">One issue every Friday.</p>
-      </div>
-      <div class="issue">
-        <div class="m">Latest &mdash; Issue 003 &middot; August 14, 2026</div>
-        <h3>Found in Retrospect</h3>
-        <p>Anthropic found three real-world compromises only after reviewing 141,006
-           stored evaluations.</p>
-        <div class="links"><a href="#">Read the latest issue</a><a href="#">View all issues</a></div>
+        <p class="sub-note">One issue every Friday.</p>
       </div>
     </div>
   </section>

@@ -30,6 +30,26 @@ where the data comes from. All four of those are written down here, once.
 
 Steps 1 to 3 are lookups and should cost almost nothing. That is the point.
 
+## Pick the stance from the reader, not from taste
+
+On 2026-09-27 Amber Circles passed ux-lint, axe, layout-check and design-gate
+in the editorial stance (serif display, one gold italic phrase, an uppercase
+kicker over every heading, outline buttons) and Caleb called it AI slop. It
+was: that look is now the median "tasteful" generated page, and every gate
+scores the absence of the old tells, not this one.
+
+The fix that landed was choosing the stance from who reads it. The users were
+older people opening links from texts, so it became signage (ux-engine
+`material`) in Atkinson Hyperlegible, the Braille Institute's face for low
+vision. Two rules came out of it:
+
+- **Give the accent exactly one meaning** ("you can tap this") and write a
+  test that fails when it fills anything else. The first signage landing had
+  four amber things above the fold and design-gate read it LOUD at ink 0.52.
+- **Show the content as itself.** The text a group actually receives, each
+  tool as a live thumbnail the way Docs shows pages, faces instead of counts.
+  A description of the product is the generated move.
+
 ## One theme, never re-chosen
 
 Caleb: "keep it the same theme." Tokens are defined once per surface and
@@ -39,11 +59,11 @@ moment two of them sit side by side.
 
 ## Where the thing renders
 
-| Surface | Use | Reach it with |
-| --- | --- | --- |
-| **HUD** | Ambient, live, over other apps, no window | `hud` and the `hud` skill |
-| **Local page** | Something to click through or keep open | an HTML file, opened |
-| **In the repo** | Part of a product being built | the project's own stack, per `stack-rules` |
+| Surface         | Use                                       | Reach it with                              |
+| --------------- | ----------------------------------------- | ------------------------------------------ |
+| **HUD**         | Ambient, live, over other apps, no window | `hud` and the `hud` skill                  |
+| **Local page**  | Something to click through or keep open   | an HTML file, opened                       |
+| **In the repo** | Part of a product being built             | the project's own stack, per `stack-rules` |
 
 Pick the surface before the layout. An overlay HUD and a settings page are
 different templates, and building the second one into the first is the common

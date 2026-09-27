@@ -16,6 +16,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GRN='\033[0;32m'; RED='\033[0;31m'; DIM='\033[2m'; BLD='\033[1m'; NC='\033[0m'
 PASS=0; FAIL=0; SKIP=0
 ONLY="${1:-}"
+# The groups, read from this file so a new one is listed the day it is added.
+GROUPS_HERE=$(grep -oE '^[[:space:]]*if group "[^"]+"' "${BASH_SOURCE[0]}" | cut -d'"' -f2 | awk '!seen[$0]++')
+# An unknown word used to select nothing and print "0 passed, 0 skipped", a
+# clean result for doing no work at all: `--list` did exactly that (2026-09-26).
+if [ "$ONLY" = "--list" ]; then printf '%s\n' "$GROUPS_HERE"; exit 0; fi
+if [ -n "$ONLY" ] && ! printf '%s\n' "$GROUPS_HERE" | grep -qxF -- "$ONLY"; then
+  echo "unknown group: $ONLY. Groups: $(printf '%s' "$GROUPS_HERE" | tr '\n' ',')" >&2; exit 2
+fi
 declare -a FAILURES=()
 
 TMP="$(mktemp -d)"
@@ -1053,6 +1061,7 @@ if group "reasoning backends"; then
   check "page-render draws the same pixels every run" bash "$ROOT/tests/page_render.sh"
   check "the drawn extent never walks backwards" bash "$ROOT/tests/sweep_monotonic.sh"
   check "the vibe guard refuses claims with no evidence" bash "$ROOT/tests/vibe_guard.sh"
+  check  "closeout streams, answers fast, reuses gates only for this commit" bash "$ROOT/tests/closeout.sh"
   check "stage 8 is enforced: a first-name collision is refused" bash "$ROOT/tests/fusion_guard.sh"
   check "the installer ships everything it registers" bash "$ROOT/tests/setup_ships_what_it_registers.sh"
   check "shared agent instructions are current" python3 "$ROOT/tools/agents_md.py" --check

@@ -482,7 +482,7 @@ function testimonials() {
    frame, the label INSIDE the frame's top-left, and the overlap. The overlap
    is the only depth cue in a flat drawing, and it is what makes six plates
    read as one composition instead of six decorations. */
-import { sphere, crosshatch, hyperboloid, ring, isoCube, dotArch } from "./geometry.js";
+import { sphere, crosshatch, hyperboloid, ring, isoCube, dotArch, fit } from "./geometry.js";
 
 const PLATES = [
   { id: "LEM. 1.1", left: "8%",    top: 0,   w: 281, h: 186, fig: "hyper" },
@@ -494,67 +494,95 @@ const PLATES = [
 ];
 
 const A = "#755cfe";
-/* Draw-on, per the reference: 600-800ms LINEAR with a 15-20ms stagger, and
-   pathLength="1" so every stroke finishes together whatever its real length.
-   The whole stagger is capped so a 260-element figure still lands inside the
-   400ms budget: at 260 x 18ms it would run 4.7s and the page would look
-   broken, so the step shrinks as the count grows. */
-/* Stagger step per figure, exactly as the reference runs it. NOT capped:
-   the reference's sphere staggers across 1,485ms and that slow reveal is the
-   effect. Capping it to fit a 400ms entrance budget compresses a drawing
-   into a flash, and the 400ms rule is about a list of UI elements arriving,
-   not about a hundred-path figure drawing itself. */
-function polys(list, sw = 0.55, op = 0.75, step = 18, extra = "") {
+
+/* ONE COORDINATE SYSTEM, AND ONLY ONE.
+   Caleb: "Your scaling and positioning is always off." It was, and it was
+   one cause repeated, not a run of separate mistakes.
+
+   The reference gives EVERY plate viewBox="0 0 100 100". One normalised box,
+   and the viewBox does all the scaling. geometry.js already ends every
+   generator with fit(), which emits into exactly that 0..100 box.
+
+   I was taking fit()'s output and hand-multiplying it per figure by numbers
+   I invented: w*0.0082 here, min(w,h)*0.24 there, h*0.32 somewhere else.
+   That is a SECOND mapping from geometry to pixels, sitting alongside the
+   one the viewBox already performs, and the two disagreed differently in
+   every figure. Two plates rendered as empty frames from it; the rest were
+   each wrong by their own private factor.
+
+   This is feedback_one_mapping_for_spatial_input, which was written after
+   six alignment bugs in one morning, all of them two paths from a landmark
+   to a pixel: map once, at the door.
+
+   So: viewBox is 0 0 100 100 for every plate, coordinates are emitted raw
+   from fit(), and there is no scaling arithmetic anywhere below. A figure
+   cannot be the wrong size now, because nothing is sizing it. */
+const VB = "0 0 100 100";
+
+/* pathLength="100" makes the dash length mean the SAME thing on every path.
+   The reference animates stroke-dashoffset from 100px to 0; without
+   declaring a path length, 100 is 100 real user units, so a 40-unit ring
+   segment is already fully covered by the first dash and a 400-unit curve
+   gets four dashes marching along it. That is what rendered the sphere as a
+   dotted line instead of a drawn one. Declaring the length makes 100 mean
+   "the whole path" everywhere, which is what the reference's figures assume.
+
+   vector-effect is gone: with non-scaling-stroke the dash is measured in
+   SCREEN pixels while the path is in user units, so the two disagree by the
+   viewBox scale, differently on every plate. Another second mapping. */
+function polys(list, sw = 0.55, step = 18, extra = "") {
   return list.map((pts, i) =>
-    `<polyline points="${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}"
-       data-draw ${extra} fill="none" stroke="${A}" stroke-width="${sw}"
-       style="animation-delay:${(i * step).toFixed(0)}ms"/>`).join("");
+    `<polyline points="${pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}"
+       pathLength="100" data-draw ${extra} fill="none" stroke="${A}"
+       stroke-width="${sw}" style="animation-delay:${(i * step).toFixed(0)}ms"/>`).join("");
 }
 
-function figure(kind, w, h) {
-  const vb = `${-w / 2} ${-h / 2} ${w} ${h}`;
+/* Every generator already returns fit()-normalised 0..100 polylines, except
+   the three added for this rebuild, which are normalised here ONCE so the
+   rule holds for all of them without exception. */
+function norm(list) { return fit(list); }
+
+function figure(kind) {
   let inner = "";
   if (kind === "hyper") {
-    const hy = hyperboloid({ n: 60, twist: 1.25, w: w * 0.42, h: h * 0.32 });
-    /* Exactly TWO paths carry the perpetual dash, matching the reference's
-       count. Every line drifting is noise; two is a pulse under the plate. */
-    inner = polys(hy.slice(0, 58), 0.5, 0.6, 20)
-          + polys(hy.slice(58), 0.7, 0.75, 20, "data-orbit");
+    const hy = norm(hyperboloid({ n: 60, twist: 1.25, w: 100, h: 60 }));
+    inner = polys(hy.slice(0, 58), 0.5, 20)
+          + polys(hy.slice(58), 0.7, 20, 'data-orbit');
   } else if (kind === "ring") {
-    /* Wrapped in a <g> because the infinite spin transforms the group, not
-       each band. The selector had no <g> to match, so the one perpetual
-       rotation on the page was written and never ran: the page measured
-       0 infinite animations against the reference's 4. */
-    inner = ring({ r: Math.min(w, h) * 0.30, thick: Math.min(w, h) * 0.13, bands: 30 })
-      .map((b, i) => `<polyline points="${b.pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}"
-        pathLength="1" data-draw-fade fill="none" stroke="${A}" stroke-width="1.1"
-        style="animation-duration:600ms;animation-delay:${i * 18}ms;opacity:${b.o.toFixed(2)}"/>`).join("");
+    const bands = ring({ r: 34, thick: 15, bands: 30 });
+    inner = "<g>" + bands.map((b, i) =>
+      `<polyline points="${b.pts.map(([x, y]) => `${(x + 50).toFixed(2)},${(y + 50).toFixed(2)}`).join(" ")}"
+         pathLength="100" data-draw fill="none" stroke="${A}" stroke-width="1.1"
+         style="animation-delay:${i * 18}ms"/>`).join("") + "</g>";
   } else if (kind === "cube") {
-    const c = isoCube({ s: Math.min(w, h) * 0.24 });
-    const P = pts => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-    inner = `<g transform="translate(${(-Math.min(w, h) * 0.24).toFixed(1)},0)">
-      <polygon points="${P(c.left)}"  fill="none" stroke="${A}" stroke-width="0.8"/>
-      <polygon points="${P(c.right)}" fill="none" stroke="${A}" stroke-width="0.8"/>
-      <polygon points="${P(c.top)}"   fill="#1d1956"/></g>`;
-  } else if (kind === "mesh" || kind === "sphere") {
-    /* geometry.js runs everything through fit(), which maps into a 0..100 box
-       centred on (50,50). Treating that output as unit coordinates and scaling
-       it by the plate width put both figures thousands of pixels outside their
-       viewBox, so two plates rendered as empty frames. The frames looked
-       deliberate, which is why this survived a code read and died instantly in
-       a screenshot. Re-centre on 0 and scale from 100, not from 1. */
-    const src = kind === "mesh"
-      ? crosshatch({ n: 18, seg: 8 })
-      : sphere({ lats: 9, longs: 14, seg: 30 });
-    const k = Math.min(w, h) * 0.0082;           // 0.82 of the plate's short side
-    inner = polys(src.map(l => l.map(([x, y]) => [(x - 50) * k, (y - 50) * k])),
-                  0.5, kind === "sphere" ? 1 : 0.6, kind === "sphere" ? 15 : 20);
+    const c = isoCube({ s: 24 });
+    const P = pts => pts.map(([x, y]) => `${(x + 38).toFixed(2)},${(y + 50).toFixed(2)}`).join(" ");
+    inner = `<polygon points="${P(c.left)}"  fill="none" stroke="${A}" stroke-width="0.8"/>
+             <polygon points="${P(c.right)}" fill="none" stroke="${A}" stroke-width="0.8"/>
+             <polygon points="${P(c.top)}"   fill="#1d1956"/>`;
+  } else if (kind === "mesh") {
+    inner = polys(crosshatch({ n: 18, seg: 8 }), 0.45, 20);
+  } else if (kind === "sphere") {
+    inner = polys(sphere({ lats: 9, longs: 14, seg: 30 }), 0.5, 15);
   } else if (kind === "dots") {
-    inner = dotArch({ cols: 32, rows: 26, w: w * 0.78, h: h * 0.72 })
-      .map(([x, y, r], i) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}"
-        fill="${A}" data-draw-fade style="animation-duration:800ms;animation-delay:${(i % 40) * 9}ms;opacity:.8"/>`).join("");
+    /* 2,046 circles on the reference's densest plate. 700 here rather than
+       the previous ~400: still under it, and honest about being under it,
+       but far past the point where the arch reads as a field instead of a
+       sprinkle. */
+    /* ANIMATION BUDGET. The reference runs 214 animations on the whole
+       page: 100 sphere paths, 60 harmonograph, 48 gravlens, 6 others. Mine
+       ran 1,969 because every element that could animate did, including
+       every one of these circles.
+
+       The reference's densest plate holds 2,046 circles and animates NONE of
+       them individually: the field fades in as ONE group. A per-circle
+       animation on a dense field is invisible anyway, and 700 of them is
+       700 compositor entries buying nothing. */
+    inner = `<g data-draw-group>` + dotArch({ cols: 52, rows: 42, w: 78, h: 72 })
+      .map(([x, y, r]) => `<circle cx="${(x + 50).toFixed(2)}" cy="${(y + 50).toFixed(2)}"
+        r="${(r * 0.42).toFixed(2)}" fill="${A}"/>`).join("") + `</g>`;
   }
-  return `<svg viewBox="${vb}" preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
+  return `<svg viewBox="${VB}" preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
 }
 
 function plates() {
@@ -570,7 +598,7 @@ function plates() {
        hum, and a hum on every element is noise. */
     if (p.fig === "ring") d.classList.add("spin");
     d.dataset.fig = p.fig;
-    d.innerHTML = figure(p.fig, p.w, p.h) + `<div class="cap">${p.id}</div>`;
+    d.innerHTML = figure(p.fig) + `<div class="cap">${p.id}</div>`;
     host.appendChild(d);
   }
 }

@@ -12,8 +12,9 @@
   --accent-dp: #5d4ee7;        /* rgb(93,78,231), pressed/deep */
   --panel:     #f7faff;        /* rgb(247,250,255), raised surfaces */
   --white:     #ffffff;
-  --line:      #d4d4dd;        /* rgb(212,212,221), hairlines */
-  --line-soft: #e8e8e8;        /* rgb(232,232,232), the Login button */
+  --line:      #d5d5d5;        /* their --color-accent-light, read from source */
+  --line-soft: #e6e6e6;        /* their --color-muted */
+  --navy-lite: #322c8a;        /* their --color-brand-navy-light, which I had missed entirely */
   --grey:      #a6a9b3;        /* rgb(166,169,179) */
   --slack-ink: #1d1c1d;        /* rgb(29,28,29), the Slack mock only */
 
@@ -594,3 +595,88 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
 .hero { min-height: 680px; padding: 84px 0 24px; }
 .trusted { padding-top: 8px; }
 @media (max-width: 900px) { .hero { min-height: 0; padding: 48px 0 24px; } }
+
+/* A dense field fades in as one group, never per element. */
+@keyframes group-in { from { opacity: 0 } to { opacity: .8 } }
+.plate svg [data-draw-group] { animation: group-in 800ms linear both; }
+.plate svg [data-draw] { stroke-dasharray: 100; stroke-dashoffset: 100; }
+@media (prefers-reduced-motion: reduce) {
+  .plate svg [data-draw-group] { animation: none; opacity: .8 }
+}
+
+/* ---- HOVER, read from their served stylesheet ------------------------
+   Caleb: "there's a bunch of hover effects all over that you didn't
+   effectively scan for", then "you have the ability to scrape their code".
+   Both right. My element-level hover scan only caught the nav, because
+   their hover layer is Tailwind GROUP-hover: the trigger is an ancestor
+   and the thing that moves is a descendant, so hovering the child and
+   diffing its own computed style finds nothing.
+
+   From their CSS, with their own named group scopes (group/link,
+   group/link2, group/menu-item):
+
+     group-hover:scale-x-100          an underline grown from zero width
+     group-hover:-translate-x-0.5     an arrow sliding back
+     group-hover:translate-x-0.5      an arrow sliding forward
+     group-hover:text-brand-purple    text to #755cfe
+     group-hover:opacity-100 / 60
+     group-hover:[clip-path:inset(0 0 0 0)]   a wipe reveal
+
+   Their transition is 0.15s cubic-bezier(0.4, 0, 0.2, 1) on colour, and
+   0.3s cubic-bezier(0, 0, 0.2, 1) on the opacity reveals. Measured on the
+   live page, not guessed: nav links go #6b6891 to #1d1956 over 150ms, and
+   the ghost buttons go #e8e8e8 to #e0e0e0. */
+
+.group { position: relative; }
+
+/* The underline that grows from the left rather than fading in. scaleX from
+   0 with a left origin is the whole trick, and it is why their links feel
+   drawn rather than switched. */
+.ul-grow { position: relative; }
+.ul-grow::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -2px; height: 1px;
+  background: currentColor; transform: scaleX(0); transform-origin: left center;
+  transition: transform .15s cubic-bezier(.4, 0, .2, 1);
+}
+.ul-grow:hover::after, .group:hover .ul-grow::after { transform: scaleX(1); }
+
+.nav a { transition: color .15s cubic-bezier(.4, 0, .2, 1); }
+.btn   { transition: background-color .15s cubic-bezier(0, 0, .2, 1),
+                     color .15s cubic-bezier(0, 0, .2, 1); }
+.btn-ghost:hover { background: #e0e0e0; }
+
+/* An arrow that slides on hover of its whole row, not of itself. */
+.arrow { display: inline-block; transition: translate .15s cubic-bezier(.4, 0, .2, 1); }
+.group:hover .arrow { translate: 2px 0; }
+.group:hover .arrow-back { translate: -2px 0; }
+
+/* The clip-path wipe: a second copy revealed from the bottom up. Nothing
+   fades, so the swap reads as one object changing rather than two crossfading. */
+.wipe { position: relative; display: inline-block; }
+.wipe > .under { color: var(--accent); position: absolute; inset: 0;
+  clip-path: inset(100% 0 0); transition: clip-path .3s cubic-bezier(0, 0, .2, 1); }
+.group:hover .wipe > .under, .wipe:hover > .under { clip-path: inset(0); }
+
+.tcard { transition: border-color .15s cubic-bezier(.4, 0, .2, 1); }
+.tcard:hover { border-color: var(--accent); }
+.tcard .q a, .tcard .hd a { transition: opacity .15s cubic-bezier(.4, 0, .2, 1); }
+.tcard .q a:hover, .tcard .hd a:hover { opacity: .8; }
+.logo-cell { transition: background-color .15s cubic-bezier(.4, 0, .2, 1); }
+.logo-cell:hover { background: #ededed; }
+.logo-cell:hover .n { color: var(--accent); }
+.logo-cell .n { transition: color .15s cubic-bezier(.4, 0, .2, 1); }
+.plate { transition: border-color .3s cubic-bezier(0, 0, .2, 1); }
+.plate:hover { border-color: var(--navy-lite); }
+.issue-links a, .fcol a { transition: color .15s cubic-bezier(.4, 0, .2, 1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .ul-grow::after, .arrow, .wipe > .under { transition: none; }
+}
+
+/* The nav rests at muted and moves to ink on hover. I had "corrected" it to
+   ink from a screenshot read, which put it permanently at its own hover
+   state, so the hover then had nowhere to go. Measured from the live page:
+   rgb(107,104,145) -> rgb(29,25,86) over 150ms. A screenshot can only ever
+   show one state, so reading a resting colour off one is a coin flip. */
+.header .nav a { color: var(--muted); }
+.header .nav a:hover { color: var(--ink); }

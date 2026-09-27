@@ -24,6 +24,7 @@ export PEOPLE_DIR="$TMP/people"
 export COURSEWORK_DIR="$TMP/coursework"
 export CHEWBACCA_LOG_DIR="$TMP/logs"
 export SUPERASSISTANT_DIR="$TMP/superassistant"
+export BOB_DECISIONS="$TMP/decisions.jsonl"
 
 group() { CURRENT="$1"; [ -n "$ONLY" ] && [ "$ONLY" != "$1" ] && return 1
           echo -e "\n${BLD}$1${NC}"; return 0; }
@@ -235,6 +236,7 @@ if group "decision-learning"; then
   check "graph optimization and offline reinforcement learning" python3 "$ROOT/tests/test_ux_policy.py"
   check "bounded Clay replay and stale rejection" python3 "$ROOT/tests/test_clay_review.py"
   check "Jev transport shape and credential compatibility" python3 "$ROOT/tests/test_jev_transport.py"
+  check "hybrid skill route: code, Jev, model fallback, budgets, verifier and resume" python3 "$ROOT/tests/test_hybrid_route.py"
   check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 
@@ -301,6 +303,12 @@ if group "tools"; then
     bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck/skills' 2>&1 || true"
   exits  "and the checker exits non-zero" 1 \
     bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck/skills'"
+  LONG="$TMP/fmcheck-long/skills/long"; mkdir -p "$LONG"
+  printf -- '---\nname: long\ndescription: "%s"\n---\n\n# x\n' "$(printf 'a%.0s' $(seq 1 1100))" > "$LONG/SKILL.md"
+  expect "a description over 1024 characters is caught" "the limit is 1024" \
+    bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck-long/skills' 2>&1 || true"
+  # Perplexity imports skills as zips; every repo skill must package cleanly.
+  check  "every skill packages for Perplexity" bash -c "python3 '$ROOT/tools/agent_runtime.py' export --runtime perplexity-computer --destination '$TMP/px' >/dev/null && [ \"\$(ls '$TMP/px/skills' | wc -l)\" -eq \"\$(ls -d '$ROOT'/skills/*/SKILL.md | wc -l)\" ] && ! grep -q '/Users/' '$TMP/px/CHEWBACCA.md'"
   check  "AGENTS.md exports for other agents" python3 "$ROOT/tools/agents_md.py" "$TMP"
   check  "the export leaks no @imports" bash -c "! grep -q '^@' '$TMP/AGENTS.md'"
   check  "slop check holds the line" python3 "$ROOT/bin/slop-check" "$ROOT/docs" "$ROOT/skills" --max 60
@@ -589,6 +597,11 @@ if group "installer"; then
   check  "every relative link in the docs resolves" \
     python3 "$ROOT/tools/linkcheck.py"
 
+  # The real BACKLOG.md lives in the team's private repo, so these read a
+  # fixture: on CI, where that repo is absent, they failed from 2026-09-21 to
+  # 2026-09-25 while passing on every Mac that had CHEWBACCA_PRIVATE set.
+  # tests/backlog.sh also swaps HOME, so the beside-checkout fallback cannot
+  # find a real backlog either.
   check  "the backlog lists open work" bash "$ROOT/tests/backlog.sh" "$ROOT" open
 
   check  "the backlog keeps dead items and their reason" bash "$ROOT/tests/backlog.sh" "$ROOT" dead
@@ -951,6 +964,17 @@ if group "hud"; then
   check  "the terminal state folds and tails" python3 "$ROOT/tests/test_terminal_state.py"
   check  "the agent board folds every session and picks by Jev" python3 "$ROOT/tests/test_agent_board.py"
   check  "fanout runs the JevBacca kill test with injected judges" python3 "$ROOT/tests/test_fanout.py"
+  check  "site-fast types a field value or nothing" python3 "$ROOT/tests/test_site_fast.py"
+  check  "untrusted-screen flags text aimed at the agent, and only that" python3 "$ROOT/tests/test_screen.py"
+  check  "model-route maps Jev's class to the router's targets" python3 "$ROOT/tests/test_model_route.py"
+  check  "intro walks you, a person, an org, and nothing else" python3 "$ROOT/tests/test_intro.py"
+  check  "ux-do acts on what was meant, asks when unsure, never presses send" python3 "$ROOT/tests/test_ux.py"
+  check  "every named Jev decision is logged and joined to what happened" python3 "$ROOT/tests/test_decision_log.py"
+  check  "math, time, conversions and weather are computed, never guessed" python3 "$ROOT/tests/test_quick.py"
+  check  "web-record keeps the path, never what was typed" python3 "$ROOT/tests/test_web_record.py"
+  check  "bb opens Blackboard by read addresses, asks when unsure" python3 "$ROOT/tests/test_bb.py"
+  check  "brand-grab reads a business's own brand and marks refused pages refused" python3 "$ROOT/tests/test_brand_grab.py"
+  check  "list-sift judges only what survives the facts" python3 "$ROOT/tests/test_list_sift.py"
   # The same file has a pytest-only path (the fixtures at its top) that no
   # runner ever exercised: none of the python3 interpreters on the dev Macs,
   # 3.12 through 3.14 and /usr/bin, has pytest, so a bare `python3 -m pytest`
@@ -964,7 +988,7 @@ if group "hud"; then
   else
     skip "the suite collects under pytest" "no pytest and no uv"
   fi
-  expect "the skill teaches the wire format" "Bob Lines" cat "$ROOT/skills/hud/SKILL.md"
+  expect "the skill teaches the wire format" "Kyber Lines" cat "$ROOT/skills/hud/SKILL.md"
 fi
 
 # ── guide ─────────────────────────────────────────────────────────────────────
@@ -1047,12 +1071,16 @@ if group "reasoning backends"; then
   check "circle detector accepts circles, not triangles" bash "$ROOT/tests/circle_shapes.sh"
   check "no drawn line is ever jagged" bash "$ROOT/tests/path_smoothness.sh"
   check "portals open and close" bash "$ROOT/tests/portal_state.sh"
+  check "page-render draws the same pixels every run" bash "$ROOT/tests/page_render.sh"
   check "the drawn extent never walks backwards" bash "$ROOT/tests/sweep_monotonic.sh"
   check "the vibe guard refuses claims with no evidence" bash "$ROOT/tests/vibe_guard.sh"
   check "stage 8 is enforced: a first-name collision is refused" bash "$ROOT/tests/fusion_guard.sh"
   check "the installer ships everything it registers" bash "$ROOT/tests/setup_ships_what_it_registers.sh"
   check "shared agent instructions are current" python3 "$ROOT/tools/agents_md.py" --check
   check "ChatGPT turn boundaries" python3 "$ROOT/tests/test_chatgpt_tab.py"
+  check "Perplexity turn boundaries and voice routing" python3 "$ROOT/tests/test_perplexity_tab.py"
+  check "jev-browse stops at a send and reports its claim" python3 "$ROOT/tests/test_jev_browse.py"
+  check "chewbacca-bridge runs only its fixed tools" python3 "$ROOT/tests/test_chewbacca_bridge.py"
   check "gateway protocol and execution" python3 "$ROOT/tests/test_chatgpt_gateway.py"
   check "provider selection and ownership" python3 "$ROOT/tests/test_mac_use_providers.py"
   check "Codex shared instructions and optional health" python3 "$ROOT/tests/test_codex.py"

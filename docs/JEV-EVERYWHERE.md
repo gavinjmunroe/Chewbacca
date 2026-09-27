@@ -9,7 +9,7 @@ piece of infrastructure they all share.
 An LLM decision costs seconds and cents, so Chewbacca asks as few as it can and
 guesses the rest with word lists. Measured here: the Haiku classifier took 9 to 17 s
 and $0.074 per sentence and never beat its timeout once. Jev answers the same question
-in 0.18 to 0.35 s for a small fraction of a cent (see `project-voice-router-fix`).
+inside that timeout.
 
 That changes the design question: once decisions are cheap, Chewbacca can ask
 typed questions about its own state and the person's state continuously, on every
@@ -21,6 +21,14 @@ Everything below follows the article's rule. **Text comes from the LLM. Picking,
 scoring and yes/no go to Jev. An exact rule stays in code.**
 
 ## The foundation: a decision registry with outcomes
+
+Built so far (2026-09-25): the log and the outcome join. `jev.ask(..., decision=<name>)`
+writes `~/.bob/decisions.jsonl` through `bin/lib/decision_log.py`; the router, the agent
+board, model-route and ux-do are named. Outcomes come from observation only: ux-do reads
+the window again after pressing, and a spoken "no, the terminal" marks the Jev route it
+corrects. `decisions stats` gives right and wrong by confidence bucket. The registry
+files, nightly calibration and shadow mode below are not built; PR #3's decision-lab is
+the offline half of calibration and can read this log.
 
 Every idea further down plugs into this. Build it first, because without it each Jev
 call is a one-off with a hand-set threshold and a hand-written eval.
@@ -41,7 +49,7 @@ call is a one-off with a hand-set threshold and a hand-written eval.
    `review-discipline.md` already demands.
 5. **Shadow mode.** A new decision runs beside the current rule for a week, acts on
    nothing, and logs disagreements. It goes live when its calibrated accuracy beats the
-   rule on real traffic. This retires the "30/30 on labels we wrote ourselves" caveat.
+   rule on real traffic. This retires the "labels we wrote ourselves" caveat.
 6. **Fan-out.** One call carries every question about an event. Jev runs them in
    parallel, so ten questions cost one round trip.
 
@@ -77,7 +85,7 @@ type, is the moat [LEARNING-TO-ACT.md](LEARNING-TO-ACT.md) describes for the reg
 JEV-HUD.md already covers the agent board, one parallel call per sentence, permission
 triage, guide mode and the cost line. These go further.
 
-- **End-of-turn detection.** `hud/Sources/BobHUDKit/Voice.swift` closes a turn after a
+- **End-of-turn detection.** `hud/Sources/KyberKit/Voice.swift` closes a turn after a
   fixed 1.1 s of silence, and its own comment says that is shorter than a pause for
   thought. Ask Jev on every partial transcript: "is this utterance finished". A
   finished sentence fires at 300 ms of silence; "and then the" waits. Turn-taking is
@@ -97,8 +105,7 @@ triage, guide mode and the cost line. These go further.
   is a Noul on the board state, spoken once.
 - **Mac control on Jev.** The accessibility tree becomes the menu, rebuilt every step,
   and Jev picks action and target. That is Browser Use's loop, applied to peekaboo.
-  `tests/eval_ground_jev.py` already measured the grounding half: 29/30 top-1 against
-  12/30 for word overlap.
+  `tests/eval_ground_jev.py` already measures the grounding half.
 - **Speak or write.** Choice per answer: speak it, write it to the hyper bar, or both
   with a one-line pointer, from answer length, front app and whether he is on a call.
 - **Corrections are labels.** "No, the terminal" already recovers a bad route. Written
@@ -117,8 +124,8 @@ permission for the Amber side, so the fan-out may run on personal text.
 - **Amber's people scoring, fed by Jev (2026-09-23).** `people note` and `people me`
   now ask Jev for dimensions, modality and source whenever the flags leave them out.
   Before this, every observation in the live store was `actual`, so the modality
-  weights in Amber's design never fired. `tests/eval_people_jev.py`: dimensions
-  22/24, modality 24/24, source 22/24, against 9, 13 and 20 for the keyword path.
+  weights in Amber's design never fired. `tests/eval_people_jev.py` compares the
+  two paths; its results stay private under TypeSafe's agreement 2.3(f).
   Events and speaker facts pulled from texts go through the same questions since the
   full-access choice; events used to be tagged `social` whatever they were.
 

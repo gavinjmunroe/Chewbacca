@@ -11,14 +11,19 @@ import json
 import math
 import os
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import decision_log  # noqa: E402
+
 URL = "https://api.typesafe.ai/v1/systemone"
 MODEL = os.environ.get("TYPESAFE_MODEL", "jev-latest")
-# Measured 2026-09-23 from this Mac: 0.18 to 0.32 s per single-question call.
-# Ten times the worst of those still leaves the router's 3 s budget intact.
+# Well above the single-question call times seen from this Mac on 2026-09-23
+# (kept private under TypeSafe's agreement 2.3(f)), and inside the router's
+# 3 s budget.
 TIMEOUT_S = 2.5
 
 _key: str | None = None
@@ -108,11 +113,13 @@ def validate_choice(answer, criteria) -> tuple[str, float] | None:
 
 
 def ask_result(state, questions: dict, timeout: float = TIMEOUT_S, *,
-               max_attempts: int = 1, retry_codes=()) -> dict | None:
+               max_attempts: int = 1, retry_codes=(), decision: str | None = None) -> dict | None:
     """One request by default; callers explicitly opt into bounded retries.
 
     Retry policy preserves fanout's existing backoff. Invalid response shapes
     abstain immediately; retries cannot repair a broken answer schema.
+    `decision` names the call in ~/.bob/decisions.jsonl (bin/lib/decision_log.py);
+    unnamed calls, the bulk ones, are not logged. One row per call, not per attempt.
     """
     if type(max_attempts) is not int or not 1 <= max_attempts <= 4:
         raise ValueError("max_attempts must be between one and four")
@@ -122,6 +129,18 @@ def ask_result(state, questions: dict, timeout: float = TIMEOUT_S, *,
     if not key:
         return None
     body = json.dumps({"state": state, "model": MODEL, "questions": questions}, allow_nan=False).encode()
+    started = time.monotonic()
+    result, error = _send(body, key, timeout, max_attempts, retry_codes)
+    if decision:
+        answers = result["answers"] if result else None
+        decision_log.record(decision, state, answers, (time.monotonic() - started) * 1000,
+                            error or (None if answers else "no answers"))
+    return result
+
+
+def _send(body: bytes, key: str, timeout: float, max_attempts: int,
+          retry_codes) -> tuple[dict | None, str | None]:
+    """The request loop. Returns (result, error class name or None)."""
     for attempt in range(max_attempts):
         req = urllib.request.Request(URL, data=body, method="POST", headers={
             "Authorization": f"Bearer {key}", "Content-Type": "application/json",
@@ -129,24 +148,24 @@ def ask_result(state, questions: dict, timeout: float = TIMEOUT_S, *,
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 payload = json.loads(resp.read())
-        except urllib.error.HTTPError as error:
-            status = error.code
-            error.close()
+        except urllib.error.HTTPError as err:
+            status = err.code
+            err.close()
             if status not in retry_codes or attempt + 1 == max_attempts:
-                return None
-        except (OSError, urllib.error.URLError, ValueError):
+                return None, f"HTTP {status}"
+        except (OSError, urllib.error.URLError, ValueError) as err:
             if attempt + 1 == max_attempts:
-                return None
+                return None, type(err).__name__
         else:
             if not isinstance(payload, dict) or not isinstance(payload.get("answers"), dict):
-                return None
+                return None, "invalid response"
             # Allowlisted metadata only; never echo provider diagnostics or input.
             return {"answers": payload["answers"], "model": payload.get("model"),
-                    "usage": payload.get("usage"), "attempts": attempt + 1}
+                    "usage": payload.get("usage"), "attempts": attempt + 1}, None
         time.sleep(2 ** attempt)
-    return None
+    return None, "exhausted"
 
 
-def ask(state, questions: dict, timeout: float = TIMEOUT_S) -> dict | None:
-    result = ask_result(state, questions, timeout)
+def ask(state, questions: dict, timeout: float = TIMEOUT_S, decision: str | None = None) -> dict | None:
+    result = ask_result(state, questions, timeout, decision=decision)
     return result["answers"] if result else None

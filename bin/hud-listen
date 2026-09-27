@@ -2,7 +2,7 @@
 """Close the loop: speech in, an interface out.
 
 The display can hear (it emits `h "..."` when someone speaks to it) and it can
-draw (it accepts Bob Lines). Nothing joined the two, so the microphone produced
+draw (it accepts Kyber Lines). Nothing joined the two, so the microphone produced
 events that went nowhere. This is the join: hold one connection open, wait for
 something to be said, ask a model for an interface, and stream the answer back
 down the same socket.
@@ -44,6 +44,12 @@ import route  # noqa: E402
 import voice_memory  # noqa: E402
 import terminal_state  # noqa: E402
 import agent_board  # noqa: E402
+import decision_log  # noqa: E402
+import quick  # noqa: E402
+
+# HUD_QUICK=off: math, time, date, conversions and weather go to the model
+# like everything else, instead of being computed (bin/lib/quick.py).
+QUICK = os.environ.get("HUD_QUICK", "on") != "off"
 
 # HUD_ROUTE=off: every sentence goes to the assistant and nothing is written
 # to ~/.bob/memory, which is how the fake-display test runs without a
@@ -195,6 +201,11 @@ SUPERASSISTANT = Path(__file__).resolve().parent / "superassistant"
 # measured on 2026-09-20) to reach `hud-music` now reaches it in the time
 # one search and one AppleScript take.
 MUSIC = Path(__file__).resolve().parent / "hud-music"
+# Perplexity Computer in a Chrome tab. See bin/perplexity-tab.
+PERPLEXITY = Path(__file__).resolve().parent / "perplexity-tab"
+# A Computer turn can run for many minutes. Past this the voice stops
+# listening for the answer and says where to find it. Guessed.
+PERPLEXITY_WAIT_S = float(os.environ.get("HUD_PERPLEXITY_WAIT_S", "1800"))
 _superassistant: object = None
 
 
@@ -266,7 +277,7 @@ PERMISSION_MODES = {"acceptEdits", "auto", "bypassPermissions", "manual", "dontA
 RETIRE_TURNS = 50
 RETIRE_TOKENS = 60_000
 # The names the display's recogniser is told to expect (Vocabulary in
-# BobHUDKit reads this): whoever the person has been texting, then whoever
+# KyberKit reads this): whoever the person has been texting, then whoever
 # is in Contacts. Written once per start, in the background.
 NAMES = Path(os.environ.get("BOB_NAMES", str(Path.home() / ".bob" / "names.txt")))
 NAMES_CHATS = 60
@@ -564,7 +575,7 @@ def user_settings() -> dict:
 def instructions() -> str:
     """The drawing vocabulary, as a fallback only.
 
-    The first version pasted this into every prompt and demanded Bob Lines back
+    The first version pasted this into every prompt and demanded Kyber Lines back
     on stdout. Then the first real test showed the model doing something better:
     it found the `hud` skill itself, went and read the actual coursework ledger
     and message history, and drew real data. Told to emit lines, it would have
@@ -582,7 +593,7 @@ def instructions() -> str:
 def draw_lines(text: str) -> list[str]:
     """Keep the ops and throw away the prose.
 
-    A model asked for only Bob Lines will still occasionally explain itself, and
+    A model asked for only Kyber Lines will still occasionally explain itself, and
     an explanation sent to the parser is a screen full of warnings. Filtering to
     known verbs on this side means the worst case is a missing surface rather
     than a broken one.
@@ -2003,6 +2014,8 @@ class Listener:
         # seconds to send to a model.
         if not relayed and self.pleasantry(said):
             return
+        if QUICK and not relayed and self.quick_answer(said, typed):
+            return
         if not relayed and self.music_request(said, typed):
             return
         # A relayed event (a click the display reported) and a request already
@@ -2141,6 +2154,35 @@ class Listener:
         self.remember(req, answer, True, "done")
         self.send("s " + json.dumps(answer))
         self.speak(answer)
+        self.settle("done", self.LEAVE_AFTER)
+        return True
+
+    def quick_answer(self, said: str, typed: bool) -> bool:
+        """Math, time, date, a unit conversion or the weather, computed, with no
+        model turn. Same shape as `pleasantry`; see bin/lib/quick.py for why.
+
+        Only when nothing is running: an answer spoken over a run in flight
+        would talk across it, and the queue keeps its order."""
+        if self.in_flight():
+            return False
+        started = time.monotonic()
+        try:
+            found = quick.answer(said)
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("quick failed:", err)
+            return False
+        finally:
+            quick.warm()
+        if not found:
+            return False
+        answer = found["text"]
+        self.log(f"quick: {found['kind']} in {(time.monotonic() - started) * 1000:.0f}ms:", answer)
+        req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+        self.remember(req, answer, True, "done")
+        self.send("s " + json.dumps(answer))
+        self.send("w " + json.dumps(answer) + " done=true")
+        if not typed:
+            self.speak(answer)
         self.settle("done", self.LEAVE_AFTER)
         return True
 
@@ -2350,6 +2392,10 @@ class Listener:
         }
         decision = route.route(req.said, context, memory, names=read_names(), now=now)
         self.log("route:", decision.dest, f"{decision.confidence:.2f}", decision.reason)
+        # "No, the terminal" is the one outcome a route gets for free. It is
+        # written against the Jev call only when Jev made the route it corrects.
+        if decision.reason == "correction" and (memory["last"] or {}).get("reason") == "classifier":
+            decision_log.outcome(decision_log.last_id("route"), "wrong", f"corrected to {decision.dest}")
         return decision
 
     def open_browser(self, said: str) -> tuple[str, bool]:
@@ -2711,6 +2757,9 @@ class Listener:
         board = agent_board.load()
         board.pop(self.session, None)
         line = agent_board.summary(board)
+        pline = perplexity_status()
+        if pline:
+            line = line.rstrip(".") + ". " + pline if board else pline
         self.log("agents:", line)
         self.send("s " + json.dumps(line))
         self.speak(line)
@@ -2870,6 +2919,8 @@ class Listener:
             outcome = "done" if opened else "failed"
             self.record(req, decision, None, outcome)
             return outcome
+        if decision.dest == "perplexity":
+            return self.to_perplexity(req, decision)
         if decision.dest == "terminal" and not req.tty and not self.choose_agent(req):
             self.record(req, decision, None, "done")
             return "done"
@@ -2938,6 +2989,59 @@ class Listener:
             self.maybe_summarize()
         return "done" if ok else "failed"
 
+    def to_perplexity(self, req: Request, decision: "route.Decision") -> str:
+        """Hand the sentence to Perplexity Computer and read the answer back.
+
+        The send is synchronous and short, so a failure is heard at once. The
+        wait is a thread: a Computer turn can take minutes, and the voice must
+        stay free for the next sentence meanwhile. A continuation ("and also")
+        stays in the session last used; anything else opens a fresh one.
+        """
+        prompt = route.perplexity_prompt(req.said)
+        fresh = not decision.reason.startswith("continuation")
+        argv = [str(PERPLEXITY), "new" if fresh else "send", "--json", "--stdin"]
+        try:
+            result = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=90)
+            sent = json.loads(result.stdout.strip().splitlines()[-1]) if result.stdout.strip() else {}
+        except (OSError, subprocess.TimeoutExpired, ValueError) as err:
+            self.log("perplexity send failed:", err)
+            sent = {}
+        if not sent.get("sent"):
+            why = (sent.get("error") or "couldn't reach the Perplexity tab in Chrome").rstrip(".")
+            self.send("s " + json.dumps("Perplexity: " + why))
+            self.speak("I couldn't send that to Perplexity.")
+            self.record(req, decision, None, "failed")
+            return "failed"
+        self.send("s " + json.dumps("to Perplexity"))
+        self.record(req, decision, None, "done")
+
+        def work() -> None:
+            try:
+                done = subprocess.run(
+                    [str(PERPLEXITY), "wait", "--json", "--timeout", str(PERPLEXITY_WAIT_S)]
+                    + (["--session", sent["session"]] if sent.get("session") else [])
+                    + (["--after", str(sent["before"])] if isinstance(sent.get("before"), int) else []),
+                    capture_output=True, text=True, timeout=PERPLEXITY_WAIT_S + 60,
+                )
+                got = json.loads(done.stdout.strip().splitlines()[-1]) if done.stdout.strip() else {}
+            except (OSError, subprocess.TimeoutExpired, ValueError) as err:
+                self.log("perplexity wait failed:", err)
+                got = {}
+            if got.get("state") == "done" and got.get("text"):
+                answer = got["text"]
+                self.send("w " + json.dumps(answer) + " done=true")
+                line = subtitle(prose(answer)) or "Perplexity is done."
+                self.send("s " + json.dumps("Perplexity: " + line))
+                self.speak("Perplexity says: " + line)
+            elif got.get("state") == "waiting":
+                self.send("s " + json.dumps("Perplexity is waiting on you"))
+                self.speak("Perplexity is waiting on you in Chrome.")
+            else:
+                self.send("s " + json.dumps("Perplexity is still going, check the tab"))
+
+        threading.Thread(target=work, daemon=True).start()
+        return "done"
+
     def prompt_for(self, req: Request, seen: str) -> str:
         """The prompt, with what a stopped run left on the glass in front.
 
@@ -2980,7 +3084,7 @@ class Listener:
                 f"{instructions()}\n\n---\n\n"
                 + prefix
                 + f"The user said, out loud: {req.said!r}\n\n"
-                "Answer by drawing on their screen. Reply with Bob Lines "
+                "Answer by drawing on their screen. Reply with Kyber Lines "
                 "and nothing else: no prose, no explanation, no code "
                 "fences. If the request does not warrant a panel, reply "
                 "with a single line that is only the word: none\n"
@@ -3322,11 +3426,26 @@ class Listener:
         return ok, run.text, run.said, run.first_text, run.answer(), voiced
 
 
+def perplexity_status() -> str:
+    """One spoken line for the Perplexity tab, or "" when there is none."""
+    try:
+        r = subprocess.run([str(PERPLEXITY), "status", "--json", "--timeout", "5"],
+                           capture_output=True, text=True, timeout=10)
+        state = json.loads(r.stdout.strip() or "{}")
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return ""
+    if state.get("state") == "busy":
+        return "Perplexity is working" + (f" on {state['title']}" if state.get("title") else "") + "."
+    if state.get("state") == "idle" and state.get("session_url"):
+        return "Perplexity is idle" + (f", last on {state['title']}" if state.get("title") else "") + "."
+    return ""
+
+
 def claim_socket(path: str) -> tuple[int | None, str]:
     """Take the one listener slot for `path`, or say who holds it.
 
     Two listeners on one socket both answer every request, which is BACKLOG
-    #50's other face. BobHUD's two seconds of grace (main.swift) cannot
+    #50's other face. Kyber's two seconds of grace (main.swift) cannot
     prevent it: an orphan's reconnect backoff grows to five, and a slow
     `prime()` lets the four-second spawn cooldown fire twice. A lock the
     kernel drops when the process dies cannot go stale, which a pid file can.
@@ -3413,6 +3532,8 @@ def main() -> int:
                 print(f"names: {count} written to {NAMES}", file=sys.stderr, flush=True)
 
         threading.Thread(target=names, daemon=True).start()
+    if QUICK:
+        quick.warm()
     return Listener(
         args.model_cmd, args.verbose, args.bare, voice=voice, profile=args.profile
     ).run()

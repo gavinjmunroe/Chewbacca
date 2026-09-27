@@ -502,7 +502,7 @@ link_tool() {
 
 install_backend_launchers() {
   local backend_tool
-  for backend_tool in chatgpt-tab chatgpt-gateway mac-use chrome-js; do
+  for backend_tool in chatgpt-tab chatgpt-gateway perplexity-tab jev-browse chewbacca-bridge mac-use chrome-js; do
     link_tool "$backend_tool"
   done
   log "Chewbacca backend launchers refreshed in ~/.local/bin"
@@ -955,7 +955,7 @@ fi
 # list-audit is pure stdlib python, no venv and no network, so it installs with
 # no dependency check at all. list-gate ships with it: audit reads a bought file,
 # gate refuses to ship a generated one, and the Stop hook calls the gate by name.
-for _tool in list-audit list-gate kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review; do
+for _tool in list-audit list-gate kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     log "$_tool installed to ~/.local/bin/"
@@ -995,14 +995,14 @@ if [ -n "$_installed_hud" ]; then
   # two lines, in the middle of a setup that prints hundreds, and nothing he
   # could run afterwards would have told him. An install that ends in an
   # instruction has not installed anything.
-  if [ ! -d "/Applications/BobHUD.app" ] && [ ! -d "$HOME/Applications/BobHUD.app" ]; then
+  if [ ! -d "/Applications/Kyber.app" ] && [ ! -d "$HOME/Applications/Kyber.app" ]; then
     if command -v swift >/dev/null 2>&1 && [ -x "$SCRIPT_DIR/hud/scripts/bundle.sh" ]; then
       log "Building the display. About a minute, once."
       if (cd "$SCRIPT_DIR/hud" && ./scripts/bundle.sh release >/dev/null 2>&1); then
         _dest="/Applications"
         [ -w "$_dest" ] || { _dest="$HOME/Applications"; mkdir -p "$_dest"; }
-        if cp -r "$SCRIPT_DIR/hud/build/BobHUD.app" "$_dest/" 2>/dev/null; then
-          log "Installed BobHUD.app to $_dest/. Open it, or run: hud open"
+        if cp -r "$SCRIPT_DIR/hud/build/Kyber.app" "$_dest/" 2>/dev/null; then
+          log "Installed Kyber.app to $_dest/. Open it, or run: hud open"
         else
           warn "built the display but could not copy it into $_dest"
         fi
@@ -1492,6 +1492,10 @@ _register("UserPromptSubmit", hooks_dir + "/design-context.sh", timeout=8)
 
 _register("UserPromptSubmit", hooks_dir + "/ask-capture.sh", timeout=5)
 
+# Jev's read of the task class where claude-model-router-hook's keywords are
+# unsure, in 0.3 s instead of that router's 8 s haiku fallback. Advice only.
+_register("UserPromptSubmit", hooks_dir + "/model-route.sh", timeout=6)
+
 _register("Stop", hooks_dir + "/kit-autopush.sh", timeout=30,
           status="Pushing the kit...")
 
@@ -1524,6 +1528,13 @@ _register("SessionStart", hooks_dir + "/kit-autopull.sh", timeout=20,
 _register("PostToolUse", hooks_dir + "/prose-guard.sh", timeout=20,
           matcher="Write|Edit",
           status="Checking the prose against the writing rules...")
+
+# The untrusted-content rule, checked instead of hoped for. A page, a text or a
+# mail body that addresses the agent gets its excerpt put in front of the model
+# with the rule attached. Warns, never blocks. See the hook for the tool list.
+_register("PostToolUse", hooks_dir + "/untrusted-screen.sh", timeout=15,
+          matcher="WebFetch|Bash|mcp__claude-in-chrome__.*|mcp__plugin_playwright_playwright__.*",
+          status="Screening what was just read for instructions aimed at the agent...")
 
 h["Notification"] = [{"hooks": [{
     "type": "command",
@@ -2470,6 +2481,20 @@ else
     fi
   else
     warn "npm missing, so the accessibility driver and web bridge are skipped"
+  fi
+
+  # site-fast: browser-use's jev-ultrafast agent, one Jev call per step. It
+  # lives outside the repo because it pins its own Python environment.
+  SITE_FAST_HOME="${SITE_FAST_HOME:-$HOME/dev/jev-ultrafast}"
+  if command -v uv &>/dev/null; then
+    if [ ! -d "$SITE_FAST_HOME/.git" ]; then
+      git clone --quiet https://github.com/browser-use/jev-ultrafast "$SITE_FAST_HOME" \
+        || warn "could not clone jev-ultrafast, so site-fast will not run"
+    fi
+    [ -d "$SITE_FAST_HOME/.git" ] && (cd "$SITE_FAST_HOME" && uv sync --quiet &>/dev/null) \
+      && log "site-fast ready (jev-ultrafast in $SITE_FAST_HOME)"
+  else
+    warn "uv missing, so site-fast is skipped"
   fi
 
   if command -v claude &>/dev/null; then

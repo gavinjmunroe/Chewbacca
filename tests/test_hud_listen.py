@@ -1558,7 +1558,11 @@ def test_one_model_process() -> None:
         # asserting both are SPOKEN, because that is what this test is for;
         # the written-answer guarantee is the separate check below.
         [(0.0, 'h "first"'), (12.0, 'h "second"')],
-        lambda lines: 's "Here is second"' in lines and "p dormant" in lines,
+        # Stop on what the checks below assert. "p dormant" alone also matched
+        # the FIRST turn's, so once speech got faster (audio marked pending
+        # before the pipe write) the run stopped between the second answer
+        # being spoken and being written, and the done=true check failed.
+        lambda lines: 's "Here is second"' in lines and 'w "Here is second" done=true' in lines,
         name="claude",
     )
     lines = [line for _, line in received]
@@ -1728,7 +1732,7 @@ def test_orphan_leaves() -> None:
     """BACKLOG #50: when the display that spawned the listener is replaced,
     the listener exits rather than reconnecting beside the new one's."""
     path, fake, env = _listener_fixture()
-    # sh stands in for BobHUD: it is the parent, and killing it orphans the
+    # sh stands in for Kyber: it is the parent, and killing it orphans the
     # listener exactly as KeepAlive replacing the app does.
     parent = subprocess.Popen(
         ["sh", "-c", '"$0" "$1" --model-cmd "$2" --voice off & echo $!; wait',

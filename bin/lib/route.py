@@ -24,7 +24,7 @@ from datetime import datetime
 from typing import Callable, Sequence
 from urllib.parse import quote_plus
 
-DESTS = ("terminal", "browser", "assistant")
+DESTS = ("terminal", "browser", "assistant", "perplexity")
 
 # A correction lands inside this many seconds of the decision it corrects.
 # Guessed, never measured: long enough to finish a sentence and change your
@@ -101,6 +101,13 @@ SITE_TASK_PHRASES = ("sign up", "sign in", "log in", "login to", "turn on", "tur
 SEARCH_OPENERS = ("look up ", "lookup ", "search for ", "search ", "google ")
 EXPLICIT_TERMINAL = ("in terminal", "in the terminal", "terminal,", "to the terminal")
 EXPLICIT_BROWSER = ("in chrome", "in the browser", "in browser", "in safari")
+# Perplexity Computer, through bin/perplexity-tab. Only ever by name: it is a
+# second agent with its own credits, so a sentence goes there because the
+# person said so, never because a rule or Jev guessed it. That is also why it
+# is not one of Jev's choices in JEV_QUESTION.
+EXPLICIT_PERPLEXITY = ("ask perplexity", "tell perplexity", "have perplexity", "get perplexity",
+                       "hey perplexity", "in perplexity", "to perplexity", "perplexity,",
+                       "perplexity ", "send to perplexity", "send this to perplexity")
 
 SUBMIT_WORDS = frozenset({"send it", "send", "run it", "run", "confirm", "go", "do it",
                           "send that", "run that", "submit", "submit it", "enter"})
@@ -201,8 +208,22 @@ def seen_app(seen: str) -> str:
     return seen.split(" · ")[0].strip()
 
 
+def perplexity_prompt(said: str) -> str:
+    """The sentence with the "ask Perplexity" that routed it taken off."""
+    text = said.strip()
+    low = text.lower()
+    for prefix in sorted(EXPLICIT_PERPLEXITY, key=len, reverse=True):
+        if low.startswith(prefix):
+            rest = text[len(prefix):].lstrip(" ,:.")
+            rest = re.sub(r"^(to|and|if|whether)\s+", "", rest, flags=re.I) if prefix.startswith(("ask", "tell", "have", "get")) else rest
+            return rest or text
+    return text
+
+
 def _explicit(said: str) -> str | None:
     low = said.lower().strip()
+    if low.startswith(EXPLICIT_PERPLEXITY) and len(_words(said)) > 1:
+        return "perplexity"
     if low.startswith(EXPLICIT_TERMINAL):
         return "terminal"
     if low.startswith(EXPLICIT_BROWSER):
@@ -215,7 +236,7 @@ def _correction(said: str, memory: dict, now: float) -> Decision | None:
     if not last or now - _epoch(last.get("t", "")) > CORRECTION_S:
         return None
     words = _norm(said)
-    m = re.match(r"^(no|nope|not that|no not that)\s*(the |to )?(terminal|you|chrome|browser|safari)$", words)
+    m = re.match(r"^(no|nope|not that|no not that)\s*(the |to )?(terminal|you|chrome|browser|safari|perplexity)$", words)
     other = words == "other one" or words == "the other one"
     if not m and not other:
         return None
@@ -223,7 +244,7 @@ def _correction(said: str, memory: dict, now: float) -> Decision | None:
         dest = "assistant" if last.get("dest") in ("terminal", "browser") else "terminal"
     else:
         dest = {"terminal": "terminal", "you": "assistant", "chrome": "browser",
-                "browser": "browser", "safari": "browser"}[m.group(3)]
+                "browser": "browser", "safari": "browser", "perplexity": "perplexity"}[m.group(3)]
     return Decision(dest, 1.0, "correction", reroute=last.get("text", ""))
 
 
@@ -332,11 +353,20 @@ def route(
     if app == "Terminal" and context.get("claude_tab") and _work_shaped(said):
         return Decision("terminal", 0.8, "terminal in front, about the work")
     if app in BROWSER_APPS:
-        if warm == "terminal" and not browser_shaped:
-            return _classified(said, {**memory, "context": context}, classify)
-        if site_task:
-            return Decision("assistant", 0.8, "a task on a site")
-        return Decision("browser", 0.8, "browser in front")
+        # Chrome in front says where they are looking, not what they want.
+        # Taken as a destination it sent every sentence without one of
+        # SITE_TASK_WORDS to the browser, which turns what it cannot open into
+        # a Google search of the whole sentence: on 2026-09-24 "summarize this
+        # page", "sort these by price", "close this tab" and twelve more of
+        # tests/eval_route_front.py became searches. Only a sentence that is a
+        # search or an open by its own words goes straight there; the rest is
+        # judged, with the app in the state.
+        # A site task needs no early exit: `_classified` already refuses the
+        # browser for one, and going to the classifier first keeps "write the
+        # readme" with Chrome in front able to reach the terminal.
+        if browser_shaped:
+            return Decision("browser", 0.8, "browser in front, browser-shaped")
+        return _classified(said, {**memory, "context": context}, classify)
 
     if browser_shaped:
         return Decision("browser", 0.8, "browser-shaped")
@@ -470,11 +500,12 @@ def _ask_model(prompt: str, timeout: float, argv: list[str] | None = None) -> st
 
 
 # Jev may send a sentence to the terminal only when it is at least this sure.
-# Measured 2026-09-23 on the 30 hand-labelled sentences in
-# tests/eval_route_jev.py: three bubble and window fragments came back
-# terminal at 0.55, 0.56 and 0.62, and every real terminal request scored 0.80
-# or higher. The asymmetry in `_classified` is why the floor sits on the
-# terminal side only.
+# Set from a live measurement kept out of this public repo, because TypeSafe's
+# customer agreement (2.3(f)) bars publishing Jev performance results.
+# Re-measure with tests/eval_route_jev.py before moving it. Fragments about
+# the bubble and windows scored below it and real terminal requests above.
+# The asymmetry in `_classified` is why the floor sits on the terminal side
+# only.
 JEV_TERMINAL_FLOOR = 0.7
 
 JEV_QUESTION = {"dest": {
@@ -509,9 +540,9 @@ def classify_default(said: str, memory: dict) -> str | None:
 def classify_with_jev(said: str, memory: dict) -> str | None:
     """One Choice question to TypeSafe's Jev, None when it cannot answer.
 
-    The frontmost application is in the state because it moved one sentence
-    of the thirty: "No, let's talk to text feature. We just built the bubble."
-    scored terminal 0.80 with it and 0.59 without. HUD_CLASSIFY_JEV=off
+    The frontmost application is in the state because it moved one eval
+    sentence across the floor: "No, let's talk to text feature. We just built
+    the bubble." HUD_CLASSIFY_JEV=off
     switches the tier off again.
     """
     if os.environ.get("HUD_CLASSIFY_JEV") == "off":
@@ -521,13 +552,19 @@ def classify_with_jev(said: str, memory: dict) -> str | None:
     app = context.get("app") or "nothing"
     if app == "Terminal" and context.get("claude_tab"):
         app = "Terminal (Claude Code)"
-    answers = jev.ask({"spoken": said, "frontmost_app": app}, JEV_QUESTION, timeout=CLASSIFY_TIMEOUT_S)
+    answers = jev.ask({"spoken": said, "frontmost_app": app}, JEV_QUESTION, timeout=CLASSIFY_TIMEOUT_S, decision="route")
     answer = answers.get("dest") if isinstance(answers, dict) else None
     validated = jev.validate_choice(answer, JEV_QUESTION["dest"]["criteria"])
     if validated is None:
         return None
     choice, confidence = validated
     if choice == "terminal" and confidence < JEV_TERMINAL_FLOOR:
+        return "assistant"
+    # The same asymmetry on the browser side: a sentence sent to the browser
+    # by mistake becomes a Google search of itself, while the assistant can
+    # open the page as well as answer. Guessed at the terminal floor, never
+    # measured on its own.
+    if choice == "browser" and confidence < JEV_TERMINAL_FLOOR:
         return "assistant"
     return choice
 

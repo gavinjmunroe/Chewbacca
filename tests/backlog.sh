@@ -19,7 +19,7 @@ cat > "$TEST_DIR/private/BACKLOG.md" <<'MD'
 ## Dead
 | Item | Reason |
 | --- | --- |
-| Removed experiment | Superseded |
+| Removed experiment | Replaced |
 MD
 run() {
   env HOME="$TEST_DIR/home" CHEWBACCA_PRIVATE="$TEST_DIR/private" \
@@ -29,7 +29,7 @@ case "$MODE" in
   open) run | grep -q '1 open now' ;;
   dead)
     output="$(run dead)"
-    [[ "$output" == *'Removed experiment'* && "$output" == *'Superseded'* ]]
+    [[ "$output" == *'Removed experiment'* && "$output" == *'Replaced'* ]]
     ;;
   absent)
     rm "$TEST_DIR/private/BACKLOG.md"

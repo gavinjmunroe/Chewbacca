@@ -101,7 +101,33 @@ site show example.com                     # the map and every page read so far
   live try. The kit does not try to look human. A blocked task moves into the
   person's own Chrome through `chrome-js`.
 
+## Measured: Jev as the pointer
+
+`tests/eval_ground_jev.py` runs 30 spoken-style requests over six real pages
+(Airbnb, Booking, Wikipedia, GitHub, Hacker News, Stripe), each page's
+controls going to Jev as one choice question. It was run 2026-09-23 and cleared
+its falsifier (top-1 under about 90%, or wrong answers as confident as right
+ones). The scores stay off this public repo: TypeSafe's customer agreement
+(2.3(f)) bars publishing Jev performance results.
+
+What it taught is design. The answer key was corrected in three places where
+the page proved Jev's pick right: Booking has two support links, Wikipedia
+links Español directly, and Stripe's two "Contact sales" controls differed only
+by an invisible U+2060 character, which `site snap` now strips. The one real
+miss was "open the comments on the Claude post" on Hacker News: the tree
+flattens the story list, so a comments link loses the row it belongs to. Its
+confidence was low, so a confidence-shaped interface ("act at 0.7 or above,
+otherwise show the top two, otherwise ask") would have asked instead of
+clicking the wrong link. Thirty rows is a small set, so this is a go for
+building, not proof it works everywhere.
+
 ## Next to build, in order
+
+0. **The Jev pointer in `hud-guide`.** Add a choice over `site snap`
+   controls with the 0.7 and top-two bands above. Give each option its row
+   context (the story title next to "918 comments") to fix the one miss.
+   Send page text through `amber-redact` first, because the page leaves the
+   Mac.
 
 1. **Snap inside the person's Chrome.** `chrome-js` can walk the page's
    controls on a signed-in session (Clay, Blackboard). It waits on Chrome's

@@ -1,0 +1,392 @@
+#!/usr/bin/env python3
+"""clone <url>  ->  a studied, scaffolded, gap-reported rebuild. One command.
+
+    clone https://example.com
+    clone gap                      what is still missing, from inside a clone
+    clone spec                     reprint the recovered spec
+
+Caleb, 2026-09-27: "the UX sucks this is so far from smth my grandpa could
+easily use, it has to be EASIER than a google doc."
+
+He is right, and the thing he is describing is not the replica, it is this
+toolkit. Cloning a page took ux-scan, then ux-anim, then ux-rate, then
+ux-gap, then reading three reports, writing specs by hand, and dispatching
+builders. Every one of those is a good tool and the SEQUENCE was the product,
+living only in somebody's head. A product that exists only as a sequence
+somebody remembers is not a product.
+
+So: one argument, no required flags, and it ends by telling you the one thing
+you actually want to know, which is what is still missing.
+
+WHAT IT DOES, in order, and why each step is here rather than optional:
+
+  1 READ THE SOURCE FIRST. Fetch the page, parse the webpack manifest, and
+    pull every chunk, not only the ones the HTML references. On the page this
+    was built against, the HTML named 37 chunks and the manifest listed 79,
+    and the figure generators were all in the half nobody had fetched. Two
+    days went into fitting a curve to one of those figures before anybody
+    read the file that generates it.
+
+  2 CHECK FOR SOURCE MAPS. A 200 here ends the guessing entirely. Worth the
+    one request every time.
+
+  3 INVENTORY. Places, animations with their keyframes, transitions, and the
+    distribution of scroll rates. All four on the same pass.
+
+  4 WRITE THE SPEC as prose a person reads, with every number carrying where
+    it came from, and marking clearly what was measured against what was
+    assumed.
+
+  5 SCAFFOLD a project with the single-writer section layout, so parallel
+    builders cannot collide on one file.
+
+  6 GAP REPORT against the scaffold, so the first output is a worked list
+    rather than an empty folder.
+
+WHAT IT REFUSES TO DO. It downloads the target's code into a cache to READ,
+and it never copies any of it into the scaffold. No stylesheets, no scripts,
+no fonts, no images, and no third-party marks from a logo wall, which belong
+to those companies rather than to the site being studied. The scaffold it
+writes is structure and measurements; the words and the artwork are yours.
+"""
+import argparse
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import urllib.parse
+
+HERE = pathlib.Path(__file__).resolve().parent
+MARKER = ".clone"
+
+
+def say(msg, end="\n"):
+    """Progress goes to stderr so stdout stays pipeable."""
+    print(msg, end=end, file=sys.stderr, flush=True)
+
+
+def slug(url):
+    host = urllib.parse.urlparse(url).netloc or url
+    return re.sub(r"[^a-z0-9]+", "-", host.lower()).strip("-") or "site"
+
+
+def fetch(url, timeout=25):
+    import urllib.request
+    req = urllib.request.Request(url, headers={"User-Agent": "clone/1.0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.read()
+
+
+def harvest(url, cache):
+    """Step 1 and 2: the page, every chunk the manifest knows, and source maps."""
+    cache.mkdir(parents=True, exist_ok=True)
+    say("  reading the page ...", end="")
+    html = fetch(url).decode("utf-8", "replace")
+    (cache / "page.html").write_text(html)
+    say(f" {len(html) // 1024}KB")
+
+    origin = "{}://{}".format(*urllib.parse.urlparse(url)[:2])
+    refs = sorted(set(re.findall(r'"?(/[^"\s]+?\.js)"?', html)))[:200]
+
+    # The manifest is the point of this step: it lists chunks the page can
+    # lazy-load, which the HTML never names.
+    manifest = [r for r in refs if "webpack" in r]
+    extra = []
+    for m in manifest:
+        try:
+            js = fetch(origin + m).decode("utf-8", "replace")
+            for cid, h in set(re.findall(r'"?([0-9]{3,5})"?:\s*"([a-f0-9]{16,})"', js)):
+                extra.append(f"/_next/static/chunks/{cid}.{h}.js")
+        except Exception:
+            pass
+
+    urls = sorted(set(refs + extra))
+    say(f"  {len(refs)} scripts referenced, {len(extra)} more in the manifest")
+
+    jsdir = cache / "js"
+    jsdir.mkdir(exist_ok=True)
+    got = 0
+    for u in urls:
+        try:
+            body = fetch(origin + u, timeout=15)
+        except Exception:
+            continue
+        (jsdir / pathlib.Path(u).name).write_bytes(body)
+        got += 1
+    say(f"  downloaded {got} scripts to read")
+
+    maps = 0
+    for u in urls[:8]:
+        try:
+            fetch(origin + u + ".map", timeout=8)
+            maps += 1
+        except Exception:
+            pass
+    say("  source maps: " + ("AVAILABLE, read them and stop guessing"
+                             if maps else "none (404), so the source is minified"))
+
+    css = []
+    for href in re.findall(r'href="([^"]+\.css[^"]*)"', html):
+        try:
+            css.append(fetch(href if href.startswith("http") else origin + href)
+                       .decode("utf-8", "replace"))
+        except Exception:
+            pass
+    (cache / "all.css").write_text("\n".join(css))
+    say(f"  {sum(len(c) for c in css) // 1024}KB of stylesheets")
+    return html, "\n".join(css), jsdir
+
+
+def components(jsdir):
+    """Component names out of the bundle's own exports.
+
+    This is the step that turns 'reverse engineer a complex site' from
+    open-ended into a finite checklist, and it costs one grep.
+    """
+    names = set()
+    for f in jsdir.glob("*.js"):
+        try:
+            s = f.read_text(errors="replace")
+        except Exception:
+            continue
+        names |= set(re.findall(r"([A-Z][A-Za-z0-9]{3,34}):\(\)=>", s))
+    return sorted(names)
+
+
+def keyframes(html, css):
+    src = html + css
+    out = {}
+    for m in re.finditer(r"@keyframes\s+([A-Za-z0-9_-]+)\s*\{", src):
+        i, depth = m.end(), 1
+        while depth and i < len(src):
+            depth += (src[i] == "{") - (src[i] == "}")
+            i += 1
+        out[m.group(1)] = re.sub(r"\s+", " ", src[m.end():i - 1]).strip()[:260]
+    return out
+
+
+def libraries(jsdir):
+    probes = ["lenis", "gsap", "framer", "three", "lottie", "embla", "swiper",
+              "react-spring", "MeshGradient", "IntersectionObserver",
+              "requestAnimationFrame", "oklch"]
+    hits = {}
+    files = list(jsdir.glob("*.js"))
+    for p in probes:
+        n = sum(1 for f in files
+                if p.lower() in f.read_text(errors="replace").lower())
+        if n:
+            hits[p] = n
+    return hits
+
+
+def write_spec(out, url, comps, kf, libs, css):
+    tokens = {}
+    for name, pat in (("brand / accents", r"#[0-9a-fA-F]{6}"),
+                      ("durations", r"\b\d{2,4}ms\b"),
+                      ("easings", r"cubic-bezier\([^)]*\)")):
+        c = {}
+        for v in re.findall(pat, css):
+            c[v] = c.get(v, 0) + 1
+        tokens[name] = sorted(c.items(), key=lambda kv: -kv[1])[:10]
+
+    weights = {w: len(re.findall(rf"font-weight:\s*{w}\b", css))
+               for w in (300, 400, 500, 600, 700)}
+
+    L = [f"# Recovered spec: {url}", "",
+         "Written by `clone`. Every number here was read from the served",
+         "payload. Anything not measured is marked as such, because a",
+         "confident guess and a measurement are worth very different amounts.",
+         "", "## Components, from the bundle's own exports", ""]
+    L += [f"- `{c}`" for c in comps] or ["- none found (not a bundled app)"]
+    L += ["", "## Libraries actually present, counted across every chunk", ""]
+    L += [f"- {k} in {v} chunk(s)" for k, v in sorted(libs.items(), key=lambda kv: -kv[1])]
+    L += ["", "Absent is as useful as present. A library that does not appear",
+          "cannot be the mechanism, however much the page looks like it.", ""]
+    L += ["## Type weight", ""]
+    used = {w: n for w, n in weights.items() if n}
+    L += [f"- font-weight {w}: {n}" for w, n in used.items()] or ["- none declared"]
+    if len(used) <= 1:
+        L += ["", "**One weight only.** Hierarchy runs on size, colour and",
+              "opacity. Reaching for a bolder weight will break the system."]
+    for name, items in tokens.items():
+        L += ["", f"## {name}", ""] + [f"- `{v}` x{n}" for v, n in items]
+    L += ["", "## Keyframes", ""]
+    for k, v in list(kf.items())[:40]:
+        L += [f"### {k}", "```", v, "```", ""]
+
+    chains = []
+    for m in re.finditer(r"animation:\s*([A-Za-z0-9_-]+)\s+([\d.]+)s[^;]*?\s([\d.]+)s", css + ""):
+        chains.append((m.group(1), float(m.group(2)), float(m.group(3))))
+    for a in chains:
+        for b in chains:
+            if a is not b and abs((a[2] + a[1]) - b[2]) < 0.02:
+                L += ["## The load is a CHAIN, not a stagger", "",
+                      f"`{a[0]}` starts at {a[2]}s and runs {a[1]}s; `{b[0]}`",
+                      f"starts at {b[2]}s. {a[2]} + {a[1]} = {b[2]}, so each stage",
+                      "begins as the previous ends. An `index * 100ms` stagger",
+                      "cannot express that, because it never knows how long",
+                      "anything takes.", ""]
+                break
+        else:
+            continue
+        break
+    (out / "SPEC.md").write_text("\n".join(L))
+
+
+SCAFFOLD_HTML = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{name}</title>
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+<main id="top">
+  <!-- One section, one mount point, one module, one writer.
+       See src/sections/README.md before adding anything here. -->
+</main>
+<script type="module" src="src/app.js"></script>
+</body>
+</html>
+"""
+
+SCAFFOLD_README = """# Section modules
+
+One section, one file, one writer.
+
+Parallel builders that share a file collide, and that is the first of the
+three classic parallel-fleet failures. The topology forbids it rather than a
+prompt asking nicely:
+
+    src/sections/<name>.js     the only file that builder writes
+    src/sections/<name>.css    its styles, likewise
+
+`app.js` imports and mounts each one and stays single-writer.
+
+## Contract
+
+```js
+export const MOUNT = "#<dom-id>";
+export function render() { return `...`; }   // HTML string
+export function mount(root) { }              // listeners, observers; may return cleanup
+```
+
+Rules, each paid for once already:
+
+- Never query outside `root`. Reaching into the document is a hidden edge
+  between two builders who think they are independent.
+- Animate `transform` and `opacity`, plus `clip-path` and
+  `stroke-dashoffset`. Not `width`, `top` or `left`.
+- Start on `IntersectionObserver` and BANK elapsed time when off screen, so
+  scrolling back does not restart an entrance.
+- `prefers-reduced-motion` jumps to the finished state. The figure is
+  information; only the drawing of it goes.
+- Every constant carries the observation that set it, not the reasoning.
+- Above about 60 elements, animate the GROUP rather than each element. A
+  per-stroke animation on a dense field is invisible and costs a compositor
+  entry each.
+"""
+
+
+def scaffold(out, url, name):
+    (out / "src" / "sections").mkdir(parents=True, exist_ok=True)
+    if not (out / "index.html").exists():
+        (out / "index.html").write_text(SCAFFOLD_HTML.format(name=name))
+    (out / "src" / "sections" / "README.md").write_text(SCAFFOLD_README)
+    if not (out / "src" / "styles.css").exists():
+        (out / "src" / "styles.css").write_text(
+            "/* Tokens go here, from SPEC.md. Nothing copied from the target. */\n")
+    if not (out / "src" / "app.js").exists():
+        (out / "src" / "app.js").write_text(
+            "/* Mount section modules here. This file has ONE writer. */\n")
+    (out / MARKER).write_text(json.dumps({"url": url}, indent=1))
+    (out / ".gitignore").write_text("cache/\nnode_modules/\n")
+
+
+def find_root():
+    d = pathlib.Path.cwd()
+    for p in [d, *d.parents]:
+        if (p / MARKER).exists():
+            return p
+    return None
+
+
+def cmd_gap(root, port):
+    conf = json.loads((root / MARKER).read_text())
+    srv = subprocess.Popen([sys.executable, "-m", "http.server", str(port)],
+                           cwd=root, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL)
+    try:
+        import time
+        time.sleep(1.5)
+        subprocess.run([str(HERE / "ux-gap"), conf["url"],
+                        f"http://localhost:{port}/index.html"], check=False)
+    finally:
+        srv.terminate()
+
+
+def main():
+    ap = argparse.ArgumentParser(
+        prog="clone", description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("target", help="a URL to clone, or 'gap' / 'spec' inside a clone")
+    ap.add_argument("--into", help="where to put it (default: ./<host>-clone)")
+    ap.add_argument("--port", type=int, default=8788)
+    a = ap.parse_args()
+
+    if a.target in ("gap", "spec"):
+        root = find_root()
+        if not root:
+            print("clone: not inside a clone. Run `clone <url>` first.",
+                  file=sys.stderr)
+            return 2
+        if a.target == "spec":
+            print((root / "SPEC.md").read_text())
+            return 0
+        cmd_gap(root, a.port)
+        return 0
+
+    url = a.target
+    if not url.startswith("http"):
+        print(f"clone: '{url}' is not a URL and not a subcommand.", file=sys.stderr)
+        return 2
+
+    name = slug(url)
+    out = pathlib.Path(a.into or f"./{name}-clone").resolve()
+    out.mkdir(parents=True, exist_ok=True)
+    cache = out / "cache"
+
+    say(f"\ncloning {url}\n  into {out}\n")
+    html, css, jsdir = harvest(url, cache)
+
+    say("  reading the bundle ...", end="")
+    comps = components(jsdir)
+    kf = keyframes(html, css)
+    libs = libraries(jsdir)
+    say(f" {len(comps)} components, {len(kf)} keyframes")
+
+    write_spec(out, url, comps, kf, libs, css)
+    scaffold(out, url, name)
+    say(f"  wrote {out / 'SPEC.md'} and a scaffold\n")
+
+    if comps:
+        say("  what this page is made of, by its own names:")
+        for c in comps[:12]:
+            say(f"    {c}")
+        say("")
+
+    say("  first gap report ...\n")
+    cmd_gap(out, a.port)
+
+    print(f"\n  cd {out}")
+    print("  then `clone gap` after each change. Work the list to zero.")
+    print("\n  SPEC.md has the recovered numbers. Nothing of theirs was copied")
+    print("  into the scaffold: the words and the artwork are yours.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

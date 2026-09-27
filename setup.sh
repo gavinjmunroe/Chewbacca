@@ -1185,6 +1185,16 @@ if [ -n "$_installed_hud" ]; then
     warn "hud-voice is not built; replies are read by hud-speak, which needs uv and espeak-ng."
     warn "Build it: $(dirname "$0")/voice/build.sh, then HUD_SPEAKER=hud-voice for hud-listen."
   fi
+  # Wake mode asks Smart Turn whether a pause means finished, and ends the
+  # turn there instead of waiting out its 1.1s silence timer. About 17 MB,
+  # pinned and hash-checked; without it wake mode keeps the timer.
+  if [ -x "$SCRIPT_DIR/hud/scripts/fetch-smart-turn.sh" ]; then
+    if "$SCRIPT_DIR/hud/scripts/fetch-smart-turn.sh" >/dev/null 2>&1; then
+      log "Smart Turn end-of-turn model in ~/.bob/smart-turn"
+    else
+      warn "could not fetch Smart Turn; wake mode keeps its silence timer ($SCRIPT_DIR/hud/scripts/fetch-smart-turn.sh)"
+    fi
+  fi
   ensure_local_bin_on_path
   ensure_terminal_shell_guard
 fi

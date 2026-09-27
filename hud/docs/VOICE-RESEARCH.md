@@ -64,13 +64,27 @@ as an interested party's. The architecture claim is the durable part, and Pipeca
 arrived at the same place independently by reading prosody straight from audio
 with no transcript.
 
-On Apple Silicon the same idea exists as an 8M CoreML model (Smart Turn v3.2,
-23 languages), which is small enough that the question of whether to run it is
-not a resource question.
+Pipecat's Smart Turn v3.2 (8M parameters, Whisper Tiny encoder, 23 languages,
+BSD 2-Clause) is the open one. Checked 2026-09-27: upstream publishes ONNX
+only, an 8 MB int8 file and a 32 MB fp32 one, taking Whisper log-mel features
+for the last 8 s of 16 kHz audio. The Core ML version is a third-party export
+(aufklarer/Smart-Turn-v3.2-CoreML, 17 MB, mel front end inside, raw samples
+in). On this M4 Pro it answers in about 2 ms, and on nine clips it matched
+upstream's fp32 ONNX run through upstream's `inference.py` to within 0.01 on
+every one of 27 predictions. Small enough that whether to run it is not a
+resource question.
 
-**In Kyber:** `Sources/KyberKit/Voice.swift`. Push to talk sidesteps end of
-turn entirely, which is the correct first move and why the mode exists. Wake mode
-does not, and `silenceTimer` there is the timer this section is about. The
+**In Kyber:** `Sources/KyberKit/Voice.swift` and `SmartTurn.swift`. Push to
+talk sidesteps end of turn entirely, which is the correct first move and why
+the mode exists. Wake mode asks Smart Turn 0.2 s after the last partial and
+ends the turn there when it says finished; the old 1.1 s `silenceTimer` is
+the ceiling, and all there is when the model is missing
+(`hud/scripts/fetch-smart-turn.sh` puts it in `~/.bob/smart-turn`). Each ask
+logs a `voice.endpoint` line with its probability. Measured only on
+synthesised speech so far: whole sentences 0.98 to 0.99; sentences cut after
+"and" or "to" mostly under 0.03, one at 0.27; the same words said by `say`
+as a sentence of their own 0.96 to 0.98, because the voice drops its pitch
+as though it had finished, and the model reads the voice, not the words. The
 `commitGrace` band of 300 to 500 ms is sized off the same research as everyone
 else's silence timer and has the same ceiling.
 

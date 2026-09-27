@@ -96,6 +96,26 @@ public final class VoiceListener {
     /// morning and again after lunch is two requests, not a repeat.
     private var lastFiredAt = Date.distantPast
     private var silenceTimer: Timer?
+    /// What the silence timer will send when it fires.
+    private var pendingText = ""
+    /// Wake mode's short pause, at which Smart Turn is asked whether the turn
+    /// is over. See `EndOfTurn`.
+    private var pauseTimer: Timer?
+    /// Bumped by every partial and every teardown, so an answer from the model
+    /// about a pause the person has since talked through is dropped.
+    private var pauseCheck = 0
+    /// Smart Turn, once it has loaded. Nil means wake mode ends turns on the
+    /// silence timer alone, exactly as it did before the model existed.
+    var predictor: TurnPredictor?
+    private var predictorRequested = false
+    /// The last eight seconds of wake-mode audio, for the model.
+    private let turnAudio = TurnAudio()
+    /// See `EndOfTurn.onset` and `EndOfTurn.ceiling`. Variables only so a test
+    /// can keep the run loop from firing them under it.
+    var pauseOnset = EndOfTurn.onset
+    var silenceCeiling = EndOfTurn.ceiling
+    /// Off only in tests, which must never open the microphone.
+    var reopensAfterTurn = true
     /// The wait after a key release before the last partial is committed. See
     /// `commitGrace`.
     private var commitTimer: Timer?
@@ -212,11 +232,24 @@ public final class VoiceListener {
             stopWarmTimer()
             stop()
         case .wake:
+            loadPredictor()
             authorize { ok in if ok { self.start() } }
         case .pushToTalk:
             // Nothing opens until the key goes down. That is the point of the
             // mode: no audio is captured while you are not holding it.
             stop()
+        }
+    }
+
+    /// Load Smart Turn off the main thread, once, the first time wake mode is
+    /// chosen. Until it lands, and forever if it never does, turns end on the
+    /// silence timer alone.
+    private func loadPredictor() {
+        guard predictor == nil, !predictorRequested else { return }
+        predictorRequested = true
+        Task {
+            let model = await Task.detached(priority: .utility) { await SmartTurn.load() }.value
+            if let model { self.predictor = model }
         }
     }
 
@@ -429,6 +462,9 @@ public final class VoiceListener {
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         let recorder = self.recorder
+        // Only wake mode asks the model, so only wake mode keeps the audio.
+        turnAudio.reset()
+        let turnAudio = mode == .wake ? self.turnAudio : nil
         let device = AVCaptureDevice.default(for: .audio)?.localizedName ?? "?"
         Self.log.notice(
             "voice.format device=\(device, privacy: .public) rate=\(format.sampleRate) channels=\(format.channelCount) interleaved=\(format.isInterleaved) float=\(format.commonFormat == .pcmFormatFloat32) recording=\(recorder != nil)")
@@ -445,6 +481,7 @@ public final class VoiceListener {
             let buffer = Self.mono(raw) ?? raw
             request.append(buffer)
             recorder?.append(buffer)
+            turnAudio?.append(buffer)
             let signal = Self.carriesSignal(buffer)
             let level = Self.level(of: buffer)
             // One hop for both: two tasks capturing `self` from this closure
@@ -660,6 +697,9 @@ public final class VoiceListener {
         recorder = nil
         silenceTimer?.invalidate()
         silenceTimer = nil
+        pauseTimer?.invalidate()
+        pauseTimer = nil
+        pauseCheck += 1
         commitTimer?.invalidate()
         commitTimer = nil
         finalTimeout?.invalidate()
@@ -686,7 +726,7 @@ public final class VoiceListener {
         // minute while it was, in fact, still listening.
         let wasWaking = mode == .wake
         stop(quiet: wasWaking)
-        guard mode == .wake else { return }
+        guard mode == .wake, reopensAfterTurn else { return }
         // A short gap before reopening, or a recogniser that errored in a loop
         // spins the CPU as fast as it can fail.
         Task { @MainActor in
@@ -706,28 +746,97 @@ public final class VoiceListener {
     ///
     /// When the person is holding a key, the key IS the endpoint. There is no
     /// guess to make, so this does not run and `endPush` closes the turn.
+    ///
+    /// In wake mode the timer is the ceiling now, not the rule: at a shorter
+    /// pause Smart Turn is asked, and a turn it calls finished ends there.
     private func armSilence(_ text: String) {
         guard mode == .wake else { return }
         silenceTimer?.invalidate()
-        silenceTimer = Timer.scheduledTimer(withTimeInterval: 1.1, repeats: false) {
+        pendingText = text
+        silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceCeiling, repeats: false) {
             @Sendable _ in
-            Task { @MainActor in self.fire(text) }
+            Task { @MainActor in self.silenceElapsed() }
         }
+        armPause(text)
+    }
+
+    /// The silence timer's body: the turn ends on the newest partial, whatever
+    /// the model said or is still saying.
+    private func silenceElapsed() {
+        silenceTimer = nil
+        pauseTimer?.invalidate()
+        pauseTimer = nil
+        pauseCheck += 1
+        fire(pendingText)
+    }
+
+    /// Ask Smart Turn, at a short pause, whether the person has finished. Only
+    /// for a sentence addressed to the assistant: `fire` drops anything
+    /// without the wake word, so asking about the rest of the room's talk
+    /// would spend the Neural Engine on nothing.
+    private func armPause(_ text: String) {
+        pauseTimer?.invalidate()
+        pauseTimer = nil
+        pauseCheck += 1
+        guard predictor != nil, strippingWakeWord(from: text) != nil else { return }
+        let check = pauseCheck
+        pauseTimer = Timer.scheduledTimer(withTimeInterval: pauseOnset, repeats: false) {
+            @Sendable _ in
+            Task { @MainActor in await self.pauseElapsed(text, check: check) }
+        }
+    }
+
+    /// The model's answer at the pause. Finished ends the turn now instead of
+    /// at the silence timer; anything else, no answer included, leaves that
+    /// timer to end it.
+    ///
+    /// Ending here restarts the recogniser, as a final does in wake mode. The
+    /// recogniser keeps revising a partial after the words stop, capitals and
+    /// punctuation most of all, and a revision landing after an early commit
+    /// would re-arm the timer and send the request a second time.
+    private func pauseElapsed(_ text: String, check: Int) async {
+        guard check == pauseCheck, mode == .wake, let predictor else { return }
+        pauseTimer = nil
+        let audio = turnAudio
+        let samples = await Task.detached(priority: .userInitiated) {
+            audio.samples16k()
+        }.value
+        guard EndOfTurn.endsInQuiet(samples) else {
+            Self.log.notice("voice.endpoint verdict=talking")
+            return
+        }
+        let started = Date()
+        let probability = await predictor.completion(of: EndOfTurn.window(samples))
+        let ms = Int(Date().timeIntervalSince(started) * 1000)
+        // Speech that resumed while the model ran, or a turn torn down under
+        // it, bumped `pauseCheck`; that answer is about a pause that is over.
+        let current = check == pauseCheck && mode == .wake
+        let finished = EndOfTurn.isFinished(probability)
+        let shown = probability.map { String(format: "%.3f", $0) } ?? "none"
+        let verdict = !current ? "stale" : finished ? "finished" : "wait"
+        Self.log.notice(
+            "voice.endpoint p=\(shown, privacy: .public) ms=\(ms) verdict=\(verdict, privacy: .public) audio_s=\(Double(samples.count) / EndOfTurn.sampleRate, format: .fixed(precision: 1))")
+        guard current, finished else { return }
+        silenceTimer?.invalidate()
+        silenceTimer = nil
+        if fire(text) { restartIfWaking() }
     }
 
     /// How long the same words count as one utterance being refined rather than
     /// as a second request. The recogniser settles well inside this.
     private static let repeatWindow: TimeInterval = 4
 
-    private func fire(_ raw: String) {
+    /// Whether a request went out.
+    @discardableResult
+    private func fire(_ raw: String) -> Bool {
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty else { return false }
         let repeated = text == lastFired
             && Date().timeIntervalSince(lastFiredAt) < Self.repeatWindow
-        guard !repeated else { return }
+        guard !repeated else { return false }
 
         if mode == .wake {
-            guard let stripped = strippingWakeWord(from: text) else { return }
+            guard let stripped = strippingWakeWord(from: text) else { return false }
             lastFired = text
             lastFiredAt = Date()
             onSignal?(.heard(stripped))
@@ -736,6 +845,7 @@ public final class VoiceListener {
             lastFiredAt = Date()
             onSignal?(.heard(text))
         }
+        return true
     }
 
     // MARK: Seams for tests
@@ -771,6 +881,42 @@ public final class VoiceListener {
     /// for the turn it would have been armed in.
     func fireCommitForTesting(turn: Int? = nil) {
         commitLatestPartial(turn: turn ?? self.turn)
+    }
+
+    /// Wake mode without the permission prompts or the microphone, neither of
+    /// which a test process has. The two timers are set to an hour so the run
+    /// loop never fires them under a test: the test fires them itself.
+    func enterWakeForTesting(predictor: TurnPredictor?) {
+        mode = .wake
+        self.predictor = predictor
+        predictorRequested = true
+        reopensAfterTurn = false
+        pauseOnset = 3_600
+        silenceCeiling = 3_600
+    }
+
+    func appendAudioForTesting(_ buffer: AVAudioPCMBuffer) {
+        turnAudio.append(buffer)
+    }
+
+    /// Runs the pause timer's body now and waits for the model's answer.
+    /// False when no pause check was armed.
+    @discardableResult
+    func firePauseForTesting() async -> Bool {
+        guard let timer = pauseTimer, timer.isValid else { return false }
+        timer.invalidate()
+        await pauseElapsed(pendingText, check: pauseCheck)
+        return true
+    }
+
+    /// Runs the silence timer's body now. False when it was no longer armed,
+    /// which is what an early commit leaves behind.
+    @discardableResult
+    func fireSilenceForTesting() -> Bool {
+        guard let timer = silenceTimer, timer.isValid else { return false }
+        timer.invalidate()
+        silenceElapsed()
+        return true
     }
 
     /// Remove the wake word and everything before it, or return nil if it was

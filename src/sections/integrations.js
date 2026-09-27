@@ -137,7 +137,7 @@ export function render() {
           <div class="ig-body">${envBody}</div>
         </div>
         <div class="ig-panel">
-          ${captionBar("02", "ask lemma", true)}
+          ${captionBar("02", "ask sift", true)}
           <div class="ig-body">${promptBody}</div>
         </div>
       </div>

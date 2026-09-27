@@ -217,7 +217,7 @@ function scene1(host) {
   /* The two headlines share ONE relative box below the label, so the
      incoming one cannot land on top of the eyebrow. Previously s1b was
      position:absolute top:0 against the whole caption, which put it exactly
-     where the label sits: "RESOLUTION" printed through "With Lemma, you
+     where the label sits: "RESOLUTION" printed through "With Sift, you
      don't." A wipe between two headlines needs them stacked on each other,
      not on the element above them. */
   cap.innerHTML =
@@ -370,15 +370,15 @@ function scene1(host) {
 /* ---------------------------------------------------------------------- */
 const DEMO = [
   { label: "Traces", title: "Surface failures you didn't know to look for.",
-    body: "Lemma audits every trace against your agent's instructions and groups recurring failures into issues.",
+    body: "Sift audits every trace against your agent's instructions and groups recurring failures into issues.",
     render: tracePanel },
   { label: "Live alerts", title: "Get notified on what matters.",
-    body: "Lemma triages issues and alerts you in Slack.", render: slackPanel },
-  { label: "Lemma MCP", title: "Fix it where you work.",
+    body: "Sift triages issues and alerts you in Slack.", render: slackPanel },
+  { label: "Sift MCP", title: "Fix it where you work.",
     body: "Pull context into your coding agent to resolve it without context-switching.",
     render: agentPanel },
   { label: "Metrics", title: "Ship with confidence.",
-    body: "After deploying the fix, Lemma creates an online eval. If a regression occurs, you'll know.",
+    body: "After deploying the fix, Sift creates an online eval. If a regression occurs, you'll know.",
     render: metricsPanel },
 ];
 
@@ -401,7 +401,7 @@ function tracePanel() {
       customerId: "unknown" &middot; 23 fabricated lookups</div></div>`;
 }
 function slackPanel() {
-  return `<div class="panel-head"><span>#lemma-agent</span>
+  return `<div class="panel-head"><span>#sift-agent</span>
     <span style="margin-left:auto">9:42 AM</span></div>
     <div class="panel-body" style="font-family:var(--chat);font-size:14px;color:var(--slack-ink)">
     <div style="font-weight:700;margin-bottom:4px">New issue found in support-agent</div>
@@ -415,7 +415,7 @@ function slackPanel() {
     <div style="margin-top:12px;font-size:13px;color:var(--muted)">3 replies &middot; Today at 9:44 AM</div>
     <div style="margin-top:8px;font-size:14px"><b>Cole Gawin</b>
       <span style="color:var(--muted);font-size:12px">9:44 AM</span></div>
-    <div style="font-size:14px">can you show me the traces? <span style="color:var(--accent)">@Lemma</span></div>
+    <div style="font-size:14px">can you show me the traces? <span style="color:var(--accent)">@Sift</span></div>
     </div>`;
 }
 function agentPanel() {
@@ -424,10 +424,10 @@ function agentPanel() {
   return `<div class="panel-head"><span>your coding agent</span>
     <span style="margin-left:auto">bypass permissions on</span></div>
     <div class="panel-body">
-    ${l("&rsaquo; fix the P0 refund-policy incident from Lemma", "var(--accent)")}
-    ${l("&bull; lemma &middot; get_incident(inc_4f2a)", "var(--muted)")}
+    ${l("&rsaquo; fix the P0 refund-policy incident from Sift", "var(--accent)")}
+    ${l("&bull; sift &middot; get_incident(inc_4f2a)", "var(--muted)")}
     ${l("&boxur; P0 &mdash; promising refunds outside 30-day policy")}
-    ${l("&bull; lemma &middot; get_traces(refund_policy)", "var(--muted)")}
+    ${l("&bull; sift &middot; get_traces(refund_policy)", "var(--muted)")}
     ${l("12 traces &middot; root cause: prompt revision 41m ago", "var(--muted)")}
     <div style="margin:10px 0;padding:10px;background:var(--panel);border:1px solid var(--line);
       font-family:var(--mono);font-size:12px;line-height:1.7">
@@ -561,46 +561,7 @@ function drive(runId, render) {
   tick();
 }
 
-const TESTIMONIALS = [
-  ["conor brennan-burke", "@contextconor", "we've been using Lemma for observability and it's legitimately awesome"],
-  ["Nicolas Dessaigne", "Y Combinator &middot; @dessaigne", "Agents can look like they're working even when they've failed. Lemma catches that before your users do."],
-  ["Baptiste D", "@baptistedebever", "congrats to the lemma team! we switched over from raindrop a while back at folk and the difference is night and day"],
-  ["Chenxin Yan", "@chenxinyan04", "Very excited to be working alongside the Lemma team!"],
-  ["Hai Ta (YC P26)", "Userlens &middot; @HaiTa", "Every morning, I check our frontend logs, backend logs, then Lemma logs, then pipe any issues straight into the coding agent."],
-  ["Adhit Sankaran", "@adhit_sankaran", "can confirm: agents f*ck up. volume is growing faster than any human could review, so this is the only way."],
-  ["Elior Alayev", "@EliorAlayev", "Agents are getting better. Their mistakes are getting weirder."],
-  ["Jenny He", "Founder & General Partner, Position &middot; @jennydhe", "This is why we invested. Sign up before your agents turn everything into paperclips."],
-  ["Kevin Le", "Cladlabs (YC F25) &middot; @xkevin_le", "We got set up on lemma in under 10 min using their agent skill. almost immediately it flagged a real issue."],
-  ["Danylo Borodchuk", "Lopus (YC W25) &middot; @danylo_dev", "the thing we love is that it understands what your agents are supposed to do, instead of just logging what they did."],
-  ["Prama Yudhistira", "Parameter &middot; @menace_codes", "Well deserved, been working with the lemma team since we were still in the yc batch together."],
-  ["Cole Gawin", "@colegawin_", "Love the Lemma team. Gave me the easiest way to find where our agent did something it shouldn't have."],
-];
 
-function testimonials() {
-  const g = document.getElementById("tgrid");
-  if (!g) return;
-  /* @handles render as accent links inline in the quote, which is how the
-     reference reads: these are real posts, not pull-quotes, and the handle
-     being live is what says so. */
-  const at = t => t.replace(/(@[A-Za-z0-9_]+)/g, '<a href="#">$1</a>');
-  g.innerHTML = TESTIMONIALS.map(([n, h, q]) =>
-    `<figure class="tcard">
-       <div class="who"><span class="nm">${n}</span><span class="hd">${at(h)}</span></div>
-       <blockquote class="q" style="margin:0">${at(q)}</blockquote>
-     </figure>`).join("");
-
-  const dots = document.getElementById("cdots");
-  if (dots) dots.innerHTML = TESTIMONIALS.map(() => "<i></i>").join("");
-  const mark = () => {
-    const i = Math.round(g.scrollLeft / (g.scrollWidth / TESTIMONIALS.length));
-    [...(dots ? dots.children : [])].forEach((d, k) => d.classList.toggle("on", k === i));
-  };
-  const page = dir => g.scrollBy({ left: dir * 356, behavior: "smooth" });
-  document.querySelector(".cbtn.prev")?.addEventListener("click", () => page(-1));
-  document.querySelector(".cbtn.next")?.addEventListener("click", () => page(1));
-  g.addEventListener("scroll", mark, { passive: true });
-  mark();
-}
 
 /* Hero plates. Positions, sizes and stacking are MEASURED off the reference
    at 1280x900, not composed: six framed plates, two overlapping pairs, all
@@ -640,12 +601,12 @@ import { sphere, isoTiles, isoCube, fit, rose, rng,
 const PLATE_BOX = 1600;
 
 const PLATES = [
-  { id: "LEM. 1.1", x: 178,  top: -9,  w: 282, h: 196, fig: "lens",   sw: 0.12, op: 0.7  },
-  { id: "LEM. 1.2", x: 1288, top: 45,  w: 158, h: 214, fig: "cube",   sw: 0.25, op: 0.85 },
-  { id: "LEM. 1.3", x: 1111, top: 72,  w: 202, h: 196, fig: "harmo",  sw: 0.15, op: 0.6  },
-  { id: "LEM. 2.1", x: 149,  top: 342, w: 176, h: 196, fig: "mesh",   sw: 0.15, op: 0.5  },
-  { id: "LEM. 2.2", x: 275,  top: 414, w: 202, h: 205, fig: "sphere", sw: 0.2,  op: 0.5  },
-  { id: "LEM. 2.3", x: 1140, top: 360, w: 229, h: 196, fig: "dots",   sw: 1,    op: 0.3  },
+  { id: "SFT. 1.1", x: 178,  top: -9,  w: 282, h: 196, fig: "lens",   sw: 0.12, op: 0.7  },
+  { id: "SFT. 1.2", x: 1288, top: 45,  w: 158, h: 214, fig: "cube",   sw: 0.25, op: 0.85 },
+  { id: "SFT. 1.3", x: 1111, top: 72,  w: 202, h: 196, fig: "harmo",  sw: 0.15, op: 0.6  },
+  { id: "SFT. 2.1", x: 149,  top: 342, w: 176, h: 196, fig: "mesh",   sw: 0.15, op: 0.5  },
+  { id: "SFT. 2.2", x: 275,  top: 414, w: 202, h: 205, fig: "sphere", sw: 0.2,  op: 0.5  },
+  { id: "SFT. 2.3", x: 1140, top: 360, w: 229, h: 196, fig: "dots",   sw: 1,    op: 0.3  },
 ];
 
 const A = "#755cfe";
@@ -851,8 +812,8 @@ function figure(kind, sw, op) {
       + ` style="transition:cx 220ms ease-out,cy 220ms ease-out;pointer-events:none"/>`
       + `<circle class="ca-hit" data-ca="${i}" cx="${caX(c).toFixed(3)}" cy="${caY(r).toFixed(3)}" r="${CA_R_HIT}"`
       + ` fill="transparent" style="transition:cx 220ms ease-out,cy 220ms ease-out"/></g>`).join("");
-    inner = `<defs><clipPath id="lemma-ca-clip"><rect class="ca-clip" x="0" y="0" width="100" height="0"/></clipPath></defs>`
-          + `<g clip-path="url(#lemma-ca-clip)">${dead}${live}</g>`;
+    inner = `<defs><clipPath id="sift-ca-clip"><rect class="ca-clip" x="0" y="0" width="100" height="0"/></clipPath></defs>`
+          + `<g clip-path="url(#sift-ca-clip)">${dead}${live}</g>`;
   }
   return `<svg viewBox="${VB}" preserveAspectRatio="xMidYMid meet" opacity="${op}">${inner}</svg>`;
 }
@@ -1037,7 +998,6 @@ function cubeClock() {
 cubeClock();
 
 
-testimonials();
 drive("run1", scene1(document.getElementById("stage1")));
 drive("run2", scene2());
 

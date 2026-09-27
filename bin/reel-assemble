@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""Put picture, sound and captions together into one vertical MP4, from a spec.
+
+  reel-assemble edit.json
+
+The picture can come from anywhere the skill's three routes produce it: a
+numbered frame sequence (Blender, page-render --frames), or one or more clips
+(Higgsfield, a screen capture). Paths in the spec are relative to the spec.
+
+  {
+    "out": "reel.mp4", "size": "1080x1920", "fps": 30, "seconds": 10.5,
+    "frames": "full/frame_%04d.png",            or  "clips": ["a.mp4", "b.mp4"],
+    "audio": [
+      {"file": "clicks.wav", "at": 0.0, "gain_db": -2, "duck": true},
+      {"file": "vo1.wav", "at": 0.1, "voice": true}
+    ],
+    "captions": [{"text": "My AI set up", "from": 0.4, "to": 1.4}],
+    "caption_style": {"font": "Inter.ttf", "weight": 900, "size": 96, "y": 0.33},
+    "loudness": -14
+  }
+
+Captions are drawn here with Pillow because this Mac's ffmpeg has no
+drawtext (built without freetype), and a burned-in caption has to exist:
+Hoyos's read of Reels is that people watch with the sound off.
+"""
+
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFont
+
+
+def caption_card(text, style, size, path):
+    w, h = size
+    font = ImageFont.truetype(style["font"], style.get("size", 96))
+    try:
+        font.set_variation_by_axes([min(32, style.get("size", 96)), style.get("weight", 900)])
+    except (OSError, AttributeError):
+        pass  # a static font has no axes; it is already the weight it is
+    stroke = style.get("stroke", max(6, style.get("size", 96) // 10))
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    # Wrap to the width the platform leaves free: the action rail takes
+    # about 140 px on the right of a 1080 frame, so text stays inside 84%.
+    max_w = int(w * style.get("max_width", 0.84))
+    lines, line = [], ""
+    for word in text.split():
+        trial = f"{line} {word}".strip()
+        if draw.textlength(trial, font=font) + 2 * stroke <= max_w or not line:
+            line = trial
+        else:
+            lines.append(line)
+            line = word
+    lines.append(line)
+    lh = int(font.size * 1.12)
+    y = int(h * style.get("y", 0.33)) - lh * len(lines) // 2
+    for ln in lines:
+        tw = draw.textlength(ln, font=font)
+        x = (w - tw) / 2
+        draw.text((x + 4, y + 6), ln, font=font, fill=(0, 0, 0, 110), stroke_width=stroke, stroke_fill=(0, 0, 0, 110))
+        draw.text((x, y), ln, font=font, fill=style.get("fill", "#ffffff"), stroke_width=stroke, stroke_fill=style.get("stroke_fill", "#000000"))
+        y += lh
+    img.save(path)
+
+
+def main() -> int:
+    spec_path = Path(sys.argv[1]).resolve()
+    base = spec_path.parent
+    spec = json.loads(spec_path.read_text())
+    fps = spec.get("fps", 30)
+    w, h = (int(v) for v in spec.get("size", "1080x1920").split("x"))
+    seconds = float(spec["seconds"])
+    out = base / spec["out"]
+    tmp = Path(tempfile.mkdtemp(prefix="assemble-"))
+
+    args = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error"]
+    if "frames" in spec:
+        args += ["-framerate", str(fps), "-i", str(base / spec["frames"])]
+        vin = "[0:v]"
+        n_video = 1
+    else:
+        clips = spec["clips"]
+        for c in clips:
+            args += ["-i", str(base / c)]
+        n_video = len(clips)
+        vin = None
+    filters = []
+    if vin is None:
+        norm = [f"[{i}:v]scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},fps={fps},setsar=1[c{i}]" for i in range(n_video)]
+        filters += norm
+        filters.append("".join(f"[c{i}]" for i in range(n_video)) + f"concat=n={n_video}:v=1:a=0[vcat]")
+        vin = "[vcat]"
+    filters.append(f"{vin}scale={w}:{h},format=rgba[v0]")
+
+    idx = n_video
+    last = "[v0]"
+    style = dict(spec.get("caption_style", {}))
+    if "font" in style:
+        style["font"] = str(base / style["font"])
+    for k, cap in enumerate(spec.get("captions", [])):
+        card = tmp / f"cap{k}.png"
+        caption_card(cap["text"], style, (w, h), card)
+        args += ["-loop", "1", "-framerate", str(fps), "-t", str(seconds), "-i", str(card)]
+        nxt = f"[v{k + 1}]"
+        filters.append(f"{last}[{idx}:v]overlay=0:0:enable='between(t,{cap['from']},{cap['to']})'{nxt}")
+        last = nxt
+        idx += 1
+    filters.append(f"{last}format=yuv420p,trim=duration={seconds}[vout]")
+
+    beds, voices = [], []
+    for k, tr in enumerate(spec.get("audio", [])):
+        args += ["-i", str(base / tr["file"])]
+        ms = int(float(tr.get("at", 0)) * 1000)
+        label = f"[a{k}]"
+        filters.append(f"[{idx}:a]aformat=sample_rates=48000:channel_layouts=stereo,adelay={ms}|{ms},volume={tr.get('gain_db', 0)}dB,apad=whole_dur={seconds}{label}")
+        (voices if tr.get("voice") else beds).append((label, tr.get("duck", False)))
+        idx += 1
+    if beds or voices:
+        if voices:
+            filters.append("".join(v for v, _ in voices) + f"amix=inputs={len(voices)}:normalize=0[vo]")
+        if beds:
+            filters.append("".join(b for b, _ in beds) + f"amix=inputs={len(beds)}:normalize=0[bed]")
+        if beds and voices and any(d for _, d in beds):
+            filters.append("[vo]asplit=2[vo1][vo2]")
+            # The bed drops about 8 dB under speech and comes back in 250 ms.
+            filters.append("[bed][vo1]sidechaincompress=threshold=0.03:ratio=6:attack=15:release=250[beddk]")
+            filters.append("[beddk][vo2]amix=inputs=2:normalize=0[mix]")
+        elif beds and voices:
+            filters.append("[bed][vo]amix=inputs=2:normalize=0[mix]")
+        else:
+            filters.append(f"{'[vo]' if voices else '[bed]'}anull[mix]")
+        lufs = spec.get("loudness", -14)
+        filters.append(f"[mix]loudnorm=I={lufs}:TP=-1.5:LRA=11,atrim=duration={seconds}[aout]")
+    args += ["-filter_complex", ";".join(filters), "-map", "[vout]"]
+    if beds or voices:
+        args += ["-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-ar", "48000"]
+    args += ["-c:v", "libx264", "-profile:v", "high", "-preset", "slow", "-crf", "17",
+             "-r", str(fps), "-movflags", "+faststart", "-t", str(seconds), str(out)]
+    subprocess.run(args, check=True)
+    print(f"assemble: {out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,41 @@
+{
+  "skill": "creative-video",
+  "cases": [
+    {
+      "prompt": "Make me an Instagram reel for my page",
+      "expect_tools": ["creative-video"],
+      "why": "a reel is the core trigger; the brief comes before any tool",
+      "reject": ["opening an editor before a hook line exists"]
+    },
+    {
+      "prompt": "Use Higgsfield to make a YouTube Short of a car drifting",
+      "expect_tools": ["creative-video"],
+      "why": "a named generative tool; the credit cost is stated before the batch",
+      "reject": ["starting a generation without stating credits"]
+    },
+    {
+      "prompt": "Render a satisfying 3D loop in Blender for TikTok",
+      "expect_tools": ["creative-video"],
+      "why": "Blender runs headless and never opens a window on his screen",
+      "reject": ["opening the Blender GUI"]
+    },
+    {
+      "prompt": "My shorts keep getting like 200 views, what's wrong with them",
+      "expect_tools": ["creative-video"],
+      "why": "a video getting no views is an explicit trigger; judge it against the craft",
+      "reject": [
+        "blaming the algorithm without checking the first frame and the ending"
+      ]
+    },
+    {
+      "prompt": "The captions on my reel are hidden behind the like button",
+      "expect_tools": ["creative-video"],
+      "why": "the safe zones, checked with reel-check --sheet"
+    },
+    {
+      "prompt": "Record a demo of the app I just built",
+      "expect_tools": ["demo"],
+      "why": "a product demo belongs to the demo skill, not this one"
+    }
+  ]
+}

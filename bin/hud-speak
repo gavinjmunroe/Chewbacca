@@ -52,6 +52,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -345,6 +346,7 @@ def main() -> int:
     parser.add_argument("--speed", type=float, default=1.0)
     parser.add_argument("--volume", type=float, default=1.0, help="afplay volume, 0 to 1")
     parser.add_argument("--say", help="speak this once and exit")
+    parser.add_argument("--out", help="with --say: write the speech to this wav instead of playing it")
     parser.add_argument("--list", action="store_true", help="list the voices")
     args = parser.parse_args()
 
@@ -354,6 +356,16 @@ def main() -> int:
         voices = sorted(Path(snapshot_download(MODEL)).glob("voices/*.safetensors"))
         for v in voices:
             print(v.stem)
+        return 0
+
+    if args.say and args.out:
+        # A voiceover for a video: the whole line as one file, never the
+        # short-line cache, because the editor needs this take and no other.
+        speaker = Speaker(args.voice, args.speed, volume=args.volume)
+        made, _, _ = speaker.synthesize(args.say, cache=False)
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(made, args.out)
+        print(args.out)
         return 0
 
     if args.say:

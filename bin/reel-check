@@ -1,0 +1,210 @@
+#!/usr/bin/env python3
+"""Check a vertical video against what Reels and Shorts need, before it posts.
+
+  reel-check video.mp4                    checks, exit 1 on any FAIL
+  reel-check video.mp4 --sheet sheet.png  plus frames with the app's UI shaded
+  reel-check video.mp4 --json
+
+What a script can settle, it settles here: the frame is 9:16, the length fits
+the platform, there is sound and it is at the loudness the apps play at, the
+first second moves, and the ending does not sit still after the payoff. What
+it cannot settle (is the hook any good, does the caption sit under the like
+button) the sheet puts in front of whoever reviews it: a frame at 0, 1, 2 and
+3 seconds and then every few, with the parts of the screen the app covers
+shaded red.
+
+The craft behind every threshold is in crafts/short-form-video.md.
+"""
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+
+import numpy as np
+from PIL import Image, ImageDraw
+
+# YouTube raised the Shorts limit to three minutes on 2024-10-15 (YouTube
+# Help 15424877). Mosseri on Threads, January 2025: reels up to three minutes
+# "can show up in recommendations surfaces like Explore and the Reels tab".
+# Longer uploads are allowed on Instagram and stay with existing followers.
+MAX_SECONDS = 180
+# Both apps normalise playback near -14 LUFS; a mix far below it plays quiet
+# next to everything around it in the feed. The band is a convention, not
+# a measurement on either app.
+LOUDNESS_BAND = (-16.0, -12.0)
+SILENT_LUFS = -50.0
+# Mean absolute pixel change (0 to 255) between frame 0 and frame 1 s below
+# which nothing is moving in the hook. Guessed, never measured.
+STILL = 1.5
+# Hoyos trimmed one still second off a Short's ending and its retention went
+# from 83% to 88%, and "the video went flying" (Creator Science, 2023-10).
+# Anything over this much stillness at the end is flagged.
+STILL_TAIL_SECONDS = 1.5
+# The parts of a 1080x1920 frame the apps draw over. These are the widest of
+# the third-party templates (Outfy, CampaignSwift, Zeely, 2026) rather than a
+# measurement on a device: top bar, the caption and audio block at the bottom,
+# and the like/comment/share rail on the right.
+UI_TOP = 250 / 1920
+UI_BOTTOM = 480 / 1920
+UI_RAIL_X = 140 / 1080
+UI_RAIL_TOP = 960 / 1920
+
+
+def probe(path):
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path],
+        capture_output=True, text=True, check=True).stdout
+    return json.loads(out)
+
+
+def frame_at(path, t, width=None):
+    vf = ["-vf", f"scale={width}:-2"] if width else []
+    raw = subprocess.run(
+        ["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", path, "-frames:v", "1", *vf,
+         "-f", "image2pipe", "-vcodec", "png", "-"],
+        capture_output=True, check=True).stdout
+    if not raw:
+        return None
+    from io import BytesIO
+    return Image.open(BytesIO(raw)).convert("RGB")
+
+
+def diff(a, b):
+    if a is None or b is None:
+        return 0.0
+    return float(np.abs(np.asarray(a, dtype=np.int16) - np.asarray(b, dtype=np.int16)).mean())
+
+
+def loudness(path):
+    err = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostats", "-i", path, "-af", "ebur128=peak=true", "-f", "null", "-"],
+        capture_output=True, text=True).stderr
+    summary = err[err.rfind("Summary:"):]
+    i = re.search(r"I:\s+(-?[\d.]+|-inf) LUFS", summary)
+    p = re.search(r"Peak:\s+(-?[\d.]+|-inf) dBFS", summary)
+    val = lambda m: float("-inf") if not m or m.group(1) == "-inf" else float(m.group(1))
+    return val(i), val(p)
+
+
+def shade(img):
+    w, h = img.size
+    over = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(over)
+    red = (230, 40, 40, 90)
+    d.rectangle([0, 0, w, int(h * UI_TOP)], fill=red)
+    d.rectangle([0, int(h * (1 - UI_BOTTOM)), w, h], fill=red)
+    d.rectangle([int(w * (1 - UI_RAIL_X)), int(h * UI_RAIL_TOP), w, int(h * (1 - UI_BOTTOM))], fill=red)
+    return Image.alpha_composite(img.convert("RGBA"), over).convert("RGB")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("video")
+    ap.add_argument("--sheet", help="write a contact sheet with the app UI shaded")
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args()
+
+    info = probe(args.video)
+    v = next((s for s in info["streams"] if s["codec_type"] == "video"), None)
+    a = next((s for s in info["streams"] if s["codec_type"] == "audio"), None)
+    dur = float(info["format"].get("duration", 0))
+    results = []
+
+    def add(level, name, detail):
+        results.append({"level": level, "check": name, "detail": detail})
+
+    if v is None:
+        add("FAIL", "video", "no video stream")
+    else:
+        w, h = int(v["width"]), int(v["height"])
+        if w * 16 != h * 9:
+            add("FAIL", "aspect", f"{w}x{h} is not 9:16; the feed crops it or letterboxes it")
+        elif w < 1080:
+            add("WARN", "size", f"{w}x{h}: 9:16 but under 1080 wide, soft on a phone")
+        else:
+            add("PASS", "size", f"{w}x{h}")
+        num, den = (int(x) for x in v.get("avg_frame_rate", "0/1").split("/"))
+        fps = num / den if den else 0
+        add("PASS" if 23.9 <= fps <= 60.1 else "WARN", "fps", f"{fps:.2f}")
+        codec = v.get("codec_name")
+        pix = v.get("pix_fmt")
+        ok = codec in ("h264", "hevc") and pix == "yuv420p"
+        add("PASS" if ok else "WARN", "codec", f"{codec} {pix}")
+
+    if dur > MAX_SECONDS:
+        add("FAIL", "length", f"{dur:.1f}s is over {MAX_SECONDS}s: not eligible as a Short, not recommended as a Reel")
+    else:
+        add("PASS", "length", f"{dur:.1f}s")
+
+    if a is None:
+        add("FAIL", "audio", "no audio stream; a Reel with no sound has nothing for the sound-on half of the feed")
+    else:
+        lufs, peak = loudness(args.video)
+        if lufs < SILENT_LUFS:
+            add("FAIL", "audio", f"audio stream is silent ({lufs} LUFS)")
+        elif not (LOUDNESS_BAND[0] <= lufs <= LOUDNESS_BAND[1]):
+            add("WARN", "loudness", f"{lufs:.1f} LUFS, outside {LOUDNESS_BAND[0]} to {LOUDNESS_BAND[1]}")
+        else:
+            add("PASS", "loudness", f"{lufs:.1f} LUFS, peak {peak:.1f} dBFS")
+        if peak > -1.0:
+            add("WARN", "peak", f"peak {peak:.1f} dBFS clips after the app's own encode")
+
+    first = frame_at(args.video, 0, 270)
+    if first is not None:
+        luma = float(np.asarray(first.convert("L")).mean())
+        if luma < 12:
+            add("FAIL", "first frame", f"black (mean luma {luma:.0f}); the first frame is the hook")
+        else:
+            add("PASS", "first frame", f"mean luma {luma:.0f}")
+        moved = diff(first, frame_at(args.video, min(1.0, dur / 2), 270))
+        add("PASS" if moved >= STILL else "WARN", "first second",
+            f"change {moved:.1f}/255" + ("" if moved >= STILL else ": nothing moves in the hook"))
+
+    if dur > 3:
+        step = 0.25
+        times = [dur - 0.05 - k * step for k in range(int(3 / step) + 1)]
+        frames = [frame_at(args.video, t, 270) for t in times]
+        still = 0.0
+        for k in range(1, len(frames)):
+            if diff(frames[k - 1], frames[k]) < 0.6:
+                still += step
+            else:
+                break
+        if still >= STILL_TAIL_SECONDS:
+            add("WARN", "tail", f"the last {still:.2f}s barely move; end right after the payoff")
+        else:
+            add("PASS", "tail", f"still for {still:.2f}s at the end")
+        seam = diff(frame_at(args.video, 0, 270), frames[0])
+        # Under 4/255 a replay reads as one take; guessed, never measured.
+        add("INFO", "loop seam", f"last vs first frame {seam:.1f}/255 ({'loops' if seam < 4 else 'hard cut on replay'})")
+
+    if args.sheet and v is not None:
+        times = [0, 1, 2, 3] + [t for t in np.arange(5, dur, max(2.0, dur / 8))] + [max(0, dur - 0.1)]
+        times = sorted({round(float(t), 2) for t in times if t < dur})
+        tiles = [(t, frame_at(args.video, t, 360)) for t in times]
+        tiles = [(t, shade(im)) for t, im in tiles if im is not None]
+        tw, th = tiles[0][1].size
+        per_row = min(6, len(tiles))
+        rows = (len(tiles) + per_row - 1) // per_row
+        sheet = Image.new("RGB", (tw * per_row, (th + 24) * rows), (24, 24, 24))
+        d = ImageDraw.Draw(sheet)
+        for k, (t, im) in enumerate(tiles):
+            x, y = (k % per_row) * tw, (k // per_row) * (th + 24)
+            sheet.paste(im, (x, y + 24))
+            d.text((x + 6, y + 6), f"{t:.2f}s", fill=(255, 255, 255))
+        sheet.save(args.sheet)
+        add("INFO", "sheet", args.sheet)
+
+    failed = any(r["level"] == "FAIL" for r in results)
+    if args.json:
+        print(json.dumps({"video": args.video, "ok": not failed, "results": results}, indent=2))
+    else:
+        for r in results:
+            print(f"{r['level']:<5} {r['check']:<13} {r['detail']}")
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

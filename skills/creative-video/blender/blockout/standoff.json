@@ -1,0 +1,22 @@
+{
+  "about": "Two people twenty paces apart. Shot A: extreme wide, low, slow push in, 0 to 3 s. Hard cut. Shot B: over the left one's hip, locked, 3 to 5 s. The left figure stays frame-left in both shots, which holds the 180-degree line.",
+  "size": "1920x822",
+  "fps": 24,
+  "seconds": 5,
+  "ground_size": 1200,
+  "actors": [
+    {"name": "left", "at": [-7.5, 0], "facing": 0, "color": "#4f86b0", "tint_name": "blue",
+     "role": "<the person on the left>, who stays frame-left in every shot"},
+    {"name": "right", "at": [7.5, 0], "facing": 180, "color": "#b0584f", "tint_name": "red",
+     "role": "<the person on the right>, who stays frame-right in every shot"},
+    {"name": "mesa_a", "kind": "box", "at": [-140, 330], "size": [90, 40, 38], "color": "#7d7468"},
+    {"name": "mesa_b", "kind": "box", "at": [40, 380], "size": [120, 50, 30], "color": "#7d7468"},
+    {"name": "mesa_c", "kind": "box", "at": [200, 320], "size": [70, 40, 44], "color": "#7d7468"}
+  ],
+  "camera": [
+    {"t": 0.0,  "at": [0, -38, 0.5],   "look": [0, 0, 1.4], "lens": 24},
+    {"t": 2.96, "at": [0, -26, 0.55],  "look": [0, 0, 1.4], "lens": 24},
+    {"t": 3.0,  "at": [-9.2, -0.7, 1.0], "look": [7.5, 0, 1.2], "lens": 50, "cut": true},
+    {"t": 4.96, "at": [-9.2, -0.7, 1.0], "look": [7.5, 0, 1.2], "lens": 50}
+  ]
+}

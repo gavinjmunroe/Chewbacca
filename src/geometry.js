@@ -302,22 +302,86 @@ export function isoCube({ s = 42 } = {}) {
    seed of their random number generator, and would look no better.
 
    p(d) = -1.0125d^2 + 1.4126d + 0.0556 by depth, R^2 0.79 on row means. */
-export function dotField({ cols = 40, rows = 50, seed = 7 } = {}) {
-  const rnd = rng(seed);
-  const out = [];
-  for (let j = 0; j < rows; j++) {
-    const d = j / (rows - 1);                       // depth, 0 top
-    const pDepth = -1.0125 * d * d + 1.4126 * d + 0.0556;
-    for (let i = 0; i < cols; i++) {
-      const u = Math.abs(i - (cols - 1) / 2) / ((cols - 1) / 2);
-      // Falls off from the centre column; clamped because a fitted quadratic
-      // leaves the valid range at the edges.
-      const p = Math.max(0, Math.min(1, pDepth * (1 - 0.55 * u * u)));
-      out.push([1.25 + i * 2.5, 8.92 + j * 1.84, rnd() < p ? 0.589 : 0.221]);
+/* ---------------------------------------------------------------------- */
+/* RULE 30, an elementary cellular automaton (Wolfram, 1983).
+
+   READ OUT OF THE REFERENCE'S OWN BUNDLE on 2026-09-27, not guessed. Their
+   component is named CellularAutomataFigure and the rule number 30 is
+   decomposed into its 8 bits exactly as below.
+
+   This replaces a probability dither I had fitted to the same plate:
+
+       p(d) = -1.0125 d^2 + 1.4126 d + 0.0556
+
+   That quadratic reproduced the plate's DENSITY profile to within a few
+   percent and was still fiction. It is a curve fitted to the silhouette of a
+   Rule 30 triangle. Every dot it placed was placed for the wrong reason, and
+   no amount of refitting it would ever have produced the interior structure,
+   because the interior of Rule 30 is chaotic on the left and periodic on the
+   right and a separable p(row) * f(col) cannot express that.
+
+   The lesson is cheaper to write down than it was to learn: a generative
+   figure has a generator, and fitting its output distribution is not
+   recovering it. Read the source.
+
+   GENERATOR: 40 cells, 50 generations, one live cell at index 20, PERIODIC
+   boundaries (the row wraps, so the triangle's arms re-enter on the far
+   side rather than being clipped). Those four facts are the whole figure.
+
+   The live/dead counts are not tuned. 40 x 50 = 2000 cells and Rule 30 from
+   a single seed happens to leave 842 live and 1158 dead. Matching those
+   counts by choosing a fill fraction is the same mistake as the quadratic. */
+
+const RULE_30 = Array.from({ length: 8 }, (_, i) => ((30 >> i) & 1) === 1);
+
+export function rule30({ cols = 40, rows = 50, seed = null } = {}) {
+  const gens = [];
+  let row = new Array(cols).fill(false);
+  row[seed === null ? Math.floor(cols / 2) : seed] = true;
+  gens.push(row);
+  for (let g = 1; g < rows; g++) {
+    const prev = gens[g - 1];
+    const next = new Array(cols).fill(false);
+    for (let c = 0; c < cols; c++) {
+      // The 3-cell neighbourhood as a 0-7 index, left bit most significant.
+      // Periodic: both neighbours wrap, which is what lets the pattern reach
+      // the full width instead of dying inside a clipped cone.
+      const l = prev[(c - 1 + cols) % cols] ? 1 : 0;
+      const m = prev[c] ? 1 : 0;
+      const r = prev[(c + 1) % cols] ? 1 : 0;
+      next[c] = RULE_30[(l << 2) | (m << 1) | r];
     }
+    gens.push(next);
   }
-  return out;
+  const live = [], dead = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      (gens[r][c] ? live : dead).push([r, c]);
+  return { gens, live, dead, cols, rows };
 }
+
+/* Their placement, in the 0-100 viewBox both plates share.
+   Pitch 2.5 x 1.84, cells sampled at their centres, field starting at y=8. */
+export const CA_PITCH_X = 2.5;
+export const CA_PITCH_Y = 1.84;
+export const CA_Y0 = 8;
+export const CA_R_LIVE = 0.5888;
+export const CA_R_DEAD = 0.2208;
+export const CA_R_HIT = 1.012;          // the invisible click target per live cell
+
+export const caX = c => (c + 0.5) * CA_PITCH_X;
+export const caY = r => CA_Y0 + (r + 0.5) * CA_PITCH_Y;
+
+/* The reveal is a clip rect growing DOWNWARD one generation at a time, so
+   rows appear as the automaton computes them. Nothing translates and nothing
+   fades: the figure is drawn by uncovering it.
+
+   70ms per generation x 50 generations = 3500ms. Their loop variant holds the
+   finished state and restarts at 5100ms, so the hold is 1600ms. */
+export const CA_MS_PER_GEN = 70;
+export const CA_GROW_MS = CA_MS_PER_GEN * 50;     // 3500
+export const CA_LOOP_MS = 5100;
+export const caClipHeight = gen => CA_Y0 + CA_PITCH_Y * gen;
 
 export function dotArch({ cols = 30, rows = 24, w = 200, h = 170 } = {}) {
   const out = [];
@@ -334,4 +398,234 @@ export function dotArch({ cols = 30, rows = 24, w = 200, h = 170 } = {}) {
     }
   }
   return out;
+}
+
+/* ---------------------------------------------------------------------- */
+/* RECOVERED 2026-09-26 by ux-recover, from the reference's own served
+   geometry. Every constant below was read out of their SVG, not chosen. */
+
+/* A PENCIL OF LINES THROUGH A POINT. Their LEM 1.1 plate: 48 rays, start
+   heights 9.73 to 90.27 at pitch 1.71, and every single ray passes through
+   EXACTLY (50, 50) at its midpoint. Measured waist width: 0.00.
+
+   So the hourglass is not a hyperboloid and not a ruled surface. It is the
+   simplest possible construction, a pencil of straight lines through one
+   point, and the bright waist is pure convergence: 48 strokes crossing the
+   same pixel. I had built a twisted ruled surface, which looks superficially
+   similar and can never produce that pinch, because its lines never actually
+   meet. */
+export function pencil({ rays = 48, seg = 61, cx = 50, cy = 50,
+                         lo = 9.73, hi = 90.27 } = {}) {
+  const out = [];
+  for (let i = 0; i < rays; i++) {
+    const y0 = lo + (hi - lo) * (i / (rays - 1));
+    const y1 = 2 * cy - y0;                 // mirrored through the centre
+    const line = [];
+    for (let j = 0; j < seg; j++) {
+      const t = j / (seg - 1);
+      line.push([t * 100, y0 + (y1 - y0) * t]);
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+/* A PENTAGON ROSE. Their 60 "harmograph-line" paths are byte-identical: one
+   regular pentagon, repeated, each rotated by k * 6.10 degrees about (50,50).
+   60 * 6.10 is 366, so it closes just past a full turn.
+
+   The vertices below are theirs exactly. Nothing about this is a
+   harmonograph despite the class name, which is why building one produced
+   something unrelated. */
+export const PENTAGON = [[50, 12], [86.14, 38.26], [72.34, 80.74],
+                         [27.66, 80.74], [13.86, 38.26]];
+export function rose({ copies = 60, stepDeg = 6.10 } = {}) {
+  return Array.from({ length: copies }, (_, i) => ({
+    pts: PENTAGON, rot: +(i * stepDeg).toFixed(2),
+  }));
+}
+
+/* AN ISOMETRIC QUAD TILING. Their lattice plate is 1,116 four-point paths,
+   not crossing lines. Two edges are always 4.47 long and two vary; the edge
+   vectors are (4.0, 1.118) and (-2.237, 1.592), giving a 3.58:1 shallow
+   isometric basis. Centres sit on a 2.0 x-pitch.
+
+   Building this from lines produced a fan, because a lattice of lines and a
+   lattice of tiles are different objects: only the tiles can be individually
+   filled, faded or lifted, which is what the reference does to them. */
+export const ISO_U = [4.0, 1.118];
+export const ISO_V = [-2.237, 1.592];
+export function isoTiles({ cols = 44, rows = 26, ox = 50, oy = 62 } = {}) {
+  const out = [];
+  for (let b = 0; b < rows; b++) {
+    for (let a = 0; a < cols; a++) {
+      const u = a - cols / 2, v = b - rows / 2;
+      const x = ox + u * ISO_U[0] + v * ISO_V[0];
+      const y = oy + u * ISO_U[1] + v * ISO_V[1];
+      out.push([[x, y],
+                [x + ISO_U[0], y + ISO_U[1]],
+                [x + ISO_U[0] + ISO_V[0], y + ISO_U[1] + ISO_V[1]],
+                [x + ISO_V[0], y + ISO_V[1]]]);
+    }
+  }
+  return out;
+}
+
+/* ---------------------------------------------------------------------- */
+/* THEIR ACTUAL SOURCE, 2026-09-26.
+ *
+ * I said these generators were server-side and unrecoverable. Wrong. I had
+ * downloaded 39 eager chunks; the build ships 116, and the rest are lazy.
+ * Parsing the webpack chunk map reaches them, and the figures are in there.
+ *
+ * So everything below is transcribed from their shipped code, not fitted and
+ * not guessed. Where my earlier measurement disagreed, their code wins and
+ * the disagreement is noted, because those are the places my reasoning was
+ * wrong in an instructive way. */
+
+/* GRAVITATIONAL LENS. 48 rays, 61 samples, Gaussian deflection.
+ *
+ * I measured this as "a pencil of 48 straight lines through (50,50)" because
+ * every ray passes through the lens centre with spread 0.00. The convergence
+ * was real; the mechanism was not. They are Gaussian-deflected curves, and
+ * at x = cx the exponential is exactly 1, so every ray lands on cy by
+ * construction. A pencil of straight lines reproduces the waist and none of
+ * the bowing on either side of it.
+ *
+ * sigma^2 = 784, so sigma = 28 in a 100-unit box. */
+export function gravLens({ rays = 48, seg = 60, cx = 50, cy = 50, sigma2 = 784 } = {}) {
+  const out = [];
+  for (let i = 0; i < rays; i++) {
+    const y0 = 8 + (i / (rays - 1)) * 84;      // their span: 8 to 92
+    const n = y0 - cy;
+    const line = [];
+    for (let j = 0; j <= seg; j++) {
+      const x = (j / seg) * 100;
+      line.push([x, y0 - n * Math.exp(-((x - cx) ** 2) / sigma2)]);
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+/* THE PENTAGON, exactly theirs: radius 38 about (50,50), first vertex at
+ * -PI/2 so it points up. 60 copies at 6.10 degree steps. The class name on
+ * these is "harmograph-line" and there is no harmonograph anywhere in it. */
+export function pentagon({ r = 38, cx = 50, cy = 50, n = 5 } = {}) {
+  return Array.from({ length: n }, (_, i) => {
+    const t = (i / n) * Math.PI * 2 - Math.PI / 2;
+    return [cx + r * Math.cos(t), cy + r * Math.sin(t)];
+  });
+}
+
+/* WIREFRAME SPHERE. Recovered to rms 0.0041 user units against their 3,315
+ * emitted coordinates, which is the bound imposed by their own 2-decimal
+ * rounding. Five parameters, every one from a free least-squares fit rather
+ * than assumed:
+ *
+ *   centre (50, 52)   NOT (50,50): the sphere sits two units low
+ *   radius 38.0
+ *   tilt   14.000 deg about the screen X axis
+ *   phase  49.342 deg
+ *
+ * The tilt tips the north pole AWAY from the viewer, so the camera sits just
+ * below the equator plane and the near half of the equator draws ABOVE the
+ * horizontal centre line. Counterintuitive, and it is what the data says.
+ *
+ * 32 meridians at 11.25 deg and 19 rings at 9 deg, every curve 65 samples.
+ * The 5..65 sample counts I had read as sloppiness are the VISIBILITY SPLIT:
+ * each curve is cut where it crosses the horizon so the far half can be
+ * drawn at lower opacity. Near z>0 is 0.7, far is 0.4, threshold exactly 0.
+ *
+ * The r=38 circle is the SILHOUETTE, not the equator, despite their own
+ * class calling it sphere-equator. The real equator is a separate ring.
+ *
+ * Ring runs that straddle sample 0 emit TWO subpaths in one d. Joining them
+ * draws a chord straight across the sphere. */
+export function sphere3d({ meridians = 32, rings = 19, seg = 64,
+                           cx = 50, cy = 52, r = 38,
+                           tiltDeg = 14, phaseDeg = 49.342 } = {}) {
+  const T = tiltDeg * Math.PI / 180;
+  const P = (latDeg, lonDeg) => {
+    const a = latDeg * Math.PI / 180, b = lonDeg * Math.PI / 180;
+    const x = Math.cos(a) * Math.cos(b);
+    const y = -Math.sin(a);                       // +lat is the TOP of screen
+    const z = Math.cos(a) * Math.sin(b);
+    return { sx: cx + r * x,
+             sy: cy + r * (y * Math.cos(T) - z * Math.sin(T)),
+             front: (y * Math.sin(T) + z * Math.cos(T)) > 0 };
+  };
+  const curves = [];
+  for (let j = 0; j < meridians; j++) {
+    const lon = phaseDeg - j * (360 / meridians);
+    curves.push(Array.from({ length: seg + 1 },
+      (_, i) => P(90 - i * (180 / seg), lon)));
+  }
+  for (let k = 0; k < rings; k++) {
+    const lat = 81 - 9 * k;
+    curves.push(Array.from({ length: seg + 1 },
+      (_, i) => P(lat, phaseDeg - i * (360 / seg))));
+  }
+  // Split each curve into near and far runs, near emitted first.
+  const out = [];
+  for (const c of curves) {
+    for (const want of [true, false]) {
+      const runs = []; let run = [];
+      for (const p of c) {
+        if (p.front === want) run.push([p.sx, p.sy]);
+        else if (run.length > 1) { runs.push(run); run = []; }
+        else run = [];
+      }
+      if (run.length > 1) runs.push(run);
+      if (runs.length) out.push({ runs, front: want, opacity: want ? 0.7 : 0.4 });
+    }
+  }
+  return out;
+}
+
+/* VALUE NOISE. The reason their field reads as organic and mine did not.
+ *
+ * My dither drew each cell independently, so the result was statistically
+ * uniform: every tile isolated, none touching, a perfectly even scatter.
+ * Theirs has pairs and triples sitting adjacent, clumps with gaps between
+ * them. That is not a different probability, it is a different PROCESS.
+ *
+ * Independent draws cannot cluster. Clustering requires the value at a cell
+ * to be correlated with its neighbours, which is what value noise gives:
+ * random values on a coarse grid, smoothly interpolated between. Threshold
+ * that field and the cells above the line come out in connected blobs.
+ *
+ * This is the single difference between "random" and "organic", and no
+ * amount of tuning a per-cell probability reaches it. */
+export function valueNoise(seed = 1) {
+  const rnd = rng(seed);
+  const N = 64;
+  const g = Array.from({ length: N * N }, () => rnd());
+  const fade = t => t * t * (3 - 2 * t);           // smoothstep, C1 continuous
+  return (x, y) => {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    const xf = fade(x - xi), yf = fade(y - yi);
+    const at = (a, b) => g[(((b % N) + N) % N) * N + (((a % N) + N) % N)];
+    const a = at(xi, yi),     b = at(xi + 1, yi);
+    const c = at(xi, yi + 1), d = at(xi + 1, yi + 1);
+    return (a + (b - a) * xf) * (1 - yf) + (c + (d - c) * xf) * yf;
+  };
+}
+
+/* The tile field: a fine ground lattice plus sparse tiles that CLUSTER.
+ * Two scales, because the reference has both: a dense grid providing
+ * texture, and tiles an order of magnitude larger sitting in it. */
+export function tileField({ cols = 46, rows = 34, fill = 0.055,
+                            scale = 0.22, seed = 5 } = {}) {
+  const noise = valueNoise(seed);
+  const cells = [], tiles = [];
+  for (let b = 0; b < rows; b++) {
+    for (let a = 0; a < cols; a++) {
+      const u = a - cols / 2, v = b - rows / 2;
+      cells.push([u, v]);
+      // Correlated field, so tiles above the threshold come out adjacent.
+      if (noise(a * scale, b * scale) > 1 - fill * 6) tiles.push([u, v]);
+    }
+  }
+  return { cells, tiles };
 }

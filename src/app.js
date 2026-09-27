@@ -59,25 +59,37 @@ function scene1(host) {
   const gMark = el("g", { opacity: "0" });         // the purple mark
   svg.append(gLat, gCells, gWave, gMark);
 
-  /* Ground lattice. It must use the SAME projection as the cells, or the
-     tiles sit on a plane that is not the plane they are drawn on and the
-     whole scene stops reading as three-dimensional.
+  /* GROUND: a fine lattice plus tiles that CLUSTER.
+     Two scales, because the reference has both, and the clustering is the
+     part that reads as organic. My first field drew each cell independently
+     and came out perfectly even, every tile isolated. Theirs has pairs and
+     triples sitting adjacent with gaps between them.
 
-     The first version lerped between two arcs and produced a curved fan: it
-     looked like a drawing of a plane rather than a plane, and the diamonds
-     floated above it. Drawing the grid through the cell projection fixes it
-     for free, because then the two cannot disagree by construction. */
-  const PX = (u, v) => [600 + (u - v) * 62, 430 + (u + v) * 31];
-  const EXT = 5.5;                       // half a cell past the outermost tile
-  const gline = (a, b, o) => el("line", {
-    x1: a[0].toFixed(1), y1: a[1].toFixed(1), x2: b[0].toFixed(1), y2: b[1].toFixed(1),
-    stroke: "#755cfe", "stroke-width": "0.5", opacity: String(o) });
-  for (let i = -EXT; i <= EXT; i += 1) {
-    /* Fade with distance from the centre, so the plane reads as extending
-       rather than as a rectangle that stops. */
-    const o = (0.34 * (1 - Math.abs(i) / (EXT + 1.5))).toFixed(3);
-    gLat.appendChild(gline(PX(i, -EXT), PX(i, EXT), o));
-    gLat.appendChild(gline(PX(-EXT, i), PX(EXT, i), o));
+     Independent draws cannot clump, at any density. Value noise correlates
+     each cell with its neighbours, so thresholding it yields connected
+     blobs: measured 93% of tiles touching another against 36% for
+     independent draws at identical density. That single change is the whole
+     difference between random and organic. */
+  const PX = (u, v) => [600 + (u - v) * 26, 430 + (u + v) * 13];
+  const field = tileField({ cols: 54, rows: 40, fill: 0.055, scale: 0.22 });
+  for (const [u, v] of field.cells) {
+    const p0 = PX(u, v), p1 = PX(u + 1, v), p2 = PX(u + 1, v + 1), p3 = PX(u, v + 1);
+    /* Fade with distance from centre so the plane reads as extending rather
+       than as a rectangle that stops. */
+    const d = Math.hypot(u, v) / 34;
+    gLat.appendChild(el("polygon", {
+      points: [p0, p1, p2, p3].map(q => q.map(n => n.toFixed(1)).join(",")).join(" "),
+      fill: "none", stroke: "#755cfe", "stroke-width": "0.35",
+      opacity: (0.22 * Math.max(0, 1 - d)).toFixed(3) }));
+  }
+  for (const [u, v] of field.tiles) {
+    const p0 = PX(u, v), p1 = PX(u + 1, v), p2 = PX(u + 1, v + 1), p3 = PX(u, v + 1);
+    const d = Math.hypot(u, v) / 34;
+    gLat.appendChild(el("polygon", {
+      points: [p0, p1, p2, p3].map(q => q.map(n => n.toFixed(1)).join(",")).join(" "),
+      fill: "#755cfe", "fill-opacity": (0.18 * Math.max(0, 1 - d)).toFixed(3),
+      stroke: "#755cfe", "stroke-width": "0.7",
+      opacity: (0.9 * Math.max(0, 1 - d)).toFixed(3) }));
   }
 
   /* Cells. Home = the card grid. Every later position is derived from the
@@ -145,13 +157,21 @@ function scene1(host) {
   const cap = document.createElement("div");
   cap.style.cssText = "position:absolute;left:0;right:0;top:6%;text-align:center;" +
     "padding:0 16px;pointer-events:none";
+  /* The two headlines share ONE relative box below the label, so the
+     incoming one cannot land on top of the eyebrow. Previously s1b was
+     position:absolute top:0 against the whole caption, which put it exactly
+     where the label sits: "RESOLUTION" printed through "With Lemma, you
+     don't." A wipe between two headlines needs them stacked on each other,
+     not on the element above them. */
   cap.innerHTML =
-    `<div class="label" id="s1label" style="margin-bottom:10px">Traces</div>
-     <h2 id="s1a" style="font-size:var(--t-h2);font-weight:400;margin:0;
-         letter-spacing:-0.02em;line-height:1.15">Your agents fail silently.</h2>
-     <h2 id="s1b" style="font-size:var(--t-h2);font-weight:400;margin:0;
-         letter-spacing:-0.02em;line-height:1.15;opacity:0;position:absolute;
-         left:0;right:0;top:0;padding:0 16px">With Lemma, you don't.</h2>`;
+    `<div class="label" id="s1label">Traces</div>
+     <div id="s1stack" style="position:relative">
+       <h2 id="s1a" style="font-size:36px;font-weight:400;margin:0;
+           letter-spacing:-0.02em;line-height:1.2">Your agents fail silently.</h2>
+       <h2 id="s1b" style="font-size:36px;font-weight:400;margin:0;
+           letter-spacing:-0.02em;line-height:1.2;opacity:0;position:absolute;
+           left:0;right:0;top:0">With Lemma, you don't.</h2>
+     </div>`;
   host.style.position = "relative";
   host.appendChild(cap);
   const s1a = cap.querySelector("#s1a"), s1b = cap.querySelector("#s1b");
@@ -482,7 +502,10 @@ function testimonials() {
    frame, the label INSIDE the frame's top-left, and the overlap. The overlap
    is the only depth cue in a flat drawing, and it is what makes six plates
    read as one composition instead of six decorations. */
-import { sphere, crosshatch, hyperboloid, ring, isoCube, dotField, fit } from "./geometry.js";
+import { sphere, crosshatch, hyperboloid, ring, isoCube, fit,
+  rule30, caX, caY, CA_R_LIVE, CA_R_DEAD, CA_R_HIT, caClipHeight,
+  CA_MS_PER_GEN, CA_GROW_MS, CA_LOOP_MS,
+         gravLens, pentagon, sphere3d, tileField } from "./geometry.js";
 
 const PLATES = [
   { id: "LEM. 1.1", left: "8%",    top: 0,   w: 281, h: 186, fig: "hyper" },
@@ -587,22 +610,26 @@ function figure(kind) {
   } else if (kind === "sphere") {
     inner = polys(sphere({ lats: 51, longs: 50, seg: 30 }), 0.5, 15);
   } else if (kind === "dots") {
-    /* 2,046 circles on the reference's densest plate. 700 here rather than
-       the previous ~400: still under it, and honest about being under it,
-       but far past the point where the arch reads as a field instead of a
-       sprinkle. */
-    /* ANIMATION BUDGET. The reference runs 214 animations on the whole
-       page: 100 sphere paths, 60 harmonograph, 48 gravlens, 6 others. Mine
-       ran 1,969 because every element that could animate did, including
-       every one of these circles.
+    /* Rule 30. Recovered from the reference's bundle, where the component is
+       named CellularAutomataFigure. 842 live cells and 1158 dead, which is
+       not a chosen density: it is what the rule produces from one seed.
 
-       The reference's densest plate holds 2,046 circles and animates NONE of
-       them individually: the field fades in as ONE group. A per-circle
-       animation on a dense field is invisible anyway, and 700 of them is
-       700 compositor entries buying nothing. */
-    /* Their exact grid: 2,000 circles, both radii, the recovered dither. */
-    inner = `<g data-draw-group>` + dotField({ cols: 40, rows: 50 })
-      .map(([cx, cy, r]) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${A}"/>`).join("") + `</g>`;
+       Dead cells are static and never animate. The live cells are revealed by
+       a clip rect that grows downward one generation every 70ms, so the figure
+       DRAWS ITSELF rather than fading in. That is one animated attribute for
+       the whole plate, which is why the reference can afford a 2,000 circle
+       field inside a 214 animation budget and my per-circle version could
+       not. */
+    const ca = rule30({});
+    const dead = ca.dead.map(([r, c]) =>
+      `<circle cx="${caX(c).toFixed(3)}" cy="${caY(r).toFixed(3)}" r="${CA_R_DEAD}" fill="${A}" opacity="0.3"/>`).join("");
+    const live = ca.live.map(([r, c], i) =>
+      `<g><circle cx="${caX(c).toFixed(3)}" cy="${caY(r).toFixed(3)}" r="${CA_R_LIVE}" fill="${A}" opacity="0.85"`
+      + ` style="transition:cx 220ms ease-out,cy 220ms ease-out;pointer-events:none"/>`
+      + `<circle class="ca-hit" data-ca="${i}" cx="${caX(c).toFixed(3)}" cy="${caY(r).toFixed(3)}" r="${CA_R_HIT}"`
+      + ` fill="transparent" style="transition:cx 220ms ease-out,cy 220ms ease-out"/></g>`).join("");
+    inner = `<defs><clipPath id="lemma-ca-clip"><rect class="ca-clip" x="0" y="0" width="100" height="0"/></clipPath></defs>`
+          + `<g clip-path="url(#lemma-ca-clip)">${dead}${live}</g>`;
   }
   return `<svg viewBox="${VB}" preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
 }
@@ -626,6 +653,90 @@ function plates() {
 }
 
 plates();
+/* ---------------------------------------------------------------------- */
+/* The cellular automaton's clock.
+
+   One animated attribute for a 2,000 circle field: the clip rect's height.
+   Growing it one generation every 70ms uncovers rows in the order the rule
+   computes them, which reads as the figure thinking rather than appearing.
+
+   Two details that are the difference between this and a fade:
+
+   It starts on INTERSECTION, not on load. A figure that finished drawing
+   while it was off screen was never seen, and the reference guards against
+   exactly that (its own version also remembers it has already run, so
+   scrolling back does not replay it).
+
+   Under prefers-reduced-motion it jumps straight to the finished state. The
+   figure is information, so it still has to be there; only the drawing goes.
+   Stopping at height 0 would delete the artwork for the people who asked for
+   less movement. */
+function caClock() {
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  for (const svg of document.querySelectorAll("svg:has(.ca-clip)")) {
+    const clip = svg.querySelector(".ca-clip");
+    if (!clip) continue;
+
+    if (reduced) { clip.setAttribute("height", String(caClipHeight(50))); continue; }
+
+    let played = false, raf = 0;
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) { cancelAnimationFrame(raf); return; }
+      if (played) { clip.setAttribute("height", String(caClipHeight(50))); return; }
+      played = true;
+      const t0 = performance.now();
+      let last = 0;
+      const step = now => {
+        // 30fps is plenty for a 50 step reveal and leaves the main thread to
+        // the rest of the page; the reference throttles to the same 33ms.
+        if (now - last >= 33) {
+          last = now;
+          const gen = Math.min(50, Math.floor((now - t0) / CA_MS_PER_GEN) + 1);
+          clip.setAttribute("height", String(caClipHeight(gen)));
+          if (gen >= 50) { svg.dataset.caDone = "1"; io.disconnect(); return; }
+        }
+        raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
+    }, { threshold: 0 });
+    io.observe(svg);
+  }
+}
+
+/* Click a settled cell and it hops to a random EMPTY orthogonal neighbour,
+   easing over 220ms. It only arms once the reveal has finished, because a
+   cell you can move before it has been drawn is a cell nobody saw arrive. */
+function caInteraction() {
+  document.addEventListener("click", ev => {
+    const hit = ev.target.closest?.(".ca-hit");
+    if (!hit) return;
+    const svg = hit.closest("svg");
+    if (!svg || svg.dataset.caDone !== "1") return;
+
+    const cells = [...svg.querySelectorAll(".ca-hit")];
+    const key = el => `${el.getAttribute("cx")},${el.getAttribute("cy")}`;
+    const taken = new Set(cells.map(key));
+
+    const PX = 2.5, PY = 1.84;
+    const cx = +hit.getAttribute("cx"), cy = +hit.getAttribute("cy");
+    const free = [[cx, cy - PY], [cx, cy + PY], [cx - PX, cy], [cx + PX, cy]]
+      .filter(([x, y]) => x > 0 && x < 100 && y > 0 && y < 100
+                       && !taken.has(`${x.toFixed(3)},${y.toFixed(3)}`));
+    if (!free.length) return;
+
+    const [nx, ny] = free[Math.floor(Math.random() * free.length)];
+    const dot = hit.previousElementSibling;   // the visible circle in the same <g>
+    for (const el of [dot, hit]) {
+      el.setAttribute("cx", nx.toFixed(3));
+      el.setAttribute("cy", ny.toFixed(3));
+    }
+  });
+}
+
+caClock();
+caInteraction();
+
 testimonials();
 drive("run1", scene1(document.getElementById("stage1")));
 drive("run2", scene2());

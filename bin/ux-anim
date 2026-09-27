@@ -1,0 +1,396 @@
+#!/usr/bin/env python3
+"""Recover the specification of EVERY animation on a page, declared or not.
+
+    ux-anim https://example.com --out lenses/example
+    ux-anim https://example.com --seconds 6 --scroll
+
+Caleb, 2026-09-27: "there's gotta be a smart way for us to reverse engineer
+ANY animation."
+
+There is, and it is two methods rather than one, because animations on the
+web come from two different places and only one of them can be asked.
+
+DECLARED (CSS animations, CSS transitions, Web Animations API). The browser
+already holds the full specification and will hand it over.
+document.getAnimations() returns every running animation, and each one's
+effect carries getTiming() AND getKeyframes(). Keyframes are the part that
+matters: they are the exact property values at each offset, with per-keyframe
+easing. No sampling, no fitting, no error.
+
+ux-crawl has harvested getAnimations() since it was written and records only
+duration, delay, easing and iterations. That tells you something ran for 900ms
+and never what moved. Reading the keyframes is the difference between "an
+animation exists here" and having the animation.
+
+UNDECLARED (requestAnimationFrame loops, scroll handlers, anything a library
+drives by writing styles every frame). These do not appear in getAnimations()
+at all, because nothing declared them. The browser has no spec to give. This
+is where uselemma.ai's hero depth stack, its cube and its cellular automaton
+all live, and it is why an animation-only capture of that page reported most
+of it as static.
+
+For those, sample the property and FIT A MODEL. That is the honest method, and
+the fit's residual says how much to trust it.
+
+THE MODEL LIBRARY, and why these seven. Each is a thing real interface code
+actually does, and each has a parameter worth recovering:
+
+    constant        it never moved; the baseline every other model must beat
+    linear          a plain scroll mapping or a linear keyframe
+    ease-out cubic  1-(1-t)^3, the most common entrance curve on the web
+    ease-in cubic   t^3
+    lerp follower   1-(1-k)^n from `cur += (target-cur)*k`, run every frame.
+                    Fitting it recovers k DIRECTLY, which is how a smooth
+                    scroll library's lerp constant becomes a number you can
+                    read off rather than guess at. On the reference this is
+                    what makes an instantaneous scroll rate untrustworthy
+                    near a jump: the follower has not converged.
+    sinusoid        a loop, where frequency is the period you want
+    logistic        an S curve, for anything eased in and out
+
+Fitting is ordinary least squares against a design matrix of these basis
+functions, solved with numpy's lstsq, and ranked by ADJUSTED R-squared so a
+model does not win by having more parameters. Non-linear parameters (the lerp
+k, the sinusoid frequency) are swept over a coarse grid and refined, because
+the grid is small and a global sweep cannot land in a local minimum.
+
+CUBIC BEZIER RECOVERY. CSS easings are cubic-bezier(x1,y1,x2,y2) and a sampled
+curve can be inverted back to those control points. Reporting "cubic-bezier
+(0.33, 0, 0.15, 1)" is worth more than "eased", because it is a value you can
+paste. Recovered by least squares over the Bezier's own parameterisation.
+
+WHAT THIS DOES NOT DO. It cannot see a value that never changes while it is
+watching. An entrance that finished before the capture started is invisible,
+which is why the declared pass runs first and immediately: the reference's own
+load choreography is over inside 1.6 seconds.
+"""
+import argparse
+import json
+import math
+import pathlib
+import sys
+
+try:
+    import numpy as np
+except ImportError:
+    print("ux-anim needs numpy: pip3 install numpy", file=sys.stderr)
+    sys.exit(2)
+
+
+# Declared animations, with their keyframes. This is the exact half.
+DECLARED_JS = r"""() => {
+  const out = [];
+  for (const a of document.getAnimations()) {
+    let timing = {}, frames = [], sel = "", props = [];
+    try { timing = a.effect ? a.effect.getTiming() : {}; } catch (e) {}
+    try {
+      frames = a.effect ? a.effect.getKeyframes() : [];
+      const seen = new Set();
+      for (const f of frames)
+        for (const k of Object.keys(f))
+          if (!["offset","computedOffset","easing","composite"].includes(k)) seen.add(k);
+      props = [...seen];
+    } catch (e) {}
+    try {
+      const el = a.effect && a.effect.target;
+      if (el && el.tagName) {
+        sel = el.tagName.toLowerCase();
+        const c = typeof el.className === "string" ? el.className
+                : (el.className && el.className.baseVal) || "";
+        if (c) sel += "." + c.trim().split(/\s+/).slice(0, 3).join(".");
+      }
+    } catch (e) {}
+    out.push({
+      kind: a.constructor.name, name: a.animationName || a.transitionProperty || "",
+      sel, props,
+      dur: typeof timing.duration === "number" ? timing.duration : null,
+      delay: timing.delay || 0, easing: timing.easing || "",
+      iter: timing.iterations === Infinity ? "infinite" : timing.iterations,
+      fill: timing.fill || "", dir: timing.direction || "",
+      frames: frames.map(f => {
+        const o = {offset: f.computedOffset, easing: f.easing};
+        for (const k of Object.keys(f))
+          if (!["offset","computedOffset","easing","composite"].includes(k)) o[k] = f[k];
+        return o;
+      })
+    });
+  }
+  return out;
+}"""
+
+
+# Undeclared motion: watch every visible element and record what CHANGES.
+# Only changing values are kept, because a page is overwhelmingly static and
+# storing the static part per frame is how a capture becomes a gigabyte.
+WATCH_JS = r"""(ms) => new Promise(resolve => {
+  const els = [...document.querySelectorAll("body *")].filter(e => {
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && r.bottom > -200 && r.top < innerHeight + 200;
+  }).slice(0, 4000);
+  const key = (e, i) => e.tagName.toLowerCase() + "#" +
+      ((typeof e.className === "string" ? e.className : "") || "").slice(0, 30) + "#" + i;
+  const series = new Map();
+  const t0 = performance.now();
+  function frame(now) {
+    const t = now - t0;
+    for (let i = 0; i < els.length; i++) {
+      const e = els[i], s = getComputedStyle(e), r = e.getBoundingClientRect();
+      const rec = [ +(+s.opacity).toFixed(4), r.top, r.left, r.width, r.height,
+                    s.transform === "none" ? "" : s.transform,
+                    s.strokeDashoffset === "0px" ? "" : s.strokeDashoffset,
+                    s.clipPath === "none" ? "" : s.clipPath ];
+      const k = key(e, i);
+      let arr = series.get(k);
+      if (!arr) { arr = []; series.set(k, arr); }
+      arr.push([t, rec]);
+    }
+    if (t < ms) requestAnimationFrame(frame);
+    else {
+      const out = {};
+      for (const [k, arr] of series) {
+        // Keep only what actually moved. A property with one distinct value
+        // across the whole window is not an animation.
+        const changed = [];
+        for (let j = 0; j < 8; j++) {
+          const vals = new Set(arr.map(p => String(p[1][j])));
+          if (vals.size > 2) changed.push(j);
+        }
+        if (changed.length) out[k] = {cols: changed, t: arr.map(p => p[0]),
+          v: changed.map(j => arr.map(p => p[1][j]))};
+      }
+      resolve(out);
+    }
+  }
+  requestAnimationFrame(frame);
+})"""
+
+FIELDS = ["opacity", "top", "left", "width", "height", "transform", "dashoffset", "clipPath"]
+
+
+def numeric(vals):
+    """A column of samples as floats where that is possible.
+
+    transform arrives as a matrix string and its translateY is the part that
+    carries motion; dashoffset and clip-path arrive with units.
+    """
+    out = []
+    for v in vals:
+        if isinstance(v, (int, float)):
+            out.append(float(v)); continue
+        s = str(v)
+        if s.startswith("matrix"):
+            try:
+                p = [float(x) for x in s[s.index("(") + 1:s.rindex(")")].split(",")]
+                out.append(p[5] if len(p) == 6 else (p[13] if len(p) == 16 else 0.0))
+                continue
+            except (ValueError, IndexError):
+                out.append(float("nan")); continue
+        try:
+            out.append(float(s.replace("px", "").replace("%", "").strip()))
+        except ValueError:
+            out.append(float("nan"))
+    return np.array(out, dtype=float)
+
+
+def basis(t01, k=None, freq=None):
+    """Candidate shapes, each a column of the design matrix.
+
+    t01 is time normalised to [0, 1] over the observed window, so every model
+    is compared on the same footing regardless of how long the capture ran.
+    """
+    cols = {
+        "constant": np.ones_like(t01),
+        "linear": t01,
+        "easeOutCubic": 1 - (1 - t01) ** 3,
+        "easeInCubic": t01 ** 3,
+        "logistic": 1 / (1 + np.exp(-12 * (t01 - 0.5))),
+    }
+    if k is not None:
+        # cur += (target - cur) * k, applied once per frame. After n frames the
+        # value has covered 1 - (1-k)^n of the distance. Recovering k from a
+        # sampled curve is how a library's lerp constant becomes readable.
+        n = t01 * 60.0
+        cols[f"lerp(k={k:.3f})"] = 1 - (1 - k) ** n
+    if freq is not None:
+        cols[f"sin(f={freq:.2f})"] = np.sin(2 * math.pi * freq * t01)
+    return cols
+
+
+def fit_one(t, v):
+    """Best model for one series, fitted ONE BASIS AT A TIME.
+
+    The first version of this fitted a linear combination of every basis at
+    once and reported r2 = 1.000 on the reference with coefficients of +18097
+    and -9046 that cancelled each other out. Over a short window these shapes
+    are nearly collinear, so least squares will always find some enormous
+    cancelling combination that fits perfectly and describes nothing. A
+    perfect fit from a sum of similar curves is an artifact of the design
+    matrix, not a discovery about the page.
+
+    So each candidate is fitted alone as v = a + b*f(t), which has two free
+    parameters, is never degenerate, and yields a winner you can act on:
+    "ease-out cubic, r2 0.998" is a specification, where "0.7 x lerp minus
+    0.3 x linear plus 0.2 x cubic" is a shrug with decimals.
+
+    Ties are broken toward the simpler model, because on a short window an
+    eased curve and a lerp follower are genuinely hard to separate and
+    claiming the more specific one is overclaiming.
+    """
+    good = ~np.isnan(v)
+    t, v = t[good], v[good]
+    if len(t) < 12:
+        return None
+    span = float(np.nanmax(v) - np.nanmin(v))
+    if span < 0.01:
+        return {"model": "static", "r2": 1.0, "span": span, "params": {}}
+
+    t01 = (t - t.min()) / max(t.max() - t.min(), 1e-9)
+
+    cands = dict(basis(t01))                      # the parameter-free shapes
+    for k in [round(x, 3) for x in np.arange(0.02, 0.45, 0.02)]:
+        cands.update(basis(t01, k=k))
+    for f in [round(x, 2) for x in np.arange(0.5, 6.0, 0.5)]:
+        cands.update(basis(t01, freq=f))
+    cands.pop("constant", None)                   # it is the intercept already
+
+    # Simpler models win ties. Order is the tiebreak, so list them by how much
+    # they claim about the mechanism.
+    RANK = {"linear": 0, "easeOutCubic": 1, "easeInCubic": 1, "logistic": 2}
+    best = None
+    for name, f in cands.items():
+        A = np.column_stack([np.ones_like(t01), f])
+        try:
+            coef, *_ = np.linalg.lstsq(A, v, rcond=None)
+        except np.linalg.LinAlgError:
+            continue
+        pred = A @ coef
+        ss_res = float(np.sum((v - pred) ** 2))
+        ss_tot = float(np.sum((v - v.mean()) ** 2)) or 1e-12
+        r2 = 1 - ss_res / ss_tot
+        rank = RANK.get(name, 3)
+        if best is None or (r2, -rank) > (best["r2"], -best["rank"]):
+            best = {"r2": r2, "rank": rank, "span": span, "model": name,
+                    "params": {"offset": round(float(coef[0]), 3),
+                               "amplitude": round(float(coef[1]), 3)}}
+    return best
+
+
+def bezier_from_samples(t01, y):
+    """Recover cubic-bezier(x1,y1,x2,y2) from a sampled easing curve.
+
+    Worth doing because "cubic-bezier(0.33, 0, 0.15, 1)" is a value that can be
+    pasted into a stylesheet, where "eased" is a description of one.
+
+    A CSS easing is a Bezier through (0,0) and (1,1). Sweeping the two control
+    points over a grid and keeping the lowest squared error is crude and is
+    also exact enough: CSS authors use two-decimal control points, and the grid
+    below is finer than that.
+    """
+    y = (y - y.min()) / max(y.max() - y.min(), 1e-9)
+    grid = np.arange(0.0, 1.01, 0.05)
+    s = np.linspace(0, 1, 60)
+    best, err = None, float("inf")
+    for x1 in grid:
+        for y1 in grid:
+            for x2 in grid:
+                for y2 in grid:
+                    bx = 3 * (1 - s) ** 2 * s * x1 + 3 * (1 - s) * s ** 2 * x2 + s ** 3
+                    by = 3 * (1 - s) ** 2 * s * y1 + 3 * (1 - s) * s ** 2 * y2 + s ** 3
+                    pred = np.interp(t01, bx, by)
+                    e = float(np.sum((pred - y) ** 2))
+                    if e < err:
+                        err, best = e, (x1, y1, x2, y2)
+    return best, err
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("url")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--seconds", type=float, default=4.0,
+                    help="how long to watch undeclared motion. The declared "
+                         "pass runs immediately regardless, because a load "
+                         "choreography can be over in under two seconds")
+    ap.add_argument("--settle", type=int, default=0,
+                    help="ms before the declared pass. 0 catches the entrance")
+    ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--height", type=int, default=900)
+    ap.add_argument("--top", type=int, default=30)
+    a = ap.parse_args()
+
+    from playwright.sync_api import sync_playwright
+    out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
+
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": a.width, "height": a.height})
+        pg.goto(a.url, wait_until="domcontentloaded")
+        if a.settle:
+            pg.wait_for_timeout(a.settle)
+        declared = pg.evaluate(DECLARED_JS)
+        pg.wait_for_timeout(300)
+        declared_late = pg.evaluate(DECLARED_JS)
+        watched = pg.evaluate(WATCH_JS, a.seconds * 1000)
+        b.close()
+
+    # Declared animations are exact. Merge the two passes so an entrance that
+    # had already finished at t=0 is not lost, and a loop is not double counted.
+    seen, merged = set(), []
+    for src in (declared, declared_late):
+        for d in src:
+            sig = (d["sel"], d["name"], d["dur"], d["delay"])
+            if sig in seen:
+                continue
+            seen.add(sig); merged.append(d)
+
+    print(f"\n{a.url}")
+    print(f"\nDECLARED: {len(merged)} animations the browser can describe exactly.")
+    if merged:
+        print(f"  {'name':<22} {'dur':>7} {'delay':>7} {'iter':>8}  easing / properties")
+        for d in sorted(merged, key=lambda x: -(x["dur"] or 0))[:a.top]:
+            props = ",".join(d["props"][:4]) or "-"
+            print(f"  {(d['name'] or d['kind'])[:22]:<22} {str(d['dur']):>7} "
+                  f"{str(d['delay']):>7} {str(d['iter']):>8}  {d['easing'][:26]}  [{props}]")
+        # Keyframes are the half ux-crawl never recorded, so show one in full.
+        withkf = [d for d in merged if len(d.get("frames", [])) > 1]
+        if withkf:
+            d = max(withkf, key=lambda x: len(x["frames"]))
+            print(f"\n  keyframes of '{d['name'] or d['kind']}' "
+                  f"({len(d['frames'])} stops), which is the part a timing-only "
+                  f"capture throws away:")
+            for f in d["frames"][:6]:
+                vals = {k: v for k, v in f.items() if k not in ("offset", "easing")}
+                print(f"    {f['offset']:>5}  {vals}")
+
+    rows = []
+    for k, rec in watched.items():
+        for ci, col in enumerate(rec["cols"]):
+            v = numeric(rec["v"][ci])
+            f = fit_one(np.array(rec["t"], dtype=float), v)
+            if f and f["model"] != "static" and f["span"] > 0.5:
+                rows.append((f["r2"], f["span"], FIELDS[col], f["model"], f["params"], k))
+    rows.sort(key=lambda r: (-r[0], -r[1]))
+
+    print(f"\nUNDECLARED: {len(rows)} property series moving with NO animation "
+          f"object behind them.")
+    print("  These are driven by script every frame, so the browser has no spec")
+    print("  to hand over and the model below is FITTED. Read the r2.")
+    if rows:
+        print(f"\n  {'r2':>5} {'range':>9}  {'property':<11} model")
+        for adj, span, field, model, params, key in rows[:a.top]:
+            print(f"  {adj:>5.3f} {span:>9.1f}  {field:<11} {model}")
+            print(f"        {params}   {key[:62]}")
+
+    payload = {"url": a.url, "declared": merged,
+               "undeclared": [{"r2": r[0], "span": r[1], "field": r[2],
+                               "model": r[3], "params": r[4], "el": r[5]} for r in rows]}
+    path = out / "anim.json"
+    path.write_text(json.dumps(payload, indent=1))
+    print(f"\n  wrote {path}")
+    print(f"  {len(merged)} exact, {len(rows)} fitted")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

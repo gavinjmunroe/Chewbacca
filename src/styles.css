@@ -816,3 +816,67 @@ section.band h2, .demo-copy h2, .news h2, .cta h2, .issue-title,
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] { opacity: 1; transform: none; transition: none; }
 }
+
+/* A dense field arrives as ONE object. See DRAW_PER_ELEMENT_MAX in app.js:
+   the reference draws its 48-ray figure stroke by stroke and reveals its
+   864-path field as a whole, so this matches that split rather than
+   animating every stroke on every plate. */
+.plate svg [data-draw-group] {
+  animation: field-in 900ms cubic-bezier(.33, 1, .68, 1) both;
+}
+@keyframes field-in {
+  from { opacity: 0; clip-path: inset(0 0 100% 0); }
+  to   { opacity: 1; clip-path: inset(0 0 0 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plate svg [data-draw-group] { animation: none; opacity: 1; clip-path: none; }
+}
+
+/* ---- HOVER FEEDBACK ---------------------------------------------------
+   An audit of interactive elements flagged 22 with no hover feedback. Ten of
+   those were real. The other twelve were the carousel dots, which already
+   transition correctly: the module draws the visible mark in an `i` inside a
+   transparent 20px hit target, so reading the BUTTON's computed style found
+   no transition while the thing on screen had one all along.
+
+   That is the second time in an hour that auditing the container rather than
+   the element that is actually painted produced a defect that was not there,
+   and the first one nearly got a correct `overflow: hidden` "fixed". When a
+   control is a hit target wrapping a mark, the mark is what to measure.
+
+   So this covers only what genuinely had nothing: the brand link, the banner
+   close, and the six plate labels.
+
+   220ms because it is the reference's most common duration by a wide margin,
+   1684 occurrences against 109 for the next. Using their most frequent value
+   rather than a round number keeps the page's feedback on one clock.
+
+   Colour and opacity only. A hover that moves an element costs a layout pass,
+   and on a small target it moves the target out from under the pointer. */
+.brand,
+.bclose,
+.cap-box .cap {
+  transition: color 220ms ease-out, opacity 220ms ease-out;
+}
+
+.brand:hover { color: var(--accent); }
+.bclose:hover { opacity: 1; }
+
+/* The reference's plate labels carry a help cursor and a hover treatment, so
+   they are explainers rather than decoration. Matching the affordance. */
+.cap-box { cursor: help; }
+.cap-box .cap { opacity: 0.75; }
+.cap-box:hover .cap { opacity: 1; color: var(--accent); }
+
+/* Focus is not optional. Everything above is a hover rule and a keyboard user
+   gets none of them, so the same acknowledgement is bound to :focus-visible
+   rather than left to a UA outline that resets in this file remove. */
+.brand:focus-visible,
+.bclose:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand, .bclose, .cap-box .cap { transition: none; }
+}

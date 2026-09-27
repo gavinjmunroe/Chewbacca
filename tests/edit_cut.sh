@@ -71,7 +71,11 @@ for s in slots:
             if t0 < b - 1e-6 and t0 + dur > a + 1e-6:
                 sys.exit(f"FAIL: {src} reused at {t0:.2f} (already {a:.2f} to {b:.2f})")
         used.setdefault(src, []).append((t0, t0 + dur))
-print(json.dumps({"card_at": card["t"]}))
+if e.get("tracker") not in ("beat_this final0", "librosa"):
+    sys.exit(f"FAIL: the edit list does not say which tracker found the beats: {e.get('tracker')}")
+if e["tracker"] == "beat_this final0" and not e.get("downbeats"):
+    sys.exit("FAIL: Beat This ran but no bar starts were written")
+print(json.dumps({"card_at": card["t"], "tracker": e["tracker"]}))
 PY
 
 # the card fills the frame: at its midpoint over a tenth of the pixels are red

@@ -21,12 +21,12 @@ here, not copied.
 - **Tightening speech goes in this order:** silence and dead air first, then
   fillers and flubbed lines by word timestamps (`whisper-cli -ml 1 -sow -oj`
   writes one word per segment, with its times), then read the remaining
-  transcript as prose. Catch orphaned
-  half-thoughts, leftover retakes and jumps. A coherent spoken arc beats the
-  shortest possible cut.
-- **Cutting to music:** bar starts by default, every beat only for a fast
-  montage. For a montage, [cutting-to-music.md](cutting-to-music.md) wins: our
-  own measuring says not to put every cut on the downbeat.
+  transcript as prose. Catch orphaned half-thoughts, leftover retakes and
+  jumps. A coherent spoken arc beats the shortest possible cut.
+- **Cutting to music:** Palmier cuts on bar starts by default and on every
+  beat only for fast montage. Our reference editors start only 15% of their
+  long shots on a bar start, so for a montage
+  [cutting-to-music.md](cutting-to-music.md) wins.
 - **A new version is a copy.** Never edit over a cut he approved. A vertical
   version starts from a copy of the wide, then gets reframed. With
   `reel-assemble`, that means a new `edit.json` per version.

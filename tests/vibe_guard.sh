@@ -3,15 +3,20 @@
 # on an ordinary reply. A guard that has never refused anything is decoration:
 # two authorship guards in this kit had never fired once.
 set -uo pipefail
-HOOK="$HOME/.claude/hooks/vibe-guard.sh"
-[ -x "$HOOK" ] || { echo "vibe-guard not installed"; exit 1; }
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+HOOK="$ROOT/.claude/hooks/vibe-guard.sh"
+TEST_DIR="$(mktemp -d)"
+trap 'rm -rf "$TEST_DIR"' EXIT
+TEST_HOME="$TEST_DIR/home"
+mkdir -p "$TEST_HOME"
+[ -x "$HOOK" ] || { echo "vibe-guard source missing"; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "jq absent, skipping"; exit 0; }
 
 fail=0
 probe() {                     # name, message, expected exit
   local out code
   out=$(printf '{"last_assistant_message":%s,"prompt_id":"t-%s"}' \
-        "$(jq -Rn --arg m "$2" '$m')" "$RANDOM" | "$HOOK" 2>&1)
+        "$(jq -Rn --arg m "$2" '$m')" "$RANDOM" | env HOME="$TEST_HOME" TMPDIR="$TEST_DIR" CHEWBACCA_LOG_DIR="$TEST_DIR/logs" bash "$HOOK" 2>&1)
   code=$?
   if [ "$code" = "$3" ]; then
     printf '  ok    %s (exit %s)\n' "$1" "$code"

@@ -249,6 +249,7 @@ fi
 
 # ── tools ─────────────────────────────────────────────────────────────────────
 if group "tools"; then
+  check "counts handles conflict stages and whitespace paths" python3 "$ROOT/tests/test_counts.py"
   check  "counts --check passes on a clean tree" python3 "$ROOT/tools/counts.py" --check
   check  "counts --json is valid" bash -c "python3 '$ROOT/tools/counts.py' --json | python3 -m json.tool"
   check  "evals structure pass" python3 "$ROOT/tools/evals.py"
@@ -588,14 +589,11 @@ if group "installer"; then
   check  "every relative link in the docs resolves" \
     python3 "$ROOT/tools/linkcheck.py"
 
-  check  "the backlog lists open work" bash -c '
-    out=$("$1/bin/backlog" 2>/dev/null)
-    case "$out" in *"open now"*) : ;;
-      *) echo "backlog printed nothing"; exit 1 ;; esac' _ "$ROOT"
+  check  "the backlog lists open work" bash "$ROOT/tests/backlog.sh" "$ROOT" open
 
-  check  "the backlog keeps dead items and their reason" bash -c '
-    "$1/bin/backlog" dead 2>/dev/null | grep -q . || {
-      echo "dead items vanished, so somebody will propose them again"; exit 1; }' _ "$ROOT"
+  check  "the backlog keeps dead items and their reason" bash "$ROOT/tests/backlog.sh" "$ROOT" dead
+
+  check  "a public install without a private backlog stays usable" bash "$ROOT/tests/backlog.sh" "$ROOT" absent
 
   # A store nobody reads is the failure this whole file keeps finding.
   check  "SessionStart injects the backlog" \

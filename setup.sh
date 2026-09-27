@@ -924,6 +924,15 @@ if [ -d "$SCRIPT_DIR/crafts" ]; then
   log "seeded $(ls "$SCRIPT_DIR/crafts" | wc -l | tr -d ' ') craft notes"
 fi
 
+# The opener gate reads the word a reply must open with from here. Written
+# only when the person's own CLAUDE.md asks for a prayer ending in Amen, so
+# prayer-guard.sh stays inert for everyone who did not ask for one.
+if grep -qiE "prayer|pray" "$HOME/.claude/CLAUDE.md" 2>/dev/null && grep -q "Amen" "$HOME/.claude/CLAUDE.md" 2>/dev/null; then
+  mkdir -p "$HOME/.chewbacca"
+  echo "Amen" > "$HOME/.chewbacca/opener-marker"
+  log "opener gate on: replies must open with a prayer, as CLAUDE.md asks"
+fi
+
 # ux-engine lives in its own repo, so its tools cannot go through link_tool,
 # which resolves against this repo's bin/. Link them when that repo is present,
 # from the same default ux-guard.sh reads.
@@ -1361,6 +1370,16 @@ h["Stop"] = [{"hooks": [{
     "command": hooks_dir + "/slop-guard.sh",
     "timeout": 15,
     "statusMessage": "Checking the reply against the writing rules...",
+}]}, {"hooks": [{
+    # The session opener in CLAUDE.md decayed across one long session on
+    # 2026-09-27: replies went out without the prayer and Caleb had to say
+    # "UR NOT PRAYIN" twice. Same lesson as slop-guard: read the reply, do not
+    # trust the rule to be remembered. Inert unless ~/.chewbacca/opener-marker
+    # exists, which is written below only when CLAUDE.md asks for a prayer.
+    "type": "command",
+    "command": hooks_dir + "/prayer-guard.sh",
+    "timeout": 5,
+    "statusMessage": "Checking the reply opens the way you asked...",
 }]}, {"hooks": [{
     # Caleb, 2026-09-27, three messages in a row: "Don't assume anything to be
     # linear." "Don't expect any placements to be uniform." "Don't assume

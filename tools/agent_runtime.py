@@ -26,7 +26,7 @@ CLAUDE_CHECKS = {
     'UserPromptSubmit': ['coursework-context.sh', 'kit-route.sh', 'skill-route.sh', 'method-guard.sh', 'model-route.sh'],
     'PreToolUse': ['write-log.sh', 'submit-guard.sh', 'browser-ux-guard.sh', 'env-guard.sh', 'fusion-guard.sh', 'ux-guard.sh'],
     'PostToolUse': ['write-log.sh', 'prose-guard.sh', 'untrusted-screen.sh'],
-    'Stop': ['slop-guard.sh', 'handoff-guard.sh', 'durable-guard.sh', 'vibe-guard.sh'],
+    'Stop': ['slop-guard.sh', 'prayer-guard.sh', 'handoff-guard.sh', 'durable-guard.sh', 'vibe-guard.sh'],
 }
 
 

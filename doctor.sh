@@ -843,6 +843,17 @@ else
   warn "slop-check missing (re-run setup.sh)"
 fi
 
+# The opener gate, when the user asked for one. Checked here because a gate
+# that was installed and never wired is the failure this kit keeps repeating.
+if [ -s "$HOME/.chewbacca/opener-marker" ]; then
+  if [ -x "$CLAUDE_DIR/hooks/prayer-guard.sh" ] && grep -q "prayer-guard" "$CLAUDE_DIR/settings.json" 2>/dev/null; then
+    ok "opener gate wired: replies must open with a prayer"
+  else
+    bad "CLAUDE.md asks for a prayer first, but prayer-guard.sh is not wired" \
+      "re-run setup.sh, or add it to hooks.Stop in ~/.claude/settings.json"
+  fi
+fi
+
 # ── Secrets ───────────────────────────────────────────────────────────────────
 section "Secrets"
 

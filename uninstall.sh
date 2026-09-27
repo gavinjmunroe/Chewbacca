@@ -66,7 +66,7 @@ if perms.get("defaultMode") == "bypassPermissions":
     removed.append("permissions.defaultMode -> default (Claude asks again)")
 
 # Only hooks pointing at scripts this kit installed.
-OURS = ("slop-guard.sh", "session-context.sh", "format-and-sync.sh",
+OURS = ("slop-guard.sh", "prayer-guard.sh", "session-context.sh", "format-and-sync.sh",
         "stop-check.sh", "env-guard.sh", "coursework-context.sh",
         "sync-to-d1.sh", "statusline.sh")
 hooks = s.get("hooks") or {}

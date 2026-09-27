@@ -1,0 +1,279 @@
+#!/usr/bin/env -S uv run --script --quiet
+# /// script
+# requires-python = ">=3.10,<3.13"
+# dependencies = ["librosa", "numpy<2.4", "pillow", "opencv-python-headless"]
+# ///
+"""Measure how an edit is cut, so a style can be copied by numbers, not by eye.
+
+  edit-dna VIDEO_OR_URL ... [--out DIR]
+
+Each input is a file or a public post URL (Instagram, YouTube, TikTok; fetched
+with yt-dlp). For every one it writes, under DIR (default ./edit-dna):
+
+  NAME.json         the summary and one row per shot
+  NAME.sheet.jpg    two frames a second, tiled
+  NAME.energy.png   motion and loudness over time, cuts and beats marked
+
+Per shot: length, motion (optical flow, split into camera move and subject
+move), loudness, brightness, saturation, and whether motion keeps its
+direction across the cut into the next shot. Per video: cut rate, the shot
+length histogram, how often cuts land on the beat against how often they
+would by chance, and how often the edit cuts on a loudness jump.
+
+What it cannot tell: whether a shot is good. That is the reviewer's, or a
+taste model trained on the reviewer's labels.
+"""
+
+import argparse
+import json
+from collections import Counter
+import os
+import re
+import subprocess
+import sys
+
+import cv2
+import librosa
+import numpy as np
+from PIL import Image, ImageDraw
+
+# A cut within 50 ms of a beat counts as on it: 1.5 frames at 30 fps, 1.2 at
+# 24. Wider and chance alone passes most cuts at dance tempos: at 144 BPM a
+# random cut lands within 104 ms of a beat half the time (BlackShell
+# DSazJqtEkOj, 2026-09-27, whose median 102 ms first read as locked).
+HIT_S = 0.05
+# ffmpeg scene score above which a frame starts a new shot. 0.3 found every
+# hard cut in 12 reels checked by eye on 2026-09-27; lower split whip pans
+# and flashes into extra shots. Guessed for dissolves, never measured.
+SCENE = 0.3
+FLOW_FPS = 12  # enough to see a 1-frame flash at 24 fps as its own sample
+FLOW_W = 160
+
+
+def run(cmd, **kw):
+    return subprocess.run(cmd, capture_output=True, **kw)
+
+
+def fetch(url, out):
+    os.makedirs(out, exist_ok=True)
+    code = re.sub(r"[^A-Za-z0-9_-]", "", url.rstrip("/").split("/")[-1])[:40] or "clip"
+    r = run(["yt-dlp", "--no-warnings", "-q", "--write-info-json", "-o",
+             os.path.join(out, f"{code}.%(ext)s"), url], text=True)
+    got = [f for f in os.listdir(out) if f.startswith(code) and f.endswith((".mp4", ".webm", ".mkv"))]
+    if r.returncode or not got:
+        sys.exit(f"edit-dna: could not fetch {url}: {r.stderr.strip()[:200]}")
+    return os.path.join(out, got[0])
+
+
+def probe(path):
+    j = json.loads(run(["ffprobe", "-v", "error", "-show_entries",
+                        "stream=codec_type,width,height,r_frame_rate:format=duration",
+                        "-of", "json", path], text=True).stdout)
+    v = next(s for s in j["streams"] if s["codec_type"] == "video")
+    a, b = v["r_frame_rate"].split("/")
+    return {"w": v["width"], "h": v["height"], "fps": round(int(a) / int(b), 2),
+            "seconds": round(float(j["format"]["duration"]), 2),
+            "audio": any(s["codec_type"] == "audio" for s in j["streams"])}
+
+
+def cut_times(path):
+    err = run(["ffmpeg", "-i", path, "-filter:v", f"select='gt(scene,{SCENE})',showinfo",
+               "-f", "null", "-"], text=True).stderr
+    return [float(m) for m in re.findall(r"pts_time:([0-9.]+)", err)]
+
+
+def frames(path, fps, width, p):
+    h = int(round(p["h"] * width / p["w"] / 2) * 2)
+    raw = run(["ffmpeg", "-v", "error", "-i", path, "-vf", f"fps={fps},scale={width}:{h}",
+               "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]).stdout
+    n = len(raw) // (width * h * 3)
+    return np.frombuffer(raw[: n * width * h * 3], np.uint8).reshape(n, h, width, 3)
+
+
+def still(path, t, p):
+    """One frame at t, for a shot too short to fall on a FLOW_FPS sample."""
+    h = int(round(p["h"] * FLOW_W / p["w"] / 2) * 2)
+    raw = run(["ffmpeg", "-v", "error", "-ss", f"{t:.3f}", "-i", path, "-frames:v", "1",
+               "-vf", f"scale={FLOW_W}:{h}", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]).stdout
+    if len(raw) < FLOW_W * h * 3:
+        return None
+    f = np.frombuffer(raw[: FLOW_W * h * 3], np.uint8).reshape(h, FLOW_W, 3)
+    return cv2.cvtColor(f, cv2.COLOR_RGB2HSV).astype(np.float32) / 255
+
+
+def flash_kind(luma):
+    # White and black are what a solid or blown-out flash measures as; anything
+    # between is a frame of footage cut in for one or two frames.
+    return "white" if luma > 0.8 else "black" if luma < 0.08 else "frame"
+
+
+def flow_series(fr):
+    """Per sample: camera move (median flow) and subject move (flow left after
+    removing it), both in frame widths per second, and the camera's direction."""
+    grey = [cv2.cvtColor(f, cv2.COLOR_RGB2GRAY) for f in fr]
+    cam, subj, vec = [0.0], [0.0], [(0.0, 0.0)]
+    for a, b in zip(grey, grey[1:]):
+        f = cv2.calcOpticalFlowFarneback(a, b, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        med = np.median(f.reshape(-1, 2), axis=0)
+        resid = np.linalg.norm(f - med, axis=2)
+        scale = FLOW_FPS / FLOW_W
+        cam.append(float(np.linalg.norm(med)) * scale)
+        subj.append(float(np.percentile(resid, 90)) * scale)
+        vec.append((float(med[0]), float(med[1])))
+    return np.array(cam), np.array(subj), np.array(vec)
+
+
+def audio(path):
+    sr = 22050
+    y = np.frombuffer(run(["ffmpeg", "-v", "error", "-i", path, "-ac", "1", "-ar", str(sr),
+                           "-f", "f32le", "-"]).stdout, np.float32)
+    if len(y) < sr or float(np.abs(y).max()) < 1e-3:
+        return None
+    rms = librosa.feature.rms(y=y)[0]
+    env = librosa.onset.onset_strength(y=y, sr=sr)
+    t = librosa.times_like(rms, sr=sr)
+    tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+    return {"t": t, "db": librosa.amplitude_to_db(rms, ref=np.max), "env": env,
+            "tempo": float(np.atleast_1d(tempo)[0]), "beats": librosa.frames_to_time(beats, sr=sr)}
+
+
+def near(ts, grid):
+    return float(np.mean([np.min(np.abs(grid - t)) <= HIT_S for t in ts])) if len(ts) else 0.0
+
+
+def beat_stats(cuts, a):
+    bt = a["beats"]
+    if len(bt) < 8:
+        return {"tempo": round(a["tempo"], 1), "beat_grid": False}
+    period = float(np.median(np.diff(bt)))
+    lo, hi = bt[0] - period / 2, bt[-1] + period / 2
+    inside = np.array([c for c in cuts if lo <= c <= hi])
+    halves = np.sort(np.concatenate([bt, bt[:-1] + np.diff(bt) / 2]))
+    null = np.random.default_rng(0).uniform(lo, hi, 4000)
+    # a loudness jump: onset strength at the cut against the clip's own median
+    at = [a["env"][np.argmin(np.abs(a["t"] - c))] for c in inside]
+    return {"tempo": round(a["tempo"], 1), "cuts_in_music": int(len(inside)),
+            "on_beat": round(near(inside, bt), 2), "on_beat_by_chance": round(near(null, bt), 2),
+            "on_half_beat": round(near(inside, halves), 2),
+            "on_half_beat_by_chance": round(near(null, halves), 2),
+            "onset_at_cut_vs_median": round(float(np.median(at) / np.median(a["env"])), 2) if at else None}
+
+
+def energy_png(out, p, cuts, t_fr, cam, subj, a):
+    W, H = 1600, 360
+    im = Image.new("RGB", (W, H), (14, 14, 16))
+    d = ImageDraw.Draw(im)
+    X = lambda t: int(t / p["seconds"] * (W - 1))
+    for c in cuts:
+        d.line([(X(c), 0), (X(c), H)], fill=(60, 60, 68))
+    if a is not None:
+        for b in a["beats"]:
+            d.line([(X(b), H - 14), (X(b), H)], fill=(230, 200, 60))
+        db = np.clip((a["db"] + 60) / 60, 0, 1)
+        d.line([(X(t), int(H - 20 - v * (H - 40))) for t, v in zip(a["t"], db)], fill=(90, 160, 255), width=1)
+    top = max(float(np.percentile(cam + subj, 98)), 1e-6)
+    d.line([(X(t), int(H - 20 - min(v / top, 1) * (H - 40))) for t, v in zip(t_fr, cam + subj)],
+           fill=(255, 90, 70), width=2)
+    d.text((8, 6), "red motion   blue loudness   grey cuts   yellow beats", fill=(200, 200, 200))
+    im.save(out)
+
+
+def sheet(path, out, p):
+    fr = frames(path, 2, 180, p)
+    cols, (h, w) = 10, fr.shape[1:3]
+    s = Image.new("RGB", (cols * w, int(np.ceil(len(fr) / cols)) * h), "black")
+    for i, f in enumerate(fr):
+        s.paste(Image.fromarray(f), ((i % cols) * w, (i // cols) * h))
+    s.save(out, quality=80)
+
+
+def analyse(path, outdir):
+    p = probe(path)
+    cuts = cut_times(path)
+    edges = [0.0] + cuts + [p["seconds"]]
+    fr = frames(path, FLOW_FPS, FLOW_W, p)
+    cam, subj, vec = flow_series(fr)
+    t_fr = np.arange(len(fr)) / FLOW_FPS
+    hsv = np.stack([cv2.cvtColor(f, cv2.COLOR_RGB2HSV) for f in fr]).astype(np.float32) / 255
+    a = audio(path) if p["audio"] else None
+    shots = []
+    for i, (s, e) in enumerate(zip(edges, edges[1:])):
+        m = (t_fr > s + 0.5 / FLOW_FPS) & (t_fr < e)  # skip the sample straddling the cut
+        row = {"i": i, "start": round(s, 2), "seconds": round(e - s, 2)}
+        if m.any():
+            row.update(camera=round(float(cam[m].mean()), 3), subject=round(float(subj[m].mean()), 3),
+                       luma=round(float(hsv[m][..., 2].mean()), 3),
+                       saturation=round(float(hsv[m][..., 1].mean()), 3))
+            v = vec[m]
+            row["_head"], row["_tail"] = v[: 3].mean(0), v[-3:].mean(0)
+        else:
+            hs = still(path, s + (e - s) / 2, p)
+            if hs is not None:
+                row.update(luma=round(float(hs[..., 2].mean()), 3),
+                           saturation=round(float(hs[..., 1].mean()), 3), sampled="one frame")
+        if a is not None:
+            am = (a["t"] >= s) & (a["t"] < e)
+            if am.any():
+                row["loudness_db"] = round(float(a["db"][am].mean()), 1)
+        shots.append(row)
+    # Does the camera keep moving the same way through the cut? Only counted
+    # when both sides actually move, or every static pair would score.
+    carried = []
+    for x, y in zip(shots, shots[1:]):
+        if "_tail" in x and "_head" in y:
+            u, v = x["_tail"], y["_head"]
+            nu, nv = np.linalg.norm(u), np.linalg.norm(v)
+            if nu > 0.3 and nv > 0.3:
+                c = float(u @ v / (nu * nv))
+                x["direction_into_next"] = round(c, 2)
+                carried.append(c)
+    for r in shots:
+        r.pop("_head", None), r.pop("_tail", None)
+    lengths = np.diff(edges)
+    bins = [0, 0.13, 0.3, 0.6, 1.2, 2.5, 1e9]
+    hist = {f"{lo}-{hi if hi < 1e9 else 'up'}s": int(((lengths > lo) & (lengths <= hi)).sum())
+            for lo, hi in zip(bins, bins[1:])}
+    sat = hsv[..., 1].mean(axis=(1, 2))
+    summary = {**p, "cuts": len(cuts), "cuts_per_second": round(len(cuts) / p["seconds"], 2),
+               "median_shot": round(float(np.median(lengths)), 2), "shot_lengths": hist,
+               "flash_shots": int((lengths <= 0.13).sum()),
+               "flash_kinds": dict(Counter(flash_kind(r["luma"]) for r in shots
+                                           if r["seconds"] <= 0.13 and "luma" in r)),
+               "mono_share": round(float((sat < 0.06).mean()), 2),
+               "motion_mean": round(float((cam + subj).mean()), 3),
+               "direction_kept_across_cuts": round(float(np.mean(np.array(carried) > 0.7)), 2) if carried else None,
+               "moving_cut_pairs": len(carried)}
+    if a is not None:
+        summary.update(beat_stats(np.array(cuts), a))
+    base = os.path.splitext(os.path.basename(path))[0]
+    info = os.path.splitext(path)[0] + ".info.json"
+    if os.path.exists(info):
+        d = json.load(open(info))
+        summary.update({k: d.get(k) for k in ("channel", "upload_date", "like_count")},
+                       caption=(d.get("description") or "")[:300])
+    os.makedirs(outdir, exist_ok=True)
+    energy_png(os.path.join(outdir, f"{base}.energy.png"), p, cuts, t_fr, cam, subj, a)
+    sheet(path, os.path.join(outdir, f"{base}.sheet.jpg"), p)
+    res = {"file": path, "summary": summary, "cut_times": [round(c, 3) for c in cuts], "shots": shots}
+    json.dump(res, open(os.path.join(outdir, f"{base}.json"), "w"), indent=1)
+    return base, summary
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Measure how an edit is cut.")
+    ap.add_argument("inputs", nargs="+")
+    ap.add_argument("--out", default="edit-dna")
+    args = ap.parse_args()
+    for x in args.inputs:
+        path = fetch(x, os.path.join(args.out, "refs")) if re.match(r"https?://", x) else x
+        base, s = analyse(path, args.out)
+        beat = (f"on beat {s['on_beat']:.0%} vs {s['on_beat_by_chance']:.0%} by chance"
+                if s.get("on_beat") is not None else "no beat grid")
+        keep = s["direction_kept_across_cuts"]
+        print(f"{base}: {s['seconds']}s {s['w']}x{s['h']}@{s['fps']}, {s['cuts_per_second']} cuts/s, "
+              f"median shot {s['median_shot']}s, {s['flash_shots']} flash, {beat}, "
+              f"motion carried across {'n/a' if keep is None else f'{keep:.0%}'} of moving cuts")
+
+
+if __name__ == "__main__":
+    main()

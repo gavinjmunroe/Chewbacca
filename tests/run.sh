@@ -1053,6 +1053,8 @@ if group "reasoning backends"; then
   check "page-render draws the same pixels every run" bash "$ROOT/tests/page_render.sh"
   check "reel-check fails a broken reel and reel-assemble makes one that passes" bash "$ROOT/tests/reel_check.sh"
   check "a blockout reference is exactly as long as its spec, at any preview scale" bash "$ROOT/tests/blockout_ref.sh"
+  check "edit-dna finds cuts where they are and scores beat lock against chance" bash "$ROOT/tests/edit_dna.sh"
+  check "edit-cut cuts on the song's own beats, finds the drop and never reuses footage" bash "$ROOT/tests/edit_cut.sh"
   check "the drawn extent never walks backwards" bash "$ROOT/tests/sweep_monotonic.sh"
   check "the vibe guard refuses claims with no evidence" bash "$ROOT/tests/vibe_guard.sh"
   check "stage 8 is enforced: a first-name collision is refused" bash "$ROOT/tests/fusion_guard.sh"

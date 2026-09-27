@@ -29,6 +29,9 @@ else. Every rule below points back to it.
    `~/dev/gavin-context/research/higgsfield/LEARNING.md`. For a shot whose
    camera or blocking must hold, follow
    [references/blender-to-seedance.md](references/blender-to-seedance.md).
+   For a montage of footage cut to a song, measure three references with
+   `edit-dna` and cut with `edit-cut`, following
+   [references/cutting-to-music.md](references/cutting-to-music.md).
 3. **Stage one, keyframe sheet.** Render five to seven stills across the
    timeline at half size, tile them, and look. The first frame is judged
    hardest.

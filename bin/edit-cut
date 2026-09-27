@@ -1,0 +1,465 @@
+#!/usr/bin/env -S uv run --script --quiet
+# /// script
+# requires-python = ">=3.10,<3.13"
+# dependencies = ["librosa", "numpy<2.4", "pillow", "opencv-python-headless"]
+# ///
+"""Cut footage to a song in a measured style, then measure the result.
+
+  edit-cut --song track.m4a --style electric CLIP_OR_DIR ... [--out edit.mp4]
+           [--seconds 30] [--song-start 0] [--title "DIRECTORS REEL*"] [--seed 1]
+
+Styles are recipes read off real edits with edit-dna, not adjectives:
+
+  electric    Drew Cronin's 2025 director's reel: 4:3, 24 fps, colour, a flash
+              frame at every other cut, a type card on the drop, one slow-motion
+              hero shot after it.
+  bw-montage  BlackShell's "invisible work" reel: 9:16, 30 fps, black and white,
+              half-beat and two-beat shots, a five-frame strobe to finish.
+  long-take   BlackShell's action reel: 9:16, black and white, 8 and 16 beat
+              shots of whatever moves most.
+
+How a slot is filled: the song's loudness at that moment sets how much motion
+the shot should carry, measured as optical flow across every clip, so calm
+stretches of the song get calm footage and the drop gets the violent stuff.
+Footage is never reused and never taken from a dark or soft stretch.
+
+Writes the video, NAME.edl.json (every slot: source, in point, speed, flash)
+and then runs edit-dna on the result, printing how its numbers compare with
+the reference it was built from. The song must be a file; to cut to a sound
+you will add in the Instagram app, fetch any reel using it with
+`edit-dna URL` and use its audio.
+"""
+
+import argparse
+import json
+import os
+import random
+import shutil
+import subprocess
+import sys
+import tempfile
+
+import cv2
+import librosa
+import numpy as np
+from PIL import Image, ImageDraw, ImageFont
+
+# Shot lengths are in beats and the weights are the measured share of each
+# length, after taking the flash frames out. Source: edit-dna on the named
+# reels, 2026-09-27, with each shot rounded to the nearest beat multiple at
+# that reel's own tempo (129 BPM for ELECTRIC, 144 for the BlackShell reel).
+STYLES = {
+    "electric": {  # instagram.com/drewxcronin/reel/DTnzVO9kTG5
+        "aspect": "4:3", "fps": 24, "grade": "electric",
+        "beats": {0.5: 19, 1: 25, 2: 15, 4: 16, 8: 2},
+        "flash_rate": 0.49,  # 38 flash shots against 77 others
+        # What those 38 are, measured one frame each: 31 frames of other
+        # footage, 6 white, 1 black. Across all nine Drew pieces: 106, 26, 3.
+        "flash": {"frame": 31, "white": 6, "black": 1},
+        "intro_beats": 2, "card": True, "hero": True, "strobe": 0.0,
+        "reference": {"cuts_per_second": 1.84, "median_shot": 0.33, "on_beat": 0.34},
+    },
+    "bw-montage": {  # instagram.com/teamblackshell/reel/DSazJqtEkOj
+        "aspect": "9:16", "fps": 30, "grade": "bw",
+        "beats": {0.5: 21, 1: 2, 2: 12, 4: 5, 8: 1},
+        "flash_rate": 0.05,  # 2 flash shots in 43: one black, one footage frame
+        "flash": {"frame": 1, "black": 1},
+        "intro_beats": 2, "card": False, "hero": False,
+        "strobe": 2.0,  # 22.0 to 24.1 s: a cut every 5 frames at 30 fps
+        "reference": {"cuts_per_second": 1.57, "median_shot": 0.27, "on_beat": 0.3},
+    },
+    "long-take": {  # instagram.com/teamblackshell/reel/DRimmkSjLDS
+        "aspect": "9:16", "fps": 30, "grade": "bw",
+        "beats": {8: 1, 16: 1},
+        "flash_rate": 0.0, "flash": {}, "intro_beats": 8, "card": False, "hero": False,
+        "strobe": 0.0,
+        "reference": {"cuts_per_second": 0.14, "median_shot": 7.93},
+    },
+}
+SIZES = {"9:16": (1080, 1920), "4:3": (1440, 1080), "16:9": (1920, 1080)}
+GRADES = {
+    # Crushed blacks, a lifted highlight roll-off, film grain. Tuned by eye on
+    # the ELECTRIC and BlackShell sheets; not matched to a LUT. Black and white
+    # comes from a channel mix weighted to red, not from zero saturation: red
+    # carries skin and sky apart, which is the harder contrast (Warren Eagles,
+    # via research/edits/PRACTITIONERS.md).
+    "bw": "colorchannelmixer=rr=0.6:rg=0.3:rb=0.1:gr=0.6:gg=0.3:gb=0.1:br=0.6:bg=0.3:bb=0.1,"
+          "curves=all='0/0 0.25/0.17 0.5/0.52 0.75/0.85 1/1',noise=alls=10:allf=t",
+    "electric": "eq=contrast=1.08:saturation=1.12,curves=all='0/0 0.1/0.035 0.5/0.5 0.9/0.95 1/1',"
+                "vignette=angle=PI/5,noise=alls=6:allf=t",
+    "none": "null",
+}
+SAMPLE_FPS = 6
+TEMPO_CONTEXT = 90
+SAMPLE_W = 160
+DARK = 0.08    # mean luma under this is a black or near-black stretch
+SOFT_PCT = 20  # windows in the softest fifth (Laplacian variance) are skipped
+CARD_RED = (200, 16, 30)
+CARD_STRETCH = 2.4
+
+
+def run(cmd):
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode:
+        sys.exit(f"edit-cut: {' '.join(cmd[:4])} ... failed: {r.stderr.strip()[-300:]}")
+    return r
+
+
+def probe(path):
+    j = json.loads(subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                   "stream=width,height,r_frame_rate:stream_side_data=rotation:format=duration",
+                                   "-of", "json", path], capture_output=True, text=True).stdout or "{}")
+    if not j.get("streams"):
+        return None
+    s = j["streams"][0]
+    w, h = s["width"], s["height"]
+    rot = next((abs(int(d.get("rotation", 0))) for d in s.get("side_data_list", [])), 0)
+    if rot in (90, 270):  # phones store portrait video landscape plus a rotation flag
+        w, h = h, w
+    a, b = s["r_frame_rate"].split("/")
+    return {"w": w, "h": h, "fps": int(a) / max(int(b), 1), "seconds": float(j["format"]["duration"])}
+
+
+def scan(path):
+    """Motion, sharpness and brightness, SAMPLE_FPS times a second."""
+    p = probe(path)
+    if not p or p["seconds"] < 0.5:
+        return None
+    h = int(round(p["h"] * SAMPLE_W / p["w"] / 2) * 2)
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-vf", f"fps={SAMPLE_FPS},scale={SAMPLE_W}:{h}",
+                          "-f", "rawvideo", "-pix_fmt", "gray", "-"], capture_output=True).stdout
+    n = len(raw) // (SAMPLE_W * h)
+    if n < 3:
+        return None
+    g = np.frombuffer(raw[: n * SAMPLE_W * h], np.uint8).reshape(n, h, SAMPLE_W)
+    motion = [0.0]
+    for a, b in zip(g, g[1:]):
+        f = cv2.calcOpticalFlowFarneback(a, b, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        motion.append(float(np.linalg.norm(f, axis=2).mean()) * SAMPLE_FPS / SAMPLE_W)
+    motion[0] = motion[1]
+    return {"path": path, **p, "motion": np.array(motion),
+            "sharp": np.array([cv2.Laplacian(x, cv2.CV_64F).var() for x in g]),
+            "luma": g.reshape(n, -1).mean(1) / 255}
+
+
+def music(path, start, seconds):
+    sr = 22050
+    # Tempo comes from up to TEMPO_CONTEXT seconds of the song, not just the
+    # stretch being cut: on ELECTRIC's track the first 20 s (an ambient intro)
+    # read 112 BPM and the whole 62 s read 129, and an even grid at the wrong
+    # period was off the real beats within four bars (2026-09-27).
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", str(start), "-t", str(max(seconds + 2, TEMPO_CONTEXT)),
+                          "-i", path, "-ac", "1", "-ar", str(sr), "-f", "f32le", "-"], capture_output=True).stdout
+    y_all = np.frombuffer(raw, np.float32)
+    y = y_all[: int((seconds + 2) * sr)]
+    if len(y) < sr * 4:
+        sys.exit("edit-cut: the song is under 4 s from --song-start")
+    bpm = float(np.atleast_1d(librosa.feature.tempo(y=y_all, sr=sr))[0])
+    _, bf = librosa.beat.beat_track(y=y_all, sr=sr, bpm=bpm, trim=False)
+    # A tracked beat is the peak of its onset; a cut belongs on the attack. On
+    # a 120 BPM click track the peaks sat 53 ms after the clicks, and moved
+    # back to the preceding low in onset strength they sat 9 ms before.
+    env = librosa.onset.onset_strength(y=y_all, sr=sr)
+    env_t = librosa.times_like(env, sr=sr)
+    bf = librosa.onset.onset_backtrack(bf, env)
+    beats = librosa.frames_to_time(bf, sr=sr)
+    beats = beats[beats <= seconds + 1]
+    if len(beats) < 8:
+        sys.exit("edit-cut: no steady beat found; pick a song with a pulse or a different --song-start")
+    period = float(np.median(np.diff(beats)))
+    rms = librosa.feature.rms(y=y)[0]
+    t = librosa.times_like(rms, sr=sr)
+    k = max(1, int(0.5 / (t[1] - t[0])))
+    smooth = np.convolve(rms, np.ones(k) / k, mode="same")
+    lo, hi = np.percentile(smooth, 5), np.percentile(smooth, 98)
+    level = np.clip((smooth - lo) / max(hi - lo, 1e-9), 0, 1)
+    # The drop: the biggest one-second rise in loudness between 1.5 s and 60%.
+    step = k * 2
+    rise = np.full(len(smooth), -np.inf)
+    rise[step:] = smooth[step:] - smooth[:-step]
+    window = (t > 1.5) & (t < 0.6 * seconds)
+    rise_end = float(t[np.argmax(np.where(window, rise, -np.inf))]) if window.any() else float(beats[0]) + 1
+    # The grid is the tracked beats and the points halfway between them, so it
+    # bends with the drummer; only before the first and after the last beat is
+    # it extended at the median period.
+    before = beats[0] - np.arange(1, 64) * period / 2
+    after = beats[-1] + np.arange(1, 64) * period / 2
+    grid = np.sort(np.concatenate([beats, beats[:-1] + np.diff(beats) / 2, before, after]))
+    grid = grid[(grid >= 0) & (grid <= seconds)]
+    if grid[0] > 1e-3:
+        grid = np.concatenate([[0.0], grid])
+    # The biggest one-second rise ends up to a second after the jump, and a
+    # half-second average moves the jump itself early (4.81 s, then 3.74 s,
+    # for a jump at 4.00 s on the test click track). The drop is the grid
+    # point in that second where the hard hits start: the first within 80% of
+    # the hardest, because after a drop every beat hits about equally (the
+    # hardest alone read 4.48 s). Onset peaks trail the attack by about 50 ms,
+    # hence the window's skew.
+    cand = grid[(grid >= rise_end - 1.05) & (grid <= rise_end + 0.05)]
+    if len(cand) == 0:
+        cand = grid[[int(np.argmin(np.abs(grid - rise_end)))]]
+    hits = [env[(env_t >= g - 0.02) & (env_t <= g + 0.08)].max(initial=0.0) for g in cand]
+    drop = float(cand[int(np.argmax(np.array(hits) >= 0.8 * max(hits)))])
+    return {"grid": grid, "beats": beats, "period": period, "bpm": bpm, "drop": drop,
+            "level": lambda x: float(np.interp(x, t, level))}
+
+
+def plan(style, m, seconds, rng):
+    """Slots on the half-beat grid: intro, card, hero, body, strobe, then black."""
+    grid, period = list(m["grid"]), m["period"]
+    lengths, weights = zip(*style["beats"].items())
+    strobe_at = seconds - style["strobe"] - (0.5 if style["strobe"] else 0)
+    slots, i = [], 0
+
+    def take(n_half, **kw):
+        nonlocal i
+        j = min(i + n_half, len(grid) - 1)
+        if grid[j] > strobe_at and not kw.get("kind") == "black":
+            j = max(i + 1, max(x for x in range(len(grid)) if grid[x] <= strobe_at + 1e-6))
+        if j <= i:
+            return False
+        slots.append({"t": float(grid[i]), "dur": float(grid[j] - grid[i]), **kw})
+        i = j
+        return True
+
+    while i < len(grid) - 1 and grid[i] < m["drop"] - 1e-6:
+        n = max(1, int(round(style["intro_beats"] * 2)))
+        n = min(n, int(round((m["drop"] - grid[i]) / (period / 2))) or 1)
+        take(n, kind="shot")
+    if style["card"]:
+        # Read off ELECTRIC at 12 fps (research/edits/detail/electric-0-12s.jpg):
+        # the card holds 0.42 s, returns after a black beat for 0.5 s, and the
+        # slow-motion hero opens on a blown-out frame. Two exposures of about
+        # 0.46 s give a 15-character title the 0.75 s that 20 characters a
+        # second (Netflix's subtitle ceiling) asks for.
+        take(2, kind="card")
+        take(1, kind="black")
+        take(2, kind="card")
+    if style["hero"]:
+        take(8, kind="shot", speed=0.5, hero=True, flash="white")
+    while i < len(grid) - 1 and grid[i] < strobe_at - 1e-6:
+        b = rng.choices(lengths, weights)[0]
+        if not take(max(1, int(round(b * 2))), kind="shot"):
+            break
+    t = slots[-1]["t"] + slots[-1]["dur"] if slots else 0.0
+    if style["strobe"]:
+        n = int(style["strobe"] * style["fps"] / 5)
+        for _ in range(n):
+            slots.append({"t": t, "dur": 5 / style["fps"], "kind": "shot", "strobe": True})
+            t += 5 / style["fps"]
+    if seconds - t > 1 / style["fps"]:
+        slots.append({"t": t, "dur": seconds - t, "kind": "black"})
+    for s in slots:
+        if s["kind"] == "shot" and "flash" not in s and not s.get("strobe") and rng.random() < style["flash_rate"]:
+            s["flash"] = rng.choices(list(style["flash"]), list(style["flash"].values()))[0]
+    return slots
+
+
+def choose(clips, slot, target, used, rng, avoid=None):
+    """The unused, sharp, lit window whose motion sits nearest the target."""
+    need = slot["dur"] * slot.get("speed", 1.0)
+    best = None
+    for ci, c in enumerate(clips):
+        if ci == avoid and len(clips) > 1:
+            continue
+        n = int(np.ceil(need * SAMPLE_FPS)) + 1
+        if len(c["motion"]) < n:
+            continue
+        mot = np.convolve(c["pct"], np.ones(n) / n, mode="valid")
+        lum = np.convolve(c["luma"], np.ones(n) / n, mode="valid")
+        shp = np.convolve(c["sharp_ok"], np.ones(n) / n, mode="valid")
+        for k in range(len(mot)):
+            a, b = k / SAMPLE_FPS, k / SAMPLE_FPS + need
+            if b > c["seconds"] - 0.05 or lum[k] < DARK or shp[k] < 0.6:
+                continue
+            if any(a < ub and b > ua for ua, ub in used.get(ci, [])):
+                continue
+            score = abs(mot[k] - target) + rng.random() * 0.08  # small jitter so reruns differ by --seed
+            if best is None or score < best[0]:
+                best = (score, ci, a, float(mot[k]))
+    if best is None:
+        sys.exit("edit-cut: ran out of unused footage; add clips or shorten --seconds")
+    _, ci, a, mot = best
+    used.setdefault(ci, []).append((a, a + need))
+    return ci, a, mot
+
+
+def card_png(text, size, path):
+    """Full-frame type: each line stretched tall, all sharing one width scale,
+    left-aligned. ELECTRIC's DIRECTORS REEL* card fills 97% of the frame this
+    way (detail/electric-0-12s.jpg); set uniformly, the same words in Helvetica
+    Neue Condensed Black filled a sixth of it."""
+    W, H = size
+    lines = text.upper().split("\\N") if "\\N" in text else text.upper().split()
+    font = ImageFont.truetype("/System/Library/Fonts/HelveticaNeue.ttc", 400, index=9)  # Condensed Black
+    glyphs = []
+    for ln in lines:
+        box = font.getbbox(ln)
+        im = Image.new("L", (box[2] - box[0], box[3] - box[1]), 0)
+        ImageDraw.Draw(im).text((-box[0], -box[1]), ln, font=font, fill=255)
+        glyphs.append(im)
+    margin, gap = int(W * 0.015), int(H * 0.02)
+    sx = (W - 2 * margin) / max(g.width for g in glyphs)
+    row = (H - 2 * margin - gap * (len(glyphs) - 1)) / len(glyphs)
+    # At 4:3 two lines stretch about 2.3 times taller than wide, which is the
+    # reference; at 9:16 the same fill ran to 5.5 and read as a distortion.
+    row = min(row, max(g.height for g in glyphs) * sx * CARD_STRETCH)
+    card = Image.new("RGB", (W, H), (0, 0, 0))
+    y = (H - row * len(glyphs) - gap * (len(glyphs) - 1)) / 2
+    for g in glyphs:
+        mask = g.resize((max(1, int(g.width * sx)), max(1, int(row))), Image.LANCZOS)
+        card.paste(Image.new("RGB", mask.size, CARD_RED), (margin, int(y)), mask)
+        y += row + gap
+    card.save(path)
+
+
+def render(slots, clips, style, song, song_start, seconds, out, tmp, title):
+    W, H = SIZES[style["aspect"]]
+    fps = style["fps"]
+    grade = GRADES[style["grade"]]
+    parts, frames_done = [], 0
+    for n, s in enumerate(slots):
+        end = int(round((s["t"] + s["dur"]) * fps))
+        nf = max(1, end - frames_done)
+        frames_done += nf
+        seg = os.path.join(tmp, f"{n:04d}.mp4")
+        fx = {"white": ",colorlevels=rimax=0.35:gimax=0.35:bimax=0.35:enable='lt(n,1)'",
+              "black": ",lutrgb=r=0:g=0:b=0:enable='lt(n,1)'"}.get(s.get("flash"), "")
+        if s["kind"] == "shot" and s.get("flash") == "frame" and nf > 1:
+            fl = os.path.join(tmp, f"{n:04d}f.mp4")
+            run(["ffmpeg", "-v", "error", "-y", "-ss", f"{s['flash_in']:.3f}", "-i", clips[s["flash_clip"]]["path"],
+                 "-vf", f"scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={fps},{grade},"
+                 "format=yuv420p", "-frames:v", "1", "-an", "-r", str(fps), "-c:v", "libx264", "-crf", "17",
+                 "-preset", "veryfast", fl])
+            parts.append(fl)
+            nf -= 1
+        if s["kind"] == "shot":
+            c = clips[s["clip"]]
+            speed = s.get("speed", 1.0)
+            vf = (f"setpts=PTS/{speed},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
+                  f"fps={fps},{grade}{fx},format=yuv420p")
+            cmd = ["ffmpeg", "-v", "error", "-y", "-ss", f"{s['in']:.3f}", "-i", c["path"], "-vf", vf]
+        elif s["kind"] == "card":
+            png = os.path.join(tmp, "card.png")
+            if not os.path.exists(png):
+                card_png(title, (W, H), png)
+            cmd = ["ffmpeg", "-v", "error", "-y", "-loop", "1", "-framerate", str(fps), "-i", png,
+                   "-vf", f"format=yuv420p{fx}"]
+        else:
+            cmd = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=black:s={W}x{H}:r={fps}",
+                   "-vf", "format=yuv420p"]
+        run(cmd + ["-frames:v", str(nf), "-an", "-r", str(fps), "-c:v", "libx264", "-crf", "17",
+                   "-preset", "veryfast", seg])
+        parts.append(seg)
+    lst = os.path.join(tmp, "list.txt")
+    open(lst, "w").write("".join(f"file '{p}'\n" for p in parts))
+    silent = os.path.join(tmp, "video.mp4")
+    run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", lst, "-c", "copy", silent])
+    run(["ffmpeg", "-v", "error", "-y", "-i", silent, "-ss", str(song_start), "-t", str(seconds), "-i", song,
+         "-map", "0:v", "-map", "1:a", "-c:v", "copy", "-c:a", "aac", "-b:a", "256k",
+         "-af", f"afade=t=out:st={max(seconds - 1.2, 0):.2f}:d=1.2", "-shortest", "-movflags", "+faststart", out])
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Cut footage to a song in a measured style.")
+    ap.add_argument("clips", nargs="+", help="video files or folders of them")
+    ap.add_argument("--song", required=True)
+    ap.add_argument("--style", choices=sorted(STYLES), default="electric")
+    ap.add_argument("--seconds", type=float, default=30.0)
+    ap.add_argument("--song-start", type=float, default=0.0)
+    ap.add_argument("--title", default="", help='type card on the drop, one word a line, or \\N between lines: "DIRECTORS REEL*"')
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--out", default="edit.mp4")
+    ap.add_argument("--no-check", action="store_true", help="skip measuring the result with edit-dna")
+    args = ap.parse_args()
+    style = dict(STYLES[args.style])
+    if style["card"] and not args.title:
+        style["card"] = False
+    rng = random.Random(args.seed)
+
+    paths = []
+    for c in args.clips:
+        if os.path.isdir(c):
+            paths += sorted(os.path.join(c, f) for f in os.listdir(c)
+                            if f.lower().endswith((".mp4", ".mov", ".m4v", ".webm", ".mkv")))
+        else:
+            paths.append(c)
+    print(f"edit-cut: scanning {len(paths)} clips", file=sys.stderr)
+    clips = [s for s in (scan(p) for p in paths) if s]
+    if not clips:
+        sys.exit("edit-cut: no readable clips")
+    allm = np.concatenate([c["motion"] for c in clips])
+    allsharp = np.concatenate([c["sharp"] for c in clips])
+    soft = np.percentile(allsharp, SOFT_PCT)
+    for c in clips:
+        c["pct"] = np.searchsorted(np.sort(allm), c["motion"]) / len(allm)
+        c["sharp_ok"] = (c["sharp"] >= soft).astype(float)
+
+    m = music(args.song, args.song_start, args.seconds)
+    slots = plan(style, m, args.seconds, rng)
+    used = {}
+    # the hero first, so it gets the most violent stretch before the body spends it
+    order = sorted(range(len(slots)), key=lambda k: not slots[k].get("hero"))
+    for k in order:
+        s = slots[k]
+        if s["kind"] != "shot":
+            continue
+        target = 0.97 if s.get("hero") or s.get("strobe") else 0.15 + 0.8 * m["level"](s["t"] + s["dur"] / 2)
+        s["clip"], s["in"], s["motion"] = choose(clips, s, target, used, rng)
+        s["target"] = round(target, 2)
+        if s.get("flash") == "frame":
+            # one frame of the most violent footage left, from another clip
+            s["flash_clip"], s["flash_in"], _ = choose(clips, {"dur": 1 / style["fps"]}, 1.0, used, rng,
+                                                       avoid=s["clip"])
+
+    with tempfile.TemporaryDirectory() as tmp:
+        render(slots, clips, style, args.song, args.song_start, args.seconds, args.out, tmp, args.title)
+    for s in slots:
+        if "flash_clip" in s:
+            s["flash_source"] = clips[s.pop("flash_clip")]["path"]
+    edl = {"style": args.style, "song": args.song, "song_start": args.song_start, "seconds": args.seconds,
+           "drop": round(m["drop"], 3), "beat": round(m["period"], 4), "seed": args.seed,
+           "slots": [{**{k: v for k, v in s.items() if k != "clip"},
+                      **({"source": clips[s["clip"]]["path"]} if "clip" in s else {})} for s in slots]}
+    for s in edl["slots"]:
+        for k in ("t", "dur", "in", "motion"):
+            if k in s:
+                s[k] = round(float(s[k]), 3)
+    json.dump(edl, open(os.path.splitext(args.out)[0] + ".edl.json", "w"), indent=1)
+    shots = sum(s["kind"] == "shot" for s in slots)
+    print(f"edit-cut: {args.out}, {len(slots)} slots ({shots} shots), drop at {m['drop']:.2f}s, "
+          f"beat {m['bpm']:.0f} BPM")
+    # Beat lock is read against the song's own beats, tracked over
+    # TEMPO_CONTEXT seconds. edit-dna on the output re-tracks only the cut
+    # stretch, which on ELECTRIC's intro read 16% for an edit whose every cut
+    # was on a half-beat.
+    inside = [s["t"] for s in slots[1:] if s["t"] >= m["beats"][0] - 0.05]
+    # Counted the way edit-dna counts the reference: a flash is its own
+    # one-frame shot, and the black tail is not a shot.
+    lengths = []
+    for s in slots[:-1] if slots[-1]["kind"] == "black" else slots:
+        if s.get("flash"):
+            lengths += [1 / style["fps"], s["dur"] - 1 / style["fps"]]
+        else:
+            lengths.append(s["dur"])
+    planned = {"cuts_per_second": round(len(lengths) / args.seconds, 2),
+               "median_shot": round(float(np.median(lengths)), 2),
+               "on_beat": round(float(np.mean([np.min(np.abs(m["beats"] - t)) <= 0.05 for t in inside])), 2)
+               if inside else 0.0}
+    got = {}
+    if not args.no_check:
+        dna = shutil.which("edit-dna") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "edit-dna")
+        outdir = os.path.splitext(args.out)[0] + ".dna"
+        subprocess.run([dna, args.out, "--out", outdir], capture_output=True)
+        res = os.path.join(outdir, os.path.splitext(os.path.basename(args.out))[0] + ".json")
+        if os.path.exists(res):
+            got = json.load(open(res))["summary"]
+    # Measured above planned means cuts inside the source clips, or a render
+    # that split a shot; on_beat is only compared as planned, see above.
+    print(f"  {'':16} {'planned':>8} {'measured':>9} {'reference':>10}")
+    for k, want in style["reference"].items():
+        print(f"  {k:16} {planned[k]:>8} {'' if k == 'on_beat' else str(got.get(k, '')):>9} {want:>10}")
+
+
+if __name__ == "__main__":
+    main()

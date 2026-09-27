@@ -168,6 +168,7 @@ not as a last resort.
 | The morning brief                     | `chewie brief`                                  |
 | Click, type, or drive a menu          | `peekaboo click "Sign In"`, `peekaboo type`   |
 | Get the gist of a URL, video, or file | `summarize "<url>" --cli claude`              |
+| Read an Instagram post or carousel    | `ig-read "<url>"`, then read the sheets       |
 | Drive a Mac app from one instruction  | `mac-use "open Calculator and add 5 and 4"`   |
 | Read a calendar, contact, or thread   | `mac calendar list --json`, `mac contacts find` |
 | Send a text (positional, no flags)    | `mac messages send <handle> "<text>" --json`  |

@@ -163,6 +163,7 @@ people find <name or number>     look a person up
 scars                            mistakes already made, so you skip them
 peekaboo image --app <App>       look at the screen when asked what is on it
 summarize "<url or file>"        read a page, video or document
+ig-read "<instagram url>"        an Instagram post's slides, video and caption
 yt-transcript "<url>"            read a YouTube video
 chewie see --app <App>           read the screen as text rather than pixels
 ```

@@ -613,13 +613,48 @@ import { sphere, isoTiles, isoCube, fit, rose, rng,
    were wrong and the ring does not exist. */
 const PLATE_BOX = 1600;
 
+/* THE OFFSETS ABOVE ARE THE >=1600 LAYOUT, AND BELOW 1600 THEY SCALE.
+
+   Measured on all six plates at four widths. Each plate's offset from the
+   page centre, as a fraction of its own offset at 1600:
+
+       vw     1280     1440     1600     1920
+       s     0.8648   0.9730   1.000    1.000
+
+   Every plate agrees to within 0.3%, and above 1600 the box caps and
+   centres, which is the behaviour the comment above already describes.
+
+   What this fixes: applying the 1600 layout at 1440 pushed every plate
+   outward from centre by 2.7%, which is small enough to look like nothing
+   and is exactly the kind of error that makes a composition feel loose
+   without showing you where. Plate WIDTHS are fixed pixels at every width,
+   so this scales positions only.
+
+   INTERPOLATED BETWEEN THE MEASURED POINTS, NOT MODELLED. The curve is not
+   linear in viewport width (+0.108 over the first 160px, +0.027 over the
+   second) and no ratio or power law fits all three, so it is probably a
+   breakpoint set rather than a formula. Three points are what was measured
+   and three points are what is stored; below 1280 it holds at 0.8648
+   because nothing was measured there. */
+const PLATE_SCALE = [[1280, 0.8648], [1440, 0.9730], [1600, 1.0]];
+
+function plateScale(vw) {
+  if (vw >= 1600) return 1;
+  if (vw <= 1280) return PLATE_SCALE[0][1];
+  for (let i = 1; i < PLATE_SCALE.length; i++) {
+    const [x0, y0] = PLATE_SCALE[i - 1], [x1, y1] = PLATE_SCALE[i];
+    if (vw <= x1) return y0 + (y1 - y0) * ((vw - x0) / (x1 - x0));
+  }
+  return 1;
+}
+
 const PLATES = [
-  { id: "SFT. 1.1", x: 178,  top: -9,  w: 282, h: 196, fig: "lens",   sw: 0.12, op: 0.7  },
-  { id: "SFT. 1.2", x: 1288, top: 45,  w: 158, h: 214, fig: "cube",   sw: 0.25, op: 0.85 },
-  { id: "SFT. 1.3", x: 1111, top: 72,  w: 202, h: 196, fig: "harmo",  sw: 0.15, op: 0.6  },
-  { id: "SFT. 2.1", x: 149,  top: 342, w: 176, h: 196, fig: "mesh",   sw: 0.15, op: 0.5  },
-  { id: "SFT. 2.2", x: 275,  top: 414, w: 202, h: 205, fig: "sphere", sw: 0.2,  op: 0.5  },
-  { id: "SFT. 2.3", x: 1140, top: 360, w: 229, h: 196, fig: "dots",   sw: 1,    op: 0.3  },
+  { id: "SFT. 1.1", x: 178,  top: -15,  w: 282, h: 202, fig: "lens",   sw: 0.12, op: 0.7  },
+  { id: "SFT. 1.2", x: 1288, top: 39,  w: 158, h: 220, fig: "cube",   sw: 0.25, op: 0.85 },
+  { id: "SFT. 1.3", x: 1111, top: 66,  w: 202, h: 202, fig: "harmo",  sw: 0.15, op: 0.6  },
+  { id: "SFT. 2.1", x: 149,  top: 336, w: 176, h: 202, fig: "mesh",   sw: 0.15, op: 0.5  },
+  { id: "SFT. 2.2", x: 275,  top: 408, w: 202, h: 211, fig: "sphere", sw: 0.2,  op: 0.5  },
+  { id: "SFT. 2.3", x: 1140, top: 354, w: 229, h: 202, fig: "dots",   sw: 1,    op: 0.3  },
 ];
 
 const A = "#755cfe";
@@ -839,7 +874,8 @@ function plates() {
     d.className = "plate";
     // Positioned inside a centred PLATE_BOX rather than as a percentage of
     // the viewport, so the overlaps hold their pixel relationships at any width.
-    d.style.cssText = `left:calc(50% - ${PLATE_BOX / 2}px + ${p.x}px);`
+    const off = (p.x - PLATE_BOX / 2) * plateScale(window.innerWidth);
+    d.style.cssText = `left:calc(50% + ${off.toFixed(1)}px);`
                     + `top:${p.top}px;width:${p.w}px;height:${p.h}px`;
     /* Exactly ONE plate rotates forever and ONE drifts forever. The
        reference runs 1 infinite transform and 2 infinite dashes across the

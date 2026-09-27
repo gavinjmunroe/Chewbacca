@@ -107,11 +107,12 @@ main { padding-top: calc(var(--banner-h) + var(--nav-h)); }
 /* ---- hero ------------------------------------------------------------ */
 .hero { position: relative; padding: 96px 0 40px; text-align: center; overflow: hidden; }
 .hero h1 {
-  font-size: var(--t-hero); line-height: 1.1; margin: 0 auto 18px;
-  font-weight: 400; letter-spacing: -0.02em; max-width: 18ch;
+  font-size: var(--t-hero); line-height: 1.1; margin: 0 auto 8px;
+  font-weight: 400; letter-spacing: -0.01em; max-width: none;
 }
 .hero h1 b { font-weight: 500; }
-.hero p { font-size: var(--t-15); color: var(--muted); margin: 0 auto 22px; max-width: 46ch; line-height: 1.55; }
+/* 512px measured, and 1.5 leading gives their 22.5px at 15px. */
+.hero p { font-size: var(--t-15); color: var(--muted); margin: 0 auto 14px; max-width: 512px; line-height: 1.5; }
 .backed { font-family: var(--mono); font-size: var(--t-10); color: var(--muted); margin-bottom: 14px; }
 .hero-cta { display: flex; gap: 10px; justify-content: center; }
 
@@ -272,9 +273,10 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
 
 /* 4. "Backed by" is a bordered pill carrying the YC mark, not loose text. */
 .backed { display: inline-flex; align-items: center; gap: 6px;
-  border: 1px solid var(--line); background: var(--bg); padding: 5px 10px;
+  border: 1px solid var(--line); background: var(--bg); padding: 3px 10px;
   font-family: var(--mono); font-size: var(--t-10); color: var(--muted);
-  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 22px; }
+  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px;
+  line-height: 1.5; }
 .backed .yc { background: #f26625; color: #fff; font-family: var(--sans);
   font-weight: 700; font-size: 10px; width: 13px; height: 13px;
   display: grid; place-items: center; }
@@ -293,8 +295,8 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
 
 /* 6. The hero needs room for the plates to sit beside the type rather than
       under it, and the plates OVERLAP each other, which is the depth cue. */
-.hero { padding: 84px 0 150px; min-height: 760px; }
-.hero h1 { max-width: 15ch; }
+.hero { padding: 203px 0 150px; min-height: 760px; }
+.hero h1 { max-width: none; }
 @media (max-width: 900px) { .hero { min-height: 0; padding: 48px 0 40px; } }
 
 /* ---- testimonials and newsletter, rebuilt after looking -------------
@@ -592,7 +594,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
    between the figures and the logo strip. ux-eye had already flagged the
    band as EMPTY (ink 0.025) and I read past it. Height comes from the
    plates now, not from a number I picked. */
-.hero { min-height: 680px; padding: 84px 0 24px; }
+.hero { min-height: 680px; padding: 203px 0 24px; }
 .trusted { padding-top: 8px; }
 @media (max-width: 900px) { .hero { min-height: 0; padding: 48px 0 24px; } }
 
@@ -723,13 +725,27 @@ section.band h2, .demo-copy h2, .news h2, .cta h2, .issue-title,
 .tcard .hd, .logo-cell .d, .card .d { color: var(--ink-65); }
 .fig-label { color: var(--ink-25); }
 
-/* Their measured type, responsive. Headline is 36px at md and 44px at 3xl,
-   with leading 1.2, and body drops to 13px on small screens. */
-.hero h1, section.band h2, .demo-copy h2, .news h2, .cta h2 {
-  font-size: 36px; line-height: 1.2;
+/* Their measured type. Re-measured 2026-09-27 at 1440 against every heading
+   on the page, which corrected two things this block used to assert.
+
+   THE HERO H1 IS NOT A SECTION H2. This rule lumped them together at 36px,
+   which also silently beat `--t-hero: 40px` set at the top of the file, so
+   the token looked right and did nothing. Theirs: h1 40/44, h2 36/43.2.
+   Seven of our h2s already matched to the pixel; only the h1 was short.
+
+   LETTER-SPACING IS -0.01em, NOT -0.02em. Uniform across their whole scale:
+   -0.4px at 40, -0.36 at 36, -0.18 at 18, -0.16 at 16, -0.12 at 12. Ours was
+   double that at every size, which is the kind of error that reads as "the
+   font is wrong" rather than as a tracking error, because it is doing to the
+   word shapes what a different typeface would. */
+section.band h2, .demo-copy h2, .news h2, .cta h2 {
+  font-size: 36px; line-height: 1.2; letter-spacing: -0.01em;
 }
+.hero h1 { font-size: 40px; line-height: 44px; letter-spacing: -0.01em; }
+h3 { font-size: 18px; line-height: 28px; letter-spacing: -0.01em; font-weight: 400; }
 @media (min-width: 1920px) {
-  .hero h1, section.band h2, .demo-copy h2, .news h2, .cta h2 { font-size: 44px; }
+  section.band h2, .demo-copy h2, .news h2, .cta h2 { font-size: 44px; }
+  .hero h1 { font-size: 44px; line-height: 48px; }
 }
 @media (max-width: 767px) {
   .hero p, section.band .lead, .demo-copy p { font-size: 13px; }

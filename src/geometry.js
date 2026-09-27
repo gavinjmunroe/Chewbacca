@@ -232,3 +232,71 @@ export function phyllotaxis({ n = 260, k = 0.42 } = {}) {
   }
   return out;
 }
+
+/* ---------------------------------------------------------------------- */
+/* Figures added 2026-09-26 to match the reference hero plates. Each one is
+   a named construction with its own parameters, not a scribble: the first
+   attempt drew random polylines and read as noise next to the reference's
+   six distinct, legible objects. */
+
+/* A ruled hyperboloid. Straight chords between two circles, offset by a
+   twist. The waist is not drawn: it EMERGES where the chords crowd, which
+   is the whole reason this shape is beautiful and why drawing a curve
+   instead would look dead. */
+export function hyperboloid({ n = 46, twist = 1.15, w = 120, h = 74 } = {}) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const b = a + twist;
+    out.push([[Math.cos(a) * w, -h], [Math.cos(b) * w, h]]);
+  }
+  return out;
+}
+
+/* A torus seen face-on: concentric rings with a density falloff, so the
+   band reads as glowing without any blur filter. Opacity does the work a
+   gradient would, and stays crisp at any zoom. */
+export function ring({ bands = 26, r = 74, thick = 26 } = {}) {
+  const out = [];
+  for (let i = 0; i < bands; i++) {
+    const t = i / (bands - 1);
+    const rr = r - thick / 2 + t * thick;
+    const pts = [];
+    for (let k = 0; k <= 60; k++) {
+      const a = (k / 60) * Math.PI * 2;
+      pts.push([Math.cos(a) * rr, Math.sin(a) * rr * 0.96]);
+    }
+    out.push({ pts, o: 0.16 + Math.sin(t * Math.PI) * 0.72 });
+  }
+  return out;
+}
+
+/* An isometric cube with one solid face. The reference fills the top face
+   dark and leaves the rest wireframe, which is what makes it read as a
+   physical object sitting in the drawing rather than a diagram of one. */
+export function isoCube({ s = 42 } = {}) {
+  const top = [[0, -s * 0.5], [s, -s], [s * 2, -s * 0.5], [s, 0]];
+  const left = [[0, -s * 0.5], [0, s * 0.42], [s, s * 0.92], [s, 0]];
+  const right = [[s * 2, -s * 0.5], [s * 2, s * 0.42], [s, s * 0.92], [s, 0]];
+  return { top, left, right };
+}
+
+/* A dotted field masked to an arch. Dot SIZE carries the gradient, not
+   opacity, because the reference's dots stay individually countable at the
+   top of the arch where they thin out. */
+export function dotArch({ cols = 30, rows = 24, w = 200, h = 170 } = {}) {
+  const out = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = (c / (cols - 1) - 0.5) * w;
+      const y = (r / (rows - 1) - 0.5) * h;
+      // Arch mask: a parabola opening downward, plus straight legs.
+      const nx = x / (w / 2), ny = y / (h / 2);
+      const inside = ny > -1 + nx * nx * 0.92;
+      if (!inside) continue;
+      const d = (ny + 1) / 2;                 // 0 at the crown, 1 at the base
+      out.push([x, y, 0.5 + d * 1.5]);
+    }
+  }
+  return out;
+}

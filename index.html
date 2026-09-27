@@ -1,158 +1,209 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ux-engine</title>
-<meta name="description" content="Extract what a website actually does, not what its stylesheet says." />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="src/styles.css" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lemma replica</title>
+<meta name="description" content="A study reconstruction of uselemma.ai, built from measured DOM and computed styles. Not affiliated with Lemma.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Lato:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="src/styles.css">
 </head>
 <body>
 
-<!-- Chrome. Their nav is a plain bar and the announcement strip sits UNDER it,
-     which is the opposite of the usual order and keeps the brand line at the
-     very top of the document. -->
-<nav class="nav">
-  <a class="brand" href="#top">
-    <span class="brand-mark" aria-hidden="true"></span>
-    <span class="brand-name">ux-engine</span>
-  </a>
-  <div class="nav-links">
-    <a href="#what">Docs</a><a href="#what">Corpus</a><a href="#proof">Findings</a><a href="#close">Changelog</a>
+<header class="header">
+  <div class="inner">
+    <a class="brand" href="#top">
+      <svg viewBox="0 0 22 20" width="19" height="17" aria-hidden="true">
+        <path d="M11 1 1 6l10 5 10-5z" fill="#1d1956"/>
+        <path d="M1 10.5 11 15.5 21 10.5" fill="none" stroke="#755cfe" stroke-width="1.6"/>
+        <path d="M1 14.5 11 19.5 21 14.5" fill="none" stroke="#755cfe" stroke-width="1.6" opacity=".55"/>
+      </svg><span>Lemma</span></a>
+    <nav class="nav">
+      <a href="#">Docs</a><a href="#">Blog</a><a href="#">Weekly</a>
+      <a href="#">Changelog</a><a href="#careers">Careers</a>
+    </nav>
+    <div class="right">
+      <a class="btn btn-ghost" href="#">Login</a>
+      <a class="btn btn-primary" href="#">Book a demo</a>
+    </div>
   </div>
-  <div class="nav-cta">
-    <a class="btn btn-ghost" href="#close">Read the notes</a>
-    <a class="btn btn-solid" href="#close">Run it</a>
-  </div>
-</nav>
+</header>
 
-<div class="strip" role="status">
-  <span class="strip-dot" aria-hidden="true"></span>
-  <span>Film mode records every animation frame. <a href="#what">See what it found</a></span>
+<div class="banner">
+  <span class="bmark" aria-hidden="true"></span>
+  We're&nbsp;<a href="#careers">hiring</a>!
+  <button class="bclose" aria-label="Dismiss">&times;</button>
 </div>
 
-<!-- THE PINNED RUN.
-     Their first sticky container has a parent of 10,800px against a 900px
-     viewport, so twelve screens of scroll with one screen held still. 81% of
-     their page is pinned. This is 12 viewports for the same reason: the scene
-     machine is the whole reason their page catches you off guard, and a short
-     pin just reads as a sticky header. -->
-<main id="top" class="run" data-scenes="4">
-  <div class="pin">
+<main id="top">
 
-    <!-- Scene 0. Entrance order follows READING order: badge, headline line
-         one, line two, subhead, buttons, then the plates last. -->
-    <section class="scene scene-hero" data-scene="0">
-      <!-- Scattered, overlapping, size-varied, bleeding off the right edge.
-           Occlusion is the depth cue, so the plates must cross each other
-           rather than sit in a grid. -->
-      <div class="scatter" data-enter="5" aria-hidden="true"></div>
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <div class="backed"><span>Backed by</span>
+        <span class="yc" aria-hidden="true">Y</span><span class="ycw">Combinator</span></div>
+      <h1>Stop guessing<br><b>why your agents fail</b></h1>
+      <p>Production monitoring for AI agents. Surface silent failures, pull context
+         across traces, improve your agent before users churn.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary btn-lg" href="#">Book a demo</a>
+        <a class="btn btn-ghost btn-lg" href="#">Read the docs</a>
+      </div>
+    </div>
+    <div id="plates"></div>
+  </section>
 
-      <div class="col col-centre hero-col">
-        <p class="eyebrow" data-enter="0">Runtime, not stylesheets</p>
-        <h1 class="display centre">
-          <span data-enter="1">Stop reading</span>
-          <span data-enter="2">what a site claims</span>
-        </h1>
-        <p class="lede centre" data-enter="3">
-          Drive the interface, record every frame, and label what each element
-          actually does. Grepping a stylesheet gave two tidy durations. The
-          runtime had eight, and three infinite loops.
-        </p>
-        <div class="row row-centre" data-enter="4">
-          <a class="btn btn-solid" href="#what">See a capture</a>
-          <a class="btn btn-ghost" href="#proof">Read the findings</a>
+  <!-- LOGO STRIP -->
+  <section class="trusted wrap">
+    <div class="label">Trusted by teams shipping agents</div>
+    <div class="logos">
+      <div class="logo-cell"><div class="n">Aiden</div><div class="d">AI platform for accounting firms</div></div>
+      <div class="logo-cell"><div class="n">Warmly</div><div class="d">AI agent making warm introductions</div></div>
+      <div class="logo-cell"><div class="n">Stan</div><div class="d">Link-in-bio storefront for creators</div></div>
+      <div class="logo-cell"><div class="n">Ottomate</div><div class="d">Cloud infrastructure for autonomous agents</div></div>
+      <div class="logo-cell"><div class="n">Superpower</div><div class="d">Health testing and wellness tracking</div></div>
+      <div class="logo-cell"><div class="n">Martin</div><div class="d">Personal AI assistant for messaging</div></div>
+      <div class="logo-cell"><div class="n">Rentable</div><div class="d">Apartment search over text message</div></div>
+      <div class="logo-cell"><div class="n">Lindy</div><div class="d">Always-on autonomous agents for business</div></div>
+      <div class="logo-cell"><div class="n">Hebbia</div><div class="d">AI agents for private equity</div></div>
+      <div class="logo-cell"><div class="n">Glean</div><div class="d">Unified company knowledge for agents</div></div>
+    </div>
+  </section>
+
+  <!-- SCENE 1: the pinned geometric narrative, 12 viewports on the reference -->
+  <div class="run" id="run1" style="height:1000svh">
+    <div class="pin">
+      <div id="stage1" style="width:100%;height:100%"></div>
+    </div>
+  </div>
+
+  <!-- SCENE 2: the pinned product demo, 4 viewports on the reference -->
+  <div class="run" id="run2" style="height:400svh">
+    <div class="pin">
+      <div class="demo-grid">
+        <div class="demo-copy">
+          <div class="label" id="demoLabel">TRACES</div>
+          <h2 id="demoTitle">Surface failures you didn't know to look for.</h2>
+          <p id="demoBody">Lemma audits every trace against your agent's instructions and
+             groups recurring failures into issues.</p>
+        </div>
+        <div class="demo-stage" id="demoStage"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- INTEGRATIONS -->
+  <section class="band wrap">
+    <div class="label">Integrations</div>
+    <h2>Fits into your existing stack.</h2>
+    <p class="lead">Native support for the frameworks your team already uses.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="n">1</div>
+        <div class="t">Generate API key</div>
+        <div class="code">
+          <div class="v">.env.example</div>
+          <div><span class="k">LEMMA_API_KEY</span>=<span class="v">your_api_key_here</span></div>
+          <div><span class="k">LEMMA_PROJECT_ID</span>=<span class="v">0aea4e153c71b2</span></div>
         </div>
       </div>
-    </section>
-
-    <!-- Scene 1. The field. Theirs holds 42 rects constant while the text
-         count goes 33 to 51 and the filled count goes 0 to 9: scroll drives
-         state, nothing animates, and an animation-only capture calls it
-         static. -->
-    <section class="scene" data-scene="1">
-      <div class="col col-wide">
-        <h2 class="display sm">Most of an interface is not on load.</h2>
-        <p class="lede">
-          It is on hover, on press, on scroll, on a failed submit. Every
-          extractor reads the entrance. This one reads the rest.
-        </p>
+      <div class="step">
+        <div class="n">2</div>
+        <div class="t">Paste into your coding agent</div>
+        <div class="code">
+          <div class="v">Prompt</div>
+          <div>Install the Lemma AI skill from github.com/uselemma/skills
+               and use it to add tracing to this project.</div>
+        </div>
       </div>
-      <div class="field" aria-hidden="true"></div>
-    </section>
+    </div>
+  </section>
 
-    <!-- Scene 2. The density trough. Theirs collapses from 124 visible blocks
-         to 8. One idea, enormous, alone. This is the beat a uniformly dense
-         page can never have. -->
-    <section class="scene scene-sparse" data-scene="2">
-      <div class="col col-centre">
-        <p class="eyebrow">42 elements, one continuous view</p>
-        <h2 class="display sm">See the structure behind the motion.</h2>
-        <p class="lede centre">The highlighted elements keep their identity as the field changes perspective.</p>
+  <!-- SECURITY -->
+  <section class="band wrap">
+    <div class="label">Security</div>
+    <h2>Trust is non-negotiable.</h2>
+    <p class="lead">Your data stays yours. Protected by best-in-class infrastructure
+       and verified compliance.</p>
+    <div class="cards">
+      <div class="card"><div class="t">SOC 2 Type II</div>
+        <div class="d">Independently audited security controls.</div></div>
+      <div class="card"><div class="t">End-to-end encryption</div>
+        <div class="d">AES-256 at rest, TLS 1.2+ in transit.</div></div>
+      <div class="card"><div class="t">Data Isolation</div>
+        <div class="d">Fully isolated per organization.</div></div>
+    </div>
+    <div style="margin-top:22px"><a class="btn btn-ghost" href="#">View Trust Center</a></div>
+  </section>
+
+  <!-- TESTIMONIALS -->
+  <section class="band wrap">
+    <div class="label">Testimonials</div>
+    <h2>What people are saying.</h2>
+    <div class="tgrid" id="tgrid"></div>
+  </section>
+
+  <!-- NEWSLETTER -->
+  <section class="band wrap">
+    <div class="news">
+      <div>
+        <div class="label">Lemma Weekly</div>
+        <h2 style="font-size:var(--t-h2);font-weight:400;letter-spacing:-0.02em;margin:10px 0 14px;line-height:1.15">
+          The Friday briefing on AI agent observability and reliability.</h2>
+        <p style="font-size:var(--t-sm);color:var(--muted);margin:0">
+          One email every Friday on what actually mattered in agent reliability.</p>
+        <form class="field" onsubmit="return false">
+          <input type="email" placeholder="Email address" aria-label="Email address">
+          <button class="btn btn-primary" type="submit">Get Weekly</button>
+        </form>
+        <p style="font-size:var(--t-xs);color:var(--muted);margin-top:10px">One issue every Friday.</p>
       </div>
-    </section>
-
-    <!-- Scene 3. Resolution, and density climbs back. -->
-    <section class="scene" data-scene="3">
-      <div class="col">
-        <h2 class="display sm">Five labels, per element.</h2>
-        <p class="lede">
-          Every element gets one: it fires once and holds, it loops on its own
-          clock, it tracks your scroll, it steps because the page re-rendered,
-          or it never moves. Most should never move.
-        </p>
-        <ul class="labels"></ul>
+      <div class="issue">
+        <div class="m">Latest &mdash; Issue 003 &middot; August 14, 2026</div>
+        <h3>Found in Retrospect</h3>
+        <p>Anthropic found three real-world compromises only after reviewing 141,006
+           stored evaluations.</p>
+        <div class="links"><a href="#">Read the latest issue</a><a href="#">View all issues</a></div>
       </div>
-      <div class="plates plates-small" aria-hidden="true"></div>
-    </section>
+    </div>
+  </section>
 
-  </div>
+  <!-- CTA -->
+  <section class="cta wrap">
+    <h2>Start improving your agents today</h2>
+    <div class="hero-cta">
+      <a class="btn btn-primary btn-lg" href="#">Book a demo</a>
+      <a class="btn btn-ghost btn-lg" href="#">Read the docs</a>
+    </div>
+  </section>
 
-  <!-- The progress rail. Theirs runs a pulse; this states the beat count so
-       the reader knows how long the pin lasts. -->
-  <div class="rail" aria-hidden="true"></div>
 </main>
 
-<!-- Past the pin, the page resumes normal flow. Their second sticky is 4
-     viewports; this section is the unpinned counterweight that makes the pin
-     legible as a deliberate device rather than as the whole site. -->
-<section id="what" class="band">
+<footer>
   <div class="wrap">
-    <p class="eyebrow">What a capture holds</p>
-    <h2 class="display sm">Four states, then every frame of a scroll.</h2>
-    <div class="cards"></div>
-  </div>
-</section>
-
-<section id="proof" class="band band-quiet">
-  <div class="wrap">
-    <p class="eyebrow">Measured, not claimed</p>
-    <h2 class="display sm">What the runtime disagreed about.</h2>
-    <dl class="facts"></dl>
-  </div>
-</section>
-
-<section id="close" class="band band-close">
-  <div class="wrap wrap-narrow">
-    <h2 class="display sm">It reads what the browser resolved.</h2>
-    <p class="lede">
-      A stylesheet says what was written. A computed style says what won. The
-      two disagree often enough that the difference is the whole product.
-    </p>
-    <a class="btn btn-solid" href="#top">Run a capture</a>
-  </div>
-</section>
-
-<footer class="foot">
-  <div class="wrap foot-row">
-    <span>ux-engine</span>
-    <span class="foot-note">
-      A study build. Mechanisms rebuilt from measurement; all copy and artwork
-      original.
-    </span>
+    <div class="fgrid">
+      <div class="fcol">
+        <div class="brand" style="font-size:var(--t-md);margin-bottom:10px">Lemma</div>
+        <div style="font-size:var(--t-13);color:var(--muted);max-width:34ch;line-height:1.5">
+          Production monitoring for AI agents.</div>
+      </div>
+      <div class="fcol">
+        <div class="h">Resources</div>
+        <a href="#">Docs</a><a href="#">Blog</a><a href="#">Weekly</a>
+        <a href="#">Changelog</a><a href="#" id="careers">Careers</a><a href="#">Trust Center</a>
+      </div>
+      <div class="fcol">
+        <div class="h">Social</div>
+        <a href="#">X</a><a href="#">Twitter</a><a href="#">LinkedIn</a><a href="#">Instagram</a>
+      </div>
+    </div>
+    <div class="fbot">
+      <div>&copy; 2026 Forge AI Labs, Inc.</div>
+      <div>Any questions? contact jerry@uselemma.ai</div>
+      <div><a href="#">Cookie settings</a></div>
+    </div>
   </div>
 </footer>
 

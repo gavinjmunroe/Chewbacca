@@ -1503,6 +1503,14 @@ _register("PreToolUse", hooks_dir + "/load-guard.sh", timeout=10,
           matcher="Bash",
           status="Checking this will not take over the machine...")
 
+# zsh is the shell here and the agent writes bash. Three traps cost a full
+# re-run each on 2026-09-27: `for path in` rebinding $PATH, "$G[v]" parsing as
+# a subscript, and a flags variable passed as one argument. The third was
+# already a memory note from 2026-09-22; it recurred because notes do not fire.
+_register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
+          matcher="Bash",
+          status="Checking this reads right in zsh...")
+
 _register("PreToolUse", hooks_dir + "/ux-guard.sh", timeout=15,
           matcher="Write|Edit",
           status="Checking this UI is not the generated look...")

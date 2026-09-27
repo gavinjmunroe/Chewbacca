@@ -65,11 +65,20 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null
 # python3 -c "import mlx_whisper"`, and the first version of this fix blocked
 # the commit, because it had decided to read the raw text whenever it saw the
 # word xargs anywhere. Describing a fan-out is not performing one.
-nohd="$(printf '%s' "$cmd" | awk '
-  /<<-?'"'"'?[A-Za-z_]+'"'"'?/ { inheredoc=1; next }
-  inheredoc && /^[A-Za-z_]*$/  { inheredoc=0; next }
-  inheredoc                    { next }
-  { print }
+nohd="$(printf '%s\n' "$cmd" | awk '
+  # A heredoc ends at ITS delimiter, never at the first all-letters line: an
+  # empty line matches /^[A-Za-z_]*$/, so a blank line in a commit message
+  # used to end the heredoc early and the rest was read as commands
+  # (load-guard refused a commit message that mentioned a video tool,
+  # 2026-09-27). The text before << is still a command and stays.
+  !inh {
+    if (match($0, "<<-?[ \t]*[\047\042]?[A-Za-z_][A-Za-z0-9_]*[\047\042]?") && substr($0, RSTART - 1, 1) != "<") {
+      d = substr($0, RSTART, RLENGTH); gsub("<<-?[ \t]*|[\047\042]", "", d)
+      print substr($0, 1, RSTART - 1); inh = 1; next
+    }
+    print; next
+  }
+  { t = $0; sub("^[ \t]+", "", t); if (t == d) inh = 0; next }
 ')"
 # A quoted string is sometimes data and sometimes the argument that names the
 # binary, so it is only stripped when nothing outside it looks like a fan-out.

@@ -34,6 +34,8 @@ else. Every rule below points back to it.
    For a montage of footage cut to a song, measure three references with
    `edit-dna` and cut with `edit-cut`, following
    [references/cutting-to-music.md](references/cutting-to-music.md).
+   For any cut of his footage (trimming speech, a new version, a shot that
+   continues a clip), follow [references/editing.md](references/editing.md).
 3. **Stage one, keyframe sheet.** Render five to seven stills across the
    timeline at half size, tile them, and look. The first frame is judged
    hardest.

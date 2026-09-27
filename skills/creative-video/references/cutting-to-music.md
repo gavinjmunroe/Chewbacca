@@ -67,6 +67,11 @@ Measured 2026-09-27 with `edit-dna`. On-beat is the share of cuts within
 
 ## What it does not do yet
 
+- **Downbeats.** librosa's `beat_track` finds beats, not where the bar starts,
+  so the drop and beat 1 are inferred. Beat This (CPJKU/beat_this, MIT,
+  `pip install beat-this`) returns beats and downbeats, and Palmier Pro ships
+  it on-device for this job. Measure it against librosa on the three
+  reference songs before switching.
 - **Speed ramps.** The hero shot is a flat half speed. Ramping over 4 to 6
   frames and cutting before peak speed is the stated technique; not built.
 - **Action on the beat.** Cuts land on the grid; the action lands wherever the

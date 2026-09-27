@@ -234,7 +234,7 @@ export function render() {
 <div class="wf">
   <div class="wf-copy">
     <p class="wf-label">Traces</p>
-    <h2 class="wf-h">The failures you didn't know to look for.</h2>
+    <h2 class="wf-h">Read every span, not just the ones that errored.</h2>
     <p class="wf-sub">Every span of every run, timed against the one before it.
       The audit reads the whole tree, so a retrieval that quietly fell back to a
       stale index shows up as a finding instead of as a good answer.</p>

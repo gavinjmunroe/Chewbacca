@@ -64,9 +64,9 @@ const MARKS = [
  * obviously synthetic on purpose: a plausible-looking secret in a replica repo
  * is the kind of string someone later greps for and panics about. */
 const ENV_LINES = [
-  ["LEMMA_API_KEY", '"lk_demo_not_a_real_key"'],
-  ["LEMMA_PROJECT", '"agents-prod"'],
-  ["LEMMA_SAMPLE_RATE", '"1.0"'],
+  ["SIFT_API_KEY", '"lk_demo_not_a_real_key"'],
+  ["SIFT_PROJECT", '"agents-prod"'],
+  ["SIFT_SAMPLE_RATE", '"1.0"'],
 ];
 
 /* Our own prompt copy, written for the agent-monitoring product this replica

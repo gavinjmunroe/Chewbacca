@@ -46,7 +46,7 @@ const MESSAGE_AT = [
 ];
 const SETTLE_MS = MESSAGE_AT[MESSAGE_AT.length - 1];
 
-/* Our product is Bellwether, an agent monitoring service. It posts as an app
+/* Our product is Sift, an agent monitoring service. It posts as an app
  * into a team channel. "Wren" is an invented on-call handle, not a person. */
 const CHANNEL = {
   name: "agent-health",
@@ -57,8 +57,8 @@ const CHANNEL = {
 const THREAD = [
   {
     from: "app",
-    author: "Bellwether",
-    initials: "BW",
+    author: "Sift",
+    initials: "SF",
     time: "2:09 PM",
     /* A chat client genuinely bolds the first line of a bot alert, which is the
      * one place weight is allowed inside this mock. The page itself stays at
@@ -78,8 +78,8 @@ const THREAD = [
   },
   {
     from: "app",
-    author: "Bellwether",
-    initials: "BW",
+    author: "Sift",
+    initials: "SF",
     time: "2:11 PM",
     body: "EUR only, and three things line up on it:",
     bullets: [
@@ -129,7 +129,7 @@ export function render() {
         <p class="cm-label">Alerts</p>
         <h2 class="cm-heading" id="cm-heading">Hear about it in the channel you already have open.</h2>
         <p class="cm-sub">
-          Bellwether posts the failure into your team's chat with the runs that
+          Sift posts the failure into your team's chat with the runs that
           prove it and a link into the trace that caused it. There is no second
           dashboard to remember to check at 2am.
         </p>
@@ -149,8 +149,8 @@ export function render() {
         <ol class="cm-thread">
           ${THREAD.map(messageHtml).join("")}
           <li class="cm-typing" data-cm-typing style="order:5">
-            <span class="cm-avatar cm-avatar-app" aria-hidden="true">BW</span>
-            <span class="cm-dots" role="status" aria-label="Bellwether is typing">
+            <span class="cm-avatar cm-avatar-app" aria-hidden="true">SF</span>
+            <span class="cm-dots" role="status" aria-label="Sift is typing">
               <i class="cm-dot"></i><i class="cm-dot"></i><i class="cm-dot"></i>
             </span>
           </li>

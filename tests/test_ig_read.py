@@ -26,11 +26,25 @@ def load():
     return mod
 
 
-def fake_download(dest, stills, clips=()):
-    """Slides 01..n as jpgs, some with an mp4 beside them, plus info files."""
-    from PIL import Image
+def has_pillow():
+    try:
+        import PIL  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def fake_download(dest, stills, clips=(), images=False):
+    """Slides 01..n as jpgs, some with an mp4 beside them, plus info files.
+
+    Only the sheet test needs pictures it can open. The rest get bare bytes,
+    because the suite's pytest env and CI's python3 have no Pillow."""
     for n in range(1, stills + 1):
-        Image.new("RGB", (72, 90), (n * 10, 0, 0)).save(dest / f"{n:02d}.jpg")
+        if images:
+            from PIL import Image
+            Image.new("RGB", (72, 90), (n * 10, 0, 0)).save(dest / f"{n:02d}.jpg")
+        else:
+            (dest / f"{n:02d}.jpg").write_bytes(b"\xff\xd8\xff")
         (dest / f"{n:02d}.info.json").write_text(json.dumps({"description": "short"}))
     for n in clips:
         (dest / f"{n:02d}.mp4").write_bytes(b"\0")
@@ -75,11 +89,31 @@ def test_a_video_slide_is_still_a_slide():
     assert [Path(v).name for v in post["videos"]] == ["02.mp4", "03.mp4"]
 
 
+def test_no_pillow_means_no_sheets_not_a_crash():
+    ig = load()
+    real = sys.modules.get("PIL")
+    sys.modules["PIL"] = None  # makes `from PIL import Image` raise ImportError
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            fake_download(d, 9)
+            slides = [Path(p) for p in ig.collect(d)["slides"]]
+            assert ig.tile(slides, d) == []
+    finally:
+        if real is None:
+            sys.modules.pop("PIL", None)
+        else:
+            sys.modules["PIL"] = real
+
+
 def test_sheets_four_to_a_page_and_none_for_a_short_post():
+    if not has_pillow():
+        print("  skip  sheets: Pillow not installed")
+        return
     ig = load()
     with tempfile.TemporaryDirectory() as tmp:
         d = Path(tmp)
-        fake_download(d, 9)
+        fake_download(d, 9, images=True)
         slides = [Path(p) for p in ig.collect(d)["slides"]]
         assert ig.tile(slides[:4], d) == [], "four slides read fine one by one"
         sheets = ig.tile(slides, d)

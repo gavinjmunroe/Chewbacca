@@ -84,9 +84,13 @@ def collect(dest):
 
 def tile(paths, dest):
     """Four slides to a sheet, each at the first slide's size, so text stays legible."""
-    from PIL import Image
     sheets = []
     if len(paths) <= PER_SHEET:
+        return sheets
+    try:
+        from PIL import Image
+    except ImportError:
+        # The slides are already on disk; a sheet only saves opening them one by one.
         return sheets
     w, h = Image.open(paths[0]).size
     for n in range(0, len(paths), PER_SHEET):

@@ -796,3 +796,23 @@ section.band h2, .demo-copy h2, .news h2, .cta h2, .issue-title,
   font-size: 8px; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--accent);
 }
+
+/* ---- REVEAL ON ARRIVAL -----------------------------------------------
+   One-shot: fires when the element arrives and holds. Distinct from the
+   hero stack, which tracks scroll and reverses. The reference uses both and
+   a downward-only capture cannot tell them apart, so which one each section
+   uses is recorded rather than guessed.
+
+   Transform and opacity only. Animating top or height here would put every
+   reveal through layout on a scrolling page. */
+[data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 18px, 0);
+  transition: opacity .7s cubic-bezier(.33, 1, .68, 1),
+              transform .7s cubic-bezier(.33, 1, .68, 1);
+}
+[data-reveal].in { opacity: 1; transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] { opacity: 1; transform: none; transition: none; }
+}

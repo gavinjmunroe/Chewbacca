@@ -502,6 +502,7 @@ function testimonials() {
    frame, the label INSIDE the frame's top-left, and the overlap. The overlap
    is the only depth cue in a flat drawing, and it is what makes six plates
    read as one composition instead of six decorations. */
+import { registerHero, registerReveals, startScroll } from "./scroll.js";
 import { sphere, isoTiles, isoCube, fit, rose,
   extrudedCube, cubeSpinAt, CUBE_POINTER_LERP, CUBE_POINTER_YAW, CUBE_POINTER_PITCH,
   rule30, caX, caY, CA_R_LIVE, CA_R_DEAD, CA_R_HIT, caClipHeight, CA_MS_PER_GEN,
@@ -745,6 +746,14 @@ function plates() {
 }
 
 plates();
+
+/* The hero layers must be registered AFTER plates() has put them in the
+   document, because the depth ordering reads each plate's measured position.
+   Registering against an empty container is the silent version of this bug:
+   no error, no motion, and a scroll system that looks wired and is not. */
+registerHero(document.querySelector(".hero") || document.body);
+registerReveals();
+startScroll();
 /* ---------------------------------------------------------------------- */
 /* The cellular automaton's clock.
 

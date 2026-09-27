@@ -1,0 +1,440 @@
+/* Section G: the trace waterfall panel.
+ *
+ * Scoped to .wf. Nothing here touches a global token: the only custom
+ * properties declared are the module's own --wf-* set, and every one of them
+ * is mixed out of the two brand tokens rather than picked by eye.
+ *
+ * Zero radius everywhere, weight 400 everywhere, hierarchy from size, colour
+ * and opacity only, which is what makes the reference read as an instrument.
+ */
+
+.wf {
+  /* Kind colours. The reference colour-codes bars by span kind; its actual
+   * hues were never measured, so these are a ramp along brand to navy with
+   * grey for the non-model work. A choice, not a finding. */
+  --wf-agent: var(--accent);
+  --wf-gen: var(--navy-lite);
+  --wf-tool: color-mix(in oklab, var(--accent) 52%, var(--navy-lite));
+  --wf-retr: color-mix(in oklab, var(--accent) 70%, var(--white));
+  --wf-vec: color-mix(in oklab, var(--accent) 48%, var(--white));
+  --wf-guard: color-mix(in oklab, var(--navy-lite) 34%, var(--grey));
+  /* Warm red, per the brief. Measured at 5.14:1 against the white panel it
+   * is read on, so the error rows clear AA at 11px. */
+  --wf-err: #c2412c;
+
+  /* One indent step. Chosen, not measured. At depth 3 it spends 42px of the
+   * name column, which is where the deepest span names start to ellipsize at
+   * a 375px viewport; 10px below 560px buys that back. */
+  --wf-step: 14px;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 56px;
+  align-items: start;
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+/* ---- copy ------------------------------------------------------------ */
+
+.wf-label {
+  margin: 0 0 18px;
+  font-family: var(--mono);
+  font-size: var(--t-8);
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.wf-h {
+  margin: 0 0 18px;
+  font-family: var(--sans);
+  font-size: var(--t-h2);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.wf-sub {
+  margin: 0;
+  max-width: 34em;
+  font-size: var(--t-md);
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ---- panel ----------------------------------------------------------- */
+
+.wf-panel {
+  min-width: 0;
+  background: var(--white);
+  border: 1px solid var(--line);
+}
+
+.wf-hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.wf-tid {
+  font-family: var(--mono);
+  font-size: var(--t-11);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-hd-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: none;
+}
+
+.wf-hd-v {
+  font-family: var(--mono);
+  font-size: var(--t-10);
+  color: var(--muted);
+}
+
+.wf-hd-err {
+  font-family: var(--mono);
+  font-size: var(--t-10);
+  color: var(--wf-err);
+}
+
+.wf-hd-sep {
+  width: 1px;
+  height: 9px;
+  background: var(--line);
+}
+
+/* ---- occurrences ----------------------------------------------------- */
+
+.wf-occ {
+  padding: 12px 14px 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.wf-occ-label {
+  margin: 0 0 9px;
+  font-family: var(--mono);
+  font-size: var(--t-8);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.wf-find + .wf-find {
+  margin-top: 1px;
+}
+
+.wf-find-hd {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 8px 7px 4px;
+  border: 1px solid transparent;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color 220ms ease-out,
+    border-color 220ms ease-out;
+}
+
+.wf-find-hd:hover {
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+  border-color: var(--line-soft);
+}
+
+.wf-find-hd:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.wf-chev {
+  color: var(--accent);
+  transition: transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.wf-find-hd[aria-expanded="true"] .wf-chev {
+  transform: rotate(90deg);
+}
+
+.wf-find-t {
+  font-size: var(--t-13);
+  font-weight: 400;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-find-n {
+  font-family: var(--mono);
+  font-size: var(--t-9);
+  color: var(--muted);
+}
+
+.wf-find-bd {
+  padding: 0 8px 10px 24px;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition:
+    opacity 220ms ease-out,
+    transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.wf-find-bd.is-open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.wf-find-p {
+  margin: 0 0 6px;
+  font-size: var(--t-13);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.wf-find-sp {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--t-9);
+  color: var(--accent);
+}
+
+/* ---- span tree ------------------------------------------------------- */
+
+.wf-tree {
+  padding: 11px 14px 14px;
+}
+
+.wf-cols,
+.wf-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 54px minmax(110px, 0.9fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.wf-cols {
+  padding: 0 4px 7px;
+  border-bottom: 1px solid var(--line-soft);
+  font-family: var(--mono);
+  font-size: var(--t-8);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+
+.wf-cols span:nth-child(2) {
+  text-align: right;
+}
+
+.wf-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wf-row {
+  position: relative;
+  padding: 0 4px;
+  min-height: 21px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition:
+    opacity 220ms ease-out,
+    transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.wf-row.is-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.wf-row:hover {
+  background: color-mix(in oklab, var(--accent) 5%, transparent);
+}
+
+/* The depth guides. Repeating 1px verticals across exactly the indent, so
+ * each line lands on its parent row's icon centre (offset 5px of a 10px
+ * glyph) rather than being drawn per row. */
+.wf-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-left: calc(var(--depth) * var(--wf-step));
+  background-image: repeating-linear-gradient(
+    to right,
+    var(--line-soft) 0 1px,
+    transparent 1px var(--wf-step)
+  );
+  background-size: calc(var(--depth) * var(--wf-step)) 100%;
+  background-position: 5px 0;
+  background-repeat: no-repeat;
+}
+
+.wf-ico {
+  flex: none;
+  color: var(--wf-c, var(--accent));
+}
+
+.wf-nm {
+  font-family: var(--mono);
+  font-size: var(--t-11);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-note {
+  flex: none;
+  font-family: var(--mono);
+  font-size: var(--t-8);
+  color: var(--grey);
+}
+
+.wf-dur {
+  font-family: var(--mono);
+  font-size: var(--t-10);
+  color: var(--muted);
+  text-align: right;
+}
+
+.wf-track {
+  position: relative;
+  height: 11px;
+  min-width: 0;
+}
+
+/* The trace's own baseline, so a bar that starts late reads as late. */
+.wf-track::before {
+  content: "";
+  position: absolute;
+  inset: 5px 0 auto;
+  height: 1px;
+  background: var(--line-soft);
+}
+
+/* left and width are inline, written by geometry() from start and dur. Only
+ * scaleX is animated, so nothing here recalculates layout. */
+.wf-bar {
+  position: absolute;
+  top: 3px;
+  height: 5px;
+  background: var(--wf-c, var(--accent));
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.wf-row.is-in .wf-bar {
+  transform: scaleX(1);
+}
+
+/* ---- kind colours ---------------------------------------------------- */
+
+.wf-row[data-kind="agent"] { --wf-c: var(--wf-agent); }
+.wf-row[data-kind="gen"]   { --wf-c: var(--wf-gen); }
+.wf-row[data-kind="tool"]  { --wf-c: var(--wf-tool); }
+.wf-row[data-kind="retr"]  { --wf-c: var(--wf-retr); }
+.wf-row[data-kind="vec"]   { --wf-c: var(--wf-vec); }
+.wf-row[data-kind="guard"] { --wf-c: var(--wf-guard); }
+
+/* ---- error ----------------------------------------------------------- */
+
+.wf-row.is-error { --wf-c: var(--wf-err); }
+
+.wf-row.is-error .wf-nm,
+.wf-row.is-error .wf-dur,
+.wf-row.is-error .wf-note {
+  color: var(--wf-err);
+}
+
+.wf-mark {
+  position: absolute;
+  left: -5px;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  background: var(--wf-err);
+}
+
+.wf-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- narrow ---------------------------------------------------------- */
+
+@media (max-width: 900px) {
+  .wf {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+}
+
+@media (max-width: 560px) {
+  .wf {
+    --wf-step: 10px;
+  }
+
+  .wf-cols,
+  .wf-row {
+    grid-template-columns: minmax(0, 1fr) 46px minmax(78px, 0.7fr);
+    gap: 7px;
+  }
+
+  .wf-nm { font-size: var(--t-10); }
+
+  /* The hit count is the first thing to go: it was costing the deepest span
+   * names about 7 characters at 375px. */
+  .wf-note { display: none; }
+  .wf-hd, .wf-occ, .wf-tree { padding-left: 11px; padding-right: 11px; }
+}
+
+/* ---- reduced motion -------------------------------------------------- *
+ * The panel is information. Only the drawing of it goes.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .wf-row,
+  .wf-bar,
+  .wf-chev,
+  .wf-find-bd,
+  .wf-find-hd {
+    transition: none;
+  }
+
+  .wf-row {
+    opacity: 1;
+    transform: none;
+  }
+
+  .wf-bar {
+    transform: scaleX(1);
+  }
+}

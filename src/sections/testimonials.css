@@ -1,0 +1,158 @@
+/* Section D: testimonial carousel.
+
+   The column constraint is the whole point of this file. `.tst-col` is the only
+   element allowed to decide width, everything else inherits it, and the row
+   itself is clipped inside it. The previous build put the scrolling row in the
+   page flow at full width, which read as a different site above 1600px.
+
+   Tokens come from src/styles.css and are used, never redefined. Every weight
+   here is 400, like everywhere else on the reference: hierarchy is size,
+   colour and opacity only. */
+
+/* The mount root. app.js may give it the id alone, so both selectors carry the
+   variables: without them the JS falls back to three cards and no sliver. */
+#testimonials,
+.tst {
+  /* Visible cards, the edge sliver, and the row height. The sliver is not a
+     taste value: it is 1200 minus three 352px cards minus two 16px gaps,
+     halved. See the derivation in testimonials.js. */
+  --tst-visible: 3;
+  --tst-peek: 56px;
+  --tst-gap: 16px;
+  /* Measured, not chosen: the tallest of our twelve cards needs 175px of
+     content at the narrowest card width this layout ever produces (352px, the
+     three-up desktop case). Below that width the row shows fewer, wider cards
+     and the same quotes get shorter. 180 is that measurement plus the slack a
+     font fallback can eat. */
+  --tst-h: 180px;
+  margin-top: 28px;
+}
+
+.tst-col {
+  position: relative;
+  width: min(var(--maxw, 1200px), 100%);
+  margin-inline: auto;
+}
+
+.tst-viewport {
+  position: relative;
+  height: var(--tst-h);
+  overflow: hidden;
+  /* Both edges fade, so the row reads as continuing past the three cards. A
+     hard cut at the clip edge is what makes a carousel look broken.
+
+     The ramp runs past the sliver rather than ending at it. At +10px the edge
+     card's tail words were still fully legible in the 1280 render and the row
+     read as three cards plus two clipped ones. Reaching full opacity 26px
+     INSIDE the first whole card puts the sliver at roughly half alpha, which
+     is what makes it read as continuation. */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0,
+    #000 calc(var(--tst-peek) + 26px), #000 calc(100% - var(--tst-peek) - 26px), transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0,
+    #000 calc(var(--tst-peek) + 26px), #000 calc(100% - var(--tst-peek) - 26px), transparent 100%);
+}
+.tst-viewport:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+
+.tst-track { position: relative; height: 100%; }
+
+.tst-card {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--tst-card, 352px);
+  /* <figure> carries a UA margin of 1em 40px. Left in, it pushed every card
+     40px right of the slot the transform had computed and ate 32px of the
+     stretched height, which clipped the longest quote by 27px. */
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  /* transform only: the row never re-lays out while it advances. */
+  transform: translate3d(0, 0, 0);
+}
+
+.tst-head { display: flex; align-items: center; gap: 10px; }
+
+.tst-avatar {
+  flex: 0 0 auto;
+  width: 32px; height: 32px; border-radius: 50%;
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: var(--t-10); font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--accent);
+  background: rgba(117, 92, 254, 0.10);   /* the brand mark at 10% */
+  border: 1px solid var(--line);
+}
+
+.tst-who { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.tst-name { font-size: var(--t-sm); font-weight: 400; color: var(--ink); }
+.tst-meta { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.tst-mark { color: var(--accent); flex: 0 0 auto; }
+.tst-co {
+  font-family: var(--mono); font-size: var(--t-8); font-weight: 400;
+  text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent);
+  white-space: nowrap;
+}
+.tst-handle {
+  font-size: var(--t-xs); color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.tst-quote {
+  margin: 0;
+  font-size: var(--t-sm); font-weight: 400; line-height: 1.6;
+  color: var(--ink);
+  overflow: hidden;
+}
+
+.tst-arrow {
+  position: absolute;
+  top: calc(var(--tst-h) / 2);
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  font-family: var(--sans); font-size: 14px; font-weight: 400;
+  cursor: pointer;
+  transition: color 220ms ease-out, border-color 220ms ease-out;
+}
+.tst-arrow:hover { color: var(--ink); border-color: var(--muted); }
+.tst-arrow:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+.tst-prev { left: 0; }
+.tst-next { right: 0; }
+
+.tst-dots {
+  display: flex; justify-content: center; align-items: center;
+  gap: 2px; margin-top: 18px;
+}
+.tst-dot {
+  width: 20px; height: 20px; padding: 0;
+  display: grid; place-items: center;
+  border: 0; background: none; cursor: pointer;
+}
+.tst-dot i {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--line);
+  transition: background-color 220ms ease-out;
+}
+.tst-dot:hover i { background: var(--muted); }
+.tst-dot.on i { background: var(--accent); }
+.tst-dot:focus-visible { outline: 1px solid var(--accent); outline-offset: 0; }
+
+@media (max-width: 1000px) {
+  #testimonials, .tst { --tst-visible: 2; --tst-peek: 44px; }
+}
+@media (max-width: 680px) {
+  /* One card, and the height measured again at 390, where the card is 286px
+     wide and the longest quote needs 197px. 204 is that plus the same slack. */
+  #testimonials, .tst { --tst-visible: 1; --tst-peek: 28px; --tst-h: 204px; }
+  .tst-arrow { width: 30px; height: 30px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tst-card, .tst-arrow, .tst-dot i { transition: none !important; }
+}

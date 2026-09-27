@@ -93,7 +93,25 @@ function frame() {
   const settled = Math.abs(target - cur) < 0.1;
   if (settled) cur = target;
 
-  const p = Math.min(Math.max(cur / HERO_END, 0), 1);
+  /* THE TRAVEL IS EASED, NOT LINEAR.
+
+     This mapped scroll to travel linearly, which was an assumption nobody
+     made on purpose: the measurement was in hand and the implementation
+     ignored it. Their layer covers 88% of its 500px by half the scroll
+     window and 99% by 79% of it. Fitting 1-(1-p)^k to those samples gives
+     k = 3.02.
+
+     So it is a cubic ease-out, which is the same 1 - (1-t)^3 their own
+     bundle uses to drive the headline wipe. The curve was recovered from
+     two independent places and then not applied to the one thing built
+     from it.
+
+     What this buys is the thing a linear ramp cannot: the scene is mostly
+     gone before you have finished scrolling past it, so the exit feels
+     decided rather than dragged. A linear ramp is still moving at the last
+     pixel, which reads as the page resisting you. */
+  const raw = Math.min(Math.max(cur / HERO_END, 0), 1);
+  const p = 1 - Math.pow(1 - raw, 3);
   const o = 1 - Math.min(Math.max(cur / FADE_END, 0), 1);
 
   for (const L of layers) {

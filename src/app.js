@@ -94,37 +94,77 @@ function scene1(host) {
 
   /* Cells. Home = the card grid. Every later position is derived from the
      same index, so correspondence is structural and never re-solved. */
+  /* MASONRY, NOT A LATTICE. AND NO MODULUS.
+
+     This was a rigid 7x6 grid of identical 132x74 cells with
+     `fails: i % 4 === 1`, so every brick was the same size and every fourth
+     one failed on a perfect cycle. Neither is true of the reference, whose
+     rows hold bricks of clearly different widths and whose failures sit
+     where they sit.
+
+     Uniformity and a modulus are what you write when you have not looked.
+     They are cheap, they are visible from across the room, and a viewer
+     reads them as a placeholder even without being able to say why: real
+     systems do not fail on a cycle, and a wall of identical rectangles is a
+     table pretending to be a wall.
+
+     Widths are drawn per brick and each row is PACKED to the full width, so
+     no two rows break in the same place and the vertical seams never line
+     up. Failures are drawn against a probability rather than an index, so
+     the gaps between them vary the way a real sample does. Both come from a
+     seeded generator, so the layout is stable between reloads and is still
+     not a pattern. */
   const cells = [];
-  const CW = 132, CH = 74, GX = 14, GY = 16;
-  const originX = (1200 - (COLS * CW + (COLS - 1) * GX)) / 2;
-  /* 150 rather than 96: the caption band above needs about 100 viewBox units
-     at the viewport heights this is read at, and 96 put the first row inside
-     it. 150 + 6 rows at 90 = 690, which still clears the 700 unit box. */
+  const GX = 14, GY = 16, CH = 74;
+  /* The caption band above needs about 100 viewBox units at the heights this
+     is read at, and 96 put the first row inside it. 150 + 6 rows at 90 = 690,
+     which still clears the 700 unit box. Re-declared here because the masonry
+     rewrite replaced the block that used to hold it. */
   const originY = 150;
-  for (let i = 0; i < CELLS; i++) {
-    const r = Math.floor(i / COLS), c = i % COLS;
-    /* Staggered rows: odd rows offset, as the reference shows. */
-    const home = { x: originX + c * (CW + GX) + (r % 2 ? CW * 0.22 : 0),
-                   y: originY + r * (CH + GY) };
-    /* Isometric target: same index, projected onto the ground plane. */
-    const u = (c - (COLS - 1) / 2), v = (r - (ROWS - 1) / 2);
-    const iso = { x: 600 + (u - v) * 62, y: 430 + (u + v) * 31 };
-    const g = el("g");
-    const rect = el("rect", { x: 0, y: 0, width: CW, height: CH, rx: 0,
-      fill: "none", stroke: "#1d1956", "stroke-width": "1", opacity: "0.55" });
-    const fill = el("rect", { x: 0, y: 0, width: CW, height: CH,
-      fill: "#755cfe", opacity: "0" });
-    const lbl = el("text", { x: 8, y: 17, "font-family": "IBM Plex Mono, monospace",
-      "font-size": "8", fill: "#6c6991" });
-    lbl.textContent = `TRACE ${String(i + 1).padStart(2, "0")}`;
-    const fail = el("text", { x: 8, y: 34, "font-family": "IBM Plex Mono, monospace",
-      "font-size": "9", fill: "#d4443c", opacity: "0" });
-    fail.textContent = FAILURES[i % FAILURES.length];
-    g.append(fill, rect, lbl, fail);
-    gCells.appendChild(g);
-    /* Every 4th cell is a failing one. A field where everything fails says
-       nothing; the reference shows a minority lit up inside a calm grid. */
-    cells.push({ g, rect, fill, lbl, fail, home, iso, i, fails: i % 4 === 1 });
+  const ROW_W = 1200 - 2 * 40;
+  const rnd = rng(9);
+  let idx = 0;
+  for (let r = 0; r < ROWS && idx < CELLS; r++) {
+    // Pack this row: draw widths until the remaining space cannot hold
+    // another brick, then distribute the slack so the row ends flush.
+    const widths = [];
+    let used = 0;
+    while (idx + widths.length < CELLS) {
+      const w = 96 + Math.floor(rnd() * 112);        // 96 to 208
+      if (used + w + (widths.length ? GX : 0) > ROW_W) break;
+      used += w + (widths.length ? GX : 0);
+      widths.push(w);
+    }
+    if (!widths.length) break;
+    const slack = (ROW_W - used) / widths.length;
+    let x = 40;
+    const y = originY + r * (CH + GY);
+    for (const w0 of widths) {
+      const w = w0 + slack;
+      const home = { x, y };
+      const u = (x + w / 2 - 600) / 90, v = (r - (ROWS - 1) / 2);
+      const iso = { x: 600 + (u - v) * 62, y: 430 + (u + v) * 31 };
+      const g = el("g");
+      const rect = el("rect", { x: 0, y: 0, width: w, height: CH, rx: 0,
+        fill: "none", stroke: "#1d1956", "stroke-width": "1", opacity: "0.55" });
+      const fill = el("rect", { x: 0, y: 0, width: w, height: CH,
+        fill: "#755cfe", opacity: "0" });
+      const lbl = el("text", { x: 8, y: 17, "font-family": "IBM Plex Mono, monospace",
+        "font-size": "8", fill: "#6c6991" });
+      lbl.textContent = `TRACE ${String(idx + 1).padStart(2, "0")}`;
+      const fail = el("text", { x: 8, y: 34, "font-family": "IBM Plex Mono, monospace",
+        "font-size": "9", fill: "#d4443c", opacity: "0" });
+      fail.textContent = FAILURES[idx % FAILURES.length];
+      g.append(fill, rect, lbl, fail);
+      gCells.appendChild(g);
+      /* Drawn, not counted. A field where everything fails says nothing, and
+         a field where every fourth fails says "placeholder". About a quarter,
+         irregularly spaced. */
+      cells.push({ g, rect, fill, lbl, fail, home, iso, w,
+                   i: idx, fails: rnd() < 0.26 });
+      x += w + GX;
+      idx++;
+    }
   }
 
   /* The cube wave. Outlined stacked cubes crossing the lattice. */
@@ -227,7 +267,13 @@ function scene1(host) {
       const a = clamp((tIn - d * 0.35) / 0.65);
       /* Width: full card -> square. Height never changes, so the shape reads
          as narrowing rather than scaling. */
-      const w = lerp(CW, CH, ease(tNarrow));
+      /* Each brick narrows from ITS OWN width, not from a shared constant.
+         The masonry rewrite gave every brick a drawn width, so lerping from
+         a single CW would have snapped all 42 to one size on the first frame
+         of this stage, undoing the varied layout exactly when it starts
+         moving. The square it narrows TO is shared, because that is the tile
+         the ground plane holds. */
+      const w = lerp(c.w, CH, ease(tNarrow));
 
       /* PROJECTION, NOT ROTATION. This was rotate(45) on a square, and a
          square turned 45 degrees has EQUAL diagonals. A square actually
@@ -567,7 +613,7 @@ function testimonials() {
    is the only depth cue in a flat drawing, and it is what makes six plates
    read as one composition instead of six decorations. */
 import { registerHero, registerReveals, startScroll } from "./scroll.js";
-import { sphere, isoTiles, isoCube, fit, rose,
+import { sphere, isoTiles, isoCube, fit, rose, rng,
   extrudedCube, cubeSpinAt, CUBE_POINTER_LERP, CUBE_POINTER_YAW, CUBE_POINTER_PITCH,
   rule30, caX, caY, CA_R_LIVE, CA_R_DEAD, CA_R_HIT, caClipHeight, CA_MS_PER_GEN,
   gravLens, pentagon, sphere3d, tileField } from "./geometry.js";
@@ -639,11 +685,36 @@ const VB = "0 0 100 100";
    vector-effect is gone: with non-scaling-stroke the dash is measured in
    SCREEN pixels while the path is in user units, so the two disagree by the
    viewBox scale, differently on every plate. Another second mapping. */
+/* ONE ANIMATION PER FIGURE ABOVE THIS COUNT, not one per stroke.
+
+   Measured 2026-09-27: this page ran 1,091 animations at load against the
+   reference's 220, and 864 of them were a single plate's tile field with
+   every tile drawing itself. Per-element animation on a dense field is
+   invisible work: at 864 strokes nobody can follow an individual one, and
+   each is a compositor entry bought for nothing.
+
+   The threshold comes from the reference rather than from taste. Its
+   animation inventory contains `opacity + strokeDashoffset [700-1500ms]
+   once` exactly 48 times, which is its 48-ray lens animating per ray, and
+   its 864-path plate appears nowhere as 864 animations. So it draws the
+   sparse figure stroke by stroke and reveals the dense ones as one object.
+
+   60 sits between those two measured cases. It is a real boundary, not a
+   round number: below it a viewer can follow individual strokes arriving,
+   above it they read the field emerging. */
+const DRAW_PER_ELEMENT_MAX = 60;
+
 function polys(list, sw = 0.55, step = 18, extra = "") {
-  return list.map((pts, i) =>
-    `<polyline points="${pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}"
-       pathLength="100" data-draw ${extra} fill="none" stroke="${A}"
-       stroke-width="${sw}" style="animation-delay:${(i * step).toFixed(0)}ms"/>`).join("");
+  const shapes = list.map((pts, i) => {
+    const pt = pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ");
+    const per = list.length <= DRAW_PER_ELEMENT_MAX
+      ? ` data-draw style="animation-delay:${(i * step).toFixed(0)}ms"` : "";
+    return `<polyline points="${pt}" pathLength="100"${per} ${extra}
+       fill="none" stroke="${A}" stroke-width="${sw}"/>`;
+  }).join("");
+  return list.length <= DRAW_PER_ELEMENT_MAX
+    ? shapes
+    : `<g data-draw-group>${shapes}</g>`;
 }
 
 /* Every generator already returns fit()-normalised 0..100 polylines, except
@@ -969,3 +1040,49 @@ cubeClock();
 testimonials();
 drive("run1", scene1(document.getElementById("stage1")));
 drive("run2", scene2());
+
+/* ---------------------------------------------------------------------- */
+/* SECTION MODULES.
+
+   Seven sections were built in parallel, each owning exactly one js and one
+   css that no other writer touches. This file mounts them and is the only
+   place that knows they exist, which is what kept seven concurrent builders
+   from colliding on it.
+
+   A module that fails to mount must not take the page down with it. Each one
+   is a separate try: on a page assembled from independently built parts, one
+   throwing module silently blanking the other six is the worst possible
+   failure mode, because it looks like a layout bug rather than an error. */
+import * as sec_logo_wall from "./sections/logo-wall.js";
+import * as sec_failure_wall from "./sections/failure-wall.js";
+import * as sec_counter from "./sections/counter.js";
+import * as sec_waterfall from "./sections/waterfall.js";
+import * as sec_chat_mock from "./sections/chat-mock.js";
+import * as sec_integrations from "./sections/integrations.js";
+import * as sec_testimonials from "./sections/testimonials.js";
+
+/* Prefixed, because `testimonials` and `counter` are already bound in this
+   file by the older hand-built versions. A namespace import that collides
+   with an existing const is a MODULE-LEVEL SyntaxError, so it does not fail
+   that one section: it stops the whole file, and all seven mount points stay
+   empty with the page otherwise looking fine. Caught by checking that each
+   section had children rather than by trusting that the import list was
+   correct. */
+const SECTIONS = [sec_logo_wall, sec_failure_wall, sec_counter, sec_waterfall, sec_chat_mock, sec_integrations, sec_testimonials];
+
+for (const mod of SECTIONS) {
+  try {
+    const root = document.querySelector(mod.MOUNT);
+    if (!root) { console.warn("no mount point for", mod.MOUNT); continue; }
+    if (typeof mod.render === "function") root.innerHTML = mod.render();
+    if (typeof mod.mount === "function") mod.mount(root);
+  } catch (err) {
+    console.error("section failed to mount:", mod.MOUNT, err);
+  }
+}
+
+/* Reveals are registered AFTER the sections exist, because the observer can
+   only watch elements that are in the document. Registering first is the
+   silent version of this bug: no error, no reveal, and a scroll system that
+   looks wired and is not. */
+registerReveals();

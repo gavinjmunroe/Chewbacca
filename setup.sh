@@ -1534,6 +1534,21 @@ _register("PreToolUse", hooks_dir + "/ux-guard.sh", timeout=15,
           matcher="Write|Edit",
           status="Checking this UI is not the generated look...")
 
+# Two plans in a row on one repo opened with a measurement phase, and both
+# times the measurement was skipped and the building started anyway. Seven
+# sections got built from impressions overnight; the next day went on
+# measuring them one at a time and finding every one wrong.
+#
+# Writing the plan was never the problem. Two good plans existed. Neither was
+# followed, and nothing in the session could tell that it was not being
+# followed, because a plan is prose and prose does not fail. So a PLAN.md may
+# now carry a machine readable PLAN-GATES block naming, per phase, the
+# artifacts that must exist and the paths writable until they do. Inert in
+# any repo whose plan has no such block, which is nearly all of them.
+_register("PreToolUse", hooks_dir + "/plan-guard.sh", timeout=10,
+          matcher="Write|Edit",
+          status="Checking this is the phase the plan is actually on...")
+
 # Coursework is never turned in without being asked. This was a rule in prose
 # that got broken twice in one night, so it became a gate.
 _register("PreToolUse", hooks_dir + "/submit-guard.sh", timeout=10,

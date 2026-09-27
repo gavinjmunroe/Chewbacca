@@ -231,11 +231,27 @@ function scene1(host) {
        A cross-fade would lose the wipe, and the wipe is the effect. */
     s1a.style.clipPath = `inset(0 ${(tWipe * 100).toFixed(1)}% 0 0)`;
     s1a.style.opacity = String(1 - tWipe * 0.2);
+    /* A fully clipped element still occupies its box, so the two headlines
+       kept overlapping in layout after the wipe finished. Invisible on
+       screen, caught by the gate's pairwise box check at 39%. Taking the
+       spent one out of the flow is both the fix and the honest state. */
+    s1a.style.display = tWipe >= 1 ? "none" : "";
+    s1b.style.display = tWipe <= 0 ? "none" : "";
     s1b.style.opacity = String(tWipe);
     s1b.style.clipPath = `inset(0 0 0 ${((1 - tWipe) * 100).toFixed(1)}%)`;
     s1label.textContent = tWipe > 0.5 ? "Resolution" : "Traces";
 
     /* The mark assembles in stages: sparse pieces, then runs, then resolved. */
+    /* The whole scene leaves together. Lifting the geometry while the
+       headline stayed pinned sent the assembled mark straight up THROUGH the
+       type: invisible while reading the code, and the reason design-gate
+       measured visual weight 0.355 off centre at this position. The
+       reference moves the mark and its plane out as one object, so the
+       caption travels with them. */
+    const capLift = (tLift * -320).toFixed(1);
+    cap.style.transform = `translateY(${capLift}px)`;
+    cap.style.opacity = String(1 - tLift);
+    counter.style.transform = `translateY(${capLift}px)`;
     gMark.setAttribute("opacity", (1 - tLift).toFixed(3));
     markTiles.forEach((t, i) => {
       const o = clamp((tMark - (i / markTiles.length) * 0.55) / 0.45);

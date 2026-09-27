@@ -377,6 +377,11 @@ if group "installer"; then
   check  "kit-debt fires when a session taught the kit nothing" \
     bash "$ROOT/tests/kit_debt.sh" "$ROOT"
 
+  # Three zsh traps cost a re-run each on 2026-09-27. Refuse all three, and
+  # pass commands that only mention them in a heredoc or single quotes.
+  check  "zsh-guard refuses the traps and passes the rest" \
+    bash "$ROOT/tests/zsh_guard.sh" "$ROOT"
+
   # 2026-09-26: a texted QR photo sat undownloaded (transfer_state 0) and the
   # machine had no decoder. qr must decode, refuse blanks, and say "not downloaded".
   check  "qr decodes a texted code and reports undownloaded images" \

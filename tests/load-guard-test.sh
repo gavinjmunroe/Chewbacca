@@ -1,5 +1,5 @@
 #!/bin/bash
-H=~/Desktop/2026-Code/projects/chewbacca/.claude/hooks/load-guard.sh
+H="${LOAD_GUARD_HOOK:-$(cd "$(dirname "$0")/.." && pwd)/.claude/hooks/load-guard.sh}"
 # Pin the load average. Without this the "single heavy job" case passes or
 # fails depending on what the machine is doing, which it did on 2026-09-22.
 export LOAD_GUARD_LOAD=1.0
@@ -37,7 +37,23 @@ t "commit msg quoting it"     0 'git commit -F - <<MSG
 Fix: xargs -P 4 python3 -c "import mlx_whisper" was the shape that broke it
 MSG'
 
+# Regression, 2026-09-27: a BLANK line inside a commit message ended the
+# heredoc early, so the body after it was read as commands and a message
+# mentioning ffmpeg was refused.
+t "blank line in commit msg" 0 'git commit -F - <<MSG
+feat: a title
+
+the body mentions ffmpeg and whisper
+MSG'
 echo "SHOULD BLOCK ON LOAD (exit 2):"
 LOAD_GUARD_LOAD=12.0 t "single job, busy machine" 2 'yt-transcript abc123 --timestamps'
+# The 2026-09-27 regression only shows under load, which is when it bit: a
+# lone heavy word is refused on a busy machine, so a commit message whose
+# body sat after a blank line was refused at a load average of 10.8.
+LOAD_GUARD_LOAD=12.0 t "busy, blank line in commit msg" 0 'git commit -F - <<MSG
+feat: a title
+
+the body mentions ffmpeg
+MSG'
 echo; echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]

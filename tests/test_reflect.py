@@ -151,6 +151,28 @@ def main() -> int:
     got = json.loads(r.stdout).get("memories") if r.returncode == 0 else r.stderr[-300:]
     check("learn finds the brain setup.sh named, in both spellings", got == 2, got)
 
+    # A branch the gate kept is waiting on a person, and only until it merges.
+    repo = TMP / "repo"
+    repo.mkdir()
+    g = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True, check=True)
+    g("init", "-q", "-b", "main")
+    g("config", "user.email", "t@t")
+    g("config", "user.name", "t")
+    g("commit", "-q", "--allow-empty", "-m", "base")
+    for name in ("learn/kept", "learn/merged"):
+        g("checkout", "-q", "-b", name, "main")
+        g("commit", "-q", "--allow-empty", "-m", f"loop: {name}")
+    g("checkout", "-q", "main")
+    g("merge", "-q", "--no-ff", "--no-edit", "learn/merged")
+    from importlib.machinery import SourceFileLoader
+    import importlib.util
+    loader = SourceFileLoader("reflect", str(ROOT / "bin" / "reflect"))
+    mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("reflect", loader))
+    loader.exec_module(mod)
+    waiting = mod.pending(repo)
+    check("--pending lists an unmerged learn/ branch and drops a merged one",
+          len(waiting) == 1 and waiting[0].startswith("learn/kept (today): loop: learn/kept"), waiting)
+
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0
 

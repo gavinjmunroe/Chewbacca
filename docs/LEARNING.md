@@ -129,9 +129,29 @@ What replay showed on the first run: the router's 16 logged mistakes were all
 fixed already, and the live failures were elsewhere. Spoken "open" requests
 went to the model 15 times in two weeks at 6.8 s each.
 
+### The first run, 2026-09-27
+
+`reflect` ranked three live shapes: "open" (15 requests, 6.8 s median), and
+"i" and "no". `propose` ran a headless Claude for 275 s, 32 turns and $0.98.
+It wrote `bin/lib/opener.py` for a new Terminal window, a new Chrome window
+and Google Sheets, with its own test, and declined six "open" sentences and
+both other shapes with a reason each. "Open new Claude window" names no
+folder, and a bare "No" can't be read without the conversation. The judge
+failed before and passed after.
+
+The gate refused it anyway, and it was right to stop. `test_reflect` had
+built its slow cases from real "open" requests, so the first fix the loop
+made broke the test that describes the loop. The fixture now uses drafting,
+which needs the model for good. The same run found that every archived
+attempt lost its final newline and could not be replayed with `git apply`.
+Both have tests that fail without the fix.
+
 Still open: a verb can only be judged on whether it takes the model out of the
 path, not on whether the action was right, so every `learn/` branch is read by
-a person before it merges. The recursion, where the proposer's own prompt is
+a person before it merges. The session briefing lists each one until it does
+(`reflect --pending`). The gate cannot yet compare eval cases one by one,
+because `fitness --run` has never been run on both sides, so it says NOT
+CHECKED rather than passing that half. The recursion, where the proposer's own prompt is
 scored by how many of its branches merged, has its data (`prompt_sha` on every
 proposal) and no runner yet. Nothing is scheduled until the loop has run clean,
 supervised, more than once.

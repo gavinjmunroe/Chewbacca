@@ -307,7 +307,16 @@ fi
 # not exported it. The first version of this block referenced it bare and took
 # the whole session briefing down with it on 2026-09-21, silently, for every
 # machine but the one it was written on.
-_bl_root="${CHEWBACCA_ROOT:-$HOME/Desktop/2026-Code/projects/chewbacca}"
+# The repo setup.sh ran from is in the install manifest. Without that lookup
+# this block never ran on Gavin's Mac: CHEWBACCA_ROOT is unset there and the
+# default below is Caleb's path, so the backlog was silently skipped until
+# 2026-09-27.
+_bl_root="${CHEWBACCA_ROOT:-}"
+if [ -z "$_bl_root" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
+  _bl_root="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("repo",""))' \
+    "$HOME/.chewbacca/install-manifest.json" 2>/dev/null)"
+fi
+_bl_root="${_bl_root:-$HOME/Desktop/2026-Code/projects/chewbacca}"
 if [ -x "$_bl_root/bin/backlog" ] || command -v backlog >/dev/null 2>&1; then
   BL="$(command -v backlog || echo "$_bl_root/bin/backlog")"
   OPEN="$("$BL" 2>/dev/null | grep -E "^ +[0-9]+ " | head -8)"
@@ -315,6 +324,18 @@ if [ -x "$_bl_root/bin/backlog" ] || command -v backlog >/dev/null 2>&1; then
     echo ""
     echo "Open in the Chewbacca backlog (BACKLOG.md, or \`backlog all\`):"
     echo "$OPEN"
+  fi
+fi
+
+# Changes the learning loop made that passed its gate and wait on a person.
+# The gate keeps them as learn/<id> branches instead of merging, and a branch
+# nobody hears about never lands, so each one gets a line here until it merges.
+if [ -x "$_bl_root/bin/reflect" ]; then
+  WAITING="$("$_bl_root/bin/reflect" --pending 2>/dev/null | head -5)"
+  if [ -n "$WAITING" ]; then
+    echo ""
+    echo "Kept by the learning loop, waiting to be read and merged (\`evolve --show <id>\`):"
+    echo "$WAITING"
   fi
 fi
 

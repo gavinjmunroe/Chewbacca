@@ -5,6 +5,7 @@
     reflect --days 30        a longer window
     reflect --write          keep the episodes and rewrite the live cases
     reflect --json           the same, for a machine
+    reflect --pending        learn/ branches the gate kept and nobody merged
 
 THE FIRST STEP OF THE LOOP. Every piece after it already existed on
 2026-09-27 and none of it had ever run, because nothing turned a failure into
@@ -147,12 +148,47 @@ def write(h: dict) -> dict:
     return run
 
 
+def pending(repo: Path = ROOT) -> list[str]:
+    """One line per learn/ branch not yet merged into main.
+
+    The gate keeps a change as a branch for a person to read, and a branch
+    nobody knows about is a change that never lands. The session briefing
+    prints these, so the waiting is visible without anyone going to look.
+    """
+    import subprocess
+    base = "main"
+    for ref in ("main", "HEAD"):
+        if subprocess.run(["git", "-C", str(repo), "rev-parse", "--verify", "-q", ref],
+                          capture_output=True).returncode == 0:
+            base = ref
+            break
+    else:
+        return []
+    r = subprocess.run(["git", "-C", str(repo), "for-each-ref", "refs/heads/learn/",
+                        f"--no-merged={base}", "--sort=-committerdate",
+                        "--format=%(refname:short)%09%(committerdate:unix)%09%(subject)"],
+                       capture_output=True, text=True)
+    out = []
+    for line in r.stdout.splitlines():
+        name, when, subject = (line.split("\t", 2) + ["", ""])[:3]
+        days = int((time.time() - int(when or 0)) // 86400)
+        age = "today" if days == 0 else f"{days}d old"
+        out.append(f"{name} ({age}): {subject}")
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--days", type=float, default=14)
     ap.add_argument("--write", action="store_true", help="keep episodes and cases under ~/.chewbacca/learn")
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--pending", action="store_true", help="learn/ branches waiting on a person")
     a = ap.parse_args()
+
+    if a.pending:
+        for line in pending():
+            print(line)
+        return 0
 
     h = harvest(a.days)
     run = write(h) if a.write else None

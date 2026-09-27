@@ -1362,6 +1362,25 @@ h["Stop"] = [{"hooks": [{
     "timeout": 15,
     "statusMessage": "Checking the reply against the writing rules...",
 }]}, {"hooks": [{
+    # Caleb, 2026-09-27, three messages in a row: "Don't assume anything to be
+    # linear." "Don't expect any placements to be uniform." "Don't assume
+    # patterns." All three about one page, and all three right: it shipped a
+    # wall of 42 identical rectangles in a perfect lattice where every fourth
+    # one failed, because the code said `i % 4 === 1`.
+    #
+    # Uniformity and a modulus are not stylistic slips. They are the signature
+    # of having stopped looking, and they are what an agent reaches for by
+    # default because they are the shortest code that fills a space.
+    #
+    # "Linear where the measurement curved" was the third thing he named and
+    # is not detectable from source, since a linear map is only wrong relative
+    # to data the file does not contain. That one stays in the rules. These
+    # two are detectable because they are self-evidently invented.
+    "type": "command",
+    "command": hooks_dir + "/assumption-guard.sh",
+    "timeout": 15,
+    "statusMessage": "Checking for invented structure...",
+}]}, {"hooks": [{
     # 39 hooks were registered on 2026-09-27 and not one of them looked at a
     # rendered image. slop-guard blocked a reply that night over a single em
     # dash while a page shipped across four commits with a collapsed figure,

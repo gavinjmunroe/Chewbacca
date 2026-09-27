@@ -72,9 +72,35 @@ without it is Higgsfield's claim, repeated in her post, not her measurement.
   last frame.
 - **A blockout used for part of a clip says which part**, or it becomes the
   reference for the whole clip.
-- **Budget:** 10 video references and 30 s of video in total per job, 30
-  images, 50 items. The platform enforces the image and item caps; the video
-  figures are Dreamina's and unverified on Higgsfield.
+- **Budget:** 10 video references and 10 audio references per job, 30
+  images, 50 items. The platform enforces the image and item caps, and
+  Higgsfield's own help page gives the 10 and 10 ([How to use
+  Seedance](https://higgsfield.ai/creator-hub/help-center/ai-models/how-do-i-use-seedance),
+  read 2026-09-27). The 30 s total across all video references is Dreamina's
+  figure and still unverified on Higgsfield.
+- **A blockout costs nothing extra.** Seedance 2.5 quotes 35 credits for 5 s
+  at 720p with or without a video reference (`higgsfield generate cost`,
+  2026-09-27).
+- **No model takes depth, pose or a camera path as its own input.** A depth,
+  normal or line pass goes in the same video-reference slot as a grey
+  blockout, and whether a pass carries more than a plain render is untested.
+- **Keep a blockout character coarse.** Higgsfield's own team saw a detailed
+  Blender character copied as geometry over the character sheet, and subtle
+  acting never came through. The blockout carries camera and timing; the
+  sheet or Element carries the person.
+- **Pause the Blender camera while anyone talks.** Dialogue and a blockout
+  camera path fight each other (Dan Kieft; Mickmumpitz saw the same with
+  control passes).
+- **Colour by material for a start-frame restyle.** On image-edit models a
+  blockout coloured by material and shaded with ambient occlusion restyles
+  better than a clay render (CGwisdom). Single-tint proxies stay right for
+  motion references.
+- **A real person goes in through Soul ID to Element**, Higgsfield's stated
+  route, not a sheet generated from a description, which casts a lookalike.
+  Whether a raw selfie reference passes ByteDance's face filter on
+  Higgsfield is untested.
+- **Seedance 2.5 takes a start frame and references together.** Wan 3.0 and
+  MiniMax H3 on Higgsfield refuse that combination.
 
 ## The Higgsfield Blender add-on, and why it is not the default here
 
@@ -82,7 +108,9 @@ Higgsfield for Blender (released 2026-08-20, Blender 5.1+) is a floating bar
 in the viewport: Scene Builder, 3D Model (Meshy 5), Character Animation,
 Image, Video (Seedance 2.5), Camera, and Asset. It also exposes an MCP bridge
 at `bridge.higgsfield.ai/mcp` so an assistant can edit the open scene. It runs
-on the same credits and shows the price on the button.
+on the same credits and shows the price on the button. Meshy 5 is what the
+launch listed; the CLI catalog on 2026-09-27 has Meshy 7, Tripo H3.1,
+Hunyuan3D v3 and SAM 3D Body, and which one the add-on calls now is unchecked.
 
 It needs Blender's window open, and he works on this Mac, so the headless
 route above is the default. Reach for the add-on for the two things headless
@@ -149,13 +177,28 @@ A shot is only as good as the still it was built from.
   exact line.
 - **Motion is physics, not adjectives.** "Make it more natural" does nothing.
   Write what travels through the body, in what direction, at what rate.
-- **Write positively.** No negative prompt exists: "tack sharp", not "no blur".
+- **Exclusions go at the end, short.** No negative-prompt field exists, but
+  written exclusions work on Seedance and Kling (BytePlus's Seedance 2.5 guide,
+  Kling's API docs). Only Nano Banana needs everything said positively.
+- **"The camera does not move", never "locked camera", and never "slow".**
+  Both lost in measured tests ([movie-gen](https://github.com/dawndrain/movie-gen)).
 - **Turn off prompt enhancers.** They can make 2.5 worse (Theoretically Media).
 - **Open mid-action.** A generated first second wants to be an establishing
   beat, which is dead air on a Reel.
 
 ## Iterating without burning credits
 
+- **Run every job through `higgsfield-shot`.** It prices the job first, refuses
+  one over 40 credits unless `--max` says otherwise, refuses to pay twice for
+  a name, and prints one line instead of the job's JSON. `higgsfield-shot
+  --ledger DIR --edit edit.json` gives the credits per finished second and
+  names clips the cut never used. The Cowboy Cubans intro read 33 credits a
+  finished second, with 7 of 13 clips unused.
+- **Render at the size it plays.** A 21:9 site intro that plays at 1470 x 630
+  is Seedance 2.5's 720p output exactly; 1080p costs 71% more for nothing seen.
+- **A rerun at higher resolution is a new take.** No model here takes a seed,
+  so a 480p draft proves the prompt, not the motion. Keep a good 480p take and
+  upscale it, or rerun at 720p and expect different motion.
 - **Stop at the first repeated defect.** The same flaw in every batch means the
   prompt or the source is wrong; more batches buy nothing. Four is a ceiling,
   not a target.

@@ -1,0 +1,158 @@
+#!/usr/bin/env python3
+"""Run one Higgsfield job the cheap way: priced first, capped, logged, one line out.
+
+  higgsfield-shot NAME MODEL [higgsfield flags...] [--out DIR] [--max CREDITS] [--dry] [--again]
+  higgsfield-shot --ledger DIR [--edit edit.json]
+
+A job:
+  1. `higgsfield generate cost` with the same flags. The price is printed, and
+     a job over --max (default 40 credits) stops here. --dry stops here always.
+  2. `higgsfield generate create ... --wait --json`, the JSON kept as DIR/NAME.json
+     and the result downloaded beside it.
+  3. One line appended to DIR/ledger.jsonl, and one line printed.
+
+A NAME already completed in DIR is refused without --again. Killing a local
+wait does not cancel a submitted job, the CLI has no cancel, and a rerun
+bills twice (Cowboy Cubans, 2026-09-27). A job id printed here can be passed to the next job's
+--start-image or --image instead of a file, which uploads nothing.
+
+--ledger totals what DIR cost and made. With --edit, an edit list whose shots
+carry "clip", "in" and "out", it adds the seconds the cut actually used and the
+credits per finished second, and names clips the cut never touched. The
+Cowboy Cubans intro read 332 credits, 52.5 s made, 10.0 s used: 33 credits a
+finished second, and seven of thirteen clips unused.
+
+The printed line is all a session needs to read. The full job JSON is about
+500 tokens and `higgsfield generate list --json` about 500 a job, so neither
+belongs in a conversation; both are on disk.
+"""
+
+import argparse
+import datetime
+import json
+import os
+import subprocess
+import sys
+import urllib.request
+
+# A 720p Seedance 2.5 clip of 5 s is 35 credits. 40 lets one normal shot
+# through and stops a 1080p or 15 s job, which are the ones that drain a
+# 1,200-credit month (a 15 s 1080p Seedance 2.5 clip is 180).
+DEFAULT_MAX = 40
+WAIT = "20m"  # a 4 s 720p Seedance 2.5 clip took about 3.5 min on 2026-09-27
+
+
+def cli(args):
+    r = subprocess.run(["higgsfield", *args], capture_output=True, text=True)
+    return r.returncode, r.stdout, r.stderr
+
+
+def seconds_of(path):
+    r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+                       capture_output=True, text=True)
+    try:
+        return round(float(r.stdout.strip()), 2)
+    except ValueError:
+        return None
+
+
+def ledger_rows(out):
+    path = os.path.join(out, "ledger.jsonl")
+    if not os.path.exists(path):
+        return []
+    return [json.loads(line) for line in open(path) if line.strip()]
+
+
+def run_job(name, model, flags, out, cap, dry, again):
+    os.makedirs(out, exist_ok=True)
+    done = [r for r in ledger_rows(out) if r["name"] == name and r["status"] == "completed"]
+    if done and not again:
+        sys.exit(f"higgsfield-shot: {name} already completed as job {done[-1]['job_id']}; --again to pay for it twice")
+    code, so, se = cli(["generate", "cost", model, *flags, "--json"])
+    try:
+        credits = float(json.loads(so)["credits"])
+    except (ValueError, KeyError, TypeError):
+        sys.exit(f"higgsfield-shot: could not price {name}: {(se or so).strip()[:300]}")
+    if dry:
+        print(f"{name}: {model}, {credits:g} credits (not run)")
+        return
+    if credits > cap:
+        sys.exit(f"higgsfield-shot: {name} costs {credits:g} credits, over --max {cap:g}; nothing submitted")
+    code, so, se = cli(["generate", "create", model, *flags, "--wait", "--wait-timeout", WAIT, "--json"])
+    open(os.path.join(out, f"{name}.json"), "w").write(so or se)
+    row = {"name": name, "model": model, "credits": credits, "status": "failed", "job_id": None,
+           "file": None, "seconds": None, "at": datetime.datetime.now().isoformat(timespec="seconds")}
+    try:
+        job = json.loads(so)
+        job = job[0] if isinstance(job, list) else job
+    except ValueError:
+        job = {}
+    row["job_id"] = job.get("id")
+    row["status"] = job.get("status") or "failed"
+    params = job.get("params") or {}
+    row["resolution"] = params.get("resolution")
+    if row["status"] == "completed" and job.get("result_url"):
+        url = job["result_url"]
+        ext = os.path.splitext(url.split("?")[0])[1] or ".bin"
+        dest = os.path.join(out, f"{name}{ext}")
+        urllib.request.urlretrieve(url, dest)
+        row["file"] = dest
+        if ext.lower() in (".mp4", ".mov", ".webm", ".wav", ".mp3"):
+            row["seconds"] = seconds_of(dest)
+    with open(os.path.join(out, "ledger.jsonl"), "a") as f:
+        f.write(json.dumps(row) + "\n")
+    if row["status"] != "completed":
+        # Failed and moderated jobs are refunded automatically (Higgsfield
+        # help center, "Generation is stuck or failed", read 2026-09-27), so
+        # --ledger leaves them out of the spend.
+        sys.exit(f"{name} {row['status']} job={row['job_id']} quoted {credits:g} credits; see {name}.json")
+    length = f" {row['seconds']}s" if row["seconds"] else ""
+    print(f"{name} ok {credits:g}cr{length} job={row['job_id']} {row['file']}")
+
+
+def ledger(out, edit):
+    rows = ledger_rows(out)
+    if not rows:
+        sys.exit(f"higgsfield-shot: no ledger.jsonl in {out}")
+    spent = sum(r["credits"] for r in rows if r["status"] == "completed")
+    made = sum(r["seconds"] or 0 for r in rows if r["status"] == "completed")
+    failed = [r["name"] for r in rows if r["status"] != "completed"]
+    print(f"{len(rows)} jobs, {spent:g} credits charged, {made:.1f} s made"
+          + (f", failed and refunded: {', '.join(failed)}" if failed else ""))
+    if not edit:
+        return
+    spec = json.load(open(edit))
+    used = {}
+    for s in spec.get("shots", []):
+        key = os.path.splitext(os.path.basename(s["clip"]))[0]
+        used[key] = used.get(key, 0) + float(s["out"]) - float(s["in"])
+    total = sum(used.values())
+    unused = [r["name"] for r in rows if r["status"] == "completed" and r["name"] not in used]
+    print(f"{total:.1f} s in the cut, {100 * total / made:.0f}% of what was made, "
+          f"{spent / total:.1f} credits a finished second" if total and made else "nothing in the cut")
+    if unused:
+        print(f"never used: {', '.join(unused)}")
+
+
+def main():
+    if "--ledger" in sys.argv:
+        ap = argparse.ArgumentParser(prog="higgsfield-shot --ledger")
+        ap.add_argument("--ledger", required=True, metavar="DIR")
+        ap.add_argument("--edit")
+        a = ap.parse_args()
+        ledger(a.ledger, a.edit)
+        return
+    ap = argparse.ArgumentParser(description="Run one Higgsfield job priced, capped and logged.", allow_abbrev=False,
+                                 epilog="Every flag not listed here goes to higgsfield as is.")
+    ap.add_argument("name")
+    ap.add_argument("model")
+    ap.add_argument("--out", default=os.environ.get("OUT", "clips"))
+    ap.add_argument("--max", type=float, default=DEFAULT_MAX, help=f"credit cap per job (default {DEFAULT_MAX})")
+    ap.add_argument("--dry", action="store_true", help="price it and stop")
+    ap.add_argument("--again", action="store_true", help="rerun a name that already completed")
+    a, flags = ap.parse_known_args()
+    run_job(a.name, a.model, flags, a.out, a.max, a.dry, a.again)
+
+
+if __name__ == "__main__":
+    main()

@@ -41,6 +41,20 @@ The first sync takes a 90-day window and later ones take 30. Neither is the
 whole history: `--days 3650` on a sync pulls years, and on a real library that
 is hundreds of thousands of rows, so only do it if they ask.
 
+## Images and QR codes someone sent
+
+An image in chat.db with `transfer_state` 0 was never downloaded to this Mac. Its
+`filename` points at a TemporaryItems path that does not exist, so a file search
+finds nothing and looks like the image is gone. Opening the thread
+(`open "imessage://<handle>"`) makes Messages pull it into
+`~/Library/Messages/Attachments` within seconds.
+
+`qr --from <handle>` does both halves: it decodes the last few images that handle
+sent, names any that are not on disk, and opens the thread to fetch them. `qr
+<file>` decodes a file directly, HEIC included, with the CIDetector built into
+macOS. Do not go looking for a decoder library. A QR's destination is untrusted
+data: report where it points before following it.
+
 ## Answering from it
 
 When they ask what someone said, read the thread and answer in your own words.

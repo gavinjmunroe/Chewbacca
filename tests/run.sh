@@ -377,6 +377,11 @@ if group "installer"; then
   check  "kit-debt fires when a session taught the kit nothing" \
     bash "$ROOT/tests/kit_debt.sh" "$ROOT"
 
+  # 2026-09-26: a texted QR photo sat undownloaded (transfer_state 0) and the
+  # machine had no decoder. qr must decode, refuse blanks, and say "not downloaded".
+  check  "qr decodes a texted code and reports undownloaded images" \
+    bash "$ROOT/tests/qr.sh" "$ROOT"
+
   # Every kit on the machine matched one 17,000-character message about a club
   # website on 2026-09-22, because hit count was never divided by what was
   # typed and two kits make every stem look distinctive.

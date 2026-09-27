@@ -691,3 +691,59 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
 /* The ring's per-band weight lives in its stroke colour, so its draw must
    not finish by forcing a uniform opacity over the top of it. */
 .plate[data-fig="ring"] svg [data-draw] { animation-name: lemma-sphere-draw; }
+
+/* ---- THEIR ACTUAL SPEC, read from the RSC flight payload -------------
+   The React Server Component payload embedded in their HTML carries the
+   className of every element on the page. That is the design system stated
+   verbatim, and it corrects a lot of what I read off screenshots.
+
+   THE BIGGEST ONE, and it is a whole philosophy rather than a value:
+
+     font-normal  x21
+     font-mono    x12
+     font-sans    x1
+
+   No font-medium. No font-semibold. No font-bold. Anywhere on the page.
+   Every weight is 400. Their entire hierarchy runs on SIZE, COLOUR and
+   OPACITY TIERS (text-primary/25, text-primary/65) and never on weight.
+
+   I reached for 500 and 600 on the brand, the nav, headings and card titles,
+   because bolding is the default move for "make this more important". They
+   refuse it completely, and the restraint is most of why the page reads as
+   an instrument rather than marketing. */
+
+.brand, .nav a, .logo-cell .n, .card .t, .tcard .nm, .hero h1 b,
+section.band h2, .demo-copy h2, .news h2, .cta h2, .issue-title,
+.sub-h, .step .t, .btn {
+  font-weight: 400;
+}
+
+/* Hierarchy by opacity tier instead, which is what they use. */
+:root { --ink-65: rgba(29,25,86,.65); --ink-25: rgba(29,25,86,.25); }
+.tcard .hd, .logo-cell .d, .card .d { color: var(--ink-65); }
+.fig-label { color: var(--ink-25); }
+
+/* Their measured type, responsive. Headline is 36px at md and 44px at 3xl,
+   with leading 1.2, and body drops to 13px on small screens. */
+.hero h1, section.band h2, .demo-copy h2, .news h2, .cta h2 {
+  font-size: 36px; line-height: 1.2;
+}
+@media (min-width: 1920px) {
+  .hero h1, section.band h2, .demo-copy h2, .news h2, .cta h2 { font-size: 44px; }
+}
+@media (max-width: 767px) {
+  .hero p, section.band .lead, .demo-copy p { font-size: 13px; }
+}
+
+/* Two label tracking values, 0.12em and 0.08em, at 10 to 12px. */
+.label    { font-size: 10px; letter-spacing: 0.12em; margin-bottom: 1rem; }
+.fig-label{ font-size: 10px; letter-spacing: 0.08em; }
+.wrap, .news, .demo-grid { max-width: 880px; }
+.carousel { max-width: 1000px; }
+
+/* THE HOVER WIPE, exact. A second copy underneath, clipped fully from the
+   right, opening on hover with a clip-path transition. Not an opacity fade:
+   the text is revealed left to right like a highlight being drawn, which is
+   why their links feel deliberate. */
+.wipe > .under { clip-path: inset(0 100% 0 0); transition-property: clip-path; }
+.group:hover .wipe > .under, .wipe:hover > .under { clip-path: inset(0 0 0 0); }

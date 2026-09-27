@@ -97,7 +97,10 @@ function scene1(host) {
   const cells = [];
   const CW = 132, CH = 74, GX = 14, GY = 16;
   const originX = (1200 - (COLS * CW + (COLS - 1) * GX)) / 2;
-  const originY = 96;
+  /* 150 rather than 96: the caption band above needs about 100 viewBox units
+     at the viewport heights this is read at, and 96 put the first row inside
+     it. 150 + 6 rows at 90 = 690, which still clears the 700 unit box. */
+  const originY = 150;
   for (let i = 0; i < CELLS; i++) {
     const r = Math.floor(i / COLS), c = i % COLS;
     /* Staggered rows: odd rows offset, as the reference shows. */
@@ -155,7 +158,21 @@ function scene1(host) {
 
   /* Headlines, as HTML over the SVG so the type matches the rest of the page. */
   const cap = document.createElement("div");
-  cap.style.cssText = "position:absolute;left:0;right:0;top:6%;text-align:center;" +
+  /* THE CAPTION OWNS A BAND AND THE GRID STARTS BELOW IT.
+
+     The headline was printing straight through the first two rows of traces.
+     The caption sits absolutely over the SVG at a percentage of the pinned
+     stage while the grid is positioned in viewBox units, so the two were
+     laid out in different coordinate systems and nothing connected them. At
+     900px tall the caption's text ended around y=134 and the grid began at
+     y=123, so they were guaranteed to collide at exactly the viewport height
+     this is usually read at.
+
+     Two systems addressing the same space with no shared constraint is the
+     same failure as a percentage-positioned plate next to a pixel-positioned
+     one: it works at the width you happened to test. The band below is
+     reserved in BOTH systems and the grid's origin is derived from it. */
+  cap.style.cssText = "position:absolute;left:0;right:0;top:2%;text-align:center;" +
     "padding:0 16px;pointer-events:none";
   /* The two headlines share ONE relative box below the label, so the
      incoming one cannot land on top of the eyebrow. Previously s1b was
@@ -170,7 +187,7 @@ function scene1(host) {
            letter-spacing:-0.02em;line-height:1.2">Your agents fail silently.</h2>
        <h2 id="s1b" style="font-size:36px;font-weight:400;margin:0;
            letter-spacing:-0.02em;line-height:1.2;opacity:0;position:absolute;
-           left:0;right:0;top:0">With Lemma, you don't.</h2>
+           left:0;right:0;top:0">With Sift, you see it.</h2>
      </div>`;
   host.style.position = "relative";
   host.appendChild(cap);
@@ -396,6 +413,53 @@ function metricsPanel() {
       Recurred 2m ago &mdash; 2 traces flagged &middot; team notified</div></div>`;
 }
 
+
+/* TEXT TRAVELS, IT DOES NOT SWITCH.
+
+   Caleb: "In 1 section text is supposed to scroll bottom to top while the box
+   on the right animates but instead the text is basically just switching."
+
+   Exactly right. This was three `textContent =` assignments, so the panels on
+   the right crossfaded while the copy beside them cut between states. A cut
+   next to a dissolve reads as a bug even when neither is wrong alone.
+
+   The reference ships the mechanism as two clip-path keyframes:
+
+       maskHideUp      inset(0 0 0)     -> inset(0 0 100%)   opacity 1 -> 0
+       maskRevealDown  inset(100% 0 0)  -> inset(0 0 0)      opacity 0 -> 1
+
+   Outgoing line wipes upward, incoming line is uncovered from its baseline
+   up. Nothing translates, so there is no reflow and nothing can overlap the
+   line below it, which is what a translateY swap does at small line heights.
+
+   The three lines are offset 0, 60 and 120ms. That is a stagger rather than a
+   chain, and it is correct here: these are siblings arriving together, not
+   stages where one has to finish before the next can start. Chaining them
+   would take 0.9s to change a label. */
+const SWAP_MS = 260;
+
+function swapText(el, next, delay) {
+  if (el.textContent === next) return;
+  // A scroll-driven swap can fire many times a second while someone flicks.
+  // Without this the element accumulates animations and lands mid-wipe.
+  if (el._swap) { clearTimeout(el._swap); }
+  el._swap = setTimeout(() => {
+    if (REDUCED) { el.textContent = next; return; }
+    el.animate(
+      [{ clipPath: "inset(0 0 0 0)", opacity: 1 },
+       { clipPath: "inset(0 0 100% 0)", opacity: 0 }],
+      { duration: SWAP_MS, easing: "cubic-bezier(.33,1,.68,1)", fill: "forwards" }
+    ).onfinish = () => {
+      el.textContent = next;
+      el.animate(
+        [{ clipPath: "inset(100% 0 0 0)", opacity: 0 },
+         { clipPath: "inset(0 0 0 0)", opacity: 1 }],
+        { duration: SWAP_MS, easing: "cubic-bezier(.33,1,.68,1)", fill: "forwards" }
+      );
+    };
+  }, delay);
+}
+
 function scene2() {
   const stage = document.getElementById("demoStage");
   const label = document.getElementById("demoLabel");
@@ -425,9 +489,9 @@ function scene2() {
     });
     if (label.dataset.i !== String(i)) {
       label.dataset.i = String(i);
-      label.textContent = DEMO[i].label;
-      title.textContent = DEMO[i].title;
-      body.textContent  = DEMO[i].body;
+      swapText(label, DEMO[i].label, 0);
+      swapText(title, DEMO[i].title, 60);
+      swapText(body,  DEMO[i].body,  120);
     }
   };
 }

@@ -20,14 +20,30 @@ has been wrong every time: hours of work somewhere else, nothing here.
 """
 import argparse, json, os, pathlib, subprocess, sys, time
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+# The kit checkout, NOT this script's parent. Installed at ~/.local/bin/kit-debt,
+# parent.parent was ~/.local, whose git toplevel is $HOME, so `git log` ran in the
+# home repo and returned nothing. kit_commits() was therefore always empty and this
+# tool reported OWED on every session no matter what the kit shipped. A gate that
+# can never be satisfied gets ignored, which is how it went unnoticed since 9/20.
+def _kit_root():
+    here = pathlib.Path(__file__).resolve()
+    for c in [here.parent.parent, *(pathlib.Path.home() / "Desktop/2026-Code/projects" / n
+                                    for n in ("chewbacca", "Chewbacca"))]:
+        if (c / ".git").exists() and (c / "bin" / "kit-debt").exists():
+            return c
+    return here.parent.parent
+
+ROOT = _kit_root()
 
 def git(args, cwd=ROOT):
     r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
     return r.stdout.strip() if r.returncode == 0 else ""
 
 def kit_commits(hours):
-    out = git(["log", f"--since={hours} hours ago", "--format=%h %s"])
+    # --all, not HEAD. Work often lands on main from a worktree while the main
+    # checkout sits on a feature branch, and HEAD-only counting scored that as
+    # zero on 2026-09-26 for a commit that was already pushed to main.
+    out = git(["log", "--all", f"--since={hours} hours ago", "--format=%h %s"])
     return [l for l in out.splitlines() if l.strip()]
 
 def work_dirs(hours):

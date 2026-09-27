@@ -1,3 +1,47 @@
+<!-- PLAN-GATES
+# Machine readable, and the only part of this file a hook reads.
+#
+# Each phase names the artifacts that must EXIST before the phase counts as
+# done, and the path prefixes that may be edited while it is the active phase.
+# plan-guard.sh walks these in order, finds the first whose `requires` are not
+# all present, and refuses a write outside that phase's `allows`.
+#
+# This exists because two plans in a row opened with a measurement phase and
+# both times the measurement was skipped and the building started anyway.
+#
+# phase  <n>  <name>
+# requires    <space separated paths that must exist>
+# allows      <space separated path prefixes writable during this phase>
+
+phase 0 The delta ledger
+requires docs/SECTIONS.md docs/DELTAS.md
+allows docs/ tools/ tests/ PLAN.md README.md .gitignore
+
+phase 1 Structure
+requires docs/STRUCTURE-DONE
+allows docs/ tools/ tests/ index.html src/app.js src/styles.css PLAN.md
+
+phase 2 Global tokens
+requires docs/TOKENS-DONE
+allows docs/ tools/ tests/ src/styles.css PLAN.md
+
+phase 3 Per-section geometry
+requires docs/GEOMETRY-DONE
+allows docs/ tools/ tests/ src/ index.html PLAN.md
+
+phase 4 The content gap
+requires docs/MOCKUPS-DONE
+allows docs/ tools/ tests/ src/ index.html PLAN.md
+
+phase 5 Motion
+requires docs/MOTION-DONE
+allows docs/ tools/ tests/ src/ index.html PLAN.md
+
+phase 6 States and breakpoints
+requires docs/STATES-DONE
+allows docs/ tools/ tests/ src/ index.html PLAN.md
+-->
+
 # Getting to 1:1
 
 Rewritten 2026-09-27, after a day that produced two sections out of twelve.

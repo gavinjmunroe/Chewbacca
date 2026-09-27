@@ -209,3 +209,42 @@ rates near a scroll jump are not**, because Lenis has not converged inside a
 - "LEM 1.1 is 714 paths." It holds 48. The 714 was a page-wide total
   attributed to one plate.
 - "The `cx` transition is dead CSS." It fires on click after the entrance.
+
+---
+
+## The counter is an odometer, from chunk `768`
+
+The headline "sift through 526,565 traces" animates its number, and the blur in
+a mid-count screenshot is not a transition artifact. It is built in.
+
+- one reel per digit, six for a six-digit number
+- each reel is a column of **11 cells**, `(start + i) % 10`, so it always has a
+  wrap cell to land on and never shows a gap
+- the column translates by `-10em`; `.lemma-reel-window` is `height: 1em`,
+  `overflow: hidden`, `inline-block`, `align-baseline`
+- each reel takes its own `start`, `duration`, `delay` and `blur`, and owns a
+  private SVG filter `lemma-reel-blur-<idx>`. Six filters were observed across
+  83 captured states, which is why per-digit blur reads as motion rather than
+  as a single blurred number
+
+Independent digit timings are what make it read as a mechanical counter instead
+of a number fading in. A single element counting up cannot produce it.
+
+## The headline wipe
+
+`clip-path: inset(0 0 0 X%)` entering and `inset(0 X% 0 0)` leaving, with X
+driven by `1 - (1-t)^3`, a cubic ease-out. Horizontal, not a fade.
+
+The headline sits at `top: calc(var(--chrome-h, 3.5rem) + 60px)` with
+`transition-[top] duration-300 ease-out`, gated by `motion-reduce`. Type is
+`text-[32px]` at `md`, `text-[40px]` at `3xl`, `leading-[1.2]`, weight 400.
+
+## TraceShowcaseVisual is the trace waterfall, not the isometric scenes
+
+Chunk `8331` holds span types, tool calls, citations and status descriptions:
+`ai.agent.run`, `ai.generateText`, `ai.toolCall`, `retrieve_context`,
+`vector_search`. It is the waterfall panel with its demo trace.
+
+The isometric scenes live with `IsoGridPreview` and `EdgesToRender` in `768`
+and `2388`. Naming a component from its position on the page rather than from
+its contents was wrong twice.

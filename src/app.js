@@ -141,7 +141,20 @@ function scene1(host) {
     const y = originY + r * (CH + GY);
     for (const w0 of widths) {
       const w = w0 + slack;
-      const home = { x, y };
+      /* HOME IS A CENTRE, because the transform that places it ends in
+         `matrix(..., -w/2, -CH/2)` and therefore draws every brick centred
+         on the point it is given. This stored the brick's TOP-LEFT instead,
+         so each one rendered shifted left by its own half-width: eight
+         overlapping pairs at up to 57px, and the first brick of every row
+         hanging 97px off the left edge of the SVG. Measured at the settled
+         home state across four scroll positions, so it was the layout and
+         not the morph mid-flight.
+
+         Varying widths are what made it look random rather than like an
+         offset: a brick overlaps its left neighbour exactly when it is more
+         than 2*GX wider than it. `iso` below was already a centre, which is
+         the tell. One input, two conventions for what the number means. */
+      const home = { x: x + w / 2, y: y + CH / 2 };
       const u = (x + w / 2 - 600) / 90, v = (r - (ROWS - 1) / 2);
       const iso = { x: 600 + (u - v) * 62, y: 430 + (u + v) * 31 };
       const g = el("g");

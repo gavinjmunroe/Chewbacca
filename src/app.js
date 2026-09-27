@@ -499,20 +499,32 @@ const A = "#755cfe";
    The whole stagger is capped so a 260-element figure still lands inside the
    400ms budget: at 260 x 18ms it would run 4.7s and the page would look
    broken, so the step shrinks as the count grows. */
-function polys(list, sw = 0.55, op = 0.75, dur = 700, baseStep = 18) {
-  const step = Math.min(baseStep, 380 / Math.max(list.length, 1));
+/* Stagger step per figure, exactly as the reference runs it. NOT capped:
+   the reference's sphere staggers across 1,485ms and that slow reveal is the
+   effect. Capping it to fit a 400ms entrance budget compresses a drawing
+   into a flash, and the 400ms rule is about a list of UI elements arriving,
+   not about a hundred-path figure drawing itself. */
+function polys(list, sw = 0.55, op = 0.75, step = 18, extra = "") {
   return list.map((pts, i) =>
     `<polyline points="${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}"
-       pathLength="1" data-draw fill="none" stroke="${A}" stroke-width="${sw}"
-       opacity="${op}" style="animation-duration:${dur}ms;animation-delay:${(i * step).toFixed(0)}ms"/>`).join("");
+       data-draw ${extra} fill="none" stroke="${A}" stroke-width="${sw}"
+       style="animation-delay:${(i * step).toFixed(0)}ms"/>`).join("");
 }
 
 function figure(kind, w, h) {
   const vb = `${-w / 2} ${-h / 2} ${w} ${h}`;
   let inner = "";
   if (kind === "hyper") {
-    inner = polys(hyperboloid({ n: 54, twist: 1.25, w: w * 0.42, h: h * 0.32 }), 0.5, 0.55);
+    const hy = hyperboloid({ n: 60, twist: 1.25, w: w * 0.42, h: h * 0.32 });
+    /* Exactly TWO paths carry the perpetual dash, matching the reference's
+       count. Every line drifting is noise; two is a pulse under the plate. */
+    inner = polys(hy.slice(0, 58), 0.5, 0.6, 20)
+          + polys(hy.slice(58), 0.7, 0.75, 20, "data-orbit");
   } else if (kind === "ring") {
+    /* Wrapped in a <g> because the infinite spin transforms the group, not
+       each band. The selector had no <g> to match, so the one perpetual
+       rotation on the page was written and never ran: the page measured
+       0 infinite animations against the reference's 4. */
     inner = ring({ r: Math.min(w, h) * 0.30, thick: Math.min(w, h) * 0.13, bands: 30 })
       .map((b, i) => `<polyline points="${b.pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}"
         pathLength="1" data-draw-fade fill="none" stroke="${A}" stroke-width="1.1"
@@ -536,7 +548,7 @@ function figure(kind, w, h) {
       : sphere({ lats: 9, longs: 14, seg: 30 });
     const k = Math.min(w, h) * 0.0082;           // 0.82 of the plate's short side
     inner = polys(src.map(l => l.map(([x, y]) => [(x - 50) * k, (y - 50) * k])),
-                  0.5, kind === "sphere" ? 0.7 : 0.55);
+                  0.5, kind === "sphere" ? 1 : 0.6, kind === "sphere" ? 15 : 20);
   } else if (kind === "dots") {
     inner = dotArch({ cols: 32, rows: 26, w: w * 0.78, h: h * 0.72 })
       .map(([x, y, r], i) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}"
@@ -557,6 +569,7 @@ function plates() {
        whole page, not a loop per figure: an ambient layer is a background
        hum, and a hum on every element is noise. */
     if (p.fig === "ring") d.classList.add("spin");
+    d.dataset.fig = p.fig;
     d.innerHTML = figure(p.fig, p.w, p.h) + `<div class="cap">${p.id}</div>`;
     host.appendChild(d);
   }

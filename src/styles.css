@@ -369,6 +369,154 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
   .ctrack { padding: 4px 16px 8px; }
 }
 
+/* ---- LOAD-IN: the EXACT spec, read from getKeyframes() ---------------
+   Caleb: "I don't think you know EXACTLY every in and out of every
+   placement, sizing, transforming, and animation in the lemma site!" He was
+   right. The first pass here was built from a 4-sample summary and got three
+   things wrong. This is the real thing, dumped from the reference's own
+   animation objects.
+
+     x100 path    lemma-sphere-draw      700ms linear  step 15ms  delay 100..1585
+     x60  path    lemma-harmograph-draw  600ms linear  step 20ms  delay   0..1180
+     x48  path    lemma-gravlens-draw    800ms linear  step 18ms  delay   0..846
+     x2   path    loader-orbit          2400ms linear  INFINITE   0 -> -100px
+     x1   circle  lemma-sphere-draw      800ms linear
+     x1   div     lemma-scroll-pulse    2400ms linear  INFINITE   .5 -> 1 -> .5
+     x1   svg     spin                  1000ms linear  INFINITE   rotate(360deg)
+     x1   div     fillProgress          1800ms linear  width 0 -> 100%
+
+   WHAT I HAD WRONG, and each one changes how it reads:
+
+   1. Dashoffset is a flat 100px to 0 with fill:both, not a pathLength="1"
+      normalisation. Every path shares one dash length, so a short tick
+      finishes early and a long curve is still drawing. That UNEVENNESS is
+      the texture; normalising it away makes every stroke land together and
+      the drawing appear all at once.
+
+   2. The stagger runs to 1,585ms. I reported ~295ms because I sampled at
+      t+2000ms and caught only the paths still running, reading a truncated
+      tail as the whole range. I then capped my own stagger at 380ms citing
+      the 400ms ceiling, which is a rule about entrance staggers on a LIST
+      of UI elements, not about a hundred-path drawing revealing itself.
+      Capping it turned a slow reveal into a flash.
+
+   3. Each figure lands on its OWN final opacity: harmonograph 0.6, gravlens
+      0.7, sphere 1.0. A single opacity for all three flattens the depth
+      between the plates. */
+
+@keyframes lemma-sphere-draw   { from { stroke-dashoffset: 100px } to { stroke-dashoffset: 0 } }
+@keyframes lemma-harmograph-draw { from { opacity: 0; stroke-dashoffset: 100px }
+                                   to   { opacity: .6; stroke-dashoffset: 0 } }
+@keyframes lemma-gravlens-draw { from { opacity: 0; stroke-dashoffset: 100px }
+                                 to   { opacity: .7; stroke-dashoffset: 0 } }
+/* Negative-going offset, so the dash travels forever and never lands. */
+@keyframes loader-orbit        { from { stroke-dashoffset: 0 } to { stroke-dashoffset: -100px } }
+@keyframes lemma-scroll-pulse  { 0%,100% { opacity: .5 } 50% { opacity: 1 } }
+@keyframes spin                { from { transform: rotate(0) } to { transform: rotate(360deg) } }
+
+.plate svg [data-draw] {
+  stroke-dasharray: 100; stroke-dashoffset: 100;
+  animation-timing-function: linear; animation-fill-mode: both;
+}
+.plate[data-fig="sphere"] svg [data-draw] { animation-name: lemma-sphere-draw;   animation-duration: 700ms; }
+.plate[data-fig="hyper"]  svg [data-draw],
+.plate[data-fig="mesh"]   svg [data-draw] { animation-name: lemma-harmograph-draw; animation-duration: 600ms; }
+.plate[data-fig="ring"]   svg [data-draw],
+.plate[data-fig="dots"]   svg [data-draw] { animation-name: lemma-gravlens-draw;  animation-duration: 800ms; }
+.plate[data-fig="cube"]   svg [data-draw] { animation-name: lemma-sphere-draw;    animation-duration: 800ms; }
+
+.plate[data-fig="ring"] svg > g { animation: spin 1000ms linear infinite; transform-origin: 50% 50%; }
+.plate[data-fig="hyper"] svg [data-orbit] {
+  stroke-dasharray: 8 4; animation: loader-orbit 2400ms linear infinite;
+}
+
+@keyframes rise { from { transform: translateY(14px); opacity: 0 }
+                  to   { transform: none;             opacity: 1 } }
+.hero h1, .hero p, .hero .hero-cta, .hero .backed {
+  animation: rise 450ms cubic-bezier(0.34, 1.5, 0.64, 1) both;
+}
+.hero .backed { animation-delay: 0ms }   .hero h1 { animation-delay: 60ms }
+.hero p { animation-delay: 140ms }       .hero .hero-cta { animation-delay: 210ms }
+
+@media (prefers-reduced-motion: reduce) {
+  .plate svg [data-draw] { animation: none !important; stroke-dashoffset: 0; opacity: 1 }
+  .plate svg [data-orbit], .plate[data-fig="ring"] svg > g { animation: none !important }
+  .hero h1, .hero p, .hero .hero-cta, .hero .backed { animation: none }
+}
+
+/* ---- testimonials and newsletter, rebuilt after looking -------------
+   These two were built blind, from the text content alone, and came out as
+   generic bordered cards in a three-column grid. The reference does neither
+   thing. Two structural facts, both visible only in a screenshot:
+
+   The cards are WHITE ON GREY with no heavy border, in a horizontal
+   CAROUSEL that fades at both edges. Bordering every card is the reflex
+   that makes a page look like a template; the reference separates by
+   surface and by hairline, almost never by box.
+
+   And the newsletter splits into two columns divided by a VERTICAL
+   HAIRLINE, with the subscribe form on the RIGHT. I had it inverted. */
+
+.carousel { position: relative; margin-top: 28px; }
+.ctrack {
+  display: flex; gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory;
+  padding: 4px 56px 8px; scrollbar-width: none;
+  /* Fade at both edges, so the row reads as continuing rather than stopping.
+     A hard cut at the viewport edge is what makes a carousel look broken. */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+          mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+}
+.ctrack::-webkit-scrollbar { display: none; }
+.tcard {
+  flex: 0 0 340px; scroll-snap-align: center; background: var(--white);
+  border: 1px solid #ececf2; padding: 18px 20px; min-height: 190px;
+  display: flex; flex-direction: column; gap: 10px; margin: 0;
+}
+.tcard .nm { font-size: var(--t-sm); font-weight: 500; }
+.tcard .hd { font-size: var(--t-xs); color: var(--muted); }
+.tcard .q  { font-size: var(--t-sm); line-height: 1.6; }
+.tcard .q a, .tcard .hd a { color: var(--accent); }
+.cbtn {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 2;
+  width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--bg); color: var(--muted); cursor: pointer; font-size: 14px;
+}
+.cbtn:hover { color: var(--ink); border-color: var(--muted); }
+.cbtn.prev { left: 10px; } .cbtn.next { right: 10px; }
+.cdots { display: flex; gap: 7px; justify-content: center; margin-top: 22px; }
+.cdots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line); }
+.cdots i.on { background: var(--accent); }
+
+.news-band { border-top: 1px solid var(--line); background: #efeff1; }
+.news { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.news-left  { padding-right: 56px; }
+.news-right { padding-left: 56px; border-left: 1px solid var(--line); }
+.news h2 { font-size: var(--t-h2); font-weight: 400; letter-spacing: -0.02em;
+           line-height: 1.15; margin: 10px 0 0; }
+.rule { border: 0; border-top: 1px solid var(--line); margin: 26px 0 18px; }
+.issue-meta { font-family: var(--mono); font-size: var(--t-10); color: var(--muted);
+              text-transform: uppercase; letter-spacing: 0.08em; }
+.issue-title { font-size: var(--t-lg); font-weight: 400; margin: 10px 0; }
+.issue-body { font-size: var(--t-md); color: var(--muted); line-height: 1.6; margin: 0 0 14px; }
+.issue-links { display: flex; gap: 20px; font-size: var(--t-sm); }
+.issue-links a { text-decoration: underline; text-underline-offset: 3px; }
+.sub-h { font-size: var(--t-lg); font-weight: 400; margin: 0 0 8px; }
+.sub-p { font-size: var(--t-sm); color: var(--muted); margin: 0 0 16px; line-height: 1.55; }
+/* The button is ATTACHED to the input on the reference. A gap between them
+   is the default flex instinct and it reads as two unrelated controls. */
+.field { gap: 0; max-width: 420px; }
+.field input { border-right: 0; }
+.sub-note { font-size: var(--t-xs); color: var(--muted); margin-top: 10px; }
+
+@media (max-width: 900px) {
+  .news { grid-template-columns: 1fr; }
+  .news-left { padding-right: 0; }
+  .news-right { padding-left: 0; border-left: 0; border-top: 1px solid var(--line);
+                margin-top: 32px; padding-top: 32px; }
+  .tcard { flex-basis: 84vw; }
+  .ctrack { padding: 4px 16px 8px; }
+}
+
 /* ---- LOAD-IN, measured off the reference 2026-09-26 -------------------
    The replica had no load animation at all. The reference runs 214 at
    t+2000ms and the shape of them is specific:

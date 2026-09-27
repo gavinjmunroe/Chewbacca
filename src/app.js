@@ -191,16 +191,37 @@ function scene1(host) {
       /* Width: full card -> square. Height never changes, so the shape reads
          as narrowing rather than scaling. */
       const w = lerp(CW, CH, ease(tNarrow));
-      const rot = lerp(0, 45, ease(tTilt));
-      const sc = lerp(1, 0.46, ease(tScat));
-      const x = lerp(c.home.x, c.iso.x - (CH * 0.46) / 2, ease(tScat));
-      const y = lerp(c.home.y, c.iso.y - (CH * 0.46) / 2, ease(tScat));
+
+      /* PROJECTION, NOT ROTATION. This was rotate(45) on a square, and a
+         square turned 45 degrees has EQUAL diagonals. A square actually
+         lying on this isometric ground plane projects to a rhombus whose
+         horizontal diagonal is twice its vertical one, because the plane's
+         own basis is u -> (62,31) and v -> (-62,31).
+
+         So the tiles were the wrong shape for the plane they were sitting
+         on: a diamond hovering above the grid instead of a tile lying in
+         it. Rotating is not projecting, and using one for the other is why
+         the scene never locked together no matter what else got fixed.
+
+         The matrix below IS the grid. Tile and cell cannot disagree now,
+         because both are generated from the same two basis vectors. */
+      const k = ease(tTilt);                    // 0 flat on screen, 1 on the plane
+      const ux = lerp(1, 62 / CH, k), uy = lerp(0, 31 / CH, k);
+      const vx = lerp(0, -62 / CH, k), vy = lerp(1, 31 / CH, k);
+      /* Inset inside the cell, not filling it. At 0.92 the tiles tiled edge
+         to edge into one continuous sheet and the lattice under them became
+         invisible. The reference keeps a clear gap so each tile reads as a
+         separate object resting on a visible ground. */
+      const sc = lerp(1, 0.6, ease(tScat));
+      const x = lerp(c.home.x, c.iso.x, ease(tScat));
+      const y = lerp(c.home.y, c.iso.y, ease(tScat));
       const lift = tLift * -620;
 
       c.g.setAttribute("transform",
         `translate(${x.toFixed(1)},${(y + lift).toFixed(1)}) ` +
-        `rotate(${rot.toFixed(2)},${(w / 2).toFixed(1)},${CH / 2}) ` +
-        `scale(${sc.toFixed(3)})`);
+        `scale(${sc.toFixed(3)}) ` +
+        `matrix(${ux.toFixed(4)},${uy.toFixed(4)},${vx.toFixed(4)},${vy.toFixed(4)},` +
+        `${(-w / 2).toFixed(1)},${(-CH / 2).toFixed(1)})`);
       c.g.setAttribute("opacity", (a * (1 - tLift * 0.9)).toFixed(3));
       c.rect.setAttribute("width", w.toFixed(1));
       c.fill.setAttribute("width", w.toFixed(1));
@@ -473,10 +494,17 @@ const PLATES = [
 ];
 
 const A = "#755cfe";
-function polys(list, sw = 0.55, op = 0.75) {
-  return list.map(pts =>
+/* Draw-on, per the reference: 600-800ms LINEAR with a 15-20ms stagger, and
+   pathLength="1" so every stroke finishes together whatever its real length.
+   The whole stagger is capped so a 260-element figure still lands inside the
+   400ms budget: at 260 x 18ms it would run 4.7s and the page would look
+   broken, so the step shrinks as the count grows. */
+function polys(list, sw = 0.55, op = 0.75, dur = 700, baseStep = 18) {
+  const step = Math.min(baseStep, 380 / Math.max(list.length, 1));
+  return list.map((pts, i) =>
     `<polyline points="${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}"
-       fill="none" stroke="${A}" stroke-width="${sw}" opacity="${op}"/>`).join("");
+       pathLength="1" data-draw fill="none" stroke="${A}" stroke-width="${sw}"
+       opacity="${op}" style="animation-duration:${dur}ms;animation-delay:${(i * step).toFixed(0)}ms"/>`).join("");
 }
 
 function figure(kind, w, h) {
@@ -486,8 +514,9 @@ function figure(kind, w, h) {
     inner = polys(hyperboloid({ n: 54, twist: 1.25, w: w * 0.42, h: h * 0.32 }), 0.5, 0.55);
   } else if (kind === "ring") {
     inner = ring({ r: Math.min(w, h) * 0.30, thick: Math.min(w, h) * 0.13, bands: 30 })
-      .map(b => `<polyline points="${b.pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}"
-        fill="none" stroke="${A}" stroke-width="1.1" opacity="${b.o.toFixed(2)}"/>`).join("");
+      .map((b, i) => `<polyline points="${b.pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")}"
+        pathLength="1" data-draw-fade fill="none" stroke="${A}" stroke-width="1.1"
+        style="animation-duration:600ms;animation-delay:${i * 18}ms;opacity:${b.o.toFixed(2)}"/>`).join("");
   } else if (kind === "cube") {
     const c = isoCube({ s: Math.min(w, h) * 0.24 });
     const P = pts => pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
@@ -510,7 +539,8 @@ function figure(kind, w, h) {
                   0.5, kind === "sphere" ? 0.7 : 0.55);
   } else if (kind === "dots") {
     inner = dotArch({ cols: 32, rows: 26, w: w * 0.78, h: h * 0.72 })
-      .map(([x, y, r]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}" fill="${A}" opacity="0.8"/>`).join("");
+      .map(([x, y, r], i) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r.toFixed(2)}"
+        fill="${A}" data-draw-fade style="animation-duration:800ms;animation-delay:${(i % 40) * 9}ms;opacity:.8"/>`).join("");
   }
   return `<svg viewBox="${vb}" preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
 }
@@ -522,6 +552,11 @@ function plates() {
     const d = document.createElement("div");
     d.className = "plate";
     d.style.cssText = `left:${p.left};top:${p.top}px;width:${p.w}px;height:${p.h}px`;
+    /* Exactly ONE plate rotates forever and ONE drifts forever. The
+       reference runs 1 infinite transform and 2 infinite dashes across the
+       whole page, not a loop per figure: an ambient layer is a background
+       hum, and a hum on every element is noise. */
+    if (p.fig === "ring") d.classList.add("spin");
     d.innerHTML = figure(p.fig, p.w, p.h) + `<div class="cap">${p.id}</div>`;
     host.appendChild(d);
   }

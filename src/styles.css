@@ -368,3 +368,81 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
   .tcard { flex-basis: 84vw; }
   .ctrack { padding: 4px 16px 8px; }
 }
+
+/* ---- LOAD-IN, measured off the reference 2026-09-26 -------------------
+   The replica had no load animation at all. The reference runs 214 at
+   t+2000ms and the shape of them is specific:
+
+     x100 paths  strokeDashoffset          700ms linear, stagger ~15ms
+     x60  paths  opacity+strokeDashoffset  600ms linear, stagger ~20ms
+     x48  paths  opacity+strokeDashoffset  800ms linear, stagger ~18ms
+     x2   paths  strokeDashoffset         2400ms linear, INFINITE
+     x1   svg    transform                1000ms linear, INFINITE
+     x1   div    opacity                  2400ms linear, INFINITE
+
+   Two things matter more than the numbers.
+
+   LINEAR, always, on every draw. An eased draw-on reads as mushy because
+   the pen appears to slow down for no physical reason: a real pen moves at
+   a constant rate. Every one of the 208 one-shot draws here is linear.
+
+   AND FOUR THINGS NEVER STOP. At t+120ms the ONLY animations running are
+   the infinite ones; the draws fire later, when their section mounts. That
+   ambient layer under the page is what makes it feel alive when nothing is
+   being scrolled, and it is what a static rebuild always misses. */
+
+@keyframes draw-on { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes draw-fade { from { stroke-dashoffset: 1; opacity: 0; } to { stroke-dashoffset: 0; opacity: 1; } }
+/* The ambient loop: a dash that never lands, so the line is always in
+   motion without ever arriving anywhere. 2400ms linear, exactly as measured. */
+@keyframes drift { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 2; } }
+@keyframes slow-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes breathe { 0%,100% { opacity: .35 } 50% { opacity: .85 } }
+
+/* pathLength="1" normalises every path to the same length, so a 12px tick
+   and a 900px curve finish together instead of the long one lagging. */
+.plate svg [data-draw] {
+  stroke-dasharray: 1; stroke-dashoffset: 1;
+  animation: draw-on 700ms linear forwards;
+}
+.plate svg [data-draw-fade] {
+  stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0;
+  animation: draw-fade 600ms linear forwards;
+}
+.plate svg [data-drift] {
+  stroke-dasharray: .06 .03;
+  animation: drift 2400ms linear infinite;
+}
+.plate.spin svg > g { animation: slow-spin 1000ms linear infinite;
+                      transform-origin: 50% 50%; }
+
+/* The hero type arrives on an overshoot spring, 450ms, which is the one
+   place the reference is NOT linear: cubic-bezier(0.34, 1.5, 0.64, 1). */
+@keyframes rise { from { transform: translateY(14px); opacity: 0 }
+                  to   { transform: none;             opacity: 1 } }
+.hero h1, .hero p, .hero .hero-cta, .hero .backed {
+  animation: rise 450ms cubic-bezier(0.34, 1.5, 0.64, 1) both;
+}
+.hero .backed   { animation-delay: 0ms;   }
+.hero h1        { animation-delay: 60ms;  }
+.hero p         { animation-delay: 140ms; }
+.hero .hero-cta { animation-delay: 210ms; }
+/* Whole stagger spans 210ms, inside the 400ms total ceiling. */
+
+@media (prefers-reduced-motion: reduce) {
+  .plate svg [data-draw], .plate svg [data-draw-fade] {
+    animation: none; stroke-dashoffset: 0; opacity: 1;
+  }
+  .plate svg [data-drift], .plate.spin svg > g { animation: none; }
+  .hero h1, .hero p, .hero .hero-cta, .hero .backed { animation: none; }
+}
+
+/* ---- dead space ------------------------------------------------------
+   The hero reserved min-height 760 plus 150px of bottom padding while its
+   tallest plate ends near 620, so several hundred pixels of nothing sat
+   between the figures and the logo strip. ux-eye had already flagged the
+   band as EMPTY (ink 0.025) and I read past it. Height comes from the
+   plates now, not from a number I picked. */
+.hero { min-height: 680px; padding: 84px 0 24px; }
+.trusted { padding-top: 8px; }
+@media (max-width: 900px) { .hero { min-height: 0; padding: 48px 0 24px; } }

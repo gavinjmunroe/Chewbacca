@@ -7,3 +7,9 @@
 # film mode, added 2026-09-23. One row per animation frame, so a single
 # 17k-pixel page is 3.3MB. Regenerable with `ux-crawl <url> --states film`.
 */film.json
+# ux-scan output, added 2026-09-26. 100% coverage of every element at every
+# 24px, delta-encoded: 708 positions x 25,127 elements on a 17.8k-pixel page
+# is 46MB, against a 5.4MB repo. Regenerable with
+# `ux-scan <url> --out lenses/<name>`, and reproducible because the capture
+# is deterministic at a fixed viewport and step.
+*/scan.json

@@ -87,6 +87,24 @@ DOM_JS = """() => {
     if (st.visibility === "hidden" || st.opacity === "0" ||
         st.display === "none") continue;
     const box = {
+      /* A fixed or sticky element is SUPPOSED to sit over the content
+         scrolling beneath it. Counting that as a collision made the gate
+         refuse every page with a fixed header, including the reference it
+         was built to compare against, at 81% overlap. A gate that fires on
+         correct layout is worse than no gate, because it trains everyone to
+         ignore the real findings next to it. Recorded so the pair check can
+         skip these rather than pretending they do not exist. */
+      /* Checking the element's OWN position was not enough: the nav links
+         inside a fixed header are themselves position:static, so they still
+         registered as colliding with every input and paragraph that scrolled
+         beneath the bar. Overlay-ness is inherited from the nearest
+         positioned ancestor, so the walk has to go up. */
+      over: (() => { let n = el;
+        while (n && n !== document.body) {
+          const q = getComputedStyle(n).position;
+          if (q === "fixed" || q === "sticky") return 1;
+          n = n.parentElement;
+        } return 0; })(),
       x: r.left, y: r.top, w: r.width, h: r.height,
       tag: el.tagName.toLowerCase(),
       cls: (el.getAttribute("class") || "").slice(0, 30),
@@ -153,6 +171,10 @@ def overlaps(painted):
             aa, ab = a["w"] * a["h"], b["w"] * b["h"]
             # Containment is nesting, which is normal and not a collision.
             if inter > 0.92 * min(aa, ab):
+                continue
+            # One of the pair is an overlay. Overlapping what scrolls under
+            # it is the whole job of a fixed header or a sticky rail.
+            if a.get("over") or b.get("over"):
                 continue
             share = inter / min(aa, ab)
             if share > 0.12:

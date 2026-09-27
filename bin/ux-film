@@ -95,15 +95,43 @@ def classify(ys, vals):
     return "CONSTANT", r
 
 
+def anims_at_load(frame):
+    """Animations running in the first frame, across both capture schemas.
+
+    ux-crawl used to write a bare integer `anims`. On 2026-09-23 that was
+    replaced with `a`, a digest carrying per-animation names, durations,
+    easings and keyframe properties, because a count cannot describe a
+    draw-on. Nothing was updated to read it and nothing tested the pair, so
+    this tool raised KeyError on every lens for three days while the work it
+    does was done by hand instead.
+
+    Reading both shapes is the cheap half of the fix. The gate that stops it
+    recurring is tests/test_film_contract.py, which runs the real producer
+    into the real consumer.
+    """
+    a = frame.get("a")
+    if isinstance(a, dict):
+        return a.get("total", 0)
+    if isinstance(a, int):
+        return a
+    return frame.get("anims", 0)
+
+
 def report(path):
-    data = json.loads(pathlib.Path(path).read_text())
+    # Accept a lens DIRECTORY, like every other tool in this repo. Only this
+    # one demanded the film.json path, so the obvious invocation crashed with
+    # IsADirectoryError and looked like the lens was corrupt.
+    src = pathlib.Path(path)
+    if src.is_dir():
+        src = src / "film.json"
+    data = json.loads(src.read_text())
     frames = data["frames"]
     tracked = {t["id"]: t for t in data["tracked"]}
     ys = [f["y"] for f in frames]
 
     print(f"\n{path}")
     print(f"  {len(frames)} frames, {ys[-1]}px travelled, "
-          f"{frames[0]['anims']} animations at load")
+          f"{anims_at_load(frames[0])} animations at load")
 
     # The density rhythm. This is composition, not motion, and it is the thing
     # a uniformly dense page never has.

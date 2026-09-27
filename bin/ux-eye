@@ -136,23 +136,43 @@ def luminance(img):
 
 
 def bg_purity(lum, box, vw, vh):
-    """Fraction of pixels in a text box belonging to one luminance mode.
+    """How much of a text box belongs to its own two natural modes.
 
-    Clean type on a flat ground: the ground is one tight mode holding most of
-    the box, with the strokes a small dark minority. Type over artwork: the
-    ground is not one mode, so no single bin dominates.
+    THIS MEASURED THE WRONG THING AT FIRST and the calibration test caught it
+    on a page with nothing wrong: ordinary body copy under a fixed header
+    scored 0.533 and was reported unreadable.
+
+    The reason is that clean type on a flat ground is BIMODAL, not unimodal.
+    One mode is the ground, the other is the letter strokes. Scoring only the
+    single largest mode therefore punishes any box where the strokes take a
+    fair share of the pixels, which is every short label and every heading:
+    "Docs" in a 32px box is mostly ink by area and perfectly legible.
+
+    Type sitting on top of artwork is the case worth catching, and it is
+    genuinely multi-modal: the ground behind it is not one value, so no two
+    clusters can account for the box. Summing the top TWO clusters separates
+    the two cases and stops punishing large type for being large.
     """
     x0 = max(0, int(box["x"])); y0 = max(0, int(box["y"]))
     x1 = min(vw, int(box["x"] + box["w"])); y1 = min(vh, int(box["y"] + box["h"]))
     if x1 - x0 < 8 or y1 - y0 < 6:
         return None
     crop = lum[y0:y1, x0:x1]
-    hist, edges = np.histogram(crop, bins=32, range=(0, 255))
-    top = int(np.argmax(hist))
-    # The mode plus its immediate neighbours, since antialiasing smears the
-    # ground across adjacent bins and would otherwise read as impurity.
-    lo, hi = max(0, top - 1), min(len(hist), top + 2)
-    return float(hist[lo:hi].sum() / max(crop.size, 1))
+    hist, _ = np.histogram(crop, bins=32, range=(0, 255))
+    total = max(crop.size, 1)
+
+    def take(h, i):
+        """One cluster: a peak plus its immediate neighbours, since
+        antialiasing smears every edge across adjacent bins."""
+        lo, hi = max(0, i - 1), min(len(h), i + 2)
+        got = int(h[lo:hi].sum())
+        h[lo:hi] = 0
+        return got
+
+    h = hist.copy().astype(int)
+    first = take(h, int(np.argmax(h)))
+    second = take(h, int(np.argmax(h))) if h.max() > 0 else 0
+    return float((first + second) / total)
 
 
 def overlaps(painted):

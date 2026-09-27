@@ -14,6 +14,10 @@ check() {
 }
 
 echo "ux-engine tests"
+check "motion derivatives respect observed support" python3 "$ROOT/tests/test_modes.py"
+check "design gate requires a fresh capture" python3 "$ROOT/tests/test_design_gate.py"
+check "design gate requires a fresh capture" python3 "$ROOT/tests/test_gate_calibration.py"
+check "comparison rejects unmatched captures" python3 "$ROOT/tests/test_compare.py"
 
 # The index must regenerate deterministically from the vendored corpus.
 check "extractor runs"            python3 "$ROOT/tools/extract.py"

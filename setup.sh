@@ -1362,6 +1362,24 @@ h["Stop"] = [{"hooks": [{
     "timeout": 15,
     "statusMessage": "Checking the reply against the writing rules...",
 }]}, {"hooks": [{
+    # 39 hooks were registered on 2026-09-27 and not one of them looked at a
+    # rendered image. slop-guard blocked a reply that night over a single em
+    # dash while a page shipped across four commits with a collapsed figure,
+    # six over-dense plates and no scroll motion at all. The kit could
+    # describe a good page in four documents and could not see one.
+    #
+    # design-gate was written in ux-engine on 2026-09-23 to close exactly this
+    # hole. It exits 2 and it was registered nowhere, so it had never fired.
+    # Per feedback_built_but_never_fires: the bug is wiring, not capability.
+    #
+    # It renders only when the turn edited a rendered file AND a URL for that
+    # project is available, so a shell session pays nothing. When it cannot
+    # see, it reports blind rather than green.
+    "type": "command",
+    "command": hooks_dir + "/design-gate.sh",
+    "timeout": 120,
+    "statusMessage": "Looking at the page that was just edited...",
+}]}, {"hooks": [{
     # SendMessage returning success means a message was accepted, not that an
     # agent is alive. On 2026-09-23 a resume of a subagent from a dead session
     # returned {"success": true}, nothing started, and the reply went out

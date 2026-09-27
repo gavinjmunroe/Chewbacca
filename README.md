@@ -69,7 +69,43 @@ each section is.
 
 ## Running it
 
-Open `index.html`. No build step, on purpose: the study is the mechanisms, and
+Run `python3 -m http.server 4310`, then open http://localhost:4310. No build step: the study is the mechanisms, and
 a toolchain between an edit and seeing it is friction against learning.
 
 All glory to God! ✝️❤️
+
+
+## Reconstruction pass, 2026-09-23
+
+The original geometry generators remain. Plate positions now use viewport-sized
+coordinates; a text-sized containing block had moved the whole composition.
+The same 42 trace cells persist from the labeled grid into an isometric field.
+`tools/build-motion.py` calls the existing `ux-morph.correspond` solver to produce
+`src/morph.json`. Total point travel is 12,004.45 versus 19,106.97 under index
+pairing (37.2% shorter). The solver minimizes squared travel; the reported sum
+is Euclidean travel. Orientation is meaningful here, so no Procrustes rotation
+is applied. These are transport measurements, not taste scores.
+The cell matrix and center spacing use the same isometric basis; projected
+cell axes have equal length and meet at 120 degrees. Browser checks verify
+that invariant on all 42 actual SVG transforms.
+
+Text scenes use exclusive visibility. A partition of unity constrained total
+opacity but still allowed two headlines to occupy the same pixels. Fading both
+to zero instead produced an empty seam. Neither was a collision guarantee.
+
+Remaining fidelity gaps: these are still original study copy and geometry,
+not the full Lemma product page. The scene changes are discrete; the point
+morph is continuous. The second pinned product narrative is not yet reconstructed.
+
+
+The lens and harmonograph now animate their existing geometry equations at up
+to 24 updates per second. Time drives their cycle; scroll modulates its amplitude.
+The animation loop pauses when the hero is off-screen or the document is hidden,
+and is not started with reduced motion. All six figures remain in the narrow
+layout. The browser regression includes the actual 862×734 preview size.
+
+The final rendered gate still refuses this study: it reports header overlaps
+and a sparse isometric interval as dead space. A fresh isolated capture showed
+a complete header where the multi-shot capture cropped it. The discrepancy is
+unresolved; the gate is not reported as passing. Browser structure checks are
+not a substitute for resolving that rendered discrepancy.

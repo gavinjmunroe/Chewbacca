@@ -122,18 +122,9 @@ function mountPlates() {
       fig.style.width = `${s.w}vw`;
       fig.style.zIndex = s.z;
       fig.style.rotate = `${s.rot}deg`;
-      // Parallax rate comes FROM the plate's apparent depth, so the motion
-      // agrees with the occlusion the eye already read. A near plate (large,
-      // high z) travels further than a far one. Picking rates by hand is what
-      // makes parallax read as a gimmick: the rates disagree with the depth
-      // cues and the brain notices before you do.
-      //
-      // Range is 2px to 14px across the whole run. Val Head's variable is
-      // virtual DISTANCE, not duration, and 16 to 32px is a reveal while
-      // 400px is a ride. This stays under a reveal on purpose, because six
-      // plates moving at once accumulate.
+      // Different measured-depth cues get different scroll displacement.
       const depth = (s.w / 25) * 0.6 + (s.z / 3) * 0.4;   // 0..1, near = 1
-      fig.dataset.par = (2 + depth * 12).toFixed(1);
+      fig.dataset.par = (90 + depth * 220).toFixed(1);
       host.append(fig);
     }
   }
@@ -201,7 +192,7 @@ function mountField() {
   const host = document.querySelector(".field");
   if (!host) return null;
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", `${VB.x} ${VB.y} ${VB.w} ${VB.h}`);
+  svg.setAttribute("viewBox", `${VB.x} -650 ${VB.w} 1050`);
   svg.setAttribute("role", "img");
   svg.setAttribute("aria-label",
     "A field of animation properties. Four of them carry a behaviour label instead: " +
@@ -219,7 +210,8 @@ function mountField() {
   });
 
   host.append(svg);
-  return { svg, cells: made };
+  document.querySelector(".pin").append(host);
+  return { svg, cells: made, host };
 }
 
 function paintField(field, p) {
@@ -252,7 +244,17 @@ function paintField(field, p) {
       c.texts.push(t);
     };
     if (want === "label") { text("code", 40, c.code); text("word", 82, c.ghost); }
-    if (want === "lit")   { text("tag", 42, c.lit.tag.toUpperCase()); text("said", 86, `"${c.lit.said}"`); }
+    if (want === "lit") {
+      text("tag", 30, c.lit.tag.toUpperCase());
+      const maxChars = Math.floor((c.w - 44) / 12);
+      const lines = [""];
+      for (const word of c.lit.said.split(" ")) {
+        const last = lines.length - 1;
+        if (lines[last] && lines[last].length + word.length + 1 > maxChars) lines.push(word);
+        else lines[last] += (lines[last] ? " " : "") + word;
+      }
+      lines.forEach((line, index) => text("said", 62 + index * 25, line));
+    }
   }
 }
 
@@ -262,7 +264,7 @@ function paintField(field, p) {
    centre means a scene hits full opacity at exactly one scroll position and
    sits at 0.41 everywhere else, so the reader never gets a legible frame.
    ============================================================ */
-function sceneMachine(field) {
+function sceneMachine(field, signal) {
   const run = document.querySelector(".run");
   const scenes = [...document.querySelectorAll(".scene")];
   const n = scenes.length;
@@ -270,68 +272,24 @@ function sceneMachine(field) {
   if (rail) rail.innerHTML = scenes.map(() => "<i></i>").join("");
   const ticks = rail ? [...rail.children] : [];
 
-  if (STILL) { paintField(field, 1); scenes.forEach(revealScene); return; }
-
-  /* A symmetric dissolve CANNOT be exclusive: at the midpoint between two
-   * scenes both sit at the same value by construction, so both render. That
-   * was fine when every scene had the same footprint and catastrophic here,
-   * where one scene is a 42-cell field and the next is a 15rem numeral. The
-   * field drew straight through the headline.
-   *
-   * Their page does not dissolve. Sampling it at scroll 3400 showed the trace
-   * grid NOT MOUNTED: they swap scenes outright. So this is a hard window
-   * with a short ramp at the seam, and anything outside its window leaves the
-   * layout entirely rather than sitting at 0.3 on top of the next thing.
-   *
-   * d runs 0 at this scene's centre to 1 at its neighbour's. */
-  /* PARTITION OF UNITY. Two scenes may be mid-crossfade; their opacities
-   * must SUM TO 1 at every scroll position. This has now been wrong twice in
-   * opposite directions, so the constraint is written down rather than tuned.
-   *
-   * Neighbouring scenes always satisfy d_i + d_next = 1 by construction.
-   *
-   *   V1 centred the ramp on d = 1. A scene a full step away sat at 0.5 and
-   *   drew through its neighbour: sum 1.5.
-   *   V2 "fixed" it with a plateau holding full opacity out to d = 0.76.
-   *   But then d_i = 0.4 and d_next = 0.6 are BOTH inside the plateau, so
-   *   both scenes painted at opacity 1: sum 2.0, over half of every
-   *   transition. That is the hero and the next scene rendered on top of
-   *   each other, which is what shipped.
-   *
-   * Centring the crossfade on d = 0.5 makes the sum identically 1. With a
-   * linear ramp of half-width W:
-   *   a_i + a_next = (0.5+W-d)/(2W) + (0.5+W-(1-d))/(2W) = 2W/2W = 1
-   * The plateau survives: a scene is whole until d = 0.5-W and gone by
-   * d = 0.5+W, and its neighbour is exactly the complement.
-   */
-  const W = 0.15;
-  const presence = (i, p) => {
-    // Centres span END TO END, i/(n-1), not the centre of an equal slice.
-    // With slice centres the first scene sits at 12.5% of the run, so at
-    // scroll zero it is half present, its entrance never fires, and the hero
-    // renders blank. The first scene must be whole before anyone scrolls.
-    const centre = i / (n - 1);
-    const d = Math.abs(p - centre) * (n - 1);
-    if (d <= 0.5 - W) return 1;
-    if (d >= 0.5 + W) return 0;
-    return (0.5 + W - d) / (2 * W);
-  };
-
-  // The invariant, asserted rather than trusted. Both previous versions
-  // looked correct while reading them; only summing them exposes the fault.
-  if (!STILL) {
-    let worst = 0;
-    for (let k = 0; k <= 400; k++) {
-      const p = k / 400;
-      let sum = 0;
-      for (let i = 0; i < n; i++) sum += presence(i, p);
-      worst = Math.max(worst, Math.abs(sum - 1));
-    }
-    if (worst > 0.01) {
-      throw new Error(`scene presence is not a partition of unity: ` +
-                      `worst |sum-1| = ${worst.toFixed(3)}`);
-    }
+  if (STILL) {
+    document.querySelector('[data-scene="1"]').append(field.host);
+    paintField(field, 1);
+    signal?.(1);
+    const stillField = field.host.cloneNode(true);
+    document.querySelector('[data-scene="2"]').append(stillField);
+    signal?.(0);
+    scenes.forEach(revealScene);
+    return;
   }
+
+  // Text scenes occupy exclusive windows. Opacity sums cannot prevent ink overlap.
+  const presence = (i, p) => {
+    const position = p * (n - 1);
+    const active = Math.min(n - 1, Math.floor(position + 0.5));
+    if (i !== active) return 0;
+    return 1;
+  };
 
   const parallaxEls = STILL ? [] : [...document.querySelectorAll("[data-par]")];
 
@@ -346,14 +304,9 @@ function sceneMachine(field) {
     scenes.forEach((s, i) => {
       const a = presence(i, p);
       s.style.opacity = a;
-      // Blur and a small lift are both on Val Head's safe list; the travel
-      // stays inside the 16-32px a reveal is allowed.
       s.style.filter = a > 0.99 ? "none" : `blur(${(1 - a) * 7}px)`;
       s.style.transform = a > 0.99 ? "none" : `translateY(${(1 - a) * 22}px)`;
-      // display:none, not visibility:hidden. A hidden element still occupies
-      // its grid cell and still paints its children's stacking context on
-      // some engines; taking it out of the flow is what actually stops the
-      // field from drawing through the headline.
+      // Inactive scenes leave both the painted and keyboard-accessible tree.
       s.style.display = a <= 0.001 ? "none" : "";
       s.style.pointerEvents = a > 0.5 ? "" : "none";
       s.setAttribute("aria-hidden", a < 0.5);
@@ -362,7 +315,11 @@ function sceneMachine(field) {
     });
 
     // Scene 1 owns the second quarter, so the field reads its LOCAL progress.
-    paintField(field, clamp((p - 1 / n) * n));
+    paintField(field, clamp((p * (n - 1) - 0.55) / 0.65));
+
+    const phase = p * (n - 1);
+    field.host.hidden = phase < 0.5 || phase >= 2.5;
+    signal?.(clamp((phase - 1.25) / 1.1));
 
     // Parallax. transform only, and it rides the same frame as everything
     // else rather than adding a listener.
@@ -428,6 +385,74 @@ function mountContent() {
     `<div><dt>${k}</dt><dd class="was">${was}</dd><dd class="is">${is}</dd></div>`).join("");
 }
 
+async function mountSignal(field) {
+  const response = await fetch("./src/morph.json");
+  if (!response.ok) throw new Error(`Morph data: ${response.status}`);
+  const { configs } = await response.json();
+  return (progress) => {
+    const t = progress * progress * (3 - 2 * progress);
+    field.svg.setAttribute("viewBox", `${VB.x} ${-650 - 50*t} ${VB.w} ${1050 + 350*t}`);
+    field.cells.forEach((cell, i) => {
+      const from = configs[0][i], to = configs[1][i];
+      const x = from[0] + (to[0] - from[0]) * t;
+      const y = from[1] + (to[1] - from[1]) * t;
+      const side = 160 * 0.82;
+      const horizontal = Math.sqrt(3) / 2 * side;
+      const vertical = side / 2;
+      const a = 1 + t * (horizontal / cell.w - 1);
+      const b = t * vertical / cell.w;
+      const c = -t * horizontal / CELL.h;
+      const d = 1 + t * (vertical / CELL.h - 1);
+      cell.g.setAttribute("transform", `translate(${x} ${y}) matrix(${a} ${b} ${c} ${d} 0 0) translate(${-from[0]} ${-from[1]})`);
+      cell.texts.forEach(text => text.style.opacity = clamp(1 - t * 5));
+    });
+  };
+}
+
+function animateGizmos() {
+  if (STILL) return;
+  const hero = document.querySelector(".scene-hero");
+  const lensPaths = [...hero.querySelectorAll(".plate:nth-child(1) path")];
+  const harmonicPath = hero.querySelector(".plate:nth-child(2) path");
+  let visible = false, frame = 0, previous = -Infinity;
+  const paint = (time) => {
+    frame = 0;
+    if (!visible || document.hidden) return;
+    if (time - previous >= 1000 / 24) {
+      previous = time;
+      const seconds = time / 1000;
+      const envelope = clamp(scrollY / (innerHeight * 1.5));
+      const mass = .34 + Math.sin(seconds * Math.PI / 6) * (.04 + .14 * envelope);
+      gravlens({ mass }).forEach((line, i) => lensPaths[i].setAttribute("d", toPath(line)));
+      const phase = Math.sin(seconds * Math.PI / 8) * (.25 + .4 * envelope);
+      harmonicPath.setAttribute("d", toPath(harmonograph({
+        cycles: 24, spc: 32, phase: [phase, Math.PI / 2, 0, Math.PI / 2 - phase],
+      })[0]));
+    }
+    frame = requestAnimationFrame(paint);
+  };
+  const schedule = () => {
+    if (visible && !document.hidden && !frame) frame = requestAnimationFrame(paint);
+    else if ((!visible || document.hidden) && frame) {
+      cancelAnimationFrame(frame);
+      frame = 0;
+    }
+  };
+  new IntersectionObserver(([entry]) => {
+    visible = entry.isIntersecting;
+    schedule();
+  }).observe(hero);
+  document.addEventListener("visibilitychange", schedule);
+  hero.querySelectorAll(".plate:nth-child(-n+2)").forEach(el => {
+    el.dataset.motionDrivers = "time scroll";
+  });
+}
+
 mountContent();
 mountPlates();
-sceneMachine(mountField());
+const field = mountField();
+let signal;
+try { signal = await mountSignal(field); }
+catch (error) { console.error(error); }
+sceneMachine(field, signal);
+animateGizmos();

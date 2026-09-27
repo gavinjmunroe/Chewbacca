@@ -383,6 +383,88 @@ export const CA_GROW_MS = CA_MS_PER_GEN * 50;     // 3500
 export const CA_LOOP_MS = 5100;
 export const caClipHeight = gen => CA_Y0 + CA_PITCH_Y * gen;
 
+
+/* ---------------------------------------------------------------------- */
+/* THE EXTRUDED CUBE. Recovered 2026-09-27 from the reference's bundle,
+   where the component is ExtrudedCubePreview.
+
+   I had called this dead code. It is the richest thing on their page.
+
+   PROJECTION. Orthographic, not isometric and not a 2D rotation. A unit cube
+   at +/-1 is rotated about Y by `spin` degrees, then tilted about X by `tilt`,
+   then scaled by 22 and centred in the 100x100 box every plate shares. There
+   is no perspective divide, which is why the silhouette stays honest at any
+   angle instead of ballooning.
+
+   Earlier I drew this as a rotate(45deg) square and was told, correctly, that
+   a rotated square has EQUAL diagonals while a cube face on this plane has a
+   2:1 ratio. The fix is not a better angle. It is doing the projection.
+
+   TOP FACE. Vertices 3,2,6,7 in the order below form the top quad, and the
+   reference uses it as a clip-path polygon with an animated mesh-gradient
+   shader rendered inside it. That is the part I could never have guessed from
+   looking: the cube's lid is a living gradient, masked to a face that turns. */
+
+const CUBE_VERTS = [
+  [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+  [-1, -1,  1], [1, -1,  1], [1, 1,  1], [-1, 1,  1],
+];
+
+const CUBE_EDGES = [
+  [0, 1], [1, 2], [2, 3], [3, 0],      // back face
+  [4, 5], [5, 6], [6, 7], [7, 4],      // front face
+  [0, 4], [1, 5], [2, 6], [3, 7],      // the four struts
+];
+
+export const CUBE_SCALE = 22;
+export const CUBE_TOP_FACE = [3, 2, 6, 7];
+
+export function extrudedCube({ spin = 35, tilt = 22, cx = 50, cy = 50, s = CUBE_SCALE } = {}) {
+  const ry = spin * Math.PI / 180, rx = tilt * Math.PI / 180;
+  const p = CUBE_VERTS.map(([x, y, z]) => {
+    // Yaw about the vertical axis.
+    const xr =  x * Math.cos(ry) + z * Math.sin(ry);
+    const zr = -x * Math.sin(ry) + z * Math.cos(ry);
+    // Then pitch, and drop the depth term. Screen y grows downward, hence
+    // the subtraction rather than an added term.
+    return { x: cx + s * xr, y: cy - s * (y * Math.cos(rx) - zr * Math.sin(rx)) };
+  });
+  return {
+    verts: p,
+    edges: CUBE_EDGES.map(([a, b]) => ({ x1: p[a].x, y1: p[a].y, x2: p[b].x, y2: p[b].y })),
+    topVerts: CUBE_TOP_FACE.map(i => p[i]),
+  };
+}
+
+/* Their motion, exactly.
+
+   A cubic ease-out carries it through one full turn in 1.2s, and after that
+   it just keeps going at 6 degrees per second forever. The slow constant
+   drift is what makes it read as an object sitting there rather than an
+   animation that has finished.
+
+   The pointer contributes through a lerp at 0.08 per frame, so the cube
+   leans toward the cursor and settles back rather than snapping: +/-45 deg
+   of extra yaw and +/-35 of pitch at the corners of its own box.
+
+   Off screen it PAUSES and banks the elapsed time, so scrolling back finds
+   it where it was rather than at the start of its spin. */
+export const CUBE_SPINUP_S = 1.2;
+export const CUBE_DRIFT_DEG_S = 6;
+export const CUBE_POINTER_LERP = 0.08;
+export const CUBE_POINTER_YAW = 45;
+export const CUBE_POINTER_PITCH = 35;
+
+export const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+export const easeInCubic  = t => t * t * t;
+
+/* Degrees of yaw at t seconds of accumulated on-screen time. */
+export function cubeSpinAt(t) {
+  return t < CUBE_SPINUP_S
+    ? easeOutCubic(t / CUBE_SPINUP_S) * 360
+    : 360 + (t - CUBE_SPINUP_S) * CUBE_DRIFT_DEG_S;
+}
+
 export function dotArch({ cols = 30, rows = 24, w = 200, h = 170 } = {}) {
   const out = [];
   for (let r = 0; r < rows; r++) {

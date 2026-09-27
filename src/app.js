@@ -502,18 +502,39 @@ function testimonials() {
    frame, the label INSIDE the frame's top-left, and the overlap. The overlap
    is the only depth cue in a flat drawing, and it is what makes six plates
    read as one composition instead of six decorations. */
-import { sphere, crosshatch, hyperboloid, ring, isoCube, fit,
-  rule30, caX, caY, CA_R_LIVE, CA_R_DEAD, CA_R_HIT, caClipHeight,
-  CA_MS_PER_GEN, CA_GROW_MS, CA_LOOP_MS,
-         gravLens, pentagon, sphere3d, tileField } from "./geometry.js";
+import { sphere, isoTiles, isoCube, fit, rose,
+  extrudedCube, cubeSpinAt, CUBE_POINTER_LERP, CUBE_POINTER_YAW, CUBE_POINTER_PITCH,
+  rule30, caX, caY, CA_R_LIVE, CA_R_DEAD, CA_R_HIT, caClipHeight, CA_MS_PER_GEN,
+  gravLens, pentagon, sphere3d, tileField } from "./geometry.js";
+
+/* MEASURED 2026-09-27 off the reference at 1280, 1600 and 2456 wide.
+
+   Plate sizes are FIXED PIXELS and identical at every viewport; only the
+   container centres. Above 1600 every plate shifts by exactly half the
+   viewport growth, which is the signature of a capped centred container
+   rather than a fluid grid. So these offsets are coordinates inside a
+   1600px box, and the box centres.
+
+   My previous version used percentage lefts, which is why the overlaps
+   drifted apart on a wide screen: a percentage offset scales the GAPS with
+   the viewport, and the whole composition depends on two specific plates
+   overlapping by a specific number of pixels.
+
+   Figure assignments are measured from their DOM node counts, not guessed:
+   1.1 has 48 paths (the lens), 1.2 has 12 lines plus a canvas (the cube and
+   its shader), 1.3 has 60 paths (the harmonograph), 2.1 has 864, 2.2 has
+   100 (the sphere), 2.3 has 2842 circles (the automaton: 2000 cells, 842
+   hit targets). I previously had the cube in 1.3 and a ring in 1.2, so both
+   were wrong and the ring does not exist. */
+const PLATE_BOX = 1600;
 
 const PLATES = [
-  { id: "LEM. 1.1", left: "8%",    top: 0,   w: 281, h: 186, fig: "hyper" },
-  { id: "LEM. 1.3", left: "83%",   top: 41,  w: 156, h: 218, fig: "cube"  },
-  { id: "LEM. 1.2", left: "71%",   top: 67,  w: 200, h: 200, fig: "ring"  },
-  { id: "LEM. 2.1", left: "6%",    top: 336, w: 174, h: 200, fig: "mesh"  },
-  { id: "LEM. 2.2", left: "14.6%", top: 407, w: 201, h: 210, fig: "sphere"},
-  { id: "LEM. 2.3", left: "73%",   top: 355, w: 229, h: 200, fig: "dots"  },
+  { id: "LEM. 1.1", x: 178,  top: -9,  w: 282, h: 196, fig: "lens"   },
+  { id: "LEM. 1.2", x: 1288, top: 45, w: 158, h: 214, fig: "cube"   },
+  { id: "LEM. 1.3", x: 1111, top: 72, w: 202, h: 196, fig: "harmo"  },
+  { id: "LEM. 2.1", x: 149,  top: 342, w: 176, h: 196, fig: "mesh"   },
+  { id: "LEM. 2.2", x: 275,  top: 414, w: 202, h: 205, fig: "sphere" },
+  { id: "LEM. 2.3", x: 1140, top: 360, w: 229, h: 196, fig: "dots"   },
 ];
 
 const A = "#755cfe";
@@ -567,46 +588,81 @@ function norm(list) { return fit(list); }
 
 function figure(kind) {
   let inner = "";
-  if (kind === "hyper") {
-    /* DENSITY IS THE EFFECT. Their LEM 1.1 plate is 714 paths; this was 60.
-       At 60 you see a lattice and can count the strokes. At 700 the strokes
-       stop reading as strokes: the waist EMERGES where chords crowd, and the
-       bright pinch is an interference pattern, not a drawn highlight.
+  if (kind === "lens") {
+    /* LEM 1.1: 48 paths, counted off their live DOM per plate.
 
-       This is why every figure looked cheap next to theirs while using the
-       same construction. Same generator, same maths, an order of magnitude
-       fewer elements, and the emergent behaviour never appears. Nothing
-       about opacity, colour or timing could have recovered it. */
-    const hy = norm(hyperboloid({ n: 714, twist: 1.25, w: 100, h: 60 }));
-    /* Stagger scaled so 714 paths still land inside the reference's own
-       1,180ms harmonograph window: 1180/714 is about 1.6ms. */
-    inner = polys(hy.slice(0, 712), 0.18, 1.6)
-          + polys(hy.slice(712), 0.5, 1.6, 'data-orbit');
-  } else if (kind === "ring") {
-    /* A torus, not a donut. 30 bands paint a flat ring; 260 fine bands with
-       a density falloff read as a lit tube, because the eye integrates the
-       spacing into a gradient. Opacity per band does the work a blur filter
-       would, and stays crisp at any size. */
-    /* The falloff has to live in the STROKE COLOUR, not in opacity. The
-       shared draw keyframe ends at a fixed opacity, so it overwrote the
-       per-band value and all 260 bands landed at the same alpha, packing
-       into a solid slab. Putting the falloff in rgba() leaves the keyframe
-       free to animate opacity while each band keeps its own weight, and the
-       eye integrates the spacing into a gradient. That gradient is the
-       difference between a lit torus and a flat donut. */
-    const bands = ring({ r: 34, thick: 15, bands: 260 });
-    inner = "<g>" + bands.map((b, i) =>
-      `<polyline points="${b.pts.map(([x, y]) => `${(x + 50).toFixed(2)},${(y + 50).toFixed(2)}`).join(" ")}"
-         pathLength="100" data-draw fill="none" stroke="rgba(117,92,254,${b.o.toFixed(3)})"
-         stroke-width="0.3" style="animation-delay:${(i * 3).toFixed(0)}ms"/>`).join("") + "</g>";
+       This plate previously held a 714 path hyperboloid, built on a note
+       saying "their LEM 1.1 is 714 paths, density is the effect". That count
+       came from a page wide path total attributed to one plate. Counting the
+       plates individually gives 48, 12, 60, 864, 100 and 2842, so the 714
+       was never in this frame.
+
+       The density lesson was still real, it was just filed against the wrong
+       figure: the dense one is LEM 2.1 at 864. Here, 48 rays IS the drawing,
+       and stacking 700 would bury the one thing it is about, which is that
+       every ray passes through a single point.
+
+       Recovered generator: 48 rays deflected by a Gaussian centred on the
+       plate, sigma^2 = 784. Measured waist spread across all 48 midpoints
+       was 0.000000, so the crossing is exact rather than approximate. */
+    inner = polys(gravLens({ rays: 48, seg: 60 }), 0.18, 24);
+  } else if (kind === "harmo") {
+    /* LEM 1.3: 60 paths. Not a harmonograph trace in the usual sense but 60
+       IDENTICAL copies of one closed 5 vertex figure, each rotated 6.10deg
+       from the last. 60 x 6.10 = 366deg, so it closes just past a full turn
+       and the last copy sits fractionally off the first, which is what gives
+       the rosette its moire rather than a clean 60 fold symmetry. */
+    /* rose() returns {pts, rot}: ONE shape plus 60 rotations, because that
+       is what the reference ships. Rendering it through polys(), which takes
+       raw coordinate arrays, threw "pts.map is not a function" and blanked
+       every plate after it. Keeping the rotation as data rather than baking
+       it into coordinates is what makes the repetition legible as a single
+       figure turned 60 times. */
+    inner = "<g>" + rose({ copies: 60, stepDeg: 6.10 }).map((r, i) =>
+      `<polygon points="${r.pts.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" ")}"
+         transform="rotate(${r.rot} 50 50)" pathLength="100" data-draw fill="none"
+         stroke="${A}" stroke-width="0.18" style="animation-delay:${i * 19}ms"/>`).join("") + "</g>";
   } else if (kind === "cube") {
-    const c = isoCube({ s: 24 });
-    const P = pts => pts.map(([x, y]) => `${(x + 38).toFixed(2)},${(y + 50).toFixed(2)}`).join(" ");
-    inner = `<polygon points="${P(c.left)}"  fill="none" stroke="${A}" stroke-width="0.8"/>
-             <polygon points="${P(c.right)}" fill="none" stroke="${A}" stroke-width="0.8"/>
-             <polygon points="${P(c.top)}"   fill="#1d1956"/>`;
+    /* Orthographic, 35 deg of yaw and 22 of pitch to start, from the
+       reference's own projector. The top face doubles as a clip region.
+
+       THE LOAD IS A CHAIN, NOT A STAGGER. Their timings:
+
+           draw    starts 0.42s, runs 1.1s   (stroke-dashoffset to 0)
+           dashed  starts 1.52s
+
+       0.42 + 1.1 = 1.52. Each stage begins the frame the previous one ends,
+       which is why it reads as one composed move. An index * 100ms stagger,
+       the reflex version of this, cannot produce that relationship because it
+       never knows how long anything takes.
+
+       pathLength="100" normalises every edge to the same dash budget, so the
+       twelve edges finish together despite being different lengths on screen.
+       Without it the short struts land first and the cube assembles raggedly. */
+    const c = extrudedCube({ spin: 35, tilt: 22 });
+    const edges = c.edges.map(e =>
+      `<line x1="${e.x1.toFixed(2)}" y1="${e.y1.toFixed(2)}" x2="${e.x2.toFixed(2)}" y2="${e.y2.toFixed(2)}"`
+      + ` stroke="${A}" stroke-width="0.25" opacity="0.85" pathLength="100" class="cube-edge"/>`).join("");
+    const top = c.topVerts.map(v => `${v.x.toFixed(2)},${v.y.toFixed(2)}`).join(" ");
+    inner = `<defs>
+        <clipPath id="cube-top"><polygon class="cube-topface" points="${top}"/></clipPath>
+        <linearGradient id="cube-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0"   stop-color="#322C8A"/>
+          <stop offset="0.5" stop-color="${A}"/>
+          <stop offset="1"   stop-color="#322C8A"/>
+          <animateTransform attributeName="gradientTransform" type="rotate"
+            from="0 0.5 0.5" to="360 0.5 0.5" dur="14s" repeatCount="indefinite"/>
+        </linearGradient>
+      </defs>
+      <g clip-path="url(#cube-top)"><rect x="0" y="0" width="100" height="100" fill="url(#cube-grad)"/></g>
+      <g class="cube-edges">${edges}</g>`;
   } else if (kind === "mesh") {
-    inner = polys(crosshatch({ n: 120, seg: 10 }), 0.22, 3);   // a plane, not a fan
+    /* LEM 2.1 is their densest plate: 864 paths in 162 groups, counted off
+       their DOM. A 240 line crosshatch reads as a wireframe you can count.
+       At 864 tiles the strokes stop reading as strokes and the plane
+       emerges, which is the same density effect I had previously filed
+       against the wrong plate. */
+    inner = polys(isoTiles({ cols: 36, rows: 24 }), 0.14, 1);
   } else if (kind === "sphere") {
     inner = polys(sphere({ lats: 51, longs: 50, seg: 30 }), 0.5, 15);
   } else if (kind === "dots") {
@@ -640,12 +696,14 @@ function plates() {
   for (const p of PLATES) {
     const d = document.createElement("div");
     d.className = "plate";
-    d.style.cssText = `left:${p.left};top:${p.top}px;width:${p.w}px;height:${p.h}px`;
+    // Positioned inside a centred PLATE_BOX rather than as a percentage of
+    // the viewport, so the overlaps hold their pixel relationships at any width.
+    d.style.cssText = `left:calc(50% - ${PLATE_BOX / 2}px + ${p.x}px);`
+                    + `top:${p.top}px;width:${p.w}px;height:${p.h}px`;
     /* Exactly ONE plate rotates forever and ONE drifts forever. The
        reference runs 1 infinite transform and 2 infinite dashes across the
        whole page, not a loop per figure: an ambient layer is a background
        hum, and a hum on every element is noise. */
-    if (p.fig === "ring") d.classList.add("spin");
     d.dataset.fig = p.fig;
     d.innerHTML = figure(p.fig) + `<div class="cap">${p.id}</div>`;
     host.appendChild(d);
@@ -736,6 +794,70 @@ function caInteraction() {
 
 caClock();
 caInteraction();
+
+/* ---------------------------------------------------------------------- */
+/* The cube's clock. Spin-up, then an indefinite slow drift, plus a pointer
+   lean, paused and BANKED while off screen so scrolling back finds it where
+   it was rather than restarting its entrance. */
+function cubeClock() {
+  const host = document.querySelector("svg:has(.cube-edges)");
+  if (!host) return;
+  const plate = host.closest(".plate") || host;
+  const edgeG = host.querySelector(".cube-edges");
+  const face  = host.querySelector(".cube-topface");
+  if (!edgeG || !face) return;
+
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const want = { x: 0, y: 0 };
+  let lean = { x: 0, y: 0 }, banked = 0, t0 = 0, live = false, raf = 0, last = 0;
+
+  plate.addEventListener("mousemove", ev => {
+    const r = plate.getBoundingClientRect();
+    const n = Math.min(r.width, r.height);
+    want.x = (ev.clientX - (r.left + r.width / 2)) / n;
+    want.y = (ev.clientY - (r.top + r.height / 2)) / n;
+  });
+  plate.addEventListener("mouseleave", () => { want.x = 0; want.y = 0; });
+
+  const step = now => {
+    if (!live) return;
+    if (now - last >= 33) {
+      last = now;
+      const t = banked + (now - t0) / 1000;
+      // Lerping toward the pointer rather than tracking it is what makes the
+      // lean feel like mass instead of a cursor readout.
+      lean = { x: lean.x + (want.x - lean.x) * CUBE_POINTER_LERP,
+               y: lean.y + (want.y - lean.y) * CUBE_POINTER_LERP };
+      const spin = cubeSpinAt(t) + CUBE_POINTER_YAW * lean.x;
+      const tilt = 22 - CUBE_POINTER_PITCH * lean.y;
+      const c = extrudedCube({ spin, tilt });
+      const lines = edgeG.children;
+      for (let i = 0; i < lines.length; i++) {
+        const e = c.edges[i];
+        lines[i].setAttribute("x1", e.x1.toFixed(2)); lines[i].setAttribute("y1", e.y1.toFixed(2));
+        lines[i].setAttribute("x2", e.x2.toFixed(2)); lines[i].setAttribute("y2", e.y2.toFixed(2));
+      }
+      face.setAttribute("points", c.topVerts.map(v => `${v.x.toFixed(2)},${v.y.toFixed(2)}`).join(" "));
+    }
+    raf = requestAnimationFrame(step);
+  };
+
+  new IntersectionObserver(([e]) => {
+    if (e.isIntersecting && !live) {
+      live = true; t0 = performance.now(); last = 0;
+      host.classList.add("cube-drawing");
+      raf = requestAnimationFrame(step);
+    } else if (!e.isIntersecting && live) {
+      live = false;
+      banked += (performance.now() - t0) / 1000;
+      cancelAnimationFrame(raf);
+    }
+  }, { threshold: 0 }).observe(host);
+}
+
+cubeClock();
+
 
 testimonials();
 drive("run1", scene1(document.getElementById("stage1")));

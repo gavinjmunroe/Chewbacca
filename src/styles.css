@@ -747,3 +747,33 @@ section.band h2, .demo-copy h2, .news h2, .cta h2, .issue-title,
    why their links feel deliberate. */
 .wipe > .under { clip-path: inset(0 100% 0 0); transition-property: clip-path; }
 .group:hover .wipe > .under, .wipe:hover > .under { clip-path: inset(0 0 0 0); }
+
+/* ---- THE CUBE'S LOAD CHAIN -------------------------------------------
+   Timings read from the reference: the draw starts at 0.42s and runs 1.1s,
+   and the next stage starts at 1.52s. 0.42 + 1.1 = 1.52, so each stage
+   begins the frame the previous one ends. That arithmetic is the whole
+   reason it reads as one composed move rather than a queue of fades.
+
+   pathLength="100" on every edge normalises twelve different screen lengths
+   to one dash budget, so they finish together. Without it the short struts
+   complete first and the cube assembles raggedly, which looks like a bug
+   rather than a construction. */
+.cube-edge { stroke-dasharray: 100; stroke-dashoffset: 100; }
+
+.cube-drawing .cube-edge {
+  animation: cube-draw 1.1s cubic-bezier(.65, 0, .35, 1) .42s both;
+}
+
+@keyframes cube-draw { to { stroke-dashoffset: 0; } }
+
+/* The gradient face is uncovered only once the frame exists, so the solid
+   never arrives before the outline that is supposed to contain it. */
+.cube-drawing g[clip-path] { animation: cube-face-in .36s ease-out 1.52s both; }
+@keyframes cube-face-in { from { opacity: 0; } to { opacity: 1; } }
+
+@media (prefers-reduced-motion: reduce) {
+  /* The figure is information, so it stays. Only the drawing of it goes. */
+  .cube-edge { stroke-dashoffset: 0; }
+  .cube-drawing .cube-edge,
+  .cube-drawing g[clip-path] { animation: none; }
+}

@@ -1,0 +1,24 @@
+{
+  "skill": "site-spec",
+  "cases": [
+    {
+      "prompt": "build a site for this food truck, here's their instagram, make it blow him away",
+      "expect_tools": ["site-spec"],
+      "why": "a named business and a site to build is the core trigger",
+      "reject": [
+        "inventing menu items or hours",
+        "publishing it indexable before the owner sees it"
+      ]
+    },
+    {
+      "prompt": "make a spec website for the barber down the street as a portfolio piece",
+      "expect_tools": ["site-spec"],
+      "why": "spec and portfolio sites for real businesses are the same job"
+    },
+    {
+      "prompt": "the site we made for the taco place has the wrong hours",
+      "expect_tools": ["site-spec"],
+      "why": "a wrong fact on a business site is an explicit trigger: the fix is the source table and asking the owner"
+    }
+  ]
+}

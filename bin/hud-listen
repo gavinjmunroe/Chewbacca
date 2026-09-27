@@ -1074,9 +1074,16 @@ def read_names() -> list[str]:
 
 
 # The paths at the top of `Listener.ask` that answer with no model turn and need
-# no state to decide. `fast_path` checks exactly these, and
-# tests/test_fast_path.py fails if `ask` grows a path that is in neither list.
-FAST_PATHS = ("stop", "pleasantry", "quick", "music", "agents")
+# no state to decide, as the method `ask` calls -> the name `fast_path` returns.
+# A new one is an entry here and a branch in `fast_path`; tests/test_fast_path.py
+# fails if `ask` calls a path that is in neither this nor STATEFUL_PATHS. Stop
+# words are checked inline in `ask` and come back as "stop".
+FAST_PATHS = {
+    "pleasantry": "pleasantry",
+    "quick_answer": "quick",
+    "music_request": "music",
+    "handle_agents_word": "agents",
+}
 # These need a pending draft, a waiting agent or a live terminal to decide, and
 # a replayed sentence has none of those, so `fast_path` cannot say.
 STATEFUL_PATHS = ("handle_agent_answer", "handle_draft_word", "handle_terminal_word")
@@ -1087,6 +1094,9 @@ def fast_path(said: str) -> str | None:
 
     The checks at the top of `Listener.ask`, in the same order, with no side
     effects, so a sentence from the log can be replayed against today's code.
+    Parse only, never perform: tests/voice_cases.py replays every logged
+    sentence through this, and an action here would open apps on the person's
+    screen while they work.
     `bin/reflect` uses it to tell a failure the kit still makes from one it has
     outgrown: on 2026-09-27 every one of the router's 16 logged mistakes had
     already been fixed by hand, and only a replay could show it.

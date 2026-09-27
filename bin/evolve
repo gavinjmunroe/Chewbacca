@@ -245,6 +245,8 @@ def suite_failures(path):
     `finished` is False when the runner died without its summary, which is
     different from a clean run and must never read as one.
     """
+    # The suite took 954 s and 1139 s on 2026-09-27 with two runs sharing the
+    # Mac; 2400 leaves about twice that before a slow run reads as a hang.
     try:
         r = subprocess.run(["bash", str(path / "tests/run.sh")], capture_output=True,
                            text=True, timeout=2400, cwd=str(path))

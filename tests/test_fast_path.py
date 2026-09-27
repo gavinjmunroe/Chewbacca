@@ -77,11 +77,13 @@ def main() -> int:
     src = BIN.read_text(encoding="utf-8")
     seen = ask_paths(src)
     check("ask still has its fast paths to read", len(seen) >= 4, seen)
-    named = {"pleasantry": "pleasantry", "quick_answer": "quick", "music_request": "music",
-             "handle_agents_word": "agents"}
     for method in seen:
-        known = named.get(method) in m.FAST_PATHS or method in m.STATEFUL_PATHS
+        known = method in m.FAST_PATHS or method in m.STATEFUL_PATHS
         check(f"ask's {method} is replayed or declared stateful", known, method)
+    body = src.split("def fast_path(", 1)[1].split("\nclass Listener", 1)[0]
+    for method, name in m.FAST_PATHS.items():
+        check(f"fast_path can answer {name!r} for {method}", f'return "{name}"' in body, name)
+    check("fast_path never performs", ".perform(" not in body and "subprocess" not in body)
     check("stop words are replayed", "STOP_WORDS" in src.split("    def ask(", 1)[1][:600])
 
     print("all passed" if not failed else f"{failed} failed")

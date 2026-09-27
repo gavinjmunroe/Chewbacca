@@ -42,7 +42,12 @@ If it can:
 3. Call it from `Listener.ask` among the other fast paths, before any model
    turn, only when nothing is in flight, as `quick_answer` does. Speak and
    write a short answer the way `quick_answer` does.
-4. Add it to `fast_path` and to `FAST_PATHS`, in the same order as in `ask`.
+4. Add a branch to `fast_path` and an entry to the `FAST_PATHS` dict (the
+   method `ask` calls, mapped to the name `fast_path` returns), in the same
+   order as in `ask`. `fast_path` and your parser only parse and never
+   perform: the judge replays every logged sentence through them, and an
+   action there opens apps on the person's screen while they work. Tests
+   stub the action for the same reason.
 5. Add each real sentence you now handle as a row at the end of `TABLE` in
    `tests/test_fast_path.py`, and write a test file for the parser with the
    sentences it must take and near misses it must refuse. Register that file

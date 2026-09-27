@@ -1,270 +1,306 @@
 # Getting to 1:1
 
-Ordered. Each step names what it teaches, how it is verified, and what is
-already known so nothing gets re-derived. Verification is a command or a
-number, never an opinion, because every wrong turn on this build so far came
-from a confident impression.
+Rewritten 2026-09-27, after a day that produced two sections out of twelve.
 
-Rule for the whole list: **read the shipped source before measuring, measure
-before editing, look at the render before claiming.** All three were skipped
-at least once, and each skip cost a day.
+## Why the last plan failed
 
----
+The previous version of this file opened with "Phase 0. Stop flying blind" and
+listed a full section inventory as the first thing to build. **Phase 0 was
+never run.** Seven sections were built overnight from impressions instead, and
+the whole of the next day went on measuring them one at a time and discovering
+each was wrong: the brick wall was invented, the opacity was on the wrong
+element, the plate padding did not exist, the tile field was a sheet instead of
+a pentagon, and the animation stages ran in the wrong order.
 
-## Phase 0. Stop flying blind (half a day)
+That is not seven sections built. That is seven sections of rework queued.
 
-Nothing below is reliable until these exist. They are unglamorous and they are
-why the numbers keep drifting.
+**The rule this plan is organised around: measure everything, write it down,
+then fix. Never measure-fix-measure-fix section by section.** One section a
+morning is the rate that produces, and at twelve sections that is two weeks.
 
-### 0.1 Section inventory with scroll offsets
+## What is actually done
 
-Full-page capture at 1280, 1600 and 390, every section boundary as a scroll
-offset, one screenshot each. The page is 17,852px and I have never had a
-complete list of what is on it; Caleb's phone screenshots taught more in
-thirty seconds than six hours of instruments, because they showed **what
-exists** rather than how something behaves.
+| | state | evidence |
+|---|---|---|
+| Brand and third-party marks | done | 0 hits for the reference name in rendered innerText |
+| Hero layout and type | parity | every anchor within 1px, six plates within 1px |
+| Hero figures | close | all counts, extents, strokes and opacities match; rosette texture and sphere arc count still differ |
+| Trace wall grid and states | close | 42 bricks on the measured grid, correct stage order |
+| Everything below the trace wall | **untouched** | 10 sections |
 
-- Teaches: inventory precedes measurement. An instrument can only refine what
-  you already know is there.
-- Verify: `docs/SECTIONS.md` lists every section with its y-range, and the
-  count matches a manual scroll.
+## The instruments that exist
 
-### 0.2 The interaction sweep that was never done
+```
+ux-scan     every element, every scroll position, delta-encoded
+ux-rate     scroll rate per element (parallax bands), no sampling
+ux-anim     animations, exact via getAnimations() where declared
+ux-gap      structural inventory diff
+ux-compare  offline side-by-side from a manifest
+clone       the one-command sequence
+```
 
-For every component: default, hover, active, focus, disabled, loading, empty,
-error, open. At 1280, 768 and 390.
+**`ux-gap` compares inventories, not geometry.** It reported 27 gaps on a page
+where every brick was rendering half its width off-position. It is useful and
+it is not a fidelity measure. Do not steer by it alone. That mistake cost most
+of a day.
 
-This is the step that would have caught the header bar above every plate,
-which is visible in all six reference frames and absent from all six of mine.
-
-- Teaches: a missing state is invisible in a screenshot and obvious in use.
-- Verify: `lenses/uselemma-states/` holds one capture per state per component,
-  and every one has a matching entry in the spec files from 0.3.
-
-### 0.3 Spec files before any more building
-
-One markdown file per component under `docs/spec/`: exact computed values, DOM
-structure, every state, verbatim text, assets, responsive behaviour.
-
-Seven agents were dispatched at this page with no spec contract and produced
-nothing usable, because each one went off to measure instead of build. A spec
-is what makes a builder a builder.
-
-- Teaches: the source of truth is a written spec, not a measurement in a
-  transcript that scrolls away.
-- Verify: every `fig` kind and every section in `SECTIONS.md` has a spec file,
-  and each spec's numbers are reproducible by re-running its capture command.
-
-### 0.4 Read the two chunks still unopened
-
-`768-*.js` holds the reels and the 220ms transitions. `8331-*.js` holds
-`TraceShowcaseVisual`, the isometric scenes, which is the largest thing on the
-page and the least understood. Both are on disk in the scratchpad already.
-
-Said twice in two sessions that this was next, done zero times.
-
-- Teaches: grep the bundle for magic constants, never for the API you guessed.
-  `setAttribute("cx"` found nothing; `.5888` found the exact file.
-- Verify: `docs/spec/trace-showcase.md` and `docs/spec/reels.md` exist and name
-  the generator, its parameters, and its timing.
+The 90-chunk comparison is the instrument that works. Chunks are anchored to
+paired section boundaries, not to page fraction, because the pages are 17,852
+and 19,323 tall and a fraction pair drifts onto different content by the footer.
 
 ---
 
-## Phase 1. The hero, to exact (one day)
+# Phase 0. The delta ledger
 
-Position, size and node count already match on all six plates: 48, 12, 60,
-864, 100, 2842. What is left is everything about how they look and move.
+**Nothing gets fixed in this phase.** The entire output is one file,
+`docs/DELTAS.md`, holding every measured difference across all twelve sections
+on every axis. Fixing starts only when it is complete.
 
-### 1.1 The header bar above every plate
+This is the phase that was skipped last time. It is the whole plan.
 
-Present on all six reference plates, absent on all six of mine. Measure its
-height, offset, border and whether it is a sibling or a pseudo-element.
+## 0.1 Section correspondence, written by hand
 
-- Teaches: the state sweep exists to catch exactly this class of miss.
-- Verify: element count and computed geometry match the reference's.
+Their 11 sections against our 12, paired by position and role. Heading text
+cannot do this: our copy is deliberately ours, so text matches on 5 of 11 and
+an automatic match pairs the other 6 silently wrong.
 
-### 1.2 Density and weight
+Already known:
 
-Mine render far darker and denser than the reference at identical node counts,
-so the difference is stroke width, stroke opacity, or both. The circular
-figures are the worst offenders.
+```
+theirs                             ours                        delta
+hero + trace scene   y209  10967   hero + trace  y239  10337   -630
+Surface failures     y11176  928   Surface fail  y10576 3425   +2497  3.7x
+Get notified         y12104  908   Hear about it y15616  601
+Fix it where you work y13012 886   Two lines     y16217  949
+Ship with confidence y13898  662   Read every span y15046 570
+Fits into your stack y14560  697   Fits          y17166  517
+Trust                y15257  588   Trust         y17684  482
+What people saying   y15845  674   (no h2, unregistered)
+Subscribe            y16488  670   Friday brief  y18166  577
+Start improving      y17158  694   Start         y18743  580
+                                   failure-wall  y14001  781   OURS ONLY
+                                   counter       y14782  264   OURS ONLY
+```
 
-Measure their actual `stroke-width` and `stroke-opacity` per figure rather
-than tuning by eye, which has already failed twice.
+**Exit gate:** `docs/SECTIONS.md` lists all 11 of theirs and all 12 of ours
+with y-range, role, and an explicit pairing, and every pair increases
+monotonically on both sides.
 
-- Teaches: identical element counts with wrong weight read as a completely
-  different drawing. Weight is not a finishing touch.
-- Verify: `ux-eye` ink coverage per plate within 15% of the reference's.
+## 0.2 Per-section measurement, all twelve, in parallel
 
-### 1.3 LEM 2.1 renders as a collapsed sliver
+For each paired section, on both pages, at 1440:
 
-It should be a plane. `isoTiles` is producing a degenerate shape at the
-current cols/rows. Find out whether the basis vectors or the `fit()`
-normalisation is at fault.
+- heading: size, leading, tracking, weight, alignment, x, width
+- body: size, leading, colour, max-width, gap from heading
+- container: content width, padding, and the element inset inside each frame
+- children: element counts by tag, and their extents
+- controls: count, size, hit-target size, hover and focus states
+- media: is there a product-UI mockup, and what is in it
 
-- Teaches: a generator correct in the abstract can still be wrong at the
-  parameters you called it with. Render it, do not trust the node count.
-- Verify: the plate's bounding box fills its frame the way the reference's does.
+These twelve are genuinely independent, so they fan out. Nothing writes to a
+shared file until the results merge.
 
-### 1.4 The cube's top face
+**Exit gate:** `docs/DELTAS.md` has a row per section per axis with both
+numbers and the difference, and no cell says "approximately".
 
-Theirs is a WebGL mesh gradient (`MeshGradient`, uniforms `u_swirl`,
-`u_distortion`) masked to the rotating top face, with a `<canvas>` in the
-plate. Mine is a flat SVG gradient, which is an honest stand-in and visibly
-not the same object.
+## 0.3 Motion measurement, all sections
 
-Decide: implement the shader, or keep the stand-in and write down that it is
-one. Do not leave it undeclared.
+`ux-rate` across the whole page on both, and `ux-anim` for declared animations.
+Record for each section: which elements are pinned, which parallax and at what
+rate, which are one-shot reveals, and the stage order where a scene has stages.
 
-- Teaches: where an approximation is acceptable, and that the cost of one is
-  saying so.
-- Verify: either a canvas exists with a running shader, or `docs/spec/cube.md`
-  records the substitution and why.
+**Scroll-linked and one-shot are different things and a downward-only capture
+cannot tell them apart.** Record it per section rather than guessing, and check
+the reverse scroll.
 
-### 1.5 Entrance order and stagger
+**Exit gate:** every section in `docs/DELTAS.md` carries a motion row naming
+its kind, and the trace wall's stage table is reproduced from measurement.
 
-Caleb: the frame animates top to bottom before the contents start, and
-everything is synchronous.
+## 0.4 The palette audit
 
-Their chain is arithmetic: draw starts 0.42s, runs 1.1s, next stage at 1.52s,
-because 0.42 + 1.1 = 1.52. Find the equivalent relationship for the plate
-frame against its contents rather than inventing delays.
+Today's lesson in miniature: the brick wall was first a uniform lattice, then
+overcorrected to a seeded random masonry, and the truth was four widths in a
+fixed sequence with alternating row centres. **Uniform and random are both
+guesses.**
 
-- Teaches: chained timing, where each stage starts as the previous ends, reads
-  as composed. `index * 100ms` cannot express it because it never knows how
-  long anything takes.
-- Verify: `getAnimations()` on both pages returns the same count, and the
-  delay of each stage equals the sum of the durations preceding it.
+For every repeated element set on the page, extract the actual distinct values:
+widths, heights, gaps, colours, opacities, delays. A set of four values is a
+palette. Twenty values is probably random. One value is probably uniform. Read
+which it is.
 
-### 1.6 The middle column
-
-Sizing and placement are off. Measure their headline size, line height,
-max-width in ch, the gap stack down to the buttons, and the button metrics.
-
-- Teaches: a centre column is a measured object, not a vibe. Their whole page
-  runs at `font-weight: 400`, so hierarchy is size, colour and opacity only.
-- Verify: every value matches, in px, at 1280 and 1600.
-
----
-
-## Phase 2. Scroll behaviour (one day)
-
-Currently zero of this exists on the replica, which is the single largest gap.
-
-### 2.1 Parallax, which is real and was denied
-
-38.1% of 9,133 measurable elements move at a rate strictly between pinned and
-normal flow. Clean bands at rate 0.20-0.25 (564 elements) and 0.85-0.95 (139),
-plus 52 moving faster than scroll.
-
-- Teaches: an instrument that samples 26 of 9,133 will hand you a confident
-  negative. Check coverage before believing a null result. And measure the
-  observable, an element's rect against scroll, never its own `transform`,
-  because containers carry the motion.
-- Verify: `ux-rate lenses/replica` reports the same band distribution as
-  `ux-rate lenses/full`.
-
-### 2.2 The hero depth stack
-
-Seven layers translating fixed distances on exit: 500, 420, 412, 360, 240,
-117, 78 px, under one shared opacity ramp from 1.0 to 0.015 over 552px,
-identical to three decimals across every layer.
-
-- Teaches: saturation distances are timing-independent and trustworthy;
-  instantaneous rates near a scroll jump are contaminated by the smooth-scroll
-  lerp and are not.
-- Verify: the seven travels and the shared ramp reproduce.
-
-### 2.3 Wipes
-
-`maskRevealDown`, `maskHideUp` and `lemma-vt-bottom-up` are `clip-path: inset()`
-animations. 321 elements carry a clip-path. Their page transitions use the
-real View Transitions API.
-
-- Teaches: a wipe is a clip animation, not an opacity fade with a gradient.
-- Verify: clip-path element count and the inset values at both ends.
-
-### 2.4 Scroll-linked versus one-shot
-
-Every reveal is one or the other, and a downward-only capture cannot tell them
-apart. Scroll past each section and back up.
-
-- Teaches: the distinction decides the implementation entirely, and it is
-  cheap to test and impossible to infer.
-- Verify: each spec file records which, from an observed reverse scroll.
+**Exit gate:** every repeated set on the reference has its distinct-value list
+recorded, and no generator in our source draws from a range where the reference
+uses a palette.
 
 ---
 
-## Phase 3. The sections below the hero (two to three days)
+# Phase 1. Structure
 
-None have been touched. In page order, with what is already known.
+Everything downstream depends on the page having the right sections in the
+right order at the right heights. Doing type or figures first means doing them
+twice.
 
-### 3.1 Logo wall
+## 1.1 Resolve the two extra sections
 
-Label sits in a centre cell of the grid rather than above it. Cells populate
-and empty (`lg-cell`, r² 0.23-0.61, so state-swapping rather than tweening).
-Use `brand-grab` for geometry. **Do not vendor other companies' marks**; build
-the grid and use our own placeholders.
+`failure-wall` and `counter` exist on ours and not on theirs. `failure-wall`
+currently renders a solid purple wall in the middle of their feature sequence
+(chunk 62), which reads as a duplicate of the trace wall.
 
-### 3.2 Trace brick wall
+Decision required, and it is Caleb's: cut them, or keep them as deliberate
+divergence. **If they stay, they are excluded from the parity score and said so
+in writing**, because a clone judged against a page that does not have them
+will always show a gap there.
 
-Solid bricks land first, become outlined chips with ids, then some flip to a
-failure state with a quote. The blobs are a stage, not a bug, which is the
-opposite of what was previously written down.
+## 1.2 The Surface-failures section is 3.7x too tall
 
-### 3.3 The isometric scenes
+928px on theirs, 3425px on ours. This single section is most of the 1,471px
+height difference between the pages.
 
-The largest and least understood: a ground plane of tiles, a single cube, a
-headline with a number animating under blur, and a large extruded form built
-from isometric cubes. Source is in `8331-*.js`, unread. The 564 elements at
-one-fifth scroll rate live here.
+## 1.3 The four feature sections
 
-### 3.4 Trace waterfall panel
+Theirs are each roughly 900px with a left-aligned heading, a short paragraph,
+and a large product-UI mockup beside them. Ours vary from 517 to 949 and the
+headings are centred or `start`.
 
-Spans, nested rows, durations, coloured bars, expandable occurrences.
-
-### 3.5 Slack mock
-
-`slackTyping 1.2s ease-in-out infinite` already found and previously had no
-known use. Also `termLineArrive .16s` and `termCursorBlink 1.1s step-end` for
-a terminal elsewhere.
-
-### 3.6 Integrations
-
-Logo row plus two code panels with a copy affordance.
-
-### 3.7 Testimonial carousel
-
-Twelve dots, three cards visible, edge cards partially faded. Constrained to a
-column, not full-bleed, which the current build gets wrong.
-
-### 3.8 Footer
+**Exit gate:** section count matches after the 1.1 decision, every paired
+section's height is within 5% of its counterpart, and total page height is
+within 2%.
 
 ---
 
-## Phase 4. Gate it so it cannot regress (half a day)
+# Phase 2. Global tokens
 
-### 4.1 Wire `ux-diff` as a fidelity gate
+Cheap, mechanical, and they touch every section, so they come before per-section
+work or they get applied twice.
 
-`design-gate` is now wired and catches broken, never bad. It exited 0 on a
-build Caleb called unusable. A fidelity gate reads `.design-gate-ref` for a
-reference lens and refuses when a ranked axis regresses.
+Already found and fixed: letter-spacing was -0.02em everywhere against their
+uniform -0.01em, and `.hero h1` was lumped with every section h2 at 36px, which
+silently beat `--t-hero: 40px`.
 
-- Teaches: a gate that passes bad work is not a gate. Per the kit's own rule,
-  exit 2 or it is a log line.
-- Verify: make it refuse a deliberately worsened build, then pass the restored
-  one. A guard that has never refused anything proves nothing.
+Still to audit: h3 and below, body sizes at every breakpoint, the full colour
+ramp, border colours, radii, shadow values, and the spacing scale.
 
-### 4.2 Hold the numbers
-
-214 animations at load, a 9.9x on-screen text swing, 700ms draw-ons at 15-20ms
-stagger. Named as targets weeks ago and never once checked.
+**Exit gate:** a computed-style sweep of every text node on both pages produces
+the same set of (size, leading, tracking, weight, colour) tuples, and any
+deliberate difference is listed.
 
 ---
 
-## Standing constraints
+# Phase 3. Per-section geometry
 
-- Read to learn technique and parameters; write our own code. Their CSS, JS,
-  fonts and third-party company marks do not go into this repo.
-- `.design-gate-url` is committed so the gate can see the page every turn.
-- Every constant carries the observation that set it, not the reasoning.
+Now, and only now, fix. One section per pass, but with the whole ledger already
+written so no measurement happens inside the fix.
+
+Order by chunks affected, which is the honest impact measure:
+
+| section | chunks | note |
+|---|---|---|
+| the four feature sections | ~19 | largest by far, and mostly missing content |
+| extra sections and order | ~8 | blocked on the 1.1 decision |
+| closing CTA | 5 | needs the full purple gradient block |
+| testimonials | 5 | ours renders, position differs |
+| logo wall | 4 | theirs holds pinned across more scroll |
+| trust, stack, subscribe | 3 each | |
+
+**Exit gate per section:** its row in `docs/DELTAS.md` is all zeros or all
+explained, and the chunk pair renders the same scene at the same scale.
+
+---
+
+# Phase 4. The content gap
+
+This is the biggest single item on the page and it is not styling.
+
+Each of their four feature sections carries a large product-UI mockup: a trace
+table with rows and severities, a Slack-style notification panel, a dark code
+editor, and a chart. Ours have small panels or empty space. That is about 19 of
+90 chunks.
+
+These are original artwork, not copies. Read their structure to learn what
+information a panel carries and at what density, then build ours with our own
+data, our own copy and our own product's shape. **Nothing of theirs gets
+vendored.**
+
+**Exit gate:** every feature section has a mockup at the same visual weight and
+information density as its counterpart, built from our own content.
+
+---
+
+# Phase 5. Motion
+
+Deliberately after geometry, because a parallax rate measured against the wrong
+section height is a wrong number.
+
+- scroll-rate bands per section, matched to the Phase 0.3 record
+- stage sequences where a scene has them, in the measured order
+- entrance kinds: one-shot versus scroll-linked, per section
+- chained timings, never index staggers. Their load is 0.42 + 1.1 = 1.52, each
+  stage starting as the previous ends. An `index * step` delay cannot express
+  that because it never knows how long anything takes.
+- reduced-motion: figures hold at full opacity, only movement goes
+
+**Exit gate:** `ux-rate` on both pages produces the same distribution across
+pinned / slower / normal / faster bands, within 3 points per band.
+
+---
+
+# Phase 6. States and breakpoints
+
+Everything Phase 0 measured was the default state at 1440.
+
+- hover, focus-visible, active, disabled on every control
+- the plate geometry scale is already measured at 1280/1440/1600/1920 and
+  stored; the rest of the page is not
+- 390 and 768 widths
+- empty, loading and error states where the mockups imply data
+
+**Exit gate:** a state sweep produces the same set of state-to-style mappings
+on both pages, and nothing at 390 scrolls horizontally.
+
+---
+
+# Phase 7. The gate
+
+`design-gate` catches broken, never bad. It passed this page on a turn Caleb
+called the result unusable, and its own docstring says so. Treat a green gate
+as "not broken" and nothing more.
+
+The real gate is the 90-chunk comparison with a number attached: for each pair,
+a perceptual difference score, and a ranked list of the worst remaining chunks.
+
+**Done means:** every chunk pair either scores under the threshold or has a
+written reason it does not, `docs/DELTAS.md` has no unexplained rows, nothing
+of theirs is vendored in the repo, and the page carries no third-party mark.
+
+---
+
+# The traps that already bit, kept here so they do not again
+
+**The pixels outrank the DOM.** Three probes were wrong in one morning: a
+selector that did not count `polygon`, an opacity read off the `<g>` when it
+was on the `<svg>`, and "6px too low" when the elements were 6px too short and
+top-anchored. Crop the same region from both screenshots and look.
+
+**When two things measure identical and render differently, ask WHERE the value
+is applied.** Group opacity composites every child into one layer at full alpha
+and then fades the layer; per-element opacity lets crossings accumulate. Same
+number, different picture, and no measurement of the effective value can find
+it.
+
+**An instrument that samples is an instrument that lies.** "No parallax on this
+page" came from 26 elements out of 9,133.
+
+**Measure the observable, not the implementation.** A child parallaxing because
+its container moves honestly reports `transform: none`.
+
+**Counts are per element, not per page.** A page-wide path total attributed to
+one figure sent a 714-path construction into a frame that holds 48.
+
+**A clipped element still reports its full rect.** Rects say where a thing
+would be, never what is painted.
+
+**Mid-morph overlap is not a packing bug.** Measure at the settled state and
+confirm the numbers repeat at several scroll positions before believing them.
+
+**Stage order carries the meaning.** Same states, same colours, wrong sequence,
+and a wall with nine faults in it reads as a wall that flickered.

@@ -234,6 +234,36 @@ def test_gate_checks_the_suite_and_the_cases():
     assert "structural score fell" in body, "the gate must notice a score drop"
 
 
+def test_the_archived_diff_applies():
+    """The archive is only worth keeping if a change in it can be replayed.
+    git() strips output, and attempt 590e4335 archived a diff with no final
+    newline that `git apply` rejected as corrupt."""
+    import subprocess
+    e = load()
+    with tempfile.TemporaryDirectory() as tmp:
+        repo = Path(tmp) / "repo"
+        repo.mkdir()
+        run = lambda *a: subprocess.run(["git", "-C", str(repo), *a],
+                                        capture_output=True, text=True, check=True)
+        run("init", "-q")
+        run("config", "user.email", "t@t")
+        run("config", "user.name", "t")
+        (repo / "a.txt").write_text("one\n")
+        run("add", "a.txt")
+        run("commit", "-qm", "base")
+        (repo / "a.txt").write_text("two\n")
+        (repo / "new.py").write_text("x = 1\n")
+        diff = e.full_diff(repo)
+        assert "new.py" in diff, "a created file must be in the archived diff"
+        run("reset", "-q", "--hard")
+        run("clean", "-qfd")
+        patch = Path(tmp) / "change.diff"
+        patch.write_text(diff)
+        ok = subprocess.run(["git", "-C", str(repo), "apply", "--check", str(patch)],
+                            capture_output=True, text=True)
+        assert ok.returncode == 0, ok.stderr
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in sorted(globals().items()):

@@ -48,10 +48,14 @@ def fixtures():
     (TMP / "voice").mkdir()
     (TMP / "bob").mkdir()
     model = {"output_tokens": 40}
+    # The slow shape here must be one no fast path should ever take. It was
+    # "open" until loop attempt 590e4335 fixed the opens on 2026-09-27 and this
+    # fixture failed the gate for it: a test built from fixable requests breaks
+    # the first time the loop does its job. Drafting needs the model for good.
     rows = [
-        {"said": "Open up Google sheets", "answer": "On it. Chrome's up with a new sheet.", "seconds": 7.2},
-        {"said": "Open a new terminal window", "answer": "Doing it. Terminal's open.", "seconds": 3.9},
-        {"said": "can you open youtube", "answer": "YouTube's up.", "seconds": 5.1},
+        {"said": "Write a caption for the Cowboy Cubans clip", "answer": "Here's one.", "seconds": 7.2},
+        {"said": "Write Caleb a note about the demo", "answer": "Drafted it.", "seconds": 3.9},
+        {"said": "can you write a toast for Saturday", "answer": "Here's a toast.", "seconds": 5.1},
         {"said": "Play Danielle by Fred again", "answer": "Playing it.", "seconds": 9.0},
         {"said": "Play Lose Yourself", "answer": "Playing it.", "seconds": 8.0},
         {"said": "Play Black Dog", "answer": "Playing it.", "seconds": 8.5},
@@ -62,7 +66,7 @@ def fixtures():
             fh.write(json.dumps({"said": r["said"], "answer": r["answer"], "seconds": r["seconds"],
                                  "outcome": r.get("outcome", "done"), "usage": model,
                                  "at": stamp(60 - i)}) + "\n")
-    (TMP / "bob" / "listen.log").write_text("muted: Open up Google sheets\n")
+    (TMP / "bob" / "listen.log").write_text("muted: Write a caption for the Cowboy Cubans clip\n")
 
     proj = TMP / "projects" / "-Users-someone"
     proj.mkdir(parents=True)
@@ -91,12 +95,12 @@ def main() -> int:
     r = run("bin/reflect")
     check("the default run succeeds", r.returncode == 0, r.stderr[-400:])
     check("the default run writes nothing", not (TMP / "learn").exists())
-    check("it names the live shape", "open" in r.stdout, r.stdout[-600:])
+    check("it names the live shape", "write" in r.stdout, r.stdout[-600:])
 
     r = run("bin/reflect", "--json")
     data = json.loads(r.stdout)
-    live = [c for c in data["live"] if c["shape"] == "open"]
-    check("three slow opens are live cases", len(live) == 3, data["live"])
+    live = [c for c in data["live"] if c["shape"] == "write"]
+    check("three slow drafts are live cases", len(live) == 3, data["live"])
     check("the plays replay onto the music path and are counted fixed",
           {c.get("path") for c in data["fixed"]} == {"music"} and len(data["fixed"]) == 3, data["fixed"])
     check("a failed outcome is an episode",
@@ -118,18 +122,18 @@ def main() -> int:
     check("the trend line gets a row per run",
           (TMP / "learn" / "reflect.jsonl").read_text().count("\n") == 2)
 
-    r = run("tests/voice_cases.py", "--shapes", "open")
-    check("the judge fails while nothing serves the opens", r.returncode == 1, r.stdout)
+    r = run("tests/voice_cases.py", "--shapes", "write")
+    check("the judge fails while nothing serves the drafts", r.returncode == 1, r.stdout)
     case = live[0]["id"] if live else ""
     with (TMP / "learn" / "declined.jsonl").open("w") as fh:
         for c in live:
             fh.write(json.dumps({"case": c["id"], "why": "test"}) + "\n")
-    r = run("tests/voice_cases.py", "--shapes", "open")
+    r = run("tests/voice_cases.py", "--shapes", "write")
     check("declining every case is not a fix", r.returncode == 1 and "every case was declined" in r.stdout,
           r.stdout)
     with (TMP / "learn" / "declined.jsonl").open("w") as fh:
         fh.write(json.dumps({"case": case, "why": "left to the model"}) + "\n")
-    r = run("tests/voice_cases.py", "--shapes", "open")
+    r = run("tests/voice_cases.py", "--shapes", "write")
     check("a declined sentence is shown, not hidden", "LEFT" in r.stdout and "1/2" not in r.stdout
           and "0/2" in r.stdout, r.stdout)
     r = run("tests/voice_cases.py", "--shapes", "nosuchshape")

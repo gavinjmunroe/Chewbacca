@@ -140,7 +140,11 @@ def full_diff(worktree):
     new = [p for p in new if not p.startswith(".evolve-")]
     if new:
         git("add", "--intent-to-add", "--", *new, cwd=worktree)
-    return git("diff", cwd=worktree)
+    # git() strips its output, and a diff without its final newline is one
+    # `git apply` calls corrupt. Attempt 590e4335 on 2026-09-27 archived
+    # that way and could not be replayed until the newline went back on.
+    diff = git("diff", cwd=worktree)
+    return diff + "\n" if diff else diff
 
 
 def commit_branch(worktree, aid, note):

@@ -94,87 +94,98 @@ function scene1(host) {
 
   /* Cells. Home = the card grid. Every later position is derived from the
      same index, so correspondence is structural and never re-solved. */
-  /* MASONRY, NOT A LATTICE. AND NO MODULUS.
+  /* THE GRID, READ OFF THE REFERENCE RATHER THAN GENERATED.
 
-     This was a rigid 7x6 grid of identical 132x74 cells with
-     `fails: i % 4 === 1`, so every brick was the same size and every fourth
-     one failed on a perfect cycle. Neither is true of the reference, whose
-     rows hold bricks of clearly different widths and whose failures sit
-     where they sit.
+     Two wrong versions preceded this. First a rigid 7x6 lattice of identical
+     132x74 cells with `fails: i % 4 === 1`. Then, correcting that, a seeded
+     random masonry: widths drawn from 96..208 and rows packed to a flush
+     edge. The second was a better guess and still a guess.
 
-     Uniformity and a modulus are what you write when you have not looked.
-     They are cheap, they are visible from across the room, and a viewer
-     reads them as a placeholder even without being able to say why: real
-     systems do not fail on a cycle, and a wall of identical rectangles is a
-     table pretending to be a wall.
+     Measuring their 42 bricks at the solid stage gives the actual thing, and
+     it is neither uniform nor random:
 
-     Widths are drawn per brick and each row is PACKED to the full width, so
-     no two rows break in the same place and the vertical seams never line
-     up. Failures are drawn against a probability rather than an index, so
-     the gaps between them vary the way a real sample does. Both come from a
-     seeded generator, so the layout is stable between reloads and is still
-     not a pattern. */
+         7 rows of 6, height 62, row pitch 70, gaps 7 to 8
+         FOUR widths only: 154, 182, 197, 221
+         row centres ALTERNATE between 739.5 and 701
+
+     So the variety is a four-value palette in a fixed sequence per row, and
+     the ragged look comes from the alternating row centre, not from random
+     widths. A random generator cannot produce that: it gives every row a
+     different centre and twenty different widths, which reads as noise where
+     theirs reads as rhythm. Both of my versions were wrong in the same way,
+     once toward uniform and once toward random, and the answer was to go and
+     read it.
+
+     Values are their screen pixels at 1440, divided by the 1.2 scale this
+     scene's 1200-unit viewBox renders at. */
   const cells = [];
-  const GX = 14, GY = 16, CH = 74;
-  /* The caption band above needs about 100 viewBox units at the heights this
-     is read at, and 96 put the first row inside it. 150 + 6 rows at 90 = 690,
-     which still clears the 700 unit box. Re-declared here because the masonry
-     rewrite replaced the block that used to hold it. */
-  const originY = 150;
-  const ROW_W = 1200 - 2 * 40;
-  const rnd = rng(9);
-  let idx = 0;
-  for (let r = 0; r < ROWS && idx < CELLS; r++) {
-    // Pack this row: draw widths until the remaining space cannot hold
-    // another brick, then distribute the slack so the row ends flush.
-    const widths = [];
-    let used = 0;
-    while (idx + widths.length < CELLS) {
-      const w = 96 + Math.floor(rnd() * 112);        // 96 to 208
-      if (used + w + (widths.length ? GX : 0) > ROW_W) break;
-      used += w + (widths.length ? GX : 0);
-      widths.push(w);
-    }
-    if (!widths.length) break;
-    const slack = (ROW_W - used) / widths.length;
-    let x = 40;
-    const y = originY + r * (CH + GY);
-    for (const w0 of widths) {
-      const w = w0 + slack;
-      /* HOME IS A CENTRE, because the transform that places it ends in
-         `matrix(..., -w/2, -CH/2)` and therefore draws every brick centred
-         on the point it is given. This stored the brick's TOP-LEFT instead,
-         so each one rendered shifted left by its own half-width: eight
-         overlapping pairs at up to 57px, and the first brick of every row
-         hanging 97px off the left edge of the SVG. Measured at the settled
-         home state across four scroll positions, so it was the layout and
-         not the morph mid-flight.
+  const REF_PX = 1.2;                   // our viewBox units per reference pixel
+  const CH = 62 / REF_PX;                   // 62px brick height
+  const GX = 7.5 / REF_PX;                  // measured gap, 7 to 8px
+  const PITCH = 70 / REF_PX;                // row to row
+  const originY = 150 / REF_PX;             // first row top
 
-         Varying widths are what made it look random rather than like an
-         offset: a brick overlaps its left neighbour exactly when it is more
-         than 2*GX wider than it. `iso` below was already a centre, which is
-         the tell. One input, two conventions for what the number means. */
+  // Their per-row width sequences, in reference pixels.
+  const ROW_WIDTHS = [
+    [154, 221, 182, 197, 154, 197],
+    [197, 182, 154, 221, 154, 221],
+    [182, 221, 182, 154, 197, 154],
+    [154, 221, 182, 154, 197, 182],
+    [221, 154, 182, 221, 154, 182],
+    [182, 197, 154, 182, 221, 154],
+    [154, 182, 221, 154, 182, 221],
+  ];
+  // Rows alternate between two centres. Measured: 739.5 and 701, a 38.5px
+  // offset that is what makes the wall read as laid rather than tiled.
+  const ROW_CENTRE = [739.5, 701, 739.5, 700.5, 739, 701, 739];
+
+  /* Which nine of the forty-two fail is data, not a rule. Nine of 42 was
+     counted off their red stage; an `i % N` would put them on a cycle and a
+     random draw would cluster differently on every reload. These indices are
+     spaced the way theirs are spaced. */
+  const FAIL_AT = new Set([1, 9, 13, 20, 24, 28, 32, 38, 41]);
+
+  let idx = 0;
+  for (let r = 0; r < ROW_WIDTHS.length; r++) {
+    const wsPx = ROW_WIDTHS[r];
+    const total = wsPx.reduce((a, b) => a + b, 0) / REF_PX + (wsPx.length - 1) * GX;
+    let x = ROW_CENTRE[r] / REF_PX - total / 2;
+    const y = originY + r * PITCH;
+    for (const wPx of wsPx) {
+      const w = wPx / REF_PX;
       const home = { x: x + w / 2, y: y + CH / 2 };
-      const u = (x + w / 2 - 600) / 90, v = (r - (ROWS - 1) / 2);
+      const u = (x + w / 2 - 600) / 90, v = (r - (ROW_WIDTHS.length - 1) / 2);
       const iso = { x: 600 + (u - v) * 62, y: 430 + (u + v) * 31 };
+
       const g = el("g");
+      /* FILL AND STROKE CROSSFADE, THEY DO NOT BOTH SIT AT ONE VALUE.
+
+         Measured across their scroll:
+
+             y1333  fill-opacity 1     stroke-opacity 0     solid purple
+             y2095  fill 0.99 -> 0     stroke -> 0.01       crossfading
+             y2476  fill 0            stroke 1              outline only
+             y2857  failures fill 0.13 in red, and widen
+
+         Ours had no solid stage at all: an outlined rect plus a fill rect
+         pinned at opacity 0 that only ever reached 0.13. So the bricks
+         arrived as faint outlines and the first fourteen chunks of the page
+         were the wrong colour. One rect that crossfades its own fill and
+         stroke is what they ship, and it cannot get out of step with itself
+         the way two stacked rects can. */
       const rect = el("rect", { x: 0, y: 0, width: w, height: CH, rx: 0,
-        fill: "none", stroke: "#1d1956", "stroke-width": "1", opacity: "0.55" });
-      const fill = el("rect", { x: 0, y: 0, width: w, height: CH,
-        fill: "#755cfe", opacity: "0" });
+        fill: "#755cfe", "fill-opacity": "1",
+        stroke: "#755cfe", "stroke-opacity": "0", "stroke-width": "1" });
       const lbl = el("text", { x: 8, y: 17, "font-family": "IBM Plex Mono, monospace",
-        "font-size": "8", fill: "#6c6991" });
+        "font-size": "8", fill: "#6c6991", opacity: "0" });
       lbl.textContent = `TRACE ${String(idx + 1).padStart(2, "0")}`;
       const fail = el("text", { x: 8, y: 34, "font-family": "IBM Plex Mono, monospace",
-        "font-size": "9", fill: "#d4443c", opacity: "0" });
+        "font-size": "9", fill: "#ee5557", opacity: "0" });
       fail.textContent = FAILURES[idx % FAILURES.length];
-      g.append(fill, rect, lbl, fail);
+      g.append(rect, lbl, fail);
       gCells.appendChild(g);
-      /* Drawn, not counted. A field where everything fails says nothing, and
-         a field where every fourth fails says "placeholder". About a quarter,
-         irregularly spaced. */
-      cells.push({ g, rect, fill, lbl, fail, home, iso, w,
-                   i: idx, fails: rnd() < 0.26 });
+      cells.push({ g, rect, fill: rect, lbl, fail, home, iso, w,
+                   i: idx, fails: FAIL_AT.has(idx) });
       x += w + GX;
       idx++;
     }
@@ -258,17 +269,32 @@ function scene1(host) {
     /* STAGE WINDOWS. They overlap on purpose: detail leaves while width is
        already changing, the ground appears before the tilt finishes. That
        overlap is what separates a sequence from a slideshow. */
-    const tIn    = seg(p, 0.00, 0.10);   // cards arrive, staggered
-    const tFail  = seg(p, 0.07, 0.20);   // failures light up and expand
-    const tClear = seg(p, 0.19, 0.29);   // detail leaves, outlines stay
-    const tNarrow= seg(p, 0.25, 0.38);   // width collapses toward square
-    const tTilt  = seg(p, 0.35, 0.48);   // rotation into diamonds
-    const tScat  = seg(p, 0.44, 0.60);   // redistribution onto the plane
-    const tGround= seg(p, 0.50, 0.63);   // lattice reveal, under the tiles
-    const tWave  = seg(p, 0.58, 0.75);   // cube wave crosses
+    /* THE FAILURES COME AFTER THE OUTLINE, NOT DURING THE SOLID STAGE.
+
+       tFail used to run 0.07 to 0.20, finishing before tClear began, so our
+       red lit up while the wall was still solid purple and had gone again by
+       the time the outlines arrived. Theirs is the other order, measured:
+
+           y2476   crossfade done, outline only, nothing red
+           y2857   nine bricks light red ON the outlined wall, and widen
+           y3619   still lit
+           y4000   red gone, narrowing begins
+
+       The order carries the meaning. Solid wall, then the wall goes quiet,
+       then the nine that failed light up against the quiet. Firing the red
+       during the solid stage hides it, which is why ours read as a purple
+       wall that flickered rather than as a wall with nine faults in it. */
+    const tIn    = seg(p, 0.00, 0.08);   // cards arrive, staggered
+    const tClear = seg(p, 0.10, 0.18);   // solid crossfades to outline
+    const tFail  = seg(p, 0.20, 0.36);   // the nine light up, and widen
+    const tNarrow= seg(p, 0.38, 0.48);   // width collapses toward square
+    const tTilt  = seg(p, 0.46, 0.56);   // rotation into diamonds
+    const tScat  = seg(p, 0.54, 0.66);   // redistribution onto the plane
+    const tGround= seg(p, 0.60, 0.70);   // lattice reveal, under the tiles
+    const tWave  = seg(p, 0.68, 0.80);   // cube wave crosses
     const tWipe  = seg(p, 0.70, 0.79);   // headline exchange
-    const tMark  = seg(p, 0.76, 0.94);   // the mark assembles
-    const tLift  = seg(p, 0.92, 1.00);   // everything leaves upward
+    const tMark  = seg(p, 0.80, 0.94);   // the mark assembles
+    const tLift  = seg(p, 0.93, 1.00);   // everything leaves upward
 
     gLat.setAttribute("opacity", (tGround * 0.9 * (1 - tLift)).toFixed(3));
 
@@ -320,15 +346,27 @@ function scene1(host) {
         `${(-w / 2).toFixed(1)},${(-CH / 2).toFixed(1)})`);
       c.g.setAttribute("opacity", (a * (1 - tLift * 0.9)).toFixed(3));
       c.rect.setAttribute("width", w.toFixed(1));
-      c.fill.setAttribute("width", w.toFixed(1));
 
-      /* Failure state: a red fill and its caption, both gone by tClear.
-         Expansion is horizontal only, which is what the reference does. */
+      /* THE CROSSFADE. Measured on their scroll, fill and stroke trade
+         places over tClear rather than either being constant:
+
+             before  fill-opacity 1   stroke-opacity 0    solid purple
+             after   fill-opacity 0   stroke-opacity 1    outline only
+
+         The label is invisible while the brick is solid, because there is
+         nothing to read it against, and appears as the fill leaves. */
+      const swap = ease(tClear);
       const f = c.fails ? tFail * (1 - tClear) : 0;
-      c.fill.setAttribute("opacity", (f * 0.13).toFixed(3));
+      // A failing brick keeps a 0.13 wash of red where a healthy one goes to
+      // nothing. 0.13 is theirs, measured at the stage where nine of the
+      // forty-two are lit.
+      const fillOp = c.fails ? Math.max(1 - swap, f * 0.13) : 1 - swap;
+      c.rect.setAttribute("fill", c.fails && f > 0.1 ? "#ee5557" : "#755cfe");
+      c.rect.setAttribute("fill-opacity", fillOp.toFixed(3));
+      c.rect.setAttribute("stroke-opacity", swap.toFixed(3));
+      c.rect.setAttribute("stroke", c.fails && f > 0.1 ? "#ee5557" : "#755cfe");
       c.fail.setAttribute("opacity", f.toFixed(3));
-      c.rect.setAttribute("stroke", c.fails && f > 0.1 ? "#d4443c" : "#1d1956");
-      c.lbl.setAttribute("opacity", (a * (1 - tClear)).toFixed(3));
+      c.lbl.setAttribute("opacity", (a * swap * (1 - tNarrow)).toFixed(3));
     }
 
     /* Cube wave: crosses left to right, each cube offset so the crest is

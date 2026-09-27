@@ -461,6 +461,7 @@ if group "installer"; then
   # said it was running. The user caught it, not the kit.
   check  "agent-claim-guard refuses an unlaunched agent claim" \
     bash "$ROOT/tests/agent_claim_guard.sh" "$ROOT"
+    bash "every refusing hook is tested both ways" "$ROOT"
 
   # This line lost its `check` keyword and its script path in f24d6d0, so it
   # ran the DESCRIPTION as a filename and failed on every run. It hid its own

@@ -150,6 +150,75 @@ raggedly.
 It fires on click, after an entrance completes. Probing found nothing twice;
 the source said it outright.
 
+## The traps from the second pass, 2026-09-27
+
+Added after a morning where the page still looked wrong and three DOM
+measurements in a row said it did not.
+
+**THE PIXELS OUTRANK THE DOM.** Three probes were wrong in one morning: "the
+ring renders 0 paths" (the selector did not count `polygon`), "the ring is
+missing its 0.6 opacity" (it was on the `<svg>` and the probe read the `<g>`),
+"every plate is 6px too low" (they were 6px too SHORT and top-anchored, so the
+bottoms already matched). Each would have become a commit that fixed nothing.
+Crop the same region from both screenshots and look. That found in one image
+what three probes missed.
+
+**When two things measure identical and render differently, ask WHERE the
+value is applied, not what it is.** Sixty rotated pentagons: identical
+geometry, identical stroke width, identical effective opacity (0.6 on both
+sides, walking the parent chain and multiplying). Theirs crosshatched, ours a
+smooth airbrushed donut.
+
+    per element   two crossing strokes at 0.6 give 1-(1-0.6)^2 = 0.84, so
+                  crossings are darker and the moire survives
+    on the group  all 60 composite into one layer at full alpha FIRST, every
+                  crossing saturates, THEN the finished layer fades
+
+No measurement of the effective value can find this, because the effective
+value is correct. Filters, transforms, blend modes and masks all compose
+differently on a group than on its children.
+
+**Measure the element's inset inside its container.** Their figures sat in a
+well: `l19 t24 r19 b19` on some plates, `l1 t6 r1 b1` on others. Ours all
+filled the frame. Missing 19px each side of a 202px box draws the contents 19%
+too large while every internal measurement stays correct, which is the most
+confusing possible combination. It is also not one rule: check every container,
+because a page will have two or three classes of them.
+
+**Neither uniform nor random. Go and read the palette.** A wall of 42 bricks
+was first a rigid lattice with `i % 4` failures, then, correcting that, a
+seeded random masonry with widths drawn from 96..208. Both wrong. Theirs:
+seven rows of six, four widths only (154, 182, 197, 221) in a fixed sequence
+per row, and row centres alternating between two values 38px apart. The
+ragged look came from the alternating centre, not from random widths.
+Overcorrecting from uniform to random is still not measuring.
+
+**Stage ORDER carries the meaning, so measure the sequence, not just the
+states.** Our failure highlight fired while the wall was still solid and was
+gone before the outlines arrived. Theirs: solid wall, wall goes quiet, then
+the nine that failed light up against the quiet. Same states, same colours,
+and ours read as a wall that flickered rather than a wall with faults in it.
+
+**Pair sections by position, never by heading text.** A clone has its own
+copy, so headings match on maybe 5 of 11 sections and an automatic text match
+silently pairs the other 6 wrong. Write the pairing by hand, assert it
+increases on both sides, interpolate between anchors. Where a paired gap is
+wildly unequal (928px on theirs against 3425px on ours) that is not a matching
+failure, that is the finding.
+
+**Compare at 90 chunks, not 20.** At one screen per frame a section's
+internals never appear next to their counterpart. At 90 the same scene shows
+up in several frames at different offsets, which makes a spacing difference
+visible rather than inferrable.
+
+**Check brand and third-party marks before anything visual, in the RENDERED
+innerText.** A clone will quietly keep the original's real customer names,
+real email addresses, real investor badges and real repo paths. Ours shipped
+twelve real people's real quotes, a real employee's email and a real investor
+logo, all still rendering after a rebrand pass that only touched the source.
+Grep the DOM text, case-insensitively, for the original's name.
+
+
 ## Done means
 
 Every section from step 0 is built. Every component has a spec and every state

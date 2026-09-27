@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Decode QR codes from images, including a photo someone texted.
+#
+#   qr <image>...             decode each file (png, jpg, heic, screenshots)
+#   qr --from <handle> [N]    decode the last N images (default 5) a handle sent
+#
+# Why --from exists: on 2026-09-26 Shirley texted a photo of a laptop showing
+# the Origin Weekend onboarding QR. chat.db pointed at a TemporaryItems path
+# that no longer existed, because the attachment had transfer_state 0: it was
+# never downloaded to this Mac. Opening her thread in Messages pulled it into
+# ~/Library/Messages/Attachments within seconds. The machine also had no QR
+# decoder (no zbar, no pyzbar, no cv2), and the agent went to a GitHub topics
+# page for one. macOS ships CIDetector, which read a photo-of-a-screen first try.
+set -uo pipefail
+
+decode() {
+  swift - "$@" <<'SWIFT' 2>/dev/null
+import CoreImage
+import Foundation
+var found = false
+let det = CIDetector(ofType: CIDetectorTypeQRCode, context: nil,
+                     options: [CIDetectorAccuracy: CIDetectorAccuracyHigh])!
+for path in CommandLine.arguments.dropFirst() {
+  guard let img = CIImage(contentsOf: URL(fileURLWithPath: path)) else {
+    FileHandle.standardError.write("qr: cannot read \(path)\n".data(using: .utf8)!); continue
+  }
+  for f in det.features(in: img) {
+    if let s = (f as? CIQRCodeFeature)?.messageString { print(s); found = true }
+  }
+}
+exit(found ? 0 : 1)
+SWIFT
+}
+
+if [ "${1:-}" = "--from" ]; then
+  handle="${2:?usage: qr --from <handle> [N]}"; limit="${3:-5}"
+  db="${CHAT_DB:-$HOME/Library/Messages/chat.db}"
+  rows=$(sqlite3 -separator '|' "$db" "SELECT a.transfer_state, a.filename FROM message m
+    JOIN handle h ON m.handle_id=h.ROWID
+    JOIN message_attachment_join j ON j.message_id=m.ROWID
+    JOIN attachment a ON a.ROWID=j.attachment_id
+    WHERE h.id='$(printf %s "$handle" | sed "s/'/''/g")' AND m.is_from_me=0
+      AND a.mime_type LIKE 'image/%'
+    ORDER BY m.date DESC LIMIT $((limit+0));")
+  [ -z "$rows" ] && { echo "qr: no images from $handle" >&2; exit 1; }
+  missing=0; status=1
+  while IFS='|' read -r state file; do
+    file="${file/#\~/$HOME}"
+    if [ "$state" != "5" ] || [ ! -f "$file" ]; then
+      missing=$((missing+1)); echo "not downloaded: $(basename "$file")" >&2; continue
+    fi
+    echo "== $(basename "$file")"
+    decode "$file" && status=0
+  done <<< "$rows"
+  if [ "$missing" -gt 0 ]; then
+    echo "qr: $missing image(s) not on disk. Opening the thread in Messages downloads them; rerun after." >&2
+    [ -z "${QR_NO_OPEN:-}" ] && open "imessage://$handle"
+  fi
+  exit $status
+fi
+
+[ $# -eq 0 ] && { sed -n 2,5p "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+decode "$@"

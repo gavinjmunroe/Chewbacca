@@ -37,8 +37,8 @@ to any food truck has failed, however good it looks.
    Friday; the pinned hours post, newer, said Monday to Saturday. Pick the newest
    dated source, comment it in the data file, and list it in the README under
    "confirm before launch". Never settle it silently.
-6. **Learn the genre before designing**: for anywhere people eat, the rules below
-   come first, and for any other trade, look its rules up the same way.
+6. Learn the genre before designing anything. For anywhere people eat, the rules
+   below come first, and for any other trade, look its rules up the same way.
 7. **Design from their assets, pushed further.** Colors are sampled from their
    own graphics (`palette` in `brand-grab`), type matches their wordmark, and
    the texture comes from their real surroundings. On that truck it was a
@@ -47,7 +47,7 @@ to any food truck has failed, however good it looks.
    template.
 8. **Screenshot every section at 1440 and 390 before calling it done**, after
    scrolling, so reveal animations have fired. Read each shot.
-9. **Ship it as a private draft**, meaning a private repo, a Vercel deploy and
+9. Ship it as a private draft, meaning a private repo, a Vercel deploy and
    `robots: noindex` until the owner says to swap, with the URL taken from the
    aliases in `vercel inspect`, because `<name>.vercel.app` may belong to a
    stranger and the team-scoped alias sits behind deployment protection (it
@@ -80,6 +80,29 @@ to any food truck has failed, however good it looks.
 - **Brand icons are gone from Lucide.** Draw Instagram and TikTok as inline SVG.
 - **A formatter reflows files between edits.** Patch by line number or re-read,
   and check that the count of changed lines matches.
+
+## When they ask for an intro animation
+
+The Cowboy Cubans draft got a five second duel on first load (two silhouettes,
+pressed Cubans for guns, one drops). What made it work, and what nearly didn't:
+
+- Drive every frame from one clock, `t` in milliseconds, with keyframe tracks
+  and no chained timeouts. Then `?intro=<ms>` freezes any frame, and the
+  screenshot pass can read a dozen frames at 1440 and at 390 like a storyboard.
+  That pass caught the real bug: the loser fell backward, the action needed
+  1150 units of width, and on a phone each man was 65 px tall.
+- Stage it for the phone held upright. Pick the choreography so the whole
+  action fits the narrowest frame. Falling forward instead of backward cut the
+  width to 800 units and made both men about 40% bigger.
+- Decide before the first paint whether it plays. A static head script skips it
+  on a second visit in the tab and under reduced motion, a `noscript` style
+  hides it without JavaScript, a CSS failsafe clears it if hydration never
+  comes, and a load slower than four seconds goes straight to the site. Skip
+  sits in the letterbox and Escape works.
+- Hold the hero's entrance until the curtain opens, or it plays unseen under
+  the overlay.
+- Keep it in the site's palette with no comic lettering. A sentence of dialogue
+  in the letterbox and one iris-out did more than any "BANG" would have.
 
 ## Hard line
 

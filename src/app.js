@@ -545,15 +545,37 @@ function norm(list) { return fit(list); }
 function figure(kind) {
   let inner = "";
   if (kind === "hyper") {
-    const hy = norm(hyperboloid({ n: 60, twist: 1.25, w: 100, h: 60 }));
-    inner = polys(hy.slice(0, 58), 0.5, 20)
-          + polys(hy.slice(58), 0.7, 20, 'data-orbit');
+    /* DENSITY IS THE EFFECT. Their LEM 1.1 plate is 714 paths; this was 60.
+       At 60 you see a lattice and can count the strokes. At 700 the strokes
+       stop reading as strokes: the waist EMERGES where chords crowd, and the
+       bright pinch is an interference pattern, not a drawn highlight.
+
+       This is why every figure looked cheap next to theirs while using the
+       same construction. Same generator, same maths, an order of magnitude
+       fewer elements, and the emergent behaviour never appears. Nothing
+       about opacity, colour or timing could have recovered it. */
+    const hy = norm(hyperboloid({ n: 714, twist: 1.25, w: 100, h: 60 }));
+    /* Stagger scaled so 714 paths still land inside the reference's own
+       1,180ms harmonograph window: 1180/714 is about 1.6ms. */
+    inner = polys(hy.slice(0, 712), 0.18, 1.6)
+          + polys(hy.slice(712), 0.5, 1.6, 'data-orbit');
   } else if (kind === "ring") {
-    const bands = ring({ r: 34, thick: 15, bands: 30 });
+    /* A torus, not a donut. 30 bands paint a flat ring; 260 fine bands with
+       a density falloff read as a lit tube, because the eye integrates the
+       spacing into a gradient. Opacity per band does the work a blur filter
+       would, and stays crisp at any size. */
+    /* The falloff has to live in the STROKE COLOUR, not in opacity. The
+       shared draw keyframe ends at a fixed opacity, so it overwrote the
+       per-band value and all 260 bands landed at the same alpha, packing
+       into a solid slab. Putting the falloff in rgba() leaves the keyframe
+       free to animate opacity while each band keeps its own weight, and the
+       eye integrates the spacing into a gradient. That gradient is the
+       difference between a lit torus and a flat donut. */
+    const bands = ring({ r: 34, thick: 15, bands: 260 });
     inner = "<g>" + bands.map((b, i) =>
       `<polyline points="${b.pts.map(([x, y]) => `${(x + 50).toFixed(2)},${(y + 50).toFixed(2)}`).join(" ")}"
-         pathLength="100" data-draw fill="none" stroke="${A}" stroke-width="1.1"
-         style="animation-delay:${i * 18}ms"/>`).join("") + "</g>";
+         pathLength="100" data-draw fill="none" stroke="rgba(117,92,254,${b.o.toFixed(3)})"
+         stroke-width="0.3" style="animation-delay:${(i * 3).toFixed(0)}ms"/>`).join("") + "</g>";
   } else if (kind === "cube") {
     const c = isoCube({ s: 24 });
     const P = pts => pts.map(([x, y]) => `${(x + 38).toFixed(2)},${(y + 50).toFixed(2)}`).join(" ");
@@ -561,9 +583,9 @@ function figure(kind) {
              <polygon points="${P(c.right)}" fill="none" stroke="${A}" stroke-width="0.8"/>
              <polygon points="${P(c.top)}"   fill="#1d1956"/>`;
   } else if (kind === "mesh") {
-    inner = polys(crosshatch({ n: 18, seg: 8 }), 0.45, 20);
+    inner = polys(crosshatch({ n: 120, seg: 10 }), 0.22, 3);   // a plane, not a fan
   } else if (kind === "sphere") {
-    inner = polys(sphere({ lats: 9, longs: 14, seg: 30 }), 0.5, 15);
+    inner = polys(sphere({ lats: 51, longs: 50, seg: 30 }), 0.5, 15);
   } else if (kind === "dots") {
     /* 2,046 circles on the reference's densest plate. 700 here rather than
        the previous ~400: still under it, and honest about being under it,
@@ -578,9 +600,11 @@ function figure(kind) {
        them individually: the field fades in as ONE group. A per-circle
        animation on a dense field is invisible anyway, and 700 of them is
        700 compositor entries buying nothing. */
-    inner = `<g data-draw-group>` + dotArch({ cols: 52, rows: 42, w: 78, h: 72 })
+    /* 2,046 circles on their plate. The count is what makes the arch edge
+       feather instead of ending in a hard line. */
+    inner = `<g data-draw-group>` + dotArch({ cols: 78, rows: 62, w: 80, h: 74 })
       .map(([x, y, r]) => `<circle cx="${(x + 50).toFixed(2)}" cy="${(y + 50).toFixed(2)}"
-        r="${(r * 0.42).toFixed(2)}" fill="${A}"/>`).join("") + `</g>`;
+        r="${(r * 0.26).toFixed(2)}" fill="${A}"/>`).join("") + `</g>`;
   }
   return `<svg viewBox="${VB}" preserveAspectRatio="xMidYMid meet">${inner}</svg>`;
 }

@@ -419,7 +419,7 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
   stroke-dasharray: 100; stroke-dashoffset: 100;
   animation-timing-function: linear; animation-fill-mode: both;
 }
-.plate[data-fig="sphere"] svg [data-draw] { animation-name: lemma-sphere-draw;   animation-duration: 700ms; }
+.plate[data-fig="sphere"] svg [data-draw] { animation-name: lemma-sphere-draw;   animation-duration: 800ms; }
 .plate[data-fig="hyper"]  svg [data-draw],
 .plate[data-fig="mesh"]   svg [data-draw] { animation-name: lemma-harmograph-draw; animation-duration: 600ms; }
 .plate[data-fig="ring"]   svg [data-draw],
@@ -680,3 +680,14 @@ footer { border-top: 1px solid var(--line); padding: 56px 0 28px; }
    show one state, so reading a resting colour off one is a coin flip. */
 .header .nav a { color: var(--muted); }
 .header .nav a:hover { color: var(--ink); }
+
+
+/* The carousel was full-bleed at every width while every other section is
+   capped at 1200px, so at 2560px it spanned 2560 against a 1200 column and
+   the page came apart. It is now capped like everything else, with the
+   overhang kept only as far as the gutter. */
+.carousel { max-width: calc(var(--maxw) + 120px); margin-inline: auto; }
+
+/* The ring's per-band weight lives in its stroke colour, so its draw must
+   not finish by forcing a uniform opacity over the top of it. */
+.plate[data-fig="ring"] svg [data-draw] { animation-name: lemma-sphere-draw; }

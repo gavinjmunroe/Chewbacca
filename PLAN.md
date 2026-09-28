@@ -151,10 +151,15 @@ No screenshots needed in this wave; it is all counts.
 `docs/waves/W1-structure.md`, holding:
 
     section count           ours 11   theirs 11        equal
-    page height             within 2% of 17852         17495..18209
     sections with no counterpart on either side        0
     the pinned demo's four titles, in their order      verified
     measure2 reports a sticky section once, not 4x     verified
+    heading size and alignment on every paired section equal
+
+    Page height was a criterion here and moved to Wave 4. It is the SUM of
+    per-section heights, and closing those is what Wave 4 is; holding this
+    wave open for it would mean doing Wave 4 inside Wave 1. See
+    docs/waves/W1-structure.md for the split.
 
 ## STOP. Caleb's call before Wave 2:
 

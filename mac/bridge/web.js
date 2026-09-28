@@ -26,7 +26,6 @@ try {
   fail("bridge deps missing. run: cd bridge && npm install");
 }
 
-const PORT = parseInt(process.env.CHEWIE_CDP_PORT || "9333", 10);
 const CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const REAL_DIR = path.join(
   os.homedir(),
@@ -80,6 +79,20 @@ function resolveProfile(want) {
 
 const WANT_PROFILE = process.env.CHEWIE_CHROME_PROFILE || "Default";
 const SRC_PROFILE = resolveProfile(WANT_PROFILE);
+// One debug port per source profile. With one shared port, whichever profile
+// launched first kept answering: on 2026-09-28 CHEWIE_CHROME_PROFILE="Profile 1"
+// (calebnew@usc.edu) drove the already-running Default window
+// (calebsnewton@gmail.com) three times without an error.
+const PORT = parseInt(
+  process.env.CHEWIE_CDP_PORT ||
+    String(
+      9333 +
+        (SRC_PROFILE === "Default"
+          ? 0
+          : 1 + ([...SRC_PROFILE].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 500)),
+    ),
+  10,
+);
 // One debug dir per source profile. Sharing one dir across profiles silently
 // served whichever account was copied first.
 const PROFILE = path.join(

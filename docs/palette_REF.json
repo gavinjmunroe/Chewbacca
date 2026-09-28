@@ -1,0 +1,203 @@
+[
+ {
+  "key": "g>g n=7",
+  "n": 7,
+  "widths": [
+   1128,
+   1142,
+   1152,
+   1166
+  ],
+  "n_widths": 4,
+  "heights": [
+   62
+  ],
+  "n_heights": 1,
+  "gaps": [],
+  "rows": 7
+ },
+ {
+  "key": "g>g n=6",
+  "n": 6,
+  "widths": [
+   154,
+   182,
+   197,
+   221
+  ],
+  "n_widths": 4,
+  "heights": [
+   62
+  ],
+  "n_heights": 1,
+  "gaps": [
+   7,
+   8
+  ],
+  "rows": 1
+ },
+ {
+  "key": "DIV>DIV n=6",
+  "n": 6,
+  "widths": [
+   542
+  ],
+  "n_widths": 1,
+  "heights": [
+   28,
+   56,
+   84
+  ],
+  "n_heights": 3,
+  "gaps": [],
+  "rows": 6
+ },
+ {
+  "key": "DIV>DIV n=13",
+  "n": 13,
+  "widths": [
+   494
+  ],
+  "n_widths": 1,
+  "heights": [
+   19,
+   33,
+   77
+  ],
+  "n_heights": 3,
+  "gaps": [],
+  "rows": 13
+ },
+ {
+  "key": "DIV>SPAN n=8",
+  "n": 8,
+  "widths": [
+   22,
+   52,
+   82,
+   89,
+   156
+  ],
+  "n_widths": 5,
+  "heights": [
+   14
+  ],
+  "n_heights": 1,
+  "gaps": [
+   0,
+   1
+  ],
+  "rows": 1
+ },
+ {
+  "key": "DIV>SPAN n=6",
+  "n": 6,
+  "widths": [
+   82
+  ],
+  "n_widths": 1,
+  "heights": [
+   3
+  ],
+  "n_heights": 1,
+  "gaps": [
+   4,
+   5
+  ],
+  "rows": 1
+ },
+ {
+  "key": "DIV>A,DIV n=14",
+  "n": 14,
+  "widths": [
+   28
+  ],
+  "n_widths": 1,
+  "heights": [
+   28
+  ],
+  "n_heights": 1,
+  "gaps": [
+   48
+  ],
+  "rows": 1
+ },
+ {
+  "key": "DIV>DIV n=11",
+  "n": 11,
+  "widths": [
+   389
+  ],
+  "n_widths": 1,
+  "heights": [
+   289
+  ],
+  "n_heights": 1,
+  "gaps": [
+   0,
+   1
+  ],
+  "rows": 1
+ },
+ {
+  "key": "DIV>BUTTON n=11",
+  "n": 11,
+  "widths": [
+   6
+  ],
+  "n_widths": 1,
+  "heights": [
+   6
+  ],
+  "n_heights": 1,
+  "gaps": [
+   8
+  ],
+  "rows": 1
+ },
+ {
+  "key": "UL>LI n=6",
+  "n": 6,
+  "widths": [
+   77
+  ],
+  "n_widths": 1,
+  "heights": [
+   20
+  ],
+  "n_heights": 1,
+  "gaps": [],
+  "rows": 6
+ },
+ {
+  "key": "g>path n=2025",
+  "n": 2025,
+  "widths": [
+   34
+  ],
+  "n_widths": 1,
+  "heights": [
+   17
+  ],
+  "n_heights": 1,
+  "gaps": [
+   -1,
+   0
+  ],
+  "rows": 89
+ },
+ {
+  "key": "DIV>DIV n=7",
+  "n": 7,
+  "widths": [
+   494
+  ],
+  "n_widths": 1,
+  "heights": [
+   19
+  ],
+  "n_heights": 1,
+  "gaps": [],
+  "rows": 7
+ }
+]

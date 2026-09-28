@@ -1168,8 +1168,6 @@ drive("run2", scene2());
    throwing module silently blanking the other six is the worst possible
    failure mode, because it looks like a layout bug rather than an error. */
 import * as sec_logo_wall from "./sections/logo-wall.js";
-import * as sec_failure_wall from "./sections/failure-wall.js";
-import * as sec_counter from "./sections/counter.js";
 import * as sec_waterfall from "./sections/waterfall.js";
 import * as sec_chat_mock from "./sections/chat-mock.js";
 import * as sec_integrations from "./sections/integrations.js";
@@ -1182,7 +1180,12 @@ import * as sec_testimonials from "./sections/testimonials.js";
    empty with the page otherwise looking fine. Caught by checking that each
    section had children rather than by trusting that the import list was
    correct. */
-const SECTIONS = [sec_logo_wall, sec_failure_wall, sec_counter, sec_waterfall, sec_chat_mock, sec_integrations, sec_testimonials];
+/* failure-wall and counter were cut 2026-09-28. Neither has a counterpart on
+   the reference, so keeping them guaranteed a permanent gap in every chunk
+   comparison, and failure-wall rendered a second purple brick wall in the
+   middle of their feature sequence that read as a duplicate of the trace
+   wall. Both are still in git at 42cc2df if they are ever wanted. */
+const SECTIONS = [sec_logo_wall, sec_waterfall, sec_chat_mock, sec_integrations, sec_testimonials];
 
 for (const mod of SECTIONS) {
   try {

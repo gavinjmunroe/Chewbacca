@@ -1046,8 +1046,8 @@
   {
    "kind": "cause",
    "id": "thin",
-   "name": "panels carry a fraction of their content",
-   "found": "2026-09-28, their sticky panel holds 504 descendants, ours 32 to 169",
+   "name": "the metrics panel is thin (5 text leaves against 24 to 60)",
+   "found": "2026-09-28, per-panel leaf counts on both, corrected from a container-against-panel comparison",
    "as_of": "2026-09-28"
   },
   {
@@ -1169,7 +1169,7 @@
   {
    "src": "hero::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "hero::svg shapes",
@@ -1199,7 +1199,7 @@
   {
    "src": "surface failures::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "surface failures::svg shapes",
@@ -1219,7 +1219,7 @@
   {
    "src": "notifications::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "notifications::svg shapes",
@@ -1244,7 +1244,7 @@
   {
    "src": "fix where you work / mcp::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "fix where you work / mcp::svg shapes",
@@ -1269,7 +1269,7 @@
   {
    "src": "ship with confidence::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "ship with confidence::svg shapes",
@@ -1294,7 +1294,7 @@
   {
    "src": "fits into your stack::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "fits into your stack::svg shapes",
@@ -1329,7 +1329,7 @@
   {
    "src": "trust::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "trust::svg shapes",
@@ -1384,7 +1384,7 @@
   {
    "src": "testimonials::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "testimonials::svg shapes",
@@ -1444,7 +1444,7 @@
   {
    "src": "subscribe::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "subscribe::svg shapes",
@@ -1509,7 +1509,7 @@
   {
    "src": "the friday briefing on ai agent ob::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "the friday briefing on ai agent ob::svg shapes",
@@ -1554,7 +1554,7 @@
   {
    "src": "closing cta::painted elements",
    "rel": "CAUSED_BY",
-   "dst": "thin"
+   "dst": "svg"
   },
   {
    "src": "closing cta::svg shapes",

@@ -143,3 +143,41 @@ the move is to fold those three renders into the DEMO array and cut the
 standalone sections. That closes the duplicate sections and most of the
 content gap in one change, and it means Phase 4 is substantially already
 built and merely mounted in the wrong place.
+
+## Their pinned panel, measured 2026-09-28
+
+One sticky container, 544x900, holding all four sub-panels at once and
+crossfading between them. Not four separate panels, and not one panel that
+morphs: the trace id at the top is the same string at every stage and the
+leaf count barely moves.
+
+    at Traces        512 descendants   121 text leaves
+    at Live alerts   452               121
+    at Sift MCP      462               101   + a 19% progress bar
+    at Metrics       497               113   + a 64% progress bar
+
+Diffing the leaf sets between stages gives +1 and -1: a progress bar appears
+and a "Resolve" label goes. Everything else is present the whole time.
+
+## Correction: the content gap was a measurement artifact
+
+The plan called this the largest single item on the page, on "their sticky
+panel holds 504 descendants, ours 32 to 169". That compared their whole
+CONTAINER against our INDIVIDUAL panels. Measured the same way on both:
+
+    theirs   sticky container   451-511 descendants   101-121 text leaves
+    ours     demo stage         359 descendants       122 text leaves
+
+**Our leaf count already matches theirs.** The information density is there.
+The descendant gap is markup depth, 4.0 elements per leaf on theirs against
+2.9 on ours, which is a wrapper-div difference rather than a content one.
+
+Per panel on ours:
+
+    waterfall      169 descendants   60 leaves
+    integrations   112               33
+    chat-mock       42               24
+    metrics         32                5   <- the only genuinely thin one
+
+So Wave 3 is one panel, not four. The metrics panel needs building out; the
+other three are already at their density.

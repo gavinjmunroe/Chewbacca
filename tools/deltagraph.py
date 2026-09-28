@@ -51,10 +51,24 @@ CAUSES = [
          name="centred headings are full-width boxes on ours, shrink-to-fit on theirs",
          found="2026-09-28, hero h1 box 848 against their 340 at identical text",
          matches=lambda s, a: a in ("heading x", "heading width") and s not in FEATURE),
+    # CORRECTED 2026-09-28. This said "panels carry a fraction of their
+    # content", from their sticky panel holding 504 descendants against our
+    # 32 to 169. That compared their whole CONTAINER against our INDIVIDUAL
+    # panels. Measured the same way on both:
+    #
+    #     theirs   sticky container   451-511 descendants   101-121 text leaves
+    #     ours     demo stage         359 descendants       122 text leaves
+    #
+    # Our leaf count already matches theirs, so the information density is
+    # there. The descendant gap is markup depth, 4.0 elements per leaf on
+    # theirs against 2.9 on ours, which is a wrapper-div difference and not a
+    # content one. Only the metrics panel is genuinely thin at 32 descendants
+    # and 5 leaves, against 42 to 169 for the other three.
     dict(id="thin", wave=3, artifact="src/app.js",
-         name="panels carry a fraction of their content",
-         found="2026-09-28, their sticky panel holds 504 descendants, ours 32 to 169",
-         matches=lambda s, a: a.startswith("largest block") or a == "painted elements"),
+         name="the metrics panel is thin (5 text leaves against 24 to 60)",
+         found="2026-09-28, per-panel leaf counts on both, corrected from a "
+               "container-against-panel comparison",
+         matches=lambda s, a: a.startswith("largest block")),
     dict(id="short", wave=4, artifact="index.html",
          name="sections below the demo are not built out",
          found="2026-09-28, 735px of the 1348px shortfall sits below the demo",
@@ -66,7 +80,7 @@ CAUSES = [
     dict(id="svg", wave=3, artifact="src/app.js",
          name="figure element counts differ",
          found="2026-09-28, per-plate node counts on both",
-         matches=lambda s, a: a in ("svg shapes", "controls")),
+         matches=lambda s, a: a in ("svg shapes", "controls", "painted elements")),
 ]
 FEATURE = {"surface failures", "notifications", "fix where you work / mcp",
            "read the spans / ship with confidence"}

@@ -19,8 +19,8 @@ have chased eight symptoms instead.
 
 | cause | closes | wave | lives in |
 |---|---|---|---|
-| panels carry a fraction of their content | **35** | 3 | `src/app.js` |
-| figure element counts differ | **22** | 3 | `src/app.js` |
+| figure element counts differ | **33** | 3 | `src/app.js` |
+| the metrics panel is thin (5 text leaves against 24 to 60) | **24** | 3 | `src/app.js` |
 | lead paragraph rhythm is ad hoc | **11** | 2 | `src/styles.css` |
 | sections below the demo are not built out | **9** | 4 | `index.html` |
 | centred headings are full-width boxes on ours, shrink-to-fit on theirs | **8** | 2 | `src/styles.css` |

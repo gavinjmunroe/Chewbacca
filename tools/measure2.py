@@ -9,15 +9,56 @@ on that would be wrong in a way that looks precise.
 import sys, json
 from playwright.sync_api import sync_playwright
 
-FIND = r"""() => [...document.querySelectorAll('h1,h2')]
-  .filter(h => (h.textContent||'').trim() && h.getBoundingClientRect().width > 0)
-  .map(h => ({ y: Math.round(h.getBoundingClientRect().top + scrollY),
-               text: (h.textContent||'').trim().replace(/\s+/g,' ').slice(0,52) }))"""
+FIND = r"""() => { 
+// HOW A HEADING IS TURNED INTO A LABEL. Neither obvious reading works:
+//
+//   innerText    layout-aware, so it returns '' for an element the browser
+//                considers not rendered. Their hero is a pinned scene
+//                mid-entrance when it gets read, so it came back empty and
+//                the whole section reported as unmounted.
+//   textContent  not layout-aware, but it swallows inline <script> text
+//                ("Surface failures you didn't know to look for.self.__")
+//                and drops the space a <br> renders as
+//                ("Stop guessingwhy your agents fail").
+//
+// Both broke the pairing, which is keyed on this string. So: clone, strip
+// script and style, turn <br> into a space, then collapse whitespace.
+const LABEL = (el) => {
+  const c = el.cloneNode(true);
+  c.querySelectorAll('script,style,noscript').forEach(n => n.remove());
+  c.querySelectorAll('br').forEach(n => n.replaceWith(' '));
+  return (c.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 52);
+};
+
+  return [...document.querySelectorAll('h1,h2')]
+    .filter(h => LABEL(h) && h.getBoundingClientRect().width > 0)
+    .map(h => ({ y: Math.round(h.getBoundingClientRect().top + scrollY),
+                 text: LABEL(h) }));
+}"""
 
 MEASURE = r"""(want) => {
-  const heads = [...document.querySelectorAll('h1,h2')]
-    .filter(h => (h.textContent||'').trim());
-  let h = heads.find(x => (x.textContent||'').trim().replace(/\s+/g,' ').slice(0,52) === want);
+// HOW A HEADING IS TURNED INTO A LABEL. Neither obvious reading works:
+//
+//   innerText    layout-aware, so it returns '' for an element the browser
+//                considers not rendered. Their hero is a pinned scene
+//                mid-entrance when it gets read, so it came back empty and
+//                the whole section reported as unmounted.
+//   textContent  not layout-aware, but it swallows inline <script> text
+//                ("Surface failures you didn't know to look for.self.__")
+//                and drops the space a <br> renders as
+//                ("Stop guessingwhy your agents fail").
+//
+// Both broke the pairing, which is keyed on this string. So: clone, strip
+// script and style, turn <br> into a space, then collapse whitespace.
+const LABEL = (el) => {
+  const c = el.cloneNode(true);
+  c.querySelectorAll('script,style,noscript').forEach(n => n.remove());
+  c.querySelectorAll('br').forEach(n => n.replaceWith(' '));
+  return (c.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 52);
+};
+
+  const heads = [...document.querySelectorAll('h1,h2')].filter(h => LABEL(h));
+  let h = heads.find(x => LABEL(x) === want);
   if (!h) return null;
   const hb = h.getBoundingClientRect(), hc = getComputedStyle(h);
   /* THE LEAD IS THE FIRST <p> AFTER THE HEADING INSIDE THE HEADING'S OWN

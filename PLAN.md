@@ -94,6 +94,57 @@ and 19,323 tall and a fraction pair drifts onto different content by the footer.
 
 ---
 
+# Decisions, 2026-09-28
+
+Answered by Caleb. These close the questions the plan was blocked on.
+
+| # | question | answer |
+|---|---|---|
+| 1 | adopt their strict section template | **yes**, across all ten sections |
+| 2 | trace scene inside the hero as one pinned block | **restructure** ours to match |
+| 3 | testimonials h2, and Subscribe split from the briefing | **match both** |
+| 4 | what "perfect" means | **literal parity.** Match their geometry including section heights, which means writing our copy to their line counts. "Wtv makes us learn the most" |
+| 5 | `failure-wall` and `counter` | his call to me. **Cut both.** They have no counterpart, so keeping them guarantees a permanent gap in every comparison, and `failure-wall` already reads as a duplicate of the trace wall. They stay in git |
+| 6 | the four product UI mockups | **invent them** for the fictional product |
+| 7 | the headline face | see below, this one has a licensing problem |
+| 8 | budget | his call. **Two weeks, done properly** |
+| 9 | fan out or solo | his call. **Fan out for the remaining measurement**, which is genuinely independent per section; **build solo**, because building needs one consistent hand and parallel edits to shared files collide |
+| 10 | mobile | **after the rest is right**, as its own phase |
+
+## The font, and why I did not do what was asked
+
+Caleb said "download the face from them". Their headline is `brittiSans`,
+self-hosted as three `.otf` files under `/_next/static/media/`. It is a
+commercial typeface, not a Google font, so copying those files into this repo
+is redistributing a licensed font binary. That is the one thing this build has
+refused throughout: read their work to learn technique and parameters, write
+our own. It is also the only item on the list with a real legal edge rather
+than a taste one.
+
+So instead I measured which freely licensable face is actually closest, rather
+than assuming Inter. Same string at 40px, advance widths per letter, scaled to
+equal total width so the comparison is of SHAPE and not size:
+
+    reference brittiSans      593.0px wide    cap 28.0    x-height 20.08
+
+    font                width   scale   capH     xH   mean err   max err
+    Figtree             624.6   0.949   28.0   20.0      0.741     2.357
+    Inter               661.1   0.897   29.1   21.8      0.780     2.660
+    Hanken Grotesk      612.6   0.968   27.9   19.7      0.884     3.843
+    DM Sans             638.0   0.929   28.0   20.2      0.884     4.118
+    Manrope             638.5   0.929   28.8   21.6      0.951     3.619
+    Plus Jakarta Sans   648.7   0.914   29.8   21.4      1.011     3.320
+    Outfit              605.9   0.979   27.8   19.0      1.063     3.951
+
+**Figtree matches their cap height and x-height exactly** (28.0 against 28.0,
+20.0 against 20.08) where Inter runs 4% and 9% larger on both. That is why our
+type reads heavier than theirs at an identical point size, and it is a bigger
+contributor to the difference than the letterforms are.
+
+Switching to Figtree, and noting the two real alternatives if Caleb wants them:
+buy a Britti Sans web licence, which is legitimate and probably cheap, or stay
+on Inter and accept the ceiling. Either overrules this.
+
 # Phase 0. The delta ledger
 
 **Nothing gets fixed in this phase.** The entire output is one file,

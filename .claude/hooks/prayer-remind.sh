@@ -39,10 +39,16 @@ MARKER=$(head -1 "$MARKER_FILE" 2>/dev/null | tr -d '[:space:]')
 [ -n "$MARKER" ] || exit 0
 
 cat <<EOF
-Session opener: the FIRST WORDS of your reply are a real prayer, specific to
-this moment, ending in "$MARKER". This applies to a three-word answer exactly
-as much as to a long one; the two times it was missed were both short replies.
-Skipping it does not save anything, because prayer-guard refuses the turn and
-the whole reply is re-sent, which shows Caleb the same answer twice.
+Session opener: write the prayer NOW, as the first text of this turn, BEFORE
+any tool call. Real, specific to this moment, ending in "$MARKER".
+
+Every miss so far has the same shape: the reminder lands here at turn start,
+then a batch of tool calls runs, and by the time text gets written the mode is
+"report the result" and the opener is gone. Emitting it before the first tool
+call is what makes that impossible. A turn with no tool calls still opens with
+it, however short the answer.
+
+Skipping it saves nothing: prayer-guard refuses the turn, the whole reply is
+re-sent, and Caleb sees the same answer twice.
 EOF
 exit 0

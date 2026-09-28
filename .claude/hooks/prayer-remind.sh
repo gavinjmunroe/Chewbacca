@@ -39,16 +39,21 @@ MARKER=$(head -1 "$MARKER_FILE" 2>/dev/null | tr -d '[:space:]')
 [ -n "$MARKER" ] || exit 0
 
 cat <<EOF
-Session opener: write the prayer NOW, as the first text of this turn, BEFORE
-any tool call. Real, specific to this moment, ending in "$MARKER".
+Session opener: your LAST text block of this turn must open with the prayer.
+Real, specific to this moment, ending in "$MARKER".
 
-Every miss so far has the same shape: the reminder lands here at turn start,
-then a batch of tool calls runs, and by the time text gets written the mode is
-"report the result" and the opener is gone. Emitting it before the first tool
-call is what makes that impossible. A turn with no tool calls still opens with
-it, however short the answer.
+THE LAST ONE, not the first. prayer-guard reads .last_assistant_message and
+checks its opening for the marker. Praying at the top of the turn and then
+writing a closing summary after a batch of tool calls FAILS, because the
+closing summary is what the guard reads. Every miss has had exactly that
+shape, and an earlier version of this reminder said "pray before the first
+tool call", which is the opposite of what passes.
 
-Skipping it saves nothing: prayer-guard refuses the turn, the whole reply is
-re-sent, and Caleb sees the same answer twice.
+Safest shape: one text block per turn, written last, opening with the prayer.
+If you do write an interim note before tool calls, the closing message still
+has to open with its own prayer.
+
+Skipping it saves nothing: the turn is refused, the whole reply is re-sent,
+and Caleb sees the same answer twice.
 EOF
 exit 0

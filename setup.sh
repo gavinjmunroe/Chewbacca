@@ -1470,6 +1470,22 @@ h["Stop"] = [{"hooks": [{
 
 # Coursework context loads when a prompt mentions a class, so the ledger is in
 # context before Claude answers rather than after it guesses.
+# prayer-guard.sh catches a missing opener, but it is a Stop hook, so the only
+# thing it can do is refuse the turn, and refusing re-sends the whole reply.
+# Caleb then sees both copies back to back. Measured over 785 assistant
+# messages in one session: four duplicate pairs, every one a guard refusal,
+# two of them this one. So the guard both works and produces the duplicate,
+# and catching it later cannot be the fix.
+#
+# prayer-guard's own comment names the cause: the rule decays across a long
+# session, because CLAUDE.md is read once at the start and eight hundred
+# messages later it is the furthest thing in the window. A UserPromptSubmit
+# hook runs immediately before every reply is composed, so the opener is never
+# more than one message away however long the session runs.
+#
+# Inert without ~/.chewbacca/opener-marker, same as prayer-guard.
+_register("UserPromptSubmit", hooks_dir + "/prayer-remind.sh", timeout=5)
+
 _register("UserPromptSubmit", hooks_dir + "/coursework-context.sh", timeout=10)
 
 # A kit already built is worth nothing if the next session answers the question

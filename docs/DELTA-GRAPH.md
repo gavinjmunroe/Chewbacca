@@ -8,8 +8,8 @@ picking up the next piece of work.
 
     delta nodes      88
     cause nodes      7
-    CAUSED_BY edges  81
-    unmodelled       7
+    CAUSED_BY edges  80
+    unmodelled       8
 
 ## Causes by fan-out
 
@@ -19,7 +19,7 @@ have chased eight symptoms instead.
 
 | cause | closes | wave | lives in |
 |---|---|---|---|
-| figure element counts differ | **26** | 3 | `src/app.js` |
+| figure element counts differ | **25** | 3 | `src/app.js` |
 | the metrics panel is thin (5 text leaves against 24 to 60) | **23** | 3 | `src/app.js` |
 | lead paragraph rhythm is ad hoc | **13** | 2 | `src/styles.css` |
 | sections below the demo are not built out | **11** | 4 | `index.html` |
@@ -49,3 +49,4 @@ error.
 | fix where you work / mcp | heading lines | **+1** | none |
 | fix where you work / mcp | painted elements | **-271** | hidden, svg |
 | ship with confidence | heading lines | **+1** | none |
+| ship with confidence | painted elements | **-375** | hidden, svg |

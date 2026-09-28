@@ -96,8 +96,12 @@ CAUSES = [
          found="2026-09-28, per-plate node counts on both",
          matches=lambda s, a: a in ("svg shapes", "controls", "painted elements")),
 ]
+# The four text blocks inside the pinned scene. Keys are the ROLE names
+# gendeltas emits, and the last one was still "read the spans / ship with
+# confidence" from before the roles were settled, so every rule keyed on this
+# set silently skipped one of the four.
 FEATURE = {"surface failures", "notifications", "fix where you work / mcp",
-           "read the spans / ship with confidence"}
+           "ship with confidence"}
 
 
 def parse(path):

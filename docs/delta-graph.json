@@ -381,7 +381,12 @@
    "delta": "**-375**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
-   "as_of": "2026-09-28"
+   "as_of": "2026-09-28",
+   "unmodelled": true,
+   "claimed_by": [
+    "hidden",
+    "svg"
+   ]
   },
   {
    "kind": "delta",
@@ -1341,11 +1346,6 @@
    "src": "ship with confidence::section height",
    "rel": "CAUSED_BY",
    "dst": "short"
-  },
-  {
-   "src": "ship with confidence::painted elements",
-   "rel": "CAUSED_BY",
-   "dst": "svg"
   },
   {
    "src": "ship with confidence::svg shapes",

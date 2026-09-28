@@ -85,3 +85,33 @@ are two sections; ours is one.
 10834px hero block. Whether that difference matters depends on how the hero
 pinning is structured, which is Phase 0.3.
 
+
+## The feature-section template, recovered 2026-09-28
+
+Walking the DOM from their "Surface failures" h2 up to the page container
+gives the whole thing, and it is not four sections with four panels:
+
+    SECTION                              full width, page background
+      DIV   max-width 1040, centred, padding 0 24px      content 992
+        DIV grid, columns 384px + 544px, gap 64          384+64+544 = 992
+          DIV  text column, 384 wide
+            DIV  h-svh, flex column, justify-center      one viewport tall,
+              h2 + lead                                  vertically centred
+          DIV  media column, 544 wide, 3600 TALL
+            DIV  position:sticky, top:0, h-svh           544x900, 504 kids
+
+**The media column is 3600px tall and holds one sticky 900px panel.** 3600 is
+four viewport heights. So their four "sections" are four text blocks scrolling
+past a SINGLE PINNED PANEL whose content changes as each one passes. That is
+why sections 1 through 4 all measured the same `1040x3600` block: it is the
+same element, measured four times.
+
+Their four heights are 928, 908, 886 and 662, summing to 3384 against the
+3600 of the media column.
+
+Ours is four separate sections, each with its own small panel, which is why
+the heading x drifts (296, 136, 296, 136) and why our panels are 880x460 to
+1200x793 where theirs is one 544x900 pinned surface.
+
+This is the single largest structural difference left on the page, and it
+explains both the heading-position drift and the content gap at once.

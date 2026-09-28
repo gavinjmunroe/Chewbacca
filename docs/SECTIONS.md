@@ -115,3 +115,31 @@ the heading x drifts (296, 136, 296, 136) and why our panels are 880x460 to
 
 This is the single largest structural difference left on the page, and it
 explains both the heading-position drift and the content gap at once.
+
+## Correction: our pinned demo already matches theirs
+
+Measured directly rather than through the section walk, because the walk is
+wrong about pinned elements: `rect.top + scrollY` is not a stable page
+position for something that sticks, so one pinned h2 showing four different
+titles reads as four separate sections.
+
+    #run2          y10272   3600px   the pinned demo    <- matches theirs exactly
+    #waterfall     y13872    486px   own h2
+    #chat-mock     y14358    601px   own h2
+    #integrations  y14959    698px   own h2
+    #testimonials  y15685    218px   no h2
+
+`#run2` is 3600px, which is their media column's height to the pixel, and its
+DEMO array already carries their four titles in order: Traces, Live alerts,
+Sift MCP, Metrics. So the hard structural part of the feature template was
+already built and is already right.
+
+What is wrong is that `#waterfall`, `#chat-mock` and `#integrations` sit
+AFTER it as three more standalone sections, 1785px of content with no
+counterpart on theirs, covering ground the pinned demo already covers.
+
+Their panel content is exactly what the pinned demo's four panels need, so
+the move is to fold those three renders into the DEMO array and cut the
+standalone sections. That closes the duplicate sections and most of the
+content gap in one change, and it means Phase 4 is substantially already
+built and merely mounted in the wrong place.

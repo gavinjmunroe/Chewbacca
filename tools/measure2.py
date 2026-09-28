@@ -6,7 +6,10 @@ whatever state the walk left it in: the reference's hero had unmounted entirely
 and our hero's heading reported x=296 against its true 531. A delta ledger built
 on that would be wrong in a way that looks precise.
 """
-import sys, json
+import sys, json, pathlib
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+DOCS = ROOT / "docs"
 from playwright.sync_api import sync_playwright
 
 FIND = r"""() => { 
@@ -199,6 +202,6 @@ with sync_playwright() as p:
         for t in pinned: print(f"    {t}")
 
 
-    json.dump({"height": total, "sections": out}, open(f"m2_{tag}.json","w"), indent=1)
+    json.dump({"height": total, "sections": out}, (DOCS / f"m2_{tag}.json").open("w"), indent=1)
     print(f"{tag}  height={total}  sections={len(out)}")
     b.close()

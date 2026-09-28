@@ -1,5 +1,13 @@
 import json, pathlib, datetime
-ref=json.load(open("m2_REF.json")); ours=json.load(open("m2_OURS.json"))
+
+# Paths are relative to the REPO, not the cwd. There were two copies of this
+# file, one here and one in a scratchpad, and a run against the stale copy
+# reported 16 unpaired sections that were paired fine. A tool that reads its
+# inputs from wherever it happens to be started will eventually be started
+# somewhere wrong.
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+DOCS = ROOT / "docs"
+ref=json.load((DOCS / "m2_REF.json").open()); ours=json.load((DOCS / "m2_OURS.json").open())
 
 # PAIRING BY HEADING TEXT, WITH EXPLICIT OVERRIDES.
 #
@@ -115,5 +123,5 @@ for r, o, role in pair(ref, ours):
     out.append(row("largest block children", rm.get("kids"), om.get("kids")))
     out.append("")
 
-pathlib.Path("DELTAS.md").write_text("\n".join(out)+"\n")
+(DOCS / "DELTAS.md").write_text("\n".join(out)+"\n")
 print("DELTAS.md:", len("\n".join(out).splitlines()), "lines")

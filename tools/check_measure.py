@@ -15,12 +15,15 @@ Asserts, on whatever measurement files are present:
 """
 import json, sys, pathlib, re
 
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+DOCS = ROOT / "docs"
+
 FAIL = []
 def check(cond, msg):
     if not cond: FAIL.append(msg)
 
 for tag in ("REF", "OURS"):
-    f = pathlib.Path(f"m2_{tag}.json")
+    f = DOCS / f"m2_{tag}.json"
     if not f.exists(): FAIL.append(f"{tag}: missing"); continue
     d = json.load(f.open())
     secs = d["sections"]
@@ -37,8 +40,8 @@ for tag in ("REF", "OURS"):
               f"{tag}: '{head[:36]}' looks like a <br> was dropped")
         check(len(head.split()) >= 1, f"{tag}: empty label")
 
-if pathlib.Path("DELTAS.md").exists():
-    t = pathlib.Path("DELTAS.md").read_text()
+if (DOCS / "DELTAS.md").exists():
+    t = (DOCS / "DELTAS.md").read_text()
     only = t.count("ONLY")
     check(only <= 0, f"DELTAS: {only} sections did not pair")
     rows = re.findall(r"^\| [a-z].*?\|$", t, re.M)

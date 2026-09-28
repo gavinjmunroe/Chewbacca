@@ -551,9 +551,27 @@ function swapText(el, next, delay) {
 
 function scene2() {
   const stage = document.getElementById("demoStage");
-  const label = document.getElementById("demoLabel");
-  const title = document.getElementById("demoTitle");
-  const body  = document.getElementById("demoBody");
+  const text  = document.getElementById("demoText");
+  if (!stage || !text) return () => {};
+
+  /* FOUR TEXT BLOCKS, WRITTEN ONCE AND THEN LEFT ALONE.
+
+     This used to be one block whose label, title and body were swapped with
+     a clip-path wipe as you scrolled. Theirs does not swap anything: there
+     are four blocks, each one viewport tall, and they scroll past the pinned
+     panel. So the wipe, the swap scheduler and the three element handles all
+     go, and with them a whole class of bug where a fast flick left an
+     element stranded mid-wipe.
+
+     Each block is its own landmark now, which also means a screen reader and
+     the section walk both see four headings here instead of one. */
+  text.innerHTML = DEMO.map((d, i) => `
+    <div class="feat-block" data-i="${i}">
+      <div class="label">${d.label}</div>
+      <h2>${d.title}</h2>
+      <p>${d.body}</p>
+    </div>`).join("");
+
   const panels = DEMO.map(d => {
     const p = document.createElement("div");
     p.className = "panel";
@@ -569,11 +587,22 @@ function scene2() {
     return p;
   });
 
-  return function render(p) {
-    /* Which panel, as a continuous index. The reference overlaps outgoing and
-       incoming demo content rather than cutting, so neighbours share a band. */
-    const f = clamp(p) * (DEMO.length - 1);
-    const i = Math.min(DEMO.length - 1, Math.floor(f + 0.5));
+  /* WHICH PANEL IS DRIVEN BY WHICH TEXT BLOCK IS IN VIEW, not by a fraction
+     of the section. A fraction assumes every block is the same height and
+     that the section starts where the pin starts; neither survives a short
+     viewport. Reading each block's own centre against the viewport's centre
+     is true whatever the heights turn out to be. */
+  const blocks = [...text.querySelectorAll(".feat-block")];
+  return function render() {
+    const mid = window.innerHeight / 2;
+    // continuous index: distance of each block's centre from the viewport's
+    let f = 0, best = Infinity;
+    blocks.forEach((b, k) => {
+      const r = b.getBoundingClientRect();
+      const d = (r.top + r.height / 2 - mid) / window.innerHeight;
+      if (Math.abs(d) < best) { best = Math.abs(d); f = k + d * -1; }
+    });
+    f = Math.max(0, Math.min(DEMO.length - 1, f));
     panels.forEach((el2, k) => {
       const d = Math.abs(f - k);
       const o = clamp(1 - d * 1.45);
@@ -583,12 +612,6 @@ function scene2() {
          pointer events and still paints its children's stacking context. */
       el2.style.display = o < 0.01 ? "none" : "";
     });
-    if (label.dataset.i !== String(i)) {
-      label.dataset.i = String(i);
-      swapText(label, DEMO[i].label, 0);
-      swapText(title, DEMO[i].title, 60);
-      swapText(body,  DEMO[i].body,  120);
-    }
   };
 }
 

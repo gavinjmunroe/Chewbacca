@@ -69,20 +69,36 @@
     </div>
   </div>
 
-  <!-- SCENE 2: the pinned product demo, 4 viewports on the reference -->
-  <div class="run" id="run2" style="height:400svh">
-    <div class="pin">
-      <div class="demo-grid">
-        <div class="demo-copy">
-          <div class="label" id="demoLabel">TRACES</div>
-          <h2 id="demoTitle">Read every span, not just the ones that errored.</h2>
-          <p id="demoBody">Sift audits every trace against your agent's instructions and
-             groups recurring failures into issues.</p>
+  <!-- SCENE 2: four text columns scrolling past ONE pinned panel.
+       NOT a pinned block whose copy swaps, which is what this was.
+
+       measure2 samples each heading's page position at two scroll offsets to
+       find out whether it is pinned. On ours it flagged two headings. On
+       theirs it flags one, the hero. So their four feature titles are four
+       real text blocks that scroll; only the media column is sticky. Same
+       apparent result, different mechanism, and it is why theirs has no
+       text-swap animation: the text does not swap, it scrolls past.
+
+       Structure recovered from their DOM:
+
+         DIV  max-width 1040, centred, padding 0 24      content 992
+           DIV  grid, columns 384 + 544, gap 64          384+64+544 = 992
+             DIV  text, four blocks each one viewport tall, centred
+             DIV  media, 4 viewports tall, ONE sticky panel at top 0
+
+       The section is ordinary flow now. The old `.run`/`.pin` wrapper was
+       doing by hand what `position: sticky` does, and doing it to the wrong
+       column. -->
+  <section class="feat" id="run2">
+    <div class="feat-wrap">
+      <div class="feat-grid">
+        <div class="feat-text" id="demoText"></div>
+        <div class="feat-media">
+          <div class="feat-pin"><div class="demo-stage" id="demoStage"></div></div>
         </div>
-        <div class="demo-stage" id="demoStage"></div>
       </div>
     </div>
-  </div>
+  </section>
 
   <!-- INTEGRATIONS -->
 

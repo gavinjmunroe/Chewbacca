@@ -903,5 +903,58 @@ h3 { font-size: 18px; line-height: 28px; letter-spacing: -0.01em; font-weight: 4
 
 /* Their Subscribe heading is an h2 rendered at 18/28, not at the h2 scale.
    Measured on their page. */
-.sub-h { font-size: 18px; line-height: 28px; letter-spacing: -0.01em;
-         font-weight: 400; margin: 0 0 8px; }
+/* Specificity, not order: `section.band h2` is (0,1,2) and a bare class is
+   (0,1,0), so the first version of this rule lost even though it came last
+   in the file and measured 36px on the page. */
+h2.sub-h, .news-right h2.sub-h {
+  font-size: 18px; line-height: 28px; letter-spacing: -0.01em;
+  font-weight: 400; margin: 0 0 8px;
+}
+
+/* ---- the feature section ---------------------------------------------- */
+/* Measured off their DOM, not composed:
+ *
+ *   container   max-width 1040, centred, padding 0 24      content 992
+ *   grid        columns 384px + 544px, gap 64              384+64+544 = 992
+ *   text col    four blocks, each 100svh, contents centred vertically
+ *   media col   4 x 100svh tall, holding one sticky panel at top 0
+ *
+ * The old version wrapped the whole thing in a hand-rolled sticky block and
+ * swapped the copy with a clip-path wipe. That pinned the wrong column: on
+ * theirs the text scrolls and only the panel stays. */
+.feat        { position: relative; }
+.feat-wrap   { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+.feat-grid   { display: grid; grid-template-columns: 384px 544px; gap: 64px; }
+
+.feat-block  { height: 100svh; display: flex; flex-direction: column;
+               justify-content: center; }
+/* Their lead is 18/27 sitting 8px under the heading, on every feature block. */
+.feat-block h2 { font-size: 36px; line-height: 43.2px; letter-spacing: -0.01em;
+                 font-weight: 400; margin: 0 0 8px; text-align: left; }
+.feat-block p  { font-size: 18px; line-height: 27px; color: var(--muted);
+                 margin: 0; text-align: left; }
+.feat-block .label { text-align: left; }
+
+.feat-media  { position: relative; }
+/* top:0 like theirs. The nav is overlaid rather than in flow, so there is no
+   header offset to subtract here the way .pin needed one. */
+.feat-pin    { position: sticky; top: 0; height: 100svh;
+               display: flex; align-items: center; }
+.feat-pin .demo-stage { width: 100%; height: 544px; }
+
+@media (max-width: 900px) {
+  .feat-grid { grid-template-columns: 1fr; gap: 0; }
+  .feat-media { display: none; }
+}
+
+/* Two headings that measured wrong against theirs after Wave 1.
+ *
+ *   testimonials   theirs 36px centred, ours rendered 24px
+ *   fits / trust   theirs text-align center, ours inherited start
+ *
+ * Both are class selectors beaten by `section.band h2`, so both are raised
+ * rather than reordered. */
+h2.tst-title { font-size: 36px; line-height: 43.2px; letter-spacing: -0.01em;
+               font-weight: 400; }
+.band.wrap   { text-align: center; }
+.band.wrap .steps, .band.wrap .cards { text-align: left; }

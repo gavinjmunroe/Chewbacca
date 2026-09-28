@@ -17,16 +17,16 @@
     "w": 512,
     "gap": 8
    },
-   "painted": 3182,
-   "shapes": 2233,
-   "svg": 13,
+   "painted": 3175,
+   "shapes": 2231,
+   "svg": 12,
    "canvas": 0,
    "img": 0,
    "mockup": {
     "w": 1200,
     "h": 496,
     "tag": "DIV",
-    "kids": 144
+    "kids": 150
    },
    "controls": 12,
    "control_h": [

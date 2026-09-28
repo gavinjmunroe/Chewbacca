@@ -2,7 +2,40 @@
  "height": 17852,
  "sections": [
   {
-   "unmounted": true,
+   "h_size": "40px",
+   "h_lh": "44px",
+   "h_ls": "-0.4px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 550,
+   "h_w": 340,
+   "h_lines": 2,
+   "lead": {
+    "size": "15px",
+    "lh": "22.5px",
+    "color": "oklab(0.262919 0.0168294 -0.104771 / 0.65)",
+    "w": 512,
+    "gap": 8
+   },
+   "painted": 3393,
+   "shapes": 2374,
+   "svg": 9,
+   "canvas": 2,
+   "img": 1,
+   "mockup": {
+    "w": 560,
+    "h": 231,
+    "tag": "DIV",
+    "kids": 19
+   },
+   "controls": 15,
+   "control_h": [
+    14,
+    20,
+    26,
+    28,
+    33
+   ],
    "i": 0,
    "y": 342,
    "height": 10834,
@@ -24,16 +57,16 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 629,
-   "shapes": 166,
-   "svg": 26,
+   "painted": 667,
+   "shapes": 165,
+   "svg": 25,
    "canvas": 2,
-   "img": 7,
+   "img": 6,
    "mockup": {
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 506
+    "kids": 544
    },
    "controls": 15,
    "control_h": [
@@ -64,18 +97,18 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 515,
-   "shapes": 31,
-   "svg": 26,
+   "painted": 530,
+   "shapes": 29,
+   "svg": 24,
    "canvas": 1,
    "img": 7,
    "mockup": {
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 535
+    "kids": 552
    },
-   "controls": 16,
+   "controls": 15,
    "control_h": [
     14,
     20,
@@ -104,18 +137,18 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 549,
-   "shapes": 32,
-   "svg": 27,
+   "painted": 465,
+   "shapes": 29,
+   "svg": 24,
    "canvas": 1,
    "img": 6,
    "mockup": {
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 567
+    "kids": 487
    },
-   "controls": 17,
+   "controls": 15,
    "control_h": [
     14,
     20,
@@ -144,18 +177,18 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 494,
-   "shapes": 32,
-   "svg": 27,
+   "painted": 524,
+   "shapes": 29,
+   "svg": 24,
    "canvas": 1,
-   "img": 7,
+   "img": 6,
    "mockup": {
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 516
+    "kids": 544
    },
-   "controls": 17,
+   "controls": 15,
    "control_h": [
     14,
     20,
@@ -193,7 +226,7 @@
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 534
+    "kids": 544
    },
    "controls": 26,
    "control_h": [

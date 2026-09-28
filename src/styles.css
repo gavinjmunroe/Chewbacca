@@ -1,3 +1,107 @@
+/* Self-hosted, so the page makes no third-party font request. That is what
+   theirs does too: all three of their faces come from their own origin under
+   /_next/static/media/.
+
+   Only the latin and latin-ext subsets are kept. The unicode-range values are
+   Google's own, copied with the rules, so a character outside those ranges
+   still falls back correctly rather than rendering from the wrong subset.
+
+   The weight is in each filename because Lato and IBM Plex Mono ship a
+   separate file per weight, and naming on subset alone had 700 quietly
+   overwriting 400.
+
+   Licences sit beside the files. All three are open. */
+
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url(fonts/figtree-300-900-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Figtree';
+  font-style: normal;
+  font-weight: 300 900;
+  font-display: swap;
+  src: url(fonts/figtree-300-900-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/plexmono-400-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/plexmono-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(fonts/plexmono-500-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(fonts/plexmono-500-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Lato';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/lato-400-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Lato';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/lato-400-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'Lato';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(fonts/lato-700-latin-ext.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: 'Lato';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(fonts/lato-700-latin.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 /* Lemma replica: tokens measured from the reference, not chosen.
    Every value here came out of getComputedStyle on https://www.uselemma.ai/
    at 1280x900 on 2026-09-26. Where a value is an approximation because the
@@ -27,11 +131,28 @@
   --t-13: 13px;  --t-xs: 12px;  --t-11: 11px; --t-10: 10px;
   --t-9: 9px;    --t-8: 8px;
 
-  /* brittiSans is a licensed face and is not distributable. Inter is the
-     nearest widely available neo-grotesque: same vertical proportions and
-     a similar single-storey 'a' at display sizes. Labelled so nobody
-     mistakes this for the real thing. */
-  --sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  /* brittiSans is a licensed face and is not distributable, so it is not
+     here and their .otf files are not in this repo.
+
+     Figtree is the substitute, chosen by measurement rather than by eye.
+     Rendering the same string at 40px in seven free faces and comparing
+     per-letter advance widths, scaled to equal total width so the comparison
+     is of shape and not size:
+
+         reference brittiSans   cap 28.0   x-height 20.08
+         Figtree                cap 28.0   x-height 20.0    err 0.741px
+         Inter                  cap 29.1   x-height 21.8    err 0.780px
+         Hanken Grotesk         cap 27.9   x-height 19.7    err 0.884px
+         DM Sans                cap 28.0   x-height 20.2    err 0.884px
+         Manrope                cap 28.8   x-height 21.6    err 0.951px
+         Plus Jakarta Sans      cap 29.8   x-height 21.4    err 1.011px
+         Outfit                 cap 27.8   x-height 19.0    err 1.063px
+
+     Figtree matches their cap height and x-height EXACTLY where Inter runs
+     4% and 9% large on both. That vertical mismatch is why our type read
+     heavier than theirs at an identical point size, and it mattered more
+     than the letterforms did. tools/fontmatch.py reproduces the table. */
+  --sans: "Figtree", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
   --chat: "Lato", ui-sans-serif, system-ui, sans-serif;
 
@@ -165,7 +286,12 @@ main { padding-top: calc(var(--banner-h) + var(--nav-h)); }
 section.band { padding: 88px 0; }
 section.band h2 { font-size: var(--t-h2); font-weight: 400; letter-spacing: -0.02em;
                   margin: 10px 0 14px; line-height: 1.15; }
-section.band .lead { font-size: var(--t-lead); color: var(--muted); margin: 0 0 34px; max-width: 62ch; line-height: 1.5; }
+/* Their lead is 18/28 everywhere it appears, not just on the feature blocks.
+   Ours was --t-lead at 1.5, which resolved to 14/21.7 inside a band and read
+   as a caption rather than as a lead. Measured on "Fits into your existing
+   stack", where theirs is 18/28 across 672px and ours was 14/21.7 across 367. */
+section.band .lead { font-size: 18px; line-height: 28px; color: var(--muted);
+                     margin: 0 0 34px; max-width: 62ch; }
 
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
          background: var(--line); border: 1px solid var(--line); }
@@ -931,7 +1057,9 @@ h2.sub-h, .news-right h2.sub-h {
 /* Their lead is 18/27 sitting 8px under the heading, on every feature block. */
 .feat-block h2 { font-size: 36px; line-height: 43.2px; letter-spacing: -0.01em;
                  font-weight: 400; margin: 0 0 8px; text-align: left; }
-.feat-block p  { font-size: 18px; line-height: 27px; color: var(--muted);
+/* 28px, not 27. Theirs is 18/28, which is not 1.5 and not 1.55; it is a flat
+   28 and the ratio is a coincidence of the size. Measured on all four. */
+.feat-block p  { font-size: 18px; line-height: 28px; color: var(--muted);
                  margin: 0; text-align: left; }
 .feat-block .label { text-align: left; }
 

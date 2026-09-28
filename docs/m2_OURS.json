@@ -1,5 +1,5 @@
 {
- "height": 19323,
+ "height": 16479,
  "sections": [
   {
    "h_size": "40px",
@@ -26,329 +26,259 @@
     "w": 1200,
     "h": 496,
     "tag": "DIV",
-    "kids": 144
+    "kids": 143
    },
    "controls": 12,
    "control_h": [
     17,
+    19,
     20,
     31,
-    35,
-    36
+    35
    ],
    "i": 0,
-   "y": 340,
-   "height": 978,
+   "y": 339,
+   "height": 10308,
    "heading": "Your agent failed and nothing threw an error"
   },
   {
    "h_size": "36px",
    "h_lh": "43.2px",
-   "h_ls": "-0.72px",
+   "h_ls": "-0.36px",
    "h_weight": "400",
-   "h_align": "center",
-   "h_x": 16,
-   "h_w": 1408,
-   "h_lines": 1,
-   "lead": null,
-   "painted": 2175,
-   "shapes": 1918,
-   "svg": 12,
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 2,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgb(108, 105, 145)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 509,
+   "shapes": 350,
+   "svg": 17,
    "canvas": 0,
    "img": 0,
    "mockup": {
-    "w": 1200,
-    "h": 496,
+    "w": 1040,
+    "h": 3600,
     "tag": "DIV",
-    "kids": 144
+    "kids": 380
    },
-   "controls": 10,
+   "controls": 12,
    "control_h": [
     17,
+    19,
     20,
     31,
-    36
+    35
    ],
    "i": 1,
-   "y": 1318,
-   "height": 9258,
-   "heading": "Your agents fail silently."
+   "y": 10647,
+   "height": 928,
+   "heading": "Surface failures you didn't know to look for."
   },
   {
    "h_size": "36px",
    "h_lh": "43.2px",
    "h_ls": "-0.36px",
    "h_weight": "400",
-   "h_align": "start",
-   "h_x": 296,
-   "h_w": 368,
-   "h_lines": 3,
-   "lead": {
-    "size": "18px",
-    "lh": "27px",
-    "color": "rgb(108, 105, 145)",
-    "w": 368,
-    "gap": 14
-   },
-   "painted": 531,
-   "shapes": 474,
-   "svg": 2,
-   "canvas": 0,
-   "img": 0,
-   "mockup": {
-    "w": 880,
-    "h": 460,
-    "tag": "DIV",
-    "kids": 99
-   },
-   "controls": 10,
-   "control_h": [
-    17,
-    20,
-    31,
-    36
-   ],
-   "i": 2,
-   "y": 10576,
-   "height": 3443,
-   "heading": "Surface failures you didn't know to look for."
-  },
-  {
-   "h_size": "36px",
-   "h_lh": "41.4px",
-   "h_ls": "-0.72px",
-   "h_weight": "400",
-   "h_align": "start",
-   "h_x": 136,
-   "h_w": 545,
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
    "h_lines": 2,
    "lead": {
     "size": "18px",
-    "lh": "27px",
+    "lh": "28px",
     "color": "rgb(108, 105, 145)",
-    "w": 704,
-    "gap": 16
+    "w": 384,
+    "gap": 8
    },
-   "painted": 301,
+   "painted": 77,
    "shapes": 3,
    "svg": 1,
    "canvas": 0,
    "img": 0,
    "mockup": {
-    "w": 1200,
-    "h": 793,
+    "w": 1040,
+    "h": 3600,
     "tag": "DIV",
-    "kids": 275
+    "kids": 380
    },
-   "controls": 10,
+   "controls": 11,
    "control_h": [
     17,
+    19,
     20,
     31,
-    36
+    35
    ],
-   "i": 3,
-   "y": 14019,
-   "height": 781,
-   "heading": "Your agents fail without raising anything."
-  },
-  {
-   "h_size": "32px",
-   "h_lh": "38.4px",
-   "h_ls": "-0.32px",
-   "h_weight": "400",
-   "h_align": "start",
-   "h_x": 296,
-   "h_w": 848,
-   "h_lines": 2,
-   "lead": {
-    "size": "16px",
-    "lh": "24.8px",
-    "color": "rgb(108, 105, 145)",
-    "w": 565,
-    "gap": 20
-   },
-   "painted": 292,
-   "shapes": 13,
-   "svg": 13,
-   "canvas": 0,
-   "img": 0,
-   "mockup": {
-    "w": 1200,
-    "h": 793,
-    "tag": "DIV",
-    "kids": 275
-   },
-   "controls": 12,
-   "control_h": [
-    17,
-    20,
-    31,
-    32,
-    36
-   ],
-   "i": 4,
-   "y": 14800,
-   "height": 264,
-   "heading": "Your agents left 4 5 6 7 8 9 0 1 2 3 4 1 2 3 4 5 6 7"
+   "i": 2,
+   "y": 11575,
+   "height": 908,
+   "heading": "Get notified on what matters."
   },
   {
    "h_size": "36px",
    "h_lh": "43.2px",
    "h_ls": "-0.36px",
    "h_weight": "400",
-   "h_align": "start",
-   "h_x": 136,
-   "h_w": 505,
-   "h_lines": 2,
-   "lead": {
-    "size": "16px",
-    "lh": "24.8px",
-    "color": "rgb(108, 105, 145)",
-    "w": 505,
-    "gap": 18
-   },
-   "painted": 220,
-   "shapes": 17,
-   "svg": 17,
-   "canvas": 0,
-   "img": 0,
-   "mockup": {
-    "w": 1200,
-    "h": 486,
-    "tag": "DIV",
-    "kids": 173
-   },
-   "controls": 12,
-   "control_h": [
-    17,
-    20,
-    31,
-    32,
-    36
-   ],
-   "i": 5,
-   "y": 15064,
-   "height": 570,
-   "heading": "Read every span, not just the ones that errored."
-  },
-  {
-   "h_size": "36px",
-   "h_lh": "41.4px",
-   "h_ls": "-0.72px",
-   "h_weight": "400",
-   "h_align": "start",
-   "h_x": 136,
-   "h_w": 505,
-   "h_lines": 2,
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 1,
    "lead": {
     "size": "18px",
-    "lh": "27px",
+    "lh": "28px",
     "color": "rgb(108, 105, 145)",
-    "w": 500,
-    "gap": 14
+    "w": 384,
+    "gap": 8
    },
-   "painted": 146,
-   "shapes": 9,
-   "svg": 9,
-   "canvas": 0,
-   "img": 0,
-   "mockup": {
-    "w": 1200,
-    "h": 486,
-    "tag": "DIV",
-    "kids": 173
-   },
-   "controls": 11,
-   "control_h": [
-    17,
-    20,
-    31,
-    36
-   ],
-   "i": 6,
-   "y": 15634,
-   "height": 615,
-   "heading": "Hear about it in the channel you already have open."
-  },
-  {
-   "h_size": "36px",
-   "h_lh": "41.4px",
-   "h_ls": "-0.72px",
-   "h_weight": "400",
-   "h_align": "center",
-   "h_x": 447,
-   "h_w": 545,
-   "h_lines": 2,
-   "lead": {
-    "size": "15px",
-    "lh": "22.5px",
-    "color": "rgb(108, 105, 145)",
-    "w": 530,
-    "gap": 12
-   },
-   "painted": 148,
+   "painted": 139,
    "shapes": 21,
    "svg": 14,
    "canvas": 0,
    "img": 0,
    "mockup": {
-    "w": 1200,
-    "h": 425,
+    "w": 1040,
+    "h": 3600,
     "tag": "DIV",
-    "kids": 46
+    "kids": 380
    },
-   "controls": 12,
+   "controls": 11,
    "control_h": [
     17,
+    19,
     20,
     29,
-    31,
-    36
+    31
    ],
-   "i": 7,
-   "y": 16249,
-   "height": 917,
-   "heading": "Two lines of config, then ask in plain English."
+   "i": 3,
+   "y": 12483,
+   "height": 900,
+   "heading": "Fix it where you work."
   },
   {
    "h_size": "36px",
    "h_lh": "43.2px",
    "h_ls": "-0.36px",
    "h_weight": "400",
-   "h_align": "start",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 1,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgb(108, 105, 145)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 72,
+   "shapes": 25,
+   "svg": 2,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 380
+   },
+   "controls": 12,
+   "control_h": [
+    17,
+    19,
+    20,
+    31,
+    34
+   ],
+   "i": 4,
+   "y": 13383,
+   "height": 564,
+   "heading": "Ship with confidence."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 120,
+   "h_w": 1200,
+   "h_lines": 1,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgb(108, 105, 145)",
+    "w": 715,
+    "gap": 432
+   },
+   "painted": 221,
+   "shapes": 27,
+   "svg": 13,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 380
+   },
+   "controls": 24,
+   "control_h": [
+    17,
+    19,
+    20,
+    31,
+    34
+   ],
+   "i": 5,
+   "y": 13947,
+   "height": 400,
+   "heading": "What people are saying."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "center",
    "h_x": 280,
    "h_w": 880,
    "h_lines": 1,
    "lead": {
     "size": "18px",
-    "lh": "27px",
+    "lh": "28px",
     "color": "rgb(108, 105, 145)",
-    "w": 704,
+    "w": 715,
     "gap": 14
    },
-   "painted": 223,
+   "painted": 221,
    "shapes": 27,
    "svg": 13,
    "canvas": 0,
    "img": 0,
    "mockup": {
     "w": 880,
-    "h": 517,
+    "h": 519,
     "tag": "SECTION",
     "kids": 21
    },
-   "controls": 24,
+   "controls": 22,
    "control_h": [
     17,
+    19,
     20,
     31,
-    34,
-    36
+    35
    ],
-   "i": 8,
-   "y": 17166,
-   "height": 518,
+   "i": 6,
+   "y": 14347,
+   "height": 520,
    "heading": "Fits into your existing stack."
   },
   {
@@ -356,40 +286,80 @@
    "h_lh": "43.2px",
    "h_ls": "-0.36px",
    "h_weight": "400",
-   "h_align": "start",
+   "h_align": "center",
    "h_x": 280,
    "h_w": 880,
    "h_lines": 1,
    "lead": {
     "size": "18px",
-    "lh": "27px",
+    "lh": "28px",
     "color": "rgb(108, 105, 145)",
-    "w": 704,
+    "w": 715,
     "gap": 14
    },
-   "painted": 64,
+   "painted": 65,
    "shapes": 3,
    "svg": 1,
    "canvas": 0,
    "img": 0,
    "mockup": {
     "w": 880,
-    "h": 517,
+    "h": 519,
     "tag": "SECTION",
     "kids": 21
    },
    "controls": 13,
    "control_h": [
     17,
+    19,
     20,
-    30,
-    31,
-    36
+    29,
+    31
    ],
-   "i": 9,
-   "y": 17684,
-   "height": 482,
+   "i": 7,
+   "y": 14867,
+   "height": 426,
    "heading": "Trust is non-negotiable."
+  },
+  {
+   "h_size": "18px",
+   "h_lh": "28px",
+   "h_ls": "-0.18px",
+   "h_weight": "400",
+   "h_align": "start",
+   "h_x": 777,
+   "h_w": 367,
+   "h_lines": 1,
+   "lead": {
+    "size": "14px",
+    "lh": "21.7px",
+    "color": "rgb(108, 105, 145)",
+    "w": 367,
+    "gap": 8
+   },
+   "painted": 58,
+   "shapes": 3,
+   "svg": 1,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 880,
+    "h": 454,
+    "tag": "SECTION",
+    "kids": 15
+   },
+   "controls": 15,
+   "control_h": [
+    17,
+    18,
+    19,
+    20,
+    29
+   ],
+   "i": 8,
+   "y": 15293,
+   "height": 29,
+   "heading": "Subscribe"
   },
   {
    "h_size": "36px",
@@ -414,21 +384,21 @@
    "img": 0,
    "mockup": {
     "w": 880,
-    "h": 481,
+    "h": 454,
     "tag": "SECTION",
     "kids": 15
    },
    "controls": 15,
    "control_h": [
     17,
+    18,
+    19,
     20,
-    30,
-    31,
-    36
+    29
    ],
-   "i": 10,
-   "y": 18166,
-   "height": 577,
+   "i": 9,
+   "y": 15322,
+   "height": 578,
    "heading": "The Friday briefing on AI agent observability and re"
   },
   {
@@ -448,7 +418,7 @@
    "img": 0,
    "mockup": {
     "w": 880,
-    "h": 398,
+    "h": 399,
     "tag": "DIV",
     "kids": 21
    },
@@ -456,13 +426,13 @@
    "control_h": [
     15,
     17,
-    20,
-    27,
-    31
+    18,
+    19,
+    20
    ],
-   "i": 11,
-   "y": 18743,
-   "height": 580,
+   "i": 10,
+   "y": 15900,
+   "height": 579,
    "heading": "Start improving your agents today"
   }
  ]

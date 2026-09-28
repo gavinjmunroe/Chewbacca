@@ -20,13 +20,23 @@ MEASURE = r"""(want) => {
   let h = heads.find(x => (x.innerText||'').trim().replace(/\s+/g,' ').slice(0,52) === want);
   if (!h) return null;
   const hb = h.getBoundingClientRect(), hc = getComputedStyle(h);
-  let lead = null, n = h;
-  for (let k = 0; k < 8 && n; k++) {
-    n = n.nextElementSibling || (n.parentElement && n.parentElement.nextElementSibling);
-    if (!n) break;
-    if (n.tagName === 'P') { lead = n; break; }
-    const p = n.querySelector && n.querySelector('p');
-    if (p) { lead = p; break; }
+  /* THE LEAD IS THE FIRST <p> AFTER THE HEADING INSIDE THE HEADING'S OWN
+     BLOCK, not the first one found by walking siblings upward.
+
+     The sibling walk climbed out of the heading's container whenever the
+     heading was the last child, and then grabbed a paragraph from the next
+     section entirely. On the four feature blocks it reported three of them as
+     715px wide with a 14px gap while the DOM said 384 and 8, so the ledger
+     had me about to fix three things that were already correct.
+
+     Climbing to the nearest container that holds BOTH the heading and a
+     paragraph keeps the search inside one block. */
+  let lead = null, box = h.parentElement;
+  for (let k = 0; k < 6 && box; k++) {
+    const ps = [...box.querySelectorAll('p')].filter(x =>
+      h.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (ps.length) { lead = ps[0]; break; }
+    box = box.parentElement;
   }
   const lb = lead && lead.getBoundingClientRect(), lc = lead && getComputedStyle(lead);
   // everything currently painted in the viewport band

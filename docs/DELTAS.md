@@ -16,7 +16,7 @@ theirs `Stop guessing why your agents fail`  |  ours `Your agent failed and noth
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 10834px | 978px | **-9856** |
+| section height | 10834px | 10308px | **-526** |
 | heading size | 40px | 40px | ok |
 | heading leading | 44px | 44px | ok |
 | heading tracking | -0.4px | -0.4px | ok |
@@ -29,179 +29,179 @@ theirs `Stop guessing why your agents fail`  |  ours `Your agent failed and noth
 | lead leading | 22.5px | 22.5px | ok |
 | lead width | 512px | 512px | ok |
 | lead gap under heading | 8px | 8px | ok |
-| painted elements | 3243 | 3175 | **-68** |
-| svg shapes | 2260 | 2231 | **-29** |
+| painted elements | 3157 | 3175 | **+18** |
+| svg shapes | 2206 | 2231 | **+25** |
 | controls | 15 | 12 | **-3** |
 | largest block width | 560px | 1200px | **+640** |
-| largest block height | 231px | 496px | **+265** |
-| largest block children | 19 | 144 | **+125** |
+| largest block height | 232px | 496px | **+264** |
+| largest block children | 19 | 143 | **+124** |
 
 
 ## trace scene
 
-No counterpart on theirs. Ours: `Your agents fail silently.`, y1318, 9258px tall.
+No counterpart on theirs. Ours: `Surface failures you didn't know to look for.`, y10647, 928px tall.
 
 
 ## surface failures
 
-theirs `Surface failures you didn't know to look for.`  |  ours `Surface failures you didn't know to look for.`
+theirs `Surface failures you didn't know to look for.`  |  ours `Get notified on what matters.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 928px | 3443px | **+2515** |
+| section height | 928px | 908px | **-20** |
 | heading size | 36px | 36px | ok |
 | heading leading | 43.2px | 43.2px | ok |
 | heading tracking | -0.36px | -0.36px | ok |
 | heading weight | 400 | 400 | ok |
-| heading align | left | start | **differs** |
-| heading x | 224px | 296px | **+72** |
-| heading width | 384px | 368px | **-16** |
-| heading lines | 2 | 3 | **+1** |
+| heading align | left | left | ok |
+| heading x | 224px | 224px | ok |
+| heading width | 384px | 384px | ok |
+| heading lines | 2 | 2 | ok |
 | lead size | 18px | 18px | ok |
-| lead leading | 28px | 27px | **-1** |
-| lead width | 384px | 368px | **-16** |
-| lead gap under heading | 8px | 14px | **+6** |
-| painted elements | 632 | 531 | **-101** |
-| svg shapes | 165 | 474 | **+309** |
-| controls | 15 | 10 | **-5** |
-| largest block width | 1040px | 880px | **-160** |
-| largest block height | 3600px | 460px | **-3140** |
-| largest block children | 508 | 99 | **-409** |
+| lead leading | 28px | 28px | ok |
+| lead width | 384px | 384px | ok |
+| lead gap under heading | 8px | 8px | ok |
+| painted elements | 618 | 77 | **-541** |
+| svg shapes | 165 | 3 | **-162** |
+| controls | 15 | 11 | **-4** |
+| largest block width | 1040px | 1040px | ok |
+| largest block height | 3600px | 3600px | ok |
+| largest block children | 495 | 380 | **-115** |
 
 
 ## notifications
 
-theirs `Get notified on what matters.`  |  ours `Hear about it in the channel you already have open.`
+theirs `Get notified on what matters.`  |  ours `Fits into your existing stack.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 908px | 615px | **-293** |
+| section height | 908px | 520px | **-388** |
 | heading size | 36px | 36px | ok |
-| heading leading | 43.2px | 41.4px | **-1.8** |
-| heading tracking | -0.36px | -0.72px | ok |
+| heading leading | 43.2px | 43.2px | ok |
+| heading tracking | -0.36px | -0.36px | ok |
 | heading weight | 400 | 400 | ok |
-| heading align | left | start | **differs** |
-| heading x | 224px | 136px | **-88** |
-| heading width | 384px | 505px | **+121** |
-| heading lines | 2 | 2 | ok |
+| heading align | left | center | **differs** |
+| heading x | 224px | 280px | **+56** |
+| heading width | 384px | 880px | **+496** |
+| heading lines | 2 | 1 | **-1** |
 | lead size | 18px | 18px | ok |
-| lead leading | 28px | 27px | **-1** |
-| lead width | 384px | 500px | **+116** |
+| lead leading | 28px | 28px | ok |
+| lead width | 384px | 715px | **+331** |
 | lead gap under heading | 8px | 14px | **+6** |
-| painted elements | 509 | 146 | **-363** |
-| svg shapes | 29 | 9 | **-20** |
-| controls | 15 | 11 | **-4** |
-| largest block width | 1040px | 1200px | **+160** |
-| largest block height | 3600px | 486px | **-3114** |
-| largest block children | 528 | 173 | **-355** |
+| painted elements | 495 | 221 | **-274** |
+| svg shapes | 29 | 27 | **-2** |
+| controls | 15 | 22 | **+7** |
+| largest block width | 1040px | 880px | **-160** |
+| largest block height | 3600px | 519px | **-3081** |
+| largest block children | 515 | 21 | **-494** |
 
 
 ## fix where you work / MCP
 
-theirs `Fix it where you work.`  |  ours `Two lines of config, then ask in plain English.`
+theirs `Fix it where you work.`  |  ours `Trust is non-negotiable.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 886px | 917px | **+31** |
+| section height | 886px | 426px | **-460** |
 | heading size | 36px | 36px | ok |
-| heading leading | 43.2px | 41.4px | **-1.8** |
-| heading tracking | -0.36px | -0.72px | ok |
+| heading leading | 43.2px | 43.2px | ok |
+| heading tracking | -0.36px | -0.36px | ok |
 | heading weight | 400 | 400 | ok |
 | heading align | left | center | **differs** |
-| heading x | 224px | 447px | **+223** |
-| heading width | 384px | 545px | **+161** |
-| heading lines | 1 | 2 | **+1** |
-| lead size | 18px | 15px | **-3** |
-| lead leading | 28px | 22.5px | **-5.5** |
-| lead width | 384px | 530px | **+146** |
-| lead gap under heading | 8px | 12px | **+4** |
-| painted elements | 531 | 148 | **-383** |
-| svg shapes | 29 | 21 | **-8** |
-| controls | 15 | 12 | **-3** |
-| largest block width | 1040px | 1200px | **+160** |
-| largest block height | 3600px | 425px | **-3175** |
-| largest block children | 549 | 46 | **-503** |
+| heading x | 224px | 280px | **+56** |
+| heading width | 384px | 880px | **+496** |
+| heading lines | 1 | 1 | ok |
+| lead size | 18px | 18px | ok |
+| lead leading | 28px | 28px | ok |
+| lead width | 384px | 715px | **+331** |
+| lead gap under heading | 8px | 14px | **+6** |
+| painted elements | 521 | 65 | **-456** |
+| svg shapes | 29 | 3 | **-26** |
+| controls | 15 | 13 | **-2** |
+| largest block width | 1040px | 880px | **-160** |
+| largest block height | 3600px | 519px | **-3081** |
+| largest block children | 541 | 21 | **-520** |
 
 
 ## read the spans / ship with confidence
 
-theirs `Ship with confidence.`  |  ours `Read every span, not just the ones that errored.`
+theirs `Ship with confidence.`  |  ours `What people are saying.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 662px | 570px | **-92** |
+| section height | 662px | 400px | **-262** |
 | heading size | 36px | 36px | ok |
 | heading leading | 43.2px | 43.2px | ok |
 | heading tracking | -0.36px | -0.36px | ok |
 | heading weight | 400 | 400 | ok |
-| heading align | left | start | **differs** |
-| heading x | 224px | 136px | **-88** |
-| heading width | 384px | 505px | **+121** |
-| heading lines | 1 | 2 | **+1** |
-| lead size | 18px | 16px | **-2** |
-| lead leading | 28px | 24.8px | **-3.2** |
-| lead width | 384px | 505px | **+121** |
-| lead gap under heading | 8px | 18px | **+10** |
-| painted elements | 461 | 220 | **-241** |
-| svg shapes | 29 | 17 | **-12** |
-| controls | 15 | 12 | **-3** |
-| largest block width | 1040px | 1200px | **+160** |
-| largest block height | 3600px | 486px | **-3114** |
-| largest block children | 482 | 173 | **-309** |
+| heading align | left | center | **differs** |
+| heading x | 224px | 120px | **-104** |
+| heading width | 384px | 1200px | **+816** |
+| heading lines | 1 | 1 | ok |
+| lead size | 18px | 18px | ok |
+| lead leading | 28px | 28px | ok |
+| lead width | 384px | 715px | **+331** |
+| lead gap under heading | 8px | 432px | **+424** |
+| painted elements | 529 | 221 | **-308** |
+| svg shapes | 29 | 27 | **-2** |
+| controls | 15 | 24 | **+9** |
+| largest block width | 1040px | 1040px | ok |
+| largest block height | 3600px | 3600px | ok |
+| largest block children | 544 | 380 | **-164** |
 
 
 ## fits into your stack
 
-theirs `Fits into your existing stack.`  |  ours `Fits into your existing stack.`
+theirs `Fits into your existing stack.`  |  ours `Subscribe`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 697px | 518px | **-179** |
-| heading size | 36px | 36px | ok |
-| heading leading | 43.2px | 43.2px | ok |
-| heading tracking | -0.36px | -0.36px | ok |
+| section height | 697px | 29px | **-668** |
+| heading size | 36px | 18px | **-18** |
+| heading leading | 43.2px | 28px | **-15.2** |
+| heading tracking | -0.36px | -0.18px | ok |
 | heading weight | 400 | 400 | ok |
 | heading align | center | start | **differs** |
-| heading x | 344px | 280px | **-64** |
-| heading width | 752px | 880px | **+128** |
+| heading x | 344px | 777px | **+433** |
+| heading width | 752px | 367px | **-385** |
 | heading lines | 1 | 1 | ok |
-| lead size | 18px | 18px | ok |
-| lead leading | 28px | 27px | **-1** |
-| lead width | 672px | 704px | **+32** |
-| lead gap under heading | 8px | 14px | **+6** |
-| painted elements | 145 | 223 | **+78** |
-| svg shapes | 7 | 27 | **+20** |
-| controls | 26 | 24 | **-2** |
+| lead size | 18px | 14px | **-4** |
+| lead leading | 28px | 21.7px | **-6.3** |
+| lead width | 672px | 367px | **-305** |
+| lead gap under heading | 8px | 8px | ok |
+| painted elements | 145 | 58 | **-87** |
+| svg shapes | 7 | 3 | **-4** |
+| controls | 26 | 15 | **-11** |
 | largest block width | 1040px | 880px | **-160** |
-| largest block height | 3600px | 517px | **-3083** |
-| largest block children | 508 | 21 | **-487** |
+| largest block height | 3600px | 454px | **-3146** |
+| largest block children | 500 | 15 | **-485** |
 
 
 ## trust
 
-theirs `Trust is non-negotiable.`  |  ours `Trust is non-negotiable.`
+theirs `Trust is non-negotiable.`  |  ours `The Friday briefing on AI agent observability and re`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 588px | 482px | **-106** |
+| section height | 588px | 578px | **-10** |
 | heading size | 36px | 36px | ok |
 | heading leading | 43.2px | 43.2px | ok |
 | heading tracking | -0.36px | -0.36px | ok |
 | heading weight | 400 | 400 | ok |
 | heading align | center | start | **differs** |
-| heading x | 344px | 280px | **-64** |
-| heading width | 752px | 880px | **+128** |
-| heading lines | 1 | 1 | ok |
-| lead size | 18px | 18px | ok |
-| lead leading | 28px | 27px | **-1** |
-| lead width | 672px | 704px | **+32** |
-| lead gap under heading | 8px | 14px | **+6** |
-| painted elements | 89 | 64 | **-25** |
+| heading x | 344px | 296px | **-48** |
+| heading width | 752px | 368px | **-384** |
+| heading lines | 1 | 3 | **+2** |
+| lead size | 18px | 16px | **-2** |
+| lead leading | 28px | 25.6px | **-2.4** |
+| lead width | 672px | 368px | **-304** |
+| lead gap under heading | 8px | 106px | **+98** |
+| painted elements | 89 | 59 | **-30** |
 | svg shapes | 5 | 3 | **-2** |
-| controls | 14 | 13 | **-1** |
+| controls | 14 | 15 | **+1** |
 | largest block width | 1280px | 880px | **-400** |
-| largest block height | 705px | 517px | **-188** |
-| largest block children | 187 | 21 | **-166** |
+| largest block height | 705px | 454px | **-251** |
+| largest block children | 187 | 15 | **-172** |
 
 
 ## testimonials
@@ -220,68 +220,48 @@ To be built.
 
 ## friday briefing
 
-theirs `The Friday briefing on AI agent observability and re`  |  ours `The Friday briefing on AI agent observability and re`
+theirs `The Friday briefing on AI agent observability and re`  |  ours `Start improving your agents today`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 639px | 577px | **-62** |
+| section height | 639px | 579px | **-60** |
 | heading size | 36px | 36px | ok |
 | heading leading | 45px | 43.2px | **-1.8** |
 | heading tracking | -0.36px | -0.36px | ok |
 | heading weight | 400 | 400 | ok |
-| heading align | start | start | ok |
-| heading x | 113px | 296px | **+183** |
-| heading width | 576px | 368px | **-208** |
-| heading lines | 2 | 3 | **+1** |
-| lead size | 10px | 16px | **+6** |
-| lead leading | 15px | 25.6px | **+10.6** |
-| lead width | 627px | 368px | **-259** |
-| lead gap under heading | 57px | 106px | **+49** |
-| painted elements | 125 | 59 | **-66** |
+| heading align | start | center | **differs** |
+| heading x | 113px | 280px | **+167** |
+| heading width | 576px | 880px | **+304** |
+| heading lines | 2 | 1 | **-1** |
+| lead size | 10px | - | **differs** |
+| lead leading | 15px | - | **differs** |
+| lead width | 627px | -px | **differs** |
+| lead gap under heading | 57px | -px | **differs** |
+| painted elements | 125 | 63 | **-62** |
 | svg shapes | 5 | 3 | **-2** |
-| controls | 40 | 15 | **-25** |
+| controls | 40 | 25 | **-15** |
 | largest block width | 1280px | 880px | **-400** |
-| largest block height | 705px | 481px | **-224** |
-| largest block children | 187 | 15 | **-172** |
+| largest block height | 705px | 399px | **-306** |
+| largest block children | 187 | 21 | **-166** |
 
 
 ## closing CTA
 
-theirs `Start improving your agents today`  |  ours `Start improving your agents today`
+No counterpart on ours. Theirs: `Start improving your agents today`, y17158, 694px tall.
 
-| axis | theirs | ours | delta |
-|---|---|---|---|
-| section height | 694px | 580px | **-114** |
-| heading size | 36px | 36px | ok |
-| heading leading | 40px | 43.2px | **+3.2** |
-| heading tracking | -0.36px | -0.36px | ok |
-| heading weight | 400 | 400 | ok |
-| heading align | center | center | ok |
-| heading x | 466px | 280px | **-186** |
-| heading width | 509px | 880px | **+371** |
-| heading lines | 1 | 1 | ok |
-| lead size | - | - | - |
-| lead leading | - | - | - |
-| lead width | -px | -px | - |
-| lead gap under heading | -px | -px | - |
-| painted elements | 109 | 63 | **-46** |
-| svg shapes | 7 | 3 | **-4** |
-| controls | 23 | 25 | **+2** |
-| largest block width | 1280px | 880px | **-400** |
-| largest block height | 527px | 398px | **-129** |
-| largest block children | 28 | 21 | **-7** |
+To be built.
 
 
 ## failure wall  OURS ONLY
 
-No counterpart on theirs. Ours: `Your agents fail without raising anything.`, y14019, 781px tall.
+No counterpart on theirs. Ours: `Fix it where you work.`, y12483, 900px tall.
 
 Cut per the 2026-09-28 decision.
 
 
 ## counter  OURS ONLY
 
-No counterpart on theirs. Ours: `Your agents left 4 5 6 7 8 9 0 1 2 3 4 1 2 3 4 5 6 7`, y14800, 264px tall.
+No counterpart on theirs. Ours: `Ship with confidence.`, y13383, 564px tall.
 
 Cut per the 2026-09-28 decision.
 

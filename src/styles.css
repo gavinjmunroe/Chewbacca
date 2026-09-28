@@ -1074,7 +1074,12 @@ h2.sub-h, .news-right h2.sub-h {
    header offset to subtract here the way .pin needed one. */
 .feat-pin    { position: sticky; top: 0; height: 100svh;
                display: flex; align-items: center; }
-.feat-pin .demo-stage { width: 100%; height: 544px; }
+/* 900, not 544. Their sticky panel is 544x900, a tall surface, and ours was
+   square. The panels themselves size to their content, so the stage holds
+   them at the top rather than stretching them: a trace list with room under
+   it reads as a list that continues, which is what theirs does. */
+.feat-pin .demo-stage { width: 100%; height: min(900px, 100svh); }
+.feat-pin .panel      { max-height: 100%; overflow: hidden; }
 
 @media (max-width: 900px) {
   .feat-grid { grid-template-columns: 1fr; gap: 0; }
@@ -1160,3 +1165,47 @@ section.band > .lead   { max-width: 672px; margin-left: auto; margin-right: auto
    the file and lost anyway. */
 .news-band .news-left h2 { line-height: 45px; }
 section.cta h2           { line-height: 40px; }
+
+/* ---- the metrics panel ------------------------------------------------ */
+/* An issue that closed and came back, not a chart. Their version carries one
+ * rect and one line of SVG in the whole container: the sparkline is a
+ * footnote and the timeline is the subject. */
+.mx            { display: flex; flex-direction: column; gap: 14px; }
+.mx-sev        { font-family: var(--mono); font-size: 9px; letter-spacing: .06em;
+                 color: #fff; background: #d4443c; padding: 1px 5px; margin-left: 8px; }
+.mx-title      { font-size: 15px; line-height: 1.35; color: var(--ink); }
+
+.mx-track      { list-style: none; margin: 0; padding: 0;
+                 display: flex; flex-direction: column; gap: 0; }
+.mx-ev         { display: grid; grid-template-columns: 12px 64px 52px 1fr;
+                 grid-template-areas: "dot kind when who" ". note note note";
+                 align-items: center; row-gap: 2px;
+                 font-family: var(--mono); font-size: 10px;
+                 padding: 7px 0; border-bottom: 1px solid var(--line); }
+.mx-ev:last-child { border-bottom: 0; }
+.mx-dot        { grid-area: dot; width: 5px; height: 5px; border-radius: 50%;
+                 background: var(--line); }
+.mx-kind       { grid-area: kind; color: var(--ink); letter-spacing: .04em; }
+.mx-when       { grid-area: when; color: var(--muted); }
+.mx-who        { grid-area: who; color: var(--muted); text-align: right; }
+.mx-note       { grid-area: note; color: var(--muted); opacity: .8; }
+/* Only the two states that matter carry colour. Colouring all five would
+   make none of them read as the exception. */
+.mx-ev-fixed    .mx-dot { background: #1f7a45; }
+.mx-ev-reopened .mx-dot { background: #d4443c; }
+.mx-ev-reopened .mx-kind { color: #d4443c; }
+
+.mx-chart      { border: 1px solid var(--line); padding: 10px; }
+.mx-chart-hd   { display: flex; align-items: baseline; justify-content: space-between;
+                 margin-bottom: 8px; font-family: var(--mono); font-size: 10px; }
+.mx-metric     { color: var(--muted); }
+.mx-score      { font-size: 18px; color: #d4443c; }
+.mx-unit       { font-size: 10px; color: var(--muted); }
+.mx-chart svg  { width: 100%; height: 96px; display: block; }
+.mx-axis       { display: flex; justify-content: space-between; margin-top: 6px;
+                 font-family: var(--mono); font-size: 9px; color: var(--muted); }
+
+.mx-foot       { font-size: 11px; line-height: 1.5; color: var(--muted); }
+.mx-badge      { font-family: var(--mono); font-size: 9px; letter-spacing: .06em;
+                 color: #d4443c; border: 1px solid #d4443c; padding: 1px 5px;
+                 margin-right: 6px; }

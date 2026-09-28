@@ -481,25 +481,93 @@ function row(k, v, extra = "") {
    were thin sketches of panels that the waterfall, chat-mock and
    integrations modules already draw properly, and those now fill the
    DEMO slots. Kept in git at 1babb6c. */
+/* THE METRICS PANEL. Rebuilt 2026-09-28, and it is not a chart.
+
+   Ours drew 22 bars and carried five text leaves, against 24 to 60 on the
+   other three panels. Theirs, measured at the same stage, has ONE rect and
+   ONE line of SVG in the whole sticky container: the visual is not a chart,
+   it is an issue that was closed and came back, with a sparkline as a
+   footnote rather than as the subject.
+
+   That is the argument this panel makes and the bars were not making it. A
+   bar chart says "here is some data". An issue card that says RESOLVED and
+   then says REOPENED two lines later says the thing the product is for.
+
+   Structure, matching the density of the other three:
+
+       header      issue id, severity, the owning agent
+       title       what broke, in one line
+       timeline    opened, fixed, reopened, each with a time and an actor
+       sparkline   28 days, one line, a threshold, and the day it crossed
+       eval        the check that now runs on every new trace
+       footer      the recurrence, and who was told
+
+   All content is ours. tools/check_copy.py refuses a rebuild that
+   reintroduces one of their sentences. */
+const EVENTS = [
+  ["opened",   "4d ago",  "auto",            "12 runs matched, grouped by cause"],
+  ["assigned", "4d ago",  "checkout-agent",  "owner set from the failing span"],
+  ["fixed",    "3d ago",  "PR #482",         "policy window added to the prompt"],
+  ["closed",   "3d ago",  "auto",            "48h clean, eval green"],
+  ["reopened", "2m ago",  "auto",            "2 new runs matched the same shape"],
+];
+
+// 28 days of the eval score. The dip is the incident, the recovery is the
+// fix, the second dip is the regression the panel is about.
+const TREND = [
+  98, 97, 98, 99, 98, 97, 98, 96, 91, 84, 71, 62, 58, 55,
+  61, 74, 88, 96, 98, 99, 98, 98, 97, 98, 97, 93, 81, 69,
+];
+const THRESHOLD = 90;
+
 function metricsPanel() {
-  return `<div class="panel-head"><span>refund_window_breach</span>
-    <span style="margin-left:auto">all passing</span></div>
-    <div class="panel-body">
-    <div style="font-size:13px;margin-bottom:6px">Metric created &mdash;
-      <span style="font-family:var(--mono);font-size:12px">refund_window_breach</span></div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
-      Every new run is scored against this failure</div>
-    <svg viewBox="0 0 420 150" style="width:100%;height:150px">
-      <line x1="0" y1="120" x2="420" y2="120" stroke="var(--line)"/>
-      ${Array.from({ length: 22 }, (_, i) => {
-        const h = i < 9 ? 70 - i * 2 : Math.max(4, 52 - (i - 9) * 4);
-        return `<rect x="${i * 19 + 3}" y="${120 - h}" width="13" height="${h}"
-          fill="${i < 9 ? "#d4443c" : "#755cfe"}" opacity="0.85"/>`;
-      }).join("")}
-    </svg>
-    <div style="margin-top:10px;padding:8px 10px;background:var(--panel);
-      border:1px solid var(--line);font-size:12px;color:var(--muted)">
-      Recurred 2m ago &mdash; 2 traces flagged &middot; team notified</div></div>`;
+  const W = 420, H = 96, PAD = 4;
+  const x = i => PAD + (i * (W - PAD * 2)) / (TREND.length - 1);
+  const y = v => H - PAD - ((v - 40) / 60) * (H - PAD * 2);
+  const line = TREND.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const breach = TREND.findIndex((v, i) => i > 20 && v < THRESHOLD);
+
+  const ev = EVENTS.map(([kind, when, who, note]) => `
+    <li class="mx-ev mx-ev-${kind}">
+      <span class="mx-dot" aria-hidden="true"></span>
+      <span class="mx-kind">${kind}</span>
+      <span class="mx-when">${when}</span>
+      <span class="mx-who">${who}</span>
+      <span class="mx-note">${note}</span>
+    </li>`).join("");
+
+  return `<div class="panel-head">
+      <span>inc_4f2a</span>
+      <span class="mx-sev">P0</span>
+      <span style="margin-left:auto">checkout-agent</span>
+    </div>
+    <div class="panel-body mx">
+      <div class="mx-title">Refunds promised past the 30 day window</div>
+
+      <ol class="mx-track">${ev}</ol>
+
+      <div class="mx-chart">
+        <div class="mx-chart-hd">
+          <span class="mx-metric">refund_window_breach</span>
+          <span class="mx-score">69<span class="mx-unit">/100</span></span>
+        </div>
+        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+             aria-label="Eval score over 28 days, crossing the threshold twice">
+          <line x1="0" y1="${y(THRESHOLD).toFixed(1)}" x2="${W}" y2="${y(THRESHOLD).toFixed(1)}"
+                stroke="var(--line)" stroke-dasharray="3 3"/>
+          <polyline points="${line}" fill="none" stroke="${A}" stroke-width="1.5"
+                    stroke-linejoin="round"/>
+          <circle cx="${x(breach).toFixed(1)}" cy="${y(TREND[breach]).toFixed(1)}" r="3"
+                  fill="#d4443c"/>
+        </svg>
+        <div class="mx-axis"><span>28d ago</span><span>threshold ${THRESHOLD}</span><span>now</span></div>
+      </div>
+
+      <div class="mx-foot">
+        <span class="mx-badge">reopened</span>
+        2 runs matched 2m ago. Posted to #agent-alerts and reassigned.
+      </div>
+    </div>`;
 }
 
 

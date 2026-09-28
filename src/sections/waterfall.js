@@ -79,6 +79,46 @@ const TRACE = {
         { kind: "guard", name: "guardrail.output_policy", start: 4598, dur: 98 },
       ],
     },
+    /* THE TAIL. Added 2026-09-28 because the panel sat 380px tall inside a
+       900px stage with white under it, and theirs fills the height.
+
+       Padding would have been the wrong fix. The heading over this panel is
+       "read every span", and a trace that stops after the reply is sent is
+       exactly the trace that misses what this product is for: the work an
+       agent does AFTER it has answered. So the tail is the part that
+       matters, and it is where both findings now live.
+
+       Timings continue from 4704 and stay inside the 4820 total. */
+    {
+      kind: "tool",
+      name: "tool.update_ticket",
+      start: 4704,
+      dur: 96,
+      children: [
+        { kind: "retr", name: "retrieve.ticket_state", start: 4712, dur: 38 },
+        { kind: "guard", name: "guardrail.write_scope", start: 4758, dur: 34 },
+      ],
+    },
+    {
+      kind: "tool",
+      name: "tool.emit_metrics",
+      start: 4712,
+      dur: 74,
+      note: "3 counters",
+      children: [
+        { kind: "vec", name: "vector.upsert trace_embedding", start: 4720, dur: 52 },
+      ],
+    },
+    {
+      kind: "gen",
+      name: "llm.label_resolution",
+      start: 4736,
+      dur: 68,
+      error: true,
+      note: "schema mismatch",
+    },
+    { kind: "guard", name: "guardrail.pii_audit", start: 4762, dur: 44 },
+    { kind: "agent", name: "agent.close triage_ticket", start: 4790, dur: 28 },
   ],
 };
 

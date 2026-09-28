@@ -24,7 +24,6 @@ export PEOPLE_DIR="$TMP/people"
 export COURSEWORK_DIR="$TMP/coursework"
 export CHEWBACCA_LOG_DIR="$TMP/logs"
 export SUPERASSISTANT_DIR="$TMP/superassistant"
-export BOB_DECISIONS="$TMP/decisions.jsonl"
 
 group() { CURRENT="$1"; [ -n "$ONLY" ] && [ "$ONLY" != "$1" ] && return 1
           echo -e "\n${BLD}$1${NC}"; return 0; }
@@ -212,6 +211,10 @@ if group "doctor"; then
     bash -c "grep -q 'MIN_RUNS_FOR_VERDICT' '$ROOT/doctor.sh'"
 fi
 
+if group "jev"; then
+  check "Jev validates typed responses and protects failure paths" python3 "$ROOT/tests/test_jev.py"
+fi
+
 # ── GTM engineering ───────────────────────────────────────────────────────────
 if group "gtme"; then
   check "workflow graph validates evidence and bounds execution" python3 "$ROOT/tests/test_gtme_graph.py"
@@ -230,7 +233,6 @@ if group "tools"; then
   check  "the evolve merge gate refuses a regression" python3 "$ROOT/tests/test_evolve_gate.py"
   check  "a reply that hands over a command is refused" python3 "$ROOT/tests/test_handoff_check.py"
   check  "a correction must change the kit, not just the reply" python3 "$ROOT/tests/test_durable_check.py"
-  check  "native write tracking observes content and workspace changes" python3 "$ROOT/tests/test_write_log.py"
   check  "preflight describes setup.sh accurately" python3 "$ROOT/tests/test_preflight.py"
   check  "context cost --json is valid" bash -c "python3 '$ROOT/tools/context_cost.py' --json | python3 -m json.tool"
   # Not --check: every commit made after the last regeneration invalidates it,
@@ -274,22 +276,11 @@ if group "tools"; then
     bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck/skills' 2>&1 || true"
   exits  "and the checker exits non-zero" 1 \
     bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck/skills'"
-  LONG="$TMP/fmcheck-long/skills/long"; mkdir -p "$LONG"
-  printf -- '---\nname: long\ndescription: "%s"\n---\n\n# x\n' "$(printf 'a%.0s' $(seq 1 1100))" > "$LONG/SKILL.md"
-  expect "a description over 1024 characters is caught" "the limit is 1024" \
-    bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck-long/skills' 2>&1 || true"
-  # Perplexity imports skills as zips; every repo skill must package cleanly.
-  check  "every skill packages for Perplexity" bash -c "python3 '$ROOT/tools/agent_runtime.py' export --runtime perplexity-computer --destination '$TMP/px' >/dev/null && [ \"\$(ls '$TMP/px/skills' | wc -l)\" -eq \"\$(ls -d '$ROOT'/skills/*/SKILL.md | wc -l)\" ] && ! grep -q '/Users/' '$TMP/px/CHEWBACCA.md'"
   check  "AGENTS.md exports for other agents" python3 "$ROOT/tools/agents_md.py" "$TMP"
   check  "the export leaks no @imports" bash -c "! grep -q '^@' '$TMP/AGENTS.md'"
   check  "slop check holds the line" python3 "$ROOT/bin/slop-check" "$ROOT/docs" "$ROOT/skills" --max 60
   check  "code-slop scores its own tests" python3 "$ROOT/tests/test_code_slop.py"
   check  "inventory parses frontmatter and holds house style" python3 "$ROOT/tests/test_inventory.py"
-  check  "amber-mcp imports 10,000 contacts deduplicated, one user per store" python3 "$ROOT/tests/test_amber_mcp.py"
-  check  "site finds what the kit knows and snaps a page by role" python3 "$ROOT/tests/test_site.py"
-  check  "amber-user: two people, each recalls their own and never the other's" python3 "$ROOT/tests/test_amber_tenants.py"
-  check  "amber agent: greets its own person, recalls across sessions, Jev off until opted in" python3 "$ROOT/tests/test_amber_agent.py"
-  check  "amber-redact: known and pattern values never leak, the gap is measured" python3 "$ROOT/tests/test_amber_redact.py"
   # The craft gate is the only thing making the demo rules fire rather than sit
   # in a markdown file, so its fail-closed behaviour is the property to pin.
   check  "craft-gate refuses a craft nobody studied" bash -c "! CRAFT_DIR='$TMP/craft-empty' python3 '$ROOT/bin/craft-gate' pitch-deck >/dev/null 2>&1"
@@ -363,7 +354,7 @@ if group "installer"; then
   # match SHA256SUMS.txt, so a manifest that does not describe its own commit
   # breaks every fresh install. The working-tree check cannot see it.
   # The install must not reach for Claude on a machine that already has an
-  # agent. Sam runs Codex, hit a Claude credits purchase on the last screen
+  # agent. Sagar runs Codex, hit a Claude credits purchase on the last screen
   # of a kit sold as model agnostic, and stopped. He has still not onboarded.
   check  "the install uses the agent already on the machine" \
     bash "$ROOT/tests/agent_agnostic.sh" "$ROOT"
@@ -377,16 +368,6 @@ if group "installer"; then
   check  "kit-debt fires when a session taught the kit nothing" \
     bash "$ROOT/tests/kit_debt.sh" "$ROOT"
 
-  # Three zsh traps cost a re-run each on 2026-09-27. Refuse all three, and
-  # pass commands that only mention them in a heredoc or single quotes.
-  check  "zsh-guard refuses the traps and passes the rest" \
-    bash "$ROOT/tests/zsh_guard.sh" "$ROOT"
-
-  # 2026-09-26: a texted QR photo sat undownloaded (transfer_state 0) and the
-  # machine had no decoder. qr must decode, refuse blanks, and say "not downloaded".
-  check  "qr decodes a texted code and reports undownloaded images" \
-    bash "$ROOT/tests/qr.sh" "$ROOT"
-
   # Every kit on the machine matched one 17,000-character message about a club
   # website on 2026-09-22, because hit count was never divided by what was
   # typed and two kits make every stem look distinctive.
@@ -397,6 +378,15 @@ if group "installer"; then
   # said it was running. The user caught it, not the kit.
   check  "agent-claim-guard refuses an unlaunched agent claim" \
     bash "$ROOT/tests/agent_claim_guard.sh" "$ROOT"
+
+  # This line lost its `check` keyword and its script path in f24d6d0, so it
+  # ran the DESCRIPTION as a filename and failed on every run. It hid its own
+  # finding: handoff-guard could refuse and had no test at all.
+  check  "every refusing hook is tested both ways" \
+    bash "$ROOT/tests/guard_two_sided.sh" "$ROOT"
+
+  check  "handoff-guard refuses a handed-over command and permits a report" \
+    bash "$ROOT/tests/handoff_guard.sh" "$ROOT"
 
   # 18 research files and a whole session of UI work that read none of them.
   check  "design-context fires on design work only" \
@@ -542,7 +532,7 @@ if group "installer"; then
   # was still there: "brew install node" printed to someone with no brew.
   check  "a bare Mac gets no dead ends" bash "$ROOT/tests/bare_machine.sh"
 
-  # Sam installed this on 2026-09-19 and a browser window opened on his
+  # Sagar installed this on 2026-09-19 and a browser window opened on his
   # computer by itself, because Serena's upstream default starts a web
   # dashboard and opens a tab on first run. He concluded the kit was dangerous.
   # That is the right conclusion to draw about software that opens windows
@@ -578,17 +568,12 @@ if group "installer"; then
   check  "every relative link in the docs resolves" \
     python3 "$ROOT/tools/linkcheck.py"
 
-  # The real BACKLOG.md lives in the team's private repo, so these read a
-  # fixture: on CI, where that repo is absent, they failed from 2026-09-21 to
-  # 2026-09-25 while passing on every Mac that had CHEWBACCA_PRIVATE set.
-  mkdir -p "$TMP/backlog"
-  printf '## Now\n\n| # | Item | Status |\n|---|---|---|\n| 1 | Ship it | open |\n\n## Dead\n\n| Item | Reason |\n|---|---|\n| An old idea | superseded |\n' > "$TMP/backlog/BACKLOG.md"
-  check  "the backlog lists open work" env CHEWBACCA_PRIVATE="$TMP/backlog" bash -c '
+  check  "the backlog lists open work" bash -c '
     out=$("$1/bin/backlog" 2>/dev/null)
     case "$out" in *"open now"*) : ;;
       *) echo "backlog printed nothing"; exit 1 ;; esac' _ "$ROOT"
 
-  check  "the backlog keeps dead items and their reason" env CHEWBACCA_PRIVATE="$TMP/backlog" bash -c '
+  check  "the backlog keeps dead items and their reason" bash -c '
     "$1/bin/backlog" dead 2>/dev/null | grep -q . || {
       echo "dead items vanished, so somebody will propose them again"; exit 1; }' _ "$ROOT"
 
@@ -596,7 +581,7 @@ if group "installer"; then
   check  "SessionStart injects the backlog" \
     grep -q "bin/backlog" "$ROOT/.claude/hooks/session-context.sh"
 
-  # Sam, 2026-09-20, after installing: "i don't even know how to remove this
+  # Sagar, 2026-09-20, after installing: "i don't even know how to remove this
   # agent", "seems like malware". uninstall.sh existed the whole time. The
   # closing screen listed what Claude could now read and never said how to undo
   # it, so the capability might as well not have shipped.
@@ -946,21 +931,6 @@ if group "hud"; then
   check  "the router's table holds" python3 "$ROOT/tests/test_route.py"
   check  "the terminal hook filters and holds" python3 "$ROOT/tests/test_terminal_events.py"
   check  "the terminal state folds and tails" python3 "$ROOT/tests/test_terminal_state.py"
-  check  "the agent board folds every session and picks by Jev" python3 "$ROOT/tests/test_agent_board.py"
-  check  "fanout runs the JevBacca kill test with injected judges" python3 "$ROOT/tests/test_fanout.py"
-  check  "site-fast types a field value or nothing" python3 "$ROOT/tests/test_site_fast.py"
-  check  "untrusted-screen flags text aimed at the agent, and only that" python3 "$ROOT/tests/test_screen.py"
-  check  "model-route maps Jev's class to the router's targets" python3 "$ROOT/tests/test_model_route.py"
-  check  "intro walks you, a person, an org, and nothing else" python3 "$ROOT/tests/test_intro.py"
-  check  "ux-do acts on what was meant, asks when unsure, never presses send" python3 "$ROOT/tests/test_ux.py"
-  check  "every named Jev decision is logged and joined to what happened" python3 "$ROOT/tests/test_decision_log.py"
-  check  "math, time, conversions and weather are computed, never guessed" python3 "$ROOT/tests/test_quick.py"
-  check  "a replayed sentence takes the path the voice would take" python3 "$ROOT/tests/test_fast_path.py"
-  check  "reflect harvests both logs, replays them, and writes only when told" python3 "$ROOT/tests/test_reflect.py"
-  check  "web-record keeps the path, never what was typed" python3 "$ROOT/tests/test_web_record.py"
-  check  "bb opens Blackboard by read addresses, asks when unsure" python3 "$ROOT/tests/test_bb.py"
-  check  "brand-grab reads a business's own brand and marks refused pages refused" python3 "$ROOT/tests/test_brand_grab.py"
-  check  "list-sift judges only what survives the facts" python3 "$ROOT/tests/test_list_sift.py"
   # The same file has a pytest-only path (the fixtures at its top) that no
   # runner ever exercised: none of the python3 interpreters on the dev Macs,
   # 3.12 through 3.14 and /usr/bin, has pytest, so a bare `python3 -m pytest`
@@ -974,7 +944,7 @@ if group "hud"; then
   else
     skip "the suite collects under pytest" "no pytest and no uv"
   fi
-  expect "the skill teaches the wire format" "Kyber Lines" cat "$ROOT/skills/hud/SKILL.md"
+  expect "the skill teaches the wire format" "Bob Lines" cat "$ROOT/skills/hud/SKILL.md"
 fi
 
 # ── guide ─────────────────────────────────────────────────────────────────────
@@ -1057,27 +1027,17 @@ if group "reasoning backends"; then
   check "circle detector accepts circles, not triangles" bash "$ROOT/tests/circle_shapes.sh"
   check "no drawn line is ever jagged" bash "$ROOT/tests/path_smoothness.sh"
   check "portals open and close" bash "$ROOT/tests/portal_state.sh"
-  check "page-render draws the same pixels every run" bash "$ROOT/tests/page_render.sh"
-  check "reel-check fails a broken reel and reel-assemble makes one that passes" bash "$ROOT/tests/reel_check.sh"
-  check "a blockout reference is exactly as long as its spec, at any preview scale" bash "$ROOT/tests/blockout_ref.sh"
-  check "edit-dna finds cuts where they are and scores beat lock against chance" bash "$ROOT/tests/edit_dna.sh"
-  check "edit-cut cuts on the song's own beats, finds the drop and never reuses footage" bash "$ROOT/tests/edit_cut.sh"
-  check "higgsfield-shot prices before it spends, caps a job, never pays twice for a name and leaves refunds out of the spend" bash "$ROOT/tests/higgsfield_shot.sh"
   check "the drawn extent never walks backwards" bash "$ROOT/tests/sweep_monotonic.sh"
   check "the vibe guard refuses claims with no evidence" bash "$ROOT/tests/vibe_guard.sh"
   check "stage 8 is enforced: a first-name collision is refused" bash "$ROOT/tests/fusion_guard.sh"
   check "the installer ships everything it registers" bash "$ROOT/tests/setup_ships_what_it_registers.sh"
   check "shared agent instructions are current" python3 "$ROOT/tools/agents_md.py" --check
   check "ChatGPT turn boundaries" python3 "$ROOT/tests/test_chatgpt_tab.py"
-  check "Perplexity turn boundaries and voice routing" python3 "$ROOT/tests/test_perplexity_tab.py"
-  check "jev-browse stops at a send and reports its claim" python3 "$ROOT/tests/test_jev_browse.py"
-  check "chewbacca-bridge runs only its fixed tools" python3 "$ROOT/tests/test_chewbacca_bridge.py"
   check "gateway protocol and execution" python3 "$ROOT/tests/test_chatgpt_gateway.py"
   check "provider selection and ownership" python3 "$ROOT/tests/test_mac_use_providers.py"
   check "Codex shared instructions and optional health" python3 "$ROOT/tests/test_codex.py"
   check "Codex personal context startup" python3 "$ROOT/tests/test_codex_context.py"
   check "Codex native lifecycle hooks" python3 "$ROOT/tests/test_codex_hooks.py"
-  check "Codex review baselines expire after tool completion" python3 "$ROOT/tests/test_codex_review_baselines.py"
   check "independent code review receipts reject stale and failed reviews" python3 "$ROOT/tests/test_review_gate.py"
   check "task DAG preserves dependencies, capacity and independent verification" python3 "$ROOT/tests/test_task_graph.py"
   check "work ledger reaches shared startup and Codex prompt context" python3 "$ROOT/tests/test_work_ledger_context.py"

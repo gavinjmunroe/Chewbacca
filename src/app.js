@@ -1297,3 +1297,22 @@ for (const mod of SECTIONS) {
    silent version of this bug: no error, no reveal, and a scroll system that
    looks wired and is not. */
 registerReveals();
+
+/* The cookie card dismisses and stays dismissed. A consent dialog that comes
+   back on every load is not consent, it is nagging, and it is also the thing
+   that makes a page feel unfinished. localStorage can throw in a private
+   window, so every touch of it is wrapped and the card simply shows. */
+(() => {
+  const card = document.getElementById("cookie-card");
+  if (!card) return;
+  const KEY = "sift.cookie-choice";
+  let prior = null;
+  try { prior = localStorage.getItem(KEY); } catch { /* blocked, show it */ }
+  if (prior) { card.hidden = true; return; }
+  card.addEventListener("click", (e) => {
+    const choice = e.target.closest("[data-cc]")?.dataset.cc;
+    if (!choice) return;
+    try { localStorage.setItem(KEY, choice); } catch { /* nothing to do */ }
+    card.hidden = true;
+  });
+})();

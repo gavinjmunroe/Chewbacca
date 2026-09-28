@@ -217,6 +217,23 @@
   </div>
 </footer>
 
+<!-- The cookie consent card. Theirs carries one in the bottom right on every
+     view, which is why their `controls` count sits at a constant 15 against
+     our 12 in every single section: three buttons present the whole way down
+     the page. Ours says what ours actually does. -->
+<aside class="cc" id="cookie-card" role="dialog" aria-labelledby="cc-h" aria-describedby="cc-b">
+  <div class="cc-head" id="cc-h">Cookies</div>
+  <p class="cc-body" id="cc-b">We keep one analytics cookie so we can tell which
+     parts of this page people actually read.</p>
+  <div class="cc-actions">
+    <button class="cc-btn" type="button" data-cc="reject">Reject</button>
+    <button class="cc-btn" type="button" data-cc="choose">Choose</button>
+    <button class="cc-btn cc-btn-primary" type="button" data-cc="accept">Accept</button>
+  </div>
+</aside>
+
+
+
 <script type="module" src="src/app.js"></script>
 </body>
 </html>

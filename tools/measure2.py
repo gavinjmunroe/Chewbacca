@@ -162,7 +162,19 @@ with sync_playwright() as p:
         # read. Correctness over speed: this runs a handful of times a day.
         pg.goto(url, wait_until="networkidle", timeout=120000)
         pg.wait_for_timeout(4500)
-        pg.evaluate(f"window.scrollTo(0,{max(0, h['y']-300)})")
+        # CENTRE THE SECTION, do not put its heading 300px down.
+        #
+        # Inside a pinned scene the panel that belongs to a text block only
+        # reaches full opacity when that block is centred in the viewport,
+        # which is what the crossfade is for. Sampling at top-300 caught it
+        # at 0.51 with its neighbour at 0.03, so our feature blocks reported
+        # 77 to 139 painted elements against their 465 to 530 and it read as
+        # a content gap rather than as a sampling position.
+        #
+        # Centring is right for an ordinary section too: it is the position
+        # at which a section is on stage, which is the thing being compared.
+        centre = max(0, h["y"] + (nxt - h["y"]) / 2 - 450)
+        pg.evaluate(f"window.scrollTo(0,{centre:.0f})")
         pg.wait_for_timeout(1400)
         m = pg.evaluate(MEASURE, h["text"])
         if m is None: m = {"unmounted": True}

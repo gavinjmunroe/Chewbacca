@@ -246,7 +246,7 @@ function scene1(host) {
      not on the element above them. */
   /* A <p>, NOT AN h2, AND 32px LEFT-ALIGNED.
 
-     Theirs reads "Agents in production fail in unpredictable ways." in a
+     Theirs reads "Your agents fail silently." in a
      `<p>` at 32px, weight 400, text-align start, pinned at x=120. Ours was a
      centred h2 at 36px, and the tag mattered for more than semantics: the
      section walk finds sections from headings, so our trace scene registered
@@ -457,16 +457,16 @@ function scene1(host) {
    query inside a root they are handed. The thin panels had no interactive
    parts and so needed nothing. */
 const DEMO = [
-  { label: "Traces", title: "Surface failures you didn't know to look for.",
+  { label: "Traces", title: "Find the runs that failed quietly.",
     body: "Sift audits every trace against your agent's instructions and groups recurring failures into issues.",
     render: () => sec_waterfall.panel(), mount: sec_waterfall.mount },
-  { label: "Live alerts", title: "Get notified on what matters.",
+  { label: "Live alerts", title: "Hear about it in the channel you already have open.",
     body: "Sift triages issues and alerts you in Slack.",
     render: () => sec_chat_mock.panel(), mount: sec_chat_mock.mount },
-  { label: "Sift MCP", title: "Fix it where you work.",
-    body: "Pull context into your coding agent to resolve it without context-switching.",
+  { label: "Sift MCP", title: "Fix it without leaving the editor.",
+    body: "Your editor gets the trace, the diff and the fix, with no tab to change.",
     render: () => sec_integrations.panel(), mount: sec_integrations.mount },
-  { label: "Metrics", title: "Ship with confidence.",
+  { label: "Metrics", title: "Know the moment it comes back.",
     body: "After deploying the fix, Sift creates an online eval. If a regression occurs, you'll know.",
     render: metricsPanel },
 ];
@@ -482,13 +482,13 @@ function row(k, v, extra = "") {
    integrations modules already draw properly, and those now fill the
    DEMO slots. Kept in git at 1babb6c. */
 function metricsPanel() {
-  return `<div class="panel-head"><span>refund_policy_violations</span>
+  return `<div class="panel-head"><span>refund_window_breach</span>
     <span style="margin-left:auto">all passing</span></div>
     <div class="panel-body">
     <div style="font-size:13px;margin-bottom:6px">Metric created &mdash;
-      <span style="font-family:var(--mono);font-size:12px">refund_policy_violations</span></div>
+      <span style="font-family:var(--mono);font-size:12px">refund_window_breach</span></div>
     <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
-      Scoring every new trace against this failure mode</div>
+      Every new run is scored against this failure</div>
     <svg viewBox="0 0 420 150" style="width:100%;height:150px">
       <line x1="0" y1="120" x2="420" y2="120" stroke="var(--line)"/>
       ${Array.from({ length: 22 }, (_, i) => {

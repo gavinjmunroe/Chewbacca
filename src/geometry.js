@@ -97,7 +97,7 @@ export function sphere({ lats = 9, longs = 14, seg = 30 } = {}) {
 }
 
 /* GRAVITATIONAL LENS. Straight rays deflected by a central mass, which is what
- * their "distortion under load" plate is: light bent around something heavy.
+ * their "spread under strain" plate is: light bent around something heavy.
  * 48 elements, matching theirs. */
 export function gravlens({ rays = 48, seg = 90, mass = 0.34 } = {}) {
   const out = [];

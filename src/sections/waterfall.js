@@ -228,18 +228,19 @@ function findingHtml(finding) {
         </div>`;
 }
 
-export function render() {
+/* THE PANEL, SEPARATE FROM THE SECTION.
+
+   This module used to render a whole standalone section: its own label,
+   heading, lead and panel. That section had no counterpart on the reference,
+   whose four feature blocks are four text columns scrolling past ONE pinned
+   panel. So the panel is now exported on its own and mounted inside that
+   pinned stage, where the heading and lead come from the DEMO entry instead.
+
+   `render()` is kept and calls this, so the module still works standalone if
+   it is ever wanted back. */
+export function panel() {
   const errors = SPANS.filter((s) => s.error).length;
   return `
-<div class="wf">
-  <div class="wf-copy">
-    <p class="wf-label">Traces</p>
-    <h2 class="wf-h">Read every span, not just the ones that errored.</h2>
-    <p class="wf-sub">Every span of every run, timed against the one before it.
-      The audit reads the whole tree, so a retrieval that quietly fell back to a
-      stale index shows up as a finding instead of as a good answer.</p>
-  </div>
-
   <div class="wf-panel">
     <div class="wf-hd">
       <span class="wf-tid">${TRACE_ID}</span>
@@ -266,7 +267,20 @@ export function render() {
       </div>
       <ol class="wf-rows">${SPANS.map(rowHtml).join("")}</ol>
     </div>
+  </div>`;
+}
+
+export function render() {
+  return `
+<div class="wf">
+  <div class="wf-copy">
+    <p class="wf-label">Traces</p>
+    <h2 class="wf-h">Read every span, not just the ones that errored.</h2>
+    <p class="wf-sub">Every span of every run, timed against the one before it.
+      The audit reads the whole tree, so a retrieval that quietly fell back to a
+      stale index shows up as a finding instead of as a good answer.</p>
   </div>
+${panel()}
 </div>`;
 }
 

@@ -156,3 +156,8 @@
 @media (prefers-reduced-motion: reduce) {
   .tst-card, .tst-arrow, .tst-dot i { transition: none !important; }
 }
+
+/* The section heading. Theirs is centred above the carousel, which is why
+   this sits outside .tst-viewport rather than inside the track. */
+.tst-head-block { text-align: center; margin-bottom: 40px; }
+.tst-title      { margin: 0; }

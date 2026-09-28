@@ -107,17 +107,6 @@ function captionBar(num, text, withCopy) {
 }
 
 export function render() {
-  const rail = MARKS.map(markCell).join("");
-
-  const envBody = ENV_LINES.map(
-    ([k, v]) => `<div class="ig-line"><span class="ig-key">${k}</span><span
-        class="ig-eq">=</span><span class="ig-val">${v}</span></div>`,
-  ).join("");
-
-  const promptBody = PROMPT_LINES.map(
-    (line) => `<div class="ig-line ig-line-prompt">${line}</div>`,
-  ).join("");
-
   return `<div class="ig">
     <div class="wrap ig-head">
       <div class="label ig-label">Integrations</div>
@@ -125,7 +114,30 @@ export function render() {
       <p class="ig-sub">Drop the SDK into the framework you already run, set one key, and every
         agent run shows up as a trace you can interrogate.</p>
     </div>
+${panel()}
+  </div>`;
+}
 
+/* THE PANEL, SEPARATE FROM THE SECTION.
+
+   Same reason as the other two: the reference's four feature blocks are four
+   text columns scrolling past ONE pinned panel, so the panel is exported
+   alone and the heading and lead come from the DEMO entry. `render()` above
+   keeps working standalone.
+
+   The framework rail comes with it. It is the part of this panel that says
+   "drop it into what you already run", and without it the two config blocks
+   are a screenshot of a dotfile. */
+export function panel() {
+  const rail = MARKS.map(markCell).join("");
+  const envBody = ENV_LINES.map(
+    ([k, v]) => `<div class="ig-line"><span class="ig-key">${k}</span><span
+        class="ig-eq">=</span><span class="ig-val">${v}</span></div>`,
+  ).join("");
+  const promptBody = PROMPT_LINES.map(
+    (line) => `<div class="ig-line ig-line-prompt">${line}</div>`,
+  ).join("");
+  return `
     <div class="ig-rail-clip" role="list" aria-label="Supported agent frameworks">
       <div class="ig-rail">${rail}</div>
     </div>
@@ -141,8 +153,7 @@ export function render() {
           <div class="ig-body">${promptBody}</div>
         </div>
       </div>
-    </div>
-  </div>`;
+    </div>`;
 }
 
 export function mount(root) {

@@ -244,14 +244,30 @@ function scene1(host) {
      where the label sits: "RESOLUTION" printed through "With Sift, you
      don't." A wipe between two headlines needs them stacked on each other,
      not on the element above them. */
+  /* A <p>, NOT AN h2, AND 32px LEFT-ALIGNED.
+
+     Theirs reads "Agents in production fail in unpredictable ways." in a
+     `<p>` at 32px, weight 400, text-align start, pinned at x=120. Ours was a
+     centred h2 at 36px, and the tag mattered for more than semantics: the
+     section walk finds sections from headings, so our trace scene registered
+     as a section of its own where theirs does not, and every section count
+     in docs/ was off by one because of it.
+
+     This scene sits INSIDE the hero block on their page, which is why their
+     hero measures 10834px and carries no second heading. Making ours a
+     paragraph is what "restructure the trace into the hero" actually means
+     in markup; the two were already adjacent.
+
+     Tracking is -0.01em here like everywhere else, correcting the -0.02em
+     that was hardcoded on both lines. */
   cap.innerHTML =
     `<div class="label" id="s1label">Traces</div>
      <div id="s1stack" style="position:relative">
-       <h2 id="s1a" style="font-size:36px;font-weight:400;margin:0;
-           letter-spacing:-0.02em;line-height:1.2">Your agents fail silently.</h2>
-       <h2 id="s1b" style="font-size:36px;font-weight:400;margin:0;
-           letter-spacing:-0.02em;line-height:1.2;opacity:0;position:absolute;
-           left:0;right:0;top:0">With Sift, you see it.</h2>
+       <p id="s1a" style="font-size:32px;font-weight:400;margin:0;
+           letter-spacing:-0.01em;line-height:1.2;text-align:start">Your agents fail silently.</p>
+       <p id="s1b" style="font-size:32px;font-weight:400;margin:0;
+           letter-spacing:-0.01em;line-height:1.2;text-align:start;opacity:0;
+           position:absolute;left:0;right:0;top:0">With Sift, you see it.</p>
      </div>`;
   host.style.position = "relative";
   host.appendChild(cap);
@@ -419,15 +435,37 @@ function scene1(host) {
 /* ---------------------------------------------------------------------- */
 /* SCENE 2: the product demo. Copy moves, the demo area stays put.         */
 /* ---------------------------------------------------------------------- */
+/* THE FOUR PANELS, NOW THE RICH ONES.
+
+   `waterfall`, `chat-mock` and `integrations` were three standalone sections
+   sitting after this pinned demo: 1785px with no counterpart on the
+   reference, covering ground the demo already covers. Their panels are far
+   richer than the thin ones written here, so they move into the slots and
+   the sections go.
+
+   WHICH PANEL GOES WHERE, and this corrects what the plan said. I had put
+   the waterfall under "Ship with confidence". It is a trace waterfall: spans,
+   durations, a tree, findings. It belongs under "Traces", and the thin
+   `tracePanel` it replaces was a worse drawing of the same thing.
+
+       Traces        the waterfall      spans, timings, findings
+       Live alerts   the chat mock      a channel, a thread, a typing state
+       Sift MCP      the integrations   a framework rail and two config blocks
+       Metrics       metricsPanel       unchanged, thickened in Wave 3
+
+   `mount` runs after the panel is in the document, because all three modules
+   query inside a root they are handed. The thin panels had no interactive
+   parts and so needed nothing. */
 const DEMO = [
   { label: "Traces", title: "Surface failures you didn't know to look for.",
     body: "Sift audits every trace against your agent's instructions and groups recurring failures into issues.",
-    render: tracePanel },
+    render: () => sec_waterfall.panel(), mount: sec_waterfall.mount },
   { label: "Live alerts", title: "Get notified on what matters.",
-    body: "Sift triages issues and alerts you in Slack.", render: slackPanel },
+    body: "Sift triages issues and alerts you in Slack.",
+    render: () => sec_chat_mock.panel(), mount: sec_chat_mock.mount },
   { label: "Sift MCP", title: "Fix it where you work.",
     body: "Pull context into your coding agent to resolve it without context-switching.",
-    render: agentPanel },
+    render: () => sec_integrations.panel(), mount: sec_integrations.mount },
   { label: "Metrics", title: "Ship with confidence.",
     body: "After deploying the fix, Sift creates an online eval. If a regression occurs, you'll know.",
     render: metricsPanel },
@@ -439,56 +477,10 @@ function row(k, v, extra = "") {
     <span style="color:var(--ink)">${k}</span>
     <span style="color:var(--muted)">${v}</span></div>${extra}`;
 }
-function tracePanel() {
-  return `<div class="panel-head"><span>support-agent</span>
-    <span style="margin-left:auto">12.40s &middot; 10 spans</span></div>
-    <div class="panel-body">
-    ${row("input_guardrail", "1.40s")}${row("retrieve_context", "2.10s")}
-    ${row("vector_search", "1.80s")}${row("ai.generateText", "3.20s")}
-    ${row("tools", "3.40s")}${row("research_literature", "1.90s")}
-    ${row("speak_to_user", "500ms")}
-    <div style="margin-top:12px;padding:10px;background:#fdf2f2;border:1px solid #f0caca;
-      font-family:var(--mono);font-size:11px;color:#b3352d">
-      customerId: "unknown" &middot; 23 fabricated lookups</div></div>`;
-}
-function slackPanel() {
-  return `<div class="panel-head"><span>#sift-agent</span>
-    <span style="margin-left:auto">9:42 AM</span></div>
-    <div class="panel-body" style="font-family:var(--chat);font-size:14px;color:var(--slack-ink)">
-    <div style="font-weight:700;margin-bottom:4px">New issue found in support-agent</div>
-    <div style="color:#b3352d;margin-bottom:10px">When a customer can't be identified, the
-      agent invents placeholder identifiers instead of escalating.</div>
-    <div style="background:var(--panel);border-left:3px solid var(--accent);padding:10px;
-      font-size:13px;line-height:1.6">
-      <div><b>Refunds promised outside policy window</b></div>
-      <div style="color:var(--muted)">66% of support runs &middot; 23 fabricated lookups
-        &middot; 15 orphaned tickets &middot; 7 escalations routed to nonexistent queues</div></div>
-    <div style="margin-top:12px;font-size:13px;color:var(--muted)">3 replies &middot; Today at 9:44 AM</div>
-    <div style="margin-top:8px;font-size:14px"><b>Cole Gawin</b>
-      <span style="color:var(--muted);font-size:12px">9:44 AM</span></div>
-    <div style="font-size:14px">can you show me the traces? <span style="color:var(--accent)">@Sift</span></div>
-    </div>`;
-}
-function agentPanel() {
-  const l = (s, c = "var(--ink)") =>
-    `<div style="font-family:var(--mono);font-size:12px;color:${c};padding:2px 0">${s}</div>`;
-  return `<div class="panel-head"><span>your coding agent</span>
-    <span style="margin-left:auto">bypass permissions on</span></div>
-    <div class="panel-body">
-    ${l("&rsaquo; fix the P0 refund-policy incident from Sift", "var(--accent)")}
-    ${l("&bull; sift &middot; get_incident(inc_4f2a)", "var(--muted)")}
-    ${l("&boxur; P0 &mdash; promising refunds outside 30-day policy")}
-    ${l("&bull; sift &middot; get_traces(refund_policy)", "var(--muted)")}
-    ${l("12 traces &middot; root cause: prompt revision 41m ago", "var(--muted)")}
-    <div style="margin:10px 0;padding:10px;background:var(--panel);border:1px solid var(--line);
-      font-family:var(--mono);font-size:12px;line-height:1.7">
-      <div style="color:var(--muted)">prompts/refund_policy.md</div>
-      <div style="color:#b3352d">- Offer the customer a refund if they are unhappy.</div>
-      <div style="color:#1f7a45">+ Only offer refunds within the 30-day policy window.</div>
-      <div style="color:#1f7a45">+ Outside the window, route to a human agent.</div>
-      <div style="color:var(--muted)">&hellip; +6 lines</div></div>
-    ${l("&check; Fix applied &mdash; PR #482 opened", "#1f7a45")}</div>`;
-}
+/* tracePanel, slackPanel and agentPanel were deleted 2026-09-28. All three
+   were thin sketches of panels that the waterfall, chat-mock and
+   integrations modules already draw properly, and those now fill the
+   DEMO slots. Kept in git at 1babb6c. */
 function metricsPanel() {
   return `<div class="panel-head"><span>refund_policy_violations</span>
     <span style="margin-left:auto">all passing</span></div>
@@ -567,6 +559,13 @@ function scene2() {
     p.className = "panel";
     p.innerHTML = d.render();
     stage.appendChild(p);
+    /* After appendChild, never before: all three modules query inside the
+       root they are handed, and a detached node has no layout, so anything
+       measuring inside mount would read zeroes. Each is wrapped, because one
+       module throwing must not leave the other three unmounted. */
+    if (typeof d.mount === "function") {
+      try { d.mount(p); } catch (err) { console.error("panel mount failed:", d.label, err); }
+    }
     return p;
   });
 
@@ -1185,7 +1184,11 @@ import * as sec_testimonials from "./sections/testimonials.js";
    comparison, and failure-wall rendered a second purple brick wall in the
    middle of their feature sequence that read as a duplicate of the trace
    wall. Both are still in git at 42cc2df if they are ever wanted. */
-const SECTIONS = [sec_logo_wall, sec_waterfall, sec_chat_mock, sec_integrations, sec_testimonials];
+/* waterfall, chat-mock and integrations are no longer sections: their
+   panels mount inside the pinned demo above. Only their CSS is still
+   loaded, and their render() exports still work if they are ever wanted
+   standalone again. */
+const SECTIONS = [sec_logo_wall, sec_testimonials];
 
 for (const mod of SECTIONS) {
   try {

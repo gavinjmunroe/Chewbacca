@@ -120,21 +120,17 @@ function messageHtml(message, index) {
     </li>`;
 }
 
-export function render() {
+/* THE PANEL, SEPARATE FROM THE SECTION.
+
+   This module rendered a whole standalone section with its own heading and
+   lead. That section had no counterpart: the reference's four feature blocks
+   are four text columns scrolling past ONE pinned panel. The panel is now
+   exported alone and mounted inside that stage, where the heading and lead
+   come from the DEMO entry.
+
+   `render()` is kept and calls this, so the module still stands alone. */
+export function panel() {
   return `
-  <section class="cm" aria-labelledby="cm-heading">
-    <div class="cm-grid">
-
-      <div class="cm-copy">
-        <p class="cm-label">Alerts</p>
-        <h2 class="cm-heading" id="cm-heading">Hear about it in the channel you already have open.</h2>
-        <p class="cm-sub">
-          Sift posts the failure into your team's chat with the runs that
-          prove it and a link into the trace that caused it. There is no second
-          dashboard to remember to check at 2am.
-        </p>
-      </div>
-
       <div class="cm-panel">
         <div class="cm-head">
           <span class="cm-hash" aria-hidden="true">#</span>
@@ -155,8 +151,24 @@ export function render() {
             </span>
           </li>
         </ol>
-      </div>
+      </div>`;
+}
 
+export function render() {
+  return `
+  <section class="cm" aria-labelledby="cm-heading">
+    <div class="cm-grid">
+
+      <div class="cm-copy">
+        <p class="cm-label">Alerts</p>
+        <h2 class="cm-heading" id="cm-heading">Hear about it in the channel you already have open.</h2>
+        <p class="cm-sub">
+          Sift posts the failure into your team's chat with the runs that
+          prove it and a link into the trace that caused it. There is no second
+          dashboard to remember to check at 2am.
+        </p>
+      </div>
+${panel()}
     </div>
   </section>`;
 }

@@ -96,8 +96,16 @@ export function render() {
         <button class="tst-dot" type="button" data-i="${i}"
                 aria-label="Show testimonial ${i + 1}, ${t.name}"><i></i></button>`).join("");
 
+  /* THE HEADING. Theirs carries an h2 reading "What people are saying." and
+     ours had none at all, which is why the section walk could not see this
+     section: it finds sections from headings, so a section without one is
+     invisible to every measurement in docs/. Centred, matching theirs. */
   return `
     <div class="tst-col">
+      <div class="tst-head-block">
+        <div class="label">Testimonials</div>
+        <h2 class="tst-title">What people are saying.</h2>
+      </div>
       <button class="tst-arrow tst-prev" type="button" aria-label="Previous testimonial">&larr;</button>
       <div class="tst-viewport" tabindex="0" role="region"
            aria-roledescription="carousel" aria-label="Testimonials">

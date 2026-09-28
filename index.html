@@ -87,11 +87,8 @@
   <!-- INTEGRATIONS -->
 
 
-  <section id="waterfall" data-reveal></section>
 
-  <section id="chat-mock" data-reveal></section>
 
-  <section id="integrations" data-reveal></section>
 
   <section id="testimonials" data-reveal></section>
 
@@ -153,7 +150,13 @@
         <div class="issue-links"><a href="#" class="group"><span class="ul-grow">Read the latest issue</span> <span class="arrow">&rarr;</span></a><a href="#" class="group"><span class="ul-grow">View all issues</span> <span class="arrow">&rarr;</span></a></div>
       </div>
       <div class="news-right">
-        <h3 class="sub-h">Subscribe</h3>
+        <!-- h2, not h3. Theirs is an h2 at 18px, which is why their section
+             walk reports Subscribe as its own section sitting 31px before the
+             briefing: the two are side by side in one band and the walk picks
+             them up in DOM order. Ours said the same words in an h3 and so was
+             invisible to every measurement. This is a tag change, not the
+             structural split the plan assumed. -->
+        <h2 class="sub-h">Subscribe</h2>
         <p class="sub-p">One email every Friday on what actually mattered in agent reliability.</p>
         <form class="field" onsubmit="return false">
           <input type="email" placeholder="you@work.com" aria-label="Email address">

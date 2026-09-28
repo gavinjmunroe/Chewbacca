@@ -6,10 +6,10 @@ A table answers *what differs*. This answers *what closes the most*,
 which is a multi-hop question and the only one worth asking before
 picking up the next piece of work.
 
-    delta nodes      85
+    delta nodes      90
     cause nodes      6
-    CAUSED_BY edges  85
-    unmodelled       0
+    CAUSED_BY edges  87
+    unmodelled       3
 
 ## Causes by fan-out
 
@@ -21,6 +21,18 @@ have chased eight symptoms instead.
 |---|---|---|---|
 | figure element counts differ | **33** | 3 | `src/app.js` |
 | the metrics panel is thin (5 text leaves against 24 to 60) | **24** | 3 | `src/app.js` |
+| sections below the demo are not built out | **11** | 4 | `index.html` |
 | lead paragraph rhythm is ad hoc | **11** | 2 | `src/styles.css` |
-| sections below the demo are not built out | **9** | 4 | `index.html` |
 | centred headings are full-width boxes on ours, shrink-to-fit on theirs | **8** | 2 | `src/styles.css` |
+
+## Unmodelled deltas
+
+No cause claims these, or more than one does. Either way the
+ontology is incomplete and that is a finding, not a rounding
+error.
+
+| section | axis | delta | claimed by |
+|---|---|---|---|
+| notifications | heading lines | **+1** | none |
+| fix where you work / mcp | heading lines | **+1** | none |
+| ship with confidence | heading lines | **+1** | none |

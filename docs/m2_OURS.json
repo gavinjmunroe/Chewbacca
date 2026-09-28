@@ -17,9 +17,9 @@
     "w": 512,
     "gap": 8
    },
-   "painted": 3175,
-   "shapes": 2231,
-   "svg": 12,
+   "painted": 3182,
+   "shapes": 2233,
+   "svg": 13,
    "canvas": 0,
    "img": 0,
    "mockup": {
@@ -57,16 +57,16 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 509,
-   "shapes": 350,
-   "svg": 17,
+   "painted": 571,
+   "shapes": 357,
+   "svg": 25,
    "canvas": 0,
    "img": 0,
    "mockup": {
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 380
+    "kids": 478
    },
    "controls": 12,
    "control_h": [
@@ -78,8 +78,48 @@
    ],
    "i": 1,
    "y": 10647,
-   "height": 928,
-   "heading": "Surface failures you didn't know to look for."
+   "height": 907,
+   "heading": "Find the runs that failed quietly."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 3,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgb(108, 105, 145)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 77,
+   "shapes": 3,
+   "svg": 1,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 478
+   },
+   "controls": 11,
+   "control_h": [
+    17,
+    19,
+    20,
+    31,
+    35
+   ],
+   "i": 2,
+   "y": 11554,
+   "height": 907,
+   "heading": "Hear about it in the channel you already have open."
   },
   {
    "h_size": "36px",
@@ -97,46 +137,6 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 77,
-   "shapes": 3,
-   "svg": 1,
-   "canvas": 0,
-   "img": 0,
-   "mockup": {
-    "w": 1040,
-    "h": 3600,
-    "tag": "DIV",
-    "kids": 380
-   },
-   "controls": 11,
-   "control_h": [
-    17,
-    19,
-    20,
-    31,
-    35
-   ],
-   "i": 2,
-   "y": 11575,
-   "height": 908,
-   "heading": "Get notified on what matters."
-  },
-  {
-   "h_size": "36px",
-   "h_lh": "43.2px",
-   "h_ls": "-0.36px",
-   "h_weight": "400",
-   "h_align": "left",
-   "h_x": 224,
-   "h_w": 384,
-   "h_lines": 1,
-   "lead": {
-    "size": "18px",
-    "lh": "28px",
-    "color": "rgb(108, 105, 145)",
-    "w": 384,
-    "gap": 8
-   },
    "painted": 139,
    "shapes": 21,
    "svg": 14,
@@ -146,7 +146,7 @@
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 380
+    "kids": 478
    },
    "controls": 11,
    "control_h": [
@@ -157,9 +157,9 @@
     31
    ],
    "i": 3,
-   "y": 12483,
+   "y": 12461,
    "height": 900,
-   "heading": "Fix it where you work."
+   "heading": "Fix it without leaving the editor."
   },
   {
    "h_size": "36px",
@@ -169,7 +169,7 @@
    "h_align": "left",
    "h_x": 224,
    "h_w": 384,
-   "h_lines": 1,
+   "h_lines": 2,
    "lead": {
     "size": "18px",
     "lh": "28px",
@@ -177,8 +177,8 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 66,
-   "shapes": 25,
+   "painted": 81,
+   "shapes": 5,
    "svg": 2,
    "canvas": 0,
    "img": 0,
@@ -186,7 +186,7 @@
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 380
+    "kids": 478
    },
    "controls": 10,
    "control_h": [
@@ -197,9 +197,9 @@
     35
    ],
    "i": 4,
-   "y": 13383,
-   "height": 692,
-   "heading": "Ship with confidence."
+   "y": 13361,
+   "height": 714,
+   "heading": "Know the moment it comes back."
   },
   {
    "h_size": "36px",
@@ -211,7 +211,7 @@
    "h_w": 768,
    "h_lines": 1,
    "lead": null,
-   "painted": 210,
+   "painted": 213,
    "shapes": 27,
    "svg": 13,
    "canvas": 0,
@@ -220,7 +220,7 @@
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 380
+    "kids": 478
    },
    "controls": 24,
    "control_h": [
@@ -233,7 +233,7 @@
    "i": 5,
    "y": 14075,
    "height": 568,
-   "heading": "What people are saying."
+   "heading": "What teams tell us."
   },
   {
    "h_size": "36px",
@@ -273,7 +273,7 @@
    "i": 6,
    "y": 14643,
    "height": 608,
-   "heading": "Fits into your existing stack."
+   "heading": "Drops into the stack you already run."
   },
   {
    "h_size": "36px",
@@ -313,7 +313,7 @@
    "i": 7,
    "y": 15251,
    "height": 561,
-   "heading": "Trust is non-negotiable."
+   "heading": "Your traces stay yours."
   },
   {
    "h_size": "18px",
@@ -387,7 +387,7 @@
    "i": 9,
    "y": 15841,
    "height": 553,
-   "heading": "The Friday briefing on AI agent observability and re"
+   "heading": "A Friday read on why agents break, and what caught i"
   },
   {
    "h_size": "36px",

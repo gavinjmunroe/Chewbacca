@@ -29,8 +29,8 @@ theirs `Stop guessing why your agents fail`  |  ours `Your agent failed and noth
 | lead leading | 22.5px | 22.5px | ok |
 | lead width | 512px | 512px | ok |
 | lead gap under heading | 8px | 8px | ok |
-| painted elements | 3393 | 3175 | **-218** |
-| svg shapes | 2374 | 2231 | **-143** |
+| painted elements | 3393 | 3182 | **-211** |
+| svg shapes | 2374 | 2233 | **-141** |
 | controls | 15 | 12 | **-3** |
 | largest block width | 560px | 1200px | **+640** |
 | largest block height | 231px | 496px | **+265** |
@@ -39,11 +39,11 @@ theirs `Stop guessing why your agents fail`  |  ours `Your agent failed and noth
 
 ## surface failures
 
-theirs `Surface failures you didn't know to look for.`  |  ours `Surface failures you didn't know to look for.`
+theirs `Surface failures you didn't know to look for.`  |  ours `Find the runs that failed quietly.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 928px | 928px | ok |
+| section height | 928px | 907px | **-21** |
 | heading size | 36px | 36px | ok |
 | heading leading | 43.2px | 43.2px | ok |
 | heading tracking | -0.36px | -0.36px | ok |
@@ -56,21 +56,21 @@ theirs `Surface failures you didn't know to look for.`  |  ours `Surface failure
 | lead leading | 28px | 28px | ok |
 | lead width | 384px | 384px | ok |
 | lead gap under heading | 8px | 8px | ok |
-| painted elements | 667 | 509 | **-158** |
-| svg shapes | 165 | 350 | **+185** |
+| painted elements | 667 | 571 | **-96** |
+| svg shapes | 165 | 357 | **+192** |
 | controls | 15 | 12 | **-3** |
 | largest block width | 1040px | 1040px | ok |
 | largest block height | 3600px | 3600px | ok |
-| largest block children | 544 | 380 | **-164** |
+| largest block children | 544 | 478 | **-66** |
 
 
 ## notifications
 
-theirs `Get notified on what matters.`  |  ours `Get notified on what matters.`
+theirs `Get notified on what matters.`  |  ours `Hear about it in the channel you already have open.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 908px | 908px | ok |
+| section height | 908px | 907px | **-1** |
 | heading size | 36px | 36px | ok |
 | heading leading | 43.2px | 43.2px | ok |
 | heading tracking | -0.36px | -0.36px | ok |
@@ -78,7 +78,7 @@ theirs `Get notified on what matters.`  |  ours `Get notified on what matters.`
 | heading align | left | left | ok |
 | heading x | 224px | 224px | ok |
 | heading width | 384px | 384px | ok |
-| heading lines | 2 | 2 | ok |
+| heading lines | 2 | 3 | **+1** |
 | lead size | 18px | 18px | ok |
 | lead leading | 28px | 28px | ok |
 | lead width | 384px | 384px | ok |
@@ -88,12 +88,12 @@ theirs `Get notified on what matters.`  |  ours `Get notified on what matters.`
 | controls | 15 | 11 | **-4** |
 | largest block width | 1040px | 1040px | ok |
 | largest block height | 3600px | 3600px | ok |
-| largest block children | 552 | 380 | **-172** |
+| largest block children | 552 | 478 | **-74** |
 
 
 ## fix where you work / MCP
 
-theirs `Fix it where you work.`  |  ours `Fix it where you work.`
+theirs `Fix it where you work.`  |  ours `Fix it without leaving the editor.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
@@ -105,7 +105,7 @@ theirs `Fix it where you work.`  |  ours `Fix it where you work.`
 | heading align | left | left | ok |
 | heading x | 224px | 224px | ok |
 | heading width | 384px | 384px | ok |
-| heading lines | 1 | 1 | ok |
+| heading lines | 1 | 2 | **+1** |
 | lead size | 18px | 18px | ok |
 | lead leading | 28px | 28px | ok |
 | lead width | 384px | 384px | ok |
@@ -115,16 +115,16 @@ theirs `Fix it where you work.`  |  ours `Fix it where you work.`
 | controls | 15 | 11 | **-4** |
 | largest block width | 1040px | 1040px | ok |
 | largest block height | 3600px | 3600px | ok |
-| largest block children | 487 | 380 | **-107** |
+| largest block children | 487 | 478 | **-9** |
 
 
 ## ship with confidence
 
-theirs `Ship with confidence.`  |  ours `Ship with confidence.`
+theirs `Ship with confidence.`  |  ours `Know the moment it comes back.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
-| section height | 662px | 692px | **+30** |
+| section height | 662px | 714px | **+52** |
 | heading size | 36px | 36px | ok |
 | heading leading | 43.2px | 43.2px | ok |
 | heading tracking | -0.36px | -0.36px | ok |
@@ -132,22 +132,22 @@ theirs `Ship with confidence.`  |  ours `Ship with confidence.`
 | heading align | left | left | ok |
 | heading x | 224px | 224px | ok |
 | heading width | 384px | 384px | ok |
-| heading lines | 1 | 1 | ok |
+| heading lines | 1 | 2 | **+1** |
 | lead size | 18px | 18px | ok |
 | lead leading | 28px | 28px | ok |
 | lead width | 384px | 384px | ok |
 | lead gap under heading | 8px | 8px | ok |
-| painted elements | 524 | 66 | **-458** |
-| svg shapes | 29 | 25 | **-4** |
+| painted elements | 524 | 81 | **-443** |
+| svg shapes | 29 | 5 | **-24** |
 | controls | 15 | 10 | **-5** |
 | largest block width | 1040px | 1040px | ok |
 | largest block height | 3600px | 3600px | ok |
-| largest block children | 544 | 380 | **-164** |
+| largest block children | 544 | 478 | **-66** |
 
 
 ## fits into your stack
 
-theirs `Fits into your existing stack.`  |  ours `Fits into your existing stack.`
+theirs `Fits into your existing stack.`  |  ours `Drops into the stack you already run.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
@@ -174,7 +174,7 @@ theirs `Fits into your existing stack.`  |  ours `Fits into your existing stack.
 
 ## trust
 
-theirs `Trust is non-negotiable.`  |  ours `Trust is non-negotiable.`
+theirs `Trust is non-negotiable.`  |  ours `Your traces stay yours.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
@@ -201,7 +201,7 @@ theirs `Trust is non-negotiable.`  |  ours `Trust is non-negotiable.`
 
 ## testimonials
 
-theirs `What people are saying.`  |  ours `What people are saying.`
+theirs `What people are saying.`  |  ours `What teams tell us.`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|
@@ -218,12 +218,12 @@ theirs `What people are saying.`  |  ours `What people are saying.`
 | lead leading | 20px | - | **differs** |
 | lead width | 161px | -px | **differs** |
 | lead gap under heading | 69px | -px | **differs** |
-| painted elements | 248 | 210 | **-38** |
+| painted elements | 248 | 213 | **-35** |
 | svg shapes | 18 | 27 | **+9** |
 | controls | 38 | 24 | **-14** |
 | largest block width | 1280px | 1040px | **-240** |
 | largest block height | 705px | 3600px | **+2895** |
-| largest block children | 187 | 380 | **+193** |
+| largest block children | 187 | 478 | **+291** |
 
 
 ## subscribe
@@ -255,7 +255,7 @@ theirs `Subscribe`  |  ours `Subscribe`
 
 ## The Friday briefing on AI agent ob
 
-theirs `The Friday briefing on AI agent observability and re`  |  ours `The Friday briefing on AI agent observability and re`
+theirs `The Friday briefing on AI agent observability and re`  |  ours `A Friday read on why agents break, and what caught i`
 
 | axis | theirs | ours | delta |
 |---|---|---|---|

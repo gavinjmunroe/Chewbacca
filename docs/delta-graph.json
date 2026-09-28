@@ -42,8 +42,8 @@
    "section": "hero",
    "axis": "painted elements",
    "theirs": "3393",
-   "ours": "3175",
-   "delta": "**-218**",
+   "ours": "3182",
+   "delta": "**-211**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -54,8 +54,8 @@
    "section": "hero",
    "axis": "svg shapes",
    "theirs": "2374",
-   "ours": "2231",
-   "delta": "**-143**",
+   "ours": "2233",
+   "delta": "**-141**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -110,12 +110,24 @@
   },
   {
    "kind": "delta",
+   "id": "surface failures::section height",
+   "section": "surface failures",
+   "axis": "section height",
+   "theirs": "928px",
+   "ours": "907px",
+   "delta": "**-21**",
+   "source": "docs/DELTAS.md",
+   "viewport": "1440x900",
+   "as_of": "2026-09-28"
+  },
+  {
+   "kind": "delta",
    "id": "surface failures::painted elements",
    "section": "surface failures",
    "axis": "painted elements",
    "theirs": "667",
-   "ours": "509",
-   "delta": "**-158**",
+   "ours": "571",
+   "delta": "**-96**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -126,8 +138,8 @@
    "section": "surface failures",
    "axis": "svg shapes",
    "theirs": "165",
-   "ours": "350",
-   "delta": "**+185**",
+   "ours": "357",
+   "delta": "**+192**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -150,11 +162,37 @@
    "section": "surface failures",
    "axis": "largest block children",
    "theirs": "544",
-   "ours": "380",
-   "delta": "**-164**",
+   "ours": "478",
+   "delta": "**-66**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
+  },
+  {
+   "kind": "delta",
+   "id": "notifications::section height",
+   "section": "notifications",
+   "axis": "section height",
+   "theirs": "908px",
+   "ours": "907px",
+   "delta": "**-1**",
+   "source": "docs/DELTAS.md",
+   "viewport": "1440x900",
+   "as_of": "2026-09-28"
+  },
+  {
+   "kind": "delta",
+   "id": "notifications::heading lines",
+   "section": "notifications",
+   "axis": "heading lines",
+   "theirs": "2",
+   "ours": "3",
+   "delta": "**+1**",
+   "source": "docs/DELTAS.md",
+   "viewport": "1440x900",
+   "as_of": "2026-09-28",
+   "unmodelled": true,
+   "claimed_by": []
   },
   {
    "kind": "delta",
@@ -198,8 +236,8 @@
    "section": "notifications",
    "axis": "largest block children",
    "theirs": "552",
-   "ours": "380",
-   "delta": "**-172**",
+   "ours": "478",
+   "delta": "**-74**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -215,6 +253,20 @@
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
+  },
+  {
+   "kind": "delta",
+   "id": "fix where you work / mcp::heading lines",
+   "section": "fix where you work / mcp",
+   "axis": "heading lines",
+   "theirs": "1",
+   "ours": "2",
+   "delta": "**+1**",
+   "source": "docs/DELTAS.md",
+   "viewport": "1440x900",
+   "as_of": "2026-09-28",
+   "unmodelled": true,
+   "claimed_by": []
   },
   {
    "kind": "delta",
@@ -258,8 +310,8 @@
    "section": "fix where you work / mcp",
    "axis": "largest block children",
    "theirs": "487",
-   "ours": "380",
-   "delta": "**-107**",
+   "ours": "478",
+   "delta": "**-9**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -270,11 +322,25 @@
    "section": "ship with confidence",
    "axis": "section height",
    "theirs": "662px",
-   "ours": "692px",
-   "delta": "**+30**",
+   "ours": "714px",
+   "delta": "**+52**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
+  },
+  {
+   "kind": "delta",
+   "id": "ship with confidence::heading lines",
+   "section": "ship with confidence",
+   "axis": "heading lines",
+   "theirs": "1",
+   "ours": "2",
+   "delta": "**+1**",
+   "source": "docs/DELTAS.md",
+   "viewport": "1440x900",
+   "as_of": "2026-09-28",
+   "unmodelled": true,
+   "claimed_by": []
   },
   {
    "kind": "delta",
@@ -282,8 +348,8 @@
    "section": "ship with confidence",
    "axis": "painted elements",
    "theirs": "524",
-   "ours": "66",
-   "delta": "**-458**",
+   "ours": "81",
+   "delta": "**-443**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -294,8 +360,8 @@
    "section": "ship with confidence",
    "axis": "svg shapes",
    "theirs": "29",
-   "ours": "25",
-   "delta": "**-4**",
+   "ours": "5",
+   "delta": "**-24**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -318,8 +384,8 @@
    "section": "ship with confidence",
    "axis": "largest block children",
    "theirs": "544",
-   "ours": "380",
-   "delta": "**-164**",
+   "ours": "478",
+   "delta": "**-66**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -558,8 +624,8 @@
    "section": "testimonials",
    "axis": "painted elements",
    "theirs": "248",
-   "ours": "210",
-   "delta": "**-38**",
+   "ours": "213",
+   "delta": "**-35**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -618,8 +684,8 @@
    "section": "testimonials",
    "axis": "largest block children",
    "theirs": "187",
-   "ours": "380",
-   "delta": "**+193**",
+   "ours": "478",
+   "delta": "**+291**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -1197,6 +1263,11 @@
    "dst": "thin"
   },
   {
+   "src": "surface failures::section height",
+   "rel": "CAUSED_BY",
+   "dst": "short"
+  },
+  {
    "src": "surface failures::painted elements",
    "rel": "CAUSED_BY",
    "dst": "svg"
@@ -1215,6 +1286,11 @@
    "src": "surface failures::largest block children",
    "rel": "CAUSED_BY",
    "dst": "thin"
+  },
+  {
+   "src": "notifications::section height",
+   "rel": "CAUSED_BY",
+   "dst": "short"
   },
   {
    "src": "notifications::painted elements",

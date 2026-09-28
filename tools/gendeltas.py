@@ -23,8 +23,33 @@ ref=json.load((DOCS / "m2_REF.json").open()); ours=json.load((DOCS / "m2_OURS.js
 # is ours. Anything that cannot be paired is REPORTED rather than guessed at,
 # because a silently wrong pair is worse than an absent one.
 OVERRIDES = {
-    # ours -> theirs, where the copy is deliberately different
-    "Your agent failed and nothing threw an error": "Stop guessing why your agents fail",
+    # ours -> theirs. Every feature heading was lifted from their page
+    # verbatim until 2026-09-28, which is the only reason pairing on text ever
+    # worked. Now that the copy is ours, each pair is written down.
+    # tools/check_copy.py refuses a rebuild that reintroduces one of their
+    # sentences to make this convenient again.
+    #
+    # Keys are the 52-character labels measure2 produces, so two of them are
+    # truncated mid-word. That is deliberate: a key that does not match what
+    # the measurement actually emits is a key that silently pairs nothing.
+    "Your agent failed and nothing threw an error":
+        "Stop guessing why your agents fail",
+    "Find the runs that failed quietly.":
+        "Surface failures you didn't know to look for.",
+    "Hear about it in the channel you already have open.":
+        "Get notified on what matters.",
+    "Fix it without leaving the editor.":
+        "Fix it where you work.",
+    "Know the moment it comes back.":
+        "Ship with confidence.",
+    "Drops into the stack you already run.":
+        "Fits into your existing stack.",
+    "Your traces stay yours.":
+        "Trust is non-negotiable.",
+    "What teams tell us.":
+        "What people are saying.",
+    "A Friday read on why agents break, and what caught i":
+        "The Friday briefing on AI agent observability and re",
 }
 ROLE = {
     "Stop guessing why your agents fail": "hero",

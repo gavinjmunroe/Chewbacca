@@ -1,5 +1,5 @@
 {
- "height": 16479,
+ "height": 16970,
  "sections": [
   {
    "h_size": "40px",
@@ -7,8 +7,8 @@
    "h_ls": "-0.4px",
    "h_weight": "400",
    "h_align": "center",
-   "h_x": 296,
-   "h_w": 848,
+   "h_x": 487,
+   "h_w": 465,
    "h_lines": 2,
    "lead": {
     "size": "15px",
@@ -17,16 +17,16 @@
     "w": 512,
     "gap": 8
    },
-   "painted": 3175,
-   "shapes": 2231,
-   "svg": 12,
+   "painted": 3182,
+   "shapes": 2233,
+   "svg": 13,
    "canvas": 0,
    "img": 0,
    "mockup": {
     "w": 1200,
     "h": 496,
     "tag": "DIV",
-    "kids": 143
+    "kids": 144
    },
    "controls": 12,
    "control_h": [
@@ -177,7 +177,7 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 72,
+   "painted": 66,
    "shapes": 25,
    "svg": 2,
    "canvas": 0,
@@ -188,17 +188,17 @@
     "tag": "DIV",
     "kids": 380
    },
-   "controls": 12,
+   "controls": 10,
    "control_h": [
     17,
     19,
     20,
     31,
-    34
+    35
    ],
    "i": 4,
    "y": 13383,
-   "height": 564,
+   "height": 692,
    "heading": "Ship with confidence."
   },
   {
@@ -207,17 +207,11 @@
    "h_ls": "-0.36px",
    "h_weight": "400",
    "h_align": "center",
-   "h_x": 120,
-   "h_w": 1200,
+   "h_x": 336,
+   "h_w": 768,
    "h_lines": 1,
-   "lead": {
-    "size": "18px",
-    "lh": "28px",
-    "color": "rgb(108, 105, 145)",
-    "w": 715,
-    "gap": 432
-   },
-   "painted": 221,
+   "lead": null,
+   "painted": 210,
    "shapes": 27,
    "svg": 13,
    "canvas": 0,
@@ -237,8 +231,8 @@
     34
    ],
    "i": 5,
-   "y": 13947,
-   "height": 400,
+   "y": 14075,
+   "height": 568,
    "heading": "What people are saying."
   },
   {
@@ -247,24 +241,24 @@
    "h_ls": "-0.36px",
    "h_weight": "400",
    "h_align": "center",
-   "h_x": 280,
-   "h_w": 880,
+   "h_x": 344,
+   "h_w": 752,
    "h_lines": 1,
    "lead": {
     "size": "18px",
     "lh": "28px",
     "color": "rgb(108, 105, 145)",
-    "w": 715,
-    "gap": 14
+    "w": 672,
+    "gap": 8
    },
-   "painted": 221,
-   "shapes": 27,
-   "svg": 13,
+   "painted": 73,
+   "shapes": 3,
+   "svg": 1,
    "canvas": 0,
    "img": 0,
    "mockup": {
     "w": 880,
-    "h": 519,
+    "h": 607,
     "tag": "SECTION",
     "kids": 21
    },
@@ -277,8 +271,8 @@
     35
    ],
    "i": 6,
-   "y": 14347,
-   "height": 520,
+   "y": 14643,
+   "height": 608,
    "heading": "Fits into your existing stack."
   },
   {
@@ -287,28 +281,28 @@
    "h_ls": "-0.36px",
    "h_weight": "400",
    "h_align": "center",
-   "h_x": 280,
-   "h_w": 880,
+   "h_x": 344,
+   "h_w": 752,
    "h_lines": 1,
    "lead": {
     "size": "18px",
     "lh": "28px",
     "color": "rgb(108, 105, 145)",
-    "w": 715,
-    "gap": 14
+    "w": 672,
+    "gap": 8
    },
-   "painted": 65,
+   "painted": 50,
    "shapes": 3,
    "svg": 1,
    "canvas": 0,
    "img": 0,
    "mockup": {
     "w": 880,
-    "h": 519,
+    "h": 607,
     "tag": "SECTION",
     "kids": 21
    },
-   "controls": 13,
+   "controls": 11,
    "control_h": [
     17,
     19,
@@ -317,8 +311,8 @@
     31
    ],
    "i": 7,
-   "y": 14867,
-   "height": 426,
+   "y": 15251,
+   "height": 561,
    "heading": "Trust is non-negotiable."
   },
   {
@@ -327,24 +321,24 @@
    "h_ls": "-0.18px",
    "h_weight": "400",
    "h_align": "start",
-   "h_x": 777,
-   "h_w": 367,
+   "h_x": 861,
+   "h_w": 467,
    "h_lines": 1,
    "lead": {
     "size": "14px",
     "lh": "21.7px",
     "color": "rgb(108, 105, 145)",
-    "w": 367,
+    "w": 467,
     "gap": 8
    },
-   "painted": 58,
+   "painted": 53,
    "shapes": 3,
    "svg": 1,
    "canvas": 0,
    "img": 0,
    "mockup": {
     "w": 880,
-    "h": 454,
+    "h": 590,
     "tag": "SECTION",
     "kids": 15
    },
@@ -357,34 +351,28 @@
     29
    ],
    "i": 8,
-   "y": 15293,
+   "y": 15812,
    "height": 29,
    "heading": "Subscribe"
   },
   {
    "h_size": "36px",
-   "h_lh": "43.2px",
+   "h_lh": "45px",
    "h_ls": "-0.36px",
    "h_weight": "400",
    "h_align": "start",
-   "h_x": 296,
-   "h_w": 368,
-   "h_lines": 3,
-   "lead": {
-    "size": "16px",
-    "lh": "25.6px",
-    "color": "rgb(108, 105, 145)",
-    "w": 368,
-    "gap": 106
-   },
-   "painted": 59,
+   "h_x": 112,
+   "h_w": 572,
+   "h_lines": 2,
+   "lead": null,
+   "painted": 49,
    "shapes": 3,
    "svg": 1,
    "canvas": 0,
    "img": 0,
    "mockup": {
     "w": 880,
-    "h": 454,
+    "h": 590,
     "tag": "SECTION",
     "kids": 15
    },
@@ -397,18 +385,18 @@
     29
    ],
    "i": 9,
-   "y": 15322,
-   "height": 578,
+   "y": 15841,
+   "height": 553,
    "heading": "The Friday briefing on AI agent observability and re"
   },
   {
    "h_size": "36px",
-   "h_lh": "43.2px",
+   "h_lh": "40px",
    "h_ls": "-0.36px",
    "h_weight": "400",
    "h_align": "center",
-   "h_x": 280,
-   "h_w": 880,
+   "h_x": 451,
+   "h_w": 538,
    "h_lines": 1,
    "lead": null,
    "painted": 63,
@@ -417,8 +405,8 @@
    "canvas": 0,
    "img": 0,
    "mockup": {
-    "w": 880,
-    "h": 399,
+    "w": 1280,
+    "h": 334,
     "tag": "DIV",
     "kids": 21
    },
@@ -431,8 +419,8 @@
     20
    ],
    "i": 10,
-   "y": 15900,
-   "height": 579,
+   "y": 16394,
+   "height": 576,
    "heading": "Start improving your agents today"
   }
  ]

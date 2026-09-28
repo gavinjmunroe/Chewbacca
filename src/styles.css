@@ -871,7 +871,13 @@ section.band h2, .demo-copy h2, .news h2, .cta h2, .issue-title,
 section.band h2, .demo-copy h2, .news h2, .cta h2 {
   font-size: 36px; line-height: 1.2; letter-spacing: -0.01em;
 }
-.hero h1 { font-size: 40px; line-height: 44px; letter-spacing: -0.01em; }
+/* SHRINK TO FIT, like theirs. Their h1 computes max-width:none and measures
+   340px, which is the width of its longest line, not of its container: the
+   box is sized to the text. Ours was a full-width centred block at 848px.
+   The residual width difference after this is our copy being longer than
+   theirs, which is a copy question and not a layout one. */
+.hero h1 { font-size: 40px; line-height: 44px; letter-spacing: -0.01em;
+           width: fit-content; margin-inline: auto; }
 h3 { font-size: 18px; line-height: 28px; letter-spacing: -0.01em; font-weight: 400; }
 @media (min-width: 1920px) {
   section.band h2, .demo-copy h2, .news h2, .cta h2 { font-size: 44px; }
@@ -1086,3 +1092,71 @@ h2.tst-title { font-size: 36px; line-height: 43.2px; letter-spacing: -0.01em;
                font-weight: 400; }
 .band.wrap   { text-align: center; }
 .band.wrap .steps, .band.wrap .cards { text-align: left; }
+
+/* ---- the centred bands ------------------------------------------------ */
+/* Their structure, walked from the "Fits into your existing stack" h2 up:
+ *
+ *   SECTION                    1440, border-top
+ *     DIV  max-width 880, centred                     x=280, w=880
+ *       DIV  padding 64px horizontal, 128px vertical  content 752
+ *         DIV  max-width 768, centred, margin-bottom 48
+ *           H2  752 wide, centred
+ *         P     max-width 672, gap 8 under the heading
+ *
+ * Our container was already 880 and centred, which is why x matched at 280.
+ * What was missing is the 64px inner padding, so our h2 ran the full 880
+ * against their 752, and the lead had no 672 cap so it ran 715.
+ *
+ * The three widths are not arbitrary: 880 - 2*64 = 752 is the heading, and
+ * 672 is the lead inset a further 40 each side. The heading is wider than the
+ * text under it, which is what keeps a one-line heading from wrapping while
+ * the paragraph still breaks on a comfortable measure. */
+section.band { padding: 128px 64px; }
+section.band > .label,
+section.band > h2      { max-width: 768px; margin-left: auto; margin-right: auto; }
+section.band > h2      { margin-bottom: 8px; }
+section.band > .lead   { max-width: 672px; margin-left: auto; margin-right: auto;
+                         margin-bottom: 48px; }
+
+/* ---- the two container widths ----------------------------------------- */
+/* Their page has TWO, not one, and reading only the narrow band had me about
+ * to force the wide ones into 880 as well:
+ *
+ *   880   the narrow bands     fits into your stack, trust
+ *   1280  the wide ones        testimonials, the newsletter
+ *
+ * Both centre, and both pad inside, but by different amounts: 64 on the
+ * narrow bands and on testimonials, 32 on the newsletter. */
+
+/* Testimonials: 1280 container, 64 padding, heading block capped at 768 and
+   centred, which puts the h2 at x=336 in a 1440 viewport. */
+#testimonials            { padding: 128px 64px; }
+#testimonials .tst-head-block { max-width: 768px; margin: 0 auto 40px; }
+
+/* The newsletter: 1280 container, 32 padding, and a two-column grid measured
+   at 627.266 + 522.719 with a 64 gap. Those are not round because they are
+   what a `md:grid-cols-[1.2fr_1fr]` resolves to at this width; expressed as
+   the ratio rather than as the pixels so it survives a different viewport. */
+/* The padding belongs INSIDE the 1280 container, not outside it. Putting it
+   on the band and then centring a 1216 box within the padded area padded it
+   twice and put the heading at 128 against their 113. Theirs is a 1280 box
+   centred, with 32 of padding inside it, so the content starts at
+   (1440-1280)/2 + 32 = 112. */
+.news-band               { padding: 64px 0; }
+.news                    { max-width: 1280px; margin: 0 auto; padding: 0 32px;
+                           display: grid; grid-template-columns: 1.2fr 1fr; gap: 64px; }
+.news-left h2            { max-width: 576px; }
+
+/* Their closing CTA heading is 509px at x=466, and (1440-509)/2 = 465.5, so
+   it is shrink-to-fit and centred like the hero h1 rather than a full-width
+   block. Ours ran the full 880. */
+.cta h2 { width: fit-content; margin-inline: auto; }
+
+/* Two headings theirs sets at a different leading from the 43.2 default.
+   Measured, not inferred: the briefing runs 45 (1.25) and the closing CTA
+   runs 40 (1.11), both at 36px. */
+/* Specificity again: `section.band h2` is (0,1,2) and these were (0,1,1), so
+   both lost and both still measured 43.2. Third time today a rule sat last in
+   the file and lost anyway. */
+.news-band .news-left h2 { line-height: 45px; }
+section.cta h2           { line-height: 40px; }

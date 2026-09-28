@@ -1,12 +1,58 @@
 import json, pathlib, datetime
 ref=json.load(open("m2_REF.json")); ours=json.load(open("m2_OURS.json"))
-R={s["i"]:s for s in ref["sections"]}; O={s["i"]:s for s in ours["sections"]}
 
-PAIRS=[(0,0,"hero"),(None,1,"trace scene"),(1,2,"surface failures"),(2,6,"notifications"),
- (3,7,"fix where you work / MCP"),(4,5,"read the spans / ship with confidence"),
- (5,8,"fits into your stack"),(6,9,"trust"),(7,None,"testimonials"),
- (8,None,"subscribe"),(9,10,"friday briefing"),(10,11,"closing CTA"),
- (None,3,"failure wall  OURS ONLY"),(None,4,"counter  OURS ONLY")]
+# PAIRING BY HEADING TEXT, WITH EXPLICIT OVERRIDES.
+#
+# This was a hardcoded list of index pairs and it went stale the moment Wave 1
+# changed the section set: it started comparing our Subscribe against their
+# "Fits into your existing stack", and the ledger reported a 36px heading as
+# 18px and a whole column of nonsense deltas that sent me looking at correct
+# code. An index pairing is a snapshot of a structure that is being actively
+# changed, which is the worst thing to hardcode.
+#
+# It can be text now because our copy has converged: 10 of the 11 headings
+# match theirs exactly. Only the hero differs, deliberately, since that copy
+# is ours. Anything that cannot be paired is REPORTED rather than guessed at,
+# because a silently wrong pair is worse than an absent one.
+OVERRIDES = {
+    # ours -> theirs, where the copy is deliberately different
+    "Your agent failed and nothing threw an error": "Stop guessing why your agents fail",
+}
+ROLE = {
+    "Stop guessing why your agents fail": "hero",
+    "Surface failures you didn't know to look for.": "surface failures",
+    "Get notified on what matters.": "notifications",
+    "Fix it where you work.": "fix where you work / MCP",
+    "Ship with confidence.": "ship with confidence",
+    "Fits into your existing stack.": "fits into your stack",
+    "Trust is non-negotiable.": "trust",
+    "What people are saying.": "testimonials",
+    "Subscribe": "subscribe",
+    "The Friday briefing on AI agent observability and reliability.": "friday briefing",
+    "Start improving your agents today": "closing CTA",
+}
+
+def key(sec):
+    return sec["heading"].strip()
+
+def pair(ref, ours):
+    R = {key(s): s for s in ref["sections"]}
+    O = {key(s): s for s in ours["sections"]}
+    pairs, used_r, used_o = [], set(), set()
+    for ok, osec in O.items():
+        rk = OVERRIDES.get(ok, ok)
+        if rk in R:
+            pairs.append((R[rk], osec, ROLE.get(rk, rk[:34])))
+            used_r.add(rk); used_o.add(ok)
+    for rk, rsec in R.items():
+        if rk not in used_r:
+            pairs.append((rsec, None, ROLE.get(rk, rk[:34]) + "  THEIRS ONLY"))
+    for ok, osec in O.items():
+        if ok not in used_o:
+            pairs.append((None, osec, ok[:34] + "  OURS ONLY"))
+    # page order, by whichever side exists
+    pairs.sort(key=lambda t: (t[0] or t[1])["y"])
+    return pairs
 
 def num(v):
     if v is None: return None
@@ -34,14 +80,10 @@ section per axis, with both numbers and the difference. Nothing here says
 Pairing comes from `SECTIONS.md` and is by position and role, never heading text.
 """]
 
-for ri,oi,role in PAIRS:
-    r = R.get(ri) if ri is not None else None
-    o = O.get(oi) if oi is not None else None
+for r, o, role in pair(ref, ours):
     out.append(f"\n## {role}\n")
     if r is None:
         out.append(f"No counterpart on theirs. Ours: `{o['heading']}`, y{o['y']}, {o['height']}px tall.\n")
-        if "OURS ONLY" in role:
-            out.append("Cut per the 2026-09-28 decision.\n")
         continue
     if o is None:
         out.append(f"No counterpart on ours. Theirs: `{r['heading']}`, y{r['y']}, {r['height']}px tall.\n")

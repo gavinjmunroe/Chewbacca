@@ -10,14 +10,14 @@ import sys, json
 from playwright.sync_api import sync_playwright
 
 FIND = r"""() => [...document.querySelectorAll('h1,h2')]
-  .filter(h => (h.innerText||'').trim() && h.getBoundingClientRect().width > 0)
+  .filter(h => (h.textContent||'').trim() && h.getBoundingClientRect().width > 0)
   .map(h => ({ y: Math.round(h.getBoundingClientRect().top + scrollY),
-               text: (h.innerText||'').trim().replace(/\s+/g,' ').slice(0,52) }))"""
+               text: (h.textContent||'').trim().replace(/\s+/g,' ').slice(0,52) }))"""
 
 MEASURE = r"""(want) => {
   const heads = [...document.querySelectorAll('h1,h2')]
-    .filter(h => (h.innerText||'').trim());
-  let h = heads.find(x => (x.innerText||'').trim().replace(/\s+/g,' ').slice(0,52) === want);
+    .filter(h => (h.textContent||'').trim());
+  let h = heads.find(x => (x.textContent||'').trim().replace(/\s+/g,' ').slice(0,52) === want);
   if (!h) return null;
   const hb = h.getBoundingClientRect(), hc = getComputedStyle(h);
   /* THE LEAD IS THE FIRST <p> AFTER THE HEADING INSIDE THE HEADING'S OWN
@@ -38,6 +38,15 @@ MEASURE = r"""(want) => {
     if (ps.length) { lead = ps[0]; break; }
     box = box.parentElement;
   }
+  /* A PARAGRAPH FAR BELOW THE HEADING IS NOT A LEAD.
+     Some sections have no lead at all: testimonials, the briefing and the
+     closing CTA. The finder still returns the first paragraph it can reach,
+     which on their side was a 10px meta line 57px down and a 12px caption
+     458px down, and on ours a different element entirely. Comparing those
+     produced twelve deltas that were noise and not defects, and noise in a
+     ledger is worse than a gap because it gets worked on. A lead sits close
+     under its heading; past 100px it is something else. */
+  if (lead && lead.getBoundingClientRect().top - h.getBoundingClientRect().bottom > 100) lead = null;
   const lb = lead && lead.getBoundingClientRect(), lc = lead && getComputedStyle(lead);
   // everything currently painted in the viewport band
   const kids = [...document.querySelectorAll('body *')].filter(e => {
@@ -92,7 +101,30 @@ with sync_playwright() as p:
         if h["text"] not in seen: heads.append(h); seen.add(h["text"])
     heads.sort(key=lambda h: h["y"])
 
-    # PINNED HEADINGS ARE ONE SECTION, NOT SEVERAL.
+    out = []
+    for i, h in enumerate(heads):
+        nxt = heads[i+1]["y"] if i+1 < len(heads) else total
+        # RELOAD BEFORE EACH SECTION.
+        #
+        # The walk that finds lazily-added headings also destroys what it
+        # walked past: their hero is a pinned React scene that unmounts once
+        # you scroll clear of it and does not come back on the way up, so
+        # measuring it after a walk returned nothing and nine hero axes read
+        # as "differs" against a page that had not changed. Nine rows of
+        # invented delta.
+        #
+        # A fresh load costs about six seconds a section and removes the whole
+        # class of bug where the instrument changed the thing it was about to
+        # read. Correctness over speed: this runs a handful of times a day.
+        pg.goto(url, wait_until="networkidle", timeout=120000)
+        pg.wait_for_timeout(4500)
+        pg.evaluate(f"window.scrollTo(0,{max(0, h['y']-300)})")
+        pg.wait_for_timeout(1400)
+        m = pg.evaluate(MEASURE, h["text"])
+        if m is None: m = {"unmounted": True}
+        m.update({"i": i, "y": h["y"], "height": nxt - h["y"], "heading": h["text"]})
+        out.append(m)
+    # (run after the measurement pass) PINNED HEADINGS ARE ONE SECTION, NOT SEVERAL.
     #
     # `rect.top + scrollY` is not a stable page position for a sticky element,
     # so a pinned heading whose text cycles as you scroll past reports a new
@@ -109,15 +141,15 @@ with sync_playwright() as p:
     pinned = []
     for h in heads:
         a = pg.evaluate("(t) => { const e=[...document.querySelectorAll('h1,h2')]"
-                        r".find(x=>(x.innerText||'').trim().replace(/\s+/g,' ').slice(0,52)===t);"
+                        r".find(x=>(x.textContent||'').trim().replace(/\s+/g,' ').slice(0,52)===t);"
                         "return e ? Math.round(e.getBoundingClientRect().top + scrollY) : null; }", h["text"])
         pg.evaluate(f"window.scrollTo(0,{max(0, h['y'] - 700)})"); pg.wait_for_timeout(500)
         b1 = pg.evaluate("(t) => { const e=[...document.querySelectorAll('h1,h2')]"
-                         r".find(x=>(x.innerText||'').trim().replace(/\s+/g,' ').slice(0,52)===t);"
+                         r".find(x=>(x.textContent||'').trim().replace(/\s+/g,' ').slice(0,52)===t);"
                          "return e ? Math.round(e.getBoundingClientRect().top + scrollY) : null; }", h["text"])
         pg.evaluate(f"window.scrollTo(0,{max(0, h['y'] - 300)})"); pg.wait_for_timeout(500)
         b2 = pg.evaluate("(t) => { const e=[...document.querySelectorAll('h1,h2')]"
-                         r".find(x=>(x.innerText||'').trim().replace(/\s+/g,' ').slice(0,52)===t);"
+                         r".find(x=>(x.textContent||'').trim().replace(/\s+/g,' ').slice(0,52)===t);"
                          "return e ? Math.round(e.getBoundingClientRect().top + scrollY) : null; }", h["text"])
         h["pinned"] = (b1 is not None and b2 is not None and abs(b2 - b1) > 24)
         if h["pinned"]: pinned.append(h["text"])
@@ -125,16 +157,7 @@ with sync_playwright() as p:
         print(f"  pinned headings (collapsed to one section each): {len(pinned)}")
         for t in pinned: print(f"    {t}")
 
-    out = []
-    for i, h in enumerate(heads):
-        nxt = heads[i+1]["y"] if i+1 < len(heads) else total
-        # put the heading a third of the way down the viewport
-        pg.evaluate(f"window.scrollTo(0,{max(0, h['y']-300)})")
-        pg.wait_for_timeout(1200)
-        m = pg.evaluate(MEASURE, h["text"])
-        if m is None: m = {"unmounted": True}
-        m.update({"i": i, "y": h["y"], "height": nxt - h["y"], "heading": h["text"]})
-        out.append(m)
+
     json.dump({"height": total, "sections": out}, open(f"m2_{tag}.json","w"), indent=1)
     print(f"{tag}  height={total}  sections={len(out)}")
     b.close()

@@ -2,40 +2,7 @@
  "height": 17852,
  "sections": [
   {
-   "h_size": "40px",
-   "h_lh": "44px",
-   "h_ls": "-0.4px",
-   "h_weight": "400",
-   "h_align": "center",
-   "h_x": 550,
-   "h_w": 340,
-   "h_lines": 2,
-   "lead": {
-    "size": "15px",
-    "lh": "22.5px",
-    "color": "oklab(0.262919 0.0168294 -0.104771 / 0.65)",
-    "w": 512,
-    "gap": 8
-   },
-   "painted": 3157,
-   "shapes": 2206,
-   "svg": 7,
-   "canvas": 1,
-   "img": 0,
-   "mockup": {
-    "w": 560,
-    "h": 232,
-    "tag": "DIV",
-    "kids": 19
-   },
-   "controls": 15,
-   "control_h": [
-    14,
-    20,
-    26,
-    28,
-    33
-   ],
+   "unmounted": true,
    "i": 0,
    "y": 342,
    "height": 10834,
@@ -57,16 +24,16 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 618,
-   "shapes": 165,
-   "svg": 25,
+   "painted": 629,
+   "shapes": 166,
+   "svg": 26,
    "canvas": 2,
    "img": 7,
    "mockup": {
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 495
+    "kids": 506
    },
    "controls": 15,
    "control_h": [
@@ -97,18 +64,18 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 495,
-   "shapes": 29,
-   "svg": 24,
+   "painted": 515,
+   "shapes": 31,
+   "svg": 26,
    "canvas": 1,
    "img": 7,
    "mockup": {
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 515
+    "kids": 535
    },
-   "controls": 15,
+   "controls": 16,
    "control_h": [
     14,
     20,
@@ -137,18 +104,18 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 521,
-   "shapes": 29,
-   "svg": 24,
+   "painted": 549,
+   "shapes": 32,
+   "svg": 27,
    "canvas": 1,
-   "img": 7,
+   "img": 6,
    "mockup": {
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 541
+    "kids": 567
    },
-   "controls": 15,
+   "controls": 17,
    "control_h": [
     14,
     20,
@@ -177,18 +144,18 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 529,
-   "shapes": 29,
-   "svg": 24,
+   "painted": 494,
+   "shapes": 32,
+   "svg": 27,
    "canvas": 1,
-   "img": 6,
+   "img": 7,
    "mockup": {
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 544
+    "kids": 516
    },
-   "controls": 15,
+   "controls": 17,
    "control_h": [
     14,
     20,
@@ -226,7 +193,7 @@
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 500
+    "kids": 534
    },
    "controls": 26,
    "control_h": [
@@ -410,13 +377,7 @@
    "h_x": 466,
    "h_w": 509,
    "h_lines": 1,
-   "lead": {
-    "size": "12px",
-    "lh": "19.5px",
-    "color": "rgb(108, 105, 145)",
-    "w": 256,
-    "gap": 458
-   },
+   "lead": null,
    "painted": 109,
    "shapes": 7,
    "svg": 4,

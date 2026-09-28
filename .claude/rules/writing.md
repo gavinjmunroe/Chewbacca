@@ -40,9 +40,19 @@ WRONG: "The result -- if successful -- will be cached."
 RIGHT: "The result, if successful, will be cached."
 ```
 
-## EMOJIS ARE BANNED
+## EMOJIS: BANNED IN WORK, ALLOWED IN CHAT
 
-Never use emojis anywhere. Not in UI copy. Not in commit messages. Not in README files. Not in responses.
+Never use emojis in anything that ships: UI copy, code, comments, commit
+messages, README files, docs, anything a third party reads. The README footer
+is the one exception.
+
+**Chat replies to the user are different.** The user texts with emojis and
+humor, and asked on 2026-09-28 for replies to match. Follow the measured
+profile in the voice file (`core/voice.md`), not a guess: an emoji roughly one
+reply in four, from their own set, often stacked at the end ("🥀🥀🥀"), never
+as decoration on every line and never replacing words. Humor is light and
+theirs: "lol", "we're cooked", a straight-faced aside. Bad news and anything
+serious stay plain.
 
 ```
 WRONG: "🚀 Deploy in seconds"

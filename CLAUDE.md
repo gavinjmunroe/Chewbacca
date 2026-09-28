@@ -81,7 +81,7 @@ Do not restate them here. They load on their own.
 - NO missing loading/empty/error states in data-driven UIs
 - NO shipping without checking mobile view
 - **NO EM DASHES (--) anywhere, ever. In code comments, copy, documentation, chat responses, anywhere. Use a colon, period, or comma instead.**
-- **NO EMOJIS anywhere, ever. Not in copy, not in code, not in commit messages.**
+- **NO EMOJIS in anything that ships: copy, code, commit messages, docs.** Chat replies to the user may use them the way the user does (see the voice file).
 
 ---
 

@@ -193,6 +193,11 @@ def scan(text, chat=False):
     prose = strip_code(text)
     findings, per_rule = [], {}
     for rid, weight, why, pattern in RULES:
+        # Caleb texts with emojis (about 1 message in 25: 🥀 😓 🔜 😭 🔥) and
+        # asked on 2026-09-28 for replies to him to do the same. The ban still
+        # holds for files: copy, code, commits, docs.
+        if chat and rid == "emoji":
+            continue
         for m in pattern.finditer(prose):
             if rid == "binary-contrast":
                 # Look back to the start of the sentence. A conditional ("If a

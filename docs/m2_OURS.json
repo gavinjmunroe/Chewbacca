@@ -17,24 +17,19 @@
     "w": 512,
     "gap": 8
    },
-   "painted": 3182,
-   "shapes": 2233,
-   "svg": 13,
+   "painted": 2498,
+   "shapes": 2315,
+   "svg": 2,
    "canvas": 0,
    "img": 0,
-   "mockup": {
-    "w": 1200,
-    "h": 496,
-    "tag": "DIV",
-    "kids": 150
-   },
-   "controls": 12,
+   "mockup": null,
+   "controls": 13,
    "control_h": [
     17,
     19,
     20,
-    31,
-    35
+    28,
+    31
    ],
    "i": 0,
    "y": 339,
@@ -57,8 +52,8 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 571,
-   "shapes": 357,
+   "painted": 303,
+   "shapes": 39,
    "svg": 25,
    "canvas": 0,
    "img": 0,
@@ -68,13 +63,13 @@
     "tag": "DIV",
     "kids": 478
    },
-   "controls": 12,
+   "controls": 16,
    "control_h": [
     17,
     19,
     20,
-    31,
-    35
+    28,
+    31
    ],
    "i": 1,
    "y": 10647,
@@ -97,9 +92,9 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 77,
-   "shapes": 3,
-   "svg": 1,
+   "painted": 189,
+   "shapes": 21,
+   "svg": 14,
    "canvas": 0,
    "img": 0,
    "mockup": {
@@ -108,13 +103,13 @@
     "tag": "DIV",
     "kids": 478
    },
-   "controls": 11,
+   "controls": 15,
    "control_h": [
     17,
     19,
     20,
-    31,
-    35
+    28,
+    29
    ],
    "i": 2,
    "y": 11554,
@@ -137,9 +132,9 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 139,
-   "shapes": 21,
-   "svg": 14,
+   "painted": 198,
+   "shapes": 23,
+   "svg": 15,
    "canvas": 0,
    "img": 0,
    "mockup": {
@@ -148,13 +143,13 @@
     "tag": "DIV",
     "kids": 478
    },
-   "controls": 11,
+   "controls": 14,
    "control_h": [
     17,
     19,
     20,
-    29,
-    31
+    28,
+    29
    ],
    "i": 3,
    "y": 12461,
@@ -177,7 +172,7 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 81,
+   "painted": 127,
    "shapes": 5,
    "svg": 2,
    "canvas": 0,
@@ -188,13 +183,13 @@
     "tag": "DIV",
     "kids": 478
    },
-   "controls": 10,
+   "controls": 15,
    "control_h": [
     17,
     19,
     20,
-    31,
-    35
+    28,
+    31
    ],
    "i": 4,
    "y": 13361,
@@ -211,24 +206,24 @@
    "h_w": 768,
    "h_lines": 1,
    "lead": null,
-   "painted": 213,
+   "painted": 216,
    "shapes": 27,
    "svg": 13,
    "canvas": 0,
    "img": 0,
    "mockup": {
-    "w": 1040,
-    "h": 3600,
-    "tag": "DIV",
-    "kids": 478
+    "w": 880,
+    "h": 607,
+    "tag": "SECTION",
+    "kids": 21
    },
-   "controls": 24,
+   "controls": 27,
    "control_h": [
     17,
     19,
     20,
-    31,
-    34
+    28,
+    31
    ],
    "i": 5,
    "y": 14075,
@@ -251,7 +246,7 @@
     "w": 672,
     "gap": 8
    },
-   "painted": 73,
+   "painted": 56,
    "shapes": 3,
    "svg": 1,
    "canvas": 0,
@@ -262,13 +257,13 @@
     "tag": "SECTION",
     "kids": 21
    },
-   "controls": 22,
+   "controls": 13,
    "control_h": [
     17,
     19,
     20,
-    31,
-    35
+    28,
+    31
    ],
    "i": 6,
    "y": 14643,
@@ -291,7 +286,7 @@
     "w": 672,
     "gap": 8
    },
-   "painted": 50,
+   "painted": 59,
    "shapes": 3,
    "svg": 1,
    "canvas": 0,
@@ -302,13 +297,13 @@
     "tag": "SECTION",
     "kids": 21
    },
-   "controls": 11,
+   "controls": 16,
    "control_h": [
     17,
     19,
     20,
-    29,
-    31
+    28,
+    29
    ],
    "i": 7,
    "y": 15251,
@@ -331,7 +326,7 @@
     "w": 467,
     "gap": 8
    },
-   "painted": 53,
+   "painted": 65,
    "shapes": 3,
    "svg": 1,
    "canvas": 0,
@@ -342,13 +337,13 @@
     "tag": "SECTION",
     "kids": 15
    },
-   "controls": 15,
+   "controls": 18,
    "control_h": [
     17,
     18,
     19,
     20,
-    29
+    28
    ],
    "i": 8,
    "y": 15812,
@@ -365,7 +360,7 @@
    "h_w": 572,
    "h_lines": 2,
    "lead": null,
-   "painted": 49,
+   "painted": 57,
    "shapes": 3,
    "svg": 1,
    "canvas": 0,
@@ -376,13 +371,13 @@
     "tag": "SECTION",
     "kids": 15
    },
-   "controls": 15,
+   "controls": 19,
    "control_h": [
     17,
     18,
     19,
     20,
-    29
+    28
    ],
    "i": 9,
    "y": 15841,
@@ -399,7 +394,7 @@
    "h_w": 538,
    "h_lines": 1,
    "lead": null,
-   "painted": 63,
+   "painted": 70,
    "shapes": 3,
    "svg": 1,
    "canvas": 0,
@@ -410,7 +405,7 @@
     "tag": "DIV",
     "kids": 21
    },
-   "controls": 25,
+   "controls": 28,
    "control_h": [
     15,
     17,

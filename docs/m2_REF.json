@@ -7,28 +7,28 @@
    "h_ls": "-0.4px",
    "h_weight": "400",
    "h_align": "center",
-   "h_x": 550,
-   "h_w": 340,
-   "h_lines": 2,
+   "h_x": 0,
+   "h_w": 0,
+   "h_lines": 1,
    "lead": {
     "size": "15px",
     "lh": "22.5px",
     "color": "oklab(0.262919 0.0168294 -0.104771 / 0.65)",
-    "w": 512,
-    "gap": 8
+    "w": 0,
+    "gap": 0
    },
-   "painted": 3393,
-   "shapes": 2374,
-   "svg": 9,
+   "painted": 2206,
+   "shapes": 2017,
+   "svg": 4,
    "canvas": 2,
-   "img": 1,
+   "img": 0,
    "mockup": {
-    "w": 560,
-    "h": 231,
+    "w": 318,
+    "h": 220,
     "tag": "DIV",
-    "kids": 19
+    "kids": 9
    },
-   "controls": 15,
+   "controls": 13,
    "control_h": [
     14,
     20,
@@ -57,10 +57,10 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 667,
-   "shapes": 165,
-   "svg": 25,
-   "canvas": 2,
+   "painted": 523,
+   "shapes": 29,
+   "svg": 24,
+   "canvas": 1,
    "img": 6,
    "mockup": {
     "w": 1040,
@@ -97,7 +97,7 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 530,
+   "painted": 531,
    "shapes": 29,
    "svg": 24,
    "canvas": 1,
@@ -137,7 +137,7 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 465,
+   "painted": 469,
    "shapes": 29,
    "svg": 24,
    "canvas": 1,
@@ -177,11 +177,11 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 524,
+   "painted": 502,
    "shapes": 29,
    "svg": 24,
    "canvas": 1,
-   "img": 6,
+   "img": 5,
    "mockup": {
     "w": 1040,
     "h": 3600,
@@ -217,16 +217,16 @@
     "w": 672,
     "gap": 8
    },
-   "painted": 145,
+   "painted": 135,
    "shapes": 7,
    "svg": 5,
    "canvas": 1,
    "img": 14,
    "mockup": {
-    "w": 1040,
-    "h": 3600,
+    "w": 880,
+    "h": 696,
     "tag": "DIV",
-    "kids": 544
+    "kids": 73
    },
    "controls": 26,
    "control_h": [
@@ -257,18 +257,18 @@
     "w": 672,
     "gap": 8
    },
-   "painted": 89,
-   "shapes": 5,
-   "svg": 3,
+   "painted": 189,
+   "shapes": 16,
+   "svg": 14,
    "canvas": 1,
-   "img": 0,
+   "img": 16,
    "mockup": {
     "w": 1280,
     "h": 705,
     "tag": "DIV",
     "kids": 187
    },
-   "controls": 14,
+   "controls": 25,
    "control_h": [
     14,
     20,
@@ -297,7 +297,7 @@
     "w": 161,
     "gap": 69
    },
-   "painted": 248,
+   "painted": 254,
    "shapes": 18,
    "svg": 16,
    "canvas": 1,
@@ -308,7 +308,7 @@
     "tag": "DIV",
     "kids": 187
    },
-   "controls": 38,
+   "controls": 39,
    "control_h": [
     6,
     14,
@@ -337,10 +337,10 @@
     "w": 490,
     "gap": 12
    },
-   "painted": 139,
-   "shapes": 5,
-   "svg": 3,
-   "canvas": 2,
+   "painted": 174,
+   "shapes": 7,
+   "svg": 5,
+   "canvas": 1,
    "img": 0,
    "mockup": {
     "w": 1280,
@@ -348,7 +348,7 @@
     "tag": "DIV",
     "kids": 187
    },
-   "controls": 40,
+   "controls": 42,
    "control_h": [
     6,
     14,
@@ -377,7 +377,7 @@
     "w": 627,
     "gap": 57
    },
-   "painted": 125,
+   "painted": 88,
    "shapes": 5,
    "svg": 3,
    "canvas": 2,
@@ -388,13 +388,13 @@
     "tag": "DIV",
     "kids": 187
    },
-   "controls": 40,
+   "controls": 19,
    "control_h": [
-    6,
     14,
     20,
     26,
-    28
+    28,
+    33
    ],
    "i": 9,
    "y": 16519,
@@ -411,24 +411,24 @@
    "h_w": 509,
    "h_lines": 1,
    "lead": null,
-   "painted": 109,
+   "painted": 116,
    "shapes": 7,
    "svg": 4,
    "canvas": 2,
    "img": 0,
    "mockup": {
     "w": 1280,
-    "h": 527,
+    "h": 384,
     "tag": "DIV",
-    "kids": 28
+    "kids": 57
    },
-   "controls": 23,
+   "controls": 25,
    "control_h": [
     14,
+    16,
     20,
     26,
-    28,
-    33
+    28
    ],
    "i": 10,
    "y": 17158,

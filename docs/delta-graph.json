@@ -17,9 +17,9 @@
    "id": "hero::heading x",
    "section": "hero",
    "axis": "heading x",
-   "theirs": "550px",
+   "theirs": "0px",
    "ours": "487px",
-   "delta": "**-63**",
+   "delta": "**+487**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -29,9 +29,47 @@
    "id": "hero::heading width",
    "section": "hero",
    "axis": "heading width",
-   "theirs": "340px",
+   "theirs": "0px",
    "ours": "465px",
-   "delta": "**+125**",
+   "delta": "**+465**",
+   "source": "docs/DELTAS.md",
+   "viewport": "1440x900",
+   "as_of": "2026-09-28"
+  },
+  {
+   "kind": "delta",
+   "id": "hero::heading lines",
+   "section": "hero",
+   "axis": "heading lines",
+   "theirs": "1",
+   "ours": "2",
+   "delta": "**+1**",
+   "source": "docs/DELTAS.md",
+   "viewport": "1440x900",
+   "as_of": "2026-09-28",
+   "unmodelled": true,
+   "claimed_by": []
+  },
+  {
+   "kind": "delta",
+   "id": "hero::lead width",
+   "section": "hero",
+   "axis": "lead width",
+   "theirs": "0px",
+   "ours": "512px",
+   "delta": "**+512**",
+   "source": "docs/DELTAS.md",
+   "viewport": "1440x900",
+   "as_of": "2026-09-28"
+  },
+  {
+   "kind": "delta",
+   "id": "hero::lead gap under heading",
+   "section": "hero",
+   "axis": "lead gap under heading",
+   "theirs": "0px",
+   "ours": "8px",
+   "delta": "**+8**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -41,9 +79,9 @@
    "id": "hero::painted elements",
    "section": "hero",
    "axis": "painted elements",
-   "theirs": "3393",
-   "ours": "3182",
-   "delta": "**-211**",
+   "theirs": "2206",
+   "ours": "2498",
+   "delta": "**+292**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -53,21 +91,9 @@
    "id": "hero::svg shapes",
    "section": "hero",
    "axis": "svg shapes",
-   "theirs": "2374",
-   "ours": "2233",
-   "delta": "**-141**",
-   "source": "docs/DELTAS.md",
-   "viewport": "1440x900",
-   "as_of": "2026-09-28"
-  },
-  {
-   "kind": "delta",
-   "id": "hero::controls",
-   "section": "hero",
-   "axis": "controls",
-   "theirs": "15",
-   "ours": "12",
-   "delta": "**-3**",
+   "theirs": "2017",
+   "ours": "2315",
+   "delta": "**+298**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -77,9 +103,9 @@
    "id": "hero::largest block width",
    "section": "hero",
    "axis": "largest block width",
-   "theirs": "560px",
-   "ours": "1200px",
-   "delta": "**+640**",
+   "theirs": "318px",
+   "ours": "-px",
+   "delta": "**differs**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -89,9 +115,9 @@
    "id": "hero::largest block height",
    "section": "hero",
    "axis": "largest block height",
-   "theirs": "231px",
-   "ours": "496px",
-   "delta": "**+265**",
+   "theirs": "220px",
+   "ours": "-px",
+   "delta": "**differs**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -101,9 +127,9 @@
    "id": "hero::largest block children",
    "section": "hero",
    "axis": "largest block children",
-   "theirs": "19",
-   "ours": "150",
-   "delta": "**+131**",
+   "theirs": "9",
+   "ours": "-",
+   "delta": "**differs**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -125,21 +151,26 @@
    "id": "surface failures::painted elements",
    "section": "surface failures",
    "axis": "painted elements",
-   "theirs": "667",
-   "ours": "571",
-   "delta": "**-96**",
+   "theirs": "523",
+   "ours": "303",
+   "delta": "**-220**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
-   "as_of": "2026-09-28"
+   "as_of": "2026-09-28",
+   "unmodelled": true,
+   "claimed_by": [
+    "hidden",
+    "svg"
+   ]
   },
   {
    "kind": "delta",
    "id": "surface failures::svg shapes",
    "section": "surface failures",
    "axis": "svg shapes",
-   "theirs": "165",
-   "ours": "357",
-   "delta": "**+192**",
+   "theirs": "29",
+   "ours": "39",
+   "delta": "**+10**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -150,8 +181,8 @@
    "section": "surface failures",
    "axis": "controls",
    "theirs": "15",
-   "ours": "12",
-   "delta": "**-3**",
+   "ours": "16",
+   "delta": "**+1**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -199,12 +230,17 @@
    "id": "notifications::painted elements",
    "section": "notifications",
    "axis": "painted elements",
-   "theirs": "530",
-   "ours": "77",
-   "delta": "**-453**",
+   "theirs": "531",
+   "ours": "189",
+   "delta": "**-342**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
-   "as_of": "2026-09-28"
+   "as_of": "2026-09-28",
+   "unmodelled": true,
+   "claimed_by": [
+    "hidden",
+    "svg"
+   ]
   },
   {
    "kind": "delta",
@@ -212,20 +248,8 @@
    "section": "notifications",
    "axis": "svg shapes",
    "theirs": "29",
-   "ours": "3",
-   "delta": "**-26**",
-   "source": "docs/DELTAS.md",
-   "viewport": "1440x900",
-   "as_of": "2026-09-28"
-  },
-  {
-   "kind": "delta",
-   "id": "notifications::controls",
-   "section": "notifications",
-   "axis": "controls",
-   "theirs": "15",
-   "ours": "11",
-   "delta": "**-4**",
+   "ours": "21",
+   "delta": "**-8**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -273,12 +297,17 @@
    "id": "fix where you work / mcp::painted elements",
    "section": "fix where you work / mcp",
    "axis": "painted elements",
-   "theirs": "465",
-   "ours": "139",
-   "delta": "**-326**",
+   "theirs": "469",
+   "ours": "198",
+   "delta": "**-271**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
-   "as_of": "2026-09-28"
+   "as_of": "2026-09-28",
+   "unmodelled": true,
+   "claimed_by": [
+    "hidden",
+    "svg"
+   ]
   },
   {
    "kind": "delta",
@@ -286,8 +315,8 @@
    "section": "fix where you work / mcp",
    "axis": "svg shapes",
    "theirs": "29",
-   "ours": "21",
-   "delta": "**-8**",
+   "ours": "23",
+   "delta": "**-6**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -298,8 +327,8 @@
    "section": "fix where you work / mcp",
    "axis": "controls",
    "theirs": "15",
-   "ours": "11",
-   "delta": "**-4**",
+   "ours": "14",
+   "delta": "**-1**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -347,9 +376,9 @@
    "id": "ship with confidence::painted elements",
    "section": "ship with confidence",
    "axis": "painted elements",
-   "theirs": "524",
-   "ours": "81",
-   "delta": "**-443**",
+   "theirs": "502",
+   "ours": "127",
+   "delta": "**-375**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -362,18 +391,6 @@
    "theirs": "29",
    "ours": "5",
    "delta": "**-24**",
-   "source": "docs/DELTAS.md",
-   "viewport": "1440x900",
-   "as_of": "2026-09-28"
-  },
-  {
-   "kind": "delta",
-   "id": "ship with confidence::controls",
-   "section": "ship with confidence",
-   "axis": "controls",
-   "theirs": "15",
-   "ours": "10",
-   "delta": "**-5**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -407,9 +424,9 @@
    "id": "fits into your stack::painted elements",
    "section": "fits into your stack",
    "axis": "painted elements",
-   "theirs": "145",
-   "ours": "73",
-   "delta": "**-72**",
+   "theirs": "135",
+   "ours": "56",
+   "delta": "**-79**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -432,20 +449,8 @@
    "section": "fits into your stack",
    "axis": "controls",
    "theirs": "26",
-   "ours": "22",
-   "delta": "**-4**",
-   "source": "docs/DELTAS.md",
-   "viewport": "1440x900",
-   "as_of": "2026-09-28"
-  },
-  {
-   "kind": "delta",
-   "id": "fits into your stack::largest block width",
-   "section": "fits into your stack",
-   "axis": "largest block width",
-   "theirs": "1040px",
-   "ours": "880px",
-   "delta": "**-160**",
+   "ours": "13",
+   "delta": "**-13**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -455,9 +460,9 @@
    "id": "fits into your stack::largest block height",
    "section": "fits into your stack",
    "axis": "largest block height",
-   "theirs": "3600px",
+   "theirs": "696px",
    "ours": "607px",
-   "delta": "**-2993**",
+   "delta": "**-89**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -467,9 +472,9 @@
    "id": "fits into your stack::largest block children",
    "section": "fits into your stack",
    "axis": "largest block children",
-   "theirs": "544",
+   "theirs": "73",
    "ours": "21",
-   "delta": "**-523**",
+   "delta": "**-52**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -491,9 +496,9 @@
    "id": "trust::painted elements",
    "section": "trust",
    "axis": "painted elements",
-   "theirs": "89",
-   "ours": "50",
-   "delta": "**-39**",
+   "theirs": "189",
+   "ours": "59",
+   "delta": "**-130**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -503,9 +508,9 @@
    "id": "trust::svg shapes",
    "section": "trust",
    "axis": "svg shapes",
-   "theirs": "5",
+   "theirs": "16",
    "ours": "3",
-   "delta": "**-2**",
+   "delta": "**-13**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -515,9 +520,9 @@
    "id": "trust::controls",
    "section": "trust",
    "axis": "controls",
-   "theirs": "14",
-   "ours": "11",
-   "delta": "**-3**",
+   "theirs": "25",
+   "ours": "16",
+   "delta": "**-9**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -623,9 +628,9 @@
    "id": "testimonials::painted elements",
    "section": "testimonials",
    "axis": "painted elements",
-   "theirs": "248",
-   "ours": "213",
-   "delta": "**-35**",
+   "theirs": "254",
+   "ours": "216",
+   "delta": "**-38**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -647,9 +652,9 @@
    "id": "testimonials::controls",
    "section": "testimonials",
    "axis": "controls",
-   "theirs": "38",
-   "ours": "24",
-   "delta": "**-14**",
+   "theirs": "39",
+   "ours": "27",
+   "delta": "**-12**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -660,8 +665,8 @@
    "section": "testimonials",
    "axis": "largest block width",
    "theirs": "1280px",
-   "ours": "1040px",
-   "delta": "**-240**",
+   "ours": "880px",
+   "delta": "**-400**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -672,8 +677,8 @@
    "section": "testimonials",
    "axis": "largest block height",
    "theirs": "705px",
-   "ours": "3600px",
-   "delta": "**+2895**",
+   "ours": "607px",
+   "delta": "**-98**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -684,8 +689,8 @@
    "section": "testimonials",
    "axis": "largest block children",
    "theirs": "187",
-   "ours": "478",
-   "delta": "**+291**",
+   "ours": "21",
+   "delta": "**-166**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -767,9 +772,9 @@
    "id": "subscribe::painted elements",
    "section": "subscribe",
    "axis": "painted elements",
-   "theirs": "139",
-   "ours": "53",
-   "delta": "**-86**",
+   "theirs": "174",
+   "ours": "65",
+   "delta": "**-109**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -779,9 +784,9 @@
    "id": "subscribe::svg shapes",
    "section": "subscribe",
    "axis": "svg shapes",
-   "theirs": "5",
+   "theirs": "7",
    "ours": "3",
-   "delta": "**-2**",
+   "delta": "**-4**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -791,9 +796,9 @@
    "id": "subscribe::controls",
    "section": "subscribe",
    "axis": "controls",
-   "theirs": "40",
-   "ours": "15",
-   "delta": "**-25**",
+   "theirs": "42",
+   "ours": "18",
+   "delta": "**-24**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -923,9 +928,9 @@
    "id": "the friday briefing on ai agent ob::painted elements",
    "section": "the friday briefing on ai agent ob",
    "axis": "painted elements",
-   "theirs": "125",
-   "ours": "49",
-   "delta": "**-76**",
+   "theirs": "88",
+   "ours": "57",
+   "delta": "**-31**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -938,18 +943,6 @@
    "theirs": "5",
    "ours": "3",
    "delta": "**-2**",
-   "source": "docs/DELTAS.md",
-   "viewport": "1440x900",
-   "as_of": "2026-09-28"
-  },
-  {
-   "kind": "delta",
-   "id": "the friday briefing on ai agent ob::controls",
-   "section": "the friday briefing on ai agent ob",
-   "axis": "controls",
-   "theirs": "40",
-   "ours": "15",
-   "delta": "**-25**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -1031,8 +1024,8 @@
    "id": "closing cta::painted elements",
    "section": "closing cta",
    "axis": "painted elements",
-   "theirs": "109",
-   "ours": "63",
+   "theirs": "116",
+   "ours": "70",
    "delta": "**-46**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
@@ -1055,9 +1048,9 @@
    "id": "closing cta::controls",
    "section": "closing cta",
    "axis": "controls",
-   "theirs": "23",
-   "ours": "25",
-   "delta": "**+2**",
+   "theirs": "25",
+   "ours": "28",
+   "delta": "**+3**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -1067,9 +1060,9 @@
    "id": "closing cta::largest block height",
    "section": "closing cta",
    "axis": "largest block height",
-   "theirs": "527px",
+   "theirs": "384px",
    "ours": "334px",
-   "delta": "**-193**",
+   "delta": "**-50**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -1079,9 +1072,9 @@
    "id": "closing cta::largest block children",
    "section": "closing cta",
    "axis": "largest block children",
-   "theirs": "28",
+   "theirs": "57",
    "ours": "21",
-   "delta": "**-7**",
+   "delta": "**-36**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
    "as_of": "2026-09-28"
@@ -1150,6 +1143,18 @@
   },
   {
    "kind": "cause",
+   "id": "hidden",
+   "name": "offscreen panels are display:none on ours, in the DOM on theirs",
+   "found": "2026-09-28, stage descendants 457 vs 451-511, painted 42 vs 531",
+   "as_of": "2026-09-28"
+  },
+  {
+   "kind": "wave",
+   "id": "wave0",
+   "name": "Wave 0"
+  },
+  {
+   "kind": "cause",
    "id": "svg",
    "name": "figure element counts differ",
    "found": "2026-09-28, per-plate node counts on both",
@@ -1208,6 +1213,16 @@
    "dst": "src/styles.css"
   },
   {
+   "src": "hidden",
+   "rel": "FIXED_IN",
+   "dst": "wave0"
+  },
+  {
+   "src": "hidden",
+   "rel": "LIVES_IN",
+   "dst": "src/app.js"
+  },
+  {
    "src": "svg",
    "rel": "FIXED_IN",
    "dst": "wave3"
@@ -1233,17 +1248,22 @@
    "dst": "shrink"
   },
   {
+   "src": "hero::lead width",
+   "rel": "CAUSED_BY",
+   "dst": "lead"
+  },
+  {
+   "src": "hero::lead gap under heading",
+   "rel": "CAUSED_BY",
+   "dst": "lead"
+  },
+  {
    "src": "hero::painted elements",
    "rel": "CAUSED_BY",
    "dst": "svg"
   },
   {
    "src": "hero::svg shapes",
-   "rel": "CAUSED_BY",
-   "dst": "svg"
-  },
-  {
-   "src": "hero::controls",
    "rel": "CAUSED_BY",
    "dst": "svg"
   },
@@ -1268,11 +1288,6 @@
    "dst": "short"
   },
   {
-   "src": "surface failures::painted elements",
-   "rel": "CAUSED_BY",
-   "dst": "svg"
-  },
-  {
    "src": "surface failures::svg shapes",
    "rel": "CAUSED_BY",
    "dst": "svg"
@@ -1293,17 +1308,7 @@
    "dst": "short"
   },
   {
-   "src": "notifications::painted elements",
-   "rel": "CAUSED_BY",
-   "dst": "svg"
-  },
-  {
    "src": "notifications::svg shapes",
-   "rel": "CAUSED_BY",
-   "dst": "svg"
-  },
-  {
-   "src": "notifications::controls",
    "rel": "CAUSED_BY",
    "dst": "svg"
   },
@@ -1316,11 +1321,6 @@
    "src": "fix where you work / mcp::section height",
    "rel": "CAUSED_BY",
    "dst": "short"
-  },
-  {
-   "src": "fix where you work / mcp::painted elements",
-   "rel": "CAUSED_BY",
-   "dst": "svg"
   },
   {
    "src": "fix where you work / mcp::svg shapes",
@@ -1353,11 +1353,6 @@
    "dst": "svg"
   },
   {
-   "src": "ship with confidence::controls",
-   "rel": "CAUSED_BY",
-   "dst": "svg"
-  },
-  {
    "src": "ship with confidence::largest block children",
    "rel": "CAUSED_BY",
    "dst": "thin"
@@ -1381,11 +1376,6 @@
    "src": "fits into your stack::controls",
    "rel": "CAUSED_BY",
    "dst": "svg"
-  },
-  {
-   "src": "fits into your stack::largest block width",
-   "rel": "CAUSED_BY",
-   "dst": "thin"
   },
   {
    "src": "fits into your stack::largest block height",
@@ -1589,11 +1579,6 @@
   },
   {
    "src": "the friday briefing on ai agent ob::svg shapes",
-   "rel": "CAUSED_BY",
-   "dst": "svg"
-  },
-  {
-   "src": "the friday briefing on ai agent ob::controls",
    "rel": "CAUSED_BY",
    "dst": "svg"
   },

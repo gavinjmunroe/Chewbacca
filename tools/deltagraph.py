@@ -77,6 +77,20 @@ CAUSES = [
          name="lead paragraph rhythm is ad hoc",
          found="2026-09-28, theirs is 18px at an 8px gap on every feature block",
          matches=lambda s, a: a.startswith("lead")),
+    # DELIBERATE, and it ranks as work if it is not modelled. Their sticky
+    # container keeps all four sub-panels in the DOM at every scroll position,
+    # so all ~460 of their descendants count as painted in every feature
+    # block. Ours sets display:none below 0.01 opacity, so one panel is
+    # painted and the rest are out of the tree.
+    #
+    # Our stage holds 457 descendants against their 451 to 511, so the content
+    # is equal. The axis is measuring the optimisation. Keeping it: a panel at
+    # opacity 0 still paints its children's stacking context and still traps
+    # pointer events, and four of them do it four times over.
+    dict(id="hidden", wave=0, artifact="src/app.js", deliberate=True,
+         name="offscreen panels are display:none on ours, in the DOM on theirs",
+         found="2026-09-28, stage descendants 457 vs 451-511, painted 42 vs 531",
+         matches=lambda s, a: a == "painted elements" and s in FEATURE),
     dict(id="svg", wave=3, artifact="src/app.js",
          name="figure element counts differ",
          found="2026-09-28, per-plate node counts on both",
@@ -158,7 +172,17 @@ def report(nodes, edges):
              "|---|---|---|---|"]
     for cid, n in fan.most_common():
         c = next(x for x in CAUSES if x["id"] == cid)
+        if c.get("deliberate"):
+            continue
         lines.append(f"| {c['name']} | **{n}** | {c['wave']} | `{c['artifact']}` |")
+    dl = [c for c in CAUSES if c.get("deliberate")]
+    if dl:
+        lines += ["", "## Deliberate differences", "",
+                  "Counted as deltas and not as work. Each closes rows that will",
+                  "never reach zero, because ours is a decision rather than a gap.",
+                  "", "| difference | rows | why |", "|---|---|---|"]
+        for c in dl:
+            lines.append(f"| {c['name']} | {fan.get(c['id'], 0)} | {c['found']} |")
     if unmodelled:
         lines += ["", "## Unmodelled deltas", "",
                   "No cause claims these, or more than one does. Either way the",

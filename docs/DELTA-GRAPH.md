@@ -6,10 +6,10 @@ A table answers *what differs*. This answers *what closes the most*,
 which is a multi-hop question and the only one worth asking before
 picking up the next piece of work.
 
-    delta nodes      90
-    cause nodes      6
-    CAUSED_BY edges  87
-    unmodelled       3
+    delta nodes      88
+    cause nodes      7
+    CAUSED_BY edges  81
+    unmodelled       7
 
 ## Causes by fan-out
 
@@ -19,11 +19,20 @@ have chased eight symptoms instead.
 
 | cause | closes | wave | lives in |
 |---|---|---|---|
-| figure element counts differ | **33** | 3 | `src/app.js` |
-| the metrics panel is thin (5 text leaves against 24 to 60) | **24** | 3 | `src/app.js` |
+| figure element counts differ | **26** | 3 | `src/app.js` |
+| the metrics panel is thin (5 text leaves against 24 to 60) | **23** | 3 | `src/app.js` |
+| lead paragraph rhythm is ad hoc | **13** | 2 | `src/styles.css` |
 | sections below the demo are not built out | **11** | 4 | `index.html` |
-| lead paragraph rhythm is ad hoc | **11** | 2 | `src/styles.css` |
 | centred headings are full-width boxes on ours, shrink-to-fit on theirs | **8** | 2 | `src/styles.css` |
+
+## Deliberate differences
+
+Counted as deltas and not as work. Each closes rows that will
+never reach zero, because ours is a decision rather than a gap.
+
+| difference | rows | why |
+|---|---|---|
+| offscreen panels are display:none on ours, in the DOM on theirs | 0 | 2026-09-28, stage descendants 457 vs 451-511, painted 42 vs 531 |
 
 ## Unmodelled deltas
 
@@ -33,6 +42,10 @@ error.
 
 | section | axis | delta | claimed by |
 |---|---|---|---|
+| hero | heading lines | **+1** | none |
+| surface failures | painted elements | **-220** | hidden, svg |
 | notifications | heading lines | **+1** | none |
+| notifications | painted elements | **-342** | hidden, svg |
 | fix where you work / mcp | heading lines | **+1** | none |
+| fix where you work / mcp | painted elements | **-271** | hidden, svg |
 | ship with confidence | heading lines | **+1** | none |

@@ -22,19 +22,19 @@ theirs `Stop guessing why your agents fail`  |  ours `Your agent failed and noth
 | heading tracking | -0.4px | -0.4px | ok |
 | heading weight | 400 | 400 | ok |
 | heading align | center | center | ok |
-| heading x | 550px | 487px | **-63** |
-| heading width | 340px | 465px | **+125** |
-| heading lines | 2 | 2 | ok |
+| heading x | 0px | 487px | **+487** |
+| heading width | 0px | 465px | **+465** |
+| heading lines | 1 | 2 | **+1** |
 | lead size | 15px | 15px | ok |
 | lead leading | 22.5px | 22.5px | ok |
-| lead width | 512px | 512px | ok |
-| lead gap under heading | 8px | 8px | ok |
-| painted elements | 3393 | 3182 | **-211** |
-| svg shapes | 2374 | 2233 | **-141** |
-| controls | 15 | 12 | **-3** |
-| largest block width | 560px | 1200px | **+640** |
-| largest block height | 231px | 496px | **+265** |
-| largest block children | 19 | 150 | **+131** |
+| lead width | 0px | 512px | **+512** |
+| lead gap under heading | 0px | 8px | **+8** |
+| painted elements | 2206 | 2498 | **+292** |
+| svg shapes | 2017 | 2315 | **+298** |
+| controls | 13 | 13 | ok |
+| largest block width | 318px | -px | **differs** |
+| largest block height | 220px | -px | **differs** |
+| largest block children | 9 | - | **differs** |
 
 
 ## surface failures
@@ -56,9 +56,9 @@ theirs `Surface failures you didn't know to look for.`  |  ours `Find the runs t
 | lead leading | 28px | 28px | ok |
 | lead width | 384px | 384px | ok |
 | lead gap under heading | 8px | 8px | ok |
-| painted elements | 667 | 571 | **-96** |
-| svg shapes | 165 | 357 | **+192** |
-| controls | 15 | 12 | **-3** |
+| painted elements | 523 | 303 | **-220** |
+| svg shapes | 29 | 39 | **+10** |
+| controls | 15 | 16 | **+1** |
 | largest block width | 1040px | 1040px | ok |
 | largest block height | 3600px | 3600px | ok |
 | largest block children | 544 | 478 | **-66** |
@@ -83,9 +83,9 @@ theirs `Get notified on what matters.`  |  ours `Hear about it in the channel yo
 | lead leading | 28px | 28px | ok |
 | lead width | 384px | 384px | ok |
 | lead gap under heading | 8px | 8px | ok |
-| painted elements | 530 | 77 | **-453** |
-| svg shapes | 29 | 3 | **-26** |
-| controls | 15 | 11 | **-4** |
+| painted elements | 531 | 189 | **-342** |
+| svg shapes | 29 | 21 | **-8** |
+| controls | 15 | 15 | ok |
 | largest block width | 1040px | 1040px | ok |
 | largest block height | 3600px | 3600px | ok |
 | largest block children | 552 | 478 | **-74** |
@@ -110,9 +110,9 @@ theirs `Fix it where you work.`  |  ours `Fix it without leaving the editor.`
 | lead leading | 28px | 28px | ok |
 | lead width | 384px | 384px | ok |
 | lead gap under heading | 8px | 8px | ok |
-| painted elements | 465 | 139 | **-326** |
-| svg shapes | 29 | 21 | **-8** |
-| controls | 15 | 11 | **-4** |
+| painted elements | 469 | 198 | **-271** |
+| svg shapes | 29 | 23 | **-6** |
+| controls | 15 | 14 | **-1** |
 | largest block width | 1040px | 1040px | ok |
 | largest block height | 3600px | 3600px | ok |
 | largest block children | 487 | 478 | **-9** |
@@ -137,9 +137,9 @@ theirs `Ship with confidence.`  |  ours `Know the moment it comes back.`
 | lead leading | 28px | 28px | ok |
 | lead width | 384px | 384px | ok |
 | lead gap under heading | 8px | 8px | ok |
-| painted elements | 524 | 81 | **-443** |
+| painted elements | 502 | 127 | **-375** |
 | svg shapes | 29 | 5 | **-24** |
-| controls | 15 | 10 | **-5** |
+| controls | 15 | 15 | ok |
 | largest block width | 1040px | 1040px | ok |
 | largest block height | 3600px | 3600px | ok |
 | largest block children | 544 | 478 | **-66** |
@@ -164,12 +164,12 @@ theirs `Fits into your existing stack.`  |  ours `Drops into the stack you alrea
 | lead leading | 28px | 28px | ok |
 | lead width | 672px | 672px | ok |
 | lead gap under heading | 8px | 8px | ok |
-| painted elements | 145 | 73 | **-72** |
+| painted elements | 135 | 56 | **-79** |
 | svg shapes | 7 | 3 | **-4** |
-| controls | 26 | 22 | **-4** |
-| largest block width | 1040px | 880px | **-160** |
-| largest block height | 3600px | 607px | **-2993** |
-| largest block children | 544 | 21 | **-523** |
+| controls | 26 | 13 | **-13** |
+| largest block width | 880px | 880px | ok |
+| largest block height | 696px | 607px | **-89** |
+| largest block children | 73 | 21 | **-52** |
 
 
 ## trust
@@ -191,9 +191,9 @@ theirs `Trust is non-negotiable.`  |  ours `Your traces stay yours.`
 | lead leading | 28px | 28px | ok |
 | lead width | 672px | 672px | ok |
 | lead gap under heading | 8px | 8px | ok |
-| painted elements | 89 | 50 | **-39** |
-| svg shapes | 5 | 3 | **-2** |
-| controls | 14 | 11 | **-3** |
+| painted elements | 189 | 59 | **-130** |
+| svg shapes | 16 | 3 | **-13** |
+| controls | 25 | 16 | **-9** |
 | largest block width | 1280px | 880px | **-400** |
 | largest block height | 705px | 607px | **-98** |
 | largest block children | 187 | 21 | **-166** |
@@ -218,12 +218,12 @@ theirs `What people are saying.`  |  ours `What teams tell us.`
 | lead leading | 20px | - | **differs** |
 | lead width | 161px | -px | **differs** |
 | lead gap under heading | 69px | -px | **differs** |
-| painted elements | 248 | 213 | **-35** |
+| painted elements | 254 | 216 | **-38** |
 | svg shapes | 18 | 27 | **+9** |
-| controls | 38 | 24 | **-14** |
-| largest block width | 1280px | 1040px | **-240** |
-| largest block height | 705px | 3600px | **+2895** |
-| largest block children | 187 | 478 | **+291** |
+| controls | 39 | 27 | **-12** |
+| largest block width | 1280px | 880px | **-400** |
+| largest block height | 705px | 607px | **-98** |
+| largest block children | 187 | 21 | **-166** |
 
 
 ## subscribe
@@ -245,9 +245,9 @@ theirs `Subscribe`  |  ours `Subscribe`
 | lead leading | 20px | 21.7px | **+1.7** |
 | lead width | 490px | 467px | **-23** |
 | lead gap under heading | 12px | 8px | **-4** |
-| painted elements | 139 | 53 | **-86** |
-| svg shapes | 5 | 3 | **-2** |
-| controls | 40 | 15 | **-25** |
+| painted elements | 174 | 65 | **-109** |
+| svg shapes | 7 | 3 | **-4** |
+| controls | 42 | 18 | **-24** |
 | largest block width | 1280px | 880px | **-400** |
 | largest block height | 705px | 590px | **-115** |
 | largest block children | 187 | 15 | **-172** |
@@ -272,9 +272,9 @@ theirs `The Friday briefing on AI agent observability and re`  |  ours `A Friday
 | lead leading | 15px | - | **differs** |
 | lead width | 627px | -px | **differs** |
 | lead gap under heading | 57px | -px | **differs** |
-| painted elements | 125 | 49 | **-76** |
+| painted elements | 88 | 57 | **-31** |
 | svg shapes | 5 | 3 | **-2** |
-| controls | 40 | 15 | **-25** |
+| controls | 19 | 19 | ok |
 | largest block width | 1280px | 880px | **-400** |
 | largest block height | 705px | 590px | **-115** |
 | largest block children | 187 | 15 | **-172** |
@@ -299,10 +299,10 @@ theirs `Start improving your agents today`  |  ours `Start improving your agents
 | lead leading | - | - | - |
 | lead width | -px | -px | - |
 | lead gap under heading | -px | -px | - |
-| painted elements | 109 | 63 | **-46** |
+| painted elements | 116 | 70 | **-46** |
 | svg shapes | 7 | 3 | **-4** |
-| controls | 23 | 25 | **+2** |
+| controls | 25 | 28 | **+3** |
 | largest block width | 1280px | 1280px | ok |
-| largest block height | 527px | 334px | **-193** |
-| largest block children | 28 | 21 | **-7** |
+| largest block height | 384px | 334px | **-50** |
+| largest block children | 57 | 21 | **-36** |
 

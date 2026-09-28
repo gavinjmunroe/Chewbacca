@@ -94,7 +94,13 @@ CAUSES = [
     dict(id="svg", wave=3, artifact="src/app.js",
          name="figure element counts differ",
          found="2026-09-28, per-plate node counts on both",
-         matches=lambda s, a: a in ("svg shapes", "controls", "painted elements")),
+         # "painted elements" was in here and is now claimed by `hidden` on the
+         # four feature blocks. Two causes claiming one delta sends it to
+         # unmodelled by design, which is why the deliberate cause reported
+         # zero rows while looking correct. Outside the feature blocks a
+         # painted-element gap is real content, so it belongs to `short`.
+         matches=lambda s, a: a in ("svg shapes", "controls")
+                 or (a == "painted elements" and s not in FEATURE)),
 ]
 # The four text blocks inside the pinned scene. Keys are the ROLE names
 # gendeltas emits, and the last one was still "read the spans / ship with

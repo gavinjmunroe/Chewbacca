@@ -8,8 +8,8 @@ picking up the next piece of work.
 
     delta nodes      88
     cause nodes      7
-    CAUSED_BY edges  80
-    unmodelled       8
+    CAUSED_BY edges  84
+    unmodelled       4
 
 ## Causes by fan-out
 
@@ -32,7 +32,7 @@ never reach zero, because ours is a decision rather than a gap.
 
 | difference | rows | why |
 |---|---|---|
-| offscreen panels are display:none on ours, in the DOM on theirs | 0 | 2026-09-28, stage descendants 457 vs 451-511, painted 42 vs 531 |
+| offscreen panels are display:none on ours, in the DOM on theirs | 4 | 2026-09-28, stage descendants 457 vs 451-511, painted 42 vs 531 |
 
 ## Unmodelled deltas
 
@@ -43,10 +43,6 @@ error.
 | section | axis | delta | claimed by |
 |---|---|---|---|
 | hero | heading lines | **+1** | none |
-| surface failures | painted elements | **-220** | hidden, svg |
 | notifications | heading lines | **+1** | none |
-| notifications | painted elements | **-342** | hidden, svg |
 | fix where you work / mcp | heading lines | **+1** | none |
-| fix where you work / mcp | painted elements | **-271** | hidden, svg |
 | ship with confidence | heading lines | **+1** | none |
-| ship with confidence | painted elements | **-375** | hidden, svg |

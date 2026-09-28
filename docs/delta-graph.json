@@ -156,12 +156,7 @@
    "delta": "**-220**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
-   "as_of": "2026-09-28",
-   "unmodelled": true,
-   "claimed_by": [
-    "hidden",
-    "svg"
-   ]
+   "as_of": "2026-09-28"
   },
   {
    "kind": "delta",
@@ -235,12 +230,7 @@
    "delta": "**-342**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
-   "as_of": "2026-09-28",
-   "unmodelled": true,
-   "claimed_by": [
-    "hidden",
-    "svg"
-   ]
+   "as_of": "2026-09-28"
   },
   {
    "kind": "delta",
@@ -302,12 +292,7 @@
    "delta": "**-271**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
-   "as_of": "2026-09-28",
-   "unmodelled": true,
-   "claimed_by": [
-    "hidden",
-    "svg"
-   ]
+   "as_of": "2026-09-28"
   },
   {
    "kind": "delta",
@@ -381,12 +366,7 @@
    "delta": "**-375**",
    "source": "docs/DELTAS.md",
    "viewport": "1440x900",
-   "as_of": "2026-09-28",
-   "unmodelled": true,
-   "claimed_by": [
-    "hidden",
-    "svg"
-   ]
+   "as_of": "2026-09-28"
   },
   {
    "kind": "delta",
@@ -1293,6 +1273,11 @@
    "dst": "short"
   },
   {
+   "src": "surface failures::painted elements",
+   "rel": "CAUSED_BY",
+   "dst": "hidden"
+  },
+  {
    "src": "surface failures::svg shapes",
    "rel": "CAUSED_BY",
    "dst": "svg"
@@ -1313,6 +1298,11 @@
    "dst": "short"
   },
   {
+   "src": "notifications::painted elements",
+   "rel": "CAUSED_BY",
+   "dst": "hidden"
+  },
+  {
    "src": "notifications::svg shapes",
    "rel": "CAUSED_BY",
    "dst": "svg"
@@ -1326,6 +1316,11 @@
    "src": "fix where you work / mcp::section height",
    "rel": "CAUSED_BY",
    "dst": "short"
+  },
+  {
+   "src": "fix where you work / mcp::painted elements",
+   "rel": "CAUSED_BY",
+   "dst": "hidden"
   },
   {
    "src": "fix where you work / mcp::svg shapes",
@@ -1346,6 +1341,11 @@
    "src": "ship with confidence::section height",
    "rel": "CAUSED_BY",
    "dst": "short"
+  },
+  {
+   "src": "ship with confidence::painted elements",
+   "rel": "CAUSED_BY",
+   "dst": "hidden"
   },
   {
    "src": "ship with confidence::svg shapes",

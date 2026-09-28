@@ -970,6 +970,7 @@ if group "hud"; then
   check  "math, time, conversions and weather are computed, never guessed" python3 "$ROOT/tests/test_quick.py"
   check  "a replayed sentence takes the path the voice would take" python3 "$ROOT/tests/test_fast_path.py"
   check  "reflect harvests both logs, replays them, and writes only when told" python3 "$ROOT/tests/test_reflect.py"
+  check  "held-out cases stay hidden from the proposer and can fail a fix" python3 "$ROOT/tests/test_holdout.py"
   check  "web-record keeps the path, never what was typed" python3 "$ROOT/tests/test_web_record.py"
   check  "bb opens Blackboard by read addresses, asks when unsure" python3 "$ROOT/tests/test_bb.py"
   check  "brand-grab reads a business's own brand and marks refused pages refused" python3 "$ROOT/tests/test_brand_grab.py"

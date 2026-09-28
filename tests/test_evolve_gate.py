@@ -264,6 +264,142 @@ def test_the_archived_diff_applies():
         assert ok.returncode == 0, ok.stderr
 
 
+def test_judge_counts_reads_the_last_judge_line():
+    e = load()
+    out = 'ok x\nJUDGE {"held": [0, 1]}\nnoise\nJUDGE {"held": [2, 3]}\n'
+    assert e.judge_counts(out) == {"held": [2, 3]}
+    assert e.judge_counts("no counts here") is None
+    assert e.judge_counts("JUDGE {broken") is None
+
+
+def test_changed_lines_skips_the_file_headers():
+    e = load()
+    diff = "--- a/x\n+++ b/x\n@@ -1 +1,2 @@\n-one\n+two\n+three\n context\n"
+    assert e.changed_lines(diff) == 3
+
+
+def test_rank_prefers_held_out_cases_then_the_smaller_diff():
+    """Best of N is only worth running if the pick is the one that
+    generalised: a candidate reaching more sentences it never saw beats a
+    smaller diff that reached fewer."""
+    e = load()
+    c = lambda aid, held, lines, ok=True, judged=True: {
+        "aid": aid, "ok": ok, "judged": judged, "diff_lines": lines,
+        "counts": {"held": held} if held else None}
+    ranked = e.rank_candidates([
+        c("small", [1, 3], 10), c("general", [3, 3], 400), c("tie-big", [1, 3], 90),
+        c("broke", [3, 3], 5, judged=False), c("didnt-run", [3, 3], 5, ok=False)])
+    assert [x["aid"] for x in ranked] == ["general", "small", "tie-big"], ranked
+
+
+def test_n_refuses_a_patch():
+    """The same patch N times is one attempt at N times the cost."""
+    import subprocess
+    r = subprocess.run([sys.executable, str(ROOT / "bin/evolve"), "--patch", "x.diff", "--n", "3"],
+                       capture_output=True, text=True)
+    assert r.returncode == 2 and "--n needs --cmd" in r.stderr, r.stderr
+
+
+def test_a_crashing_candidate_is_recorded_not_raised():
+    """run_change runs on a pool thread. Before this, anything but a timeout
+    raised out of pool.map and the run ended with no ledger row for any
+    candidate: the reviewer reproduced it with one candidate writing a byte
+    that is not UTF-8 to stderr."""
+    import argparse
+    e = load()
+    with tempfile.TemporaryDirectory() as tmp:
+        c = {"wt": Path(tmp), "dest": Path(tmp), "ok": True, "detail": ""}
+        a = argparse.Namespace(patch=None, cmd="printf '\\377' 1>&2; exit 1", gate=True, n=2)
+        e.run_change(a, c)
+        assert c["ok"] is False, c
+        c = {"wt": Path(tmp) / "gone", "dest": Path(tmp), "ok": True, "detail": ""}
+        e.run_change(a, c)
+        assert c["ok"] is False and c["detail"], c
+
+
+def test_a_single_attempt_without_gate_keeps_declines_as_before():
+    """Only a run that can keep or refuse a candidate holds its declines back."""
+    import argparse
+    e = load()
+    c = {"dest": Path("/tmp/x")}
+    assert e.candidate_env(argparse.Namespace(gate=False, n=1), c) is None
+    assert e.candidate_env(argparse.Namespace(gate=True, n=1), c)["CHEWBACCA_PENDING_DECLINES"] \
+        == "/tmp/x/declines.jsonl"
+    assert "CHEWBACCA_PENDING_DECLINES" in e.candidate_env(argparse.Namespace(gate=False, n=3), c)
+
+
+def test_best_of_two_keeps_the_better_one_and_only_its_declines():
+    """The whole --n path on two real worktrees, with the model and the
+    structural score stubbed: both candidates pass the judge, the one that
+    reaches more held-out cases is gated first and kept, and only its
+    decline reaches declined.jsonl."""
+    import argparse
+    import os
+    import subprocess
+    e = load()
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        repo = tmp / "repo"
+        (repo / "tests").mkdir(parents=True)
+        git = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True,
+                                        text=True, check=True)
+        git("init", "-q")
+        git("config", "user.email", "t@t")
+        git("config", "user.name", "t")
+        (repo / "tests/run.sh").write_text("#!/bin/bash\necho 'stub suite'\nexit 0\n")
+        # Candidate "wide" writes good.txt, "narrow" writes ok.txt, and each
+        # declines one sentence into the pending file evolve gives it.
+        (repo / "change.py").write_text(
+            "import json, os, pathlib\n"
+            "wide = pathlib.Path.cwd().name.endswith('wide')\n"
+            "pathlib.Path('good.txt' if wide else 'ok.txt').write_text('x\\n')\n"
+            "with open(os.environ['CHEWBACCA_PENDING_DECLINES'], 'a') as fh:\n"
+            "    fh.write(json.dumps({'case': 'wide1' if wide else 'narrow1', 'why': 't'}) + '\\n')\n")
+        (repo / "judge.py").write_text(
+            "import json, pathlib, sys\n"
+            "held = [2, 2] if pathlib.Path('good.txt').exists() else "
+            "[1, 2] if pathlib.Path('ok.txt').exists() else None\n"
+            "print('JUDGE ' + json.dumps({'held': held or [0, 2]}))\n"
+            "sys.exit(0 if held else 1)\n")
+        git("add", "tests/run.sh", "change.py", "judge.py")
+        git("commit", "-qm", "base")
+
+        home = tmp / "home"
+        (home / ".chewbacca").mkdir(parents=True)
+        e.ARCHIVE, e.LEDGER = tmp / "archive", tmp / "archive" / "archive.jsonl"
+        e.ARCHIVE.mkdir()
+        e.score_in = lambda wt: (90.0, "stub")
+        os.environ["CHEWBACCA_LEARN_DIR"] = str(tmp / "learn")
+        sys.modules.pop("learnloop", None)
+        cands = []
+        for aid in ("narrow", "wide"):
+            wt = tmp / f"evolve-{aid}"
+            git("worktree", "add", "--detach", "-q", str(wt), "HEAD")
+            dest = e.ARCHIVE / aid
+            dest.mkdir()
+            cands.append({"aid": aid, "wt": wt, "dest": dest, "ok": True, "detail": "",
+                          "after": None, "delta": None, "branch": None, "judged": None,
+                          "counts": None, "diff_lines": 0, "gate": None})
+        a = argparse.Namespace(patch=None, cmd=f"{sys.executable} change.py",
+                               expect=f"{sys.executable} judge.py", gate=True,
+                               branch=False, note="test", n=2)
+        real_home = e.pathlib.Path.home
+        e.pathlib.Path.home = staticmethod(lambda: home)
+        try:
+            e.attempt(a, {"structural_score": 90.0, "sha": "base"}, "grp", cands)
+        finally:
+            e.pathlib.Path.home = real_home
+            os.environ.pop("CHEWBACCA_LEARN_DIR", None)
+            sys.modules.pop("learnloop", None)
+        rows = {r["id"]: r for r in map(json.loads, e.LEDGER.read_text().splitlines())}
+        declined = (tmp / "learn" / "declined.jsonl").read_text()
+    assert rows["wide"]["rank"] == 1 and rows["narrow"]["rank"] == 2, rows
+    assert rows["wide"]["gate"]["allowed"] is True, rows["wide"]
+    assert rows["narrow"]["gate"] is None, "the runner-up is not gated once one passes"
+    assert all(r["group"] == "grp" and r["n"] == 2 for r in rows.values()), rows
+    assert "wide1" in declined and "narrow1" not in declined, declined
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in sorted(globals().items()):

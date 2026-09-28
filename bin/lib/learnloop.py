@@ -318,9 +318,23 @@ def voice_episodes(rows: list[dict], days: float = 14) -> list[dict]:
 
 # ---------------------------------------------------------------------- cases
 
+def pending_declines() -> Path | None:
+    """Where a proposal's declines wait while it is only a candidate.
+
+    `evolve --n 3` runs three proposals side by side. Written straight into
+    declined.jsonl, one candidate's "leave this sentence to the model" would
+    excuse that sentence for the other two, and a refused candidate's
+    declines would outlive it. So evolve points each candidate here, the
+    judge reads it on top of the kept declines, and evolve copies it into
+    declined.jsonl only for the candidate the gate keeps."""
+    env = os.environ.get("CHEWBACCA_PENDING_DECLINES")
+    return Path(env) if env else None
+
+
 def _declines(key: str) -> dict[str, dict]:
     out = {}
-    for row in read_jsonl(DECLINED):
+    extra = pending_declines()
+    for row in read_jsonl(DECLINED) + (read_jsonl(extra) if extra else []):
         k = row.get(key)
         if not k:
             continue
@@ -389,6 +403,96 @@ def rank(cases: list[dict], skip: dict | None = None) -> list[dict]:
                        "cost_s": round(med * len(items), 1), "cases": items})
     ranked.sort(key=lambda g: (-g["cost_s"], g["shape"]))
     return ranked
+
+
+# ------------------------------------------------------------------- holdout
+
+# One sentence in three is never shown to a proposer, and the judge scores it
+# after. The first proposal (c8bc2a6935, 2026-09-27) was shown every sentence
+# it was then judged on, so passing proved it handled those sentences and
+# nothing about the next person to say "open" differently. A third is guessed:
+# enough that a 3-case shape usually keeps one back, few enough that the
+# proposer still sees most of the shape. CHEWBACCA_HOLDOUT_EVERY=0 turns it
+# off, which propose does for the judge it hands its own session, because
+# that judge has only the visible cases to begin with.
+HOLDOUT_EVERY = int(os.environ.get("CHEWBACCA_HOLDOUT_EVERY") or 3)
+# A held-out sentence quoted in a change means the proposer saw it. Under five
+# words, the same sentence is easy to write independently ("open google
+# sheets"), and refusing a change for that would punish a parser for being
+# right. Guessed, never measured.
+QUOTE_MIN_WORDS = 5
+
+
+def said_key(said: str) -> str:
+    """A sentence as bare lowercase words, the unit the split works on."""
+    return " ".join(re.sub(r"[^a-z0-9' ]", " ", (said or "").lower()).split())
+
+
+def exposed(cases: list[dict] | None = None) -> set[str]:
+    """Sentences (as said_key) a proposer has already been shown. These are
+    never held out, because a sentence the proposer saw cannot test anything
+    it did not.
+
+    Proposals record `shown_said` since 2026-09-28. The one before
+    (c8bc2a6935) rendered every case of its shapes that existed when it ran,
+    so that is what it is taken to have seen. Reconstruction can only
+    over-count, which holds fewer cases out and never leaks one."""
+    cases = read_jsonl(CASES / "voice.jsonl") if cases is None else cases
+    by_id = {c["id"]: c for c in cases}
+    seen: set[str] = set()
+    for path in sorted(PROPOSALS.glob("*.json")):
+        for row in read_jsonl(path):
+            if "shown_said" in row:
+                seen.update(row["shown_said"])
+            elif "shown" in row:
+                seen.update(said_key(by_id[i]["said"]) for i in row["shown"] if i in by_id)
+            else:
+                shapes, ran = set(row.get("shapes") or []), float(row.get("at") or 0)
+                seen.update(said_key(c["said"]) for c in cases
+                            if c.get("shape") in shapes and (_epoch(c.get("at", "")) or 0) <= ran)
+    return seen
+
+
+def held_out(case: dict, seen: set[str] | frozenset = frozenset()) -> bool:
+    """Decided by the sentence, not the case id.
+
+    Ids hash the log line, so "Open a new terminal window" said on two days
+    is two cases, and a split by id could show one copy and hold the other:
+    the proposer then adds the shown copy to a test table and the held copy
+    reads as leaked. By sentence, repeats always land on the same side, and
+    the split survives the voice store moving."""
+    key = said_key(case["said"])
+    if HOLDOUT_EVERY <= 0 or key in seen:
+        return False
+    return int(hashlib.sha1(f"holdout:{key}".encode()).hexdigest(), 16) % HOLDOUT_EVERY == 0
+
+
+def visible(groups: list[dict], seen: set[str] | frozenset = frozenset()) -> list[dict]:
+    """The groups as a proposer may see them: held-out cases removed, and a
+    shape with nothing left to show dropped, since a proposer cannot fix a
+    shape from no examples."""
+    out = []
+    for g in groups:
+        cases = [c for c in g["cases"] if not held_out(c, seen)]
+        if cases:
+            out.append({**g, "cases": cases, "count": len(cases),
+                        "held": len(g["cases"]) - len(cases)})
+    return out
+
+
+def quoted(held: list[dict], text: str, shown: list[dict] = ()) -> list[dict]:
+    """Held-out cases whose sentence appears in `text`, compared as bare words
+    so a change that re-punctuated a sentence into a test table still counts.
+
+    Shown sentences are cut out of the text first. A held "open a new
+    terminal window" inside a shown "can you open a new terminal window
+    please" is the proposer copying what it was given, not what it was not."""
+    hay = said_key(text)
+    for s in sorted({said_key(c["said"]) for c in shown}, key=len, reverse=True):
+        if s:
+            hay = hay.replace(s, " | ")
+    return [c for c in held
+            if len(said_key(c["said"]).split()) >= QUOTE_MIN_WORDS and said_key(c["said"]) in hay]
 
 
 def select(surface: str = "voice", top: int = 3, shapes: list[str] | None = None) -> list[dict]:

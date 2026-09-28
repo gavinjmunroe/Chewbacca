@@ -31,6 +31,20 @@ thousands of tokens to every turn (hud-listen's agent_flags measured 75k).
 THE REFUSALS ARE CODE, NOT PROMPT. After the run the diff is checked: a change
 to a protected path, or a deleted line in any test, is reverted and the
 proposal exits 3, which evolve records as a change that did not run.
+
+THE HELD-OUT CASES ARE HIDDEN, NOT SEALED. One sentence in three
+(learnloop.held_out) is left out of the prompt, and the prompt does not say
+that any were, because a model told about a hidden set may go looking for it.
+The session runs against a copy of the learn directory holding only the cases
+it was shown, with the voice log, the transcripts and ~/.bob pointed at empty
+directories, so `bin/reflect --json` inside it has nothing to reveal, and the
+judge prints held-out misses by id only, so evolve's archive holds none. It
+still runs as the person, with Write and a Python interpreter, so a model
+determined to read the raw logs could. The deny rules on the real directories
+were never probed in a live run: the auto-mode classifier refused the probe
+on 2026-09-28. The check that does not depend on any of this is the judge's:
+a held-out sentence quoted in the change fails it. Every sentence shown is
+recorded as `shown_said`, so it can never be held out later.
 """
 from __future__ import annotations
 
@@ -38,9 +52,12 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -127,6 +144,29 @@ def revert(bad: list[str]) -> None:
             (ROOT / path).unlink(missing_ok=True)
 
 
+def rule(path: Path) -> str:
+    """A permission-rule path: `~/` under home, `//` for any other absolute."""
+    try:
+        return "~/" + str(path.resolve().relative_to(Path.home().resolve()))
+    except ValueError:
+        return "/" + str(path.resolve())
+
+
+def session_view(groups: list[dict]) -> tuple[Path, dict]:
+    """A learn directory holding only what the proposer was shown, and the
+    environment that points its session there and away from the raw logs."""
+    view = Path(tempfile.mkdtemp(prefix="propose-view-"))
+    L.write_jsonl(view / "cases" / "voice.jsonl", [c for g in groups for c in g["cases"]])
+    L.write_jsonl(view / "declined.jsonl", L.read_jsonl(L.DECLINED))
+    for empty in ("voice", "transcripts", "bob"):
+        (view / empty).mkdir()
+    env = dict(os.environ, CHEWBACCA_LEARN_DIR=str(view), CHEWBACCA_HOLDOUT_EVERY="0",
+               SUPERASSISTANT_DIR=str(view / "voice"), CHEWBACCA_TRANSCRIPTS=str(view / "transcripts"),
+               BOB_DIR=str(view / "bob"))
+    env.pop("CHEWBACCA_PENDING_DECLINES", None)
+    return view, env
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--shapes", default="")
@@ -136,7 +176,11 @@ def main() -> int:
     a = ap.parse_args()
 
     shapes = [s.strip() for s in a.shapes.split(",") if s.strip()]
-    groups = L.select("voice", a.top, shapes or None)
+    chosen = L.select("voice", a.top, shapes or None)
+    groups = L.visible(chosen, L.exposed())
+    for g in chosen:
+        if g["shape"] not in {v["shape"] for v in groups}:
+            print(f"every {g['shape']} case is held out, so it is not shown", file=sys.stderr)
     if not groups:
         print("no live cases to fix. Run `reflect --write` first.", file=sys.stderr)
         return 2
@@ -145,19 +189,24 @@ def main() -> int:
         print(prompt)
         return 0
 
+    view, env = session_view(groups)
+    hidden = [Path.home() / ".chewbacca", L.LEARN, L.BOB, L.voice_store(), *L.transcript_roots()]
     argv = ["claude", "-p", prompt, "--output-format", "json",
             "--setting-sources", "local", "--strict-mcp-config",
             "--mcp-config", json.dumps({"mcpServers": {}}),
             "--tools", TOOLS, "--permission-mode", "acceptEdits",
-            "--allowedTools", *ALLOWED]
+            "--allowedTools", *ALLOWED,
+            "--disallowedTools", *(f"Read({rule(p)}/**)" for p in hidden)]
     if a.model:
         argv += ["--model", a.model]
     started = time.time()
     try:
-        r = subprocess.run(argv, capture_output=True, text=True, timeout=TIMEOUT_S, cwd=str(ROOT))
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=TIMEOUT_S, cwd=str(ROOT), env=env)
         raw, code = r.stdout, r.returncode
     except subprocess.TimeoutExpired as err:
         raw, code = (err.stdout or b"").decode() if isinstance(err.stdout, bytes) else (err.stdout or ""), 124
+    finally:
+        shutil.rmtree(view, ignore_errors=True)
     try:
         out = json.loads(raw)
     except ValueError:
@@ -171,7 +220,7 @@ def main() -> int:
         row.update({"case": m.group("case")} if m.group("case") else {"shape": m.group("shape").lower()})
         declines.append(row)
     if declines:
-        L.write_jsonl(L.DECLINED, declines, append=True)
+        L.write_jsonl(L.pending_declines() or L.DECLINED, declines, append=True)
 
     bad = violations()
     if bad:
@@ -192,6 +241,9 @@ def main() -> int:
     L.write_jsonl(L.PROPOSALS / f"{pid}.json", [{
         "id": pid, "at": started, "seconds": round(time.time() - started, 1),
         "shapes": [g["shape"] for g in groups], "model": a.model or "default",
+        "shown": [c["id"] for g in groups for c in g["cases"]],
+        "shown_said": sorted({L.said_key(c["said"]) for g in groups for c in g["cases"]}),
+        "held_back": sum(g.get("held", 0) for g in groups),
         "prompt_sha": hashlib.sha1(TEMPLATE.read_bytes()).hexdigest()[:10],
         "exit": code, "cost_usd": out.get("total_cost_usd"), "turns": out.get("num_turns"),
         "files": files, "declines": declines, "refused": bad, "result": result[-4000:],

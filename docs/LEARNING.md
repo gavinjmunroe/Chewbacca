@@ -156,6 +156,45 @@ scored by how many of its branches merged, has its data (`prompt_sha` on every
 proposal) and no runner yet. Nothing is scheduled until the loop has run clean,
 supervised, more than once.
 
+### Held-out cases and best of N, 2026-09-28
+
+The first proposal was shown every sentence it was then judged on, so passing
+proved it handled those sentences and nothing about the next way someone says
+"open". Two changes, both from the reasoning-model literature: a held-out set
+(the defence against Goodhart and against a model that knows it is being
+tested) and best-of-N sampling ranked against the group.
+
+| Piece                        | What it adds                                                                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `learnloop.held_out`         | One sentence in three, by a hash of its words, is never shown to a proposer. A repeat lands on the same side as the first       |
+| `bin/propose`                | Renders only visible cases and records them as `shown_said`; its session reads a learn directory holding only those            |
+| `tests/voice_cases.py`       | Scores held-out cases on their own line, by id; fails a quoted held-out sentence and a declined sentence the parser still reaches |
+| `evolve --n 3`               | Three proposals side by side; ranked by held-out share then diff size; the suite runs on the best first; every candidate archived |
+| `CHEWBACCA_PENDING_DECLINES` | Under `--gate` or `--n`, a candidate's declines wait in its archive dir and reach `declined.jsonl` only if the gate keeps it      |
+
+Held-out cases are never required to pass. The proposer cannot decline a
+sentence it never saw, and six of the fifteen "open" sentences rightly stayed
+with the model, so demanding them would pay a parser to grab what belongs to
+the model. A shape that passes every shown case and none of two or more held
+out is printed as MEMORISED for the person reading the branch. A declined
+shape's held cases stay in the count, so declining a shape cannot lift a
+candidate's share. The ranking still favours the parser that reaches more
+held-out sentences, and the check against grabbing declined sentences is the
+only counterweight, which is one more reason a person reads every branch.
+
+On the live cases the day this landed, "open" had nothing held out (the first
+proposal saw all of it), and "give" and "make" held back 4 of their 9.
+learn/4064ee9a still passes the new judge, 9 of 9 with no declined sentence
+reached.
+
+Hidden, not sealed: the proposer runs as the person with Write and Python, so
+a model that went looking could read the raw logs. The prompt does not say a
+set is held back, the judge prints held-out misses by id so evolve's archive
+holds no held sentence, and the deny rules on `~/.chewbacca`, `~/.bob`, the
+voice log and the transcripts were never probed in a live session, because
+the auto-mode classifier refused the probe. The quote check in the judge is
+the part that does not depend on any of that.
+
 ---
 
 ## The hard line

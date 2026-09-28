@@ -8,6 +8,17 @@
     evolve --cmd "bin/propose --shapes open" \\
            --expect "python3 tests/voice_cases.py --shapes open" --gate --branch
                                      the learning loop: see bin/reflect
+    evolve --cmd ... --expect ... --gate --branch --n 3
+                                     three proposals side by side, best kept
+
+BEST OF N. One proposal is one sample: when it passes you cannot tell a
+reliable fix from a lucky one. --n runs the --cmd in N worktrees at once,
+judges each, and ranks the ones the judge passes by the held-out cases they
+also pass (the sentences no proposer saw, see tests/voice_cases.py), then by
+the smallest diff. The suite, the expensive part at 15 to 20 minutes, runs
+only on the best candidate, and on the next only if the gate refuses it. Every
+candidate is archived. The spread is printed, because "1 of 3 passed" says
+the fix is not reliable yet even when the one is kept.
 
 --expect names a judge that must FAIL before the change and PASS after it.
 That flip is the only evidence a change fixed what it was written for; a
@@ -41,6 +52,7 @@ under .worktrees/evolve-<id>, scored there, and the worktree is removed by
 exact path. Nothing touches the working tree you are sitting in.
 """
 import argparse
+import concurrent.futures
 import hashlib
 import json
 import os
@@ -120,11 +132,58 @@ def cases_from(ledger_path):
     return {c.get("id") for c in newest["failed_cases"] if c.get("id")}
 
 
-def expect(worktree, cmd):
-    """Run the judge in the worktree. (passed, last lines of its output)."""
+def expect(worktree, cmd, env=None):
+    """Run the judge in the worktree. (passed, last lines of its output, the
+    counts from its JUDGE line or None when the judge prints none)."""
     r = subprocess.run(cmd, shell=True, cwd=str(worktree), capture_output=True,
-                       text=True, timeout=600)
-    return r.returncode == 0, (r.stdout + r.stderr).strip()[-1500:]
+                       text=True, errors="replace", timeout=600, env=env)
+    return r.returncode == 0, (r.stdout + r.stderr).strip()[-1500:], judge_counts(r.stdout)
+
+
+def judge_counts(out):
+    """The JSON on the judge's last `JUDGE ` line."""
+    found = re.findall(r"^JUDGE (\{.*\})\s*$", out or "", re.M)
+    try:
+        return json.loads(found[-1]) if found else None
+    except ValueError:
+        return None
+
+
+def changed_lines(diff):
+    return sum(1 for line in diff.splitlines()
+               if line[:1] in "+-" and not line.startswith(("+++", "---")))
+
+
+def rank_candidates(cands):
+    """The candidates worth gating, best first.
+
+    Only a change that ran and, when there is a judge, passed it. Among
+    those: the larger share of held-out cases reached, then the smaller
+    diff, then the id so the order never depends on which finished first.
+    A judge that prints no counts ranks on the diff alone.
+    """
+    def held_rate(c):
+        held = (c.get("counts") or {}).get("held") or [0, 0]
+        return held[0] / held[1] if held[1] else 0.0
+    eligible = [c for c in cands if c["ok"] and c.get("judged") is not False]
+    return sorted(eligible, key=lambda c: (-held_rate(c), c.get("diff_lines", 0), c["aid"]))
+
+
+def keep_declines(dest):
+    """Copy the kept candidate's declines into the loop's declined.jsonl.
+
+    Only the kept one: a refused candidate's "leave this to the model" must
+    not excuse that sentence for the next attempt."""
+    rows = [line for line in (dest / "declines.jsonl").read_text().splitlines() if line.strip()] \
+        if (dest / "declines.jsonl").exists() else []
+    if not rows:
+        return 0
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "lib"))
+    import learnloop
+    learnloop.DECLINED.parent.mkdir(parents=True, exist_ok=True)
+    with learnloop.DECLINED.open("a", encoding="utf-8") as fh:
+        fh.write("\n".join(rows) + "\n")
+    return len(rows)
 
 
 def full_diff(worktree):
@@ -296,7 +355,13 @@ def main():
     ap.add_argument("--branch", action="store_true",
                     help="if the gate passes, commit the change to learn/<id>; never merges")
     ap.add_argument("--show")
+    ap.add_argument("--n", type=int, default=1,
+                    help="run --cmd this many times side by side and keep the best")
     a = ap.parse_args()
+    if a.n < 1 or (a.n > 1 and a.patch):
+        print("--n needs --cmd and a count of 1 or more: the same patch N times "
+              "is one attempt", file=sys.stderr)
+        return 2
 
     ARCHIVE.mkdir(parents=True, exist_ok=True)
 
@@ -350,107 +415,202 @@ def main():
               "compare against.", file=sys.stderr)
         return 1
 
-    aid = hashlib.sha1(f"{time.time()}{a.patch}{a.cmd}".encode()).hexdigest()[:8]
-    wt = ROOT / ".worktrees" / f"evolve-{aid}"
-    dest = ARCHIVE / aid
-    dest.mkdir(parents=True, exist_ok=True)
-    (dest / "note.txt").write_text(a.note or "(no note)")
+    group = hashlib.sha1(f"{time.time()}{a.patch}{a.cmd}".encode()).hexdigest()[:8]
+    cands = []
+    for i in range(a.n):
+        aid = group if a.n == 1 else hashlib.sha1(f"{group}{i}".encode()).hexdigest()[:8]
+        dest = ARCHIVE / aid
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "note.txt").write_text(a.note or "(no note)")
+        cands.append({"aid": aid, "wt": ROOT / ".worktrees" / f"evolve-{aid}", "dest": dest,
+                      "ok": True, "detail": "", "after": None, "delta": None, "branch": None,
+                      "judged": None, "counts": None, "diff_lines": 0, "gate": None})
 
-    print(f"attempt {aid}, isolated in {wt}")
+    made = []
     try:
-        git("worktree", "add", "--detach", "-q", str(wt), "HEAD", check=True)
-    except RuntimeError as e:
-        print(f"could not create worktree: {e}", file=sys.stderr)
-        return 1
+        for c in cands:
+            print(f"attempt {c['aid']}, isolated in {c['wt']}")
+            try:
+                git("worktree", "add", "--detach", "-q", str(c["wt"]), "HEAD", check=True)
+            except RuntimeError as e:
+                print(f"could not create worktree: {e}", file=sys.stderr)
+                return 1
+            made.append(c["wt"])
+        return attempt(a, base, group, cands)
+    finally:
+        # Remove only these worktrees, each by exact path.
+        for wt in made:
+            subprocess.run(["git", "-C", str(ROOT), "worktree", "remove",
+                            "--force", str(wt)], capture_output=True)
 
-    ok, detail = True, ""
-    after, delta, branch = None, None, None
-    judged = {"cmd": a.expect, "before": None, "after": None} if a.expect else None
+
+def candidate_env(a, c):
+    """The environment a candidate's change and its judge run in.
+
+    Under --gate, or with more than one candidate, its declines wait in its
+    own archive dir and reach declined.jsonl only if the gate keeps it. A
+    single attempt without --gate keeps them the way it always did, because
+    nothing will ever decide it was kept."""
+    if a.gate or a.n > 1:
+        return dict(os.environ, CHEWBACCA_PENDING_DECLINES=str(c["dest"] / "declines.jsonl"))
+    return None
+
+
+def run_change(a, c):
+    """Apply the patch or run the command in one candidate's worktree.
+
+    Never raises. It runs on a pool thread, and an exception there would end
+    the whole run with no ledger row for any candidate, including ones that
+    finished and cost a proposal each."""
+    env = candidate_env(a, c)
     try:
-        if a.expect:
-            # Before the change, on a clean HEAD. A judge that already passes
-            # cannot tell a fix from a no-op, so there is nothing to try.
-            judged["before"], out = expect(wt, a.expect)
-            (dest / "expect.txt").write_text(f"BEFORE (must fail)\n{out}\n")
-            if judged["before"]:
-                print("  the judge already passes before any change: nothing to fix")
-                ok = False
-        baseline_suite = None
-        if ok and a.gate:
-            print("  running the suite on the unchanged commit (cached per commit)")
-            baseline_suite = suite_before(wt)
-        if not ok:
-            pass
-        elif a.patch:
-            r = subprocess.run(["git", "-C", str(wt), "apply",
+        if a.patch:
+            r = subprocess.run(["git", "-C", str(c["wt"]), "apply",
                                 str(pathlib.Path(a.patch).resolve())],
                                capture_output=True, text=True)
-            ok, detail = r.returncode == 0, r.stderr[-400:]
+            c["ok"], c["detail"] = r.returncode == 0, r.stderr[-400:]
         else:
-            r = subprocess.run(a.cmd, shell=True, cwd=str(wt),
-                               capture_output=True, text=True, timeout=1800)
-            ok, detail = r.returncode == 0, (r.stderr or r.stdout)[-400:]
+            r = subprocess.run(a.cmd, shell=True, cwd=str(c["wt"]), env=env,
+                               capture_output=True, text=True, errors="replace", timeout=1800)
+            c["ok"], c["detail"] = r.returncode == 0, (r.stderr or r.stdout)[-400:]
+    except subprocess.TimeoutExpired:
+        c["ok"], c["detail"] = False, "timed out after 1800 s"
+    except Exception as e:  # noqa: BLE001 - recorded on the candidate, see above
+        c["ok"], c["detail"] = False, f"{type(e).__name__}: {e}"[:400]
+    return c
 
-        if not ok:
-            if detail:
-                print(f"  the change did not apply/run:\n  {detail}")
+
+def attempt(a, base, group, cands):
+    """Judge before, change every candidate, judge after, rank, gate."""
+    first = cands[0]
+    if a.expect:
+        # Before the change, on a clean HEAD, once: every candidate starts
+        # from the same commit. A judge that already passes cannot tell a fix
+        # from a no-op, so there is nothing to try.
+        before, out, _ = expect(first["wt"], a.expect)
+        for c in cands:
+            (c["dest"] / "expect.txt").write_text(f"BEFORE (must fail)\n{out}\n")
+        if before:
+            print("  the judge already passes before any change: nothing to fix")
+            for c in cands:
+                c["ok"] = False
+            return ledger(a, base, group, cands, judged_before=True)
+    baseline_suite = None
+    if a.gate:
+        print("  running the suite on the unchanged commit (cached per commit)")
+        baseline_suite = suite_before(first["wt"])
+
+    if len(cands) > 1:
+        print(f"  running the change in {len(cands)} worktrees at once")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(cands)) as pool:
+        list(pool.map(lambda c: run_change(a, c), cands))
+
+    for c in cands:
+        if not c["ok"]:
+            if c["detail"]:
+                print(f"  {c['aid']}: the change did not apply/run:\n  {c['detail']}")
+            continue
+        diff = full_diff(c["wt"])
+        (c["dest"] / "change.diff").write_text(diff)
+        c["diff_lines"] = changed_lines(diff)
+        if a.expect:
+            c["judged"], out, c["counts"] = expect(c["wt"], a.expect, candidate_env(a, c))
+            with (c["dest"] / "expect.txt").open("a") as fh:
+                fh.write(f"\nAFTER (must pass)\n{out}\n")
+            print(f"  {c['aid']}: judge failed before, "
+                  f"{'PASSES' if c['judged'] else 'still FAILS'} after{spread(c)}")
+
+    ranked = rank_candidates(cands)
+    if len(cands) > 1:
+        ran = sum(c["ok"] for c in cands)
+        print(f"\n  {len(ranked)} of {len(cands)} candidates "
+              f"{'passed the judge' if a.expect else 'ran'}"
+              + (f" ({len(cands) - ran} did not run)" if ran < len(cands) else ""))
+        if 0 < len(ranked) < len(cands):
+            print("  Not every sample fixed it, so the fix is not reliable yet, "
+                  "whichever one is kept.")
+        for i, c in enumerate(ranked, 1):
+            print(f"    {i}. {c['aid']}{spread(c)}, {c['diff_lines']} changed lines")
+
+    # Under --gate only the ranked are scored and gated, best first, and the
+    # first the gate allows is kept: the suite is 15 to 20 minutes a run, and
+    # a change the judge still fails would be refused whatever the suite
+    # said. Without --gate every candidate that ran is scored.
+    if a.gate:
+        for c in cands:
+            if c["ok"] and c["judged"] is False:
+                why = "the judge (--expect) still fails after the change, so the suite was not run"
+                c["gate"] = {"allowed": False, "reasons": [why]}
+                print(f"\n  {c['aid']}  GATE: refused.\n    {why}")
+        todo = ranked
+    else:
+        todo = [c for c in cands if c["ok"]]
+    for c in todo:
+        c["after"], out = score_in(c["wt"])
+        (c["dest"] / "score.txt").write_text(out or "")
+        c["delta"] = (round(c["after"] - base["structural_score"], 2)
+                      if c["after"] is not None else None)
+        print(f"\n  {c['aid']}")
+        print(f"  base  {base['structural_score']:.2f}  ({base['sha']})")
+        print(f"  after {c['after'] if c['after'] is None else format(c['after'], '.2f')}")
+        if c["delta"] is not None:
+            verdict = ("BETTER" if c["delta"] > 0 else
+                       "WORSE" if c["delta"] < 0 else "NO MEASURABLE CHANGE")
+            print(f"  delta {c['delta']:+g}   {verdict}")
+        if not a.gate:
+            continue
+        allowed, reasons = gate(c["wt"], base, c["after"], c["judged"], baseline_suite)
+        c["gate"] = {"allowed": allowed, "reasons": reasons}
+        print()
+        if not allowed:
+            print("  GATE: refused.")
+            for why in reasons:
+                print(f"    {why}")
+            continue
+        print("  GATE: passes.")
+        for why in reasons:
+            print(f"    note: {why}")
+        kept = keep_declines(c["dest"])
+        if kept:
+            print(f"  kept its {kept} decline(s) in the loop's declined.jsonl")
+        if a.branch:
+            c["branch"] = commit_branch(c["wt"], c["aid"], a.note)
+        print(f"\n  Nothing has been merged. The diff is at:")
+        print(f"    {c['dest'] / 'change.diff'}")
+        if c["branch"]:
+            print(f"  and committed on {c['branch']}, for a person to read and merge.")
         else:
-            (dest / "change.diff").write_text(full_diff(wt))
-            if a.expect:
-                judged["after"], out = expect(wt, a.expect)
-                with (dest / "expect.txt").open("a") as fh:
-                    fh.write(f"\nAFTER (must pass)\n{out}\n")
-                print(f"  judge: failed before, {'PASSES' if judged['after'] else 'still FAILS'} after")
-            after, out = score_in(wt)
-            (dest / "score.txt").write_text(out or "")
-            delta = (round(after - base["structural_score"], 2)
-                     if after is not None else None)
-            print(f"  base  {base['structural_score']:.2f}  ({base['sha']})")
-            print(f"  after {after if after is None else f'{after:.2f}'}")
-            if delta is not None:
-                verdict = ("BETTER" if delta > 0 else
-                           "WORSE" if delta < 0 else "NO MEASURABLE CHANGE")
-                print(f"  delta {delta:+g}   {verdict}")
-            if a.gate:
-                allowed, reasons = gate(wt, base, after,
-                                        judged["after"] if judged else None,
-                                        baseline_suite)
-                print()
-                if allowed:
-                    print("  GATE: passes.")
-                    for why in reasons:
-                        print(f"    note: {why}")
-                    if a.branch:
-                        branch = commit_branch(wt, aid, a.note)
-                    print(f"\n  Nothing has been merged. The diff is at:")
-                    print(f"    {dest / 'change.diff'}")
-                    if branch:
-                        print(f"  and committed on {branch}, for a person to read and merge.")
-                    else:
-                        print("  Read it, then apply it yourself:")
-                        print(f"    git apply {dest / 'change.diff'}")
-                else:
-                    print("  GATE: refused.")
-                    for why in reasons:
-                        print(f"    {why}")
-    finally:
-        # Remove only this worktree, by exact path.
-        subprocess.run(["git", "-C", str(ROOT), "worktree", "remove",
-                        "--force", str(wt)], capture_output=True)
+            print("  Read it, then apply it yourself:")
+            print(f"    git apply {c['dest'] / 'change.diff'}")
+        break
+    return ledger(a, base, group, cands)
 
+
+def spread(c):
+    held = (c.get("counts") or {}).get("held")
+    return f", held out {held[0]}/{held[1]}" if held and held[1] else ""
+
+
+def ledger(a, base, group, cands, judged_before=False):
+    order = {c["aid"]: i for i, c in enumerate(rank_candidates(cands), 1)}
     with LEDGER.open("a") as fh:
-        fh.write(json.dumps({
-            "id": aid, "at": time.time(), "applied": ok,
-            "base": base["structural_score"], "base_sha": base["sha"],
-            "after": after, "delta": delta, "note": a.note,
-            "expect": judged, "branch": branch,
-        }) + "\n")
-
-    print(f"\narchived: {dest}")
+        for c in cands:
+            judged = ({"cmd": a.expect, "before": judged_before, "after": c["judged"]}
+                      if a.expect else None)
+            fh.write(json.dumps({
+                "id": c["aid"], "at": time.time(), "applied": c["ok"],
+                "base": base["structural_score"], "base_sha": base["sha"],
+                "after": c["after"], "delta": c["delta"], "note": a.note,
+                "expect": judged, "branch": c["branch"],
+                "group": group, "n": len(cands), "rank": order.get(c["aid"]),
+                "counts": c["counts"], "diff_lines": c["diff_lines"],
+                "gate": c["gate"],
+            }) + "\n")
+    for c in cands:
+        print(f"\narchived: {c['dest']}")
     print("NOT MERGED. The score is coverage and conformance, not quality, so "
           "a rise\ncan still be a worse kit. Read the diff and decide.")
     return 0
-
 
 if __name__ == "__main__":
     sys.exit(main())

@@ -20,7 +20,11 @@ ENV = dict(os.environ,
            CHEWBACCA_TRANSCRIPTS=str(TMP / "projects"),
            SUPERASSISTANT_DIR=str(TMP / "voice"),
            BOB_DIR=str(TMP / "bob"),
-           BOB_DECISIONS=str(TMP / "decisions.jsonl"))
+           BOB_DECISIONS=str(TMP / "decisions.jsonl"),
+           # Case ids hash the temp path, so which case is held out changes
+           # every run. These checks are about harvesting and declines;
+           # test_holdout.py pins ids and tests the holdout itself.
+           CHEWBACCA_HOLDOUT_EVERY="0")
 # A key pasted into a chat, as happened on 2026-09-27. Split so this file
 # does not itself look like a leaked key to a scanner.
 KEY = "sk-" + "ant-" + "api03-Q9KQzOylEcDVp2ncE"

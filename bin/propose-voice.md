@@ -10,6 +10,9 @@ the person's own voice log, grouped by the verb they start with. The answer
 column is what the model said back, which is the best record there is of what
 the person wanted done.
 
+These are samples of how people phrase each request, not the full list.
+Write the parser for the phrasing, not for these exact sentences.
+
 {cases}
 
 ## How the bridge avoids the model today
@@ -83,7 +86,9 @@ Run each of these and read the output:
     python3 tests/voice_cases.py --shapes {shapes}
 
 The last one is the judge. It passes when every case you did not decline
-reaches a fast path.
+reaches a fast path. It reads your `DECLINE` lines only after you stop, and
+then fails the change if a sentence you declined reaches your fast path, so
+check your parser returns None for each one you decline.
 
 ## House style
 

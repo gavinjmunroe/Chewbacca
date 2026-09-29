@@ -14,7 +14,7 @@ stops updating. The only way to read it was to re-show the window, which pulled
 focus off whatever Caleb was typing in (2026-09-29, ACAD 185). Hearing the mic
 directly needs no window at all.
 """
-import argparse, os, shutil, subprocess, sys, tempfile, time
+import argparse, os, re, shutil, subprocess, sys, tempfile, time
 
 # mlx-whisper usually lives in its own uv/pipx venv, so the python3 on PATH
 # cannot import it. Re-exec under the interpreter its own launcher names.
@@ -64,6 +64,9 @@ def main():
                 r = mlx_whisper.transcribe(path, path_or_hf_repo=MODEL, language="en",
                                            condition_on_previous_text=False)
                 text = " ".join(r.get("text", "").split())
+                # whisper loops on near-silence: 2026-09-29 one 15s chunk came
+                # back as "I think that's it." eleven times. Keep one of each run.
+                text = re.sub(r"(\b.{6,80}?[.?!])(?:\s*\1)+", r"\1", text)
                 # whisper hallucinates these on silence
                 if text and text.lower().strip(".! ") not in {"you", "thank you", "thanks for watching"}:
                     with open(a.out, "a") as fh:

@@ -29,7 +29,7 @@ baff09b097b67758927ae5ea8ed991dc855687ccd34face005381a4fb432ab42  .claude/hooks/
 44f089849a94f36c31cdb79c9b9285eff991b21efd6df510c1a4d3aca76fb781  .claude/hooks/slop-guard.sh
 0aeb3e7c5d08db6e967001ddd1fc845791f500c5186c3616f9f99d49367c2695  .claude/hooks/stale-read-guard.sh
 991de99509214748f9352ebe1d62e423cf9d78a2b195b099c914315330bf86ea  .claude/hooks/statusline.sh
-db7eed7d9305d87ac474675a4b600d51059dd378a789cff4e5e13d66d2cd9014  .claude/hooks/stop-check.sh
+e1f76a09c09bd09b013fefb86c4eb26d6c7d827d87111bc3ebb40e042f8c5f87  .claude/hooks/stop-check.sh
 14dcd53cb15ff6362ffa87a6244fda8caba0b483c0ad413da00b250689620776  .claude/hooks/submit-guard.sh
 62cbe16c5b3d3f5ce459db4469f7405c9b1dd303d0486ea0788f95773145c645  .claude/hooks/terminal-loop.sh
 7b362cdc1fb766307bd7f59f7e33b720517df59b24b8a81f6bc929c386e7005f  .claude/hooks/untrusted-screen.sh

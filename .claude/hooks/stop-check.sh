@@ -132,6 +132,16 @@ if [ "$DIRTY_COUNT" -eq 0 ] && [ "$AHEAD_COUNT" -eq 0 ] && [ "$NO_UPSTREAM" -eq 
   exit 0
 fi
 
+# Nothing here is this session's to act on, so say nothing. A Stop hook that
+# returns additionalContext re-opens the turn, and the model answers it with a
+# second closing message. On 2026-09-28 that was two replies in a row in one
+# session, each just announcing "leaving the other tab's files alone", and
+# Caleb read both as the assistant saying everything twice. Another session's
+# work is that session's hook's job to report.
+if [ "$OTHERS_COUNT" -gt 0 ] && [ "$MINE_COUNT" -eq 0 ]; then
+  exit 0
+fi
+
 if [ -n "$STATE_FILE" ]; then
   FINGERPRINT="$(git status --porcelain 2>/dev/null | shasum 2>/dev/null | cut -d' ' -f1)|$AHEAD_COUNT|$NO_UPSTREAM|$MINE_COUNT|$OTHERS_COUNT"
   [ "$(cat "$STATE_FILE" 2>/dev/null)" = "$FINGERPRINT" ] && exit 0
@@ -162,14 +172,7 @@ if no_upstream:
 advice = (
     "If the work is finished, commit and push it. If it is mid-flight, ignore this."
 )
-if others and not mine:
-    advice = (
-        f"{others} of those file(s) were last written by a DIFFERENT session, and none "
-        "by this one. That is another tab's work in flight. Do not commit it: "
-        ".githooks/pre-commit refuses an index holding two authors. Leave it alone "
-        "and say so."
-    )
-elif others and mine:
+if others and mine:
     advice = (
         f"{mine} of those file(s) are this session's and {others} belong to a different "
         "session. Committing them together will be refused by .githooks/pre-commit. "

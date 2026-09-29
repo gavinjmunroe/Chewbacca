@@ -426,6 +426,11 @@ if group "installer"; then
   check  "every hook is registered by setup.sh" \
     bash "$ROOT/tests/hooks_registered.sh"
 
+  # A router line that gets skipped twice is a log line. For enforced skills
+  # the gate refuses once, clears on load, and never loops.
+  check  "skill-gate enforces graph-engineering once per prompt" \
+    bash "$ROOT/tests/skill_gate.sh"
+
   # A Stop refusal re-sends a reply that is already on screen. For a layout
   # flag that re-send is word for word, so it has to feed forward instead.
   check  "slop-guard feeds format flags forward, refuses content flags" \

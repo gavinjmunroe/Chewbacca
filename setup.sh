@@ -1598,6 +1598,10 @@ _register("UserPromptSubmit", hooks_dir + "/method-guard.sh", timeout=8,
 _register("UserPromptSubmit", hooks_dir + "/skill-route.sh", timeout=8,
           status="Checking whether a skill already covers this...")
 
+# The router's advice for graph-engineering was skipped twice in two sessions.
+# skill-gate refuses the first tool call once until the named skill is loaded.
+_register("PreToolUse", hooks_dir + "/skill-gate.sh", timeout=5)
+
 # ux-engine holds 18 research files, six stances, a motion constant table, a
 # 24-entry effects catalog and 106 psychology principles, and a whole session
 # of UI work on 2026-09-23 consulted none of it: the page shipped at 3

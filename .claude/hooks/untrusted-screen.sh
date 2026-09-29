@@ -9,7 +9,7 @@
 # page is still the user's call, and a Jev hit is only a judgment.
 #
 # Narrow on purpose. Only tools that return someone else's words: fetched
-# pages, browser reads, and the mac/chrome/summarize commands that read texts,
+# pages, browser reads, and the mac/chrome/summarize/scrape commands that read texts,
 # mail and pages. Files in the repo and command output the agent produced are
 # not screened, because screening everything is how a warning becomes noise.
 
@@ -23,7 +23,7 @@ case "$TOOL" in
     ;;
   Bash)
     CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
-    printf '%s' "$CMD" | grep -qE '(^|[;&|[:space:]])(mac (messages|mail|notes)|chrome-js|summarize|chewie web|browser-bridge|curl)([[:space:]]|$)' || exit 0
+    printf '%s' "$CMD" | grep -qE '(^|[;&|[:space:]/])(mac (messages|mail|notes)|chrome-js|summarize|scrape|chewie web|browser-bridge|curl)([[:space:]]|$)' || exit 0
     ;;
   *) exit 0 ;;
 esac

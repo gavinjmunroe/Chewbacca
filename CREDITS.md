@@ -28,6 +28,9 @@ Shipped inside this repo, or cloned onto the machine by `setup.sh`.
 | [steipete/macos-automator-mcp](https://github.com/steipete/macos-automator-mcp) | Peter Steinberger | MIT | AppleScript and JXA over MCP with a callable script knowledge base |
 | [steipete/agent-scripts](https://github.com/steipete/agent-scripts) | Peter Steinberger | MIT | A skill pack, linked per skill rather than copied |
 | [onvoyage-ai/gtm-engineer-skills](https://github.com/onvoyage-ai/gtm-engineer-skills) | OnVoyage AI | MIT | Twelve SEO, AEO and GEO skills (keyword research, AI-search audits, content, backlinks, Reddit), linked per skill from a clone by `setup.sh` |
+| [Shubhamsaboo/awesome-llm-apps](https://github.com/Shubhamsaboo/awesome-llm-apps) | Shubham Saboo | Apache-2.0 | Two skills cloned by `setup.sh`: `thinking-out-loud` echoes a voice ramble back before acting on it, and `first-reader` runs simulated beta readers over a draft before it is posted |
+| [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | Corey Haines | MIT | Six of its 50 marketing skills, linked per skill from a clone by `setup.sh`: offers, pricing, cold-email, copywriting, marketing-psychology, social |
+| [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | Karim Shoair | BSD-3-Clause | The fetcher and hidden-text sanitizer under `scrape`, installed into its own venv on first run. Its stealth fetcher and Cloudflare solver are deliberately not used |
 | [browser-use/macOS-use](https://github.com/browser-use/macOS-use) | browser-use | MIT | The runtime under `mac-use`. Chewbacca owns the provider adapters, macOS-use supplies the agent loop |
 | [lahfir/agent-desktop](https://github.com/lahfir/agent-desktop) | lahfir | Apache-2.0 | The accessibility-tree driver. Stable element refs, JSON out |
 | [BlueM/cliclick](https://github.com/BlueM/cliclick) | BlueM | custom | Synthetic input. Does one thing and has since forever |

@@ -979,6 +979,14 @@ if [ -f "$SCRIPT_DIR/bin/brief-audio" ]; then
   ensure_local_bin_on_path
 fi
 
+# scrape reads one public page as Markdown through Scrapling, headless. Like
+# brief-audio it builds its own venv on first run, so nothing is installed here.
+if [ -f "$SCRIPT_DIR/bin/scrape" ]; then
+  link_tool scrape
+  log "scrape installed to ~/.local/bin/"
+  ensure_local_bin_on_path
+fi
+
 # list-audit is pure stdlib python, no venv and no network, so it installs with
 # no dependency check at all. list-gate ships with it: audit reads a bought file,
 # gate refuses to ship a generated one, and the Stop hook calls the gate by name.
@@ -2134,19 +2142,35 @@ while IFS='|' read -r SK_NAME SK_URL SK_PATH SK_LICENSE SK_AUTHOR; do
     log "$SK_NAME already present, left alone"
     continue
   fi
+  # Rows installed by their own tool (cap) carry a note, not a path.
+  case "$SK_PATH" in "installed by"*) continue ;; esac
   TMP_SK="$(mktemp -d)"
-  if git clone -q --depth 1 "$SK_URL" "$TMP_SK" 2>/dev/null; then
-    SK_SRC="$TMP_SK"
-    [ -n "$SK_PATH" ] && SK_SRC="$TMP_SK/$SK_PATH"
+  # A skill that lives in one folder of a large repo is fetched alone:
+  # awesome-llm-apps is about 220MB and two skills here come from it.
+  # `|| true` because setup.sh runs under set -e and one unreachable repo must
+  # not stop the rest of the install.
+  if [ -n "$SK_PATH" ]; then
+    git clone -q --depth 1 --filter=blob:none --sparse "$SK_URL" "$TMP_SK" 2>/dev/null \
+      && git -C "$TMP_SK" sparse-checkout set --no-cone "/$SK_PATH/" /LICENSE 2>/dev/null || true
+  else
+    git clone -q --depth 1 "$SK_URL" "$TMP_SK" 2>/dev/null || true
+  fi
+  SK_SRC="$TMP_SK"
+  [ -n "$SK_PATH" ] && SK_SRC="$TMP_SK/$SK_PATH"
+  # Judge by the SKILL.md, not by the clone: a path upstream moved still clones
+  # fine and would leave an empty skill logged as installed, then skipped forever.
+  if [ -f "$SK_SRC/SKILL.md" ]; then
     mkdir -p "$GLOBAL_CLAUDE/skills/$SK_NAME"
     cp -R "$SK_SRC/." "$GLOBAL_CLAUDE/skills/$SK_NAME/" 2>/dev/null || true
     rm -rf "$GLOBAL_CLAUDE/skills/$SK_NAME/.git"
     [ -f "$TMP_SK/LICENSE" ] && cp "$TMP_SK/LICENSE" "$GLOBAL_CLAUDE/skills/$SK_NAME/LICENSE" 2>/dev/null
-    printf 'source: %s\ninstalled: %s\n' "$SK_URL" "$(date -u +%Y-%m-%d)" \
-      > "$GLOBAL_CLAUDE/skills/$SK_NAME/.source"
+    { printf 'source: %s\n' "$SK_URL"
+      [ -n "$SK_PATH" ] && printf 'path: %s\n' "$SK_PATH"
+      printf 'installed: %s\n' "$(date -u +%Y-%m-%d)"
+    } > "$GLOBAL_CLAUDE/skills/$SK_NAME/.source"
     log "$SK_NAME installed ($SK_LICENSE, $SK_AUTHOR)"
   else
-    warn "Could not reach GitHub for $SK_NAME. See docs/EXTENSIONS.md to add it later."
+    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/EXTENSIONS.md to add it later."
   fi
   rm -rf "$TMP_SK"
 done <<'UPSTREAM_SKILLS'
@@ -2154,7 +2178,9 @@ avoid-ai-writing|https://github.com/conorbronsdon/avoid-ai-writing||MIT|conorbro
 cap|https://github.com/CapSoftware/Cap|installed by `cap agents install --target claude`|see upstream|CapSoftware
 cap-demo|https://github.com/CapSoftware/Cap|installed by `cap agents install --target claude`|see upstream|CapSoftware
 deslop|https://github.com/31Carlton7/skills|deslop|see upstream|31Carlton7
+first-reader|https://github.com/Shubhamsaboo/awesome-llm-apps|agent_skills/first-reader|Apache-2.0|Shubhamsaboo
 no-ai-slop|https://github.com/petergyang/no-ai-slop|skills/no-ai-slop|MIT|petergyang
+thinking-out-loud|https://github.com/Shubhamsaboo/awesome-llm-apps|agent_skills/thinking-out-loud|Apache-2.0|Shubhamsaboo
 youtube-transcripts|https://github.com/calebnewtonusc/claude-youtube-transcripts|skills/youtube-transcripts|MIT|calebnewtonusc
 UPSTREAM_SKILLS
 
@@ -2556,6 +2582,35 @@ if [ -d "$PACK_DIR/." ]; then
     PACK_N=$((PACK_N+1))
   done
   log "gtm-engineer-skills: $PACK_N skills linked"
+fi
+
+# Skill pack: marketingskills. Linked per skill, not copied, so `git pull` in
+# the clone updates every skill at once.
+#
+# MIT. Markdown and JSON only, no scripts. Found through Open Design's
+# catalogue (nexu-io/open-design), which points at it rather than copying it.
+PACK_DIR="$HOME/Projects/marketingskills"
+PACK_SKIP=""
+PACK_ONLY="cold-email copywriting marketing-psychology offers pricing social"
+if [ -d "$PACK_DIR/.git" ]; then
+  log "marketingskills already cloned, left alone"
+elif git clone -q --depth 1 "https://github.com/coreyhaines31/marketingskills.git" "$PACK_DIR" 2>/dev/null; then
+  log "marketingskills cloned"
+else
+  warn "could not clone marketingskills"
+fi
+if [ -d "$PACK_DIR/skills" ]; then
+  PACK_N=0
+  for SK in "$PACK_DIR"/skills/*/; do
+    SK_NAME="$(basename "$SK")"
+    [ -f "$SK/SKILL.md" ] || continue
+    case " $PACK_SKIP " in *" $SK_NAME "*) continue;; esac
+    case " $PACK_ONLY " in *" $SK_NAME "*) ;; *) continue;; esac
+    [ -e "$GLOBAL_CLAUDE/skills/$SK_NAME" ] && continue
+    ln -s "$SK" "$GLOBAL_CLAUDE/skills/$SK_NAME"
+    PACK_N=$((PACK_N+1))
+  done
+  log "marketingskills: $PACK_N skills linked"
 fi
 # END GENERATED: cli
 fi

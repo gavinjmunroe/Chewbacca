@@ -209,6 +209,20 @@ PACKS = {
             "the site being audited.",
         ],
     },
+    "marketingskills": {
+        "root": HOME / "Projects/marketingskills",
+        "url": "https://github.com/coreyhaines31/marketingskills",
+        "description": "Corey Haines' marketing skills: offers, pricing, cold email, copywriting, persuasion, social",
+        # 50 skills upstream. Linking all of them buried the kit's own skills in
+        # routing, so only these six are linked (2026-09-29): the ones the paid
+        # setups, noahstudio's offer and cold outreach reach for. The rest stay
+        # in the clone for anyone who wants to link more.
+        "only": ["cold-email", "copywriting", "marketing-psychology", "offers", "pricing", "social"],
+        "note": [
+            "MIT. Markdown and JSON only, no scripts. Found through Open Design's",
+            "catalogue (nexu-io/open-design), which points at it rather than copying it.",
+        ],
+    },
 }
 
 # Command-line tools and macOS apps. Homebrew where a formula or cask exists, a
@@ -625,6 +639,7 @@ def collect_skills():
             "count": len(skills),
             "skills": sorted(skills),
             "skip": PACKS[n].get("skip", []),
+            "only": PACKS[n].get("only", []),
             "subdir": PACKS[n].get("subdir", "skills"),
             "note": PACKS[n].get("note", []),
         }
@@ -886,6 +901,10 @@ def cli_block(cli, packs):
         lines += [
             f'PACK_DIR="$HOME/Projects/{k["name"]}"',
             f'PACK_SKIP="{skip}"',
+        ]
+        if k.get("only"):
+            lines += [f'PACK_ONLY="{" ".join(k["only"])}"']
+        lines += [
             'if [ -d "$PACK_DIR/.git" ]; then',
             f'  log "{k["name"]} already cloned, left alone"',
             'elif git clone -q --depth 1 "%s.git" "$PACK_DIR" 2>/dev/null; then' % k["url"],
@@ -899,6 +918,10 @@ def cli_block(cli, packs):
             '    SK_NAME="$(basename "$SK")"',
             '    [ -f "$SK/SKILL.md" ] || continue',
             '    case " $PACK_SKIP " in *" $SK_NAME "*) continue;; esac',
+        ]
+        if k.get("only"):
+            lines += ['    case " $PACK_ONLY " in *" $SK_NAME "*) ;; *) continue;; esac']
+        lines += [
             '    [ -e "$GLOBAL_CLAUDE/skills/$SK_NAME" ] && continue',
             '    ln -s "$SK" "$GLOBAL_CLAUDE/skills/$SK_NAME"',
             "    PACK_N=$((PACK_N+1))",
@@ -963,19 +986,35 @@ def setup_block(upstream, plugins, markets, mcp):
         '    log "$SK_NAME already present, left alone"',
         "    continue",
         "  fi",
+        "  # Rows installed by their own tool (cap) carry a note, not a path.",
+        '  case "$SK_PATH" in "installed by"*) continue ;; esac',
         '  TMP_SK="$(mktemp -d)"',
-        '  if git clone -q --depth 1 "$SK_URL" "$TMP_SK" 2>/dev/null; then',
-        '    SK_SRC="$TMP_SK"',
-        '    [ -n "$SK_PATH" ] && SK_SRC="$TMP_SK/$SK_PATH"',
+        "  # A skill that lives in one folder of a large repo is fetched alone:",
+        "  # awesome-llm-apps is about 220MB and two skills here come from it.",
+        "  # `|| true` because setup.sh runs under set -e and one unreachable repo must",
+        "  # not stop the rest of the install.",
+        '  if [ -n "$SK_PATH" ]; then',
+        '    git clone -q --depth 1 --filter=blob:none --sparse "$SK_URL" "$TMP_SK" 2>/dev/null \\',
+        '      && git -C "$TMP_SK" sparse-checkout set --no-cone "/$SK_PATH/" /LICENSE 2>/dev/null || true',
+        "  else",
+        '    git clone -q --depth 1 "$SK_URL" "$TMP_SK" 2>/dev/null || true',
+        "  fi",
+        '  SK_SRC="$TMP_SK"',
+        '  [ -n "$SK_PATH" ] && SK_SRC="$TMP_SK/$SK_PATH"',
+        "  # Judge by the SKILL.md, not by the clone: a path upstream moved still clones",
+        "  # fine and would leave an empty skill logged as installed, then skipped forever.",
+        '  if [ -f "$SK_SRC/SKILL.md" ]; then',
         '    mkdir -p "$GLOBAL_CLAUDE/skills/$SK_NAME"',
         '    cp -R "$SK_SRC/." "$GLOBAL_CLAUDE/skills/$SK_NAME/" 2>/dev/null || true',
         '    rm -rf "$GLOBAL_CLAUDE/skills/$SK_NAME/.git"',
         '    [ -f "$TMP_SK/LICENSE" ] && cp "$TMP_SK/LICENSE" "$GLOBAL_CLAUDE/skills/$SK_NAME/LICENSE" 2>/dev/null',
-        '    printf \'source: %s\\ninstalled: %s\\n\' "$SK_URL" "$(date -u +%Y-%m-%d)" \\',
-        '      > "$GLOBAL_CLAUDE/skills/$SK_NAME/.source"',
+        "    { printf 'source: %s\\n' \"$SK_URL\"",
+        "      [ -n \"$SK_PATH\" ] && printf 'path: %s\\n' \"$SK_PATH\"",
+        "      printf 'installed: %s\\n' \"$(date -u +%Y-%m-%d)\"",
+        '    } > "$GLOBAL_CLAUDE/skills/$SK_NAME/.source"',
         '    log "$SK_NAME installed ($SK_LICENSE, $SK_AUTHOR)"',
         "  else",
-        '    warn "Could not reach GitHub for $SK_NAME. See docs/EXTENSIONS.md to add it later."',
+        '    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/EXTENSIONS.md to add it later."',
         "  fi",
         '  rm -rf "$TMP_SK"',
         "done <<'UPSTREAM_SKILLS'",

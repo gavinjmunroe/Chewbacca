@@ -21,6 +21,8 @@ Install to `~/.claude/skills/<name>/` for every project, or
 | [no-ai-slop](https://github.com/petergyang/no-ai-slop)                | Editing a draft, or checking whether prose reads as machine-written                          |
 | [avoid-ai-writing](https://github.com/conorbronsdon/avoid-ai-writing) | A thorough writing audit, editing a file in place, or scanning docs with its Node detector   |
 | [humanizer](https://github.com/blader/humanizer)                      | A second opinion on a draft, working from Wikipedia's signs-of-AI-writing catalogue          |
+| [first-reader](https://github.com/Shubhamsaboo/awesome-llm-apps)      | A final gate before posting: would a skimmer open it, where readers quit, what they recall   |
+| [thinking-out-loud](https://github.com/Shubhamsaboo/awesome-llm-apps) | A long voice ramble, echoed back with the model's guesses apart from the speaker's words     |
 
 `coursework` is the one with a program behind it. The skill handles judgment;
 `bin/coursework` answers the factual questions off a ledger built from the

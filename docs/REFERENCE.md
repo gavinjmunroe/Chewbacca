@@ -209,7 +209,7 @@ it off is `--session-opener none`. To write your own, add it to `OPENERS` in
 | Piece                   | Details                                                                                                                 |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | **macOS tools**         | 9 installed alongside the kit: Anki, bd, cap, mac, Maccy, mac-use, peekaboo, summarize, yt-transcript                        |
-| **Skills and plugins**  | 106 skills (39 shipped here, 6 cloned from upstream, 61 from 2 skill packs) plus 20 plugins across 4 marketplaces         |
+| **Skills and plugins**  | 114 skills (39 shipped here, 8 cloned from upstream, 67 from 3 skill packs) plus 20 plugins across 4 marketplaces         |
 | **Second brain**        | A private notes repo Claude reads at the start of every session and writes to as things change. Syncs to GitHub         |
 | **Coursework ledger**   | Your syllabi become deadlines, attendance budgets, and a per-course AI policy Claude checks before touching graded work |
 | **On-device dictation** | Builds `plynn/`: hold fn to type, hold left Option to ask Chewie. Speech and cleanup run on your Mac, nothing uploaded  |
@@ -787,10 +787,13 @@ fires, which is the thing that matters most.
 | [cap](https://github.com/CapSoftware/Cap)                                                                                  | Skill  | Always use Cap's CLI or local MCP first when the user mentions Cap, a Cap URL, screen…          |
 | [cap-demo](https://github.com/CapSoftware/Cap)                                                                             | Skill  | Generate a cinematic 3D product-demo video from any URL: scouts the page, records it with…      |
 | [deslop](https://github.com/31Carlton7/skills)                                                                             | Skill  | De-slop a diff or codebase before review: strip AI-authored tells (narration comments,…         |
+| [first-reader](https://github.com/Shubhamsaboo/awesome-llm-apps)                                                           | Skill  | Simulated beta readers: skim gate, timed read with quit points, next-day recall. Never rewrites |
 | [no-ai-slop](https://github.com/petergyang/no-ai-slop)                                                                     | Skill  | Edit drafts into sharper, more human writing while preserving the writer's personal voice, or…  |
+| [thinking-out-loud](https://github.com/Shubhamsaboo/awesome-llm-apps)                                                      | Skill  | Echo a voice ramble back, guesses kept apart from his words, before acting on it                |
 | [youtube-transcripts](https://github.com/calebnewtonusc/claude-youtube-transcripts)                                        | Skill  | Get the transcript of a YouTube video, channel, or playlist.                                    |
 | [agent-scripts](https://github.com/steipete/agent-scripts) (49)                                                            | Pack   | Peter Steinberger's shared agent skills: macOS, Swift, GitHub, release ops                      |
 | [gtm-engineer-skills](https://github.com/onvoyage-ai/gtm-engineer-skills) (12)                                             | Pack   | OnVoyage's SEO, AEO and GEO skills: keyword research, AI-search audits, content, backlinks, Reddit |
+| [marketingskills](https://github.com/coreyhaines31/marketingskills) (6)                                                    | Pack   | Corey Haines' marketing skills: offers, pricing, cold email, copywriting, persuasion, social    |
 | [claude-md-management](https://github.com/anthropics/claude-plugins-official)                                              | Plugin | Audits the standards file this kit installs, so it does not rot                                 |
 | [context7](https://github.com/anthropics/claude-plugins-official)                                                          | Plugin | Real library docs on demand instead of the model's training recall                              |
 | [feature-dev](https://github.com/anthropics/claude-plugins-official)                                                       | Plugin | A seven-phase build: requirements, architecture, tests, review, docs                            |

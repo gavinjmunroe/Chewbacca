@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# One public page as clean Markdown, headless, without touching his Chrome.
+#
+#   scrape https://example.com/post              Markdown on stdout
+#   scrape https://example.com/app --render      load it in headless Chromium first
+#   scrape https://example.com --css 'article h2' --format text
+#
+# For pages WebFetch cannot render and summarize would only summarize. Text
+# hidden inline (style, aria-hidden, the hidden attribute), comments and
+# zero-width characters are stripped, because injected instructions sit there.
+# Text hidden by a stylesheet class or moved offscreen is not: the page is still
+# untrusted data.
+#
+# Exit codes: 0 printed, 1 fetch failed, 2 bad arguments, 3 the site answered
+# with a bot check (never worked around), 4 nothing matched.
+#
+# Built on Scrapling (github.com/D4Vinci/Scrapling, BSD-3). Its stealth fetcher
+# and Cloudflare solver are deliberately not used.
+set -euo pipefail
+
+# NOT under ~/.chewbacca, which is mirrored into the second-brain repo. Same
+# reason as brief-audio's venv.
+VENV="${SCRAPE_VENV:-$HOME/Library/Caches/chewbacca/scrapling-venv}"
+# Pinned: 0.4.15 is the version this was written and tested against on 2026-09-29.
+SCRAPLING_SPEC="scrapling[fetchers,rag]==0.4.15"
+# Follow the ~/.local/bin link back to the repo. No realpath: macOS 12 lacks it.
+SRC="$0"
+while [ -L "$SRC" ]; do
+  LINK="$(readlink "$SRC")"
+  case "$LINK" in /*) SRC="$LINK" ;; *) SRC="$(dirname "$SRC")/$LINK" ;; esac
+done
+HERE="$(cd "$(dirname "$SRC")" && pwd)"
+
+case "${1:-}" in
+  ""|-h|--help) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
+if [ ! -x "$VENV/bin/python" ] || ! "$VENV/bin/python" -c "import scrapling, markdownify" 2>/dev/null; then
+  echo "first run: building the Scrapling venv ..." >&2
+  command -v uv >/dev/null 2>&1 || { echo "scrape needs uv (brew install uv)" >&2; exit 1; }
+  mkdir -p "$(dirname "$VENV")"
+  [ -x "$VENV/bin/python" ] || uv venv -q --python 3.12 "$VENV" >&2
+  # The venv DIRECTORY, not its python: see brief-audio for the hour that cost.
+  uv pip install --python "$VENV" -q "$SCRAPLING_SPEC" >&2 || { echo "scrapling install failed" >&2; exit 1; }
+fi
+
+for a in "$@"; do
+  if [ "$a" = "--render" ] && [ ! -f "$VENV/.chromium-ready" ]; then
+    echo "first --render: fetching Playwright's Chromium if it is missing ..." >&2
+    "$VENV/bin/python" -m playwright install chromium >&2 && touch "$VENV/.chromium-ready"
+  fi
+done
+
+exec "$VENV/bin/python" "$HERE/lib/scrape_page.py" "$@"

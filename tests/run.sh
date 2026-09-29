@@ -391,6 +391,11 @@ if group "installer"; then
   check  "qr decodes a texted code and reports undownloaded images" \
     bash "$ROOT/tests/qr.sh" "$ROOT"
 
+  # 2026-09-29: scrape was added on Scrapling, whose headline feature is getting
+  # past bot checks. It must strip hidden text and stop at a wall, never pass it.
+  check  "scrape drops hidden text and stops at a bot check" \
+    bash "$ROOT/tests/scrape.sh" "$ROOT"
+
   # Every kit on the machine matched one 17,000-character message about a club
   # website on 2026-09-22, because hit count was never divided by what was
   # typed and two kits make every stem look distinctive.

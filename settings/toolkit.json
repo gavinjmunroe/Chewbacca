@@ -72,11 +72,25 @@
         "author": "31Carlton7"
       },
       {
+        "name": "first-reader",
+        "url": "https://github.com/Shubhamsaboo/awesome-llm-apps",
+        "path": "agent_skills/first-reader",
+        "license": "Apache-2.0",
+        "author": "Shubhamsaboo"
+      },
+      {
         "name": "no-ai-slop",
         "url": "https://github.com/petergyang/no-ai-slop",
         "path": "skills/no-ai-slop",
         "license": "MIT",
         "author": "petergyang"
+      },
+      {
+        "name": "thinking-out-loud",
+        "url": "https://github.com/Shubhamsaboo/awesome-llm-apps",
+        "path": "agent_skills/thinking-out-loud",
+        "license": "Apache-2.0",
+        "author": "Shubhamsaboo"
       },
       {
         "name": "youtube-transcripts",
@@ -161,6 +175,19 @@
         "research-brand",
         "research-keywords",
         "write-seo-geo-content"
+      ]
+    },
+    {
+      "name": "marketingskills",
+      "url": "https://github.com/coreyhaines31/marketingskills",
+      "count": 6,
+      "skills": [
+        "cold-email",
+        "copywriting",
+        "marketing-psychology",
+        "offers",
+        "pricing",
+        "social"
       ]
     }
   ],

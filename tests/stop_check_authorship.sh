@@ -32,7 +32,7 @@ says "$out" "commit and push it" && ok "no write log: the old wording, unchanged
 
 printf '%s\tgavin-tab\t%s/a.txt\n' "$(date +%s)" "$R" > "$LOG"
 out="$(run me)"
-says "$out" "DIFFERENT session" && ok "another session's file: says do not commit it" || no "told the reader to commit another session's work"
+[ -z "$out" ] && ok "another session's file only: stays silent, nothing to act on" || no "spoke about another session's work, which re-opens the turn"
 
 printf '%s\tme\t%s/a.txt\n' "$(date +%s)" "$R" > "$LOG"
 out="$(run me)"
@@ -50,7 +50,7 @@ git checkout -q -- a.txt && git reset -q && rm -f b.txt
 echo untracked > u.txt
 printf '%s\tgavin-tab\t%s/u.txt\n' "$(date +%s)" "$R" > "$LOG"
 out="$(run me)"
-says "$out" "DIFFERENT session" && ok "untracked file from another session: still caught" || no "missed an untracked file from another session"
+[ -z "$out" ] && ok "untracked file from another session: stays silent" || no "counted an untracked file from another session as this session's"
 rm -f u.txt
 out="$(run me)"
 [ -z "$out" ] && ok "clean tree: stays silent" || no "spoke about a clean tree"

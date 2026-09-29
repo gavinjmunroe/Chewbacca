@@ -431,6 +431,11 @@ if group "installer"; then
   check  "skill-gate enforces graph-engineering once per prompt" \
     bash "$ROOT/tests/skill_gate.sh"
 
+  # closeout fans out by group; a regex that finds none falls back to a
+  # 9 to 14 minute sequential run (BACKLOG 116).
+  check  "closeout finds every suite group to fan out" \
+    bash "$ROOT/tests/closeout_groups.sh"
+
   # A Stop refusal re-sends a reply that is already on screen. For a layout
   # flag that re-send is word for word, so it has to feed forward instead.
   check  "slop-guard feeds format flags forward, refuses content flags" \

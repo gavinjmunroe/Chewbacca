@@ -195,7 +195,11 @@ class Checks:
             text = suite.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return []
-        found = re.findall(r'^\s*group\s+"([^"]+)"', text, re.M)
+        # Every group in run.sh is written `if group "name"; then`. The old
+        # pattern required `group` at the start of the line, matched 0 of 16,
+        # and closeout silently fell back to one sequential 900s run: 9 to 14
+        # minutes per closeout, seen twice on 2026-09-28 (BACKLOG 116).
+        found = re.findall(r'^\s*(?:if\s+)?group\s+"([^"]+)"', text, re.M)
         seen, out = set(), []
         for g in found:
             if g not in seen:

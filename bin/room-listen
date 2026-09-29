@@ -67,6 +67,8 @@ def main():
                 # whisper loops on near-silence: 2026-09-29 one 15s chunk came
                 # back as "I think that's it." eleven times. Keep one of each run.
                 text = re.sub(r"(\b.{6,80}?[.?!])(?:\s*\1)+", r"\1", text)
+                # same loop at word level: "and and and ..." x21 in one chunk
+                text = re.sub(r"\b(\w+)(?:\s+\1\b){2,}", r"\1", text, flags=re.I)
                 # whisper hallucinates these on silence
                 if text and text.lower().strip(".! ") not in {"you", "thank you", "thanks for watching"}:
                     with open(a.out, "a") as fh:

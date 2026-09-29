@@ -1,0 +1,13 @@
+# Marks a directory as a long-running project, so an agent finds it from what
+# Caleb actually types instead of needing a path. Same mechanism as .kit and
+# deliberately a different marker: a kit is a process somebody lives inside for
+# weeks, and kit-builder's seven-property test exists to stop everything
+# becoming one. This is a build.
+#
+# use-when is the only matcher input. Write it in his words.
+
+name: lemma-replica
+domain: A 1:1 replica of uselemma.ai, built as a learning exercise and a trust gate
+use-when: the lemma site, the lemma replica, the lemma clone, cloning lemma, finish the lemma build, the replica site, the sift site, the clone we were building
+status: ready
+read-first: docs/RESUME.md

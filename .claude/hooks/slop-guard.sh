@@ -54,23 +54,50 @@ if [ -x "$PROSE" ]; then
   printf '%s\n' "$MSG" > "$TMPMD"
   if ! PROSE_REPORT=$("$PROSE" --chat "$TMPMD" 2>/dev/null); then
     rm -f "$TMPMD"
-    : > "$GUARD"
     PROSE_DETAIL=$(printf '%s' "$PROSE_REPORT" | tail -n +2 | head -20)
-    # Exit 2, for the same reason as the slop-check path below: a JSON
-    # advisory carrying `continueLoop` is not part of the Stop hook contract,
-    # so the harness ignored it and the reply shipped. This was the FIRST of
-    # the two exits and it is the one that was actually being taken, which is
-    # why fixing the second one alone changed nothing.
-    {
-      echo "prose-check flagged your reply against Caleb's own rules:"
-      printf '%s\n' "$PROSE_DETAIL"
-      echo
-      echo "Rewrite the reply plainly. Do not explain the rewrite, do not"
-      echo "apologise, and do not mention this check."
-    } >&2
-    exit 2
+    LABELS=$(printf '%s\n' "$PROSE_DETAIL" \
+      | sed -nE 's/^ *(L[0-9]+)? +([a-z][a-z-]+) +.*/\2/p' | sort -u)
+
+    # FORMAT-ONLY FLAGS DO NOT REFUSE. They feed forward instead.
+    #
+    # A Stop refusal cannot retract anything: the flagged reply is already on
+    # Caleb's screen, so exit 2 only adds a second copy. For a banned word or
+    # an em dash that second copy at least changes the words. For bold headers,
+    # markdown headers or a table it is the same sentences in a different
+    # layout, which is a pure duplicate. 2026-09-29: a reply with four bold
+    # section labels was refused, re-sent word for word without the bold, and
+    # he answered "Ur back to repeating yourself???".
+    #
+    # So these get written to the pending file, and voice-remind.sh puts them
+    # in front of the model at the start of the next turn, which is before the
+    # next reply is composed rather than after it has shipped.
+    FORMAT_RE='^(bold-scaffolding|chat-header|chat-table)$'
+    if [ -n "$LABELS" ] && ! printf '%s\n' "$LABELS" | grep -qvE "$FORMAT_RE"; then
+      STATE="${CHEWBACCA_HOME:-$HOME/.chewbacca}"
+      mkdir -p "$STATE" 2>/dev/null
+      STAMP=$(date '+%Y-%m-%d %H:%M')
+      printf '%s\n' "$PROSE_DETAIL" > "$STATE/voice-flags.pending"
+      printf '%s\t%s\n' "$STAMP" "$(printf '%s' "$LABELS" | tr '\n' ' ')" \
+        >> "$STATE/voice-flags.log"
+    else
+      : > "$GUARD"
+      # Exit 2, for the same reason as the slop-check path below: a JSON
+      # advisory carrying `continueLoop` is not part of the Stop hook contract,
+      # so the harness ignored it and the reply shipped. This was the FIRST of
+      # the two exits and it is the one that was actually being taken, which is
+      # why fixing the second one alone changed nothing.
+      {
+        echo "prose-check flagged your reply against Caleb's own rules:"
+        printf '%s\n' "$PROSE_DETAIL"
+        echo
+        echo "Rewrite the reply plainly. Do not explain the rewrite, do not"
+        echo "apologise, and do not mention this check."
+      } >&2
+      exit 2
+    fi
+  else
+    rm -f "$TMPMD"
   fi
-  rm -f "$TMPMD"
 fi
 
 MAX="${SLOP_CHECK_MAX:-10}"

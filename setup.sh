@@ -1611,6 +1611,11 @@ _register("UserPromptSubmit", hooks_dir + "/skill-route.sh", timeout=8,
 # The second one is the part that compounds.
 _register("UserPromptSubmit", hooks_dir + "/design-context.sh", timeout=8)
 
+# slop-guard can only refuse a reply that is already on screen, and the rewrite
+# lands beside it as a duplicate. This puts the same rules, plus whatever the
+# guard caught last turn, in front of the model before the reply is written.
+_register("UserPromptSubmit", hooks_dir + "/voice-remind.sh", timeout=5)
+
 _register("UserPromptSubmit", hooks_dir + "/ask-capture.sh", timeout=5)
 
 # Jev's read of the task class where claude-model-router-hook's keywords are

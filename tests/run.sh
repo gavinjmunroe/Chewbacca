@@ -426,6 +426,11 @@ if group "installer"; then
   check  "every hook is registered by setup.sh" \
     bash "$ROOT/tests/hooks_registered.sh"
 
+  # A Stop refusal re-sends a reply that is already on screen. For a layout
+  # flag that re-send is word for word, so it has to feed forward instead.
+  check  "slop-guard feeds format flags forward, refuses content flags" \
+    bash "$ROOT/tests/slop_guard_format.sh"
+
   # An automatic pull is only acceptable if it cannot eat uncommitted work.
   check  "kit-autopull refuses dirty, branched and diverged checkouts" \
     bash "$ROOT/tests/kit_autopull.sh" "$ROOT"

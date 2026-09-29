@@ -37,12 +37,27 @@ else
   echo "FAIL  voice-remind did not surface or clear the pending flag"; fail=1
 fi
 
-EM=$'Prayer. Amen.\n\nThis is wrong — very wrong.'
 EM=$(printf 'Prayer. Amen.\n\nThis is wrong \xe2\x80\x94 very wrong.')
 code=$(run "$EM" p2)
 if [ "$code" = 2 ]; then
   echo "ok    an em dash still refuses"
 else
   echo "FAIL  em dash exited $code, expected 2"; fail=1
+fi
+# The exact reply refused on 2026-09-29 and re-sent as a reworded duplicate.
+rm -f "$CHEWBACCA_HOME/voice-flags.pending"
+STYLE=$'Jesus, thank You that this week only has one exam in it. Amen.\n\nNah, just BISC Midterm 1 on Fri.\n\nOne blind spot: guitar has no syllabus in the ledger, so I can\'t see it.\n\nNot a midterm, but ACAD 324 Chindogu is due tomorrow and it\'s 150 pts.'
+code=$(run "$STYLE" p3)
+if [ "$code" = 0 ] && [ -s "$CHEWBACCA_HOME/voice-flags.pending" ]; then
+  echo "ok    colon reveal + binary contrast queue instead of refusing"
+else
+  echo "FAIL  style flags exited $code, expected 0 and a pending file"; fail=1
+fi
+
+code=$(run $'Prayer. Amen.\n\nLet us delve into the syllabus.' p4)
+if [ "$code" = 2 ]; then
+  echo "ok    a banned word still refuses"
+else
+  echo "FAIL  banned word exited $code, expected 2"; fail=1
 fi
 exit $fail

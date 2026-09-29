@@ -29,6 +29,18 @@ PROMPT_ID=$(printf '%s' "$INPUT" | jq -r '.prompt_id // .session_id // "unknown"
 GUARD="${TMPDIR:-/tmp}/slop-guard-$PROMPT_ID"
 [ -f "$GUARD" ] && exit 0
 
+# The two flags a rewrite is worth a duplicate for. See the comment in the
+# prose-check block below for why nothing else refuses.
+HARD_RE='^(em-dash|banned-word)$'
+STATE="${CHEWBACCA_HOME:-$HOME/.chewbacca}"
+
+queue_flags() {  # $1 = detail, $2 = labels
+  mkdir -p "$STATE" 2>/dev/null
+  printf '%s\n' "$1" >> "$STATE/voice-flags.pending"
+  printf '%s\t%s\n' "$(date '+%Y-%m-%d %H:%M')" "$(printf '%s' "$2" | tr '\n' ' ')" \
+    >> "$STATE/voice-flags.log"
+}
+
 SLOP=$(command -v slop-check || echo "$HOME/.local/bin/slop-check")
 [ -x "$SLOP" ] || exit 0
 
@@ -58,27 +70,24 @@ if [ -x "$PROSE" ]; then
     LABELS=$(printf '%s\n' "$PROSE_DETAIL" \
       | sed -nE 's/^ *(L[0-9]+)? +([a-z][a-z-]+) +.*/\2/p' | sort -u)
 
-    # FORMAT-ONLY FLAGS DO NOT REFUSE. They feed forward instead.
+    # ONLY HARD BANS REFUSE. Everything else feeds forward.
     #
     # A Stop refusal cannot retract anything: the flagged reply is already on
-    # Caleb's screen, so exit 2 only adds a second copy. For a banned word or
-    # an em dash that second copy at least changes the words. For bold headers,
-    # markdown headers or a table it is the same sentences in a different
-    # layout, which is a pure duplicate. 2026-09-29: a reply with four bold
-    # section labels was refused, re-sent word for word without the bold, and
-    # he answered "Ur back to repeating yourself???".
+    # Caleb's screen, so exit 2 only adds a second copy under it. 2026-09-29,
+    # twice in one day. First, four bold section labels were refused and
+    # re-sent word for word without the bold ("Ur back to repeating
+    # yourself???"), so format flags stopped refusing. Hours later a four-line
+    # reply with one colon reveal and one "Not a midterm, but" was refused,
+    # and the rewrite said the same four things with two phrases reworded. He
+    # sent a screenshot of both copies and "Bruh". A reworded duplicate costs
+    # him more than the colon did.
     #
-    # So these get written to the pending file, and voice-remind.sh puts them
-    # in front of the model at the start of the next turn, which is before the
-    # next reply is composed rather than after it has shipped.
-    FORMAT_RE='^(bold-scaffolding|chat-header|chat-table)$'
-    if [ -n "$LABELS" ] && ! printf '%s\n' "$LABELS" | grep -qvE "$FORMAT_RE"; then
-      STATE="${CHEWBACCA_HOME:-$HOME/.chewbacca}"
-      mkdir -p "$STATE" 2>/dev/null
-      STAMP=$(date '+%Y-%m-%d %H:%M')
-      printf '%s\n' "$PROSE_DETAIL" > "$STATE/voice-flags.pending"
-      printf '%s\t%s\n' "$STAMP" "$(printf '%s' "$LABELS" | tr '\n' ' ')" \
-        >> "$STATE/voice-flags.log"
+    # So only an em dash or a banned word, which he has banned outright, still
+    # refuses. The rest goes to the pending file, and voice-remind.sh puts it
+    # in front of the model at the start of the next turn, before the next
+    # reply is composed rather than after it has shipped.
+    if [ -n "$LABELS" ] && ! printf '%s\n' "$LABELS" | grep -qE "$HARD_RE"; then
+      queue_flags "$PROSE_DETAIL" "$LABELS"
     else
       : > "$GUARD"
       # Exit 2, for the same reason as the slop-check path below: a JSON
@@ -109,6 +118,12 @@ SCORE=$(printf '%s' "$REPORT" | awk 'NR==1{print $1}')
 : > "$GUARD"
 
 DETAIL=$(printf '%s' "$REPORT" | tail -n +2 | head -20)
+SLOP_LABELS=$(printf '%s\n' "$DETAIL" \
+  | sed -nE 's/^ *L[0-9]+ +([a-z][a-z-]+):.*/\1/p' | sort -u)
+if [ -n "$SLOP_LABELS" ] && ! printf '%s\n' "$SLOP_LABELS" | grep -qE "$HARD_RE"; then
+  queue_flags "$DETAIL" "$SLOP_LABELS"
+  exit 0
+fi
 
 # EXIT 2, NOT A JSON ADVISORY. This used to print
 # hookSpecificOutput.continueLoop and exit 0, and exit 2 was only the

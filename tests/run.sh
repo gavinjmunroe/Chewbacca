@@ -377,6 +377,11 @@ if group "installer"; then
   check  "list-gate refuses the defects it exists for" \
     bash "$ROOT/tests/list_gate.sh" "$ROOT"
 
+  # On 2026-09-30 a discussion sheet quoted bell hooks from model memory because
+  # the reading was never on disk. It must flag that, and not count his own post.
+  check  "reading-check flags readings with no text on disk" \
+    bash "$ROOT/tests/reading_check.sh" "$ROOT"
+
   # The rule Caleb had to state four times in one session. A gate, not a note.
   check  "kit-debt fires when a session taught the kit nothing" \
     bash "$ROOT/tests/kit_debt.sh" "$ROOT"

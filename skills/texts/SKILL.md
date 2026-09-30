@@ -85,8 +85,8 @@ convincing my mom", "where were we with Tyler"), the live conversation is in
 `chat.db`, not in an old agent session. Read that person's last few days first.
 On 2026-09-30 "convincing my mom GTME is goated" cost six tool calls grepping
 session transcripts and the brain for a prior chat that never existed. The whole
-context was three messages from that morning in Mom's thread: his elective
-question, her "Ask Andrew Laffoon", and her like on his reply.
+context was three messages from that morning in the family thread: his elective
+question, Dad's "Ask Andrew Laffoon", and Dad's like on his reply.
 
 ## Writing down what mattered
 

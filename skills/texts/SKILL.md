@@ -79,6 +79,15 @@ not the whole of it. Group chats, quiet threads and threads that went cold each
 hide people, and the `people` skill has the enumeration to run first and the
 measured numbers for what each cutoff costs.
 
+**"Get back to X with <person>" means the thread, not a transcript.** When the
+user says to pick something back up with a named person ("let's get back to
+convincing my mom", "where were we with Tyler"), the live conversation is in
+`chat.db`, not in an old agent session. Read that person's last few days first.
+On 2026-09-30 "convincing my mom GTME is goated" cost six tool calls grepping
+session transcripts and the brain for a prior chat that never existed. The whole
+context was three messages from that morning in Mom's thread: his elective
+question, her "Ask Andrew Laffoon", and her like on his reply.
+
 ## Writing down what mattered
 
 This is the half that makes it worth having, and it is the half that gets

@@ -224,6 +224,34 @@ if group "jev"; then
   check "Jev validates typed responses and protects failure paths" python3 "$ROOT/tests/test_jev.py"
 fi
 
+# Offline UX evidence and routing; no live application calls.
+if group "ux-learning"; then
+  expect "UX learning appears in help" "chewbacca ux-learning" bash "$ROOT/bin/chewbacca" --help
+  check "UX learning dispatches" bash "$ROOT/bin/chewbacca" ux-learning --help
+  ln -s "$ROOT/bin/ux-learning" "$TMP/ux-learning"
+  check "UX learning resolves installed symlink" "$TMP/ux-learning" --help
+  check "UX learning evidence and routing" python3 "$ROOT/tests/test_ux_learning.py"
+  check "Clay map validates" python3 "$ROOT/bin/ux-learning" validate "$ROOT/learning/clay-navigation/package.json"
+  check "shared instruction export is current" python3 "$ROOT/tools/agents_md.py" --check
+fi
+
+# Explicit decision learning; fixture tests never call models or browsers.
+if group "decision-learning"; then
+  check "preserved explicit Jev CLI contract" python3 "$ROOT/tests/test_jev.py"
+  for tool in jev decision-lab ux-decision ux-policy clay-review; do
+    check "$tool dispatches" bash "$ROOT/bin/chewbacca" "$tool" --help
+    ln -s "$ROOT/bin/$tool" "$TMP/$tool"
+    check "$tool resolves installed symlink" "$TMP/$tool" --help
+  done
+  check "decision contracts and outcome accounting" python3 "$ROOT/tests/test_decision_lab.py"
+  check "fresh observed UI recommendations" python3 "$ROOT/tests/test_ux_decision.py"
+  check "graph optimization and offline reinforcement learning" python3 "$ROOT/tests/test_ux_policy.py"
+  check "bounded Clay replay and stale rejection" python3 "$ROOT/tests/test_clay_review.py"
+  check "Jev transport shape and credential compatibility" python3 "$ROOT/tests/test_jev_transport.py"
+  check "hybrid skill route: code, Jev, model fallback, budgets, verifier and resume" python3 "$ROOT/tests/test_hybrid_route.py"
+  check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
+fi
+
 # ── GTM engineering ───────────────────────────────────────────────────────────
 if group "gtme"; then
   check "workflow graph validates evidence and bounds execution" python3 "$ROOT/tests/test_gtme_graph.py"
@@ -235,6 +263,7 @@ fi
 
 # ── tools ─────────────────────────────────────────────────────────────────────
 if group "tools"; then
+  check "counts handles conflict stages and whitespace paths" python3 "$ROOT/tests/test_counts.py"
   check  "counts --check passes on a clean tree" python3 "$ROOT/tools/counts.py" --check
   check  "counts --json is valid" bash -c "python3 '$ROOT/tools/counts.py' --json | python3 -m json.tool"
   check  "evals structure pass" python3 "$ROOT/tools/evals.py"
@@ -627,16 +656,13 @@ if group "installer"; then
   # The real BACKLOG.md lives in the team's private repo, so these read a
   # fixture: on CI, where that repo is absent, they failed from 2026-09-21 to
   # 2026-09-25 while passing on every Mac that had CHEWBACCA_PRIVATE set.
-  mkdir -p "$TMP/backlog"
-  printf '## Now\n\n| # | Item | Status |\n|---|---|---|\n| 1 | Ship it | open |\n\n## Dead\n\n| Item | Reason |\n|---|---|\n| An old idea | superseded |\n' > "$TMP/backlog/BACKLOG.md"
-  check  "the backlog lists open work" env CHEWBACCA_PRIVATE="$TMP/backlog" bash -c '
-    out=$("$1/bin/backlog" 2>/dev/null)
-    case "$out" in *"open now"*) : ;;
-      *) echo "backlog printed nothing"; exit 1 ;; esac' _ "$ROOT"
+  # tests/backlog.sh also swaps HOME, so the beside-checkout fallback cannot
+  # find a real backlog either.
+  check  "the backlog lists open work" bash "$ROOT/tests/backlog.sh" "$ROOT" open
 
-  check  "the backlog keeps dead items and their reason" env CHEWBACCA_PRIVATE="$TMP/backlog" bash -c '
-    "$1/bin/backlog" dead 2>/dev/null | grep -q . || {
-      echo "dead items vanished, so somebody will propose them again"; exit 1; }' _ "$ROOT"
+  check  "the backlog keeps dead items and their reason" bash "$ROOT/tests/backlog.sh" "$ROOT" dead
+
+  check  "a public install without a private backlog stays usable" bash "$ROOT/tests/backlog.sh" "$ROOT" absent
 
   # A store nobody reads is the failure this whole file keeps finding.
   check  "SessionStart injects the backlog" \

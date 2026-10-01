@@ -1184,8 +1184,7 @@ class Listener:
         self.voice = voice
         self.saying: subprocess.Popen[bytes] | None = None
         self.speaker: subprocess.Popen[str] | None = None
-        if voice and KOKORO_VOICE.fullmatch(voice):
-            self.speaker = self.start_speaker(voice)
+        # Start the reader only after all state it can touch is initialized.
 
         # The last region the person pointed at, and when.
         #
@@ -1271,6 +1270,8 @@ class Listener:
         # place: {"said", "board", "t"}. The next sentence is heard as the
         # answer while it is fresh. Read and cleared on the reader thread.
         self.agent_question: dict | None = None
+        if voice and KOKORO_VOICE.fullmatch(voice):
+            self.start_speaker(voice)
 
     def log(self, *args) -> None:
         if self.verbose:
@@ -1685,6 +1686,9 @@ class Listener:
             self.voice = FALLBACK_VOICE
             return None
 
+        with self.state:
+            self.speaker = proc
+
         def watch() -> None:
             # The model loader prints its own lines to stdout before "ready"
             # ("Creating new KokoroPipeline ..."), so read until it comes.
@@ -1699,15 +1703,27 @@ class Listener:
                     message = json.loads(line)
                 except json.JSONDecodeError:
                     continue
-                if isinstance(message, dict):
+                if isinstance(message, dict) and self.speaker is proc:
                     self.heard_speaker(message)
             proc.wait()
-            self.log(f"hud-speak exited ({proc.returncode}), falling back to say")
-            self.speaker = None
-            self.voice = FALLBACK_VOICE
+            if self.speaker_exited(proc):
+                self.log(f"hud-speak exited ({proc.returncode}), falling back to say")
 
         threading.Thread(target=watch, daemon=True).start()
         return proc
+
+    def speaker_exited(self, proc: subprocess.Popen[str]) -> bool:
+        """Forget only this speaker; its EOF cannot reset a replacement or a stop."""
+        with self.state:
+            if self.speaker is not proc:
+                return False
+            self.speaker = None
+            # An EOF before quiet left these true and held the glass for 60s.
+            self.voiced = False
+            self.talking = False
+            if self.voice is not None:
+                self.voice = FALLBACK_VOICE
+        return True
 
     def heard_speaker(self, message: dict) -> None:
         """Move the ring with the voice, and put it back when the voice stops.
@@ -1830,17 +1846,22 @@ class Listener:
         return self.voiced or self.talking or (proc is not None and proc.poll() is None)
 
     def tell_speaker(self, message: dict) -> bool:
-        proc = self.speaker
-        if proc is None or proc.stdin is None or proc.poll() is not None:
-            return False
+        with self.state:
+            proc = self.speaker
+            if proc is None or proc.stdin is None or proc.poll() is not None:
+                return False
+            # Mark pending audio before writing: a fast quiet/EOF response must
+            # remain authoritative even when it arrives before flush returns.
+            if "say" in message or "add" in message:
+                self.voiced = True
         try:
             proc.stdin.write(json.dumps(message) + "\n")
             proc.stdin.flush()
-            return True
+            with self.state:
+                return self.speaker is proc
         except (BrokenPipeError, OSError) as err:
             self.log("hud-speak pipe broke, falling back to say:", err)
-            self.speaker = None
-            self.voice = FALLBACK_VOICE
+            self.speaker_exited(proc)
             return False
 
     def speak_part(self, text: str, first: bool) -> bool:
@@ -1856,7 +1877,6 @@ class Listener:
         if self.speaker is None or not text:
             return False
         if self.tell_speaker({"say": text, "more": True} if first else {"add": text}):
-            self.voiced = True
             return True
         return False
 
@@ -1882,7 +1902,6 @@ class Listener:
         if not self.voice or not text:
             return
         if self.speaker is not None and self.tell_speaker({"say": text}):
-            self.voiced = True
             return
         self.hush()
         try:

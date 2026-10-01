@@ -1,0 +1,42 @@
+#!/opt/homebrew/bin/python3
+
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+
+import json
+import struct
+
+from tools.chatgpt.runtime import ChatGPTRuntime
+
+runtime = ChatGPTRuntime()
+
+def recv():
+    hdr = sys.stdin.buffer.read(4)
+    if not hdr:
+        return None
+    n = struct.unpack("<I", hdr)[0]
+    return json.loads(sys.stdin.buffer.read(n))
+
+def send(obj):
+    data = json.dumps(obj).encode("utf-8")
+    sys.stdout.buffer.write(struct.pack("<I", len(data)))
+    sys.stdout.buffer.write(data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = recv()
+    if msg is None:
+        break
+
+    try:
+        send(runtime.handle(msg))
+    except Exception as e:
+        send({
+            "ok": False,
+            "error": repr(e)
+        })

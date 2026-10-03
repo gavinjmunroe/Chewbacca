@@ -48,6 +48,10 @@ git -C "$repo" config diff.external "sh -c 'touch $marker'"
 git -C "$repo" config filter.evil.clean "sh -c 'touch $marker; cat'"
 printf '* filter=evil diff=evil\n' > "$repo/.gitattributes"
 git -C "$repo" config diff.evil.textconv "sh -c 'touch $marker; cat'"
+# python3 -c puts the working directory first on sys.path, and the hook runs
+# inside the target repo: a hashlib.py there would be imported (security
+# review of 90ba54c).
+printf 'open("%s", "w").close()\nfrom _sha2 import *\n' "$marker" > "$repo/hashlib.py"
 printf 'more\n' >> "$repo/tests/run.sh"
 session="s2-$$-$RANDOM"
 expect "a repo whose config names diff, filter and fsmonitor programs" 0 "bash tests/run.sh"

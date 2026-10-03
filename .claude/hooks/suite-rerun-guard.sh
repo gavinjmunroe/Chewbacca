@@ -54,7 +54,7 @@ fingerprint="$(
   safe_git rev-parse HEAD 2>/dev/null
   safe_git ls-files -s -z 2>/dev/null
   { safe_git ls-files -z 2>/dev/null; safe_git ls-files -o --exclude-standard -z 2>/dev/null; } \
-    | python3 -c '
+    | python3 -I -c '
 import hashlib, os, stat, sys
 # Regular files by content, symlinks by target, nothing else opened: a tracked
 # link to /dev/zero or a FIFO would otherwise hang the hook.

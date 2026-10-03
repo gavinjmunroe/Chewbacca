@@ -41,6 +41,20 @@ def words(text: str) -> list[str]:
     return [w.strip(".'") for w in WORD.findall(text.lower()) if w not in STOP]
 
 
+def plain(text: str) -> str:
+    """Lowercase words with punctuation and apostrophes gone: "What's this?" -> "whats this"."""
+    return " ".join(re.findall(r"[a-z0-9$]+", text.lower().replace("'", "").replace("\u2019", "")))
+
+
+# A playbook card lists what a prospect literally says, in quotes, on a line
+# starting "They say:". Those quotes are matched against the sentence just
+# heard before any BM25, because the moments that need a cue fastest are made
+# of stop words: "who is this and what is this about" had no searchable word
+# at all and returned nothing on 2026-10-02.
+# "Also heard:" carries generated paraphrases of the same moment.
+SAYS = re.compile(r"^(?:They say|Also heard):(.*)$", re.M)
+
+
 @dataclass
 class Chunk:
     path: str
@@ -104,6 +118,14 @@ class Bank:
 
     def __init__(self, chunks: list[Chunk]):
         self.chunks = chunks
+        # (words of a quoted phrasing, chunk index), from every "They say:" line.
+        self.phrasings: list[tuple[tuple[str, ...], int]] = []
+        for i, c in enumerate(chunks):
+            for line in SAYS.findall(c.text):
+                for quote in re.findall(r'"([^"]+)"', line):
+                    said = tuple(plain(quote).split())
+                    if len(said) >= 2:
+                        self.phrasings.append((said, i))
         self.terms = [Counter(words(c.heading + " " + c.path + " " + c.text)) for c in chunks]
         self.lengths = [sum(t.values()) for t in self.terms]
         self.average = (sum(self.lengths) / len(self.lengths)) if self.lengths else 1.0
@@ -133,7 +155,32 @@ class Bank:
             found.extend(chunks_of(path, root))
         return cls(found)
 
-    def search(self, query: str, k: int = 4) -> list[Chunk]:
+    def heard(self, sentence: str, k: int = 2) -> list[int]:
+        """Chunks whose "They say:" phrasings occur in `sentence`, longest match first.
+
+        A phrasing matches when its words appear in order and unbroken in the
+        sentence, or, for phrasings of three words or more, when every one of
+        its words is in the sentence ("what exactly do you guys do" against
+        "what do you guys do").
+        """
+        said = plain(sentence).split()
+        if not said:
+            return []
+        joined = " " + " ".join(said) + " "
+        present = set(said)
+        best: dict[int, int] = {}
+        for phrasing, i in self.phrasings:
+            exact = (" " + " ".join(phrasing) + " ") in joined
+            loose = len(set(phrasing)) >= 3 and set(phrasing) <= present
+            if exact or loose:
+                score = len(phrasing) * (2 if exact else 1)
+                if score > best.get(i, 0):
+                    best[i] = score
+        return sorted(best, key=lambda i: best[i], reverse=True)[:k]
+
+    def search(self, query: str, k: int = 4, said: str | None = None) -> list[Chunk]:
+        """BM25 over `query`; with `said`, cards whose phrasings it contains come first."""
+        first = self.heard(said) if said else []
         q = set(words(query))
         scores: dict[int, float] = {}
         for w in q:
@@ -145,9 +192,11 @@ class Bank:
                 norm = tf * (self.K1 + 1) / (tf + self.K1 * (1 - self.B + self.B * self.lengths[i] / self.average))
                 scores[i] = scores.get(i, 0.0) + idf * norm
         ranked = sorted(scores, key=lambda i: scores[i] * self.chunks[i].boost, reverse=True)
-        picked: list[Chunk] = []
+        picked: list[Chunk] = [self.chunks[i] for i in first]
         seen_paths: Counter[str] = Counter()
         for i in ranked:
+            if i in first:
+                continue
             chunk = self.chunks[i]
             # Two chunks from one file at most, so one long note cannot
             # crowd out everything else that matched.

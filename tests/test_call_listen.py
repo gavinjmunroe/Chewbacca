@@ -135,6 +135,83 @@ def test_context_bank_finds_the_note_and_skips_sources():
         assert all("sources" not in c.path for c in bank.chunks)
 
 
+def test_a_brush_off_made_of_stop_words_still_finds_its_card():
+    # "who is this and what is this about" has no word BM25 keeps, and found
+    # nothing at all on 2026-10-02.
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "cold.md").write_text(
+            '## Cold: "who is this"\n'
+            'They say: "who is this", "what\'s this about"\n'
+            'Say: "Fair question. It\'s Gavin, and here is why I called."\n\n'
+            '## Close: payment\n'
+            'They say: "can we split it"\n'
+            'Also heard: "do you do payment plans", "can I pay in installments"\n'
+            'Say: "Sure. Two payments, the first today."\n')
+        bank = context_bank.Bank.build(root)
+        line = "who is this and what is this about"
+        assert bank.search(line) == []
+        found = bank.search(line, said=line)
+        assert found and found[0].heading.startswith("Cold")
+        found = bank.search("ok can I pay in installments", said="ok can I pay in installments")
+        assert found and found[0].heading.startswith("Close"), "Also heard paraphrases count"
+        assert bank.heard("the weather is nice today") == []
+
+
+def test_a_late_result_from_the_last_turn_is_not_this_cue():
+    # ask() returns at message_stop; the last turn's "result" event lands
+    # after that. It was being read as the next cue, so every cue answered the
+    # line before it (2026-10-02, 30-line run).
+    import io
+    import threading
+
+    model = object.__new__(listen.Model)
+    model.events = listen.queue.Queue()
+    model.lock = threading.Lock()
+    model.turns, model.finished = 1, 0
+
+    class Proc:
+        stdin = io.StringIO()
+
+    model.proc = Proc()
+
+    def stream(text):
+        return [{"type": "stream_event", "event": {"type": "content_block_delta", "delta": {"text": text}}},
+                {"type": "stream_event", "event": {"type": "message_stop"}}]
+
+    def arrive():
+        for event in [{"type": "result", "result": "ASK: the old answer"}] + stream("HANDLE: the new answer"):
+            with model.lock:
+                model.events.put(event)
+                if event["type"] == "result":
+                    model.finished += 1
+
+    threading.Timer(0.05, arrive).start()
+    assert model.ask("they said something", timeout=2) == "HANDLE: the new answer"
+
+
+def test_a_cue_never_promises_what_coach_md_says_is_not_decided():
+    # Haiku cued a payment plan and a demo video on 2026-10-02 although the
+    # prompt and COACH.md both said never to.
+    standing = ("# Facts\n\n## Not decided yet: never promise these\n\n"
+                "- Payment plans, financing, installments, split payments, split the price.\n"
+                "- Demos, demo videos, free trials, proposal deadlines.\n"
+                "- Guarantees, refunds, guaranteed results.\n\n## Hard lines\n\n- Never invent a client.\n")
+    terms = listen.undecided(standing)
+    for promise in ["Want to spread it out with a payment plan?", "I'll shoot you a demo video",
+                    "Sure, we can split the price into two payments", "We guarantee results in 30 days"]:
+        assert listen.guard(promise, terms) == listen.CHECK_LINE, promise
+    for question in ["What results are you looking for?", "I'll send the proposal tonight. Monday?",
+                     "What would make that number work for you?", "Never invent a client"]:
+        assert listen.guard(question, terms) == question, question
+    assert listen.undecided("# no such section\n") == []
+
+
+def test_playbook_numbers_are_never_the_offer():
+    assert "Never its numbers, prices, names or examples" in listen.SYSTEM
+    assert listen.PLAYBOOK == "calls/playbook"
+
+
 def test_identify_maps_call_apps_and_ignores_everything_else():
     assert watch.identify("us.zoom.xos", "") == watch.CallApp("Zoom", "zoom.us")
     assert watch.identify("com.google.Chrome.helper", "").label == "Chrome"

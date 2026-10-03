@@ -707,6 +707,36 @@ DANGLING = {"a", "an", "the", "this", "that", "and", "or", "but", "so", "to", "o
             "at", "my", "your", "with", "is", "was", "im", "i'm", "i", "it", "its", "it's", "just", "because"}
 
 
+# For a reader with no sales training (--beginner): the screen always holds
+# exactly one line. A line stays up until the rep has said it, then the screen
+# says LISTEN; when the prospect's answer needs no new line, the script moves
+# to its next stage. Said it: half the line's words, in order, in what the mic
+# heard. Guessed, as in call-practice: a rep who keeps the spine counts.
+SAID_IT = 0.5
+LISTEN = "LISTEN: let them answer."
+
+
+def unmark_cue(cue: str) -> str:
+    text = cue.split(":", 1)[-1].replace(" / ", " ")
+    return re.sub(r"\b([A-Z]{2,})\b", lambda m: m.group(1).lower(), text).strip()
+
+
+def cue_overlap(cue: str, said: str) -> float:
+    words = lambda t: re.findall(r"[a-z0-9$']+", t.lower())  # noqa: E731
+    a, b = words(unmark_cue(cue)), words(said)
+    if not a:
+        return 0.0
+    match = difflib.SequenceMatcher(None, a, b)
+    return sum(block.size for block in match.get_matching_blocks()) / len(a)
+
+
+def next_stage(bank: dict[str, dict], after: int) -> tuple[int, str] | None:
+    """The script's next stage after `after`: (stage, situation id)."""
+    later = sorted((s["stage"], sid) for sid, s in bank.items()
+                   if isinstance(s.get("stage"), int) and s["stage"] > after and s.get("line"))
+    return later[0] if later else None
+
+
 def same_words(a: str, b: str) -> bool:
     words = lambda t: re.findall(r"[a-z0-9']+", t.lower())
     return words(a) == words(b)
@@ -948,6 +978,9 @@ class Call:
     shown: dict[str, int] = field(default_factory=dict)  # situation id -> times picked
     said: dict[str, str] = field(default_factory=dict)  # "goal", "pain", "why" -> their words
     pitched: bool = False  # a pitch or objection line has shown: discovery is over
+    pending: str = ""  # --beginner: the line on screen the rep has not said yet
+    stage_at: int = 0  # --beginner: the furthest script stage shown
+    resume: str = ""  # --beginner: a script line an objection cut off, owed next
 
     def talk_share(self) -> int | None:
         with self.lock:
@@ -1038,6 +1071,7 @@ class Listener:
         # With a bank and a Jev key, the bank is the only source of cues.
         # Without a key every pick fails, so the written coach stays on.
         self.lines_only = bool(self.lines) and bool(jev_client().api_key()) and jev_client().allowed()
+        self.beginner = bool(getattr(args, "beginner", False)) and self.lines_only
         self.call = Call()
         self.screen = Screen(not args.no_hud)
         self.coach = Coach(args.model, SYSTEM.format(name=first_name(self.brain)))
@@ -1162,6 +1196,10 @@ class Listener:
                 self.latest = line
                 self.screen.set("heard", "Them: " + text)
                 self.wake.set()
+            elif self.heard_you(line):
+                self.screen.set("cue", LISTEN)
+                self.screen.set("alt", "")
+                self.screen.set("theirs", "")
 
     # lines -> cues
 
@@ -1217,15 +1255,56 @@ class Listener:
             extra = "".join(f"\n      {x}" for x in (result.runner_up, result.theirs) if x)
             print(f"  >>  {line.cue}   ({result.took:.1f}s){extra}", flush=True)
 
+    def steady(self, result: "CueResult", picked: str | None, advance: bool = True) -> "CueResult":
+        """--beginner: one line, never a blank screen. A new line replaces the
+        one up; no new line keeps the unsaid one, or moves the script on."""
+        if not getattr(self, "beginner", False):
+            return result
+        result.runner_up = ""
+        if result.cue:
+            situation = self.lines.get(picked or "", {})
+            stage = situation.get("stage")
+            if situation.get("use"):
+                # Past the pitch, "what comes next" is never discovery again.
+                pitch = [s["stage"] for s in self.lines.values() if s.get("use") and isinstance(s.get("stage"), int)]
+                if pitch:
+                    self.call.stage_at = max(self.call.stage_at, min(pitch))
+            if self.call.pending and self.call.pending != result.cue and not isinstance(stage, int):
+                self.call.resume = self.call.resume or self.call.pending
+            elif isinstance(stage, int):
+                self.call.resume = ""
+            self.call.pending = result.cue
+            if isinstance(stage, int):
+                self.call.stage_at = max(self.call.stage_at, stage)
+            return result
+        # A filler "mm-hm" holds the screen; it moves the script only before
+        # the first line, so the opener is up from the start.
+        if not self.call.pending and self.call.resume:
+            self.call.pending, self.call.resume = self.call.resume, ""
+        if not self.call.pending and (advance or not self.call.stage_at):
+            found = next_stage(self.lines, self.call.stage_at)
+            if found:
+                self.call.stage_at, sid = found
+                self.call.pending = situation_cue(self.lines, sid) or ""
+        result.cue = self.call.pending or None
+        return result
+
+    def heard_you(self, line: Line) -> bool:
+        """--beginner: the rep said the line on screen, so it comes down."""
+        if getattr(self, "beginner", False) and self.call.pending and cue_overlap(self.call.pending, line.text) >= SAID_IT:
+            self.call.pending = ""
+            return True
+        return False
+
     def cue_for(self, line: Line) -> "CueResult":
         """One line heard -> the cue for the screen. The stress harness
         (research/sales/stress in the brain) calls this same method, so what
         it measures is what a call shows."""
         if is_filler(line.text):
-            return CueResult("NONE", None, 0.0)
+            return self.steady(CueResult("NONE", None, 0.0), None, advance=False)
         routed = route(line.text, answers(read_capped(self.standing, STANDING_CAP) if self.standing else ""))
         if routed:
-            return CueResult("ROUTED", f"SAY: {routed}", 0.0)
+            return self.steady(CueResult("ROUTED", f"SAY: {routed}", 0.0), None)
         if self.lines:
             started = time.monotonic()
             recent = self.call.recent(6)
@@ -1246,7 +1325,7 @@ class Listener:
                 # 23 of 97 failures were a price or "what is it" asked a third
                 # time and answered with nothing.
                 if picked in ("none", "check"):
-                    return CueResult(f"PICK {picked}", situation_cue(self.lines, picked), took)
+                    return self.steady(CueResult(f"PICK {picked}", situation_cue(self.lines, picked), took), picked)
                 key = self.lines[picked].get("capture")
                 if key and their_words(line.text):
                     self.call.said[key] = their_words(line.text)
@@ -1259,17 +1338,21 @@ class Listener:
                 theirs = playback(self.lines, picked, self.call.said)
                 times = self.call.shown.get(picked, 0)
                 self.call.shown[picked] = times + 1
-                if self.lines[picked].get("kind", "SAY") == "SAY":
+                if self.lines[picked].get("kind", "SAY") == "SAY" or getattr(self, "beginner", False):
+                    # A beginner has no line of their own to fall back on, so
+                    # a coaching line alternates like a fact instead of going
+                    # quiet. n1 replay 2026-10-03: a third "send me the info"
+                    # went quiet and the fallback put a discovery question up.
                     cue = situation_cue(self.lines, picked, times % 2 == 1) or situation_cue(self.lines, picked)
                 else:
                     cue = situation_cue(self.lines, picked, times == 1) if times < 2 else None
                 alt = runner_up(self.lines, picked) if cue else ""
-                return CueResult(f"PICK {picked}", cue, took, theirs=theirs if cue else "", runner_up=alt)
+                return self.steady(CueResult(f"PICK {picked}", cue, took, theirs=theirs if cue else "", runner_up=alt), picked)
             # In bank mode a failed pick shows nothing. The 2026-10-03 site
             # replay's only off-bank cue came from falling through to the
             # written coach here, and a written line is the part that invents.
             if self.lines_only:
-                return CueResult("PICK FAILED", None, took)
+                return self.steady(CueResult("PICK FAILED", None, took), None)
         started = time.monotonic()
         reply = self.coach.cue(self.prompt_for(line))
         took = time.monotonic() - started
@@ -1400,6 +1483,7 @@ def main() -> int:
     parser.add_argument("--wav", help="replay a 16 kHz mono recording as the other side")
     parser.add_argument("--fast", action="store_true", help="with --wav, do not wait in real time")
     parser.add_argument("--transcripts", help="folder for the transcript (default: <brain>/calls)")
+    parser.add_argument("--beginner", action="store_true", help="with a line bank: one line on screen at all times, held until said, then the script's next")
     parser.add_argument("--early-look", action="store_true", help="with a line bank, cue at 300 ms of quiet when Jev is sure the thought is finished")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()

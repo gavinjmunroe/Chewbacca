@@ -575,6 +575,46 @@ def test_an_early_look_is_held_unless_jev_is_sure_they_finished():
         listen.LAST_PICK.finished = None
 
 
+
+def test_beginner_mode_holds_one_line_until_said_then_walks_the_script():
+    # --beginner: a reader with no training must never face a blank screen or
+    # a choice. Filler keeps the unsaid line; once said, the next "none"
+    # moves to the script's next stage.
+    listener, pick = _bank_listener(["open", "none", "none", "busy", "none"])
+    listener.lines = {
+        "open": {"kind": "ASK", "line": "What made you book the call?", "stage": 1},
+        "week": {"kind": "ASK", "line": "Walk me through a normal week.", "stage": 2},
+        "busy": {"kind": "HANDLE", "line": "Fair, it's busy."},
+    }
+    listener.beginner = True
+    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, finished=False: pick(bank, heard, recent)
+    try:
+        cue = lambda text: listener.cue_for(listen.Line("them", 0.0, 1.0, text)).cue
+        assert cue("hey, yeah i'm here") == "ASK: What made you book the call?"
+        assert cue("mm-hm") == "ASK: What made you book the call?"  # unsaid: held
+        assert listener.heard_you(listen.Line("you", 0.0, 1.0, "so what made you book this call"))
+        assert cue("honestly i'm just tired of feeling heavy") == "ASK: Walk me through a normal week."
+        assert cue("i'm slammed at work though") == "HANDLE: Fair, it's busy."
+        assert listener.heard_you(listen.Line("you", 0.0, 1.0, "fair, it's busy"))
+        assert cue("yeah") == "ASK: Walk me through a normal week."  # back on the script
+        assert not listener.heard_you(listen.Line("you", 0.0, 1.0, "cool cool"))
+    finally:
+        listen.pick_situation = real
+
+
+def test_beginner_mode_never_shows_a_runner_up():
+    listener, pick = _bank_listener(["price"])
+    listener.beginner = True
+    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, finished=False: pick(bank, heard, recent)
+    listen.LAST_PICK.scores = {"price": 0.55, "busy": 0.40, "none": 0.05}
+    try:
+        got = listener.cue_for(listen.Line("them", 0.0, 1.0, "how much is it"))
+        assert got.cue == "SAY: It's $3,500." and got.runner_up == ""
+    finally:
+        listen.pick_situation = real
+        listen.LAST_PICK.scores = None
+
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted(globals().items()):

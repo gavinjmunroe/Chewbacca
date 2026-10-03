@@ -16,6 +16,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GRN='\033[0;32m'; RED='\033[0;31m'; DIM='\033[2m'; BLD='\033[1m'; NC='\033[0m'
 PASS=0; FAIL=0; SKIP=0
 ONLY="${1:-}"
+# The groups, read from this file so a new one is listed the day it is added.
+GROUPS_HERE=$(grep -oE '^[[:space:]]*if group "[^"]+"' "${BASH_SOURCE[0]}" | cut -d'"' -f2 | awk '!seen[$0]++')
+# An unknown word used to select nothing and print "0 passed, 0 skipped", a
+# clean result for doing no work at all: `--list` did exactly that (2026-09-26).
+if [ "$ONLY" = "--list" ]; then printf '%s\n' "$GROUPS_HERE"; exit 0; fi
+if [ -n "$ONLY" ] && ! printf '%s\n' "$GROUPS_HERE" | grep -qxF -- "$ONLY"; then
+  echo "unknown group: $ONLY. Groups: $(printf '%s' "$GROUPS_HERE" | tr '\n' ',')" >&2; exit 2
+fi
 declare -a FAILURES=()
 
 TMP="$(mktemp -d)"
@@ -81,6 +89,19 @@ if group "chewbacca CLI"; then
     check "completion for $sh" bash "$ROOT/bin/chewbacca" completion "$sh"
   done
   exits  "completion with no shell exits 2" 2 bash "$ROOT/bin/chewbacca" completion
+fi
+
+# Offline reusable math, graphs, and UX evidence. No live service calls.
+if group "learning tools"; then
+  for tool in gtme-math gtme-graph gtme-learning gtme-library clay-fixture-check task-graph ux-learning; do
+    expect "$tool appears in help" "chewbacca $tool" bash "$ROOT/bin/chewbacca" --help
+    check "$tool dispatches" bash "$ROOT/bin/chewbacca" "$tool" --help
+    ln -s "$ROOT/bin/$tool" "$TMP/$tool"
+    check "$tool resolves installed symlink" "$TMP/$tool" --help
+    module="${tool//-/_}"
+    check "$tool unit tests" python3 "$ROOT/tests/test_$module.py"
+  done
+  check "agent-neutral export is current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 
 # ── people ────────────────────────────────────────────────────────────────────
@@ -216,6 +237,34 @@ if group "jev"; then
   check "Jev validates typed responses and protects failure paths" python3 "$ROOT/tests/test_jev.py"
 fi
 
+# Offline UX evidence and routing; no live application calls.
+if group "ux-learning"; then
+  expect "UX learning appears in help" "chewbacca ux-learning" bash "$ROOT/bin/chewbacca" --help
+  check "UX learning dispatches" bash "$ROOT/bin/chewbacca" ux-learning --help
+  ln -s "$ROOT/bin/ux-learning" "$TMP/ux-learning"
+  check "UX learning resolves installed symlink" "$TMP/ux-learning" --help
+  check "UX learning evidence and routing" python3 "$ROOT/tests/test_ux_learning.py"
+  check "Clay map validates" python3 "$ROOT/bin/ux-learning" validate "$ROOT/learning/clay-navigation/package.json"
+  check "shared instruction export is current" python3 "$ROOT/tools/agents_md.py" --check
+fi
+
+# Explicit decision learning; fixture tests never call models or browsers.
+if group "decision-learning"; then
+  check "preserved explicit Jev CLI contract" python3 "$ROOT/tests/test_jev.py"
+  for tool in jev decision-lab ux-decision ux-policy clay-review; do
+    check "$tool dispatches" bash "$ROOT/bin/chewbacca" "$tool" --help
+    ln -s "$ROOT/bin/$tool" "$TMP/$tool"
+    check "$tool resolves installed symlink" "$TMP/$tool" --help
+  done
+  check "decision contracts and outcome accounting" python3 "$ROOT/tests/test_decision_lab.py"
+  check "fresh observed UI recommendations" python3 "$ROOT/tests/test_ux_decision.py"
+  check "graph optimization and offline reinforcement learning" python3 "$ROOT/tests/test_ux_policy.py"
+  check "bounded Clay replay and stale rejection" python3 "$ROOT/tests/test_clay_review.py"
+  check "Jev transport shape and credential compatibility" python3 "$ROOT/tests/test_jev_transport.py"
+  check "hybrid skill route: code, Jev, model fallback, budgets, verifier and resume" python3 "$ROOT/tests/test_hybrid_route.py"
+  check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
+fi
+
 # ── GTM engineering ───────────────────────────────────────────────────────────
 if group "gtme"; then
   check "workflow graph validates evidence and bounds execution" python3 "$ROOT/tests/test_gtme_graph.py"
@@ -227,6 +276,7 @@ fi
 
 # ── tools ─────────────────────────────────────────────────────────────────────
 if group "tools"; then
+  check "counts handles conflict stages and whitespace paths" python3 "$ROOT/tests/test_counts.py"
   check  "counts --check passes on a clean tree" python3 "$ROOT/tools/counts.py" --check
   check  "counts --json is valid" bash -c "python3 '$ROOT/tools/counts.py' --json | python3 -m json.tool"
   check  "evals structure pass" python3 "$ROOT/tools/evals.py"
@@ -377,6 +427,11 @@ if group "installer"; then
   check  "list-gate refuses the defects it exists for" \
     bash "$ROOT/tests/list_gate.sh" "$ROOT"
 
+  # On 2026-09-30 a discussion sheet quoted bell hooks from model memory because
+  # the reading was never on disk. It must flag that, and not count his own post.
+  check  "reading-check flags readings with no text on disk" \
+    bash "$ROOT/tests/reading_check.sh" "$ROOT"
+
   # The rule Caleb had to state four times in one session. A gate, not a note.
   check  "kit-debt fires when a session taught the kit nothing" \
     bash "$ROOT/tests/kit_debt.sh" "$ROOT"
@@ -411,6 +466,7 @@ if group "installer"; then
   # said it was running. The user caught it, not the kit.
   check  "agent-claim-guard refuses an unlaunched agent claim" \
     bash "$ROOT/tests/agent_claim_guard.sh" "$ROOT"
+    bash "every refusing hook is tested both ways" "$ROOT"
 
   # This line lost its `check` keyword and its script path in f24d6d0, so it
   # ran the DESCRIPTION as a filename and failed on every run. It hid its own
@@ -430,6 +486,21 @@ if group "installer"; then
   # installer never registers is a feature that has never run.
   check  "every hook is registered by setup.sh" \
     bash "$ROOT/tests/hooks_registered.sh"
+
+  # A router line that gets skipped twice is a log line. For enforced skills
+  # the gate refuses once, clears on load, and never loops.
+  check  "skill-gate enforces graph-engineering once per prompt" \
+    bash "$ROOT/tests/skill_gate.sh"
+
+  # closeout fans out by group; a regex that finds none falls back to a
+  # 9 to 14 minute sequential run (BACKLOG 116).
+  check  "closeout finds every suite group to fan out" \
+    bash "$ROOT/tests/closeout_groups.sh"
+
+  # A Stop refusal re-sends a reply that is already on screen. For a layout
+  # flag that re-send is word for word, so it has to feed forward instead.
+  check  "slop-guard feeds format flags forward, refuses content flags" \
+    bash "$ROOT/tests/slop_guard_format.sh"
 
   # An automatic pull is only acceptable if it cannot eat uncommitted work.
   check  "kit-autopull refuses dirty, branched and diverged checkouts" \
@@ -604,16 +675,13 @@ if group "installer"; then
   # The real BACKLOG.md lives in the team's private repo, so these read a
   # fixture: on CI, where that repo is absent, they failed from 2026-09-21 to
   # 2026-09-25 while passing on every Mac that had CHEWBACCA_PRIVATE set.
-  mkdir -p "$TMP/backlog"
-  printf '## Now\n\n| # | Item | Status |\n|---|---|---|\n| 1 | Ship it | open |\n\n## Dead\n\n| Item | Reason |\n|---|---|\n| An old idea | superseded |\n' > "$TMP/backlog/BACKLOG.md"
-  check  "the backlog lists open work" env CHEWBACCA_PRIVATE="$TMP/backlog" bash -c '
-    out=$("$1/bin/backlog" 2>/dev/null)
-    case "$out" in *"open now"*) : ;;
-      *) echo "backlog printed nothing"; exit 1 ;; esac' _ "$ROOT"
+  # tests/backlog.sh also swaps HOME, so the beside-checkout fallback cannot
+  # find a real backlog either.
+  check  "the backlog lists open work" bash "$ROOT/tests/backlog.sh" "$ROOT" open
 
-  check  "the backlog keeps dead items and their reason" env CHEWBACCA_PRIVATE="$TMP/backlog" bash -c '
-    "$1/bin/backlog" dead 2>/dev/null | grep -q . || {
-      echo "dead items vanished, so somebody will propose them again"; exit 1; }' _ "$ROOT"
+  check  "the backlog keeps dead items and their reason" bash "$ROOT/tests/backlog.sh" "$ROOT" dead
+
+  check  "a public install without a private backlog stays usable" bash "$ROOT/tests/backlog.sh" "$ROOT" absent
 
   # A store nobody reads is the failure this whole file keeps finding.
   check  "SessionStart injects the backlog" \
@@ -1096,6 +1164,7 @@ if group "reasoning backends"; then
   check "higgsfield-shot prices before it spends, caps a job, never pays twice for a name and leaves refunds out of the spend" bash "$ROOT/tests/higgsfield_shot.sh"
   check "the drawn extent never walks backwards" bash "$ROOT/tests/sweep_monotonic.sh"
   check "the vibe guard refuses claims with no evidence" bash "$ROOT/tests/vibe_guard.sh"
+  check  "closeout streams, answers fast, reuses gates only for this commit" bash "$ROOT/tests/closeout.sh"
   check "stage 8 is enforced: a first-name collision is refused" bash "$ROOT/tests/fusion_guard.sh"
   check "the installer ships everything it registers" bash "$ROOT/tests/setup_ships_what_it_registers.sh"
   check "shared agent instructions are current" python3 "$ROOT/tools/agents_md.py" --check

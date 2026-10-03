@@ -25,7 +25,13 @@ the exact commits it passed against, so a claim made afterwards can be tied
 to a specific verified state rather than to a memory of having run it.
 
     closeout            check, print, write a receipt on success
+    closeout --fast     the git half in about a second, gates reused only
+                        from a full run on this exact commit
     closeout --quiet    receipt only, for hooks
+
+Every check prints the moment it is decided, with its evidence. The first
+version printed only at the end, so `closeout | tail` sat blank for four
+minutes on 2026-09-26, got killed, and the question never got an answer.
 """
 
 from __future__ import annotations
@@ -46,6 +52,10 @@ RECEIPT = Path.home() / ".chewbacca" / "closeout-receipt.json"
 # How long a receipt is worth anything. Long enough to write a closing
 # message, short enough that it cannot be reused tomorrow.
 RECEIPT_TTL_S = 900
+# What the gates said for one exact kit commit. Gates read only the committed
+# tree, so a pass on this HEAD with a clean tree stays a pass until either
+# changes; --fast reuses it rather than running ten minutes of suite again.
+GATES = Path.home() / ".chewbacca" / "closeout-gates.json"
 
 
 def run(args: list[str], cwd: Path, timeout: int = 60) -> tuple[int, str]:
@@ -70,17 +80,29 @@ def head(repo: Path) -> str:
     return out[:12] if code == 0 else "?"
 
 
+def tree_clean(repo: Path) -> bool:
+    code, out = run(["git", "status", "--porcelain", "--untracked-files=no"], repo)
+    return code == 0 and not out.strip()
+
+
+# Guessed from the load incident above, never tuned: three leaves headroom.
+GATE_WORKERS = 3
+
+
 class Checks:
-    def __init__(self) -> None:
+    def __init__(self, quiet: bool = False) -> None:
         self.failures: list[str] = []
         self.lines: list[str] = []
+        self.quiet = quiet
 
-    def record(self, ok: bool, name: str, evidence: str) -> None:
-        self.lines.append(("  PASS  " if ok else "  FAIL  ") + name)
-        if evidence:
-            for line in evidence.splitlines()[:6]:
-                self.lines.append("          " + line)
-        if not ok:
+    def record(self, ok: bool | None, name: str, evidence: str) -> None:
+        """ok None is UNKNOWN: not a pass, and said so rather than guessed."""
+        mark = {True: "  PASS  ", False: "  FAIL  ", None: "  ????  "}[ok]
+        new = [mark + name] + ["          " + line for line in evidence.splitlines()[:6] if evidence]
+        self.lines += new
+        if not self.quiet:
+            print("\n".join(new), flush=True)
+        if ok is not True:
             self.failures.append(name)
 
     # ── the checks ───────────────────────────────────────────────────────
@@ -140,7 +162,7 @@ class Checks:
             self.record(True, "gates: no suite present, skipped", "")
             return
 
-        groups = self._groups(suite)
+        groups = self.groups(suite)
         if not groups:
             code, out = run(["bash", str(suite)], KIT, timeout=900)
             self.record(code == 0, "gates: tests/run.sh passes",
@@ -150,9 +172,10 @@ class Checks:
         started = time.time()
         failed: list[str] = []
         detail: list[str] = []
-        # Bounded. More workers than cores turns a fan-out into contention,
-        # and several of these groups shell out heavily.
-        workers = min(len(groups), max(2, (os.cpu_count() or 4)))
+        # Bounded well under the core count. Six local jobs took this Mac's
+        # load to 50 on 2026-09-22 (memory feedback_one_job_not_six), and the
+        # hud group's tests race real timers, so contention turns into flakes.
+        workers = min(len(groups), GATE_WORKERS)
         with cf.ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {
                 pool.submit(run, ["bash", str(suite), g], KIT, 600): g
@@ -183,9 +206,29 @@ class Checks:
             f"gates: {len(groups)} groups in parallel, {secs:.0f}s",
             "\n".join(detail[:5]) if detail else f"all {len(groups)} groups green",
         )
+        if not failed and tree_clean(KIT):
+            GATES.parent.mkdir(parents=True, exist_ok=True)
+            GATES.write_text(json.dumps({"kit": head(KIT), "at": time.time(),
+                                         "groups": len(groups), "seconds": round(secs)}))
+
+    def gates_cached(self) -> None:
+        """The fast path's gates: a full pass on this exact commit, or unknown."""
+        try:
+            d = json.loads(GATES.read_text())
+        except (OSError, ValueError):
+            d = {}
+        now = head(KIT)
+        if d.get("kit") == now and tree_clean(KIT):
+            when = time.strftime("%H:%M", time.localtime(d.get("at", 0)))
+            self.record(True, f"gates: passed on {now} at {when}, reused",
+                        f"{d.get('groups')} groups, {d.get('seconds')}s, same commit, clean tree")
+        else:
+            self.record(None, "gates: not run on this commit",
+                        f"last full pass was on {d.get('kit') or 'nothing'}; "
+                        "`closeout` without --fast runs them")
 
     @staticmethod
-    def _groups(suite: Path) -> list[str]:
+    def groups(suite: Path) -> list[str]:
         """Group names, read from the suite rather than hardcoded here.
 
         Hardcoding them would mean a group added later silently never runs,
@@ -195,7 +238,11 @@ class Checks:
             text = suite.read_text(encoding="utf-8", errors="replace")
         except OSError:
             return []
-        found = re.findall(r'^\s*group\s+"([^"]+)"', text, re.M)
+        # Every group in run.sh is written `if group "name"; then`. The old
+        # pattern required `group` at the start of the line, matched 0 of 16,
+        # and closeout silently fell back to one sequential 900s run: 9 to 14
+        # minutes per closeout, seen twice on 2026-09-28 (BACKLOG 116).
+        found = re.findall(r'^\s*(?:if\s+)?group\s+"([^"]+)"', text, re.M)
         seen, out = set(), []
         for g in found:
             if g not in seen:
@@ -251,25 +298,30 @@ class Checks:
 
 def main() -> int:
     quiet = "--quiet" in sys.argv
-    c = Checks()
+    fast = "--fast" in sys.argv
+    c = Checks(quiet)
+    if not quiet:
+        print("closeout: is it safe to close this tab" + (" (fast)" if fast else ""), flush=True)
 
     c.clean(KIT, "kit")
     c.pushed(KIT, "kit")
     c.clean(BRAIN, "brain")
     c.pushed(BRAIN, "brain")
-    c.gates(quiet)
     c.lesson_written()
     c.no_scaffolding()
+    # The git half is decided above in about a second. The gates come last so
+    # an early FAIL is on screen before the slow part starts.
+    if fast:
+        c.gates_cached()
+    else:
+        c.gates(quiet)
 
     if not quiet:
-        print("closeout: is it safe to close this tab")
-        print()
-        print("\n".join(c.lines))
         print()
 
     if c.failures:
         if not quiet:
-            print("NOT SAFE TO CLOSE. " + str(len(c.failures)) + " check(s) failed:")
+            print("NOT SAFE TO CLOSE. " + str(len(c.failures)) + " check(s) not passed:")
             for f in c.failures:
                 print("  - " + f)
         RECEIPT.unlink(missing_ok=True)
@@ -283,6 +335,7 @@ def main() -> int:
                 "kit": head(KIT),
                 "brain": head(BRAIN),
                 "checks": len(c.lines),
+                "fast": fast,
             }
         )
     )

@@ -553,17 +553,18 @@ def classify_with_jev(said: str, memory: dict) -> str | None:
     if app == "Terminal" and context.get("claude_tab"):
         app = "Terminal (Claude Code)"
     answers = jev.ask({"spoken": said, "frontmost_app": app}, JEV_QUESTION, timeout=CLASSIFY_TIMEOUT_S, decision="route")
-    answer = (answers or {}).get("dest") or {}
-    choice = answer.get("choice")
-    if choice not in DESTS:
+    answer = answers.get("dest") if isinstance(answers, dict) else None
+    validated = jev.validate_choice(answer, JEV_QUESTION["dest"]["criteria"])
+    if validated is None:
         return None
-    if choice == "terminal" and (answer.get("probabilities") or {}).get("terminal", 0.0) < JEV_TERMINAL_FLOOR:
+    choice, confidence = validated
+    if choice == "terminal" and confidence < JEV_TERMINAL_FLOOR:
         return "assistant"
     # The same asymmetry on the browser side: a sentence sent to the browser
     # by mistake becomes a Google search of itself, while the assistant can
     # open the page as well as answer. Guessed at the terminal floor, never
     # measured on its own.
-    if choice == "browser" and (answer.get("probabilities") or {}).get("browser", 0.0) < JEV_TERMINAL_FLOOR:
+    if choice == "browser" and confidence < JEV_TERMINAL_FLOOR:
         return "assistant"
     return choice
 

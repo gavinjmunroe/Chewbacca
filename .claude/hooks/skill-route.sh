@@ -78,6 +78,10 @@ STOP = {
     "using","user","make","made","build","see","also","its","you","your","are",
     "can","could","should","would","will","just","like","more","most","than",
     "into","over","out","up","down","then","there","here","other","same","new",
+    # Added 2026-09-29: "but", "every", "went" and "person" routed a feature
+    # idea about trip opt-outs to graph-engineering, which teaches the model
+    # to ignore the router. Conversational glue, never a topic.
+    "but","every","went","person","people","maybe","couldn","thing","things",
 }
 
 def stems(text):
@@ -232,6 +236,26 @@ for score, name, path, why in top:
     short = path.replace(os.path.expanduser("~"), "~")
     because = ", ".join(why) if why else "topic overlap"
     lines.append(f"  {name}  ({short})  matched on: {because}")
+
+# ENFORCED skills: a match writes a marker that skill-gate.sh turns into a
+# refusal on the first tool call, until the skill is actually loaded.
+#
+# 2026-09-29: graph-engineering was named by this router on several prompts in
+# one session and skipped every time, and Caleb had to say "Graph engineer bro,
+# why do I keep having to tell you? Fix chewbacca". The same skip is in memory
+# from 2026-09-21 (feedback_fan_out_dont_read_serially). An advisory line that
+# was ignored twice is a log line, so for these skills it becomes a gate.
+ENFORCED = {"graph-engineering"}
+required = [name for _s, name, _p, _w in top if name in ENFORCED]
+sid = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("session_id") or ""))
+if required and sid:
+    state = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "state")
+    try:
+        os.makedirs(state, exist_ok=True)
+        with open(os.path.join(state, f"skill-required-{sid}"), "w") as fh:
+            fh.write("\n".join(required) + "\n")
+    except OSError:
+        pass
 
 print(json.dumps({
     "hookSpecificOutput": {

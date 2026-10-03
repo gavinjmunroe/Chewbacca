@@ -28,6 +28,28 @@ where the data comes from. All four of those are written down here, once.
 5. **Build the three states.** Loading, empty, error. This is the step that
    gets skipped, because the prompt only ever describes the happy path.
 
+6. **Verify the rendered result.** Use the project's existing capture tools,
+   then inspect desktop, narrow, reduced-motion, and transition frames. When
+   ux-engine is available, run `design-gate <url> --shots 8`; treat capture
+   failure as unverified, and inspect reported defects before delivery. Keep
+   quality judgments separate from source lint and descriptive motion metrics.
+   For a continuous morph, verify element identity through the transition,
+   including reverse scroll. An opacity sum of one does not prevent collisions.
+   Refresh the actual preview the user is viewing before claiming a fix. Test
+   its current viewport too; a desktop screenshot does not prove that a narrow
+   rule preserved the figures or controls the user cares about.
+
+   For a narrative page, review the whole journey before polishing individual
+   sections. At each handoff, name what persists, what changes, and what the
+   change tells the viewer. Reference studies must produce a concrete change
+   to this journey. Inspect adjacent frames before calling an effect a morph:
+   a prepared match cut can carry continuity too. Do not equate creative motion
+   with complexity, prohibit all cuts, or use motion metrics as taste scores.
+   Study scroll references between endpoints in both directions. Record the
+   order of detail removal, resizing, rotation, relocation, and reveal before
+   reducing them to an interpolation. Check held-scroll behavior separately
+   so timed loops are not mistaken for scroll-driven transitions.
+
 Steps 1 to 3 are lookups and should cost almost nothing. That is the point.
 
 ## Pick the stance from the reader, not from taste

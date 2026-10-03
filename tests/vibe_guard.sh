@@ -10,6 +10,9 @@ HOOK="$(cd "$(dirname "$0")/.." && pwd)/.claude/hooks/vibe-guard.sh"
 [ -f "$HOOK" ] || { echo "vibe-guard missing from the repo"; exit 1; }
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 export TMPDIR="$TMP"
+# A temporary HOME too, so the guard's logs never land in the real one.
+export HOME="$TMP/home" CHEWBACCA_LOG_DIR="$TMP/logs"
+mkdir -p "$HOME"
 # Offline: section 3 asks Jev only when a stub is not set, and every probe
 # below either sets one or has no transcript.
 export VIBE_GUARD_JEV_STUB="${VIBE_GUARD_JEV_STUB:-0.0,0.0}"

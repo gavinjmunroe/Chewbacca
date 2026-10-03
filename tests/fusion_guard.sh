@@ -13,7 +13,7 @@ command -v jq >/dev/null 2>&1 || { echo "jq absent, skipping"; exit 0; }
 # A fixture roster under a temporary HOME. This read the author's real
 # ~/second-brain, so it passed only on the one Mac whose notes held Joel Stone.
 TMPH=$(mktemp -d); trap 'rm -rf "$TMPH"' EXIT
-export HOME="$TMPH"
+export HOME="$TMPH" CHEWBACCA_LOG_DIR="$TMPH/logs"
 BRAIN="$HOME/second-brain"
 mkdir -p "$BRAIN/core" "$BRAIN/memory"
 printf -- '- **Joel Stone**, a client.\n' > "$BRAIN/core/people.md"

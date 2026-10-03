@@ -9,7 +9,7 @@
 //
 // Your side is the default input through AVAudioEngine.
 //
-// Usage: call-ears [--app <name or bundle id>]... [--exclude-app <name>]... [--no-mic]
+// Usage: call-ears (--app <name or bundle id>... | --daemons-only | --all-audio) [--no-mic]
 //        call-ears --who-listens     apps using an audio input now, then exit
 //
 // Wire format, one frame per buffer:
@@ -96,10 +96,25 @@ final class Resampler {
     }
 }
 
+enum Scope { case apps, daemonsOnly, everything }
+
+/// Whether `name` names this app: its exact bundle id, its exact name, or
+/// its name up to a "." or space ("zoom" for "zoom.us"). A bare substring let
+/// "arc", the browser, match any app or bundle id containing "search".
+func names(_ app: SCRunningApplication, _ name: String) -> Bool {
+    if app.bundleIdentifier.lowercased() == name { return true }
+    let title = app.applicationName.lowercased()
+    if title == name { return true }
+    guard !name.isEmpty, title.hasPrefix(name), let next = title.dropFirst(name.count).first else {
+        return false
+    }
+    return next == "." || next == " "
+}
+
 final class SystemAudio: NSObject, SCStreamOutput, SCStreamDelegate {
     let writer: Writer
     var apps: [String] = []
-    var excluded: [String] = []
+    var scope = Scope.apps
     let resampler = Resampler()
     var stream: SCStream?
 
@@ -112,31 +127,26 @@ final class SystemAudio: NSObject, SCStreamOutput, SCStreamDelegate {
             throw NSError(domain: "ears", code: 1, userInfo: [
                 NSLocalizedDescriptionKey: "no display to attach system audio to"])
         }
-        // With --app, only those apps are heard. Without it, everything the
-        // Mac plays is "them", and on 2026-10-02 that was Spotify: the first
-        // test capture had music under every word and whisper wrote lyrics.
+        // The scope is always named by the caller, never defaulted. Hearing
+        // everything the Mac plays was the default until 2026-10-02, and the
+        // first test capture had Spotify under every word: a default that
+        // widens is how a recorder hears what nobody agreed to.
         //
-        // With --exclude-app, everything except those apps. FaceTime needs
-        // this: its call audio plays from avconferenced, a daemon that is not
-        // an app ScreenCaptureKit can include, so "FaceTime only" heard
-        // twenty minutes of silence on a live call on 2026-10-02.
+        // --daemons-only is FaceTime's scope: its call audio plays from
+        // avconferenced, a daemon ScreenCaptureKit does not list as an app,
+        // so "FaceTime only" heard twenty minutes of silence on a live call
+        // on 2026-10-02. Excluding every app it does list leaves the daemons,
+        // and none of the 41 listed apps on this Mac was a call daemon.
         let filter: SCContentFilter
-        func matching(_ names: [String]) -> [SCRunningApplication] {
-            content.applications.filter { app in
-                names.contains { name in
-                    app.applicationName.lowercased().contains(name)
-                        || app.bundleIdentifier.lowercased().contains(name)
-                }
-            }
-        }
-        if apps.isEmpty {
-            let skipped = matching(excluded)
-            if !skipped.isEmpty {
-                note("hearing everything except: " + skipped.map(\.applicationName).joined(separator: ", "))
-            }
-            filter = SCContentFilter(display: display, excludingApplications: skipped, exceptingWindows: [])
+        if scope == .daemonsOnly {
+            note("hearing system daemons only (\(content.applications.count) apps excluded)")
+            filter = SCContentFilter(
+                display: display, excludingApplications: content.applications, exceptingWindows: [])
+        } else if scope == .everything {
+            note("hearing everything this Mac plays")
+            filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
         } else {
-            let wanted = matching(apps)
+            let wanted = content.applications.filter { app in apps.contains { names(app, $0) } }
             guard !wanted.isEmpty else {
                 let running = content.applications.map(\.applicationName).filter { !$0.isEmpty }
                 throw NSError(domain: "ears", code: 4, userInfo: [
@@ -278,8 +288,14 @@ let writer = Writer()
 let system = SystemAudio(writer: writer)
 for (index, flag) in argv.enumerated() where index + 1 < argv.count {
     if flag == "--app" { system.apps.append(argv[index + 1].lowercased()) }
-    if flag == "--exclude-app" { system.excluded.append(argv[index + 1].lowercased()) }
 }
+let scopes = [!system.apps.isEmpty, arguments.contains("--daemons-only"), arguments.contains("--all-audio")]
+guard scopes.filter({ $0 }).count == 1 else {
+    note("name exactly one scope: --app <name>..., --daemons-only or --all-audio")
+    exit(64)
+}
+if arguments.contains("--daemons-only") { system.scope = .daemonsOnly }
+if arguments.contains("--all-audio") { system.scope = .everything }
 let microphone = Microphone(writer: writer)
 
 if !arguments.contains("--no-mic") {

@@ -60,8 +60,9 @@ def lines():
     """Tracked lines. A number nobody can reproduce is not a number."""
     try:
         files = subprocess.run(
-            ["git", "ls-files"], cwd=REPO, capture_output=True, text=True, check=True
-        ).stdout.split()
+            ["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True, check=True
+        ).stdout.split("\0")
+        files = sorted(set(files) - {""})
     except (subprocess.CalledProcessError, FileNotFoundError):
         return 0
     total = 0

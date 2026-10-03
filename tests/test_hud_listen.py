@@ -106,6 +106,16 @@ def load():
     # Nor the real agent board: a "yes" with a real session waiting would
     # press Return in that session's tab. Tests that want a board write one.
     module.agent_board.EVENTS = Path('/nonexistent/agent-events.jsonl')
+    root = Path(tempfile.mkdtemp(prefix="hud-listen-unit-"))
+    module.PROMPT_OUT = root / "agent-prompt.md"
+    module.USER_SETTINGS = root / "settings.json"
+    module.ACCOUNTS_FILE = root / "accounts"
+    module.ACCOUNT_STATE = root / "account"
+    module.DEFAULT_CONFIG = root / "config"
+    module.ACCOUNTS_FILE.write_text(str(module.DEFAULT_CONFIG) + "\n")
+    context = module.superassistant()
+    if context is not None:
+        context.config_value = lambda name: ""
     return module
 
 
@@ -1144,6 +1154,108 @@ def test_voice_in_parts(m) -> None:
           not m.Listener("claude -p", False, False).speak_part("x", first=True))
 
 
+def test_speaker_exit_clears_only_owned_voice(m) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    # No constructor: this test neither builds a private prompt nor starts audio.
+    listener = m.Listener.__new__(m.Listener)
+    listener.state = threading.Lock()
+    listener.speaker = None
+    listener.voiced = listener.talking = True
+    listener.voice = "af_heart"
+    listener.saying = None
+    listener.log = lambda *args: None
+    listener.queue = []
+    sent = []
+    listener.send = sent.append
+    exited = SimpleNamespace(stdout=[], returncode=1, wait=lambda: 1)
+
+    class ImmediateThread:
+        def __init__(self, target, **kwargs):
+            self.target = target
+        def start(self):
+            self.target()
+
+    with patch.object(m.subprocess, "Popen", return_value=exited), patch.object(m.threading, "Thread", ImmediateThread):
+        listener.start_speaker("synthetic")
+    check("speaker EOF clears activity before quiet", not listener.voice_active() and listener.speaker is None)
+    check("speaker EOF keeps speech fallback available", listener.voice == m.FALLBACK_VOICE)
+    listener.settle("done", 0)
+    check("speaker EOF lets the glass leave without the timeout", sent == ["p done", "p dormant"])
+
+    replacement = object()
+    listener.speaker = replacement
+    listener.voiced = listener.talking = True
+    listener.voice = "replacement"
+    check("old speaker EOF cannot erase replacement", not listener.speaker_exited(exited) and
+          listener.speaker is replacement and listener.voiced and listener.talking and listener.voice == "replacement")
+    listener.speaker = exited
+    listener.voiced = listener.talking = False
+    listener.voice = None
+    listener.speaker_exited(exited)
+    check("speaker EOF does not re-enable deliberately disabled speech", listener.voice is None and not listener.voice_active())
+
+    # EOF can land after the write but before tell_speaker returns.
+    class Pipe:
+        def write(self, value): pass
+        def flush(self): listener.speaker_exited(racing)
+    racing = SimpleNamespace(stdin=Pipe(), poll=lambda: None)
+    listener.speaker = racing
+    check("write completion cannot resurrect activity after EOF", not listener.tell_speaker({"say": "fixture"}) and not listener.voice_active())
+
+    class QuietPipe:
+        def write(self, value): pass
+        def flush(self): listener.heard_speaker({"quiet": True})
+    quiet = SimpleNamespace(stdin=QuietPipe(), poll=lambda: None)
+    listener.speaker = quiet
+    listener.voiced = listener.talking = False
+    check("quiet before flush returns stays authoritative", listener.tell_speaker({"say": "fixture"}) and not listener.voice_active())
+
+
+
+def listener_env(directory: str, path: str) -> dict[str, str]:
+    """Keep fake-display subprocesses independent of live voice and memory."""
+    entry = Path(directory) / "listener-entry.py"
+    entry.write_text(
+        "import importlib.util, importlib.machinery, sys\n"
+        "from pathlib import Path\n"
+        f"source = {str(BIN)!r}\n"
+        "spec = importlib.util.spec_from_loader('hud_listen', importlib.machinery.SourceFileLoader('hud_listen', source))\n"
+        "module = importlib.util.module_from_spec(spec)\n"
+        "sys.modules['hud_listen'] = module\n"
+        "spec.loader.exec_module(module)\n"
+        f"root = Path({directory!r})\n"
+        "module.USER_SETTINGS = root / 'settings.json'\n"
+        "module.ACCOUNTS_FILE = root / 'accounts'\n"
+        "module.ACCOUNT_STATE = root / 'account'\n"
+        "module.DEFAULT_CONFIG = root / 'config'\n"
+        "module.claude_accounts = lambda: [module.DEFAULT_CONFIG]\n"
+        "module._superassistant = False\n"
+        "module.looking_at = lambda: ''\n"
+        "module.MUSIC = root / 'no-music'\n"
+        "sys.exit(module.main())\n",
+        encoding="utf-8",
+    )
+    return dict(
+        os.environ, HUD_TEST_ENTRY=str(entry),
+        BOB_HUD_SOCKET=path, HUD_NAMES="off", HUD_ROUTE="off",
+        HUD_VOICE="off", BOB_MEMORY_DIR=os.path.join(directory, "mem"),
+        SUPERASSISTANT_DIR=os.path.join(directory, "superassistant"),
+        BOB_NAMES=os.path.join(directory, "names.txt"),
+        HUD_TERMINAL_CMD="sh -c 'echo []'", HUD_CLASSIFY_CMD="off",
+    )
+
+
+def test_listener_environment() -> None:
+    from unittest.mock import patch
+    with tempfile.TemporaryDirectory() as directory:
+        with patch.dict(os.environ, {"HUD_VOICE": "af_heart", "BOB_MEMORY_DIR": "/real/memory"}):
+            env = listener_env(directory, os.path.join(directory, "hud.sock"))
+        check("fake displays disable inherited live speech", env["HUD_VOICE"] == "off")
+        check("fake displays isolate persisted session events", env["BOB_MEMORY_DIR"] == os.path.join(directory, "mem"))
+
+
 def test_end_to_end() -> None:
     """Stand up a fake display and run the real script against it."""
     directory = tempfile.mkdtemp()
@@ -1196,9 +1308,9 @@ def test_end_to_end() -> None:
         )
     os.chmod(fake, 0o755)
 
-    env = dict(os.environ, BOB_HUD_SOCKET=path, HUD_NAMES="off", HUD_ROUTE="off")
+    env = listener_env(directory, path)
     process = subprocess.Popen(
-        [sys.executable, str(BIN), "--model-cmd", fake],
+        [sys.executable, env["HUD_TEST_ENTRY"], "--model-cmd", fake],
         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     ready.wait(10)
@@ -1261,8 +1373,8 @@ def test_route_end_to_end() -> None:
     os.chmod(fake, 0o755)
     opened = os.path.join(directory, "opened")
     env = dict(
-        os.environ,
-        BOB_HUD_SOCKET=path, HUD_NAMES="off", HUD_ROUTE="on",
+        listener_env(directory, path),
+        HUD_ROUTE="on",
         BOB_MEMORY_DIR=os.path.join(directory, "mem"),
         # A temp file, empty: decide() reads NAMES through read_names(), and
         # without this override it reads the developer's real
@@ -1273,7 +1385,7 @@ def test_route_end_to_end() -> None:
         HUD_CLASSIFY_CMD="off",
     )
     process = subprocess.Popen(
-        [sys.executable, str(BIN), "--model-cmd", fake],
+        [sys.executable, env["HUD_TEST_ENTRY"], "--model-cmd", fake],
         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     ready.wait(10)
@@ -1341,9 +1453,9 @@ def run_against(model: str, say: list, until, timeout: float = 40.0, name: str =
 
     thread = threading.Thread(target=serve, daemon=True)
     thread.start()
-    env = dict(os.environ, BOB_HUD_SOCKET=path, HUD_NAMES="off", HUD_ROUTE="off")
+    env = listener_env(directory, path)
     process = subprocess.Popen(
-        [sys.executable, str(BIN), "--model-cmd", fake],
+        [sys.executable, env["HUD_TEST_ENTRY"], "--model-cmd", fake],
         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     ready.wait(10)
@@ -1446,7 +1558,11 @@ def test_one_model_process() -> None:
         # asserting both are SPOKEN, because that is what this test is for;
         # the written-answer guarantee is the separate check below.
         [(0.0, 'h "first"'), (12.0, 'h "second"')],
-        lambda lines: 's "Here is second"' in lines and "p dormant" in lines,
+        # Stop on what the checks below assert. "p dormant" alone also matched
+        # the FIRST turn's, so once speech got faster (audio marked pending
+        # before the pipe write) the run stopped between the second answer
+        # being spoken and being written, and the done=true check failed.
+        lambda lines: 's "Here is second"' in lines and 'w "Here is second" done=true' in lines,
         name="claude",
     )
     lines = [line for _, line in received]
@@ -1505,9 +1621,9 @@ def test_reconnects() -> None:
         handle.write("#!/bin/sh\ncat > /dev/null\necho 'r s'\n")
     os.chmod(fake, 0o755)
 
-    env = dict(os.environ, BOB_HUD_SOCKET=path, HUD_NAMES="off", HUD_ROUTE="off")
+    env = listener_env(directory, path)
     process = subprocess.Popen(
-        [sys.executable, str(BIN), "--model-cmd", fake],
+        [sys.executable, env["HUD_TEST_ENTRY"], "--model-cmd", fake],
         env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
 
@@ -1552,7 +1668,7 @@ def _listener_fixture() -> tuple[str, str, dict]:
     with open(fake, "w", encoding="utf-8") as handle:
         handle.write("#!/bin/sh\ncat > /dev/null\necho 'r s'\n")
     os.chmod(fake, 0o755)
-    env = dict(os.environ, BOB_HUD_SOCKET=path, HUD_NAMES="off", HUD_ROUTE="off")
+    env = listener_env(directory, path)
     return path, fake, env
 
 
@@ -1561,7 +1677,7 @@ def test_one_listener_per_socket() -> None:
     subscribing too, because two of them both answer every request."""
     path, fake, env = _listener_fixture()
     lock = f"{path}.listener.lock"
-    command = [sys.executable, str(BIN), "--model-cmd", fake, "--voice", "off"]
+    command = [sys.executable, env["HUD_TEST_ENTRY"], "--model-cmd", fake, "--voice", "off"]
     first = subprocess.Popen(command, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     second = None
     server = None
@@ -1620,7 +1736,7 @@ def test_orphan_leaves() -> None:
     # listener exactly as KeepAlive replacing the app does.
     parent = subprocess.Popen(
         ["sh", "-c", '"$0" "$1" --model-cmd "$2" --voice off & echo $!; wait',
-         sys.executable, str(BIN), fake],
+         sys.executable, env["HUD_TEST_ENTRY"], fake],
         env=env, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
     )
     pid = int((parent.stdout.readline() if parent.stdout else "0").strip() or 0)
@@ -2154,6 +2270,8 @@ def test_accounts(m) -> None:
 
 def main() -> int:
     module = load()
+    print("speaker lifecycle and quiet races")
+    test_speaker_exit_clears_only_owned_voice(module)
     print("two subscriptions")
     test_accounts(module)
     print("draw_lines")
@@ -2211,6 +2329,8 @@ def main() -> int:
     test_lean_prompt(module)
     print("pointing")
     test_pointing(module)
+    print("fake-display isolation")
+    test_listener_environment()
     print("end to end")
     test_end_to_end()
     print("route end to end")

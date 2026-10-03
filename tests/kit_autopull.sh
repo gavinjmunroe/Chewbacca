@@ -5,7 +5,7 @@
 # The dirty-tree case is the one this file exists for. An automatic pull is
 # only acceptable if it cannot eat uncommitted work, and "it looks careful" is
 # not evidence. Each case below is run against a real origin.
-set -uo pipefail
+set -euo pipefail
 ROOT="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
 HOOK="$ROOT/.claude/hooks/kit-autopull.sh"
 [ -x "$HOOK" ] || { echo "FAIL: kit-autopull.sh missing or not executable"; exit 1; }
@@ -27,6 +27,9 @@ git -C "$TMP/work" config user.email t@t; git -C "$TMP/work" config user.name t
 echo one > "$TMP/work/a.txt"
 git -C "$TMP/work" add a.txt; git -C "$TMP/work" commit -qm one
 git -C "$TMP/work" branch -M main; git -C "$TMP/work" push -q origin main
+# Pushing main does not update a bare remote's default HEAD. CI often starts
+# with master, leaving a subsequent clone empty unless this is explicit.
+git -C "$TMP/origin.git" symbolic-ref HEAD refs/heads/main
 git clone -q "$TMP/origin.git" "$TMP/clone"
 git -C "$TMP/clone" config user.email t@t; git -C "$TMP/clone" config user.name t
 export CHEWBACCA_REPO_DIR="$TMP/clone"

@@ -110,8 +110,43 @@ GENERIC = {
 }
 
 
-def read_kit(d):
-    marker = os.path.join(d, ".kit")
+# PROJECTS ROUTE TOO, AND THEY ARE NOT KITS.
+#
+# A kit is a repo somebody lives inside for weeks while an agent walks them
+# through a process, and kit-builder's seven-property test exists to stop
+# everything becoming one. A long-running BUILD has the same discovery problem
+# and none of the kit properties: a new tab needs to find lemma-replica from
+# "let's finish our work on the lemma site" without being handed a path.
+#
+# So a .project marker, read by the same matcher, reported with its own label.
+# Same fields as .kit, and `use-when` is still the only matcher input.
+def project_paths():
+    found, seen = [], set()
+    reg = os.path.expanduser("~/.claude/projects.paths")
+    try:
+        with open(reg) as fh:
+            for line in fh:
+                d = line.strip()
+                if d and d not in seen and os.path.exists(os.path.join(d, ".project")):
+                    found.append(d); seen.add(d)
+    except OSError:
+        pass
+    for root in (os.path.expanduser("~/Desktop/2026-Code"),
+                 os.path.expanduser("~/dev"), os.path.expanduser("~/Projects")):
+        if not os.path.isdir(root):
+            continue
+        try:
+            for name in os.listdir(root):
+                d = os.path.join(root, name)
+                if d not in seen and os.path.exists(os.path.join(d, ".project")):
+                    found.append(d); seen.add(d)
+        except OSError:
+            pass
+    return found
+
+
+def read_kit(d, marker_name=".kit"):
+    marker = os.path.join(d, marker_name)
     try:
         with open(marker) as fh:
             raw = fh.read()
@@ -136,9 +171,11 @@ def read_kit(d):
     # `speci`, `inter`. A 17,000-character message about building a club
     # website hit all five and routed into an applications kit.
     kit_stems = stems(use_when) - stems(name.replace("-", " ")) - GENERIC
-    return {"dir": d, "name": name, "use_when": use_when, "stems": kit_stems}
+    return {"dir": d, "name": name, "use_when": use_when, "stems": kit_stems,
+            "kind": "kit" if marker_name == ".kit" else "project"}
 
 loaded = [k for k in (read_kit(d) for d in kit_paths()) if k]
+loaded += [k for k in (read_kit(d, ".project") for d in project_paths()) if k]
 
 # How many kits claim each stem. A stem claimed by exactly one kit is a strong
 # signal on its own; a stem several kits share, like "letter", is nearly noise.
@@ -194,24 +231,31 @@ for k in loaded:
 
     score = len(hits) + len(distinctive) * 2 + (10 if phrase_hit else 0)
     if best is None or score > best[0]:
-        best = (score, name, d, sorted(hits))
+        best = (score, name, d, sorted(hits), k["kind"])
 
 if not best:
     raise SystemExit(0)
 
-_, name, path, _hits = best
+_, name, path, _hits, kind = best
 short = path.replace(os.path.expanduser("~"), "~")
 
 print(json.dumps({
     "hookSpecificOutput": {
         "hookEventName": "UserPromptSubmit",
         "additionalContext": (
-            f"This request matches an existing kit: {name} at {short}. "
-            f"cd there and work inside it. It already holds this person's state, "
-            f"facts and deadlines, and its CLAUDE.md decides what happens next. "
-            f"Answering here instead throws that away and produces advice that is "
-            f"gone when the window closes. If on reading it the kit clearly does "
-            f"not fit, say so in one line and carry on."
+            (f"This request matches an existing kit: {name} at {short}. "
+             f"cd there and work inside it. It already holds this person's state, "
+             f"facts and deadlines, and its CLAUDE.md decides what happens next. "
+             f"Answering here instead throws that away and produces advice that is "
+             f"gone when the window closes. If on reading it the kit clearly does "
+             f"not fit, say so in one line and carry on.")
+            if kind == "kit" else
+            (f"This request matches an existing project: {name} at {short}. "
+             f"cd there and read its resume note before doing anything, because "
+             f"it holds the state, the measurements and the decisions already "
+             f"made. Starting fresh here re-derives what is already written down "
+             f"and usually re-derives it wrong. If on reading it the project "
+             f"clearly does not fit, say so in one line and carry on.")
         ),
     }
 }))

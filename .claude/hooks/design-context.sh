@@ -58,9 +58,9 @@ if [ -f "$ENGINE/trials/log.jsonl" ]; then
 fi
 
 CONTEXT=$(cat <<EOF
-Design work. The measured constants, and what this project has already learned.
+Design work. Existing tools, reference parameters, and recorded trial losses.
 
-HARD NUMBERS, all measured rather than preferred:
+REFERENCE PARAMETERS, starting points to verify on the current design:
 - Stagger: 30-80ms per item, and (n-1)*step must stay under 400ms TOTAL.
   Cap the item count, not the delay. Most violated constant there is.
 - Press: 100-160ms, scale(0.97), ease-out. Never ease-in. Press and release
@@ -68,7 +68,7 @@ HARD NUMBERS, all measured rather than preferred:
 - Hover: 50-150ms, and gated behind @media (hover: hover) and (pointer: fine)
   or touch fires a false hover on every tap.
 - Scroll reveal: travel 16-32px. 400px is a ride, not a reveal.
-- Loops: linear only. An eased loop pulses.
+- Linear phase gives constant-speed loops. Eased phase introduces speed modulation.
 - Generative SVG: 3-12% ink coverage. Over 15% is mud. Hairlines 0.12-0.25
   stroke on a 100-unit viewBox.
 - Entrance order follows READING order. Decoration arrives last. Staggering by
@@ -88,6 +88,15 @@ AFTER BUILDING, run these rather than assuming:
   ux-film lenses/<name>/film.json        what the motion actually DOES
   ux-compose --effects a,b,c             whether the effects fight each other
   ux-lint <paths>                        generated-look tells
+  design-gate <url> --shots 8            fresh rendered capture; exit 2 refuses
+
+Open the actual frames, including transition seams and narrow/reduced-motion
+states. A source lint or opacity-sum assertion cannot prove non-overlap.
+Keep element identity through a claimed continuous morph. New unrelated dots
+are not evidence that the original elements persisted. ux-morph can solve
+correspondence, but cannot certify collision-free trajectories or good taste.
+Gate ink/balance heuristics are diagnostics, not aesthetic ground truth.
+This hook supplies context; it does not itself run or enforce the gate.
 
 EOF
 )

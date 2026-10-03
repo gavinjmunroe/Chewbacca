@@ -88,24 +88,23 @@ class IntegrationTests(unittest.TestCase):
             test_bin = Path(temp) / 'test-bin'
             test_bin.mkdir()
             (test_bin / 'python3').symlink_to(sys.executable)
-            env = dict(os.environ, HOME=temp, PATH=str(test_bin) + ':/usr/bin:/bin', MACOS_USE_HOME=str(runtime))
+            env = dict(os.environ, HOME=temp, PATH=str(test_bin) + ':/usr/bin:/bin',
+                       MACOS_USE_HOME=str(runtime), CODEX_HOME=str(Path(temp) / '.codex'),
+                       CLAUDE_CONFIG_DIR=str(Path(temp) / '.claude'),
+                       CHEWBACCA_HOME=str(Path(temp) / '.chewbacca'),
+                       CHEWBACCA_BRAIN_DIR=str(Path(temp) / 'brain'),
+                       CHEWBACCA_ISOLATED_HOME='1')
             for _ in range(2):
                 result = subprocess.run(['bash', str(ROOT / 'setup.sh'), '--only', 'agents'], env=env, check=True, capture_output=True, text=True)
                 self.assertIn('Codex absent (optional)', result.stdout)
             for name in ('mac-use', 'chatgpt-tab', 'chatgpt-gateway', 'chrome-js'):
                 self.assertEqual((Path(temp) / '.local/bin' / name).resolve(), ROOT / 'bin' / name)
-            # The installed rule is the source plus Claude-specific `paths:`
-            # scoping. Without that frontmatter the rule is always-on, and it
-            # is written for the other agent: its own text says the standards
-            # "already load for the primary agent. Nothing here restates them."
-            # 1,204 tokens of that landed in every Claude session. The source
-            # stays clean because it is also what AGENTS.md is generated from,
-            # where Claude frontmatter would be noise.
+            # Shared standards must load in every runtime even with hooks off.
+            # A Codex-only paths filter hid them from ordinary Claude work.
             installed = (Path(temp) / '.claude/rules/agent-neutral.md').read_text()
             source = (ROOT / 'instructions/agent-neutral.md').read_text()
-            self.assertTrue(installed.startswith('---\n'), 'rule lost its scoping frontmatter')
-            self.assertRegex(installed.split('\n---\n')[0], r'(?m)^paths:')
-            self.assertTrue(installed.endswith(source), 'rule body drifted from the source')
+            self.assertEqual(installed, source, 'shared standards drifted or became path-scoped')
+            self.assertFalse(installed.startswith('---\n'), 'shared standards must remain always-on')
             self.assertEqual(list(runtime.iterdir()), [sentinel])
             self.assertEqual(sentinel.read_text(), 'unchanged upstream')
             self.assertFalse((Path(temp) / 'dev').exists())

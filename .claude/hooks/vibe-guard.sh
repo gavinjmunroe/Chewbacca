@@ -79,22 +79,28 @@ elif printf '%s' "$LOWER" | grep -qE "(safe to close|good to close|fine to close
   if [ -x "$CLOSEOUT" ] && python3 "$CLOSEOUT" --check-receipt >/dev/null 2>&1; then
     : # a passing receipt exists for these exact commits
   else
-    WHY=$(python3 "$CLOSEOUT" --check-receipt 2>/dev/null || echo "closeout has not run")
-    touch "$GUARD"
-    cat >&2 <<MSG
+    # Run the answer instead of printing a command for somebody to run. The
+    # printed command was skipped every time: the full closeout took minutes in
+    # silence, so nobody ran it and the claim stood. --fast is the git half
+    # plus gates reused from a full pass on this exact commit, in about a
+    # second, inside this hook's 10 s watchdog. A pass writes the receipt.
+    FAST=$(python3 "$CLOSEOUT" --fast 2>&1)
+    if [ $? -eq 0 ]; then
+      : # decided just now, receipt written
+    else
+      touch "$GUARD"
+      cat >&2 <<MSG
 
-vibe-guard: this reply says it is safe to close, and there is no evidence for
-that: $WHY.
+vibe-guard: this reply says it is safe to close. closeout --fast ran just now
+and did not pass:
 
-"Safe to close" is a factual claim about uncommitted work, unpushed commits,
-whether the gates pass, and whether the lesson got written down. All of those
-are decidable. Run it and answer from what it prints:
+$(printf '%s\n' "$FAST" | awk '/^  (FAIL|\?\?\?\?)/{keep=1; print; next} /^  [A-Z?]/{keep=0} keep && /^          /' | head -20)
 
-  cd ~/Desktop/2026-Code/projects/chewbacca && bin/closeout
-
-If it fails, say what failed. If it passes, say so and name the commits.
+Say what did not pass instead. "gates: not run on this commit" means the suite
+has not passed on this exact commit; run the full closeout before claiming it.
 MSG
-    exit 2
+      exit 2
+    fi
   fi
 fi
 

@@ -91,6 +91,8 @@ CALL_APPS = [
 # cannot include by app, so a FaceTime call is heard as the system daemons
 # with every app excluded. Found on a live call, 2026-10-02.
 AUDIO_FROM_DAEMON = {"facetime"}
+# Sales cards built from sourced trainer material (research/sales in the brain).
+PLAYBOOK = "calls/playbook"
 WHISPER_MODELS = [
     # 0.55 s for an 8 s clip on this Mac, 2026-10-02, and it kept "Creator IQ"
     # as two words where base.en ran them together. Accuracy on names is worth
@@ -113,6 +115,10 @@ KIND is one of:
 Rules:
 - The cue is at most 12 words: words {name} can say out loud, or the fact needed. Never advice about tone or confidence.
 - Prices, numbers, names, clients, results and dates come only from CARD or NOTES. If they ask for proof that is not there, the cue is an honest answer, never an invented client, case study or number. Never claim experience the notes do not show.
+- PLAYBOOK is sales technique from trainers, with sources. Borrow its wording and its next question. Never its numbers, prices, names or examples: those describe someone else's offer, not {name}'s. Skip any move it marks Never.
+- Never write a placeholder or brackets like [their area]: the cue is read aloud as written. Use words from CARD, NOTES or the call, or ask instead.
+- Never promise anything CARD or NOTES do not offer: no demo, discount, trial, guarantee, deadline or deliverable that is not written there.
+- If they cannot talk now (driving, in a meeting, busy), the cue offers a specific time to call back.
 - When they raise a concern, prefer a calibrated how or what question over a defence.
 - Never cue asking for a password, a login or someone's account. Access is asked for as an invite or a seat.
 - Do not repeat a cue you already gave unless they repeated themselves.
@@ -313,20 +319,34 @@ class Model:
         )
         self.events: queue.Queue[dict | None] = queue.Queue()
         self.turns = 0
+        # Turns whose closing "result" event has arrived. ask() returns at
+        # message_stop, before that event, so the next ask() could find the
+        # last turn's result and return it as its own: on 2026-10-02 every
+        # cue in a 30-line test answered the line before, the first one with
+        # the warm-up's "NONE", in 0.0 s.
+        self.finished = 0
+        self.lock = threading.Lock()
         threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self) -> None:
         assert self.proc.stdout is not None
         for line in self.proc.stdout:
             try:
-                self.events.put(json.loads(line))
+                event = json.loads(line)
             except ValueError:
                 continue
+            with self.lock:
+                self.events.put(event)
+                if event.get("type") == "result":
+                    self.finished += 1
         self.events.put(None)
 
     def ask(self, prompt: str, timeout: float = CUE_TIMEOUT_S) -> str | None:
-        while not self.events.empty():
-            self.events.get_nowait()
+        with self.lock:
+            while not self.events.empty():
+                self.events.get_nowait()
+            # Earlier turns still to close; their events are not this answer.
+            stale = self.turns - self.finished
         message = {"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": prompt}]}}
         try:
             assert self.proc.stdin is not None
@@ -347,6 +367,10 @@ class Model:
                 return None
             if event is None:
                 return None
+            if stale > 0:
+                if event.get("type") == "result":
+                    stale -= 1
+                continue
             if event.get("type") == "stream_event":
                 inner = event.get("event", {})
                 if inner.get("type") == "content_block_delta":
@@ -454,6 +478,47 @@ def parse_cue(reply: str) -> tuple[str, str] | None:
             return None
         return kind, text
     return None
+
+
+UNDECIDED_HEADING = re.compile(r"^##\s+Not decided yet.*$", re.M | re.I)
+CHECK_LINE = "Let me check and confirm that for you."
+
+
+def undecided(standing: str) -> list[set[str]]:
+    """Each term under "## Not decided yet" in COACH.md, as a set of word stems.
+
+    "Payment plans, financing" -> [{"payment", "plan"}, {"financing"}].
+    """
+    found = UNDECIDED_HEADING.search(standing)
+    if not found:
+        return []
+    section = standing[found.end():].split("\n## ", 1)[0]
+    terms = []
+    for bullet in re.findall(r"^\s*-\s+(.+)$", section, re.M):
+        for term in re.split(r"[,.]", bullet):
+            stems = {stem(w) for w in re.findall(r"[a-z]+", term.lower()) if w not in GUARD_STOP}
+            if stems:
+                terms.append(stems)
+    return terms
+
+
+GUARD_STOP = {"a", "an", "the", "by", "of", "to", "or", "and", "on", "for", "versions", "promised", "date", "written"}
+
+
+def stem(word: str) -> str:
+    return word[:-1] if len(word) > 3 and word.endswith("s") else word
+
+
+def guard(text: str, terms: list[set[str]]) -> str:
+    """The cue, or CHECK_LINE when it offers something Gavin has not decided.
+
+    Haiku, told in the prompt and in COACH.md never to promise these, still
+    cued "Want to spread it out with a payment plan?" and "I could shoot you a
+    demo video" on 2026-10-02: the playbook card's wording outweighed both.
+    A rule in code does not get outweighed.
+    """
+    said = {stem(w) for w in re.findall(r"[a-z]+", text.lower())}
+    return CHECK_LINE if any(term <= said for term in terms) else text
 
 
 # ---------------------------------------------------------------- the screen
@@ -602,6 +667,11 @@ class Listener:
         self.args = args
         self.brain = find_brain(args.brain)
         self.bank = context_bank.Bank.build(self.brain) if self.brain else None
+        # Searched on its own: in the whole brain, "why should I go with you"
+        # ranked YOU.md above every card, and a held-out set found the right
+        # card for 22 of 30 lines; alone, 23 of 30 before paraphrases.
+        playbook = self.brain / PLAYBOOK if self.brain else None
+        self.playbook = context_bank.Bank.build(playbook) if playbook and playbook.is_dir() else None
         self.card = Path(args.card).expanduser() if args.card else None
         self.standing = self.brain / "calls" / "COACH.md" if self.brain else None
         self.call = Call()
@@ -723,9 +793,15 @@ class Listener:
             parts.append("STANDING NOTES (offers, prices and proof that are true):\n" + standing)
         if self.bank:
             query = line.text + "\n" + self.call.recent(4)
-            found = self.bank.search(query, k=4)
+            found = [c for c in self.bank.search(query, k=6) if not c.path.startswith(PLAYBOOK + "/")][:2]
             if found:
                 parts.append("NOTES (searched from the second brain; may be partly irrelevant):\n" + context_bank.render(found))
+        if self.playbook:
+            # Only the sentence just heard: a brush-off is short, and earlier
+            # talk in the query outvoted it. The model sees the call anyway.
+            moves = self.playbook.search(line.text, k=3, said=line.text)
+            if moves:
+                parts.append("PLAYBOOK (technique to borrow, not facts about the offer):\n" + context_bank.render(moves))
         parts.append("CALL SO FAR:\n" + self.call.recent(12))
         parts.append(f'THEY JUST SAID: "{line.text}"')
         parts.append("Your one line:")
@@ -754,6 +830,11 @@ class Listener:
                     log(f"  (no cue, {took:.1f}s)")
                 continue
             kind, text = parsed
+            standing = read_capped(self.standing, 3000) if self.standing else ""
+            checked = guard(text, undecided(standing))
+            if checked != text:
+                log(f"  (held back: {text})")
+                kind, text = "SAY", checked
             line.cue = f"{kind}: {text}"
             self.screen.set("cue", line.cue)
             print(f"  >>  {line.cue}   ({took:.1f}s)", flush=True)

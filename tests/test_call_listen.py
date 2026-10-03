@@ -501,3 +501,16 @@ if __name__ == "__main__":
                 failed += 1
                 print(f"  FAIL {name} {err}")
     sys.exit(1 if failed else 0)
+
+
+def test_any_offer_bank_in_the_brain_loads_and_odd_names_do_not():
+    # A closer loads an employer's script as calls/lines/<offer>.json; the
+    # first three offers were hardcoded until 2026-10-03.
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        brain = Path(tmp)
+        (brain / "calls" / "lines").mkdir(parents=True)
+        (brain / "calls" / "lines" / "northline.json").write_text('{"situations": {"price": {"when": "x", "line": "It is $3,000."}}}')
+        assert set(listen.load_lines(brain, "northline")) == {"price", "check", "none"}
+        assert listen.load_lines(brain, "../northline") is None
+        assert listen.load_lines(brain, "missing") is None

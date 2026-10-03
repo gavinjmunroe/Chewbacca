@@ -537,7 +537,14 @@ def route(text: str, bank: dict[str, str]) -> str | None:
 # ahead of time were usable about three times as often as lines Haiku wrote
 # mid-call (research/sales/stress in the brain).
 
-OFFERS = ("site", "noahstudio", "pilot")
+# An offer is any calls/lines/<name>.json in the brain, so a closer can load
+# an employer's script without a code change. The name is checked before it
+# becomes part of a path.
+OFFER_NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
+
+
+def has_offer(brain: Path | None, offer: str | None) -> bool:
+    return bool(brain and offer and OFFER_NAME.match(offer) and (brain / "calls" / "lines" / f"{offer}.json").is_file())
 
 
 def default_offer(brain: Path | None) -> str | None:
@@ -548,12 +555,14 @@ def default_offer(brain: Path | None) -> str | None:
         offer = (brain / "calls" / "lines" / "DEFAULT").read_text().strip() if brain else ""
     except OSError:
         return None
-    return offer if offer in OFFERS else None
+    return offer if has_offer(brain, offer) else None
 
 
 def load_lines(brain: Path | None, offer: str | None) -> dict[str, dict] | None:
     offer = offer or default_offer(brain)
-    if not brain or not offer:
+    if not has_offer(brain, offer):
+        if offer:
+            log(f"no line bank named {offer!r}; cues are written by the model")
         return None
     path = brain / "calls" / "lines" / f"{offer}.json"
     try:
@@ -1202,7 +1211,7 @@ def main() -> int:
     parser.add_argument("--app", action="append", default=[], help="hear only this app (name or bundle id); repeatable")
     parser.add_argument("--all-audio", action="store_true", help="hear everything the Mac plays")
     parser.add_argument("--card", help="a battle card for this call, read on every cue")
-    parser.add_argument("--offer", choices=OFFERS, help="pick cues from the brain's calls/lines/<offer>.json instead of writing them")
+    parser.add_argument("--offer", help="pick cues from the brain's calls/lines/<offer>.json instead of writing them")
     parser.add_argument("--brain", help="second-brain folder (default: Chewbacca's configured one)")
     parser.add_argument("--model", default="haiku", help="cue model for claude -p (default haiku)")
     parser.add_argument("--whisper-model", help="a ggml whisper model file")

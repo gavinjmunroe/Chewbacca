@@ -59,6 +59,12 @@ code=$(run "The build is running and the dev server is up on 3100." "$TMP/bare.j
 [ "$code" = "0" ] && ok "ignores a build or server described as running" \
   || no "false positive on an ordinary running process (exit $code)"
 
+# 4b. A hypothetical about agents is not a status report. This exact sentence
+#     was refused on 2026-10-03 and Caleb saw the reply twice.
+code=$(run "Nothing stops an agent from running the full 6 min three times." "$TMP/bare.jsonl" "p4b-$RUN")
+[ "$code" = "0" ] && ok "ignores a hypothetical about what an agent could run" \
+  || no "false positive on a hypothetical (exit $code)"
+
 # 5. No claim at all.
 code=$(run "Fixed the import bug in two tools and pushed." "$TMP/bare.jsonl" "p5-$RUN")
 [ "$code" = "0" ] && ok "silent when the reply claims nothing" \

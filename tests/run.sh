@@ -551,6 +551,12 @@ if group "installer"; then
   check  "stale-read-guard refuses a silence claim while jobs are outstanding" \
     bash "$ROOT/tests/stale_read_guard.sh"
 
+  check  "suite-rerun-guard refuses a repeat full run on an unchanged tree" \
+    bash "$ROOT/tests/suite_rerun_guard.sh"
+
+  check  "repo-overlap-guard warns once when another session shares the checkout" \
+    bash "$ROOT/tests/repo_overlap_guard.sh"
+
   # 18 research files and a whole session of UI work that read none of them.
   check  "design-context fires on design work only" \
     bash "$ROOT/tests/design_context.sh" "$ROOT"

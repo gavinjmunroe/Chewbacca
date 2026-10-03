@@ -1543,6 +1543,17 @@ _register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this reads right in zsh...")
 
+# 2026-10-03: the full suite ran four times in one session, twice on a tree
+# that had not changed, about 15 minutes each.
+_register("PreToolUse", hooks_dir + "/suite-rerun-guard.sh", timeout=10,
+          matcher="Bash",
+          status="Checking this suite run has something new to test...")
+
+# 2026-10-03: three Claude tabs and Codex shared one checkout and collided.
+_register("PreToolUse", hooks_dir + "/repo-overlap-guard.sh", timeout=5,
+          matcher="Edit|Write|MultiEdit|NotebookEdit",
+          status="Checking no other session is editing this checkout...")
+
 # 99.6% of iMessages since 2025 keep their words in attributedBody, not
 # `text`. A `text LIKE` search of chat.db on 2026-10-03 found 1 Pasadena
 # message where decoding found 2,213, and that silence reads as an answer.

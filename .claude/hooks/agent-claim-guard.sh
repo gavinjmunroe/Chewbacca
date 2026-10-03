@@ -38,7 +38,10 @@ GUARD="${TMPDIR:-/tmp}/agent-claim-guard-$PROMPT_ID"
 # running" and "the dev server is running" are not agent claims and must not
 # trip this.
 CLAIM_RE='(spawn(ed|ing)?|launch(ed|ing)?|resum(ed|ing)|kick(ed)? off|fann?(ed|ing) out|dispatch(ed)?)[^.]{0,60}(agent|research|subagent|in the background)'
-CLAIM_RE2='(agent|research|subagent)[^.]{0,60}(is |are |still )?(running|in flight|in the background|working on)'
+# The verb needs its "is/are/still": with it optional, "nothing stops an agent
+# from running the suite" read as a claim on 2026-10-03, the turn was refused
+# and Caleb got the same reply twice. A hypothetical is not a status report.
+CLAIM_RE2="(agent|research|subagent)s?[^.]{0,60}((is|are|'s|still) (still )?(running|in flight|working on)|in the background)"
 CLAIM_RE3="(hasn't|has not|have not|haven't) (reported|come back|returned|landed)"
 
 echo "$MSG" | grep -qiE "$CLAIM_RE|$CLAIM_RE2|$CLAIM_RE3" || exit 0

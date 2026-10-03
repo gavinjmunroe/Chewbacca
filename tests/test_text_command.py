@@ -40,7 +40,7 @@ def main() -> int:
         create table message (ROWID integer primary key, text text, attributedBody blob, is_from_me integer, date integer, service text);
         create table chat (ROWID integer primary key, chat_identifier text, service_name text);
         create table chat_message_join (chat_id integer, message_id integer);
-        insert into chat values (1, '+15550100', 'iMessage'), (2, '+15550199', 'iMessage'), (3, '+15550100', 'SMS');
+        insert into chat values (1, '+15550100', 'iMessage'), (2, '+15550199', 'iMessage'), (3, '+15550100', 'SMS'), (4, 'me@example.com', 'iMessage');
     """)
 
     clock = [800_000_000]
@@ -56,7 +56,7 @@ def main() -> int:
     tc.CONFIG = work / "config.json"
     tc.STATE = work / "state.json"
     tc.LOG = work / "log.txt"
-    tc.CONFIG.write_text(json.dumps({"handles": ["+15550100"]}))
+    tc.CONFIG.write_text(json.dumps({"handles": ["+15550100", "me@example.com"]}))
     asked, sent = [], []
     ask = lambda words: asked.append(words) or f"answer to {words}"  # noqa: E731
     send = lambda handle, words, trigger: sent.append((handle, words)) or True  # noqa: E731
@@ -83,9 +83,12 @@ def main() -> int:
 
     tc.run(False, db_path, ask, send)
     check("nothing is answered twice", len(asked) == 2, asked)
+    add(4, "Kyber what do I have tomorrow", later=120)
+    tc.run(False, db_path, ask, send, now=lambda: clock[0])
+    check("the answer goes back to the thread that asked", sent[-1][0] == "me@example.com", sent[-1])
     add(1, "Kyber open sheets", later=120)
     tc.run(False, db_path, ask, send)
-    check("the same words later are a new command", asked[-1] == "open sheets" and len(asked) == 3, asked)
+    check("the same words later are a new command", asked[-1] == "open sheets" and len(asked) == 4, asked)
 
     argv = tc.model_argv("hi")
     check("the model may only run listed commands",
@@ -100,7 +103,7 @@ def main() -> int:
 
     # With no trigger word: every plain text is a command, links and the
     # script's own replies are not.
-    tc.CONFIG.write_text(json.dumps({"handles": ["+15550100"], "trigger": ""}))
+    tc.CONFIG.write_text(json.dumps({"handles": ["+15550100", "me@example.com"], "trigger": ""}))
     before = len(asked)
     add(1, "what's due this week")
     add(1, "https://www.instagram.com/reel/abc")

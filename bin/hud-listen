@@ -309,6 +309,31 @@ def wants_texts(said: str) -> bool:
         r"\s*(?:text|send|reply|message)\b", said or "", re.I)
 
 
+def texts_hint_screen(piece: str) -> dict:
+    import screen
+    return screen.screen(piece)
+
+
+def texts_screened_clean(text: str) -> bool:
+    """True only when every piece was scored by Jev and none was flagged.
+
+    untrusted-screen is a warning for web pages, so it passes text it could
+    not judge: no key, a Jev error, or the middle of a long page. Here a pass
+    decides whether other people's words skip the tool path, so anything
+    short of a full, clean score fails closed (security review of dece55a).
+    """
+    import screen
+    pieces = [text[i:i + screen.CHUNK] for i in range(0, len(text), screen.CHUNK)] or [""]
+    for piece in pieces:
+        try:
+            result = texts_hint_screen(piece)
+        except Exception:  # noqa: BLE001 - any failure is a fail-closed
+            return False
+        if result.get("flagged") or result.get("score") is None:
+            return False
+    return True
+
+
 def texts_hint(said: str) -> str:
     """Today's texts for a request to read them, or "" for anything else."""
     if not wants_texts(said):
@@ -329,13 +354,7 @@ def texts_hint(said: str) -> str:
     # flags, or a screener that cannot run, goes back to the slow path where
     # tool results meet the untrusted-content checks; and what does go in is
     # fenced with a marker no sender can know, and labelled as data.
-    screener = Path(__file__).resolve().parent / "untrusted-screen"
-    try:
-        screened = subprocess.run([str(screener), "--source", "texts"], input=out,
-                                  capture_output=True, text=True, timeout=4)
-    except (OSError, subprocess.TimeoutExpired):
-        return ""
-    if screened.returncode != 0:
+    if not texts_screened_clean(out):
         return ""
     fence = "TEXTS-" + secrets.token_hex(8)
     out = out.replace(fence, "")

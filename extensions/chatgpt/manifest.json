@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Chewbacca",
+  "description": "Connect ChatGPT to the local Chewbacca runtime.",
+  "version": "0.1.0",
+  "permissions": [
+    "nativeMessaging",
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Chewbacca"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "bridge.js"
+      ],
+      "matches": [
+        "https://chatgpt.com/*"
+      ]
+    }
+  ]
+}

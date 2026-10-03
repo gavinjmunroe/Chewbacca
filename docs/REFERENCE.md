@@ -209,7 +209,7 @@ it off is `--session-opener none`. To write your own, add it to `OPENERS` in
 | Piece                   | Details                                                                                                                 |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | **macOS tools**         | 9 installed alongside the kit: Anki, bd, cap, mac, Maccy, mac-use, peekaboo, summarize, yt-transcript                        |
-| **Skills and plugins**  | 114 skills (39 shipped here, 8 cloned from upstream, 67 from 3 skill packs) plus 20 plugins across 4 marketplaces         |
+| **Skills and plugins**  | 120 skills (45 shipped here, 8 cloned from upstream, 67 from 3 skill packs) plus 20 plugins across 4 marketplaces         |
 | **Second brain**        | A private notes repo Claude reads at the start of every session and writes to as things change. Syncs to GitHub         |
 | **Coursework ledger**   | Your syllabi become deadlines, attendance budgets, and a per-course AI policy Claude checks before touching graded work |
 | **On-device dictation** | Builds `plynn/`: hold fn to type, hold left Option to ask Chewie. Speech and cleanup run on your Mac, nothing uploaded  |
@@ -744,14 +744,18 @@ fires, which is the thing that matters most.
 
 | Extension                                                                                                                  | Layer  | What it does                                                                                    |
 | -------------------------------------------------------------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------- |
+| [skills/gtm-engineering](../skills/gtm-engineering) | Skill | Build and evaluate GTM workflows in Clay: ICP, signals, list building, qualification,… |
+| [skills/clay-navigation](../skills/clay-navigation) | Skill | Navigate Clay directly with the built-in UX engine, configure native enrichment and dynamic… |
 | [skills/agent-setup](../skills/agent-setup)                                                                                | Skill  | Finishing the install steps that need a browser or a permission dialog                          |
 | [skills/asa](../skills/asa)                                                                                                | Skill  | Answer from the A2A Spring 2026 course, 108 hours of workshops on building a business out of…   |
 | [skills/audio-brief](../skills/audio-brief)                                                                                | Skill  | Turn a piece of work into something the user can listen to instead of read.                     |
 | [skills/call-coach](../skills/call-coach)                                                                                  | Skill  | Debrief a sales or client call from its transcript or recording.                                |
 | [skills/coursework](../skills/coursework)                                                                                  | Skill  | Your syllabi as a ledger: deadlines, attendance math, per-course AI policy                      |
+| [skills/clay-navigation](../skills/clay-navigation)                                                                        | Skill  | Navigate Clay directly with the built-in UX engine, configure native enrichment and dynamic…    |
 | [skills/debugging](../skills/debugging)                                                                                    | Skill  | Find the root cause of a bug instead of guessing at it.                                         |
 | [skills/deep-research](../skills/deep-research)                                                                            | Skill  | Research a topic, market, company or claim properly, with sources that can be checked.          |
 | [skills/demo](../skills/demo)                                                                                              | Skill  | Recording a product demo by reading the product's code, not guessing at its UI                  |
+| [skills/manim](../skills/manim)                                                                                            | Skill  | Animated math and explainer videos with Manim Community, no LaTeX needed                        |
 | [skills/graph-engineering](../skills/graph-engineering)                                                                    | Skill  | Knowledge graphs and agent task graphs, with teaching mode                                      |
 | [skills/hud](../skills/hud)                                                                                                | Skill  | Draw live interfaces on the screen over everything else, with no browser and no window.         |
 | [skills/interface](../skills/interface)                                                                                    | Skill  | Build any interface by loading a preset instead of re-deriving one: dashboards, tables, forms,… |

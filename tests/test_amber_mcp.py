@@ -223,7 +223,11 @@ def main():
           cfg["mcpServers"]["amber"]["env"]["AMBER_USER"] == "gavin" and cfg["mcpServers"]["other"] and cfg["keep"] == 1, cfg)
     check("install backs the config up first", (desk / "claude_desktop_config.json.before-amber").exists())
     check("a config that does not parse is left untouched", (fake / ".claude.json").read_text() == "{ not json", r.stdout)
-    check("what install says never uses the word MCP", "MCP" not in r.stdout.upper(), r.stdout)
+    # The paste-this command is the server's own path, mcp/amber/amber-mcp, so
+    # it is taken out first: the rule is about the words, and checking the whole
+    # output failed on every machine whatever the words said.
+    words = r.stdout.replace(str(SERVER), "").replace(str(SERVER.parent), "")
+    check("what install says never uses the word MCP", "MCP" not in words.upper(), r.stdout)
     r2 = subprocess.run(["node", str(SERVER), "install"], capture_output=True, text=True, env=ienv)
     check("installing twice changes nothing", "already there" in r2.stdout, r2.stdout)
 

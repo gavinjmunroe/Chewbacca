@@ -33,6 +33,12 @@ regardless of language or framework, so they are imported rather than left to
 be discovered.
 
 @~/.claude/rules/agent-neutral.md
+
+The shared evidence, math, graph, and durable-learning method applies across work
+through the agent-neutral instructions; `methods/learning.md` gives the procedure.
+Use it proportionally, preserve disabled hooks, and distinguish tested recipes
+from claims of mastery. Applying the method never authorizes hook activation.
+
 @~/.claude/rules/git.md
 @~/.claude/rules/security.md
 @~/.claude/rules/writing.md

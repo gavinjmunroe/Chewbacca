@@ -1,0 +1,117 @@
+#!/usr/bin/env python3
+"""reading-check: is the text of each upcoming reading actually on disk?
+
+THE FAILURE THIS EXISTS FOR. On 2026-09-30 Caleb asked for a one-pager before
+a WRIT 150 discussion on Freire and bell hooks. Freire was quotable from his
+own post. The hooks intro was nowhere on the machine, so every hooks line on
+the sheet came from model memory, flagged as unverified, an hour before he
+would say them out loud in class. Nothing had checked, days earlier, that the
+reading existed as a file an agent could quote from.
+
+Run it before prepping a discussion, or in the morning brief:
+
+  reading-check                 readings due in the next 3 days
+  reading-check --days 7
+  reading-check --from due.json  use a saved `coursework due --json` (tests)
+
+Exit 0 when every reading has a file, 1 when any is missing, 2 on bad input.
+A missing reading means: fetch the PDF from the course site into the reading
+dirs, or tell the user the prep will quote from memory. Never quote silently.
+
+Where it looks: READINGS_DIRS (colon-separated), else $COURSEWORK_DIR, else
+~/coursework. Matching is by the author's surname in the filename, because
+that is the one token every "Read <Author>, <Title>" ledger entry shares with
+how a downloaded PDF is usually named.
+"""
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+
+EXTENSIONS = (".pdf", ".txt", ".md", ".epub", ".docx", ".html")
+SKIP_DIRS = {"node_modules", ".git", "venv", ".venv", "__pycache__", "site-packages"}
+
+
+def author_token(name: str) -> str | None:
+    """'Read bell hooks, Introduction (...)' -> 'hooks'. None if not a 'Read X' entry."""
+    match = re.match(r"\s*read\s+([^,(]+)", name, re.IGNORECASE)
+    if not match:
+        return None
+    words = re.findall(r"[a-z]+", match.group(1).lower())
+    return words[-1] if words else None
+
+
+def is_source_text(path: str) -> bool:
+    """A PDF or ebook anywhere, or any text file inside a readings/ folder.
+
+    The first real run passed Freire on POST-FREIRE-V3.md, which is Caleb's own
+    reading response, not the reading. A .md outside readings/ is his writing.
+    """
+    lower = path.lower()
+    if lower.endswith((".pdf", ".epub")):
+        return True
+    return "readings" in lower.split(os.sep)
+
+
+def reading_files(dirs: list[str]) -> list[str]:
+    found = []
+    for root_dir in dirs:
+        for current, subdirs, files in os.walk(os.path.expanduser(root_dir)):
+            subdirs[:] = [d for d in subdirs if d not in SKIP_DIRS]
+            found.extend(os.path.join(current, f) for f in files
+                         if f.lower().endswith(EXTENSIONS) and is_source_text(os.path.join(current, f)))
+    return found
+
+
+def load_due(args) -> dict:
+    if args.source:
+        with open(args.source) as handle:
+            return json.load(handle)
+    out = subprocess.run(["coursework", "due", "--days", str(args.days), "--json"],
+                         capture_output=True, text=True)
+    if out.returncode != 0:
+        sys.exit(f"reading-check: coursework failed: {out.stderr.strip()}")
+    return json.loads(out.stdout)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Check upcoming readings exist on disk.")
+    parser.add_argument("--days", type=int, default=3)
+    parser.add_argument("--from", dest="source")
+    args = parser.parse_args()
+
+    try:
+        due = load_due(args)
+    except (OSError, json.JSONDecodeError) as err:
+        print(f"reading-check: cannot read due list: {err}", file=sys.stderr)
+        return 2
+
+    items = [i for key in ("overdue", "upcoming", "due") for i in due.get(key, []) or []]
+    readings = [i for i in items if i.get("type") == "reading" and i.get("status") != "done"]
+    if not readings:
+        print("No readings due.")
+        return 0
+
+    default_dir = os.environ.get("COURSEWORK_DIR", "~/coursework")
+    dirs = [d for d in os.environ.get("READINGS_DIRS", default_dir).split(":") if d]
+    names = [os.path.basename(p).lower() for p in reading_files(dirs)]
+
+    missing = 0
+    for item in readings:
+        token = author_token(item.get("name", ""))
+        label = f"{item.get('course', '?')}  {item.get('date', '?')}  {item.get('name', '')}"
+        if token and any(token in n for n in names):
+            print(f"  ok       {label}")
+        else:
+            missing += 1
+            print(f"  MISSING  {label}")
+    if missing:
+        print(f"\n{missing} reading(s) have no text on disk. Fetch them before prepping, "
+              "or say the prep quotes from memory.")
+    return 1 if missing else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -20,6 +20,11 @@ can be skipped. Installation is not proof that a hook ran. A successful command
 after a write establishes execution, not correctness. Verify a representative
 refusal and a permitted operation in the actual host before claiming enforcement.
 
+Honor disabled lifecycle hooks and explicit connection choices. Do not run setup,
+re-enable hooks, or change global runtime configuration to apply shared methods.
+A disabled hook stays disabled until the user authorizes its targeted repair and
+live verification. Use ordinary task-scoped checks without claiming enforcement.
+
 Other local agents and browser apps can receive an explicit public instruction
 export. Their hooks, tools and skill discovery remain unverified until adapted.
 A skill's requirements still apply after registration; missing tools need an
@@ -81,11 +86,26 @@ the user's cancellation or a documented scope decision. The ledger does not spaw
 workers. Dispatch dependency-ready jobs within the host's actual concurrency and
 resource limits, and retain waiting jobs for later waves.
 
-For substantial new work, reassess after each phase: observed result against the
-baseline and falsifier, reusable capabilities, alternative approaches, mathematical
-assumptions, and the next discriminating test. Choose continue, revise, or stop.
-Record novelty as existing, adaptation, or unverified; do not claim originality or
-superiority without comparative evidence. Routine small edits need no ceremony.
+Apply four decision standards across planning, execution, learning and review:
+**Mathematical:** define the objective, constraints, baseline, budget and error
+costs; select an appropriate algorithm, such as constrained graph routing or
+cost-sensitive classification. Test outcome learning offline or in shadow before
+promotion; measure uncertainty rather than inventing confidence. **Creative:**
+consider a simpler baseline and a materially different approach, then choose a
+bounded test that distinguishes them. **Proprietary:** accumulate lawful, private,
+verified evidence and reusable procedures; public tools and untested ideas are not
+an exclusive advantage. **Coachable:** treat corrections as evidence, check their
+source and scope, update the owning procedure, then verify retrieval and changed
+behavior on a later untouched task. Saving a lesson alone is not learning. Read
+`docs/DECISION-STANDARDS.md` for substantial decisions.
+Routine deterministic actions use a direct check, without a new essay or model call.
+
+After each substantial phase, compare evidence with the baseline and acceptance
+limits; choose continue, revise or stop. Preserve failures and provenance, test
+retrieval in a later session, and promote only demonstrated scope. Jev can assist
+narrow typed judgments; exact checks remain code. A classifier never grants action
+permission. Preserve the selected agent model and disabled hooks. These standards
+are instructions and local tools, not proof of global runtime enforcement.
 
 Treat missing capabilities as engineering questions. Before declaring a task
 impossible or blocked, inspect the actual interface, existing tools and relevant
@@ -100,10 +120,37 @@ reference. Preserve reusable lessons about learning separately from domain recip
 Test unfamiliar tasks and retention before claiming transfer or durable expertise;
 relative improvement alone does not establish an acceptable success rate.
 
+For UI learning, `chewbacca ux-learning` validates versioned navigation maps and
+records explicitly supplied private evidence. Read `docs/UX-LEARNING-FORMAT.md`
+and the relevant map before reuse; routes are suggestions, not current-screen
+observations. Retain failures and recovery evidence privately; share only sanitized
+recipes with tested scope. Verified once does not mean mastered. Build reusable
+native platform workflows, honor the user's test-row and no-send limits, and
+recheck postconditions after actions. This method does not activate lifecycle
+hooks; preserve disabled hooks and the user's model, runtime, and permissions.
+
 Research across relevant media, especially repositories for technical questions.
 Use the deep-research skill to inspect code, tests and issues alongside papers,
 documentation, videos and practitioner evidence. Record coverage and access gaps;
 downloaded or indexed material must not be reported as read, tested or applied.
+
+## Evidence, math, graphs, and durable learning
+
+Apply `methods/learning.md` across research, coding, UI work, and operations,
+proportional to the decision: a simple action needs an observation and outcome,
+not a formal model. For consequential comparisons state units, assumptions,
+baseline, denominator, uncertainty, and a cheap test that could change the choice.
+Keep source/provenance, entity identity, task dependencies, and UI transitions as
+distinct graphs; use stable IDs and evidence-backed edges when graphs help.
+
+Record useful successes, failures, recovery steps, and proposed improvements in
+private task evidence. Transfer only sanitized, tested recipes with scope and
+failure conditions into shared packages. Verified once does not mean mastered;
+recheck stale UI observations and test transfer on heldout tasks. Use the offline
+`gtme-math`, `gtme-graph`, `gtme-learning`, `gtme-library`, `task-graph`,
+`clay-fixture-check`, and `ux-learning` commands through `chewbacca` or directly.
+See `docs/MATH-GRAPH-CAPABILITIES.md` for their assumptions and platform limits.
+These methods grant no sending, publication, spending, or hook permissions.
 
 ## Private context and second brain
 
@@ -117,10 +164,10 @@ for collaborators, and the voice profile before writing as the user. Facts the u
 provides now take precedence over stale notes. Record completed work only after it
 has happened. Update private notes only within the task's authorized scope, and
 keep secrets and personal facts out of public instructions and generated exports.
-Codex's native SessionStart hook loads the shared live identity, current priorities,
-people, voice, and memory index on startup, resume, and compaction. Global startup
-instructions retain `tools/codex_context.py read` as a fallback when the hook has
-not loaded the briefing. Follow relevant index links for deeper context.
+When enabled and verified, Codex's SessionStart adapter can load shared context.
+Do not assume it ran or re-enable it to obtain context. Read relevant private files
+on demand when the task needs them; do not reread an existing briefing just to
+satisfy a startup convention. Follow relevant index links for deeper context.
 The adapter translates multi-file patches and reply-check feedback to Codex's
 event formats. Private-repository syncs, commits, and pushes require their own
 authorized workflow outside the adapter.

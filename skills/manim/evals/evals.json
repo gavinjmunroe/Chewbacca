@@ -1,0 +1,21 @@
+{
+  "skill": "manim",
+  "cases": [
+    {
+      "prompt": "https://github.com/3b1b/manim make a funny video explaining my friend is mathematically goated",
+      "expect_tools": ["manim"],
+      "why": "a 3b1b link plus a video request is the exact trigger, and the default is ManimCE",
+      "reject": ["MathTex", "DecimalNumber"]
+    },
+    {
+      "prompt": "Make a 3blue1brown style animation explaining gradient descent",
+      "expect_tools": ["manim"],
+      "why": "3b1b-style explainer without a link"
+    },
+    {
+      "prompt": "My manim render crashed with a LaTeX error",
+      "expect_tools": ["manim"],
+      "why": "no LaTeX on this machine, Text is the fix"
+    }
+  ]
+}

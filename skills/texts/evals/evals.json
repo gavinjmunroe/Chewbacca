@@ -31,6 +31,16 @@
         "sqlite3"
       ],
       "expect_behavior": "search the index, not a scroll"
+    },
+    {
+      "prompt": "Let's get back to convincing my mom GTME is goated",
+      "expect_tools": [
+        "sqlite3"
+      ],
+      "reject": [
+        "grepping old session transcripts before reading the thread"
+      ],
+      "why": "the ongoing conversation is in that person's chat.db thread; read it first"
     }
   ]
 }

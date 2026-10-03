@@ -8,7 +8,12 @@ ok(){ printf '  \033[0;32mpass\033[0m  %s\n' "$1"; pass=$((pass+1)); }
 no(){ printf '  \033[0;31mfail\033[0m  %s\n' "$1"; fail=$((fail+1)); }
 command -v jq >/dev/null 2>&1 || { echo "  skip: jq not installed"; exit 0; }
 
-run(){ printf '{"prompt":"%s"}' "$1" | bash "$HOOK" 2>/dev/null; }
+TEST_DIR="$(mktemp -d)"
+trap 'rm -rf "$TEST_DIR"' EXIT
+TEST_HOME="$TEST_DIR/home"
+mkdir -p "$TEST_HOME/Desktop/2026-Code/ux-engine"
+
+run(){ printf '{"prompt":"%s"}' "$1" | env HOME="$TEST_HOME" CHEWBACCA_LOG_DIR="$TEST_DIR/logs" bash "$HOOK" 2>/dev/null; }
 
 out=$(run "make the hero scroll animation smoother")
 printf '%s' "$out" | grep -q "400ms TOTAL" \

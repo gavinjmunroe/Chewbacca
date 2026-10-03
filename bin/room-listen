@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Transcribe the room live, in the background, with no window ever taking focus.
+
+    room-listen [--out FILE] [--chunk SECONDS] [--device NAME]
+
+Appends "HH:MM:SS<TAB>text" lines to FILE (default ~/.chewbacca/room/live.txt)
+so an agent can tail it and act on what is being said.
+
+Why this exists instead of reading Granola: Granola 7.x keeps its cache under a
+data key only Granola-signed code can read, strips --remote-debugging-port, and
+hides its main window about 10s after losing focus during a meeting. Once
+hidden, Chromium freezes the window's accessibility tree, so the transcript
+stops updating. The only way to read it was to re-show the window, which pulled
+focus off whatever Caleb was typing in (2026-09-29, ACAD 185). Hearing the mic
+directly needs no window at all.
+"""
+import argparse, os, re, shutil, subprocess, sys, tempfile, time
+
+# mlx-whisper usually lives in its own uv/pipx venv, so the python3 on PATH
+# cannot import it. Re-exec under the interpreter its own launcher names.
+try:
+    import mlx_whisper  # noqa: F401
+except ImportError:
+    launcher = shutil.which("mlx_whisper")
+    if not launcher or os.environ.get("ROOM_LISTEN_REEXEC"):
+        sys.exit("room-listen: needs mlx-whisper (uv tool install mlx-whisper) and ffmpeg")
+    interp = open(launcher).readline()[2:].strip()
+    os.environ["ROOM_LISTEN_REEXEC"] = "1"
+    os.execv(interp, [interp] + sys.argv)
+
+MODEL = "mlx-community/whisper-small.en-mlx"
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--out", default=os.path.expanduser("~/.chewbacca/room/live.txt"))
+    # 15s: long enough that whisper sees whole sentences, short enough that an
+    # agent acting on it is under half a minute behind the room. Guessed, never
+    # measured against other lengths.
+    p.add_argument("--chunk", type=int, default=15)
+    p.add_argument("--device", default="MacBook Pro Microphone")
+    a = p.parse_args()
+    os.makedirs(os.path.dirname(a.out), exist_ok=True)
+    tmp = tempfile.mkdtemp(prefix="room-listen-")
+
+    # ffmpeg's segment muxer writes one wav per chunk; a chunk is finished once
+    # the next one exists, so only ever transcribe all but the newest file.
+    rec = subprocess.Popen(
+        ["ffmpeg", "-loglevel", "error", "-f", "avfoundation", "-i", f":{a.device}",
+         "-ac", "1", "-ar", "16000", "-f", "segment", "-segment_time", str(a.chunk),
+         os.path.join(tmp, "c%06d.wav")],
+        stdin=subprocess.DEVNULL)
+
+    import mlx_whisper
+
+    done = set()
+    try:
+        while rec.poll() is None:
+            files = sorted(f for f in os.listdir(tmp) if f.endswith(".wav"))
+            for f in files[:-1]:
+                if f in done:
+                    continue
+                path = os.path.join(tmp, f)
+                r = mlx_whisper.transcribe(path, path_or_hf_repo=MODEL, language="en",
+                                           condition_on_previous_text=False)
+                text = " ".join(r.get("text", "").split())
+                # whisper loops on near-silence: 2026-09-29 one 15s chunk came
+                # back as "I think that's it." eleven times. Keep one of each run.
+                text = re.sub(r"(\b.{6,80}?[.?!])(?:\s*\1)+", r"\1", text)
+                # same loop at word level: "and and and ..." x21 in one chunk
+                text = re.sub(r"\b(\w+)(?:\s+\1\b){2,}", r"\1", text, flags=re.I)
+                # whisper hallucinates these on silence
+                if text and text.lower().strip(".! ") not in {"you", "thank you", "thanks for watching"}:
+                    with open(a.out, "a") as fh:
+                        fh.write(time.strftime("%H:%M:%S") + "\t" + text + "\n")
+                done.add(f)
+                os.remove(path)
+            time.sleep(1)
+        sys.exit(f"room-listen: ffmpeg exited {rec.returncode}; check mic permission for the host app")
+    finally:
+        rec.terminate()
+
+
+if __name__ == "__main__":
+    main()

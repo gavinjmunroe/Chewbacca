@@ -987,6 +987,13 @@ if [ -f "$SCRIPT_DIR/bin/scrape" ]; then
   ensure_local_bin_on_path
 fi
 
+# reddit reads posts and comments from Reddit's public feeds. Stdlib only.
+if [ -f "$SCRIPT_DIR/bin/reddit" ]; then
+  link_tool reddit
+  log "reddit installed to ~/.local/bin/"
+  ensure_local_bin_on_path
+fi
+
 # list-audit is pure stdlib python, no venv and no network, so it installs with
 # no dependency check at all. list-gate ships with it: audit reads a bought file,
 # gate refuses to ship a generated one, and the Stop hook calls the gate by name.

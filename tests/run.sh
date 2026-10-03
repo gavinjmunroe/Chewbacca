@@ -451,6 +451,11 @@ if group "installer"; then
   check  "scrape drops hidden text and stops at a bot check" \
     bash "$ROOT/tests/scrape.sh" "$ROOT"
 
+  # 2026-10-02: the .json trick from a reel was dead (403 "blocked by network
+  # security" since 2026-05-30), so reddit reads the Atom feeds. Same wall rule.
+  check  "reddit parses feeds, retries a 429 and stops at the block page" \
+    bash "$ROOT/tests/reddit.sh" "$ROOT"
+
   # Every kit on the machine matched one 17,000-character message about a club
   # website on 2026-09-22, because hit count was never divided by what was
   # typed and two kits make every stem look distinctive.

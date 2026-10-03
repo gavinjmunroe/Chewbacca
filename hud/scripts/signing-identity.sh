@@ -33,6 +33,13 @@ else
   WORK="$(mktemp -d)"
   trap 'rm -rf "$WORK"' EXIT
 
+  # Imported but not yet trusted: a run that stopped at the password last
+  # time. Importing again would leave two certificates of the same name, and
+  # codesign refuses an ambiguous identity, so the one already there is used.
+  if security find-certificate -c "$NAME" >/dev/null 2>&1; then
+    echo "The certificate is already in your keychain; it only needs trusting."
+    security find-certificate -c "$NAME" -p > "$WORK/cert.pem"
+  else
   # 1.2.840.113635.100.6.1.13 is Apple's code-signing extension. Without it
   # the certificate is a certificate and not an identity `codesign` will use.
   cat > "$WORK/cert.cnf" <<'EOF'
@@ -70,12 +77,19 @@ EOF
   echo "Putting it in your login keychain..."
   security import "$WORK/id.p12" -k "$HOME/Library/Keychains/login.keychain-db" \
     -P "$TRANSFER" -T /usr/bin/codesign >/dev/null
+  fi
 
   # Trust is what makes it an identity rather than a file. This is the step
-  # that needs the password, and the only one.
+  # that needs the password, and the only one. Without a terminal (Claude
+  # Code's `!` prefix has none) sudo cannot ask, which is how this failed on
+  # 2026-10-03, so the system password dialog asks instead.
   echo "Trusting it for code signing (this is the step that asks for your password)..."
-  sudo security add-trusted-cert -d -r trustRoot -p codeSign \
-    -k /Library/Keychains/System.keychain "$WORK/cert.pem"
+  if [ -t 0 ]; then
+    sudo security add-trusted-cert -d -r trustRoot -p codeSign \
+      -k /Library/Keychains/System.keychain "$WORK/cert.pem"
+  else
+    osascript -e "do shell script \"security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain '$WORK/cert.pem'\" with administrator privileges"
+  fi
 
   if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "$NAME"; then
     echo "The certificate did not come out valid. Nothing else has changed." >&2

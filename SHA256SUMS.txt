@@ -36,7 +36,7 @@ e1f76a09c09bd09b013fefb86c4eb26d6c7d827d87111bc3ebb40e042f8c5f87  .claude/hooks/
 14dcd53cb15ff6362ffa87a6244fda8caba0b483c0ad413da00b250689620776  .claude/hooks/submit-guard.sh
 589cf1f0c097d66b736a50ea457e6d9eeff524885a49d2f53ea9317aaea94816  .claude/hooks/suite-rerun-guard.sh
 62cbe16c5b3d3f5ce459db4469f7405c9b1dd303d0486ea0788f95773145c645  .claude/hooks/terminal-loop.sh
-7b362cdc1fb766307bd7f59f7e33b720517df59b24b8a81f6bc929c386e7005f  .claude/hooks/untrusted-screen.sh
+66ecc4d895f438a907ade4d046c8fdcf5f276bd040a549f372c830a043764a88  .claude/hooks/untrusted-screen.sh
 a1403fdb87442604e8d9aecaadcff2b2de7f13bec444aeb7f69149ebb4b51723  .claude/hooks/ux-guard.sh
 fce81c6825b8f27bbdcded97f0789de134031b19e6ae88ce0a40b125fca10785  .claude/hooks/vibe-guard.sh
 ccbd844f20b054672833b58d83210a0726b2d4fd283d5054c0ac73b8864cd250  .claude/hooks/voice-remind.sh

@@ -153,6 +153,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, let server, !server.hasSubscribers else { return }
             _ = self.startListener()
         }
+        // A text to yourself starting with "Kyber" is answered as a text.
+        TextTrigger.shared.start()
         // And kept up after that, so a bridge that dies is back before the
         // next sentence rather than because of it. See `ListenerWatchdog`.
         listenerCheck = Timer.scheduledTimer(

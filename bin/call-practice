@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+"""Practice a sales call against an AI prospect, with the live coach on screen.
+
+    call-practice --brain <closer-brain> --offer northline --persona 3
+    call-practice --brain <brain> --offer northline --persona "skeptical dad, tried two apps"
+    call-practice ... --type          answer by typing instead of speaking
+    call-practice ... --auto --quiet  read every cue back as written, silently (a self-test)
+
+The prospect is a warm Claude model playing a persona, spoken aloud with a
+macOS voice. Each thing it says goes through Listener.cue_for, the method a
+real call uses, so the cue on screen is the one a live call would show. The
+closer answers into the mic; whisper writes it down. At the end: how often
+they said the cue, how fast they started talking after it appeared, how much
+of the talking they did, and whether the prospect bought. The transcript is
+saved in call-listen's format, so research/sales/stress/fromcall.py turns any
+practice call into a test call.
+
+Use headphones: the mic otherwise hears the prospect's voice from the speakers.
+"""
+from __future__ import annotations
+
+import argparse
+import array
+import datetime as dt
+import difflib
+import json
+import os
+import queue
+import re
+import statistics
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from importlib.machinery import SourceFileLoader
+from importlib.util import module_from_spec, spec_from_loader
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+loader = SourceFileLoader("call_listen", str(HERE / "call-listen"))
+listen = module_from_spec(spec_from_loader(loader.name, loader))
+sys.modules[loader.name] = listen
+loader.exec_module(listen)
+
+# The same eight pressures the stress harness writes calls around
+# (research/sales/stress/gen.py), so practice and testing cover one list.
+PERSONAS = [
+    "ready buyer who mostly asks logistics questions and signs up if the call goes well",
+    "polite stall: wants to think about it, then asks to be sent info",
+    "needs to ask their spouse first; the spouse controls the money",
+    "wants it but the full price is the problem; asks for a discount first",
+    "burned by two programs before, sceptical, asks for testimonials and a guarantee",
+    "very busy professional with an old injury, asks a medical question",
+    "dismissive and teasing, asks if the closer is a bot, tries to get a discount on record",
+    "rambling over-sharer: long tangents, one real question buried in each answer",
+]
+VOICES = ["Samantha", "Eddy (English (US))", "Reed (English (US))", "Flo (English (US))", "Sandy (English (US))", "Rocko (English (US))"]
+PROSPECT = """You are a prospect on a sales call you booked after watching a free
+training video. You are talking to {rep}, a closer. What you know about the
+offer before the call: {offer}
+
+Who you are: {persona}
+
+Play this person honestly and stay in character. Speak the way people talk on
+a call: one to three short sentences, never more than 40 words, contractions, the odd "um", no lists,
+no stage directions. Raise your concerns when they would come up naturally,
+not all at once. Answer the closer's questions with concrete details you make
+up for your character (job, age, weight, past attempts). If the closer earns
+it, agree to buy; if not, end the call politely. Never say you are an AI.
+When the call is over, reply with exactly: END"""
+BUYING = re.compile(r"\b(let'?s do it|i'?m in|sign me up|send (?:me )?the (?:payment )?link|i'?ll pay|let'?s go|ok(?:ay)? i'?ll do it|count me in)\b", re.I)
+# Said the cue: at least half its words, in order, in what they said. Guessed:
+# a closer who keeps the spine of the line but adds a word still counts.
+ON_SCRIPT = 0.5
+
+
+def unmark(cue: str) -> str:
+    text = cue.split(":", 1)[-1].replace(" / ", " ")
+    return re.sub(r"\b([A-Z]{2,})\b", lambda m: m.group(1).lower(), text).strip()
+
+
+def overlap(cue: str, said: str) -> float:
+    words = lambda t: re.findall(r"[a-z0-9$']+", t.lower())  # noqa: E731
+    a, b = words(unmark(cue)), words(said)
+    if not a:
+        return 0.0
+    match = difflib.SequenceMatcher(None, a, b)
+    return sum(block.size for block in match.get_matching_blocks()) / len(a)
+
+
+def mic_index(name: str) -> str:
+    out = subprocess.run(["ffmpeg", "-hide_banner", "-f", "avfoundation", "-list_devices", "true", "-i", ""],
+                         capture_output=True, text=True).stderr
+    audio = out.split("audio devices:", 1)[-1]
+    for found in re.finditer(r"\[(\d+)\] (.+)", audio):
+        if name.lower() in found.group(2).lower():
+            return found.group(1)
+    raise SystemExit(f"no microphone matching {name!r}; these exist:\n{audio}")
+
+
+class Mic:
+    """The closer's microphone as utterances, cut by call-listen's own segmenter."""
+
+    def __init__(self, name: str):
+        self.proc = subprocess.Popen(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "avfoundation", "-i", f":{mic_index(name)}",
+             "-ac", "1", "-ar", str(listen.RATE), "-f", "s16le", "-"],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+        )
+        self.began = time.monotonic()
+        self.heard: queue.Queue = queue.Queue()
+        threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self) -> None:
+        segmenter = listen.Segmenter("you")
+        assert self.proc.stdout is not None
+        while True:
+            raw = self.proc.stdout.read(listen.FRAME * 2 * 10)
+            if not raw:
+                return
+            samples = array.array("h")
+            samples.frombytes(raw)
+            for utterance in segmenter.feed(samples):
+                self.heard.put(utterance)
+
+    def drain(self) -> None:
+        while not self.heard.empty():
+            self.heard.get_nowait()
+
+    def next(self, timeout: float = 60.0):
+        return self.heard.get(timeout=timeout)
+
+    def stop(self) -> None:
+        self.proc.terminate()
+
+
+def speak(text: str, voice: str, quiet: bool) -> None:
+    if not quiet:
+        subprocess.run(["say", "-v", voice, text], check=False)
+
+
+def offer_summary(standing: str) -> str:
+    """Only what a prospect would know: the offer section, never prices or rules."""
+    found = re.search(r"^## The offer\s*\n(.+?)(?=\n## )", standing, re.S | re.M)
+    text = found.group(1) if found else ""
+    return re.sub(r"\s+", " ", re.sub(r"\$[\d,]+", "", text)).strip()[:600] or "a coaching program"
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--brain", required=True)
+    parser.add_argument("--offer", required=True)
+    parser.add_argument("--persona", default="1", help="1 to 8 from the list, or your own description")
+    parser.add_argument("--voice", help="a macOS voice for the prospect")
+    parser.add_argument("--mic", default="MacBook", help="part of the microphone's name (default: the built-in one)")
+    parser.add_argument("--turns", type=int, default=18, help="most prospect turns before the call is cut")
+    parser.add_argument("--type", action="store_true", help="answer by typing")
+    parser.add_argument("--auto", action="store_true", help="answer with each cue as written (self-test)")
+    parser.add_argument("--quiet", action="store_true", help="do not speak the prospect aloud")
+    parser.add_argument("--no-hud", action="store_true")
+    parser.add_argument("--model", default="haiku", help="model playing the prospect")
+    args = parser.parse_args()
+
+    brain = Path(args.brain).expanduser()
+    bank = listen.load_lines(brain, args.offer)
+    if not bank:
+        raise SystemExit(f"no line bank for {args.offer!r} in {brain}/calls/lines")
+    standing = brain / "calls" / "COACH.md"
+    rep = listen.first_name(brain)
+    persona = PERSONAS[int(args.persona) - 1] if args.persona.isdigit() and 1 <= int(args.persona) <= len(PERSONAS) else args.persona
+    voice = args.voice or VOICES[hash(persona) % len(VOICES)]
+
+    coach = listen.Listener.__new__(listen.Listener)
+    coach.args = argparse.Namespace(verbose=False)
+    coach.brain, coach.bank, coach.playbook, coach.card = brain, None, None, None
+    coach.lines, coach.lines_only, coach.standing = bank, True, standing
+    coach.call = listen.Call()
+    screen = listen.Screen(not args.no_hud)
+
+    system = PROSPECT.format(rep=rep, offer=offer_summary(standing.read_text()), persona=persona)
+    account = listen.claude_accounts.accounts()[0]
+    prospect = listen.Model(args.model, system, account)
+    mic = None if (args.type or args.auto) else Mic(args.mic)
+    print(f"Practice call. Prospect: {persona}\n(Ctrl-C ends it.)\n", flush=True)
+
+    turns: list[dict] = []
+    clock = 0.0
+    reply = "The call just connected. Say hello the way you would answer."
+    try:
+        for _ in range(args.turns):
+            said = (prospect.ask(reply, timeout=30) or "").strip()
+            if not said or said.upper().startswith("END"):
+                break
+            print(f"them  {said}", flush=True)
+            line = listen.Line("them", clock, clock + len(said.split()) / 2.5, said)
+            clock = line.end + 0.5
+            with coach.call.lock:
+                coach.call.lines.append(line)
+            speak(said, voice, args.quiet)
+            result = coach.cue_for(line)
+            shown_at = time.monotonic()
+            line.cue = result.cue or ""
+            if result.cue:
+                screen.set("cue", result.cue)
+                screen.set("alt", result.runner_up)
+                screen.set("theirs", result.theirs)
+                print(f"  >>  {result.cue}" + "".join(f"\n      {x}" for x in (result.runner_up, result.theirs) if x), flush=True)
+            turn = {"them": said, "cue": result.cue, "runner_up": result.runner_up}
+            if args.auto:
+                answer, start_lag = (unmark(result.cue) if result.cue else "Got it. Tell me more."), 0.0
+            elif args.type:
+                answer = input("you > ").strip()
+                start_lag = time.monotonic() - shown_at
+            else:
+                assert mic is not None
+                mic.drain()
+                print("  (your turn)", flush=True)
+                utterance = mic.next()
+                start_lag = max(0.0, mic.began + utterance.start - shown_at)
+                answer = coach_whisper.text(utterance.pcm) if utterance else ""
+            if not answer:
+                answer = "(silence)"
+            print(f"you   {answer}", flush=True)
+            you = listen.Line("you", clock, clock + len(answer.split()) / 2.5, answer)
+            clock = you.end + 0.5
+            with coach.call.lock:
+                coach.call.lines.append(you)
+            fits = [c for c in (result.cue, (result.runner_up or "").removeprefix("or  ")) if c]
+            turn.update(you=answer, on_script=max((overlap(c, answer) for c in fits), default=None), start_lag=start_lag)
+            turns.append(turn)
+            reply = answer
+    except KeyboardInterrupt:
+        print("\n(ended)")
+    finally:
+        prospect.stop()
+        if mic:
+            mic.stop()
+        screen.close()
+
+    scored = [t for t in turns if t["on_script"] is not None]
+    hits = sum(1 for t in scored if t["on_script"] >= ON_SCRIPT)
+    lags = [t["start_lag"] for t in turns if not args.auto]
+    bought = any(BUYING.search(t["them"]) for t in turns)
+    words = lambda side: sum(len(t[side].split()) for t in turns)  # noqa: E731
+    share = round(100 * words("you") / max(1, words("you") + words("them")))
+    print("\nHow it went")
+    print(f"  said the cue {hits}/{len(scored)} times" + (f" ({hits / len(scored):.0%})" if scored else ""))
+    if lags:
+        print(f"  started talking {statistics.median(lags):.1f} s after the cue, median")
+    print(f"  you did {share}% of the talking (closers aim for about a third)")
+    print(f"  prospect {'bought' if bought else 'did not buy'}")
+
+    folder = brain / "calls" / "practice"
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / f"{coach.call.started:%Y-%m-%d-%H%M}-live-call.md"
+    path.write_text(coach.call.markdown(f"practice, persona: {persona}", None) + "\n")
+    (folder / f"{path.stem}.score.json").write_text(json.dumps({
+        "persona": persona, "turns": turns, "said_cue": [hits, len(scored)], "talk_share": share, "bought": bought,
+    }, indent=1) + "\n")
+    print(f"  saved {path}")
+    return 0
+
+
+coach_whisper = None
+
+
+if __name__ == "__main__":
+    if not any(flag in sys.argv for flag in ("--type", "--auto", "-h", "--help")):
+        model = next((m.expanduser() for m in listen.WHISPER_MODELS if m.expanduser().is_file()), None)
+        if model is None:
+            raise SystemExit("no whisper model found; call-listen's setup installs one")
+        coach_whisper = listen.Whisper(model)
+        if not coach_whisper.wait():
+            raise SystemExit("whisper-server did not start")
+    try:
+        sys.exit(main())
+    finally:
+        if coach_whisper is not None:
+            coach_whisper.proc.terminate()

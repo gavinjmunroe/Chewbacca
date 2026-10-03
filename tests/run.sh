@@ -1090,6 +1090,7 @@ fi
 if group "call"; then
   check  "call-listen compiles"      python3 -m py_compile "$ROOT/bin/call-listen"
   check  "call-watch compiles"       python3 -m py_compile "$ROOT/bin/call-watch"
+  check  "call-practice scoring"     python3 "$ROOT/tests/test_call_practice.py"
   check  "segmenter, cue parser, context bank and call watcher" python3 "$ROOT/tests/test_call_listen.py"
 fi
 

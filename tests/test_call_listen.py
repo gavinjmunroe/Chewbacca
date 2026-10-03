@@ -216,7 +216,7 @@ def test_answers_are_shown_word_for_word_and_unknown_ids_check():
         coach = Path(tmp) / "COACH.md"
         coach.write_text(standing)
         listener = listen.Listener.__new__(listen.Listener)
-        listener.standing, listener.card, listener.bank, listener.playbook = coach, None, None, None
+        listener.standing, listener.card, listener.bank, listener.playbook, listener.lines = coach, None, None, None, None
         listener.call = listen.Call()
         them = listen.Line("them", 0, 1, "how much is it, like 300?")
         listener.call.lines.append(them)
@@ -237,6 +237,91 @@ def test_recording_and_login_questions_are_answered_in_code():
     assert listen.route("is there an AI listening to me right now", bank) == bank["recording"]
     assert listen.route("want me to just send you our login", bank) == bank["access"]
     assert listen.route("how much is the site", bank) is None
+    assert listen.route("notetaker sure whatever. my nephew does websites", bank) is None
+
+
+def test_situation_picks_tolerate_rounding_and_repeats_use_the_alternate():
+    criteria = {f"s{i}": "x" for i in range(50)}
+    scores = {k: 0.01 for k in criteria}
+    scores["s0"] = 0.50  # 49 x 0.01 + 0.50 = 0.99, as Jev rounds
+    assert listen.valid_pick({"choice": "s0", "probabilities": scores}, criteria) == "s0"
+    assert listen.valid_pick({"choice": "s1", "probabilities": scores}, criteria) is None
+    assert listen.valid_pick({"choice": "s0", "probabilities": {"s0": 1.0}}, criteria) is None
+    bank = {"price": {"kind": "SAY", "line": "It's $750.", "alt": "Same $750, plus $50 a month."}, "busy": {"kind": "ASK", "line": "When's better?"}}
+    assert listen.situation_cue(bank, "price") == "SAY: It's $750."
+    assert listen.situation_cue(bank, "price", repeat=True) == "SAY: Same $750, plus $50 a month."
+    assert listen.situation_cue(bank, "busy", repeat=True) is None
+    assert listen.situation_cue(bank, "check") == f"SAY: {listen.CHECK_LINE}"
+    assert listen.situation_cue(bank, "none") is None
+
+
+def _bank_listener(picks):
+    listener = listen.Listener.__new__(listen.Listener)
+    listener.standing, listener.card, listener.bank, listener.playbook = None, None, None, None
+    listener.lines = {
+        "price": {"kind": "SAY", "line": "It's $3,500.", "alt": "Still $3,500 for the pilot."},
+        "busy": {"kind": "HANDLE", "line": "Fair, it's busy.", "alt": "Totally get it."},
+    }
+    listener.lines_only = True
+    listener.call = listen.Call()
+    listener.coach = type("Writes", (), {"cue": staticmethod(lambda prompt: "SAY: Invented line.")})()
+    queue = iter(picks)
+    return listener, lambda bank, heard, recent: next(queue)
+
+
+def test_a_coaching_line_shows_its_line_then_its_alternate_then_nothing():
+    # 2026-10-03 site replay: a line came back word for word several turns
+    # after its first showing, because only back-to-back repeats were caught.
+    listener, pick = _bank_listener(["busy", "none", "busy", "busy"])
+    real, listen.pick_situation = listen.pick_situation, pick
+    try:
+        said = lambda text: listener.cue_for(listen.Line("them", 0.0, 1.0, text)).cue
+        assert said("i'm slammed right now") == "HANDLE: Fair, it's busy."
+        assert said("ok and when do you start") is None
+        assert said("seriously i'm slammed") == "HANDLE: Totally get it."
+        assert said("slammed, I said") is None
+    finally:
+        listen.pick_situation = real
+
+
+def test_a_fact_asked_again_is_always_answered():
+    # b2 exam, 2026-10-03: 23 of 97 failures were a price or "what is it"
+    # asked a third time and answered with nothing.
+    listener, pick = _bank_listener(["price", "price", "price"])
+    real, listen.pick_situation = listen.pick_situation, pick
+    try:
+        said = lambda text: listener.cue_for(listen.Line("them", 0.0, 1.0, text)).cue
+        assert said("how much is it") == "SAY: It's $3,500."
+        assert said("so the price again") == "SAY: Still $3,500 for the pilot."
+        assert said("is that per month") == "SAY: It's $3,500."
+    finally:
+        listen.pick_situation = real
+
+
+def test_a_failed_pick_in_bank_mode_shows_nothing_rather_than_written_text():
+    # 2026-10-03 site replay: the only cue from outside the bank came from a
+    # failed Jev pick falling through to the written coach.
+    listener, pick = _bank_listener([None, None])
+    real, listen.pick_situation = listen.pick_situation, pick
+    try:
+        assert listener.cue_for(listen.Line("them", 0.0, 1.0, "what's your number again")).cue is None
+    finally:
+        listen.pick_situation = real
+
+
+def test_a_call_with_no_offer_uses_the_brains_default_bank():
+    # call-watch passes no --offer, so before DEFAULT existed a real call
+    # never used a bank at all.
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        brain = Path(tmp)
+        (brain / "calls" / "lines").mkdir(parents=True)
+        (brain / "calls" / "lines" / "pilot.json").write_text('{"situations": {"price": {"when": "x", "line": "y"}}}')
+        assert listen.load_lines(brain, None) is None
+        (brain / "calls" / "lines" / "DEFAULT").write_text("pilot\n")
+        assert "price" in listen.load_lines(brain, None)
+        (brain / "calls" / "lines" / "DEFAULT").write_text("nonsense")
+        assert listen.load_lines(brain, None) is None
 
 
 def test_filler_gets_no_cue_and_questions_do():

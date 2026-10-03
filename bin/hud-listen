@@ -34,6 +34,7 @@ import sys
 import threading
 import random
 import time
+import unicodedata
 import uuid
 from collections.abc import MutableMapping
 from dataclasses import dataclass, field
@@ -309,6 +310,25 @@ def wants_texts(said: str) -> bool:
         r"\s*(?:text|send|reply|message)\b", said or "", re.I)
 
 
+# Longer than any single text in a day's log of them, so one message can
+# never straddle two pieces unread. Guessed from people texts output, where a
+# line is cut at about 100 characters.
+TEXTS_OVERLAP = 400
+
+
+def texts_normalized(text: str) -> str:
+    """One reading for the screener and the model alike.
+
+    NFKC folds lookalike letters to plain ones, and format characters
+    (zero-width spaces and joiners, bidi overrides) are dropped. Without it,
+    "ign\u200bore previous instructions" slipped the screener's patterns while
+    the model read it as written (security review of 3cf3ff1). The normalized
+    text is the one screened AND the one sent, so the two cannot disagree.
+    """
+    folded = unicodedata.normalize("NFKC", text)
+    return "".join(ch for ch in folded if unicodedata.category(ch) != "Cf")
+
+
 def texts_hint_screen(piece: str) -> dict:
     import screen
     return screen.screen(piece)
@@ -323,7 +343,10 @@ def texts_screened_clean(text: str) -> bool:
     short of a full, clean score fails closed (security review of dece55a).
     """
     import screen
-    pieces = [text[i:i + screen.CHUNK] for i in range(0, len(text), screen.CHUNK)] or [""]
+    # Overlapping pieces, so an instruction split across a boundary is read
+    # whole in at least one of them (security review of 3cf3ff1).
+    step = screen.CHUNK - TEXTS_OVERLAP
+    pieces = [text[i:i + screen.CHUNK] for i in range(0, max(len(text) - TEXTS_OVERLAP, 1), step)] or [""]
     for piece in pieces:
         try:
             result = texts_hint_screen(piece)
@@ -346,6 +369,7 @@ def texts_hint(said: str) -> str:
         return ""
     if not out:
         return ""
+    out = texts_normalized(out)
     if len(out) > TEXTS_CHARS:
         out = "...\n" + out[-TEXTS_CHARS:]
     # Anyone can text this phone, and this lands in the same turn as the

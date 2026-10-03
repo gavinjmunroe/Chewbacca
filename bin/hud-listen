@@ -283,7 +283,26 @@ PERMISSION_MODES = {"acceptEdits", "auto", "bypassPermissions", "manual", "dontA
 # show what a day of use actually reaches, these are the ceiling and not
 # the target.
 RETIRE_TURNS = 50
-RETIRE_TOKENS = 60_000
+
+# Four exchanges: enough for "take me there" to find the sentence that said
+# where "there" was, short enough to add a few hundred tokens. Guessed from
+# the one 2026-10-03 failure, never tuned.
+CARRY_EXCHANGES = 4
+CARRY_CHARS = 600
+
+
+def carried_context(recent) -> str:
+    """What the last session said, for the first request of a new one."""
+    if not recent:
+        return ""
+    lines = ["Earlier in this conversation (the session was refreshed since; "
+             "treat this as what was just said):"]
+    for said, answer in recent:
+        reply = " ".join(str(answer or "").split())
+        if len(reply) > CARRY_CHARS:
+            reply = reply[:CARRY_CHARS] + "..."
+        lines.append(f"- They said: {said!r}. You answered: {reply!r}")
+    return "\n".join(lines) + "\n\n"
 # The names the display's recogniser is told to expect (Vocabulary in
 # KyberKit reads this): whoever the person has been texting, then whoever
 # is in Contacts. Written once per start, in the background.
@@ -1265,6 +1284,10 @@ class Listener:
         # the first request rather than staying the same.
         self.session = str(uuid.uuid4())
         self.started = False
+        # The last few exchanges, so a fresh session (retired, a runtime or
+        # account switch, a restart of the listener) still knows what "that"
+        # and "there" mean in the very next sentence.
+        self.recent: collections.deque = collections.deque(maxlen=CARRY_EXCHANGES)
         # Which subscription answers. Kept in ~/.bob/account so a switch made
         # because one ran out outlives a restart of the display.
         self.accounts = claude_accounts()
@@ -1976,11 +1999,16 @@ class Listener:
         self.prime()
 
     def should_retire(self) -> bool:
+        # Turns only. The CLI reports usage SUMMED over every model call in a
+        # turn, so a single "scan my recent texts" read 114,357 cached tokens
+        # on 2026-10-03 against a 38k base: one tool-using turn crossed the
+        # 60k ceiling, the session retired, and the next sentence ("take me
+        # there") landed in a blank conversation and opened Messages instead
+        # of Full Disk Access. A summed figure cannot be compared with a
+        # context size, so it no longer decides anything.
         if not self.lean or not self.started:
             return False
-        read = self.last_usage.get("cache_read_input_tokens")
-        cached = read if isinstance(read, (int, float)) else 0
-        return self.turns >= RETIRE_TURNS or cached >= RETIRE_TOKENS
+        return self.turns >= RETIRE_TURNS
 
     def voice_active(self) -> bool:
         """Whether a reply is being said, or is about to be."""
@@ -3390,9 +3418,9 @@ class Listener:
                 stopped = None
             else:
                 self.cancelled = None
-        prefix = ""
+        prefix = carried_context(self.recent) if not self.started else ""
         if stopped is not None:
-            prefix = (
+            prefix += (
                 f"Your previous run, for {stopped.said!r}, was stopped by the user before it "
                 "finished. Only these panels reached their screen: "
                 f"{', '.join(drawn) if drawn else 'none'}. Anything you drew or said after "
@@ -3731,6 +3759,7 @@ class Listener:
         if ok:
             self.turns += 1
             self.last_usage = run.usage
+            self.recent.append((req.said, run.answer() or run.text))
         report = {
             "started": started,
             "wait": None if asked_at is None else max(0.0, started - asked_at),

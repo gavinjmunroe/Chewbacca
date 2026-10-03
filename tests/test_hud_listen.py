@@ -2360,12 +2360,37 @@ def test_accounts(m) -> None:
             m.ACCOUNTS_FILE, m.ACCOUNT_STATE, m.DEFAULT_CONFIG = saved
 
 
+def test_memory_survives_a_heavy_turn(m) -> None:
+    """2026-10-03, 2:39pm: "scan my recent texts" read 114,357 cached tokens
+    summed across its tool calls, crossed the old 60k ceiling, retired the
+    session, and "take me there" opened Messages instead of Full Disk Access."""
+    listener = m.Listener("claude -p", False, False)
+    listener.lean, listener.started, listener.turns = True, True, 2
+    listener.last_usage = {"cache_read_input_tokens": 114357}
+    check("a tool-heavy turn no longer retires the session",
+          not listener.should_retire())
+    listener.turns = m.RETIRE_TURNS
+    check("the turn ceiling still retires it", listener.should_retire())
+    listener.recent.append(("Scan my recent texts",
+        "Can't read your texts yet. Kyber needs Full Disk Access in System Settings, under Privacy and Security."))
+    listener.started = False
+    req = m.Request("Take me there", 0.0, None)
+    prompt = listener.prompt_for(req, "")
+    check("a fresh session is told what was just said",
+          "Full Disk Access" in prompt and "Earlier in this conversation" in prompt, prompt[:300])
+    listener.started = True
+    check("a continuing session is not told twice",
+          "Earlier in this conversation" not in listener.prompt_for(m.Request("ok", 0.0, None), ""))
+
+
 def main() -> int:
     module = load()
     print("speaker lifecycle and quiet races")
     test_speaker_exit_clears_only_owned_voice(module)
     print("two subscriptions")
     test_accounts(module)
+    print("memory across a heavy turn")
+    test_memory_survives_a_heavy_turn(module)
     print("draw_lines")
     test_draw_lines(module)
     print("subtitle")

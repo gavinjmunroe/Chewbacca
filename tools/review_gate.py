@@ -15,7 +15,6 @@ import fcntl
 import hashlib
 import json
 import os
-import re
 from pathlib import Path
 import shutil
 import sqlite3
@@ -139,6 +138,24 @@ def task_evidence(repo, manifest=None):
     if evidence['errors']:
         raise ValueError('task observation is incomplete')
     return evidence
+
+
+def independent_repository(path):
+    """True only for a child whose Git directory lives inside it.
+
+    A `.git` FILE reading `gitdir: <parent>/.git` makes Git list the folder as
+    an embedded repository while it runs on the parent's index; its own
+    "receipt" would vouch for nothing (security review of d01331a, 2026-10-03).
+    """
+    path = Path(path).resolve()
+    marker = path / '.git'
+    if marker.is_symlink() or not marker.is_dir() or repo_root(path) != path:
+        return False
+    try:
+        git_dir = Path(git(path, 'rev-parse', '--absolute-git-dir').decode().strip()).resolve()
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return False
+    return git_dir == marker.resolve()
 
 
 def embedded_obligations(coverage):
@@ -288,6 +305,8 @@ def check(repo):
         # new folder hid task code from every review (security review of
         # df799e6, 2026-10-03). The child needs its own repository-wide receipt.
         for child in embedded_obligations(coverage):
+            if not independent_repository(root / child):
+                return False, 'embedded repository shares Git state with another repository: ' + child
             with task_review(None):
                 child_ok, _ = check(root / child)
             if not child_ok:
@@ -390,19 +409,13 @@ def prepare_incomplete(repos, session_id, turn_id, sequence):
 
 INCOMPLETE_PRAYER = 'Jesus Christ, help me report this unfinished work truthfully. Amen.'
 
-# The reply no longer has to be the report verbatim, because forcing that
-# produced duplicate completion bubbles. It still may not claim completion:
-# after 3cd8ec6 dropped the reply check entirely, "Complete and ready." ended a
-# turn with review pending (security review of df799e6, 2026-10-03). An empty
-# reply claims nothing and passes.
-INCOMPLETE_ACKNOWLEDGED = re.compile(
-    r'\b(?:incomplete|pending|unreviewed|unfinished|not (?:yet )?(?:been )?reviewed|'
-    r'not (?:yet )?(?:complete|finished|done))\b', re.IGNORECASE)
-
-
+# The reply no longer has to BE the report, because forcing that produced
+# duplicate completion bubbles, but it must CONTAIN it. A keyword list was
+# tried first and "Done, nothing pending." passed it (security review of
+# d01331a, 2026-10-03); after 3cd8ec6 dropped the check, "Complete and ready."
+# ended a turn with review pending.
 def acknowledges_incomplete(message):
-    text = str(message or '').strip()
-    return not text or bool(INCOMPLETE_ACKNOWLEDGED.search(text))
+    return incomplete_text(()) in str(message or '')
 
 
 def allows_incomplete(state, payload):

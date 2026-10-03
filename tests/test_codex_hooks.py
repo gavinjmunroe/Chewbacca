@@ -450,7 +450,7 @@ class HookTests(unittest.TestCase):
                 self.assertEqual(state['review_required'], [str(repo)])
                 self.assertFalse(review_gate.receipt_path(repo).exists())
                 self.assertEqual(hooks.dispatch(dict(base, turn_id='next', last_assistant_message=prepared['report']))['decision'], 'block')
-                self.assertNotIn('decision', hooks.dispatch(dict(base, last_assistant_message='Review remains pending.')))
+                self.assertEqual(hooks.dispatch(dict(base, last_assistant_message='Done, nothing pending.'))['decision'], 'block')
                 # A retry may not walk out claiming completion.
                 self.assertEqual(hooks.dispatch(dict(base, stop_hook_active=True,
                     last_assistant_message='Complete and ready.'))['decision'], 'block')

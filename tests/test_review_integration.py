@@ -118,6 +118,22 @@ class TaskIntegrationTests(unittest.TestCase):
             self.assertFalse(ok)
             self.assertIn('hidden', reason)
 
+    def test_embedded_folder_sharing_the_parent_git_state_cannot_vouch_for_itself(self):
+        with gate.task_review('gitdir-task'):
+            self.observe(before=True)
+            (self.repo / 'index.md').write_text('task edit\n')
+            child = self.repo / 'hidden'
+            child.mkdir()
+            (child / 'payload.py').write_text('unreviewed task code\n')
+            (child / '.git').write_text('gitdir: ' + str(self.repo / '.git') + '\n')
+            self.observe()
+            self.assertEqual(gate.embedded_obligations(gate.task_evidence(self.repo)), ['hidden'])
+            self.assertFalse(gate.independent_repository(child))
+            self.assertTrue(self.review()['ok'])
+            ok, reason = gate.check(self.repo)
+            self.assertFalse(ok)
+            self.assertIn('shares Git state', reason)
+
     def test_untouched_embedded_repository_does_not_block_a_task(self):
         child = self.repo / 'vendor'
         child.mkdir()

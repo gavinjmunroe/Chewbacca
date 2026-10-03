@@ -389,7 +389,9 @@ def stop_feedback(payload, feedback):
         return {}
     return {'decision': 'block', 'reason':
             'Checks remain incomplete. Resolve the pending checks before claiming completion. '
-            'If work cannot continue, say plainly that review is incomplete. Do not repeat a completion reply.'}
+            'If work cannot continue, include this exact sentence in the reply: '
+            '"Work remains incomplete. Independent review has not cleared these changes." '
+            'Do not repeat a completion reply.'}
 
 
 def dispatch(payload):

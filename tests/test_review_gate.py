@@ -269,11 +269,13 @@ class ReviewGateTests(unittest.TestCase):
         prepared = gate.prepare_incomplete([self.repo], 'session', 'turn', 3)
         state = {'review_required': [str(self.repo)], 'sequence': 3}
         payload = {'session_id': 'session', 'turn_id': 'turn'}
-        for message in (prepared['report'], 'Review is still pending.', ''):
+        for message in (prepared['report'], gate.INCOMPLETE_PRAYER + '\n\n' + prepared['report']):
             self.assertTrue(gate.allows_incomplete(state, dict(payload, last_assistant_message=message)))
-        # A recorded disposition never licenses claiming the work is finished.
-        for message in ('Complete and ready.', 'All done, shipped it.'):
+        # A recorded disposition never licenses claiming the work is finished,
+        # and a stray keyword is not an admission.
+        for message in ('Complete and ready.', 'Done, nothing pending.', 'Review is still pending.', ''):
             self.assertFalse(gate.allows_incomplete(state, dict(payload, last_assistant_message=message)))
+        payload = dict(payload, last_assistant_message=prepared['report'])
         self.assertFalse(gate.check(self.repo)[0])
         self.assertNotIn('Missing context', prepared['report'])
         for changed in ({'session_id': 'other'}, {'turn_id': 'next'}):

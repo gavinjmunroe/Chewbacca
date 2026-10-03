@@ -22,7 +22,7 @@ final class KeyDictation {
     var typer: KeystrokeTyper?
     /// The microphone is open for this session.
     var listening = false
-    /// The last partial's words, for `LiveText.stablePrefix`.
+    /// The last partial's words. Empty means nothing was heard.
     var previous: [String] = []
     /// Bumped per session, so a Whisper answer for an earlier sentence never
     /// edits a later one.
@@ -107,14 +107,12 @@ extension AppDelegate {
         guard session.listening, let typer = session.typer else { return false }
         switch signal {
         case .partial(let text):
-            let words = LiveText.words(Spoken.punctuate(text))
-            let stable = LiveText.stablePrefix(previous: session.previous, current: words)
-            session.previous = words
-            let target = stable.joined(separator: " ")
-            // Only forward. A revision that drops back behind what is typed is
-            // usually undone by the next one, and deleting on it is the
-            // shiver this exists to avoid.
-            if !target.isEmpty, !typer.typed.hasPrefix(target) { typer.show(target) }
+            let target = LiveText.live(Spoken.punctuate(text))
+            session.previous = LiveText.words(target)
+            // Every partial, revisions included: the recogniser's newest word
+            // is on screen the moment it is heard, and a word it changes its
+            // mind about is deleted and retyped. See `LiveText.live`.
+            if !target.isEmpty, target != typer.typed { typer.show(target) }
 
         case .heard(let text):
             let final = Spoken.punctuate(text)

@@ -159,6 +159,7 @@ def main() -> int:
     parser.add_argument("--auto", action="store_true", help="answer with each cue as written (self-test)")
     parser.add_argument("--quiet", action="store_true", help="do not speak the prospect aloud")
     parser.add_argument("--no-hud", action="store_true")
+    parser.add_argument("--beginner", action="store_true", help="one line on screen at all times, as call-listen --beginner shows it")
     parser.add_argument("--model", default="haiku", help="model playing the prospect")
     args = parser.parse_args()
 
@@ -175,6 +176,7 @@ def main() -> int:
     coach.args = argparse.Namespace(verbose=False)
     coach.brain, coach.bank, coach.playbook, coach.card = brain, None, None, None
     coach.lines, coach.lines_only, coach.standing = bank, True, standing
+    coach.beginner = args.beginner
     coach.call = listen.Call()
     screen = listen.Screen(not args.no_hud)
 
@@ -226,6 +228,7 @@ def main() -> int:
             clock = you.end + 0.5
             with coach.call.lock:
                 coach.call.lines.append(you)
+            coach.heard_you(you)
             fits = [c for c in (result.cue, (result.runner_up or "").removeprefix("or  ")) if c]
             turn.update(you=answer, on_script=max((overlap(c, answer) for c in fits), default=None), start_lag=start_lag)
             turns.append(turn)

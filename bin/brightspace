@@ -1,0 +1,269 @@
+#!/usr/bin/env python3
+"""
+brightspace: read USC Brightspace with the session already in Chrome, and catch
+assignments the coursework ledger never heard of.
+
+  brightspace whoami                 prove the session works
+  brightspace due [--days 14]        every dropbox due in the window, with
+                                     submitted/not, flagged NOT IN LEDGER when
+                                     no ledger item matches it
+  brightspace get <api path>         raw JSON, e.g. /le/1.99/302780/news/
+
+The ledger is built from syllabi, and some assignments only ever exist as a
+Brightspace dropbox. "Presentation Topics" in the BISC lab (due 2026-10-02,
+topics first come first served) was in neither the syllabus schedule nor the
+ledger, and was found the day after it was due only because Caleb remembered
+it. `due` exists to make that a listed line instead of a memory.
+
+Auth is Caleb's own d2l cookies from Chrome Profile 1 ("Caleb (Work)"). They
+expire: on 2026-10-03 a cookie that decrypted fine returned 403 on every call.
+Opening Brightspace in that profile renews them, so on a 403 this opens it once
+and retries. It never writes to Brightspace and never submits anything.
+
+BRIGHTSPACE_FIXTURE=<file.json> replaces the network with {"path": response}
+for tests.
+"""
+import argparse
+import datetime as dt
+import hashlib
+import json
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+HOST = "https://brightspace.usc.edu"
+PROFILE = os.environ.get("CHEWIE_CHROME_PROFILE", "Profile 1")
+COOKIE_DB = Path.home() / "Library/Application Support/Google/Chrome" / PROFILE / "Cookies"
+LEDGER = Path(os.environ.get("COURSEWORK_DIR", Path.home() / "coursework")) / "courses"
+
+# Fall 2026 org units, from /lp/1.63/enrollments/myenrollments/?orgUnitTypeId=3
+# on 2026-09-21. The lab is its own org unit, which is where Presentation
+# Topics lived; reading only the lecture would have missed it again.
+COURSES = {
+    "ACAD 185": [298850],
+    "ACAD 324g": [299120],
+    "WRIT 150": [302009],
+    "MPGU 120a": [302284],
+    "BISC 101Lxg": [302776, 302780],
+}
+
+
+class Expired(Exception):
+    pass
+
+
+class Forbidden(Exception):
+    pass
+
+
+def chrome_cookies():
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp) / "Cookies"
+        shutil.copy(COOKIE_DB, copy)
+        rows = sqlite3.connect(copy).execute(
+            "select name, encrypted_value from cookies"
+            " where host_key in ('brightspace.usc.edu', '.brightspace.usc.edu')"
+        ).fetchall()
+    secret = subprocess.check_output(
+        ["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]
+    ).strip()
+    key = hashlib.pbkdf2_hmac("sha1", secret, b"saltysalt", 1003, 16)
+    cookies = {}
+    for name, blob in rows:
+        dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
+        raw = dec.update(blob[3:]) + dec.finalize()
+        raw = raw[: -raw[-1]]
+        # Newer Chrome prefixes a 32-byte SHA256 of the host. Every d2l cookie
+        # seen on 2026-10-03 had it, but older rows may not.
+        try:
+            raw[:32].decode()
+            cookies[name] = raw.decode()
+        except UnicodeDecodeError:
+            cookies[name] = raw[32:].decode()
+    return cookies
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    # urllib copies the Cookie header onto a redirect, whatever host it points
+    # at. An expired session redirects to the SSO login, so a redirect is
+    # treated as expiry and never followed with the session attached.
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+OPENER = urllib.request.build_opener(NoRedirect)
+
+
+def fetch(path, cookies):
+    if not path.startswith("/") or "@" in path or "//" in path:
+        sys.exit(f"brightspace: refusing path {path!r}, expected /le/... or /lp/...")
+    req = urllib.request.Request(
+        HOST + "/d2l/api" + path,
+        headers={"Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items())},
+    )
+    try:
+        with OPENER.open(req, timeout=25) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as err:
+        if err.code in (301, 302, 303, 307, 308, 401, 403):
+            raise Expired() from err
+        raise
+
+
+class Client:
+    def __init__(self):
+        fixture = os.environ.get("BRIGHTSPACE_FIXTURE")
+        self.fixture = json.loads(Path(fixture).read_text()) if fixture else None
+        self.cookies = None
+
+    def get(self, path):
+        if self.fixture is not None:
+            if path not in self.fixture:
+                raise KeyError(f"fixture has no {path}")
+            return self.fixture[path]
+        if self.cookies is None:
+            self.cookies = chrome_cookies()
+        try:
+            return fetch(path, self.cookies)
+        except Expired:
+            # A 403 can mean one forbidden resource, not a dead session: on
+            # 2026-10-03 one dropbox's submissions 403'd while whoami worked,
+            # and treating it as expiry crashed the whole listing.
+            try:
+                fetch("/lp/1.63/users/whoami", self.cookies)
+            except Expired:
+                self.refresh()
+                return fetch(path, self.cookies)
+            raise Forbidden(path)
+
+    def refresh(self):
+        print("brightspace: session expired, reopening it in Chrome", file=sys.stderr)
+        subprocess.run(
+            ["open", "-na", "Google Chrome", "--args", f"--profile-directory={PROFILE}",
+             HOST + "/d2l/home"],
+            check=False,
+        )
+        # A fresh SSO redirect took under 5s on 2026-10-03; 30s covers a slow
+        # Okta hop without hanging forever on a signed-out profile.
+        for _ in range(6):
+            time.sleep(5)
+            self.cookies = chrome_cookies()
+            try:
+                fetch("/lp/1.63/users/whoami", self.cookies)
+                return
+            except Expired:
+                continue
+        sys.exit("BLOCKED: Brightspace is signed out in Chrome %s. Sign in there once." % PROFILE)
+
+
+def tokens(text):
+    stop = {"the", "a", "an", "and", "of", "to", "for", "in", "on", "lab", "team"}
+    # "P2_Chindogu" is the dropbox's name for the ledger's "Project 2 Chindogu".
+    text = re.sub(r"\bp(\d+)\b", r"project \1", text.lower().replace("_", " "))
+    words = re.findall(r"[a-z0-9]+", text)
+    # "Topics" in the dropbox, "Topic" in the ledger.
+    return {w[:-1] if len(w) > 3 and w.endswith("s") else w for w in words if w not in stop}
+
+
+def ledger_names(ledger_dir):
+    """course code -> list of item names, read without a YAML dependency."""
+    out = {}
+    for path in sorted(Path(ledger_dir).glob("*.yml")):
+        text = path.read_text()
+        code = re.search(r'^code:\s*"?([^"\n]+)"?', text, re.M)
+        if not code:
+            continue
+        out[code.group(1).strip()] = re.findall(r'name:\s*"([^"]+)"', text)
+    return out
+
+
+def in_ledger(dropbox_name, names):
+    """True when some ledger item shares most of the dropbox's words.
+
+    "P2_Chindogu" has to match "Project 2 Chindogu" and "A12 Market Validation
+    Prep Worksheet (CBBE)" has to match the ledger's name without "(CBBE)", so
+    exact match is useless. Half the dropbox's words is the floor because
+    "Presentation Topics" shares only "presentation" with "Project 4e Final
+    Presentation", and that one must NOT count as recorded.
+    """
+    want = tokens(dropbox_name)
+    if not want:
+        return False
+    numbers = {w for w in want if re.fullmatch(r"a\d+[a-z]?", w)}
+    for name in names:
+        have = tokens(name)
+        if numbers & have or len(want & have) * 2 > len(want):
+            return True
+    return False
+
+
+def cmd_due(client, days, ledger_dir, as_json):
+    now = dt.datetime.now(dt.timezone.utc)
+    lo, hi = now - dt.timedelta(days=days), now + dt.timedelta(days=days)
+    names = ledger_names(ledger_dir)
+    rows = []
+    for course, units in COURSES.items():
+        for ou in units:
+            for folder in client.get(f"/le/1.99/{ou}/dropbox/folders/"):
+                due = folder.get("DueDate")
+                if not due:
+                    continue
+                when = dt.datetime.fromisoformat(due.replace("Z", "+00:00"))
+                if not lo <= when <= hi:
+                    continue
+                try:
+                    subs = client.get(f"/le/1.99/{ou}/dropbox/folders/{folder['Id']}/submissions/")
+                    submitted = any(s.get("Submissions") for s in subs)
+                except Forbidden:
+                    submitted = None
+                rows.append({
+                    "course": course, "name": folder["Name"], "due": due, "ou": ou,
+                    "id": folder["Id"], "submitted": submitted,
+                    "in_ledger": in_ledger(folder["Name"], names.get(course, [])),
+                })
+    rows.sort(key=lambda r: r["due"])
+    if as_json:
+        print(json.dumps(rows, indent=1))
+    else:
+        for r in rows:
+            local = dt.datetime.fromisoformat(r["due"].replace("Z", "+00:00")).astimezone()
+            flags = {True: "submitted", False: "NOT SUBMITTED", None: "UNKNOWN (403, check in browser)"}[r["submitted"]]
+            if not r["in_ledger"]:
+                flags += "  NOT IN LEDGER"
+            print(f"{r['course']:<12} {r['name'][:42]:<42} {local:%a %b %d %H:%M}  {flags}")
+    missing = [r for r in rows if not r["in_ledger"]]
+    return 1 if missing else 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="brightspace")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("whoami")
+    d = sub.add_parser("due")
+    d.add_argument("--days", type=int, default=14)
+    d.add_argument("--json", action="store_true")
+    g = sub.add_parser("get")
+    g.add_argument("path")
+    args = ap.parse_args()
+    client = Client()
+    if args.cmd == "whoami":
+        me = client.get("/lp/1.63/users/whoami")
+        print(me.get("FirstName"), me.get("LastName"))
+    elif args.cmd == "get":
+        print(json.dumps(client.get(args.path), indent=1))
+    else:
+        sys.exit(cmd_due(client, args.days, LEDGER, args.json))
+
+
+if __name__ == "__main__":
+    main()

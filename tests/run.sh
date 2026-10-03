@@ -427,6 +427,11 @@ if group "installer"; then
   check  "list-gate refuses the defects it exists for" \
     bash "$ROOT/tests/list_gate.sh" "$ROOT"
 
+  # BISC lab "Presentation Topics" lived only on Brightspace and was found a
+  # day late on 2026-10-03. brightspace due has to flag what the ledger lacks.
+  check  "brightspace flags dropboxes missing from the ledger" \
+    bash "$ROOT/tests/brightspace.sh" "$ROOT"
+
   # On 2026-09-30 a discussion sheet quoted bell hooks from model memory because
   # the reading was never on disk. It must flag that, and not count his own post.
   check  "reading-check flags readings with no text on disk" \

@@ -1543,6 +1543,13 @@ _register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this reads right in zsh...")
 
+# 99.6% of iMessages since 2025 keep their words in attributedBody, not
+# `text`. A `text LIKE` search of chat.db on 2026-10-03 found 1 Pasadena
+# message where decoding found 2,213, and that silence reads as an answer.
+_register("PreToolUse", hooks_dir + "/chatdb-guard.sh", timeout=5,
+          matcher="Bash",
+          status="Checking this chat.db search reads attributedBody...")
+
 _register("PreToolUse", hooks_dir + "/ux-guard.sh", timeout=15,
           matcher="Write|Edit",
           status="Checking this UI is not the generated look...")

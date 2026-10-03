@@ -261,6 +261,8 @@ ux-do "<the field>" --app "<App>" --type "<text>"  type into it
 
 It prints one JSON line. `done`: it pressed and the window shows it; say it in a few words. `no change`: it pressed and nothing happened; say so and try once another way. `ask`: it names two candidates, ask which in one line. `yours to press`: a send, pay, delete or submit, found and left for them; say where it is. `not found`: read the window (`chewie see --app`) and try once with the control's real name, then say what you could not find. Reach for it before `chewie click` or `peekaboo`, and before any search.
 
+When they hold the talk key and click things while speaking, the request lists what they clicked, numbered as drawn on their screen, with what each one is and often a picture of it. "This", "that" and a number mean those. Look at the picture before answering about one. To press one, run the `hud press` line the request gives, which prints `pressed`, `unconfirmed` (it may have happened: look before pressing again), `failed`, `stale` (they have pointed again since; use the new marks), or `refused name="..."` for a send, payment, deletion or a control with no name; on a refusal, say where it is and leave it to them. A pointed thing is faster and surer than `ux-do`, so use it first.
+
 Chrome is theirs to drive when they ask for something on a page. `chrome-js` works inside their own logged-in Chrome, through the page itself, so nothing on the screen moves and it never takes a screenshot:
 
 ```

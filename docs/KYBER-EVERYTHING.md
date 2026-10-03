@@ -65,6 +65,32 @@ agent fetched.
 request carries both selectors and both crops. Hold the globe on a Finder file and say "send
 this to" someone: it stops before the send.
 
+**Built 2026-10-03, not yet run on a real screen.** Steps 1, 2 and 4 are in, and step 5 became
+`hud press <n>` instead of a `ux-do` flag, because Kyber already holds the element.
+
+- `hud/Sources/KyberKit/Pointing.swift` reads the element under the pointer and crops it. A
+  click and a drag are told apart by 6 points of travel.
+- In `hud/Sources/Kyber/main.swift`, an event tap takes the click while the talk key is held,
+  so a click on Send marks the button and does not send. The tap is off whenever the key is up,
+  so a missed key release can't leave every click on the Mac swallowed. The AX reads run after
+  the callback returns and give up after 0.5 s.
+- Kyber sends a `pt {json}` line for each mark at once, then a `pc` line when its crop is on
+  disk. Each line carries the hold, meaning which press of the talk key it came from. `hud-listen`
+  keeps the marks for 30 s, drops anything from an older hold, and `marks_sentence` puts them in
+  the prompt, crops included.
+- `press <n> hold=<h>` presses the element Kyber holds for that number. It checks every label
+  the control carries and refuses a send, payment, deletion, trash, reply or share, and any
+  control with no name, because an icon-only button is how chat apps draw Send. Only English
+  labels are checked. A press from an older hold comes back `stale`. `hud press <n> <h>` waits
+  for the `pr` answer.
+- Selected text (step 3): the bridge called `hud-context` without `--full`, so only "340 chars
+  selected" reached the prompt. It now passes the text itself, marked as data to read.
+- Tests: `PointingTests.swift` (11), plus `test_pointed_marks` (16 checks) and `test_seen_line`
+  (5) in `tests/test_hud_listen.py`.
+
+What's left is a live run. That needs the new build installed, with Accessibility and Screen
+Recording granted to it.
+
 ## Phase 2: the desk (backlog 118)
 
 1. Lift the draw ban for answers that work better as a panel, at most three panels a reply.

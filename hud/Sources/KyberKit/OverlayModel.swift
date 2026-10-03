@@ -236,6 +236,13 @@ public final class OverlayModel {
             agentCursor = nil
             revision += 1
 
+        case .press(let number, let hold):
+            let (outcome, center) = PointedStore.shared.press(number, hold: hold)
+            // The agent's pointer goes to what it pressed, so the person sees
+            // where the press landed without their own cursor moving.
+            if let center { apply(.agentCursor(point: center, act: outcome == .pressed)) }
+            onEvent?(.pressed(number: number, outcome: outcome))
+
         default:
             surface(current).store.apply([op])
             revision += 1

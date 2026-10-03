@@ -42,6 +42,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var reticleUp: Any?
     /// Where a reticle drag began, in screen points. Nil when not dragging.
     private var reticleOrigin: CGPoint?
+    /// Talk key plus trackpad: the event tap, whether the talk key is down for
+    /// the assistant (not dictation), and where a click being held began.
+    private var pointTap: CFMachPort?
+    private var talkHeldForPointing = false
+    private var pointStart: CGPoint?
     // `voice` is internal, not private: Control-dictation in
     // KeyDictation.swift drives the same listener, and it is one microphone.
     let voice = VoiceListener()
@@ -82,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpCommandBar()
         setUpChat()
         setUpReticle()
+        setUpPointing()
         setUpDictation()
         setUpHands()
         setUpMenuBar()
@@ -613,6 +619,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// these events to `taps` is what made one hold read as the exit gesture
     /// 18 times in three hours on 2026-09-21.
     private func talkKeyGoneByFlags() {
+        holdForPointing(false)
         guard voice.mode == .pushToTalk, model.pill.phase == .hearing else { return }
         Self.keys.notice("voice.key failsafe close")
         taps.release()
@@ -631,10 +638,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // key that stopped arriving: on 2026-09-19 two presses produced no
         // trace at all and there was no way to know which.
         Self.keys.notice("voice.key down=\(down) mode=\(self.voice.mode.rawValue, privacy: .public)")
+        // Before every early return: a release that skipped this left the tap
+        // swallowing every click on the Mac until the next press.
+        if !down { holdForPointing(false) }
         guard voice.mode == .pushToTalk else { return }
         // Control held with it: type what is said at the caret instead.
         if dictationKey(down: down) { return }
         if down {
+            holdForPointing(true)
+            PointedStore.shared.begin()
+            for number in 1...max(1, PointedStore.shared.lastHold) {
+                model.apply(.unmark(id: "point-\(number)"))
+            }
             // The same key twice, quickly, is out rather than in.
             if taps.press() {
                 Self.keys.notice("voice.key double")
@@ -760,6 +775,137 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.model.mark(
                     id: "reticle", rect: rect, label: "this", tone: nil, life: 20)
                 self.model.onEvent?(.region(rect))
+            }
+        }
+    }
+
+    /// Hold the talk key and click, or drag, to point at what "this" means.
+    ///
+    /// Backlog 117. The click is taken by an event tap while the key is held,
+    /// so it never reaches the app underneath: holding the globe and clicking a
+    /// Send button marks it, it does not send. Without the key down every
+    /// event passes straight through, untouched.
+    ///
+    /// One coordinate space throughout: CGEvent's location is global points
+    /// with a top-left origin, which is what AXUIElementCopyElementAtPosition,
+    /// AXPosition, the `m` marks and ScreenCaptureKit's display frames all use.
+    /// Nothing is flipped here, and nothing downstream converts it again.
+    ///
+    /// Needs Accessibility, which dictation already holds. Without it the tap
+    /// is not created and the Option-Command reticle still works.
+    private func setUpPointing() {
+        let events: [CGEventType] = [.leftMouseDown, .leftMouseDragged, .leftMouseUp]
+        let mask = events.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
+        let refcon = Unmanaged.passUnretained(self).toOpaque()
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+            eventsOfInterest: mask,
+            callback: { _, type, event, refcon in
+                guard let refcon else { return Unmanaged.passUnretained(event) }
+                let delegate = Unmanaged<AppDelegate>.fromOpaque(refcon).takeUnretainedValue()
+                // The tap's run loop source is on the main run loop, so the
+                // event never actually crosses an isolation boundary. CGEvent
+                // is not Sendable, which is all the unsafe binding covers.
+                nonisolated(unsafe) let event = event
+                nonisolated(unsafe) var result: Unmanaged<CGEvent>?
+                MainActor.assumeIsolated { result = delegate.pointing(type, event) }
+                return result
+            },
+            userInfo: refcon)
+        else {
+            Self.keys.notice("point.tap unavailable: no Accessibility grant")
+            return
+        }
+        let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
+        // Off until the talk key goes down. An enabled active tap makes every
+        // click on the Mac wait for this app's main thread, key held or not.
+        CGEvent.tapEnable(tap: tap, enable: false)
+        pointTap = tap
+    }
+
+    /// The tap is on while the key is held, and stays on after release only
+    /// until a click that began during the hold comes up, so its mouseUp is
+    /// not delivered to an app that never saw the mouseDown.
+    private func holdForPointing(_ held: Bool) {
+        talkHeldForPointing = held
+        guard let pointTap else { return }
+        CGEvent.tapEnable(tap: pointTap, enable: held || pointStart != nil)
+    }
+
+    private func pointing(_ type: CGEventType, _ event: CGEvent) -> Unmanaged<CGEvent>? {
+        switch type {
+        case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            // macOS turns a slow tap off. Turn it back on, or pointing dies
+            // silently for the rest of the session.
+            if let pointTap, talkHeldForPointing || pointStart != nil {
+                CGEvent.tapEnable(tap: pointTap, enable: true)
+            }
+            return Unmanaged.passUnretained(event)
+        case .leftMouseDown:
+            guard talkHeldForPointing else { return Unmanaged.passUnretained(event) }
+            pointStart = event.location
+            return nil
+        case .leftMouseDragged:
+            guard let start = pointStart else { return Unmanaged.passUnretained(event) }
+            let end = event.location
+            let rect = CGRect(
+                x: min(start.x, end.x), y: min(start.y, end.y),
+                width: abs(end.x - start.x), height: abs(end.y - start.y))
+            model.mark(id: "reticle", rect: rect, label: "", tone: nil, life: 0)
+            return nil
+        case .leftMouseUp:
+            guard let start = pointStart else { return Unmanaged.passUnretained(event) }
+            pointStart = nil
+            model.apply(.unmark(id: "reticle"))
+            if !talkHeldForPointing { holdForPointing(false) }
+            if let gesture = PointGesture.classify(from: start, to: event.location) {
+                // Out of the callback: the AX reads wait on the app under the
+                // pointer, and every click on the Mac waits on this callback.
+                Task { @MainActor in self.point(gesture) }
+            }
+            return nil
+        default:
+            return Unmanaged.passUnretained(event)
+        }
+    }
+
+    /// Mark it on the glass at once, then crop it and send it up.
+    private func point(_ gesture: PointGesture) {
+        let store = PointedStore.shared
+        let number = store.next()
+        var pointed: PointedElement
+        switch gesture {
+        case .click(let at):
+            if let (found, element, words) = AXInspector.element(at: at, number: number) {
+                pointed = found
+                store.keep(number, element: element, words: words, frame: found.frame)
+            } else {
+                // Nothing answered: the desktop, or an app that exposes no
+                // tree. Still a point, so "this" has somewhere to look.
+                pointed = PointedElement(
+                    number: number, role: "point",
+                    frame: CGRect(x: at.x - 40, y: at.y - 40, width: 80, height: 80))
+                store.keep(number, element: nil, words: [], frame: pointed.frame)
+            }
+        case .drag(let rect):
+            pointed = PointedElement(number: number, role: "region", frame: rect)
+            store.keep(number, element: nil, words: [], frame: rect)
+        }
+        Self.keys.notice(
+            "point.mark n=\(number) role=\(pointed.role, privacy: .public)")
+        model.mark(
+            id: "point-\(number)", rect: pointed.frame, label: "\(number)", tone: nil,
+            life: PointedElement.markLife)
+        // Sent now, before the crop, so it can never arrive after the next
+        // press of the talk key. The crop follows as its own line, carrying
+        // the hold, and the bridge drops one that belongs to an old hold.
+        pointed.hold = store.hold
+        model.onEvent?(.pointed(pointed))
+        let hold = store.hold, frame = pointed.frame
+        Task { @MainActor in
+            if let crop = await PointCrop.capture(frame, number: number) {
+                self.model.onEvent?(.cropped(hold: hold, number: number, path: crop))
             }
         }
     }

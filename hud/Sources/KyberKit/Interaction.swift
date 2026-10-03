@@ -34,6 +34,17 @@ public enum OutboundEvent: Sendable, Equatable {
     /// A region of the screen the person pointed at, in points with a top-left
     /// origin. Deixis: this is what makes "what is this" mean something.
     case region(CGRect)
+    /// Something pointed at while the talk key was held: the element under the
+    /// pointer, or a dragged region, numbered as it is drawn on the glass.
+    /// Backlog 117. `pt` and one JSON object, so a listener that does not know
+    /// the line skips it whole.
+    case pointed(PointedElement)
+    /// The crop of a mark, once it is on disk: `pc` and one JSON object with
+    /// the hold, the number and the path. Later than its `pt` by the time
+    /// ScreenCaptureKit takes, so it carries the hold to be matched by.
+    case cropped(hold: Int, number: Int, path: String)
+    /// What happened when the agent asked to press a pointed element.
+    case pressed(number: Int, outcome: PressOutcome)
     /// Something the sender got wrong.
     ///
     /// Nothing used to go back. A misspelled component, a dropped prop, a line
@@ -80,6 +91,21 @@ public enum OutboundEvent: Sendable, Equatable {
 
         case .version(let text):
             return "v! \(OutboundEvent.jsonString(text))"
+
+        case .pointed(let element):
+            return "pt \(element.json)"
+
+        case .cropped(let hold, let number, let path):
+            let object: [String: Any] = ["hold": hold, "n": number, "crop": path]
+            let data = (try? JSONSerialization.data(
+                withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])) ?? Data()
+            return "pc \(String(decoding: data, as: UTF8.self))"
+
+        case .pressed(let number, let outcome):
+            if case .refused(let name) = outcome {
+                return "pr \(number) refused name=\(OutboundEvent.jsonString(name))"
+            }
+            return "pr \(number) \(outcome.word)"
 
         case .region(let rect):
             // Whole points. Sub-pixel precision in a gesture made with a hand

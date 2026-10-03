@@ -243,6 +243,9 @@ public enum Op: Sendable, Equatable {
     case agentCursor(point: CGPoint, act: Bool)
     /// Take the agent's pointer off the screen.
     case agentCursorOff
+    /// Press what the person pointed at, by the number on the glass.
+    /// `hold`, when given, must be the current press of the talk key.
+    case press(number: Int, hold: Int?)
 }
 
 /// The three things a terminal strip can say. Colours follow the ring:

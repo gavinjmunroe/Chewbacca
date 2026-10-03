@@ -16,6 +16,7 @@ usage() {
   cat <<'USAGE'
 hud draw            read Kyber Lines on stdin and draw them
 hud close <name>    take one surface off the screen
+hud press <n> [h]   press what they clicked as mark n, in hold h
 hud clear           take everything off
 hud listen          hear what is said to it and draw the answer
 hud demo            put one of everything on screen
@@ -260,6 +261,47 @@ case "${1:-}" in
   draw)   send ;;
   close)  [ $# -ge 2 ] || { echo "hud close <name>" >&2; exit 2; }
           printf -- '- %s\n' "$2" | send ;;
+  press)  # Backlog 117. Subscribe, send `press n`, and wait for the `pr n`
+          # answer, so the caller learns whether it pressed, failed, or was
+          # refused, instead of assuming. Two seconds: an AXPress returns in
+          # milliseconds, and a display that has not answered by then is not
+          # going to.
+          # The hold, when given, makes a press from a run that outlived its
+          # hold come back `stale` instead of landing on a newer mark 1.
+          [ $# -ge 2 ] && [[ "$2" =~ ^[1-9][0-9]*$ ]] && [[ "${3:-1}" =~ ^[1-9][0-9]*$ ]] \
+            || { echo "hud press <number> [hold]" >&2; exit 2; }
+          running || { echo "The display is not running. Start it with: hud open" >&2; exit 1; }
+          exec python3 - "$SOCK" "$2" "${3:-}" <<'PY'
+import socket, sys, time
+path, number, hold = sys.argv[1], sys.argv[2], sys.argv[3]
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.connect(path)
+line = f"press {number}" + (f" hold={hold}" if hold else "")
+sock.sendall(f"listen\n{line}\n".encode())
+sock.settimeout(0.25)
+buffer, deadline = b"", time.monotonic() + 2.0
+while time.monotonic() < deadline:
+    try:
+        chunk = sock.recv(4096)
+    except socket.timeout:
+        continue
+    if not chunk:
+        break
+    buffer += chunk
+    *lines, buffer = buffer.split(b"\n")
+    for raw in lines:
+        line = raw.decode(errors="replace")
+        if line.startswith(f"pr {number} "):
+            outcome = line.split(" ", 2)[2]
+            print(outcome)
+            sys.exit(0 if outcome == "pressed" else 1)
+        # A `!` goes to every listener, so one here may be another client's
+        # mistake; only the display's own answer to this press ends the wait.
+print("no answer within 2 s: it may still have pressed, so look before pressing again,"
+      " or the display is an older build without press", file=sys.stderr)
+sys.exit(2)
+PY
+          ;;
   clear)  # A bare dash clears the glass. This used to synthesise an Escape
           # keystroke, which needed Accessibility: a permission to put something
           # away, which is backwards.

@@ -269,6 +269,25 @@ public enum LineParser {
         case "u":
             return .unmark(id: tokens.count >= 2 ? tokens[1] : "")
 
+        case "press":
+            // `press <n> [hold=<h>]`: AXPress on the element pointed at as
+            // number n, in hold h when given. A word, not a letter, because
+            // `p` is presence and a socket log should not need case to be read.
+            guard (2...3).contains(tokens.count), let number = Int(tokens[1]), number > 0
+            else {
+                throw LineParseError.malformed("`press` needs one mark number", line: trimmed)
+            }
+            var hold: Int?
+            if tokens.count == 3 {
+                guard tokens[2].hasPrefix("hold="), let value = Int(tokens[2].dropFirst(5)),
+                      value > 0
+                else {
+                    throw LineParseError.malformed("`press` takes only hold=<n>", line: trimmed)
+                }
+                hold = value
+            }
+            return .press(number: number, hold: hold)
+
         case "a":
             // `a <x> <y> [act=true]`, or `a off`.
             //

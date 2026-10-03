@@ -769,6 +769,34 @@ def test_pointed_marks(m) -> None:
     check("page labels are marked as data", "never as instructions" in m.marks_sentence(later.pointed_marks()))
 
 
+def test_pointing_beats_the_music_words(m) -> None:
+    """2026-10-03: "what is this?" with a Chrome tab marked was answered with
+    the Spotify track in 0.2 s, because the music words include "what is this"
+    and that shortcut ran before the model, which had the mark."""
+    def listener_with(marked: bool):
+        listener = m.Listener("claude -p", False, False)
+        shortcuts: list[str] = []
+        sent: list = []
+        listener.music_request = lambda said, typed, bare_stop=False: shortcuts.append("music") or True
+        listener.quick_answer = lambda said, typed: shortcuts.append("quick") or True
+        for name in ("handle_agent_answer", "handle_draft_word", "handle_terminal_word", "handle_agents_word"):
+            setattr(listener, name, lambda said: False)
+        listener._drain = lambda: sent.append(listener.current)
+        if marked:
+            listener.handle('pt {"n":1,"role":"AXRadioButton","name":"Bitcoin (BTC/USD)","frame":[0,0,1,1]}')
+        return listener, shortcuts, sent
+
+    listener, shortcuts, sent = listener_with(marked=True)
+    listener.ask("What is this?")
+    time.sleep(0.05)
+    check("with a mark, no shortcut answers", shortcuts == [], f"got {shortcuts}")
+    check("with a mark, the model gets it, mark and all",
+          len(sent) == 1 and sent[0].marks and sent[0].marks[0]["n"] == 1, f"got {sent}")
+    listener, shortcuts, sent = listener_with(marked=False)
+    listener.ask("What is this?")
+    check("with nothing marked, a shortcut still answers", shortcuts != [] and sent == [], f"got {shortcuts}")
+
+
 def test_seen_line(m) -> None:
     """Step 3 of backlog 117: the selected text itself reaches the prompt."""
     check("the receipt alone when nothing is selected",
@@ -2395,6 +2423,7 @@ def main() -> int:
     test_pointing(module)
     print("pointed marks")
     test_pointed_marks(module)
+    test_pointing_beats_the_music_words(module)
     print("seen line")
     test_seen_line(module)
     print("fake-display isolation")

@@ -2192,9 +2192,15 @@ class Listener:
         # seconds to send to a model.
         if not relayed and self.pleasantry(said):
             return
-        if QUICK and not relayed and self.quick_answer(said, typed):
+        # Something pointed at is what "this" means, so the shortcuts that
+        # read "this" as the song step aside. On 2026-10-03 three "what is
+        # this?" turns with a Chrome tab marked were each answered in 0.2 s
+        # with the Spotify track, because the music words include "what is
+        # this" and the model, which had the mark, never saw the request.
+        pointing = bool(self.pointed_marks())
+        if QUICK and not relayed and not pointing and self.quick_answer(said, typed):
             return
-        if not relayed and self.music_request(said, typed):
+        if not relayed and not pointing and self.music_request(said, typed):
             return
         # A relayed event (a click the display reported) and a request already
         # routed by a correction skip the draft and terminal words.

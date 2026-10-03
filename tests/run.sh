@@ -1001,6 +1001,13 @@ if group "hud"; then
   expect "the skill teaches the wire format" "Kyber Lines" cat "$ROOT/skills/hud/SKILL.md"
 fi
 
+# ── call ──────────────────────────────────────────────────────────────────────
+if group "call"; then
+  check  "call-listen compiles"      python3 -m py_compile "$ROOT/bin/call-listen"
+  check  "call-watch compiles"       python3 -m py_compile "$ROOT/bin/call-watch"
+  check  "segmenter, cue parser, context bank and call watcher" python3 "$ROOT/tests/test_call_listen.py"
+fi
+
 # ── guide ─────────────────────────────────────────────────────────────────────
 if group "guide"; then
   export GUIDE_DIR="$TMP/guides"

@@ -1541,6 +1541,11 @@ class Listener:
                 threading.Thread(
                     target=lambda: self.terminal("focus", voice_memory.project().get("tty")), daemon=True,
                 ).start()
+            elif action.startswith("call-"):
+                # `e call-start` and `e call-dismiss` are the call offer's
+                # buttons, and call-watch acts on them. Asked here as well,
+                # one press would start the coach and a model turn.
+                pass
             else:
                 # A control was used. Same path: the press is a request in words.
                 self.ask(

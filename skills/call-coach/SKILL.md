@@ -58,6 +58,25 @@ Not a verdict on the person. A bad call is usually a structural problem: no
 discovery, price before value, or a question that never got asked. Name the
 structure, not the character.
 
+## During the call
+
+`call-listen` puts one cue at the top of the screen each time the other side
+finishes talking: ASK, SAY, HANDLE or CLOSE, at most a short line. Audio is
+captured and transcribed on the Mac (`call-ears`, whisper); only the text goes
+to the cue model.
+
+- `call-watch` runs in the background and offers "Coach this call" when Zoom,
+  Teams, FaceTime, Discord, Slack or a browser takes the mic. It stops the
+  listener when the app lets go, and the transcript lands in `<brain>/calls/`.
+- `call-listen --card <file>` reads a battle card on every cue. Without one it
+  searches the whole brain for what was just said, plus `calls/COACH.md`, the
+  standing list of offers, prices and proof that are true.
+- Run the debrief above on the transcript it writes.
+- Say an AI notetaker is running at the start. Some states, California among
+  them, need everyone's consent to record, and transcription counts.
+- Cues are prompts, not a script. Reading full sentences off the screen sounds
+  like reading. Know the card; let the cue catch what you forgot.
+
 ## Feeding it back
 
 When a debrief is right, keep the call. A corpus of the user's own calls that

@@ -1,0 +1,323 @@
+#!/usr/bin/env python3
+"""Notice a call starting and offer the coach, the way Granola offers notes.
+
+Every two seconds it asks CoreAudio which apps hold an audio input
+(`call-ears --who-listens`). When a call app (Zoom, Teams, FaceTime, a
+browser...) has held the mic for two checks in a row, Kyber shows a small
+panel at the top of the screen with "Coach this call" and "Not now". Coach
+starts `call-listen` on that app. When the app lets go of the mic, the call
+is over: `call-listen` is stopped and writes its transcript.
+
+Nothing starts listening without the press. "Not now" holds until that app
+lets go of the mic, so one call never asks twice.
+
+Usage:
+    call-watch            run until Ctrl-C (or put it under launchd once it has
+                          caught a few real calls cleanly)
+"""
+from __future__ import annotations
+
+import json
+import os
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+POLL_S = 2.0
+# Two checks in a row before asking: a browser tab that touches the mic for
+# a second (a permission test, a voice search) should not pop a panel.
+# Guessed, never measured against a real false alarm.
+SETTLE_POLLS = 2
+# Unanswered, the offer goes away on its own rather than sitting over the
+# call. Guessed.
+OFFER_LIFE_S = 45.0
+# The call app has to let go of the mic for this long before the call counts
+# as over: Zoom drops the input for a moment when the person changes devices
+# or mutes on some setups. Guessed, never measured.
+ENDED_AFTER_S = 8.0
+
+# Bundle id prefix -> (what the panel calls it, what call-ears --app matches).
+CALL_BUNDLES = [
+    ("us.zoom.xos", "Zoom", "zoom.us"),
+    ("com.microsoft.teams", "Teams", "microsoft teams"),
+    ("com.apple.FaceTime", "FaceTime", "facetime"),
+    ("com.apple.avconferenced", "FaceTime", "facetime"),
+    ("com.cisco.webex", "Webex", "webex"),
+    ("com.hnc.Discord", "Discord", "discord"),
+    ("com.tinyspeck.slackmacgap", "Slack", "slack"),
+    ("net.whatsapp.WhatsApp", "WhatsApp", "whatsapp"),
+    ("com.google.Chrome", "Chrome", "google chrome"),
+    ("company.thebrowser.Browser", "Arc", "arc"),
+    ("com.brave.Browser", "Brave", "brave browser"),
+    ("com.microsoft.edgemac", "Edge", "microsoft edge"),
+    ("com.apple.Safari", "Safari", "safari"),
+    ("com.apple.WebKit.GPU", "Safari", "safari"),
+]
+# A process with no bundle id is named by the .app its executable lives in.
+CALL_APP_PATHS = {
+    "zoom.us.app": ("Zoom", "zoom.us"),
+    "Microsoft Teams.app": ("Teams", "microsoft teams"),
+    "FaceTime.app": ("FaceTime", "facetime"),
+    "Discord.app": ("Discord", "discord"),
+    "Slack.app": ("Slack", "slack"),
+    "WhatsApp.app": ("WhatsApp", "whatsapp"),
+    "Google Chrome.app": ("Chrome", "google chrome"),
+    "Arc.app": ("Arc", "arc"),
+    "Safari.app": ("Safari", "safari"),
+}
+
+
+def log(*parts: object) -> None:
+    print(time.strftime("%H:%M:%S"), *parts, file=sys.stderr, flush=True)
+
+
+@dataclass(frozen=True)
+class CallApp:
+    label: str
+    match: str
+
+
+def identify(bundle: str, path: str) -> CallApp | None:
+    for prefix, label, match in CALL_BUNDLES:
+        if bundle.startswith(prefix):
+            return CallApp(label, match)
+    for app, (label, match) in CALL_APP_PATHS.items():
+        if f"/{app}/" in path:
+            return CallApp(label, match)
+    return None
+
+
+def process_path(pid: int) -> str:
+    try:
+        return subprocess.run(
+            ["ps", "-p", str(pid), "-o", "comm="], capture_output=True, text=True, timeout=2,
+        ).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def apps_on_mic() -> set[CallApp]:
+    try:
+        out = subprocess.run(
+            ["call-ears", "--who-listens"], capture_output=True, text=True, timeout=5,
+        ).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return set()
+    found: set[CallApp] = set()
+    for line in out.splitlines():
+        try:
+            entry = json.loads(line)
+        except ValueError:
+            continue
+        bundle = str(entry.get("bundle", ""))
+        pid = int(entry.get("pid", 0))
+        app = identify(bundle, "" if bundle else process_path(pid))
+        if app:
+            found.add(app)
+    return found
+
+
+class Panel:
+    """The offer on Kyber. Subscribed to events only while it is up.
+
+    Kyber treats any subscriber as "somebody is listening" and stops
+    restarting hud-listen when one is connected (hud/Sources/Kyber/main.swift),
+    so a watcher that stayed subscribed all day would hide a dead voice
+    listener. The connection lives exactly as long as the offer.
+    """
+
+    SURFACE = "call-offer"
+
+    def __init__(self) -> None:
+        self.sock: socket.socket | None = None
+        self.pressed: list[str] = []
+        self.lock = threading.Lock()
+
+    @staticmethod
+    def _open() -> socket.socket | None:
+        path = os.environ.get("BOB_HUD_SOCKET", str(Path.home() / ".bob" / "hud.sock"))
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(path)
+            return sock
+        except OSError:
+            return None
+
+    def _read(self, sock: socket.socket) -> None:
+        buffer = b""
+        while True:
+            try:
+                chunk = sock.recv(4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            buffer += chunk
+            while b"\n" in buffer:
+                raw, buffer = buffer.split(b"\n", 1)
+                parts = raw.decode("utf-8", "replace").split()
+                if len(parts) >= 2 and parts[0] == "e" and parts[1].startswith("call-"):
+                    with self.lock:
+                        self.pressed.append(parts[1])
+
+    def take(self) -> list[str]:
+        with self.lock:
+            pressed, self.pressed = self.pressed, []
+        return pressed
+
+    def offer(self, app: CallApp) -> bool:
+        self.withdraw()
+        sock = self._open()
+        if sock is None:
+            log("Kyber is not running, so there is nowhere to offer the coach.")
+            return False
+        lines = [
+            "listen",
+            f"@ {self.SURFACE} at=top w=420",
+            'c s Screen title="CALL DETECTED"',
+            f"c t Text value={json.dumps(app.label + ' is using your mic. Coach this call?')}",
+            "c row Stack direction=grid cols=2 gap=2",
+            'c go Button label="Coach this call" action=call-start variant=primary',
+            'c no Button label="Not now" action=call-dismiss',
+            "> s t row",
+            "> row go no",
+            "r s",
+        ]
+        try:
+            sock.sendall(("\n".join(lines) + "\n").encode("utf-8"))
+        except OSError:
+            sock.close()
+            return False
+        self.sock = sock
+        threading.Thread(target=self._read, args=(sock,), daemon=True).start()
+        return True
+
+    def withdraw(self) -> None:
+        sock, self.sock = self.sock, None
+        if sock is None:
+            return
+        try:
+            sock.sendall(f"- {self.SURFACE}\n".encode("utf-8"))
+        except OSError:
+            pass
+        sock.close()
+
+
+class Watcher:
+    def __init__(self, panel: Panel, detect=apps_on_mic, start=None) -> None:
+        self.panel = panel
+        self.detect = detect
+        self.start = start or self.start_listener
+        self.state = "idle"
+        self.seen: dict[CallApp, int] = {}
+        self.dismissed: set[CallApp] = set()
+        self.offered: CallApp | None = None
+        self.offered_at = 0.0
+        self.coaching: CallApp | None = None
+        self.listener: subprocess.Popen | None = None
+        self.gone_since: float | None = None
+
+    def start_listener(self, app: CallApp) -> subprocess.Popen | None:
+        folder = Path.home() / ".bob" / "calls"
+        folder.mkdir(parents=True, exist_ok=True)
+        out = open(folder / "listen.log", "a")
+        out.write(f"\n--- {time.strftime('%Y-%m-%d %H:%M:%S')} {app.label}\n")
+        out.flush()
+        try:
+            return subprocess.Popen(
+                [str(HERE / "call-listen"), "--app", app.match],
+                stdout=out, stderr=out, start_new_session=True,
+            )
+        except OSError as err:
+            log("call-listen did not start:", err)
+            return None
+
+    def stop_listener(self) -> None:
+        if self.listener is not None and self.listener.poll() is None:
+            # SIGINT is the Ctrl-C path: it writes the transcript.
+            self.listener.send_signal(signal.SIGINT)
+            try:
+                self.listener.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                self.listener.kill()
+        self.listener = None
+
+    def tick(self, now: float) -> None:
+        on_mic = self.detect()
+        for app in list(self.seen):
+            if app not in on_mic:
+                del self.seen[app]
+        for app in on_mic:
+            self.seen[app] = self.seen.get(app, 0) + 1
+        self.dismissed &= on_mic
+        pressed = self.panel.take()
+
+        if self.state == "offered":
+            assert self.offered is not None
+            if "call-start" in pressed:
+                self.panel.withdraw()
+                self.listener = self.start(self.offered)
+                self.coaching, self.offered = self.offered, None
+                self.state = "coaching" if self.listener else "idle"
+                self.gone_since = None
+                log("coaching", self.coaching.label if self.coaching else "")
+                return
+            if "call-dismiss" in pressed or now - self.offered_at > OFFER_LIFE_S or self.offered not in on_mic:
+                self.panel.withdraw()
+                if self.offered in on_mic:
+                    self.dismissed.add(self.offered)
+                self.offered = None
+                self.state = "idle"
+            return
+
+        if self.state == "coaching":
+            assert self.coaching is not None
+            if self.listener is not None and self.listener.poll() is not None:
+                # Ended by hand, or it failed: do not offer again this call.
+                self.dismissed.add(self.coaching)
+                self.listener, self.coaching, self.state = None, None, "idle"
+                return
+            if self.coaching in on_mic:
+                self.gone_since = None
+                return
+            self.gone_since = self.gone_since or now
+            if now - self.gone_since >= ENDED_AFTER_S:
+                log("call over:", self.coaching.label)
+                self.stop_listener()
+                self.coaching, self.state = None, "idle"
+            return
+
+        ready = [a for a, n in self.seen.items() if n >= SETTLE_POLLS and a not in self.dismissed]
+        if ready:
+            app = sorted(ready, key=lambda a: [c[1] for c in CALL_BUNDLES].index(a.label))[0]
+            if self.panel.offer(app):
+                self.offered, self.offered_at, self.state = app, now, "offered"
+                log("offered:", app.label)
+            else:
+                self.dismissed.add(app)
+
+
+def main() -> int:
+    if subprocess.run(["which", "call-ears"], capture_output=True).returncode != 0:
+        log("call-ears is not built: sh call/build.sh in the Chewbacca checkout")
+        return 1
+    watcher = Watcher(Panel())
+    log("watching for calls")
+    try:
+        while True:
+            watcher.tick(time.monotonic())
+            time.sleep(POLL_S)
+    except KeyboardInterrupt:
+        watcher.panel.withdraw()
+        watcher.stop_listener()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

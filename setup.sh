@@ -994,7 +994,7 @@ unset _tool
 # hud calls the others by path, so installing one alone gives a command that
 # fails halfway.
 _installed_hud=""
-for _tool in hud hud-listen hud-context hud-watch hud-speak hud-guide hud-music superassistant chewbacca-mcp portal; do
+for _tool in hud hud-listen hud-runtime hud-codex hud-context hud-watch hud-speak hud-guide hud-music superassistant chewbacca-mcp portal; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_hud="$_installed_hud $_tool"
@@ -1542,6 +1542,13 @@ _register("PreToolUse", hooks_dir + "/load-guard.sh", timeout=10,
 _register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this reads right in zsh...")
+
+# 99.6% of iMessages since 2025 keep their words in attributedBody, not
+# `text`. A `text LIKE` search of chat.db on 2026-10-03 found 1 Pasadena
+# message where decoding found 2,213, and that silence reads as an answer.
+_register("PreToolUse", hooks_dir + "/chatdb-guard.sh", timeout=5,
+          matcher="Bash",
+          status="Checking this chat.db search reads attributedBody...")
 
 _register("PreToolUse", hooks_dir + "/ux-guard.sh", timeout=15,
           matcher="Write|Edit",

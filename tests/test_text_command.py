@@ -93,6 +93,8 @@ def main() -> int:
     check("no listed command writes, sends or opens a shell",
           not any(w in rule for rule in tc.ALLOW for w in ("send", "delete", " add", "edit", "append", "bash -c", "python", "osascript", "Bash(*")),
           tc.ALLOW)
+    check("every rule names a subcommand, never a whole tool",
+          all(rule.count(" ") >= 1 and not rule.startswith("Bash(date") for rule in tc.ALLOW), tc.ALLOW)
     check("the trigger is a whole word", tc.command_in("Kyberish thing", "kyber") is None)
     check("the trigger takes punctuation after it", tc.command_in("Kyber: hi", "kyber") == "hi")
 

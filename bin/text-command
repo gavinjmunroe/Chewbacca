@@ -81,7 +81,13 @@ ALLOW = [
     "Bash(mac contacts find:*)", "Bash(mac notes list:*)", "Bash(mac notes search:*)",
     "Bash(mac notes read:*)",
     "Bash(mac mail list:*)", "Bash(mac mail search:*)",
-    "Bash(coursework:*)", "Bash(textbook:*)", "Bash(date:*)",
+    # By subcommand, never by tool: `coursework:*` included `coursework ics
+    # --out <file>`, which writes anywhere (2026-10-03 review), and `date`
+    # with arguments sets the clock.
+    "Bash(coursework due:*)", "Bash(coursework today:*)", "Bash(coursework week:*)",
+    "Bash(coursework attendance:*)", "Bash(coursework grade:*)", "Bash(coursework policy:*)",
+    "Bash(textbook books:*)", "Bash(textbook toc:*)", "Bash(textbook search:*)",
+    "Bash(textbook show:*)", "Bash(textbook glossary:*)",
 ]
 
 

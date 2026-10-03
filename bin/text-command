@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
 import os
 import re
@@ -95,8 +96,17 @@ ALLOW = [
 
 def log(*parts) -> None:
     LOG.parent.mkdir(parents=True, exist_ok=True)
-    with LOG.open("a") as f:
+    # Owner only: a line can carry the start of a message.
+    fd = os.open(LOG, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "a") as f:
         print(*parts, file=f)
+
+
+def fingerprint(words: str) -> str:
+    """A reply, as something to recognise and not something to read: the state
+    file is plain JSON on disk, and a reply can quote mail or a calendar."""
+    return hashlib.sha256(words.strip()[:MOST_CHARS].encode()).hexdigest()[:16]
 
 
 def load_json(path: Path, default):
@@ -252,7 +262,7 @@ def run(dry_run: bool, db_path: Path = CHAT_DB, ask=answer, send=reply_to, now=N
 def handle_rows(rows, state, handles, trigger, dry_run, ask, send) -> None:
     for rowid, at, words in rows:
         replies = state.get("replies") or []
-        if words.strip()[:MOST_CHARS] in replies:
+        if fingerprint(words) in replies:
             # Kept, not crossed off: a self text can land twice.
             asked = None
         else:
@@ -271,7 +281,7 @@ def handle_rows(rows, state, handles, trigger, dry_run, ask, send) -> None:
             else:
                 reply = ask(asked)
                 kept = (state.get("replies") or [])[-(KEPT_REPLIES - 1):]
-                state["replies"] = kept + [reply.strip()[:MOST_CHARS]]
+                state["replies"] = kept + [fingerprint(reply)]
                 ok = send(handles[0], reply, trigger)
                 log(f"answered {rowid} sent={ok} chars={len(reply)}")
         if not dry_run:

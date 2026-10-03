@@ -60,6 +60,10 @@ class Expired(Exception):
     pass
 
 
+class Forbidden(Exception):
+    pass
+
+
 def chrome_cookies():
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
@@ -132,8 +136,15 @@ class Client:
         try:
             return fetch(path, self.cookies)
         except Expired:
-            self.refresh()
-            return fetch(path, self.cookies)
+            # A 403 can mean one forbidden resource, not a dead session: on
+            # 2026-10-03 one dropbox's submissions 403'd while whoami worked,
+            # and treating it as expiry crashed the whole listing.
+            try:
+                fetch("/lp/1.63/users/whoami", self.cookies)
+            except Expired:
+                self.refresh()
+                return fetch(path, self.cookies)
+            raise Forbidden(path)
 
     def refresh(self):
         print("brightspace: session expired, reopening it in Chrome", file=sys.stderr)
@@ -210,8 +221,11 @@ def cmd_due(client, days, ledger_dir, as_json):
                 when = dt.datetime.fromisoformat(due.replace("Z", "+00:00"))
                 if not lo <= when <= hi:
                     continue
-                subs = client.get(f"/le/1.99/{ou}/dropbox/folders/{folder['Id']}/submissions/")
-                submitted = any(s.get("Submissions") for s in subs)
+                try:
+                    subs = client.get(f"/le/1.99/{ou}/dropbox/folders/{folder['Id']}/submissions/")
+                    submitted = any(s.get("Submissions") for s in subs)
+                except Forbidden:
+                    submitted = None
                 rows.append({
                     "course": course, "name": folder["Name"], "due": due, "ou": ou,
                     "id": folder["Id"], "submitted": submitted,
@@ -223,7 +237,7 @@ def cmd_due(client, days, ledger_dir, as_json):
     else:
         for r in rows:
             local = dt.datetime.fromisoformat(r["due"].replace("Z", "+00:00")).astimezone()
-            flags = ("submitted" if r["submitted"] else "NOT SUBMITTED")
+            flags = {True: "submitted", False: "NOT SUBMITTED", None: "UNKNOWN (403, check in browser)"}[r["submitted"]]
             if not r["in_ledger"]:
                 flags += "  NOT IN LEDGER"
             print(f"{r['course']:<12} {r['name'][:42]:<42} {local:%a %b %d %H:%M}  {flags}")

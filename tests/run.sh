@@ -1271,6 +1271,7 @@ if group "reasoning backends"; then
   check "chewbacca-bridge runs only its fixed tools" python3 "$ROOT/tests/test_chewbacca_bridge.py"
   check "gateway protocol and execution" python3 "$ROOT/tests/test_chatgpt_gateway.py"
   check "provider selection and ownership" python3 "$ROOT/tests/test_mac_use_providers.py"
+  check "run_plan calls only functions that exist" python3 "$ROOT/tests/test_run_plan_names.py"
   check "Codex shared instructions and optional health" python3 "$ROOT/tests/test_codex.py"
   check "Codex personal context startup" python3 "$ROOT/tests/test_codex_context.py"
   check "Codex native lifecycle hooks" python3 "$ROOT/tests/test_codex_hooks.py"

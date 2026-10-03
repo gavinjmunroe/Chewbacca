@@ -98,6 +98,20 @@ def main() -> int:
     check("the trigger is a whole word", tc.command_in("Kyberish thing", "kyber") is None)
     check("the trigger takes punctuation after it", tc.command_in("Kyber: hi", "kyber") == "hi")
 
+    # With no trigger word: every plain text is a command, links and the
+    # script's own replies are not.
+    tc.CONFIG.write_text(json.dumps({"handles": ["+15550100"], "trigger": ""}))
+    before = len(asked)
+    add(1, "what's due this week")
+    add(1, "https://www.instagram.com/reel/abc")
+    tc.run(False, db_path, ask, send, now=lambda: clock[0])
+    check("with no trigger, a plain text is a command", asked[before:] == ["what's due this week"], asked)
+    add(1, "answer to what's due this week", later=2)
+    tc.run(False, db_path, ask, send, now=lambda: clock[0])
+    add(1, "answer to what's due this week", later=1)
+    tc.run(False, db_path, ask, send, now=lambda: clock[0])
+    check("its own reply landing in the thread is never answered, even twice", len(asked) == before + 1, asked)
+
     tc.CONFIG.write_text(json.dumps({}))
     check("with no handles configured nothing is read", tc.run(False, db_path, ask, send) == 2)
 

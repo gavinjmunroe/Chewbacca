@@ -11,7 +11,9 @@ A command is a message that:
     forged SMS "from" your own number would land in this same thread (a
     self text can land as sent or as received, so `is_from_me` is not asked,
     and the second copy of one is skipped),
-  - starts with the trigger word ("kyber" unless the config says otherwise),
+  - starts with the trigger word, when the config sets one ("trigger": "kyber"),
+    or with none set, is any text with no link in it (links are the content
+    inbox's, bin/social-inbox) and is not one of this script's own replies,
   - arrived after the first run, which only records where history ends.
 
 THE HARD LINE. Nothing reached this way sends, posts, pays or deletes. Those
@@ -124,8 +126,18 @@ def body_text(text: str | None, blob: bytes | None) -> str:
     return blob[start:start + size].decode("utf-8", "ignore")
 
 
+URL = re.compile(r"https?://|www\.", re.I)
+# The replies this keeps, to know its own when they land in the thread. Its
+# answer arrives there as a new row like any other text, and with no trigger
+# word an unrecognised reply would be answered, and that answer answered.
+KEPT_REPLIES = 20
+
+
 def command_in(words: str, trigger: str) -> str | None:
     """What was asked, with the trigger word taken off, or None."""
+    if not trigger:
+        asked = words.strip()
+        return None if not asked or URL.search(asked) else asked
     m = re.match(rf"^\s*{re.escape(trigger)}\b[\s,:.-]*(.*)$", words, re.I | re.S)
     if not m:
         return None
@@ -199,7 +211,7 @@ def model_argv(asked: str) -> list[str]:
 def reply_to(handle: str, words: str, trigger: str) -> bool:
     words = words.strip()[:MOST_CHARS]
     # A reply that started with the trigger word would read as the next command.
-    if command_in(words, trigger) is not None:
+    if trigger and command_in(words, trigger) is not None:
         words = "Re: " + words
     done = subprocess.run(["mac", "messages", "send", handle, words], capture_output=True, text=True)
     return done.returncode == 0
@@ -209,7 +221,7 @@ def run(dry_run: bool, db_path: Path = CHAT_DB, ask=answer, send=reply_to, now=N
     now = now or apple_now
     config = load_json(CONFIG, {})
     handles = [h for h in config.get("handles", []) if isinstance(h, str) and h]
-    trigger = str(config.get("trigger") or "kyber")
+    trigger = str(config.get("trigger", "kyber") or "")
     if not handles:
         log("no handles in", CONFIG, "so nothing is read")
         return 2
@@ -239,7 +251,16 @@ def run(dry_run: bool, db_path: Path = CHAT_DB, ask=answer, send=reply_to, now=N
 
 def handle_rows(rows, state, handles, trigger, dry_run, ask, send) -> None:
     for rowid, at, words in rows:
-        asked = command_in(words, trigger)
+        replies = state.get("replies") or []
+        if words.strip()[:MOST_CHARS] in replies:
+            # Kept, not crossed off: a self text can land twice.
+            asked = None
+        else:
+            asked = command_in(words, trigger)
+        if asked is None:
+            # What a row that was not a command began with, so a text that
+            # should have been one can be seen to have decoded wrong.
+            log(f"row {rowid} not a command: {words[:16]!r} ({len(words)} chars)")
         last = state.get("answered") or {}
         if asked is not None and last.get("words") == asked and abs(at - last.get("at", 0)) < SAME_TEXT_S:
             asked = None
@@ -249,6 +270,8 @@ def handle_rows(rows, state, handles, trigger, dry_run, ask, send) -> None:
                 print(f"would answer {rowid}: {asked}")
             else:
                 reply = ask(asked)
+                kept = (state.get("replies") or [])[-(KEPT_REPLIES - 1):]
+                state["replies"] = kept + [reply.strip()[:MOST_CHARS]]
                 ok = send(handles[0], reply, trigger)
                 log(f"answered {rowid} sent={ok} chars={len(reply)}")
         if not dry_run:

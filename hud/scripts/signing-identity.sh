@@ -52,14 +52,24 @@ EOF
   echo "Making the certificate..."
   openssl req -x509 -newkey rsa:2048 -keyout "$WORK/key.pem" -out "$WORK/cert.pem" \
     -days 7300 -nodes -config "$WORK/cert.cnf" >/dev/null 2>&1
-  openssl pkcs12 -export -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
-    -out "$WORK/id.p12" -passout pass: -name "$NAME" >/dev/null 2>&1
+  # OpenSSL 3 (Homebrew's) writes a PKCS12 with an HMAC-SHA256 MAC that
+  # macOS `security import` cannot verify: on 2026-10-03 it failed with "MAC
+  # verification failed during PKCS12 import (wrong password?)", and the same
+  # file built with -legacy imported. LibreSSL (/usr/bin/openssl) has no
+  # -legacy flag and already writes the old format. The password only
+  # protects the file between these two commands; an empty one is what
+  # macOS's importer handles worst.
+  LEGACY=""
+  if openssl pkcs12 -help 2>&1 | grep -q -- "-legacy"; then LEGACY="-legacy"; fi
+  TRANSFER="chewbacca-$$"
+  openssl pkcs12 -export $LEGACY -inkey "$WORK/key.pem" -in "$WORK/cert.pem" \
+    -out "$WORK/id.p12" -passout "pass:$TRANSFER" -name "$NAME" >/dev/null 2>&1
 
   # Only codesign is given the key. macOS may still ask once, the first time it
   # signs, whether codesign may use it; "Always Allow" ends that for good.
   echo "Putting it in your login keychain..."
   security import "$WORK/id.p12" -k "$HOME/Library/Keychains/login.keychain-db" \
-    -P "" -T /usr/bin/codesign >/dev/null
+    -P "$TRANSFER" -T /usr/bin/codesign >/dev/null
 
   # Trust is what makes it an identity rather than a file. This is the step
   # that needs the password, and the only one.

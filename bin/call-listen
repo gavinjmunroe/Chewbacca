@@ -632,13 +632,80 @@ def valid_pick(answer, criteria: dict) -> str | None:
     return choice
 
 
+# Hormozi: prospects believe almost nothing the closer says and almost
+# everything they say themselves (research/sales RULES.md, three talks). A
+# line a bank marks with "capture" stores what they just said; a line marked
+# with "use" shows it back under the cue. Quoted, never paraphrased, so the
+# coach cannot put words in their mouth.
+SPOKEN_FILLER = re.compile(r"\b(?:um+|uh+|uhm|er|like|you know|i mean|kind of|sort of|honestly|basically)\b,?\s*", re.I)
+THEIR_WORDS_MAX = 16
+DANGLING = {"a", "an", "the", "this", "that", "and", "or", "but", "so", "to", "of", "for", "in", "on",
+            "at", "my", "your", "with", "is", "was", "im", "i'm", "i", "it", "its", "it's", "just", "because"}
+
+
+def their_words(text: str) -> str:
+    """A speech-to-text line cut to what can be said back: fillers and
+    stutters out, at most THEIR_WORDS_MAX words, ending on a clause."""
+    text = SPOKEN_FILLER.sub("", text)
+    text = re.sub(r"^(?:(?:so|fair|yeah|yes|ok|okay|well|right|and|i guess)\b[,.]?\s*)+", "", text.strip(), flags=re.I)
+    words = text.split()
+    key = lambda chunk: [w.lower().strip(",.") for w in chunk]
+    # Stutters repeat a phrase, not just a word: "I want to I want to lose".
+    for size in (4, 3, 2, 1):
+        i = 0
+        while i + 2 * size <= len(words):
+            if key(words[i:i + size]) == key(words[i + size:i + 2 * size]):
+                del words[i + size:i + 2 * size]
+            else:
+                i += 1
+    if len(words) > THEIR_WORDS_MAX:
+        cut = words[:THEIR_WORDS_MAX]
+        ends = [i for i, w in enumerate(cut) if w.endswith((",", ".", "?", "!")) and i >= 5]
+        words = cut[: ends[-1] + 1] if ends else cut
+    # Never end a quote mid-phrase: "keep it off this" read back sounds
+    # like the coach misheard (n1 replay, 2026-10-03).
+    while len(words) > 5 and words[-1].lower().strip(",.") in DANGLING:
+        words.pop()
+    return " ".join(words).strip(" ,.") if words else ""
+
+
+# The picker files a goal stated mid-answer under whatever the answer was
+# about, so bank captures alone fired 4 times in 8 test calls (n1, 2026-10-03).
+# These catch the phrasing itself, but only in discovery: after the pitch,
+# "I want it, it's just the three grand" is an objection, not a goal.
+GOAL_WORDS = re.compile(r"\b(?:i want|i wanna|i'd love|i need to|my goal|i'd like to|i just want|be able to)\b", re.I)
+PAIN_WORDS = re.compile(r"\b(?:tired of|sick of|i hate|scared|afraid|embarrass\w*|doctor|blood pressure|out of breath|never stick|always quit|fell off|gave up)\b", re.I)
+
+
+def heard_goal_or_pain(text: str) -> tuple[str, str] | None:
+    """("goal" | "pain", their words from the phrase on), or None."""
+    for key, pattern, back in (("goal", GOAL_WORDS, 0), ("pain", PAIN_WORDS, 2)):
+        found = pattern.search(text)
+        if found:
+            before = text[: found.start()].split()[-back:] if back else []
+            rest = re.split(r"(?<=[.?!])\s", text[found.start():], maxsplit=1)[0]
+            words = their_words(" ".join(before) + " " + rest)
+            if len(words.split()) >= 4:
+                return key, words
+    return None
+
+
+def playback(bank: dict[str, dict], sid: str, said: dict[str, str]) -> str:
+    for key in bank.get(sid, {}).get("use", []):
+        if said.get(key):
+            return f'They said: "{said[key]}"'
+    return ""
+
+
 def situation_cue(bank: dict[str, dict], sid: str, repeat: bool = False) -> str | None:
     if sid == "none":
         return None
     if sid == "check":
         return f"SAY: {CHECK_LINE}"
     situation = bank[sid]
-    line = situation.get("alt") if repeat else situation.get("line")
+    # "say" is the line with read-aloud marks (" / " a beat, one word in
+    # caps to lean on); the words are the line's, checked by intake.
+    line = situation.get("alt") if repeat else (situation.get("say") or situation.get("line"))
     if not line:
         return None
     kind = situation.get("kind", "SAY")
@@ -751,10 +818,12 @@ class Screen:
             f"@ {self.SURFACE} at=top w=560",
             'c s Screen title="CALL"',
             "c cue Heading text=@/cue level=1",
+            "c theirs Text value=@/theirs",
             "c heard Text value=@/heard tone=muted",
             "c talk Text value=@/talk tone=muted",
-            "> s cue heard talk",
+            "> s cue theirs heard talk",
             'd /cue "Listening"',
+            'd /theirs ""',
             'd /heard ""',
             'd /talk ""',
             "r s",
@@ -795,6 +864,7 @@ class CueResult:
     cue: str | None  # what the screen shows; None for no cue
     took: float
     held_back: str = ""  # the cue the guard replaced, if it did
+    theirs: str = ""  # the prospect's own words to say back, shown under the cue
 
 
 @dataclass
@@ -803,6 +873,8 @@ class Call:
     lines: list[Line] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
     shown: dict[str, int] = field(default_factory=dict)  # situation id -> times picked
+    said: dict[str, str] = field(default_factory=dict)  # "goal", "pain", "why" -> their words
+    pitched: bool = False  # a pitch or objection line has shown: discovery is over
 
     def talk_share(self) -> int | None:
         with self.lock:
@@ -1051,7 +1123,8 @@ class Listener:
                 continue
             line.cue = result.cue
             self.screen.set("cue", line.cue)
-            print(f"  >>  {line.cue}   ({result.took:.1f}s)", flush=True)
+            self.screen.set("theirs", result.theirs)
+            print(f"  >>  {line.cue}   ({result.took:.1f}s)" + (f"\n      {result.theirs}" if result.theirs else ""), flush=True)
 
     def cue_for(self, line: Line) -> "CueResult":
         """One line heard -> the cue for the screen. The stress harness
@@ -1078,13 +1151,23 @@ class Listener:
                 # time and answered with nothing.
                 if picked in ("none", "check"):
                     return CueResult(f"PICK {picked}", situation_cue(self.lines, picked), took)
+                key = self.lines[picked].get("capture")
+                if key and their_words(line.text):
+                    self.call.said[key] = their_words(line.text)
+                elif not self.call.pitched:
+                    heard = heard_goal_or_pain(line.text)
+                    if heard:
+                        self.call.said.setdefault(*heard)
+                if self.lines[picked].get("use"):
+                    self.call.pitched = True
+                theirs = playback(self.lines, picked, self.call.said)
                 times = self.call.shown.get(picked, 0)
                 self.call.shown[picked] = times + 1
                 if self.lines[picked].get("kind", "SAY") == "SAY":
                     cue = situation_cue(self.lines, picked, times % 2 == 1) or situation_cue(self.lines, picked)
                 else:
                     cue = situation_cue(self.lines, picked, times == 1) if times < 2 else None
-                return CueResult(f"PICK {picked}", cue, took)
+                return CueResult(f"PICK {picked}", cue, took, theirs=theirs if cue else "")
             # In bank mode a failed pick shows nothing. The 2026-10-03 site
             # replay's only off-bank cue came from falling through to the
             # written coach here, and a written line is the part that invents.

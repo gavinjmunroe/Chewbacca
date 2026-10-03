@@ -490,19 +490,6 @@ def test_not_now_holds_until_the_app_lets_go_of_the_mic():
     assert started == []
 
 
-if __name__ == "__main__":
-    failed = 0
-    for name, fn in sorted(globals().items()):
-        if name.startswith("test_") and callable(fn):
-            try:
-                fn()
-                print(f"  ok   {name}")
-            except AssertionError as err:
-                failed += 1
-                print(f"  FAIL {name} {err}")
-    sys.exit(1 if failed else 0)
-
-
 def test_any_offer_bank_in_the_brain_loads_and_odd_names_do_not():
     # A closer loads an employer's script as calls/lines/<offer>.json; the
     # first three offers were hardcoded until 2026-10-03.
@@ -514,3 +501,50 @@ def test_any_offer_bank_in_the_brain_loads_and_odd_names_do_not():
         assert set(listen.load_lines(brain, "northline")) == {"price", "check", "none"}
         assert listen.load_lines(brain, "../northline") is None
         assert listen.load_lines(brain, "missing") is None
+
+
+def test_their_words_cut_fillers_and_stay_short():
+    said = listen.their_words("um so like I want to I want to lose twenty pounds before my sister's wedding in may, that's the big one honestly")
+    assert said.startswith("I want to lose twenty pounds")
+    assert "um" not in said.split() and "I want to I want" not in said
+    assert len(said.split()) <= listen.THEIR_WORDS_MAX
+    clipped = listen.their_words("i just want to feel good in my clothes again and actually keep it off this time for real")
+    assert not clipped.endswith(" this"), clipped
+
+
+def test_a_goal_they_state_is_shown_back_at_an_objection():
+    # The words come from the transcript, never from a model, so the coach
+    # cannot put a goal in their mouth.
+    listener, pick = _bank_listener(["goal", "price"])
+    listener.lines = {
+        "goal": {"kind": "ASK", "line": "Why that number?", "capture": "goal"},
+        "price": {"kind": "HANDLE", "line": "No problem. What part do you want to think through?", "say": "No problem. / What PART do you want to think through?", "use": ["goal"]},
+    }
+    real, listen.pick_situation = listen.pick_situation, pick
+    try:
+        first = listener.cue_for(listen.Line("them", 0.0, 1.0, "honestly just fit in my suits again"))
+        assert first.cue == "ASK: Why that number?" and first.theirs == ""
+        later = listener.cue_for(listen.Line("them", 2.0, 3.0, "i need to think about it"))
+        assert later.cue == "HANDLE: No problem. / What PART do you want to think through?"
+        assert later.theirs == 'They said: "just fit in my suits again"'
+    finally:
+        listen.pick_situation = real
+
+
+def test_goal_and_pain_are_heard_in_discovery_from_the_phrase_on():
+    assert listen.heard_goal_or_pain("i filled out the app thing. i wanna drop like thirty pounds. so what do you charge") == ("goal", "i wanna drop thirty pounds")
+    assert listen.heard_goal_or_pain("my doctor said my numbers are creeping up and im 44")[0] == "pain"
+    assert listen.heard_goal_or_pain("we walked the dog") is None
+
+
+if __name__ == "__main__":
+    failed = 0
+    for name, fn in sorted(globals().items()):
+        if name.startswith("test_") and callable(fn):
+            try:
+                fn()
+                print(f"  ok   {name}")
+            except AssertionError as err:
+                failed += 1
+                print(f"  FAIL {name} {err}")
+    sys.exit(1 if failed else 0)

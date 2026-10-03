@@ -81,14 +81,18 @@ EOF
 
   # Trust is what makes it an identity rather than a file. This is the step
   # that needs the password, and the only one. Without a terminal (Claude
-  # Code's `!` prefix has none) sudo cannot ask, which is how this failed on
-  # 2026-10-03, so the system password dialog asks instead.
+  # Code's `!` prefix has none) sudo cannot ask. An administrator-privileges
+  # osascript reaches root but then fails "no user interaction was possible",
+  # because the system trust store wants its own prompt. Both seen 2026-10-03.
+  # Trust for this user only works from there: macOS shows its password
+  # dialog, and find-identity counts the certificate valid afterwards.
   echo "Trusting it for code signing (this is the step that asks for your password)..."
   if [ -t 0 ]; then
     sudo security add-trusted-cert -d -r trustRoot -p codeSign \
       -k /Library/Keychains/System.keychain "$WORK/cert.pem"
   else
-    osascript -e "do shell script \"security add-trusted-cert -d -r trustRoot -p codeSign -k /Library/Keychains/System.keychain '$WORK/cert.pem'\" with administrator privileges"
+    security add-trusted-cert -r trustRoot -p codeSign \
+      -k "$HOME/Library/Keychains/login.keychain-db" "$WORK/cert.pem"
   fi
 
   if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "$NAME"; then

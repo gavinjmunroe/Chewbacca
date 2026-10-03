@@ -32,6 +32,11 @@ Shipped inside this repo, or cloned onto the machine by `setup.sh`.
 | [onvoyage-ai/gtm-engineer-skills](https://github.com/onvoyage-ai/gtm-engineer-skills) | OnVoyage AI | MIT | Twelve SEO, AEO and GEO skills (keyword research, AI-search audits, content, backlinks, Reddit), linked per skill from a clone by `setup.sh` |
 | [Shubhamsaboo/awesome-llm-apps](https://github.com/Shubhamsaboo/awesome-llm-apps) | Shubham Saboo | Apache-2.0 | Two skills cloned by `setup.sh`: `thinking-out-loud` echoes a voice ramble back before acting on it, and `first-reader` runs simulated beta readers over a draft before it is posted |
 | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | Corey Haines | MIT | Six of its 50 marketing skills, linked per skill from a clone by `setup.sh`: offers, pricing, cold-email, copywriting, marketing-psychology, social |
+| [cathrynlavery/diagram-design](https://github.com/cathrynlavery/diagram-design) | Cathryn Lavery | MIT | The `diagram` skill, vendored at a pinned commit with its `verify-geometry.py` checker. Onboarding, profiles, auto-update and the editorial template are left out; see `skills/diagram/UPSTREAM.md` |
+| [pbakaus/impeccable](https://github.com/pbakaus/impeccable) | Paul Bakaus | Apache-2.0 | The four page modes and the Verify and Refuse lists in `skills/interface/references/craft-floor.md`. The plugin itself is not installed |
+| [Leonxlnx/taste-skill](https://github.com/Leonxlnx/taste-skill) | Leonxlnx | MIT | "Motion claimed, motion shown", the dials and two countable checks in the interface skill |
+| [hardikpandya/stop-slop](https://github.com/hardikpandya/stop-slop) | Hardik Pandya | MIT | Two writing patterns, false agency and narrator-from-a-distance, in `.claude/rules/writing.md` |
+| [zarazhangrui/frontend-slides](https://github.com/zarazhangrui/frontend-slides) | Zara Zhang | MIT | The stage size, reading-or-speaking question and no-process-labels rules in `crafts/deck.md`. Its public deploy script is not used |
 | [D4Vinci/Scrapling](https://github.com/D4Vinci/Scrapling) | Karim Shoair | BSD-3-Clause | The fetcher and hidden-text sanitizer under `scrape`, installed into its own venv on first run. Its stealth fetcher and Cloudflare solver are deliberately not used |
 | [browser-use/macOS-use](https://github.com/browser-use/macOS-use) | browser-use | MIT | The runtime under `mac-use`. Chewbacca owns the provider adapters, macOS-use supplies the agent loop |
 | [lahfir/agent-desktop](https://github.com/lahfir/agent-desktop) | lahfir | Apache-2.0 | The accessibility-tree driver. Stable element refs, JSON out |
@@ -193,6 +198,7 @@ practitioner. The rule that forced this is
 | [Application essay](library/crafts/application-essay.md) | A former Dartmouth admissions officer's account of reading the pile, College Essay Guy and Collegewise on show-don't-tell, plus one outcome retro diffing five rejections against two advances in a single cycle |
 | [Study guide](library/crafts/study-guide.md) | Roediger and Karpicke, above |
 | [Onboarding kit](library/crafts/onboarding-kit.md) | Diátaxis, above |
+| [Deck](library/crafts/deck.md) | zarazhangrui/frontend-slides, above |
 
 ### People, by permission
 

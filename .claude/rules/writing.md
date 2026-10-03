@@ -115,6 +115,32 @@ Before writing any headline, ask: could this headline appear on a competitor's s
 
 If yes, it is not specific enough. Rewrite it.
 
+### Name who did it
+
+**False agency** gives an inanimate thing a human verb, which hides the person
+who acted. Complaints do not become fixes, decisions do not emerge, data does
+not tell. Name the human, or put the reader in the seat with "you".
+
+```
+WRONG: "The complaint becomes a fix."
+RIGHT: "The team fixed it that week."
+
+WRONG: "The data tells us retention dropped."
+RIGHT: "We read the cohort table: retention dropped 8 points."
+```
+
+**Narrator-from-a-distance** floats above the scene instead of putting the
+reader in it: "Nobody designed this", "This is why...", "People tend to...".
+
+```
+WRONG: "Nobody designed this. It just accumulated."
+RIGHT: "You don't sit down one day and decide to run 40 tabs."
+```
+
+Both are from Stop Slop (hardikpandya/stop-slop, MIT, `8da1f03`,
+`references/structures.md`). Neither has a fixed vocabulary, so `slop-check`
+does not catch them. Read for them.
+
 ---
 
 ## TWO SHAPES THAT READ AS GENERATED

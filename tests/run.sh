@@ -874,6 +874,10 @@ if group "installer"; then
     bash "$ROOT/tests/chewbacca_google.sh" "$ROOT"
   check  "chewbacca email signs in with calendar write, Docs and Gmail compose, re-consents the main gws config in place, pins the account, and drops the stale token cache" \
     bash "$ROOT/tests/chewbacca_email_scopes.sh" "$ROOT"
+  # 2026-10-03: diagram was vendored from diagram-design. Its geometry checker
+  # must still refuse a label mask under a later node, on our fixtures and theirs.
+  check  "diagram geometry checker passes clean and refuses overlaps" \
+    bash "$ROOT/skills/diagram/tests/geometry.sh" "$ROOT"
 
   # Every kit on the machine matched one 17,000-character message about a club
   # website on 2026-09-22, because hit count was never divided by what was

@@ -39,7 +39,9 @@ where the data comes from. All four of those are written down here, once.
    including reverse scroll. An opacity sum of one does not prevent collisions.
    Refresh the actual preview the user is viewing before claiming a fix. Test
    its current viewport too; a desktop screenshot does not prove that a narrow
-   rule preserved the figures or controls the user cares about.
+   rule preserved the figures or controls the user cares about. Run the
+   Verify list, Refuse list and countable checks in
+   `references/craft-floor.md` against the same render.
 
    For a narrative page, review the whole journey before polishing individual
    sections. At each handoff, name what persists, what changes, and what the
@@ -127,6 +129,48 @@ vision. Two rules came out of it:
   tool as a live thumbnail the way Docs shows pages, faces instead of counts.
   A description of the product is the generated move.
 
+**Name the mode before the stance.** The mode says what success looks like for
+the person on the surface. Choose it from the surface, not the product: a
+tool's landing page is still Persuade, a docs index is still Read.
+
+| Mode           | The visitor                                                 | Surfaces                                    |
+| -------------- | ----------------------------------------------------------- | ------------------------------------------- |
+| **Persuade**   | decides and acts; the design is the product                 | landing, marketing, campaigns, pricing      |
+| **Operate**    | completes a task; scanability and native expectations first | app UI, dashboards, editors, admin, settings |
+| **Read**       | understands something; structure for comprehension first    | docs, articles, guides, help, changelogs    |
+| **Experience** | is inside the work; the interface recedes                   | portfolios, galleries, case studies         |
+
+Most templates in the taxonomy are Operate. The Amber Circles landing was
+Persuade, in the signage stance: mode and stance are separate calls.
+_Modes from pbakaus/impeccable `skill/SKILL.src.md`, Apache-2.0, at `e103efe`._
+
+**On Persuade and Experience, declare the ambition before building.** Three
+dials, 1 to 10, decided once per surface like the theme: `DESIGN_VARIANCE`
+(symmetry to asymmetry), `MOTION_INTENSITY` (static to cinematic),
+`VISUAL_DENSITY` (gallery to cockpit). Operate and Read take no dials; their
+motion follows how often the interaction is seen
+([library/crafts/web-ux.md](../../library/crafts/web-ux.md), "Motion").
+
+| Use case                      | Variance | Motion | Density |
+| ----------------------------- | -------- | ------ | ------- |
+| Landing, SaaS                 | 7        | 6      | 4       |
+| Landing, agency or creative   | 9        | 8      | 3       |
+| Landing, premium consumer     | 7        | 6      | 3       |
+| Portfolio, designer or studio | 8        | 7      | 3       |
+| Portfolio, developer          | 6        | 5      | 4       |
+| Editorial or blog             | 6        | 4      | 3       |
+| Public-sector service         | 3        | 2      | 5       |
+
+**Motion claimed, motion shown.** Above motion 4 the page has to move. A static
+page that claims `MOTION_INTENSITY: 7` is broken. If working motion will not fit
+the scope, drop the dial to 3 and ship a clean static page; never half-build
+motion that breaks. On 2026-09-23 a page shipped at 3 animations against a
+reference's 214 and the linter returned clean, because nothing scored ambition.
+_Dials and rule from Leonxlnx/taste-skill `skills/taste-skill/SKILL.md` §1.B
+and §5, MIT, at `ce26fc2`. Its "at minimum" list (hero entrance, scroll-reveal
+on key sections, CTA hover physics) is left out: step 6 already refuses to
+equate motion with quantity._
+
 ## One theme, never re-chosen
 
 Caleb: "keep it the same theme." Tokens are defined once per surface and
@@ -156,6 +200,9 @@ mistake.
 - [references/discover-data.md](references/discover-data.md): the procedure for
   a source nothing covers yet, cheapest method first, ending in pixels only as
   a last resort. Read when step 3 misses.
+- [references/craft-floor.md](references/craft-floor.md): what to check on
+  the built result, what to refuse, and what a script can count. Read at
+  step 6.
 - [library/crafts/interface.md](../../library/crafts/interface.md): the researched rules, from
   Refactoring UI and Atomic Design. Read at step 4.
 

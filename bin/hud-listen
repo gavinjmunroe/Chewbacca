@@ -25,6 +25,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import secrets
 import shlex
 import socket
@@ -289,6 +290,42 @@ RETIRE_TURNS = 50
 # the one 2026-10-03 failure, never tuned.
 CARRY_EXCHANGES = 4
 CARRY_CHARS = 600
+
+
+# "Scan my recent texts" took a model turn of several tool round trips to
+# find and read chat.db, long enough on 2026-10-03 that Caleb asked why it was
+# still going at 0:14. `people texts --days 1` answers the same question with
+# names attached in 0.09 s, so it is read before the model starts and handed
+# over: one reply, no tool calls. Sending ("text Sagar ...") never matches.
+TEXTS_ASK = re.compile(
+    r"\b(?:my|new|recent|latest|unread|today'?s)\s+(?:\w+\s+)?(?:texts?|messages|imessages?|dms)\b"
+    r"|\bany\s+(?:new\s+)?(?:texts?|messages|dms)\b|\bwho (?:texted|messaged)\b|\bwhat did i miss\b",
+    re.IGNORECASE)
+TEXTS_CHARS = 8000
+
+
+def wants_texts(said: str) -> bool:
+    return bool(TEXTS_ASK.search(said or "")) and not re.match(
+        r"\s*(?:text|send|reply|message)\b", said or "", re.I)
+
+
+def texts_hint(said: str) -> str:
+    """Today's texts for a request to read them, or "" for anything else."""
+    if not wants_texts(said):
+        return ""
+    people = shutil.which("people") or str(Path(__file__).resolve().parent / "people")
+    try:
+        out = subprocess.run([people, "texts", "--days", "1"], capture_output=True,
+                             text=True, timeout=4).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if not out:
+        return ""
+    if len(out) > TEXTS_CHARS:
+        out = "...\n" + out[-TEXTS_CHARS:]
+    return ("Their texts from the last day are already read for you below (people texts "
+            "--days 1, oldest first, '->' is them sending). Answer from this; run no tool "
+            "to read messages again unless they ask for something older.\n\n" + out)
 
 
 def carried_context(recent) -> str:
@@ -665,7 +702,7 @@ def instructions() -> str:
         return ""
 
 
-def draw_lines(text: str) -> list[str]:
+def draw_lines(text: str, *, prose_reply: bool = False) -> list[str]:
     """Keep the ops and throw away the prose.
 
     A model asked for only Kyber Lines will still occasionally explain itself, and
@@ -681,6 +718,12 @@ def draw_lines(text: str) -> list[str]:
         if not stripped:
             continue
         head = stripped.split(None, 1)[0]
+        # In a prose answer "- item" is a Markdown bullet and "> quote" a
+        # quote, but on the wire they close surfaces and a bare "-" clears
+        # the glass. An agent with tools draws through `hud`, never through
+        # its prose, so those two verbs only count in a Kyber Lines reply.
+        if prose_reply and head in ("-", ">"):
+            continue
         if head in VERBS:
             out.append(stripped)
     return out
@@ -2265,6 +2308,7 @@ class Listener:
         req = Request(
             said=said, spoken_at=time.monotonic(), pointed=self.pointing(),
             marks=self.pointed_marks(), typed=typed, relayed=relayed, dest=dest, tty=tty, agent=agent,
+            hint="" if relayed else texts_hint(said),
         )
         with self.state:
             waiting = self.current is not None
@@ -3306,7 +3350,7 @@ class Listener:
         # opened, and every request after it would fail the same way.
         if ok:
             self.started = True
-        for line in draw_lines(out):
+        for line in draw_lines(out, prose_reply=not self.bare):
             self.send(line)
         replied = out.strip()
         if replied:

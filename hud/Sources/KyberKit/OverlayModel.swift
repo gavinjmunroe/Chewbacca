@@ -195,7 +195,12 @@ public final class OverlayModel {
             revision += 1
 
         case .close(let id):
-            if id.isEmpty { reset() } else { close(id) }
+            // A clear from the bridge while an answer is still coming takes
+            // the glass, never the conversation panel. On 2026-10-03 the panel
+            // closed mid-answer and left the pill loading on its own, which
+            // Caleb read as the HUD quitting on him. Escape, the close button,
+            // two globe presses and the menu still close it.
+            if id.isEmpty { reset(keepChat: pill.phase == .working || pill.phase == .hearing || pill.phase == .heard) } else { close(id) }
 
         case .say(let text):
             say(text)
@@ -447,7 +452,7 @@ public final class OverlayModel {
         }
     }
 
-    public func reset() {
+    public func reset(keepChat: Bool = false) {
         markers = []
         agentCursorTask?.cancel()
         agentCursor = nil
@@ -467,7 +472,7 @@ public final class OverlayModel {
         // forgotten either, and a panel that opens empty over a model that
         // remembers the last exchange is lying about one of them.
         // `clearChat` is the deliberate version.
-        closeChat()
+        if !keepChat { closeChat() }
         revision += 1
     }
 

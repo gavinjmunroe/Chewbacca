@@ -2360,6 +2360,27 @@ def test_accounts(m) -> None:
             m.ACCOUNTS_FILE, m.ACCOUNT_STATE, m.DEFAULT_CONFIG = saved
 
 
+def test_prose_bullets_never_reach_the_glass(m) -> None:
+    """A bulleted answer forwarded "-" lines, the display's close verb, and a
+    bare "-" clears the glass. In prose they are Markdown, not commands."""
+    reply = "Two threads:\n- Sagar\n-\n> quoted line\ns heads up"
+    lines = m.draw_lines(reply, prose_reply=True)
+    check("a prose bullet is not sent as a close", not any(l.startswith(("-", ">")) for l in lines), str(lines))
+    check("real verbs in prose still go through", "s heads up" in lines, str(lines))
+    check("a Kyber Lines reply keeps its clear", "-" in m.draw_lines("-\n- panel"), "")
+
+
+def test_texts_are_read_before_the_model(m) -> None:
+    """2026-10-03: "scan my recent texts" sat at 0:14 and climbing while the
+    model found and read chat.db with tools. The texts now arrive in the hint."""
+    for said in ("Scan my recent texts", "any new texts?", "what did I miss",
+                 "who texted me", "read my messages"):
+        check(f"prefetches texts for {said!r}", m.wants_texts(said))
+    for said in ("text Sagar that I'm late", "Send a message to Colin", "open messages",
+                 "check the deploy messages in Vercel", "reply to my messages from Sagar"):
+        check(f"leaves {said!r} alone", not m.wants_texts(said))
+
+
 def test_memory_survives_a_heavy_turn(m) -> None:
     """2026-10-03, 2:39pm: "scan my recent texts" read 114,357 cached tokens
     summed across its tool calls, crossed the old 60k ceiling, retired the
@@ -2389,6 +2410,10 @@ def main() -> int:
     test_speaker_exit_clears_only_owned_voice(module)
     print("two subscriptions")
     test_accounts(module)
+    print("prose bullets stay off the glass")
+    test_prose_bullets_never_reach_the_glass(module)
+    print("texts read before the model")
+    test_texts_are_read_before_the_model(module)
     print("memory across a heavy turn")
     test_memory_survives_a_heavy_turn(module)
     print("draw_lines")

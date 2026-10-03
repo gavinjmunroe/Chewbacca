@@ -155,14 +155,17 @@ def command_in(words: str, trigger: str) -> str | None:
     return asked or None
 
 
-def new_messages(db_path: Path, handles: list[str], after: int) -> list[tuple[int, float, str]]:
-    """(rowid, seconds, words) in the self thread after `after`, oldest first.
+def new_messages(db_path: Path, handles: list[str], after: int) -> list[tuple[int, float, str, str]]:
+    """(rowid, seconds, words, thread) in the self threads after `after`,
+    oldest first. `thread` is the address the text was sent to: the phone
+    number and the Apple ID email are two threads with yourself, and the
+    answer goes back to the one that asked.
     Seconds are Apple's (since 2001), only ever compared with each other."""
     db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         marks = ",".join("?" * len(handles))
         rows = db.execute(
-            f"""select m.ROWID, m.date, m.text, m.attributedBody from message m
+            f"""select m.ROWID, m.date, m.text, m.attributedBody, c.chat_identifier from message m
                 join chat_message_join j on j.message_id = m.ROWID
                 join chat c on c.ROWID = j.chat_id
                 where c.chat_identifier in ({marks}) and m.ROWID > ?
@@ -172,7 +175,8 @@ def new_messages(db_path: Path, handles: list[str], after: int) -> list[tuple[in
         ).fetchall()
     finally:
         db.close()
-    return [(rowid, (date or 0) / 1e9, body_text(text, blob)) for rowid, date, text, blob in rows]
+    return [(rowid, (date or 0) / 1e9, body_text(text, blob), thread)
+            for rowid, date, text, blob, thread in rows]
 
 
 def history_end(db_path: Path, now_s: float) -> int:
@@ -260,17 +264,13 @@ def run(dry_run: bool, db_path: Path = CHAT_DB, ask=answer, send=reply_to, now=N
 
 
 def handle_rows(rows, state, handles, trigger, dry_run, ask, send) -> None:
-    for rowid, at, words in rows:
+    for rowid, at, words, thread in rows:
         replies = state.get("replies") or []
         if fingerprint(words) in replies:
             # Kept, not crossed off: a self text can land twice.
             asked = None
         else:
             asked = command_in(words, trigger)
-        if asked is None:
-            # What a row that was not a command began with, so a text that
-            # should have been one can be seen to have decoded wrong.
-            log(f"row {rowid} not a command: {words[:16]!r} ({len(words)} chars)")
         last = state.get("answered") or {}
         if asked is not None and last.get("words") == asked and abs(at - last.get("at", 0)) < SAME_TEXT_S:
             asked = None
@@ -282,7 +282,7 @@ def handle_rows(rows, state, handles, trigger, dry_run, ask, send) -> None:
                 reply = ask(asked)
                 kept = (state.get("replies") or [])[-(KEPT_REPLIES - 1):]
                 state["replies"] = kept + [fingerprint(reply)]
-                ok = send(handles[0], reply, trigger)
+                ok = send(thread if thread in handles else handles[0], reply, trigger)
                 log(f"answered {rowid} sent={ok} chars={len(reply)}")
         if not dry_run:
             # Saved per row, so a crash halfway never answers a text twice.

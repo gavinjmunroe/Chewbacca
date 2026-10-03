@@ -102,6 +102,35 @@ class TaskIntegrationTests(unittest.TestCase):
         self.assertEqual(gate.current_scope(self.repo), legacy_scope)
         self.assertFalse(gate.check(self.repo)[0])
 
+    def test_task_code_inside_a_new_embedded_repository_needs_its_own_review(self):
+        with gate.task_review('embedded-task'):
+            self.observe(before=True)
+            (self.repo / 'index.md').write_text('task edit\n')
+            child = self.repo / 'hidden'
+            child.mkdir()
+            (child / 'payload.py').write_text('unreviewed task code\n')
+            subprocess.run(['git', '-C', str(child), 'init', '-q'], check=True)
+            self.observe()
+            coverage = gate.task_evidence(self.repo)
+            self.assertEqual(gate.embedded_obligations(coverage), ['hidden'])
+            self.assertTrue(self.review()['ok'])
+            ok, reason = gate.check(self.repo)
+            self.assertFalse(ok)
+            self.assertIn('hidden', reason)
+
+    def test_untouched_embedded_repository_does_not_block_a_task(self):
+        child = self.repo / 'vendor'
+        child.mkdir()
+        (child / 'lib.py').write_text('preexisting\n')
+        subprocess.run(['git', '-C', str(child), 'init', '-q'], check=True)
+        with gate.task_review('clean-task'):
+            self.observe(before=True)
+            (self.repo / 'index.md').write_text('task edit\n')
+            self.observe()
+            self.assertEqual(gate.embedded_obligations(gate.task_evidence(self.repo)), [])
+            self.assertTrue(self.review()['ok'])
+            self.assertTrue(gate.check(self.repo)[0])
+
     def test_touched_dirty_paths_include_preexisting_changes_and_index_only_edits(self):
         (self.repo / 'index.md').write_text('preexisting staged\n')
         self.git('add', 'index.md')

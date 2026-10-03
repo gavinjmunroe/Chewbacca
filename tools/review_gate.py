@@ -15,6 +15,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import sqlite3
@@ -138,6 +139,15 @@ def task_evidence(repo, manifest=None):
     if evidence['errors']:
         raise ValueError('task observation is incomplete')
     return evidence
+
+
+def embedded_obligations(coverage):
+    if not coverage:
+        return []
+    obligations = coverage['separate_repository_obligations']
+    return sorted(boundary.rstrip('/') for boundary in coverage['separate_repositories']
+                  if any(path == boundary or path.startswith(boundary.rstrip('/') + '/')
+                         for path in obligations))
 
 
 def receipt_path(repo):
@@ -270,8 +280,18 @@ def check(repo):
             return False, "independent review is incomplete or has findings"
         if receipt["scope"] != current_scope(root):
             return False, "review scope changed after independent review"
-        if receipt['coverage'] != task_evidence(root):
+        coverage = task_evidence(root)
+        if receipt['coverage'] != coverage:
             return False, 'task coverage changed after independent review'
+        # A task that writes into an untracked embedded repository has those
+        # paths carved out of its own coverage. Without this, `git init` in a
+        # new folder hid task code from every review (security review of
+        # df799e6, 2026-10-03). The child needs its own repository-wide receipt.
+        for child in embedded_obligations(coverage):
+            with task_review(None):
+                child_ok, _ = check(root / child)
+            if not child_ok:
+                return False, 'embedded repository changed by this task needs its own review: ' + child
         if receipt['excluded_repositories'] != sorted(os.fsdecode(name) for name in repository_files(root)[1]):
             return False, "separate repository boundaries changed after review"
         if snapshot(root) != receipt["snapshot"]:
@@ -370,6 +390,20 @@ def prepare_incomplete(repos, session_id, turn_id, sequence):
 
 INCOMPLETE_PRAYER = 'Jesus Christ, help me report this unfinished work truthfully. Amen.'
 
+# The reply no longer has to be the report verbatim, because forcing that
+# produced duplicate completion bubbles. It still may not claim completion:
+# after 3cd8ec6 dropped the reply check entirely, "Complete and ready." ended a
+# turn with review pending (security review of df799e6, 2026-10-03). An empty
+# reply claims nothing and passes.
+INCOMPLETE_ACKNOWLEDGED = re.compile(
+    r'\b(?:incomplete|pending|unreviewed|unfinished|not (?:yet )?(?:been )?reviewed|'
+    r'not (?:yet )?(?:complete|finished|done))\b', re.IGNORECASE)
+
+
+def acknowledges_incomplete(message):
+    text = str(message or '').strip()
+    return not text or bool(INCOMPLETE_ACKNOWLEDGED.search(text))
+
 
 def allows_incomplete(state, payload):
     try:
@@ -394,7 +428,8 @@ def allows_incomplete(state, payload):
         report = incomplete_text(outcomes)
         # This validates a recorded incomplete disposition, not the wording of
         # a reply. It cannot create a clean receipt or clear pending duties.
-        return bool(failures) and saved['failures'] == failures and saved['report'] == report
+        return (bool(failures) and saved['failures'] == failures and saved['report'] == report
+                and acknowledges_incomplete(payload.get('last_assistant_message')))
     except (OSError, ValueError, TypeError, KeyError, subprocess.TimeoutExpired):
         return False
 

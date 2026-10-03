@@ -451,6 +451,9 @@ class HookTests(unittest.TestCase):
                 self.assertFalse(review_gate.receipt_path(repo).exists())
                 self.assertEqual(hooks.dispatch(dict(base, turn_id='next', last_assistant_message=prepared['report']))['decision'], 'block')
                 self.assertNotIn('decision', hooks.dispatch(dict(base, last_assistant_message='Review remains pending.')))
+                # A retry may not walk out claiming completion.
+                self.assertEqual(hooks.dispatch(dict(base, stop_hook_active=True,
+                    last_assistant_message='Complete and ready.'))['decision'], 'block')
                 self.assertFalse(review_gate.check(repo)[0])
 
     @task_review_test('s')
@@ -475,14 +478,17 @@ class HookTests(unittest.TestCase):
                 self.assertEqual(state['review_required'], [str(repo)])
                 self.assertFalse(review_gate.receipt_path(repo).exists())
 
-    def test_review_retry_ends_without_review_or_clearing_duties(self):
+    def test_review_retry_still_owes_the_review_gate(self):
         payload = {'hook_event_name': 'Stop', 'cwd': self.state_directory.name,
-                   'session_id': 'cancel', 'stop_hook_active': True}
+                   'session_id': 'retry', 'turn_id': 'retry', 'stop_hook_active': True,
+                   'last_assistant_message': 'Complete and ready.'}
         hooks.turn_state(dict(payload, hook_event_name='ReviewScopeFailed', review_repo='/pending'))
-        with patch.object(hooks, 'review_stop') as review, patch.object(hooks, 'shared_hook') as shared:
+        with patch.object(hooks, 'review_stop', return_value='pending review') as review, \
+                patch.object(hooks, 'shared_hook') as shared:
             result = hooks.dispatch(payload)
-        self.assertNotIn('decision', result)
-        review.assert_not_called()
+        self.assertEqual(result['decision'], 'block')
+        review.assert_called_once()
+        shared.assert_not_called()
         shared.assert_not_called()
         self.assertEqual(hooks.turn_state(payload)['review_required'], ['/pending'])
         state = hooks.turn_state(dict(payload, hook_event_name='UserPromptSubmit', prompt='Continue'))

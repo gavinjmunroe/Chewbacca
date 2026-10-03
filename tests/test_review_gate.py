@@ -271,6 +271,9 @@ class ReviewGateTests(unittest.TestCase):
         payload = {'session_id': 'session', 'turn_id': 'turn'}
         for message in (prepared['report'], 'Review is still pending.', ''):
             self.assertTrue(gate.allows_incomplete(state, dict(payload, last_assistant_message=message)))
+        # A recorded disposition never licenses claiming the work is finished.
+        for message in ('Complete and ready.', 'All done, shipped it.'):
+            self.assertFalse(gate.allows_incomplete(state, dict(payload, last_assistant_message=message)))
         self.assertFalse(gate.check(self.repo)[0])
         self.assertNotIn('Missing context', prepared['report'])
         for changed in ({'session_id': 'other'}, {'turn_id': 'next'}):

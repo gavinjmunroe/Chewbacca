@@ -389,7 +389,7 @@ def stop_feedback(payload, feedback):
         return {}
     return {'decision': 'block', 'reason':
             'Checks remain incomplete. Resolve the pending checks before claiming completion. '
-            'If work cannot continue, report the limitation briefly. Do not repeat a completion reply.'}
+            'If work cannot continue, say plainly that review is incomplete. Do not repeat a completion reply.'}
 
 
 def dispatch(payload):
@@ -516,7 +516,12 @@ def dispatch_event_body(payload):
         cancelled = re.fullmatch(
             r'(?:bro\s+|please\s+)?(?:stop|cancel)(?:\s+(?:now|please|working|this(?: task)?|the task))?[.!\s]*',
             str(state.get('prompt', '')).strip(), re.IGNORECASE)
-        if payload.get('stop_hook_active') or cancelled:
+        if cancelled:
+            return {}
+        # A retry still owes the review gate: skipping it on stop_hook_active
+        # let a second Stop end the turn with unreviewed changes (security
+        # review of df799e6, 2026-10-03). Desktop cannot block, so it records.
+        if payload.get('stop_hook_active') and is_codex_desktop(payload):
             return {}
         review_feedback = review_stop(state)
         if review_feedback:

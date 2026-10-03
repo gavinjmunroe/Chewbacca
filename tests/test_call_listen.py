@@ -16,7 +16,6 @@ from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "bin" / "lib"))
 
 
 def load(name: str):
@@ -29,9 +28,14 @@ def load(name: str):
     return module
 
 
+# call-listen puts bin/lib and tools on sys.path when it loads. Left there, a
+# later test in the same pytest process that imports `jev` got bin/lib/jev.py
+# instead of the one it meant, and test_hybrid_route failed on 2026-10-02.
+_saved_path = list(sys.path)
 listen = load("call-listen")
 watch = load("call-watch")
-import context_bank  # noqa: E402
+context_bank = listen.context_bank
+sys.path[:] = _saved_path
 
 RATE = 16_000
 

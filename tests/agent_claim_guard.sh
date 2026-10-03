@@ -65,6 +65,14 @@ code=$(run "Nothing stops an agent from running the full 6 min three times." "$T
 [ "$code" = "0" ] && ok "ignores a hypothetical about what an agent could run" \
   || no "false positive on a hypothetical (exit $code)"
 
+# 4c. Describing the guard, or quoting a claim, is not making one.
+code=$(run "The guard that checks whether a reply claims an agent is running misread my sentence." "$TMP/bare.jsonl" "p4c-$RUN")
+[ "$code" = "0" ] && ok "ignores a description of the claim check itself" \
+  || no "false positive on talk about a claim (exit $code)"
+code=$(run 'It read "the agent is running" as a status line.' "$TMP/bare.jsonl" "p4d-$RUN")
+[ "$code" = "0" ] && ok "ignores a quoted claim" \
+  || no "false positive on a quoted claim (exit $code)"
+
 # 5. No claim at all.
 code=$(run "Fixed the import bug in two tools and pushed." "$TMP/bare.jsonl" "p5-$RUN")
 [ "$code" = "0" ] && ok "silent when the reply claims nothing" \

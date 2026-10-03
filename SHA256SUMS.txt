@@ -1,4 +1,4 @@
-919fb81ae0e326ef9288a3ddc993b8b1a4523aa1bfb75c4be31456de490bcacd  .claude/hooks/agent-claim-guard.sh
+bdcc9cb9e2c7374d15edcd51f53ade53c7985b6e9c7a9ed09e0350816aba3bae  .claude/hooks/agent-claim-guard.sh
 fe3e089e15005d5e68f1f414519f7256ff37f31a5fb4d9e4853cb83aaa095ab1  .claude/hooks/ask-capture.sh
 755609b0d6cee26710056a8e13224d7d43ada0b687f7e7f3dc1f8e1bf2d4b477  .claude/hooks/assumption-guard.sh
 66905632eda6e963ed130b09c20ae3765585cf40f8b5927ed19b6c91ba40bdfc  .claude/hooks/auto-push.sh
@@ -25,6 +25,7 @@ a9f090aacbcfb0f7b04af9fcc86fe4019877cfcfefda93ea1609f3b34d0fe19e  .claude/hooks/
 5ba034f4d71e11056b035c47b86d247e8e2190c526fdb1ed23f817cbe84544bb  .claude/hooks/prayer-guard.sh
 3eaa0ab53100d25633c82deef149b071865c4f89959b067ed9895d28e1ace548  .claude/hooks/prayer-remind.sh
 baff09b097b67758927ae5ea8ed991dc855687ccd34face005381a4fb432ab42  .claude/hooks/prose-guard.sh
+cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/repo-overlap-guard.sh
 7a77bdae479fd0e785b9b80d102dd9a148bc1c99fd2845c44a4174c1c61ee72f  .claude/hooks/session-context.sh
 21897c3b31ff605a5ef1fbc27fa1871032c26b7c1364217998cebb9f0c459f49  .claude/hooks/skill-gate.sh
 235a26752e8a87a984846b01f204c08a2c3b837753d32a9aadc8effd9137a02d  .claude/hooks/skill-route.sh
@@ -33,6 +34,7 @@ eb8e8f5b01b200afd455808647e7c339ecb0b29506ecdde2fc2664747ba13342  .claude/hooks/
 991de99509214748f9352ebe1d62e423cf9d78a2b195b099c914315330bf86ea  .claude/hooks/statusline.sh
 e1f76a09c09bd09b013fefb86c4eb26d6c7d827d87111bc3ebb40e042f8c5f87  .claude/hooks/stop-check.sh
 14dcd53cb15ff6362ffa87a6244fda8caba0b483c0ad413da00b250689620776  .claude/hooks/submit-guard.sh
+aab0e0943225859eadfd169f860867590e04f297b51d7398498a03a9c267ad4c  .claude/hooks/suite-rerun-guard.sh
 62cbe16c5b3d3f5ce459db4469f7405c9b1dd303d0486ea0788f95773145c645  .claude/hooks/terminal-loop.sh
 7b362cdc1fb766307bd7f59f7e33b720517df59b24b8a81f6bc929c386e7005f  .claude/hooks/untrusted-screen.sh
 a1403fdb87442604e8d9aecaadcff2b2de7f13bec444aeb7f69149ebb4b51723  .claude/hooks/ux-guard.sh

@@ -44,7 +44,15 @@ CLAIM_RE='(spawn(ed|ing)?|launch(ed|ing)?|resum(ed|ing)|kick(ed)? off|fann?(ed|i
 CLAIM_RE2="(agent|research|subagent)s?[^.]{0,60}((is|are|'s|still) (still )?(running|in flight|working on)|in the background)"
 CLAIM_RE3="(hasn't|has not|have not|haven't) (reported|come back|returned|landed)"
 
-echo "$MSG" | grep -qiE "$CLAIM_RE|$CLAIM_RE2|$CLAIM_RE3" || exit 0
+# Talk ABOUT a claim is not a claim. "the guard that checks whether a reply
+# claims an agent is running" was refused on 2026-10-03, minutes after the
+# same guard was fixed for a hypothetical, and Caleb got a second duplicate.
+# Quoted text and sentences that report, test or describe a claim are dropped
+# before matching; a plain status line still has nothing to hide behind.
+CLAIMS=$(printf '%s' "$MSG" | sed -E 's/"[^"]*"//g; s/`[^`]*`//g' | tr '\n' ' ' \
+  | sed -E 's/([.!?]) /\1\n/g' \
+  | grep -viE '\b(whether|claims?|claimed|says?|said|reads? as|misread|if)\b')
+printf '%s' "$CLAIMS" | grep -qiE "$CLAIM_RE|$CLAIM_RE2|$CLAIM_RE3" || exit 0
 
 # Evidence. Only two things count.
 #

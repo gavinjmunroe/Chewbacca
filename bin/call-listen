@@ -88,10 +88,9 @@ CALL_APPS = [
     ("Safari", "safari"),
 ]
 # FaceTime's call audio plays from avconferenced, a daemon ScreenCaptureKit
-# cannot include by app, so a FaceTime call is heard as everything the Mac
-# plays minus the music apps. Found on a live call, 2026-10-02.
+# cannot include by app, so a FaceTime call is heard as the system daemons
+# with every app excluded. Found on a live call, 2026-10-02.
 AUDIO_FROM_DAEMON = {"facetime"}
-MEDIA_APPS = ["spotify", "music", "rekordbox", "serato", "ableton", "tidal", "podcasts"]
 WHISPER_MODELS = [
     # 0.55 s for an 8 s clip on this Mac, 2026-10-02, and it kept "Creator IQ"
     # as two words where base.en ran them together. Accuracy on names is worth
@@ -621,9 +620,10 @@ class Listener:
 
     def hear_ears(self, apps: list[str]) -> None:
         argv = ["call-ears"]
-        if set(apps) & AUDIO_FROM_DAEMON:
-            for media in MEDIA_APPS:
-                argv += ["--exclude-app", media]
+        if not apps:
+            argv.append("--all-audio")
+        elif set(apps) & AUDIO_FROM_DAEMON:
+            argv.append("--daemons-only")
         else:
             for app in apps:
                 argv += ["--app", app]
@@ -773,6 +773,16 @@ class Listener:
         if not self.args.wav and shutil.which("call-ears") is None:
             log("call-ears is not built: sh call/build.sh in the Chewbacca checkout")
             return 1
+        apps: list[str] = []
+        if not self.args.wav:
+            apps = [a.lower() for a in self.args.app] or ([] if self.args.all_audio else [pick_app(running_apps())])
+            apps = [a for a in apps if a]
+            if not apps and not self.args.all_audio:
+                # Widening to everything the Mac plays is never done for you:
+                # the person agreed to one call, not to their whole machine.
+                log("No call app is running (Zoom, Teams, FaceTime, Meet in a browser...). "
+                    "Name one with --app, or pass --all-audio to hear everything.")
+                return 1
         self.whisper = Whisper(model)
         log(f"brain: {self.brain or 'none'}" + (f" ({len(self.bank.chunks)} notes)" if self.bank else ""))
         if self.card:
@@ -795,11 +805,6 @@ class Listener:
             self.app = f"recording {self.args.wav}"
             hearing = threading.Thread(target=self.hear_wav, args=(Path(self.args.wav).expanduser(),), daemon=True)
         else:
-            apps = [a.lower() for a in self.args.app] or ([] if self.args.all_audio else [pick_app(running_apps())])
-            apps = [a for a in apps if a]
-            if not apps and not self.args.all_audio:
-                log("No call app is running (Zoom, Teams, FaceTime, Meet in a browser...). "
-                    "Hearing everything instead: pause music first.")
             self.app = ", ".join(apps) if apps else "everything this Mac plays"
             hearing = threading.Thread(target=self.hear_ears, args=(apps,), daemon=True)
         log(f"hearing {self.app}. Tell them you are running an AI notetaker. Ctrl-C ends the call.")

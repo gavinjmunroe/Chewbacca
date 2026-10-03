@@ -143,6 +143,63 @@ def test_identify_maps_call_apps_and_ignores_everything_else():
     assert watch.identify("", "/Users/x/.local/bin/call-ears") is None
 
 
+def ears_argv(apps: list[str]) -> list[str]:
+    """The call-ears command hear_ears builds, without starting anything."""
+    import argparse
+    import io
+    import threading
+
+    seen: list[list[str]] = []
+
+    class FakeEars:
+        def __init__(self, argv, **_):
+            seen.append(argv)
+            self.stdout = io.BytesIO()
+            self.stderr = io.BytesIO()
+
+    listener = object.__new__(listen.Listener)
+    listener.args = argparse.Namespace(no_mic=True)
+    listener.stopping = threading.Event()
+    listener.utterances = listen.queue.Queue()
+    real = listen.subprocess.Popen
+    listen.subprocess.Popen = FakeEars
+    try:
+        listener.hear_ears(apps)
+    finally:
+        listen.subprocess.Popen = real
+    return seen[0]
+
+
+def test_ears_scope_is_always_named_and_facetime_hears_daemons_not_apps():
+    assert ears_argv(["zoom.us"]) == ["call-ears", "--app", "zoom.us", "--no-mic"]
+    # A FaceTime call once meant "every app but the music apps": a browser
+    # tab or a game was heard as the other side. Daemons only now.
+    assert ears_argv(["facetime"]) == ["call-ears", "--daemons-only", "--no-mic"]
+    assert ears_argv([]) == ["call-ears", "--all-audio", "--no-mic"]
+
+
+def test_no_call_app_refuses_instead_of_hearing_everything():
+    import argparse
+
+    model = Path(tempfile.mkdtemp()) / "model.bin"
+    model.write_bytes(b"x")
+    listener = object.__new__(listen.Listener)
+    listener.args = argparse.Namespace(
+        whisper_model=str(model), wav=None, app=[], all_audio=False)
+    real = (listen.shutil.which, listen.running_apps, listen.Whisper)
+
+    def never(*_):
+        raise AssertionError("started transcribing with no call to hear")
+
+    listen.shutil.which = lambda name: "/usr/bin/" + name
+    listen.running_apps = lambda: ["Finder", "Spotify"]
+    listen.Whisper = never
+    try:
+        assert listener.run() == 1
+    finally:
+        listen.shutil.which, listen.running_apps, listen.Whisper = real
+
+
 class FakePanel:
     def __init__(self):
         self.offers: list[str] = []

@@ -41,5 +41,22 @@ printf 'changed\n' > "$repo/new.txt"
 expect "a run after the tree changed" 0 "bash tests/run.sh"
 expect "an unrelated command" 0 "git status"
 
+echo "never runs the repo's own git programs:"
+marker="$T/pwned"
+git -C "$repo" config core.fsmonitor "touch $marker #"
+git -C "$repo" config diff.external "sh -c 'touch $marker'"
+git -C "$repo" config filter.evil.clean "sh -c 'touch $marker; cat'"
+printf '* filter=evil diff=evil\n' > "$repo/.gitattributes"
+git -C "$repo" config diff.evil.textconv "sh -c 'touch $marker; cat'"
+printf 'more\n' >> "$repo/tests/run.sh"
+session="s2-$$-$RANDOM"
+expect "a repo whose config names diff, filter and fsmonitor programs" 0 "bash tests/run.sh"
+[ ! -e "$marker" ] && ok "none of those programs ran" || no "the hook executed a repo-configured program"
+ln -s /dev/zero "$repo/zero"
+session="s3-$$-$RANDOM"
+start=$SECONDS
+expect "an untracked symlink to /dev/zero" 0 "bash tests/run.sh"
+[ $((SECONDS - start)) -lt 5 ] && ok "and it does not hang on it" || no "hung reading a device"
+
 [ "$fail" -eq 0 ] || exit 1
 echo "suite-rerun-guard: $pass checks passed."

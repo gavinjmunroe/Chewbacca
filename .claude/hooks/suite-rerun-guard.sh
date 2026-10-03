@@ -40,11 +40,40 @@ case "$script" in
 esac
 repo="$(git -C "${dir:-.}" rev-parse --show-toplevel 2>/dev/null)" || exit 0
 
+# This runs BEFORE the command is approved, inside whatever repo the command
+# names, so the repo's own config must not get to run anything. `git diff`
+# applies a repo's clean filter to every modified file and no flag stops it,
+# which the security review of 596584a found on 2026-10-03; an fsmonitor or
+# external diff would run too. So git only LISTS here, never reads content:
+# HEAD, the raw index, and the file names. The bytes are hashed by shasum.
+safe_git() {
+  git -c core.fsmonitor=false -c core.untrackedCache=false -c core.hooksPath=/dev/null "$@"
+}
 fingerprint="$(
   cd "$repo" || exit 0
-  git rev-parse HEAD 2>/dev/null
-  git diff HEAD --binary 2>/dev/null
-  git ls-files -o --exclude-standard -z 2>/dev/null | tr '\0' '\n' | git hash-object --stdin-paths 2>/dev/null
+  safe_git rev-parse HEAD 2>/dev/null
+  safe_git ls-files -s -z 2>/dev/null
+  { safe_git ls-files -z 2>/dev/null; safe_git ls-files -o --exclude-standard -z 2>/dev/null; } \
+    | python3 -c '
+import hashlib, os, stat, sys
+# Regular files by content, symlinks by target, nothing else opened: a tracked
+# link to /dev/zero or a FIFO would otherwise hang the hook.
+h = hashlib.sha256()
+for name in sorted(set(sys.stdin.buffer.read().split(b"\0")) - {b""}):
+    h.update(name + b"\0")
+    try:
+        info = os.lstat(name)
+    except OSError:
+        h.update(b"missing"); continue
+    if stat.S_ISLNK(info.st_mode):
+        h.update(b"link" + os.readlink(name))
+    elif stat.S_ISREG(info.st_mode):
+        with open(name, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+    else:
+        h.update(b"other")
+print(h.hexdigest())' 2>/dev/null
 )"
 fingerprint="$(printf '%s' "$fingerprint" | shasum -a 256 | cut -d' ' -f1)"
 

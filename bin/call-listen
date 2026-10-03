@@ -87,6 +87,11 @@ CALL_APPS = [
     ("Arc", "arc"),
     ("Safari", "safari"),
 ]
+# FaceTime's call audio plays from avconferenced, a daemon ScreenCaptureKit
+# cannot include by app, so a FaceTime call is heard as everything the Mac
+# plays minus the music apps. Found on a live call, 2026-10-02.
+AUDIO_FROM_DAEMON = {"facetime"}
+MEDIA_APPS = ["spotify", "music", "rekordbox", "serato", "ableton", "tidal", "podcasts"]
 WHISPER_MODELS = [
     # 0.55 s for an 8 s clip on this Mac, 2026-10-02, and it kept "Creator IQ"
     # as two words where base.en ran them together. Accuracy on names is worth
@@ -616,8 +621,12 @@ class Listener:
 
     def hear_ears(self, apps: list[str]) -> None:
         argv = ["call-ears"]
-        for app in apps:
-            argv += ["--app", app]
+        if set(apps) & AUDIO_FROM_DAEMON:
+            for media in MEDIA_APPS:
+                argv += ["--exclude-app", media]
+        else:
+            for app in apps:
+                argv += ["--app", app]
         if self.args.no_mic:
             argv.append("--no-mic")
         self.ears = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)

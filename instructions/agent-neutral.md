@@ -61,8 +61,9 @@ Read their substantive guidance in any runtime; path frontmatter and native
 Claude tool instructions require the selected adapter. The directory name is
 compatibility layout, not a dependency on an installed Claude application.
 
-Chewbacca's hermetic suite is `bash tests/run.sh`; pass a group name as its
-positional argument. Live checks are separate: `chewbacca live --list` lists the
+Chewbacca's hermetic suite is `bash tests/run.sh`, which runs its groups in
+parallel; pass a group name to run one. After a focused change, run the touched
+test files and their group, and run the whole suite once at the end. Live checks are separate: `chewbacca live --list` lists the
 checks that touch real apps or models. Normal doctor never spends model quota.
 Use `ai-scan` and `slop-check` for prose and `code-slop` for code when installed.
 Read back generated files and verify the edit landed. Report observed outcomes,

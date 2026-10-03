@@ -8,7 +8,7 @@
 # Hermetic: every test runs against a temp HOME, PEOPLE_DIR and COURSEWORK_DIR,
 # so running this never touches your real data.
 #
-#   tests/run.sh            everything
+#   tests/run.sh            everything, groups in parallel
 #   tests/run.sh people     one group
 set -uo pipefail
 
@@ -25,6 +25,66 @@ if [ -n "$ONLY" ] && ! printf '%s\n' "$GROUPS_HERE" | grep -qxF -- "$ONLY"; then
   echo "unknown group: $ONLY. Groups: $(printf '%s' "$GROUPS_HERE" | tr '\n' ',')" >&2; exit 2
 fi
 declare -a FAILURES=()
+
+# No group named means every group, and every group runs in its own process at
+# once. On 2026-10-03 this file ran strictly in sequence at about 15 minutes a
+# pass, four passes in one session, while bin/closeout had fanned the same
+# groups out since September. Agents read "the suite is bash tests/run.sh" in
+# AGENTS.md and never found closeout, so the slow path was the default. The
+# groups share nothing: each run gets its own TMP, HOME fixtures and exports.
+# Three jobs, not fourteen: six local jobs took this Mac's load to 50 on
+# 2026-09-22 and the hud group races real timers. CHEWBACCA_SUITE_SERIAL=1
+# restores the old single-process run.
+if [ -z "$ONLY" ] && [ -z "${CHEWBACCA_SUITE_SERIAL:-}" ]; then
+  OUTDIR="$(mktemp -d)"; trap 'rm -rf "$OUTDIR"' EXIT
+  STARTED=$SECONDS
+  # Longest first, measured 2026-10-03 (pytest ~300 s, hud ~170, reasoning
+  # backends 203, tools 183, doctor 123, installer 87, the rest under 15).
+  # In file order these started last and the run waited on them alone. A
+  # group missing from this list still runs, just in file order after these.
+  SLOW="pytest
+hud
+reasoning backends
+tools
+doctor
+installer"
+  ORDERED=$( { printf '%s\n' "$SLOW" | grep -Fxf <(printf '%s\n' "$GROUPS_HERE");
+               printf '%s\n' "$GROUPS_HERE" | grep -vFxf <(printf '%s\n' "$SLOW"); } )
+  # tr, not awk: BSD awk cannot print a NUL byte and xargs got nothing at all.
+  printf '%s\n' "$ORDERED" | tr '\n' '\0' |
+    # Not -I: BSD xargs caps a substituted command at 255 bytes and then
+    # runs nothing, which is how the first version of this reported every
+    # group failed in 0 s. The group arrives as the last argument instead.
+    xargs -0 -n 1 -P "${CHEWBACCA_SUITE_JOBS:-3}" bash -c '
+      log="$1/$(printf %s "$2" | tr -c "A-Za-z0-9" _)"
+      t=$SECONDS; bash "$0" "$2" >"$log.log" 2>&1; rc=$?
+      echo "$rc" >"$log.rc"
+      if [ "$rc" -eq 0 ]; then mark="ok  "; else mark="FAIL"; fi
+      printf "  %s  %-22s %3ss\n" "$mark" "$2" "$((SECONDS - t))"' \
+      "${BASH_SOURCE[0]}" "$OUTDIR"
+  passed=0; failed=0; skipped=0; bad=0
+  while IFS= read -r g; do
+    log="$OUTDIR/$(printf %s "$g" | tr -c 'A-Za-z0-9' _)"
+    line=$(sed 's/\x1b\[[0-9;]*m//g' "$log.log" | grep -E '[0-9]+ passed' | tail -1)
+    p=$(printf '%s' "$line" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+'); passed=$((passed + ${p:-0}))
+    f=$(printf '%s' "$line" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+'); failed=$((failed + ${f:-0}))
+    s=$(printf '%s' "$line" | grep -oE '[0-9]+ skipped' | grep -oE '[0-9]+'); skipped=$((skipped + ${s:-0}))
+    if [ "$(cat "$log.rc" 2>/dev/null)" != 0 ]; then
+      bad=$((bad + 1))
+      # A group that died before its verdict printed no count; never let that
+      # read as zero failures.
+      [ -n "$f" ] || failed=$((failed + 1))
+      echo ""; cat "$log.log"
+    fi
+  done <<< "$GROUPS_HERE"
+  echo ""
+  echo "$(printf '%s\n' "$GROUPS_HERE" | grep -c .) groups in parallel, $((SECONDS - STARTED))s"
+  if [ "$bad" -eq 0 ]; then
+    echo -e "${GRN}${BLD}$passed passed${NC}${GRN}, $skipped skipped.${NC}"; exit 0
+  fi
+  echo -e "${RED}${BLD}$failed failed${NC}${RED}, $passed passed, $skipped skipped.${NC}"
+  exit 1
+fi
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -786,8 +846,13 @@ if group "windows installer"; then
     grep -q "start.ps1" "$ROOT/SHA256SUMS.txt"
 
   # Parsing is not running. If pwsh is on this machine, run the whole thing.
-  if command -v pwsh >/dev/null 2>&1 || [ -x /tmp/pwsh/pwsh ]; then
-    PWSH="$(command -v pwsh 2>/dev/null || echo /tmp/pwsh/pwsh)"
+  # A pwsh that cannot find its own core cmdlets is not a PowerShell. The
+  # /tmp/pwsh install on the dev Mac lost its Modules folder to /tmp cleanup,
+  # and from then on "start.ps1 installs into a clean HOME" failed on every
+  # run with "Join-Path is not recognized", a red line about the machine that
+  # read as a red line about the installer (2026-10-03).
+  PWSH="$(command -v pwsh 2>/dev/null || echo /tmp/pwsh/pwsh)"
+  if [ -x "$PWSH" ] && "$PWSH" -NoProfile -Command 'Get-Command Join-Path' >/dev/null 2>&1; then
     check "start.ps1 parses" "$PWSH" -NoProfile -Command "
       \$e=\$null
       \$null=[System.Management.Automation.Language.Parser]::ParseFile('$ROOT/start.ps1',[ref]\$null,[ref]\$e)
@@ -805,7 +870,7 @@ if group "windows installer"; then
       HOME="$sandbox" "$2" -NoProfile -File "$1/start.ps1" >/dev/null 2>&1
       grep -q "Always use tabs" "$sandbox/.claude/CLAUDE.md"' _ "$ROOT" "$PWSH"
   else
-    skip "start.ps1 runs" "no pwsh on this machine"
+    skip "start.ps1 runs" "no working pwsh on this machine"
   fi
 
   check  "hook registration survives a re-run" python3 "$ROOT/tests/test_setup_hooks.py"
@@ -1070,6 +1135,13 @@ if group "hud"; then
   check  "bb opens Blackboard by read addresses, asks when unsure" python3 "$ROOT/tests/test_bb.py"
   check  "brand-grab reads a business's own brand and marks refused pages refused" python3 "$ROOT/tests/test_brand_grab.py"
   check  "list-sift judges only what survives the facts" python3 "$ROOT/tests/test_list_sift.py"
+  expect "the skill teaches the wire format" "Kyber Lines" cat "$ROOT/skills/hud/SKILL.md"
+fi
+
+# Its own group because it reruns every Python test file in one process, about
+# five minutes, and inside hud it made hud the 470 s long pole of a parallel
+# run on 2026-10-03. Alone it runs beside the other groups.
+if group "pytest"; then
   # The same file has a pytest-only path (the fixtures at its top) that no
   # runner ever exercised: none of the python3 interpreters on the dev Macs,
   # 3.12 through 3.14 and /usr/bin, has pytest, so a bare `python3 -m pytest`
@@ -1083,7 +1155,6 @@ if group "hud"; then
   else
     skip "the suite collects under pytest" "no pytest and no uv"
   fi
-  expect "the skill teaches the wire format" "Kyber Lines" cat "$ROOT/skills/hud/SKILL.md"
 fi
 
 # ── call ──────────────────────────────────────────────────────────────────────

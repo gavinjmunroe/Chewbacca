@@ -537,6 +537,44 @@ def test_goal_and_pain_are_heard_in_discovery_from_the_phrase_on():
     assert listen.heard_goal_or_pain("we walked the dog") is None
 
 
+def test_an_unsure_pick_shows_the_runner_up_and_a_sure_one_does_not():
+    bank = {"price": {"kind": "SAY", "line": "It's $3,000."}, "refund": {"kind": "SAY", "line": "14-day refund."}, "none": {}}
+    listen.LAST_PICK.scores = {"price": 0.55, "refund": 0.40, "none": 0.05}
+    assert listen.runner_up(bank, "price") == "or  SAY: 14-day refund."
+    listen.LAST_PICK.scores = {"price": 0.92, "refund": 0.05, "none": 0.03}
+    assert listen.runner_up(bank, "price") == ""
+    listen.LAST_PICK.scores = {"price": 0.55, "none": 0.40, "refund": 0.05}
+    assert listen.runner_up(bank, "price") == ""
+    listen.LAST_PICK.scores = None
+
+
+def test_the_early_look_fires_once_per_pause_and_only_when_asked():
+    import array, math
+    tone = array.array("h", (int(4000 * math.sin(i / 3)) for i in range(listen.RATE)))
+    quiet = array.array("h", [0] * int(listen.RATE * 0.9))
+    hush = array.array("h", ((i % 7) * 10 for i in range(listen.RATE // 2)))  # the floor is learned first
+    plain, early = listen.Segmenter("them"), listen.Segmenter("them", early_look=True)
+    assert [u.early for u in plain.feed(hush + tone + quiet)] == [False]
+    got = early.feed(hush + tone + quiet)
+    assert [u.early for u in got] == [True, False]
+    assert got[0].start == got[1].start and len(got[0].pcm) <= len(got[1].pcm)
+
+
+def test_an_early_look_is_held_unless_jev_is_sure_they_finished():
+    listener, pick = _bank_listener(["price", "price"])
+    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, finished=False: pick(bank, heard, recent)
+    try:
+        listen.LAST_PICK.finished = 0.4
+        held = listener.cue_for(listen.Line("them", 0.0, 1.0, "so how much is", early=True))
+        assert held.cue is None and held.reply == "EARLY HOLD"
+        listen.LAST_PICK.finished = 0.95
+        shown = listener.cue_for(listen.Line("them", 0.0, 1.0, "so how much is it", early=True))
+        assert shown.cue == "SAY: It's $3,500."
+    finally:
+        listen.pick_situation = real
+        listen.LAST_PICK.finished = None
+
+
 if __name__ == "__main__":
     failed = 0
     for name, fn in sorted(globals().items()):

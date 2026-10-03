@@ -56,6 +56,17 @@ FRAME = 480  # 30 ms
 # short enough that the cue lands while the pause is still a pause. Tune it on
 # the first real call before trusting it.
 SILENCE_END_MS = 700
+# The early look (--early-look, off by default): after this much quiet the
+# other side's words so far are transcribed and Jev is asked, in the same call
+# as the pick, whether the thought is finished. When it is sure, the cue shows
+# without waiting out SILENCE_END_MS. Measured 2026-10-03 on two synthetic-voice
+# calls: p50 0.98 s without it, 0.86 s with it, but 2 of 20 cues fired mid-turn
+# at a sentence break inside a longer answer. Off until a real call shows how
+# people pause.
+EARLY_LOOK_MS = 300
+# How sure Jev must be that they finished before an early cue shows. Guessed,
+# never measured on real mid-sentence pauses; a real call must set it.
+FINISHED_AT = 0.8
 # A monologue is cut here so the cue keeps up with someone who never pauses.
 MAX_UTTERANCE_S = 15.0
 # Clicks, a cough, a chair: anything shorter is not a turn.
@@ -152,13 +163,16 @@ class Utterance:
     start: float  # seconds since the call started
     end: float
     pcm: bytes
+    early: bool = False  # a look at an unfinished turn; the final one follows
 
 
 class Segmenter:
     """Cuts one side's audio into utterances on silence."""
 
-    def __init__(self, side: str):
+    def __init__(self, side: str, early_look: bool = False):
         self.side = side
+        self.early_look = early_look
+        self.looked = False
         self.pending = array.array("h")
         self.floor: float | None = None
         self.active = False
@@ -200,6 +214,14 @@ class Segmenter:
                 continue
             self.heard.extend(frame)
             self.quiet_ms = 0 if loud else self.quiet_ms + 30
+            if loud:
+                self.looked = False
+            elif self.early_look and not self.looked and self.quiet_ms >= EARLY_LOOK_MS:
+                self.looked = True
+                speech = len(self.heard) - int(self.quiet_ms / 1000 * RATE)
+                if speech >= MIN_UTTERANCE_S * RATE:
+                    done.append(Utterance(self.side, self.began / RATE, self.samples / RATE,
+                                          self.heard[:speech].tobytes(), early=True))
             if self.quiet_ms >= SILENCE_END_MS or len(self.heard) >= MAX_UTTERANCE_S * RATE:
                 cut = self.close()
                 if cut:
@@ -211,6 +233,7 @@ class Segmenter:
             return None
         self.active = False
         self.loud_run = 0
+        self.looked = False
         speech = len(self.heard) - int(self.quiet_ms / 1000 * RATE)
         if speech < MIN_UTTERANCE_S * RATE:
             return None
@@ -590,7 +613,37 @@ def jev_client():
     return _jev
 
 
-def pick_situation(bank: dict[str, dict], heard: str, recent: str) -> str | None:
+# Jev's probabilities for the last pick on this thread, for the stress
+# harness to study confidence; the live path does not read them yet.
+LAST_PICK = threading.local()
+# Under this, Jev's second choice is shown under the first. On 2026-10-03 a
+# pick at p >= 0.9 was right 55 of 55 times on an intake-built bank, and
+# 0.5 to 0.9 about 60%; the right line was in the top two 94% of the time.
+# Asking Jev again over its top three did not help (13 right before, 12
+# after). At 0.7 the right line reached the screen 92% of the time, from 87%,
+# with two lines on 17% of cues (research/sales/rylee/README.md).
+RUNNER_UP_BELOW = 0.7
+
+
+def runner_up(bank: dict[str, dict], picked: str) -> str:
+    scores = getattr(LAST_PICK, "scores", None) or {}
+    numeric = {k: v for k, v in scores.items() if isinstance(v, (int, float)) and k in bank}
+    if not numeric or numeric.get(picked, 1) >= RUNNER_UP_BELOW:
+        return ""
+    second = sorted((k for k in numeric if k != picked), key=lambda k: -numeric[k])[:1]
+    if not second or second[0] == "none":
+        return ""
+    cue = situation_cue(bank, second[0])
+    return f"or  {cue}" if cue else ""
+
+
+FINISHED = {
+    "done": "They have finished their thought: a complete question, answer or statement, waiting for a reply.",
+    "mid": "They are mid-sentence or mid-thought and will keep talking: the line trails off, ends on a connector, or is half a question.",
+}
+
+
+def pick_situation(bank: dict[str, dict], heard: str, recent: str, finished: bool = False) -> str | None:
     """One Jev choice over the bank's situations; None when Jev gives no judgment."""
     jev = jev_client()
     criteria = {sid: s["when"] for sid, s in bank.items()}
@@ -605,8 +658,19 @@ def pick_situation(bank: dict[str, dict], heard: str, recent: str) -> str | None
         },
         "criteria": criteria,
     }}
+    if finished:
+        # Asked in the same call as the pick, so the early look costs no time.
+        question["finished"] = {
+            "type": "choice",
+            "instructions": {"question": "The prospect paused after saying `heard`. Are they done, or mid-thought?"},
+            "criteria": FINISHED,
+        }
     answers = jev.ask({"heard": heard, "call_so_far": recent}, question, decision="call-pick")
     answer = answers.get("situation") if isinstance(answers, dict) else None
+    LAST_PICK.scores = answer.get("probabilities") if isinstance(answer, dict) else None
+    done = answers.get("finished") if finished and isinstance(answers, dict) else None
+    scores = done.get("probabilities") if isinstance(done, dict) else None
+    LAST_PICK.finished = scores.get("done") if isinstance(scores, dict) and isinstance(scores.get("done"), (int, float)) else None
     return valid_pick(answer, criteria)
 
 
@@ -641,6 +705,11 @@ SPOKEN_FILLER = re.compile(r"\b(?:um+|uh+|uhm|er|like|you know|i mean|kind of|so
 THEIR_WORDS_MAX = 16
 DANGLING = {"a", "an", "the", "this", "that", "and", "or", "but", "so", "to", "of", "for", "in", "on",
             "at", "my", "your", "with", "is", "was", "im", "i'm", "i", "it", "its", "it's", "just", "because"}
+
+
+def same_words(a: str, b: str) -> bool:
+    words = lambda t: re.findall(r"[a-z0-9']+", t.lower())
+    return words(a) == words(b)
 
 
 def their_words(text: str) -> str:
@@ -818,11 +887,13 @@ class Screen:
             f"@ {self.SURFACE} at=top w=560",
             'c s Screen title="CALL"',
             "c cue Heading text=@/cue level=1",
+            "c alt Text value=@/alt tone=muted",
             "c theirs Text value=@/theirs",
             "c heard Text value=@/heard tone=muted",
             "c talk Text value=@/talk tone=muted",
-            "> s cue theirs heard talk",
+            "> s cue alt theirs heard talk",
             'd /cue "Listening"',
+            'd /alt ""',
             'd /theirs ""',
             'd /heard ""',
             'd /talk ""',
@@ -856,6 +927,7 @@ class Line:
     end: float
     text: str
     cue: str = ""
+    early: bool = False
 
 
 @dataclass
@@ -865,6 +937,7 @@ class CueResult:
     took: float
     held_back: str = ""  # the cue the guard replaced, if it did
     theirs: str = ""  # the prospect's own words to say back, shown under the cue
+    runner_up: str = ""  # Jev's second choice, shown when it was unsure of the first
 
 
 @dataclass
@@ -970,6 +1043,7 @@ class Listener:
         self.coach = Coach(args.model, SYSTEM.format(name=first_name(self.brain)))
         self.utterances: queue.Queue[Utterance | None] = queue.Queue()
         self.latest: Line | None = None
+        self.early: Line | None = None  # the last early look at their turn
         self.wake = threading.Event()
         self.stopping = threading.Event()
         self.app = "everything this Mac plays"
@@ -992,7 +1066,7 @@ class Listener:
             argv.append("--no-mic")
         self.ears = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         threading.Thread(target=self._relay_ears_errors, daemon=True).start()
-        segmenters = {0: Segmenter("you"), 1: Segmenter("them")}
+        segmenters = {0: Segmenter("you"), 1: Segmenter("them", getattr(self.args, "early_look", False) and bool(self.lines))}
         stream = self.ears.stdout
         assert stream is not None
         while not self.stopping.is_set():
@@ -1024,7 +1098,7 @@ class Listener:
                 self.stopping.set()
                 return
             pcm = w.readframes(w.getnframes())
-        segmenter = Segmenter("them")
+        segmenter = Segmenter("them", getattr(self.args, "early_look", False) and bool(self.lines))
         step = FRAME * 2 * 10
         began = time.monotonic()
         # Timing harnesses (research/sales/stress/e2e.py) line audio up with cues from this.
@@ -1062,7 +1136,22 @@ class Listener:
                 continue
             if item.side == "you" and self.call.echo_of_them(text, item.end):
                 continue
+            if item.early:
+                # Cued from, never kept: the final turn is the one the call
+                # and the transcript record.
+                self.early = Line(item.side, item.start, item.end, text, early=True)
+                self.latest = self.early
+                self.wake.set()
+                continue
             line = Line(item.side, item.start, item.end, text)
+            seen = self.early
+            if seen is not None and seen.start == item.start and seen.cue and same_words(seen.text, text):
+                # The early look already cued exactly this turn.
+                line.cue = seen.cue
+                with self.call.lock:
+                    self.call.lines.append(line)
+                print(f"them  {text}", flush=True)
+                continue
             with self.call.lock:
                 self.call.lines.append(line)
             print(f"{'you ' if item.side == 'you' else 'them'}  {text}", flush=True)
@@ -1124,7 +1213,9 @@ class Listener:
             line.cue = result.cue
             self.screen.set("cue", line.cue)
             self.screen.set("theirs", result.theirs)
-            print(f"  >>  {line.cue}   ({result.took:.1f}s)" + (f"\n      {result.theirs}" if result.theirs else ""), flush=True)
+            self.screen.set("alt", result.runner_up)
+            extra = "".join(f"\n      {x}" for x in (result.runner_up, result.theirs) if x)
+            print(f"  >>  {line.cue}   ({result.took:.1f}s){extra}", flush=True)
 
     def cue_for(self, line: Line) -> "CueResult":
         """One line heard -> the cue for the screen. The stress harness
@@ -1138,10 +1229,15 @@ class Listener:
         if self.lines:
             started = time.monotonic()
             recent = self.call.recent(6)
-            picked = pick_situation(self.lines, line.text, recent)
+            look = {"finished": True} if line.early else {}
+            picked = pick_situation(self.lines, line.text, recent, **look)
             if picked is None:
-                picked = pick_situation(self.lines, line.text, recent)
+                picked = pick_situation(self.lines, line.text, recent, **look)
             took = time.monotonic() - started
+            # An early look shows nothing unless Jev is sure the thought is
+            # done; the final turn, 400 ms later, is cued as before.
+            if line.early and (getattr(LAST_PICK, "finished", None) or 0) < FINISHED_AT:
+                return CueResult("EARLY HOLD", None, took)
             if picked is not None:
                 # First pick reads the line, the second its alternate, then
                 # nothing. On the 2026-10-03 site replay a line came back word
@@ -1167,7 +1263,8 @@ class Listener:
                     cue = situation_cue(self.lines, picked, times % 2 == 1) or situation_cue(self.lines, picked)
                 else:
                     cue = situation_cue(self.lines, picked, times == 1) if times < 2 else None
-                return CueResult(f"PICK {picked}", cue, took, theirs=theirs if cue else "")
+                alt = runner_up(self.lines, picked) if cue else ""
+                return CueResult(f"PICK {picked}", cue, took, theirs=theirs if cue else "", runner_up=alt)
             # In bank mode a failed pick shows nothing. The 2026-10-03 site
             # replay's only off-bank cue came from falling through to the
             # written coach here, and a written line is the part that invents.
@@ -1303,6 +1400,7 @@ def main() -> int:
     parser.add_argument("--wav", help="replay a 16 kHz mono recording as the other side")
     parser.add_argument("--fast", action="store_true", help="with --wav, do not wait in real time")
     parser.add_argument("--transcripts", help="folder for the transcript (default: <brain>/calls)")
+    parser.add_argument("--early-look", action="store_true", help="with a line bank, cue at 300 ms of quiet when Jev is sure the thought is finished")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
     return Listener(args).run()

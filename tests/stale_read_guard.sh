@@ -8,8 +8,9 @@
 # minute run. A wrong diagnosis reached the user as an instruction to go change
 # working code, which is the cost this test exists to keep paid once.
 set -uo pipefail
-HOOK="$HOME/.claude/hooks/stale-read-guard.sh"
-[ -x "$HOOK" ] || { echo "stale-read-guard not installed"; exit 1; }
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+HOOK="$ROOT/.claude/hooks/stale-read-guard.sh"
+[ -x "$HOOK" ] || { echo "stale-read-guard.sh not executable"; exit 1; }
 command -v jq >/dev/null 2>&1 || { echo "jq absent, skipping"; exit 0; }
 
 T=$(mktemp)

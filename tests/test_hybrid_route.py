@@ -10,7 +10,8 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 import hybrid_route as hr  # noqa: E402
-import jev  # noqa: E402
+
+jev = hr.jev_client()
 
 CATALOG = [{"name": "list-audit", "description": "Check a purchased contact list."},
            {"name": "audio-brief", "description": "Turn work into audio."}]

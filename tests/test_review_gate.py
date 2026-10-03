@@ -55,6 +55,18 @@ class ReviewGateTests(unittest.TestCase):
         with patch.object(gate.shutil, "which", return_value=sys.executable), patch.object(gate, "review_process", side_effect=self.reviewer(**kwargs)):
             return gate.run_review(self.repo, timeout=10)
 
+    def test_background_reviewer_cannot_claim_hud_runtime(self):
+        state = Path(self.temp.name) / 'hud-runtime.json'
+        original = json.dumps({'runtime': 'claude', 'claimed_at_ns': 1})
+        state.write_text(original)
+        with patch.dict(os.environ, {'CHEWBACCA_HUD_RUNTIME_STATE': str(state),
+                                     'CHEWBACCA_HUD_CHILD': '0'}):
+            result = gate.review_process(
+                [sys.executable, str(ROOT / 'tools/hud_runtime.py'), 'codex'], timeout=10)
+            self.assertEqual(os.environ['CHEWBACCA_HUD_CHILD'], '0')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(state.read_text(), original)
+
     def test_committed_changes_remain_in_frozen_review_scope(self):
         scope = gate.capture_scope(self.repo)
         self.git('add', '.')
@@ -128,6 +140,41 @@ class ReviewGateTests(unittest.TestCase):
         staged = gate.snapshot(self.repo)
         (self.repo / "new.py").write_text("different\n")
         self.assertNotEqual(staged, gate.snapshot(self.repo))
+
+    def test_embedded_repository_is_explicit_separate_scope(self):
+        child = self.repo / 'child'
+        subprocess.run(['git', 'init', '-q', str(child)], check=True)
+        (child / 'code.py').write_text('first')
+        first = gate.snapshot(self.repo)
+        prompts = []
+        reviewer = self.reviewer()
+        def observe(command, timeout):
+            prompts.append(command[-1])
+            return reviewer(command, timeout)
+        with patch.object(gate.shutil, 'which', return_value=sys.executable), patch.object(gate, 'review_process', side_effect=observe):
+            self.assertTrue(gate.run_review(self.repo)['ok'])
+        self.assertIn('Explicit excluded repository boundaries: ["child/"]', prompts[0])
+        self.assertEqual(json.loads(gate.receipt_path(self.repo).read_text())['excluded_repositories'], ['child/'])
+        (child / 'code.py').write_text('second')
+        self.assertEqual(first, gate.snapshot(self.repo))
+        self.assertTrue(gate.check(self.repo)[0])
+        self.assertFalse(gate.check(child)[0])
+        gate.shutil.rmtree(child / '.git')
+        self.assertNotEqual(first, gate.snapshot(self.repo))
+        self.assertFalse(gate.check(self.repo)[0])
+        uncovered = gate.snapshot(self.repo)
+        (child / 'code.py').write_text('third')
+        self.assertNotEqual(uncovered, gate.snapshot(self.repo))
+
+    def test_tracked_gitlink_still_requires_separate_handling(self):
+        child = self.repo / 'child'
+        subprocess.run(['git', 'init', '-q', str(child)], check=True)
+        subprocess.run(['git', '-C', str(child), '-c', 'user.name=Synthetic',
+                        '-c', 'user.email=synthetic@example.invalid',
+                        'commit', '--allow-empty', '-qm', 'fixture'], check=True)
+        self.git('add', 'child')
+        with self.assertRaisesRegex(ValueError, 'separate review scope'):
+            gate.snapshot(self.repo)
 
     def test_pass_and_edits_invalidate_receipt(self):
         self.assertFalse(gate.check(self.repo)[0])
@@ -217,20 +264,38 @@ class ReviewGateTests(unittest.TestCase):
         self.assertFalse(gate.check(self.repo)[0])
         self.assertFalse(gate.receipt_path(self.repo).exists())
 
-    def test_incomplete_report_requires_exact_final_scope_and_identity(self):
+    def test_incomplete_disposition_requires_scope_and_identity_not_reply_rewrite(self):
         self.run_mock(report={"status": "incomplete", "summary": "Missing context", "findings": []})
         prepared = gate.prepare_incomplete([self.repo], 'session', 'turn', 3)
         state = {'review_required': [str(self.repo)], 'sequence': 3}
-        payload = {'session_id': 'session', 'turn_id': 'turn', 'last_assistant_message': prepared['report']}
-        self.assertTrue(gate.allows_incomplete(state, payload))
+        payload = {'session_id': 'session', 'turn_id': 'turn'}
+        for message in (prepared['report'], 'Review is still pending.', ''):
+            self.assertTrue(gate.allows_incomplete(state, dict(payload, last_assistant_message=message)))
         self.assertFalse(gate.check(self.repo)[0])
-        for changed in ({'last_assistant_message': 'incomplete'},
-                        {'last_assistant_message': prepared['report'] + '\nEverything is ready.'},
-                        {'session_id': 'other'}, {'turn_id': 'next'}):
+        self.assertNotIn('Missing context', prepared['report'])
+        for changed in ({'session_id': 'other'}, {'turn_id': 'next'}):
             self.assertFalse(gate.allows_incomplete(state, dict(payload, **changed)))
         self.assertFalse(gate.allows_incomplete(dict(state, review_required=[]), payload))
         (self.repo / 'new.py').write_text('later edit')
         self.assertFalse(gate.allows_incomplete(state, payload))
+
+    def test_retry_keeps_previous_failure_reportable_until_it_finishes(self):
+        report = {'status': 'incomplete', 'summary': 'Missing context', 'findings': []}
+        self.run_mock(report=report)
+        prepared = gate.prepare_incomplete([self.repo], 's', 't', 0)
+        state = {'review_required': [str(self.repo)], 'sequence': 0}
+        payload = {'session_id': 's', 'turn_id': 't', 'last_assistant_message': prepared['report']}
+        complete = self.reviewer()
+
+        def retry(command, timeout):
+            self.assertTrue(gate.allows_incomplete(state, payload))
+            self.assertFalse(gate.check(self.repo)[0])
+            return complete(command, timeout)
+
+        with patch.object(gate.shutil, 'which', return_value=sys.executable), \
+                patch.object(gate, 'review_process', side_effect=retry):
+            self.assertTrue(gate.run_review(self.repo, timeout=10)['ok'])
+        self.assertFalse(gate.failure_path(self.repo).exists())
 
     def test_new_obligation_and_replaced_failed_outcome_invalidate_report(self):
         report = {"status": "incomplete", "summary": "Missing context", "findings": []}
@@ -264,34 +329,38 @@ class ReviewGateTests(unittest.TestCase):
                 self.run_mock()
             prepared = gate.prepare_incomplete([self.repo], 's', 't', 4)
             payload = {'session_id': 's', 'turn_id': 't', 'last_assistant_message': prepared['report']}
-            self.assertIn('bytes could not be verified', prepared['report'])
+            self.assertIn('incomplete', prepared['report'])
+            self.assertFalse(gate.check(self.repo)[0])
             self.assertTrue(gate.allows_incomplete({'review_required': [str(self.repo)], 'sequence': 4}, payload))
             self.assertFalse(gate.allows_incomplete({'review_required': [str(self.repo)], 'sequence': 5}, payload))
         self.assertFalse(gate.allows_incomplete({'review_required': [str(self.repo)], 'sequence': 4}, payload))
 
     def test_cli_report_reads_native_obligations_and_returns_nonclean_disposition(self):
-        self.run_mock(report={"status": "incomplete", "summary": "Missing context", "findings": []})
-        home = Path(self.temp.name) / 'codex'
-        directory = home / 'chewbacca-turn-state'
-        directory.mkdir(parents=True)
-        with closing(sqlite3.connect(directory / 'receipts.sqlite')) as db:
-            db.execute('CREATE TABLE turns (session TEXT PRIMARY KEY, state TEXT NOT NULL)')
-            db.execute('INSERT INTO turns VALUES (?, ?)', ('s', json.dumps(
-                {'review_required': [str(self.repo)], 'sequence': 6})))
-            db.commit()
-        with patch.dict(os.environ, {'CODEX_HOME': str(home)}):
-            result = subprocess.run([sys.executable, str(ROOT / 'bin/review-gate'),
-                                     'report-incomplete', '--session-id', 's', '--turn-id', 't'],
-                                    capture_output=True, text=True, check=False)
-        self.assertEqual(result.returncode, 1)
-        record = json.loads(result.stdout)
-        self.assertFalse(record['ok'])
-        self.assertEqual(record['disposition'], 'incomplete')
-        self.assertTrue(Path(record['report_path']).is_file())
-        self.assertTrue(gate.allows_incomplete({'review_required': [str(self.repo)], 'sequence': 7},
-                                              {'session_id': 's', 'turn_id': 't',
-                                               'last_assistant_message': record['report']}))
-        self.assertFalse(gate.check(self.repo)[0])
+        with gate.task_review('s'):
+            gate.observe_task(self.repo, gate.snapshot_manifest(self.repo), before=True)
+            gate.include_task_paths(self.repo, ['tracked.py'])
+            self.run_mock(report={"status": "incomplete", "summary": "Missing context", "findings": []})
+            home = Path(self.temp.name) / 'codex'
+            directory = home / 'chewbacca-turn-state'
+            directory.mkdir(parents=True)
+            with closing(sqlite3.connect(directory / 'receipts.sqlite')) as db:
+                db.execute('CREATE TABLE turns (session TEXT PRIMARY KEY, state TEXT NOT NULL)')
+                db.execute('INSERT INTO turns VALUES (?, ?)', ('s', json.dumps(
+                    {'review_required': [str(self.repo)], 'sequence': 6})))
+                db.commit()
+            with patch.dict(os.environ, {'CODEX_HOME': str(home)}):
+                result = subprocess.run([sys.executable, str(ROOT / 'bin/review-gate'),
+                                         'report-incomplete', '--session-id', 's', '--turn-id', 't'],
+                                        capture_output=True, text=True, check=False)
+            self.assertEqual(result.returncode, 1)
+            record = json.loads(result.stdout)
+            self.assertFalse(record['ok'])
+            self.assertEqual(record['disposition'], 'incomplete')
+            self.assertTrue(Path(record['report_path']).is_file())
+            self.assertTrue(gate.allows_incomplete({'review_required': [str(self.repo)], 'sequence': 7},
+                                                  {'session_id': 's', 'turn_id': 't',
+                                                   'last_assistant_message': record['report']}))
+            self.assertFalse(gate.check(self.repo)[0])
 
     def test_failure_evidence_missing_or_corrupt_never_allows_report(self):
         with self.assertRaises(OSError):

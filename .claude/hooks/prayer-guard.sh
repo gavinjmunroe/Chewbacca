@@ -23,6 +23,10 @@ type hook_init >/dev/null 2>&1 && hook_init prayer-guard.sh 5
 # that is between Caleb and God. Fires at most once per turn.
 set -uo pipefail
 
+if [ "${CHEWBACCA_HUD_CHILD:-}" = "1" ]; then
+  exit 0
+fi
+
 MARKER=$(cat "${CHEWBACCA_HOME:-$HOME/.chewbacca}/opener-marker" 2>/dev/null | head -1 | tr -d '[:space:]')
 [ -n "$MARKER" ] || exit 0
 

@@ -92,8 +92,23 @@ def code_node(prompt: str, names: set[str]) -> dict:
     return stage("code", "abstain", rule="needs judgment")
 
 
+def jev_client():
+    """tools/jev.py, loaded by path. bin/lib/jev.py is also named jev and has
+    no JevError, so a bare `import jev` took whichever loaded first: on
+    2026-10-03 a whole-suite pytest run failed here with AttributeError that
+    no single-file run reproduced."""
+    name = "chewbacca_tools_jev"
+    if name not in sys.modules:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name("jev.py"))
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
+
+
 def jev_node(prompt: str, catalog: list[dict], threshold: float, evaluate=None) -> dict:
-    import jev as client
+    client = jev_client()
     evaluate = evaluate or client.evaluate
     by_id = {f"s{i}": c["name"] for i, c in enumerate(catalog)}
     criteria = {f"s{i}": {"name": c["name"], "description": c["description"]}

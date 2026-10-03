@@ -1,20 +1,12 @@
 #!/usr/bin/env python3
-"""durable-check: a correction must change the kit, not just the reply.
-
-Measured from 209 sessions: "fix chewbacca" and its variants are the most
-frequent correction that nothing enforces, 13 of them. He is not asking for
-the immediate thing to be fixed; he is asking for the kit to change so the
-correction never has to be given again.
-
-The false-positive direction matters most. A gate that fires on ordinary
-requests gets switched off in a day, and then it protects nothing.
-"""
+"""Regression coverage for conservative correction detection and write evidence."""
 
 from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
 import sys
+import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -38,7 +30,7 @@ def log_with(tmp, session, paths, ts=None):
     return p
 
 
-# His real words, from the corpus.
+# Original corpus corrections plus synthetic repair-request regressions.
 CORRECTIONS = [
     "Bro what did I say, NEVER MAKE ME RUN TERMINAL U ALWAYS DO IT URSELF DONT FORGET AND FIX CHEWBACCA",
     "I have a feeling you still are stupid Bro I shouldn't hv to keep saying it, fix chewbacca!",
@@ -48,9 +40,14 @@ CORRECTIONS = [
     "Never ask me to do something manual retard",
     "Bro wtf",
     "Ur being retarded",
+    "fix the kit",
+    "Please fix chewbacca",
+    "Can you fix chewbacca?",
+    "No, that's not what I asked for.",
+    "Stop asking me to run commands manually.",
 ]
 
-# Ordinary requests, also his words. None of these may fire.
+# Original ordinary requests plus synthetic status and diagnostic regressions.
 REQUESTS = [
     "Make chewbacca perfect",
     "can you add a dark mode toggle",
@@ -60,6 +57,20 @@ REQUESTS = [
     "I wanna use the portal to open diff applications",
     "Run overnight while I sleep building and fixing",
     "Good night",
+    "Are the hooks still broken?",
+    "What's broken right now?",
+    "The parser is broken; please investigate.",
+    "Why did you choose that model?",
+    "Why are you running the tests?",
+    "Can you explain the ai slop checker?",
+    "Does the checker think this is stupid or dumb?",
+    "Did you fix chewbacca?",
+    "Have you managed to fix chewbacca yet?",
+    'Explain why "fix chewbacca" fires the checker.',
+    'The log says "Bro wtf". What does that mean?',
+    'Explain this fixture:\n```text\nfix chewbacca\n```',
+    'Explain this feedback:\n> stop asking me to do that',
+    'What does `fix chewbacca` mean?',
 ]
 
 
@@ -124,6 +135,18 @@ def test_missing_log_is_safe():
     assert refuse, "no log means no evidence of a durable change"
     refuse, _ = d.check("add a toggle", "s1", log=Path("/nonexistent/x.tsv"))
     assert not refuse
+
+
+def test_feedback_does_not_claim_a_live_historical_count():
+    with tempfile.TemporaryDirectory() as tmp:
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "bin/durable-check"), "--session", "fixture",
+             "--log", str(Path(tmp) / "missing.tsv")],
+            input="fix chewbacca", text=True, capture_output=True)
+        assert result.returncode == 1
+        assert "heuristic" in result.stderr
+        assert "13 times" not in result.stderr
+        assert "209 sessions" not in result.stderr
 
 
 if __name__ == "__main__":

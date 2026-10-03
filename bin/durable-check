@@ -1,34 +1,9 @@
 #!/usr/bin/env python3
-"""Refuse to end a turn that was corrected and changed nothing durable.
+"""Check direct corrections for a subsequent policy write in this session.
 
-THE MOST FREQUENT UNGATED FAILURE IN THE WHOLE CORPUS. Across 209 sessions
-and 18,154 user turns, "fix chewbacca" and its variants appear 13 times as
-corrections, more than any other failure that nothing enforces:
-
-    "Bro what did I say, NEVER MAKE ME RUN TERMINAL U ALWAYS DO IT URSELF
-     DONT FORGET AND FIX CHEWBACCA"
-    "Bro figure it out you have full access ... and fix chewbacca"
-    "I have a feeling you still are stupid. Bro I shouldn't hv to keep
-     saying it, fix chewbacca!"
-
-He is not asking for the immediate thing to be fixed. He is asking for the
-KIT to change so the correction never has to be given again, and he has had
-to say it thirteen times, which is the proof it never happened.
-
-There is already a memory about this, `feedback_never_close_without_
-updating_chewbacca`. It is written down and it is not enforced, which is
-the same shape as the always-on rule that failed twice in one night and
-prompted the handoff gate. A lesson that has to be remembered decays.
-
-WHAT COUNTS AS DURABLE. A file written under the kit or the second brain,
-during this session, after the correction. Not a reply, however good. Not a
-plan. The session's write log already records which session touched which
-path, so this is a lookup rather than a judgement.
-
-WHAT DOES NOT COUNT, deliberately: editing the thing he was complaining
-about. Fixing the essay he said was slop is the immediate work, and doing
-only that is the failure this exists to catch. So a write has to land in a
-POLICY surface: rules, skills, hooks, memories, tests, or the backlog.
+This conservative text heuristic does not establish intent or prove learning.
+Runtime adapters must supply the real user prompt, never hook feedback. Writes
+are evidence of a policy change, not evidence that the change fixes the problem.
 """
 
 from __future__ import annotations
@@ -45,20 +20,33 @@ from pathlib import Path
 WRITE_LOG = Path(os.environ.get("CHEWBACCA_WRITE_LOG") or
                  (Path(os.environ.get("CHEWBACCA_HOME") or Path.home() / ".chewbacca").expanduser() / "write-log.tsv")).expanduser()
 
-# A correction, not a request. Same vocabulary the corpus reader uses.
-# NOT "bro" or "bruh". Measured in core/voice.md at 3,330 uses, they are how
-# he addresses anyone, and treating them as complaint markers fired on "J
-# give me the list bruh". A signal that common is not a signal.
+# Generic fault words and questions such as "why did you" also occur in
+# ordinary status requests (BACKLOG's 2026-09-23 integration handoff).
+# Require a direct correction instead of treating those words as intent.
 CORRECTION = re.compile(
-    r"\b(wtf|retard\w*|stupid|dumb|broken|ai slop|slop (?:writing|tendencies)|"
-    r"doesn'?t seem authentic|that'?s (?:not|wrong)|not what i|"
-    r"didn'?t (?:ask|say|want|tell)|stop (?:doing|asking)|"
-    r"never (?:do|ask|say|make|said)|why (?:did|are) (?:you|u)|ur being|"
-    r"you'?re being|fix chewbacca|shouldn'?t hv to|shouldn'?t have to|"
-    r"what is wrong with you|1% the way)\b", re.I)
+    r"\b(that'?s (?:not|wrong)|not what i|"
+    r"(?:i|you|u) didn'?t (?:ask|say|want|tell)|"
+    r"stop (?:doing|asking)|never (?:do|ask|say|make)|i never said|"
+    r"ur being|you'?re being|shouldn'?t hv to|shouldn'?t have to|"
+    r"what is wrong with you|1% the way|"
+    r"(?:this|that|it|your (?:reply|writing|answer)) is (?:ai slop|slop writing)|"
+    r"(?:this|that|it) doesn'?t seem authentic)\b", re.I)
+DIRECT_REACTION = re.compile(r"^(?:(?:bro|bruh|dawg)\s+)?wtf[!? .]*$", re.I)
 
-# Asking for the kit itself to change makes the requirement explicit.
-EXPLICIT = re.compile(r"\b(fix chewbacca|fix the kit|fix ts|make ts perfect)\b", re.I)
+# Explicit repair requests also stand on their own without another complaint.
+# "Did you fix chewbacca?" is a status question, not a new repair request.
+EXPLICIT = re.compile(
+    r"(?:^|[.!?;,\n]|\band(?: then)?)\s*"
+    r"(?:(?:bro|bruh|dawg|please|wtf)\s+)*(?:(?:can|could|would) you\s+)?"
+    r"(?:fix (?:chewbacca|the kit|ts)|make ts perfect)\b", re.I)
+
+
+def correction_text(text):
+    """Ignore quoted examples, code and blockquotes when classifying prose."""
+    text = re.sub(r"```.*?(?:```|$)", "", text, flags=re.S)
+    text = re.sub(r"(?m)^\s*>.*$", "", text)
+    return re.sub(r'`[^`]*`|"[^"\n]*"|“[^”\n]*”', "", text).strip()
+
 
 # Policy surfaces. A write here changes what the next session will do.
 POLICY = (
@@ -100,13 +88,14 @@ def wrote_policy(session_id, since=None, log=WRITE_LOG):
 
 def check(user_text, session_id, since=None, log=WRITE_LOG):
     """Returns (refuse, reason)."""
-    if not user_text or not CORRECTION.search(user_text):
+    user_text = correction_text(user_text or "")
+    explicit = bool(EXPLICIT.search(user_text))
+    if not (explicit or CORRECTION.search(user_text) or DIRECT_REACTION.fullmatch(user_text)):
         return False, ""
     hits = wrote_policy(session_id, since, log)
     if hits:
         return False, ""
-    explicit = bool(EXPLICIT.search(user_text))
-    why = ("He asked outright for the kit to change." if explicit
+    why = ("The user requested a kit repair." if explicit
            else "That read as a correction.")
     return True, why
 
@@ -124,8 +113,8 @@ def main():
     print(f"durable-check: {why} Nothing durable changed in this session.",
           file=sys.stderr)
     print("""
-A correction that only fixes the immediate thing will be given again. It has
-been given 13 times across 209 sessions, which is the whole reason this runs.
+A direct correction was detected, but no subsequent policy write was found
+in this session. This is a heuristic check, not a verified recurring error.
 
 Change a policy surface before ending the turn: a rule, a hook, a skill, a
 test, a memory, or the backlog. Then say which one and why, in a line.

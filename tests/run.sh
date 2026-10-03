@@ -482,6 +482,15 @@ if group "installer"; then
   check  "handoff-guard refuses a handed-over command and permits a report" \
     bash "$ROOT/tests/handoff_guard.sh" "$ROOT"
 
+  check  "plan-guard refuses a skipped phase and permits the active one" \
+    bash "$ROOT/tests/plan_guard.sh"
+
+  check  "assumption-guard refuses an invented modulus and permits index wrapping" \
+    bash "$ROOT/tests/assumption_guard.sh"
+
+  check  "stale-read-guard refuses a silence claim while jobs are outstanding" \
+    bash "$ROOT/tests/stale_read_guard.sh"
+
   # 18 research files and a whole session of UI work that read none of them.
   check  "design-context fires on design work only" \
     bash "$ROOT/tests/design_context.sh" "$ROOT"
@@ -983,6 +992,9 @@ if group "mcp"; then
 fi
 
 if group "hud"; then
+  check "one native HUD across simultaneous launches" python3 "$ROOT/tests/test_hud_singleton.py"
+  check "HUD follows the last foreground runtime" python3 "$ROOT/tests/test_hud_runtime.py"
+  check "HUD Codex adapter preserves defaults and continuity" python3 "$ROOT/tests/test_hud_codex.py"
   check  "hud parses"         bash -n "$ROOT/bin/hud"
   # EVERY Swift target must compile, test targets included.
   #
@@ -1182,8 +1194,13 @@ if group "reasoning backends"; then
   check "Codex shared instructions and optional health" python3 "$ROOT/tests/test_codex.py"
   check "Codex personal context startup" python3 "$ROOT/tests/test_codex_context.py"
   check "Codex native lifecycle hooks" python3 "$ROOT/tests/test_codex_hooks.py"
+  check "Codex native exit evidence never trusts stdout" python3 "$ROOT/tests/test_codex_execution_evidence.py"
+  check "Codex desktop final reply keeps prayer visible" python3 "$ROOT/tests/test_codex_app_prayer.py"
   check "Codex review baselines expire after tool completion" python3 "$ROOT/tests/test_codex_review_baselines.py"
   check "independent code review receipts reject stale and failed reviews" python3 "$ROOT/tests/test_review_gate.py"
+  check "review snapshots preserve bytes and child boundaries" python3 "$ROOT/tests/test_review_snapshot.py"
+  check "task review scopes retain dirty and concurrent obligations" python3 "$ROOT/tests/test_review_task_scope.py"
+  check "task receipts cannot clear repository-wide review duties" python3 "$ROOT/tests/test_review_integration.py"
   check "task DAG preserves dependencies, capacity and independent verification" python3 "$ROOT/tests/test_task_graph.py"
   check "work ledger reaches shared startup and Codex prompt context" python3 "$ROOT/tests/test_work_ledger_context.py"
   check "shared work ledger preserves commitments across requests and runtimes" python3 "$ROOT/tests/test_work_ledger.py"

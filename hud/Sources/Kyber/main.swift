@@ -1051,8 +1051,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-let app = NSApplication.shared
-let delegate = AppDelegate()
-app.delegate = delegate
-app.setActivationPolicy(.accessory)
-app.run()
+do {
+    guard let instance = try HUDInstanceLock() else { exit(EXIT_SUCCESS) }
+    withExtendedLifetime(instance) {
+        let app = NSApplication.shared
+        let delegate = AppDelegate()
+        app.delegate = delegate
+        app.setActivationPolicy(.accessory)
+        app.run()
+    }
+} catch {
+    fputs("Kyber could not acquire the display lock: \(error.localizedDescription)\n", stderr)
+    exit(EXIT_FAILURE)
+}

@@ -994,7 +994,7 @@ unset _tool
 # hud calls the others by path, so installing one alone gives a command that
 # fails halfway.
 _installed_hud=""
-for _tool in hud hud-listen hud-context hud-watch hud-speak hud-guide hud-music superassistant chewbacca-mcp portal; do
+for _tool in hud hud-listen hud-runtime hud-codex hud-context hud-watch hud-speak hud-guide hud-music superassistant chewbacca-mcp portal; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_hud="$_installed_hud $_tool"
@@ -1638,6 +1638,13 @@ _register("UserPromptSubmit", hooks_dir + "/youtube-transcript-ready.sh", timeou
 # answer that complaint has not fired once.
 _register("Stop", hooks_dir + "/kit-debt.sh", timeout=15,
           status="Checking the kit learned something...")
+
+# Written 2026-09-26 after a background job's empty output file was read four
+# times and reported as a silent death; the job was buffering until the end of
+# a twenty minute run. The hook shipped that day and was never registered, so
+# it had not fired once by 2026-10-03, when hooks_registered.sh caught it.
+_register("Stop", hooks_dir + "/stale-read-guard.sh", timeout=5,
+          status="Checking no unfinished job was called silent...")
 
 # The pull half. kit-autopush made the remote the default for work leaving this
 # machine; nothing made it the default for work arriving. `chewbacca update`

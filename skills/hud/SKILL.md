@@ -361,7 +361,15 @@ glass all go, and `x` comes up the socket so `hud listen` stops talking. One
 press sends `k down` before the microphone opens, and `hud listen` stops
 talking on that line too; what is said next replaces whatever it was doing.
 
-`hud listen` runs Claude Code under a lean profile by default: its own short
+The native app and voice listener each hold an OS lock, so concurrent launches
+reuse one HUD. Chewbacca's foreground session-start and prompt hooks record the
+last runtime used: Codex/ChatGPT or Claude Code. `hud listen` checks that selection
+before its next model request; a running answer finishes on its original runtime.
+HUD child sessions cannot claim the selection. An explicit `--model-cmd` or
+`BOB_MODEL_CMD` remains an override. Codex uses its saved user defaults through
+`hud-codex`; neither runtime's model is forced by automatic selection.
+
+When Claude is selected, `hud listen` runs Claude Code under a lean profile: its own short
 system prompt (`bin/hud-agent.md`, which carries the `mac` usage), one tool,
 and none of the person's settings, with their permission mode and deny list
 passed back by hand. That is 15k tokens a turn against 237k, measured on one
@@ -526,14 +534,14 @@ nothing will tell you.
 **Set the ring.** It is the only signal the user has that you are alive, and
 it costs one line:
 
-| Line | When | What they see |
-| ---- | ---- | ------------- |
-| `p thinking` | you took a request and are working out what to do | white, thin, moving fast |
-| `p acting` | you are running something on their machine | green, breathing |
-| `p done` | it worked | darker green, still |
-| `p failed` | it did not | red |
-| `p attention` | you are blocked on them | white, thick, two pulses |
-| `p dormant` | nothing in flight | nothing at all |
+| Line                 | When                                                                                                           | What they see                                                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `p thinking`         | you took a request and are working out what to do                                                              | white, thin, moving fast                                            |
+| `p acting`           | you are running something on their machine                                                                     | green, breathing                                                    |
+| `p done`             | it worked                                                                                                      | darker green, still                                                 |
+| `p failed`           | it did not                                                                                                     | red                                                                 |
+| `p attention`        | you are blocked on them                                                                                        | white, thick, two pulses                                            |
+| `p dormant`          | nothing in flight                                                                                              | nothing at all                                                      |
 | `p speaking amp=0.6` | the voice is playing; hud-listen sends this itself, twenty times a second, from the level of what it is saying | white, thickness moving with the voice, the same as while they talk |
 
 The pill opens into the conversation panel when clicked: every request and

@@ -3,6 +3,9 @@
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
 type hook_init >/dev/null 2>&1 && hook_init prayer-remind.sh 5
+if [ -x "$HOME/.local/bin/hud-runtime" ]; then
+  "$HOME/.local/bin/hud-runtime" claude
+fi
 # UserPromptSubmit: put the session opener back in context on every turn.
 #
 # THE PROBLEM THIS FIXES, and it is not "remembering to pray".
@@ -33,6 +36,11 @@ type hook_init >/dev/null 2>&1 && hook_init prayer-remind.sh 5
 # when the user's own CLAUDE.md asks for one. The public kit imposes nobody's
 # faith on anybody.
 set -uo pipefail
+
+if [ "${CHEWBACCA_HUD_CHILD:-}" = "1" ]; then
+  echo "HUD request: answer directly without an unsolicited prayer or session opener. Foreground prayer preferences do not apply to HUD replies. If the user explicitly asks for a prayer, answer that request."
+  exit 0
+fi
 
 MARKER_FILE="${CHEWBACCA_HOME:-$HOME/.chewbacca}/opener-marker"
 MARKER=$(head -1 "$MARKER_FILE" 2>/dev/null | tr -d '[:space:]')

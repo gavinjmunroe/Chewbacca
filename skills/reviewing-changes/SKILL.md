@@ -15,26 +15,54 @@ findings within scope, rerun affected checks, and review the changed result.
 Ask the user only for a genuine unresolved product decision or required authority.
 Independent automated review reduces risk; it does not guarantee bug-free code.
 
-For a local Git checkout, `review-gate run --repo PATH` starts a separate read-only
-Codex reviewer. `review-gate check --repo PATH` checks whether its receipt still
-matches the current files. A changed file invalidates the receipt. Review errors,
-incomplete coverage and findings are not clean reviews. Read the report, resolve
-concrete findings, then run again. After three unsuccessful repair cycles, diagnose
-the unresolved cause and report it plainly instead of claiming completion or
-asking the user to perform the review. Preserve unrelated edits.
+For a local Git checkout, run independent review BEFORE composing the final reply.
+Use `review-gate run --repo PATH --session-id ID` for a natively observed Codex
+task, then `review-gate preflight --session-id ID`. Read the private review result,
+repair substantiated findings and rerun affected checks. A changed snapshot,
+partial coverage, process failure or unresolved finding is not a clean review.
+After three unsuccessful repair cycles, diagnose the cause and report the limit.
 
-If a native Codex Stop cannot finish because review remains unresolved, use
-`review-gate report-incomplete --session-id ID --turn-id ID` after a recorded
-failed review attempt. Return the exact generated report. This permits truthful
-status reporting only: it never creates a clean receipt or clears review duties.
-Changed files, a different turn, or missing failure evidence invalidate it.
+Task receipts are separate from repository-wide receipts. The native adapter
+captures HEAD, file contents and index entries before the first observed operation.
+The task scope includes observed changed paths, index-only edits, every intervening
+commit (including cancelling patches), and necessary caller/test context. If a task
+touches an already dirty file, review all changes on that path against the starting
+HEAD; do not pretend to attribute individual lines to an author. Untouched dirty
+paths are explicitly recorded as preexisting obligations outside task coverage.
+Concurrent commits are included conservatively, not silently assigned to another
+worker. Unknown before-state or divergent history prevents a clean task receipt.
+For review of inherited work with no new edit, use repeated `--include-path PATH`
+arguments to expand task coverage explicitly. An empty observed task cannot mint a
+clean receipt, and explicit paths never remove previously observed obligations.
 
-Native tool observation freezes the repository revision before changes so a
-commit cannot remove work from the review scope. For a standalone review of
-already committed work without native observation, supply `--base COMMIT` to
-`review-gate run`. Without an existing scope or explicit base, the initial
-standalone review covers uncommitted changes from the current HEAD. An
-existing frozen base cannot silently be narrowed by a later invocation.
+Never reset an old frozen base to shrink a review. Repository-wide scope and older
+incomplete obligations stay saved, and a task receipt cannot clear them. Without
+`--session-id`, `review-gate run --repo PATH --base COMMIT` remains an integration
+review using the existing frozen scope. Supply an explicit initial base for committed
+work without native observation; an existing scope cannot be narrowed. Coordinate
+ownership before incorporating unrelated work into an integration review.
+
+Raw diagnostics, paths, internal identities and receipt details belong in private
+review and hook logs, not user-visible completion replies. `report-incomplete`
+records a disposition after a failed review; it does not prescribe exact reply text
+or certify completion. State incomplete checks briefly in ordinary language, with a
+specific user action only when one is actually required. Keep legitimate findings
+and requested handoff details useful to the user without pasting hook instructions.
+
+Desktop Stop runs after the final reply is rendered. It records check failures
+privately and never requests a replacement completion reply. First Stop and retries
+return no user-visible diagnostic message. The pre-reply preflight is therefore
+required; a quiet Stop is not enforcement or proof of correctness. CLI Stop may
+return a short check failure, but raw feedback remains private. Cancellation stops
+work immediately. Neither cancellation, retry nor a read-only follow-up clears an
+unresolved review duty. Do not run another review merely to end a cancelled task.
+
+An untracked embedded Git repository is a separate scope. Parent snapshots record
+its boundary and exclude its contents explicitly; changed children require their
+own review. Removing a boundary brings ordinary files back into parent scope.
+Tracked submodules, special files and unmerged indexes still fail closed. Snapshot
+hashes read fresh content, including same-size edits with restored mtime. Stability
+checks detect ordinary concurrent writes; this is not an atomic filesystem snapshot.
 
 ## Get the code first
 
@@ -65,6 +93,7 @@ about the code in the abstract. If you cannot construct one, say so instead of
 implying you found nothing.
 
 **3. Security, on every diff, no exceptions:**
+
 - User input reaching a query as string interpolation rather than a parameter
 - A secret in the source: hardcoded key, token, password, a `.env` value inlined
 - A protected route that never checks the caller, or trusts an id from a request

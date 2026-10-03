@@ -3,6 +3,9 @@
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
 type hook_init >/dev/null 2>&1 && hook_init session-context.sh 8
+if [ -x "$HOME/.local/bin/hud-runtime" ]; then
+  "$HOME/.local/bin/hud-runtime" claude
+fi
 # SessionStart: inject personal context, and today's tasks if Todoist is wired.
 #
 # Why this is a script and not an inline settings.json command:

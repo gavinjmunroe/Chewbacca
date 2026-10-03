@@ -75,7 +75,7 @@ mkdir -p "$HOME/Library/LaunchAgents" "$LOGDIR"
 # that shell is the one that can actually find these. The stable directories are
 # appended so a later nvm or Homebrew change has somewhere to be found.
 AGENT_PATH="$(
-  { command -v claude; command -v python3; command -v node; } 2>/dev/null |
+  { command -v claude; command -v codex; command -v python3; command -v node; } 2>/dev/null |
     xargs -n1 dirname 2>/dev/null | awk '!seen[$0]++' | tr '\n' ':'
 )$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 

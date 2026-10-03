@@ -46,6 +46,8 @@ import terminal_state  # noqa: E402
 import agent_board  # noqa: E402
 import decision_log  # noqa: E402
 import quick  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
+import hud_runtime  # noqa: E402
 
 # HUD_QUICK=off: math, time, date, conversions and weather go to the model
 # like everything else, instead of being computed (bin/lib/quick.py).
@@ -670,6 +672,7 @@ def account_env(config: Path) -> dict[str, str]:
     "keychain cannot be found" prompt fixed on 2026-09-22.
     """
     env = dict(os.environ)
+    env['CHEWBACCA_HUD_CHILD'] = '1'
     if config.expanduser().resolve() == DEFAULT_CONFIG.resolve():
         env.pop("CLAUDE_CONFIG_DIR", None)
     else:
@@ -1079,6 +1082,7 @@ def read_names() -> list[str]:
 # fails if `ask` calls a path that is in neither this nor STATEFUL_PATHS. Stop
 # words are checked inline in `ask` and come back as "stop".
 FAST_PATHS = {
+    "connection_check": "connection",
     "pleasantry": "pleasantry",
     "quick_answer": "quick",
     "music_request": "music",
@@ -1106,6 +1110,8 @@ def fast_path(said: str) -> str | None:
         return None
     if words in STOP_WORDS:
         return "stop"
+    if words in Listener.CONNECTION_CHECKS:
+        return "connection"
     if words in Listener.GREETINGS | Listener.FAREWELLS | Listener.THANKS:
         return "pleasantry"
     if QUICK:
@@ -1129,13 +1135,14 @@ def fast_path(said: str) -> str | None:
 class Listener:
     def __init__(
         self,
-        model_cmd: str,
+        model_cmd: str | None,
         verbose: bool,
         bare: bool,
         voice: str | None = None,
         profile: str = "lean",
     ) -> None:
-        self.model_cmd = model_cmd
+        self.auto_runtime = model_cmd is None
+        self.model_cmd = model_cmd or hud_runtime.model_command()
         self.verbose = verbose
         # `lean` gives Claude Code its own short system prompt, one tool and
         # none of the person's settings (see `agent_flags`); `full` runs it
@@ -1964,7 +1971,7 @@ class Listener:
             "not send anything, and do not write a session opener. Reply with "
             "only the word: ready\n"
         )
-        proc = self.spawn()
+        proc = self.spawn(argv)
         if proc is None or not self.turn(proc, prompt):
             self.log("prime failed: the model did not start")
             return
@@ -1994,7 +2001,7 @@ class Listener:
         self.started = True
         self.log(f"primed in {time.monotonic() - started:.0f}s: {reply.strip()[:60]!r}")
 
-    def spawn(self) -> subprocess.Popen[str] | None:
+    def spawn(self, argv: list[str]) -> subprocess.Popen[str] | None:
         """Start the model process that answers every request of the session.
 
         One process for the session, taking each request as a turn over
@@ -2005,7 +2012,6 @@ class Listener:
         every request before the model has said a word, which was most of
         the 4 to 6s the person waited for the first spoken sentence.
         """
-        argv = self.command()
         try:
             proc = subprocess.Popen(
                 argv + [
@@ -2036,12 +2042,12 @@ class Listener:
         self.model = proc
         return proc
 
-    def model_process(self) -> subprocess.Popen[str] | None:
+    def model_process(self, argv: list[str]) -> subprocess.Popen[str] | None:
         """The live model process, or a fresh one resuming the session."""
         proc = self.model
         if proc is not None and proc.poll() is None:
             return proc
-        return self.spawn()
+        return self.spawn(argv)
 
     @staticmethod
     def turn(proc: subprocess.Popen[str], prompt: str) -> bool:
@@ -2067,6 +2073,8 @@ class Listener:
             if not self.in_flight() and self.music_request(said, typed, bare_stop=True):
                 return
             self.stop()
+            return
+        if not relayed and self.connection_check(said, typed):
             return
         # Cheapest test first: a greeting costs nothing to recognise and 21
         # seconds to send to a model.
@@ -2139,6 +2147,22 @@ class Listener:
         self.send("s " + json.dumps(phrase))
         self.speak(phrase)
         self.settle("done", self.LEAVE_AFTER)
+
+    CONNECTION_CHECKS = frozenset({"testing", "test", "ping", "mic check", "sound check"})
+
+    def connection_check(self, said: str, typed: bool) -> bool:
+        """A whole-utterance input check needs no screen sample or model."""
+        if normalise(said) not in self.CONNECTION_CHECKS or self.in_flight():
+            return False
+        answer = "Message received." if typed else "I hear you."
+        req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+        self.remember(req, answer, True, "done")
+        self.send("s " + json.dumps(answer))
+        self.send("w " + json.dumps(answer) + " done=true")
+        if not typed:
+            self.speak(answer)
+        self.settle("done", self.LEAVE_AFTER)
+        return True
 
     # Pleasantries, answered without a model at all.
     #
@@ -2403,7 +2427,7 @@ class Listener:
             return None
         return self.region
 
-    def command(self) -> list[str]:
+    def command(self, *, refresh_runtime: bool = True) -> list[str]:
         """The model command, with the profile and continuity flags if it
         understands them.
 
@@ -2413,9 +2437,26 @@ class Listener:
         not know is how a working configuration turns into an unexplainable
         failure.
         """
+        if self.auto_runtime and refresh_runtime:
+            selected = hud_runtime.model_command()
+            if selected != self.model_cmd:
+                if self.model is not None and self.model.poll() is None:
+                    self.model.kill()
+                    self.model.wait()
+                self.model = None
+                self.model_cmd = selected
+                self.session = str(uuid.uuid4())
+                self.started = False
+                self.turns = 0
+                self.last_usage = {}
+                self.log('HUD runtime switched to', hud_runtime.current())
         argv = shlex.split(self.model_cmd)
         if not argv or Path(argv[0]).name != "claude":
             return argv
+        if self.auto_runtime and self.lean:
+            configured_model = user_settings().get('model')
+            if isinstance(configured_model, str) and configured_model:
+                argv += ['--model', configured_model]
         self.refresh_prompt()
         argv = argv + self.flags
         if self.started:
@@ -2998,7 +3039,10 @@ class Listener:
             # notice.
             if is_limit_reply(answer or out) and self.switch_account():
                 self.send("s " + json.dumps("switching accounts"))
-                argv = self.command()
+                # Finish this request with the runtime already selected. A
+                # foreground switch takes effect on the next request, not
+                # halfway through a Claude account retry.
+                argv = self.command(refresh_runtime=False)
                 ok, out, said, first, answer, voiced = self.run_streamed(
                     argv, prompt, typed=req.typed, asked_at=req.spoken_at, said=req.said
                 )
@@ -3263,6 +3307,7 @@ class Listener:
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
             text=True,
+            env=dict(os.environ, CHEWBACCA_HUD_CHILD='1'),
         )
         with self.state:
             self.proc = proc
@@ -3275,8 +3320,12 @@ class Listener:
         except subprocess.TimeoutExpired:
             # communicate() leaves the child running on a timeout; run() used
             # to kill it, and a model still writing to a closed loop is worse.
-            proc.kill()
-            proc.communicate()
+            proc.terminate()
+            try:
+                proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.communicate()
             raise
         finally:
             with self.state:
@@ -3353,7 +3402,7 @@ class Listener:
         # is not coming now: the new request hushed it.
         self.report_turn()
         self.first_level_at = None
-        proc = self.model_process()
+        proc = self.model_process(argv)
         if proc is None:
             return False, "", None, None, "", False
         with self.state:
@@ -3531,16 +3580,8 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model-cmd",
-        # `--strict-mcp-config` loads no MCP servers, which is worth about
-        # four times the work on a request like this and also stops the agent
-        # wandering off to a remote service for something one local CLI knows.
-        # The first measured round trip without it was 190 seconds, most of it
-        # before the model had read anything. Sonnet rather than Haiku for the
-        # same reason ChewieRouter gives: these requests chain several CLI
-        # calls and that is where Haiku gets lost.
-        default=os.environ.get(
-            "BOB_MODEL_CMD", "claude -p --strict-mcp-config --model sonnet"
-        ),
+        # No override means follow the last foreground Chewbacca runtime.
+        default=os.environ.get("BOB_MODEL_CMD"),
         help="any command that reads a prompt on stdin and writes the answer to stdout",
     )
     parser.add_argument("--verbose", action="store_true")
@@ -3566,6 +3607,9 @@ def main() -> int:
         "(~156k, 25s). Measured 2026-09-21, same question, warm.",
     )
     args = parser.parse_args()
+    # Every model subprocess spawned by this daemon is background work,
+    # including routing/summarization helpers, not just the reply model.
+    os.environ['CHEWBACCA_HUD_CHILD'] = '1'
     # Before the prompt build, the names and the speaker, so a duplicate
     # costs nothing on its way out.
     held, holder = claim_socket(SOCKET)

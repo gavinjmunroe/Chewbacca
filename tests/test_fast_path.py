@@ -12,12 +12,14 @@ Rows added by the loop go at the end of TABLE, each with the sentence that
 earned it.
 """
 import importlib.util
+import json
 import os
 import re
 import sys
 import tempfile
 from importlib.machinery import SourceFileLoader
 from pathlib import Path
+from unittest.mock import Mock
 
 os.environ.setdefault("BOB_DIR", tempfile.mkdtemp())
 os.environ.setdefault("BOB_DECISIONS", os.path.join(os.environ["BOB_DIR"], "d.jsonl"))
@@ -46,6 +48,11 @@ def load():
 
 # (sentence, the path that must answer it, or None for the model)
 TABLE = [
+    ("Testing", "connection"),
+    ("Testing!", "connection"),
+    ("Ping", "connection"),
+    ("testing the deployment", None),
+    ("ping the server", None),
     ("stop", "stop"),
     ("Never mind", "stop"),
     ("Hello", "pleasantry"),
@@ -70,6 +77,21 @@ def ask_paths(source: str) -> list[str]:
 
 def main() -> int:
     m = load()
+    for typed in (False, True):
+        listener = m.Listener.__new__(m.Listener)
+        for method in ("hush", "remember", "send", "speak", "settle", "pleasantry", "quick_answer", "music_request"):
+            setattr(listener, method, Mock())
+        listener.in_flight = Mock(return_value=False)
+        listener.ask("Testing!", typed=typed)
+        answer = "Message received." if typed else "I hear you."
+        check(f"connection check typed={typed} finishes panel", ('w ' + json.dumps(answer) + ' done=true',) in [c.args for c in listener.send.call_args_list])
+        check(f"connection check typed={typed} respects speech", listener.speak.call_count == (0 if typed else 1))
+        check("connection check bypasses other routing", not listener.pleasantry.called and not listener.quick_answer.called and not listener.music_request.called)
+        check("request mode preserved", listener.remember.call_args.args[0].typed == typed)
+        listener.in_flight.return_value = True
+        check("active request keeps queue behavior", not listener.connection_check("Testing", typed))
+        listener.in_flight.return_value = False
+        check("task bearing testing stays a request", not listener.connection_check("testing the deployment", typed))
     for said, want in TABLE:
         got = m.fast_path(said)
         check(f"{said!r} -> {want}", got == want, got)

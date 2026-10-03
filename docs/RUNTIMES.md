@@ -94,6 +94,25 @@ configuration file or a direct adapter test alone cannot prove interception in a
 live host. See [Codex hooks](https://learn.chatgpt.com/docs/hooks) and
 [configuration](https://learn.chatgpt.com/docs/config-file/config-reference).
 
+Native Bash PostToolUse payloads can contain only stdout. The adapter correlates
+their call ID with structured execution metadata in the native transcript to
+obtain an exit status; stdout never establishes success. Missing or ephemeral
+transcripts leave status unknown. Repository changes made by a shell command
+count as writes, not verification of that command's own edits. Per-event status
+files under `CODEX_HOME/chewbacca-hook-events` preserve the latest running,
+successful, or failed hook invocation without storing prompts or tool output.
+These records describe hook execution, not application correctness. Fresh-process
+verification does not prove that an already-running desktop host reloaded hooks.
+
+When the user's prompt preference requires a prayer to Jesus Christ, the Codex
+desktop adapter also reminds the agent to put it at the beginning of the final
+reply, ending with Amen. Desktop commentary collapses after completion, so a prayer there alone is
+insufficient. The adapter identifies the app from the matching native session
+header's `Codex Desktop` originator; CLI, editor-extension, and unknown hosts keep
+their existing behavior. This instruction is supplied before composition by
+UserPromptSubmit. It adds no Stop refusal or automatic reply rewrite, and does
+not override higher-priority output contracts.
+
 MCP connections are separate from skills. The existing explicit
 `tools/codex_integrations.py --server NAME` importer copies selected private
 connection settings and preserves existing destinations. Verify server handshake,

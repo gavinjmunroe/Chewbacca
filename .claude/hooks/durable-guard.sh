@@ -4,24 +4,8 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
 type hook_init >/dev/null 2>&1 && hook_init durable-guard.sh 10
 # Stop hook: a correction must change the kit, not just the reply.
-#
-# THE MOST FREQUENT UNGATED FAILURE IN THE CORPUS. Across 209 sessions and
-# 18,154 user turns there are 75 real corrections, and 13 of them are him
-# asking for the KIT to change:
-#
-#   "Bro what did I say, NEVER MAKE ME RUN TERMINAL U ALWAYS DO IT URSELF
-#    DONT FORGET AND FIX CHEWBACCA"
-#   "I have a feeling you still are stupid. Bro I shouldn't hv to keep
-#    saying it, fix chewbacca!"
-#
-# Thirteen times is the proof it never happened. The memory that says to do
-# it, feedback_never_close_without_updating_chewbacca, is written down and
-# not enforced, which is the same shape as the always-on rule that failed
-# twice in one night and produced handoff-guard.
-#
-# Deterministic and free: it reads the session's own write log, which already
-# records which session touched which path, and asks whether any of them was
-# a policy surface. Fixing the thing he complained about does not count.
+# Runtime adapters must supply the current user prompt, not hook feedback.
+# The checker looks for a subsequent policy write in this session's log.
 set -uo pipefail
 
 INPUT=$(cat)

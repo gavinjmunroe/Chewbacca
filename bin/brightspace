@@ -67,7 +67,8 @@ def chrome_cookies():
         copy = Path(tmp) / "Cookies"
         shutil.copy(COOKIE_DB, copy)
         rows = sqlite3.connect(copy).execute(
-            "select name, encrypted_value from cookies where host_key like '%brightspace.usc.edu%'"
+            "select name, encrypted_value from cookies"
+            " where host_key in ('brightspace.usc.edu', '.brightspace.usc.edu')"
         ).fetchall()
     secret = subprocess.check_output(
         ["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]
@@ -88,16 +89,29 @@ def chrome_cookies():
     return cookies
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    # urllib copies the Cookie header onto a redirect, whatever host it points
+    # at. An expired session redirects to the SSO login, so a redirect is
+    # treated as expiry and never followed with the session attached.
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+OPENER = urllib.request.build_opener(NoRedirect)
+
+
 def fetch(path, cookies):
+    if not path.startswith("/") or "@" in path or "//" in path:
+        sys.exit(f"brightspace: refusing path {path!r}, expected /le/... or /lp/...")
     req = urllib.request.Request(
         HOST + "/d2l/api" + path,
         headers={"Cookie": "; ".join(f"{k}={v}" for k, v in cookies.items())},
     )
     try:
-        with urllib.request.urlopen(req, timeout=25) as resp:
+        with OPENER.open(req, timeout=25) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as err:
-        if err.code in (401, 403):
+        if err.code in (301, 302, 303, 307, 308, 401, 403):
             raise Expired() from err
         raise
 

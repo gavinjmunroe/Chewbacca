@@ -9,7 +9,7 @@
 //
 // Your side is the default input through AVAudioEngine.
 //
-// Usage: call-ears [--app <name or bundle id>]... [--no-mic]
+// Usage: call-ears [--app <name or bundle id>]... [--exclude-app <name>]... [--no-mic]
 //        call-ears --who-listens     apps using an audio input now, then exit
 //
 // Wire format, one frame per buffer:
@@ -99,6 +99,7 @@ final class Resampler {
 final class SystemAudio: NSObject, SCStreamOutput, SCStreamDelegate {
     let writer: Writer
     var apps: [String] = []
+    var excluded: [String] = []
     let resampler = Resampler()
     var stream: SCStream?
 
@@ -114,16 +115,28 @@ final class SystemAudio: NSObject, SCStreamOutput, SCStreamDelegate {
         // With --app, only those apps are heard. Without it, everything the
         // Mac plays is "them", and on 2026-10-02 that was Spotify: the first
         // test capture had music under every word and whisper wrote lyrics.
+        //
+        // With --exclude-app, everything except those apps. FaceTime needs
+        // this: its call audio plays from avconferenced, a daemon that is not
+        // an app ScreenCaptureKit can include, so "FaceTime only" heard
+        // twenty minutes of silence on a live call on 2026-10-02.
         let filter: SCContentFilter
-        if apps.isEmpty {
-            filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
-        } else {
-            let wanted = content.applications.filter { app in
-                apps.contains { name in
+        func matching(_ names: [String]) -> [SCRunningApplication] {
+            content.applications.filter { app in
+                names.contains { name in
                     app.applicationName.lowercased().contains(name)
                         || app.bundleIdentifier.lowercased().contains(name)
                 }
             }
+        }
+        if apps.isEmpty {
+            let skipped = matching(excluded)
+            if !skipped.isEmpty {
+                note("hearing everything except: " + skipped.map(\.applicationName).joined(separator: ", "))
+            }
+            filter = SCContentFilter(display: display, excludingApplications: skipped, exceptingWindows: [])
+        } else {
+            let wanted = matching(apps)
             guard !wanted.isEmpty else {
                 let running = content.applications.map(\.applicationName).filter { !$0.isEmpty }
                 throw NSError(domain: "ears", code: 4, userInfo: [
@@ -175,7 +188,24 @@ final class Microphone {
     let engine = AVAudioEngine()
     let resampler = Resampler()
 
-    init(writer: Writer) { self.writer = writer }
+    init(writer: Writer) {
+        self.writer = writer
+        // A call app turning on voice processing reconfigures the input, and
+        // AVAudioEngine stops without a word when that happens: on the
+        // 2026-10-02 FaceTime call the mic went silent from the first second.
+        NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            note("microphone reconfigured, restarting")
+            self.engine.inputNode.removeTap(onBus: 0)
+            do {
+                try self.start()
+            } catch {
+                note("microphone restart failed: \(error.localizedDescription)")
+            }
+        }
+    }
 
     func start() throws {
         let input = engine.inputNode
@@ -246,8 +276,9 @@ let argv = Array(CommandLine.arguments.dropFirst())
 let arguments = Set(argv)
 let writer = Writer()
 let system = SystemAudio(writer: writer)
-for (index, flag) in argv.enumerated() where flag == "--app" && index + 1 < argv.count {
-    system.apps.append(argv[index + 1].lowercased())
+for (index, flag) in argv.enumerated() where index + 1 < argv.count {
+    if flag == "--app" { system.apps.append(argv[index + 1].lowercased()) }
+    if flag == "--exclude-app" { system.excluded.append(argv[index + 1].lowercased()) }
 }
 let microphone = Microphone(writer: writer)
 

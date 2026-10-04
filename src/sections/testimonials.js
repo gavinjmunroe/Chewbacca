@@ -1,29 +1,23 @@
 /* Section D: the testimonial carousel.
 
-   THE ERROR THIS FILE EXISTS TO FIX: the previous build let the track run full
-   bleed, so at 2560 wide it showed seven cards edge to edge and the section
-   stopped agreeing with every other block on the page. The reference keeps the
-   row inside the same content column as the headline above it. So the column
-   is declared once, in `.tst-col` as `min(var(--maxw), 100%)` centred, and the
-   scrolling row lives inside an `overflow: hidden` viewport nested in it.
-   Nothing here can escape the column, at any viewport width.
+   Geometry read off theirs at 1440 (lower-brief/p_ref2.txt):
 
-   Card width is DERIVED, not chosen. Measured on the reference: cards sit
-   between 340 and 356px wide with three of them visible in a 1200px column.
-   1200 - 3x352 - 2x16 of gap = 112px left over, which is why each edge card
-   shows a 56px sliver: the leftovers, split. Change the column width and the
-   same arithmetic re-derives the card, which is what `layout()` does.
+     section      1280 box, padding 128/64, content 1152 at x=144
+     heading      768 centred, eyebrow then h2 16px under it, 48 below
+     viewport     1152 wide, overflow hidden, 12px of vertical room each side
+                  for the card border, pulled back up by a -12 margin
+     cards        basis 1/3 of a track 16px wider than the viewport, so the
+                  step is (1152 + 16) / 3 = 389.33 and a card is 373.33
+     resting x    the first whole card sits 227px into the viewport, which
+                  leaves a 208px sliver on the left and 147 on the right:
+                  two whole cards and two partial ones, as in lo_ref_1.png
+     arrows       32px circles 48px outside the viewport, centred on the cards
 
    The row is a RING, not a strip with two ends. Each card is placed at a
-   signed slot relative to the active index, modulo the item count, so the slot
-   left of the window and the slot right of it are always occupied by a real
-   card. That is what makes the faded edges read as "the row continues" rather
-   than as "the row ran out". A card that wraps from one end of the ring to the
-   other would otherwise slide the whole width of the window on its way round,
-   so a wrapping card is moved with its transition suppressed for that frame.
-
-   Renders the carousel machinery only. The section's label and headline belong
-   to the page shell, so putting them here would print them twice. */
+   signed slot relative to the active index, modulo the item count, so both
+   slivers are always real cards. A card that wraps from one end of the ring
+   to the other would otherwise slide the whole width of the window on its
+   way round, so a wrapping card moves with its transition suppressed. */
 
 export const MOUNT = "#testimonials";
 
@@ -58,18 +52,21 @@ const ITEMS = [
     quote: "An agent that fails loudly is easy. Ours failed politely, in full sentences, for nine days." },
 ];
 
-/* Reference gap between cards, read off their track. The card width in
-   `layout()` is solved against this, so it is load-bearing rather than taste. */
+/* Gap between cards, their pl-4 gutter. Step and card width derive from it. */
 const GAP = 16;
 
-/* Their step transition. `lemma-cl-entry` ships as
-   cubic-bezier(.33,1,.68,1) and 450ms is the second most common duration in
-   their stylesheet after 220ms, which is too fast to read across 350px. */
+/* Their step transition: 450ms on cubic-bezier(.33,0,.15,1), read off the
+   card's own transition property. */
 const STEP_MS = 450;
-const STEP_EASE = "cubic-bezier(.33,1,.68,1)";
+const STEP_EASE = "cubic-bezier(.33,0,.15,1)";
 
 const initials = name =>
   name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+
+const ARROW = d => `
+  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+    <path d="${d}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
 
 export function render() {
   const cards = ITEMS.map((t, i) => `
@@ -79,14 +76,7 @@ export function render() {
           <span class="tst-avatar" aria-hidden="true">${initials(t.name)}</span>
           <span class="tst-who">
             <span class="tst-name">${t.name}</span>
-            <span class="tst-meta">
-              <svg class="tst-mark" viewBox="0 0 10 10" width="8" height="8" aria-hidden="true">
-                <path d="M5 0 10 2.6 5 5.2 0 2.6z" fill="currentColor"/>
-                <path d="M0 5.6 5 8.2 10 5.6" fill="none" stroke="currentColor" stroke-width="1"/>
-              </svg>
-              <span class="tst-co">${t.company}</span>
-              <span class="tst-handle">${t.handle}</span>
-            </span>
+            <span class="tst-meta">${t.company} &middot; ${t.handle}</span>
           </span>
         </header>
         <blockquote class="tst-quote">${t.quote}</blockquote>
@@ -96,54 +86,50 @@ export function render() {
         <button class="tst-dot" type="button" data-i="${i}"
                 aria-label="Show testimonial ${i + 1}, ${t.name}"><i></i></button>`).join("");
 
-  /* THE HEADING. Theirs carries an h2 reading "What teams tell us." and
-     ours had none at all, which is why the section walk could not see this
-     section: it finds sections from headings, so a section without one is
-     invisible to every measurement in docs/. Centred, matching theirs. */
   return `
     <div class="tst-col">
       <div class="tst-head-block">
-        <div class="label">Testimonials</div>
+        <p class="tst-eyebrow">Testimonials</p>
         <h2 class="tst-title">What teams tell us.</h2>
       </div>
-      <button class="tst-arrow tst-prev" type="button" aria-label="Previous testimonial">&larr;</button>
-      <div class="tst-viewport" tabindex="0" role="region"
-           aria-roledescription="carousel" aria-label="Testimonials">
-        <div class="tst-track">${cards}</div>
+      <div class="tst-stage">
+        <button class="tst-arrow tst-prev" type="button" aria-label="Previous testimonial">${ARROW("M13 8H3M7 4 3 8l4 4")}</button>
+        <div class="tst-viewport" tabindex="0" role="region"
+             aria-roledescription="carousel" aria-label="Testimonials">
+          <div class="tst-track">${cards}</div>
+        </div>
+        <button class="tst-arrow tst-next" type="button" aria-label="Next testimonial">${ARROW("M3 8h10M9 4l4 4-4 4")}</button>
       </div>
-      <button class="tst-arrow tst-next" type="button" aria-label="Next testimonial">&rarr;</button>
       <div class="tst-dots" role="tablist" aria-label="Choose a testimonial">${dots}</div>
     </div>`;
 }
 
 export function mount(root) {
-  const col = root.querySelector(".tst-col");
   const viewport = root.querySelector(".tst-viewport");
   const cards = [...root.querySelectorAll(".tst-card")];
   const dots = [...root.querySelectorAll(".tst-dot")];
-  if (!col || !viewport || !cards.length) return;
+  if (!viewport || !cards.length) return;
 
   const N = cards.length;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-  let index = 0, step = 0, peek = 0;
+  let index = 0, step = 0, start = 0, width = 0, card = 0;
   const lastSlot = new Map();
 
-  /* Solve the card width from the column, never the other way round. The
-     column is whatever the page gives it, capped at --maxw by the CSS, so
-     reading it back is the only way the arithmetic stays true at 2560. */
+  /* --tst-basis is the share of (viewport + gap) one step takes, and
+     --tst-start where the first card rests as a share of the viewport. Both
+     come from CSS so the breakpoints live in one file. */
   function layout() {
     const style = getComputedStyle(root);
-    const visible = Math.max(1, parseInt(style.getPropertyValue("--tst-visible"), 10) || 3);
-    peek = parseFloat(style.getPropertyValue("--tst-peek")) || 0;
-    const w = viewport.clientWidth;
-    const card = (w - (visible - 1) * GAP - 2 * peek) / visible;
-    step = card + GAP;
+    const basis = parseFloat(style.getPropertyValue("--tst-basis")) || 1 / 3;
+    const startFrac = parseFloat(style.getPropertyValue("--tst-start")) || 0;
+    width = viewport.clientWidth;
+    step = (width + GAP) * basis;
+    card = step - GAP;
+    start = width * startFrac;
     root.style.setProperty("--tst-card", `${card.toFixed(2)}px`);
     place(false);
   }
 
-  /* Signed slot on the ring: 0 is the first fully visible card, -1 is the
-     sliver on the left, `visible` is the sliver on the right. */
   const slotOf = i => {
     const r = ((i - index) % N + N) % N;
     return r <= N / 2 ? r : r - N;
@@ -153,13 +139,14 @@ export function mount(root) {
     for (const cardEl of cards) {
       const s = slotOf(+cardEl.dataset.i);
       const was = lastSlot.get(cardEl);
-      /* A card crossing the seam of the ring travels the whole window on its
-         way round. Suppress its transition for that one frame instead. */
       const wrapped = was !== undefined && Math.abs(s - was) > 1;
       cardEl.style.transition = (!animate || wrapped || reduced.matches) ? "none"
         : `transform ${STEP_MS}ms ${STEP_EASE}`;
-      cardEl.style.transform = `translate3d(${(peek + s * step).toFixed(2)}px,0,0)`;
-      cardEl.setAttribute("aria-hidden", s < 0 || s > 2 ? "true" : "false");
+      const x = start + s * step;
+      cardEl.style.transform = `translate3d(${x.toFixed(2)}px,0,0)`;
+      /* Only a card wholly inside the window is announced. */
+      const whole = x >= -0.5 && x + card <= width + 0.5;
+      cardEl.setAttribute("aria-hidden", whole ? "false" : "true");
       lastSlot.set(cardEl, s);
     }
     dots.forEach((d, k) => {
@@ -185,9 +172,12 @@ export function mount(root) {
     if (e.key === "ArrowRight") { onNext(); e.preventDefault(); }
   };
 
-  root.querySelector(".tst-prev").addEventListener("click", onPrev);
-  root.querySelector(".tst-next").addEventListener("click", onNext);
-  root.querySelector(".tst-dots").addEventListener("click", onDot);
+  const prev = root.querySelector(".tst-prev");
+  const next = root.querySelector(".tst-next");
+  const dotRow = root.querySelector(".tst-dots");
+  prev.addEventListener("click", onPrev);
+  next.addEventListener("click", onNext);
+  dotRow.addEventListener("click", onDot);
   viewport.addEventListener("keydown", onKey);
 
   const ro = new ResizeObserver(layout);
@@ -196,9 +186,9 @@ export function mount(root) {
 
   return () => {
     ro.disconnect();
-    root.querySelector(".tst-prev").removeEventListener("click", onPrev);
-    root.querySelector(".tst-next").removeEventListener("click", onNext);
-    root.querySelector(".tst-dots").removeEventListener("click", onDot);
+    prev.removeEventListener("click", onPrev);
+    next.removeEventListener("click", onNext);
+    dotRow.removeEventListener("click", onDot);
     viewport.removeEventListener("keydown", onKey);
   };
 }

@@ -1,0 +1,682 @@
+/* Everything below the pinned demo, plus the footer. Every class is `lw-`
+   prefixed so no rule in styles.css (.band, .steps, .news, .cta, footer .fgrid)
+   reaches in. Numbers are their computed styles at 1440x900,
+   lower-brief/p_ref2.txt and p_ref_b.json, unless a comment says otherwise. */
+
+#lower,
+#lower-footer {
+  /* Their border colour is rgb(212,212,221), bluer than our --line #d5d5d5. */
+  --lw-line: #d4d4dd;
+  --lw-ink65: rgba(29, 25, 86, 0.65);
+  /* rgb(161,160,184): every eyebrow and card header label on the narrow bands. */
+  --lw-tint: #a1a0b8;
+  /* Body tracking is 0.32px on every element of theirs we measured. */
+  letter-spacing: 0.32px;
+}
+#lower p,
+#lower h2,
+#lower h3,
+#lower-footer p,
+#lower-footer h3 {
+  margin: 0;
+}
+
+/* ---- buttons --------------------------------------------------------- */
+/* Mono 11px caps, 10px 20px, square. 116x37 for "Book a demo" on theirs. */
+.lw-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 16.5px;
+  font-weight: 400;
+  letter-spacing: 0.32px;
+  text-transform: uppercase;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background-color 150ms cubic-bezier(0, 0, 0.2, 1),
+    color 150ms cubic-bezier(0, 0, 0.2, 1);
+}
+.lw-btn-ghost {
+  background: #e8e8e8;
+  color: var(--ink);
+}
+.lw-btn-ghost:hover {
+  background: #dedde6;
+}
+.lw-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- the two narrow bands ------------------------------------------ */
+/* SECTION full width with a border-top, then an 880 box padded 128/64, so
+   content is 752 at x=344. Integrations measures 696 tall, security 587. */
+.lw-band {
+  border-top: 1px solid var(--lw-line);
+}
+.lw-band-in {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 128px 64px;
+}
+
+.lw-head {
+  max-width: 768px;
+  margin: 0 auto 48px;
+  text-align: center;
+}
+.lw-eyebrow {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 15px;
+  text-transform: uppercase;
+  color: var(--lw-tint);
+}
+/* Eyebrow 15 + 16 + h2 43.2 + 8 + lead 28 = 110, their header block. */
+#lower .lw-h2 {
+  margin-top: 16px;
+  font-size: 36px;
+  line-height: 43.2px;
+  letter-spacing: -0.36px;
+  font-weight: 400;
+  color: var(--ink);
+}
+#lower .lw-lead {
+  max-width: 672px;
+  margin: 8px auto 0;
+  font-size: 18px;
+  line-height: 28px;
+  color: var(--lw-ink65);
+}
+
+/* Glyph row: header ends at 14687, the step grid starts at 14795, glyph
+   centres sit at ~14708. 44 tall + 64 below lands both. */
+.lw-fws {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 48px;
+  height: 44px;
+  margin-bottom: 64px;
+  color: #8d8c9c;
+}
+.lw-fw {
+  flex: 0 0 auto;
+}
+.lw-fw:nth-child(2n) {
+  color: #6f6e80;
+}
+
+.lw-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+}
+.lw-step {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.lw-step-h {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.lw-step-n {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--lw-line);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink);
+}
+.lw-step-t {
+  font-size: 18px;
+  line-height: 28px;
+  letter-spacing: -0.18px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+/* Card 360x130: header strip 38 + body 16 pad + two 19.5 lines + 4 gap. */
+.lw-code {
+  flex: 1;
+  background: #fff;
+  border: 1px solid var(--lw-line);
+}
+.lw-code-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--lw-line);
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 16.5px;
+  text-transform: uppercase;
+  color: var(--lw-tint);
+}
+.lw-code-b {
+  padding: 16px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 19.5px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.lw-code-b > div + div {
+  margin-top: 4px;
+}
+.lw-k {
+  color: var(--ink);
+}
+.lw-eq {
+  color: var(--lw-tint);
+}
+.lw-v {
+  color: var(--accent);
+}
+
+.lw-copy {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin-right: -4px;
+  border: 0;
+  background: none;
+  color: var(--lw-tint);
+  cursor: pointer;
+  transition: color 150ms ease-out;
+}
+.lw-copy:hover {
+  color: var(--ink);
+}
+.lw-copy.is-done {
+  color: var(--accent);
+}
+.lw-copy:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Three 229 columns, gap 32, no cards. Title 16/24, desc 14/20 at .65. */
+.lw-trust {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px;
+  text-align: center;
+}
+.lw-trust-t {
+  font-size: 16px;
+  line-height: 24px;
+  color: var(--ink);
+}
+#lower .lw-trust-d {
+  margin-top: 4px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--lw-ink65);
+}
+.lw-trust-cta {
+  display: flex;
+  justify-content: center;
+  margin-top: 40px;
+}
+
+/* ---- newsletter ------------------------------------------------------ */
+/* A bordered 1280 box straight under the testimonials, 112 below it. Inner
+   grid 96/32 padding, 1.2fr/1fr, gap 64: 627 + 523 at 1440. */
+.lw-news {
+  padding: 0 0 112px;
+}
+.lw-news-box {
+  max-width: 1280px;
+  margin: 0 auto;
+  border: 1px solid var(--lw-line);
+}
+.lw-news-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 64px;
+  padding: 96px 32px;
+}
+#lower .lw-news-eyebrow {
+  margin-bottom: 16px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 15px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.lw-news-h2 {
+  max-width: 576px;
+  font-size: 36px;
+  line-height: 45px;
+  letter-spacing: -0.36px;
+  font-weight: 400;
+  color: var(--ink);
+}
+.lw-issue {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--lw-line);
+}
+#lower .lw-issue-meta {
+  margin-bottom: 12px;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 15px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.lw-issue-t {
+  display: block;
+  font-size: 20px;
+  line-height: 27.5px;
+  color: var(--ink);
+  transition: color 150ms ease-out;
+}
+.lw-issue-t:hover {
+  color: var(--accent);
+}
+/* Two lines at 26, then cut: their teaser is clamped mid-sentence too. Title
+   ends at 16721 and the links start at 16801, so 8 + 52 + 20. */
+#lower .lw-issue-b {
+  margin-top: 8px;
+  font-size: 16px;
+  line-height: 26px;
+  color: var(--muted);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.lw-issue-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 24px;
+  margin-top: 20px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.lw-link-latest {
+  color: var(--accent-dp);
+  transition: color 150ms ease-out;
+}
+.lw-link-all {
+  color: var(--muted);
+  transition: color 150ms ease-out;
+}
+.lw-link-latest:hover,
+.lw-link-all:hover {
+  color: var(--accent);
+}
+
+.lw-news-r {
+  padding-left: 32px;
+  border-left: 1px solid var(--lw-line);
+}
+.lw-sub-h {
+  font-size: 18px;
+  line-height: 28px;
+  letter-spacing: -0.18px;
+  font-weight: 400;
+  color: var(--ink);
+}
+#lower .lw-sub-p {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--muted);
+}
+.lw-form {
+  display: flex;
+  gap: 12px;
+  max-width: 448px;
+  margin-top: 16px;
+}
+.lw-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 46px;
+  padding: 0 16px;
+  font: inherit;
+  font-size: 16px;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--lw-line);
+  border-radius: 0;
+  transition: border-color 150ms ease-out;
+}
+.lw-input::placeholder {
+  color: #a1a0b8;
+}
+.lw-input:hover {
+  border-color: #b9b8c9;
+}
+.lw-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+/* 112x46 on theirs: 14px sans, sentence case, 12px 20px. */
+.lw-submit {
+  flex: 0 0 auto;
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 0;
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: 0.32px;
+  background: var(--ink);
+  color: #f2f2f2;
+  cursor: pointer;
+  transition: opacity 150ms ease-out;
+}
+.lw-submit:hover {
+  opacity: 0.9;
+}
+.lw-submit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#lower .lw-sub-note {
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 22.75px;
+  color: rgba(108, 105, 145, 0.8);
+}
+
+/* ---- closing CTA ----------------------------------------------------- */
+/* 357 tall: 128 + h2 40 + 24 + button 37 + 128. Theirs is a WebGL mesh: a
+   deep indigo field with one lighter ribbon curving down through the right
+   half. Approximated with layered gradients and a feTurbulence grain. */
+.lw-cta {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(
+      ellipse 22% 70% at 64% 8%,
+      rgba(150, 132, 255, 0.55),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 30% 55% at 52% 96%,
+      rgba(132, 112, 255, 0.45),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 60% 120% at 100% 50%,
+      rgba(98, 80, 238, 0.9),
+      transparent 70%
+    ),
+    linear-gradient(100deg, #2f2788 0%, #3a2fa3 40%, #4a3ccc 70%, #5747de 100%);
+}
+/* The ribbon. Theirs is one lit fold that enters at the top near x=870,
+   bulges right to ~955 at mid-height and sweeps down-left to ~610 at the
+   bottom (lo_ref_3.png), brighter field to its right, shadow to its left.
+   Drawn as an S-curve: a blurred fill, a blurred shadow stroke and a thin
+   highlight on the edge, stretched to the section. */
+.lw-cta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: no-repeat center / 100% 100% url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 357' preserveAspectRatio='none'><filter id='b' x='-20%' y='-20%' width='140%' height='140%'><feGaussianBlur stdDeviation='16'/></filter><filter id='s' x='-5%' y='-5%' width='110%' height='110%'><feGaussianBlur stdDeviation='2.5'/></filter><path d='M866 0C966 90 996 200 886 270S696 330 616 357H1440V0Z' fill='%236a58f0' opacity='.6' filter='url(%23b)'/><path d='M836 0C936 90 966 200 856 270S666 330 586 357' fill='none' stroke='%231c166a' stroke-width='46' opacity='.5' filter='url(%23b)'/><path d='M864 0C964 90 994 200 884 270S694 330 614 357' fill='none' stroke='%23b8adff' stroke-width='5' opacity='.45' filter='url(%23s)'/></svg>");
+}
+.lw-cta::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.22;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+}
+.lw-cta-in {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 128px 24px;
+  text-align: center;
+}
+.lw-cta-h {
+  width: fit-content;
+  max-width: 100%;
+  font-size: 36px;
+  line-height: 40px;
+  letter-spacing: -0.36px;
+  font-weight: 400;
+  color: #f2f2f2;
+}
+
+/* ---- footer ---------------------------------------------------------- */
+/* `footer` in styles.css pads 56/28; the class beats the element selector. */
+.lw-foot {
+  border-top: 1px solid var(--lw-line);
+  padding: 0;
+}
+/* 1280 box, 96/32 padding, four 256 columns with 64 gaps. The link columns
+   take the last three and pack right with 96 between them. */
+.lw-foot-in {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 96px 32px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 64px;
+}
+.lw-foot-brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+}
+.lw-foot-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  font-size: 24px;
+  line-height: 32px;
+  letter-spacing: -0.24px;
+  color: var(--navy-lite);
+  transition: color 150ms ease-out;
+}
+.lw-foot-logo:hover {
+  color: var(--accent);
+}
+.lw-foot-tag {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--muted);
+}
+.lw-foot-links {
+  grid-column: span 3;
+  display: flex;
+  justify-content: flex-end;
+  gap: 96px;
+}
+/* Heading 12/16 then links 14/20 every 28px, the first 16px under the heading. */
+.lw-foot-h {
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: -0.12px;
+  font-weight: 400;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.lw-foot-col ul {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.lw-foot-col li {
+  font-size: 14px;
+  line-height: 20px;
+}
+.lw-foot-col a {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--muted);
+  transition: color 150ms ease-out;
+}
+.lw-foot-col a:hover {
+  color: var(--accent);
+}
+
+.lw-foot-bar {
+  border-top: 1px solid var(--lw-line);
+}
+.lw-foot-bar-in {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.lw-copyright {
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 16px;
+  color: rgba(108, 105, 145, 0.6);
+}
+.lw-cookie-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 16px;
+  letter-spacing: 0.32px;
+  color: rgba(108, 105, 145, 0.6);
+  transition: color 150ms ease-out;
+}
+.lw-cookie-btn:hover {
+  color: var(--accent);
+}
+.lw-cookie-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.lw-contact {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+/* ---- narrower viewports --------------------------------------------- */
+/* Their own breakpoints: px-12/py-24 under lg, px-8 under md. */
+@media (max-width: 1311px) {
+  .lw-news-box {
+    margin: 0 16px;
+  }
+}
+@media (max-width: 1023px) {
+  .lw-band-in {
+    padding: 96px 48px;
+  }
+  .lw-foot-in {
+    grid-template-columns: 1fr;
+    gap: 48px;
+  }
+  .lw-foot-links {
+    grid-column: auto;
+    justify-content: flex-start;
+    gap: 64px;
+  }
+}
+@media (max-width: 767px) {
+  .lw-band-in {
+    padding: 96px 16px;
+  }
+  #lower .lw-h2,
+  .lw-news-h2,
+  .lw-cta-h {
+    font-size: 28px;
+    line-height: 34px;
+  }
+  #lower .lw-lead {
+    font-size: 16px;
+    line-height: 24px;
+  }
+  .lw-fws {
+    gap: 20px;
+    flex-wrap: wrap;
+    height: auto;
+    margin-bottom: 48px;
+  }
+  .lw-steps,
+  .lw-trust {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .lw-news-grid {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    padding: 64px 20px;
+  }
+  .lw-news-r {
+    padding-left: 0;
+    border-left: 0;
+    padding-top: 40px;
+    border-top: 1px solid var(--lw-line);
+  }
+  .lw-form {
+    flex-direction: column;
+  }
+  .lw-cta-in {
+    padding: 96px 16px;
+  }
+  .lw-foot-in {
+    padding: 64px 16px;
+  }
+  .lw-foot-bar-in {
+    flex-direction: column;
+    padding: 32px 16px;
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lw-btn,
+  .lw-copy,
+  .lw-issue-t,
+  .lw-link-latest,
+  .lw-link-all,
+  .lw-input,
+  .lw-submit,
+  .lw-foot-logo,
+  .lw-foot-col a,
+  .lw-cookie-btn {
+    transition: none;
+  }
+}

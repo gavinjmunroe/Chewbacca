@@ -1,436 +1,11 @@
-/* Lemma replica: the two pinned scene machines.
+/* The page's scene wiring. The hero scene lives in sections/hero-scene.js;
+   this file mounts it, runs the pinned product demo, draws the hero plates
+   and mounts the section modules. */
 
-   The reference is 17,852px tall and 81% of it is pinned: a sticky child in a
-   parent twelve viewports tall for the geometric narrative, and another four
-   viewports tall for the product demo. Scroll holds the screen still and
-   changes what is in it. No amount of reveal-on-scroll reaches that shape.
-
-   THE RULE THAT SHAPES ALL OF SCENE 1, from a direct browser study of the
-   reference on 2026-09-22: it makes loss of detail, shrinking, tilting,
-   redistribution and ground reveal legible as SEPARATE STAGES. The previous
-   replica treated card-to-plane as one interpolation and read as a single
-   tween because of it. So every property here gets its OWN overlapping
-   interval and its own curve, and none of them share one master easing.
-
-   The 42 cells are created once and never destroyed. Their identity is the
-   story: the same rectangle that carried a failure label becomes the square,
-   the diamond, and the projected tile. Fading one set out and another in
-   would be easier and would break the only thing the sequence is saying. */
-
-const CELLS = 42;                    // measured on the reference: 42 rects held
-const COLS = 7, ROWS = 6;
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
-const NS = "http://www.w3.org/2000/svg";
 
 const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
-/* Progress inside one stage's own window. Stages deliberately overlap. */
-const seg = (p, a, b) => clamp((p - a) / (b - a));
-/* Distinct curves, because a shared curve is what makes stages read as one
-   move. ease is for travel, snap for a state change, linear for a draw. */
-const ease = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-const snap = t => 1 - Math.pow(1 - t, 4);
-const lerp = (a, b, t) => a + (b - a) * t;
 
-const el = (n, attrs = {}) => {
-  const e = document.createElementNS(NS, n);
-  for (const k in attrs) e.setAttribute(k, attrs[k]);
-  return e;
-};
-
-/* The failure copy that appears inside expanded cells in stage 2. Taken from
-   the reference's own vocabulary rather than invented, so the stage reads as
-   a real product surface. */
-const FAILURES = [
-  "fabricated lookup", "orphaned ticket", "escalation to nobody",
-  "refund outside policy", "customerId: unknown", "placeholder identifier",
-];
-
-/* ---------------------------------------------------------------------- */
-/* SCENE 1                                                                 */
-/* ---------------------------------------------------------------------- */
-function scene1(host) {
-  const svg = el("svg", { viewBox: "0 0 1200 700", width: "100%", height: "100%",
-                          preserveAspectRatio: "xMidYMid meet" });
-  host.appendChild(svg);
-
-  const gLat = el("g", { opacity: "0" });          // ground lattice, under all
-  const gCells = el("g");
-  const gWave = el("g", { opacity: "0" });         // the cube wave
-  const gMark = el("g", { opacity: "0" });         // the purple mark
-  svg.append(gLat, gCells, gWave, gMark);
-
-  /* GROUND: a fine lattice plus tiles that CLUSTER.
-     Two scales, because the reference has both, and the clustering is the
-     part that reads as organic. My first field drew each cell independently
-     and came out perfectly even, every tile isolated. Theirs has pairs and
-     triples sitting adjacent with gaps between them.
-
-     Independent draws cannot clump, at any density. Value noise correlates
-     each cell with its neighbours, so thresholding it yields connected
-     blobs: measured 93% of tiles touching another against 36% for
-     independent draws at identical density. That single change is the whole
-     difference between random and organic. */
-  const PX = (u, v) => [600 + (u - v) * 26, 430 + (u + v) * 13];
-  const field = tileField({ cols: 54, rows: 40, fill: 0.055, scale: 0.22 });
-  for (const [u, v] of field.cells) {
-    const p0 = PX(u, v), p1 = PX(u + 1, v), p2 = PX(u + 1, v + 1), p3 = PX(u, v + 1);
-    /* Fade with distance from centre so the plane reads as extending rather
-       than as a rectangle that stops. */
-    const d = Math.hypot(u, v) / 34;
-    gLat.appendChild(el("polygon", {
-      points: [p0, p1, p2, p3].map(q => q.map(n => n.toFixed(1)).join(",")).join(" "),
-      fill: "none", stroke: "#755cfe", "stroke-width": "0.35",
-      opacity: (0.22 * Math.max(0, 1 - d)).toFixed(3) }));
-  }
-  for (const [u, v] of field.tiles) {
-    const p0 = PX(u, v), p1 = PX(u + 1, v), p2 = PX(u + 1, v + 1), p3 = PX(u, v + 1);
-    const d = Math.hypot(u, v) / 34;
-    gLat.appendChild(el("polygon", {
-      points: [p0, p1, p2, p3].map(q => q.map(n => n.toFixed(1)).join(",")).join(" "),
-      fill: "#755cfe", "fill-opacity": (0.18 * Math.max(0, 1 - d)).toFixed(3),
-      stroke: "#755cfe", "stroke-width": "0.7",
-      opacity: (0.9 * Math.max(0, 1 - d)).toFixed(3) }));
-  }
-
-  /* Cells. Home = the card grid. Every later position is derived from the
-     same index, so correspondence is structural and never re-solved. */
-  /* THE GRID, READ OFF THE REFERENCE RATHER THAN GENERATED.
-
-     Two wrong versions preceded this. First a rigid 7x6 lattice of identical
-     132x74 cells with `fails: i % 4 === 1`. Then, correcting that, a seeded
-     random masonry: widths drawn from 96..208 and rows packed to a flush
-     edge. The second was a better guess and still a guess.
-
-     Measuring their 42 bricks at the solid stage gives the actual thing, and
-     it is neither uniform nor random:
-
-         7 rows of 6, height 62, row pitch 70, gaps 7 to 8
-         FOUR widths only: 154, 182, 197, 221
-         row centres ALTERNATE between 739.5 and 701
-
-     So the variety is a four-value palette in a fixed sequence per row, and
-     the ragged look comes from the alternating row centre, not from random
-     widths. A random generator cannot produce that: it gives every row a
-     different centre and twenty different widths, which reads as noise where
-     theirs reads as rhythm. Both of my versions were wrong in the same way,
-     once toward uniform and once toward random, and the answer was to go and
-     read it.
-
-     Values are their screen pixels at 1440, divided by the 1.2 scale this
-     scene's 1200-unit viewBox renders at. */
-  const cells = [];
-  const REF_PX = 1.2;                   // our viewBox units per reference pixel
-  const CH = 62 / REF_PX;                   // 62px brick height
-  const GX = 7.5 / REF_PX;                  // measured gap, 7 to 8px
-  const PITCH = 70 / REF_PX;                // row to row
-  const originY = 150 / REF_PX;             // first row top
-
-  // Their per-row width sequences, in reference pixels.
-  const ROW_WIDTHS = [
-    [154, 221, 182, 197, 154, 197],
-    [197, 182, 154, 221, 154, 221],
-    [182, 221, 182, 154, 197, 154],
-    [154, 221, 182, 154, 197, 182],
-    [221, 154, 182, 221, 154, 182],
-    [182, 197, 154, 182, 221, 154],
-    [154, 182, 221, 154, 182, 221],
-  ];
-  // Rows alternate between two centres. Measured: 739.5 and 701, a 38.5px
-  // offset that is what makes the wall read as laid rather than tiled.
-  const ROW_CENTRE = [739.5, 701, 739.5, 700.5, 739, 701, 739];
-
-  /* Which nine of the forty-two fail is data, not a rule. Nine of 42 was
-     counted off their red stage; an `i % N` would put them on a cycle and a
-     random draw would cluster differently on every reload. These indices are
-     spaced the way theirs are spaced. */
-  const FAIL_AT = new Set([1, 9, 13, 20, 24, 28, 32, 38, 41]);
-
-  let idx = 0;
-  for (let r = 0; r < ROW_WIDTHS.length; r++) {
-    const wsPx = ROW_WIDTHS[r];
-    const total = wsPx.reduce((a, b) => a + b, 0) / REF_PX + (wsPx.length - 1) * GX;
-    let x = ROW_CENTRE[r] / REF_PX - total / 2;
-    const y = originY + r * PITCH;
-    for (const wPx of wsPx) {
-      const w = wPx / REF_PX;
-      const home = { x: x + w / 2, y: y + CH / 2 };
-      const u = (x + w / 2 - 600) / 90, v = (r - (ROW_WIDTHS.length - 1) / 2);
-      const iso = { x: 600 + (u - v) * 62, y: 430 + (u + v) * 31 };
-
-      const g = el("g");
-      /* FILL AND STROKE CROSSFADE, THEY DO NOT BOTH SIT AT ONE VALUE.
-
-         Measured across their scroll:
-
-             y1333  fill-opacity 1     stroke-opacity 0     solid purple
-             y2095  fill 0.99 -> 0     stroke -> 0.01       crossfading
-             y2476  fill 0            stroke 1              outline only
-             y2857  failures fill 0.13 in red, and widen
-
-         Ours had no solid stage at all: an outlined rect plus a fill rect
-         pinned at opacity 0 that only ever reached 0.13. So the bricks
-         arrived as faint outlines and the first fourteen chunks of the page
-         were the wrong colour. One rect that crossfades its own fill and
-         stroke is what they ship, and it cannot get out of step with itself
-         the way two stacked rects can. */
-      const rect = el("rect", { x: 0, y: 0, width: w, height: CH, rx: 0,
-        fill: "#755cfe", "fill-opacity": "1",
-        stroke: "#755cfe", "stroke-opacity": "0", "stroke-width": "1" });
-      const lbl = el("text", { x: 8, y: 17, "font-family": "IBM Plex Mono, monospace",
-        "font-size": "8", fill: "#6c6991", opacity: "0" });
-      lbl.textContent = `TRACE ${String(idx + 1).padStart(2, "0")}`;
-      const fail = el("text", { x: 8, y: 34, "font-family": "IBM Plex Mono, monospace",
-        "font-size": "9", fill: "#ee5557", opacity: "0" });
-      fail.textContent = FAILURES[idx % FAILURES.length];
-      g.append(rect, lbl, fail);
-      gCells.appendChild(g);
-      cells.push({ g, rect, fill: rect, lbl, fail, home, iso, w,
-                   i: idx, fails: FAIL_AT.has(idx) });
-      x += w + GX;
-      idx++;
-    }
-  }
-
-  /* The cube wave. Outlined stacked cubes crossing the lattice. */
-  for (let i = 0; i < 9; i++) {
-    const c = el("g", { opacity: "0.5" });
-    const s = 26, x = 0, y = 0;
-    c.appendChild(el("path", { d: `M${x},${y} l${s},-${s * 0.5} l${s},${s * 0.5} l-${s},${s * 0.5} Z`,
-      fill: "none", stroke: "#755cfe", "stroke-width": "1" }));
-    c.appendChild(el("path", { d: `M${x},${y} l0,${s * 0.7} l${s},${s * 0.5} l0,-${s * 0.7}`,
-      fill: "none", stroke: "#755cfe", "stroke-width": "1", opacity: "0.6" }));
-    c.appendChild(el("path", { d: `M${x + s * 2},${y} l0,${s * 0.7} l-${s},${s * 0.5} l0,-${s * 0.7}`,
-      fill: "none", stroke: "#755cfe", "stroke-width": "1", opacity: "0.6" }));
-    c.dataset.i = i;
-    gWave.appendChild(c);
-  }
-
-  /* The mark: segmented purple runs that resolve into a block L. */
-  const MARK = [[0,0],[0,1],[0,2],[0,3],[1,3],[2,3],[2,2],[1,0],[1,1]];
-  const markTiles = MARK.map(([mx, my]) => {
-    const t = el("g", { opacity: "0" });
-    const s = 54, px = 600 + (mx - my) * s * 0.9, py = 300 + (mx + my) * s * 0.45;
-    t.appendChild(el("path", { d: `M${px},${py} l${s},-${s * 0.5} l${s},${s * 0.5} l-${s},${s * 0.5} Z`,
-      fill: "#755cfe", opacity: "0.92" }));
-    t.appendChild(el("path", { d: `M${px},${py} l0,${s * 0.62} l${s},${s * 0.5} l0,-${s * 0.62} Z`,
-      fill: "#5d4ee7" }));
-    t.appendChild(el("path", { d: `M${px + s * 2},${py} l0,${s * 0.62} l-${s},${s * 0.5} l0,-${s * 0.62} Z`,
-      fill: "#4a3cc4" }));
-    gMark.appendChild(t);
-    return t;
-  });
-
-  /* Headlines, as HTML over the SVG so the type matches the rest of the page. */
-  const cap = document.createElement("div");
-  /* THE CAPTION OWNS A BAND AND THE GRID STARTS BELOW IT.
-
-     The headline was printing straight through the first two rows of traces.
-     The caption sits absolutely over the SVG at a percentage of the pinned
-     stage while the grid is positioned in viewBox units, so the two were
-     laid out in different coordinate systems and nothing connected them. At
-     900px tall the caption's text ended around y=134 and the grid began at
-     y=123, so they were guaranteed to collide at exactly the viewport height
-     this is usually read at.
-
-     Two systems addressing the same space with no shared constraint is the
-     same failure as a percentage-positioned plate next to a pixel-positioned
-     one: it works at the width you happened to test. The band below is
-     reserved in BOTH systems and the grid's origin is derived from it. */
-  cap.style.cssText = "position:absolute;left:0;right:0;top:2%;text-align:center;" +
-    "padding:0 16px;pointer-events:none";
-  /* The two headlines share ONE relative box below the label, so the
-     incoming one cannot land on top of the eyebrow. Previously s1b was
-     position:absolute top:0 against the whole caption, which put it exactly
-     where the label sits: "RESOLUTION" printed through "With Sift, you
-     don't." A wipe between two headlines needs them stacked on each other,
-     not on the element above them. */
-  /* A <p>, NOT AN h2, AND 32px LEFT-ALIGNED.
-
-     Theirs reads "Your agents fail silently." in a
-     `<p>` at 32px, weight 400, text-align start, pinned at x=120. Ours was a
-     centred h2 at 36px, and the tag mattered for more than semantics: the
-     section walk finds sections from headings, so our trace scene registered
-     as a section of its own where theirs does not, and every section count
-     in docs/ was off by one because of it.
-
-     This scene sits INSIDE the hero block on their page, which is why their
-     hero measures 10834px and carries no second heading. Making ours a
-     paragraph is what "restructure the trace into the hero" actually means
-     in markup; the two were already adjacent.
-
-     Tracking is -0.01em here like everywhere else, correcting the -0.02em
-     that was hardcoded on both lines. */
-  cap.innerHTML =
-    `<div class="label" id="s1label">Traces</div>
-     <div id="s1stack" style="position:relative">
-       <p id="s1a" style="font-size:32px;font-weight:400;margin:0;
-           letter-spacing:-0.01em;line-height:1.2;text-align:start">Your agents fail silently.</p>
-       <p id="s1b" style="font-size:32px;font-weight:400;margin:0;
-           letter-spacing:-0.01em;line-height:1.2;text-align:start;opacity:0;
-           position:absolute;left:0;right:0;top:0">With Sift, you see it.</p>
-     </div>`;
-  host.style.position = "relative";
-  host.appendChild(cap);
-  const s1a = cap.querySelector("#s1a"), s1b = cap.querySelector("#s1b");
-  const s1label = cap.querySelector("#s1label");
-
-  /* The trace counter that changes above the lattice during the wave. */
-  const counter = document.createElement("div");
-  counter.className = "label";
-  counter.style.cssText = "position:absolute;left:0;right:0;bottom:8%;text-align:center;" +
-    "opacity:0;pointer-events:none";
-  host.appendChild(counter);
-
-  return function render(p) {
-    /* STAGE WINDOWS. They overlap on purpose: detail leaves while width is
-       already changing, the ground appears before the tilt finishes. That
-       overlap is what separates a sequence from a slideshow. */
-    /* THE FAILURES COME AFTER THE OUTLINE, NOT DURING THE SOLID STAGE.
-
-       tFail used to run 0.07 to 0.20, finishing before tClear began, so our
-       red lit up while the wall was still solid purple and had gone again by
-       the time the outlines arrived. Theirs is the other order, measured:
-
-           y2476   crossfade done, outline only, nothing red
-           y2857   nine bricks light red ON the outlined wall, and widen
-           y3619   still lit
-           y4000   red gone, narrowing begins
-
-       The order carries the meaning. Solid wall, then the wall goes quiet,
-       then the nine that failed light up against the quiet. Firing the red
-       during the solid stage hides it, which is why ours read as a purple
-       wall that flickered rather than as a wall with nine faults in it. */
-    const tIn    = seg(p, 0.00, 0.08);   // cards arrive, staggered
-    const tClear = seg(p, 0.10, 0.18);   // solid crossfades to outline
-    const tFail  = seg(p, 0.20, 0.36);   // the nine light up, and widen
-    const tNarrow= seg(p, 0.38, 0.48);   // width collapses toward square
-    const tTilt  = seg(p, 0.46, 0.56);   // rotation into diamonds
-    const tScat  = seg(p, 0.54, 0.66);   // redistribution onto the plane
-    const tGround= seg(p, 0.60, 0.70);   // lattice reveal, under the tiles
-    const tWave  = seg(p, 0.68, 0.80);   // cube wave crosses
-    const tWipe  = seg(p, 0.70, 0.79);   // headline exchange
-    const tMark  = seg(p, 0.80, 0.94);   // the mark assembles
-    const tLift  = seg(p, 0.93, 1.00);   // everything leaves upward
-
-    gLat.setAttribute("opacity", (tGround * 0.9 * (1 - tLift)).toFixed(3));
-
-    for (const c of cells) {
-      const d = c.i / CELLS;
-      /* Arrival is staggered by index but the whole stagger fits inside the
-         stage, so the last cell is not still arriving after the next stage
-         has begun. */
-      const a = clamp((tIn - d * 0.35) / 0.65);
-      /* Width: full card -> square. Height never changes, so the shape reads
-         as narrowing rather than scaling. */
-      /* Each brick narrows from ITS OWN width, not from a shared constant.
-         The masonry rewrite gave every brick a drawn width, so lerping from
-         a single CW would have snapped all 42 to one size on the first frame
-         of this stage, undoing the varied layout exactly when it starts
-         moving. The square it narrows TO is shared, because that is the tile
-         the ground plane holds. */
-      const w = lerp(c.w, CH, ease(tNarrow));
-
-      /* PROJECTION, NOT ROTATION. This was rotate(45) on a square, and a
-         square turned 45 degrees has EQUAL diagonals. A square actually
-         lying on this isometric ground plane projects to a rhombus whose
-         horizontal diagonal is twice its vertical one, because the plane's
-         own basis is u -> (62,31) and v -> (-62,31).
-
-         So the tiles were the wrong shape for the plane they were sitting
-         on: a diamond hovering above the grid instead of a tile lying in
-         it. Rotating is not projecting, and using one for the other is why
-         the scene never locked together no matter what else got fixed.
-
-         The matrix below IS the grid. Tile and cell cannot disagree now,
-         because both are generated from the same two basis vectors. */
-      const k = ease(tTilt);                    // 0 flat on screen, 1 on the plane
-      const ux = lerp(1, 62 / CH, k), uy = lerp(0, 31 / CH, k);
-      const vx = lerp(0, -62 / CH, k), vy = lerp(1, 31 / CH, k);
-      /* Inset inside the cell, not filling it. At 0.92 the tiles tiled edge
-         to edge into one continuous sheet and the lattice under them became
-         invisible. The reference keeps a clear gap so each tile reads as a
-         separate object resting on a visible ground. */
-      const sc = lerp(1, 0.6, ease(tScat));
-      const x = lerp(c.home.x, c.iso.x, ease(tScat));
-      const y = lerp(c.home.y, c.iso.y, ease(tScat));
-      const lift = tLift * -620;
-
-      c.g.setAttribute("transform",
-        `translate(${x.toFixed(1)},${(y + lift).toFixed(1)}) ` +
-        `scale(${sc.toFixed(3)}) ` +
-        `matrix(${ux.toFixed(4)},${uy.toFixed(4)},${vx.toFixed(4)},${vy.toFixed(4)},` +
-        `${(-w / 2).toFixed(1)},${(-CH / 2).toFixed(1)})`);
-      c.g.setAttribute("opacity", (a * (1 - tLift * 0.9)).toFixed(3));
-      c.rect.setAttribute("width", w.toFixed(1));
-
-      /* THE CROSSFADE. Measured on their scroll, fill and stroke trade
-         places over tClear rather than either being constant:
-
-             before  fill-opacity 1   stroke-opacity 0    solid purple
-             after   fill-opacity 0   stroke-opacity 1    outline only
-
-         The label is invisible while the brick is solid, because there is
-         nothing to read it against, and appears as the fill leaves. */
-      const swap = ease(tClear);
-      const f = c.fails ? tFail * (1 - tClear) : 0;
-      // A failing brick keeps a 0.13 wash of red where a healthy one goes to
-      // nothing. 0.13 is theirs, measured at the stage where nine of the
-      // forty-two are lit.
-      const fillOp = c.fails ? Math.max(1 - swap, f * 0.13) : 1 - swap;
-      c.rect.setAttribute("fill", c.fails && f > 0.1 ? "#ee5557" : "#755cfe");
-      c.rect.setAttribute("fill-opacity", fillOp.toFixed(3));
-      c.rect.setAttribute("stroke-opacity", swap.toFixed(3));
-      c.rect.setAttribute("stroke", c.fails && f > 0.1 ? "#ee5557" : "#755cfe");
-      c.fail.setAttribute("opacity", f.toFixed(3));
-      c.lbl.setAttribute("opacity", (a * swap * (1 - tNarrow)).toFixed(3));
-    }
-
-    /* Cube wave: crosses left to right, each cube offset so the crest is
-       diagonal rather than a wall. */
-    gWave.setAttribute("opacity", (tWave > 0 ? (1 - Math.abs(tWave - 0.5) * 2) : 0).toFixed(3));
-    [...gWave.children].forEach((c, i) => {
-      const d = i / 9;
-      const t = clamp(tWave * 1.6 - d * 0.5);
-      c.setAttribute("transform",
-        `translate(${lerp(140, 1010, t).toFixed(1)},${(452 - d * 26 + Math.sin(t * Math.PI) * -46).toFixed(1)})`);
-    });
-    counter.style.opacity = (tWave > 0.05 && tWave < 0.95 ? 0.9 : 0).toFixed(2);
-    counter.textContent = `${Math.round(lerp(0, 12406, tWave)).toLocaleString()} traces scored`;
-
-    /* Headline exchange: the outgoing one wipes horizontally, which is what
-       the reference does, and the incoming one arrives as the plane persists.
-       A cross-fade would lose the wipe, and the wipe is the effect. */
-    s1a.style.clipPath = `inset(0 ${(tWipe * 100).toFixed(1)}% 0 0)`;
-    s1a.style.opacity = String(1 - tWipe * 0.2);
-    /* A fully clipped element still occupies its box, so the two headlines
-       kept overlapping in layout after the wipe finished. Invisible on
-       screen, caught by the gate's pairwise box check at 39%. Taking the
-       spent one out of the flow is both the fix and the honest state. */
-    s1a.style.display = tWipe >= 1 ? "none" : "";
-    s1b.style.display = tWipe <= 0 ? "none" : "";
-    s1b.style.opacity = String(tWipe);
-    s1b.style.clipPath = `inset(0 0 0 ${((1 - tWipe) * 100).toFixed(1)}%)`;
-    s1label.textContent = tWipe > 0.5 ? "Resolution" : "Traces";
-
-    /* The mark assembles in stages: sparse pieces, then runs, then resolved. */
-    /* The whole scene leaves together. Lifting the geometry while the
-       headline stayed pinned sent the assembled mark straight up THROUGH the
-       type: invisible while reading the code, and the reason design-gate
-       measured visual weight 0.355 off centre at this position. The
-       reference moves the mark and its plane out as one object, so the
-       caption travels with them. */
-    const capLift = (tLift * -320).toFixed(1);
-    cap.style.transform = `translateY(${capLift}px)`;
-    cap.style.opacity = String(1 - tLift);
-    counter.style.transform = `translateY(${capLift}px)`;
-    gMark.setAttribute("opacity", (1 - tLift).toFixed(3));
-    markTiles.forEach((t, i) => {
-      const o = clamp((tMark - (i / markTiles.length) * 0.55) / 0.45);
-      t.setAttribute("opacity", snap(o).toFixed(3));
-      t.setAttribute("transform", `translate(0,${((1 - snap(o)) * 40 - tLift * 620).toFixed(1)})`);
-    });
-  };
-}
 
 /* ---------------------------------------------------------------------- */
 /* SCENE 2: the product demo. Copy moves, the demo area stays put.         */
@@ -451,7 +26,7 @@ function scene1(host) {
        Traces        the waterfall      spans, timings, findings
        Live alerts   the chat mock      a channel, a thread, a typing state
        Sift MCP      the integrations   a framework rail and two config blocks
-       Metrics       metricsPanel       unchanged, thickened in Wave 3
+       Metrics       metrics.js         an issue that closed and came back
 
    `mount` runs after the panel is in the document, because all three modules
    query inside a root they are handed. The thin panels had no interactive
@@ -459,180 +34,23 @@ function scene1(host) {
 const DEMO = [
   { label: "Traces", title: "Find the runs that failed quietly.",
     body: "Sift audits every trace against your agent's instructions and groups recurring failures into issues.",
-    render: () => sec_waterfall.panel(), mount: sec_waterfall.mount },
+    mod: sec_waterfall },
   { label: "Live alerts", title: "Hear about it in the channel you already have open.",
     body: "Sift triages issues and alerts you in Slack.",
-    render: () => sec_chat_mock.panel(), mount: sec_chat_mock.mount },
+    mod: sec_chat_mock },
   { label: "Sift MCP", title: "Fix it without leaving the editor.",
     body: "Your editor gets the trace, the diff and the fix, with no tab to change.",
-    render: () => sec_integrations.panel(), mount: sec_integrations.mount },
+    mod: sec_integrations },
   { label: "Metrics", title: "Know the moment it comes back.",
     body: "After deploying the fix, Sift creates an online eval. If a regression occurs, you'll know.",
-    render: metricsPanel },
+    mod: sec_metrics },
 ];
-
-function row(k, v, extra = "") {
-  return `<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;
-    border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11px">
-    <span style="color:var(--ink)">${k}</span>
-    <span style="color:var(--muted)">${v}</span></div>${extra}`;
-}
-/* tracePanel, slackPanel and agentPanel were deleted 2026-09-28. All three
-   were thin sketches of panels that the waterfall, chat-mock and
-   integrations modules already draw properly, and those now fill the
-   DEMO slots. Kept in git at 1babb6c. */
-/* THE METRICS PANEL. Rebuilt 2026-09-28, and it is not a chart.
-
-   Ours drew 22 bars and carried five text leaves, against 24 to 60 on the
-   other three panels. Theirs, measured at the same stage, has ONE rect and
-   ONE line of SVG in the whole sticky container: the visual is not a chart,
-   it is an issue that was closed and came back, with a sparkline as a
-   footnote rather than as the subject.
-
-   That is the argument this panel makes and the bars were not making it. A
-   bar chart says "here is some data". An issue card that says RESOLVED and
-   then says REOPENED two lines later says the thing the product is for.
-
-   Structure, matching the density of the other three:
-
-       header      issue id, severity, the owning agent
-       title       what broke, in one line
-       timeline    opened, fixed, reopened, each with a time and an actor
-       sparkline   28 days, one line, a threshold, and the day it crossed
-       eval        the check that now runs on every new trace
-       footer      the recurrence, and who was told
-
-   All content is ours. tools/check_copy.py refuses a rebuild that
-   reintroduces one of their sentences. */
-const EVENTS = [
-  ["opened",   "4d ago",  "auto",            "12 runs matched, grouped by cause"],
-  ["assigned", "4d ago",  "checkout-agent",  "owner set from the failing span"],
-  ["fixed",    "3d ago",  "PR #482",         "policy window added to the prompt"],
-  ["closed",   "3d ago",  "auto",            "48h clean, eval green"],
-  ["reopened", "2m ago",  "auto",            "2 new runs matched the same shape"],
-];
-
-// 28 days of the eval score. The dip is the incident, the recovery is the
-// fix, the second dip is the regression the panel is about.
-const TREND = [
-  98, 97, 98, 99, 98, 97, 98, 96, 91, 84, 71, 62, 58, 55,
-  61, 74, 88, 96, 98, 99, 98, 98, 97, 98, 97, 93, 81, 69,
-];
-const THRESHOLD = 90;
-
-function metricsPanel() {
-  const W = 420, H = 96, PAD = 4;
-  const x = i => PAD + (i * (W - PAD * 2)) / (TREND.length - 1);
-  const y = v => H - PAD - ((v - 40) / 60) * (H - PAD * 2);
-  const line = TREND.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const breach = TREND.findIndex((v, i) => i > 20 && v < THRESHOLD);
-
-  const ev = EVENTS.map(([kind, when, who, note]) => `
-    <li class="mx-ev mx-ev-${kind}">
-      <span class="mx-dot" aria-hidden="true"></span>
-      <span class="mx-kind">${kind}</span>
-      <span class="mx-when">${when}</span>
-      <span class="mx-who">${who}</span>
-      <span class="mx-note">${note}</span>
-    </li>`).join("");
-
-  return `<div class="panel-head">
-      <span>inc_4f2a</span>
-      <span class="mx-sev">P0</span>
-      <span style="margin-left:auto">checkout-agent</span>
-    </div>
-    <div class="panel-body mx">
-      <div class="mx-title">Refunds promised past the 30 day window</div>
-
-      <ol class="mx-track">${ev}</ol>
-
-      <div class="mx-chart">
-        <div class="mx-chart-hd">
-          <span class="mx-metric">refund_window_breach</span>
-          <span class="mx-score">69<span class="mx-unit">/100</span></span>
-        </div>
-        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-             aria-label="Eval score over 28 days, crossing the threshold twice">
-          <line x1="0" y1="${y(THRESHOLD).toFixed(1)}" x2="${W}" y2="${y(THRESHOLD).toFixed(1)}"
-                stroke="var(--line)" stroke-dasharray="3 3"/>
-          <polyline points="${line}" fill="none" stroke="${A}" stroke-width="1.5"
-                    stroke-linejoin="round"/>
-          <circle cx="${x(breach).toFixed(1)}" cy="${y(TREND[breach]).toFixed(1)}" r="3"
-                  fill="#d4443c"/>
-        </svg>
-        <div class="mx-axis"><span>28d ago</span><span>threshold ${THRESHOLD}</span><span>now</span></div>
-      </div>
-
-      <div class="mx-foot">
-        <span class="mx-badge">reopened</span>
-        2 runs matched 2m ago. Posted to #agent-alerts and reassigned.
-      </div>
-    </div>`;
-}
-
-
-/* TEXT TRAVELS, IT DOES NOT SWITCH.
-
-   Caleb: "In 1 section text is supposed to scroll bottom to top while the box
-   on the right animates but instead the text is basically just switching."
-
-   Exactly right. This was three `textContent =` assignments, so the panels on
-   the right crossfaded while the copy beside them cut between states. A cut
-   next to a dissolve reads as a bug even when neither is wrong alone.
-
-   The reference ships the mechanism as two clip-path keyframes:
-
-       maskHideUp      inset(0 0 0)     -> inset(0 0 100%)   opacity 1 -> 0
-       maskRevealDown  inset(100% 0 0)  -> inset(0 0 0)      opacity 0 -> 1
-
-   Outgoing line wipes upward, incoming line is uncovered from its baseline
-   up. Nothing translates, so there is no reflow and nothing can overlap the
-   line below it, which is what a translateY swap does at small line heights.
-
-   The three lines are offset 0, 60 and 120ms. That is a stagger rather than a
-   chain, and it is correct here: these are siblings arriving together, not
-   stages where one has to finish before the next can start. Chaining them
-   would take 0.9s to change a label. */
-const SWAP_MS = 260;
-
-function swapText(el, next, delay) {
-  if (el.textContent === next) return;
-  // A scroll-driven swap can fire many times a second while someone flicks.
-  // Without this the element accumulates animations and lands mid-wipe.
-  if (el._swap) { clearTimeout(el._swap); }
-  el._swap = setTimeout(() => {
-    if (REDUCED) { el.textContent = next; return; }
-    el.animate(
-      [{ clipPath: "inset(0 0 0 0)", opacity: 1 },
-       { clipPath: "inset(0 0 100% 0)", opacity: 0 }],
-      { duration: SWAP_MS, easing: "cubic-bezier(.33,1,.68,1)", fill: "forwards" }
-    ).onfinish = () => {
-      el.textContent = next;
-      el.animate(
-        [{ clipPath: "inset(100% 0 0 0)", opacity: 0 },
-         { clipPath: "inset(0 0 0 0)", opacity: 1 }],
-        { duration: SWAP_MS, easing: "cubic-bezier(.33,1,.68,1)", fill: "forwards" }
-      );
-    };
-  }, delay);
-}
 
 function scene2() {
   const stage = document.getElementById("demoStage");
   const text  = document.getElementById("demoText");
   if (!stage || !text) return () => {};
 
-  /* FOUR TEXT BLOCKS, WRITTEN ONCE AND THEN LEFT ALONE.
-
-     This used to be one block whose label, title and body were swapped with
-     a clip-path wipe as you scrolled. Theirs does not swap anything: there
-     are four blocks, each one viewport tall, and they scroll past the pinned
-     panel. So the wipe, the swap scheduler and the three element handles all
-     go, and with them a whole class of bug where a fast flick left an
-     element stranded mid-wipe.
-
-     Each block is its own landmark now, which also means a screen reader and
-     the section walk both see four headings here instead of one. */
   text.innerHTML = DEMO.map((d, i) => `
     <div class="feat-block" data-i="${i}">
       <div class="label">${d.label}</div>
@@ -640,45 +58,42 @@ function scene2() {
       <p>${d.body}</p>
     </div>`).join("");
 
-  const panels = DEMO.map(d => {
-    const p = document.createElement("div");
-    p.className = "panel";
-    p.innerHTML = d.render();
-    stage.appendChild(p);
-    /* After appendChild, never before: all three modules query inside the
-       root they are handed, and a detached node has no layout, so anything
-       measuring inside mount would read zeroes. Each is wrapped, because one
-       module throwing must not leave the other three unmounted. */
-    if (typeof d.mount === "function") {
-      try { d.mount(p); } catch (err) { console.error("panel mount failed:", d.label, err); }
-    }
-    return p;
+  /* THEIR STACK, from the DOM: four absolute layers over the pinned 900px
+     column, each a flex column centring its panel, and the switch is a CSS
+     opacity transition of 500ms ease-out on a class. The crossfade is
+     TIMED, not scrubbed: at the halfway scroll point theirs reads 0.447 and
+     0.553 because the transition is in flight, and it lands either way.
+
+     Each panel module hands back setActive, because their panels are timed
+     state machines that run only while their block is the one in view and
+     restart on every return. */
+  const layers = DEMO.map((d) => {
+    const layer = document.createElement("div");
+    layer.className = "demo-layer";
+    layer.innerHTML = `<div class="demo-w">${d.mod.panel()}</div>`;
+    stage.appendChild(layer);
+    let ctl = null;
+    try { ctl = d.mod.mount(layer.querySelector(".demo-w").firstElementChild) || null; }
+    catch (err) { console.error("panel mount failed:", d.label, err); }
+    return { layer, ctl };
   });
 
-  /* WHICH PANEL IS DRIVEN BY WHICH TEXT BLOCK IS IN VIEW, not by a fraction
-     of the section. A fraction assumes every block is the same height and
-     that the section starts where the pin starts; neither survives a short
-     viewport. Reading each block's own centre against the viewport's centre
-     is true whatever the heights turn out to be. */
+  /* Active is the block whose centre is nearest the viewport's. */
   const blocks = [...text.querySelectorAll(".feat-block")];
+  let active = -1;
   return function render() {
     const mid = window.innerHeight / 2;
-    // continuous index: distance of each block's centre from the viewport's
-    let f = 0, best = Infinity;
-    blocks.forEach((b, k) => {
+    let best = Infinity, k = 0;
+    blocks.forEach((b, i) => {
       const r = b.getBoundingClientRect();
-      const d = (r.top + r.height / 2 - mid) / window.innerHeight;
-      if (Math.abs(d) < best) { best = Math.abs(d); f = k + d * -1; }
+      const d = Math.abs(r.top + r.height / 2 - mid);
+      if (d < best) { best = d; k = i; }
     });
-    f = Math.max(0, Math.min(DEMO.length - 1, f));
-    panels.forEach((el2, k) => {
-      const d = Math.abs(f - k);
-      const o = clamp(1 - d * 1.45);
-      el2.style.opacity = o.toFixed(3);
-      el2.style.transform = `translateY(${((f - k) * 26).toFixed(1)}px)`;
-      /* Out of the band, out of the tree: a panel at opacity 0 still traps
-         pointer events and still paints its children's stacking context. */
-      el2.style.display = o < 0.01 ? "none" : "";
+    if (k === active) return;
+    active = k;
+    layers.forEach((L, i) => {
+      L.layer.classList.toggle("on", i === k);
+      if (L.ctl && typeof L.ctl.setActive === "function") L.ctl.setActive(i === k);
     });
   };
 }
@@ -1242,7 +657,7 @@ function cubeClock() {
 cubeClock();
 
 
-drive("run1", scene1(document.getElementById("stage1")));
+mountHeroScene(document.getElementById("hero"));
 drive("run2", scene2());
 
 /* ---------------------------------------------------------------------- */
@@ -1262,6 +677,9 @@ import * as sec_waterfall from "./sections/waterfall.js";
 import * as sec_chat_mock from "./sections/chat-mock.js";
 import * as sec_integrations from "./sections/integrations.js";
 import * as sec_testimonials from "./sections/testimonials.js";
+import * as sec_lower from "./sections/lower.js";
+import { mountHeroScene } from "./sections/hero-scene.js";
+import * as sec_metrics from "./sections/metrics.js";
 
 /* Prefixed, because `testimonials` and `counter` are already bound in this
    file by the older hand-built versions. A namespace import that collides
@@ -1279,7 +697,7 @@ import * as sec_testimonials from "./sections/testimonials.js";
    panels mount inside the pinned demo above. Only their CSS is still
    loaded, and their render() exports still work if they are ever wanted
    standalone again. */
-const SECTIONS = [sec_logo_wall, sec_testimonials];
+const SECTIONS = [sec_lower, sec_testimonials];
 
 for (const mod of SECTIONS) {
   try {
@@ -1308,6 +726,8 @@ registerReveals();
   const KEY = "sift.cookie-choice";
   let prior = null;
   try { prior = localStorage.getItem(KEY); } catch { /* blocked, show it */ }
+  /* The footer's Cookie settings button asks for the card back. */
+  document.addEventListener("sift:cookie-settings", () => { card.hidden = false; });
   if (prior) { card.hidden = true; return; }
   card.addEventListener("click", (e) => {
     const choice = e.target.closest("[data-cc]")?.dataset.cc;

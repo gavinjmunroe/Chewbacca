@@ -1,440 +1,319 @@
-/* Section G: the trace waterfall panel.
- *
- * Scoped to .wf. Nothing here touches a global token: the only custom
- * properties declared are the module's own --wf-* set, and every one of them
- * is mixed out of the two brand tokens rather than picked by eye.
- *
- * Zero radius everywhere, weight 400 everywhere, hierarchy from size, colour
- * and opacity only, which is what makes the reference read as an instrument.
- */
+/* Panel 1, "Traces". Sizes are theirs, read from chunk 8331 and measured at
+ * 1440: this panel is NOT scaled at desktop width, so every value below is
+ * the rendered pixel. 41 header + 141 findings + 292 tree + 27 steps + 1
+ * border = 502, their measured height. */
 
-.wf {
-  /* Kind colours. The reference colour-codes bars by span kind; its actual
-   * hues were never measured, so these are a ramp along brand to navy with
-   * grey for the non-model work. A choice, not a finding. */
-  --wf-agent: var(--accent);
-  --wf-gen: var(--navy-lite);
-  --wf-tool: color-mix(in oklab, var(--accent) 52%, var(--navy-lite));
-  --wf-retr: color-mix(in oklab, var(--accent) 70%, var(--white));
-  --wf-vec: color-mix(in oklab, var(--accent) 48%, var(--white));
-  --wf-guard: color-mix(in oklab, var(--navy-lite) 34%, var(--grey));
-  /* Warm red, per the brief. Measured at 5.14:1 against the white panel it
-   * is read on, so the error rows clear AA at 11px. */
-  --wf-err: #c2412c;
-
-  /* One indent step. Chosen, not measured. At depth 3 it spends 42px of the
-   * name column, which is where the deepest span names start to ellipsize at
-   * a 375px viewport; 10px below 560px buys that back. */
-  --wf-step: 14px;
-
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
-  gap: 56px;
-  align-items: start;
-  max-width: var(--maxw);
-  margin: 0 auto;
-  padding: 0 var(--gutter);
+@property --wf-reveal {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 0%;
 }
-
-/* ---- copy ------------------------------------------------------------ */
-
-.wf-label {
-  margin: 0 0 18px;
-  font-family: var(--mono);
-  font-size: var(--t-8);
-  font-weight: 400;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.wf-h {
-  margin: 0 0 18px;
-  font-family: var(--sans);
-  font-size: var(--t-h2);
-  font-weight: 400;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-.wf-sub {
-  margin: 0;
-  max-width: 34em;
-  font-size: var(--t-md);
-  font-weight: 400;
-  line-height: 1.55;
-  color: var(--muted);
-}
-
-/* ---- panel ----------------------------------------------------------- */
 
 .wf-panel {
-  min-width: 0;
-  background: var(--white);
-  border: 1px solid var(--line);
+  background: #fff;
+  border: 0.5px solid rgb(212, 212, 221);
+  overflow: hidden;
+  font-size: 14px;
+  color: var(--ink);
+  font-family: var(--sans);
 }
 
+/* px-4 py-3, mono 11 and 10. */
 .wf-hd {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 11px 14px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
+  padding: 12px 16px;
+  border-bottom: 1px solid rgb(232, 232, 238);
 }
-
 .wf-tid {
-  font-family: var(--mono);
-  font-size: var(--t-11);
-  color: var(--ink);
+  font: 11px/16px var(--mono);
+  color: #7b7b88;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
-.wf-hd-meta {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  flex: none;
+.wf-meta {
+  font: 10px/16px var(--mono);
+  color: #a3a3ab;
+  flex-shrink: 0;
 }
 
-.wf-hd-v {
-  font-family: var(--mono);
-  font-size: var(--t-10);
-  color: var(--muted);
-}
-
-.wf-hd-err {
-  font-family: var(--mono);
-  font-size: var(--t-10);
-  color: var(--wf-err);
-}
-
-.wf-hd-sep {
-  width: 1px;
-  height: 9px;
-  background: var(--line);
-}
-
-/* ---- occurrences ----------------------------------------------------- */
-
+/* min-height 140 holds the slot while it is a loader and while it is cards. */
 .wf-occ {
-  padding: 12px 14px 13px;
-  border-bottom: 1px solid var(--line);
-}
-
-.wf-occ-label {
-  margin: 0 0 9px;
-  font-family: var(--mono);
-  font-size: var(--t-8);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--accent);
-}
-
-.wf-find + .wf-find {
-  margin-top: 1px;
-}
-
-.wf-find-hd {
-  display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 7px 8px 7px 4px;
-  border: 1px solid transparent;
-  border-radius: 0;
-  background: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition:
-    background-color 220ms ease-out,
-    border-color 220ms ease-out;
-}
-
-.wf-find-hd:hover {
-  background: color-mix(in oklab, var(--accent) 6%, transparent);
-  border-color: var(--line-soft);
-}
-
-.wf-find-hd:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.wf-chev {
-  color: var(--accent);
-  transition: transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
-}
-
-.wf-find-hd[aria-expanded="true"] .wf-chev {
-  transform: rotate(90deg);
-}
-
-.wf-find-t {
-  font-size: var(--t-13);
-  font-weight: 400;
-  color: var(--ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.wf-find-n {
-  font-family: var(--mono);
-  font-size: var(--t-9);
-  color: var(--muted);
-}
-
-.wf-find-bd {
-  padding: 0 8px 10px 24px;
-  opacity: 0;
-  transform: translateY(-3px);
-  transition:
-    opacity 220ms ease-out,
-    transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
-}
-
-.wf-find-bd.is-open {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.wf-find-p {
-  margin: 0 0 6px;
-  font-size: var(--t-13);
-  line-height: 1.5;
-  color: var(--muted);
-}
-
-.wf-find-sp {
-  margin: 0;
-  font-family: var(--mono);
-  font-size: var(--t-9);
-  color: var(--accent);
-}
-
-/* ---- span tree ------------------------------------------------------- */
-
-.wf-tree {
-  padding: 11px 14px 14px;
-}
-
-.wf-cols,
-.wf-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 54px minmax(110px, 0.9fr);
-  align-items: center;
-  gap: 10px;
-}
-
-.wf-cols {
-  padding: 0 4px 7px;
-  border-bottom: 1px solid var(--line-soft);
-  font-family: var(--mono);
-  font-size: var(--t-8);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--grey);
-}
-
-.wf-cols span:nth-child(2) {
-  text-align: right;
-}
-
-.wf-rows {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.wf-row {
   position: relative;
-  padding: 0 4px;
-  min-height: 21px;
+  min-height: 140px;
+  border-bottom: 1px solid rgb(232, 232, 238);
+}
+.wf-wait {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 500ms ease-out;
+}
+.wf-wait.is-off {
   opacity: 0;
-  transform: translateY(4px);
+}
+.wf-wait-t {
+  font: 11px/16px var(--mono);
+  color: rgba(29, 25, 86, 0.4);
+}
+.wf-orbit {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.wf-orbit-run {
+  animation: wf-orbit 2.4s linear infinite;
+}
+@keyframes wf-orbit {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+/* The findings unmask downward as each one lands: solid to N%, fading over
+ * the next 12%, transitioned 600ms on the curve theirs uses. */
+.wf-found {
+  position: relative;
+  opacity: 0;
+  pointer-events: none;
+  --wf-reveal: 0%;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 var(--wf-reveal),
+    transparent calc(var(--wf-reveal) + 12%)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    #000 var(--wf-reveal),
+    transparent calc(var(--wf-reveal) + 12%)
+  );
   transition:
-    opacity 220ms ease-out,
-    transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
+    opacity 300ms ease-out,
+    --wf-reveal 600ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-
-.wf-row.is-in {
+.wf-found.is-on {
   opacity: 1;
-  transform: translateY(0);
+  pointer-events: auto;
 }
-
-.wf-row:hover {
-  background: color-mix(in oklab, var(--accent) 5%, transparent);
+.wf-found-h {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 12px 12px 8px;
+  font-size: 12px;
+  line-height: 16px;
+  color: #6c6991;
 }
-
-/* The depth guides. Repeating 1px verticals across exactly the indent, so
- * each line lands on its parent row's icon centre (offset 5px of a 10px
- * glyph) rather than being drawn per row. */
-.wf-name {
+.wf-found-ico {
+  width: 14px;
+  height: 14px;
+  color: #ef4444;
+}
+.wf-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 16px;
+}
+.wf-card {
   display: flex;
   align-items: center;
   gap: 6px;
+  border: 1px solid rgba(212, 212, 221, 0.6);
+  padding: 10px 14px;
+  margin: 0;
+}
+.wf-card-t {
+  flex: 1;
   min-width: 0;
-  padding-left: calc(var(--depth) * var(--wf-step));
-  background-image: repeating-linear-gradient(
-    to right,
-    var(--line-soft) 0 1px,
-    transparent 1px var(--wf-step)
-  );
-  background-size: calc(var(--depth) * var(--wf-step)) 100%;
-  background-position: 5px 0;
-  background-repeat: no-repeat;
-}
-
-.wf-ico {
-  flex: none;
-  color: var(--wf-c, var(--accent));
-}
-
-.wf-nm {
-  font-family: var(--mono);
-  font-size: var(--t-11);
-  color: var(--ink);
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.wf-chev {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: #6c6991;
+}
+
+/* py-1.5 around 28px rows. */
+.wf-tree {
+  position: relative;
+  overflow: hidden;
+  padding: 6px 0;
+}
+.wf-row {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding-right: 4px;
+}
+.wf-pad {
+  width: 16px;
+  flex-shrink: 0;
+}
+.wf-col {
+  position: relative;
+  width: 32px;
+  height: 100%;
+  flex-shrink: 0;
+}
+.wf-v {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgb(226, 226, 232);
+}
+.wf-v.wf-half {
+  bottom: 50%;
+}
+.wf-h {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 1px;
+  background: rgb(226, 226, 232);
+}
+.wf-gap {
+  width: 10px;
+  flex-shrink: 0;
+}
+.wf-cv {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 100%;
+  flex-shrink: 0;
+  color: rgba(108, 105, 145, 0.7);
+}
+.wf-caret {
+  width: 10px;
+  height: 10px;
+}
+.wf-ico {
+  flex-shrink: 0;
+  margin-right: 8px;
+}
+.wf-nm {
+  flex: 1;
+  min-width: 0;
+  margin-right: 4px;
+  font: 12px/16px var(--mono);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-.wf-note {
-  flex: none;
-  font-family: var(--mono);
-  font-size: var(--t-8);
-  color: var(--grey);
+.wf-err {
+  flex-shrink: 0;
+  margin-right: 4px;
+  color: #ef4444;
 }
-
 .wf-dur {
-  font-family: var(--mono);
-  font-size: var(--t-10);
-  color: var(--muted);
-  text-align: right;
+  flex-shrink: 0;
+  margin-right: 6px;
+  font: 12px/16px var(--mono);
+  color: #6c6991;
 }
-
 .wf-track {
   position: relative;
-  height: 11px;
-  min-width: 0;
+  width: 80px;
+  height: 6px;
+  flex-shrink: 0;
+  margin-right: 8px;
+  overflow: hidden;
+  background: rgba(108, 105, 145, 0.2);
 }
-
-/* The trace's own baseline, so a bar that starts late reads as late. */
-.wf-track::before {
-  content: "";
-  position: absolute;
-  inset: 5px 0 auto;
-  height: 1px;
-  background: var(--line-soft);
-}
-
-/* left and width are inline, written by geometry() from start and dur. Only
- * scaleX is animated, so nothing here recalculates layout. */
 .wf-bar {
   position: absolute;
-  top: 3px;
-  height: 5px;
-  background: var(--wf-c, var(--accent));
-  transform-origin: left center;
-  transform: scaleX(0);
-  transition: transform 220ms cubic-bezier(0.33, 1, 0.68, 1);
+  top: 0;
+  bottom: 0;
+  background: rgba(108, 105, 145, 0.4);
+}
+.wf-row.is-err .wf-nm {
+  color: #b91c1c;
+}
+.wf-row.is-err .wf-dur {
+  color: rgba(239, 68, 68, 0.7);
 }
 
-.wf-row.is-in .wf-bar {
-  transform: scaleX(1);
+/* Kind colours: icons at the -600 step, bars at -500, as theirs pairs them. */
+.wf-k-agent {
+  color: #9333ea;
+}
+.wf-k-generation {
+  color: #ec4899;
+}
+.wf-k-tool {
+  color: #ea580c;
+}
+.wf-k-guardrail {
+  color: #dc2626;
+}
+.wf-k-retriever {
+  color: #0d9488;
+}
+.wf-k-embedding {
+  color: #d97706;
+}
+.wf-b-agent {
+  background: #a855f7;
+}
+.wf-b-generation,
+.wf-b-embedding {
+  background: #ec4899;
+}
+.wf-b-tool,
+.wf-b-retriever {
+  background: #f97316;
+}
+.wf-b-guardrail {
+  background: #ef4444;
 }
 
-/* ---- kind colours ---------------------------------------------------- */
-
-.wf-row[data-kind="agent"] { --wf-c: var(--wf-agent); }
-.wf-row[data-kind="gen"]   { --wf-c: var(--wf-gen); }
-.wf-row[data-kind="tool"]  { --wf-c: var(--wf-tool); }
-.wf-row[data-kind="retr"]  { --wf-c: var(--wf-retr); }
-.wf-row[data-kind="vec"]   { --wf-c: var(--wf-vec); }
-.wf-row[data-kind="guard"] { --wf-c: var(--wf-guard); }
-
-/* ---- error ----------------------------------------------------------- */
-
-.wf-row.is-error { --wf-c: var(--wf-err); }
-
-.wf-row.is-error .wf-nm,
-.wf-row.is-error .wf-dur,
-.wf-row.is-error .wf-note {
-  color: var(--wf-err);
+/* This panel's strip is the reference's own: 2px bars, gap 4, filled up to
+ * and including the current stage, colour-transitioned 300ms. It is not the
+ * 3px fill-bar strip the other three panels use. */
+.wf-steps {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px;
+  border-top: 1px solid rgb(232, 232, 238);
+}
+.wf-step {
+  flex: 1;
+  height: 2px;
+  background: rgb(232, 232, 238);
+  transition: background-color 300ms;
+}
+.wf-step.is-on {
+  background: var(--ink);
 }
 
-.wf-mark {
-  position: absolute;
-  left: -5px;
-  top: 50%;
-  width: 4px;
-  height: 4px;
-  margin-top: -2px;
-  background: var(--wf-err);
-}
-
-.wf-sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-/* ---- narrow ---------------------------------------------------------- */
-
-@media (max-width: 900px) {
-  .wf {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 28px;
-  }
-}
-
-@media (max-width: 560px) {
-  .wf {
-    --wf-step: 10px;
-  }
-
-  .wf-cols,
-  .wf-row {
-    grid-template-columns: minmax(0, 1fr) 46px minmax(78px, 0.7fr);
-    gap: 7px;
-  }
-
-  .wf-nm { font-size: var(--t-10); }
-
-  /* The hit count is the first thing to go: it was costing the deepest span
-   * names about 7 characters at 375px. */
-  .wf-note { display: none; }
-  .wf-hd, .wf-occ, .wf-tree { padding-left: 11px; padding-right: 11px; }
-}
-
-/* ---- reduced motion -------------------------------------------------- *
- * The panel is information. Only the drawing of it goes.
- */
 @media (prefers-reduced-motion: reduce) {
-  .wf-row,
-  .wf-bar,
-  .wf-chev,
-  .wf-find-bd,
-  .wf-find-hd {
+  .wf-orbit-run {
+    animation: none;
+  }
+  .wf-found,
+  .wf-wait,
+  .wf-step {
     transition: none;
-  }
-
-  .wf-row {
-    opacity: 1;
-    transform: none;
-  }
-
-  .wf-bar {
-    transform: scaleX(1);
   }
 }

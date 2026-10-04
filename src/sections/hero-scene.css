@@ -1,0 +1,280 @@
+/* The hero scene. Geometry from their DOM at 1440x900:
+ *
+ *   block       1200vh, the pin is sticky top 0, one viewport, overflow hidden
+ *   captions    top = chrome (96) + 60 = 156, left 120, max-width 672,
+ *               32/38.4 ink; the lead is 18/28 at ink .65, max-width 576,
+ *               8px under the heading
+ *   stage       the bottom 80vh of the pin, so the svg box is 1440x720
+ *   logo band   full width hairlines top and bottom, a 1280 grid inside it
+ *               with side hairlines, min(56vh, 520px) tall, 4 x 3 cells with
+ *               the label spanning the two middle cells
+ */
+
+/* The block starts under the fixed chrome like theirs does, so main's
+   padding is cancelled here and given back to the hero copy instead. */
+.hs-run {
+  position: relative;
+  margin-top: calc(-1 * (var(--banner-h) + var(--nav-h)));
+}
+.hs-pin {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+  background: var(--bg);
+}
+.hs-pin > .hero {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 10;
+  padding-top: calc(203px + var(--banner-h) + var(--nav-h));
+}
+
+.hs-logos {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.hs-lw-band {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.hs-lw-grid {
+  max-width: 1280px;
+  margin: 0 auto;
+  height: min(56vh, 520px);
+  min-height: 360px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+.hs-lw-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px;
+  border-color: var(--line);
+}
+.hs-lw-cell.bt {
+  border-top: 1px solid var(--line);
+}
+.hs-lw-cell.bl {
+  border-left: 1px solid var(--line);
+}
+.hs-lw-cell.span2 {
+  grid-column: span 2;
+}
+.hs-lw-label {
+  margin: 0;
+  max-width: 22ch;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6e6885;
+}
+/* Marks rest in one muted ink and take the accent on hover, with a blurb
+   tag rising at the bottom of the cell: their hover, our marks. */
+.hs-lw-mark {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #6e6885;
+  font-size: 26px;
+  letter-spacing: -0.01em;
+  transition: color 200ms ease-out;
+}
+.hs-lw-mark svg {
+  width: 24px;
+  height: 24px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+}
+.hs-lw-cell:hover .hs-lw-mark,
+.hs-lw-mark:focus-visible {
+  color: var(--accent);
+}
+.hs-lw-tip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  margin: 0 auto;
+  width: fit-content;
+  max-width: calc(100% - 1rem);
+  border: 1px solid var(--line);
+  background: var(--bg);
+  padding: 2px 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  line-height: 1.6;
+  color: var(--ink);
+  opacity: 0;
+  transition: opacity 150ms ease-out;
+  pointer-events: none;
+}
+.hs-lw-cell:hover .hs-lw-tip {
+  opacity: 1;
+}
+
+.hs-stage {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 80vh;
+  z-index: 25;
+  pointer-events: none;
+}
+.hs-rise {
+  position: absolute;
+  inset: 0;
+}
+.hs-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.hs-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: none;
+}
+
+.hs-cap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  top: calc(var(--banner-h) + var(--nav-h) + 60px);
+  padding: 0 96px 0 120px;
+  display: none;
+}
+.hs-cap-in {
+  max-width: 672px;
+}
+.hs-cap-h {
+  margin: 0 0 8px;
+  font-size: 32px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  font-weight: 400;
+  color: var(--ink);
+}
+.hs-cap-l {
+  margin: 0;
+  max-width: 576px;
+  font-size: 18px;
+  line-height: 28px;
+  color: var(--ink-65);
+}
+
+/* The reels. Each window is one digit tall and its strip runs 0 to -10em,
+   linear and forever. */
+.hs-count {
+  display: inline-flex;
+  align-items: baseline;
+  vertical-align: baseline;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.45em;
+  padding: 0.22em 0 0.23em;
+}
+.hs-reel-win {
+  display: inline-block;
+  overflow: hidden;
+  height: 1em;
+  vertical-align: baseline;
+  position: relative;
+}
+.hs-reel {
+  display: block;
+  animation: hs-reel linear infinite;
+  will-change: transform;
+}
+.hs-reel > span {
+  display: block;
+  height: 1em;
+  line-height: 1em;
+}
+@keyframes hs-reel {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(-10em);
+  }
+}
+
+@media (max-width: 767px) {
+  .hs-cap {
+    padding: 0 32px;
+  }
+  .hs-cap-in {
+    max-width: 100%;
+  }
+  .hs-cap-h {
+    font-size: 24px;
+  }
+  .hs-cap-l {
+    font-size: 16px;
+  }
+  .hs-lw-grid {
+    grid-template-columns: repeat(2, 1fr);
+    grid-template-rows: none;
+    height: auto;
+  }
+  .hs-lw-cell.span2 {
+    grid-column: span 2;
+    order: -1;
+  }
+  .hs-lw-cell {
+    padding: 28px 12px;
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+  .hs-lw-mark {
+    font-size: 20px;
+  }
+}
+
+/* Reduced motion: no pin and no scene. The hero and the logo wall sit in
+   flow, which is what theirs does under the same preference. */
+.hs-run.hs-static {
+  height: auto !important;
+}
+.hs-static .hs-pin {
+  position: relative;
+  height: auto;
+  overflow: visible;
+}
+.hs-static .hs-pin > .hero {
+  position: relative;
+}
+.hs-static .hs-logos {
+  position: relative;
+  padding: 48px 0;
+}
+.hs-static .hs-stage,
+.hs-static .hs-cap {
+  display: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .hs-reel {
+    animation: none;
+  }
+}

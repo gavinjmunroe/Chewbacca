@@ -1,354 +1,256 @@
-/* Section F: Integrations.
- *
- * Every colour here is a global token from src/styles.css. Nothing in this
- * file redefines one, and nothing selects outside .ig.
- *
- * Weight is 400 everywhere, per REFERENCE-SPEC.md: the reference ships zero
- * font-medium, font-semibold or font-bold, and hierarchy runs on size, colour
- * and opacity alone. Reintroducing weight here would be the single most
- * visible way to break the section's family resemblance to the rest of the
- * page.
- */
+/* Panel 3, "Sift MCP". Natural 640 wide, zoomed 0.85 as theirs is at lg,
+ * so 544 rendered. Heights read off their rendered panel at 1440 and divided
+ * by 0.85: titlebar 44, tab row 42, terminal 562, strip 28, which with the
+ * borders is their measured 576 rendered. */
 
-.ig {
-  padding: 88px 0; /* matches section.band in styles.css */
-  overflow: hidden; /* the rail deliberately overflows; nothing escapes the page */
-}
-
-/* ---- head ------------------------------------------------------------- */
-
-.ig-head {
-  text-align: center;
-}
-
-.ig-label {
-  /* 8px mono uppercase brand, the plate label from REFERENCE-SPEC.md. The
-     global .label is 12px, so the size and tracking are set locally. */
-  font-size: var(--t-8);
-  letter-spacing: 0.14em;
-  margin: 0 0 14px;
-}
-
-.ig-title {
-  font-family: var(--sans);
-  font-size: var(--t-h2);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  margin: 0 auto 12px;
-  max-width: 24ch;
-  color: var(--ink);
-}
-
-.ig-sub {
-  font-size: var(--t-15);
-  line-height: 1.5;
-  color: var(--muted);
-  margin: 0 auto;
-  max-width: 56ch;
-}
-
-/* ---- the framework rail ----------------------------------------------- */
-
-.ig-rail-clip {
-  margin: 44px 0 52px;
-  overflow: hidden;
-
-  /* The fade. 15% each side. Measured on the rendered PNG along the rail's
-     top hairline, which is the only continuous ink across all 1950px:
-     deviation from the page background climbs 0 -> 87 over x=0..192 at 1280
-     and 0 -> 87 over x=0..120 at 800, then mirrors on the right. A ramp that
-     wide dissolves a mark across itself rather than stepping it out, since a
-     cell is 150px. Full numbers at the bottom of this file. */
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent 0%,
-    #000 15%,
-    #000 85%,
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to right,
-    transparent 0%,
-    #000 15%,
-    #000 85%,
-    transparent 100%
-  );
-
-  opacity: 0;
-  transition: opacity 600ms cubic-bezier(0.33, 1, 0.68, 1);
-}
-
-.ig-rail-clip.is-in {
-  opacity: 1;
-}
-
-.ig-rail {
-  /* max-content plus the 50% / -50% pair centres a row that is WIDER than its
-     container, which is the whole point. 13 cells of 150px is 1950px, and the
-     rendered box lands at x=-335 against a 1280 clip and x=-575 against an 800
-     one, so the row is genuinely cut on both sides at both widths. Without the
-     overflow the mask would fade page background into page background and look
-     identical to no mask at all. */
-  width: max-content;
-  margin-left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-
-  /* The top and bottom hairlines run the full 1950px, so the fade is
-     continuous across every pixel column rather than only where a mark
-     happens to sit. */
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.ig-mark {
-  width: 150px;
-  height: 76px;
-  flex: 0 0 150px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  border-right: 1px solid var(--line);
-  color: var(--navy-lite);
-}
-
-.ig-mark:first-child {
-  border-left: 1px solid var(--line);
-}
-
-.ig-mark-glyph {
-  width: 18px;
-  height: 18px;
-  opacity: 0.75;
-  transition: opacity 220ms ease-out; /* 220ms: the reference's most common duration, 1,684 occurrences */
-}
-
-.ig-mark-name {
-  font-family: var(--mono);
-  font-size: var(--t-9);
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--muted);
-  transition: color 220ms ease-out;
-}
-
-.ig-mark:hover .ig-mark-glyph {
-  opacity: 1;
-}
-
-.ig-mark:hover .ig-mark-name {
-  color: var(--accent);
-}
-
-/* ---- panels ----------------------------------------------------------- */
-
-.ig-panels {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+.ig-zoom {
+  zoom: 0.85;
 }
 
 .ig-panel {
-  border: 1px solid var(--line);
-  background: var(--panel);
-  min-width: 0; /* a grid child holding <pre>-like mono lines will not shrink without this */
-
-  opacity: 0;
-  transform: translateY(14px);
-  transition:
-    opacity 600ms cubic-bezier(0.33, 1, 0.68, 1),
-    transform 600ms cubic-bezier(0.33, 1, 0.68, 1);
+  overflow: hidden;
+  background: #fff;
+  border: 0.5px solid rgb(212, 212, 221);
+  font-family: var(--sans);
 }
 
-.ig-panel.is-in {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.ig-head {
-  opacity: 0;
-  transform: translateY(14px);
-  transition:
-    opacity 600ms cubic-bezier(0.33, 1, 0.68, 1),
-    transform 600ms cubic-bezier(0.33, 1, 0.68, 1);
-}
-
-.ig-head.is-in {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* The caption bar: a hairline separates it from the body, which is the one
-   detail that makes the panel read as an instrument rather than as a card. */
-.ig-cap {
-  display: flex;
-  align-items: stretch;
-  border-bottom: 1px solid var(--line);
-  min-height: 30px;
-}
-
-.ig-num {
-  /* The numbered marker: a small hairline-bordered square with the number in
-     mono. It borrows the caption bar's bottom hairline as its own, so the
-     grid of rules stays on one line. */
-  flex: 0 0 30px;
-  width: 30px;
+.ig-title {
+  position: relative;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-right: 1px solid var(--line);
-  font-family: var(--mono);
-  font-size: var(--t-8);
-  color: var(--accent);
-  letter-spacing: 0.04em;
+  background: #ececee;
+  font-size: 13px;
+  font-weight: 500;
+  color: #3b3b44;
+}
+.ig-lights {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 8px;
+}
+.ig-lights i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #e2675d;
+}
+.ig-lights i:nth-child(2) {
+  background: #e4b04a;
+}
+.ig-lights i:nth-child(3) {
+  background: #5fb85a;
+}
+.ig-title-t {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.ig-cap-text {
-  flex: 1 1 auto;
-  min-width: 0;
+.ig-tabs {
   display: flex;
   align-items: center;
-  padding: 0 10px;
-  font-family: var(--mono);
-  font-size: var(--t-8);
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-  white-space: nowrap;
+  gap: 10px;
+  height: 42px;
+  padding: 0 12px 6px 8px;
+  background: #ececee;
+  border-bottom: 1px solid #d9d9de;
+}
+.ig-tab {
+  flex: 1;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f8f9;
+  border-radius: 15px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  font-size: 12px;
+  font-weight: 500;
+  color: #3b3b44;
+}
+.ig-plus {
+  font-size: 18px;
+  line-height: 1;
+  color: #55555f;
+}
+
+/* The terminal is a fixed 560 so the panel never changes height as lines
+ * arrive; the status bar sits on its foot. */
+.ig-term {
+  height: 562px;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 28px;
+  background: #292f3b;
+  color: #e4e6eb;
+  font: 15px/22.5px var(--mono);
+}
+.ig-lines {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
-
-/* The copy affordance, in the panel's top-right corner. Its left hairline
-   makes it a cell of the caption bar rather than a button floated over the
-   code. */
-.ig-copy {
-  flex: 0 0 auto;
-  border: 0;
-  border-left: 1px solid var(--line);
-  background: transparent;
-  padding: 0 11px;
-  font-family: var(--mono);
-  font-size: var(--t-8);
-  font-weight: 400;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--muted);
-  cursor: pointer;
-  transition:
-    color 220ms ease-out,
-    background-color 220ms ease-out;
+.ig-group {
+  display: none;
 }
-
-.ig-copy:hover {
-  color: var(--accent);
-  background: rgba(117, 92, 254, 0.07);
+.ig-group.is-in {
+  display: block;
+  animation: ig-in 200ms ease-out both;
 }
-
-.ig-copy:focus-visible {
-  outline: 1px solid var(--accent);
-  outline-offset: -3px;
-  color: var(--accent);
+.ig-group + .ig-group {
+  margin-top: 22.5px;
 }
-
-.ig-copy.is-done {
-  color: var(--accent);
-}
-
-.ig-body {
-  padding: 14px 14px 16px;
-  font-family: var(--mono);
-  font-size: var(--t-11);
-  line-height: 1.85;
-  color: var(--ink);
-  overflow-x: auto;
+@keyframes ig-in {
+  from {
+    opacity: 0;
+  }
 }
 
 .ig-line {
+  display: flex;
+}
+.ig-g {
+  width: 16px;
+  flex-shrink: 0;
+}
+.ig-in {
+  padding-left: 8px;
+}
+.ig-in .ig-g {
+  width: 16px;
+}
+.ig-t {
+  min-width: 0;
+  white-space: pre-wrap;
+}
+.ig-recap .ig-t {
+  padding-left: 0;
+}
+
+.ig-b {
+  font-weight: 700;
+  color: #fff;
+}
+.ig-n {
+  color: inherit;
+}
+.ig-dim {
+  color: #8d92a0;
+}
+.ig-dot {
+  color: #3fc155;
+  font-size: 11px;
+}
+.ig-path {
+  color: #a9a3ff;
+}
+.ig-del {
+  color: #f0647b;
+}
+.ig-add {
+  color: #50c46e;
+}
+.ig-it {
+  font-style: italic;
+  color: #b9bdc8;
+}
+.ig-red {
+  color: #f0647b;
+}
+.ig-cyan {
+  color: #2cc3b5;
+}
+
+.ig-load {
+  display: none;
+  margin-top: 22.5px;
+  padding-left: 16px;
+  color: #8d92a0;
+}
+.ig-lines:not(:has(.ig-group.is-in)) .ig-load {
+  margin-top: 0;
+}
+.ig-load.is-on {
+  display: block;
+}
+.ig-bar {
   white-space: pre;
 }
 
-.ig-line-prompt {
-  white-space: normal;
-  color: var(--muted);
+.ig-cursor {
+  display: none;
+  margin-top: 22.5px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
-
-.ig-key {
-  color: var(--navy-lite);
+.ig-cursor.is-on {
+  display: block;
 }
-
-.ig-eq {
-  color: var(--grey);
-  padding: 0 2px;
+.ig-caret {
+  display: inline-block;
+  width: 9px;
+  height: 17px;
+  vertical-align: -3px;
+  background: #e4e6eb;
+  animation: ig-blink 1s steps(1) infinite;
 }
-
-/* Values in the brand colour, per the section brief. */
-.ig-val {
-  color: var(--accent);
-}
-
-/* ---- narrow ----------------------------------------------------------- */
-
-/* 900px: the two panels each need ~44 mono characters at 11px to hold a
-   prompt line without wrapping mid-word, which is ~330px of body plus 30px of
-   padding and the 20px gap. Below 900 that stops fitting and the pair
-   stacks. */
-@media (max-width: 900px) {
-  .ig-panels {
-    grid-template-columns: 1fr;
-  }
-
-  .ig {
-    padding: 56px 0; /* matches the narrow section.band in styles.css */
-  }
-
-  .ig-rail-clip {
-    margin: 34px 0 40px;
+@keyframes ig-blink {
+  50% {
+    opacity: 0;
   }
 }
 
-/* ---- reduced motion --------------------------------------------------- */
+.ig-status {
+  flex-shrink: 0;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+}
 
-/* The panels and the rail are information, not decoration, so reduced motion
-   lands on the finished state instead of removing the content. styles.css
-   already kills animation and transition globally under this query; these
-   rules make sure the pre-entrance state is not what is left behind. */
+/* The shared strip, with one difference read off theirs: finished segments
+ * stay solid, so the strip reads as a progress bar through the session. */
+.ig-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  border-top: 1px solid rgb(212, 212, 221);
+  background: #f2f2f2;
+}
+.ig-step {
+  position: relative;
+  flex: 1;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(29, 25, 86, 0.1);
+}
+.ig-step.is-done {
+  background: var(--ink);
+}
+.ig-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  background: var(--ink);
+  animation: ig-fill linear forwards;
+}
+@keyframes ig-fill {
+  to {
+    width: 100%;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .ig-head,
-  .ig-panel,
-  .ig-rail-clip {
-    opacity: 1;
-    transform: none;
+  .ig-group.is-in,
+  .ig-caret,
+  .ig-fill {
+    animation: none;
   }
 }
-
-/* Verified 2026-09-27, Playwright + Chromium, against the rendered PNG rather
-   than against this file. Sampling the rail's top hairline, the one row of
-   continuous ink across all 1950px, as absolute deviation from the #f2f2f2
-   page background (87 = full hairline, 0 = gone):
-
-     1280:  x=0 -> 0    x=51 -> 24   x=128 -> 57   x=192 -> 87 (full)
-            ... 87 held through the middle ...
-            x=1088 -> 87   x=1178 -> 45   x=1254 -> 12   x=1279 -> 0
-            first visible ink x=16, last x=1263, blank margin 16px both sides
-     800:   x=0 -> 0    x=32 -> 21   x=80 -> 57    x=120 -> 87 (full)
-            x=680 -> 87    x=736 -> 45    x=784 -> 9     x=799 -> 0
-            first visible ink x=10, last x=789, blank margin 10px both sides
-
-   Symmetric and monotonic at both widths, so both edges genuinely fade.
-
-   Panels: 1280 gives two columns of 414px, both at y=426 (grid-template-columns
-   computes to "414px 414px"). 800 gives one column of 768px, stacked at y=349
-   and y=492 ("768px"). 13 marks render at both widths.
-
-   Console: 0 messages, 0 page errors, 0 failed requests at both widths.
-   Font weight: 117 elements under .ig, all of them 400.
-   Copy affordance: with clipboard permission granted the label goes
-   Copy -> Copied and the clipboard holds the 232-character prompt; without it
-   the label falls back to Select rather than claiming a copy that did not
-   happen. Returns to Copy after the 1400ms hold.
-   prefers-reduced-motion: reduce lands .ig-head, .ig-rail-clip and .ig-panel
-   all at opacity 1, so the content is present rather than stuck pre-entrance. */

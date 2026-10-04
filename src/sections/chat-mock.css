@@ -1,364 +1,269 @@
-/* Section E, the chat notification mock.
- *
- * Tokens come from src/styles.css and are only read here, never redefined.
- * --chat (Lato) and --slack-ink exist in that file specifically for this
- * section, because the reference's mock renders in the chat client's own face
- * rather than in the page face.
- *
- * Every rule is scoped under .cm so nothing in this file can reach another
- * section module's markup. */
+/* Panel 2, "Live alerts". Drawn at the reference's natural size and zoomed
+ * 0.85, which is what their lg breakpoint does: 640 natural -> 544 rendered,
+ * and 748 natural -> their measured 636. Type is the chat-client ramp read
+ * from chunk 3247: 18/900 channel, 15/22 body, 12 timestamps, 13 thread. */
 
-.cm {
-  padding: 88px 0;
+.cm-zoom {
+  zoom: 0.85;
 }
 
-.cm-grid {
-  max-width: var(--maxw);
-  margin: 0 auto;
-  padding: 0 var(--gutter);
-  display: grid;
-  /* 5/6 split: the panel is the wider column because a chat thread needs the
-     measure and the copy does not. Fractions, not pixels, so the panel is
-     exactly its column at every viewport. */
-  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-  gap: 56px;
-  align-items: start;
-}
-
-/* ---- the copy beside the panel --------------------------------------- */
-
-.cm-label {
-  font-family: var(--mono);
-  font-size: var(--t-8);
-  font-weight: 400;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--accent);
-  margin: 0 0 14px;
-}
-
-.cm-heading {
-  font-size: var(--t-h2);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
-  margin: 0 0 14px;
-  color: var(--ink);
-}
-
-.cm-sub {
-  font-size: var(--t-lead);
-  font-weight: 400;
-  color: var(--muted);
-  line-height: 1.5;
-  margin: 0;
-  max-width: 44ch;
-}
-
-/* ---- the panel -------------------------------------------------------- */
-
-/* Hairline border on the page background, and zero radius. The square corner
-   is a signature of the reference (its buttons measure at radius 0) and it is
-   the first thing a generic rebuild rounds off. */
 .cm-panel {
-  background: var(--bg);
-  border: 1px solid var(--line);
-  font-family: var(--chat);
+  width: 100%;
+  overflow: hidden;
+  background: #fff;
+  border: 0.5px solid rgba(29, 28, 29, 0.13);
+  font-family: "Lato", var(--sans);
   color: var(--slack-ink);
+  text-align: left;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 .cm-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(29, 28, 29, 0.13);
+  font-size: 18px;
+  line-height: 27px;
+  font-weight: 900;
+}
+
+.cm-list {
+  padding: 12px 0;
+}
+.cm-slot {
+  position: relative;
+}
+.cm-arrive {
+  visibility: hidden;
+}
+.cm-slot.is-in .cm-arrive {
+  visibility: visible;
+}
+.cm-slot.is-anim .cm-arrive {
+  animation: cm-arrive 300ms ease-out both;
+}
+@keyframes cm-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+.cm-msg,
+.cm-typing {
+  display: flex;
+  align-items: flex-start;
+  padding: 12px 20px;
+}
+.cm-typing {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: none;
+}
+.cm-slot.is-typing .cm-typing {
+  display: flex;
+}
+
+.cm-av {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  margin: 2px 8px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cm-av-bot {
+  background: #4b3fc4;
+}
+.cm-av-human {
+  background: #2f7d6d;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.cm-av-sm {
+  width: 24px;
+  height: 24px;
+  margin: 0;
+}
+.cm-av-sm svg {
+  width: 13px;
+  height: 13px;
+}
+
+.cm-main {
+  flex: 1;
+  min-width: 0;
+}
+.cm-meta {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  padding: 11px 14px;
-  border-bottom: 1px solid var(--line);
+  line-height: 22px;
 }
-
-.cm-hash {
-  font-family: var(--mono);
-  font-size: var(--t-sm);
-  color: var(--accent);
+.cm-name {
+  font-size: 15px;
+  font-weight: 900;
 }
-
-.cm-channel {
-  font-size: var(--t-sm);
-  font-weight: 400;
-  color: var(--slack-ink);
+.cm-app {
+  margin-left: 6px;
+  transform: translateY(-1px);
+  border-radius: 2px;
+  background: rgba(29, 28, 29, 0.09);
+  padding: 2px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #616061;
 }
-
-.cm-head-topic {
-  font-size: var(--t-xs);
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.cm-time {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #616061;
 }
-
-.cm-head-count {
-  margin-left: auto;
-  font-family: var(--mono);
-  font-size: var(--t-10);
-  color: var(--muted);
+.cm-body {
+  margin-top: 2px;
+  font-size: 15px;
+  line-height: 22px;
 }
-
-.cm-head-count::before {
-  content: "";
+.cm-body strong {
+  font-weight: 900;
+}
+.cm-beacon {
   display: inline-block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-  margin-right: 5px;
-  vertical-align: middle;
+  vertical-align: -2px;
 }
-
-/* ---- the thread ------------------------------------------------------- */
+.cm-at {
+  border-radius: 3px;
+  background: #e3f3fa;
+  padding: 2px 4px;
+  color: #1264a3;
+}
+.cm-code {
+  border-radius: 3px;
+  border: 1px solid rgba(29, 28, 29, 0.13);
+  background: rgba(29, 28, 29, 0.04);
+  padding: 1px 3px;
+  font: 12px var(--mono);
+  color: #e01e5a;
+}
 
 .cm-thread {
   display: flex;
-  flex-direction: column;
-  list-style: none;
-  margin: 0;
-  padding: 14px;
-  gap: 16px;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.cm-replies {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1264a3;
+}
+.cm-tmeta {
+  font-size: 13px;
+  color: #616061;
 }
 
-/* Unrevealed messages stay in flow at opacity 0. They reserve their height
-   from first paint, so the sequence never shifts the page below the panel,
-   and only transform and opacity animate. */
-.cm-msg {
+.cm-actions {
   display: flex;
-  gap: 10px;
-  opacity: 0;
-  transform: translateY(8px);
-  /* 240ms on cubic-bezier(.33,1,.68,1) is the reference's own short entry
-     curve, measured as `lemma-cl-entry .24s cubic-bezier(.33,1,.68,1)`. The
-     8px travel is OUR choice: the reference's measured fade-up travels 18px,
-     which is a page-block distance and too far for a single chat row. */
-  transition:
-    opacity 240ms cubic-bezier(0.33, 1, 0.68, 1),
-    transform 240ms cubic-bezier(0.33, 1, 0.68, 1);
+  gap: 8px;
+  margin-top: 8px;
 }
-
-.cm-msg.is-in {
-  opacity: 1;
-  transform: none;
-}
-
-/* Generated initial circles. Nothing is fetched and no likeness is used. */
-.cm-avatar {
-  flex: 0 0 auto;
-  width: 30px;
+.cm-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 30px;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  font-family: var(--mono);
-  font-size: var(--t-10);
-  font-weight: 400;
-  letter-spacing: 0.02em;
-  color: var(--white);
-  user-select: none;
-}
-
-.cm-avatar-app {
-  background: var(--accent);
-}
-
-.cm-avatar-human {
-  background: var(--navy-lite);
-}
-
-.cm-body {
-  min-width: 0;
-}
-
-.cm-meta {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 0 3px;
-}
-
-/* The only weight above 400 in this section, twice: a sender name and a bot
-   alert's first line. Both are things a chat client genuinely bolds, and both
-   are inside the mock. The page around it stays at 400. */
-.cm-author {
-  font-size: var(--t-13);
+  padding: 0 12px;
+  border-radius: 4px;
+  background: #33795c;
+  color: #fff;
+  font-size: 13px;
   font-weight: 700;
-  color: var(--slack-ink);
+  transition: background-color 150ms;
 }
-
-.cm-badge {
-  font-family: var(--mono);
-  font-size: var(--t-8);
-  font-weight: 400;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  background: var(--line-soft);
-  padding: 2px 4px;
-}
-
-.cm-time {
-  font-family: var(--mono);
-  font-size: var(--t-9);
-  color: var(--grey);
-}
-
-.cm-lead {
-  font-size: var(--t-13);
-  font-weight: 700;
-  line-height: 1.45;
-  margin: 0 0 4px;
-  color: var(--slack-ink);
-}
-
-.cm-text {
-  font-size: var(--t-13);
-  font-weight: 400;
-  line-height: 1.55;
-  margin: 0;
-  color: var(--slack-ink);
-}
-
-.cm-bullets {
-  margin: 6px 0 0;
-  padding-left: 1.15em;
-  font-size: var(--t-13);
-  font-weight: 400;
-  line-height: 1.55;
-}
-
-.cm-bullets li {
-  margin-bottom: 2px;
-}
-
-.cm-bullets li::marker {
-  color: var(--accent);
-}
-
-.cm-action {
-  margin-top: 12px;
-  font-family: var(--sans);
-  font-size: var(--t-11);
-  font-weight: 400;
-  line-height: 1.4;
-  letter-spacing: 0.01em;
-  padding: 8px 14px;
-  border: 0;
-  border-radius: 0;
-  background: var(--ink);
-  color: var(--white);
-  cursor: pointer;
-  transition: background 220ms ease-out;
-}
-
-.cm-action:hover {
-  background: var(--accent-dp);
-}
-
-.cm-action:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* ---- the typing indicator -------------------------------------------- */
-
-/* The indicator never leaves the flow, so showing and hiding it is one opacity
-   change. Its flex `order`, set in the module, keeps it in the slot the next
-   message will occupy: pinned to the foot of the panel instead, it strands the
-   undelivered rows between itself and the last thing anyone said. */
-.cm-typing {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  opacity: 0;
-  transition: opacity 200ms ease-out;
-}
-
-.cm-typing.is-on {
-  opacity: 1;
+.cm-btn:hover {
+  background: #3e8a6b;
 }
 
 .cm-dots {
   display: inline-flex;
-  align-items: center;
   gap: 4px;
-  height: 30px;
+  padding: 10px 2px;
 }
-
-.cm-dot {
-  width: 5px;
-  height: 5px;
+.cm-dots i {
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--muted);
-  /* 1.2s ease-in-out infinite, measured off the reference's typing keyframe.
-     This is the one number in the section that is not ours to pick. */
-  animation: cm-typing 1.2s ease-in-out infinite;
-  /* Paused while the indicator is hidden. The row stays in the layout the whole
-     time, and an invisible loop would otherwise run for the life of the page. */
-  animation-play-state: paused;
+  background: #616061;
+  opacity: 0.4;
+  animation: cm-dot 1.2s ease-in-out infinite;
+}
+.cm-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.cm-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes cm-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
 }
 
-.cm-typing.is-on .cm-dot {
-  animation-play-state: running;
+/* The shared strip: 3px segments on ink/10, gap 6, the current one filling
+ * linearly over the 1400ms step, on #f2f2f2. */
+.cm-steps {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(29, 28, 29, 0.13);
+  background: #f2f2f2;
+}
+.cm-step {
+  position: relative;
+  display: block;
+  flex: 1;
+  height: 3px;
+  overflow: hidden;
+  background: rgba(29, 28, 29, 0.1);
+}
+.cm-fill,
+.cm-full {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--ink);
+}
+.cm-fill {
+  width: 0;
+  animation: cm-fill 1400ms linear forwards;
+}
+.cm-full {
+  right: 0;
+}
+@keyframes cm-fill {
+  to {
+    width: 100%;
+  }
 }
 
-/* Staggered across the period rather than started together, so the three dots
-   read as a wave. Thirds of 1.2s would put dot three back in phase with dot
-   one; 0.16s steps keep them distinct inside one cycle. */
-.cm-dot:nth-child(2) { animation-delay: 0.16s; }
-.cm-dot:nth-child(3) { animation-delay: 0.32s; }
-
-@keyframes cm-typing {
-  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
-  30%           { opacity: 0.95; transform: translateY(-3px); }
-}
-
-/* ---- reduced motion --------------------------------------------------- */
-
-/* The thread is information. Only the delivery of it goes: the settled state
-   renders immediately, with no sequencing and no typing loop. The JS adds
-   .cm-still and jumps to the end; these rules cover a viewer who flips the
-   setting after load. */
 @media (prefers-reduced-motion: reduce) {
-  .cm-msg,
-  .cm-typing,
-  .cm-action {
-    transition: none;
-  }
-  .cm-dot,
-  .cm-typing.is-on .cm-dot {
+  .cm-slot.is-anim .cm-arrive,
+  .cm-dots i,
+  .cm-fill {
     animation: none;
-  }
-}
-
-.cm-still .cm-msg,
-.cm-still .cm-typing {
-  transition: none;
-}
-
-.cm-still .cm-dot,
-.cm-still .cm-typing.is-on .cm-dot {
-  animation: none;
-}
-
-/* ---- narrow ----------------------------------------------------------- */
-
-@media (max-width: 900px) {
-  .cm {
-    padding: 56px 0;
-  }
-  .cm-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 28px;
-  }
-  .cm-heading {
-    font-size: var(--t-h3);
-  }
-  .cm-sub {
-    font-size: var(--t-15);
   }
 }

@@ -50,6 +50,9 @@ OVERRIDES = {
         "What people are saying.",
     "A Friday read on why agents break, and what caught i":
         "The Friday briefing on AI agent observability and re",
+    # Ours was their sentence word for word until 2026-10-03.
+    "See what your agents did today":
+        "Start improving your agents today",
 }
 ROLE = {
     "Stop guessing why your agents fail": "hero",

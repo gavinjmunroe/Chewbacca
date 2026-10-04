@@ -1,419 +1,330 @@
-/* Section G: the trace waterfall panel.
+/* Panel 1, "Traces": a run arrives span by span, gets audited, and the
+ * findings land above the tree.
  *
  * Mechanism read out of the reference's chunk 8331 (TraceShowcaseVisual):
- * a header row, an occurrences block of expandable findings, and a nested
- * span tree whose bars are positioned and sized by each span's offset and
- * length inside the trace. See docs/spec/SECTIONS.md section G.
+ * a four-stage machine, tracing 2600 / processing 2000 / flagging 3000 /
+ * done 3200 ms, cycling through two traces. Rows stream in at
+ * 100 + i * 2000 / n ms, findings at 300 and 1600 ms into flagging. Measured
+ * on their page at 1440: no scale wrapper is active at desktop width, so the
+ * panel renders at natural size, 544 wide and 502 tall.
  *
- * The trace below is ours. It is a support-triage agent run written for this
- * repo: our span names, our findings, our durations.
+ * The traces, names and findings are ours, written for Sift.
  */
 
 export const MOUNT = "#waterfall";
 
-/* ---- the trace ------------------------------------------------------- *
- * start and dur are milliseconds from the start of the trace. Depth is NOT
- * stored: it comes from the nesting, so a row can never be indented to a
- * level its parent does not actually have.
- */
-const TRACE_ID = "tr_9f41c2ad8e7b0356";
+const STAGES = ["tracing", "processing", "flagging", "done"];
+const STAGE_MS = [2600, 2000, 3000, 3200];
+/* The whole tree streams in over 2000ms of the 2600ms tracing stage. */
+const STREAM_MS = 2000;
+const FINDING_AT = [300, 1600];
+/* h-7 in theirs. The spacer under a partial tree is (n - shown) * ROW_H so
+ * the panel is the same height before the first span and after the last. */
+const ROW_H = 28;
 
-const TRACE = {
-  kind: "agent",
-  name: "agent.run triage_ticket",
-  start: 0,
-  dur: 4820,
-  children: [
-    { kind: "guard", name: "guardrail.input_scope", start: 12, dur: 96 },
-    { kind: "gen", name: "llm.plan_route", start: 118, dur: 742 },
-    {
-      kind: "tool",
-      name: "tool.fetch_ticket",
-      start: 872,
-      dur: 268,
-      children: [
-        { kind: "retr", name: "retrieve.ticket_thread", start: 902, dur: 214 },
-      ],
-    },
-    {
-      kind: "retr",
-      name: "retrieve.kb_passages",
-      start: 1156,
-      dur: 1486,
-      children: [
-        { kind: "vec", name: "vector.search kb_chunks_v3", start: 1180, dur: 604, note: "41 hits" },
-        {
-          kind: "vec",
-          name: "vector.search runbooks_v1",
-          start: 1802,
-          dur: 392,
-          error: true,
-          note: "0 hits",
-        },
-        { kind: "gen", name: "llm.rerank_passages", start: 2208, dur: 418 },
-      ],
-    },
-    {
-      kind: "tool",
-      name: "tool.post_reply",
-      start: 2664,
-      dur: 834,
-      children: [
-        {
-          kind: "gen",
-          name: "llm.compose_reply",
-          start: 2690,
-          dur: 726,
-          children: [
-            { kind: "guard", name: "guardrail.pii_redact", start: 3208, dur: 184 },
-          ],
-        },
-      ],
-    },
-    {
-      kind: "gen",
-      name: "llm.summarize_resolution",
-      start: 3512,
-      dur: 1192,
-      children: [
-        { kind: "guard", name: "guardrail.output_policy", start: 4598, dur: 98 },
-      ],
-    },
-    /* THE TAIL. Added 2026-09-28 because the panel sat 380px tall inside a
-       900px stage with white under it, and theirs fills the height.
-
-       Padding would have been the wrong fix. The heading over this panel is
-       "read every span", and a trace that stops after the reply is sent is
-       exactly the trace that misses what this product is for: the work an
-       agent does AFTER it has answered. So the tail is the part that
-       matters, and it is where both findings now live.
-
-       Timings continue from 4704 and stay inside the 4820 total. */
-    {
-      kind: "tool",
-      name: "tool.update_ticket",
-      start: 4704,
-      dur: 96,
-      children: [
-        { kind: "retr", name: "retrieve.ticket_state", start: 4712, dur: 38 },
-        { kind: "guard", name: "guardrail.write_scope", start: 4758, dur: 34 },
-      ],
-    },
-    {
-      kind: "tool",
-      name: "tool.emit_metrics",
-      start: 4712,
-      dur: 74,
-      note: "3 counters",
-      children: [
-        { kind: "vec", name: "vector.upsert trace_embedding", start: 4720, dur: 52 },
-      ],
-    },
-    {
-      kind: "gen",
-      name: "llm.label_resolution",
-      start: 4736,
-      dur: 68,
-      error: true,
-      note: "schema mismatch",
-    },
-    { kind: "guard", name: "guardrail.pii_audit", start: 4762, dur: 44 },
-    { kind: "agent", name: "agent.close triage_ticket", start: 4790, dur: 28 },
-  ],
-};
-
-/* Our own findings, both of them derivable from the trace above:
- * runbooks_v1 returned nothing, and the summary starts 3512 - 3498 = 14ms
- * after the reply span returns. */
-const FINDINGS = [
-  {
-    id: "wf-f1",
-    title: "Retrieval fell back to a stale index",
-    runs: "38 runs",
-    span: "vector.search runbooks_v1",
-    body:
-      "The runbook index returned 0 hits in 392ms and the run carried on with kb_chunks_v3 alone. Nothing failed, so nothing paged anyone. The index had not been rebuilt in 9 days.",
-  },
-  {
-    id: "wf-f2",
-    title: "The summary ran after the reply was already out",
-    runs: "12 runs",
-    span: "llm.summarize_resolution",
-    body:
-      "tool.post_reply returns at 3.50s and the summary starts 14ms later, so the resolution note is written from the reply instead of checked against it. Every one of these looks clean in the reply and wrong in the log.",
-  },
-];
-
-/* ---- geometry -------------------------------------------------------- */
-
-/** Depth-first flatten. Depth is the nesting level, computed here. */
-function flatten(node, depth, out) {
-  out.push({
-    kind: node.kind,
-    name: node.name,
-    start: node.start,
-    dur: node.dur,
-    error: Boolean(node.error),
-    note: node.note || "",
-    depth,
-  });
-  (node.children || []).forEach((child) => flatten(child, depth + 1, out));
-  return out;
-}
-
-export const SPANS = flatten(TRACE, 0, []);
-export const TOTAL_MS = TRACE.dur;
-export const MAX_DEPTH = SPANS.reduce((m, s) => Math.max(m, s.depth), 0);
-
-/**
- * A span's bar geometry as percentages of the track. This is the whole point
- * of the panel: nothing about a bar is placed by hand.
- */
-export function geometry(span, total = TOTAL_MS) {
+/* ---- the traces ------------------------------------------------------ *
+ * [kind, name, start ms, duration ms, error?, children?]. Both traces are 10
+ * spans so the panel height never changes between them; theirs alternates
+ * 10 and 9 and jumps 28px on the swap. */
+function span(kind, name, start, dur, error, children) {
   return {
-    left: (span.start / total) * 100,
-    width: (span.dur / total) * 100,
+    kind,
+    name,
+    start,
+    dur,
+    error: Boolean(error),
+    children: children || [],
   };
 }
 
-function ms(value) {
-  return value < 1000 ? `${value}ms` : `${(value / 1000).toFixed(2)}s`;
+const TRACES = [
+  {
+    id: "7d3a91f0-2c4b-4e8a-b615-0f9c2e4ad781",
+    total: 11800,
+    root: span("agent", "refund-agent", 0, 11800, false, [
+      span("guardrail", "scope_check", 140, 1250),
+      span("tool", "load_order", 1420, 2240, false, [
+        span("tool", "order_history", 1910, 1380),
+      ]),
+      span("generation", "llm.plan_refund", 3720, 2880),
+      span("tool", "settle", 6650, 3100, false, [
+        span("tool", "issue_payout", 6790, 2920, false, [
+          span("generation", "llm.compose_note", 7400, 1700),
+        ]),
+      ]),
+      span("generation", "llm.confirm_refund", 9810, 1620, true),
+      span("tool", "notify_customer", 11460, 340, true),
+    ]),
+    findings: [
+      "Told the customer the refund was sent before the payout returned",
+      "Sent the confirmation even though issue_payout came back empty",
+    ],
+  },
+  {
+    id: "c05e2b77-91d4-4f3a-8e20-6ab4d19f3c02",
+    total: 9200,
+    root: span("agent", "billing-agent", 0, 9200, false, [
+      span("generation", "classify_intent", 92, 640),
+      span("tool", "fetch_account", 760, 1500, false, [
+        span("retriever", "account_db", 980, 1050),
+      ]),
+      span("retriever", "kb_search", 2300, 1720, true, [
+        span("embedding", "embed_query", 2380, 420),
+      ]),
+      span("generation", "llm.draft_answer", 4080, 2150),
+      span("tool", "apply_credit", 6260, 1380, false, [
+        span("tool", "ledger_write", 6420, 860),
+      ]),
+      span("generation", "llm.final_reply", 7700, 1380, true),
+    ]),
+    findings: [
+      "Credited the account twice for a single disputed charge",
+      "Quoted a fee policy the knowledge base never returned",
+    ],
+  },
+];
+
+function order(node, out = []) {
+  out.push(node);
+  node.children.forEach((c) => order(c, out));
+  return out;
+}
+TRACES.forEach((t) => {
+  t.order = order(t.root);
+});
+
+/* ---- formatting and glyphs ------------------------------------------- */
+
+function fmt(ms) {
+  return ms >= 1000 ? `${(ms / 1000).toFixed(2)}s` : `${Math.round(ms)}ms`;
 }
 
-/* ---- timing ---------------------------------------------------------- *
- * 220ms is the reference's most common transition duration, 1684 occurrences
- * across its stylesheet (ux-engine/research/REFERENCE-SPEC.md, "Motion").
- */
-const ROW_FADE_MS = 220;
-
-/* Derived from the repo's own recorded target, "700ms draw-ons at 15-20ms
- * stagger" (PLAN.md 4.2): the last row has to finish inside 700ms, so with a
- * 220ms fade the 13 gaps between 14 rows get (700 - 220) / 13 = 36.9ms each.
- * At the measured 20ms the sweep is over in 260ms and reads as one block
- * appearing rather than as a waterfall. */
-const ROW_STAGGER_MS = 36;
-
-const REVEAL_TOTAL_MS = ROW_STAGGER_MS * SPANS.length + ROW_FADE_MS;
-
-/* ---- icons ----------------------------------------------------------- *
- * One glyph per span kind, 10x10, currentColor so the kind colour drives it.
- */
-const ICONS = {
+/* 12x12, filled, one colour per kind, same pairing as theirs: agent purple,
+ * generation pink, tool orange, guardrail red, retriever teal, embedding
+ * amber. The shapes are ours. */
+const ICON = {
   agent:
-    '<circle cx="5" cy="5" r="3.4"/><circle cx="5" cy="5" r=".9" fill="currentColor" stroke="none"/>',
-  gen: '<path d="M1.5 3h7M1.5 5h5M1.5 7h3"/>',
-  tool: '<path d="M3.4 1.6H1.6v6.8h1.8M6.6 1.6h1.8v6.8H6.6"/>',
-  retr: '<path d="M5 1.4v4.4M3.2 4.2 5 6l1.8-1.8M1.6 8.4h6.8"/>',
-  vec: '<circle cx="5" cy="2.2" r=".95"/><circle cx="2.2" cy="7.2" r=".95"/><circle cx="7.8" cy="7.2" r=".95"/>',
-  guard:
-    '<path d="M5 1.2 8.4 2.6v3C8.4 7.3 5 8.8 5 8.8S1.6 7.3 1.6 5.6v-3z"/>',
+    '<rect x="2" y="3" width="8" height="7" rx="1.5"/><rect x="5.4" y="1" width="1.2" height="2.4"/><circle cx="4.5" cy="6.4" r=".9" fill="#fff"/><circle cx="7.5" cy="6.4" r=".9" fill="#fff"/>',
+  generation:
+    '<circle cx="6" cy="3.6" r="2.1"/><circle cx="3.4" cy="8.2" r="2.1"/><circle cx="8.6" cy="8.2" r="2.1"/>',
+  tool: '<path d="M8.6 1.2a2.6 2.6 0 0 0-2.4 3.5L1.5 9.4l1.1 1.1 4.7-4.7a2.6 2.6 0 0 0 3.5-2.4L9.3 4.9 7.4 4.6 7.1 2.7z"/>',
+  guardrail:
+    '<path d="M6 1 10.4 2.6v3.2c0 2.6-2 4.4-4.4 5.2-2.4-.8-4.4-2.6-4.4-5.2V2.6z"/><path d="M4.1 6 5.5 7.3 8 4.8" stroke="#fff" stroke-width="1.1" fill="none"/>',
+  retriever:
+    '<circle cx="5.2" cy="5.2" r="3.4"/><path d="M7.4 7.6 10.6 10.8" stroke="currentColor" stroke-width="1.6"/><circle cx="5.2" cy="5.2" r="1.6" fill="#fff"/>',
+  embedding:
+    '<rect x="1.5" y="1.5" width="4" height="4"/><rect x="6.5" y="6.5" width="4" height="4"/><rect x="6.5" y="1.5" width="4" height="4" opacity=".5"/>',
 };
 
-const KIND_LABEL = {
-  agent: "agent run",
-  gen: "text generation",
-  tool: "tool call",
-  retr: "retrieval",
-  vec: "vector search",
-  guard: "guardrail check",
-};
+function icon(kind) {
+  return `<svg class="wf-ico wf-k-${kind}" viewBox="0 0 12 12" width="12" height="12" fill="currentColor" aria-hidden="true">${ICON[kind]}</svg>`;
+}
 
-function iconSvg(kind) {
-  return (
-    `<svg class="wf-ico" viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" ` +
-    `fill="none" stroke="currentColor" stroke-width=".9" stroke-linecap="round" ` +
-    `stroke-linejoin="round">${ICONS[kind]}</svg>`
+const ERR_ICON =
+  '<svg class="wf-err" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true"><circle cx="6" cy="6" r="5.5" fill="currentColor"/><path d="M6 3.2v3.4" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><circle cx="6" cy="8.6" r=".75" fill="#fff"/></svg>';
+
+const CARET =
+  '<svg class="wf-caret" viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"><path d="M2.5 3.8 5 6.3 7.5 3.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+const CHEV =
+  '<svg class="wf-chev" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+/* Lissajous 3:2 with a quarter-turn phase, 140 segments, in a 100 box. The
+ * same curve family as their loader, drawn here from the parametric form. */
+const ORBIT = (() => {
+  let d = "";
+  for (let i = 0; i <= 140; i += 1) {
+    const t = (i / 140) * Math.PI * 2;
+    const x = 50 + 40 * Math.sin(3 * t + Math.PI / 2);
+    const y = 50 + 40 * Math.sin(2 * t);
+    d += `${i ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)} `;
+  }
+  return `${d}Z`;
+})();
+
+const LOADER = `<svg class="wf-orbit" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+  <path d="${ORBIT}" pathLength="100" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity=".2"/>
+  <path class="wf-orbit-run" d="${ORBIT}" pathLength="100" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="32 68"/>
+</svg>`;
+
+/* ---- tree ------------------------------------------------------------ */
+
+function rowHtml(node, depth, isLast, guides, trace) {
+  const kids = node.children;
+  let lead = "";
+  if (depth === 0) {
+    lead = '<span class="wf-pad"></span>';
+  } else {
+    lead =
+      guides
+        .map(
+          (g) =>
+            `<span class="wf-col">${g ? '<i class="wf-v"></i>' : ""}</span>`,
+        )
+        .join("") +
+      `<span class="wf-col"><i class="wf-v${isLast ? " wf-half" : ""}"></i><i class="wf-h"></i></span>` +
+      '<span class="wf-gap"></span>';
+  }
+  const left = Math.max((node.start / trace.total) * 100, 0);
+  const width = Math.max(
+    Math.min((node.dur / trace.total) * 100, 100 - left),
+    1,
   );
+  return `<div class="wf-row${node.error ? " is-err" : ""}">
+      ${lead}
+      <span class="wf-cv">${kids.length ? CARET : ""}</span>
+      ${icon(node.kind)}
+      <span class="wf-nm">${node.name}</span>
+      ${node.error ? ERR_ICON : ""}
+      <span class="wf-dur">${fmt(node.dur)}</span>
+      <span class="wf-track"><span class="wf-bar wf-b-${node.kind}" style="left:${left.toFixed(2)}%;width:${width.toFixed(2)}%"></span></span>
+    </div>`;
 }
 
-/* ---- render ---------------------------------------------------------- */
-
-function rowHtml(span, index) {
-  const { left, width } = geometry(span);
-  return `
-      <li class="wf-row${span.error ? " is-error" : ""}" data-kind="${span.kind}"
-          data-index="${index}" data-start="${span.start}" data-dur="${span.dur}"
-          style="--depth:${span.depth}">
-        ${span.error ? '<span class="wf-mark" aria-hidden="true"></span>' : ""}
-        <span class="wf-name">
-          ${iconSvg(span.kind)}<span class="wf-sr">${KIND_LABEL[span.kind]}${
-            span.error ? ", error" : ""
-          }</span><span class="wf-nm">${span.name}</span>${
-            span.note ? `<span class="wf-note">${span.note}</span>` : ""
-          }
-        </span>
-        <span class="wf-dur">${ms(span.dur)}</span>
-        <span class="wf-track">
-          <span class="wf-bar" style="left:${left.toFixed(4)}%;width:${width.toFixed(
-            4,
-          )}%"></span>
-        </span>
-      </li>`;
+/* Renders only the first `count` spans in depth-first order. Last-sibling
+ * guides are worked out over the VISIBLE children, as theirs does, so a
+ * branch drawn mid-stream ends its line where the stream currently ends. */
+function treeHtml(trace, count) {
+  const shown = new Set(trace.order.slice(0, count));
+  const walk = (node, depth, isLast, guides) => {
+    const kids = node.children.filter((c) => shown.has(c));
+    const next = depth > 0 ? [...guides, !isLast] : guides;
+    return (
+      rowHtml(node, depth, isLast, guides, trace) +
+      kids
+        .map((c, i) => walk(c, depth + 1, i === kids.length - 1, next))
+        .join("")
+    );
+  };
+  const body = shown.has(trace.root) ? walk(trace.root, 0, true, []) : "";
+  return `${body}<div class="wf-spacer" style="height:${(trace.order.length - count) * ROW_H}px"></div>`;
 }
 
-function findingHtml(finding) {
-  return `
-        <div class="wf-find">
-          <button class="wf-find-hd" type="button" aria-expanded="false" aria-controls="${finding.id}">
-            <svg class="wf-chev" viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"
-                 fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round"
-                 stroke-linejoin="round"><path d="M3.6 2 6.8 5 3.6 8"/></svg>
-            <span class="wf-find-t">${finding.title}</span>
-            <span class="wf-find-n">${finding.runs}</span>
-          </button>
-          <div class="wf-find-bd" id="${finding.id}" hidden>
-            <p class="wf-find-p">${finding.body}</p>
-            <p class="wf-find-sp">${finding.span}</p>
-          </div>
-        </div>`;
+function findingsHtml(trace, count) {
+  return trace.findings
+    .slice(0, count)
+    .map(
+      (title) => `<div class="wf-card">
+        <p class="wf-card-t">${title}</p>${CHEV}
+      </div>`,
+    )
+    .join("");
 }
 
-/* THE PANEL, SEPARATE FROM THE SECTION.
+/* ---- panel ----------------------------------------------------------- */
 
-   This module used to render a whole standalone section: its own label,
-   heading, lead and panel. That section had no counterpart on the reference,
-   whose four feature blocks are four text columns scrolling past ONE pinned
-   panel. So the panel is now exported on its own and mounted inside that
-   pinned stage, where the heading and lead come from the DEMO entry instead.
-
-   `render()` is kept and calls this, so the module still works standalone if
-   it is ever wanted back. */
 export function panel() {
-  const errors = SPANS.filter((s) => s.error).length;
-  return `
-  <div class="wf-panel">
+  return `<div class="wf-panel">
     <div class="wf-hd">
-      <span class="wf-tid">${TRACE_ID}</span>
-      <span class="wf-hd-meta">
-        <span class="wf-hd-v">${ms(TOTAL_MS)}</span>
-        <span class="wf-hd-sep" aria-hidden="true"></span>
-        <span class="wf-hd-v">${SPANS.length} spans</span>
-        ${
-          errors
-            ? `<span class="wf-hd-sep" aria-hidden="true"></span><span class="wf-hd-err">${errors} error</span>`
-            : ""
-        }
-      </span>
+      <span class="wf-tid"></span>
+      <span class="wf-meta"></span>
     </div>
-
     <div class="wf-occ">
-      <p class="wf-occ-label">Occurrences</p>
-      ${FINDINGS.map(findingHtml).join("")}
-    </div>
-
-    <div class="wf-tree">
-      <div class="wf-cols" aria-hidden="true">
-        <span>Span</span><span>Dur</span><span>Offset in trace</span>
+      <div class="wf-wait">${LOADER}<span class="wf-wait-t"></span></div>
+      <div class="wf-found">
+        <p class="wf-found-h">${ERR_ICON.replace('class="wf-err"', 'class="wf-found-ico"')}<span>Flagged in this run</span></p>
+        <div class="wf-cards"></div>
       </div>
-      <ol class="wf-rows">${SPANS.map(rowHtml).join("")}</ol>
     </div>
+    <div class="wf-tree"></div>
+    <div class="wf-steps">${STAGES.map(() => '<span class="wf-step"></span>').join("")}</div>
   </div>`;
 }
 
 export function render() {
-  return `
-<div class="wf">
-  <div class="wf-copy">
-    <p class="wf-label">Traces</p>
-    <h2 class="wf-h">Read every span, not just the ones that errored.</h2>
-    <p class="wf-sub">Every span of every run, timed against the one before it.
-      The audit reads the whole tree, so a retrieval that quietly fell back to a
-      stale index shows up as a finding instead of as a good answer.</p>
-  </div>
-${panel()}
-</div>`;
+  return panel();
 }
 
 /* ---- mount ----------------------------------------------------------- */
 
 export function mount(root) {
-  const rows = Array.from(root.querySelectorAll(".wf-row"));
-  const teardown = [];
+  const $ = (s) => root.querySelector(s);
+  const tid = $(".wf-tid");
+  const meta = $(".wf-meta");
+  const wait = $(".wf-wait");
+  const waitT = $(".wf-wait-t");
+  const found = $(".wf-found");
+  const cards = $(".wf-cards");
+  const tree = $(".wf-tree");
+  const steps = [...root.querySelectorAll(".wf-step")];
 
-  /* Findings. The body is hidden outright so it is out of the tab order, then
-   * given a frame before the class lands so the transition has two states to
-   * run between. */
-  root.querySelectorAll(".wf-find-hd").forEach((button) => {
-    const body = root.querySelector(`#${button.getAttribute("aria-controls")}`);
-    let closeTimer = 0;
-    const onClick = () => {
-      const open = button.getAttribute("aria-expanded") === "true";
-      button.setAttribute("aria-expanded", open ? "false" : "true");
-      if (open) {
-        body.classList.remove("is-open");
-        closeTimer = window.setTimeout(() => {
-          body.hidden = true;
-        }, ROW_FADE_MS);
-      } else {
-        window.clearTimeout(closeTimer);
-        body.hidden = false;
-        requestAnimationFrame(() => body.classList.add("is-open"));
-      }
-    };
-    button.addEventListener("click", onClick);
-    teardown.push(() => {
-      button.removeEventListener("click", onClick);
-      window.clearTimeout(closeTimer);
-    });
-  });
+  let traceIx = 0;
+  let stage = 0;
+  let timers = [];
+  const clear = () => {
+    timers.forEach(clearTimeout);
+    timers = [];
+  };
+  const later = (fn, ms) => timers.push(window.setTimeout(fn, ms));
 
-  const settle = () => rows.forEach((row) => row.classList.add("is-in"));
-
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    settle();
-    return () => teardown.forEach((fn) => fn());
+  function paintTrace(trace) {
+    tid.textContent = trace.id;
+    meta.textContent = `${(trace.total / 1000).toFixed(1)}s · ${trace.order.length} spans`;
   }
 
-  /* Elapsed time is banked, not restarted: leaving the panel mid-sweep and
-   * scrolling back resumes where it stopped. */
-  let elapsed = 0;
-  let lastFrame = 0;
-  let running = false;
-  let raf = 0;
+  function paintFindings(trace, n) {
+    cards.innerHTML = findingsHtml(trace, n);
+    const has = n > 0;
+    wait.classList.toggle("is-off", has);
+    found.classList.toggle("is-on", has);
+    found.style.setProperty(
+      "--wf-reveal",
+      `${Math.round((n / trace.findings.length) * 100)}%`,
+    );
+  }
 
-  const apply = () => {
-    for (let i = 0; i < rows.length; i += 1) {
-      if (elapsed >= i * ROW_STAGGER_MS) rows[i].classList.add("is-in");
-    }
-  };
-
-  const frame = (now) => {
-    if (!running) return;
-    if (lastFrame) elapsed += now - lastFrame;
-    lastFrame = now;
-    apply();
-    if (elapsed < REVEAL_TOTAL_MS) {
-      raf = requestAnimationFrame(frame);
+  function enter(s) {
+    stage = s;
+    const trace = TRACES[traceIx];
+    const name = STAGES[s];
+    steps.forEach((el, i) => el.classList.toggle("is-on", i <= s));
+    if (name === "tracing") {
+      paintTrace(trace);
+      paintFindings(trace, 0);
+      tree.innerHTML = treeHtml(trace, 0);
+      const gap = STREAM_MS / trace.order.length;
+      trace.order.forEach((_, i) =>
+        later(() => (tree.innerHTML = treeHtml(trace, i + 1)), 100 + i * gap),
+      );
     } else {
-      running = false;
+      tree.innerHTML = treeHtml(trace, trace.order.length);
     }
-  };
+    waitT.textContent =
+      name === "tracing" ? "Listening for a run…" : "Auditing the run…";
+    if (name === "flagging") {
+      trace.findings.forEach((_, i) =>
+        later(() => paintFindings(trace, i + 1), FINDING_AT[i]),
+      );
+    }
+    later(() => {
+      if (s === STAGES.length - 1) {
+        traceIx = (traceIx + 1) % TRACES.length;
+        enter(0);
+      } else {
+        enter(s + 1);
+      }
+    }, STAGE_MS[s]);
+  }
 
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          if (!running && elapsed < REVEAL_TOTAL_MS) {
-            running = true;
-            lastFrame = 0;
-            raf = requestAnimationFrame(frame);
-          }
-        } else {
-          running = false;
-          lastFrame = 0;
-          cancelAnimationFrame(raf);
-        }
-      });
+  function finished() {
+    const trace = TRACES[0];
+    paintTrace(trace);
+    tree.innerHTML = treeHtml(trace, trace.order.length);
+    paintFindings(trace, trace.findings.length);
+    steps.forEach((el) => el.classList.add("is-on"));
+  }
+
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  finished();
+
+  return {
+    setActive(on) {
+      clear();
+      if (reduced) return finished();
+      if (on) {
+        traceIx = 0;
+        enter(0);
+      }
     },
-    { threshold: 0.15 },
-  );
-
-  const panel = root.querySelector(".wf-panel");
-  if (panel) observer.observe(panel);
-
-  return () => {
-    observer.disconnect();
-    cancelAnimationFrame(raf);
-    teardown.forEach((fn) => fn());
   };
 }

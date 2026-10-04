@@ -1,227 +1,214 @@
-/* Section F: Integrations.
+/* Panel 3, "Sift MCP": a coding agent in a terminal pane pulls the issue and
+ * its traces from Sift's MCP server, patches the prompt, and reports back.
  *
- * Spec: docs/spec/SECTIONS.md "F. Integrations". Centred label, headline and
- * one-line subhead; a horizontal row of framework marks faded at both ends so
- * it reads as continuing past the viewport; two numbered monospace panels
- * below, side by side at desktop, the second carrying a copy affordance.
+ * Structure read out of the reference's chunk 7969 (McpVisual) and off its
+ * rendered panel: a window titlebar, one tab, a dark terminal body whose
+ * lines are typed prompt / tool call / tool result / diff / check / collapse
+ * / recap, a status bar pinned to the foot, and a 6-segment strip. Each step
+ * is preceded by a text progress bar that counts to 100% and is then
+ * replaced by the step's lines. Measured at 1440: zoom 0.85 on a natural
+ * 640px window, 576px tall at 544.
  *
- * Marks and copy are OURS. The names below are invented SDK names and the
- * glyphs are geometry written by hand, because vendoring a real framework's
- * logo is the one thing the section spec forbids twice.
+ * The terminal component itself (their module 6606) was not in the chunks,
+ * so the step durations below are ours, set so one pass is 13.4s, close to
+ * the other three panels' cycles of 10.8 to 12.8s.
+ *
+ * Every line, tool name, file and id is ours.
  */
 
 export const MOUNT = "#integrations";
 
-/* The rail has to OVERFLOW its container for the edge fade to mean anything.
- * A mask over a row that already fits fades page background into page
- * background and looks identical to no mask at all. Measured in the render:
- * 13 cells x 150px = 1950px of rail inside a full-bleed clip. Measured in the
- * render: the rail box sits at x=-335 in a 1280 viewport and at x=-575 in an
- * 800 one, so it is cut by 335px and 575px on EACH side respectively and the
- * mask always has real ink to fade. The 150px cell width itself lives in
- * integrations.css, because nothing in JS reads it. */
+/* Load time of each step, then a hold on the finished session with a live
+ * cursor. Six entries, six strip segments. */
+const STEP_MS = [1200, 1600, 1600, 2400, 2000, 2600];
+/* 22 cells reads as a terminal bar at 640 natural without wrapping. */
+const BAR_CELLS = 22;
+const BAR_TICK_MS = 80;
 
-/* Our own marks. Each glyph is a 18x18 viewBox of stroked primitives, all
- * stroke-width 1 so the row keeps one hairline weight across every cell. */
-const MARKS = [
-  {
-    name: "Orchard",
-    d: '<circle cx="9" cy="9" r="7"/><circle cx="9" cy="9" r="2.6"/>',
-  },
-  { name: "Vane", d: '<path d="M2 15 9 3l7 12z"/>' },
-  {
-    name: "Corda",
-    d: '<rect x="2" y="2" width="14" height="14"/><rect x="6" y="6" width="6" height="6"/>',
-  },
-  { name: "Relay", d: '<path d="M3 5h8l4 4-4 4H3"/><path d="M3 9h8"/>' },
-  { name: "Quill", d: '<path d="M9 2 16 9 9 16 2 9z"/>' },
-  { name: "Lattice", d: '<path d="M2 6h14M2 12h14M6 2v14M12 2v14"/>' },
-  {
-    name: "Mesa",
-    d: '<path d="M2 14h14"/><path d="M4 14V8h5v6"/><path d="M11 14V5h3v9"/>',
-  },
-  {
-    name: "Kiln",
-    d: '<path d="M9 2v14"/><path d="M3 6l6-4 6 4"/><path d="M3 12l6 4 6-4"/>',
-  },
-  {
-    name: "Harbor",
-    d: '<path d="M2 9a7 7 0 0 1 14 0"/><path d="M2 9h14"/><circle cx="9" cy="13" r="2"/>',
-  },
-  { name: "Drift", d: '<path d="M2 12c3.5 0 3.5-6 7-6s3.5 6 7 6"/>' },
-  { name: "Pilot", d: '<circle cx="9" cy="9" r="7"/><path d="M9 2v14"/>' },
-  {
-    name: "Vector",
-    d: '<path d="M3 15 15 3"/><path d="M15 3v6"/><path d="M15 3H9"/>',
-  },
-  {
-    name: "Slate",
-    d: '<rect x="2" y="4" width="14" height="10"/><path d="M2 8h14"/>',
-  },
+const t = (text, cls = "") => ({ text, cls });
+
+/* One group per load step. Each line is a list of styled runs. */
+const GROUPS = [
+  [{ kind: "prompt", runs: [t("close out the P1 payout issue Sift opened")] }],
+  [
+    {
+      kind: "call",
+      runs: [t("sift", "b"), t(" · "), t("get_issue", "b"), t("(iss_7c19)")],
+    },
+    {
+      kind: "result",
+      runs: [t("P1: refund confirmed before the payout returns")],
+    },
+  ],
+  [
+    {
+      kind: "call",
+      runs: [
+        t("sift", "b"),
+        t(" · "),
+        t("get_traces", "b"),
+        t("(refund_agent)"),
+      ],
+    },
+    {
+      kind: "result",
+      runs: [t("21 traces · cause: step order changed in deploy d41e")],
+    },
+  ],
+  [
+    {
+      kind: "call",
+      runs: [
+        t("Edit", "b"),
+        t("("),
+        t("prompts/refund_agent.md", "path"),
+        t(")"),
+      ],
+    },
+    {
+      kind: "result",
+      runs: [t("- Tell the customer the refund is on its way.", "del")],
+    },
+    {
+      kind: "cont",
+      runs: [t("+ Confirm a refund only after issue_payout succeeds.", "add")],
+    },
+    {
+      kind: "cont",
+      runs: [
+        t("+ If the payout fails, say so and hand off to a person.", "add"),
+      ],
+    },
+    { kind: "cont", runs: [t("✓ ", ""), t("Patch applied, PR #317 opened")] },
+    { kind: "cont", runs: [t("… 4 more lines hidden", "dim")] },
+  ],
+  [
+    {
+      kind: "recap",
+      runs: [
+        t("recap: ", "b"),
+        t(
+          "Closed the P1 payout issue from Sift. Reordered prompts/refund_agent.md and replayed all 21 failing traces, which now pass. Next: merge PR #317 and watch the eval Sift set up.",
+          "it",
+        ),
+      ],
+    },
+  ],
 ];
 
-/* Our own env var names, our own project slug, our own fake key. The key is
- * obviously synthetic on purpose: a plausible-looking secret in a replica repo
- * is the kind of string someone later greps for and panics about. */
-const ENV_LINES = [
-  ["SIFT_API_KEY", '"lk_demo_not_a_real_key"'],
-  ["SIFT_PROJECT", '"agents-prod"'],
-  ["SIFT_SAMPLE_RATE", '"1.0"'],
+const STATUS = [
+  t("▸▸ edits auto-approved", "red"),
+  t(" · ", "dim"),
+  t("1 task", "cyan"),
+  t(" · ", "dim"),
+  t("tab to switch", "dim"),
+  t(" · ", "dim"),
+  t("esc to stop", "dim"),
 ];
 
-/* Our own prompt copy, written for the agent-monitoring product this replica
- * is a study of. */
-const PROMPT_LINES = [
-  "Review the last 24 hours of traces on",
-  "agents-prod. Flag every run where the agent",
-  "answered from retrieved context that did not",
-  "contain the answer, then group the flags by",
-  "tool call and tell me which tool produces",
-  "the most of them.",
-];
+const runs = (list) =>
+  list.map((r) => `<span class="ig-${r.cls || "n"}">${r.text}</span>`).join("");
 
-const COPY_TEXT = PROMPT_LINES.join(" ").replace(/\s+/g, " ");
+const GUTTER = {
+  prompt: '<span class="ig-g ig-dim">›</span>',
+  call: '<span class="ig-g ig-dot">●</span>',
+  result: '<span class="ig-g ig-dim">└</span>',
+  cont: '<span class="ig-g"></span>',
+  recap: '<span class="ig-g ig-dim">*</span>',
+};
 
-function markCell({ name, d }) {
-  return `<div class="ig-mark">
-      <svg class="ig-mark-glyph" viewBox="0 0 18 18" aria-hidden="true">
-        <g fill="none" stroke="currentColor" stroke-width="1"
-           stroke-linecap="square" stroke-linejoin="miter">${d}</g>
-      </svg>
-      <span class="ig-mark-name">${name}</span>
-    </div>`;
+function lineHtml(line) {
+  const indent = line.kind === "result" || line.kind === "cont" ? " ig-in" : "";
+  return `<div class="ig-line ig-${line.kind}${indent}">${GUTTER[line.kind]}<span class="ig-t">${runs(line.runs)}</span></div>`;
 }
 
-function captionBar(num, text, withCopy) {
-  return `<div class="ig-cap">
-      <span class="ig-num" aria-hidden="true">${num}</span>
-      <span class="ig-cap-text">${text}</span>
-      ${
-        withCopy
-          ? `<button type="button" class="ig-copy" aria-label="Copy the prompt">
-        <span class="ig-copy-label">Copy</span>
-      </button>`
-          : ""
-      }
-    </div>`;
-}
+const FOLDER =
+  '<svg viewBox="0 0 14 12" width="14" height="12" aria-hidden="true"><path d="M1 2.2c0-.6.4-1 1-1h3.2l1.3 1.4H12c.6 0 1 .4 1 1V10c0 .6-.4 1-1 1H2c-.6 0-1-.4-1-1z" fill="#8ea2b8"/><path d="M1 4h12v6c0 .6-.4 1-1 1H2c-.6 0-1-.4-1-1z" fill="#a9bbcf"/></svg>';
 
-export function render() {
-  return `<div class="ig">
-    <div class="wrap ig-head">
-      <div class="label ig-label">Integrations</div>
-      <h2 class="ig-title">Two lines of config, then ask in plain English.</h2>
-      <p class="ig-sub">Drop the SDK into the framework you already run, set one key, and every
-        agent run shows up as a trace you can interrogate.</p>
+export function panel() {
+  return `<div class="ig-zoom">
+    <div class="ig-panel">
+      <div class="ig-title">
+        <span class="ig-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="ig-title-t">${FOLDER}refund-agent</span>
+      </div>
+      <div class="ig-tabs">
+        <span class="ig-tab">agent session</span>
+        <span class="ig-plus" aria-hidden="true">+</span>
+      </div>
+      <div class="ig-term">
+        <div class="ig-lines">
+          ${GROUPS.map((g) => `<div class="ig-group">${g.map(lineHtml).join("")}</div>`).join("")}
+          <div class="ig-load"><span class="ig-bar"></span></div>
+          <div class="ig-cursor"><span class="ig-dim">›</span> <i class="ig-caret"></i></div>
+        </div>
+        <div class="ig-status">${runs(STATUS)}</div>
+      </div>
+      <div class="ig-steps">${STEP_MS.map(() => '<span class="ig-step"></span>').join("")}</div>
     </div>
-${panel()}
   </div>`;
 }
 
-/* THE PANEL, SEPARATE FROM THE SECTION.
-
-   Same reason as the other two: the reference's four feature blocks are four
-   text columns scrolling past ONE pinned panel, so the panel is exported
-   alone and the heading and lead come from the DEMO entry. `render()` above
-   keeps working standalone.
-
-   The framework rail comes with it. It is the part of this panel that says
-   "drop it into what you already run", and without it the two config blocks
-   are a screenshot of a dotfile. */
-export function panel() {
-  const rail = MARKS.map(markCell).join("");
-  const envBody = ENV_LINES.map(
-    ([k, v]) => `<div class="ig-line"><span class="ig-key">${k}</span><span
-        class="ig-eq">=</span><span class="ig-val">${v}</span></div>`,
-  ).join("");
-  const promptBody = PROMPT_LINES.map(
-    (line) => `<div class="ig-line ig-line-prompt">${line}</div>`,
-  ).join("");
-  return `
-    <div class="ig-rail-clip" role="list" aria-label="Supported agent frameworks">
-      <div class="ig-rail">${rail}</div>
-    </div>
-
-    <div class="wrap">
-      <div class="ig-panels">
-        <div class="ig-panel">
-          ${captionBar("01", ".env.local", false)}
-          <div class="ig-body">${envBody}</div>
-        </div>
-        <div class="ig-panel">
-          ${captionBar("02", "ask sift", true)}
-          <div class="ig-body">${promptBody}</div>
-        </div>
-      </div>
-    </div>`;
+export function render() {
+  return panel();
 }
 
 export function mount(root) {
-  const cleanups = [];
+  const groups = [...root.querySelectorAll(".ig-group")];
+  const load = root.querySelector(".ig-load");
+  const bar = root.querySelector(".ig-bar");
+  const cursor = root.querySelector(".ig-cursor");
+  const steps = [...root.querySelectorAll(".ig-step")];
+  const last = STEP_MS.length - 1;
+  let timer = 0;
+  let ticker = 0;
 
-  /* Copy affordance. Clipboard access throws on an insecure origin and in a
-   * headless context, so the label falls back to "Select" rather than lying
-   * about having copied anything. */
-  const copyBtn = root.querySelector(".ig-copy");
-  const copyLabel = root.querySelector(".ig-copy-label");
-  /* 1400ms: long enough that the label change is legible after a click without
-   * the button sitting in a confirmed state while someone reads the panel.
-   * Chosen, not measured off the reference. */
-  const COPIED_HOLD_MS = 1400;
-  let holdTimer = 0;
+  function drawBar(fraction) {
+    const full = Math.round(fraction * BAR_CELLS);
+    bar.textContent = `[${"█".repeat(full)}${"░".repeat(BAR_CELLS - full)}] ${Math.round(fraction * 100)}%`;
+  }
 
-  if (copyBtn && copyLabel) {
-    const onCopy = async () => {
-      let ok = false;
-      try {
-        if (navigator.clipboard && window.isSecureContext) {
-          await navigator.clipboard.writeText(COPY_TEXT);
-          ok = true;
-        }
-      } catch {
-        ok = false;
-      }
-      copyLabel.textContent = ok ? "Copied" : "Select";
-      copyBtn.classList.toggle("is-done", ok);
-      clearTimeout(holdTimer);
-      holdTimer = setTimeout(() => {
-        copyLabel.textContent = "Copy";
-        copyBtn.classList.remove("is-done");
-      }, COPIED_HOLD_MS);
-    };
-    copyBtn.addEventListener("click", onCopy);
-    cleanups.push(() => {
-      copyBtn.removeEventListener("click", onCopy);
-      clearTimeout(holdTimer);
+  /* Step s: groups before s are on screen. A load step shows the bar
+   * counting up and then reveals group s; the last step is the hold. */
+  function paint(s, animate) {
+    groups.forEach((g, i) => g.classList.toggle("is-in", i < s));
+    load.classList.toggle("is-on", animate && s < last);
+    cursor.classList.toggle("is-on", s >= last);
+    steps.forEach((el, i) => {
+      el.classList.toggle("is-done", i < s || (!animate && i === s));
+      el.innerHTML =
+        animate && i === s
+          ? `<span class="ig-fill" style="animation-duration:${STEP_MS[s]}ms"></span>`
+          : "";
     });
   }
 
-  /* Entrance. One shot, unobserved once it fires, so scrolling back never
-   * replays it and there is no elapsed time to bank. prefers-reduced-motion
-   * lands on the finished state in CSS, so nothing here is gated on it. */
-  const staged = Array.from(
-    root.querySelectorAll(".ig-head, .ig-rail-clip, .ig-panel"),
-  );
-  if (!("IntersectionObserver" in window)) {
-    staged.forEach((el) => el.classList.add("is-in"));
-    return () => cleanups.forEach((fn) => fn());
+  function stop() {
+    window.clearTimeout(timer);
+    window.clearInterval(ticker);
   }
 
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("is-in");
-        io.unobserve(entry.target);
-      });
-    },
-    /* 0.15: the panels are ~200px tall against a 900px viewport, so a
-     * threshold this low fires while the panel is still entering rather than
-     * after it has already settled in the middle of the screen. */
-    { threshold: 0.15 },
-  );
-  staged.forEach((el) => io.observe(el));
-  cleanups.push(() => io.disconnect());
+  function enter(s) {
+    stop();
+    paint(s, true);
+    if (s < last) {
+      const t0 = performance.now();
+      drawBar(0);
+      ticker = window.setInterval(() => {
+        drawBar(Math.min((performance.now() - t0) / STEP_MS[s], 1));
+      }, BAR_TICK_MS);
+    }
+    timer = window.setTimeout(() => enter(s === last ? 0 : s + 1), STEP_MS[s]);
+  }
 
-  return () => cleanups.forEach((fn) => fn());
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  paint(last, false);
+
+  return {
+    setActive(on) {
+      stop();
+      if (reduced) return paint(last, false);
+      if (on) enter(0);
+    },
+  };
 }

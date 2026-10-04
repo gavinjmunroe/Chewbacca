@@ -10,7 +10,11 @@
 <link rel="stylesheet" href="src/sections/waterfall.css">
 <link rel="stylesheet" href="src/sections/chat-mock.css">
 <link rel="stylesheet" href="src/sections/integrations.css">
+<link rel="stylesheet" href="src/sections/metrics.css">
 <link rel="stylesheet" href="src/sections/testimonials.css">
+<link rel="stylesheet" href="src/sections/hero-scene.css">
+<link rel="stylesheet" href="src/sections/lower.css">
+<link rel="stylesheet" href="src/sections/chrome.css">
 </head>
 <body>
 
@@ -41,8 +45,11 @@
 
 <main id="top">
 
-  <!-- HERO -->
-  <section class="hero">
+  <!-- HERO: one pinned block, 12 viewports, holding the hero, the logo wall
+       and the trace scene. See src/sections/hero-scene.js. -->
+  <section class="hs-run" id="hero" style="height:1200vh">
+    <div class="hs-pin">
+      <section class="hero">
     <div class="wrap">
       <div class="backed"><span class="dot" aria-hidden="true"></span><span class="ycw">Now in public beta</span></div>
       <h1>Your agent failed<br><b>and nothing threw an error</b></h1>
@@ -55,16 +62,21 @@
     </div>
     <div id="plates"></div>
   </section>
-
-  <!-- LOGO STRIP -->
-  <section id="logo-wall" data-reveal></section>
-
-  <!-- SCENE 1: the pinned geometric narrative, 12 viewports on the reference -->
-  <div class="run" id="run1" style="height:1000svh">
-    <div class="pin">
-      <div id="stage1" style="width:100%;height:100%"></div>
+      <div class="hs-logos"></div>
+      <div class="hs-stage"><div class="hs-rise"></div></div>
+      <div class="hs-cap"><div class="hs-cap-in">
+        <p class="hs-cap-h">Your agents fail without telling you.</p>
+        <p class="hs-cap-l">Loops, wrong tools, context that goes stale mid-run. Nothing raises an exception, but the customer notices&hellip; then&nbsp;they&nbsp;leave.</p>
+      </div></div>
+      <div class="hs-cap"><div class="hs-cap-in">
+        <p class="hs-cap-h">Catching one quiet failure by hand means reading through <span class="hs-reels"></span> runs.</p>
+      </div></div>
+      <div class="hs-cap"><div class="hs-cap-in">
+        <p class="hs-cap-h">With Sift, you see it first.</p>
+        <p class="hs-cap-l">Sift connects what your agent did in production to what you fix next.</p>
+      </div></div>
     </div>
-  </div>
+  </section>
 
   <!-- SCENE 2: four text columns scrolling past ONE pinned panel.
        NOT a pinned block whose copy swaps, which is what this was.
@@ -103,119 +115,11 @@
 
 
 
-  <section id="testimonials" data-reveal></section>
-
-  <section class="band wrap">
-    <div class="label">Integrations</div>
-    <h2>Drops into the stack you already run.</h2>
-    <p class="lead">Works with the agent frameworks you already run.</p>
-    <div class="steps">
-      <div class="step">
-        <div class="n">1</div>
-        <div class="t">Generate API key</div>
-        <div class="code">
-          <div class="v">.env.example</div>
-          <div><span class="k">SIFT_API_KEY</span>=<span class="v">your_api_key_here</span></div>
-          <div><span class="k">SIFT_PROJECT_ID</span>=<span class="v">0aea4e153c71b2</span></div>
-        </div>
-      </div>
-      <div class="step">
-        <div class="n">2</div>
-        <div class="t">Hand it to your coding agent</div>
-        <div class="code">
-          <div class="v">Prompt</div>
-          <div>Run npx sift-skill init and use it to add tracing to this project.</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- SECURITY -->
-  <section class="band wrap">
-    <div class="label">Security</div>
-    <h2>Your traces stay yours.</h2>
-    <p class="lead">Your data stays yours. Protected by best-in-class infrastructure
-       and verified compliance.</p>
-    <div class="cards">
-      <div class="card"><div class="t">SOC 2 Type II</div>
-        <div class="d">Audited by a third party, every year.</div></div>
-      <div class="card"><div class="t">Encrypted end to end</div>
-        <div class="d">AES-256 on disk, TLS 1.3 on the wire.</div></div>
-      <div class="card"><div class="t">Data Isolation</div>
-        <div class="d">Every org gets its own isolated store.</div></div>
-    </div>
-    <div style="margin-top:22px"><a class="btn btn-ghost" href="#">View Trust Center</a></div>
-  </section>
-
-
-  <!-- NEWSLETTER -->
-  <section class="band news-band">
-    <div class="wrap news">
-      <div class="news-left">
-        <div class="label">Sift Weekly</div>
-        <h2>A Friday read on why agents break, and what caught it.</h2>
-        <hr class="rule">
-        <div class="issue-meta">Latest &mdash; Issue 003 &middot; August 14, 2026</div>
-        <h3 class="issue-title">Found in Retrospect</h3>
-        <p class="issue-body">Anthropic found three real-world compromises only after
-          reviewing 141,006 stored evaluation runs. Meta disclosed another
-          testing-boundary failure. A new benchmark&hellip;</p>
-        <div class="issue-links"><a href="#" class="group"><span class="ul-grow">Read the latest issue</span> <span class="arrow">&rarr;</span></a><a href="#" class="group"><span class="ul-grow">View all issues</span> <span class="arrow">&rarr;</span></a></div>
-      </div>
-      <div class="news-right">
-        <!-- h2, not h3. Theirs is an h2 at 18px, which is why their section
-             walk reports Subscribe as its own section sitting 31px before the
-             briefing: the two are side by side in one band and the walk picks
-             them up in DOM order. Ours said the same words in an h3 and so was
-             invisible to every measurement. This is a tag change, not the
-             structural split the plan assumed. -->
-        <h2 class="sub-h">Subscribe</h2>
-        <p class="sub-p">One email on Friday, on what actually broke this week.</p>
-        <form class="field" onsubmit="return false">
-          <input type="email" placeholder="you@work.com" aria-label="Email address">
-          <button class="btn btn-primary" type="submit">Get Weekly</button>
-        </form>
-        <p class="sub-note">Fridays only. Leave whenever.</p>
-      </div>
-    </div>
-  </section>
-
-  <!-- CTA -->
-  <section class="cta wrap">
-    <h2>Start improving your agents today</h2>
-    <div class="hero-cta">
-      <a class="btn btn-primary btn-lg" href="#">Book a demo</a>
-      <a class="btn btn-ghost btn-lg" href="#">Read the docs</a>
-    </div>
-  </section>
+  <div id="lower"></div>
 
 </main>
 
-<footer>
-  <div class="wrap">
-    <div class="fgrid">
-      <div class="fcol">
-        <div class="brand" style="font-size:var(--t-md);margin-bottom:10px">Sift</div>
-        <div style="font-size:var(--t-13);color:var(--muted);max-width:34ch;line-height:1.5">
-          Replay every agent run and see where it went wrong.</div>
-      </div>
-      <div class="fcol">
-        <div class="h">Resources</div>
-        <a href="#">Docs</a><a href="#">Blog</a><a href="#">Weekly</a>
-        <a href="#">Changelog</a><a href="#" id="careers">Careers</a><a href="#">Trust Center</a>
-      </div>
-      <div class="fcol">
-        <div class="h">Social</div>
-        <a href="#">X</a><a href="#">Twitter</a><a href="#">LinkedIn</a><a href="#">Instagram</a>
-      </div>
-    </div>
-    <div class="fbot">
-      <div>&copy; 2026 Forge AI Labs, Inc.</div>
-      <div>Any questions? contact hello@sift.example</div>
-      <div><a href="#">Cookie settings</a></div>
-    </div>
-  </div>
-</footer>
+<div id="lower-footer"></div>
 
 <!-- The cookie consent card. Theirs carries one in the bottom right on every
      view, which is why their `controls` count sits at a constant 15 against
@@ -223,8 +127,7 @@
      the page. Ours says what ours actually does. -->
 <aside class="cc" id="cookie-card" role="dialog" aria-labelledby="cc-h" aria-describedby="cc-b">
   <div class="cc-head" id="cc-h">Cookies</div>
-  <p class="cc-body" id="cc-b">We keep one analytics cookie so we can tell which
-     parts of this page people actually read.</p>
+  <p class="cc-body" id="cc-b">One analytics cookie, to see which parts get read.</p>
   <div class="cc-actions">
     <button class="cc-btn" type="button" data-cc="reject">Reject</button>
     <button class="cc-btn" type="button" data-cc="choose">Choose</button>

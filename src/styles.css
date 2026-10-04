@@ -1228,3 +1228,23 @@ section.cta h2           { line-height: 40px; }
 .cc-btn-primary      { background: var(--ink); color: #fff; border-color: var(--ink); }
 .cc-btn-primary:hover{ background: #2b2668; border-color: #2b2668; }
 .cc[hidden] { display: none; }
+
+/* ---- the demo stack, 2026-10-03 --------------------------------------- */
+/* Read off their DOM: the sticky column holds four absolute layers, each a
+ * flex column that centres its panel vertically in the 900px pin, and the
+ * active one is switched by a class with a 500ms ease-out opacity
+ * transition. The panels are 544 wide and size to their own content
+ * (502, 636, 576 and 508 tall on theirs); the stage no longer sets a height
+ * or draws a card, the panel module does. */
+.feat-pin .demo-stage { position: relative; width: 100%; height: 100%; }
+.demo-layer { position: absolute; inset: 0; display: flex; flex-direction: column;
+              justify-content: center; opacity: 0; pointer-events: none;
+              transition: opacity 500ms ease-out; }
+.demo-layer.on { opacity: 1; pointer-events: auto; }
+.demo-w { width: 100%; }
+@media (prefers-reduced-motion: reduce) { .demo-layer { transition: none; } }
+
+/* Eyebrows are grey, not accent. Measured on all six of theirs: IBM Plex
+ * Mono 12/15, uppercase, rgb(161,160,184), tracking at the body's 0.32px. */
+.label, .feat-block .label { font-size: 12px; line-height: 15px; letter-spacing: .32px;
+                             color: #a1a0b8; }

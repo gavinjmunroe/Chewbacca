@@ -1,261 +1,150 @@
-/* Section E, the chat notification mock.
+/* Panel 2, "Live alerts": Sift posts an issue into a team channel and answers
+ * two follow-ups.
  *
- * The one measured fact this section exists to reproduce: the reference ships a
- * typing keyframe running `1.2s ease-in-out infinite`
- * (docs/spec/SECTIONS.md section E, and item 6 of "Sections, in page order" in
- * ux-engine/research/REFERENCE-SPEC.md). A looping typing indicator is
- * therefore part of the section and its period is not ours to choose.
+ * Mechanism read out of the reference's chunk 3247 (AlertsVisual): five
+ * messages, one more every 1400ms with a typing row parked in the slot the
+ * next message will take, a 2000ms hold on the full thread, then the thread
+ * clears and starts again. Every slot is laid out from first paint and only
+ * made visible on arrival, so the panel height never moves. Measured on
+ * their page at 1440: zoom 0.85 on a natural 640px card, 636px tall at 544.
  *
- * Everything else here is a choice, and the choices say so.
- *
- * Copy, product name, app identity and people are ours. No real person and no
- * other company's product messages appear. Avatars are drawn from initials, so
- * nothing is fetched.
+ * Channel, bot, person and every message are ours. The chat client is a
+ * generic one; nothing here names or draws a real product.
  */
 
 export const MOUNT = "#chat-mock";
 
-/* One full period of the reference's 1.2s typing keyframe. Holding the
- * indicator for exactly one period means the loop is never cut mid-cycle, so
- * the dots always leave the screen from the same phase they entered it. A
- * shorter hold shows a truncated bounce, which is the tell that a mock is
- * faking the wait. */
-const TYPING_MS = 1200;
+const STEP_MS = 1400;
+const HOLD_MS = 2000;
 
-/* Reading pause between the alert and the human answering it. 600ms is one of
- * the six most common durations on the reference (220, 450, 400, 600, 200,
- * 150ms, counted across its stylesheets), so the section keeps to the page's
- * own vocabulary rather than introducing a seventh number. */
-const REPLY_GAP_MS = 600;
+const SIFT_AVATAR = `<span class="cm-av cm-av-bot" aria-hidden="true"><svg viewBox="0 0 20 20" width="18" height="18"><path d="M4 6h12M6 10h8M8 14h4" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg></span>`;
+const WREN_AVATAR = `<span class="cm-av cm-av-human" aria-hidden="true">WO</span>`;
 
-/* Gap between the human's question and the app starting to answer it. 200ms,
- * also from that measured set. Our choice of which one. */
-const REACT_MS = 200;
+/* A flashing beacon, drawn, in place of an emoji. */
+const BEACON = `<svg class="cm-beacon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2" y="12" width="12" height="2.5" rx=".6" fill="#7a1f2b"/><path d="M4 12V8a4 4 0 0 1 8 0v4z" fill="#e0344b"/><path d="M6.2 8.4a1.8 1.8 0 0 1 1.8-1.8" stroke="#fff" stroke-width="1.1" fill="none" stroke-linecap="round" opacity=".8"/><path d="M8 1.2v1.6M2.6 3.4l1.1 1.1M13.4 3.4l-1.1 1.1" stroke="#e0344b" stroke-width="1.1" stroke-linecap="round"/></svg>`;
 
-/* The resulting schedule. Derived, not typed in, so the numbers above are the
- * only things to change. Messages are revealed at these marks; the typing
- * indicator runs in the windows, and every window is exactly TYPING_MS long. */
-const TYPING_WINDOWS = [
-  [0, TYPING_MS],
-  [TYPING_MS + REPLY_GAP_MS + REACT_MS, TYPING_MS + REPLY_GAP_MS + REACT_MS + TYPING_MS],
-];
-const MESSAGE_AT = [
-  TYPING_WINDOWS[0][1],                          // 1200: the alert
-  TYPING_WINDOWS[0][1] + REPLY_GAP_MS,           // 1800: the human reply
-  TYPING_WINDOWS[1][1],                          // 3200: the app answer
-];
-const SETTLE_MS = MESSAGE_AT[MESSAGE_AT.length - 1];
+const SIFT = { name: "Sift", avatar: SIFT_AVATAR, app: true };
+const WREN = { name: "Wren Okafor", avatar: WREN_AVATAR, app: false };
 
-/* Our product is Sift, an agent monitoring service. It posts as an app
- * into a team channel. "Wren" is an invented on-call handle, not a person. */
-const CHANNEL = {
-  name: "agent-health",
-  topic: "Production agents. Paging goes here.",
-  members: "14",
-};
+const mention = (t) => `<span class="cm-at">${t}</span>`;
+const code = (t) => `<code class="cm-code">${t}</code>`;
 
-const THREAD = [
+const MESSAGES = [
   {
-    from: "app",
-    author: "Sift",
-    initials: "SF",
-    time: "2:09 PM",
-    /* A chat client genuinely bolds the first line of a bot alert, which is the
-     * one place weight is allowed inside this mock. The page itself stays at
-     * 400 everywhere. */
-    lead: "refund-resolver is closing tickets without moving the money",
+    author: SIFT,
+    time: "10:16 AM",
+    body: `${BEACON} <strong>New issue in refund-agent</strong> ${BEACON}<br>The agent tells the customer their refund is on its way before the payout call has returned, and when the payout fails the message stands. 21 of the last 60 runs affected.`,
+  },
+  {
+    author: WREN,
+    time: "10:18 AM",
+    body: `${mention("@Sift")} which runs?`,
+  },
+  {
+    author: SIFT,
+    time: "10:18 AM",
+    body: "Three runs, one for each way it goes wrong:",
+    thread: { count: 3, meta: "Today at 10:18 AM" },
+  },
+  {
+    author: WREN,
+    time: "10:19 AM",
+    body: `${mention("@Sift")} how many customers got the wrong message?`,
+  },
+  {
+    author: SIFT,
+    time: "10:19 AM",
     body:
-      "34 of the last 312 runs finished clean and never called the payout tool. " +
-      "No error raised, no retry attempted. The customer reads a confirmation " +
-      "for a refund that never happened.",
-  },
-  {
-    from: "human",
-    author: "Wren",
-    initials: "W",
-    time: "2:11 PM",
-    body: "is that every currency or just the EUR ones",
-  },
-  {
-    from: "app",
-    author: "Sift",
-    initials: "SF",
-    time: "2:11 PM",
-    body: "EUR only, and three things line up on it:",
-    bullets: [
-      "all 34 runs carry a EUR amount, none carry USD",
-      "the payout call is skipped immediately after the eligibility step",
-      "the first one lands 6 minutes after deploy a41c9e2",
-    ],
-    action: "Open the failing trace",
+      `<strong>35% of refund runs</strong><br>` +
+      `• 12 confirmations with no payout behind them<br>` +
+      `• 6 payouts retried after the customer was told it was done<br>` +
+      `• 3 orders refunded twice, each with ${code("payout_id: null")} on the first try<br>` +
+      `None of them raised an error, so the error tracker saw nothing.<br>` +
+      `<strong>Proposed fix:</strong> hold the confirmation until issue_payout returns. The prompt change is drafted and waiting on your review.`,
+    action: "Open in Sift",
   },
 ];
 
-function avatar(message) {
-  return `<span class="cm-avatar cm-avatar-${message.from}" aria-hidden="true">${message.initials}</span>`;
-}
-
-function messageHtml(message, index) {
-  const badge = message.from === "app" ? `<span class="cm-badge">APP</span>` : "";
-  const lead = message.lead ? `<p class="cm-lead">${message.lead}</p>` : "";
-  const bullets = message.bullets
-    ? `<ul class="cm-bullets">${message.bullets.map((b) => `<li>${b}</li>`).join("")}</ul>`
+function messageHtml(m) {
+  const badge = m.author.app ? '<span class="cm-app">APP</span>' : "";
+  const thread = m.thread
+    ? `<div class="cm-thread">${SIFT_AVATAR.replace("cm-av ", "cm-av cm-av-sm ")}<span class="cm-replies">${m.thread.count} replies</span><span class="cm-tmeta">${m.thread.meta}</span></div>`
     : "";
-  const action = message.action
-    ? `<button class="cm-action" type="button">${message.action}</button>`
+  const action = m.action
+    ? `<div class="cm-actions"><span class="cm-btn" role="presentation">${m.action}</span></div>`
     : "";
-  return `
-    <li class="cm-msg" data-cm-msg="${index}" style="order:${(index + 1) * 10}">
-      ${avatar(message)}
-      <div class="cm-body">
-        <p class="cm-meta">
-          <span class="cm-author">${message.author}</span>${badge}
-          <time class="cm-time">${message.time}</time>
-        </p>
-        ${lead}
-        <p class="cm-text">${message.body}</p>
-        ${bullets}
-        ${action}
+  return `<div class="cm-msg">
+      ${m.author.avatar}
+      <div class="cm-main">
+        <div class="cm-meta"><span class="cm-name">${m.author.name}</span>${badge}<span class="cm-time">${m.time}</span></div>
+        <div class="cm-body">${m.body}</div>
+        ${thread}${action}
       </div>
-    </li>`;
+    </div>`;
 }
 
-/* THE PANEL, SEPARATE FROM THE SECTION.
-
-   This module rendered a whole standalone section with its own heading and
-   lead. That section had no counterpart: the reference's four feature blocks
-   are four text columns scrolling past ONE pinned panel. The panel is now
-   exported alone and mounted inside that stage, where the heading and lead
-   come from the DEMO entry.
-
-   `render()` is kept and calls this, so the module still stands alone. */
 export function panel() {
-  return `
-      <div class="cm-panel">
-        <div class="cm-head">
-          <span class="cm-hash" aria-hidden="true">#</span>
-          <span class="cm-channel">${CHANNEL.name}</span>
-          <span class="cm-head-topic">${CHANNEL.topic}</span>
-          <span class="cm-head-count">${CHANNEL.members}</span>
-        </div>
-
-        <!-- Every row, delivered or not, holds its slot from first paint, so
-             the panel is exactly as tall before the first message as it is
-             after the last one and nothing below the section ever moves. -->
-        <ol class="cm-thread">
-          ${THREAD.map(messageHtml).join("")}
-          <li class="cm-typing" data-cm-typing style="order:5">
-            <span class="cm-avatar cm-avatar-app" aria-hidden="true">SF</span>
-            <span class="cm-dots" role="status" aria-label="Sift is typing">
-              <i class="cm-dot"></i><i class="cm-dot"></i><i class="cm-dot"></i>
-            </span>
-          </li>
-        </ol>
-      </div>`;
+  return `<div class="cm-zoom">
+    <div class="cm-panel">
+      <div class="cm-head">#agent-alerts</div>
+      <div class="cm-list">
+        ${MESSAGES.map(
+          (m) => `<div class="cm-slot">
+          <div class="cm-arrive">${messageHtml(m)}</div>
+          <div class="cm-typing" aria-hidden="true">${m.author.avatar}<span class="cm-dots"><i></i><i></i><i></i></span></div>
+        </div>`,
+        ).join("")}
+      </div>
+      <div class="cm-steps">${MESSAGES.map(() => '<span class="cm-step"></span>').join("")}</div>
+    </div>
+  </div>`;
 }
 
 export function render() {
-  return `
-  <section class="cm" aria-labelledby="cm-heading">
-    <div class="cm-grid">
-
-      <div class="cm-copy">
-        <p class="cm-label">Alerts</p>
-        <h2 class="cm-heading" id="cm-heading">Hear about it in the channel you already have open.</h2>
-        <p class="cm-sub">
-          Sift posts the failure into your team's chat with the runs that
-          prove it and a link into the trace that caused it. There is no second
-          dashboard to remember to check at 2am.
-        </p>
-      </div>
-${panel()}
-    </div>
-  </section>`;
+  return panel();
 }
 
 export function mount(root) {
-  const messages = Array.from(root.querySelectorAll("[data-cm-msg]"));
-  const typing = root.querySelector("[data-cm-typing]");
-  if (!messages.length || !typing) return;
+  const slots = [...root.querySelectorAll(".cm-slot")];
+  const steps = [...root.querySelectorAll(".cm-step")];
+  const n = slots.length;
+  let timer = 0;
 
-  let lastSignature = "";
+  /* count = messages delivered. The slot at `count` shows the typing row and
+   * its progress segment fills over STEP_MS; once all are in, only the last
+   * segment is drawn solid, as theirs does. */
+  function paint(count, animate) {
+    slots.forEach((el, i) => {
+      el.classList.toggle("is-in", i < count);
+      el.classList.toggle("is-anim", animate && i < count);
+      el.classList.toggle("is-typing", animate && i === count);
+    });
+    steps.forEach((el, i) => {
+      el.innerHTML = "";
+      if (animate && i === count && count < n)
+        el.innerHTML = '<span class="cm-fill"></span>';
+      if (i === n - 1 && count >= n)
+        el.innerHTML = '<span class="cm-full"></span>';
+    });
+  }
 
-  /* Declarative rather than a replayed event list: state is a pure function of
-   * elapsed time, so applying it twice is the same as applying it once. That is
-   * what makes banking safe. Resuming mid-sequence re-applies whatever the
-   * banked time implies and nothing double-fires. */
-  function apply(elapsed) {
-    let shown = 0;
-    for (let i = 0; i < MESSAGE_AT.length; i += 1) {
-      if (elapsed >= MESSAGE_AT[i]) shown = i + 1;
+  function step(count) {
+    paint(count, true);
+    if (count < n) {
+      timer = window.setTimeout(() => step(count + 1), STEP_MS);
+    } else {
+      timer = window.setTimeout(() => step(0), HOLD_MS);
     }
-    const isTyping = TYPING_WINDOWS.some(([from, to]) => elapsed >= from && elapsed < to);
-    const signature = `${shown}:${isTyping ? 1 : 0}`;
-    if (signature === lastSignature) return;
-    lastSignature = signature;
-
-    messages.forEach((el, i) => el.classList.toggle("is-in", i < shown));
-    typing.classList.toggle("is-on", isTyping);
-    /* Flex `order` parks the indicator in the slot the next message will land
-     * in, rather than at the foot of the panel with the undelivered rows
-     * stranded between. It displaces only rows that are still invisible, so no
-     * visible row moves and the panel's height does not change: the three
-     * screenshot marks all measure 425.2px. Four writes for the whole sequence,
-     * not one per frame, because `apply` bails when the state is unchanged. */
-    typing.style.order = String(shown * 10 + 5);
   }
 
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    root.classList.add("cm-still");
-    apply(SETTLE_MS);
-    return;
-  }
+  const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  paint(n, false);
 
-  apply(0);
-
-  let elapsed = 0;
-  let previous = 0;
-  let frame = 0;
-
-  function tick(now) {
-    elapsed += now - previous;
-    previous = now;
-    apply(elapsed);
-    if (elapsed >= SETTLE_MS) {
-      frame = 0;
-      return;
-    }
-    frame = requestAnimationFrame(tick);
-  }
-
-  function start() {
-    if (frame || elapsed >= SETTLE_MS) return;
-    previous = performance.now();
-    frame = requestAnimationFrame(tick);
-  }
-
-  function stop() {
-    if (!frame) return;
-    cancelAnimationFrame(frame);
-    frame = 0;
-  }
-
-  /* Threshold 0, matching every other figure on the reference. Time only
-   * accumulates while the panel is on screen, so scrolling away and back
-   * resumes the thread rather than replaying it from the first typing dot. */
-  const observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) start();
-        else stop();
-      }
+  return {
+    setActive(on) {
+      window.clearTimeout(timer);
+      if (reduced) return paint(n, false);
+      if (on) step(0);
     },
-    { threshold: 0 },
-  );
-  observer.observe(root);
-
-  return () => {
-    stop();
-    observer.disconnect();
   };
 }

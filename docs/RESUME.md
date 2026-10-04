@@ -10,15 +10,14 @@ Private repo, deliberately. The product on the page is fictional and called
 Sift; none of the reference's brand, copy, customers, marks or font files are
 in this repo and none ever go in.
 
-## The state, measured not remembered
+## The state, measured not remembered (2026-10-03)
 
-    axes matching       117 of 205     57%
+    axes matching       136 of 220     62%   (136 of 209 without header rows)
     instrument check    clean, exit 0
-    page height         ours 16970     theirs 17852
+    page height         ours 17853     theirs 17852
     sections            11 / 11, all paired
-    console errors      0
-    copy check          clean, 213 of their strings checked
-    brand check         0 hits for their name in rendered text
+    console errors      0 at 1440 and 390
+    copy check          clean, 215 of their strings
 
 Regenerate before trusting any of it:
 
@@ -26,46 +25,30 @@ Regenerate before trusting any of it:
     python3 tools/measure2.py http://localhost:8731/index.html OURS
     python3 tools/gendeltas.py
     python3 tools/check_measure.py      # MUST exit 0 before reading a score
-    python3 tools/deltagraph.py         # ranks the causes by fan-out
 
-A measure2 run reloads before each section on both pages, so the pair takes
-about eight minutes. That cost buys the class of bug where the walk destroys
-what it is about to read.
+## Read their code before measuring anything
 
-## Start here, in order
+The hero scene was fitted from scroll samples for days and still wrong. Their
+shipped chunks hold it exactly: `768-*.js` is the scene, `598-*.js` its
+constants, `8331`, `3247`, `7969`, `5133` the four panels. Fetch with
 
-1. `PLAN.md`. Eight waves. Each has ENTRY, WORK, LOOP, EXIT and a STOP block.
-   Wave 1 is open.
-2. `docs/SECTIONS.md`. Every section on both pages, the pairing, and the
-   feature-section template recovered from their DOM.
-3. `docs/DELTAS.md`. One row per section per axis with both numbers.
+    curl -sL https://www.uselemma.ai/ -o page.html
+    grep -oE '/_next/static/chunks/[^"]+\.js' page.html
+
+grep a visible string to find the component, prettify it, read it. Learn the
+mechanism, write our own; never vendor their copy, logos or marks.
 
 ## Where the waves are
 
     Wave 1  structure        CLOSED, docs/waves/W1-structure.md
     Wave 2  design system    CLOSED, docs/waves/W2-design-system.md
-    Wave 3  pinned panels    OPEN, and much smaller than the plan says
+    Wave 3  pinned panels    CLOSED, docs/waves/W3-panels.md (hero scene too)
+    Wave 4  sections below   built to within 1-2px per section, exit doc not
+                             written: the 85% axis target is not met and the
+                             misses are mostly element counts, see W3
 
-Wave 3 shrank once it was measured. The plan called the panels the largest
-item on the page from "their sticky panel holds 504 descendants, ours 32 to
-169", which compared their whole container against our individual panels.
-Measured the same way on both, our stage holds 457 descendants against their
-451 to 511 and our text-leaf counts beat theirs. The density is there.
-
-What is actually left, by fan-out:
-
-    figure element counts differ      25   the hero plates, not the panels
-    the metrics panel is thin         23   STALE: that panel went 5 -> 30
-                                           leaves, the cause was written
-                                           from the old numbers and needs
-                                           re-modelling before it is worked
-    lead paragraph rhythm             13   Wave 2 leftover
-    sections below the demo           11   Wave 4
-    centred headings shrink-to-fit     8   Wave 2 leftover, mostly copy length
-
-Nothing is blocked on Caleb. The Wave 3 STOP question about what the panels
-argue was answered by building: fictional product, invented data, no
-third-party marks.
+What is next: Wave 5 motion (verify the panel crossfade and hero beats on a
+recording), then states, then mobile. The page already holds at 390.
 
 ## The gate
 

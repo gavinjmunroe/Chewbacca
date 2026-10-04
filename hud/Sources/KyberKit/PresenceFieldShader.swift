@@ -332,13 +332,13 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     }
 
     if (inPill) {
-        // The bar is a capsule of the same material: opaque bezel, grain lit
-        // round its rim, dark in the middle where the words sit.
+        // The bar is a capsule of the same bezel with a smooth lit rim, dark
+        // in the middle where the words sit. No grain, glitter or specks:
+        // the words are read here, and on 2026-10-04 the ask was "get rid of
+        // the glitter in the hyper bar".
         float v = clamp(-pillSdf / max(pillHalf.y, 1e-4), 0.0, 1.0);
         float rim = exp(-v * 7.0);
-        float pillLum = grain * rim * (0.9 + 0.6 * light);
-        float pillSpeck = step(pixelHash(px, 6u), 0.05 * (1.0 - rim)) * 0.35;
-        lum = pillLum + pillSpeck;
+        lum = rim * 0.55 * (0.9 + 0.6 * light);
         backA = 0.92;
         born = U.pillOn;
     }

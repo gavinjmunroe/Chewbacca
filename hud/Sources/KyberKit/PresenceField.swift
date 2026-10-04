@@ -7,9 +7,14 @@ import SwiftUI
 /// there are seven states: it takes three numbers and a frame rate, so adding
 /// a state is a row in that table rather than a branch in Metal.
 struct PresenceFieldStyle: Equatable {
-    /// How deep the pool sits at rest, measured from the screen edge inward.
+    /// How deep the band sits at rest, in points from the screen edge inward.
     ///
-    /// Not the same quantity these numbers used to hold. The shader's band
+    /// Points since 2026-10-04. It was screen heights, which made the same
+    /// state a different thickness on every display, and the titanium band
+    /// was asked for at a size ("about 14pt"), not a fraction. The renderer
+    /// divides by the view's height in points before it reaches the shader.
+    ///
+    /// Before that it was not the same quantity either. The shader's band
     /// used to be measured from zero and the screen edge sat at 0.200 of it,
     /// so most of every value here was spent getting to the edge and only the
     /// remainder was visible. Scaling those old numbers down on 2026-09-19
@@ -18,7 +23,7 @@ struct PresenceFieldStyle: Equatable {
     /// leaves the corners, where the silhouette dips, as four smudges. Now
     /// this is the visible depth directly, so halving it halves the band.
     var rest: Double
-    /// How fast the contour field travels round the edge.
+    /// How fast the light travels round the edge.
     var drift: Double
     /// What the body is multiplied by, and how much of it to take. rgb then
     /// amount, so `FieldTint.steel` at amount zero leaves the palette alone.
@@ -86,6 +91,12 @@ extension Presence {
     /// 0.018, thinking 0.029 to 0.023, acting 0.061 to 0.049, done 0.038 to
     /// 0.030, attention 0.094 to 0.075, failed 0.072 to 0.058. Dormant is
     /// still zero, because zero is the one value that draws nothing.
+    ///
+    /// Then, on 2026-10-04, converted to points with the titanium band:
+    /// attentive set to 14 as asked, and every other state moved with it by
+    /// the same ratio it had to attentive, so hearing 6.5, thinking 8, acting
+    /// 18, done 11, attention 27, failed 21. On an 800 point display that is
+    /// about 0.45 of the old heights, which is the "closer to the edge".
     var field: PresenceFieldStyle {
         switch self {
         case .dormant:
@@ -95,7 +106,7 @@ extension Presence {
                 rest: 0, drift: 0, tint: FieldTint.steel, pulse: 0, fps: 1, animating: false)
         case .attentive:
             return .init(
-                rest: 0.039, drift: 0.5, tint: FieldTint.steel, pulse: 0, fps: 20,
+                rest: 14, drift: 0.5, tint: FieldTint.steel, pulse: 0, fps: 20,
                 animating: true)
         case .hearing, .speaking:
             // The two states driven from outside. `rest` here is a floor and
@@ -110,14 +121,14 @@ extension Presence {
             // flow reads as fast while the two stay apart: a voice is thick
             // and moving with the sound, thinking is thin and sprinting.
             return .init(
-                rest: 0.018, drift: 2.4, tint: FieldTint.steel, pulse: 0, fps: 60,
+                rest: 6.5, drift: 2.4, tint: FieldTint.steel, pulse: 0, fps: 60,
                 animating: true)
         case .thinking:
             // Thin and fast. Work reads as travel round the edge rather than
             // as weight on it, and it is still white: nothing has been done to
             // the machine yet.
             return .init(
-                rest: 0.023, drift: 3.2, tint: FieldTint.steel, pulse: 0, fps: 30,
+                rest: 8, drift: 3.2, tint: FieldTint.steel, pulse: 0, fps: 30,
                 animating: true)
         case .acting:
             // Green and breathing, and the only state that breathes on its own
@@ -125,7 +136,7 @@ extension Presence {
             // and that is the one thing in this vocabulary worth a colour they
             // cannot miss.
             return .init(
-                rest: 0.049, drift: 1.1, tint: FieldTint.green, pulse: 0.8, fps: 30,
+                rest: 18, drift: 1.1, tint: FieldTint.green, pulse: 0.8, fps: 30,
                 animating: true, embers: 1)
         case .done:
             // Darker green, calm, and still alive. The same hue as `acting`
@@ -146,18 +157,18 @@ extension Presence {
             // living instrument. Slower than `attentive`'s 0.5 so it reads
             // as settled rather than waiting, at its rate.
             return .init(
-                rest: 0.030, drift: 0.35, tint: FieldTint.deepGreen, pulse: 0, fps: 20,
+                rest: 11, drift: 0.35, tint: FieldTint.deepGreen, pulse: 0, fps: 20,
                 animating: true)
         case .attention:
             // The thickest, because this is the one that has to be noticed. It
             // stays white: green and red are spoken for, and a third hue here
             // would make the palette decoration again.
             return .init(
-                rest: 0.075, drift: 0.9, tint: FieldTint.steel, pulse: 0, fps: 30,
+                rest: 27, drift: 0.9, tint: FieldTint.steel, pulse: 0, fps: 30,
                 animating: true)
         case .failed:
             return .init(
-                rest: 0.058, drift: 0.3, tint: FieldTint.red, pulse: 0, fps: 20,
+                rest: 21, drift: 0.3, tint: FieldTint.red, pulse: 0, fps: 20,
                 animating: true)
         }
     }
@@ -680,9 +691,11 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
         let pixelsPerPoint = Float(size.height) / Float(max(view.bounds.height, 1))
         let radius = Self.partRadius * pixelsPerPoint / Float(max(size.height, 1))
         let feather = Self.partFeather * pixelsPerPoint / Float(max(size.height, 1))
+        // `rest` is points in the table and screen heights in the shader.
+        let restTarget = Float(style.rest) / Float(max(view.bounds.height, 1))
         let pointer = Self.pointer
         let partTarget = Self.parting(
-            pointer: pointer, aspect: W, rest: Float(style.rest),
+            pointer: pointer, aspect: W, rest: restTarget,
             reach: radius + feather)
         if let p = pointer {
             pointerX.step(toward: Float(p.x), dt: dt)
@@ -692,7 +705,7 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
         // Release slower than attack, or the band shakes between syllables.
         heard.tau = heardTarget > heard.shown ? 0.04 : 0.16
 
-        rest.step(toward: closing ? rest.shown : Float(style.rest), dt: dt)
+        rest.step(toward: closing ? rest.shown : restTarget, dt: dt)
         drift.step(toward: Float(style.drift), dt: dt)
         pulseRate.step(toward: Float(style.pulse), dt: dt)
         pulseDepth.step(toward: style.pulse > 0 ? 1 : 0, dt: dt)
@@ -759,7 +772,7 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
         let pillTarget: Float = frame.pill == nil ? 0 : 1
         pillOn.step(toward: pillTarget, dt: dt)
 
-        let settled = rest.settled(at: Float(style.rest))
+        let settled = rest.settled(at: restTarget)
             && drift.settled(at: Float(style.drift))
             && pulseRate.settled(at: Float(style.pulse))
             && pulseDepth.settled(at: style.pulse > 0 ? 1 : 0)

@@ -38,10 +38,11 @@ final class FieldPipeline {
     static let rippleSamples = 32
     /// Seconds between them. Matches RIPPLE_STEP.
     static let rippleStep = 0.05
-    /// How much of the blurred rims is added back. Guessed, then judged on
-    /// the snapshot: more and the band reads as fog, less and the rims stop
-    /// at a hard edge again.
-    static let bloomStrength: Float = 1.3
+    /// How much of the blur is added back. 1.3 suited the liquid band, whose
+    /// rims needed it to stop reading as a hard edge. The titanium band of
+    /// 2026-10-04 is meant to be crisp, so only a little halo round each glint.
+    /// Guessed, then judged on the snapshot.
+    static let bloomStrength: Float = 0.35
 
     private let field: MTLRenderPipelineState
     private let down: MTLRenderPipelineState

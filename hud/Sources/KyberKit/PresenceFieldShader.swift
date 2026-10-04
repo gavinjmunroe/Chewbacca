@@ -55,6 +55,22 @@ static inline float perimeterAt(float2 uv, float W) {
     return s / (2.0 * W + 2.0);
 }
 
+/// `perimeterAt`, but continuous through the corners. The plain one switches
+/// edge on the corner's diagonal, which drew the flowing brushed streaks with
+/// a hard mitre seam in each corner. Inside a corner square of side `R` this
+/// blends the two edges' positions by the angle round the corner instead.
+static inline float perimeterRound(float2 uv, float W, float R) {
+    float x = uv.x * W, y = uv.y;
+    float2 c = float2(clamp(x, R, W - R), clamp(y, R, 1.0 - R));
+    float2 d = float2(x, y) - c;
+    if (d.x == 0.0 || d.y == 0.0) return perimeterAt(uv, W);
+    float onFlat = perimeterAt(float2(c.x / W, y), W);
+    float onSide = perimeterAt(float2(uv.x, c.y), W);
+    float w = atan2(abs(d.y), abs(d.x)) / 1.5707963;
+    float gap = fract(onFlat - onSide + 0.5) - 0.5;
+    return fract(onSide + gap * w);
+}
+
 /// How far apart two perimeter positions are, the short way round, in screen
 /// heights.
 static inline float along(float a, float b, float W) {
@@ -265,18 +281,44 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
 
     // Brushed: a hash per row of pixels across the band, interpolated slowly
     // along it, so the streaks run with the edge and bend round the corners.
+    //
+    // And it flows. "It has to be moving somehow within it" (2026-10-04): a
+    // still surface under a moving light read as a picture of metal. So the
+    // streaks travel round the frame like a part turning on a lathe, pushed
+    // by the same `travel` the light is, so they crawl at rest and run while
+    // the assistant works. A second, coarser layer runs the other way at a
+    // third of the speed, and where the two cross the brushing shifts the
+    // way a turning surface does. Motion of the whole texture, never of a
+    // single grain: grains moving on their own was the fairy dust.
     float rowPx = e * size.y;
-    float alongPx = here * P * size.y / 60.0;
     float row = floor(rowPx);
-    float cell = floor(alongPx);
+    float runPx = U.travel * 70.0 * size.y / 800.0;
+    // Cells counted in whole numbers round the frame and wrapped, so the
+    // texture meets itself at the top-left corner, where the perimeter goes
+    // from 1 back to 0. Unwrapped, that corner drew a hard diagonal seam.
+    float round = perimeterRound(uv, W, depth + 0.012);
+    float cells = max(floor(P * size.y / 60.0), 1.0);
+    float alongPx = round * cells + runPx / 60.0;
+    float cell = fmod(floor(alongPx), cells);
     float t01 = smoothstep(0.0, 1.0, fract(alongPx));
-    float brush = mix(pixelHash(float2(cell, row), 11u), pixelHash(float2(cell + 1.0, row), 11u), t01);
+    float brush = mix(pixelHash(float2(cell, row), 11u),
+                      pixelHash(float2(fmod(cell + 1.0, cells), row), 11u), t01);
+    float cells2 = max(floor(P * size.y / 140.0), 1.0);
+    float backPx = round * cells2 - runPx * 0.33 / 140.0;
+    float band = floor(row / 3.0);
+    float cell2 = fmod(floor(backPx), cells2);
+    cell2 += cell2 < 0.0 ? cells2 : 0.0;
+    float t02 = smoothstep(0.0, 1.0, fract(backPx));
+    float brush2 = mix(pixelHash(float2(cell2, band), 13u),
+                       pixelHash(float2(fmod(cell2 + 1.0, cells2), band), 13u), t02);
     float bead = pixelHash(floor(fragPos.xy), 12u);
-    float texture = 0.86 + 0.28 * brush + 0.06 * (bead - 0.5);
+    float texture = 0.80 + 0.26 * brush + 0.18 * brush2 + 0.05 * (bead - 0.5);
 
     // The studio light: one light circling the frame at the state's drift.
     // At rest (drift 0.5) a lap takes about 33 s; thinking takes about 5.
-    float lightAt = fract(U.travel * 0.06);
+    // Faster than the first cut (0.06, about 33 s a lap at rest), which on
+    // screen was too slow to read as moving at all: now about 13 s.
+    float lightAt = fract(U.travel * 0.15);
     float fromLight = along(here, lightAt, W) / P;
     float broad = exp(-pow(fromLight / 0.12, 2.0));
     float hard = exp(-pow(fromLight / 0.035, 2.0));
@@ -285,7 +327,9 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // so it reads as something going somewhere. Its strength follows the
     // drift: nothing at rest, clear while listening, full while thinking.
     // Acting carries three, evenly spaced, so it reads as a machine running.
-    float streakOn = max(smoothstep(0.8, 2.6, U.drift), U.embers);
+    // A faint streak even at rest, so there is always something going
+    // somewhere round the frame while the assistant is up.
+    float streakOn = max(max(0.30, smoothstep(0.8, 2.6, U.drift)), U.embers);
     float streak = 0.0;
     if (streakOn > 0.001) {
         float head = fract(U.travel * 0.12);
@@ -307,9 +351,18 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
                 (1.0 - smoothstep(1.1, 1.6, U.sweep));
     }
 
-    float faceLum = (0.18 + 0.55 * broad + 0.30 * ripple + 0.5 * crest) * texture *
+    // A sheen rolling across the face, glass side to bevel and back, at a
+    // different place at every point round the frame: the reflection a
+    // curved face throws as it turns. Driven by `travel`, like everything
+    // else that moves here, so it slows and quickens with the state.
+    float sheenAt = 0.42 + 0.30 * sin(U.travel * 0.9 + round * 6.2831853 * 2.0);
+    float sheen = exp(-pow((u - sheenAt) / 0.16, 2.0));
+
+    // Brighter than the first cut (0.18 at the floor), which read as a
+    // shadow round the screen rather than as a solid frame: "more opaque".
+    float faceLum = (0.30 + 0.50 * broad + 0.28 * sheen + 0.30 * ripple + 0.5 * crest) * texture *
                     mix(1.0, 0.82, clamp(u / BEVEL_AT, 0.0, 1.0));
-    float bevelLum = 0.45 + 1.6 * hard + 1.5 * ripple + 1.8 * crest;
+    float bevelLum = 0.55 + 1.6 * hard + 1.5 * ripple + 1.8 * crest;
     float streakLum = 2.4 * streak;
 
     // Black titanium on the face, near white where the bevel catches light.
@@ -333,7 +386,8 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     float body = 1.0 - smoothstep(1.0 - aa, 1.0, u);
     float bevel = smoothstep(BEVEL_AT - aa, BEVEL_AT + aa, u);
     float3 c = mix(face * faceLum, edge * bevelLum + hot * streakLum, bevel) * body;
-    float a = 0.96 * body;
+    // Fully opaque: a frame, not a tint over the screen.
+    float a = body;
 
     // The seating shadow just inside the cut: alpha only, so it darkens the
     // screen under it rather than drawing a colour.

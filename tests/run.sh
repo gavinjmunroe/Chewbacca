@@ -183,6 +183,8 @@ if group "site-gate"; then
       check "bad page flags: $needle" grep -qF -- "$needle" "$TMP/sg.out"
     done
     exits  "clean page passes" 0 "$ROOT/bin/site-gate" check "$SG/good.html"
+    exits  "a page marked @404 that 404s passes" 0 "$ROOT/bin/site-gate" check "$SG/missing.html@404"
+    exits  "the same 404 unmarked fails" 1 "$ROOT/bin/site-gate" check "$SG/missing.html"
     kill "$SGPID" 2>/dev/null; wait "$SGPID" 2>/dev/null
   else
     skip "site-gate" "playwright or Pillow missing"

@@ -8,6 +8,7 @@ does under a hand, and where every control goes. The craft is written in
 crafts/website.md. Prose does not fire, so this is the half that does.
 
     site-gate check <url> [<url>...]   exit 1 on any failure below
+                                        (write url@404 for a page meant to 404)
     site-gate idle <url> [--ref <url>] what moves while nobody touches it
 
 check, at 1440x900 and 390x844, on every url given:
@@ -84,6 +85,11 @@ def launch(pw):
 
 def check_page(pw, url, out):
     fails = []
+    # A not-found page is meant to answer 404 (T Combinator's unknown-slug
+    # page, 2026-10-04); url@404 says so, and any other status then fails.
+    expect = 200
+    if "@" in url.rsplit("/", 1)[-1] and url.rsplit("@", 1)[-1].isdigit():
+        url, expect = url.rsplit("@", 1)[0], int(url.rsplit("@", 1)[-1])
     b = launch(pw)
     for w, h in SIZES:
         ctx = b.new_context(viewport={"width": w, "height": h})
@@ -92,8 +98,9 @@ def check_page(pw, url, out):
         pg.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
         pg.on("pageerror", lambda e: errs.append(str(e)))
         resp = pg.goto(url, wait_until="networkidle", timeout=60000)
-        if resp is None or resp.status >= 400:
-            fails.append(f"{w}: {url} answered {resp.status if resp else 'nothing'}")
+        status = resp.status if resp else None
+        if status is None or (status >= 400 and status != expect) or (expect != 200 and status != expect):
+            fails.append(f"{w}: {url} answered {status if status else 'nothing'}, expected {expect}")
             ctx.close(); continue
         pg.wait_for_timeout(2500)
         # walk the page so lazy sections mount and their errors surface
@@ -140,6 +147,8 @@ def check_page(pw, url, out):
                 if hov == base and foc == base:
                     inert.append(pg.evaluate("e => (e.tagName + ' ' + (e.getAttribute('aria-label') || e.textContent || '').trim().slice(0,40))", el))
             fails += [f"no hover and no focus state: {x}" for x in inert]
+        if expect == 404:
+            errs = [e for e in errs if "404" not in e]
         fails += [f"{w}: console: {e[:160]}" for e in errs]
         ctx.close()
     # reduced motion: nothing infinite may run
@@ -151,7 +160,7 @@ def check_page(pw, url, out):
           ? a.effect.target.className.baseVal : a.effect.target && a.effect.target.className) || '').toString().slice(0, 30))""")
     fails += [f"runs under reduced motion: {r}" for r in sorted(set(running))]
     ctx.close(); b.close()
-    out[url] = fails
+    out[url + (f"@{expect}" if expect != 200 else "")] = fails
     return fails
 
 

@@ -108,8 +108,10 @@ struct Uniforms {
     /// rgb is what the body is multiplied by, a is how much of it to take.
     float4 tint;
     /// The hyper bar's rectangle, unit coordinates, top-left origin: x, y,
-    /// width, height. Its body is drawn here, out of the same liquid as the
-    /// band, so the bar and the edge read as one material.
+    /// width, height. Unread since 2026-10-04: the bar's body was drawn here,
+    /// and its soft rim never lined up with the words on top ("hyper bar is
+    /// not clean, looks like shit"), so `PillView` draws it now. Kept so the
+    /// layout matches `FieldUniforms` without a second change there.
     float4 pill;
     float2 size;
     /// Unit coordinates, top-left origin. Off screen when there is no pointer.
@@ -249,17 +251,6 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     }
     depth *= 1.0 + 0.6 * ripple;
 
-    float pillSdf = 1.0;
-    float2 pillHalf = float2(0.0);
-    if (U.pillOn > 0.001) {
-        float2 pillCentre = (U.pill.xy + U.pill.zw * 0.5) * float2(W, 1.0);
-        pillHalf = U.pill.zw * 0.5 * float2(W, 1.0) * mix(0.6, 1.0, U.pillOn);
-        float radius = pillHalf.y;
-        float2 box = abs(uv * float2(W, 1.0) - pillCentre) - (pillHalf - radius);
-        pillSdf = length(max(box, 0.0)) + min(max(box.x, box.y), 0.0) - radius;
-    }
-    bool inPill = pillSdf < 0.0;
-
     // Corner radius of the inner edge, in screen heights. The display's own
     // corners are about 10 pt; 0.012 of an 800 pt screen is close to that, so
     // the inner edge follows the glass rather than cutting across it.
@@ -276,7 +267,7 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // How far in the seating shadow reaches past the inner edge, in screen
     // heights: about 2.5 pt on an 800 pt display.
     const float SHADOW = 0.003;
-    if (!inPill && e > depth + SHADOW) {
+    if (e > depth + SHADOW) {
         return half4(0.0);
     }
 
@@ -417,19 +408,6 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // screen under it rather than drawing a colour.
     float past = (e - depth) / SHADOW;
     if (past > 0.0) a = max(a, 0.35 * exp(-past * 2.5) * (1.0 - body));
-
-    if (inPill) {
-        // The bar is a capsule of the same bezel with a smooth lit rim, dark
-        // in the middle where the words sit. No grain, glitter or specks:
-        // the words are read here, and on 2026-10-04 the ask was "get rid of
-        // the glitter in the hyper bar".
-        float v = clamp(-pillSdf / max(pillHalf.y, 1e-4), 0.0, 1.0);
-        float rim = exp(-v * 7.0);
-        const float3 BEZEL = float3(0.022, 0.024, 0.028);
-        c = BEZEL * 0.92 + edge * rim * 0.55 * (0.9 + 0.6 * broad);
-        a = 0.92;
-        born = U.pillOn;
-    }
 
     c *= mix(0.70, 1.0, wave) * born;
     a *= born * U.alpha;

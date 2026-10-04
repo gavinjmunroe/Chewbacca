@@ -811,7 +811,7 @@ if group "installer"; then
   # while skills/graph-engineering sat there holding the task-graph rules.
   check  "the skill router names a skill for a request one covers" bash -c '
     out=$(printf "%s" "{\"prompt\":\"build a knowledge graph and dedupe entities across sources\",\"cwd\":\"$1\"}" \
-      | "$1/.claude/hooks/skill-route.sh" 2>/dev/null)
+      | SKILL_ROUTE_NO_VECTOR=1 "$1/.claude/hooks/skill-route.sh" 2>/dev/null)
     case "$out" in *graph-engineering*) : ;;
       *) echo "router said nothing for a graph request"; exit 1 ;; esac' _ "$ROOT"
 
@@ -819,8 +819,17 @@ if group "installer"; then
   # the failure it exists to prevent. Silence is the common case.
   check  "the skill router stays silent on an unrelated prompt" bash -c '
     out=$(printf "%s" "{\"prompt\":\"whats the weather like today\",\"cwd\":\"$1\"}" \
-      | "$1/.claude/hooks/skill-route.sh" 2>/dev/null)
+      | SKILL_ROUTE_NO_VECTOR=1 "$1/.claude/hooks/skill-route.sh" 2>/dev/null)
     [ -z "$out" ] || { echo "routed noise: $out"; exit 1; }' _ "$ROOT"
+
+  # The meaning-first path (2026-10-03). With Ollama unreachable it has to fall
+  # back to the stem matcher rather than go quiet, or one stopped app silences
+  # the router everywhere.
+  check  "the skill router falls back to keywords when Ollama is down" bash -c '
+    out=$(printf "%s" "{\"prompt\":\"build a knowledge graph and dedupe entities across sources\",\"cwd\":\"$1\"}" \
+      | OLLAMA_HOST=http://127.0.0.1:9 CHEWBACCA_HOME="$(mktemp -d)" "$1/.claude/hooks/skill-route.sh" 2>/dev/null)
+    case "$out" in *graph-engineering*) : ;;
+      *) echo "fallback said nothing: $out"; exit 1 ;; esac' _ "$ROOT"
 
   # It shipped to one machine once before and never reached anybody else.
   check  "the skill router is registered in the shipped settings" \

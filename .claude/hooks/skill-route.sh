@@ -2,7 +2,9 @@
 # Timing, logging, a watchdog and an output cap. See lib.sh.
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
-type hook_init >/dev/null 2>&1 && hook_init skill-route.sh 5
+# The detached child that embeds the skill catalog gets no watchdog: a cold
+# model load plus ~120 descriptions overruns the 5s a live prompt is allowed.
+type hook_init >/dev/null 2>&1 && hook_init skill-route.sh "$([ -n "${SKILL_ROUTE_BUILD_CACHE:-}" ] && echo 0 || echo 5)"
 # Name the skill that already covers this request, at the moment it is typed.
 #
 # THE FAILURE THIS EXISTS FOR, 2026-09-21. Caleb: "Chewbacca's resourcefulness
@@ -29,6 +31,7 @@ type hook_init >/dev/null 2>&1 && hook_init skill-route.sh 5
 
 SKILL_ROUTE_PAYLOAD=$(cat)
 export SKILL_ROUTE_PAYLOAD
+export SKILL_ROUTE_SELF="${BASH_SOURCE[0]}"
 
 exec python3 <<'PY'
 import json, os, re, sys
@@ -170,6 +173,80 @@ for root in ROOTS:
 if not skills:
     raise SystemExit(0)
 
+# Meaning first, keywords as the fallback. Added 2026-10-03.
+#
+# The stem matcher below routed "design an agentic pipeline ... vector
+# database ... python" to xlsx on pipel, pytho and datab, and gated tool calls
+# on graph-engineering three times in one session for prompts that only shared
+# words with it. Scored on the blind 40-case calibration set from 2026-09-26,
+# the stem matcher got 29/40. embeddinggemma (local, via Ollama) over
+# "name: description" got 34/40 with its threshold chosen leave-one-out, and
+# 9/12 against the stem matcher's 8/12 on the separate 12-case dev fixture.
+# nomic-embed-text tied the stem matcher at 29 and mxbai reached 31, which is
+# why the model is this one.
+#
+# VEC_MIN is the threshold all 40 leave-one-out folds converged near. Below it
+# the router says nothing, which is right for "what's the weather" and the
+# other no-skill cases that made up 18 of the 40.
+VEC_MODEL = "embeddinggemma"
+VEC_MIN = float(os.environ.get("SKILL_ROUTE_VEC_MIN", "0.34"))
+VEC_QUERY = "task: search result | query: "
+
+def _embed(texts, timeout):
+    import urllib.request
+    req = urllib.request.Request(
+        os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/") + "/api/embed",
+        data=json.dumps({"model": VEC_MODEL, "input": texts, "keep_alive": "30m"}).encode(),
+        headers={"Content-Type": "application/json"})
+    out = json.load(urllib.request.urlopen(req, timeout=timeout))["embeddings"]
+    return [_unit(v) for v in out]
+
+def _unit(v):
+    n = sum(x * x for x in v) ** 0.5 or 1.0
+    return [x / n for x in v]
+
+def vector_route():
+    """[(cos, name, path)] best first, [] to abstain, None when unavailable.
+
+    Skill vectors are cached by a hash of the catalog text, so a new or edited
+    SKILL.md re-embeds once. A cold cache is built in a detached child and this
+    prompt falls back to keywords: embedding ~120 descriptions while the model
+    loads can take longer than the hook's budget."""
+    import hashlib, subprocess
+    docs = [f"{n}: {d}" for n, d, _p in skills]
+    key = hashlib.sha256((VEC_MODEL + "\n" + "\n".join(docs)).encode()).hexdigest()[:16]
+    cache_dir = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "cache")
+    cache = os.path.join(cache_dir, f"skill-vectors-{key}.json")
+    if os.environ.get("SKILL_ROUTE_BUILD_CACHE") == cache:
+        os.makedirs(cache_dir, exist_ok=True)
+        vecs = _embed(docs, 120)
+        tmp = cache + ".tmp"
+        with open(tmp, "w") as fh:
+            json.dump(vecs, fh)
+        os.replace(tmp, cache)
+        raise SystemExit(0)
+    try:
+        with open(cache) as fh:
+            vecs = json.load(fh)
+    except (OSError, ValueError):
+        if not os.path.exists(cache + ".tmp"):
+            env = dict(os.environ, SKILL_ROUTE_BUILD_CACHE=cache)
+            subprocess.Popen(["bash", os.environ.get("SKILL_ROUTE_SELF", "")], env=env,
+                             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True
+                             ).stdin.write(json.dumps(payload).encode())
+        return None
+    if len(vecs) != len(skills):
+        return None
+    try:
+        q = _embed([VEC_QUERY + prompt[:2000]], 1.5)[0]
+    except Exception:
+        return None
+    scored = sorted(((sum(a * b for a, b in zip(q, v)), i) for i, v in enumerate(vecs)), reverse=True)
+    return [(c, skills[i][0], skills[i][2]) for c, i in scored[:2] if c >= VEC_MIN][:1]
+
+vec = None if os.environ.get("SKILL_ROUTE_NO_VECTOR") else vector_route()
+
 prompt_stems = stems(prompt)
 prompt_bigrams = bigrams(stem_seq(prompt))
 
@@ -181,7 +258,9 @@ for _n, desc, _p in skills:
         claims[s] = claims.get(s, 0) + 1
 
 best = []
-for name, desc, path in skills:
+if vec is not None:
+    best = [(c, name, path, [f"meaning {c:.2f}"]) for c, name, path in vec]
+for name, desc, path in ([] if vec is not None else skills):
     d_stems = stems(desc)
     hits = prompt_stems & d_stems
     if not hits:
@@ -246,7 +325,13 @@ for score, name, path, why in top:
 # from 2026-09-21 (feedback_fan_out_dont_read_serially). An advisory line that
 # was ignored twice is a log line, so for these skills it becomes a gate.
 ENFORCED = {"graph-engineering"}
-required = [name for _s, name, _p, _w in top if name in ENFORCED]
+# A meaning match only gates when it is clear of the noise floor. On
+# 2026-10-03 "design an agentic pipeline with a vector database" matched the
+# video skill at 0.35, one hundredth over VEC_MIN: fine as a suggestion the
+# model can wave off, wrong as a refusal. 0.45 is guessed, never measured.
+VEC_GATE = 0.45
+required = [name for s, name, _p, _w in top
+            if name in ENFORCED and (vec is None or s >= VEC_GATE)]
 sid = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("session_id") or ""))
 if required and sid:
     state = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "state")

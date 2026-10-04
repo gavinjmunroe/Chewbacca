@@ -2,6 +2,10 @@
    every selector starts at `body` so it outranks the earlier rules without
    !important. Numbers are theirs at 1440x900 (lower-brief/p_ref2.txt). */
 
+/* The banner orbit and hero scroll cue (ambient.js). Imported here so the
+   chrome's ambient loops ship with the chrome and index.html is untouched. */
+@import url("ambient.css");
+
 /* ---- nav --------------------------------------------------------------- */
 /* Fixed, 56 tall, 70% canvas with a blur. Inside, a 1600-capped grid of
    1fr auto 1fr with 30px left and 24px right padding, so the logo sits at

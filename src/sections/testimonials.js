@@ -60,6 +60,22 @@ const GAP = 16;
 const STEP_MS = 450;
 const STEP_EASE = "cubic-bezier(.33,0,.15,1)";
 
+/* AUTO-SCROLL. Theirs (chunk 1204) installs Embla AutoScroll at `speed: .4`
+   with startDelay 0, and states.md measured it at one 389px step per 14.8
+   to 15.5s, 25.1 to 26.3px/s. 25.7 is the middle of that. Embla's speed is
+   per frame; ours is per millisecond, so a 120Hz screen does not run it
+   twice as fast. */
+const AUTO_PX_PER_S = 25.7;
+/* Theirs stops on pointer enter and on focus inside the carousel region,
+   and resumes on leave and blur with play(0). Both edges add
+   `transition-transform 450ms ease-out` to the track for 450ms so the stop
+   and the restart ease rather than snap. Ours ramps the speed itself over
+   the same 450ms on an ease-out, which reads the same and keeps the
+   transform written by one hand. */
+const AUTO_EASE_MS = 450;
+/* A hidden tab pauses rAF; cap the step so the row does not leap on return. */
+const AUTO_MAX_DT = 50;
+
 const initials = name =>
   name.split(/\s+/).slice(0, 2).map(w => w[0]).join("").toUpperCase();
 
@@ -117,8 +133,16 @@ export function mount(root) {
 
   const N = cards.length;
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-  let index = 0, step = 0, start = 0, width = 0, card = 0;
+  /* pos is the ring position in cards, fractional while auto-scrolling:
+     card i sits at slot i - pos. index is the nearest whole card, which is
+     what the dots show (Embla's selectedScrollSnap). */
+  let pos = 0, index = 0, step = 0, start = 0, width = 0, card = 0;
   const lastSlot = new Map();
+  const lastHidden = new Map();
+  let dotsDrawn = false;
+  /* A click step owns the transforms for its 450ms; the auto-scroll waits
+     it out instead of overwriting the transition on the next frame. */
+  let holdUntil = 0;
 
   /* --tst-basis is the share of (viewport + gap) one step takes, and
      --tst-start where the first card rests as a share of the viewport. Both
@@ -136,10 +160,12 @@ export function mount(root) {
   }
 
   const slotOf = i => {
-    const r = ((i - index) % N + N) % N;
+    const r = ((i - pos) % N + N) % N;
     return r <= N / 2 ? r : r - N;
   };
 
+  /* animate: true for a click step (450ms on their curve), false for the
+     per-frame auto-scroll write and for layout. */
   function place(animate) {
     for (const cardEl of cards) {
       const s = slotOf(+cardEl.dataset.i);
@@ -148,33 +174,46 @@ export function mount(root) {
       /* Only the slide duration is set here. The hover lift and border in
          testimonials.css ride the same transition list, and an inline
          `transition` would have overwritten them. */
-      cardEl.style.setProperty("--tst-move",
-        (!animate || wrapped || reduced.matches) ? "0ms" : `${STEP_MS}ms`);
+      const move = (!animate || wrapped || reduced.matches) ? "0ms" : `${STEP_MS}ms`;
+      if (cardEl.style.getPropertyValue("--tst-move") !== move)
+        cardEl.style.setProperty("--tst-move", move);
       const x = start + s * step;
       cardEl.style.transform = `translate3d(${x.toFixed(2)}px,0,0)`;
-      /* Only a card wholly inside the window is announced. */
-      const whole = x >= -0.5 && x + card <= width + 0.5;
-      cardEl.setAttribute("aria-hidden", whole ? "false" : "true");
+      /* Only a card wholly inside the window is announced. Written only on
+         change: at 60 writes a second the attribute churn would otherwise
+         be constant. */
+      const hidden = !(x >= -0.5 && x + card <= width + 0.5);
+      if (lastHidden.get(cardEl) !== hidden) {
+        cardEl.setAttribute("aria-hidden", hidden ? "true" : "false");
+        lastHidden.set(cardEl, hidden);
+      }
       lastSlot.set(cardEl, s);
     }
-    dots.forEach((d, k) => {
-      const on = k === index;
-      d.classList.toggle("on", on);
-      /* aria-current, as theirs does. The row is a set of buttons, not a
-         tablist: a tablist needs tabpanels and roving focus, and theirs
-         gives every dot its own tab stop. */
-      if (on) d.setAttribute("aria-current", "true");
-      else d.removeAttribute("aria-current");
-    });
+    const near = ((Math.round(pos) % N) + N) % N;
+    if (near !== index || animate || !dotsDrawn) {
+      index = near;
+      dotsDrawn = true;
+      dots.forEach((d, k) => {
+        const on = k === index;
+        d.classList.toggle("on", on);
+        /* aria-current, as theirs does. The row is a set of buttons, not a
+           tablist: a tablist needs tabpanels and roving focus, and theirs
+           gives every dot its own tab stop. */
+        if (on) d.setAttribute("aria-current", "true");
+        else d.removeAttribute("aria-current");
+      });
+    }
   }
 
   function go(to) {
-    index = ((to % N) + N) % N;
+    /* Steps land on whole cards, from wherever auto-scroll had got to. */
+    pos = ((to % N) + N) % N;
+    holdUntil = performance.now() + STEP_MS;
     place(true);
   }
 
-  const onPrev = () => go(index - 1);
-  const onNext = () => go(index + 1);
+  const onPrev = () => go(Math.round(pos) - 1);
+  const onNext = () => go(Math.round(pos) + 1);
   const onDot = e => {
     const b = e.target.closest(".tst-dot");
     if (b) go(+b.dataset.i);
@@ -198,15 +237,93 @@ export function mount(root) {
   const stage = root.querySelector(".tst-stage");
   stage.addEventListener("keydown", onKey);
 
+  /* ---- auto-scroll ---- */
+  let hovered = false, focusIn = false, onScreen = false;
+  let ramp = 0;           /* 0..1, linear in time over AUTO_EASE_MS */
+  let speed = 0;          /* share of AUTO_PX_PER_S, eased from ramp */
+  let raf = 0, last = 0;
+  const wantPlay = () => !hovered && !focusIn && !reduced.matches;
+  const live = () => onScreen && !document.hidden && !reduced.matches &&
+    (wantPlay() || speed > 0);
+
+  function frame(now) {
+    raf = 0;
+    const dt = last ? Math.min(AUTO_MAX_DT, now - last) : 0;
+    last = now;
+    /* An ease-out on position, both ways: stopping, the speed falls as
+       (1 - t)^2, the derivative of their ease-out curve; starting, it
+       rises the mirror way, so the row answers at once and settles in. */
+    const up = wantPlay();
+    ramp = Math.min(1, Math.max(0, ramp + (up ? 1 : -1) * (dt / AUTO_EASE_MS)));
+    speed = up ? 1 - (1 - ramp) * (1 - ramp) : ramp * ramp;
+    if (speed > 0 && step > 0 && now >= holdUntil) {
+      pos = (pos + (speed * AUTO_PX_PER_S * dt) / 1000 / step) % N;
+      place(false);
+    }
+    if (live()) raf = requestAnimationFrame(frame);
+  }
+  function update() {
+    /* While it moves on its own, polite announcements would read a new
+       card every few seconds; the region goes quiet until it stops. */
+    viewport.setAttribute("aria-live", wantPlay() && !reduced.matches ? "off" : "polite");
+    if (live()) {
+      if (!raf) { last = 0; raf = requestAnimationFrame(frame); }
+    } else if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+  }
+
+  /* Theirs puts these on the carousel region, which holds the slides and
+     both arrows but not the dots. */
+  const onEnter = () => { hovered = true; update(); };
+  const onLeave = () => { hovered = false; update(); };
+  const onFocusIn = () => { focusIn = true; update(); };
+  const onFocusOut = e => {
+    if (stage.contains(e.relatedTarget)) return;
+    focusIn = false;
+    update();
+  };
+  const onVis = () => update();
+  stage.addEventListener("pointerenter", onEnter);
+  stage.addEventListener("pointerleave", onLeave);
+  stage.addEventListener("focusin", onFocusIn);
+  stage.addEventListener("focusout", onFocusOut);
+  document.addEventListener("visibilitychange", onVis);
+  /* Under reduced motion theirs never installs the plugin. A change of the
+     setting mid-session is honoured here without a reload; stopping snaps
+     to the nearest whole card, the finished state. */
+  const onReduced = () => {
+    if (reduced.matches) { ramp = speed = 0; go(Math.round(pos)); }
+    update();
+  };
+  reduced.addEventListener("change", onReduced);
+
+  /* Offscreen it stops and pos stays where it was: the bank. */
+  const io = new IntersectionObserver(entries => {
+    onScreen = entries[entries.length - 1].isIntersecting;
+    update();
+  });
+  io.observe(stage);
+
   const ro = new ResizeObserver(layout);
   ro.observe(viewport);
   layout();
+  update();
 
   return () => {
+    if (raf) cancelAnimationFrame(raf);
+    io.disconnect();
     ro.disconnect();
     prev.removeEventListener("click", onPrev);
     next.removeEventListener("click", onNext);
     dotRow.removeEventListener("click", onDot);
     stage.removeEventListener("keydown", onKey);
+    stage.removeEventListener("pointerenter", onEnter);
+    stage.removeEventListener("pointerleave", onLeave);
+    stage.removeEventListener("focusin", onFocusIn);
+    stage.removeEventListener("focusout", onFocusOut);
+    document.removeEventListener("visibilitychange", onVis);
+    reduced.removeEventListener("change", onReduced);
   };
 }

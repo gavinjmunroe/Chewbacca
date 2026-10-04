@@ -15,8 +15,9 @@ const MARK = (w, h) => `
   </svg>`;
 
 /* Seven framework glyphs. Theirs is a row of seven third-party marks; ours
-   are abstract shapes drawn for this page and stand for nothing real. 28px
-   box, centres 76px apart like theirs (475, 551 ... 931 at 1440). */
+   are abstract shapes drawn for this page and stand for nothing real. Each
+   is a 28px box like theirs (every item measured 28x28 at 1440). The
+   seventh is theirs' "coming soon" slot: not a link, and dimmer. */
 const GLYPHS = [
   `<path d="M14 4 25 23H3z"/>`,
   `<circle cx="14" cy="14" r="9" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="14" cy="14" r="3.2"/>`,
@@ -26,6 +27,59 @@ const GLYPHS = [
   `<rect x="3" y="8" width="22" height="12" rx="6"/><circle cx="10" cy="14" r="2.2" fill="#f2f2f2"/><circle cx="18" cy="14" r="2.2" fill="#f2f2f2"/>`,
   `<path d="M4 22 10 6h3L7 22z"/><path d="M12 22 18 6h3l-6 16z" opacity=".7"/><path d="M20 22l3-8 2 8z" opacity=".45"/>`,
 ];
+/* Our names for the seven, generic on purpose: each glyph is a way of
+   getting runs into Sift, not anybody's product. The last is not built. */
+const GLYPH_NAMES = [
+  "Python SDK",
+  "TypeScript SDK",
+  "Batch import",
+  "REST ingest",
+  "Queue workers",
+  "Webhook export",
+  "Streaming ingest",
+];
+const SOON = 6;
+
+/* ---- the integrations marquee -------------------------------------------
+   Theirs (chunk 768, module 68482): the items rendered twice in one flex
+   row, gap 48 (gap-12), padding 8/16 (py-2 px-4), inside a box 70% of the
+   column (526.4 of 752 at 1440), 64px fades at both edges from the
+   background to transparent. A rAF loop advances it 0.02px per ms with the
+   frame delta capped at 50ms, and wraps by half the content. Touch, pointer
+   down and wheel hold it for 2500ms. An IntersectionObserver runs the loop
+   only while the row is on screen, and under reduced motion it never
+   starts.
+
+   Theirs scrolls the box (scrollLeft); ours moves the track with a
+   transform, per this repo's rule, and holds the offset while paused or
+   offscreen, which is the bank. Theirs wraps at scrollWidth / 2, which
+   counts the row's own 32px of padding and one gap fewer than a period
+   (1048 / 2 = 524 against a true period of 7 x 76 = 532), so every lap
+   jumps 8px. Ours wraps at the measured offset of the second copy, the
+   true period, and does not jump. */
+const MQ_PX_PER_MS = 0.02;
+const MQ_MAX_DT = 50;
+const MQ_HOLD_MS = 2500;
+
+function glyphSvg(g) {
+  return `<svg viewBox="0 0 28 28" width="28" height="28" fill="currentColor" aria-hidden="true" focusable="false">${g}</svg>`;
+}
+
+/* One copy of the seven. `copy` is false for the duplicate, which exists
+   only to fill the loop: hidden from assistive tech and out of the tab
+   order, so a keyboard user meets each link once. */
+function mqSet(copy) {
+  const items = GLYPHS.map((g, i) => {
+    const name = GLYPH_NAMES[i];
+    if (i === SOON) {
+      return `<span class="lw-mq-item is-soon"${copy ? ` role="img" aria-label="${name}, coming soon"` : ""}>${glyphSvg(g)}</span>`;
+    }
+    return copy
+      ? `<a class="lw-mq-item" href="#" aria-label="${name}">${glyphSvg(g)}</a>`
+      : `<a class="lw-mq-item" href="#" tabindex="-1">${glyphSvg(g)}</a>`;
+  }).join("");
+  return `<div class="lw-mq-set"${copy ? "" : ' aria-hidden="true"'}>${items}</div>`;
+}
 
 const COPY_ICON = `
   <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
@@ -64,11 +118,6 @@ const FOOT_COLS = [
 ];
 
 export function render() {
-  const glyphs = GLYPHS.map(
-    (g) =>
-      `<svg class="lw-fw" viewBox="0 0 28 28" width="28" height="28" fill="currentColor" aria-hidden="true">${g}</svg>`,
-  ).join("");
-
   const trust = TRUST.map(
     ([t, d]) => `
         <div class="lw-trust-item">
@@ -85,7 +134,11 @@ export function render() {
         <h2 id="lw-int-h" class="lw-h2">Drops into the stack you already run.</h2>
         <p class="lw-lead">Tracing hooks for the agent frameworks your team ships on today.</p>
       </header>
-      <div class="lw-fws" aria-hidden="true">${glyphs}</div>
+      <div class="lw-mq" role="group" aria-label="Integrations">
+        <div class="lw-mq-row"><div class="lw-mq-track">${mqSet(true)}${mqSet(false)}</div></div>
+        <div class="lw-mq-fade is-l" aria-hidden="true"></div>
+        <div class="lw-mq-fade is-r" aria-hidden="true"></div>
+      </div>
       <div class="lw-steps">
         <div class="lw-step">
           <div class="lw-step-h"><span class="lw-step-n">1</span><h3 class="lw-step-t">Create a project key</h3></div>
@@ -93,7 +146,7 @@ export function render() {
             <div class="lw-code-h">.env.example</div>
             <div class="lw-code-b">
               <div><span class="lw-k">SIFT_API_KEY</span><span class="lw-eq">=</span><span class="lw-v">paste_key_here</span></div>
-              <div><span class="lw-k">SIFT_PROJECT_ID</span><span class="lw-eq">=</span><span class="lw-v">0aea4e153c71b2</span></div>
+              <div><span class="lw-k">SIFT_PROJECT_ID</span><span class="lw-eq">=</span><span class="lw-v lw-scramble">0aea4e153c71b2</span></div>
             </div>
           </div>
         </div>
@@ -117,6 +170,7 @@ export function render() {
         <p class="lw-lead">Traces carry customer data, so we treat them that way.<br>
           Audited controls, encrypted everywhere, nothing shared.</p>
       </header>
+      <div class="lw-chips">${TRUST.map(([t]) => `<span class="lw-chip">${t}</span>`).join("")}</div>
       <div class="lw-trust">${trust}
       </div>
       <div class="lw-trust-cta"><a class="lw-btn lw-btn-ghost" href="#">View trust center</a></div>
@@ -199,7 +253,175 @@ export function renderFooter() {
   </footer>`;
 }
 
+/* Runs the integrations marquee in `wrap`. Returns a cleanup. */
+function mountMarquee(wrap) {
+  const row = wrap.querySelector(".lw-mq-row");
+  const track = wrap.querySelector(".lw-mq-track");
+  const sets = wrap.querySelectorAll(".lw-mq-set");
+  if (!row || !track || sets.length < 2) return () => {};
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+
+  let x = 0; /* px travelled, banked across pauses */
+  let period = 0;
+  let last = 0;
+  let raf = 0;
+  let onScreen = false;
+  let holdUntil = 0;
+  let focused = false;
+
+  const measure = () => {
+    period = sets[1].offsetLeft - sets[0].offsetLeft;
+  };
+  const paint = () => {
+    track.style.transform = `translate3d(${(-x).toFixed(2)}px,0,0)`;
+  };
+  const running = () => onScreen && !focused && !reduced.matches && !document.hidden;
+
+  function frame(now) {
+    raf = 0;
+    const dt = last ? Math.min(MQ_MAX_DT, now - last) : 0;
+    last = now;
+    if (now > holdUntil && period > 0) {
+      x += MQ_PX_PER_MS * dt;
+      if (x >= period) x -= period;
+      paint();
+    }
+    if (running()) raf = requestAnimationFrame(frame);
+  }
+  function update() {
+    if (running()) {
+      if (!raf) {
+        last = 0;
+        raf = requestAnimationFrame(frame);
+      }
+    } else if (raf) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+    }
+  }
+  /* Reduced motion: the finished state is the row at rest with its first
+     copy showing; lower.css lets it scroll by hand instead. */
+  const syncReduced = () => {
+    wrap.classList.toggle("is-static", reduced.matches);
+    if (reduced.matches) {
+      x = 0;
+      track.style.transform = "";
+    }
+    update();
+  };
+
+  const hold = () => {
+    holdUntil = performance.now() + MQ_HOLD_MS;
+  };
+  /* A focused link must be on screen. Theirs gets this free from the
+     browser scrolling its box; ours moves the track so the link sits in
+     the middle, then holds still until focus leaves the row. */
+  const onFocusIn = (e) => {
+    focused = true;
+    update();
+    const item = e.target.closest(".lw-mq-item");
+    if (!item || reduced.matches || !period) return;
+    const at = item.offsetLeft + item.offsetWidth / 2 - row.clientWidth / 2;
+    /* Clamped, not wrapped: wrapping would centre the hidden duplicate
+       and leave the focused original out of view. */
+    x = Math.max(0, Math.min(at, period - 0.01));
+    paint();
+  };
+  const onFocusOut = (e) => {
+    if (wrap.contains(e.relatedTarget)) return;
+    focused = false;
+    update();
+  };
+  const onVis = () => update();
+
+  const io = new IntersectionObserver((entries) => {
+    onScreen = entries[entries.length - 1].isIntersecting;
+    update();
+  });
+  const ro = new ResizeObserver(() => {
+    measure();
+    if (period > 0) x %= period;
+  });
+
+  measure();
+  ro.observe(track);
+  io.observe(wrap);
+  row.addEventListener("pointerdown", hold);
+  row.addEventListener("touchstart", hold, { passive: true });
+  row.addEventListener("wheel", hold, { passive: true });
+  wrap.addEventListener("focusin", onFocusIn);
+  wrap.addEventListener("focusout", onFocusOut);
+  document.addEventListener("visibilitychange", onVis);
+  reduced.addEventListener("change", syncReduced);
+  syncReduced();
+
+  return () => {
+    if (raf) cancelAnimationFrame(raf);
+    io.disconnect();
+    ro.disconnect();
+    row.removeEventListener("pointerdown", hold);
+    row.removeEventListener("touchstart", hold);
+    row.removeEventListener("wheel", hold);
+    wrap.removeEventListener("focusin", onFocusIn);
+    wrap.removeEventListener("focusout", onFocusOut);
+    document.removeEventListener("visibilitychange", onVis);
+    reduced.removeEventListener("change", syncReduced);
+  };
+}
+
+/* ---- the project id that never settles ----------------------------------
+   Theirs (chunk 768, module 54032, mounted on the second .env line with
+   length 14): a hex string where every 90ms each character is re-rolled
+   with probability .16, forever, so the value shimmers while the key above
+   it stays put. It was the 5267px change inside the integrations band in
+   the 2026-10-03 idle sweep (bbox down to y 432 at scroll 14500) that ours
+   lacked. Their seed is a fixed pattern; ours starts from our own value.
+   Reduced motion: it never starts. Theirs keeps its interval running
+   offscreen; ours stops while the line is out of view. The text is
+   monospace, so a swap moves nothing around it. */
+const SCRAMBLE_MS = 90;
+const SCRAMBLE_P = 0.16;
+const HEX = "0123456789abcdef";
+
+function mountScramble(el) {
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  const chars = [...el.textContent.trim()];
+  let timer = 0;
+  const tick = () => {
+    for (let i = 0; i < chars.length; i++)
+      if (Math.random() < SCRAMBLE_P) chars[i] = HEX[Math.floor(Math.random() * 16)];
+    el.textContent = chars.join("");
+  };
+  let onScreen = false;
+  const update = () => {
+    const run = onScreen && !reduced.matches && !document.hidden;
+    if (run && !timer) timer = setInterval(tick, SCRAMBLE_MS);
+    if (!run && timer) {
+      clearInterval(timer);
+      timer = 0;
+    }
+  };
+  const io = new IntersectionObserver((entries) => {
+    onScreen = entries[entries.length - 1].isIntersecting;
+    update();
+  });
+  io.observe(el);
+  document.addEventListener("visibilitychange", update);
+  reduced.addEventListener("change", update);
+  return () => {
+    clearInterval(timer);
+    io.disconnect();
+    document.removeEventListener("visibilitychange", update);
+    reduced.removeEventListener("change", update);
+  };
+}
+
 export function mount(root) {
+  const mq = root.querySelector(".lw-mq");
+  const stopMarquee = mq ? mountMarquee(mq) : null;
+  const scr = root.querySelector(".lw-scramble");
+  const stopScramble = scr ? mountScramble(scr) : null;
+
   /* The one write outside root the contract allows: the footer slot. */
   const foot = document.querySelector("#lower-footer");
   if (foot && !foot.firstElementChild) foot.innerHTML = renderFooter();
@@ -238,12 +460,16 @@ export function mount(root) {
   if (cta && meshHost) {
     stopMesh = attachMeshGradient(meshHost, {
       colors: MESH_COLORS,
+      /* Theirs runs from page load, offscreen too; see mesh-gradient.js. */
+      wallClock: true,
       onLost: () => cta.classList.remove("is-mesh"),
     });
     if (stopMesh) cta.classList.add("is-mesh");
   }
 
   return () => {
+    stopMarquee?.();
+    stopScramble?.();
     stopMesh?.();
     clearTimeout(timer);
     copyBtn?.removeEventListener("click", onCopy);

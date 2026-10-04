@@ -22,7 +22,7 @@ const DEFAULTS = {
   colors: MESH_COLORS,
   /* `speed: 0.4` at every call site. Their clock is 0.001 * ms * speed, and
      the shader runs at half that again, so one unit of orbit phase takes
-     10s of wall time. */
+     5s of wall time (0.5 * 0.001 * 0.4 = 0.0002 per ms). */
   speed: 0.4,
   /* `distortion: 4`, `swirl: 1.2`, `grainMixer: 0.5`, `grainOverlay: 0.25`,
      identical at all three call sites. */
@@ -38,22 +38,28 @@ const DEFAULTS = {
 const MAX_DPR = 2;
 const MAX_PIXELS = 8294400;
 
-/* Their shader adds a fixed 41.5 to the clock before halving it, so the
-   first frame is already mid-drift rather than every point at its orbit
-   start. Ours starts at a phase of the same size for the same reason; the
-   value is ours, picked by eye against their CTA crop. */
-const PHASE0 = 20;
+/* Their shader adds a fixed 41.5 to the clock and halves the sum, so the
+   first frame is already 20.75 units into the drift. Ours used 20, picked by
+   eye; 2026-10-03 it is their value, because with the orbits below also set
+   from their derivation the same elapsed time now draws the same field, and
+   an idle diff of the two pages compares like with like. */
+const PHASE0 = 0.5 * 41.5;
 
-/* Per-point orbit: x frequency, y frequency, x phase, y phase. Theirs derives
-   frequencies 0.6..1.2 on x and 0.8..1.55 on y from the point index; these
-   sit in the same ranges so the drift has the same unhurried pace. */
-const ORBITS = [
-  [0.63, 0.86, 0.0, 0.0],
-  [0.94, 1.12, 0.41, 0.6],
-  [1.21, 1.37, 0.79, 1.17],
-  [0.71, 1.53, 1.13, 1.69],
-  [1.05, 0.97, 1.5, 2.2],
-];
+/* Per-point orbit: x frequency, y frequency, x phase, y phase. Until
+   2026-10-03 these were our own values "in the same ranges" as theirs. An
+   idle sweep then put their CTA at 1180..36489 changed px per 1.2s (median
+   8289, 8 samples) against ours at 0..7685 (median 1170): same clock rate,
+   different field, so their fold crossed the band and ours sat beside it.
+   Their getPosition (lazy chunk 8408) derives point i as
+     x freq .6 + (i mod 3) * .3, y freq .8 + ((i + 1) mod 4) * .25,
+     x phase .37 i, y phase 1.5 * .37 i,
+   and the table below is that rule evaluated, not a fit. */
+const ORBITS = [0, 1, 2, 3, 4].map((i) => [
+  0.6 + (i % 3) * 0.3,
+  0.8 + ((i + 1) % 4) * 0.25,
+  0.37 * i,
+  0.555 * i,
+]);
 const MAX_POINTS = ORBITS.length;
 
 const REDUCED =
@@ -103,7 +109,9 @@ void main() {
      longer side runs past 0..1. */
   float side = min(u_res.x, u_res.y);
   vec2 px = gl_FragCoord.xy - 0.5 * u_res;
-  vec2 p = vec2(px.x, -px.y) / side + 0.5;
+  /* y runs UP, as gl_FragCoord does and as theirs does. Ours was flipped,
+     which mirrored the whole field top to bottom against theirs. */
+  vec2 p = px / side + 0.5;
 
   float grain = vnoise(px * u_grain);
   float nudge = 0.4 * u_jitter * (grain - 0.5);
@@ -112,13 +120,16 @@ void main() {
   float r = smoothstep(0.0, 1.0, length(p - 0.5));
   float pull = 1.0 - r;
 
-  /* Two passes of centre-weighted warp, the second half the first. */
+  /* Two passes of centre-weighted warp, the second half the first. The
+     three inner frequencies (.4, 2.4, 2.0) are theirs from lazy chunk 8408;
+     ours were .45, 2.3 and 1.9, close enough to look alike in a still and
+     far enough apart that the fold drifted off theirs within seconds. */
   for (int k = 1; k <= 2; k++) {
     float fk = float(k);
     float sy = smoothstep(0.0, 1.0, p.y);
-    p.x += u_warp * pull / fk * sin(t + fk * 0.45 * sy) * cos(0.2 * t + fk * 2.3 * sy);
+    p.x += u_warp * pull / fk * sin(t + fk * 0.4 * sy) * cos(0.2 * t + fk * 2.4 * sy);
     float sx = smoothstep(0.0, 1.0, p.x);
-    p.y += u_warp * pull / fk * cos(t + fk * 1.9 * sx);
+    p.y += u_warp * pull / fk * cos(t + fk * 2.0 * sx);
   }
 
   /* Twist grows with distance from the centre. */
@@ -276,7 +287,19 @@ export function attachMeshGradient(host, options = {}) {
     raf = 0,
     onScreen = false,
     dead = false;
-  const phase = () => PHASE0 + 0.5 * 0.001 * elapsed * o.speed;
+  /* wallClock: the drift follows time since attach, offscreen included,
+     and only the drawing pauses. Their CTA mounts with the page and its
+     clock adds every rAF delta whether or not the band is in view (lazy
+     chunk 8408 has no IntersectionObserver), so by the time a reader
+     scrolls 17000px down to it, theirs is tens of seconds into the drift
+     and a banked clock is a few. That is not a speed difference but it
+     reads as one: the 2026-10-03 idle sweep put theirs at a median 15799
+     changed px per 1.2s against our 8335 at the same scroll, same rate.
+     There is no entrance here for a restart to spoil, which is what the
+     bank is for, so the band runs on wall time. */
+  const born = performance.now();
+  const clock = () => (o.wallClock ? performance.now() - born : elapsed);
+  const phase = () => PHASE0 + 0.5 * 0.001 * clock() * o.speed;
 
   function size() {
     /* getBoundingClientRect, not offsetWidth: inside a scaled SVG
@@ -327,7 +350,11 @@ export function attachMeshGradient(host, options = {}) {
 
   const io = new IntersectionObserver(
     (entries) => {
+      const was = onScreen;
       onScreen = entries[entries.length - 1].isIntersecting;
+      /* restartOnShow: the clock starts over each time the host comes back,
+         instead of resuming from the bank. See attachMeshToSvgFaces. */
+      if (onScreen && !was && o.restartOnShow) elapsed = 0;
       if (onScreen) still();
       update();
     },
@@ -416,7 +443,18 @@ export function attachMeshToSvgFaces(parent, box, options = {}) {
   if (clipped) defs.appendChild(clip);
   parent.appendChild(fo);
 
+  /* Their hero mark mounts its MeshGradient inside a component that renders
+     only while the solution phase is on (`T > 0 && <I/>`, chunk 768), and
+     their shader clock starts at frame 0 on mount. So every time the mark
+     appears its drift begins again at 20.75, and leaving the phase throws the
+     clock away. Ours hides the same <g> with display:none outside the phase,
+     which the IntersectionObserver reads as offscreen, so restarting on show
+     reproduces their clock. Before this, ours resumed whatever it had banked
+     on earlier visits, so the mark opened on a different field from theirs
+     every time but the first. Default on for the clipped-faces use only; a caller
+     that is always mounted (the cube plate, clipToFaces false) banks. */
   const stop = attachMeshGradient(host, {
+    restartOnShow: options.clipToFaces !== false,
     ...options,
     onLost: () => {
       fo.remove();

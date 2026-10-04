@@ -136,8 +136,9 @@ function drive(runId, render) {
    read as one composition instead of six decorations. */
 import { registerReveals, startScroll } from "./scroll.js";
 import { PLATE_LAYOUT } from "./sections/hero-intro.js";
+import { sphereFigure, mountSphere } from "./sections/sphere-plate.js";
 import { attachMeshToSvgFaces, MESH_COLORS } from "./sections/mesh-gradient.js";
-import { sphere, isoTiles, isoCube, fit, rose, rng,
+import { isoTiles, isoCube, fit, rose, rng,
   extrudedCube, cubeSpinAt, CUBE_POINTER_LERP, CUBE_POINTER_YAW, CUBE_POINTER_PITCH,
   rule30, caX, caY, CA_R_LIVE, CA_R_DEAD, CA_R_HIT, caClipHeight, CA_MS_PER_GEN,
   gravLens, pentagon, sphere3d, tileField, meshPentagon } from "./geometry.js";
@@ -382,40 +383,9 @@ function figure(kind, sw, op) {
        than as an object sitting inside one. */
     inner = polys(meshPentagon(), sw, 1, "", op);
   } else if (kind === "sphere") {
-    /* LEM 2.2. Their path count is 100 plus one <circle>, and ours is 101, so
-       the wireframe itself was never the problem. Three things were:
-
-         stroke     theirs 0.13, ours 0.20. On 101 overlapping curves a 54%
-                    heavier stroke is what turns a wireframe into a dark mat,
-                    and it reads as "too dense" rather than as "too thick".
-         shape      theirs is a true circle: a literal <circle r="38"> at
-                    (50,52), with the wireframe inscribed in it. Ours came out
-                    of fit() as an 80 x 84 ellipse, taller than wide.
-         outline    that circle is a drawn element in its own right at stroke
-                    0.2 and opacity 0.5, heavier than the wireframe inside it.
-                    Without it the globe has no silhouette and the meridians
-                    just stop.
-
-       So the wireframe is inscribed rather than fitted: mapped onto the same
-       r=38 circle at (50,52) the outline uses, which is the only way the two
-       cannot disagree. */
-    const R = 38, CX = 50, CY = 52;
-    const raw = sphere({ lats: 16, longs: 28, seg: 30 });
-    // fit() leaves the set spanning 0..100 on its longer axis; rescale the
-    // whole SET (never each curve) onto the r=38 circle, so relative
-    // positions survive and only the envelope changes.
-    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    for (const pts of raw) for (const [x, y] of pts) {
-      if (x < x0) x0 = x; if (x > x1) x1 = x;
-      if (y < y0) y0 = y; if (y > y1) y1 = y;
-    }
-    const k = (2 * R) / Math.max(x1 - x0, y1 - y0);
-    const mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-    const fitted = raw.map((pts) =>
-      pts.map(([x, y]) => [CX + (x - mx) * k, CY + (y - my) * k]));
-    inner = `<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${A}"`
-          + ` stroke-width="0.2" opacity="${op}"/>`
-          + polys(fitted, sw, 15, "", op);
+    /* LEM 2.2 turns at 16 deg/s and takes pins; see sections/sphere-plate.js,
+       which replaced a flat generator frozen at one phase of their rotation. */
+    inner = sphereFigure(A, sw);
   } else if (kind === "dots") {
     /* Rule 30. Recovered from the reference's bundle, where the component is
        named CellularAutomataFigure. 842 live cells and 1158 dead, which is
@@ -481,6 +451,7 @@ function plates() {
 }
 
 plates();
+{ const g = document.querySelector('.plate[data-fig="sphere"] svg'); if (g) mountSphere(g, A); }
 
 /* The hero layers must be registered AFTER plates() has put them in the
    document, because the depth ordering reads each plate's measured position.
@@ -720,6 +691,7 @@ import * as sec_testimonials from "./sections/testimonials.js";
 import * as sec_lower from "./sections/lower.js";
 import { mountHeroScene } from "./sections/hero-scene.js";
 import * as sec_states from "./sections/states.js";
+import * as sec_ambient from "./sections/ambient.js";
 import * as sec_metrics from "./sections/metrics.js";
 
 /* Prefixed, because `testimonials` and `counter` are already bound in this
@@ -753,6 +725,8 @@ for (const mod of SECTIONS) {
 /* Hover, focus, pressed and keyboard for every control. Mounted on the body
    because it is the one cross-cutting module; see states.js. */
 try { sec_states.mount(document.body); } catch (err) { console.error("states failed to mount:", err); }
+/* What moves at rest: the banner orbit and the hero scroll cue. */
+try { sec_ambient.mount(document.body); } catch (err) { console.error("ambient failed to mount:", err); }
 
 /* Reveals are registered AFTER the sections exist, because the observer can
    only watch elements that are in the document. Registering first is the

@@ -96,22 +96,92 @@
   color: var(--lw-ink65);
 }
 
-/* Glyph row: header ends at 14687, the step grid starts at 14795, glyph
-   centres sit at ~14708. 44 tall + 64 below lands both. */
-.lw-fws {
+/* Integrations marquee. Header ends at 14687, the step grid starts at
+   14795: their row is 44 tall (28 + 8 + 8) with 64 below (mb-16 at lg). The
+   box is 70% of the column, 526.4 at 1440, centred. */
+.lw-mq {
+  position: relative;
+  width: 70%;
+  margin: 0 auto 64px;
+}
+.lw-mq-row {
+  overflow: hidden;
+}
+.lw-mq-track {
+  position: relative;
   display: flex;
-  justify-content: center;
   align-items: center;
   gap: 48px;
-  height: 44px;
-  margin-bottom: 64px;
-  color: #8d8c9c;
+  width: max-content;
+  padding: 8px 16px;
+  will-change: transform;
 }
-.lw-fw {
+.lw-mq-set {
+  display: flex;
+  align-items: center;
+  gap: 48px;
+}
+/* Theirs: each logo forced black (brightness-0 grayscale) at opacity .7,
+   the coming-soon one at .4. Ours draws in black and dims the same way. */
+.lw-mq-item {
+  display: flex;
   flex: 0 0 auto;
+  align-items: center;
+  height: 28px;
+  color: #000;
 }
-.lw-fw:nth-child(2n) {
-  color: #6f6e80;
+.lw-mq-item svg {
+  display: block;
+  opacity: 0.7;
+  transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.lw-mq-item.is-soon svg {
+  opacity: 0.4;
+}
+/* Theirs puts `hover:opacity-100` on the link while the .7 sits on the img
+   inside it, so their hover changes nothing (states.md: "no measurable
+   change"). Ours lifts the glyph itself to full, which is what the class
+   was evidently for. A deliberate difference. */
+a.lw-mq-item:hover svg,
+a.lw-mq-item:focus-visible svg {
+  opacity: 1;
+}
+a.lw-mq-item:focus-visible {
+  outline: auto 1px rgb(0, 95, 204);
+  outline-offset: 1px;
+}
+/* 64px (w-16) from the background to transparent, over the row's ends. */
+.lw-mq-fade {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 64px;
+  pointer-events: none;
+}
+.lw-mq-fade.is-l {
+  left: 0;
+  background: linear-gradient(to right, var(--bg, #f2f2f2), rgba(242, 242, 242, 0));
+}
+.lw-mq-fade.is-r {
+  right: 0;
+  background: linear-gradient(to left, var(--bg, #f2f2f2), rgba(242, 242, 242, 0));
+}
+/* Reduced motion: no loop, so no duplicate; the row scrolls by hand with
+   its scrollbar hidden, as theirs does. */
+.lw-mq.is-static .lw-mq-row {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.lw-mq.is-static .lw-mq-row::-webkit-scrollbar {
+  display: none;
+}
+.lw-mq.is-static .lw-mq-set + .lw-mq-set {
+  display: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lw-mq-item svg {
+    transition: none;
+  }
 }
 
 .lw-steps {
@@ -236,6 +306,28 @@
   display: flex;
   justify-content: center;
   margin-top: 40px;
+}
+/* Under 768 theirs swaps the three columns for a wrapped row of chips
+   (md:hidden / hidden md:grid): 12/16 text, 6/12 padding, white with the
+   line colour, gap 8. At 390 that row is 68 tall where the stacked columns
+   were 208, which was most of our +178 there. */
+.lw-chips {
+  display: none;
+  max-width: 896px;
+  margin: 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.lw-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--lw-line);
+  background: #fff;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  color: var(--ink);
 }
 
 /* ---- newsletter ------------------------------------------------------ */
@@ -619,6 +711,14 @@
   .lw-band-in {
     padding: 96px 48px;
   }
+  /* mb-10 below lg, 12 at lg: 40 here. */
+  .lw-head {
+    margin-bottom: 40px;
+  }
+  /* The marquee's mb-12 below lg, 16 at lg. */
+  .lw-mq {
+    margin-bottom: 48px;
+  }
   .lw-foot-in {
     grid-template-columns: 1fr;
     gap: 48px;
@@ -630,29 +730,41 @@
   }
 }
 @media (max-width: 767px) {
+  /* px-8 under md on theirs: 32, not 16. */
   .lw-band-in {
-    padding: 96px 16px;
+    padding: 96px 32px;
   }
-  #lower .lw-h2,
   .lw-news-h2,
   .lw-cta-h {
     font-size: 28px;
     line-height: 34px;
   }
+  /* The two band headings are text-3xl under md on theirs: 30/36. */
+  #lower .lw-h2 {
+    font-size: 30px;
+    line-height: 36px;
+  }
   #lower .lw-lead {
     font-size: 16px;
     line-height: 24px;
   }
-  .lw-fws {
-    gap: 20px;
-    flex-wrap: wrap;
-    height: auto;
-    margin-bottom: 48px;
+  /* The forced break is for the 672 measure at 1440; at 326 it only adds
+     a short line. */
+  #lower .lw-lead br {
+    display: none;
   }
-  .lw-steps,
-  .lw-trust {
+  .lw-steps {
     grid-template-columns: 1fr;
     gap: 32px;
+  }
+  .lw-trust {
+    display: none;
+  }
+  .lw-chips {
+    display: flex;
+  }
+  .lw-trust-cta {
+    margin-top: 32px;
   }
   .lw-news-grid {
     grid-template-columns: 1fr;

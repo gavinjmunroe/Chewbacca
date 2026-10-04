@@ -21,14 +21,16 @@ using namespace metal;
 // distinct motion signature identifiable without looking at it. Six states
 // that all breathe are one state.
 //
-// What it draws is a straight band of titanium against every edge of the
-// screen, one thickness the whole way round: a near black bezel with silver
-// grain on it, dense at the glass and thinning inward into single specks, the
-// way the iPhone 15 Pro titanium wallpapers fall off into the dark. The grain
-// is fixed to the screen. What moves is the light: one broad highlight
-// travelling round the edge at the state's drift, and a few glints flashing.
+// What it draws is a machined frame of black titanium against every edge of
+// the screen, one thickness the whole way round: a brushed face whose streaks
+// run with the edge, and a polished bevel on the inner edge that catches a
+// hard line of light. The surface never moves. What moves is the light: a
+// studio light circling the frame at the state's drift, and, while the
+// assistant works, a scanning streak racing along the bevel.
 //
-// It replaced, on 2026-10-04, a liquid pool with contour filaments and an
+// That is the third look of 2026-10-04. The second was the iPhone 15 Pro
+// wallpaper's silver grain, glittering and thinning into specks, and it read
+// as "fairy dust". The first replaced a liquid pool with contour filaments and an
 // iridescent shimmer, ported from skills/hud/presence/refined.html. The ask
 // was "much cleaner, and more consolidated and contained at the edge of the
 // screen ... linear all the way around with this speckle, closer to the edge,
@@ -36,13 +38,10 @@ using namespace metal;
 // is exactly what "linear" and "contained" rule out.
 
 
-static inline float hash21(float2 p) {
-    return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
-}
 
 /// Where along the edge of the screen a point sits, 0 to 1, clockwise from the
 /// top-left corner, measured to the nearest edge. The voice ripples, the done
-/// sweep, the sparks and the tendril all travel along the edge rather than
+/// sweep, the streaks and the tendril all travel along the edge rather than
 /// across the screen, so all four read this one number.
 static inline float perimeterAt(float2 uv, float W) {
     float x = uv.x * W, y = uv.y;
@@ -116,7 +115,7 @@ struct Uniforms {
     /// Where on the perimeter the sweep starts: the agent's last spot, or the
     /// hyper bar.
     float sweepOrigin;
-    /// How many sparks are lifting off the band, 0 to 1. Acting only.
+    /// Acting only, 0 to 1: brings in the second and third scanning streaks.
     float embers;
     /// How much of the bar is there, 0 to 1, eased, so it condenses in and
     /// evaporates out rather than cutting.
@@ -124,6 +123,8 @@ struct Uniforms {
     /// Where the top edge is, in screen heights: the bottom of the menu bar,
     /// which sits above this window and hid the top of the band behind it.
     float top;
+    /// How fast the light travels, eased: the scanning streak's strength.
+    float drift;
 };
 
 /// How loud the voice was, one sample every RIPPLE_STEP seconds, newest first.
@@ -181,7 +182,6 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
                                 constant Uniforms &U [[buffer(0)]],
                                 constant float *voice [[buffer(1)]]) {
     float2 size = U.size;
-    float time = U.time;
     float2 uv = float2(fragPos.x / size.x, fragPos.y / size.y);
     float W = size.x / max(size.y, 1.0);
 
@@ -233,13 +233,12 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // window, and it is translucent, so a bezel behind it would tint it.
     if (uv.y < U.top) return half4(0.0);
 
-    // A slow swell travelling round the edge, a tenth of the depth either
-    // way. Enough that the inner edge is never quite still, not enough to
-    // stop it reading as one straight band.
-    depth *= 1.0 + 0.10 * sin(here * P * 2.4 - time * 0.9) * sin(here * P * 0.9 + time * 0.37);
-
+    // 0 at the glass, 1 at the band's inner edge.
     float e = edgeDistance(uv, W, depth + 0.012, U.top);
-    if (!inPill && e > depth * 1.45 + 0.004 + 0.08 * U.embers) {
+    // How far in the seating shadow reaches past the inner edge, in screen
+    // heights: about 2.5 pt on an 800 pt display.
+    const float SHADOW = 0.003;
+    if (!inPill && e > depth + SHADOW) {
         return half4(0.0);
     }
 
@@ -250,86 +249,96 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
                                              length(toPointer)));
     depth *= 1.0 - hole;
 
-    // 0 at the bezel, 1 at the band's inner edge, more than 1 in the dust.
     float u = e / max(depth, 1e-4);
 
-    // The light. Two highlights travelling round the edge in opposite
-    // directions at the state's drift, like lamps moving across brushed
-    // titanium, over a floor so the band still reads where they are not.
+    // A machined frame, not sand. Pass two drew the wallpaper's grain with
+    // every grain glittering, specks drifting off the band and single pixels
+    // flashing, and on screen it read as "fairy dust and not titanium ...
+    // it shouldnt feel like magical" (2026-10-04). Titanium does none of
+    // that: its texture is fine and still, light crosses it in broad bands,
+    // and the polished bevel catches one hard line. So nothing below that
+    // shapes the surface reads the clock. Only the lights move.
     //
-    // The first version had one broad light at a twentieth of this speed,
-    // about a minute a lap at rest, and on screen it read as still: "it
-    // doesnt feel alive at all, its all static" (2026-10-04). At rest the
-    // lead light now laps in about 25 s and the second in about 40.
-    float rakeA = exp(-pow(along(here, fract(U.travel * 0.08), W) / P / 0.09, 2.0));
-    float rakeB = exp(-pow(along(here, fract(0.43 - U.travel * 0.05), W) / P / 0.13, 2.0));
-    float light = 0.38 + 1.25 * rakeA + 0.75 * rakeB + 1.4 * ripple;
+    // The face runs from the glass to BEVEL_AT, the bevel from there to the
+    // inner edge, and the inner edge is cut, not faded.
+    const float BEVEL_AT = 0.86;
 
+    // Brushed: a hash per row of pixels across the band, interpolated slowly
+    // along it, so the streaks run with the edge and bend round the corners.
+    float rowPx = e * size.y;
+    float alongPx = here * P * size.y / 60.0;
+    float row = floor(rowPx);
+    float cell = floor(alongPx);
+    float t01 = smoothstep(0.0, 1.0, fract(alongPx));
+    float brush = mix(pixelHash(float2(cell, row), 11u), pixelHash(float2(cell + 1.0, row), 11u), t01);
+    float bead = pixelHash(floor(fragPos.xy), 12u);
+    float texture = 0.86 + 0.28 * brush + 0.06 * (bead - 0.5);
+
+    // The studio light: one light circling the frame at the state's drift.
+    // At rest (drift 0.5) a lap takes about 33 s; thinking takes about 5.
+    float lightAt = fract(U.travel * 0.06);
+    float fromLight = along(here, lightAt, W) / P;
+    float broad = exp(-pow(fromLight / 0.12, 2.0));
+    float hard = exp(-pow(fromLight / 0.035, 2.0));
+
+    // The scanning streak: a sharp front and a tail behind it, on the bevel,
+    // so it reads as something going somewhere. Its strength follows the
+    // drift: nothing at rest, clear while listening, full while thinking.
+    // Acting carries three, evenly spaced, so it reads as a machine running.
+    float streakOn = max(smoothstep(0.8, 2.6, U.drift), U.embers);
+    float streak = 0.0;
+    if (streakOn > 0.001) {
+        float head = fract(U.travel * 0.12);
+        int count = U.embers > 0.5 ? 3 : 1;
+        for (int k = 0; k < 3; k++) {
+            if (k >= count) break;
+            float d = fract(here - head - float(k) / 3.0 + 0.5) - 0.5;
+            float front = exp(-pow(d / 0.004, 2.0));
+            float tail = d < 0.0 ? exp(d / 0.05) : 0.0;
+            streak += max(front, 0.55 * tail);
+        }
+        streak *= streakOn;
+    }
+
+    float crest = 0.0;
     if (U.sweep < 2.0) {
         float fromOrigin = along(here, U.sweepOrigin, W);
-        float crest = exp(-pow((fromOrigin - U.sweep * SWEEP_SPEED) / 0.10, 2.0));
-        light += crest * (1.0 - smoothstep(1.1, 1.6, U.sweep)) * 1.6;
+        crest = exp(-pow((fromOrigin - U.sweep * SWEEP_SPEED) / 0.10, 2.0)) *
+                (1.0 - smoothstep(1.1, 1.6, U.sweep));
     }
 
-    // The grain. Under it the light is smooth; the grain only moves each
-    // pixel up or down from that, the way the wallpaper's lit flank is an
-    // even grey with sand in it. A first pass that multiplied the light by
-    // raw noise read as television static, not metal. Two layers, one per
-    // device pixel and one per two, so it has some body.
-    float2 px = floor(fragPos.xy);
-    float g1 = pixelHash(px, 1u);
-    float g2 = pixelHash(floor(px * 0.5), 2u);
-    float grain = 0.72 + 0.34 * g1 + 0.22 * g2 - 0.28;
-    // Each grain catches the light on its own slow cycle, a second or two
-    // long, so the sand glitters in place. Smooth and slow on purpose: per
-    // frame noise here would be static, which is what the first pass at
-    // grain looked like.
-    float glitter = 0.5 + 0.5 * sin(time * (0.6 + 1.4 * pixelHash(px, 8u)) + g1 * 6283.0);
-    grain *= 0.70 + 0.55 * glitter;
+    float faceLum = (0.18 + 0.55 * broad + 0.30 * ripple + 0.5 * crest) * texture *
+                    mix(1.0, 0.82, clamp(u / BEVEL_AT, 0.0, 1.0));
+    float bevelLum = 0.45 + 1.6 * hard + 1.5 * ripple + 1.8 * crest;
+    float streakLum = 2.4 * streak;
 
-    // A plateau of light from the glass to just past the middle of the band,
-    // then a fall into the dark.
-    float profile = 1.0 - smoothstep(0.35, 1.0, u);
-    float lum = profile * grain * light * 0.90;
-
-    // Sparkle: the brightest grains, about one in thirty, catch the light
-    // on their own. This is most of what makes it read as titanium.
-    float sparkle = smoothstep(0.965, 0.995, pixelHash(px, 7u));
-    lum += sparkle * profile * light * 0.90 * (0.3 + 0.9 * glitter);
-
-    // The dust: past the middle of the band the grain stops being continuous
-    // and becomes single specks, fewer the further in, running on past the
-    // band's edge into the screen.
-    float dustAt = smoothstep(0.45, 1.40, u);
-    float speckOdds = mix(0.16, 0.0, dustAt) * step(0.45, u);
-    float speck = step(pixelHash(px, 3u), speckOdds);
-    float drift = 0.5 + 0.5 * sin(time * (0.4 + 0.9 * pixelHash(px, 9u)) + g2 * 6283.0);
-    lum += speck * (0.55 + 0.45 * g2) * light * mix(0.75, 0.3, dustAt) * (0.2 + 0.8 * drift);
-
-    // Glints: one pixel pair in about seventy, each flashing on its own phase
-    // and its own rate, so no two catch the light together. Was one in three
-    // hundred, which on a real screen was a glint every few seconds somewhere
-    // nobody was looking.
-    float glintSeed = pixelHash(floor(px * 0.5), 4u);
-    if (glintSeed > 0.985 && u < 0.95) {
-        float phase = time * (1.6 + 1.6 * pixelHash(floor(px * 0.5), 5u)) + glintSeed * 6283.0;
-        float flash = pow(0.5 + 0.5 * sin(phase), 14.0);
-        lum += flash * 2.2 * (1.0 - u) * (0.6 + 0.4 * light);
-    }
-
-    // The bezel behind the grain: near black, opaque at the glass and gone by
-    // the band's inner edge, so the band has an edge and not a fog.
-    float backA = 0.88 * (1.0 - smoothstep(0.40, 1.05, u));
-
-    // Titanium, a hair cool. The state's colour goes into the grain only: the
-    // bezel stays black, so working reads as green sand on a dark frame.
-    const float3 TITANIUM = float3(0.80, 0.82, 0.86);
-    const float3 BEZEL = float3(0.022, 0.024, 0.028);
-    float3 metal = TITANIUM;
+    // Black titanium on the face, near white where the bevel catches light.
+    const float3 FACE = float3(0.60, 0.61, 0.60);
+    const float3 EDGE = float3(0.96, 0.96, 0.94);
+    // The state's colour is carried by the streaks. The bevel line and the
+    // face only take a little of it: a frame lit green all the way round
+    // read as a neon outline, a status light rather than an instrument.
+    float3 face = FACE;
+    float3 edge = EDGE;
+    float3 hot = EDGE;
     if (U.tint.a > 0.001) {
         float amt = min(U.tint.a * mix(0.55, 1.0, wave) * 1.25, 1.0);
-        metal = mix(TITANIUM, U.tint.rgb * 0.72, amt);
+        hot = mix(EDGE, U.tint.rgb * 0.80, amt);
+        edge = mix(EDGE, U.tint.rgb * 0.80, amt * 0.40);
+        face = mix(FACE, U.tint.rgb * 0.45, amt * 0.25);
     }
+
+    // One pixel of antialiasing on the cut, and none of the fade into dust.
+    float aa = max(fwidth(u), 1e-4);
+    float body = 1.0 - smoothstep(1.0 - aa, 1.0, u);
+    float bevel = smoothstep(BEVEL_AT - aa, BEVEL_AT + aa, u);
+    float3 c = mix(face * faceLum, edge * bevelLum + hot * streakLum, bevel) * body;
+    float a = 0.96 * body;
+
+    // The seating shadow just inside the cut: alpha only, so it darkens the
+    // screen under it rather than drawing a colour.
+    float past = (e - depth) / SHADOW;
+    if (past > 0.0) a = max(a, 0.35 * exp(-past * 2.5) * (1.0 - body));
 
     if (inPill) {
         // The bar is a capsule of the same bezel with a smooth lit rim, dark
@@ -338,39 +347,14 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
         // the glitter in the hyper bar".
         float v = clamp(-pillSdf / max(pillHalf.y, 1e-4), 0.0, 1.0);
         float rim = exp(-v * 7.0);
-        lum = rim * 0.55 * (0.9 + 0.6 * light);
-        backA = 0.92;
+        const float3 BEZEL = float3(0.022, 0.024, 0.028);
+        c = BEZEL * 0.92 + edge * rim * 0.55 * (0.9 + 0.6 * broad);
+        a = 0.92;
         born = U.pillOn;
     }
 
-    // Sparks lifting off the band while acting: specks, not blobs.
-    if (U.embers > 0.001) {
-        const float CELLS = 90.0;
-        float spark = 0.0;
-        float cell0 = floor(here * CELLS);
-        for (int k = -1; k <= 1; k++) {
-            float cell = cell0 + float(k);
-            if (hash21(float2(cell, 1.9)) < 0.55) continue;
-            float seed = hash21(float2(cell, 3.1));
-            float life = 2.2 + seed * 1.4;
-            float phase = fract(time / life + seed * 7.3);
-            float centre = (cell + 0.2 + 0.6 * hash21(float2(cell, 8.7))) / CELLS;
-            float lat = (fract(here - centre + 0.5) - 0.5) * P +
-                        sin(phase * 6.2831853 + seed * 9.0) * 0.006;
-            float rise = depth + 0.003 + phase * (0.04 + 0.03 * seed);
-            float r = 0.0016 * (1.0 - 0.5 * phase);
-            float dot2 = lat * lat + (e - rise) * (e - rise);
-            spark += exp(-dot2 / (r * r)) * smoothstep(0.0, 0.1, phase) *
-                     (1.0 - smoothstep(0.55, 1.0, phase));
-        }
-        lum += spark * U.embers * 1.6;
-    }
-
-    lum *= mix(0.70, 1.0, wave) * born;
-    backA *= born;
-
-    float3 c = BEZEL * backA + metal * lum;
-    float a = clamp(max(backA, max(max(c.r, c.g), c.b)), 0.0, 1.0) * U.alpha;
+    c *= mix(0.70, 1.0, wave) * born;
+    a *= born * U.alpha;
     c *= U.alpha;
     return half4(half3(min(c, float3(a))), half(a));
 }

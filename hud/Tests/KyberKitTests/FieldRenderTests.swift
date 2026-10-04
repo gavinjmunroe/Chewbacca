@@ -139,6 +139,52 @@ struct FieldRenderTests {
         }
     }
 
+    @Test("thinking: a scanning streak on the bevel")
+    func thinking() throws {
+        _ = try Self.render(suffix: "-thinking") {
+            $0.rest = 11 / 800
+            $0.drift = 3.2
+        }
+    }
+
+    /// Six frames of thinking a fifth of a second apart, for judging the
+    /// motion before an install. Drift 3.2 advances `travel` 3.2 a second.
+    @Test("thinking, as a strip of frames")
+    func thinkingStrip() throws {
+        for frame in 0..<6 {
+            let seconds = Float(frame) * 0.2
+            _ = try Self.render(suffix: "-strip\(frame)") {
+                $0.rest = 11 / 800
+                $0.drift = 3.2
+                $0.time += seconds
+                $0.travel += 3.2 * seconds
+            }
+        }
+    }
+
+    /// The second look scattered specks past the band's edge into the screen,
+    /// and on screen that read as "fairy dust" (2026-10-04). Nothing may be
+    /// drawn further in than the band plus its seating shadow, at rest or
+    /// acting, which is the state that used to lift sparks.
+    @Test("nothing is drawn inside the screen past the band")
+    func noDust() throws {
+        let width = 1280, height = 800
+        for (rest, embers) in [(Float(20), Float(0)), (Float(26), Float(1))] {
+            guard let pixels = try Self.draw(suffix: "-nodust", background: -1, { $0.rest = rest / 800; $0.embers = embers })
+            else { return }
+            // Band, its 10% swell from a voice that is not there, the 2.4 px
+            // shadow, and a pixel of antialiasing.
+            let limit = Int(rest * 1.1) + 4
+            var stray = 0
+            for y in (limit + 40)..<(height - limit - 40) {
+                for x in (limit + 1)..<(width - limit - 1) where pixels[(y * width + x) * 4 + 3] > 5 {
+                    stray += 1
+                }
+            }
+            #expect(stray == 0)
+        }
+    }
+
     @Test("the band starts under the menu bar, not behind it")
     func underMenuBar() throws {
         // A 37 point menu bar, the height on a notched MacBook.

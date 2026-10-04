@@ -40,8 +40,9 @@ struct PresenceFieldStyle: Equatable {
     /// False means one frame and then stop. A layer that redraws forever is a
     /// battery bug, which is the objection `PresenceRing` raises about itself.
     var animating: Bool
-    /// How many sparks lift off the band, 0 to 1. Only `acting` has any: it is
-    /// the one state where something is being done to the machine.
+    /// 0 to 1, and only `acting` has any: it is the one state where something
+    /// is being done to the machine. Since 2026-10-04 it brings in the second
+    /// and third scanning streaks; it used to lift sparks off the band.
     var embers: Double = 0
 }
 
@@ -836,7 +837,8 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
             sweepOrigin: sweepOrigin,
             embers: embers.shown,
             pillOn: pillOn.shown,
-            top: menuBar)
+            top: menuBar,
+            drift: drift.shown)
         pipeline.encode(
             buffer, into: pass, width: Int(size.width), height: Int(size.height),
             uniforms: &uniforms, voice: voice)

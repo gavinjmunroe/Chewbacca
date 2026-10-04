@@ -28,6 +28,8 @@ struct FieldUniforms {
     /// Where the band's top edge sits, in screen heights from the top: the
     /// menu bar's height, or 0 when it hides. See `top` in the shader.
     var top: Float = 0
+    /// How fast the light travels, eased. Sets the scanning streak's strength.
+    var drift: Float = 0
 }
 
 /// The field and its glow, as five passes: the field at full size, its bright

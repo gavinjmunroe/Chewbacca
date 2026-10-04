@@ -50,6 +50,10 @@ with open(sys.argv[1], "w") as fh:
                              "candidates": [{"name": "watch", "score": 0.5 + i * 0.005}]}) + "\n")
 PY
 ok "all-noise labels recommend no VEC_MIN" "$(python3 "$ROOT/tools/route_tune.py" --labels "$T/bad.jsonl" | grep -c 'no VEC_MIN reaches precision')" "1"
+# A stem-matcher row (score ~30, not a cosine) must not count at any threshold.
+cp "$T/labels.jsonl" "$T/stem.jsonl"
+printf '%s\n' '{"id":"st1","hook":"brain-recall","method":"stem","truth":null,"outside":false,"candidates":[{"name":"x","score":30.0}]}' >> "$T/stem.jsonl"
+ok "stem rows are left out of the cosine sweep" "$(python3 "$ROOT/tools/route_tune.py" --labels "$T/stem.jsonl" | grep -c 'brain-recall: 65 labeled rows')" "1"
 ok "missing labels file exits 1" "$(python3 "$ROOT/tools/route_tune.py" --labels "$T/none.jsonl" >/dev/null 2>&1; echo $?)" "1"
 
 echo; echo "$pass passed, $fail failed"; [ "$fail" -eq 0 ]

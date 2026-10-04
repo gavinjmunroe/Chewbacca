@@ -73,8 +73,14 @@ def load(path):
                 row = json.loads(line)
             except ValueError:
                 continue
-            if row.get("id") and row.get("hook") in HOOKS and row.get("candidates"):
-                out[row["id"]] = row
+            if not (row.get("id") and row.get("hook") in HOOKS and row.get("candidates")):
+                continue
+            # Stem-matcher scores run to 30 and are not cosines; one would
+            # count as a prediction at every threshold. route-label already
+            # skips them, this keeps a hand-edited file honest too.
+            if row.get("method") not in (None, "vector", "cosine"):
+                continue
+            out[row["id"]] = row
     return list(out.values())
 
 

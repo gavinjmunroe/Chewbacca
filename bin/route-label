@@ -112,8 +112,13 @@ def truth_for(key, row):
     if key in "123" and int(key) <= len(cands):
         return cands[int(key) - 1], False
     if key == "y":
-        shown = row.get("shown") or []
-        return (shown[0] if shown else None), False
+        # The shown candidate with the highest score, not shown[0]: brain-recall
+        # lists files in brain's fused-rank order while route_tune judges the
+        # top cosine, so shown[0] could be a lower-scored file and every such
+        # row would read as a false positive.
+        shown = set(row.get("shown") or [])
+        best = [c for c in row.get("candidates", []) if c["name"] in shown]
+        return (max(best, key=lambda c: c["score"])["name"] if best else None), False
     if key == "n":
         return None, False
     if key == "o":
@@ -191,7 +196,7 @@ def main():
             continue
         truth, outside = got
         label = {"id": row["id"], "hook": row.get("hook"), "prompt_sha": row.get("prompt_sha"),
-                 "truth": truth, "outside": outside, "key": key,
+                 "truth": truth, "outside": outside, "key": key, "method": row.get("method"),
                  "candidates": row.get("candidates", []), "shown": row.get("shown") or [],
                  "labeled_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
         fd = os.open(args.labels, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)

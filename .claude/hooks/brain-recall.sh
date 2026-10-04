@@ -34,7 +34,7 @@ import atexit, json, os, re, shutil, subprocess
 def route_shadow(row):
     """Append one row to ~/.chewbacca/state/route-shadow.jsonl. Never raises.
 
-    Shared verbatim with skill-route.sh, because install.sh copies only *.sh
+    Shared verbatim by brain-recall.sh and skill-route.sh, because install.sh copies only *.sh
     into ~/.claude/hooks and a helper module would not arrive. The log holds
     the start of every typed prompt, so it must never land in a git work tree:
     any ancestor holding .git makes this refuse, whatever path it was handed.

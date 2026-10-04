@@ -90,6 +90,11 @@ ok "a labeled row is not asked again" "$(printf 'n' | python3 "$ROOT/bin/route-l
 brain_run "a different question about my mentor entirely" >/dev/null
 printf 'n' | python3 "$ROOT/bin/route-label" >/dev/null
 ok "key n means nothing fits" "$(field "$LAB" 1 'str(r["truth"])+"/"+str(r["outside"])')" "None/False"
+# y on a brain-recall row labels the highest-scored shown file, not shown[0]:
+# brain prints in fused-rank order and route_tune judges the top cosine.
+printf '%s\n' '{"id":"yy1","hook":"brain-recall","prompt_sha":"y1","gate":"","method":"cosine","candidates":[{"name":"memory/high.md","score":0.71},{"name":"memory/low.md","score":0.68}],"shown":["memory/low.md","memory/high.md"]}' >> "$LOG"
+printf 'y' | python3 "$ROOT/bin/route-label" >/dev/null
+ok "y labels the top-scored shown file" "$(field "$LAB" 2 'r["truth"]')" "memory/high.md"
 ok "route-label refuses a labels path inside a repo" "$(ROUTE_LABELS="$T/repo/l.jsonl" python3 "$ROOT/bin/route-label" </dev/null >/dev/null 2>&1; echo $?)" "2"
 
 echo; echo "$pass passed, $fail failed"; [ "$fail" -eq 0 ]

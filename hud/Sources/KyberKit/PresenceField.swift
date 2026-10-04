@@ -203,6 +203,9 @@ struct PresenceFrame: Equatable {
     /// The hyper bar, in points with a top-left origin, while it is up. The
     /// field draws its body.
     var pill: CGRect? = nil
+    /// Draw only the strip under the menu bar, as a tint, for the window that
+    /// sits above the menu bar. See `MenuBarStripWindow`.
+    var menuBarOnly = false
 }
 
 /// One number that follows another instead of jumping to it.
@@ -250,6 +253,8 @@ struct PresenceField: View {
     var agent: CGPoint? = nil
     /// The hyper bar, in points, while it is up.
     var pill: CGRect? = nil
+    /// True for the copy in the window above the menu bar.
+    var menuBarOnly = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.hudOffscreen) private var offscreen
@@ -312,7 +317,8 @@ struct PresenceField: View {
             alpha: pulsing && pulses < 2 ? 0.55 : 1.0,
             agent: agent,
             doneAt: doneAt,
-            pill: pill)
+            pill: pill,
+            menuBarOnly: menuBarOnly)
     }
 
     /// Arrival and departure, the only two transitions this layer treats as
@@ -401,7 +407,7 @@ private struct PresenceFieldSurface: NSViewRepresentable {
         view.framebufferOnly = true
         view.enableSetNeedsDisplay = false
         view.delegate = context.coordinator
-        context.coordinator.attach(to: view)
+        context.coordinator.attach(to: view, wakesOnPointer: !frame.menuBarOnly)
         return view
     }
 
@@ -630,8 +636,11 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
     }
 
     @MainActor
-    func attach(to view: MTKView) {
-        Self.live = view
+    func attach(to view: MTKView, wakesOnPointer: Bool = true) {
+        // One view wakes on the pointer: the main frame. The menu bar strip
+        // has no parting to show, and taking this slot would leave the main
+        // frame parked through a pointer move.
+        if wakesOnPointer { Self.live = view }
         guard let device, !broken, pipeline == nil else { return }
         do {
             pipeline = try FieldPipeline(device: device, format: view.colorPixelFormat)
@@ -838,7 +847,8 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
             embers: embers.shown,
             pillOn: pillOn.shown,
             top: menuBar,
-            drift: drift.shown)
+            drift: drift.shown,
+            menuOnly: frame.menuBarOnly ? 1 : 0)
         pipeline.encode(
             buffer, into: pass, width: Int(size.width), height: Int(size.height),
             uniforms: &uniforms, voice: voice)

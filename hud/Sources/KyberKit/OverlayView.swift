@@ -1,6 +1,19 @@
 import AppKit
 import SwiftUI
 
+/// The frame's strip over the menu bar, for `MenuBarStripWindow`: the same
+/// field as the main glass, drawing only the strip.
+@MainActor
+public struct MenuBarStripView: View {
+    let model: OverlayModel
+
+    public init(model: OverlayModel) { self.model = model }
+
+    public var body: some View {
+        PresenceField(presence: model.presence, amplitude: model.amplitude, menuBarOnly: true)
+    }
+}
+
 /// Everything drawn on the glass.
 ///
 /// Surfaces are laid out by region rather than by coordinate, because an agent

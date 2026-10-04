@@ -30,6 +30,8 @@ struct FieldUniforms {
     var top: Float = 0
     /// How fast the light travels, eased. Sets the scanning streak's strength.
     var drift: Float = 0
+    /// 1 in the window above the menu bar: draw only the strip, as a tint.
+    var menuOnly: Float = 0
 }
 
 /// The field and its glow, as five passes: the field at full size, its bright

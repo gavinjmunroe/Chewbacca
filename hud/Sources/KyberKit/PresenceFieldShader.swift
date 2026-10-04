@@ -154,6 +154,9 @@ struct Uniforms {
     float top;
     /// How fast the light travels, eased: the scanning streak's strength.
     float drift;
+    /// 1 for the copy in the window above the menu bar, which draws only the
+    /// strip, and only as a tint.
+    float menuOnly;
 };
 
 /// How loud the voice was, one sample every RIPPLE_STEP seconds, newest first.
@@ -214,6 +217,7 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     float2 size = U.size;
     float2 uv = float2(fragPos.x / size.x, fragPos.y / size.y);
     float W = size.x / max(size.y, 1.0);
+    if (U.menuOnly > 0.5 && uv.y >= U.top) return half4(0.0);
 
     // The breath, for the states that have one. Driven off `beat`, which the
     // Swift side integrates from an eased rate, so it never starts mid-swing.
@@ -429,6 +433,16 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
 
     c *= mix(0.70, 1.0, wave) * born;
     a *= born * U.alpha;
+    // Over the menu bar it is a tint, not a frame: the menu bar only ever
+    // shows the desktop picture through itself, never a window, so the face
+    // drawn under it on 2026-10-04 did not show at all, and this copy sits
+    // above it instead. At half strength the menu names and icons still read
+    // through it. Guessed, then judged on screen.
+    const float MENU_TINT = 0.5;
+    if (U.menuOnly > 0.5) {
+        a *= MENU_TINT;
+        c *= MENU_TINT;
+    }
     c *= U.alpha;
     return half4(half3(min(c, float3(a))), half(a));
 }

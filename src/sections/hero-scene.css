@@ -278,3 +278,61 @@
     animation: none;
   }
 }
+
+/* The plates' frame of reference, from their intro component: a box one
+   viewport tall, centred, capped at 1480 wide. Plate left/top are percents
+   of it, so the old fitted scale curve is this box doing its job. */
+.hs-pin > .hero #plates {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
+  height: 100svh;
+  max-width: 1480px;
+  margin: 0 auto;
+  pointer-events: none;
+}
+/* Each headline line rises on its own, so it needs its own box. */
+.hero h1 .ln { display: inline-block; }
+
+/* The hero box ends above the lower plates; its overflow:hidden cut plate
+   2.2 off at 680px. The pin already clips. */
+.hs-pin > .hero { overflow: visible; }
+
+/* Their plate is two boxes: a 6px grab strip, then the body. Drawn here as
+   one frame plus a hairline 6px down. Their label span measures 22px below
+   the frame top on all six plates, 12px line-height plus 2px under it for
+   the hover rule, tracked 0.32px. Ours sat at 9px, half under the banner. */
+.plate::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 6px;
+  height: 0;
+  border-top: 1px solid var(--accent);
+  z-index: 21;
+}
+.plate .cap-box { top: 13px; }
+.plate .cap-box .cap { line-height: 12px; padding-bottom: 2px; letter-spacing: 0.32px; position: relative; left: 0; top: 0; }
+
+/* The lens plate: glow behind, rays stretched edge to edge, faded top and
+   bottom over 18% as theirs masks it. */
+.plate[data-fig="lens"] .lens-glow { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(117,92,254,0.25) 0%, rgba(117,92,254,0.08) 22%, transparent 45%); }
+.plate[data-fig="lens"] .lens-svg { position: absolute; inset: 0; width: 100%; height: 100%;
+  touch-action: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 18%, #000 82%, transparent 100%); }
+/* The plate's one-line description, shown on label hover. Their tooltip is
+   a bordered mono 9px box 4px under the label at left 8, faded over 150ms. */
+.plate .cap-tip { position: absolute; left: 8px; top: 100%; margin-top: -14px;
+  white-space: nowrap; background: var(--bg); border: 1px solid var(--accent);
+  color: var(--accent); font-family: var(--mono); font-size: 9px; line-height: 1.4;
+  padding: 2px 6px; opacity: 0; transition: opacity 150ms; pointer-events: none; }
+.plate .cap-box:hover .cap-tip { opacity: 1; }
+.plate .cap-box .cap::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0;
+  height: 1px; background: currentColor; transform: scaleX(0); transform-origin: left;
+  transition: transform 400ms ease-out; }
+.plate .cap-box:hover .cap::after { transform: scaleX(1); }

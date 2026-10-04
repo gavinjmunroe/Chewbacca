@@ -92,15 +92,20 @@ export function render() {
         <p class="tst-eyebrow">Testimonials</p>
         <h2 class="tst-title">What teams tell us.</h2>
       </div>
-      <div class="tst-stage">
-        <button class="tst-arrow tst-prev" type="button" aria-label="Previous testimonial">${ARROW("M13 8H3M7 4 3 8l4 4")}</button>
-        <div class="tst-viewport" tabindex="0" role="region"
-             aria-roledescription="carousel" aria-label="Testimonials">
+      <!-- Tab order follows theirs: the slides first, then previous, then
+           next, then the dots. Their arrows come after the slide track in
+           the DOM; the arrows here are absolutely placed, so moving them
+           after the viewport changes the order and not the layout. -->
+      <div class="tst-stage" role="region" aria-roledescription="carousel"
+           aria-label="Testimonials">
+        <div class="tst-viewport" tabindex="0" aria-live="polite"
+             aria-label="Testimonials, use the left and right arrow keys to move">
           <div class="tst-track">${cards}</div>
         </div>
+        <button class="tst-arrow tst-prev" type="button" aria-label="Previous testimonial">${ARROW("M13 8H3M7 4 3 8l4 4")}</button>
         <button class="tst-arrow tst-next" type="button" aria-label="Next testimonial">${ARROW("M3 8h10M9 4l4 4-4 4")}</button>
       </div>
-      <div class="tst-dots" role="tablist" aria-label="Choose a testimonial">${dots}</div>
+      <div class="tst-dots" role="group" aria-label="Choose a testimonial">${dots}</div>
     </div>`;
 }
 
@@ -140,8 +145,11 @@ export function mount(root) {
       const s = slotOf(+cardEl.dataset.i);
       const was = lastSlot.get(cardEl);
       const wrapped = was !== undefined && Math.abs(s - was) > 1;
-      cardEl.style.transition = (!animate || wrapped || reduced.matches) ? "none"
-        : `transform ${STEP_MS}ms ${STEP_EASE}`;
+      /* Only the slide duration is set here. The hover lift and border in
+         testimonials.css ride the same transition list, and an inline
+         `transition` would have overwritten them. */
+      cardEl.style.setProperty("--tst-move",
+        (!animate || wrapped || reduced.matches) ? "0ms" : `${STEP_MS}ms`);
       const x = start + s * step;
       cardEl.style.transform = `translate3d(${x.toFixed(2)}px,0,0)`;
       /* Only a card wholly inside the window is announced. */
@@ -152,7 +160,11 @@ export function mount(root) {
     dots.forEach((d, k) => {
       const on = k === index;
       d.classList.toggle("on", on);
-      d.setAttribute("aria-selected", on ? "true" : "false");
+      /* aria-current, as theirs does. The row is a set of buttons, not a
+         tablist: a tablist needs tabpanels and roving focus, and theirs
+         gives every dot its own tab stop. */
+      if (on) d.setAttribute("aria-current", "true");
+      else d.removeAttribute("aria-current");
     });
   }
 
@@ -167,7 +179,12 @@ export function mount(root) {
     const b = e.target.closest(".tst-dot");
     if (b) go(+b.dataset.i);
   };
+  /* Theirs listens on the whole carousel region, so the arrow keys step it
+     whether focus is on a slide or on either arrow button (read from their
+     chunk 1204: ArrowLeft scrollPrev, ArrowRight scrollNext, preventDefault).
+     The dots sit outside that region on theirs and ignore the keys. */
   const onKey = e => {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
     if (e.key === "ArrowLeft") { onPrev(); e.preventDefault(); }
     if (e.key === "ArrowRight") { onNext(); e.preventDefault(); }
   };
@@ -178,7 +195,8 @@ export function mount(root) {
   prev.addEventListener("click", onPrev);
   next.addEventListener("click", onNext);
   dotRow.addEventListener("click", onDot);
-  viewport.addEventListener("keydown", onKey);
+  const stage = root.querySelector(".tst-stage");
+  stage.addEventListener("keydown", onKey);
 
   const ro = new ResizeObserver(layout);
   ro.observe(viewport);
@@ -189,6 +207,6 @@ export function mount(root) {
     prev.removeEventListener("click", onPrev);
     next.removeEventListener("click", onNext);
     dotRow.removeEventListener("click", onDot);
-    viewport.removeEventListener("keydown", onKey);
+    stage.removeEventListener("keydown", onKey);
   };
 }

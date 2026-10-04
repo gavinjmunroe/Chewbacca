@@ -2,3 +2,4 @@
 # Generated comparison page. 29MB of embedded screenshots, and it carries the
 # reference site rendered pixels, which do not belong in this repo.
 compare.html
+__pycache__/

@@ -3,6 +3,8 @@
    (lower-brief/p_ref2.txt). Every word, glyph and number here is ours. */
 export const MOUNT = "#lower";
 
+import { attachMeshGradient, MESH_COLORS } from "./mesh-gradient.js";
+
 /* The three-layer mark from the header in index.html, so the footer logo is
    the same drawing at a larger size rather than a second design. */
 const MARK = (w, h) => `
@@ -112,8 +114,8 @@ export function render() {
       <header class="lw-head">
         <p class="lw-eyebrow">Security</p>
         <h2 id="lw-sec-h" class="lw-h2">Your traces stay yours.</h2>
-        <p class="lw-lead">Traces carry customer data, so we hold them like it: audited
-          controls, encryption everywhere, and no storage shared between orgs.</p>
+        <p class="lw-lead">Traces carry customer data, so we treat them that way.<br>
+          Audited controls, encrypted everywhere, nothing shared.</p>
       </header>
       <div class="lw-trust">${trust}
       </div>
@@ -155,6 +157,7 @@ export function render() {
   </section>
 
   <section class="lw-cta" aria-labelledby="lw-cta-h">
+    <div class="lw-cta-mesh" aria-hidden="true"></div>
     <div class="lw-cta-in">
       <h2 id="lw-cta-h" class="lw-cta-h">See what your agents did today</h2>
       <a class="lw-btn lw-btn-ghost" href="#">Book a demo</a>
@@ -226,7 +229,22 @@ export function mount(root) {
   };
   copyBtn?.addEventListener("click", onCopy);
 
+  /* The band's mesh. Theirs mounts the same shader behind the CTA text with
+     the parameters in mesh-gradient.js. Without WebGL the CSS gradient on
+     .lw-cta stays, which is our stand-in for their #1D1956 fallback. */
+  const cta = root.querySelector(".lw-cta");
+  const meshHost = root.querySelector(".lw-cta-mesh");
+  let stopMesh = null;
+  if (cta && meshHost) {
+    stopMesh = attachMeshGradient(meshHost, {
+      colors: MESH_COLORS,
+      onLost: () => cta.classList.remove("is-mesh"),
+    });
+    if (stopMesh) cta.classList.add("is-mesh");
+  }
+
   return () => {
+    stopMesh?.();
     clearTimeout(timer);
     copyBtn?.removeEventListener("click", onCopy);
     cookieBtn?.removeEventListener("click", onCookie);

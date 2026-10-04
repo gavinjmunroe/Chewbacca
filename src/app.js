@@ -33,16 +33,16 @@ const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
    parts and so needed nothing. */
 const DEMO = [
   { label: "Traces", title: "Find the runs that failed quietly.",
-    body: "Sift audits every trace against your agent's instructions and groups recurring failures into issues.",
+    body: "Sift reads every run against what your agent was told to do, and folds the failures that repeat into one issue each.",
     mod: sec_waterfall },
-  { label: "Live alerts", title: "Hear about it in the channel you already have open.",
-    body: "Sift triages issues and alerts you in Slack.",
+  { label: "Live alerts", title: "Hear about it where your team already talks.",
+    body: "Each new issue lands in Slack.",
     mod: sec_chat_mock },
-  { label: "Sift MCP", title: "Fix it without leaving the editor.",
+  { label: "Sift MCP", title: "Fix it in your editor.",
     body: "Your editor gets the trace, the diff and the fix, with no tab to change.",
     mod: sec_integrations },
-  { label: "Metrics", title: "Know the moment it comes back.",
-    body: "After deploying the fix, Sift creates an online eval. If a regression occurs, you'll know.",
+  { label: "Metrics", title: "Know if it comes back.",
+    body: "Once the fix ships, Sift keeps scoring new runs against the same failure and tells you the minute one slips through.",
     mod: sec_metrics },
 ];
 
@@ -78,17 +78,22 @@ function scene2() {
     return { layer, ctl };
   });
 
-  /* Active is the block whose centre is nearest the viewport's. */
+  /* Active is the last block to cross half visible, as their container does
+     it: an IntersectionObserver at threshold 0.5 that only ever SETS the
+     index. It starts at -1, so no panel shows until the first block is half
+     on screen, and it never clears, so scrolling back above the column
+     keeps the first panel rather than blanking it. Ours picked the nearest
+     centre, which showed panel one a full screen early. */
   const blocks = [...text.querySelectorAll(".feat-block")];
   let active = -1;
-  return function render() {
-    const mid = window.innerHeight / 2;
-    let best = Infinity, k = 0;
-    blocks.forEach((b, i) => {
-      const r = b.getBoundingClientRect();
-      const d = Math.abs(r.top + r.height / 2 - mid);
-      if (d < best) { best = d; k = i; }
-    });
+  let k = -1;
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) if (e.isIntersecting) k = Number(e.target.dataset.i);
+    apply();
+  }, { threshold: 0.5 });
+  blocks.forEach(b => io.observe(b));
+  return apply;
+  function apply() {
     if (k === active) return;
     active = k;
     layers.forEach((L, i) => {
@@ -129,7 +134,9 @@ function drive(runId, render) {
    frame, the label INSIDE the frame's top-left, and the overlap. The overlap
    is the only depth cue in a flat drawing, and it is what makes six plates
    read as one composition instead of six decorations. */
-import { registerHero, registerReveals, startScroll } from "./scroll.js";
+import { registerReveals, startScroll } from "./scroll.js";
+import { PLATE_LAYOUT } from "./sections/hero-intro.js";
+import { attachMeshToSvgFaces, MESH_COLORS } from "./sections/mesh-gradient.js";
 import { sphere, isoTiles, isoCube, fit, rose, rng,
   extrudedCube, cubeSpinAt, CUBE_POINTER_LERP, CUBE_POINTER_YAW, CUBE_POINTER_PITCH,
   rule30, caX, caY, CA_R_LIVE, CA_R_DEAD, CA_R_HIT, caClipHeight, CA_MS_PER_GEN,
@@ -154,50 +161,17 @@ import { sphere, isoTiles, isoCube, fit, rose, rng,
    100 (the sphere), 2.3 has 2842 circles (the automaton: 2000 cells, 842
    hit targets). I previously had the cube in 1.3 and a ring in 1.2, so both
    were wrong and the ring does not exist. */
-const PLATE_BOX = 1600;
-
-/* THE OFFSETS ABOVE ARE THE >=1600 LAYOUT, AND BELOW 1600 THEY SCALE.
-
-   Measured on all six plates at four widths. Each plate's offset from the
-   page centre, as a fraction of its own offset at 1600:
-
-       vw     1280     1440     1600     1920
-       s     0.8648   0.9730   1.000    1.000
-
-   Every plate agrees to within 0.3%, and above 1600 the box caps and
-   centres, which is the behaviour the comment above already describes.
-
-   What this fixes: applying the 1600 layout at 1440 pushed every plate
-   outward from centre by 2.7%, which is small enough to look like nothing
-   and is exactly the kind of error that makes a composition feel loose
-   without showing you where. Plate WIDTHS are fixed pixels at every width,
-   so this scales positions only.
-
-   INTERPOLATED BETWEEN THE MEASURED POINTS, NOT MODELLED. The curve is not
-   linear in viewport width (+0.108 over the first 160px, +0.027 over the
-   second) and no ratio or power law fits all three, so it is probably a
-   breakpoint set rather than a formula. Three points are what was measured
-   and three points are what is stored; below 1280 it holds at 0.8648
-   because nothing was measured there. */
-const PLATE_SCALE = [[1280, 0.8648], [1440, 0.9730], [1600, 1.0]];
-
-function plateScale(vw) {
-  if (vw >= 1600) return 1;
-  if (vw <= 1280) return PLATE_SCALE[0][1];
-  for (let i = 1; i < PLATE_SCALE.length; i++) {
-    const [x0, y0] = PLATE_SCALE[i - 1], [x1, y1] = PLATE_SCALE[i];
-    if (vw <= x1) return y0 + (y1 - y0) * ((vw - x0) / (x1 - x0));
-  }
-  return 1;
-}
-
+/* The fitted scale curve that lived here ("probably a breakpoint set
+   rather than a formula") was percentages all along: their plates sit at a
+   percent of a box capped at 1480, so the offset from centre scales with
+   min(vw, 1480). Positions now come from PLATE_LAYOUT in hero-intro.js. */
 const PLATES = [
-  { id: "SFT. 1.1", pad: "5px 0 0 0", x: 178,  top: -15,  w: 282, h: 202, fig: "lens",   sw: 0.12, op: 0.7  },
-  { id: "SFT. 1.2", pad: "52px 18px 47px", x: 1288, top: 39,  w: 158, h: 220, fig: "cube",   sw: 0.25, op: 0.85 },
-  { id: "SFT. 1.3", pad: "5px 0 0 0", x: 1111, top: 66,  w: 202, h: 202, fig: "harmo",  sw: 0.15, op: 0.6  },
-  { id: "SFT. 2.1", pad: "23px 18px 18px", x: 149,  top: 336, w: 176, h: 202, fig: "mesh",   sw: 0.15, op: 0.5  },
-  { id: "SFT. 2.2", pad: "23px 18px 18px", x: 275,  top: 408, w: 202, h: 211, fig: "sphere", sw: 0.13, op: 0.5  },
-  { id: "SFT. 2.3", pad: "5px 0 0 0", x: 1140, top: 354, w: 229, h: 202, fig: "dots",   sw: 1,    op: 0.3  },
+  { id: "SFT. 1.1", desc: "rays bent by one mass", pad: "5px 0 0 0", fig: "lens",   sw: 0.12, op: 0.7  },
+  { id: "SFT. 1.2", desc: "a box turned to its edge", pad: "52px 18px 47px", fig: "cube",   sw: 0.25, op: 0.85 },
+  { id: "SFT. 1.3", desc: "sixty turns of one shape", pad: "5px 0 0 0", fig: "harmo",  sw: 0.15, op: 0.6  },
+  { id: "SFT. 2.1", desc: "tiles in three directions", pad: "23px 18px 18px", fig: "mesh",   sw: 0.15, op: 0.5  },
+  { id: "SFT. 2.2", desc: "rings around one axis", pad: "23px 18px 18px", fig: "sphere", sw: 0.13, op: 0.5  },
+  { id: "SFT. 2.3", desc: "growth from a single cell", pad: "5px 0 0 0", fig: "dots",   sw: 1,    op: 0.3  },
 ];
 
 const A = "#755cfe";
@@ -323,7 +297,14 @@ function figure(kind, sw, op) {
        Recovered generator: 48 rays deflected by a Gaussian centred on the
        plate, sigma^2 = 784. Measured waist spread across all 48 midpoints
        was 0.000000, so the crossing is exact rather than approximate. */
-    inner = polys(gravLens({ rays: 48, seg: 60 }), sw, 24, "", op);
+    /* Their lens STRETCHES: preserveAspectRatio none across the 282x202
+       plate, a vertical fade mask over the top and bottom 18%, and a radial
+       glow at the lens centre. Ours was letterboxed into a 202 square in the
+       middle, which is why the rays stopped 43px short of each edge. The
+       stagger is 18ms per ray, read off their draw delay. */
+    const glow = `<div class="lens-glow" aria-hidden="true"></div>`;
+    return glow + `<svg class="lens-svg" viewBox="${VB}" preserveAspectRatio="none">`
+         + polys(gravLens({ rays: 48, seg: 60 }), sw, 18, 'class="lens-ray"', op) + `</svg>`;
   } else if (kind === "harmo") {
     /* LEM 1.3: 60 paths. Not a harmonograph trace in the usual sense but 60
        IDENTICAL copies of one closed 5 vertex figure, each rotated 6.10deg
@@ -466,9 +447,7 @@ function plates() {
   for (const p of PLATES) {
     const d = document.createElement("div");
     d.className = "plate";
-    // Positioned inside a centred PLATE_BOX rather than as a percentage of
-    // the viewport, so the overlaps hold their pixel relationships at any width.
-    const off = (p.x - PLATE_BOX / 2) * plateScale(window.innerWidth);
+    const L = PLATE_LAYOUT[PLATES.indexOf(p)];
     /* THE PLATES ARE NOT ALL THE SAME KIND OF PLATE.
 
        Ours all had the figure filling the frame, inset only by the 1px
@@ -484,9 +463,10 @@ function plates() {
        large, which is why the sphere and the tile field read as oversized
        and crowded while their internal geometry measured correct. The svg
        scales to its box, so padding the box is the whole fix. */
-    d.style.cssText = `left:calc(50% + ${off.toFixed(1)}px);`
-                    + `top:${p.top}px;width:${p.w}px;height:${p.h}px;`
-                    + `padding:${p.pad};box-sizing:border-box`;
+    /* Percent of a centred 1480 box one viewport tall, as their plate props
+       give it. The old pixel offsets put every plate exactly 96px high. */
+    d.style.cssText = `left:${L.left}%;top:${L.top}%;width:${L.w}px;height:${L.h}px;`
+                    + `z-index:${L.z};padding:${p.pad};box-sizing:border-box`;
     /* Exactly ONE plate rotates forever and ONE drifts forever. The
        reference runs 1 infinite transform and 2 infinite dashes across the
        whole page, not a loop per figure: an ambient layer is a background
@@ -495,7 +475,7 @@ function plates() {
     // The label lives in a 40px box pinned to the frame's top-left corner on
     // every reference plate. Mine was bare text, which is why the plates read
     // as bordered rectangles rather than as labelled instrument panels.
-    d.innerHTML = figure(p.fig, p.sw, p.op) + `<div class="cap-box"><span class="cap">${p.id}</span></div>`;
+    d.innerHTML = figure(p.fig, p.sw, p.op) + `<div class="cap-box"><span class="cap">${p.id}</span><span class="cap-tip">${p.desc}</span></div>`;
     host.appendChild(d);
   }
 }
@@ -506,7 +486,6 @@ plates();
    document, because the depth ordering reads each plate's measured position.
    Registering against an empty container is the silent version of this bug:
    no error, no motion, and a scroll system that looks wired and is not. */
-registerHero(document.querySelector(".hero") || document.body);
 registerReveals();
 startScroll();
 /* ---------------------------------------------------------------------- */
@@ -594,6 +573,63 @@ caClock();
 caInteraction();
 
 /* ---------------------------------------------------------------------- */
+/* The lens centre is draggable. Theirs eases the centre toward the pointer
+   at 0.025 a frame at rest and 0.12 while held, on a 33ms throttle, and
+   recomputes all 48 rays from the same Gaussian each step. Off screen the
+   loop stops. Only ever runs while the centre is still moving. */
+function lensClock() {
+  const plate = document.querySelector('.plate[data-fig="lens"]');
+  if (!plate) return;
+  const rays = [...plate.querySelectorAll(".lens-ray")];
+  const glow = plate.querySelector(".lens-glow");
+  const svg = plate.querySelector(".lens-svg");
+  const cur = { x: 50, y: 50 }, aim = { x: 50, y: 50 };
+  let held = false, raf = 0, last = 0;
+  plate.style.pointerEvents = "auto";
+  svg.style.cursor = "grab";
+  const draw = () => {
+    gravLens({ rays: 48, seg: 60, cx: cur.x, cy: cur.y }).forEach((line, i) => {
+      rays[i]?.setAttribute("points", line.map(([x, y]) => `${x.toFixed(2)},${y.toFixed(2)}`).join(" "));
+    });
+    glow.style.background = `radial-gradient(circle at ${cur.x.toFixed(2)}% ${cur.y.toFixed(2)}%, `
+      + "rgba(117,92,254,0.25) 0%, rgba(117,92,254,0.08) 22%, transparent 45%)";
+  };
+  const step = now => {
+    raf = requestAnimationFrame(step);
+    if (now - last < 33) return;
+    last = now;
+    const k = held ? 0.12 : 0.025;
+    cur.x += (aim.x - cur.x) * k;
+    cur.y += (aim.y - cur.y) * k;
+    draw();
+    if (!held && Math.abs(aim.x - cur.x) < 0.01 && Math.abs(aim.y - cur.y) < 0.01) {
+      cancelAnimationFrame(raf); raf = 0;
+    }
+  };
+  const go = () => { if (!raf) raf = requestAnimationFrame(step); };
+  const point = e => {
+    const r = svg.getBoundingClientRect();
+    aim.x = Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100));
+    aim.y = Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100));
+  };
+  svg.addEventListener("pointerdown", e => {
+    e.preventDefault();
+    svg.setPointerCapture(e.pointerId);
+    held = true; svg.style.cursor = "grabbing"; point(e); go();
+  });
+  svg.addEventListener("pointermove", e => { if (held) point(e); });
+  const release = () => { held = false; svg.style.cursor = "grab"; };
+  svg.addEventListener("pointerup", release);
+  svg.addEventListener("pointercancel", release);
+  new IntersectionObserver(([e]) => {
+    if (!e.isIntersecting && raf) { cancelAnimationFrame(raf); raf = 0; }
+    else if (e.isIntersecting && (held || aim.x !== cur.x || aim.y !== cur.y)) go();
+  }).observe(plate);
+  draw();
+}
+lensClock();
+
+/* ---------------------------------------------------------------------- */
 /* The cube's clock. Spin-up, then an indefinite slow drift, plus a pointer
    lean, paused and BANKED while off screen so scrolling back finds it where
    it was rather than restarting its entrance. */
@@ -603,6 +639,10 @@ function cubeClock() {
   const plate = host.closest(".plate") || host;
   const edgeG = host.querySelector(".cube-edges");
   const face  = host.querySelector(".cube-topface");
+  /* Their cube top is the same mesh gradient as the hero voxels (chunk 5061).
+     The group is already clipped to the top face, which this clock moves. */
+  attachMeshToSvgFaces(host.querySelector('g[clip-path="url(#cube-top)"]'), [0, 0, 100, 100],
+    { colors: MESH_COLORS, clipToFaces: false });
   if (!edgeG || !face) return;
 
   if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -679,6 +719,7 @@ import * as sec_integrations from "./sections/integrations.js";
 import * as sec_testimonials from "./sections/testimonials.js";
 import * as sec_lower from "./sections/lower.js";
 import { mountHeroScene } from "./sections/hero-scene.js";
+import * as sec_states from "./sections/states.js";
 import * as sec_metrics from "./sections/metrics.js";
 
 /* Prefixed, because `testimonials` and `counter` are already bound in this
@@ -709,6 +750,9 @@ for (const mod of SECTIONS) {
     console.error("section failed to mount:", mod.MOUNT, err);
   }
 }
+/* Hover, focus, pressed and keyboard for every control. Mounted on the body
+   because it is the one cross-cutting module; see states.js. */
+try { sec_states.mount(document.body); } catch (err) { console.error("states failed to mount:", err); }
 
 /* Reveals are registered AFTER the sections exist, because the observer can
    only watch elements that are in the document. Registering first is the

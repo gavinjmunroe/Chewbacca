@@ -19,12 +19,52 @@ subject will both say "traces" and "latency". Identifiers that are genuinely
 generic (a field name any such product would use) can be allowlisted by name,
 with the reason, rather than by lowering the threshold for everything.
 
+A BRAND SWAP IS STILL A LIFT. On 2026-10-03 three of the four feature
+leads were their sentences with "Lemma" replaced by "Sift", and this check
+passed them because it compared exact strings. Both sides are now compared
+with the two brand names folded to one token, case and whitespace folded, and
+a shared run of SHINGLE words counts as a hit even when the full sentence was
+trimmed ("you'll know" against their "you'll know immediately").
+
 Usage:  python3 tools/check_copy.py <reference-url>
 """
 import sys, re, json, pathlib, subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MIN_CHARS = 18
+# Eight words in a row. The three brand-swapped leads shared 13, 9 and 14;
+# the longest shared run between two unrelated product pages in this repo's
+# own copy is a 4-word phrase ("every trace against your"), so 8 leaves room.
+SHINGLE = 8
+BRANDS = re.compile(r"\b(lemma|sift)\b", re.I)
+
+
+def norm(s):
+    s = BRANDS.sub("BRAND", s)
+    s = re.sub(r"<[^>]+>", " ", s)
+    s = s.replace("&nbsp;", " ").replace("&hellip;", "...").replace("\u2019", "'")
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
+def shingles(s, n=SHINGLE):
+    w = re.findall(r"[a-z0-9_']+", s)
+    return {" ".join(w[i:i + n]) for i in range(len(w) - n + 1)}
+
+
+def lifted(strings, src):
+    """(string, path) for each of their strings found in our source."""
+    texts = {path: norm(text) for path, text in src.items()}
+    words = {path: " ".join(re.findall(r"[a-z0-9_']+", t)) for path, t in texts.items()}
+    hits = []
+    for s in sorted(strings, key=len, reverse=True):
+        if len(s) < MIN_CHARS or s in ALLOW:
+            continue
+        ns = norm(s)
+        for path in texts:
+            if ns in texts[path] or any(sh in words[path] for sh in shingles(ns)):
+                hits.append((s, path))
+                break
+    return hits
 
 # Generic beyond any one product. Each needs a reason, not just a place on a
 # list, because the easy way to make this check pass is to keep adding to it.
@@ -76,15 +116,8 @@ if __name__ == "__main__":
     else:
         strings = their_text(url)
         cache.write_text(json.dumps(sorted(strings), indent=1))
-    src = ours()
-    hits = []
-    for s in sorted(strings, key=len, reverse=True):
-        if len(s) < MIN_CHARS or s in ALLOW:
-            continue
-        for path, text in src.items():
-            if s in text:
-                hits.append((s, str(path.relative_to(ROOT))))
-                break
+    src = {str(p.relative_to(ROOT)): text for p, text in ours().items()}
+    hits = lifted(strings, src)
     if hits:
         print(f"copy check FAILED: {len(hits)} string(s) lifted verbatim "
               f"(>= {MIN_CHARS} chars)\n")

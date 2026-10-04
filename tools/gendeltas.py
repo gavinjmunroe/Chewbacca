@@ -36,11 +36,11 @@ OVERRIDES = {
         "Stop guessing why your agents fail",
     "Find the runs that failed quietly.":
         "Surface failures you didn't know to look for.",
-    "Hear about it in the channel you already have open.":
+    "Hear about it where your team already talks.":
         "Get notified on what matters.",
-    "Fix it without leaving the editor.":
+    "Fix it in your editor.":
         "Fix it where you work.",
-    "Know the moment it comes back.":
+    "Know if it comes back.":
         "Ship with confidence.",
     "Drops into the stack you already run.":
         "Fits into your existing stack.",

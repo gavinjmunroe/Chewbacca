@@ -23,6 +23,8 @@
  *   captions that wipe on a clip-path driven by N, not by a timer
  *   the counter is not a count: six digit reels spinning forever, blurred
  */
+import { mountIntro } from "./hero-intro.js";
+import { attachMeshToSvgFaces, MESH_COLORS } from "./mesh-gradient.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const ACCENT = "#755CFE";
@@ -76,63 +78,22 @@ const ROWS = [
   [320, 380, 460, 320, 380, 460],
 ];
 
-/* Ours. Nine failures a support agent actually produces, in our words, at
- * cells chosen so no row carries two and the column spread is even. */
+/* Ours, in our words, on THEIR nine cells. The cells are layout and come
+ * from their 598 constants; the words are ours. A brick's lit width is
+ * max(14.4 * label, 15.6 * (example + 2)) + 104, so each example is held to
+ * the length of theirs in the same cell. Our earlier cells put a 37
+ * character example at the end of row 2, and that brick widened past the
+ * wall's right edge and off the screen. */
 const FAILURES = [
-  {
-    row: 0,
-    col: 2,
-    label: "WRONG TOOL",
-    example: "Issued a refund to check a balance",
-  },
-  {
-    row: 1,
-    col: 4,
-    label: "LOOPING",
-    example: "Asked for the order number 4 times",
-  },
-  {
-    row: 2,
-    col: 1,
-    label: "MADE IT UP",
-    example: "Our warranty covers water damage",
-  },
-  {
-    row: 2,
-    col: 5,
-    label: "SKIPPED STEP",
-    example: "Closed it before the customer replied",
-  },
-  {
-    row: 3,
-    col: 3,
-    label: "STALE CONTEXT",
-    example: "Quoted last season's prices",
-  },
-  {
-    row: 4,
-    col: 0,
-    label: "GAVE UP",
-    example: "Let me transfer you to a human",
-  },
-  {
-    row: 4,
-    col: 4,
-    label: "POLICY BREACH",
-    example: "Promised a refund after 60 days",
-  },
-  {
-    row: 5,
-    col: 2,
-    label: "LOST THE THREAD",
-    example: "Which account did you mean?",
-  },
-  {
-    row: 6,
-    col: 5,
-    label: "UNSAFE ACTION",
-    example: "Deleted the draft without asking",
-  },
+  { row: 0, col: 4, label: "WRONG TOOL", example: "Refunded to check a balance" },
+  { row: 1, col: 2, label: "LOOPING", example: "Asked for it 4 times" },
+  { row: 0, col: 1, label: "MADE IT UP", example: "Our warranty covers floods" },
+  { row: 1, col: 5, label: "SKIPPED STEP", example: "Closed it before a reply" },
+  { row: 2, col: 4, label: "STALE CONTEXT", example: "Quoted last year's rates" },
+  { row: 3, col: 1, label: "GAVE UP", example: "Let me get you a human" },
+  { row: 4, col: 0, label: "POLICY BREACH", example: "Promised a refund after 60 days" },
+  { row: 5, col: 4, label: "LOST THE THREAD", example: "Which account did you mean?" },
+  { row: 6, col: 2, label: "UNSAFE ACTION", example: "Deleted the draft unasked" },
 ];
 
 /* The mark the voxels build is OUR header logo laid on the lattice: a square
@@ -408,6 +369,7 @@ function logoWallHTML() {
 export function mountHeroScene(run) {
   const pin = run.querySelector(".hs-pin");
   const hero = run.querySelector(".hero");
+  const introExit = mountIntro(hero);
   const wall = run.querySelector(".hs-logos");
   wall.innerHTML = logoWallHTML();
   const wallClip = wall.querySelector(".hs-lw-band");
@@ -574,6 +536,10 @@ export function mountHeroScene(run) {
   markNodes
     .sort((a, b) => a.c.i + a.c.j - (b.c.i + b.c.j))
     .forEach((m) => gMark.appendChild(m.g));
+  /* Theirs: one foreignObject over the stage box holding a mesh gradient,
+   * clipped to every visible top face. Null without WebGL, and the
+   * url(#hs-top) fill underneath stays as the fallback. */
+  const meshTops = attachMeshToSvgFaces(gMark, [-1200, -800, 2400, 1500], { colors: MESH_COLORS });
 
   /* ---- the sweep, on a canvas because it redraws 2000 tiles a frame ---- */
   const landed = new Set(bricks.map((b) => `${b.ti},${b.tj}`));
@@ -744,20 +710,23 @@ export function mountHeroScene(run) {
   /* ---- one render, from one progress value ---- */
   function render(N) {
     /* Logo wall. Cells rise in 0.05 apart, the band clips open from the
-     * bottom, and it leaves upward by 320px while its lower edge is cut. */
+     * bottom, and it leaves upward by 320px while its lower edge is cut.
+     * The whole exit runs on ONE cubic ease-in, t*t*t in their 598 chunk:
+     * rise, clip, per-row offset and fade. Three of the four were on an
+     * ease-out here, so at 1050px of scroll ours was already half gone
+     * while theirs had barely started. */
     const enter = clamp((N - LOGO_IN.start) / LOGO_IN.span);
     const exit = clamp((N - LOGO_OUT.start) / LOGO_OUT.span);
     const inE = easeOut(enter),
-      outI = easeIn(exit),
-      outE = easeOut(exit);
+      outI = easeIn(exit);
     const wallOp = inE * (1 - outI);
     wall.style.display = wallOp <= 0 ? "none" : "";
     wall.style.opacity = wallOp.toFixed(3);
-    wall.style.transform = `translateY(${(-320 * outE).toFixed(2)}px)`;
+    wall.style.transform = `translateY(${(-320 * outI).toFixed(2)}px)`;
     wall.style.pointerEvents = wallOp > 0.7 ? "auto" : "none";
     wallClip.style.clipPath =
       exit > 0
-        ? `inset(0 0 ${(100 * outE).toFixed(2)}% 0)`
+        ? `inset(0 0 ${(100 * outI).toFixed(2)}% 0)`
         : `inset(${((1 - easeOut(clamp(enter / 0.25))) * 100).toFixed(2)}% 0 0 0)`;
     const span = 1 - 0.05 * (MARKS.length - 1);
     for (const cell of wallCells) {
@@ -765,7 +734,7 @@ export function mountHeroScene(run) {
         r = +cell.dataset.r;
       const c = easeOut(clamp((inE - 0.05 * k) / span));
       cell.style.opacity = c.toFixed(3);
-      cell.style.transform = `translateY(${((1 - c) * 26 - outE * (2 - r) * 40).toFixed(2)}px)`;
+      cell.style.transform = `translateY(${((1 - c) * 26 - outI * (2 - r) * 40).toFixed(2)}px)`;
     }
 
     /* The failures phase and its six beats, each a slice of local progress. */
@@ -780,6 +749,7 @@ export function mountHeroScene(run) {
     const E = windowed(N, PHASE.traces.start, PHASE.traces.end);
     const T = windowed(N, PHASE.solution.start, PHASE.solution.end);
     const F = windowed(N, PHASE.intro.start, PHASE.intro.end, INTRO_SPAN);
+    introExit(N);
     const melt = prog(N, PHASE.traces.start, PHASE.traces.end);
     const gridOp = Math.max(
       (S > 0) * clamp((V - 0.93) / 0.07),
@@ -937,6 +907,10 @@ export function mountHeroScene(run) {
         m.right.setAttribute("d", f.right);
         m.top.setAttribute("d", f.top);
       }
+    if (T > 0)
+      meshTops?.sync(
+        markNodes.filter((m) => m.g.style.display !== "none").map((m) => m.top.getAttribute("d")),
+      );
 
     accent = 1 - melt;
     setTraces(N >= PHASE.traces.start && N <= PHASE.traces.end);

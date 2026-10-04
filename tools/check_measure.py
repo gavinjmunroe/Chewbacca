@@ -44,7 +44,9 @@ if (DOCS / "DELTAS.md").exists():
     t = (DOCS / "DELTAS.md").read_text()
     only = t.count("ONLY")
     check(only <= 0, f"DELTAS: {only} sections did not pair")
-    rows = re.findall(r"^\| [a-z].*?\|$", t, re.M)
+    # The table header "| axis | theirs | ours | delta |" is not an axis.
+    rows = [r for r in re.findall(r"^\| [a-z].*?\|$", t, re.M)
+            if not r.startswith("| axis |")]
     check(len(rows) >= 150, f"DELTAS: only {len(rows)} comparable rows, expected 150+")
 
 if FAIL:

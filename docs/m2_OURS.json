@@ -17,16 +17,16 @@
     "w": 512,
     "gap": 8
    },
-   "painted": 4988,
-   "shapes": 4053,
-   "svg": 8,
+   "painted": 5167,
+   "shapes": 4136,
+   "svg": 6,
    "canvas": 1,
    "img": 0,
    "mockup": {
     "w": 880,
     "h": 230,
     "tag": "DIV",
-    "kids": 10
+    "kids": 12
    },
    "controls": 15,
    "control_h": [
@@ -57,9 +57,49 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 419,
-   "shapes": 49,
-   "svg": 32,
+   "painted": 375,
+   "shapes": 38,
+   "svg": 25,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 451
+   },
+   "controls": 13,
+   "control_h": [
+    17,
+    20,
+    22,
+    26,
+    33
+   ],
+   "i": 1,
+   "y": 11176,
+   "height": 928,
+   "heading": "Find the runs that failed quietly."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 2,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgb(108, 105, 145)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 426,
+   "shapes": 50,
+   "svg": 33,
    "canvas": 0,
    "img": 0,
    "mockup": {
@@ -76,10 +116,10 @@
     26,
     33
    ],
-   "i": 1,
-   "y": 11176,
-   "height": 907,
-   "heading": "Find the runs that failed quietly."
+   "i": 2,
+   "y": 12104,
+   "height": 908,
+   "heading": "Hear about it where your team already talks."
   },
   {
    "h_size": "36px",
@@ -89,7 +129,7 @@
    "h_align": "left",
    "h_x": 224,
    "h_w": 384,
-   "h_lines": 3,
+   "h_lines": 1,
    "lead": {
     "size": "18px",
     "lh": "28px",
@@ -97,7 +137,7 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 423,
+   "painted": 359,
    "shapes": 49,
    "svg": 32,
    "canvas": 0,
@@ -106,47 +146,7 @@
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 507
-   },
-   "controls": 13,
-   "control_h": [
-    17,
-    20,
-    22,
-    26,
-    33
-   ],
-   "i": 2,
-   "y": 12083,
-   "height": 907,
-   "heading": "Hear about it in the channel you already have open."
-  },
-  {
-   "h_size": "36px",
-   "h_lh": "43.2px",
-   "h_ls": "-0.36px",
-   "h_weight": "400",
-   "h_align": "left",
-   "h_x": 224,
-   "h_w": 384,
-   "h_lines": 2,
-   "lead": {
-    "size": "18px",
-    "lh": "28px",
-    "color": "rgb(108, 105, 145)",
-    "w": 384,
-    "gap": 8
-   },
-   "painted": 356,
-   "shapes": 48,
-   "svg": 31,
-   "canvas": 0,
-   "img": 0,
-   "mockup": {
-    "w": 1040,
-    "h": 3600,
-    "tag": "DIV",
-    "kids": 508
+    "kids": 512
    },
    "controls": 13,
    "control_h": [
@@ -157,9 +157,9 @@
     33
    ],
    "i": 3,
-   "y": 12990,
-   "height": 900,
-   "heading": "Fix it without leaving the editor."
+   "y": 13012,
+   "height": 886,
+   "heading": "Fix it in your editor."
   },
   {
    "h_size": "36px",
@@ -169,7 +169,7 @@
    "h_align": "left",
    "h_x": 224,
    "h_w": 384,
-   "h_lines": 2,
+   "h_lines": 1,
    "lead": {
     "size": "18px",
     "lh": "28px",
@@ -177,16 +177,16 @@
     "w": 384,
     "gap": 8
    },
-   "painted": 380,
-   "shapes": 39,
-   "svg": 26,
+   "painted": 382,
+   "shapes": 40,
+   "svg": 27,
    "canvas": 0,
    "img": 0,
    "mockup": {
     "w": 1040,
     "h": 3600,
     "tag": "DIV",
-    "kids": 508
+    "kids": 512
    },
    "controls": 13,
    "control_h": [
@@ -197,9 +197,9 @@
     33
    ],
    "i": 4,
-   "y": 13890,
-   "height": 670,
-   "heading": "Know the moment it comes back."
+   "y": 13898,
+   "height": 662,
+   "heading": "Know if it comes back."
   },
   {
    "h_size": "36px",
@@ -371,10 +371,10 @@
     "w": 627,
     "gap": 57
    },
-   "painted": 59,
+   "painted": 61,
    "shapes": 3,
    "svg": 1,
-   "canvas": 0,
+   "canvas": 1,
    "img": 0,
    "mockup": {
     "w": 1280,
@@ -405,10 +405,10 @@
    "h_w": 500,
    "h_lines": 1,
    "lead": null,
-   "painted": 86,
+   "painted": 88,
    "shapes": 6,
    "svg": 2,
-   "canvas": 0,
+   "canvas": 1,
    "img": 0,
    "mockup": {
     "w": 1280,

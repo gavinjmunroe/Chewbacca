@@ -925,7 +925,7 @@ fi
 # remediation was a dead end and the only move left after a refusal was to
 # guess again. A gate that refuses without a runnable next step trains people
 # to route around it.
-UX_ENGINE_DIR="${UX_ENGINE_DIR:-$HOME/Desktop/2026-Code/ux-engine}"
+UX_ENGINE_DIR="${UX_ENGINE_DIR:-$HOME/code/tools/ux-engine}"
 if [ -d "$UX_ENGINE_DIR/bin" ]; then
   mkdir -p "$HOME/.local/bin"
   _ux_linked=""
@@ -2496,7 +2496,7 @@ elif ! command -v uv &>/dev/null; then
   warn "uv not found, skipping macOS-use. Install uv, then re-run:"
   warn "  ./setup.sh --only tools"
 else
-  MU_DIR="$HOME/Projects/macOS-use"
+  MU_DIR="$HOME/code/refs/macOS-use"
   [ -d "$MU_DIR/.git" ] || git clone -q --depth 1 \
     https://github.com/browser-use/macOS-use.git "$MU_DIR" 2>/dev/null || true
   if [ -d "$MU_DIR" ]; then
@@ -2557,7 +2557,7 @@ fi
 # Its own installer (scripts/sync-skills) repoints ~/.claude/CLAUDE.md at the
 # pack's AGENTS.MD, which would replace your global instructions. Do not run
 # it. The loop below does the linking and touches nothing else.
-PACK_DIR="$HOME/Projects/agent-scripts"
+PACK_DIR="$HOME/code/refs/agent-scripts"
 PACK_SKIP="codex-first frontend-design"
 if [ -d "$PACK_DIR/.git" ]; then
   log "agent-scripts already cloned, left alone"

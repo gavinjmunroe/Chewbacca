@@ -7070,7 +7070,7 @@ function textsReader() {
     path.join(here, "..", "mac", "lib", "texts.py"),
     path.join(here, "..", "..", "mac", "lib", "texts.py"),
     path.join(os.homedir(), ".chewbacca", "mac", "lib", "texts.py"),
-    path.join(os.homedir(), "Desktop/2026-Code/projects/chewbacca/mac/lib/texts.py"),
+    path.join(os.homedir(), "code/chewbacca/mac/lib/texts.py"),
   ])
     if (fs.existsSync(cand)) return cand;
   return null;

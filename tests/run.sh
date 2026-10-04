@@ -93,6 +93,9 @@ export COURSEWORK_DIR="$TMP/coursework"
 export CHEWBACCA_LOG_DIR="$TMP/logs"
 export SUPERASSISTANT_DIR="$TMP/superassistant"
 export BOB_DECISIONS="$TMP/decisions.jsonl"
+# brain-recall and skill-route log every prompt they see; without this, every
+# suite run would write its test prompts into the real private shadow log.
+export ROUTE_SHADOW_LOG="$TMP/route-shadow.jsonl"
 
 group() { CURRENT="$1"; [ -n "$ONLY" ] && [ "$ONLY" != "$1" ] && return 1
           echo -e "\n${BLD}$1${NC}"; return 0; }
@@ -917,6 +920,8 @@ fi
 # ── hooks ─────────────────────────────────────────────────────────────────────
 if group "hooks"; then
   check "brain-recall speaks only over the cosine bar" bash "$ROOT/tests/brain_recall.sh"
+  check "router shadow log never blocks a hook or lands in a repo" bash "$ROOT/tests/route_shadow.sh"
+  check "route_tune follows its written rule and refuses under 50 rows" bash "$ROOT/tests/route_tune.sh"
   check "formatter handles a broken Node runtime" python3 "$ROOT/tests/test_formatter_runtime.py"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   # A hook must never fail the session, whatever it is handed.

@@ -34,7 +34,50 @@ export SKILL_ROUTE_PAYLOAD
 export SKILL_ROUTE_SELF="${BASH_SOURCE[0]}"
 
 exec python3 <<'PY'
-import json, os, re, sys
+import atexit, json, os, re, sys
+
+
+def route_shadow(row):
+    """Append one row to ~/.chewbacca/state/route-shadow.jsonl. Never raises.
+
+    Shared verbatim with skill-route.sh, because install.sh copies only *.sh
+    into ~/.claude/hooks and a helper module would not arrive. The log holds
+    the start of every typed prompt, so it must never land in a git work tree:
+    any ancestor holding .git makes this refuse, whatever path it was handed.
+    ROUTE_SHADOW_LOG overrides the path, which is how the suite keeps test
+    prompts out of the real log."""
+    try:
+        import hashlib, time
+        path = os.environ.get("ROUTE_SHADOW_LOG") or os.path.join(
+            os.environ.get("CHEWBACCA_HOME") or "~/.chewbacca", "state", "route-shadow.jsonl")
+        path = os.path.realpath(os.path.expanduser(path))
+        probe = os.path.dirname(path)
+        while True:
+            if os.path.exists(os.path.join(probe, ".git")):
+                return
+            parent = os.path.dirname(probe)
+            if parent == probe:
+                break
+            probe = parent
+        # 20 MB is years of prompts at a few hundred bytes a row; past it the
+        # log stops growing rather than eating the disk. Guessed, never measured.
+        if os.path.exists(path) and os.path.getsize(path) > 20_000_000:
+            return
+        prompt = row.pop("prompt", "") or ""
+        row = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+               "prompt_sha": hashlib.sha256(prompt.encode()).hexdigest()[:16],
+               "prompt80": " ".join(prompt.split())[:80], **row}
+        row["id"] = hashlib.sha256(f"{row['ts']}|{row['hook']}|{prompt}|{os.getpid()}"
+                                   .encode()).hexdigest()[:12]
+        os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(fd, (json.dumps(row, separators=(",", ":")) + "\n").encode())
+        finally:
+            os.close(fd)
+    except BaseException:
+        pass
+
 
 try:
     payload = json.loads(os.environ.get("SKILL_ROUTE_PAYLOAD") or "{}")
@@ -42,8 +85,18 @@ except Exception:
     raise SystemExit(0)
 
 prompt = (payload.get("prompt") or "").strip()
+# One row per prompt in the private shadow log, silent prompts included, so
+# VEC_MIN and VEC_GATE can be set from labeled real traffic (bin/route-label,
+# tools/route_tune.py). The detached child that only builds the vector cache
+# is not a prompt and logs nothing.
+SHADOW = {"hook": "skill-route", "session_id": str(payload.get("session_id") or ""),
+          "prompt": prompt, "gate": "", "method": "", "threshold": None,
+          "gate_threshold": None, "candidates": [], "shown": [], "required": []}
+if not os.environ.get("SKILL_ROUTE_BUILD_CACHE"):
+    atexit.register(lambda: route_shadow(dict(SHADOW)))
 # Too short to match on, or a slash command the person already chose.
 if len(prompt) < 12 or prompt.startswith("/"):
+    SHADOW["gate"] = "short-or-slash"
     raise SystemExit(0)
 
 # Machine traffic is not a request. On its first live firing, 2026-09-21, this
@@ -53,6 +106,7 @@ if len(prompt) < 12 or prompt.startswith("/"):
 NOISE = ("SYSTEM NOTIFICATION", "task-notification", "<task-id>",
          "exited with code", "hookSpecificOutput", "task notification")
 if any(marker in prompt for marker in NOISE):
+    SHADOW["gate"] = "machine"
     raise SystemExit(0)
 
 ROOTS = [os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "skills"),
@@ -171,6 +225,7 @@ for root in ROOTS:
         skills.append((name, desc, sk))
 
 if not skills:
+    SHADOW["gate"] = "no-skills"
     raise SystemExit(0)
 
 # Meaning first, keywords as the fallback. Added 2026-10-03.
@@ -243,9 +298,12 @@ def vector_route():
     except Exception:
         return None
     scored = sorted(((sum(a * b for a, b in zip(q, v)), i) for i, v in enumerate(vecs)), reverse=True)
+    SHADOW["candidates"] = [{"name": skills[i][0], "score": round(c, 4)} for c, i in scored[:3]]
     return [(c, skills[i][0], skills[i][2]) for c, i in scored[:2] if c >= VEC_MIN][:1]
 
 vec = None if os.environ.get("SKILL_ROUTE_NO_VECTOR") else vector_route()
+SHADOW["method"] = "stem" if vec is None else "vector"
+SHADOW["threshold"] = None if vec is None else VEC_MIN
 
 prompt_stems = stems(prompt)
 prompt_bigrams = bigrams(stem_seq(prompt))
@@ -304,11 +362,16 @@ for name, desc, path in ([] if vec is not None else skills):
     why = sorted(hits, key=lambda h: claims.get(h, 1))[:4]
     best.append((score, name, path, why))
 
+best.sort(reverse=True)
+if vec is None:
+    # Stem scores are weight*10 plus a phrase bonus, not cosines. Logged so
+    # the fallback's rows can be told apart and left out of a cosine sweep.
+    SHADOW["candidates"] = [{"name": n, "score": round(sc, 4)} for sc, n, _p, _w in best[:3]]
 if not best:
     raise SystemExit(0)
 
-best.sort(reverse=True)
 top = best[:2]
+SHADOW["shown"] = [name for _s, name, _p, _w in top]
 
 lines = []
 for score, name, path, why in top:
@@ -332,6 +395,8 @@ ENFORCED = {"graph-engineering"}
 VEC_GATE = 0.45
 required = [name for s, name, _p, _w in top
             if name in ENFORCED and (vec is None or s >= VEC_GATE)]
+SHADOW["gate_threshold"] = VEC_GATE
+SHADOW["required"] = required
 sid = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("session_id") or ""))
 if required and sid:
     state = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "state")

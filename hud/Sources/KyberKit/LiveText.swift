@@ -5,24 +5,29 @@ import CoreGraphics
 ///
 /// The recogniser revises its partials several times a second, and mostly it
 /// revises the newest word or two: "send me the deck" is "send me the deck"
-/// then "send me the deck for" then "send me the deck for Northwind". Typing every
-/// revision straight into a field means deleting and retyping the tail on
-/// every one, which reads as the text shivering. So a word is typed only once
-/// it has survived one revision unchanged, and never while it is the newest
-/// word. That is the LocalAgreement rule streaming Whisper systems use, with
-/// the recogniser's own revisions as the chunks.
+/// then "send me the deck for" then "send me the deck for Northwind". Each
+/// partial is typed whole and `edit` deletes and retypes only the tail that
+/// changed, so the field keeps up with the voice. See `live`.
 public enum LiveText {
     public static func words(_ text: String) -> [String] {
         text.split(whereSeparator: \.isWhitespace).map(String.init)
     }
 
-    /// The words `previous` and `current` agree on from the start, never
-    /// including `current`'s newest word.
-    public static func stablePrefix(previous: [String], current: [String]) -> [String] {
-        let limit = min(previous.count, current.count - 1)
-        var n = 0
-        while n < limit, previous[n] == current[n] { n += 1 }
-        return Array(current[..<n])
+    /// What the field shows for a partial while the person is still talking:
+    /// every word, the newest included, so the text keeps up with the voice.
+    ///
+    /// Typing only words that had survived a revision (LocalAgreement) kept
+    /// the text from shivering and left it a word or two behind the voice at
+    /// all times: "its like one word behind at all times... make it where it
+    /// auto updates as the user speaks and can delete" (2026-10-03). So the
+    /// whole partial goes in and a revision deletes and retypes the tail.
+    /// Only the sentence's closing mark is held back, because the recogniser
+    /// adds one to nearly every partial and a "." blinking at the end of each
+    /// new word is the one revision that is never meant.
+    public static func live(_ partial: String) -> String {
+        var text = partial.trimmingCharacters(in: .whitespaces)
+        while let last = text.last, ".?!".contains(last) { text.removeLast() }
+        return text
     }
 
     /// How to turn what is in the field into `target`: delete this many

@@ -50,6 +50,14 @@ where the data comes from. All four of those are written down here, once.
    reducing them to an interpolation. Check held-scroll behavior separately
    so timed loops are not mistaken for scroll-driven transitions.
 
+7. **For a website, run `site-gate check <every page url>` and get exit 0.**
+   It refuses console errors, horizontal scroll at 390, dead links, controls
+   with no hover or focus state, and loops that run under reduced motion.
+   Then `site-gate idle <url>` and confirm the ambient layer you planned is
+   moving. The four layers a site needs (layout, choreography, ambience,
+   response) are in [crafts/website.md](../../crafts/website.md); read it
+   before building, because three of the four never show in a screenshot.
+
 Steps 1 to 3 are lookups and should cost almost nothing. That is the point.
 
 ## Pick the stance from the reader, not from taste

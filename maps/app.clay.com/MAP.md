@@ -172,3 +172,11 @@ Each of these cost a turn once. Each is a check now.
   "Create" lands you inside it at `home/<folderId>`), but clicking "Import
   data" was still refused as data exfiltration. **Check:** the CSV import is
   the person's step. Hand it over right away instead of retrying.
+
+## Writing values from the CLI (learned 2026-10-03)
+
+- The CLI can't write table cells. `clay workflows actions test ... upsert-audiences-record` refuses with "can only be run from an action cell or workflow tool node".
+- What works: a workflow with a `manual` trigger (inputSchema `email`, `copy`) and one tool node running `upsert-audiences-record`, mapped with flat pipe keys (`lookupFields|email`, `recordFields|<audf_id>`). Then `clay workflows runs test <wf> --inputs '{...}'` per record, and read back with `clay audiences records get`. 62 records written and verified this way.
+- Edge key on `nodes create` is `incomingEdges: [{"sourceNode": "<trigger node id>"}]`, not `sourceNodeId`.
+- A paused campaign accepts `campaigns sequence edit` with `updateStep` only. Leads can't be removed and exclusion audiences can't be set from the CLI.
+- Clay rejected CLI 1.0.0 as unsupported. The plugin's `scripts/install-cli.sh --version <cli-min-version>` installs a current one at `~/.local/bin/clay`.

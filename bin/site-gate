@@ -1,0 +1,228 @@
+#!/usr/bin/env python3
+"""site-gate: refuse a website that is a screenshot with a scrollbar.
+
+Learned rebuilding uselemma.ai (2026-09-22 to 10-03). The replica matched the
+reference's layout for a week and still read as dead, because the layers a
+screenshot cannot see were missing: what moves at rest, what every control
+does under a hand, and where every control goes. The craft is written in
+crafts/website.md. Prose does not fire, so this is the half that does.
+
+    site-gate check <url> [<url>...]   exit 1 on any failure below
+                                        (write url@404 for a page meant to 404)
+    site-gate idle <url> [--ref <url>] what moves while nobody touches it
+
+check, at 1440x900 and 390x844, on every url given:
+    console errors and uncaught exceptions          none allowed
+    horizontal scroll at 390                        none allowed
+    dead controls: href="#", "", javascript:,
+      a same-page #anchor with no target, a link
+      or button with no accessible name             none allowed
+    same-origin links that answer 4xx/5xx           none allowed
+    a visible control that changes nothing on
+      hover AND nothing on keyboard focus, on
+      itself or any descendant (group hovers count) none allowed
+    infinite animations running under
+      prefers-reduced-motion                        none allowed
+
+Chromium runs on Metal. Without it a WebGL-heavy page fell to about 1 fps
+headless and screenshots timed out after 30 s; with it the same page ran 50 to
+61 fps (measured 2026-10-03). A gate run at 1 fps measures the test rig.
+"""
+import argparse
+import io
+import json
+import sys
+from urllib.parse import urljoin, urlparse
+
+GPU = ["--use-angle=metal", "--enable-gpu", "--ignore-gpu-blocklist"]
+SIZES = [(1440, 900), (390, 844)]
+# Controls probed per page per size. Sixty covered every control on the
+# reference home page (53 tab stops) with room; more only adds minutes.
+MAX_CONTROLS = 60
+# Idle diff threshold on 0..255 grey. Below 12, JPEG-free PNG captures of a
+# still page still differed by font antialiasing on 3 to 9 px; 12 read 0.
+DIFF_LEVEL = 12
+
+SIG = r"""(el) => {
+  const props = ['color','backgroundColor','borderColor','boxShadow','transform',
+    'opacity','textDecorationLine','outlineStyle','outlineColor','filter','scale'];
+  const nodes = [el, ...el.querySelectorAll('*')].slice(0, 30);
+  return nodes.map(n => { const c = getComputedStyle(n);
+    const pc = getComputedStyle(n, '::before'), pa = getComputedStyle(n, '::after');
+    return props.map(p => c[p]).join('|') + '#' + [pc.opacity, pc.transform, pa.opacity, pa.transform].join('|'); }).join('\n');
+}"""
+
+CONTROLS = r"""(max) => {
+  const vis = e => { const r = e.getBoundingClientRect(), c = getComputedStyle(e);
+    return r.width > 1 && r.height > 1 && c.visibility !== 'hidden' && c.display !== 'none'; };
+  const all = [...document.querySelectorAll('a, button, [role=button], input, select, textarea, summary')];
+  const dead = [];
+  for (const e of all) {
+    const name = (e.getAttribute('aria-label') || e.textContent || e.getAttribute('title') ||
+                  e.getAttribute('placeholder') || e.getAttribute('value') ||
+                  (e.querySelector('img[alt]')?.getAttribute('alt')) || '').trim();
+    const tag = e.tagName.toLowerCase(), id = tag + ' "' + name.slice(0, 40) + '"';
+    if (tag === 'a') {
+      const h = e.getAttribute('href');
+      if (h === null || h === '' || h === '#' || /^javascript:/i.test(h)) dead.push(id + ' has href=' + JSON.stringify(h));
+      else if (h.startsWith('#') && !document.getElementById(decodeURIComponent(h.slice(1)))) dead.push(id + ' points at missing ' + h);
+    }
+    // A loop's duplicate set is aria-hidden and out of the tab order on
+    // purpose (the marquee on 2026-10-03): unnamed there is correct.
+    const hiddenCopy = e.closest('[aria-hidden="true"]') && e.getAttribute('tabindex') === '-1';
+    if (!name && !hiddenCopy && ['a', 'button'].includes(tag)) dead.push(tag + ' with no accessible name: ' + e.outerHTML.slice(0, 80));
+  }
+  const links = [...new Set(all.filter(e => e.tagName === 'A' && e.href && !e.getAttribute('href').startsWith('#')).map(e => e.href))];
+  const probe = all.filter(vis).filter(e => !e.disabled).slice(0, max);
+  probe.forEach((e, i) => e.setAttribute('data-sg', i));
+  return { dead, links, n: probe.length };
+}"""
+
+
+def launch(pw):
+    return pw.chromium.launch(args=GPU)
+
+
+def check_page(pw, url, out):
+    fails = []
+    # A not-found page is meant to answer 404 (T Combinator's unknown-slug
+    # page, 2026-10-04); url@404 says so, and any other status then fails.
+    expect = 200
+    if "@" in url.rsplit("/", 1)[-1] and url.rsplit("@", 1)[-1].isdigit():
+        url, expect = url.rsplit("@", 1)[0], int(url.rsplit("@", 1)[-1])
+    b = launch(pw)
+    for w, h in SIZES:
+        ctx = b.new_context(viewport={"width": w, "height": h})
+        pg = ctx.new_page()
+        errs = []
+        pg.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
+        pg.on("pageerror", lambda e: errs.append(str(e)))
+        resp = pg.goto(url, wait_until="networkidle", timeout=60000)
+        status = resp.status if resp else None
+        if status is None or (status >= 400 and status != expect) or (expect != 200 and status != expect):
+            fails.append(f"{w}: {url} answered {status if status else 'nothing'}, expected {expect}")
+            ctx.close(); continue
+        pg.wait_for_timeout(2500)
+        # walk the page so lazy sections mount and their errors surface
+        total = pg.evaluate("document.documentElement.scrollHeight")
+        for y in range(0, total, 700):
+            pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(40)
+        pg.evaluate("scrollTo(0,0)"); pg.wait_for_timeout(400)
+        if w == 390:
+            sw = pg.evaluate("document.documentElement.scrollWidth - innerWidth")
+            if sw > 1:
+                fails.append(f"390: horizontal scroll, page is {sw}px wider than the viewport")
+        info = pg.evaluate(CONTROLS, MAX_CONTROLS)
+        if w == 1440:
+            fails += [f"dead control: {d}" for d in info["dead"]]
+            origin = urlparse(url).netloc
+            for link in info["links"]:
+                if urlparse(link).netloc != origin or link.split("#")[0] == url.split("#")[0]:
+                    continue
+                try:
+                    r = ctx.request.get(link, timeout=15000)
+                    if r.status >= 400:
+                        fails.append(f"link {link} answered {r.status}")
+                except Exception as e:  # unreachable is a failure, not a skip
+                    fails.append(f"link {link} unreachable: {e}")
+            inert = []
+            for i in range(info["n"]):
+                sel = f'[data-sg="{i}"]'
+                el = pg.query_selector(sel)
+                if not el or not el.is_visible():
+                    continue
+                try:
+                    el.scroll_into_view_if_needed(timeout=2000)
+                    pg.mouse.move(1, 1); pg.wait_for_timeout(350)
+                    base = pg.evaluate(SIG, el)
+                    el.hover(timeout=2000, force=True); pg.wait_for_timeout(500)
+                    hov = pg.evaluate(SIG, el)
+                    pg.mouse.move(1, 1); pg.wait_for_timeout(350)
+                    # keyboard modality, so :focus-visible applies
+                    pg.keyboard.press("Shift"); el.focus(); pg.wait_for_timeout(350)
+                    foc = pg.evaluate(SIG, el)
+                    pg.evaluate("document.activeElement && document.activeElement.blur()")
+                except Exception:
+                    continue
+                if hov == base and foc == base:
+                    inert.append(pg.evaluate("e => (e.tagName + ' ' + (e.getAttribute('aria-label') || e.textContent || '').trim().slice(0,40))", el))
+            fails += [f"no hover and no focus state: {x}" for x in inert]
+        if expect == 404:
+            errs = [e for e in errs if "404" not in e]
+        fails += [f"{w}: console: {e[:160]}" for e in errs]
+        ctx.close()
+    # reduced motion: nothing infinite may run
+    ctx = b.new_context(viewport={"width": 1440, "height": 900}, reduced_motion="reduce")
+    pg = ctx.new_page(); pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(2000)
+    running = pg.evaluate("""() => document.getAnimations().filter(a => a.playState === 'running' &&
+        a.effect && a.effect.getTiming().iterations === Infinity).map(a => (a.animationName || 'waapi') + '@' +
+        ((a.effect.target && a.effect.target.className && a.effect.target.className.baseVal !== undefined
+          ? a.effect.target.className.baseVal : a.effect.target && a.effect.target.className) || '').toString().slice(0, 30))""")
+    fails += [f"runs under reduced motion: {r}" for r in sorted(set(running))]
+    ctx.close(); b.close()
+    out[url + (f"@{expect}" if expect != 200 else "")] = fails
+    return fails
+
+
+def idle(pw, url, ys):
+    from PIL import Image, ImageChops
+    b = launch(pw); pg = b.new_page(viewport={"width": 1440, "height": 900})
+    pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(3000)
+    pg.mouse.move(5, 890)
+    if ys is None:
+        total = pg.evaluate("document.documentElement.scrollHeight") - 900
+        ys = list(range(0, total + 1, 900))
+    rows = []
+    for y in ys:
+        pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(2500)
+        a = Image.open(io.BytesIO(pg.screenshot())).convert("L")
+        pg.wait_for_timeout(1200)
+        c = Image.open(io.BytesIO(pg.screenshot())).convert("L")
+        d = ImageChops.difference(a, c).point(lambda v: 255 if v > DIFF_LEVEL else 0)
+        n = d.histogram()[255]
+        names = pg.evaluate("""() => [...new Set(document.getAnimations().filter(a => {
+            const t = a.effect && a.effect.target; if (!t || !t.getBoundingClientRect) return false;
+            const r = t.getBoundingClientRect(); return a.effect.getTiming().iterations === Infinity &&
+            r.bottom > 0 && r.top < innerHeight && r.width > 0; }).map(a => a.animationName || 'waapi'))]""")
+        rows.append({"y": y, "changed_px": n, "bbox": d.getbbox(), "animations": sorted(names)})
+    b.close()
+    return rows
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("check"); c.add_argument("urls", nargs="+"); c.add_argument("--json", action="store_true")
+    i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
+    i.add_argument("--ys", help="comma separated scroll positions; default every 900px")
+    a = ap.parse_args()
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        if a.cmd == "check":
+            out = {}
+            for u in a.urls:
+                check_page(pw, u, out)
+            bad = sum(len(v) for v in out.values())
+            if a.json:
+                print(json.dumps(out, indent=1))
+            else:
+                for u, fails in out.items():
+                    print(f"{'FAIL' if fails else 'ok  '}  {u}")
+                    for f in fails:
+                        print(f"        {f}")
+                print(f"site-gate: {bad} problem(s) across {len(out)} page(s)")
+            sys.exit(1 if bad else 0)
+        ys = [int(v) for v in a.ys.split(",")] if a.ys else None
+        mine = idle(pw, a.url, ys)
+        theirs = idle(pw, a.ref, [r["y"] for r in mine]) if a.ref else None
+        for k, r in enumerate(mine):
+            line = f"y={r['y']:<6} ours {r['changed_px']:>7}px {r['animations']}"
+            if theirs:
+                t = theirs[k]
+                flag = "  <- they move, you do not" if t["changed_px"] > 500 and r["changed_px"] < 50 else ""
+                line += f"\n         ref  {t['changed_px']:>7}px {t['animations']}{flag}"
+            print(line)
+
+
+if __name__ == "__main__":
+    main()

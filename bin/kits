@@ -25,7 +25,7 @@ MODE="${1:-list}"
 # a convenience rather than a requirement.
 REGISTRY="${KITS_REGISTRY:-$HOME/.claude/kits.paths}"
 
-ROOTS="${KITS_DIR:-} ${REPO_DIR:-} $HOME/dev $HOME/Desktop $HOME/Projects $HOME/kits"
+ROOTS="${KITS_DIR:-} ${REPO_DIR:-} $HOME/code $HOME/dev $HOME/Desktop $HOME/Projects $HOME/kits"
 
 FOUND=""
 
@@ -40,7 +40,7 @@ fi
 for root in $ROOTS; do
   [ -n "$root" ] || continue
   [ -d "$root" ] || continue
-  # maxdepth 4 reaches ~/Desktop/2026-Code/projects/<kit>/.kit and no further.
+  # maxdepth 4 reaches ~/code/kits/<kit>/.kit and no further.
   for m in $(find "$root" -maxdepth 4 -name '.kit' -not -path '*/node_modules/*' -not -path '*/.git/*' 2>/dev/null); do
     case " $FOUND " in *" $m "*) continue ;; esac
     FOUND="$FOUND $m"

@@ -6,20 +6,25 @@ import Testing
 
 @Suite("Live dictation text")
 struct LiveTextTests {
-    @Test("the newest word is never stable")
-    func newestWordWaits() {
-        let stable = LiveText.stablePrefix(
-            previous: ["send", "me", "the"], current: ["send", "me", "the", "deck"])
-        #expect(stable == ["send", "me", "the"])
-        #expect(LiveText.stablePrefix(previous: [], current: ["send"]).isEmpty)
-        #expect(LiveText.stablePrefix(previous: ["send"], current: ["send"]).isEmpty)
+    @Test("the newest word is typed the moment it is heard")
+    func newestWordShows() {
+        #expect(LiveText.live("Send me the deck") == "Send me the deck")
+        #expect(LiveText.live("Send") == "Send")
     }
 
-    @Test("a revised word stops the stable run where it changed")
-    func revisionStopsRun() {
-        let stable = LiveText.stablePrefix(
-            previous: ["text", "sara", "about"], current: ["text", "Sarah", "about", "it"])
-        #expect(stable == ["text"])
+    @Test("the closing mark waits for the end, so it never blinks")
+    func closingMarkWaits() {
+        #expect(LiveText.live("Send me the deck.") == "Send me the deck")
+        #expect(LiveText.live("Is it done?") == "Is it done")
+        #expect(LiveText.live("Hey, Sam") == "Hey, Sam")
+    }
+
+    @Test("a revised word is deleted and retyped, never left behind")
+    func revisionRetypes() {
+        let edit = LiveText.edit(
+            from: LiveText.live("text sara about"), to: LiveText.live("text Sarah about it"))
+        #expect(edit.delete == "sara about".count)
+        #expect(edit.insert == "Sarah about it")
     }
 
     @Test("an edit deletes only the tail that differs")
@@ -29,7 +34,7 @@ struct LiveTextTests {
         #expect(edit.insert == ", can you")
         let fix = LiveText.edit(from: "deck for Northwynd", to: "deck for Northwind.")
         #expect(fix.delete == 3)
-        #expect(fix.insert == "yra.")
+        #expect(fix.insert == "ind.")
         #expect(LiveText.edit(from: "same", to: "same") == (0, ""))
     }
 

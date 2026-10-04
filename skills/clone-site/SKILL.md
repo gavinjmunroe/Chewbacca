@@ -219,9 +219,41 @@ logo, all still rendering after a rebrand pass that only touched the source.
 Grep the DOM text, case-insensitively, for the original's name.
 
 
+## The traps from the third pass, 2026-10-03
+
+**Their headless page runs at 1 fps without Metal.** Launch Chromium with
+`--use-angle=metal --enable-gpu --ignore-gpu-blocklist`. On SwiftShader the
+reference's traces scene timed out a screenshot after 30 s and a crossfade
+showed one frame; on Metal it ran 50 to 61 fps and the crossfade measured
+484 ms against our 483.
+
+**A fitted curve was a percentage all along.** Six plates had been placed by
+a scale curve "interpolated, probably a breakpoint set". Their component put
+each one at a percent of a box capped at 1480px wide and one viewport tall.
+Every plate was also exactly 96px high. Read the component before fitting.
+
+**The ease is the feel, and the ends hide it.** The logo wall's exit matched
+at rest and at the end. Theirs runs every channel on `t*t*t`; ours used an
+ease-out on three of four, so mid-exit ours was half gone while theirs had
+barely moved. Compare at three points inside every transition.
+
+**Inventory what moves at rest, on both pages.** `site-gate idle <ours> --ref
+<theirs>` found six ambient loops the replica lacked, none visible in any
+screenshot or DOM count: a banner loader, a scroll cue, a marquee, a trust
+figure, an auto-advancing carousel, and a mesh running at a different speed
+per use.
+
+**A brand swap is still their copy.** Three leads shipped as their sentences
+with the product name replaced, and an exact-match check passed them. Fold
+both brand names to one token and flag any shared run of eight words.
+
+**Your own probe can fake a regression.** A script that hid "banner" and
+"cookie" elements by class substring also hid two figures, and the crop said
+they had vanished. Confirm a surprising frame with the probe removed.
+
 ## Done means
 
-Every section from step 0 is built. Every component has a spec and every state
+Every section from step 0 is built, `site-gate check` exits 0 on every page, and `site-gate idle --ref` shows the same ambient layer as the reference. Every component has a spec and every state
 in that spec renders. `ux-diff` has been run against the reference and its
 ranked gaps are either closed or written down, `design-gate` exits 0, and
 nothing of theirs has been vendored into the repo.

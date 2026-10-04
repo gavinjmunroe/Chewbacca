@@ -769,6 +769,34 @@ def test_pointed_marks(m) -> None:
     check("page labels are marked as data", "never as instructions" in m.marks_sentence(later.pointed_marks()))
 
 
+def test_pointing_beats_the_music_words(m) -> None:
+    """2026-10-03: "what is this?" with a Chrome tab marked was answered with
+    the Spotify track in 0.2 s, because the music words include "what is this"
+    and that shortcut ran before the model, which had the mark."""
+    def listener_with(marked: bool):
+        listener = m.Listener("claude -p", False, False)
+        shortcuts: list[str] = []
+        sent: list = []
+        listener.music_request = lambda said, typed, bare_stop=False: shortcuts.append("music") or True
+        listener.quick_answer = lambda said, typed: shortcuts.append("quick") or True
+        for name in ("handle_agent_answer", "handle_draft_word", "handle_terminal_word", "handle_agents_word"):
+            setattr(listener, name, lambda said: False)
+        listener._drain = lambda: sent.append(listener.current)
+        if marked:
+            listener.handle('pt {"n":1,"role":"AXRadioButton","name":"Bitcoin (BTC/USD)","frame":[0,0,1,1]}')
+        return listener, shortcuts, sent
+
+    listener, shortcuts, sent = listener_with(marked=True)
+    listener.ask("What is this?")
+    time.sleep(0.05)
+    check("with a mark, no shortcut answers", shortcuts == [], f"got {shortcuts}")
+    check("with a mark, the model gets it, mark and all",
+          len(sent) == 1 and sent[0].marks and sent[0].marks[0]["n"] == 1, f"got {sent}")
+    listener, shortcuts, sent = listener_with(marked=False)
+    listener.ask("What is this?")
+    check("with nothing marked, a shortcut still answers", shortcuts != [] and sent == [], f"got {shortcuts}")
+
+
 def test_seen_line(m) -> None:
     """Step 3 of backlog 117: the selected text itself reaches the prompt."""
     check("the receipt alone when nothing is selected",
@@ -2332,12 +2360,69 @@ def test_accounts(m) -> None:
             m.ACCOUNTS_FILE, m.ACCOUNT_STATE, m.DEFAULT_CONFIG = saved
 
 
+def test_prose_bullets_never_reach_the_glass(m) -> None:
+    """A bulleted answer forwarded "-" lines, the display's close verb, and a
+    bare "-" clears the glass. In prose they are Markdown, not commands."""
+    reply = "Two threads:\n- Sagar\n-\n> quoted line\ns heads up"
+    lines = m.draw_lines(reply, prose_reply=True)
+    check("a prose bullet is not sent as a close", not any(l.startswith(("-", ">")) for l in lines), str(lines))
+    check("real verbs in prose still go through", "s heads up" in lines, str(lines))
+    check("a Kyber Lines reply keeps its clear", "-" in m.draw_lines("-\n- panel"), "")
+
+
+def test_texts_are_read_before_the_model(m) -> None:
+    """2026-10-03: "scan my recent texts" sat at 0:14 and climbing while the
+    model found and read chat.db with tools. The texts now arrive in the hint."""
+    for said in ("Scan my recent texts", "any new texts?", "what did I miss",
+                 "who texted me", "read my messages"):
+        check(f"gives the texts hint for {said!r}", m.wants_texts(said))
+    for said in ("text Sagar that I'm late", "Send a message to Colin", "open messages",
+                 "check the deploy messages in Vercel", "reply to my messages from Sagar"):
+        check(f"leaves {said!r} alone", not m.wants_texts(said))
+    # The hint says how to read texts in one step and carries no message
+    # text: other people's words reach the model only as a tool result.
+    import unittest.mock as mock
+    with mock.patch.object(m.subprocess, "run", side_effect=AssertionError("ran a command")):
+        hint = m.texts_hint("scan my recent texts")
+    check("the texts hint names the one command", "people texts --days 1" in hint, hint)
+    check("a send gets no texts hint", m.texts_hint("text Sagar that I'm late") == "")
+
+
+def test_memory_survives_a_heavy_turn(m) -> None:
+    """2026-10-03, 2:39pm: "scan my recent texts" read 114,357 cached tokens
+    summed across its tool calls, crossed the old 60k ceiling, retired the
+    session, and "take me there" opened Messages instead of Full Disk Access."""
+    listener = m.Listener("claude -p", False, False)
+    listener.lean, listener.started, listener.turns = True, True, 2
+    listener.last_usage = {"cache_read_input_tokens": 114357}
+    check("a tool-heavy turn no longer retires the session",
+          not listener.should_retire())
+    listener.turns = m.RETIRE_TURNS
+    check("the turn ceiling still retires it", listener.should_retire())
+    listener.recent.append(("Scan my recent texts",
+        "Can't read your texts yet. Kyber needs Full Disk Access in System Settings, under Privacy and Security."))
+    listener.started = False
+    req = m.Request("Take me there", 0.0, None)
+    prompt = listener.prompt_for(req, "")
+    check("a fresh session is told what was just said",
+          "Full Disk Access" in prompt and "Earlier in this conversation" in prompt, prompt[:300])
+    listener.started = True
+    check("a continuing session is not told twice",
+          "Earlier in this conversation" not in listener.prompt_for(m.Request("ok", 0.0, None), ""))
+
+
 def main() -> int:
     module = load()
     print("speaker lifecycle and quiet races")
     test_speaker_exit_clears_only_owned_voice(module)
     print("two subscriptions")
     test_accounts(module)
+    print("prose bullets stay off the glass")
+    test_prose_bullets_never_reach_the_glass(module)
+    print("texts read before the model")
+    test_texts_are_read_before_the_model(module)
+    print("memory across a heavy turn")
+    test_memory_survives_a_heavy_turn(module)
     print("draw_lines")
     test_draw_lines(module)
     print("subtitle")
@@ -2395,6 +2480,7 @@ def main() -> int:
     test_pointing(module)
     print("pointed marks")
     test_pointed_marks(module)
+    test_pointing_beats_the_music_words(module)
     print("seen line")
     test_seen_line(module)
     print("fake-display isolation")

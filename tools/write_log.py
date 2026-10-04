@@ -19,6 +19,64 @@ def git(repo, *args):
     return result.stdout
 
 
+# Tools whose payload names the file they wrote. Their rows are exact; every
+# other changed path is inferred from a before/after diff of the whole tree and
+# is tagged "bash", because a diff cannot tell this session's write from another
+# live session's write that landed inside the same window.
+EXACT_TOOLS = {'Write', 'Edit', 'MultiEdit', 'NotebookEdit'}
+PATCH_PREFIXES = ('*** Add File: ', '*** Update File: ', '*** Delete File: ', '*** Move to: ')
+# A file changed by the command has an mtime inside the call, give or take
+# filesystem timestamp granularity. Guessed, never measured: 2s covers HFS+
+# one-second mtimes with room to spare.
+MTIME_SLACK = 2.0
+
+
+def exact_targets(payload):
+    """Paths this call named itself: a file-edit tool's target or a patch's files."""
+    cwd = Path(payload.get('cwd') or os.getcwd())
+    data = payload.get('tool_input') or {}
+    data = data if isinstance(data, dict) else {}
+    targets = set()
+    if payload.get('tool_name') in EXACT_TOOLS:
+        for field in ('file_path', 'notebook_path'):
+            if isinstance(data.get(field), str):
+                targets.add(str((cwd / data[field]).resolve()))
+    patch = data.get('patch') or data.get('input') or data.get('command')
+    if isinstance(patch, str):
+        for line in patch.splitlines():
+            for prefix in PATCH_PREFIXES:
+                if line.startswith(prefix):
+                    targets.add(str((cwd / line[len(prefix):]).resolve()))
+    return targets
+
+
+def others_exact(log, sid, since):
+    """Paths another session logged as an exact edit at or after `since`."""
+    claimed = set()
+    try:
+        with open(log, encoding='utf-8', errors='ignore') as stream:
+            for line in stream:
+                parts = line.rstrip('\n').split('\t')
+                if len(parts) < 4 or parts[3] != 'edit' or parts[1] == sid:
+                    continue
+                try:
+                    if float(parts[0]) >= since:
+                        claimed.add(parts[2])
+                except ValueError:
+                    continue
+    except FileNotFoundError:
+        pass
+    return claimed
+
+
+def touched_in_window(path, start, end):
+    try:
+        modified = Path(path).lstat().st_mtime
+    except FileNotFoundError:
+        return True  # A deletion has no mtime left to check.
+    return start - MTIME_SLACK <= modified <= end + MTIME_SLACK
+
+
 def repositories(payload):
     cwd = Path(payload.get('cwd') or os.getcwd()).resolve()
     data = payload.get('tool_input') or {}
@@ -32,7 +90,7 @@ def repositories(payload):
     patch = data.get('patch') or data.get('input') or data.get('command')
     if isinstance(patch, str):
         for line in patch.splitlines():
-            for prefix in ('*** Add File: ', '*** Update File: ', '*** Delete File: ', '*** Move to: '):
+            for prefix in PATCH_PREFIXES:
                 if line.startswith(prefix):
                     candidates.append((cwd / line[len(prefix):]).parent)
     found = set()
@@ -126,6 +184,8 @@ def record(payload):
     with os.fdopen(lock_fd, 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         rows = []
+        now = time.time()
+        exact = exact_targets(payload)
         for repo in repos:
             tool = payload.get('tool_use_id') or payload.get('tool_call_id')
             if not tool:
@@ -149,13 +209,28 @@ def record(payload):
                 continue  # Without native call IDs, retain the earliest overlapping baseline.
             if before is not None and not is_pre:
                 changed = {path for path in set(before) | set(after) if before.get(path) != after.get(path)}
-                changed.update(committed_paths(repo, prior.get('head'), current_head))
+                committed = committed_paths(repo, prior.get('head'), current_head)
+                changed.update(committed)
+                started = float(prior.get('started') or 0)
+                claimed = others_exact(log, sid, started - MTIME_SLACK) if started else set()
                 for path in sorted(changed):
-                    rows.append(f'{time.time():.6f}\t{sid}\t{path}\n')
+                    if path in exact:
+                        rows.append(f'{now:.6f}\t{sid}\t{path}\tedit\n')
+                        continue
+                    # Another session's exact edit inside this call's window, or
+                    # a file whose mtime falls outside it, was not this call's. A
+                    # commit made inside the call is its own evidence, whatever
+                    # the file's mtime.
+                    stale = started and path not in committed and not touched_in_window(path, started, now)
+                    if path in claimed or stale:
+                        continue
+                    rows.append(f'{now:.6f}\t{sid}\t{path}\tbash\n')
             remaining = 1 if is_pre else max(0, pending - 1)
-            save(snapshot, {'files': before if not is_pre and remaining else after,
+            keep = not is_pre and remaining
+            save(snapshot, {'files': before if keep else after,
                             'pending': remaining,
-                            'head': prior.get('head') if not is_pre and remaining else current_head})
+                            'head': prior.get('head') if keep else current_head,
+                            'started': prior.get('started') if keep else now})
         if rows:
             fd = os.open(log, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
             with os.fdopen(fd, 'a') as stream:

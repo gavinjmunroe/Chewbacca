@@ -179,9 +179,21 @@ pointing at a stack trace carries more precise context than a paragraph of
 typing. When a request arrives shortly after a region, the two belong together
 and the request's "this" means whatever is in that rectangle.
 
-The display sends coordinates, not pixels. It has no screen recording permission
-and asking for one so it can crop a rectangle it already knows the bounds of
-would be a poor trade. Look at the region yourself if you need to see it.
+Holding the talk key and clicking, or dragging, is the newer way (backlog
+117): the element under the pointer goes up as `pt` with its role, name, app
+and frame, numbered as it is marked on the glass, and a crop of it follows as
+`pc` once ScreenCaptureKit has taken it (Kyber has Screen Recording since
+2026-10-03). While something is marked, the music and quick shortcuts step
+aside, so "what is this" means the mark and not the song.
+
+## Texting yourself
+
+A text to your own number that starts with "Kyber" is answered as a text.
+Kyber opens `~/Library/Messages/chat.db-wal` for kernel events, not a timer,
+and on a write runs `bin/text-command`, which reads the new rows in the self
+thread and exits. Only a command reaches a model, and nothing reached this way
+sends, posts, pays or deletes. Handles live in `~/.chewbacca/text-command.json`.
+It needs Full Disk Access for Kyber.
 
 ## Finding out when you got it wrong
 
@@ -226,8 +238,9 @@ disbelieve all of them.
 ## Dictation
 
 Hold Control, then the talk key, and talk: the words are typed at the caret of
-whatever app is in front, as they are spoken. A word goes in once it has
-survived one revision of the recogniser, so the text does not shiver. On
+whatever app is in front, as they are spoken. Every partial goes in whole,
+the newest word included, and a word the recogniser revises is deleted and
+retyped; only the closing period waits for the end (`LiveText.live`). On
 release a local whisper.cpp server (`~/.bob/whisper/`, 127.0.0.1:8178, started
 by the display at launch) reads the whole sentence again with the person's
 vocabulary as its prompt and corrects it in place, but only if the same app is

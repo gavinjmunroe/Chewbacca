@@ -131,7 +131,8 @@ def project_paths():
                     found.append(d); seen.add(d)
     except OSError:
         pass
-    for root in (os.path.expanduser("~/Desktop/2026-Code"),
+    code = os.path.expanduser("~/code")
+    for root in (code, *(os.path.join(code, g) for g in ("kits", "amber", "work", "school", "personal", "tools")),
                  os.path.expanduser("~/dev"), os.path.expanduser("~/Projects")):
         if not os.path.isdir(root):
             continue

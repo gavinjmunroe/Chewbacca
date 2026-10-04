@@ -319,7 +319,7 @@ if [ -z "$_bl_root" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
   _bl_root="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("repo",""))' \
     "$HOME/.chewbacca/install-manifest.json" 2>/dev/null)"
 fi
-_bl_root="${_bl_root:-$HOME/Desktop/2026-Code/projects/chewbacca}"
+_bl_root="${_bl_root:-$HOME/code/chewbacca}"
 if [ -x "$_bl_root/bin/backlog" ] || command -v backlog >/dev/null 2>&1; then
   BL="$(command -v backlog || echo "$_bl_root/bin/backlog")"
   OPEN="$("$BL" 2>/dev/null | grep -E "^ +[0-9]+ " | head -8)"

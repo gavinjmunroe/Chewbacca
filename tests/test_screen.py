@@ -67,6 +67,10 @@ def main():
     check("the hook screens mac messages",
           "additionalContext" in run({"tool_name": "Bash", "tool_input": {"command": "mac messages read --json"},
                                       "tool_response": {"stdout": bad}}).stdout)
+    # Kyber reads texts with this since 2026-10-03; it was not screened.
+    check("the hook screens people texts",
+          "additionalContext" in run({"tool_name": "Bash", "tool_input": {"command": "people texts --days 1"},
+                                      "tool_response": {"stdout": bad}}).stdout)
     print()
     print("untrusted-screen flags what it should and nothing else" if not failures else f"{failures} failed")
     return failures

@@ -38,9 +38,9 @@ class WriteLogTests(unittest.TestCase):
         return subprocess.run(['git', *args], cwd=self.repo, env=self.env,
                               capture_output=True, check=True)
 
-    def hook(self, event, cwd=None, data=None, sid='fixture', call=None):
+    def hook(self, event, cwd=None, data=None, sid='fixture', call=None, tool='functions.exec'):
         payload = {'hook_event_name': event, 'session_id': sid,
-                   'tool_name': 'functions.exec', 'cwd': str(cwd or self.repo),
+                   'tool_name': tool, 'cwd': str(cwd or self.repo),
                    'tool_input': data or {}}
         if call:
             payload['tool_call_id'] = call
@@ -61,7 +61,7 @@ class WriteLogTests(unittest.TestCase):
         self.policy.write_text('changed again')
         self.hook('PostToolUse')
         self.assertEqual(len(self.records()), 1)
-        self.assertTrue(self.records()[0].endswith(str(self.policy)))
+        self.assertEqual(self.records()[0].split('\t')[2], str(self.policy))
         self.hook('PreToolUse')
         self.hook('PostToolUse')
         self.assertEqual(len(self.records()), 1)
@@ -206,6 +206,56 @@ class WriteLogTests(unittest.TestCase):
             result = subprocess.run(['python3', str(ROOT / 'bin/durable-check'), '--session', 'fixture'],
                                     input='fix chewbacca', text=True, capture_output=True, env=self.env)
             self.assertEqual(result.returncode, code, result.stderr)
+
+    def stop_check(self, sid):
+        result = subprocess.run(['bash', str(ROOT / '.claude/hooks/stop-check.sh')],
+                                input=json.dumps({'hook_event_name': 'Stop', 'session_id': sid}),
+                                text=True, capture_output=True, cwd=self.repo, env=self.env, timeout=15)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout.strip()
+
+    def test_concurrent_bash_does_not_claim_another_sessions_write(self):
+        # 2026-10-03: four extract tabs wrote into ~/second-brain at once. One
+        # tab's Bash call was credited with another tab's Write, so stop-check
+        # counted that file as the Bash tab's own and warned every turn.
+        other = self.repo / 'extracts/02.md'
+        other.parent.mkdir()
+        self.hook('PreToolUse', sid='bash-tab', call='bash-1', data={'command': 'cat notes'})
+        edit = {'file_path': str(other), 'content': 'theirs'}
+        self.hook('PreToolUse', sid='write-tab', call='write-1', data=edit, tool='Write')
+        other.write_text('theirs')
+        self.hook('PostToolUse', sid='write-tab', call='write-1', data=edit, tool='Write')
+        self.hook('PostToolUse', sid='bash-tab', call='bash-1', data={'command': 'cat notes'})
+        claimed = [line.split('\t')[1] for line in self.records() if line.split('\t')[2] == str(other)]
+        self.assertNotIn('bash-tab', claimed)
+        self.assertEqual(self.stop_check('bash-tab'), '')
+        self.assertIn('uncommitted', self.stop_check('write-tab'))
+
+    def test_reader_credits_exact_write_over_later_bash_row(self):
+        # The writer can log the Bash row after the other tab's Write row, so the
+        # reader has to apply the same rule to rows already on disk.
+        other = self.repo / 'extracts/03.md'
+        other.parent.mkdir()
+        other.write_text('theirs')
+        now = time.time()
+        Path(self.env['CHEWBACCA_WRITE_LOG']).write_text(
+            f'{now - 5:.6f}\twrite-tab\t{other}\tedit\n'
+            f'{now:.6f}\tbash-tab\t{other}\tbash\n')
+        self.assertEqual(self.stop_check('bash-tab'), '')
+        self.assertIn('uncommitted', self.stop_check('write-tab'))
+
+    def test_reader_treats_legacy_batch_rows_as_bash(self):
+        # Old three-column rows still parse. A legacy row written in the same
+        # append as rows for other paths came from a diff, so a single-path row
+        # from another session outranks it.
+        mine, theirs = self.repo / 'a.md', self.repo / 'b.md'
+        theirs.write_text('theirs')
+        now = time.time()
+        Path(self.env['CHEWBACCA_WRITE_LOG']).write_text(
+            f'{now - 5:.6f}\twrite-tab\t{theirs}\n'
+            f'{now:.6f}\tbash-tab\t{mine}\n'
+            f'{now + 0.000013:.6f}\tbash-tab\t{theirs}\n')
+        self.assertEqual(self.stop_check('bash-tab'), '')
 
     def test_codex_prompt_timestamp_resets_and_reaches_guard(self):
         sys.path.insert(0, str(ROOT / 'tools'))

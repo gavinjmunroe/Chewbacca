@@ -45,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Talk key plus trackpad: the event tap, whether the talk key is down for
     /// the assistant (not dictation), and where a click being held began.
     private var pointTap: CFMachPort?
+    private var listenerCheck: Timer?
+    private var watchdog = ListenerWatchdog()
     private var talkHeldForPointing = false
     private var pointStart: CGPoint?
     // `voice` is internal, not private: Control-dictation in
@@ -150,6 +152,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak server] in
             guard let self, let server, !server.hasSubscribers else { return }
             _ = self.startListener()
+        }
+        // A text to yourself starting with "Kyber" is answered as a text.
+        TextTrigger.shared.start()
+        // And kept up after that, so a bridge that dies is back before the
+        // next sentence rather than because of it. See `ListenerWatchdog`.
+        listenerCheck = Timer.scheduledTimer(
+            withTimeInterval: ListenerWatchdog.interval, repeats: true
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkListener() }
+        }
+    }
+
+    private func checkListener() {
+        let connected = server?.hasSubscribers ?? false
+        guard watchdog.shouldStart(connected: connected) else { return }
+        if startListener() {
+            watchdog.started()
+            Self.keys.notice("listener.restart attempt=\(self.watchdog.failedStarts)")
         }
     }
 

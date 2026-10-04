@@ -907,6 +907,7 @@ fi
 
 # ── hooks ─────────────────────────────────────────────────────────────────────
 if group "hooks"; then
+  check "brain-recall speaks only over the cosine bar" bash "$ROOT/tests/brain_recall.sh"
   check "formatter handles a broken Node runtime" python3 "$ROOT/tests/test_formatter_runtime.py"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   # A hook must never fail the session, whatever it is handed.

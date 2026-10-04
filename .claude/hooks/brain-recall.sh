@@ -30,10 +30,13 @@ command -v brain >/dev/null 2>&1 || exit 0
 exec python3 <<'PY'
 import json, os, re, subprocess
 
-# Guessed, never measured on the sealed set. At 0.6 a prompt about the swift
-# parser pulled in a Swift build-mismatch memory at exactly 0.60, which was
-# relevant; "hi" pulled nothing. Raise it if this starts talking every turn.
-MIN_COS = float(os.environ.get("BRAIN_RECALL_MIN_COS", "0.6"))
+# Not measured on the sealed set. Started at 0.6, and on its first live day
+# "Alr, is chewb perfect now?" pulled two unrelated Chewbacca memories at 0.60
+# and 0.62 (a Clay history fix and the brain mirror), because a short prompt
+# naming a project matches every note about that project. The one real hit
+# seen so far, the church-mentor question, scored 0.76. 0.66 drops the noise
+# and keeps that; it is still a guess between two observations.
+MIN_COS = float(os.environ.get("BRAIN_RECALL_MIN_COS", "0.66"))
 try:
     prompt = (json.loads(os.environ.get("BRAIN_RECALL_PAYLOAD") or "{}").get("prompt") or "").strip()
 except Exception:

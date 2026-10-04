@@ -2,7 +2,7 @@ bdcc9cb9e2c7374d15edcd51f53ade53c7985b6e9c7a9ed09e0350816aba3bae  .claude/hooks/
 fe3e089e15005d5e68f1f414519f7256ff37f31a5fb4d9e4853cb83aaa095ab1  .claude/hooks/ask-capture.sh
 755609b0d6cee26710056a8e13224d7d43ada0b687f7e7f3dc1f8e1bf2d4b477  .claude/hooks/assumption-guard.sh
 66905632eda6e963ed130b09c20ae3765585cf40f8b5927ed19b6c91ba40bdfc  .claude/hooks/auto-push.sh
-d46fc1f568b5ab413ff8ce4768c4ece8648d2a8fbb5c72a94759692b13a69b2c  .claude/hooks/brain-recall.sh
+1105c4b64705c77ff5917ff982f075325b4c8fc68f8a8e1ad38e374353243186  .claude/hooks/brain-recall.sh
 4a1c8a14231bfe159c20cb876d414bff7182d32b0362a3e5507b1054a08c6aa3  .claude/hooks/browser-ux-guard.sh
 de060f6f4523dd4f70eee84d70a079bd6f7247e70ec8122b8f69e7396a693d44  .claude/hooks/chatdb-guard.sh
 2b4c3d09aa7d44acece030a70da076a4ee8baae96d348342758125de661bdc38  .claude/hooks/coursework-context.sh

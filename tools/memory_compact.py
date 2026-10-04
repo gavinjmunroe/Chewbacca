@@ -11,6 +11,14 @@ memory file itself, so the overflow is moved there rather than deleted.
 
   python3 tools/memory_compact.py --dry-run   show what would move
   python3 tools/memory_compact.py             do it
+  python3 tools/memory_compact.py --terse     rewrite link lines to the terse form
+
+The terse form, "- !stem (m/d): hook", drops the markdown link, the title and
+the bold markers. On 2026-10-03 that took a 131-pointer index from 20,948 to
+16,462 bytes, room for about 35 more pointers under the same load budget. The
+full stem stays so `grep stem` and brain-check's drift check still find it, and
+"!" keeps what the bold used to mark. Lines already terse pass through, so it is
+safe to rerun after a session appends an old-style link line.
 """
 
 import re
@@ -21,6 +29,27 @@ MEM = Path.home() / "second-brain/memory"
 INDEX = MEM / "MEMORY.md"
 LIMIT = 200          # per line, the documented cap
 HEADING = "## From the index"
+
+# An old-style pointer: "- **[Title (9/21)](stem.md)**, hook".
+POINTER = re.compile(r"^-\s*(\*\*)?\[([^\]]+)\]\(([^)\s]+?)\.md\)(\*\*)?[,:]?\s*(.*)$")
+DATE = re.compile(r"\((\d{1,2}/\d{1,2})[^)]*\)\s*$")
+
+
+def terse_line(line):
+    """One old-style pointer in the terse form; anything else unchanged."""
+    m = POINTER.match(line)
+    if not m:
+        return line
+    bold, title, stem, _, hook = m.groups()
+    date = DATE.search(title)
+    hook = hook.replace("**", "").strip()
+    head = f"- {'!' if bold else ''}{stem}{f' ({date.group(1)})' if date else ''}"
+    return f"{head}: {hook}" if hook else head
+
+
+def terse(text):
+    return "\n".join(terse_line(l) for l in text.splitlines()) + "\n"
+
 
 LINK = re.compile(r"^(\s*-\s*)(\*\*)?(\[[^\]]+\]\(([^)]+)\))(.*)$")
 
@@ -62,6 +91,17 @@ def main():
     if not INDEX.is_file():
         print(f"no index at {INDEX}", file=sys.stderr)
         return 2
+    if "--terse" in sys.argv:
+        before = INDEX.read_text(encoding="utf-8")
+        after = terse(before)
+        changed = sum(a != b for a, b in zip(before.splitlines(), after.splitlines()))
+        print(f"{changed} pointer(s) made terse, index {len(before.encode()):,} -> "
+              f"{len(after.encode()):,} bytes")
+        if dry:
+            print("dry run, nothing written")
+        elif changed:
+            INDEX.write_text(after, encoding="utf-8")
+        return 0
 
     lines = INDEX.read_text(encoding="utf-8").splitlines()
     before = sum(len(l) + 1 for l in lines)

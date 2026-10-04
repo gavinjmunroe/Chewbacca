@@ -353,6 +353,7 @@ if group "tools"; then
   check  "changelog generates" env PYTHONPATH="$ROOT/tools" python3 -c 'import changelog; assert changelog.build().startswith("# Changelog")'
   if [ -f "$HOME/second-brain/memory/MEMORY.md" ]; then
     check "memory compact dry run is safe" python3 "$ROOT/tools/memory_compact.py" --dry-run
+    check "memory index terse form converts and reruns clean" python3 "$ROOT/tests/test_memory_terse.py"
   else
     skip "memory compact dry run is safe" "no second-brain on this machine"
   fi

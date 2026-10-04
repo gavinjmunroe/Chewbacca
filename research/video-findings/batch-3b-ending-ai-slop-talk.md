@@ -1,4 +1,4 @@
-Copied to `/Users/joelnewton/Desktop/2026-Code/ux-engine/corpus/video/transcripts/lCBf9slCanI.txt` (3,183 words, 267 Whisper segments). Every quote below is verbatim against that file and grep-verified.
+Copied to `/Users/joelnewton/code/tools/ux-engine/corpus/video/transcripts/lCBf9slCanI.txt` (3,183 words, 267 Whisper segments). Every quote below is verbatim against that file and grep-verified.
 
 **Two provenance flags before the table.**
 

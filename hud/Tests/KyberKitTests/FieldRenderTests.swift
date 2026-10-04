@@ -185,7 +185,7 @@ struct FieldRenderTests {
         }
     }
 
-    @Test("the band starts under the menu bar, not behind it")
+    @Test("the cut sits under the menu bar, and the face fills the strip above it")
     func underMenuBar() throws {
         // A 37 point menu bar, the height on a notched MacBook.
         _ = try Self.render(suffix: "-menubar") { $0.top = 37 / 800 }

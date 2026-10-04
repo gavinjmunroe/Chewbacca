@@ -59,13 +59,26 @@ static inline float perimeterAt(float2 uv, float W) {
 /// edge on the corner's diagonal, which drew the flowing brushed streaks with
 /// a hard mitre seam in each corner. Inside a corner square of side `R` this
 /// blends the two edges' positions by the angle round the corner instead.
-static inline float perimeterRound(float2 uv, float W, float R) {
-    float x = uv.x * W, y = uv.y;
-    float2 c = float2(clamp(x, R, W - R), clamp(y, R, 1.0 - R));
+///
+/// Measured on the band's own rectangle, which starts `top` down, under the
+/// menu bar, so its corners are the band's corners and not the screen's.
+static inline float bandPerimeter(float x, float y, float W, float H) {
+    float m = min(min(x, W - x), min(y, H - y));
+    float s;
+    if (m == y) s = x;
+    else if (m == W - x) s = W + y;
+    else if (m == H - y) s = W + H + (W - x);
+    else s = 2.0 * W + H + (H - y);
+    return s / (2.0 * W + 2.0 * H);
+}
+
+static inline float perimeterRound(float2 uv, float W, float R, float top) {
+    float x = uv.x * W, y = uv.y - top, H = 1.0 - top;
+    float2 c = float2(clamp(x, R, W - R), clamp(y, R, H - R));
     float2 d = float2(x, y) - c;
-    if (d.x == 0.0 || d.y == 0.0) return perimeterAt(uv, W);
-    float onFlat = perimeterAt(float2(c.x / W, y), W);
-    float onSide = perimeterAt(float2(uv.x, c.y), W);
+    if (d.x == 0.0 || d.y == 0.0) return bandPerimeter(x, y, W, H);
+    float onFlat = bandPerimeter(c.x, y, W, H);
+    float onSide = bandPerimeter(x, c.y, W, H);
     float w = atan2(abs(d.y), abs(d.x)) / 1.5707963;
     float gap = fract(onFlat - onSide + 0.5) - 0.5;
     return fract(onSide + gap * w);
@@ -184,13 +197,14 @@ static inline float pixelHash(float2 p, uint salt) {
 /// Inside a corner the distance is measured to a circle of radius `R` instead
 /// of to the two straight edges, so the band's inner edge rounds the corner at
 /// the same thickness instead of meeting in a square. The wedge between that
-/// circle and the square screen corner comes back negative and is clamped to
-/// zero, which draws it as bezel.
+/// circle and the square screen corner comes back negative, as does the strip
+/// under the menu bar; the caller reads negative as face at the glass, and the
+/// brushing keeps counting rows through it, so the texture never stops.
 static inline float edgeDistance(float2 uv, float W, float R, float top) {
     float dx = min(uv.x * W, (1.0 - uv.x) * W);
     float dy = min(uv.y - top, 1.0 - uv.y);
     float2 k = float2(R - dx, R - dy);
-    if (k.x > 0.0 && k.y > 0.0) return max(R - length(k), 0.0);
+    if (k.x > 0.0 && k.y > 0.0) return R - length(k);
     return min(dx, dy);
 }
 
@@ -245,12 +259,16 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // Corner radius of the inner edge, in screen heights. The display's own
     // corners are about 10 pt; 0.012 of an 800 pt screen is close to that, so
     // the inner edge follows the glass rather than cutting across it.
-    // Under the menu bar there is nothing to draw: the bar is above this
-    // window, and it is translucent, so a bezel behind it would tint it.
-    if (uv.y < U.top) return half4(0.0);
-
     // 0 at the glass, 1 at the band's inner edge.
-    float e = edgeDistance(uv, W, depth + 0.012, U.top);
+    // Under the menu bar the frame's face carries on to the top of the
+    // screen, so the bar sits on titanium: "its not filling the top 100%"
+    // (2026-10-04), and the ask was to make the menu bar part of the frame.
+    // The bar is above this window and translucent, so its own text and
+    // icons stay on top. The band's cut and bevel stay under the bar, where
+    // they can be seen. There, the distance comes back negative; the surface
+    // reads it as face at the glass, the brushing keeps counting rows.
+    float eRaw = edgeDistance(uv, W, depth + 0.012, U.top);
+    float e = max(eRaw, 0.0);
     // How far in the seating shadow reaches past the inner edge, in screen
     // heights: about 2.5 pt on an 800 pt display.
     const float SHADOW = 0.003;
@@ -290,13 +308,15 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // third of the speed, and where the two cross the brushing shifts the
     // way a turning surface does. Motion of the whole texture, never of a
     // single grain: grains moving on their own was the fairy dust.
-    float rowPx = e * size.y;
-    float row = floor(rowPx);
+    float rowPx = eRaw * size.y;
+    // Offset so rows above the cut, under the menu bar, stay positive for
+    // the hash, which clamps negatives to one row.
+    float row = floor(rowPx) + 4096.0;
     float runPx = U.travel * 70.0 * size.y / 800.0;
     // Cells counted in whole numbers round the frame and wrapped, so the
     // texture meets itself at the top-left corner, where the perimeter goes
     // from 1 back to 0. Unwrapped, that corner drew a hard diagonal seam.
-    float round = perimeterRound(uv, W, depth + 0.012);
+    float round = perimeterRound(uv, W, depth + 0.012, U.top);
     float cells = max(floor(P * size.y / 60.0), 1.0);
     float alongPx = round * cells + runPx / 60.0;
     float cell = fmod(floor(alongPx), cells);

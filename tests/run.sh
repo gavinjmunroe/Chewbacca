@@ -167,6 +167,28 @@ if group "learning tools"; then
   check "agent-neutral export is current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 
+# A gate that has never refused anything proves nothing (2026-09-21), so each
+# failure class is planted in bad.html and the clean page must pass.
+if group "site-gate"; then
+  if python3 -c "import playwright, PIL" 2>/dev/null; then
+    SGPORT=$((20000 + RANDOM % 20000))
+    ( cd "$ROOT/tests/fixtures/site-gate" && exec python3 -m http.server "$SGPORT" >/dev/null 2>&1 ) & SGPID=$!
+    sleep 1
+    SG="http://127.0.0.1:$SGPORT"
+    "$ROOT/bin/site-gate" check "$SG/bad.html" >"$TMP/sg.out" 2>&1; SGRC=$?
+    check  "bad page exits 1" test "$SGRC" -eq 1
+    for needle in "horizontal scroll" 'href="#"' "missing #nowhere" "gone.html answered 404" \
+                  "no hover and no focus state: BUTTON Inert" "no accessible name" "planted failure" \
+                  "runs under reduced motion"; do
+      check "bad page flags: $needle" grep -qF -- "$needle" "$TMP/sg.out"
+    done
+    exits  "clean page passes" 0 "$ROOT/bin/site-gate" check "$SG/good.html"
+    kill "$SGPID" 2>/dev/null; wait "$SGPID" 2>/dev/null
+  else
+    skip "site-gate" "playwright or Pillow missing"
+  fi
+fi
+
 # ── people ────────────────────────────────────────────────────────────────────
 if group "people"; then
   if ! command -v node >/dev/null 2>&1; then

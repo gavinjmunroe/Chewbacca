@@ -66,7 +66,10 @@ CONTROLS = r"""(max) => {
       if (h === null || h === '' || h === '#' || /^javascript:/i.test(h)) dead.push(id + ' has href=' + JSON.stringify(h));
       else if (h.startsWith('#') && !document.getElementById(decodeURIComponent(h.slice(1)))) dead.push(id + ' points at missing ' + h);
     }
-    if (!name && ['a', 'button'].includes(tag)) dead.push(tag + ' with no accessible name: ' + e.outerHTML.slice(0, 80));
+    // A loop's duplicate set is aria-hidden and out of the tab order on
+    // purpose (the marquee on 2026-10-03): unnamed there is correct.
+    const hiddenCopy = e.closest('[aria-hidden="true"]') && e.getAttribute('tabindex') === '-1';
+    if (!name && !hiddenCopy && ['a', 'button'].includes(tag)) dead.push(tag + ' with no accessible name: ' + e.outerHTML.slice(0, 80));
   }
   const links = [...new Set(all.filter(e => e.tagName === 'A' && e.href && !e.getAttribute('href').startsWith('#')).map(e => e.href))];
   const probe = all.filter(vis).filter(e => !e.disabled).slice(0, max);

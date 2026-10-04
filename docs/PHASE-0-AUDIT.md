@@ -35,7 +35,7 @@ Adobe, watchman, tailscale).
 
 `com.claude.mac-endpoint` and `com.claude.telegram-relay` both have
 `KeepAlive=true` and both fail instantly with `error: Module not found`. Their
-`WorkingDirectory` is `~/Desktop/2026-Code/claude-telegram-relay`, and that
+`WorkingDirectory` is `~/code/archive/2026-code-root/claude-telegram-relay`, and that
 directory now contains exactly one thing: `logs/`. **The source was deleted and
 the agents were left running.**
 
@@ -66,7 +66,7 @@ longer.
 `ai.nova.brief`, daily at 08:00:
 
 ```
-/bin/bash -lc cd ~/Desktop/2026-Code/projects/nova && claude -p "/brief" --dangerously-skip-permissions
+/bin/bash -lc cd ~/code/tools/nova && claude -p "/brief" --dangerously-skip-permissions
 ```
 
 Today's run produced a real brief and correctly concluded "no events today, WP1
@@ -143,9 +143,9 @@ plugged into a clock.
 
 | Source | Count |
 | --- | --- |
-| `~/Projects/agent-scripts` (Peter Steinberger) | **53** |
-| `~/Desktop/2026-Code/projects/chewbacca` | 29 |
-| `~/Projects/anthropic-skills` | 6 |
+| `~/code/refs/agent-scripts` (Peter Steinberger) | **53** |
+| `~/code/chewbacca` | 29 |
+| `~/code/refs/anthropic-skills` | 6 |
 | real directories | 18 |
 
 **A naive `grep -r` over the skills directory finds nothing, because it does

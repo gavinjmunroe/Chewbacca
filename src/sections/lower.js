@@ -75,8 +75,8 @@ function mqSet(copy) {
       return `<span class="lw-mq-item is-soon"${copy ? ` role="img" aria-label="${name}, coming soon"` : ""}>${glyphSvg(g)}</span>`;
     }
     return copy
-      ? `<a class="lw-mq-item" href="#" aria-label="${name}">${glyphSvg(g)}</a>`
-      : `<a class="lw-mq-item" href="#" tabindex="-1">${glyphSvg(g)}</a>`;
+      ? `<a class="lw-mq-item" href="pages/docs.html" aria-label="${name}">${glyphSvg(g)}</a>`
+      : `<a class="lw-mq-item" href="pages/docs.html" tabindex="-1">${glyphSvg(g)}</a>`;
   }).join("");
   return `<div class="lw-mq-set"${copy ? "" : ' aria-hidden="true"'}>${items}</div>`;
 }
@@ -99,19 +99,19 @@ const FOOT_COLS = [
   [
     "Resources",
     [
-      ["Docs", "#"],
-      ["Blog", "#"],
-      ["Weekly", "#"],
-      ["Changelog", "#"],
-      ["Careers", "#careers", "careers"],
-      ["Trust center", "#"],
+      ["Docs", "pages/docs.html"],
+      ["Blog", "pages/blog.html"],
+      ["Weekly", "pages/weekly.html"],
+      ["Changelog", "pages/changelog.html"],
+      ["Careers", "pages/careers.html"],
+      ["Trust center", "pages/trust.html"],
     ],
   ],
   [
     "Company",
     [
-      ["About", "#"],
-      ["Status", "#"],
+      ["About", "pages/blog/introducing-sift.html"],
+      ["Status", "pages/trust.html#status"],
       ["Contact", "mailto:hello@sift.example"],
     ],
   ],
@@ -173,7 +173,7 @@ export function render() {
       <div class="lw-chips">${TRUST.map(([t]) => `<span class="lw-chip">${t}</span>`).join("")}</div>
       <div class="lw-trust">${trust}
       </div>
-      <div class="lw-trust-cta"><a class="lw-btn lw-btn-ghost" href="#">View trust center</a></div>
+      <div class="lw-trust-cta"><a class="lw-btn lw-btn-ghost" href="pages/trust.html">View trust center</a></div>
     </div>
   </section>
 
@@ -187,13 +187,13 @@ export function render() {
           <h2 id="lw-news-h" class="lw-news-h2">A Friday read on why agents break, and what caught it.</h2>
           <div class="lw-issue">
             <p class="lw-issue-meta">Latest &middot; Issue 014 &middot; September 25, 2026</p>
-            <a class="lw-issue-t group" href="#"><span class="ul-grow">The refund that ran twice</span></a>
+            <a class="lw-issue-t group" href="pages/weekly/issue-014.html"><span class="ul-grow">The refund that ran twice</span></a>
             <p class="lw-issue-b">A support agent retried a payment tool after a timeout, got two
               success responses back, and told the customer all was well. How the duplicate
               surfaced nine days later, and the check that now catches it on the first run.</p>
             <div class="lw-issue-links">
-              <a class="lw-link-latest group" href="#"><span class="ul-grow">Read the latest issue</span></a>
-              <a class="lw-link-all group" href="#"><span class="ul-grow">View all issues</span></a>
+              <a class="lw-link-latest group" href="pages/weekly/issue-014.html"><span class="ul-grow">Read the latest issue</span></a>
+              <a class="lw-link-all group" href="pages/weekly.html"><span class="ul-grow">View all issues</span></a>
             </div>
           </div>
         </div>
@@ -214,7 +214,7 @@ export function render() {
     <div class="lw-cta-mesh" aria-hidden="true"></div>
     <div class="lw-cta-in">
       <h2 id="lw-cta-h" class="lw-cta-h">See what your agents did today</h2>
-      <a class="lw-btn lw-btn-ghost" href="#">Book a demo</a>
+      <a class="lw-btn lw-btn-ghost" href="pages/demo.html">Book a demo</a>
     </div>
   </section>`;
 }
@@ -247,7 +247,7 @@ export function renderFooter() {
       <div class="lw-foot-bar-in">
         <p class="lw-copyright">&copy; 2026 Sift Labs, Inc.</p>
         <button class="lw-cookie-btn group" type="button"><span class="ul-grow">Cookie settings</span></button>
-        <p class="lw-contact">Any questions? contact hello@sift.example</p>
+        <p class="lw-contact">Questions go to hello@sift.example</p>
       </div>
     </div>
   </footer>`;

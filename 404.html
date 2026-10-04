@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Page not found, Sift</title>
+    <meta name="description" content="This page does not exist." />
+    <link rel="stylesheet" href="src/styles.css" />
+    <link rel="stylesheet" href="src/sections/lower.css" />
+    <link rel="stylesheet" href="src/sections/chrome.css" />
+    <link rel="stylesheet" href="src/sections/states.css" />
+    <link rel="stylesheet" href="src/pages/pages.css" />
+  </head>
+  <body data-nav="">
+    <!-- Theirs drops the header and footer on the 404 and keeps only the figure,
+     two buttons and the cookie card. So does this. -->
+    <main class="pg-404">
+      <div class="pg-404-in">
+        <div class="pg-404-plate">
+          <svg
+            viewBox="0 0 1024 596"
+            preserveAspectRatio="xMidYMid meet"
+            role="img"
+            aria-labelledby="nf-t"
+          >
+            <title id="nf-t">
+              A run drawn as a row of spans. One span, the page you asked for,
+              is an empty dashed outline, and a marker keeps scanning past it.
+            </title>
+            <text
+              x="512"
+              y="455"
+              text-anchor="middle"
+              font-family="IBM Plex Mono, monospace"
+              font-size="380"
+              fill="none"
+              stroke="#755cfe"
+              stroke-opacity=".28"
+              stroke-width="1.2"
+            >
+              404
+            </text>
+            <g id="nf-spans"></g>
+            <line
+              id="nf-scan"
+              x1="120"
+              y1="150"
+              x2="120"
+              y2="470"
+              stroke="#755cfe"
+              stroke-width="1"
+            />
+            <circle id="nf-dot" cx="120" cy="150" r="3.5" fill="#755cfe" />
+          </svg>
+          <p class="pg-404-meta pg-404-tl">Sift 4.0.4</p>
+          <p class="pg-404-meta pg-404-tr">
+            <span id="nf-count">Spans checked: 0</span><br />Still looking
+          </p>
+          <h1 class="pg-404-msg">
+            This run ended at a page that does not exist.
+          </h1>
+          <p class="pg-404-meta pg-404-bl">
+            fig. 404, a run with one step missing.
+          </p>
+        </div>
+        <div class="pg-404-actions">
+          <a class="btn btn-primary" href="index.html">Return home</a>
+          <a class="btn btn-ghost" href="pages/docs.html">Read the docs</a>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="src/pages/chrome.js"></script>
+    <script type="module">
+      /* Twelve spans laid out like a waterfall; span 7 is the missing page.
+     A scan line sweeps left to right and counts the spans it passes. With
+     reduced motion it rests at the gap instead of sweeping. */
+      const NS = "http://www.w3.org/2000/svg";
+      const g = document.getElementById("nf-spans");
+      const spans = [];
+      let x = 198; // (1024 - 629) / 2: the chain of twelve spans is 629 wide
+      for (let i = 0; i < 12; i++) {
+        const w = [90, 60, 130, 70, 110, 50, 120, 80, 60, 140, 70, 90][i];
+        const y = 160 + i * 25;
+        const r = document.createElementNS(NS, "rect");
+        r.setAttribute("x", x);
+        r.setAttribute("y", y);
+        r.setAttribute("width", w);
+        r.setAttribute("height", 12);
+        if (i === 7) {
+          r.setAttribute("fill", "none");
+          r.setAttribute("stroke", "#755cfe");
+          r.setAttribute("stroke-dasharray", "4 3");
+          const t = document.createElementNS(NS, "text");
+          t.setAttribute("x", x + w + 12);
+          t.setAttribute("y", y + 10);
+          t.setAttribute("font-family", "IBM Plex Mono, monospace");
+          t.setAttribute("font-size", "11");
+          t.setAttribute("fill", "#755cfe");
+          t.textContent = "THE PAGE YOU WANTED";
+          g.append(t);
+        } else {
+          r.setAttribute("fill", "#755cfe");
+          r.setAttribute("fill-opacity", ".22");
+          r.setAttribute("stroke", "#755cfe");
+          r.setAttribute("stroke-width", ".6");
+        }
+        g.append(r);
+        spans.push({ x, w });
+        x += w * 0.55;
+      }
+      const scan = document.getElementById("nf-scan");
+      const dot = document.getElementById("nf-dot");
+      const count = document.getElementById("nf-count");
+      const x0 = 150,
+        x1 = x + 120;
+      const place = (px) => {
+        scan.setAttribute("x1", px);
+        scan.setAttribute("x2", px);
+        dot.setAttribute("cx", px);
+        count.textContent = `Spans checked: ${spans.filter((s) => s.x + s.w < px).length}`;
+      };
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        place(spans[7].x + spans[7].w / 2);
+      } else {
+        const period = 6000;
+        const tick = (t) => {
+          place(x0 + ((t % period) / period) * (x1 - x0));
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }
+    </script>
+  </body>
+</html>

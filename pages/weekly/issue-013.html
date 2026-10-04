@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>The tool that said yes to everything, Sift Weekly 013</title>
+    <meta
+      name="description"
+      content="A permissions check that returned true for any user the agent named."
+    />
+    <link rel="stylesheet" href="../../src/styles.css" />
+    <link rel="stylesheet" href="../../src/sections/lower.css" />
+    <link rel="stylesheet" href="../../src/sections/chrome.css" />
+    <link rel="stylesheet" href="../../src/sections/states.css" />
+    <link rel="stylesheet" href="../../src/pages/pages.css" />
+  </head>
+  <body data-nav="weekly">
+    <div id="site-chrome"></div>
+
+    <main id="top">
+      <div class="pg-frame pg-frame-narrow">
+        <header class="pg-doc-head">
+          <a class="pg-back" href="../weekly.html"
+            ><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <path
+                d="M9 5H1.5M4.5 2 1.5 5l3 3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.2"
+              /></svg
+            >All issues</a
+          >
+          <p class="pg-eyebrow">
+            Sift Weekly<span class="pg-dot" aria-hidden="true">&middot;</span
+            >Issue 013
+          </p>
+          <h1>The tool that said yes to everything</h1>
+          <p class="pg-lead">
+            A permissions check that returned true for any user the agent named,
+            and the forty-one accounts it quietly opened up before anyone
+            looked.
+          </p>
+          <time datetime="2026-09-18">September 18, 2026</time>
+        </header>
+        <div class="pg-byline">
+          <div class="pg-byline-l">
+            <span class="pg-author"
+              ><svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                aria-hidden="true"
+              >
+                <rect
+                  x="2"
+                  y="2"
+                  width="10"
+                  height="10"
+                  fill="none"
+                  stroke="currentColor"
+                />
+                <circle cx="7" cy="7" r="1.6" fill="currentColor" /></svg
+              >Ines Okafor</span
+            >
+            <span>Applied ML</span>
+          </div>
+          <div class="pg-byline-r">
+            <span class="pg-read"
+              ><svg
+                width="13"
+                height="13"
+                viewBox="0 0 14 14"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="7"
+                  cy="7"
+                  r="5.5"
+                  fill="none"
+                  stroke="currentColor"
+                />
+                <path
+                  d="M7 4v3.2l2 1.3"
+                  fill="none"
+                  stroke="currentColor"
+                /></svg
+              >5 min read</span
+            >
+            <button class="pg-copy" type="button" data-copy-link>
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 12 12"
+                aria-hidden="true"
+              >
+                <path
+                  d="M5 7 7 5M4.2 5.4 2.6 7a2 2 0 0 0 2.8 2.8l1.6-1.6M7.8 6.6 9.4 5a2 2 0 0 0-2.8-2.8L5 3.8"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.1"
+                /></svg
+              ><span data-label>Copy link</span>
+            </button>
+          </div>
+        </div>
+
+        <article class="pg-issue-body pg-prose pg-band">
+          <p>
+            An internal IT agent could grant access to shared folders. Before
+            granting, it called a tool named <code>can_grant</code> with the
+            requester and the folder. The tool returned true or false, and the
+            agent was told to refuse on false.
+          </p>
+          <p>
+            It never refused once in three weeks. That should have been the
+            first clue.
+          </p>
+
+          <p class="pg-eyebrow">The failure</p>
+          <h2>A check that could not say no</h2>
+          <p>
+            A refactor had changed the tool's signature from a user ID to an
+            email address. The agent kept passing names, as in "grant Priya
+            access to finance-q3". The lookup failed to find a user, the error
+            handler defaulted to the folder's public setting, and every folder
+            in that workspace had been created with public set to true by a
+            migration years ago.
+          </p>
+          <p>Every call succeeded. Every call returned true.</p>
+
+          <aside class="pg-note">
+            <h3>For your team</h3>
+            <p>
+              A guard tool that has never returned its negative answer in
+              production is not tested by production. Look at the distribution
+              of every yes or no tool your agent relies on.
+            </p>
+          </aside>
+
+          <p class="pg-eyebrow">The check</p>
+          <h2>Watch the answers, not just the calls</h2>
+          <p>
+            Sift now tracks the result distribution of boolean tools per agent.
+            A guard that has answered the same way for a thousand calls in a row
+            gets a flag, with the first call where the distribution changed. In
+            this case that was the day of the refactor.
+          </p>
+
+          <p class="pg-eyebrow">Further reading</p>
+          <h2>From the Sift blog</h2>
+          <ul class="pg-sources">
+            <li>
+              <a href="../blog/group-failures-by-cause.html"
+                >Group failures by cause, not by trace</a
+              ><span
+                >Why forty-one runs like these become one issue instead of
+                forty-one rows.</span
+              >
+            </li>
+          </ul>
+        </article>
+
+        <section class="pg-sub pg-band" aria-labelledby="sub-h">
+          <h2 id="sub-h">Get the next one</h2>
+          <p>
+            Every past issue stays on this site. The next one goes to your inbox
+            on Friday morning.
+          </p>
+          <form class="lw-form" data-newsletter>
+            <label class="pg-sr" for="is-email">Email address</label>
+            <input
+              class="lw-input"
+              id="is-email"
+              type="email"
+              name="email"
+              placeholder="you@work.com"
+              autocomplete="email"
+            />
+            <button class="lw-submit" type="submit">Get Sift Weekly</button>
+          </form>
+          <p class="pg-status" data-status>
+            One email a week. Unsubscribe from any issue.
+          </p>
+        </section>
+
+        <a class="pg-prev" href="issue-012.html">
+          <p class="pg-eyebrow">Previous issue</p>
+          <h3>Context that went stale at step nine</h3>
+        </a>
+      </div>
+    </main>
+
+    <div id="lower-footer"></div>
+    <script type="module" src="../../src/pages/chrome.js"></script>
+  </body>
+</html>

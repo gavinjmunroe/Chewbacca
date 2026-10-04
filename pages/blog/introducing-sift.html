@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Introducing Sift</title>
+    <meta
+      name="description"
+      content="Why we started Sift, who it is for, and what it does on day one."
+    />
+    <link rel="stylesheet" href="../../src/styles.css" />
+    <link rel="stylesheet" href="../../src/sections/lower.css" />
+    <link rel="stylesheet" href="../../src/sections/chrome.css" />
+    <link rel="stylesheet" href="../../src/sections/states.css" />
+    <link rel="stylesheet" href="../../src/pages/pages.css" />
+  </head>
+  <body data-nav="blog">
+    <div id="site-chrome"></div>
+
+    <main id="top">
+      <div class="pg-band">
+        <div class="pg-frame">
+          <header class="pg-doc-head">
+            <a class="pg-back" href="../blog.html"
+              ><svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                aria-hidden="true"
+              >
+                <path
+                  d="M9 5H1.5M4.5 2 1.5 5l3 3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                /></svg
+              >All posts</a
+            >
+            <p class="pg-eyebrow">Company</p>
+            <h1>Introducing Sift</h1>
+            <time datetime="2026-08-12">August 12, 2026</time>
+          </header>
+          <div class="pg-byline">
+            <div class="pg-byline-l">
+              <span class="pg-author"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M7 1.5 12.5 12h-11z"
+                    fill="none"
+                    stroke="currentColor"
+                  /></svg
+                >Theo Banerjee</span
+              >
+              <span>Co-founder, Sift</span>
+            </div>
+            <div class="pg-byline-r">
+              <span class="pg-read"
+                ><svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 14 14"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="7"
+                    cy="7"
+                    r="5.5"
+                    fill="none"
+                    stroke="currentColor"
+                  />
+                  <path
+                    d="M7 4v3.2l2 1.3"
+                    fill="none"
+                    stroke="currentColor"
+                  /></svg
+                >4 min read</span
+              >
+              <button class="pg-copy" type="button" data-copy-link>
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 12 12"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M5 7 7 5M4.2 5.4 2.6 7a2 2 0 0 0 2.8 2.8l1.6-1.6M7.8 6.6 9.4 5a2 2 0 0 0-2.8-2.8L5 3.8"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.1"
+                  /></svg
+                ><span data-label>Copy link</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pg-band">
+        <div class="pg-frame pg-post">
+          <nav class="pg-toc" aria-label="On this page" data-toc>
+            <ol>
+              <li><a href="#why">Why we built it</a></li>
+              <li><a href="#what">What it does today</a></li>
+              <li><a href="#who">Who it is for</a></li>
+              <li><a href="#next">What comes next</a></li>
+            </ol>
+          </nav>
+          <article class="pg-prose">
+            <p class="pg-first" id="why">
+              We spent last year running support agents for other companies, and
+              the hardest part was never building them.
+            </p>
+            <p>
+              It was finding out, days later, that one had been telling
+              customers something false since Tuesday. No alert fired. Error
+              rates were flat. Latency was fine. A customer emailed, then
+              another, and someone opened a run by hand and saw it.
+            </p>
+            <p>
+              Every team we talked to had the same story and the same
+              workaround: a person reading a sample of runs every morning. It
+              catches some things. It costs a senior engineer an hour a day. It
+              misses anything rare.
+            </p>
+            <p>Sift is the tool we wanted then.</p>
+
+            <h2 id="what">What it does today</h2>
+            <p>
+              Sift reads every production run your agents make and checks the
+              final answer against what actually happened in the run. When a
+              claim has no support, when an action was reported but never
+              completed, or when the agent loops on a tool, Sift marks the step
+              and tells you why.
+            </p>
+            <ul>
+              <li>
+                <strong>Replay.</strong> Every run, step by step, with the
+                inputs and outputs of each tool call.
+              </li>
+              <li>
+                <strong>Grading.</strong> Each run checked against your
+                instructions and against its own tool results.
+              </li>
+              <li>
+                <strong>Grouping.</strong> Failures that share a cause collapse
+                into one issue, with a count and a first-seen date.
+              </li>
+              <li>
+                <strong>Alerts.</strong> A message in your team channel when a
+                new issue appears or an old one comes back.
+              </li>
+            </ul>
+            <p>
+              Setup is two environment variables and one line around your
+              agent's entry point. The
+              <a href="../docs.html">quickstart</a> walks through it.
+            </p>
+
+            <h2 id="who">Who it is for</h2>
+            <p>
+              Teams with an agent already in front of customers, usually
+              support, onboarding, scheduling or internal operations, who have
+              been surprised by it at least once. If your agent is still in a
+              notebook, you do not need us yet.
+            </p>
+
+            <h2 id="next">What comes next</h2>
+            <p>
+              Sift is in public beta from today. We are a small team, we answer
+              every email ourselves, and we would like to hear about the failure
+              that made you look for something like this.
+            </p>
+            <p>
+              <a class="pg-arrow-link" href="../demo.html"
+                >Book a demo<svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M1 6h9M7 3l3 3-3 3"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.2"
+                  /></svg
+              ></a>
+            </p>
+          </article>
+        </div>
+      </div>
+
+      <div class="pg-band">
+        <div class="pg-frame pg-related">
+          <p class="pg-eyebrow">Keep reading</p>
+          <div class="pg-related-grid">
+            <a href="reading-a-run-backwards.html"
+              ><span class="pg-fig" data-fig="backwards" data-seed="11"></span>
+              <p class="pg-eyebrow">Engineering</p>
+              <h3>Read the run backwards</h3>
+              <time class="pg-date" datetime="2026-09-29"
+                >September 29, 2026</time
+              ></a
+            >
+            <a href="group-failures-by-cause.html"
+              ><span class="pg-fig" data-fig="cluster" data-seed="23"></span>
+              <p class="pg-eyebrow">Engineering</p>
+              <h3>Group failures by cause, not by trace</h3>
+              <time class="pg-date" datetime="2026-07-21"
+                >July 21, 2026</time
+              ></a
+            >
+            <a href="the-retry-that-looked-healthy.html"
+              ><span class="pg-fig" data-fig="loop" data-seed="5"></span>
+              <p class="pg-eyebrow">Engineering</p>
+              <h3>A retry loop that passed every health check</h3>
+              <time class="pg-date" datetime="2026-06-03">June 3, 2026</time></a
+            >
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div id="lower-footer"></div>
+    <script type="module" src="../../src/pages/chrome.js"></script>
+  </body>
+</html>

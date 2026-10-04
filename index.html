@@ -17,7 +17,7 @@
 <link rel="stylesheet" href="src/sections/chrome.css">
 <link rel="stylesheet" href="src/sections/states.css">
 </head>
-<body>
+<body data-chrome="none">
 
 <header class="header">
   <div class="inner">
@@ -27,21 +27,21 @@
         <path d="M1 10.5 11 15.5 21 10.5" fill="none" stroke="#755cfe" stroke-width="1.6"/>
         <path d="M1 14.5 11 19.5 21 14.5" fill="none" stroke="#755cfe" stroke-width="1.6" opacity=".55"/>
       </svg><span>Sift</span></a>
-    <nav class="nav">
-      <a href="#" class="ul-grow">Docs</a><a href="#" class="ul-grow">Blog</a><a href="#" class="ul-grow">Weekly</a>
-      <a href="#" class="ul-grow">Changelog</a><a href="#careers" class="ul-grow">Careers</a>
+    <nav class="nav" aria-label="Primary">
+      <a href="pages/docs.html" class="ul-grow">Docs</a><a href="pages/blog.html" class="ul-grow">Blog</a><a href="pages/weekly.html" class="ul-grow">Weekly</a>
+      <a href="pages/changelog.html" class="ul-grow">Changelog</a><a href="pages/careers.html" class="ul-grow">Careers</a>
     </nav>
     <div class="right">
-      <a class="btn btn-ghost" href="#">Login</a>
-      <a class="btn btn-primary" href="#">Book a demo</a>
+      <a class="btn btn-ghost" href="pages/login.html">Login</a>
+      <a class="btn btn-primary" href="pages/demo.html">Book a demo</a>
     </div>
   </div>
 </header>
 
 <div class="banner">
   <span class="bmark" aria-hidden="true"></span>
-  We're&nbsp;<a href="#careers">hiring</a>!
-  <button class="bclose" aria-label="Dismiss">&times;</button>
+  We're&nbsp;<a href="pages/careers.html">hiring</a>!
+  <button class="bclose" type="button" aria-label="Dismiss">&times;</button>
 </div>
 
 <main id="top">
@@ -57,8 +57,8 @@
       <p>Sift replays every run, marks the steps that went wrong, and groups the
          repeats so you fix a cause instead of a ticket.</p>
       <div class="hero-cta">
-        <a class="btn btn-primary btn-lg" href="#">Book a demo</a>
-        <a class="btn btn-ghost btn-lg" href="#">Read the docs</a>
+        <a class="btn btn-primary btn-lg" href="pages/demo.html">Book a demo</a>
+        <a class="btn btn-ghost btn-lg" href="pages/docs.html">Read the docs</a>
       </div>
     </div>
     <div id="plates"></div>
@@ -139,5 +139,6 @@
 
 
 <script type="module" src="src/app.js"></script>
+<script type="module" src="src/pages/home.js"></script>
 </body>
 </html>

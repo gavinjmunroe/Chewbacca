@@ -32,7 +32,10 @@ allows docs/ tools/ tests/ src/ index.html PLAN.md
 
 phase 4 Wave 4, the remaining sections
 requires docs/waves/W4-sections.md
-allows docs/ tools/ tests/ src/ index.html PLAN.md
+# pages/ and 404.html added 2026-10-03: the rest-of-site pass (blog, weekly,
+# changelog, careers, trust, docs, login, demo, 404) was assigned with those
+# paths as its only outputs, and they are new files that no wave covered.
+allows docs/ tools/ tests/ src/ index.html PLAN.md pages/ 404.html
 
 phase 5 Wave 5, motion
 requires docs/waves/W5-motion.md
@@ -530,18 +533,18 @@ vendored, the page carries no third-party mark, and the axis score is above
 
 Answered by Caleb. These close the questions the plan was blocked on.
 
-| # | question | answer |
-|---|---|---|
-| 1 | adopt their strict section template | **yes**, across all ten sections |
-| 2 | trace scene inside the hero as one pinned block | **restructure** ours to match |
-| 3 | testimonials h2, and Subscribe split from the briefing | **match both** |
-| 4 | what "perfect" means | **literal parity.** Match their geometry including section heights, which means writing our copy to their line counts. "Wtv makes us learn the most" |
-| 5 | `failure-wall` and `counter` | his call to me. **Cut both.** They have no counterpart, so keeping them guarantees a permanent gap in every comparison, and `failure-wall` already reads as a duplicate of the trace wall. They stay in git |
-| 6 | the four product UI mockups | **invent them** for the fictional product |
-| 7 | the headline face | see below, this one has a licensing problem |
-| 8 | budget | his call. **Two weeks, done properly** |
-| 9 | fan out or solo | his call. **Fan out for the remaining measurement**, which is genuinely independent per section; **build solo**, because building needs one consistent hand and parallel edits to shared files collide |
-| 10 | mobile | **after the rest is right**, as its own phase |
+| #   | question                                               | answer                                                                                                                                                                                                      |
+| --- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | adopt their strict section template                    | **yes**, across all ten sections                                                                                                                                                                            |
+| 2   | trace scene inside the hero as one pinned block        | **restructure** ours to match                                                                                                                                                                               |
+| 3   | testimonials h2, and Subscribe split from the briefing | **match both**                                                                                                                                                                                              |
+| 4   | what "perfect" means                                   | **literal parity.** Match their geometry including section heights, which means writing our copy to their line counts. "Wtv makes us learn the most"                                                        |
+| 5   | `failure-wall` and `counter`                           | his call to me. **Cut both.** They have no counterpart, so keeping them guarantees a permanent gap in every comparison, and `failure-wall` already reads as a duplicate of the trace wall. They stay in git |
+| 6   | the four product UI mockups                            | **invent them** for the fictional product                                                                                                                                                                   |
+| 7   | the headline face                                      | see below, this one has a licensing problem                                                                                                                                                                 |
+| 8   | budget                                                 | his call. **Two weeks, done properly**                                                                                                                                                                      |
+| 9   | fan out or solo                                        | his call. **Fan out for the remaining measurement**, which is genuinely independent per section; **build solo**, because building needs one consistent hand and parallel edits to shared files collide      |
+| 10  | mobile                                                 | **after the rest is right**, as its own phase                                                                                                                                                               |
 
 ## The font, and why I did not do what was asked
 
@@ -576,7 +579,6 @@ contributor to the difference than the letterforms are.
 Switching to Figtree, and noting the two real alternatives if Caleb wants them:
 buy a Britti Sans web licence, which is legitimate and probably cheap, or stay
 on Inter and accept the ceiling. Either overrules this.
-
 
 # The traps that already bit, kept here so they do not again
 

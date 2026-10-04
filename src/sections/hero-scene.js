@@ -357,8 +357,10 @@ function logoWallHTML() {
         return `<div class="${cls}" data-k="${idx}" data-r="${r}"><p class="hs-lw-label">Running in production at</p></div>`;
       const [name, glyph] = MARKS[m];
       return (
-        `<div class="${cls}" data-k="${idx}" data-r="${r}"><a class="hs-lw-mark" href="#" aria-label="${name}">` +
-        `<svg viewBox="0 0 18 18" aria-hidden="true">${glyph}</svg><span>${name}</span></a>` +
+        /* A span, not a link: the customers are fictional, so there is nowhere
+         true to send anyone. The hover blurb still shows on the cell. */
+        `<div class="${cls}" data-k="${idx}" data-r="${r}"><span class="hs-lw-mark">` +
+        `<svg viewBox="0 0 18 18" aria-hidden="true">${glyph}</svg><span>${name}</span></span>` +
         `<span class="hs-lw-tip" aria-hidden="true">${MARK_BLURBS[m]}</span></div>`
       );
     }),

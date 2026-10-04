@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sift Weekly</title>
+    <link>https://sift.example/pages/weekly.html</link>
+    <description>One agent failure, taken apart every Friday. Sift is a fictional product used for a layout study.</description>
+    <language>en</language>
+    <item>
+      <title>The refund that ran twice</title>
+      <link>https://sift.example/pages/weekly/issue-014.html</link>
+      <pubDate>Fri, 25 Sep 2026 08:00:00 GMT</pubDate>
+      <description>A support agent retried a payment tool after a timeout and reported one refund when two had gone out.</description>
+    </item>
+    <item>
+      <title>The tool that said yes to everything</title>
+      <link>https://sift.example/pages/weekly/issue-013.html</link>
+      <pubDate>Fri, 18 Sep 2026 08:00:00 GMT</pubDate>
+      <description>A permissions check that returned true for any user the agent named.</description>
+    </item>
+    <item>
+      <title>Context that went stale at step nine</title>
+      <link>https://sift.example/pages/weekly/issue-012.html</link>
+      <pubDate>Fri, 11 Sep 2026 08:00:00 GMT</pubDate>
+      <description>A travel agent quoted a fare it had fetched eight steps earlier.</description>
+    </item>
+  </channel>
+</rss>

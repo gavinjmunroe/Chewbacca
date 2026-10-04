@@ -103,7 +103,7 @@ def their_text(url):
 
 def ours():
     files = []
-    for pat in ("index.html", "src/**/*.js", "src/**/*.css"):
+    for pat in ("index.html", "404.html", "pages/**/*.html", "src/**/*.js", "src/**/*.css"):
         files += list(ROOT.glob(pat))
     return {f: f.read_text() for f in files}
 

@@ -52,11 +52,14 @@ struct FieldRenderTests {
         pass.colorAttachments[0].texture = texture
         pass.colorAttachments[0].loadAction = .clear
         pass.colorAttachments[0].storeAction = .store
-        // Mid grey by default, the background the band was tuned against.
-        pass.colorAttachments[0].clearColor = MTLClearColorMake(background, background, background, 1)
+        // Mid grey by default, the background the band was tuned against. A
+        // negative background clears to transparent, so alpha can be read.
+        pass.colorAttachments[0].clearColor = background < 0
+            ? MTLClearColorMake(0, 0, 0, 0)
+            : MTLClearColorMake(background, background, background, 1)
 
-        // 14 points on an 800 point screen: attentive.
-        var uniforms = base(width: width, height: height, rest: 14 / 800)
+        // 20 points on an 800 point screen: attentive.
+        var uniforms = base(width: width, height: height, rest: 20 / 800)
         adjust(&uniforms)
         guard let buffer = queue.makeCommandBuffer() else { return nil }
         pipeline.encode(
@@ -98,7 +101,7 @@ struct FieldRenderTests {
     func acting() throws {
         _ = try Self.render(suffix: "-acting") {
             $0.tint = SIMD4(0.28, 1.45, 0.55, 0.60)
-            $0.rest = 18 / 800
+            $0.rest = 26 / 800
             $0.embers = 1
             $0.agent = SIMD2(0.72, 0.62)
             $0.reach = 1
@@ -112,14 +115,14 @@ struct FieldRenderTests {
             let t = Float(i)
             return max(0, sin(t * 0.55)) * (i < 20 ? 0.9 : 0.4)
         }
-        _ = try Self.render(suffix: "-voice", voice: voice) { $0.rest = 6.5 / 800 }
+        _ = try Self.render(suffix: "-voice", voice: voice) { $0.rest = 9 / 800 }
     }
 
     @Test("done sends one crest round the band")
     func sweep() throws {
         _ = try Self.render(suffix: "-done") {
             $0.tint = SIMD4(0.14, 0.62, 0.30, 0.75)
-            $0.rest = 11 / 800
+            $0.rest = 16 / 800
             $0.sweep = 0.45
             $0.sweepOrigin = 0.62
         }
@@ -132,8 +135,14 @@ struct FieldRenderTests {
             $0.pill = SIMD4(490 / 1280, 682 / 800, 300 / 1280, 34 / 800)
             $0.pillOn = 1
             $0.tint = SIMD4(0.28, 1.45, 0.55, 0.60)
-            $0.rest = 18 / 800
+            $0.rest = 26 / 800
         }
+    }
+
+    @Test("the band starts under the menu bar, not behind it")
+    func underMenuBar() throws {
+        // A 37 point menu bar, the height on a notched MacBook.
+        _ = try Self.render(suffix: "-menubar") { $0.top = 37 / 800 }
     }
 
     @Test("the bezel still reads over a white page")
@@ -143,34 +152,35 @@ struct FieldRenderTests {
 
     /// Asked for on 2026-10-04 as "linear all the way around". The liquid band
     /// it replaced pooled in the corners and bulged along the sides, so this
-    /// measures how dark the bezel makes a white screen at one inset from the
-    /// glass: middle of the left edge, middle of the top, and the same inset
-    /// along a corner's diagonal. Grain varies pixel to pixel, so each reading
-    /// is the mean of a small patch.
+    /// measures the band's opacity at one inset from the glass: middle of the
+    /// left edge, middle of the top, and the same inset along a corner's
+    /// diagonal. Opacity and not colour, because wherever the travelling light
+    /// is the grain is bright enough to match a white page. Grain varies pixel
+    /// to pixel, so each reading is the mean of a small patch.
     @Test("the band is one thickness on the sides and round the corners")
     func straight() throws {
         let width = 1280, height = 800
-        guard let pixels = try Self.draw(suffix: "-white", background: 1) else { return }
+        guard let pixels = try Self.draw(suffix: "-alpha", background: -1) else { return }
         func coverage(x: Int, y: Int) -> Double {
             var sum = 0.0, count = 0.0
             for dy in -3...3 {
                 for dx in -3...3 {
                     let i = ((y + dy) * width + (x + dx)) * 4
-                    sum += 1 - Double(pixels[i + 1]) / 255
+                    sum += Double(pixels[i + 3]) / 255
                     count += 1
                 }
             }
             return sum / count
         }
-        // 5 pixels in, inside a 14 pixel band: all three should be bezel.
+        // 5 pixels in, inside a 20 pixel band: all three should be bezel.
         let left = coverage(x: 5, y: height / 2)
         let top = coverage(x: width / 2, y: 5)
         // Round the corner the distance is to a circle of radius depth plus
-        // 0.012 heights, 23.6 px here, centred 23.6 px in on both axes, so
-        // (10, 10) sits about 4.4 px inside the glass.
-        let corner = coverage(x: 10, y: 10)
+        // 0.012 heights, 29.6 px here, centred 29.6 px in on both axes, so
+        // (12, 12) sits about 4.7 px inside the glass.
+        let corner = coverage(x: 12, y: 12)
         // Past the inner edge and the dust, the screen is untouched.
-        let inside = coverage(x: 40, y: height / 2)
+        let inside = coverage(x: 60, y: height / 2)
         #expect(left > 0.5)
         #expect(abs(left - top) < 0.12)
         #expect(abs(left - corner) < 0.12)

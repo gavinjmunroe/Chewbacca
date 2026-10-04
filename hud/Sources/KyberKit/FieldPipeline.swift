@@ -25,6 +25,9 @@ struct FieldUniforms {
     var sweepOrigin: Float
     var embers: Float
     var pillOn: Float
+    /// Where the band's top edge sits, in screen heights from the top: the
+    /// menu bar's height, or 0 when it hides. See `top` in the shader.
+    var top: Float = 0
 }
 
 /// The field and its glow, as five passes: the field at full size, its bright

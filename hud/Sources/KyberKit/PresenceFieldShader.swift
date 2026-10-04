@@ -121,6 +121,9 @@ struct Uniforms {
     /// How much of the bar is there, 0 to 1, eased, so it condenses in and
     /// evaporates out rather than cutting.
     float pillOn;
+    /// Where the top edge is, in screen heights: the bottom of the menu bar,
+    /// which sits above this window and hid the top of the band behind it.
+    float top;
 };
 
 /// How loud the voice was, one sample every RIPPLE_STEP seconds, newest first.
@@ -166,9 +169,9 @@ static inline float pixelHash(float2 p, uint salt) {
 /// the same thickness instead of meeting in a square. The wedge between that
 /// circle and the square screen corner comes back negative and is clamped to
 /// zero, which draws it as bezel.
-static inline float edgeDistance(float2 uv, float W, float R) {
+static inline float edgeDistance(float2 uv, float W, float R, float top) {
     float dx = min(uv.x * W, (1.0 - uv.x) * W);
-    float dy = min(uv.y, 1.0 - uv.y);
+    float dy = min(uv.y - top, 1.0 - uv.y);
     float2 k = float2(R - dx, R - dy);
     if (k.x > 0.0 && k.y > 0.0) return max(R - length(k), 0.0);
     return min(dx, dy);
@@ -226,7 +229,16 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // Corner radius of the inner edge, in screen heights. The display's own
     // corners are about 10 pt; 0.012 of an 800 pt screen is close to that, so
     // the inner edge follows the glass rather than cutting across it.
-    float e = edgeDistance(uv, W, depth + 0.012);
+    // Under the menu bar there is nothing to draw: the bar is above this
+    // window, and it is translucent, so a bezel behind it would tint it.
+    if (uv.y < U.top) return half4(0.0);
+
+    // A slow swell travelling round the edge, a tenth of the depth either
+    // way. Enough that the inner edge is never quite still, not enough to
+    // stop it reading as one straight band.
+    depth *= 1.0 + 0.10 * sin(here * P * 2.4 - time * 0.9) * sin(here * P * 0.9 + time * 0.37);
+
+    float e = edgeDistance(uv, W, depth + 0.012, U.top);
     if (!inPill && e > depth * 1.45 + 0.004 + 0.08 * U.embers) {
         return half4(0.0);
     }
@@ -241,13 +253,17 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // 0 at the bezel, 1 at the band's inner edge, more than 1 in the dust.
     float u = e / max(depth, 1e-4);
 
-    // The light. One broad highlight travelling round the edge at the state's
-    // drift, like a lamp moving across brushed titanium, over a floor so the
-    // band still reads where the light is not. The grain itself never moves.
-    float rakeAt = fract(U.travel * 0.03);
-    float rakeAway = along(here, rakeAt, W) / P;
-    float rake = exp(-pow(rakeAway / 0.16, 2.0));
-    float light = 0.50 + 0.85 * rake + 1.4 * ripple;
+    // The light. Two highlights travelling round the edge in opposite
+    // directions at the state's drift, like lamps moving across brushed
+    // titanium, over a floor so the band still reads where they are not.
+    //
+    // The first version had one broad light at a twentieth of this speed,
+    // about a minute a lap at rest, and on screen it read as still: "it
+    // doesnt feel alive at all, its all static" (2026-10-04). At rest the
+    // lead light now laps in about 25 s and the second in about 40.
+    float rakeA = exp(-pow(along(here, fract(U.travel * 0.08), W) / P / 0.09, 2.0));
+    float rakeB = exp(-pow(along(here, fract(0.43 - U.travel * 0.05), W) / P / 0.13, 2.0));
+    float light = 0.38 + 1.25 * rakeA + 0.75 * rakeB + 1.4 * ripple;
 
     if (U.sweep < 2.0) {
         float fromOrigin = along(here, U.sweepOrigin, W);
@@ -264,6 +280,12 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     float g1 = pixelHash(px, 1u);
     float g2 = pixelHash(floor(px * 0.5), 2u);
     float grain = 0.72 + 0.34 * g1 + 0.22 * g2 - 0.28;
+    // Each grain catches the light on its own slow cycle, a second or two
+    // long, so the sand glitters in place. Smooth and slow on purpose: per
+    // frame noise here would be static, which is what the first pass at
+    // grain looked like.
+    float glitter = 0.5 + 0.5 * sin(time * (0.6 + 1.4 * pixelHash(px, 8u)) + g1 * 6283.0);
+    grain *= 0.70 + 0.55 * glitter;
 
     // A plateau of light from the glass to just past the middle of the band,
     // then a fall into the dark.
@@ -273,7 +295,7 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // Sparkle: the brightest grains, about one in thirty, catch the light
     // on their own. This is most of what makes it read as titanium.
     float sparkle = smoothstep(0.965, 0.995, pixelHash(px, 7u));
-    lum += sparkle * profile * light * 0.90;
+    lum += sparkle * profile * light * 0.90 * (0.3 + 0.9 * glitter);
 
     // The dust: past the middle of the band the grain stops being continuous
     // and becomes single specks, fewer the further in, running on past the
@@ -281,14 +303,17 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     float dustAt = smoothstep(0.45, 1.40, u);
     float speckOdds = mix(0.16, 0.0, dustAt) * step(0.45, u);
     float speck = step(pixelHash(px, 3u), speckOdds);
-    lum += speck * (0.55 + 0.45 * g2) * light * mix(0.75, 0.3, dustAt);
+    float drift = 0.5 + 0.5 * sin(time * (0.4 + 0.9 * pixelHash(px, 9u)) + g2 * 6283.0);
+    lum += speck * (0.55 + 0.45 * g2) * light * mix(0.75, 0.3, dustAt) * (0.2 + 0.8 * drift);
 
-    // Glints: one pixel pair in a few hundred, each flashing on its own phase
-    // and its own rate, so no two catch the light together.
+    // Glints: one pixel pair in about seventy, each flashing on its own phase
+    // and its own rate, so no two catch the light together. Was one in three
+    // hundred, which on a real screen was a glint every few seconds somewhere
+    // nobody was looking.
     float glintSeed = pixelHash(floor(px * 0.5), 4u);
-    if (glintSeed > 0.9965 && u < 0.85) {
-        float phase = time * (0.9 + 0.6 * pixelHash(floor(px * 0.5), 5u)) + glintSeed * 6283.0;
-        float flash = pow(0.5 + 0.5 * sin(phase), 28.0);
+    if (glintSeed > 0.985 && u < 0.95) {
+        float phase = time * (1.6 + 1.6 * pixelHash(floor(px * 0.5), 5u)) + glintSeed * 6283.0;
+        float flash = pow(0.5 + 0.5 * sin(phase), 14.0);
         lum += flash * 2.2 * (1.0 - u) * (0.6 + 0.4 * light);
     }
 

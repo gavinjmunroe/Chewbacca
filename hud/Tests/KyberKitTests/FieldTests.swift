@@ -102,7 +102,7 @@ struct FieldTests {
     @Test("a live state that has settled runs at its own pace")
     func settledPaces() {
         #expect(PresenceFieldRenderer.rate(
-            for: Presence.attentive.field, closing: false, settled: true, parting: false) == 20)
+            for: Presence.attentive.field, closing: false, settled: true, parting: false) == 30)
         #expect(PresenceFieldRenderer.rate(
             for: Presence.hearing.field, closing: false, settled: true, parting: false) == 60)
     }

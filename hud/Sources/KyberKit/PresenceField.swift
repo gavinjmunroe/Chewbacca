@@ -94,9 +94,10 @@ extension Presence {
     ///
     /// Then, on 2026-10-04, converted to points with the titanium band:
     /// attentive set to 14 as asked, and every other state moved with it by
-    /// the same ratio it had to attentive, so hearing 6.5, thinking 8, acting
-    /// 18, done 11, attention 27, failed 21. On an 800 point display that is
-    /// about 0.45 of the old heights, which is the "closer to the edge".
+    /// the same ratio it had to attentive. Seen live the same day: "would
+    /// want it to be a bit thicker", so attentive went to 20 and the rest
+    /// moved by the same ratio again: hearing 9, thinking 11, acting 26, done
+    /// 16, attention 38, failed 30.
     var field: PresenceFieldStyle {
         switch self {
         case .dormant:
@@ -105,8 +106,11 @@ extension Presence {
             return .init(
                 rest: 0, drift: 0, tint: FieldTint.steel, pulse: 0, fps: 1, animating: false)
         case .attentive:
+            // 30fps, was 20: since 2026-10-04 every grain glitters on its own
+            // cycle and glints flash for about half a second, and at 20 the
+            // flashes stepped visibly.
             return .init(
-                rest: 14, drift: 0.5, tint: FieldTint.steel, pulse: 0, fps: 20,
+                rest: 20, drift: 0.5, tint: FieldTint.steel, pulse: 0, fps: 30,
                 animating: true)
         case .hearing, .speaking:
             // The two states driven from outside. `rest` here is a floor and
@@ -121,14 +125,14 @@ extension Presence {
             // flow reads as fast while the two stay apart: a voice is thick
             // and moving with the sound, thinking is thin and sprinting.
             return .init(
-                rest: 6.5, drift: 2.4, tint: FieldTint.steel, pulse: 0, fps: 60,
+                rest: 9, drift: 2.4, tint: FieldTint.steel, pulse: 0, fps: 60,
                 animating: true)
         case .thinking:
             // Thin and fast. Work reads as travel round the edge rather than
             // as weight on it, and it is still white: nothing has been done to
             // the machine yet.
             return .init(
-                rest: 8, drift: 3.2, tint: FieldTint.steel, pulse: 0, fps: 30,
+                rest: 11, drift: 3.2, tint: FieldTint.steel, pulse: 0, fps: 30,
                 animating: true)
         case .acting:
             // Green and breathing, and the only state that breathes on its own
@@ -136,7 +140,7 @@ extension Presence {
             // and that is the one thing in this vocabulary worth a colour they
             // cannot miss.
             return .init(
-                rest: 18, drift: 1.1, tint: FieldTint.green, pulse: 0.8, fps: 30,
+                rest: 26, drift: 1.1, tint: FieldTint.green, pulse: 0.8, fps: 30,
                 animating: true, embers: 1)
         case .done:
             // Darker green, calm, and still alive. The same hue as `acting`
@@ -157,18 +161,18 @@ extension Presence {
             // living instrument. Slower than `attentive`'s 0.5 so it reads
             // as settled rather than waiting, at its rate.
             return .init(
-                rest: 11, drift: 0.35, tint: FieldTint.deepGreen, pulse: 0, fps: 20,
+                rest: 16, drift: 0.35, tint: FieldTint.deepGreen, pulse: 0, fps: 20,
                 animating: true)
         case .attention:
             // The thickest, because this is the one that has to be noticed. It
             // stays white: green and red are spoken for, and a third hue here
             // would make the palette decoration again.
             return .init(
-                rest: 27, drift: 0.9, tint: FieldTint.steel, pulse: 0, fps: 30,
+                rest: 38, drift: 0.9, tint: FieldTint.steel, pulse: 0, fps: 30,
                 animating: true)
         case .failed:
             return .init(
-                rest: 21, drift: 0.3, tint: FieldTint.red, pulse: 0, fps: 20,
+                rest: 30, drift: 0.3, tint: FieldTint.red, pulse: 0, fps: 20,
                 animating: true)
         }
     }
@@ -691,6 +695,16 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
         let pixelsPerPoint = Float(size.height) / Float(max(view.bounds.height, 1))
         let radius = Self.partRadius * pixelsPerPoint / Float(max(size.height, 1))
         let feather = Self.partFeather * pixelsPerPoint / Float(max(size.height, 1))
+        // The menu bar sits above this window's level, so a band drawn at the
+        // true top edge of the screen is behind it: reported 2026-10-04 as "it
+        // cuts off at the top behind the nav bar". The band's top edge moves
+        // down to the menu bar's bottom instead. Not the other way round, over
+        // the menu bar: a dark bezel there would sit across the clock and
+        // every status icon.
+        let menuBar: Float = view.window?.screen.map { screen in
+            Float(max(screen.frame.maxY - screen.visibleFrame.maxY, 0))
+                / Float(max(view.bounds.height, 1))
+        } ?? 0
         // `rest` is points in the table and screen heights in the shader.
         let restTarget = Float(style.rest) / Float(max(view.bounds.height, 1))
         let pointer = Self.pointer
@@ -821,7 +835,8 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
             sweep: sweep,
             sweepOrigin: sweepOrigin,
             embers: embers.shown,
-            pillOn: pillOn.shown)
+            pillOn: pillOn.shown,
+            top: menuBar)
         pipeline.encode(
             buffer, into: pass, width: Int(size.width), height: Int(size.height),
             uniforms: &uniforms, voice: voice)

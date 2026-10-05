@@ -11,6 +11,8 @@ Claude Code writes every startup attachment into the transcript (instruction fil
 hook output, the skill list, deferred tool names, agent list, MCP instructions),
 so the split is read, not guessed. Only the system prompt and built-in tool schemas
 are not recorded; they show as the residual against the first turn's real usage.
+`chewbacca context` (tools/context_cost.py) estimates the same from files on
+disk; this reads what one session was actually sent.
 
 Characters become tokens at 2.8 per token: the same 34,646-character prompt was
 12,407 tokens on Sonnet 5 (docs/HYBRID-ROUTE.md). Haiku 4.5 runs about 3.9, so

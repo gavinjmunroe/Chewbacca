@@ -216,46 +216,33 @@ kyber-genui owns none of these files. These are the exact steps.
    control; pass it through so Refresh redraws the panel that was pressed,
    from that surface's last valid layout in `~/.bob/genui/layout-<surface>.json`.
    Without this branch, a press on Refresh becomes a model turn.
-4. **Register the graph walks as queries.** Write `surfaces/genui-queries.json`
-   (or point `GENUI_QUERIES` at any path list):
+4. **Register the graph walks as queries.** `bin/kyber-surfaces walk <kind>`
+   (landed 2026-10-04) prints rows as text; give it a `--json` that prints
+   `{"rows": [...]}` with the same row dicts, then write
+   `surfaces/genui-queries.json` (or point `GENUI_QUERIES` at any path list):
 
    ```json
-   {
-     "queries": [
-       {
-         "name": "unreplied",
-         "description": "message threads where they wrote last and nobody answered, oldest first",
-         "fields": ["who", "waiting", "channel", "last"],
-         "views": ["rows", "events", "list", "bars", "count", "note"],
-         "arg": {
-           "kind": "int",
-           "default": 7,
-           "min": 1,
-           "max": 60,
-           "help": "days back"
-         },
-         "argv": [
-           "kyber-surfaces",
-           "walk",
-           "unreplied",
-           "--days",
-           "{arg}",
-           "--json"
-         ]
-       }
-     ]
-   }
+   {"queries": [{
+     "name": "unreplied",
+     "description": "threads and decisions waiting on you, oldest first",
+     "argv": ["kyber-surfaces", "walk", "needs-you", "--json"],
+     "rename": {"label": "who", "app": "channel", "why": "waiting"},
+     "fields": ["who", "channel", "waiting"],
+     "views": ["rows", "events", "list", "count", "note"]
+   }],
+    "row_actions": {}}
    ```
 
-   The command runs with no shell, `{arg}` substituted as one argv element, and
-   must print `{"rows": [...], "note": "..."}`; optional `count`, `series`,
-   `ratio` and `scalars`. A registered name replaces the built-in stub, so
-   `unreplied` and `campaign` light up the day this file exists. Keep `last` to
-   a timestamp or a sender, never a message body: rows reach the glass, and a
-   body has no business on a panel somebody else can see over a shoulder.
-   Events are built from `time`/`date`/`waiting` plus `what`/`task`/`name`/`who`;
-   bars from `label`/`value`/`display` when the provider returns them under a
-   `bars` key, else counted by the first of `course` or `day`.
+   The command runs with no shell, `{arg}` (when the query declares an `arg`)
+   substituted as one argv element, and must print
+   `{"rows": [...], "note": "..."}`; optional `count`, `series`, `ratio`,
+   `bars` and `scalars`. `rename` maps the provider's field names onto the
+   ones the views read. A registered name replaces the built-in stub, so
+   `unreplied` and `campaign` light up the day this file exists. Rows reach
+   the glass: keep them to labels, senders and times, never a message body.
+   Events are built from `time`/`date`/`waiting` plus
+   `what`/`task`/`name`/`who`; bars from a provider's own `bars`, else counted
+   by the first of `course` or `day`.
 
 5. **Fixed surfaces on the same pointers.** A fixed surface in `surfaces/`
    written with `@/q/...` pointers passes `kyber-genui validate <file>`, and

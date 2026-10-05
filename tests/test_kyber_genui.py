@@ -181,6 +181,18 @@ def test_a_registered_row_action_is_allowed():
         G.POLICY["row_actions"].clear()
 
 
+def test_provider_query_runs_argv_and_renames_fields():
+    script = Path(FIXTURES) / "walk.sh"
+    script.write_text("#!/bin/sh\nprintf '%s' '{\"rows\":[{\"label\":\"Sam\",\"app\":\"Messages\",\"why\":\"2d\",\"id\":\"thread:1\"}]}'\n")
+    script.chmod(0o755)
+    query = G.provider_query({"name": "unreplied", "argv": [str(script), "{arg}"], "fields": ["who", "channel", "waiting"],
+                              "rename": {"label": "who", "app": "channel", "why": "waiting"},
+                              "views": ["rows", "events", "count"], "arg": {"kind": "int", "default": 7}})
+    raw = query.fetch(None)
+    assert raw["rows"][0]["who"] == "Sam", raw
+    assert G.shape("unreplied", raw)["events"][0]["text"] == "Sam", G.shape("unreplied", raw)
+
+
 def test_actions_come_from_the_allowlist():
     head = 'c s Screen title="X"\n> s a b\nc a Metric label="n" value=@/q/due/count\n'
     assert "bad_value" in problems(head + 'c b Button label="Send" action=send-all')

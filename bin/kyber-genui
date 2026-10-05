@@ -528,7 +528,14 @@ def provider_query(spec: dict) -> Query:
     def fetch(arg: str | None) -> dict:
         full = [a.replace("{arg}", arg or str(spec.get("arg", {}).get("default", ""))) for a in argv]
         out = run_json(full, timeout=float(spec.get("timeout", 20)))
-        return out if isinstance(out, dict) else {"rows": out}
+        out = out if isinstance(out, dict) else {"rows": out}
+        # A provider keeps its own field names; `rename` maps them onto the
+        # ones the views read (kyber-surfaces rows say label/app/why).
+        rename = spec.get("rename") or {}
+        if rename and isinstance(out.get("rows"), list):
+            out["rows"] = [{rename.get(k, k): v for k, v in row.items()} if isinstance(row, dict) else row
+                           for row in out["rows"]]
+        return out
 
     return Query(name, str(spec.get("description", "")), [str(f) for f in spec.get("fields", [])],
                  tuple(v for v in spec.get("views", ["rows", "list", "count", "note"]) if v in VIEWS),

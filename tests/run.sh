@@ -1146,6 +1146,7 @@ if group "weft"; then
   # Pure functions against a real Tangle build and a real approved run, so it
   # needs neither weft nor Kyber installed.
   check "weft-view draws, lights and narrates a real build" node --test "$ROOT/tests/test_weft_view.mjs"
+  check "a headless Tangle build cannot widen its own rules" node --test "$ROOT/tests/test_weft_fence.mjs"
   check "weft-view parses"  node --check "$ROOT/bin/weft-view"
   check "weft-build parses" node --check "$ROOT/bin/weft-build"
 fi

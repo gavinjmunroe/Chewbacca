@@ -8,9 +8,9 @@
 // step Tangle takes becomes a plain-words line on the pill while the boxes
 // appear in the panel. --print writes the HUD lines to stdout instead.
 //
-// Tangle runs fenced in, on purpose:
-//   - Only its own settings load (--setting-sources local plus its
-//     .claude/settings.json). The user-level hooks and rules made the first
+// Tangle runs fenced in, on purpose (lib/weft_fence.js holds the rules):
+//   - Only the fenced copy of its settings loads, from outside the project,
+//     under --restricted. The user-level hooks and rules made the first
 //     headless build end on "I committed the project to main" instead of the
 //     two sentences the brief asked for (2026-10-04).
 //   - Anything that reaches outside this Mac or spends money is refused:
@@ -28,26 +28,12 @@ const path = require("node:path");
 const readline = require("node:readline");
 const { spawn, spawnSync } = require("node:child_process");
 const view = require("./lib/weft_view.js");
+const { NAME_NOTE, TOOLS, fence, packagePlugin } = require("./lib/weft_fence.js");
 
 const PROJECTS = process.env.WEFT_PROJECTS || path.join(os.homedir(), "weft-projects");
 const WEFT = process.env.WEFT_BIN || path.join(os.homedir(), ".local", "bin", "weft");
 const CLAUDE = process.env.CLAUDE_BIN || "claude";
 const SOCKET = process.env.KYBER_SOCKET || path.join(os.homedir(), ".bob", "hud.sock");
-
-const REFUSED = [
-  "Bash(weft activate:*)",
-  "Bash(weft infra start:*)",
-  "Bash(weft infra upgrade:*)",
-  "Bash(weft rm:*)",
-  "Bash(weft clean:*)",
-  "Bash(weft prune:*)",
-  "Bash(weft connect:*)",
-  "Bash(weft token:*)",
-  "Bash(weft deploy:*)",
-  "Bash(weft domain:*)",
-  "Bash(curl:*)",
-  "Bash(git push:*)",
-];
 
 function usage(code) {
   process.stderr.write('usage: weft-build "<what it should do>" [--name <slug>] [--print]\n');
@@ -125,6 +111,16 @@ const dir = path.join(PROJECTS, name);
 // "Greeting -> Out" before Tangle has done anything. Start from nothing so
 // every box on screen is one Tangle put there.
 fs.writeFileSync(path.join(dir, "src", "main.weft"), `# ${brief.replace(/\n/g, " ")}\n`);
+// Read Tangle's rules now, before Tangle has run, and keep the copy where
+// its acceptEdits cannot reach.
+const fenceDir = path.join(os.homedir(), ".chewbacca", "weft-build");
+fs.mkdirSync(fenceDir, { recursive: true });
+const hookPath = path.join(fenceDir, `${name}.validate_weft.py`);
+fs.copyFileSync(path.join(dir, ".claude", "hooks", "validate_weft.py"), hookPath);
+const settingsPath = path.join(fenceDir, `${name}.settings.json`);
+const tangleSettings = JSON.parse(fs.readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
+fs.writeFileSync(settingsPath, `${JSON.stringify(fence(tangleSettings, hookPath), null, 2)}\n`);
+const pluginDir = packagePlugin(dir, path.join(fenceDir, `${name}.plugin`));
 hud(["p thinking"]);
 say("Starting a new agent", false);
 
@@ -146,13 +142,16 @@ const tangle = spawn(
     "--verbose",
     "--permission-mode",
     "acceptEdits",
-    "--setting-sources",
-    "local",
+    "--restricted",
+    "--plugin-dir",
+    pluginDir,
+    "--append-system-prompt",
+    NAME_NOTE,
+    "--tools",
+    TOOLS.join(","),
     "--settings",
-    path.join(dir, ".claude", "settings.json"),
+    settingsPath,
     "--strict-mcp-config",
-    "--disallowedTools",
-    ...REFUSED,
   ],
   { cwd: dir, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, PATH: `${path.dirname(WEFT)}:${process.env.PATH}` } },
 );

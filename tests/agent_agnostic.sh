@@ -34,10 +34,10 @@ grep -q 'for a in claude codex gemini; do' "$ROOT/setup.sh" \
 BASE=/usr/bin:/bin:/usr/sbin:/sbin
 printf '#!/bin/sh\nmkdir -p "$HOME/.local/bin"; printf "#!/bin/sh\\necho claude\\n" > "$HOME/.local/bin/claude"; chmod +x "$HOME/.local/bin/claude"\n' > "$FAKE/works.sh"
 printf '#!/bin/sh\nexit 1\n' > "$FAKE/fails.sh"
-run_agent() {  # home, path, installer
+run_agent() {  # home, path, installer, [profile]
   mkdir -p "$1"
   HOME="$1" PATH="$2" CHEWBACCA_CLAUDE_CODE_INSTALLER="file://$FAKE/$3" \
-    bash "$ROOT/setup.sh" --only agent --profile personal --name CI 2>&1 | sed 's/\x1b\[[0-9;]*m//g'
+    bash "$ROOT/setup.sh" --only coding-agent --profile "${4:-personal}" --name CI 2>&1 | sed 's/\x1b\[[0-9;]*m//g'
 }
 
 # Codex already here: used, and nothing is installed. Sam's case.
@@ -58,4 +58,16 @@ echo "$out" | grep -q "free tier works" && fail "claims the free tier works, whi
 run_agent "$FAKE/h-down" "$BASE" fails.sh > "$FAKE/down.out"; rc=${PIPESTATUS[0]}
 [ "$rc" -eq 0 ] || fail "a failed Claude Code download stopped the whole install (exit $rc)"
 grep -q "claude.ai/install.sh" "$FAKE/down.out" || fail "a failed download does not say how to add Claude Code later"
+
+# Nothing to download at all. With no pipefail, curl failing feeds bash an
+# empty script that exits 0, so only the check for the binary tells this
+# apart from success.
+out="$(run_agent "$FAKE/h-gone" "$BASE" no-such-installer.sh)"
+echo "$out" | grep -q "Claude Code installed" && fail "a download that never happened reported Claude Code installed"
+echo "$out" | grep -q "did not install" || fail "a failed download was not reported"
+
+# Portable promises ~/.claude and nothing else, so it never installs a binary.
+HOME="$FAKE/h-port" PATH="$BASE" CHEWBACCA_CLAUDE_CODE_INSTALLER="file://$FAKE/works.sh" \
+  bash "$ROOT/setup.sh" --profile portable --name CI >/dev/null 2>&1
+[ -e "$FAKE/h-port/.local/bin/claude" ] && fail "the portable profile installed Claude Code"
 exit 0

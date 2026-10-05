@@ -200,13 +200,14 @@ else
   echo "    Installing Claude Code from Anthropic. It is free to download; using it"
   echo "    needs a paid Claude plan (Pro, Max, Team or Enterprise) or an Anthropic"
   echo "    Console account. The free claude.ai plan does not include it."
-  if curl -fsSL "${CHEWBACCA_CLAUDE_CODE_INSTALLER:-https://claude.ai/install.sh}" 2>/dev/null | bash &>/dev/null \
+  if curl -fsSL --connect-timeout 15 --max-time 300 "${CHEWBACCA_CLAUDE_CODE_INSTALLER:-https://claude.ai/install.sh}" 2>/dev/null | bash &>/dev/null \
     && [ -x "$HOME/.local/bin/claude" ]; then
     export PATH="$HOME/.local/bin:$PATH"
     ok "Claude Code installed. You sign in the first time it opens."
   else
-    blocked "run: curl -fsSL https://claude.ai/install.sh | bash"
-    NEEDS_HUMAN=1
+    # Not BLOCKED: nothing here needs the person. setup.sh tries again, and
+    # its failure line carries the command for later.
+    miss "Claude Code did not download. Setup tries again"
   fi
 fi
 
@@ -232,7 +233,11 @@ fi
 
 echo ""
 if [ "$NEEDS_HUMAN" -eq 0 ]; then
-  echo -e "  ${GRN}Ready.${NC} Next: claude \"run the setup skill\""
+  if [ -n "$AGENT_HERE" ] || [ -x "$HOME/.local/bin/claude" ]; then
+    echo -e "  ${GRN}Ready.${NC} Next: ${AGENT_HERE:-claude} \"run the setup skill\""
+  else
+    echo -e "  ${GRN}Ready.${NC} Next: ./setup.sh, which installs Claude Code first"
+  fi
   [ "$UV_MISSING" -eq 1 ] &&
     echo -e "  ${YLW}!${NC} uv is still missing, so mac-use will be skipped. Everything else runs."
   exit 0

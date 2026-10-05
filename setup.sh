@@ -158,7 +158,7 @@ Behaviors, both off unless asked for:
 
 Re-running:
   --only <section>             Run one section. Safe to repeat.
-                               prereq agent repos settings editor desktop mcp rules
+                               prereq coding-agent repos settings editor desktop mcp rules
                                plugins tools agents mac plynn verify
   --dry-run                    Print what would run and exit.
   -h, --help                   This text.
@@ -359,14 +359,14 @@ fi
 # indicator nobody asked for.
 #
 #     ./setup.sh --only plynn     still installs it
-SECTIONS="prereq agent repos settings editor desktop mcp rules skills plugins tools agents verify manifest"
+SECTIONS="prereq coding-agent repos settings editor desktop mcp rules skills plugins tools agents verify manifest"
 if [ -n "$ONLY" ]; then
   case " $SECTIONS " in
     *" $ONLY "*) ;;
     *) err "unknown section: $ONLY"; err "one of: $SECTIONS"; exit 2 ;;
   esac
 fi
-PORTABLE_SECTIONS=" agent settings rules skills agents manifest verify "
+PORTABLE_SECTIONS=" settings rules skills agents manifest verify "
 should_run() {
   case " $SKIP_SECTIONS " in
     *" $1 "*) SKIPPED+=("$1 (--skip)"); return 1 ;;
@@ -543,7 +543,13 @@ if [ "$DRY_RUN" -eq 1 ]; then
   _dry_agent=""
   for a in claude codex gemini; do command -v "$a" &>/dev/null && { _dry_agent="$a"; break; }; done
   [ -z "$_dry_agent" ] && [ -x "$HOME/.local/bin/claude" ] && _dry_agent="claude"
-  echo "  agent:           ${_dry_agent:-none found, Claude Code would be installed (needs a paid Claude plan)}"
+  _dry_installs=1
+  [ "$ONLY_PORTABLE" -eq 1 ] && _dry_installs=0
+  [ -n "$ONLY" ] && [ "$ONLY" != coding-agent ] && _dry_installs=0
+  case " $SKIP_SECTIONS " in *" coding-agent "*) _dry_installs=0 ;; esac
+  if [ -n "$_dry_agent" ]; then echo "  agent:           $_dry_agent"
+  elif [ "$_dry_installs" -eq 1 ]; then echo "  agent:           none found, Claude Code would be installed (needs a paid Claude plan)"
+  else echo "  agent:           none found, and this run would not install one"; fi
   for pair in "anthropic:$ANTHROPIC_KEY" "github:$GITHUB_PAT" "todoist:$TODOIST_TOKEN"; do
     [ -n "${pair#*:}" ] && echo "  credential:      ${pair%%:*} (would be written to settings.json)"
   done
@@ -669,7 +675,7 @@ case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *)
 esac
 
 # ── An agent to drive all of this ────────────────────────────────────────────
-if should_run agent; then
+if should_run coding-agent; then
   # INSTALL AN AGENT ONLY IF THEY HAVE NONE, AND SAY WHAT IT COSTS FIRST.
   #
   # This used to install Claude Code whenever `claude` was missing, full
@@ -682,13 +688,16 @@ if should_run agent; then
   # With no agent at all the kit does nothing, and Kyber's voice runs on
   # `claude -p`, so a bare Mac still gets Claude Code (Gavin, 2026-10-05). Two
   # things changed from the npm version that lived in the plugins section:
-  # it ran only when npm existed and only when plugins ran, so `--fast` and a
-  # Mac where Homebrew failed got no agent and a dead end on the last screen;
+  # it ran only when npm existed and only when plugins ran, so `--fast` got
+  # no agent and a dead end on the last screen;
   # and it said "the free tier works", which Anthropic's setup page
   # contradicts: "The free claude.ai plan does not include Claude Code
   # access." Anthropic's native installer needs no Node, lands in
   # ~/.local/bin, and is signed and notarized. The plan requirement is
   # printed before the download, so nobody meets it as a surprise.
+  #
+  # Not in the portable profile: that one promises to write ~/.claude and
+  # nothing else, on machines this kit does not otherwise run on.
   CLAUDE_CODE_INSTALLER="${CHEWBACCA_CLAUDE_CODE_INSTALLER:-https://claude.ai/install.sh}"
   section "Your agent"
   for a in claude codex gemini; do
@@ -702,7 +711,7 @@ if should_run agent; then
     warn "Claude Code is free to download. Using it needs a paid Claude plan: Pro, Max,"
     warn "  Team or Enterprise, or an Anthropic Console account. The free claude.ai plan"
     warn "  does not include it. You sign in the first time it opens."
-    if curl -fsSL "$CLAUDE_CODE_INSTALLER" 2>/dev/null | bash >/dev/null 2>&1 \
+    if curl -fsSL --connect-timeout 15 --max-time 300 "$CLAUDE_CODE_INSTALLER" 2>/dev/null | bash >/dev/null 2>&1 \
       && [ -x "$HOME/.local/bin/claude" ]; then
       export PATH="$HOME/.local/bin:$PATH"
       KIT_AGENT="claude"
@@ -2281,7 +2290,7 @@ youtube-transcripts|https://github.com/calebnewtonusc/claude-youtube-transcripts
 UPSTREAM_SKILLS
 
 # `command -v claude` only proves a binary is on PATH. It does not prove
-# the CLI can do anything, and on a machine where it was npm-installed a
+# the CLI can do anything, and on a machine where it was installed a
 # minute ago and never signed in, every plugin install below fails. Two
 # people testing this on 2026-09-19 watched nineteen consecutive red
 # lines scroll past, which reads as a broken product rather than as one
@@ -2342,7 +2351,8 @@ if [ "$PLUGINS_OK" -eq 1 ]; then
   fi
   log "Plugins needing OAuth (Vercel, Railway) stay inert until you run /mcp and authorize."
 elif ! command -v claude &>/dev/null; then
-  warn "claude CLI still missing. Plugins skipped: install node, then re-run"
+  warn "Claude Code is not installed, so plugins were skipped. Add it, then re-run:"
+  warn "  curl -fsSL https://claude.ai/install.sh | bash"
   warn "  chewbacca setup --only plugins"
 fi
 

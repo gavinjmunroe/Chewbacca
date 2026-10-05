@@ -1141,6 +1141,15 @@ fi
 # Its own group because it reruns every Python test file in one process, about
 # five minutes, and inside hud it made hud the 470 s long pole of a parallel
 # run on 2026-10-03. Alone it runs beside the other groups.
+if group "weft"; then
+  # The Build view: a weft program drawn on the HUD as it is built and run.
+  # Pure functions against a real Tangle build and a real approved run, so it
+  # needs neither weft nor Kyber installed.
+  check "weft-view draws, lights and narrates a real build" node --test "$ROOT/tests/test_weft_view.mjs"
+  check "weft-view parses"  node --check "$ROOT/bin/weft-view"
+  check "weft-build parses" node --check "$ROOT/bin/weft-build"
+fi
+
 if group "pytest"; then
   # The same file has a pytest-only path (the fixtures at its top) that no
   # runner ever exercised: none of the python3 interpreters on the dev Macs,

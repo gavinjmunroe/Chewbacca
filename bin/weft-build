@@ -1,0 +1,201 @@
+#!/usr/bin/env node
+// weft-build: say what you want, watch the agent get built on the HUD.
+//
+//   weft-build "<what it should do>" [--name <slug>] [--print]
+//
+// Makes a weft project in ~/weft-projects, opens weft-view on it, and runs
+// Tangle (weft's builder, a Claude Code persona) headless inside it. Every
+// step Tangle takes becomes a plain-words line on the pill while the boxes
+// appear in the panel. --print writes the HUD lines to stdout instead.
+//
+// Tangle runs fenced in, on purpose:
+//   - Only its own settings load (--setting-sources local plus its
+//     .claude/settings.json). The user-level hooks and rules made the first
+//     headless build end on "I committed the project to main" instead of the
+//     two sentences the brief asked for (2026-10-04).
+//   - Anything that reaches outside this Mac or spends money is refused:
+//     putting a trigger live, starting paid infrastructure, deleting, and
+//     answering a person's question on their behalf. On the first build
+//     Tangle answered its own approval form with curl to test the program.
+//     Those become Kyber approval cards (Slice 2); until then they are no.
+
+"use strict";
+
+const fs = require("node:fs");
+const net = require("node:net");
+const os = require("node:os");
+const path = require("node:path");
+const readline = require("node:readline");
+const { spawn, spawnSync } = require("node:child_process");
+const view = require("./lib/weft_view.js");
+
+const PROJECTS = process.env.WEFT_PROJECTS || path.join(os.homedir(), "weft-projects");
+const WEFT = process.env.WEFT_BIN || path.join(os.homedir(), ".local", "bin", "weft");
+const CLAUDE = process.env.CLAUDE_BIN || "claude";
+const SOCKET = process.env.KYBER_SOCKET || path.join(os.homedir(), ".bob", "hud.sock");
+
+const REFUSED = [
+  "Bash(weft activate:*)",
+  "Bash(weft infra start:*)",
+  "Bash(weft infra upgrade:*)",
+  "Bash(weft rm:*)",
+  "Bash(weft clean:*)",
+  "Bash(weft prune:*)",
+  "Bash(weft connect:*)",
+  "Bash(weft token:*)",
+  "Bash(weft deploy:*)",
+  "Bash(weft domain:*)",
+  "Bash(curl:*)",
+  "Bash(git push:*)",
+];
+
+function usage(code) {
+  process.stderr.write('usage: weft-build "<what it should do>" [--name <slug>] [--print]\n');
+  process.exit(code);
+}
+
+const args = process.argv.slice(2);
+const printOnly = args.includes("--print");
+const nameAt = args.indexOf("--name");
+// Without --name, nameAt is -1 and `nameAt + 1` is 0: the first version
+// filtered out index 0, which is the brief itself, and every build stopped at
+// the usage line.
+const nameValueAt = nameAt === -1 ? -1 : nameAt + 1;
+const brief = args.filter((a, i) => !a.startsWith("--") && i !== nameValueAt).join(" ").trim();
+if (!brief) usage(2);
+
+// "Build me an agent that sorts my receipts" -> "sorts-my-receipts"
+function slugFrom(text) {
+  const words = text
+    .toLowerCase()
+    .replace(/^(please\s+)?(build|make|create)\s+(me\s+)?(an?\s+)?(agent|program|bot|thing)?\s*(that|to|which)?\s*/, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 4);
+  return words.join("-") || "agent";
+}
+
+function freeName(base) {
+  let name = base;
+  for (let n = 2; fs.existsSync(path.join(PROJECTS, name)); n += 1) name = `${base}-${n}`;
+  return name;
+}
+
+
+let socket = null;
+const pending = [];
+function hud(lines) {
+  if (printOnly) {
+    process.stdout.write(`${lines.join("\n")}\n`);
+    return;
+  }
+  pending.push(...lines);
+  if (!socket) {
+    socket = net.createConnection(SOCKET);
+    socket.on("connect", () => socket.write(`${pending.splice(0).join("\n")}\n`));
+    socket.on("error", () => {
+      socket = null;
+    });
+    socket.on("close", () => {
+      socket = null;
+    });
+  } else if (!socket.connecting) {
+    socket.write(`${pending.splice(0).join("\n")}\n`);
+  }
+}
+
+let lastSaid = "";
+function say(text, step) {
+  if (!text || text === lastSaid) return;
+  lastSaid = text;
+  hud([`s ${view.quote(text)}${step ? " step=true" : ""}`]);
+}
+
+
+fs.mkdirSync(PROJECTS, { recursive: true });
+const name = freeName(nameAt !== -1 && args[nameAt + 1] ? args[nameAt + 1] : slugFrom(brief));
+const made = spawnSync(WEFT, ["new", name, "--assistant", "claude-code"], { cwd: PROJECTS, encoding: "utf8" });
+if (made.status !== 0) {
+  process.stderr.write(`weft-build: weft new failed: ${(made.stderr || made.stdout || "").trim()}\n`);
+  process.exit(1);
+}
+const dir = path.join(PROJECTS, name);
+// `weft new` writes a hello-world program, and the panel would open on
+// "Greeting -> Out" before Tangle has done anything. Start from nothing so
+// every box on screen is one Tangle put there.
+fs.writeFileSync(path.join(dir, "src", "main.weft"), `# ${brief.replace(/\n/g, " ")}\n`);
+hud(["p thinking"]);
+say("Starting a new agent", false);
+
+// The slug ("takes-a-list-of" on the first live build) is a folder name, not
+// a title anybody should read.
+const viewer = spawn(path.join(__dirname, "weft-view"), [dir, "--title", "Your new agent", ...(printOnly ? ["--print"] : [])], {
+  stdio: ["ignore", printOnly ? "inherit" : "ignore", "inherit"],
+});
+
+
+const log = fs.createWriteStream(path.join(dir, ".weft", `build-${Date.now()}.jsonl`));
+const tangle = spawn(
+  CLAUDE,
+  [
+    "-p",
+    brief,
+    "--output-format",
+    "stream-json",
+    "--verbose",
+    "--permission-mode",
+    "acceptEdits",
+    "--setting-sources",
+    "local",
+    "--settings",
+    path.join(dir, ".claude", "settings.json"),
+    "--strict-mcp-config",
+    "--disallowedTools",
+    ...REFUSED,
+  ],
+  { cwd: dir, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, PATH: `${path.dirname(WEFT)}:${process.env.PATH}` } },
+);
+
+let result = "";
+let failed = false;
+readline.createInterface({ input: tangle.stdout }).on("line", (line) => {
+  log.write(`${line}\n`);
+  let event;
+  try {
+    event = JSON.parse(line);
+  } catch {
+    return;
+  }
+  // A helper's own steps interleaved with Tangle's read as one builder that
+  // cannot decide; the helper was already named when it was handed the work.
+  if (event.parent_tool_use_id) return;
+  if (event.type === "assistant") {
+    for (const block of (event.message && event.message.content) || []) {
+      if (block.type === "tool_use") {
+        hud(["p acting"]);
+        say(view.narrate(block), true);
+      } else if (block.type === "text") {
+        say(view.firstSentence(block.text), false);
+      }
+    }
+  } else if (event.type === "result") {
+    result = String(event.result || "");
+    failed = Boolean(event.is_error);
+  }
+});
+tangle.stderr.on("data", (chunk) => log.write(`# stderr ${chunk}`));
+
+tangle.on("close", (code) => {
+  log.end();
+  viewer.kill("SIGUSR1");
+  if (code === 0 && !failed) {
+    hud(["p done", `w ${view.quote(result || "Built.")} done=true`]);
+  } else {
+    hud(["p failed", `s ${view.quote("The build stopped before it finished")}`]);
+  }
+  process.stderr.write(`weft-build: ${dir}\n`);
+  // The panel stays up and keeps following runs; weft-view exits on Ctrl-C.
+  if (printOnly) viewer.kill();
+  setTimeout(() => process.exit(code === 0 ? 0 : 1), 300);
+});

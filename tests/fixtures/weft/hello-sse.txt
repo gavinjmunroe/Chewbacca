@@ -1,0 +1,16 @@
+data: {"event_id":"live:9379ba8f-6fdf-4508-aa44-f558092abbe3","kind":"project_registered","project_id":"69a527a0-fdfe-4e89-b00d-9cc8a5f3bac9","name":"hello"}
+
+data: {"event_id":"live:9379ba8f-6fdf-4508-aa44-f558092abbe3","kind":"project_registered","project_id":"69a527a0-fdfe-4e89-b00d-9cc8a5f3bac9","name":"hello"}
+
+data: {"event_id":"journal:10:0","kind":"execution_started","execution_id":"9af0edb2-4445-46fe-a051-403a2362d5fd","entry_node":"greeting","phase":"fire","subgraph":["greeting","out"],"project_id":"69a527a0-fdfe-4e89-b00d-9cc8a5f3bac9","at_unix":1791166492}
+
+data: {"event_id":"journal:12:0","kind":"node_started","execution_id":"9af0edb2-4445-46fe-a051-403a2362d5fd","node":"greeting","frames":[],"input":{"value":"Hello, World!"},"closed_ports":[],"project_id":"69a527a0-fdfe-4e89-b00d-9cc8a5f3bac9","at_unix":1791166492}
+
+data: {"event_id":"journal:14:0","kind":"node_completed","execution_id":"9af0edb2-4445-46fe-a051-403a2362d5fd","node":"greeting","frames":[],"output":{"value":"Hello, World!"},"project_id":"69a527a0-fdfe-4e89-b00d-9cc8a5f3bac9","at_unix":1791166492}
+
+data: {"event_id":"journal:15:0","kind":"node_started","execution_id":"9af0edb2-4445-46fe-a051-403a2362d5fd","node":"out","frames":[],"input":{"data":"Hello, World!"},"closed_ports":[],"project_id":"69a527a0-fdfe-4e89-b00d-9cc8a5f3bac9","at_unix":1791166492}
+
+data: {"event_id":"journal:16:0","kind":"node_completed","execution_id":"9af0edb2-4445-46fe-a051-403a2362d5fd","node":"out","frames":[],"output":null,"project_id":"69a527a0-fdfe-4e89-b00d-9cc8a5f3bac9","at_unix":1791166492}
+
+data: {"event_id":"journal:18:0","kind":"execution_completed","execution_id":"9af0edb2-4445-46fe-a051-403a2362d5fd","project_id":"69a527a0-fdfe-4e89-b00d-9cc8a5f3bac9","outputs":{"greeting":{"value":"Hello, World!"}},"at_unix":1791166492}
+

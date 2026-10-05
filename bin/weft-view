@@ -1,0 +1,236 @@
+#!/usr/bin/env node
+// weft-view: a weft program, drawn on the Kyber HUD while it is built and run.
+//
+//   weft-view <project-dir>           draw it, keep it live until Ctrl-C
+//   weft-view <project-dir> --print   print the HUD lines instead of sending them
+//   weft-view <project-dir> --close   take the panel down
+//   weft-view <project-dir> --title "YOUR NEW AGENT"
+//
+// SIGUSR1 clears the run colours, which weft-build sends when a build ends.
+//
+// Two feeds, one panel. The graph comes from `weft parse` every time
+// src/main.weft or nodes/ changes on disk, which is what makes it grow while
+// Tangle writes. Where the run is comes from the runtime's live stream,
+// GET /events/project/{id} on 127.0.0.1:14111. Everything it draws goes over
+// ~/.bob/hud.sock as ordinary HUD lines (see skills/hud/SKILL.md).
+
+"use strict";
+
+const fs = require("node:fs");
+const http = require("node:http");
+const net = require("node:net");
+const os = require("node:os");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+const view = require("./lib/weft_view.js");
+
+const SOCKET = process.env.KYBER_SOCKET || path.join(os.homedir(), ".bob", "hud.sock");
+const RUNTIME = process.env.WEFT_RUNTIME_URL || "http://127.0.0.1:14111";
+const WEFT = process.env.WEFT_BIN || path.join(os.homedir(), ".local", "bin", "weft");
+const SURFACE = "build";
+const POINTER = "/buildgraph";
+// Tangle writes main.weft in whole edits, and an editor save can land as two
+// writes a few ms apart. 150 ms coalesces those without the viewer noticing
+// the lag; guessed, never measured.
+const DEBOUNCE_MS = 150;
+// The runtime restarts under launchd in a few seconds; retrying every 2 s
+// reconnects within one restart without hammering a runtime that is down.
+const RECONNECT_MS = 2000;
+
+function usage(code) {
+  process.stderr.write("usage: weft-view <project-dir> [--print | --close]\n");
+  process.exit(code);
+}
+
+const args = process.argv.slice(2);
+const dir = args.find((a, i) => !a.startsWith("--") && !(i > 0 && args[i - 1] === "--title"));
+if (!dir || args.includes("-h") || args.includes("--help")) usage(dir ? 0 : 2);
+const root = path.resolve(dir);
+const printOnly = args.includes("--print");
+const titleAt = args.indexOf("--title");
+const titleArg = titleAt === -1 ? "" : args[titleAt + 1] || "";
+
+function manifest() {
+  const text = fs.readFileSync(path.join(root, "weft.toml"), "utf8");
+  const id = (text.match(/^\s*id\s*=\s*"([^"]+)"/m) || [])[1];
+  const name = (text.match(/^\s*name\s*=\s*"([^"]+)"/m) || [])[1] || path.basename(root);
+  if (!id) throw new Error(`no project id in ${path.join(root, "weft.toml")}`);
+  return { id, name };
+}
+
+let project;
+try {
+  project = manifest();
+} catch (err) {
+  process.stderr.write(`weft-view: ${err.message}\n`);
+  process.exit(1);
+}
+
+
+let socket = null;
+const queue = [];
+
+function send(lines) {
+  if (!lines.length) return;
+  if (printOnly) {
+    process.stdout.write(`${lines.join("\n")}\n`);
+    return;
+  }
+  queue.push(...lines);
+  flush();
+}
+
+function flush() {
+  if (!socket) {
+    socket = net.createConnection(SOCKET);
+    socket.on("connect", flush);
+    socket.on("error", (err) => {
+      process.stderr.write(`weft-view: Kyber is not answering on ${SOCKET} (${err.code})\n`);
+      socket = null;
+    });
+    socket.on("close", () => {
+      socket = null;
+    });
+    return;
+  }
+  if (socket.connecting) return;
+  socket.write(`${queue.splice(0).join("\n")}\n`);
+}
+
+if (args.includes("--close")) {
+  send([`- ${SURFACE}`]);
+  setTimeout(() => process.exit(0), 200);
+  return;
+}
+
+
+const slots = view.newSlots();
+const state = { status: new Map(), labels: new Map(), boxOf: new Map(), outDoors: new Set() };
+let graph = null;
+let opened = false;
+
+function parse() {
+  const source = path.join(root, "src", "main.weft");
+  let text;
+  try {
+    text = fs.readFileSync(source, "utf8");
+  } catch {
+    return null;
+  }
+  const out = spawnSync(WEFT, ["parse", "--file", source], {
+    cwd: root,
+    input: text,
+    encoding: "utf8",
+    timeout: 20000,
+  });
+  if (out.status !== 0) {
+    process.stderr.write(`weft-view: weft parse failed: ${(out.stderr || "").trim().split("\n")[0]}\n`);
+    return null;
+  }
+  try {
+    return JSON.parse(out.stdout).project;
+  } catch {
+    return null;
+  }
+}
+
+function draw() {
+  if (!graph) return;
+  const parts = JSON.stringify(view.layout(graph, slots, state.status));
+  if (!opened) {
+    opened = true;
+    const title = (titleArg || view.humanize(project.name)).toUpperCase();
+    send([
+      `@ ${SURFACE} at=right w=560`,
+      `c bs Screen title=${view.quote(title)}`,
+      `c bd Diagram aspect=1.6 parts=@${POINTER}`,
+      "> bs bd",
+      `d ${POINTER} ${parts}`,
+      "r bs",
+    ]);
+    return;
+  }
+  send([`d ${POINTER} ${parts}`]);
+}
+
+function reparse() {
+  const next = parse();
+  // A half-written edit that does not parse keeps the last good drawing,
+  // the same rule weft's own editor follows.
+  if (!next) return;
+  graph = next;
+  view.indexProject(graph, state);
+  draw();
+}
+
+let timer = null;
+function onChange() {
+  clearTimeout(timer);
+  timer = setTimeout(reparse, DEBOUNCE_MS);
+}
+
+reparse();
+if (printOnly && args.includes("--once")) process.exit(0);
+
+for (const sub of ["src", "nodes"]) {
+  const where = path.join(root, sub);
+  if (fs.existsSync(where)) fs.watch(where, { recursive: true }, onChange);
+}
+
+
+const seen = new Set();
+
+function listen() {
+  const req = http.get(`${RUNTIME}/events/project/${project.id}`, (res) => {
+    if (res.statusCode !== 200) {
+      res.resume();
+      setTimeout(listen, RECONNECT_MS);
+      return;
+    }
+    res.setEncoding("utf8");
+    let buffer = "";
+    res.on("data", (chunk) => {
+      buffer += chunk;
+      let cut;
+      while ((cut = buffer.indexOf("\n\n")) !== -1) {
+        const frame = buffer.slice(0, cut);
+        buffer = buffer.slice(cut + 2);
+        const data = frame
+          .split("\n")
+          .filter((l) => l.startsWith("data:"))
+          .map((l) => l.slice(5).trimStart())
+          .join("\n");
+        if (data) onEvent(data);
+      }
+    });
+    res.on("end", () => setTimeout(listen, RECONNECT_MS));
+  });
+  req.on("error", () => setTimeout(listen, RECONNECT_MS));
+}
+
+function onEvent(data) {
+  let event;
+  try {
+    event = JSON.parse(data);
+  } catch {
+    return;
+  }
+  // The stream replays its latest project event on connect, and a reconnect
+  // would otherwise light a node twice.
+  if (event.event_id) {
+    if (seen.has(event.event_id)) return;
+    seen.add(event.event_id);
+  }
+  const lines = view.applyEvent(state, event);
+  if (lines.length || event.kind === "node_completed") {
+    send(lines);
+    draw();
+  }
+}
+
+listen();
+process.on("SIGINT", () => process.exit(0));
+process.on("SIGUSR1", () => {
+  view.clearRun(state);
+  draw();
+});

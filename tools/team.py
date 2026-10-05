@@ -43,12 +43,12 @@ import webbrowser
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TASK_DIR = "team/tasks"
-STATUSES = ["backlog", "todo", "in_progress", "in_review", "done", "canceled"]
-LABELS = {"backlog": "Backlog", "todo": "Todo", "in_progress": "In progress",
+STATUSES = ["inbox", "backlog", "todo", "in_progress", "in_review", "done", "canceled"]
+LABELS = {"inbox": "Inbox", "backlog": "Backlog", "todo": "Todo", "in_progress": "In progress",
           "in_review": "In review", "done": "Done", "canceled": "Canceled"}
 PRIORITIES = ["urgent", "high", "medium", "low", "none"]
 FIELDS = ["id", "title", "status", "owner", "priority", "due", "labels",
-          "done_when", "proof", "created", "updated"]
+          "done_when", "proof", "source", "created", "updated"]
 ID_PREFIX = "CHW"
 # A push loses the race when the website or a teammate committed in between.
 # Three tries covers two writers landing in the same second; past that the
@@ -177,6 +177,36 @@ class Repo:
             out.append(task)
         return sorted(out, key=lambda t: id_number(t["id"]))
 
+    def write_many(self, make_changes, message):
+        """One commit for many files. `make_changes` returns {path: text, or None
+        to delete} and reruns after a lost race, like write()."""
+        if self.offline:
+            raise TeamError("writes need the remote; drop --offline")
+        for attempt in range(PUSH_TRIES):
+            if attempt:
+                self.fetch()
+            parent = self.git("rev-parse", self.ref).strip()
+            changes = make_changes()
+            if not changes:
+                return None
+            with tempfile.TemporaryDirectory() as tmp:
+                env = {"GIT_INDEX_FILE": os.path.join(tmp, "index")}
+                self.git("read-tree", parent, env=env)
+                for path, content in changes.items():
+                    if content is None:
+                        self.git("update-index", "--force-remove", path, env=env)
+                    else:
+                        blob = self.git("hash-object", "-w", "--stdin", inp=content).strip()
+                        self.git("update-index", "--add", "--cacheinfo", f"100644,{blob},{path}", env=env)
+                tree = self.git("write-tree", env=env).strip()
+            commit = self.git("commit-tree", tree, "-p", parent, "-m", message).strip()
+            p = subprocess.run(["git", "-C", str(self.path), "push", "-q", self.remote,
+                                f"{commit}:refs/heads/{self.branch}"], capture_output=True, text=True)
+            if p.returncode == 0:
+                self.git("update-ref", f"refs/remotes/{self.ref}", commit)
+                return commit
+        raise TeamError(f"push kept losing the race after {PUSH_TRIES} tries: {p.stderr.strip()[:200]}")
+
     def write(self, path, make_content, message, create=False):
         """Commit one file on top of the remote branch and push, retrying a lost race.
 
@@ -279,7 +309,8 @@ def add(repo, a):
     task = {"title": one_line(a.title), "status": status,
             "owner": resolve_owner(repo, a.owner), "priority": a.priority or "none",
             "due": check_date(a.due or ""), "labels": [x.strip() for x in (a.labels or "").split(",") if x.strip()],
-            "done_when": a.done_when or "", "proof": "", "created": today(), "notes": a.notes or ""}
+            "done_when": a.done_when or "", "proof": "", "source": one_line(getattr(a, "source", "") or ""),
+            "created": today(), "notes": a.notes or ""}
     if not task["title"]:
         raise TeamError("a task needs a title")
     for _ in range(PUSH_TRIES):
@@ -313,6 +344,84 @@ def update(repo, task_id, verb, apply=None, message=None, **changes):
     return result["task"]
 
 
+# ---------- import ----------
+
+# Sections of BACKLOG.md that hold work still to do. Done and Dead are history,
+# and "Other task owners" belongs to other tasks by the file's own contract.
+IMPORT_SECTIONS = {"Now": ("high", "now"), "Next": ("medium", "next"), "Blocked": ("none", "blocked"),
+                   "Deferred": ("low", "deferred"), "Verification gaps": ("medium", "verify")}
+
+
+def read_backlog(text, source_name="BACKLOG.md"):
+    """Rows of the BACKLOG.md status tables as task dicts, in file order. Pure: writes nothing."""
+    rows, section = [], None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            section = line[3:].strip()
+            continue
+        if section not in IMPORT_SECTIONS or not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 6 or not re.fullmatch(r"\d+", cells[0]):
+            continue
+        num, item, status, evidence, deps, accept = cells[:6]
+        priority, label = IMPORT_SECTIONS[section]
+        notes = "\n".join(x for x in (
+            f"Backlog status: {status}.",
+            f"Acceptance: {accept}" if accept else "",
+            f"Evidence: {evidence}" if evidence else "",
+            f"Depends on: {deps}" if deps and deps.lower() != "none" else "",
+        ) if x)
+        rows.append({"title": one_line(item), "status": "inbox", "owner": "", "priority": priority,
+                     "due": "", "labels": ["backlog", label], "done_when": one_line(accept)[:600],
+                     "proof": "", "source": f"{source_name} CB-{num}", "notes": notes})
+    return rows
+
+
+def plan_import(repo, rows):
+    """Which rows would be created: anything whose source is not already on the board."""
+    have = {t["source"] for t in repo.tasks() if t["source"]}
+    return [r for r in rows if r["source"] not in have]
+
+
+def apply_import(repo, rows, who):
+    def changes():
+        fresh = plan_import(repo, rows)
+        next_id = max([id_number(t["id"]) for t in repo.tasks()] + [0]) + 1
+        out = {}
+        for i, row in enumerate(fresh):
+            task = {**row, "id": f"{ID_PREFIX}-{next_id + i}", "created": today(), "updated": today(),
+                    "activity": [f"{today()} {who or 'someone'}: imported from {row['source']}"]}
+            out[f"{TASK_DIR}/{task['id']}.md"] = render(task)
+        result["count"] = len(out)
+        return out
+
+    result = {"count": 0}
+    repo.write_many(changes, f"team: import {len(rows)} items from {rows[0]['source'].split(' ')[0] if rows else 'nothing'}")
+    return result["count"]
+
+
+def remove_imported(repo, prefix):
+    """Undo: delete only tasks whose source starts with `prefix` and nobody has touched
+    (still in the inbox, unassigned, one activity line). Touched ones are kept."""
+    result = {"removed": 0, "kept": 0}
+
+    def changes():
+        out, kept = {}, 0
+        for t in repo.tasks():
+            if not t["source"].startswith(prefix):
+                continue
+            if t["status"] == "inbox" and not t["owner"] and len(t["activity"]) <= 1:
+                out[f"{TASK_DIR}/{t['id']}.md"] = None
+            else:
+                kept += 1
+        result.update(removed=len(out), kept=kept)
+        return out
+
+    repo.write_many(changes, f"team: remove untouched imports from {prefix}")
+    return result
+
+
 # ---------- display ----------
 
 def overdue(task):
@@ -331,6 +440,11 @@ def board(tasks, show_closed=False):
     out = []
     for s in STATUSES:
         group = [t for t in tasks if t["status"] == s]
+        if s == "inbox" and len(group) > 8 and not show_closed:
+            out.append(f"INBOX ({len(group)}, newest 8; team inbox for all)")
+            out += [line(t) for t in group[-8:]]
+            out.append("")
+            continue
         if s in ("done", "canceled") and not show_closed:
             if group:
                 out.append(f"{LABELS[s]}: {len(group)} (team board --all to list)")
@@ -357,7 +471,7 @@ def main(argv=None):
     b = sub.add_parser("board"); b.add_argument("--all", action="store_true"); b.add_argument("--json", action="store_true")
     m = sub.add_parser("mine"); m.add_argument("--json", action="store_true")
     x = sub.add_parser("add"); x.add_argument("title")
-    for flag in ("--owner", "--due", "--priority", "--done-when", "--labels", "--status", "--notes"):
+    for flag in ("--owner", "--due", "--priority", "--done-when", "--labels", "--status", "--notes", "--source"):
         x.add_argument(flag)
     s = sub.add_parser("show"); s.add_argument("id"); s.add_argument("--json", action="store_true")
     mv = sub.add_parser("move"); mv.add_argument("id"); mv.add_argument("status", choices=STATUSES)
@@ -369,6 +483,11 @@ def main(argv=None):
         e.add_argument(flag)
     f = sub.add_parser("feed"); f.add_argument("-n", type=int, default=20); f.add_argument("--json", action="store_true")
     o = sub.add_parser("open"); o.add_argument("id", nargs="?")
+    ib = sub.add_parser("inbox"); ib.add_argument("--json", action="store_true")
+    im = sub.add_parser("import", help="preview, then --apply, BACKLOG.md rows into the inbox")
+    im.add_argument("file", nargs="?", default=str(ROOT / "BACKLOG.md")); im.add_argument("--apply", action="store_true")
+    un = sub.add_parser("unimport", help="remove untouched imported tasks whose source starts with PREFIX")
+    un.add_argument("prefix")
     a = ap.parse_args(argv)
     repo = Repo(a.repo, offline=a.offline)
 
@@ -443,6 +562,25 @@ def main(argv=None):
                            repo.ref, "--", TASK_DIR, check=False)
             rows = [dict(zip(("sha", "when", "who", "what"), r.split("\t"))) for r in out.strip().split("\n") if r]
             print(json.dumps(rows, indent=1) if a.json else "\n".join(f"{r['when']}  {r['who']:<16} {r['what']}" for r in rows) or "No activity yet.")
+        elif cmd == "inbox":
+            tasks = [t for t in repo.tasks() if t["status"] == "inbox"]
+            print(json.dumps(tasks, indent=1) if a.json else f"Inbox: {len(tasks)}\n" + "\n".join(line(t) for t in tasks))
+        elif cmd == "import":
+            path = pathlib.Path(a.file)
+            rows = read_backlog(path.read_text(), path.name)
+            fresh = plan_import(repo, rows)
+            if not a.apply:
+                print(f"{len(rows)} open items in {path.name}, {len(fresh)} not on the board yet.")
+                print("\n".join(f"  {r['source']:<18} [{r['labels'][1]}] {r['title']}" for r in fresh[:15]))
+                if len(fresh) > 15:
+                    print(f"  ... and {len(fresh) - 15} more")
+                print("Nothing written. Run again with --apply to add them to the inbox in one commit.")
+            else:
+                n = apply_import(repo, rows, me(repo))
+                print(f"{n} tasks added to the inbox from {path.name}")
+        elif cmd == "unimport":
+            r = remove_imported(repo, a.prefix)
+            print(f"removed {r['removed']} untouched imported tasks; kept {r['kept']} someone had touched")
         elif cmd == "open":
             url = str(config(repo).get("url") or "")
             if not url:

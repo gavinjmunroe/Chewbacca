@@ -12,10 +12,12 @@ export const FIELDS = [
   "labels",
   "done_when",
   "proof",
+  "source",
   "created",
   "updated",
 ];
 export const STATUSES = [
+  "inbox",
   "backlog",
   "todo",
   "in_progress",

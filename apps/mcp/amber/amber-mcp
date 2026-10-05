@@ -444,7 +444,7 @@ function summary() {
 // isolation is the same path-level isolation the tenant test proves, and a
 // fact survives because it went to disk, not into a context window.
 
-const PEOPLE_BIN = path.join(path.dirname(fs.realpathSync(__filename)), "..", "..", "bin", "people");
+const PEOPLE_BIN = path.join(path.dirname(fs.realpathSync(__filename)), "..", "..", "..", "bin", "people");
 
 function people(...args) {
   const peopleDir = path.join(DIR, "people");

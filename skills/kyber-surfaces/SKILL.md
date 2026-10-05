@@ -73,6 +73,50 @@ reference only). The rules, each with where it came from:
 13. **A guess says it is a guess.** A task read out of a text by rule carries
     "(guess)" and the message it came from.
 
+## The bar to clear: Opal's desktop, 2026-10-01
+
+Caleb sent the Chewbacca group a screenshot of Opal's desktop glass (OPAL,
+Langston's company) and asked on 2026-10-05 for Kyber to beat it. It is the
+closest thing to Kyber that exists, so read it as a teardown, not a template.
+
+What it does that Kyber must match:
+
+- **Every panel says what it is for in one line under its title.** "What Opal
+  is hearing right now", "Everything Opal heard, day by day". A stranger never
+  wonders why a panel is there.
+- **Header counts that say what to do.** "119 conversations · 83 to act on",
+  "14 need you · 3 done today", with the actionable number in the accent color.
+- **Task rows carry provenance and payoff.** "Calendar · from Late call · ≈5
+  min saved", then one Go pill. The row says where it came from, what it will
+  touch, and what it is worth.
+- **State tabs with counts** on the task panel: Ready 17, Cooking 0, Stuck 14,
+  Done 8. Stuck is a first-class state, not a hidden failure.
+- **Cards lead with a bold clause, then the summary.** "Late call. Caught up
+  with your best friend about...", with a type chip (ACTION, THOUGHTS), a space
+  chip (Personal, Money, Work), avatars and a time.
+- **Mixed media in one system.** A live waveform, a transcript set in a serif
+  with a calendar strip, a video card, a storage ring and a product photo all
+  share one radius, one glass and one type scale.
+- **Two docks**: a right rail of surfaces with a badge, and a bottom bar of
+  Interface, Ask, Needs you (8), Customize.
+
+Where it loses, which is where Kyber wins:
+
+- **Ten panels open at once, overlapping.** The health card covers the task
+  list. Nothing says which panel matters now. Kyber opens with the one answer
+  to "what needs me" and lets the rest recede until asked (rule 2).
+- **The same transcript appears twice** (Live and Transcript). One fact, one
+  place on the glass.
+- **Small grey text on glass over a photo.** Kyber's glass already holds 4.5:1
+  over anything; never trade that for a background.
+- **Go is the same green pill for "add to calendar" and "message Nadia".** Kyber
+  shows what Go will touch and whether it can be undone before the press, and
+  reads the result back after.
+- **"Opal's guess" appears once, on one row.** Every inferred thing in Kyber
+  carries its confidence and its source, because the graph stores both (rule 13).
+- **Demo data.** Kyber is judged on Caleb's real day, and on a stranger's first
+  ten minutes on a fresh Mac.
+
 ## The hard lines
 
 - **Only a press sends.** Message and mail text is rendered, never read for

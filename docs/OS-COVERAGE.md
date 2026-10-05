@@ -15,11 +15,11 @@ only the ranking is trusted. Re-measure before reordering.
 | App      | Hours | Replaced by                                          | Status      |
 | -------- | ----- | ---------------------------------------------------- | ----------- |
 | Chrome   | 15.8  | the sites below, one by one                          | see below   |
-| VS Code  | 11.7  | session surfaces (Claude Code on the glass)          | building    |
+| VS Code  | 11.7  | session surfaces: Send types into open idle sessions, Fork and send otherwise; `code` surface: changed repos, diff, preview, read only | building    |
 | Messages | 7.1   | `messages`, `person`, `needs-you` surfaces           | building    |
 | FaceTime | 3.4   | a call surface: start, accept, who is on             | not started |
 | Codex    | 3.3   | session surfaces, Codex transcripts                  | building    |
-| Notes    | 1.5   | a notes surface over Apple Notes via `mac notes`     | not started |
+| Notes    | 1.5   | `notes` surface over Apple Notes via `mac notes`: newest 6, preview, append one line to a text-only note | partial     |
 | Granola  | 0.8   | call transcripts into the graph (anarlog or Granola) | not started |
 | Slack    | 0.7   | a Slack surface over the Slack MCP, read first       | not started |
 | Finder   | 0.7   | `files` surface                                      | building    |
@@ -28,7 +28,7 @@ only the ranking is trusted. Re-measure before reordering.
 
 ## Chrome sites, ranked (Work profile, the one with the volume)
 
-1. github.com: PRs, issues, CI as graph nodes; review and merge from the glass
+1. github.com: `github` surface, partial: review requests, his failing PRs, assigned issues and main's CI, read only; review and merge are not built
 2. google.com: search answered on the glass (generative UI)
 3. docs.google.com: open and edit through the Drive connector, File surface
 4. calendar.google.com: `today` surface; needs the Calendar permission granted
@@ -54,6 +54,10 @@ only, so the result can ship:
 - Zoom and Meet: Jitsi (Apache-2.0)
 - ChatGPT: LibreChat (MIT), AnythingLLM (MIT)
 - Chrome: Ladybird (BSD-2-Clause), a long way from daily use
+
+LM Studio's job (which local models exist, which are loaded) is covered by
+the `engine ollama-models` and `engine ollama-loaded` panels, and searching
+for an alternative to any app is the `oss` panel ("what replaces Notion").
 
 The registry returned nothing for Google Calendar, Gmail, VS Code, Spotify,
 FaceTime or WhatsApp. That is a gap in its `replaces` mapping, not proof none

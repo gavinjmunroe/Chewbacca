@@ -252,8 +252,10 @@ typed then goes up as one private line, to the card's owner only:
 e action send row="s-6d901cd1" surface="s-6d901cd1" text="run the tests"
 ```
 
-and the daemon resumes that session with `claude -p --resume <id>` in its
-folder, streaming the reply onto the card. `to off`, or the chip's x, gives
+and the daemon types it into the client the session is open in, through
+Claude Code's own session inbox; only when nothing has the session open does
+it resume it with `claude -p --resume <id>` in its folder, streaming the
+reply onto the card (docs/KYBER-SURFACES.md, "Sending into a session"). `to off`, or the chip's x, gives
 the input back to the assistant. Closing a card sends `e closed <surface>`
 to its owner so it stops redrawing it.
 

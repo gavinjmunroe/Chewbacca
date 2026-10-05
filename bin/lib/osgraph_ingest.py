@@ -597,9 +597,19 @@ def agents(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
     return snap.write(graph, "agents")
 
 
+def whatsapp(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
+    """WhatsApp through wacli, read-only. Imported here, not at the top, so a
+    Mac without wacli still loads every other source. An unlinked account is
+    a note in the report, never an error (ingest_whatsapp.whatsapp)."""
+    import ingest_whatsapp  # noqa: PLC0415
+
+    return ingest_whatsapp.whatsapp(graph, ctx, ids, days=days)
+
+
 INGESTERS = {
     "imessage": imessage, "mail": mail, "coursework": coursework, "calendar": calendar,
     "backlog": backlog, "people": people_tasks, "reminders": reminders, "agents": agents,
+    "whatsapp": whatsapp,
 }
 
 
@@ -625,7 +635,7 @@ def ingest_all(graph: Graph, ctx, days: int = 7, only: list[str] | None = None,
     return report
 
 
-MESSAGE_SOURCES = ("imessage", "mail")
+MESSAGE_SOURCES = ("imessage", "mail", "whatsapp")
 
 
 def dumps(report: dict) -> str:

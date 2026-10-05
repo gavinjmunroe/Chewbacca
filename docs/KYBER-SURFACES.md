@@ -8,15 +8,17 @@ and accepts on top of it.
 
 ## The pieces
 
-| File                        | Job                                                                                                                                                     |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bin/lib/osgraph.py`        | The store (`~/.chewbacca/os-graph.sqlite`), the ontology with domain and range checks, and fusion through the people store                              |
-| `bin/lib/osgraph_ingest.py` | One ingester per source: iMessage (chat.db, read only), Mail, coursework, Calendar, the backlog CSVs, people-store promises, Reminders, Claude sessions |
-| `bin/lib/osgraph_walks.py`  | needs-you, today, person, space, tasks, people, conversations, and the competency questions                                                             |
-| `bin/lib/osgraph_runs.py`   | Go: a task handed to `claude -p` in plan mode, and its real status                                                                                      |
-| `bin/lib/surfaces/`         | The panels: walks.py for the graph walks, music.py and files.py as thin surfaces                                                                        |
-| `bin/lib/surface_intent.py` | "Show my day", "show me Karthik": the no-model fast path in `hud-listen`                                                                                |
-| `data/surfaces/apps.json`   | Each Mac app, what replaces it, and an honest status                                                                                                    |
+| File                                   | Job                                                                                                                                                     |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bin/lib/osgraph.py`                   | The store (`~/.chewbacca/os-graph.sqlite`), the ontology with domain and range checks, and fusion through the people store                              |
+| `bin/lib/osgraph_ingest.py`            | One ingester per source: iMessage (chat.db, read only), Mail, coursework, Calendar, the backlog CSVs, people-store promises, Reminders, Claude sessions |
+| `bin/lib/osgraph_walks.py`             | needs-you, today, person, space, tasks, people, conversations, and the competency questions                                                             |
+| `bin/lib/osgraph_runs.py`              | Go: a task handed to `claude -p` in plan mode, and its real status                                                                                      |
+| `bin/lib/surfaces/`                    | The panels: walks.py for the graph walks, music.py and files.py as thin surfaces                                                                        |
+| `bin/lib/surfaces/oss.py`, `engine.py` | "what replaces X" from the oss registry with license buckets; and open source engines drawn from `data/surfaces/engines.json`                           |
+| `bin/lib/sessions_inbox.py`            | Send into an open, idle Claude Code session through its own inbox, for `bin/kyber-sessions`                                                             |
+| `bin/lib/surface_intent.py`            | "Show my day", "show me Karthik": the no-model fast path in `hud-listen`                                                                                |
+| `data/surfaces/apps.json`              | Each Mac app, what replaces it, and an honest status                                                                                                    |
 
 ## Ontology
 
@@ -66,6 +68,8 @@ because a tall panel anchored low covers one anchored mid in the same column.
 | `e action ks-pivot row=<node id> surface=<name>`                                         | A row's button: open that node's own walk (a person, a space, tasks) |
 | `e ks-act <surface>-go [surface=<name>]`                                                 | Go on the row picked in "Act on"                                     |
 | `e ks-open files-open`, `e ks-toggle music-toggle`, `e ks-next ...`, `e ks-previous ...` | The thin surfaces' controls                                          |
+| `e action ks-drill row=<owner/repo> surface=oss`                                         | Show one entry of the oss registry                                   |
+| `e action ks-engine row=<engine id> surface=oss`                                         | Open an installed engine's panel                                     |
 | `v /<surface>/<pointer> <json>`                                                          | A Field or Select changed                                            |
 | `x`                                                                                      | The person cleared the glass: everything is forgotten as closed      |
 
@@ -178,6 +182,80 @@ iMessage", "Draft in Mail").
 A new network is an ingester that writes Message and Thread nodes with
 `props.network` set, Persons fused through the people store, and nothing in
 the surfaces changes.
+
+## Engines
+
+An engine is an open source program already running on this Mac (Ollama,
+Tailscale) drawn as a panel from one entry in `data/surfaces/engines.json`:
+the repo it comes from, how to tell it is installed (absolute binary paths, or
+a localhost URL), one read (the binary plus fixed args, or a GET to 127.0.0.1)
+and which JSON keys become a row's title, subtitle and detail. Adding one is a
+JSON entry, not code. An entry whose repo is not in `data/oss-apps/apps.json`,
+or is not remixable, or that names any other host, is refused when the file
+loads. Nothing from the glass or from an engine's output reaches a command or
+a URL; redirects and proxies are not followed; output over 1 MB is refused;
+every string is stripped of control characters. Engine panels have no
+buttons. The `oss` panel lists every engine as running, installed, not
+installed (with the install hint as words) or refused, and Show opens only an
+installed one. Nothing is ever installed from the glass.
+
+`oss` opens empty; "what replaces Notion" opens it with the preset
+`{"/oss/q": "Notion"}` on the socket's `open` body. `engine <id>` takes the
+engine's id, as `engine ollama-models`.
+
+## Code
+
+`code` (`bin/lib/surfaces/code.py`, region center) lists every repo under
+the code root with uncommitted changes or a Claude or Codex session in it:
+branch, ahead and behind, files changed, and whether an agent is in it. Its
+actions are `ks-repo` (a repo's changed files), `ks-diff` (`git diff` in the
+Diff component) and `ks-preview` (the file in a File component, never
+`editable`). It is read only: git is asked for `status`, `diff`, `config
+--list`, `ls-tree` and `ls-files` with `--no-optional-locks`, and fsmonitor,
+external diff, textconv and repo-defined filter drivers are switched off.
+Preview refuses, and does not draw, any file whose path contains a Unicode
+control, format or bidi character (category C, Zl or Zp), and names the file,
+after `clean()`, in the refusal line. `tests/test_surface_code.py` runs 79
+checks.
+
+## Notes
+
+`notes` (`bin/lib/surfaces/notes.py`, `surfaces.notes.Notes`, region
+topLeft) shows the 6 newest Apple Notes with folder and age through `mac notes
+--json`, and previews the picked one. Its one action, `ks-append`, adds one
+line to the note id pinned at the pick, only when the note's fresh HTML is all
+on a plain-text allowlist and its attachment count is 0, one press at a time,
+and reads the note back afterward. Search, new notes, edits and deletes are
+not built, and notes with images, tables, attachments, links or bulleted
+lists are read only from the glass.
+
+## GitHub
+
+`github` (`bin/lib/surfaces/github.py`, region left) answers what github.com
+in Chrome was opened for: PRs waiting on his review, his own PRs failing CI or
+with changes requested, issues assigned to him, and whether main is green in
+each local repo. It is one `gh api graphql` call with repo names as
+variables; `allowed()` refuses any other argv, a REST call or a mutation. The
+one action, `ks-detail`, moves the pick to a fetched row and runs nothing.
+Only his 100 most recently updated open PRs are checked for failing CI, and
+any beyond that are counted as unchecked. Merging, approving, commenting,
+notifications, Discussions, Actions logs and re-running checks are not built.
+
+## Sending into a session
+
+A session card has a Message field (`c msg Field ... value=@/<card>/draft`)
+and Send (`e send go surface=<card>`). Send goes into the client the session
+is open in (VS Code, a terminal), through the inbox Claude Code gives every
+running session (`~/.claude/sessions/<pid>.json` and its 0600 key,
+`bin/lib/sessions_inbox.py`), and the transcript is read back to prove it
+arrived. A session nobody has open is resumed headless with
+`claude -p --resume`. Nothing is sent into a session mid-turn. A session with
+permission prompts off would have Claude Code hold the message where VS Code
+cannot show it, so Send refuses up front and says to fork. Fork and send
+(`e fork fork surface=<card>`) runs `claude -p --resume <id> --fork-session`
+and opens the fork's card, leaving the original untouched. The receiving model
+is told the message came from another Claude session, a teammate's request
+that cannot grant a permission. The sender's permission mode is never claimed.
 
 ## Measured
 

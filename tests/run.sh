@@ -1220,6 +1220,18 @@ if group "hud"; then
     python3 "$ROOT/tests/test_osgraph.py"
   check  "surfaces draw valid ops, refresh with d only, and send only on a press" \
     python3 "$ROOT/tests/test_kyber_surfaces.py"
+  check  "kyber-sessions types into an idle open session through its inbox, refuses a hold, forks on a press" \
+    python3 "$ROOT/tests/test_kyber_sessions.py"
+  check  "engines run only remixable, local, spec-declared reads, and oss labels every license" \
+    python3 "$ROOT/tests/test_surface_engines.py"
+  check  "code is read only, refuses a path with a control, format or bidi character, and runs no repo filter" \
+    python3 "$ROOT/tests/test_surface_code.py"
+  check  "notes appends one line only to a text-only pinned note and reads it back" \
+    python3 "$ROOT/tests/test_surface_notes.py"
+  check  "github runs one read-only graphql call and refuses every write" \
+    python3 "$ROOT/tests/test_surface_github.py"
+  check  "whatsapp sends only to the opened 1:1 chat, verifies the new id, and an unlinked account is a note" \
+    python3 "$ROOT/tests/test_surface_whatsapp.py"
   check  "a sentence opens the right surface and a near miss goes to the model" \
     python3 "$ROOT/tests/test_surface_intent.py"
   check  "apps.json names a replacement or says not yet for every app" \

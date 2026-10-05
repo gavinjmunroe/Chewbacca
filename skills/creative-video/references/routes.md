@@ -3,12 +3,12 @@
 Four routes. The model writes code or directs a tool in every one of them; it
 never draws a pixel itself. Checked 2026-09-27.
 
-| Route                                                               | Use it for                                                                  | Cost                    | Deterministic       | Status here           |
-| ------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------- | ------------------- | --------------------- |
-| **Code-drawn**: `page-render`, Canvas, SVG, Remotion                | UI, type, motion graphics, explainers, charts                               | free                    | yes                 | installed             |
-| **Blender, headless**: `blender -b -P scene.py`                     | 3D objects, arrays, satisfying mechanisms, product turntables, camera moves | free, about 1 s a frame | yes                 | installed (5.2.2 LTS) |
-| **Higgsfield**: Seedance, Kling, Veo and more, driven by the `higgsfield` CLI | photoreal people, places, footage-like shots, UGC styles | credits | no | signed in, Plus plan |
-| **Blender blocking, then Seedance** | exact layout and camera, with a photoreal look on top | credits | camera yes, look no | blockout renderer tested; no Seedance job yet |
+| Route                                                                         | Use it for                                                                  | Cost                    | Deterministic       | Status here                                   |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------- | ------------------- | --------------------------------------------- |
+| **Code-drawn**: `page-render`, Canvas, SVG, Remotion                          | UI, type, motion graphics, explainers, charts                               | free                    | yes                 | installed                                     |
+| **Blender, headless**: `blender -b -P scene.py`                               | 3D objects, arrays, satisfying mechanisms, product turntables, camera moves | free, about 1 s a frame | yes                 | installed (5.2.2 LTS)                         |
+| **Higgsfield**: Seedance, Kling, Veo and more, driven by the `higgsfield` CLI | photoreal people, places, footage-like shots, UGC styles                    | credits                 | no                  | signed in, Plus plan                          |
+| **Blender blocking, then Seedance**                                           | exact layout and camera, with a photoreal look on top                       | credits                 | camera yes, look no | blockout renderer tested; no Seedance job yet |
 
 ## Code-drawn
 
@@ -23,7 +23,7 @@ strongest idea.
 
 No MCP. `blender -b --factory-startup -P scene.py -- args` builds the scene from
 Python, keys it and renders PNG frames without a window, so it never takes the
-screen he is working on. Eevee on the M4 Pro: 0.38 s for one 540x960 still,
+screen the user is working on. Eevee on the M4 Pro: 0.38 s for one 540x960 still,
 0.96 s a frame at 1080x1920 with 1,003 objects. The worked template is
 `blender/domino_reveal.py`.
 
@@ -43,9 +43,10 @@ It is not installed, and installing it later means all three of these:
 
 ## Higgsfield
 
-Gavin's account is on the Plus plan (1,200 credits a month, no rollover). The
-live log of what works, what it costs and what went wrong is
-`~/dev/gavin-context/research/higgsfield/LEARNING.md` in his brain. **Read it
+This was written against the Plus plan (1,200 credits a month, no rollover);
+`higgsfield account status` says which plan this account is on. The live log
+of what works, what it costs and what went wrong is
+`~/dev/<name>-context/research/higgsfield/LEARNING.md` in the context repo. **Read it
 before any Higgsfield job and write every new fact or mistake into it the same
 turn.** What follows is only what a session needs to start.
 

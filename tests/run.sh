@@ -941,6 +941,14 @@ if group "CLAUDE.md merge"; then
     bash "$ROOT/bin/lib/merge-claude-md.sh" "$M/CLAUDE.md" "$M/standards.md"
 fi
 
+# ── context import ────────────────────────────────────────────────────────────
+# Onboarding reads other tools' notes. Scan must write nothing, apply only the
+# approved keys, undo only its own notes, and planted orders stay quoted text.
+if group "context import"; then
+  expect "import is in help" "chewbacca import" bash "$ROOT/bin/chewbacca" --help
+  check  "scan, apply and undo against a temp HOME" python3 "$ROOT/tests/test_context_import.py"
+fi
+
 # ── hooks ─────────────────────────────────────────────────────────────────────
 if group "hooks"; then
   check "brain-recall speaks only over the cosine bar" bash "$ROOT/tests/brain_recall.sh"

@@ -71,7 +71,7 @@ COMMANDS=(
   "guide|interactive study guides that remember what you got wrong"
   "triggers|say things out loud and see whether any skill fires"
   "export|bundle this machine's kit state"
-  "import|restore a bundle onto this machine"
+  "import|bring in what your other AI tools know (scan, apply, undo), or restore a bundle"
   "completion|print shell completion for zsh, bash, or fish"
   "add-skill|add a skill to the kit"
   "install|copy the standards into the current project"
@@ -232,6 +232,11 @@ export)
   ;;
 import)
   shift
+  # scan, apply and undo bring in what Claude Code, Codex, Cursor or a chat
+  # export already know. Anything else is a bundle path for the restore.
+  case "${1:-}" in
+  scan|apply|undo) exec python3 "$ROOT/tools/context_import.py" "$@" ;;
+  esac
   run bin/lib/import.sh "$@"
   ;;
 completion)

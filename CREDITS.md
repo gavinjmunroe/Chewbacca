@@ -80,6 +80,15 @@ The three worth reading even if you never install them:
 - [anthropics/claude-quickstarts](https://github.com/anthropics/claude-quickstarts)
   `computer-use-demo`. The canonical see-act-see loop in under a thousand lines.
 
+The import design came from one repo:
+[31Carlton7/realm](https://github.com/31Carlton7/realm), by Carlton Aikins.
+Its Settings > Import reads Claude Code, Codex and Cursor history with a strict
+split: scan writes nothing, apply writes only the keys the user approved, and
+undo removes only rows its own apply stamped with an origin.
+`chewbacca import scan|apply|undo` (`tools/context_import.py`) takes that
+design. **realm has no license, so no code was copied.** The implementation
+here was written from scratch after reading `apps/server/src/import/`.
+
 Also read: [bytedance/UI-TARS](https://github.com/bytedance/UI-TARS) and
 [UI-TARS-desktop](https://github.com/bytedance/UI-TARS-desktop),
 [trycua/cua](https://github.com/trycua/cua) and

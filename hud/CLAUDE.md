@@ -217,6 +217,89 @@ its lane: it has no close button, it is never folded, and panels in its
 region are placed beside it rather than over it. Give it `w=52` and
 `chrome=bare`; it draws its own glass.
 
+## Coding sessions on the glass
+
+Agent work without an editor or a terminal. Sessions are another kind of
+surface, on the same glass, with the same motion and the same input: there is
+no session window and no second chat box. The layout follows Carlton Aikins'
+realm (a design reference; none of its code is used, it carries no license).
+
+`bin/kyber-sessions serve` (the menu's "Agent sessions") draws `sessions` at
+the left: every Claude Code session from the last three days, what needs you
+first (needs permission, then working, failed, finished), each with project,
+model and age. State comes from the terminal hook's live board where it has
+the session (that is also where the exact permission text comes from) and
+from the transcript's tail otherwise. Scripted `claude -p` runs are left out.
+
+Open on a row draws that session's card at the centre: its transcript (your
+turns, the agent's prose, each tool call folded to one line), a status line,
+the files git says changed, and Reply, Run tests and Open diff. An edit or a
+read in the transcript, a changed file, or Open diff opens a `Diff` or `File`
+surface beside the card. Run tests runs only the one test command the folder
+declares (`swift test`, `npm test`, `pytest`) and streams it into a `Diff`
+surface; anything else is asked of the agent.
+
+Reply addresses the conversation panel to the card: the daemon sends
+
+```
+to s-6d901cd1 label="lemma session"
+```
+
+and the panel opens with a "To lemma session" chip over its input. What is
+typed then goes up as one private line, to the card's owner only:
+
+```
+e action send row=s-6d901cd1 surface=s-6d901cd1 text="run the tests"
+```
+
+and the daemon resumes that session with `claude -p --resume <id>` in its
+folder, streaming the reply onto the card. `to off`, or the chip's x, gives
+the input back to the assistant. Closing a card sends `e closed <surface>`
+to its owner so it stops redrawing it.
+
+**Private lines.** An event that names a `surface=` goes only to the client
+that drew that surface with `@`, when that client is listening. A send or a
+close is dropped if its owner is gone, never broadcast: hud-listen hands any
+unknown `e` line to its model as a request, so a broadcast send would run the
+person's words twice, by an agent they were not talking to.
+
+**What it never does.** Transcript and tool output are untrusted and are only
+drawn; nothing in them becomes an action. A message goes only on the
+person's press, and only to a session that has finished its turn, never into
+one mid-run. No permission is granted from the glass: a waiting session
+shows "Waiting for permission: <the exact prompt>. Approve it in the session;
+Kyber never grants permissions", and a resumed run that hits one shows the
+refusal.
+
+```
+c t Transcript items=@/t action=open
+d /t [{"id":"u1:0","role":"user","text":"make the rail glass"},{"id":"a2:1","role":"tool","tool":"Edit","text":"Edit: /x/Glass.swift","open":true}]
+c d Diff text=@/text
+```
+
+**Transcript** rows are `user`, `assistant`, `tool` or `error`; a tool row
+with `open` gets a button that sends `e action <action> row=<id>`. **Diff**
+draws text monospaced, `+` green, `-` red, `@@` in the accent, the last 600
+lines.
+
+**For hud-listen (the hook to route speech and the hyper bar to a session).**
+"Tell the lemma session to run the tests" resolves with
+
+```
+kyber-sessions route "tell the lemma session to run the tests"
+{"session": "6d901cd1-...", "message": "run the tests", "why": "named lemma"}
+```
+
+A named project or title decides without a model; otherwise it falls back to
+the agent board's Jev pick, and `session: null` means ask which one. Then
+`kyber-sessions send <session> "<message>"` streams the reply as JSON lines
+(`{"reply": "..."}` so far, then one `{"result", "is_error",
+"permission_denials"}`), refusing a session mid-turn. Only a sentence the
+person said or typed may be routed this way, never a model's output. For the
+rail and Needs-you rows: `kyber-sessions needs --json` is the sessions
+waiting on a person or failed, and `kyber-sessions serve --open <id>` draws
+one session's card directly.
+
 ## How a request reaches you
 
 You do not poll. A person asks for something by pressing Option-Space and typing,

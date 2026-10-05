@@ -395,7 +395,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chat = ChatWindow(
             model: model,
             onSubmit: { [weak self] asked in
-                Task { @MainActor in self?.dispatch(asked, typed: true) }
+                Task { @MainActor in
+                    guard let self else { return }
+                    // Addressed to a session's card: it goes to that card's
+                    // owner and nowhere else, not to the assistant as well.
+                    if self.model.sendToTarget(asked) { return }
+                    self.dispatch(asked, typed: true)
+                }
             },
             onSpeak: { [weak self] text in
                 // Read aloud on request: the bridge owns the voice, so this
@@ -1089,6 +1095,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chatItem.target = self
         menu.addItem(chatItem)
 
+        let sessionsItem = NSMenuItem(
+            title: "Agent sessions", action: #selector(sessionsFromMenu), keyEquivalent: "")
+        sessionsItem.target = self
+        menu.addItem(sessionsItem)
+
         let clearItem = NSMenuItem(
             title: "Clear everything", action: #selector(clearFromMenu), keyEquivalent: "\u{1b}")
         clearItem.target = self
@@ -1204,6 +1215,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func askFromMenu() { showCommandBar() }
     @objc private func chatFromMenu() { model.openChat() }
+
+    /// Start `kyber-sessions serve`, which draws the sessions surface and
+    /// answers its presses. It holds its own lock, so a second start while
+    /// one is running exits at once instead of drawing twice.
+    @objc private func sessionsFromMenu() {
+        let candidates = [
+            FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".local/bin/kyber-sessions").path,
+            "/usr/local/bin/kyber-sessions",
+            "/opt/homebrew/bin/kyber-sessions",
+        ]
+        guard let exe = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+        else {
+            model.fail("kyber-sessions is not installed. Run setup.sh.", hold: 4)
+            return
+        }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: exe)
+        p.arguments = ["serve"]
+        p.standardOutput = FileHandle.nullDevice
+        let log = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".bob/kyber-sessions.log")
+        FileManager.default.createFile(atPath: log.path, contents: nil)
+        p.standardError = (try? FileHandle(forWritingTo: log)) ?? FileHandle.nullDevice
+        try? p.run()
+    }
     @objc private func toggleFromMenu() { toggle() }
     @objc private func clearFromMenu() { dismissAll() }
 

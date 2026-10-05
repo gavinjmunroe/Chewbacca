@@ -162,7 +162,7 @@ public struct OverlayView: View {
                     .zIndex(9998)
             }
 
-            ForEach(model.surfaces) { surface in
+            ForEach(model.surfaces, id: \.viewID) { surface in
                 card(surface)
             }
         }
@@ -185,11 +185,17 @@ public struct OverlayView: View {
         }
         return SurfaceCard(
                     surface: surface,
-                    onDismiss: { model.close(surface.id) },
+                    onDismiss: { model.dismiss(surface.id) },
                     onDrag: { model.move(surface.id, by: $0) },
                     onSettle: { model.settle(surface.id, at: $0) },
                     onGrab: { model.raise(surface.id) },
-                    onUnfold: { model.unfold(surface.id) })
+                    onUnfold: { model.unfold(surface.id) },
+                    screenFrame: {
+                        let height = model.drawnHeight(surface)
+                        return CGRect(
+                            x: centre.x - surface.width / 2, y: centre.y - height / 2,
+                            width: surface.width, height: height)
+                    }())
                     .frame(width: surface.width)
                     .background {
                         GeometryReader { proxy in
@@ -348,6 +354,14 @@ struct SurfaceCard: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
     @State private var lit = false
+    /// Where the card is on the screen, top-left origin, for measuring the
+    /// ground under it. Zero in snapshots, which skips the measurement.
+    var screenFrame: CGRect = .zero
+    @State private var ground: Double?
+    private var groundKey: [Int] {
+        [screenFrame.minX, screenFrame.minY, screenFrame.width, screenFrame.height]
+            .map { Int(($0 / 24).rounded()) }
+    }
     /// Where the drag stood when the current gesture began: read from the
     /// surface, not kept here, because a settle can move it after release
     /// and a copy kept here made the next drag jump by the difference.
@@ -418,7 +432,16 @@ struct SurfaceCard: View {
             .padding(.horizontal, isRail ? 0 : 16)
             .padding(.vertical, isRail ? 0 : 14)
             .frame(maxWidth: .infinity, alignment: isRail ? .center : .leading)
-            .modifier(SurfaceChrome(chrome: surface.chrome, lit: lit, urgency: surface.urgency))
+            .modifier(SurfaceChrome(
+                chrome: surface.chrome, lit: lit, urgency: surface.urgency, ground: ground))
+            // Measure what is under the card when it lands or moves, in
+            // 24-point steps so a growing card does not capture every frame.
+            .task(id: groundKey) {
+                guard screenFrame.width > 0 else { return }
+                try? await Task.sleep(for: .milliseconds(400))
+                guard !Task.isCancelled else { return }
+                ground = await BackdropSampler.shared.ground(under: screenFrame)
+            }
             .overlay {
                 if surface.compact {
                     FoldedTitle(title: title, onUnfold: onUnfold)
@@ -545,6 +568,14 @@ struct SurfaceChrome: ViewModifier {
     let lit: Bool
     /// How thick the glass is and what pools in it. See `Urgency.thickness`.
     var urgency: Urgency = .normal
+    /// How light the screen under the card measured, or nil. Thickens the
+    /// wash over a light page. See `Urgency.wash(over:)`.
+    var ground: Double?
+
+    /// The wash's colour: a cool near-black rather than black, which over
+    /// a busy screen reads as frosted glass and not as a grey hole. The
+    /// blue-white of the OPAL desktop, pushed dark enough to hold text.
+    static let frost = Color(red: 0.035, green: 0.055, blue: 0.10)
 
     func body(content: Content) -> some View {
         switch chrome {
@@ -596,7 +627,8 @@ struct SurfaceChrome: ViewModifier {
                     // the wash used to. Urgency moves it either side. The
                     // snapshot tests over a white ground are what say
                     // whether it is still a card.
-                    Color.black.opacity(urgency.wash)
+                    SurfaceChrome.frost.opacity(urgency.wash(over: ground))
+                        .animation(Motion.fade(0.3, reduced: false), value: ground)
                 }
             })
     }
@@ -605,7 +637,7 @@ struct SurfaceChrome: ViewModifier {
     ///
     /// Named once so a card, a bracket and the command bar cannot drift apart,
     /// which is how a set of panels stops looking like one product.
-    static let radius: CGFloat = 18
+    static let radius: CGFloat = 16
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: SurfaceChrome.radius, style: .continuous)
@@ -759,6 +791,9 @@ public enum HUD {
     /// as secondary because size and weight do that work too.
     public static let dim = Color.white.opacity(0.78)
     public static let faint = Color.white.opacity(0.62)
+    /// The wash behind a card at normal urgency, for glass outside a card
+    /// (the rail) to match it exactly.
+    public static var cardWash: Double { Urgency.normal.wash }
 
     /// Warm colours for the two states that mean something, and the house cyan
     /// for everything else.

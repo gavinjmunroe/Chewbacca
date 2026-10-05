@@ -246,6 +246,11 @@ public enum Op: Sendable, Equatable {
     /// Press what the person pointed at, by the number on the glass.
     /// `hold`, when given, must be the current press of the talk key.
     case press(number: Int, hold: Int?)
+    /// Address the conversation panel to a surface: `to <surface>
+    /// label="lemma session"` opens the panel with that chip over its
+    /// input, and what the person types goes to that surface's owner
+    /// instead of the assistant. `to off` (surface nil) takes it back.
+    case chatTarget(surface: String?, label: String)
 }
 
 /// The three things a terminal strip can say. Colours follow the ring:

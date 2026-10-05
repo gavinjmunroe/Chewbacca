@@ -70,9 +70,26 @@ public enum OutboundEvent: Sendable, Equatable {
     /// JSON-quoted. Not `.action`, whose second word is a component id and
     /// whose encoding quotes a colon.
     case rowAction(name: String, row: String, surface: String?)
+    /// What the person typed into the conversation panel while it was
+    /// addressed to a surface (`to`): `e action send row=<surface>
+    /// surface=<surface> text="<json>"`. The socket hands it only to the
+    /// client that drew that surface, never to every listener.
+    case sendTo(surface: String, text: String)
+    /// The person closed a surface with its X: `e closed <surface>
+    /// surface=<surface>`, to its owner only, so a daemon stops redrawing
+    /// it instead of bringing it back.
+    case closed(surface: String)
 
     public var line: String {
         switch self {
+        case .sendTo(let surface, let text):
+            let name = OutboundEvent.opaque(surface)
+            return "e action send row=\(name) surface=\(name) text=\(OutboundEvent.jsonString(text))"
+
+        case .closed(let surface):
+            let name = OutboundEvent.opaque(surface)
+            return "e closed \(name) surface=\(name)"
+
         case .rowAction(let name, let row, let surface):
             var line = "e action \(name) row=\(OutboundEvent.opaque(row))"
             if let surface { line += " surface=\(OutboundEvent.opaque(surface))" }
@@ -153,6 +170,26 @@ public enum OutboundEvent: Sendable, Equatable {
     /// An id passed through untouched: bare unless it is empty or holds
     /// whitespace, a quote or a backslash, which would split or break the
     /// line, and JSON-quoted then.
+    /// Whether a line must reach only the surface's owner and is dropped
+    /// when there is none, rather than broadcast. A typed message and a
+    /// close are both private: broadcast, hud-listen would hand "the user
+    /// pressed send" with the message to its model as a fresh request.
+    public static func isPrivate(_ line: String) -> Bool {
+        line.hasPrefix("e action send ") || line.hasPrefix("e closed ")
+    }
+
+    /// The `surface=` a line names, unquoted, or nil.
+    public static func surface(in line: String) -> String? {
+        guard let range = line.range(of: " surface=") else { return nil }
+        let rest = line[range.upperBound...]
+        if rest.hasPrefix("\"") {
+            let token = LineParser.tokenize(String(rest)).first ?? ""
+            if case .string(let s)? = JSONDecoding.parse(token) { return s }
+            return nil
+        }
+        return rest.split(separator: " ").first.map(String.init)
+    }
+
     static func opaque(_ s: String) -> String {
         let unsafe = s.isEmpty || s.contains { $0.isWhitespace || $0 == "\"" || $0 == "\\" }
         return unsafe ? jsonString(s) : s

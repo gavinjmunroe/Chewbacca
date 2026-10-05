@@ -40,6 +40,14 @@ public struct OverlaySurface: Identifiable, Equatable {
     /// When it was last opened, re-addressed or touched by the person, as a
     /// sequence number. The least recent is the one that folds.
     public var touched = 0
+    /// Which opening of this name it is. A close and a reopen of the same
+    /// name in one burst (kyber-genui's skeleton, then its refresh) are two
+    /// different cards to SwiftUI, so the leaving one's exit never shares an
+    /// identity with the arriving one. Keyed on the bare name, a second
+    /// EXAMS card was left on the glass that neither `-` nor its X could
+    /// reach (reported 2026-10-04).
+    public var instance = 0
+    public var viewID: String { "\(id)#\(instance)" }
 
     /// Whether this surface is a launcher rail (its Screen holds a Rail). A
     /// rail owns a lane at its edge: it is not stacked or folded with the
@@ -64,8 +72,15 @@ public struct OverlaySurface: Identifiable, Equatable {
     public static func == (a: OverlaySurface, b: OverlaySurface) -> Bool {
         a.id == b.id && a.region == b.region && a.slot == b.slot
             && a.width == b.width && a.drag == b.drag && a.urgency == b.urgency && a.chrome == b.chrome && a.expires == b.expires
-            && a.compact == b.compact && a.summonedFrom == b.summonedFrom
+            && a.compact == b.compact && a.summonedFrom == b.summonedFrom && a.instance == b.instance
     }
+}
+
+/// The conversation panel's input, addressed to a surface rather than the
+/// assistant.
+public struct ChatTarget: Equatable, Sendable {
+    public let surface: String
+    public let label: String
 }
 
 /// What is on the glass, and where.
@@ -91,6 +106,7 @@ public final class OverlayModel {
     private var current: String = "main"
     private var nextDepth = 0
     private var nextTouch = 0
+    private var nextInstance = 0
     /// Each surface's height laid out in full, kept apart from `heights`
     /// because a folded one reports its folded height and the plan has to
     /// know what unfolding it would cost.
@@ -269,6 +285,16 @@ public final class OverlayModel {
             agentCursorTask?.cancel()
             agentCursor = nil
             revision += 1
+
+        case .chatTarget(let surface, let label):
+            if let surface {
+                chatTarget = ChatTarget(surface: surface, label: label)
+                revision += 1
+                openChat()
+            } else {
+                chatTarget = nil
+                revision += 1
+            }
 
         case .press(let number, let hold):
             let (outcome, center) = PointedStore.shared.press(number, hold: hold)
@@ -582,6 +608,40 @@ public final class OverlayModel {
         if chatOpen { closeChat() } else { openChat() }
     }
 
+    /// Who the conversation panel's input is addressed to, when it is not
+    /// the assistant: a coding session's card, set by its owner with `to`.
+    /// Shown as a chip over the input, so a message can never go somewhere
+    /// the person did not see named.
+    public private(set) var chatTarget: ChatTarget?
+
+    /// Take the chip off: the input talks to the assistant again.
+    public func clearChatTarget() {
+        chatTarget = nil
+        revision += 1
+    }
+
+    /// The person pressed send with the panel addressed: the text goes to
+    /// the surface's owner only (see `SocketServer.send`). Returns whether
+    /// it was addressed, so the caller sends to the assistant otherwise.
+    @discardableResult
+    public func sendToTarget(_ text: String) -> Bool {
+        guard let target = chatTarget else { return false }
+        guard surfaces.contains(where: { $0.id == target.surface }) else {
+            // The card was closed: nobody to send to, and the chip goes.
+            clearChatTarget()
+            return true
+        }
+        onEvent?(.sendTo(surface: target.surface, text: text))
+        return true
+    }
+
+    /// The X on a card: take it down and tell whoever drew it.
+    public func dismiss(_ id: String) {
+        close(id)
+        if chatTarget?.surface == id { chatTarget = nil }
+        onEvent?(.closed(surface: id))
+    }
+
     /// Forget the conversation. The panel's own button, and "Clear
     /// everything" in the menu; nothing else.
     public func clearChat() {
@@ -874,6 +934,8 @@ public final class OverlayModel {
             maxHeight: OverlaySurface.ceiling,
             expires: life.map { $0 == 0 ? .distantFuture : Date().addingTimeInterval($0) })
         surface.touched = nextTouch
+        nextInstance += 1
+        surface.instance = nextInstance
         surface.summonedFrom = summonOrigin
         store.surfaceID = id
         surfaces.append(surface)

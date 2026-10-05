@@ -84,7 +84,14 @@ public struct SurfaceView: View {
     /// seconds, and the erasure costs nothing a person could perceive in a panel
     /// that redraws a few times a second.
     private func render(_ element: ComponentNode, ancestors: Set<ComponentID>) -> AnyView {
-        let p = store.resolved(element)
+        var p = store.resolved(element)
+        // `bind=/draft/note` is how hud/CLAUDE.md writes a control, and until
+        // 2026-10-04 only `value=@/draft/note` worked: the documented Field
+        // drew an input that could not be typed into. Both are read now, and
+        // `bind=` shows the value at its pointer.
+        if element.props["bind"] != nil, let pointer = boundPointer(element) {
+            p["value"] = Pointer.get(store.spec.data, pointer)
+        }
         switch element.type {
         case "Screen", "Stack":
             return container(element, p, ancestors)
@@ -186,6 +193,19 @@ public struct SurfaceView: View {
             VStack(alignment: .leading, spacing: gap) {
                 children(of: element, ancestors: ancestors)
             })
+    }
+
+    /// Where a control writes: `bind=/pointer` (the documented form), then
+    /// `bind=@/pointer`, then `value=@/pointer`. Nil leaves it read-only.
+    func boundPointer(_ element: ComponentNode) -> String? {
+        switch element.props["bind"] {
+        case .literal(.string(let pointer))? where pointer.hasPrefix("/"):
+            return pointer
+        case .binding(let binding)?:
+            return binding.pointer
+        default:
+            return store.binding(element, "value")
+        }
     }
 
     /// Whether a Screen's child is its actions: a Button, or a Stack of
@@ -401,7 +421,7 @@ public struct SurfaceView: View {
                 .buttonStyle(HUDButtonStyle(primary: primary)))
 
         case "Checkbox":
-            let pointer = store.binding(element, "value")
+            let pointer = boundPointer(element)
             return AnyView(
                 Toggle(
                     isOn: Binding(
@@ -417,7 +437,7 @@ public struct SurfaceView: View {
                 .disabled(pointer == nil))
 
         case "Select":
-            let pointer = store.binding(element, "value")
+            let pointer = boundPointer(element)
             let options = (p["options"]?.arrayValue ?? []).map(\.display)
             return AnyView(
                 LabeledControl(label: p["label"]?.display ?? "") {
@@ -453,7 +473,7 @@ public struct SurfaceView: View {
                 })
 
         case "Field":
-            let pointer = store.binding(element, "value")
+            let pointer = boundPointer(element)
             let numeric = p["kind"]?.stringValue == "number"
             return AnyView(
                 LabeledControl(label: p["label"]?.display ?? "") {
@@ -481,7 +501,7 @@ public struct SurfaceView: View {
     /// `e action <action> row=<lane> surface=<surface>` (`action` defaults to
     /// `select`). A Rail press is the same line with `open`.
     func segmentedPick(_ element: ComponentNode, _ p: [String: JSON]) -> (String) -> Void {
-        let pointer = store.binding(element, "value")
+        let pointer = boundPointer(element)
         let action = p["action"]?.stringValue ?? "select"
         return { [store] id in
             if let pointer { store.write(pointer, .string(id)) }
@@ -507,6 +527,16 @@ public struct SurfaceView: View {
                     name: p["name"]?.display ?? "",
                     image: p["image"]?.stringValue,
                     size: CGFloat(min(max(p["size"]?.doubleValue ?? 24, 16), 48))))
+
+        case "Transcript":
+            let action = p["action"]?.stringValue
+            return AnyView(
+                TranscriptView(
+                    items: TranscriptView.items(p["items"]?.arrayValue ?? []),
+                    onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
+
+        case "Diff":
+            return AnyView(DiffView(text: p["text"]?.display ?? ""))
 
         case "Rail":
             return AnyView(

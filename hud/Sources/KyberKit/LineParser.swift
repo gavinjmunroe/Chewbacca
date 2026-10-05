@@ -391,6 +391,19 @@ public enum LineParser {
             }
             return .queued(count)
 
+        case "to":
+            // `to <surface> label="<who>"` or `to off`.
+            guard tokens.count >= 2 else {
+                throw LineParseError.malformed("`to` needs a surface, or off", line: trimmed)
+            }
+            if tokens[1] == "off" { return .chatTarget(surface: nil, label: "") }
+            var label = tokens[1]
+            for token in tokens.dropFirst(2) {
+                guard let (key, raw) = splitPair(token), key == "label" else { continue }
+                if case .string(let text)? = JSONDecoding.parse(raw) { label = text } else { label = raw }
+            }
+            return .chatTarget(surface: tokens[1], label: String(label.prefix(60)))
+
         case "r":
             guard tokens.count == 2 else {
                 throw LineParseError.malformed("`r` takes exactly one id", line: trimmed)

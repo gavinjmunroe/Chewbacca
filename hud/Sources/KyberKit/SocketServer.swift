@@ -67,6 +67,17 @@ public final class SocketServer: @unchecked Sendable {
     /// anything back. Drawing needs no subscription, so the common case sees
     /// nothing it did not ask for.
     private var subscribers: Set<Int32> = []
+    /// Which connection last drew each surface with `@`.
+    ///
+    /// An event that names a surface (`surface=`) goes only to that
+    /// connection when it is still subscribed. Until 2026-10-04 every press
+    /// went to every listener, so a message typed to a coding session's card
+    /// would also have reached hud-listen, which hands any unknown `e` line to
+    /// its model as "the user pressed send": the person's words run twice,
+    /// by an agent they were not talking to. A surface whose drawer is gone,
+    /// or never listened, still broadcasts, which is how a panel drawn by a
+    /// one-shot `hud draw` keeps reaching the voice.
+    private var owners: [String: Int32] = [:]
     private var running = false
 
     /// One queue per connection, so a slow reader cannot stall the others or
@@ -102,7 +113,8 @@ public final class SocketServer: @unchecked Sendable {
     @discardableResult
     public func send(_ line: String) -> Bool {
         lock.lock()
-        let targets = subscribers
+        let targets = Self.recipients(
+            for: line, subscribers: subscribers, owners: owners)
         lock.unlock()
         guard !targets.isEmpty else { return false }
 
@@ -112,6 +124,22 @@ public final class SocketServer: @unchecked Sendable {
             if write(payload, to: fd) { delivered = true }
         }
         return delivered
+    }
+
+    /// Who receives `line`: the surface's owner alone when it is listening;
+    /// nobody for a private line whose owner is not; everyone otherwise.
+    static func recipients(
+        for line: String, subscribers: Set<Int32>, owners: [String: Int32]
+    ) -> Set<Int32> {
+        guard let surface = OutboundEvent.surface(in: line) else { return subscribers }
+        if let owner = owners[surface], subscribers.contains(owner) { return [owner] }
+        return OutboundEvent.isPrivate(line) ? [] : subscribers
+    }
+
+    /// Note which connection drew a surface. Called for every `@` line.
+    static func owner(of line: String) -> String? {
+        guard line.hasPrefix("@ ") else { return nil }
+        return LineParser.tokenize(line).dropFirst().first
     }
 
     /// Write one payload to one client, reporting whether it landed.
@@ -312,6 +340,9 @@ public final class SocketServer: @unchecked Sendable {
                 self.lock.lock()
                 self.clients.remove(fd)
                 self.subscribers.remove(fd)
+                // A closed descriptor number is reused by the next accept;
+                // a stale entry would route the next client's presses wrong.
+                self.owners = self.owners.filter { $0.value != fd }
                 self.lock.unlock()
                 close(fd)
                 self.onEvent(Event(kind: .ended))
@@ -353,6 +384,11 @@ public final class SocketServer: @unchecked Sendable {
                         OutboundEvent.version(Self.version).line + "\n", to: fd)
                     onEvent(Event(kind: .subscribed))
                     continue
+                }
+                if let surface = Self.owner(of: trimmed) {
+                    lock.lock()
+                    owners[surface] = fd
+                    lock.unlock()
                 }
                 if trimmed == "version" {
                     _ = write(

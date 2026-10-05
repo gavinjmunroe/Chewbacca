@@ -199,7 +199,19 @@ struct RailView: View {
         // well sat on the rim at 7 (offscreen render, 2026-10-04).
         .padding(.horizontal, tucked && !offscreen ? 4 : 7)
         .padding(.vertical, tucked && !offscreen ? 4 : 10)
-        .background { capsule }
+        // The same glass every card is made of (`GlassSlab`, the bevel, rim
+        // and gloss), so the rail reads as part of one surface family and
+        // not as a widget with its own look.
+        .modifier(GlassSlab(
+            shape: RoundedRectangle(cornerRadius: Self.radius, style: .continuous),
+            rim: 0.73, tilt: 0, lift: 0
+        ) {
+            ZStack {
+                VisualEffect(material: .hudWindow, blending: .behindWindow)
+                Color.black.opacity(HUD.cardWash)
+            }
+        })
+        .environment(\.colorScheme, .dark)
         .overlay(alignment: .leading) { hoverLabel }
         .onHover { inside in
             if inside {
@@ -227,27 +239,6 @@ struct RailView: View {
             guard !Task.isCancelled else { return }
             withAnimation(Motion.smooth(reduced: reduceMotion)) { tucked = true }
         }
-    }
-
-    /// One frosted capsule with a light rim, the glass the rest of the
-    /// HUD is made of, so the icons stand on a surface instead of floating
-    /// over whatever window is under them (Caleb, 2026-10-04: "Ts so ugly").
-    private var capsule: some View {
-        let shape = RoundedRectangle(cornerRadius: Self.radius, style: .continuous)
-        return ZStack {
-            VisualEffect(material: .hudWindow, blending: .behindWindow)
-            Color.black.opacity(0.42)
-        }
-        .clipShape(shape)
-        .overlay {
-            shape.strokeBorder(
-                LinearGradient(
-                    colors: [.white.opacity(0.32), .white.opacity(0.08), .white.opacity(0.18)],
-                    startPoint: .top, endPoint: .bottom),
-                lineWidth: 1)
-        }
-        .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
-        .environment(\.colorScheme, .dark)
     }
 
     /// Tucked: a slim bar with one dot if anything wants attention.

@@ -240,6 +240,18 @@ cards with a small label and one line, and stat tiles, are the most
 recognisable generated-page pattern. Say it as a paragraph in the owner's
 voice (here, his own DM), as a real figure, or as a real list.
 
+**Smoothness is measured where people feel it.** On 2026-10-04 the TTS world
+reported 60fps from headless scripted scrolling, and Caleb found it "so
+jank". Measure in a headed browser with a performance trace
+(chrome-devtools `performance_start_trace`) during a fast trackpad scroll, and
+read it for long tasks, forced reflows and per-frame state updates. A
+headless rAF count only measures the test rig.
+
+**One idea per screen.** A five-card stat row plus a bar chart plus a table
+plus a callout on one screen made the run "too hard to comprehend". Show one
+number, one plain sentence and one figure per beat, driven by scroll, and put
+the detail behind a link.
+
 ## Done means
 
 `site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no

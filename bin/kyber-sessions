@@ -91,6 +91,12 @@ INTERACTIVE = frozenset({"cli", "claude-vscode", "claude-desktop"})
 MAX_ROWS = 9
 # How many turns a session card draws.
 CARD_TURNS = 40
+# How long a first Run tests press stays armed. A folder's test script is the
+# folder's own code (`npm test` runs whatever package.json says), so one press
+# on a card for a cloned repo ran it unread; a push security review flagged
+# that on 2026-10-05. The first press now shows the command and folder, and
+# only a second press inside this window runs it. Guessed, never measured.
+TESTS_CONFIRM_S = 15.0
 
 RANK = {"needs": 0, "working": 1, "failed": 2, "finished": 3}
 WORDS = {"needs": "needs you", "working": "working", "failed": "failed", "finished": "finished"}
@@ -886,6 +892,8 @@ class Serve:
         # What is typed into each card's message Field, by surface name. Only
         # the person's Send press reads it; typing alone never sends.
         self.drafts: dict[str, str] = {}
+        # Surface name -> when Run tests was first pressed on that card.
+        self.tests_armed: dict[str, float] = {}
         self.closed = False
         # False once the person closes the list: redrawing it would bring
         # back a surface they just took down.
@@ -1018,10 +1026,29 @@ class Serve:
             # A changed file's own row: its diff, or the file itself when git
             # has nothing to diff (untracked).
             self.open_change(s, str(ev["row"]))
+        elif ev["name"] == "tests" and not self.confirm_tests(surface, s):
+            return
         elif ev["name"] in ("tests", "diff"):
             threading.Thread(target=self.run_into, args=(s, ev["name"]), daemon=True).start()
         elif ev["name"] == "open" and ev.get("row"):
             self.open_item(s, str(ev["row"]))
+
+    def confirm_tests(self, surface: str, s: dict, now: float | None = None) -> bool:
+        """True on the second Run tests press within TESTS_CONFIRM_S. The
+        first one only shows what would run, and where."""
+        now = time.monotonic() if now is None else now
+        argv = allowlisted("tests", Path(s["cwd"]))
+        if argv is None:
+            return True  # nothing would run; run_into says so
+        armed = self.tests_armed.pop(surface, None)
+        if armed is not None and now - armed <= TESTS_CONFIRM_S:
+            return True
+        self.tests_armed[surface] = now
+        self.show_text(surface_name(s["id"]) + "-run", "TESTS · " + s["project"],
+                       f"$ {' '.join(argv)}\nin {s['cwd']}\n\n"
+                       "This runs the folder's own test script, which can run any code.\n"
+                       f"Press Run tests again within {int(TESTS_CONFIRM_S)} seconds to run it.", "")
+        return False
 
     def open_change(self, s: dict, rel: str) -> None:
         changed = {c["id"] for c in git_changes(s["cwd"])}

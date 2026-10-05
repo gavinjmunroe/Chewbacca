@@ -639,6 +639,36 @@ def test_card_text_is_cleaned() -> None:
     check("no bidi or zero-width character reaches the card", not re.search("[\u202a-\u202e\u2066-\u2069\u200b-\u200d]|\\\\u202e", out), out[:200])
 
 
+def test_tests_need_two_presses() -> None:
+    print("Run tests runs a folder's own code, so one press only shows it")
+    tmp = tempfile.mkdtemp()
+    (Path(tmp) / "package.json").write_text(json.dumps({"scripts": {"test": "node -e 0"}}))
+    card = {"id": "6d901cd1-bbbb", "project": "cloned", "agent": "claude", "state": "finished", "cwd": tmp}
+    srv = object.__new__(ks.Serve)
+    srv.lock = threading.Lock()
+    srv.cards = {"s-6d901cd1": dict(card)}
+    srv.drafts = {}
+    srv.tests_armed = {}
+    shown: list[tuple] = []
+    srv.show_text = lambda name, title, text, beside: shown.append((name, text))
+    ran: list[str] = []
+    fired = threading.Event()
+    srv.run_into = lambda s, what, path=None: (ran.append(what), fired.set())
+    srv.handle({"name": "tests", "surface": "s-6d901cd1"})
+    check("the first press runs nothing", ran == [], ran)
+    check("and shows the command and the folder", shown and "npm test" in shown[-1][1] and tmp in shown[-1][1], shown)
+    srv.handle({"name": "tests", "surface": "s-6d901cd1"})
+    fired.wait(2)
+    check("a second press runs it", ran == ["tests"], ran)
+    ran.clear()
+    check("a stale first press does not count", not srv.confirm_tests("s-6d901cd1", card, now=100.0)
+          and not srv.confirm_tests("s-6d901cd1", card, now=100.0 + ks.TESTS_CONFIRM_S + 1))
+    check("a press on another card does not arm this one", not srv.confirm_tests("s-other", card, now=200.0)
+          and not srv.confirm_tests("s-6d901cd1", card, now=200.5))
+    empty = {**card, "cwd": tempfile.mkdtemp()}
+    check("a folder with no test command needs no confirm", srv.confirm_tests("s-empty", empty))
+
+
 def main() -> int:
     test_classify()
     test_meta_and_rows()
@@ -655,6 +685,7 @@ def main() -> int:
     test_held_prediction()
     test_review_fixes()
     test_card_text_is_cleaned()
+    test_tests_need_two_presses()
     print("all passed" if not FAILED else f"{FAILED} failed")
     return 1 if FAILED else 0
 

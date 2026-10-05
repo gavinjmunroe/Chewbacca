@@ -1,0 +1,75 @@
+#!/bin/bash
+# The fast gate before anything reaches a shared main. Under a minute, so it
+# never becomes the thing people skip.
+#
+# WHY. On 2026-10-05 CI on calebnewtonusc/Chewbacca refused every job over
+# billing, and main already carried three red checks: an undefined name that
+# had broken every Kyber voice turn for two days, two hooks never registered,
+# and three dead doc links. A red main teaches everyone that red is normal, so
+# the next real failure reads as one of the old ones. This runs the checks
+# that cover what the push actually touches, on every push, CI or no CI.
+#
+# The full suite (bash tests/run.sh, about seven minutes) is still the gate for
+# anything large. This is the floor, not the ceiling.
+# Emergency only: git push --no-verify, and say so in the commit that follows.
+set -uo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT" || exit 0
+
+ZERO=0000000000000000000000000000000000000000
+CHANGED=""
+while read -r _local_ref local_sha _remote_ref remote_sha; do
+  [ "$local_sha" = "$ZERO" ] && continue   # a branch delete
+  if [ "$remote_sha" = "$ZERO" ]; then
+    base="$(git merge-base "$local_sha" upstream/main 2>/dev/null || git merge-base "$local_sha" origin/main 2>/dev/null)"
+  else
+    base="$remote_sha"
+  fi
+  [ -n "$base" ] || continue
+  CHANGED="$CHANGED
+$(git diff --name-only "$base" "$local_sha" 2>/dev/null)"
+done
+CHANGED="$(printf '%s\n' "$CHANGED" | sed '/^$/d' | sort -u)"
+[ -n "$CHANGED" ] || exit 0
+
+fail=0
+run() {
+  local name="$1"; shift
+  if out="$("$@" 2>&1)"; then
+    printf '  ok    %s\n' "$name"
+  else
+    printf '  FAIL  %s\n' "$name"
+    printf '%s\n' "$out" | tail -8 | sed 's/^/        /'
+    fail=1
+  fi
+}
+touched() { printf '%s\n' "$CHANGED" | grep -qE "$1"; }
+
+echo "pre-push: $(printf '%s\n' "$CHANGED" | wc -l | tr -d ' ') changed file(s)"
+run "README counts" python3 tools/counts.py --check
+run "checksums" python3 tools/checksums.py --check
+
+while IFS= read -r f; do
+  [ -f "$f" ] || continue
+  first="$(head -1 "$f" 2>/dev/null)"
+  case "$f" in
+    *.sh) run "bash -n $f" bash -n "$f" ;;
+    *.py) run "compile $f" python3 -m py_compile "$f" ;;
+    *.*) ;;
+    *) case "$first" in
+         *python*) run "compile $f" python3 -m py_compile "$f" ;;
+         *bash*|*/sh) run "bash -n $f" bash -n "$f" ;;
+       esac ;;
+  esac
+done <<< "$CHANGED"
+
+touched '(\.py$|^bin/|^tools/|^mac/|^hud/scripts/)' && run "no undefined names" bash tests/undefined_names.sh
+touched '\.md$' && run "doc links resolve" python3 tools/linkcheck.py
+touched '^(setup\.sh|\.claude/hooks/)' && run "every hook is registered" bash tests/hooks_registered.sh
+touched '^(setup\.sh|\.claude/hooks/)' && run "setup hook registration" python3 tests/test_setup_hooks.py
+
+if [ "$fail" -ne 0 ]; then
+  echo "pre-push: refused. Fix the above, or for an emergency: git push --no-verify"
+  exit 1
+fi
+exit 0

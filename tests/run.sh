@@ -618,6 +618,9 @@ if group "installer"; then
   check  "design-context fires on design work only" \
     bash "$ROOT/tests/design_context.sh" "$ROOT"
 
+  check  "brain-sync commits one turn's writes once, and only this session's" \
+    bash "$ROOT/tests/brain_sync.sh"
+
   # Six hooks were on disk and registered nowhere on 2026-09-22, including the
   # two built after Caleb had to ask for the same thing four times. A hook the
   # installer never registers is a feature that has never run.
@@ -1280,6 +1283,7 @@ if group "pytest"; then
   else
     skip "the suite collects under pytest" "no pytest and no uv"
   fi
+  check "no Python file uses an undefined name" bash "$ROOT/tests/undefined_names.sh"
 fi
 
 # ── call ──────────────────────────────────────────────────────────────────────

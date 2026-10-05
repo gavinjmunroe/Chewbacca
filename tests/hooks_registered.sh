@@ -26,7 +26,9 @@ setup = (root / "setup.sh").read_text()
 # Not hooks: lib.sh is sourced by the others, statusline.sh is the status line.
 # coursework-context.sh is a Codex-only hook since 2026-10-05: tools/codex_hooks.py
 # calls it, and for Claude Code session-context.sh carries the same deadlines.
-NOT_HOOKS = {"lib.sh", "statusline.sh", "coursework-context.sh"}
+# skill-route-shadow.sh is an opt-in experiment: a second, detached Jev call per
+# prompt to log beside skill-route's own route_shadow. Register it by hand.
+NOT_HOOKS = {"lib.sh", "statusline.sh", "coursework-context.sh", "skill-route-shadow.sh"}
 
 registered = set(re.findall(r'hooks_dir \+ "/([\w.-]+\.sh)"', setup))
 registered |= set(re.findall(r'hooks/([\w.-]+\.sh)', setup))

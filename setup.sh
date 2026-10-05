@@ -1667,6 +1667,14 @@ _register("UserPromptSubmit", hooks_dir + "/method-guard.sh", timeout=8,
 _register("UserPromptSubmit", hooks_dir + "/skill-route.sh", timeout=8,
           status="Checking whether a skill already covers this...")
 
+# brain-recall pulls the memories that answer a prompt into context by meaning,
+# so MEMORY.md's byte budget stops deciding what a session can recall. Built
+# 2026-10-03 and registered nowhere until 2026-10-05 (CHW-140), the same
+# built-but-never-fires failure as skill-route above. Silent below its cosine
+# bar and when Ollama or the brain index is missing.
+_register("UserPromptSubmit", hooks_dir + "/brain-recall.sh", timeout=5,
+          status="Recalling what the brain knows about this...")
+
 # The router's advice for graph-engineering was skipped twice in two sessions.
 # skill-gate refuses the first tool call once until the named skill is loaded.
 _register("PreToolUse", hooks_dir + "/skill-gate.sh", timeout=5)
@@ -1718,6 +1726,11 @@ _register("Stop", hooks_dir + "/kit-debt.sh", timeout=15,
 # it had not fired once by 2026-10-03, when hooks_registered.sh caught it.
 _register("Stop", hooks_dir + "/stale-read-guard.sh", timeout=5,
           status="Checking no unfinished job was called silent...")
+
+# One brain commit per turn, named after the turn, in place of format-and-sync's
+# one commit per write. See the hook's header for the 2026-10-05 history count.
+_register("Stop", hooks_dir + "/brain-sync.sh", timeout=15,
+          status="Saving the brain...")
 
 # The pull half. kit-autopush made the remote the default for work leaving this
 # machine; nothing made it the default for work arriving. `chewbacca update`

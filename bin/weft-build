@@ -28,7 +28,7 @@ const path = require("node:path");
 const readline = require("node:readline");
 const { spawn, spawnSync } = require("node:child_process");
 const view = require("./lib/weft_view.js");
-const { NAME_NOTE, TOOLS, fence, gateDir, packagePlugin } = require("./lib/weft_fence.js");
+const { NAME_NOTE, TOOLS, fence, gateDir, packagePlugin, withoutWeftEnv } = require("./lib/weft_fence.js");
 
 const PROJECTS = process.env.WEFT_PROJECTS || path.join(os.homedir(), "weft-projects");
 const WEFT = process.env.WEFT_BIN || path.join(os.homedir(), ".local", "bin", "weft");
@@ -134,11 +134,10 @@ const viewer = spawn(path.join(__dirname, "weft-view"), [dir, "--title", "Your n
 
 
 // `weft` on Tangle's PATH is the gate, which runs the real binary only for
-// the verbs the fence allows. A non-empty WEFT_DISPATCHER_URL points every
-// weft verb at that address, so the build never inherits one either.
+// the verbs the fence allows. No WEFT_* variable is inherited: several,
+// WEFT_DISPATCHER_URL and WEFT_TARGET among them, point weft elsewhere.
 const gate = gateDir(path.join(fenceDir, "bin"), path.join(__dirname, "weft-gate"));
-const tangleEnv = { ...process.env, PATH: `${gate}:${process.env.PATH}`, WEFT_GATE_REAL: WEFT };
-delete tangleEnv.WEFT_DISPATCHER_URL;
+const tangleEnv = { ...withoutWeftEnv(process.env), PATH: `${gate}:${process.env.PATH}`, WEFT_GATE_REAL: WEFT };
 
 const log = fs.createWriteStream(path.join(dir, ".weft", `build-${Date.now()}.jsonl`));
 const tangle = spawn(

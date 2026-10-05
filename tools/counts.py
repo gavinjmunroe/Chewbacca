@@ -29,7 +29,7 @@ def claude_md():
 
 
 def counts():
-    toolkit = json.loads((REPO / "settings/toolkit.json").read_text(encoding="utf-8"))
+    toolkit = json.loads((REPO / "config/settings/toolkit.json").read_text(encoding="utf-8"))
     vendored = len(list((REPO / "skills").glob("*/SKILL.md")))
     upstream = len(toolkit["skills"]["upstream"])
     packed = sum(p["count"] for p in toolkit["packs"])
@@ -37,7 +37,7 @@ def counts():
         "commands": len(list((REPO / ".claude/commands").glob("*.md"))),
         "rules": len(re.findall(r"^@~/\.claude/rules/", claude_md(), re.M)),
         "rules_on_demand": len(list((REPO / ".claude/rules").glob("*.md")))
-                           + int((REPO / "instructions/agent-neutral.md").is_file())
+                           + int((REPO / "config/instructions/agent-neutral.md").is_file())
                            - len(re.findall(r"^@~/\.claude/rules/", claude_md(), re.M)),
         "hooks": len(list((REPO / ".claude/hooks").glob("*.sh"))),
         "subagents": len(list((REPO / ".claude/agents").glob("*.md"))),
@@ -131,7 +131,7 @@ def main():
     # change, forever.
     #
     # .prettierignore already documents this same class of fight twice, for
-    # CLAUDE.md and settings/toolkit.json, and in both cases the fix was to
+    # CLAUDE.md and config/settings/toolkit.json, and in both cases the fix was to
     # exempt the file. Exempting README would stop it being formatted at all.
     # Emitting what prettier already wants is the smaller and more durable fix.
     # A blank line on BOTH sides. Prettier surrounds a markdown HTML comment

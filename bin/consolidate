@@ -2,7 +2,7 @@
 """Promote what keeps happening, retire what stopped mattering.
 
     consolidate                  what the episodes are asking to become
-    consolidate --promote        write the proposed rules into methods/
+    consolidate --promote        write the proposed rules into library/methods/
     consolidate --decay          report scars nothing has touched in N days
     consolidate --days 120
 
@@ -20,14 +20,14 @@ layers as they prove themselves. Same shape as hippocampus to neocortex to
 basal ganglia.
 
     scars       episodic    highest plasticity   what happened once
-    methods/    semantic    medium               what keeps happening
+    library/methods/    semantic    medium               what keeps happening
     hooks       procedural  lowest               what must never happen again
 
 53 episodes have never become a rule. A rule has never become a gate. This
 moves things down one level when the evidence says they have earned it.
 
 AND IT PRUNES. Every bank in this kit only grows: 120 questions, 53 scars, 30
-lint rules. crafts/web-ux.md opens with "removal is free" and the repo has
+lint rules. library/crafts/web-ux.md opens with "removal is free" and the repo has
 never had a removal pass. Synaptic density peaks in childhood and is cut back
 through adolescence; the mature system is not the one with the most
 connections.
@@ -53,7 +53,7 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCARS = pathlib.Path.home() / ".chewbacca" / "scars.json"
-METHODS = ROOT / "methods"
+METHODS = ROOT / "library" / "methods"
 
 # The mechanisms that have actually recurred here, each with the rule it
 # implies. Hand-authored from reading the corpus, not inferred: a cluster
@@ -121,7 +121,7 @@ def cluster(scars):
 
 
 def already_covered(rule_text):
-    """Do not propose what methods/ already says."""
+    """Do not propose what library/methods/ already says."""
     key = {w for w in re.findall(r"[a-z]{5,}", rule_text.lower())}
     for f in METHODS.glob("*.md"):
         body = set(re.findall(r"[a-z]{5,}", f.read_text().lower()))
@@ -149,7 +149,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--promote", action="store_true",
-                    help="write proposed rules into methods/consolidated.md")
+                    help="write proposed rules into library/methods/consolidated.md")
     ap.add_argument("--decay", action="store_true")
     ap.add_argument("--days", type=int, default=DEFAULT_DECAY_DAYS)
     a = ap.parse_args()
@@ -199,7 +199,7 @@ def main():
         print("That is the healthy state, not a failure.")
         return 0
 
-    print(f"\n{len(novel)} rule(s) the episodes have earned and methods/ "
+    print(f"\n{len(novel)} rule(s) the episodes have earned and library/methods/ "
           f"does not yet carry.")
     if not a.promote:
         print("Run with --promote to write them.")

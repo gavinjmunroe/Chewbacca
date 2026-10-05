@@ -1,4 +1,4 @@
-"""procedures/stays-compare, on the cards the sites gave on 2026-09-20.
+"""library/procedures/stays-compare, on the cards the sites gave on 2026-09-20.
 
 No network: the fixtures are the raw cards run.py saved, so a parser that
 drifts from what the sites say fails here before it fails at midnight.
@@ -27,8 +27,8 @@ def load(name: str, path: Path):
     return module
 
 
-run = load("stays_run", ROOT / "procedures" / "stays-compare" / "run.py")
-verify = load("stays_verify", ROOT / "procedures" / "stays-compare" / "verify.py")
+run = load("stays_run", ROOT / "library" / "procedures" / "stays-compare" / "run.py")
+verify = load("stays_verify", ROOT / "library" / "procedures" / "stays-compare" / "verify.py")
 airbnb = json.loads((FIXTURES / "raw-airbnb.json").read_text())["cards"]
 booking = json.loads((FIXTURES / "raw-booking.json").read_text())["cards"]
 NIGHTS = 30

@@ -15,10 +15,10 @@ and accepts on top of it.
 | `bin/lib/osgraph_walks.py`             | needs-you, today, person, space, tasks, people, conversations, and the competency questions                                                             |
 | `bin/lib/osgraph_runs.py`              | Go: a task handed to `claude -p` in plan mode, and its real status                                                                                      |
 | `bin/lib/surfaces/`                    | The panels: walks.py for the graph walks, music.py and files.py as thin surfaces                                                                        |
-| `bin/lib/surfaces/oss.py`, `engine.py` | "what replaces X" from the oss registry with license buckets; and open source engines drawn from `data/surfaces/engines.json`                           |
+| `bin/lib/surfaces/oss.py`, `engine.py` | "what replaces X" from the oss registry with license buckets; and open source engines drawn from `config/data/surfaces/engines.json`                           |
 | `bin/lib/sessions_inbox.py`            | Send into an open, idle Claude Code session through its own inbox, for `bin/kyber-sessions`                                                             |
 | `bin/lib/surface_intent.py`            | "Show my day", "show me Karthik": the no-model fast path in `hud-listen`                                                                                |
-| `data/surfaces/apps.json`              | Each Mac app, what replaces it, and an honest status                                                                                                    |
+| `config/data/surfaces/apps.json`              | Each Mac app, what replaces it, and an honest status                                                                                                    |
 
 ## Ontology
 
@@ -149,7 +149,7 @@ classes' grades", "who have I not texted back"), goes from `hud-listen` to
 voice says one line; anything else hands the request to the model in words. A
 second half that acts ("and email Swain") keeps it with the model. A
 `genui-refresh` or `genui-close` press runs `kyber-genui event` with the
-pressed surface and never reaches the model. `surfaces/genui-queries.json`
+pressed surface and never reaches the model. `config/surfaces/genui-queries.json`
 registers four walks kyber-genui may bind (`unreplied`, `needs`,
 `person:<name>`, `conversations`), each `kyber-surfaces walk <kind> --json`
 rows of label, network, age, reason and node id, and one row action,
@@ -186,11 +186,11 @@ the surfaces changes.
 ## Engines
 
 An engine is an open source program already running on this Mac (Ollama,
-Tailscale) drawn as a panel from one entry in `data/surfaces/engines.json`:
+Tailscale) drawn as a panel from one entry in `config/data/surfaces/engines.json`:
 the repo it comes from, how to tell it is installed (absolute binary paths, or
 a localhost URL), one read (the binary plus fixed args, or a GET to 127.0.0.1)
 and which JSON keys become a row's title, subtitle and detail. Adding one is a
-JSON entry, not code. An entry whose repo is not in `data/oss-apps/apps.json`,
+JSON entry, not code. An entry whose repo is not in `config/data/oss-apps/apps.json`,
 or is not remixable, or that names any other host, is refused when the file
 loads. Nothing from the glass or from an engine's output reaches a command or
 a URL; redirects and proxies are not followed; output over 1 MB is refused;

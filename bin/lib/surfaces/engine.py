@@ -1,5 +1,5 @@
 """engine <id>: a live panel over an open source engine running on this Mac,
-declared in data/surfaces/engines.json instead of written as code.
+declared in config/data/surfaces/engines.json instead of written as code.
 
 An engine spec names the repo it comes from, how to tell it is installed,
 one read that returns JSON, and which keys of that JSON become a row's title,
@@ -15,7 +15,7 @@ THE SECURITY LINE, the same bar as files.py's allowlist:
 - HTTP goes only to 127.0.0.1, ::1 or localhost, plain http, no userinfo, no
   proxy from the environment and no redirect followed, because a redirect is
   the engine choosing where the next request goes.
-- An entry whose repo is not in data/oss-apps/apps.json, or is there but is
+- An entry whose repo is not in config/data/oss-apps/apps.json, or is there but is
   not remixable (GPL, AGPL, no license, source-available), is refused when the
   file is loaded and never runs. So is any key this file does not know.
 - Output is capped before it is parsed, and every string bound for the HUD has
@@ -38,8 +38,8 @@ from urllib.parse import urlparse
 from . import Bind, Context, Provider, SurfaceError, ago, clip, comp, note_for, parse_time
 
 REPO = Path(__file__).resolve().parents[3]
-SPECS = REPO / "data" / "surfaces" / "engines.json"
-APPS = REPO / "data" / "oss-apps" / "apps.json"
+SPECS = REPO / "config" / "data" / "surfaces" / "engines.json"
+APPS = REPO / "config" / "data" / "oss-apps" / "apps.json"
 
 ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
 LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -119,7 +119,7 @@ def http_for(ctx: Context):
 def _remix_verdict(app: dict | None) -> str | None:
     """None when the repo may be built on; otherwise why not, in words."""
     if app is None:
-        return "its repo isn't in data/oss-apps/apps.json"
+        return "its repo isn't in config/data/oss-apps/apps.json"
     if app.get("remixable") is True or app.get("remixable_with_caveat") is True:
         return None
     return f"{app.get('license') or 'no'} license isn't remixable"

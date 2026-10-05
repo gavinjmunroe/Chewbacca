@@ -61,7 +61,7 @@ for an alternative to any app is the `oss` panel ("what replaces Notion").
 
 The registry returned nothing for Google Calendar, Gmail, VS Code, Spotify,
 FaceTime or WhatsApp. That is a gap in its `replaces` mapping, not proof none
-exist: add the mappings to `data/oss-apps/curated.json` and rerun before
+exist: add the mappings to `config/data/oss-apps/curated.json` and rerun before
 deciding those rows.
 
 ## Networks are kept, their clients are replaced

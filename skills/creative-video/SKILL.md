@@ -12,7 +12,7 @@ the tools. The tools are the easy half. What makes a Short work is written down
 by people who make them for a living, and it is almost all decided before a
 frame renders: a first frame that works muted, hook and foreshadow in three
 seconds, a mechanism pulling to the end, a cut right after the payoff. Read
-[crafts/short-form-video.md](../../crafts/short-form-video.md) before anything
+[library/crafts/short-form-video.md](../../library/crafts/short-form-video.md) before anything
 else. Every rule below points back to it.
 
 ## The order

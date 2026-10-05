@@ -48,8 +48,8 @@ hud/build/
 
 # The Swift voice server's build, same as the display's
 voice/.build/
-# call-ears, built by call/build.sh
-call/.build/
+# call-ears, built by apps/call/build.sh
+apps/call/.build/
 
 # A2A course material and its pipeline: reference for the second brain,
 # not a project to publish.

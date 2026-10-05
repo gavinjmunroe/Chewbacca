@@ -687,7 +687,7 @@ def test_security_review_fixes():
     check("the engine pins a full upstream commit", bool(pin) and len(pin.group(1)) == 40, pin)
     check("the build refuses a checkout that is not at the pin", "refusing to run its build" in src)
     check("the server starts with the origin guard loaded", '"--import", ORIGIN_GUARD.as_uri()' in src)
-    guard = (ROOT / "data" / "realm" / "origin-guard.mjs").read_text()
+    guard = (ROOT / "config" / "data" / "realm" / "origin-guard.mjs").read_text()
     check("the guard refuses any upgrade that carries an Origin",
           "req.headers.origin !== undefined" in guard and "403" in guard)
 

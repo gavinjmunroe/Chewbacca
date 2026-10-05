@@ -315,7 +315,7 @@ if group "doctor"; then
   # The mutant: with every rule present the same check must go quiet, or it is
   # reporting the weather rather than the install.
   cp "$ROOT/.claude/rules/"*.md "$D/.claude/rules/"
-  cp "$ROOT/instructions/agent-neutral.md" "$D/.claude/rules/agent-neutral.md"
+  cp "$ROOT/config/instructions/agent-neutral.md" "$D/.claude/rules/agent-neutral.md"
   expect "and passes once they are all there" "always-on imports resolve" \
     bash -c "HOME='$D' bash '$ROOT/doctor.sh' 2>&1"
 
@@ -336,7 +336,7 @@ if group "ux-learning"; then
   ln -s "$ROOT/bin/ux-learning" "$TMP/ux-learning"
   check "UX learning resolves installed symlink" "$TMP/ux-learning" --help
   check "UX learning evidence and routing" python3 "$ROOT/tests/test_ux_learning.py"
-  check "Clay map validates" python3 "$ROOT/bin/ux-learning" validate "$ROOT/learning/clay-navigation/package.json"
+  check "Clay map validates" python3 "$ROOT/bin/ux-learning" validate "$ROOT/library/learning/clay-navigation/package.json"
   check "shared instruction export is current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 
@@ -359,7 +359,7 @@ if group "decision-learning"; then
   check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 
-# Open source app registry: offline, reads the committed data/oss-apps/apps.json.
+# Open source app registry: offline, reads the committed config/data/oss-apps/apps.json.
 if group "oss-apps"; then
   expect "oss-apps appears in help" "chewbacca oss-apps" bash "$ROOT/bin/chewbacca" --help
   check  "oss-apps dispatches" bash "$ROOT/bin/chewbacca" oss-apps --help
@@ -484,7 +484,7 @@ if group "tools"; then
   # which craft-gate copy gets found first.
   for g in study-guide daily-brief onboarding-kit; do
     CRAFT_DIR="$TMP/craft-all" python3 "$ROOT/bin/craft-gate" "$g" \
-      --record "$ROOT/crafts/$g.md" >/dev/null 2>&1
+      --record "$ROOT/library/crafts/$g.md" >/dev/null 2>&1
   done
 
   check  "guide new fails closed with no craft-gate reachable" \
@@ -856,7 +856,7 @@ if group "installer"; then
   # Caleb, 2026-09-21, handing over Proverbs: "this should dictate the way
   # chewbacca lives. Not just as something deep in it's knowledge bank, but
   # ingested into it's living infra on how to make decisions". A verse that only
-  # sits in methods/proverbs.md is the knowledge bank he ruled out, so the guard
+  # sits in library/methods/proverbs.md is the knowledge bank he ruled out, so the guard
   # has to reach the block injected before work starts.
   check  "every process carries its standing check into the injection" bash -c '
     for m in debug experiment research creative decision build consolidated; do
@@ -894,7 +894,7 @@ if group "installer"; then
 
   # It shipped to one machine once before and never reached anybody else.
   check  "the skill router is registered in the shipped settings" \
-    grep -q "skill-route.sh" "$ROOT/settings/settings.json"
+    grep -q "skill-route.sh" "$ROOT/config/settings/settings.json"
 
   check  "no process was added without a standing check" bash -c '
     sigs=$(grep -cE "^    \(.[a-z]+., r." "$1/bin/method")
@@ -1306,11 +1306,11 @@ if group "guide"; then
   # store holding the study-guide notes. Seeded from the repo rather than
   # stubbed out, so these tests still run against the real gate.
   export CRAFT_DIR="$TMP/guide-craft"
-  python3 "$ROOT/bin/craft-gate" study-guide --record "$ROOT/crafts/study-guide.md" >/dev/null 2>&1
+  python3 "$ROOT/bin/craft-gate" study-guide --record "$ROOT/library/crafts/study-guide.md" >/dev/null 2>&1
   G=("python3" "$ROOT/bin/guide")
   check  "guide compiles"            python3 -m py_compile "$ROOT/bin/guide"
   check  "unit tests pass"           python3 "$ROOT/tests/test_guide.py"
-  check  "the template exists"       test -f "$ROOT/templates/guide.html"
+  check  "the template exists"       test -f "$ROOT/library/templates/guide.html"
   check  "new writes a guide"        "${G[@]}" new "cache coherence" --course CSCI170
   check  "the file landed"           test -f "$TMP/guides/cache-coherence.html"
   expect "the title carries the course" "CSCI170" cat "$TMP/guides/cache-coherence.html"

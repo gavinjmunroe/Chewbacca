@@ -150,7 +150,7 @@ def main():
     # 3. Ask what the episodes are becoming. PROPOSE ONLY.
     if (ROOT / "bin/consolidate").exists():
         steps.append(step("consolidate", [sys.executable, str(ROOT / "bin/consolidate")],
-                          lambda rc, out: "earned and methods/" in out))
+                          lambda rc, out: "earned and library/methods/" in out))
 
     # 4. Score, and remember the score.
     if (ROOT / "bin/fitness").exists():

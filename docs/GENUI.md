@@ -80,10 +80,10 @@ every appendix; AG-UI and C1 were read from their docs, not their code.
 
 | Rule                   | Where                                                                       | What it refuses                                                                                                                                                                                                    |
 | ---------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Closed catalog         | `genui/catalog.json`, `check_component`                                     | an unknown component or prop, with the nearest real name                                                                                                                                                           |
+| Closed catalog         | `config/genui/catalog.json`, `check_component`                                     | an unknown component or prop, with the nearest real name                                                                                                                                                           |
 | Catalog cannot drift   | `catalog_drift`, `kyber-genui catalog --check`, `tests/test_kyber_genui.py` | a component or prop in `hud/CLAUDE.md` or read by `SurfaceView.swift` that the catalog lacks, and the reverse                                                                                                      |
 | Data by reference      | `check_literal`, `check_pointer`                                            | a literal on any data prop (`Metric.value`, `Table.rows`, `Events.items`, `Bars.rows`, `List.items`, `Sparkline.points`, `Ring.value`); a pointer to an unknown query, view or argument; a `d` line from the model |
-| Actions allowlisted    | `genui/policy.json` `actions`                                               | any Button action but `genui-refresh` and `genui-close`                                                                                                                                                            |
+| Actions allowlisted    | `config/genui/policy.json` `actions`                                               | any Button action but `genui-refresh` and `genui-close`                                                                                                                                                            |
 | Skeleton first         | `generate`                                                                  | nothing: `- genui`, `@`, a Screen titled from the request, a "Building this view" line and `r s` go out before the model starts                                                                                    |
 | Validate before render | `check_line` while streaming, `check_structure` at the end                  | a bad line never reaches the socket; orphans, missing children, too many rows or buttons fail the surface                                                                                                          |
 | Repair, then fall back | `generate`                                                                  | one repair with the exact error list, then a Status panel that says no view was built and why                                                                                                                      |
@@ -123,7 +123,7 @@ rest of the stream, and sends one `d /q/<query:arg> {...}` holding every view.
 Views: `rows` (Table), `events` (Events), `list` (List), `bars` (Bars),
 `count` (Metric), `series` (Sparkline), `note` (Text or Status: why it is
 empty), plus any named value a query declares. Rows are capped per view
-(`genui/policy.json` `row_caps`), `count` is the uncapped total, and `more` is
+(`config/genui/policy.json` `row_caps`), `count` is the uncapped total, and `more` is
 what the cap hid. A query that comes back empty or fails adds a Status line
 under the panel with its note, so an empty panel always says why. Every string
 a query returns has control characters stripped and is cut to 90 characters.
@@ -144,7 +144,7 @@ deadline's name and checks it reaches the glass only as data.
 
 ## Limits, and why each is this number
 
-All in `genui/policy.json`.
+All in `config/genui/policy.json`.
 
 - **9 rows per component, 6 per Events.** Miller's 7 plus or minus 2, already
   the house list limit in CLAUDE.md's UX check. Events is 6 because
@@ -219,7 +219,7 @@ kyber-genui owns none of these files. These are the exact steps.
 4. **Register the graph walks as queries.** `bin/kyber-surfaces walk <kind>`
    (landed 2026-10-04) prints rows as text; give it a `--json` that prints
    `{"rows": [...]}` with the same row dicts, then write
-   `surfaces/genui-queries.json` (or point `GENUI_QUERIES` at any path list):
+   `config/surfaces/genui-queries.json` (or point `GENUI_QUERIES` at any path list):
 
    ```json
    {"queries": [{
@@ -255,7 +255,7 @@ kyber-genui owns none of these files. These are the exact steps.
    `"row_actions": {"reply": "kyber-surfaces opens the thread"}`. Until then the
    validator refuses `action=` on rows and the prompt does not mention it.
    Rail, Segmented and Avatar stay out of generated surfaces; the reasons are
-   in `genui/policy.json`.
+   in `config/genui/policy.json`.
 7. **The lean profile still loads auto-memory.** `--setting-sources local`
    does not stop it: the same one-line question cost 8,319 prompt tokens with
    it and 615 with `CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` (measured 2026-10-04).
@@ -273,17 +273,17 @@ kyber-genui owns none of these files. These are the exact steps.
   renderer should accept `bind`, or the generated reference (and its source,
   bob-the-builder's `src/hud/catalog.ts`) should show `value=@/...`.
 - `kyber-genui catalog --check` compares the generated block in hud/CLAUDE.md
-  and every `p["..."]` the renderer reads against `genui/catalog.json`. Run it
+  and every `p["..."]` the renderer reads against `config/genui/catalog.json`. Run it
   after adding a component or a prop; it fails until the catalog has it.
 
 ## Measured
 
 `kyber-genui bench`, 2026-10-04, the 20 frozen requests in
-`genui/bench/requests.json`, Claude Code 2.1.278 with the model in the
+`config/genui/bench/requests.json`, Claude Code 2.1.278 with the model in the
 person's settings (Opus 5.5), auto-memory off, live ledger data, `--dry-run`
 sink so the socket is not in the timing. One run per request. Raw rows,
 including every layout the model wrote, are in
-`genui/bench/results-2026-10-04.json`. This is the third full run; the first
+`config/genui/bench/results-2026-10-04.json`. This is the third full run; the first
 two (16/20 and 15/20 first try, both 20/20 after repair) used an earlier
 validator and had auto-memory on, and are not the numbers below.
 

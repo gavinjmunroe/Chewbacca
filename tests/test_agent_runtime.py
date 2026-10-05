@@ -203,11 +203,11 @@ class RuntimeTests(unittest.TestCase):
     def test_shared_guidance_is_discoverable_without_hooks_for_each_runtime(self):
         for key in ('claude-code', 'codex'):
             block = runtime.instruction_block(runtime.registry()['runtimes'][key])
-            self.assertIn(str(ROOT / 'instructions/agent-neutral.md'), block)
+            self.assertIn(str(ROOT / 'config/instructions/agent-neutral.md'), block)
         source = (ROOT / 'setup.sh').read_text()
         helper = source.split('install_agent_neutral_rule() {', 1)[1].split('\n}', 1)[0]
         self.assertNotIn('paths:', helper)
-        self.assertIn('instructions/agent-neutral.md', helper)
+        self.assertIn('config/instructions/agent-neutral.md', helper)
 
     def test_codex_home_explicit_isolation_preserves_configured_paths_otherwise(self):
         with patch.dict(os.environ, {'CODEX_HOME': '/synthetic/account/.codex',

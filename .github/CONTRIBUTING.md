@@ -58,7 +58,7 @@ Before adding a new command, rule, template, or snippet, open an issue first des
 | Slash commands | `.claude/commands/` | `kebab-case.md`        |
 | Rules          | `.claude/rules/`    | `kebab-case.md`        |
 | Templates      | `templates/`        | `descriptive-name.ext` |
-| Snippets       | `snippets/`         | `descriptive-name.ext` |
+| Snippets       | `library/snippets/`         | `descriptive-name.ext` |
 | Documentation  | `docs/`             | `UPPER-CASE.md`        |
 
 ## License

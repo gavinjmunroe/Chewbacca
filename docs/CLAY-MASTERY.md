@@ -6,7 +6,7 @@ agent? The general theory of learning a site is in
 [SITE-LEARNING.md](SITE-LEARNING.md) and [LEARNING-TO-ACT.md](LEARNING-TO-ACT.md).
 This is the plan for one app, and the first place that theory gets tested for
 real. What Chewbacca knows about the screens is in
-[maps/app.clay.com/MAP.md](../maps/app.clay.com/MAP.md).
+[library/maps/app.clay.com/MAP.md](../library/maps/app.clay.com/MAP.md).
 
 **What would prove this wrong:** Clay's own Sculptor finishing the task suite
 below with fewer credits and fewer failures than Chewbacca. If that happens,
@@ -103,7 +103,7 @@ This is what Stagehand, Skyvern and browser-use arrived at independently, as
 covered in SITE-LEARNING.md. A 2026 budget-matched study found that feeding
 learned text back into the prompt did no better than giving the agent more
 steps. Learned code that runs without the model is what helps. So each Clay
-task that succeeds once becomes `procedures/clay-<task>/`, with locators by
+task that succeeds once becomes `library/procedures/clay-<task>/`, with locators by
 role and visible name, plus a verify step.
 
 ### 6. Check the result, not the screen

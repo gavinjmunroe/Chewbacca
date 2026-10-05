@@ -6,7 +6,7 @@ description: Navigate Clay directly with the built-in UX engine, configure nativ
 # Clay navigation
 
 Read `docs/LEARNING-TO-ACT.md` for the existing learning design.
-Read `learning/clay-navigation/procedure.md` and its `package.json` from this
+Read `library/learning/clay-navigation/procedure.md` and its `package.json` from this
 checkout before acting. Read the GTM engineering skill for client objectives,
 qualification, factual claims, costs, and evaluation. The map covers a few
 observed controls, not mastery of Clay.

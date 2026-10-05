@@ -513,7 +513,7 @@ install_backend_launchers() {
 install_agent_neutral_rule() {
   local dst="$HOME/.claude/rules/agent-neutral.md"
   mkdir -p "$HOME/.claude/rules"
-  cp "$SCRIPT_DIR/instructions/agent-neutral.md" "$dst"
+  cp "$SCRIPT_DIR/config/instructions/agent-neutral.md" "$dst"
 }
 
 install_agent_instructions() {
@@ -968,10 +968,10 @@ done
 # The crafts this kit has already studied. Seeded so the research happens once
 # and every machine inherits it; craft-gate refuses to produce in a craft with
 # no notes, so an empty store would block the demo tooling on a fresh install.
-if [ -d "$SCRIPT_DIR/crafts" ]; then
+if [ -d "$SCRIPT_DIR/library/crafts" ]; then
   mkdir -p "$HOME/.chewbacca/craft"
-  cp "$SCRIPT_DIR/crafts/"*.md "$HOME/.chewbacca/craft/" 2>/dev/null || true
-  log "seeded $(ls "$SCRIPT_DIR/crafts" | wc -l | tr -d ' ') craft notes"
+  cp "$SCRIPT_DIR/library/crafts/"*.md "$HOME/.chewbacca/craft/" 2>/dev/null || true
+  log "seeded $(ls "$SCRIPT_DIR/library/crafts" | wc -l | tr -d ' ') craft notes"
 fi
 
 # The opener gate reads the word a reply must open with from here. Written
@@ -1135,10 +1135,10 @@ if [ -f "$SCRIPT_DIR/bin/coursework" ]; then
   link_tool coursework
   COURSEWORK_HOME="${COURSEWORK_DIR:-$HOME/coursework}"
   mkdir -p "$COURSEWORK_HOME/courses" "$COURSEWORK_HOME/syllabi" "$COURSEWORK_HOME/templates"
-  cp "$SCRIPT_DIR/templates/coursework/"*.yml "$COURSEWORK_HOME/templates/" 2>/dev/null || true
+  cp "$SCRIPT_DIR/library/templates/coursework/"*.yml "$COURSEWORK_HOME/templates/" 2>/dev/null || true
   mkdir -p "$COURSEWORK_HOME/texts"
   # A course textbook is half a million words, so it is ingested once into
-  # $COURSEWORK_HOME/texts and searched from there. See texts/README.md.
+  # $COURSEWORK_HOME/texts and searched from there. See apps/texts/README.md.
   [ -f "$SCRIPT_DIR/bin/textbook" ] && link_tool textbook
   log "coursework installed to ~/.local/bin/, ledger at $COURSEWORK_HOME"
   echo "    Next: run /syllabus on a syllabus PDF to fill the ledger."
@@ -1389,7 +1389,7 @@ h["PostToolUse"] = [
     # index holding two authors, and stop-check attributes dirty files.
     #
     # THIS WAS MISSING UNTIL 2026-09-21 AND BOTH GUARDS WERE INERT EVERYWHERE.
-    # The kit's settings/settings.json registered it; this installer never did,
+    # The kit's config/settings/settings.json registered it; this installer never did,
     # so ~/.chewbacca/write-log.tsv did not exist on the author's own machine
     # and pre-commit silently allowed every commit. Its own test covers that
     # state as "no write log: stays silent", so nothing failed and nothing said
@@ -1848,10 +1848,10 @@ if should_run editor; then
 # permissions.defaultMode above is only half of it. The VS Code extension gates
 # bypass mode behind its own setting, so with the CLI configured and the editor
 # not, you still get prompted inside the editor. This merges the keys from
-# settings/vscode-settings.json into whichever editors are installed.
+# config/settings/vscode-settings.json into whichever editors are installed.
 section "Wiring editor settings"
 
-export D1_EDITOR_TEMPLATE="$SCRIPT_DIR/settings/vscode-settings.json"
+export D1_EDITOR_TEMPLATE="$SCRIPT_DIR/config/settings/vscode-settings.json"
 
 python3 << 'PYEDITOR'
 import json, os, re, shutil
@@ -1861,7 +1861,7 @@ try:
     with open(template_path) as f:
         template = json.load(f)
 except Exception:
-    print("  ! settings/vscode-settings.json not readable, skipping editors")
+    print("  ! config/settings/vscode-settings.json not readable, skipping editors")
     raise SystemExit(0)
 
 # Keys starting with _comment document the template. They are not settings.

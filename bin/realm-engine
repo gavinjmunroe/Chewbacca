@@ -47,7 +47,7 @@ import realm_client  # noqa: E402
 REPO_URL = "https://github.com/31Carlton7/realm.git"
 REALM_DIR = Path(os.environ.get("CHEWBACCA_REALM_DIR")
                  or Path.home() / "code" / "vendor" / "realm").expanduser()
-PLIST_TEMPLATE = ROOT / "data" / "realm" / "com.chewbacca.realm.plist"
+PLIST_TEMPLATE = ROOT / "config" / "data" / "realm" / "com.chewbacca.realm.plist"
 LABEL = "com.chewbacca.realm"
 # Only the server and the workspace packages it imports. The full workspace
 # install pulls a Hugeicons Pro package that needs a paid token; this filter

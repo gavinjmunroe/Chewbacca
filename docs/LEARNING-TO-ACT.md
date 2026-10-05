@@ -90,7 +90,7 @@ The loop, for a task with no procedure yet:
 A directory, plain text, the way everything in the kit is stored:
 
 ```
-procedures/stays-compare/
+library/procedures/stays-compare/
   PROCEDURE.md     what it does, in one line for retrieval and a paragraph for people
   params.json      city, check-in, check-out, guests; each typed, each with an example
   run.py           Playwright or chrome-js steps, locators by role and text, never by pixel
@@ -98,7 +98,7 @@ procedures/stays-compare/
   effects          read-only | writes-local | outbound
   origin.jsonl     the run it was distilled from, the date, who confirmed it worked
   stats.json       runs, successes, last success, last failure and the step it failed on
-maps/airbnb.com/
+library/maps/airbnb.com/
   MAP.md           pages, how to reach each, what each holds, the quirks, how to tell you are logged out
 ```
 
@@ -192,7 +192,7 @@ front of them. That is the consent model the registry runs on.
 | acting inside the logged-in browser     | `chrome-js`: text, click by label, arbitrary JS                              |
 | a headless browser                      | Playwright, already used by `hud-music`                                      |
 | a procedure that runs without the model | `hud-music`, `hud-guide`, hand-written                                       |
-| a procedure distilled from a task       | `procedures/stays-compare`, from the Valencia run of 2026-09-20; `maps/` for Airbnb, Booking and Vrbo |
+| a procedure distilled from a task       | `library/procedures/stays-compare`, from the Valencia run of 2026-09-20; `library/maps/` for Airbnb, Booking and Vrbo |
 | a recorder for free-form sessions       | missing: what Claude does through peekaboo and chrome-js leaves no trace     |
 | a distiller                             | missing                                                                      |
 | retrieval before acting                 | `site find "<task>"`, BM25 over procedures, maps and saved pages; `site snap` files a page by role and name ([SITE-LEARNING.md](SITE-LEARNING.md)) |

@@ -40,7 +40,7 @@ staged its work, a bare commit swallows it.
 
 This happened twice in one day in this repo. The second time, a handoff note
 had warned about the first in writing, and the very next commit did it again:
-`a99042a`, about `methods/`, absorbed `README.md`, `setup.sh` and
+`a99042a`, about `library/methods/`, absorbed `README.md`, `setup.sh` and
 `SHA256SUMS.txt` from a parallel session.
 
 ```bash

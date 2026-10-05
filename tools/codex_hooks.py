@@ -455,7 +455,7 @@ def dispatch_event_body(payload):
         with contextlib.redirect_stdout(io.StringIO()) as output:
             print('Chewbacca startup briefing loaded by a native Codex hook. '
                   'Use this briefing without running the fallback reader again.\n')
-            print((ROOT / 'instructions/agent-neutral.md').read_text())
+            print((ROOT / 'config/instructions/agent-neutral.md').read_text())
             context.read_sources(root)
         parts.append(output.getvalue())
         checker = root / 'brain-check.sh'

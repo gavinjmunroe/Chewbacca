@@ -16,7 +16,7 @@ SKIP = re.compile(r"^(https?:|#|mailto:|/)")
 def main():
     bad = []
     for md in sorted(set(list(ROOT.glob("*.md")) + list(ROOT.glob("docs/**/*.md"))
-                         + list(ROOT.glob("methods/*.md")) + list(ROOT.glob("skills/**/*.md")))):
+                         + list(ROOT.glob("library/methods/*.md")) + list(ROOT.glob("skills/**/*.md")))):
         try:
             text = md.read_text(encoding="utf-8", errors="ignore")
         except OSError:

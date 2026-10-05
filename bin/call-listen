@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One cue on the screen each time the other side of a call finishes talking.
 
-    call-ears        your mic plus the call app's audio, 16 kHz mono (call/ears.swift)
+    call-ears        your mic plus the call app's audio, 16 kHz mono (apps/call/ears.swift)
     Segmenter        cuts each side into utterances on silence
     whisper-server   transcribes each utterance on this Mac
     context_bank     searches the second brain for what was just said
@@ -1458,7 +1458,7 @@ class Listener:
             log("whisper-server is not installed: brew install whisper-cpp")
             return 1
         if not self.args.wav and shutil.which("call-ears") is None:
-            log("call-ears is not built: sh call/build.sh in the Chewbacca checkout")
+            log("call-ears is not built: sh apps/call/build.sh in the Chewbacca checkout")
             return 1
         apps: list[str] = []
         if not self.args.wav:

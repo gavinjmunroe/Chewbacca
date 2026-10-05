@@ -548,7 +548,7 @@ def genui_wiring(tmp: Path) -> None:
     check("an ask read out of a text is named by who asked, never by its words",
           asks and not any("terms by Monday" in r["label"] for r in asks)
           and any(r["label"].startswith("from Sagar Tiwari's text") for r in asks), [r["label"] for r in asks])
-    manifest = json.loads((fx.ROOT / "surfaces" / "genui-queries.json").read_text())
+    manifest = json.loads((fx.ROOT / "config" / "surfaces" / "genui-queries.json").read_text())
     check("the manifest's walks are ones kyber-surfaces has",
           all(q["argv"][:3] in (["kyber-surfaces", "walk", "unreplied"], ["kyber-surfaces", "walk", "needs-you"],
                                 ["kyber-surfaces", "walk", "person"], ["kyber-surfaces", "walk", "conversations"])

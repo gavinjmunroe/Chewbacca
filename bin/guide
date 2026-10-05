@@ -31,7 +31,7 @@ import webbrowser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE = ROOT / "templates" / "guide.html"
+TEMPLATE = ROOT / "library" / "templates" / "guide.html"
 DIR = Path(os.environ.get("GUIDE_DIR", "guides")).resolve()
 
 

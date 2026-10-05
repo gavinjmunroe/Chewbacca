@@ -297,12 +297,12 @@ def digest(brain: Path | None = None, log: Path | None = None) -> str:
 # question never needs. These four files are about 6k tokens together and are
 # the part that actually carries the kit's judgement.
 #
-# Read at build time rather than pasted, so editing methods/doctrine.md changes
+# Read at build time rather than pasted, so editing library/methods/doctrine.md changes
 # what the voice agent believes, with no second copy to forget.
 REPO = Path(__file__).resolve().parent.parent
 DOCTRINE = (
-    REPO / "methods" / "doctrine.md",
-    REPO / "methods" / "proverbs.md",
+    REPO / "library" / "methods" / "doctrine.md",
+    REPO / "library" / "methods" / "proverbs.md",
     REPO / ".claude" / "rules" / "do-it-yourself.md",
     REPO / ".claude" / "rules" / "context-discipline.md",
 )

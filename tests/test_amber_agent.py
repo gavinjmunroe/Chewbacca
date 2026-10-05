@@ -20,7 +20,7 @@ import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SERVER = ROOT / "mcp" / "amber" / "amber-mcp"
+SERVER = ROOT / "apps" / "mcp" / "amber" / "amber-mcp"
 AMBER_USER = ROOT / "bin" / "amber-user"
 SECRET = "is quietly interviewing at Stripe"
 PASSED = FAILED = 0

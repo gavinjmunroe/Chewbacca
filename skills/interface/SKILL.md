@@ -22,7 +22,7 @@ where the data comes from. All four of those are written down here, once.
 3. **Find the data** in `references/data-loaders.md`, and when it is not there
    use `references/discover-data.md` to go find it, appending what you learn
    back into the loaders file so the next session does not repeat the search.
-4. **Apply the system**, from [crafts/interface.md](../../crafts/interface.md):
+4. **Apply the system**, from [library/crafts/interface.md](../../library/crafts/interface.md):
    grayscale first, the constrained scale, hierarchy by size and weight and
    color, too much whitespace then remove, details last.
 5. **Build the three states.** Loading, empty, error. This is the step that
@@ -55,7 +55,7 @@ where the data comes from. All four of those are written down here, once.
    with no hover or focus state, and loops that run under reduced motion.
    Then `site-gate idle <url>` and confirm the ambient layer you planned is
    moving. The four layers a site needs (layout, choreography, ambience,
-   response) are in [crafts/website.md](../../crafts/website.md); read it
+   response) are in [library/crafts/website.md](../../library/crafts/website.md); read it
    before building, because three of the four never show in a screenshot.
 
 Steps 1 to 3 are lookups and should cost almost nothing. That is the point.
@@ -109,7 +109,7 @@ mistake.
 - [references/discover-data.md](references/discover-data.md): the procedure for
   a source nothing covers yet, cheapest method first, ending in pixels only as
   a last resort. Read when step 3 misses.
-- [crafts/interface.md](../../crafts/interface.md): the researched rules, from
+- [library/crafts/interface.md](../../library/crafts/interface.md): the researched rules, from
   Refactoring UI and Atomic Design. Read at step 4.
 
 ## The hard line

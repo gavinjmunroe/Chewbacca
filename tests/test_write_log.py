@@ -200,8 +200,8 @@ class WriteLogTests(unittest.TestCase):
 
     def test_tools_and_instructions_only_qualify_inside_kit(self):
         log = Path(self.env['CHEWBACCA_WRITE_LOG'])
-        for name, code in ((ROOT / 'tools/runtime.py', 0), (ROOT / 'instructions/agent-neutral.md', 0),
-                           (self.outside / 'tools/random.py', 1), (self.outside / 'instructions/note.md', 1)):
+        for name, code in ((ROOT / 'tools/runtime.py', 0), (ROOT / 'config/instructions/agent-neutral.md', 0),
+                           (self.outside / 'tools/random.py', 1), (self.outside / 'config/instructions/note.md', 1)):
             log.write_text(f'{time.time()}\tfixture\t{name}\n')
             result = subprocess.run(['python3', str(ROOT / 'bin/durable-check'), '--session', 'fixture'],
                                     input='fix chewbacca', text=True, capture_output=True, env=self.env)

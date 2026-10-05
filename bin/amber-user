@@ -3,7 +3,7 @@
 
 One agent per person, on one machine. Every per-person store in this kit already
 takes a directory from the environment (PEOPLE_DIR, SUPERASSISTANT_DIR,
-CHEWBACCA_LOG_DIR, and AMBER_HOME plus AMBER_USER for mcp/amber/amber-mcp).
+CHEWBACCA_LOG_DIR, and AMBER_HOME plus AMBER_USER for apps/mcp/amber/amber-mcp).
 This picks one root per person and points all of them into it, so isolation is
 a property of the paths a process was started with, not of code remembering to
 filter by owner.

@@ -107,7 +107,7 @@ check("a pack's note becomes a comment", "# hello" in block, block)
 
 # ── the generated files themselves ───────────────────────────────────────────
 
-for rel in ("docs/REFERENCE.md", "README.md", "settings/toolkit.json"):
+for rel in ("docs/REFERENCE.md", "README.md", "config/settings/toolkit.json"):
     p = ROOT / rel
     if not p.is_file():
         continue

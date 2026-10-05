@@ -159,15 +159,15 @@ Ecosystem and method reading, in [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md):
 | Source | Where it lands |
 | --- | --- |
 | Southeast University graduate course 知识图谱 (Knowledge Graphs), Prof. Peng Wang, [npubird/KnowledgeGraphCourse](https://github.com/npubird/KnowledgeGraphCourse) | `skills/graph-engineering/` in full. Nine lectures distilled and translated from the Chinese slide decks into an English curriculum plus three reference files |
-| Roediger and Karpicke, "Retrieval-Based Learning: A Decade of Progress" (ERIC ED599273), plus the 2006 and 2007 Purdue Learning Lab papers | [crafts/study-guide.md](crafts/study-guide.md), and through it `study-guide`, `study-system`, and the `guide` CLI. The 13%-versus-56% forgetting result is why a guide never presents material back |
+| Roediger and Karpicke, "Retrieval-Based Learning: A Decade of Progress" (ERIC ED599273), plus the 2006 and 2007 Purdue Learning Lab papers | [library/crafts/study-guide.md](library/crafts/study-guide.md), and through it `study-guide`, `study-system`, and the `guide` CLI. The 13%-versus-56% forgetting result is why a guide never presents material back |
 | macOSWorld, [arXiv 2506.04135](https://arxiv.org/html/2506.04135v4) | [docs/mac/BENCHMARKS.md](docs/mac/BENCHMARKS.md). 202 tasks, 30 apps, proprietary agents above 30% and open models below 5% |
 | OSWorld and OSWorld 2.0, [arXiv 2606.29537](https://arxiv.org/pdf/2606.29537) | Same. The 85% versus 20.6% gap, and the compounding-failure math (twenty steps at 95% is 36%) that makes see-act-see mandatory rather than ceremonial |
 | MacArena [2606.06560](https://arxiv.org/pdf/2606.06560), OSUniverse [2505.03570](https://arxiv.org/pdf/2505.03570), OpenComputer [2605.19769](https://arxiv.org/pdf/2605.19769), ScreenSpot | Same |
-| Daniele Procida, Diátaxis (diataxis.fr) | [crafts/onboarding-kit.md](crafts/onboarding-kit.md) and `skills/kit-builder/`. Tutorial, how-to, reference, explanation, and why mixing two serves neither |
+| Daniele Procida, Diátaxis (diataxis.fr) | [library/crafts/onboarding-kit.md](library/crafts/onboarding-kit.md) and `skills/kit-builder/`. Tutorial, how-to, reference, explanation, and why mixing two serves neither |
 
 ### Data catalogs
 
-`data/oss-apps/apps.json`, the registry behind `oss-apps`, is rebuilt by
+`config/data/oss-apps/apps.json`, the registry behind `oss-apps`, is rebuilt by
 `tools/oss_apps_build.py` from two curated lists. The apps in it belong to their
 own authors, under the licenses recorded per entry.
 
@@ -186,11 +186,11 @@ practitioner. The rule that forced this is
 
 | Craft | Studied from |
 | --- | --- |
-| [Demo video](crafts/demo-video.md) | Two teardowns by the co-founder of HowdyGo, who has made and reviewed thousands of SaaS demos, plus Consensus' five-example piece |
-| [Daily brief](crafts/daily-brief.md) | Becky Root on writing the President's Daily Brief (The Cipher Brief), and Aaron Berman's guide to writing for busy decision-makers |
-| [Application essay](crafts/application-essay.md) | A former Dartmouth admissions officer's account of reading the pile, College Essay Guy and Collegewise on show-don't-tell, plus one outcome retro diffing five rejections against two advances in a single cycle |
-| [Study guide](crafts/study-guide.md) | Roediger and Karpicke, above |
-| [Onboarding kit](crafts/onboarding-kit.md) | Diátaxis, above |
+| [Demo video](library/crafts/demo-video.md) | Two teardowns by the co-founder of HowdyGo, who has made and reviewed thousands of SaaS demos, plus Consensus' five-example piece |
+| [Daily brief](library/crafts/daily-brief.md) | Becky Root on writing the President's Daily Brief (The Cipher Brief), and Aaron Berman's guide to writing for busy decision-makers |
+| [Application essay](library/crafts/application-essay.md) | A former Dartmouth admissions officer's account of reading the pile, College Essay Guy and Collegewise on show-don't-tell, plus one outcome retro diffing five rejections against two advances in a single cycle |
+| [Study guide](library/crafts/study-guide.md) | Roediger and Karpicke, above |
+| [Onboarding kit](library/crafts/onboarding-kit.md) | Diátaxis, above |
 
 ### People, by permission
 

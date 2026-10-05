@@ -57,7 +57,7 @@ import urllib.request
 
 PORT = int(os.environ.get("CHEWBACCA_BRIDGE_PORT", "8765"))
 LOG = pathlib.Path.home() / ".chewbacca" / "logs" / "browser-bridge.log"
-USERSCRIPT = pathlib.Path(__file__).resolve().parent.parent / "crafts" / "google-ai-bridge.user.js"
+USERSCRIPT = pathlib.Path(__file__).resolve().parent.parent / "library" / "crafts" / "google-ai-bridge.user.js"
 
 # First words that may run without a prompt: they read, or write only inside
 # the project. Text reaching this bridge comes off a web page, so nothing here

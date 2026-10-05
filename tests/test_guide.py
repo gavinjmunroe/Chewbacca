@@ -44,7 +44,7 @@ def _seed_craft(guide_dir: str) -> None:
     """
     store = Path(guide_dir).parent / "craft"
     store.mkdir(parents=True, exist_ok=True)
-    src = BIN.parent.parent / "crafts" / "study-guide.md"
+    src = BIN.parent.parent / "library" / "crafts" / "study-guide.md"
     if src.is_file():
         shutil.copy2(src, store / "study-guide.md")
     os.environ["CRAFT_DIR"] = str(store)

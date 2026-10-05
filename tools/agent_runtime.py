@@ -16,7 +16,7 @@ import agent_context as context
 import agent_skills as skills
 
 ROOT = Path(__file__).resolve().parents[1]
-SPECS = ROOT / 'runtimes/profiles.json'
+SPECS = ROOT / 'config/runtimes/profiles.json'
 BEGIN = '<!-- CHEWBACCA RUNTIME BEGIN -->'
 END = '<!-- CHEWBACCA RUNTIME END -->'
 
@@ -205,7 +205,7 @@ def remove(name):
 def instruction_block(spec):
     notes = '\n'.join('- ' + note for note in spec['notes'])
     return (f'{BEGIN}\n## Chewbacca runtime: {spec["label"]}\n\n'
-            f'Read `{ROOT / "instructions/agent-neutral.md"}` for shared guidance.\n'
+            f'Read `{ROOT / "config/instructions/agent-neutral.md"}` for shared guidance.\n'
             f'Shared skills: `{shared_home() / "skills"}`.\n\n{notes}\n\n'
             f'{spec["model_discovery"]}\n{END}')
 
@@ -213,7 +213,7 @@ def instruction_block(spec):
 def export(name, destination):
     spec = registry()['runtimes'][name]
     # An export must be portable and public: no local brain path or contents.
-    text = (ROOT / 'instructions/agent-neutral.md').read_text()
+    text = (ROOT / 'config/instructions/agent-neutral.md').read_text()
     text += '\n## Runtime integration\n\n' + '\n'.join('- ' + note for note in spec['notes']) + '\n'
     destination.mkdir(parents=True, exist_ok=True)
     target = destination / spec['instruction_file']

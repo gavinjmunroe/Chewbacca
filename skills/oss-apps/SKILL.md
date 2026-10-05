@@ -19,9 +19,9 @@ oss-apps stats                           # counts, sources, what could not be fe
 
 Add `--json` to any of them for an agent, and `--limit 0` for every row.
 
-The data is `data/oss-apps/apps.json`, about 1,465 repos merged from
+The data is `config/data/oss-apps/apps.json`, about 1,465 repos merged from
 serhii-londar/open-source-mac-os-apps and OpenAlternative's
-open-source-alternatives list, plus `data/oss-apps/curated.json`. Each entry has
+open-source-alternatives list, plus `config/data/oss-apps/curated.json`. Each entry has
 the repo, categories, the proprietary apps it replaces, a stack (Swift, Electron,
 Tauri, Flutter, Qt, Web), the license, stars and last push.
 

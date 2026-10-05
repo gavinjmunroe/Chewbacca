@@ -90,6 +90,30 @@ CONTROLS = r"""(max) => {
     const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
     if (ratio < 1.5) dead.push(e.tagName.toLowerCase() + ' "' + txt.slice(0, 30) + '" text is invisible on its background (contrast ' + ratio.toFixed(2) + ')');
   }
+  // Heading-plus-line grids: four or more sibling cards, each a short label
+  // over one short line. Caleb, 2026-10-04: "Header, subheader X6 screams SO
+  // AI." Navs, footers, headers and forms are exempt.
+  const words = s => (s.trim().match(/\S+/g) || []).length;
+  for (const box of document.querySelectorAll('main *, body > div *')) {
+    if (box.closest('nav, footer, header, form')) continue;
+    const kids = [...box.children].filter(vis);
+    if (kids.length < 4) continue;
+    const cards = kids.filter(k => {
+      if (k.querySelector('svg, canvas, img, video')) return false;  // a figure card is not a text card
+      const leaves = [...k.querySelectorAll('*')].filter(n => !n.children.length && (n.innerText || '').trim());
+      if (leaves.length < 2 || leaves.length > 3) return false;
+      const a = leaves[0].innerText, b = leaves[1].innerText;
+      const fa = parseFloat(getComputedStyle(leaves[0]).fontSize), fb = parseFloat(getComputedStyle(leaves[1]).fontSize);
+      return words(a) <= 4 && words(b) <= 25 && fa !== fb;
+    });
+    // A grid sits together on a screen or so; four one-screen blocks of a
+    // pinned scroll story (the Lemma replica's feature column) do not.
+    const span = box.getBoundingClientRect().height;
+    if (cards.length >= 4 && cards.length >= kids.length * 0.8 && span < 1.5 * innerHeight) {
+      dead.push('heading-plus-line grid of ' + cards.length + ' cards: "' + (cards[0].innerText || '').trim().split('\n')[0].slice(0, 30) + '"... (say it as prose, a figure or a real list)');
+      break;
+    }
+  }
   const links = [...new Set(all.filter(e => e.tagName === 'A' && e.href && !e.getAttribute('href').startsWith('#')).map(e => e.href))];
   const probe = all.filter(vis).filter(e => !e.disabled).slice(0, max);
   probe.forEach((e, i) => e.setAttribute('data-sg', i));

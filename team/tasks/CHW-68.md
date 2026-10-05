@@ -1,0 +1,22 @@
+---
+id: CHW-68
+title: Doctor Strange effects
+status: inbox
+owner: 
+priority: low
+due: 
+labels: backlog, deferred
+done_when: Separate demo target and visible render/recovery checks; preserve original effect ambition without calling it released
+proof: 
+source: BACKLOG.md CB-21
+created: 2026-10-04
+updated: 2026-10-04
+---
+
+Backlog status: deferred.
+Acceptance: Separate demo target and visible render/recovery checks; preserve original effect ambition without calling it released
+Evidence: Historical portal implementation, current visual quality unverified
+Depends on: CB-45
+
+## Activity
+- 2026-10-04 Caleb: imported from BACKLOG.md CB-21

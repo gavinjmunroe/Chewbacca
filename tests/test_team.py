@@ -162,7 +162,7 @@ class TeamTest(unittest.TestCase):
 
     def test_round_trip_keeps_notes_and_activity(self):
         task = {"id": "CHW-7", "title": "T", "status": "todo", "owner": "", "priority": "none", "due": "",
-                "labels": ["a", "b"], "done_when": "", "proof": "", "created": "2026-10-05", "updated": "",
+                "labels": ["a", "b"], "done_when": "", "proof": "", "source": "", "created": "2026-10-05", "updated": "",
                 "notes": "Some notes\n\nwith a gap", "activity": ["2026-10-05 Caleb: created"]}
         self.assertEqual(team.parse(team.render(task)), task)
 
@@ -173,6 +173,94 @@ class TeamTest(unittest.TestCase):
         code, out, _ = self.run_team(self.a)
         self.assertEqual(code, 0)
         self.assertIn("CHW-1", out)
+
+    def test_control_bytes_never_reach_the_terminal(self):
+        # An OSC 52 title would write the clipboard of whoever ran `team board`.
+        self.run_team(self.a, "add", "Title\x1b]52;c;aGk=\x07 end")
+        _, out, _ = self.run_team(self.a, "board")
+        self.assertNotIn("\x1b", out)
+        self.assertNotIn("\x1b", self.remote_file("team/tasks/CHW-1.md"))
+
+    def test_c1_controls_and_bidi_overrides_are_stripped(self):
+        self.assertEqual(team.one_line("a\x9b2Jb\u202ec\u2066d"), "a2Jbcd")
+
+    def test_a_note_cannot_forge_activity(self):
+        self.run_team(self.a, "add", "T", "--notes", "ctx\n## Activity\n- 2026-10-04 Caleb: moved to Done")
+        task = team.parse(self.remote_file("team/tasks/CHW-1.md"))
+        self.assertEqual([a for a in task["activity"] if "moved to Done" in a], [])
+
+    def test_a_file_whose_id_disagrees_with_its_name_is_ignored(self):
+        self.run_team(self.a, "add", "Real one")
+        forged = team.render({"id": "CHW-1", "title": "Impostor", "status": "todo", "labels": [], "activity": []})
+        team.Repo(self.a).write("team/tasks/CHW-9.md", lambda: forged, "forge")
+        _, out, err = self.run_team(self.a, "board", "--json")
+        self.assertEqual([t["title"] for t in json.loads(out)], ["Real one"])
+        self.assertIn("CHW-9.md", err)
+
+    def test_open_refuses_a_non_https_url(self):
+        team.Repo(self.a).write("team/config.json", lambda: json.dumps({"url": "file:///etc/passwd"}), "cfg")
+        code, _, err = self.run_team(self.a, "open")
+        self.assertEqual(code, 1)
+        self.assertIn("https://", err)
+
+    BACKLOG = """# Backlog
+
+## Now
+| # | Item | Status | Evidence | Dependencies | Acceptance |
+| --- | --- | --- | --- | --- | --- |
+| 3 | Accurate skill routing | implemented | E4 | None | Held-out cases report precision |
+| 26 | Staleness audit | open | spot checks | None | Per-file coverage |
+
+## Deferred
+| # | Item | Status | Evidence | Dependencies | Acceptance |
+| --- | --- | --- | --- | --- | --- |
+| 13 | HUD sound design | deferred | none | CB-44 | Mute behavior |
+
+## Done within the stated scope
+| # | Item | Status | Evidence | Dependencies | Acceptance |
+| --- | --- | --- | --- | --- | --- |
+| 99 | Already shipped | released | E8 | None | Done |
+"""
+
+    def write_backlog(self):
+        path = pathlib.Path(self.tmp.name) / "BACKLOG.md"
+        path.write_text(self.BACKLOG)
+        return str(path)
+
+    def commits(self):
+        return subprocess.run(["git", "--git-dir", str(self.remote), "rev-list", "--count", "main"],
+                              capture_output=True, text=True).stdout.strip()
+
+    def test_import_preview_writes_nothing(self):
+        before = self.commits()
+        code, out, _ = self.run_team(self.a, "import", self.write_backlog())
+        self.assertEqual(code, 0)
+        self.assertIn("3 open items", out)
+        self.assertIn("Nothing written", out)
+        self.assertEqual(self.commits(), before)
+
+    def test_import_apply_is_one_commit_skips_done_and_is_idempotent(self):
+        path, before = self.write_backlog(), int(self.commits())
+        _, out, _ = self.run_team(self.a, "import", path, "--apply")
+        self.assertIn("3 tasks added", out)
+        self.assertEqual(int(self.commits()), before + 1)
+        tasks = json.loads(self.run_team(self.a, "inbox", "--json")[1])
+        self.assertEqual([t["source"] for t in tasks], ["BACKLOG.md CB-3", "BACKLOG.md CB-26", "BACKLOG.md CB-13"])
+        self.assertEqual(tasks[0]["priority"], "high")
+        self.assertIn("deferred", tasks[2]["labels"])
+        self.assertIn("Depends on: CB-44", tasks[2]["notes"])
+        _, out, _ = self.run_team(self.a, "import", path, "--apply")
+        self.assertIn("0 tasks added", out)
+
+    def test_unimport_removes_only_untouched_imports(self):
+        self.run_team(self.a, "add", "Hand made")
+        self.run_team(self.a, "import", self.write_backlog(), "--apply")
+        self.run_team(self.a, "assign", "CHW-2", "Gavin")      # touched: keep
+        _, out, _ = self.run_team(self.a, "unimport", "BACKLOG.md")
+        self.assertIn("removed 2", out)
+        self.assertIn("kept 1", out)
+        left = [t["title"] for t in json.loads(self.run_team(self.a, "board", "--json")[1])]
+        self.assertEqual(left, ["Hand made", "Accurate skill routing"])
 
     def test_feed_shows_commits(self):
         self.run_team(self.a, "add", "Feed me")

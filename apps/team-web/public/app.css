@@ -178,6 +178,11 @@ a:hover {
   width: 100%;
   min-height: 44px;
 }
+/* A link styled as a button keeps the button's ink: the global a:hover rule
+   (0,1,1) outranks .btn-primary (0,1,0) and turned the GitHub button's label
+   amber on amber, invisible in the 2026-10-04 screenshot of the live page. */
+a.btn, a.btn:hover { text-decoration: none; color: var(--text); }
+a.btn-primary, a.btn-primary:hover { color: var(--accent-ink); }
 .btn svg {
   width: 16px;
   height: 16px;

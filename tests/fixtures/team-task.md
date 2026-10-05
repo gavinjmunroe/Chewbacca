@@ -8,6 +8,7 @@ due: 2026-10-07
 labels: onboarding, desktop
 done_when: Gavin walks a non-builder through it once without Caleb narrating
 proof: 
+source: BACKLOG.md CB-2
 created: 2026-10-04
 updated: 2026-10-05
 ---

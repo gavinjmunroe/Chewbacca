@@ -44,5 +44,25 @@ run S1
 g diff --cached --name-only | grep -q seed.md && ok "someone else's staged file stays staged and uncommitted" \
   || no "swallowed a file another session had staged"
 
+g reset -q; g stash -q -u; g stash drop -q
+mkdir -p "$BRAIN/new"
+echo mine > "$BRAIN/new/x.md"; echo theirs > "$BRAIN/new/y.md"; echo k > "$BRAIN/.env"
+echo glob > "$BRAIN/*.md"; echo untouched > "$BRAIN/seed.md"
+printf '1\tS3\t%s\twrite\n1\tS3\t%s\tbash\n1\tS3\t%s\tbash\n' "$BRAIN/new/x.md" "$BRAIN/.env" "$BRAIN/*.md" >> "$LOG"
+run S3
+files="$(g show --name-only --format= HEAD | sort | tr '\n' ' ')"
+[ "$files" = '*.md new/x.md ' ] && ok "a new folder adds only the written file, and a glob-named file stays literal" \
+  || no "committed: $files"
+g status --porcelain | grep -q '?? .env' && ok "a secret-named file is never committed" || no ".env was committed"
+
+PUB="$(cd "$TEST_DIR" && pwd -P)/public"; mkdir -p "$PUB"
+git -C "$PUB" init -q; git -C "$PUB" config user.email t@example.com; git -C "$PUB" config user.name t
+git -C "$PUB" config commit.gpgsign false
+printf 'PERSONAL_CONTEXT_DIR="%s"\nPUBLIC_CONTEXT_DIR="%s"\n' "$BRAIN" "$PUB" > "$TEST_HOME/.claude/d1-config.sh"
+echo p > "$PUB/p.md"; printf '1\tS4\t%s\twrite\n' "$PUB/p.md" >> "$LOG"
+run S4
+[ "$(git -C "$PUB" log -1 --format=%s)" = "brain: update 1 file(s)" ] && ok "the public repo never carries the prompt" \
+  || no "public subject was: $(git -C "$PUB" log -1 --format=%s)"
+
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

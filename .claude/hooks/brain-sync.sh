@@ -37,6 +37,8 @@ log = os.environ["CHEWBACCA_WRITE_LOG"]
 if not sid or not os.path.isfile(log):
     sys.exit(0)
 
+personal = os.environ.get("PERSONAL_CONTEXT_DIR") or ""
+personal = os.path.realpath(personal) if personal else ""
 repos = [os.path.realpath(r) for r in (os.environ.get("PERSONAL_CONTEXT_DIR"), os.environ.get("PUBLIC_CONTEXT_DIR"))
          if r and os.path.isdir(os.path.join(r, ".git"))]
 if not repos:
@@ -72,21 +74,42 @@ def subject():
     return prompt
 
 
+# Paths come from a log, so git must read them as names, never as patterns:
+# a written file called `*.md` would otherwise stage every markdown file.
+GIT_ENV = dict(os.environ, GIT_LITERAL_PATHSPECS="1")
+
+
 def git(repo, *args):
-    return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True)
+    return subprocess.run(["git", "-C", repo, *args], capture_output=True, text=True, env=GIT_ENV)
+
+
+# Bash writes are in the log too, so a credential a command dropped into the
+# brain would otherwise be committed and pushed. .gitignore is the real guard;
+# this catches the names that should never need one.
+SECRET_NAMES = (".env", ".pem", ".key", ".p12", "id_rsa", "id_ed25519", "credentials", ".netrc")
+
+
+def looks_secret(rel):
+    name = os.path.basename(rel).lower()
+    return name.startswith(".env") or any(token in name for token in SECRET_NAMES)
 
 
 for repo in repos:
     mine = sorted(os.path.relpath(p, repo) for p in written if p.startswith(repo + os.sep))
     if not mine:
         continue
-    status = git(repo, "status", "--porcelain", "-z", "--", *mine).stdout
+    # --untracked-files=all: a new file in a new folder is otherwise reported as
+    # the folder, and adding the folder sweeps in every other file inside it.
+    status = git(repo, "status", "--porcelain", "-z", "--untracked-files=all", "--", *mine).stdout
     dirty = [entry[3:] for entry in status.split("\0") if len(entry) > 3]
+    dirty = [rel for rel in dirty if rel in mine and not looks_secret(rel)]
     if not dirty:
         continue
     if git(repo, "add", "--", *dirty).returncode != 0:
         continue
-    gist = subject()
+    # The prompt names the commit only in the personal brain. The public context
+    # repo is public, and a prompt can say anything.
+    gist = subject() if repo == personal else ""
     head = f"brain: {gist}" if gist else f"brain: update {len(dirty)} file(s)"
     body = "\n".join(dirty[:40])
     done = git(repo, "commit", "-q", "-m", head, "-m", body, "--", *dirty)

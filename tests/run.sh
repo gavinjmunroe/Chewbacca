@@ -413,6 +413,7 @@ if group "tools"; then
     skip "memory compact dry run is safe" "no second-brain on this machine"
   fi
   check  "secret scan finds nothing in the repo" python3 "$ROOT/bin/secret-scan" "$ROOT"
+  check  "browser-bridge runs nothing a web page could use to run code" python3 "$ROOT/tests/test_browser_bridge.py"
   check  "checksums are current" python3 "$ROOT/tools/checksums.py" --check
   # The checksum file is not decoration. start.sh verifies every downloaded
   # file against it and aborts the install on a single mismatch. On 2026-09-19
@@ -738,6 +739,8 @@ if group "installer"; then
     exits "start.sh refuses ambiguous $_flag" 2 bash "$ROOT/start.sh" "$_flag" --dry-run
   done
   exits "an unknown flag stops before installation" 2 bash "$ROOT/start.sh" --nonsense --dry-run
+  check  "an update through start.sh keeps the state in ~/.chewbacca" bash "$ROOT/tests/start_carry_state.sh"
+  check  "setup links every tool Kyber.app runs from ~/.local/bin" bash "$ROOT/tests/kyber_tools_linked.sh"
   # --version used to silently mean "pin to this tag", so it ate the next
   # argument and never printed a version.
   check  "start.sh --version prints a version" bash -c "

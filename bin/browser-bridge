@@ -59,17 +59,41 @@ PORT = int(os.environ.get("CHEWBACCA_BRIDGE_PORT", "8765"))
 LOG = pathlib.Path.home() / ".chewbacca" / "logs" / "browser-bridge.log"
 USERSCRIPT = pathlib.Path(__file__).resolve().parent.parent / "crafts" / "google-ai-bridge.user.js"
 
-# First words that may run without a prompt. Read: safe to run, and useful to a
-# model driving a build. Anything that deletes, escalates, downloads or writes
-# outside the project is deliberately absent, including rm, sudo, curl and dd.
+# First words that may run without a prompt: they read, or write only inside
+# the project. Text reaching this bridge comes off a web page, so nothing here
+# may run code the page chooses.
+#
+# 2026-10-05: a review found this list held python3, node, npx, npm, pip3,
+# swift, make, env, find, sed, awk, cp, mv, chewie and chewbacca. Each of those
+# runs arbitrary code or writes anywhere (`python3 -c`, `env <anything>`,
+# `find -exec`, sed's `e` command, awk's system(), `chewie run` is AppleScript,
+# `chewbacca uninstall`), so one injected line got the whole Mac and the
+# first-word check below decided nothing. They now need --allow, which the
+# person watching the bridge types deliberately, as the docstring intended.
 ALLOW = {
-    "ls", "pwd", "cat", "head", "tail", "wc", "grep", "find", "file", "stat",
-    "echo", "date", "which", "whoami", "env", "du", "df",
-    "git", "npm", "npx", "node", "python3", "pip3", "swift", "make",
-    "chewbacca", "chewie", "backlog", "coursework", "people", "scars",
-    "method", "list-audit", "doctor.sh", "ai-scan", "slop-check", "prose-check",
-    "mkdir", "touch", "cp", "mv", "diff", "sort", "uniq", "sed", "awk", "jq",
+    "ls", "pwd", "cat", "head", "tail", "wc", "grep", "file", "stat",
+    "echo", "date", "which", "whoami", "du", "df",
+    "diff", "sort", "uniq", "jq", "mkdir", "touch",
+    "backlog", "coursework", "scars", "method", "list-audit",
+    "ai-scan", "slop-check", "prose-check",
 }
+
+# git, but only subcommands that read, and none of the options that run a
+# program or write a file wherever they are pointed.
+GIT_READ = {"status", "diff", "log", "show", "branch", "rev-parse", "ls-files", "blame"}
+GIT_REFUSED_PREFIXES = ("-c", "--config-env", "--exec-path", "--output", "--upload-pack",
+                        "--receive-pack", "--ext-diff", "--textconv", "-o")
+
+
+def git_refusal(argv: list[str]) -> str | None:
+    """Why a git command is refused, or None. A read subcommand must come first."""
+    if len(argv) < 2 or argv[1] not in GIT_READ:
+        return f"only git {', '.join(sorted(GIT_READ))} run without --allow git"
+    for arg in argv[1:]:
+        if arg.startswith(GIT_REFUSED_PREFIXES):
+            return f"git option {arg.split('=')[0]} can run a program or write a file"
+    return None
+
 
 TOKEN = secrets.token_urlsafe(24)
 _recent: list[str] = []
@@ -112,7 +136,13 @@ def run(command: str, extra_allow: set[str]) -> dict:
         return {"ok": False, "output": "empty command"}
 
     head = pathlib.Path(argv[0]).name
-    if head not in ALLOW and head not in extra_allow:
+    if head == "git" and head not in extra_allow:
+        why = git_refusal(argv)
+        if why:
+            log(f"REFUSED {command}")
+            print(f"  refused: {why}", flush=True)
+            return {"ok": False, "output": f"REFUSED: {why}."}
+    elif head not in ALLOW and head not in extra_allow:
         log(f"REFUSED {command}")
         print(f"  refused: {head}  (add with --allow {head!r} if you meant it)", flush=True)
         return {

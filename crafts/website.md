@@ -100,9 +100,27 @@ folded to one token and flag any shared run of eight words.
   cards" by class substring hid two figures, and the crop said they had
   vanished. Confirm a surprising frame without the probe.
 
+## Ambition is measured too, because honest and dull still fails
+
+On 2026-10-04 two rebuilt sites passed every check here, carried no false
+claim, and Caleb called them "infinitely more ugly and boring" than the
+reference. The brief had demanded honesty and restraint and never demanded
+spectacle, so the builders produced well-sourced essays. `site-gate story`
+measured the difference: the reference is 52% figure with motion on 19 of 19
+screens; the essays were 4% and 0% figure, with motion on 8 and 0 screens.
+Words per screen did not separate them.
+
+So every site needs a **scroll narrative**: one set of objects that IS the
+story and changes state as you scroll (theirs: a wall of runs, nine light up
+as failures, the wall breaks into diamonds, they land on a lattice that
+becomes the product). Plus parallax depth in the hero, a pinned section, and
+a figure on most screens. `site-gate story` exits 1 under 0.35 figure share or
+under 60% of screens with scroll-linked motion. A restraint rule never
+overrides this; restraint applies to colour and claims, not to the craft.
+
 ## Done means
 
-`site-gate check <url>` exits 0 at 1440 and 390: no console errors, no
+`site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no
 horizontal scroll, no dead links, every control changes on hover or focus,
 nothing infinite under reduced motion. `site-gate idle` shows the ambient
 layer you planned. Every subpage you link exists. Then look at it beside the

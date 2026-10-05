@@ -10,13 +10,17 @@ crafts/website.md. Prose does not fire, so this is the half that does.
     site-gate check <url> [<url>...]   exit 1 on any failure below
                                         (write url@404 for a page meant to 404)
     site-gate idle <url> [--ref <url>] what moves while nobody touches it
+    site-gate story <url>...           exit 1 if the page is an essay: figure
+                                       share under 0.35, or under 60% of
+                                       screens with scroll-linked motion
 
 check, at 1440x900 and 390x844, on every url given:
     console errors and uncaught exceptions          none allowed
     horizontal scroll at 390                        none allowed
     dead controls: href="#", "", javascript:,
       a same-page #anchor with no target, a link
-      or button with no accessible name             none allowed
+      or button with no accessible name, or a
+      control whose text matches its background     none allowed
     same-origin links that answer 4xx/5xx           none allowed
     a visible control that changes nothing on
       hover AND nothing on keyboard focus, on
@@ -71,6 +75,20 @@ CONTROLS = r"""(max) => {
     // purpose (the marquee on 2026-10-03): unnamed there is correct.
     const hiddenCopy = e.closest('[aria-hidden="true"]') && e.getAttribute('tabindex') === '-1';
     if (!name && !hiddenCopy && ['a', 'button'].includes(tag)) dead.push(tag + ' with no accessible name: ' + e.outerHTML.slice(0, 80));
+  }
+  // Text the same colour as what it sits on. A specificity slip blanked the
+  // TTS Join button on 2026-10-04 and every other check passed it.
+  const rgb = s => (s.match(/[\d.]+/g) || []).map(Number);
+  const lum = ([r, g, b]) => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
+  const bgOf = el => { for (let n = el; n; n = n.parentElement) { const c = rgb(getComputedStyle(n).backgroundColor);
+      if (c.length >= 3 && (c.length < 4 || c[3] > 0.5)) return c; } return [255, 255, 255]; };
+  for (const e of all.filter(vis)) {
+    const txt = (e.innerText || '').trim();
+    if (!txt) continue;
+    const L1 = lum(rgb(getComputedStyle(e).color)), L2 = lum(bgOf(e));
+    const ratio = (Math.max(L1, L2) + 0.05) / (Math.min(L1, L2) + 0.05);
+    if (ratio < 1.5) dead.push(e.tagName.toLowerCase() + ' "' + txt.slice(0, 30) + '" text is invisible on its background (contrast ' + ratio.toFixed(2) + ')');
   }
   const links = [...new Set(all.filter(e => e.tagName === 'A' && e.href && !e.getAttribute('href').startsWith('#')).map(e => e.href))];
   const probe = all.filter(vis).filter(e => !e.disabled).slice(0, max);
@@ -189,10 +207,77 @@ def idle(pw, url, ys):
     return rows
 
 
+
+STORY = r"""() => {
+  const W = innerWidth, H = innerHeight;
+  const inView = r => r.bottom > 0 && r.top < H && r.right > 0 && r.left < W && r.width > 0 && r.height > 0;
+  const shown = e => { const c = getComputedStyle(e); return c.visibility !== 'hidden' && c.display !== 'none' && +c.opacity > 0.05; };
+  // words: text nodes in view
+  let words = 0;
+  const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n; (n = tw.nextNode());) {
+    const el = n.parentElement; if (!el || !shown(el) || /^(SCRIPT|STYLE|NOSCRIPT)$/.test(el.tagName)) continue;
+    const r = el.getBoundingClientRect(); if (!inView(r)) continue;
+    words += (n.textContent.match(/\S+/g) || []).length;
+  }
+  // figure area: union-ish (clipped boxes, capped at the viewport) of canvas, svg, img, video
+  let area = 0;
+  for (const e of document.querySelectorAll('canvas, svg, img, video')) {
+    if (e.closest('svg') && e.tagName.toLowerCase() === 'svg' && e.parentElement.closest('svg')) continue;
+    if (!shown(e)) continue; const r = e.getBoundingClientRect(); if (!inView(r)) continue;
+    if (r.width < 24 || r.height < 24) continue;   // icons are not figures
+    area += (Math.min(r.right, W) - Math.max(r.left, 0)) * (Math.min(r.bottom, H) - Math.max(r.top, 0));
+  }
+  return { words, figure: Math.min(1, area / (W * H)) };
+}"""
+
+RATES = r"""(dy) => {
+  // elements whose screen position does not move by exactly -dy: pinned, parallax, scrubbed
+  const out = [];
+  for (const e of document.querySelectorAll('body *')) {
+    const r = e.getBoundingClientRect();
+    if (r.width < 40 || r.height < 40 || r.bottom < 0 || r.top > innerHeight) continue;
+    out.push([e, r.top]);
+  }
+  window.__sgRates = out; return out.length;
+}"""
+
+
+def story(pw, url):
+    b = launch(pw); pg = b.new_page(viewport={"width": 1440, "height": 900})
+    pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(3000)
+    total = pg.evaluate("document.documentElement.scrollHeight")
+    rows = []
+    for y in range(0, max(1, total - 900), 900):
+        pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(1500)
+        s = pg.evaluate(STORY)
+        pg.evaluate(RATES, 120)
+        pg.evaluate(f"scrollTo(0,{y + 120})"); pg.wait_for_timeout(1500)
+        moved = pg.evaluate("""() => { let n = 0; for (const [e, top] of window.__sgRates) {
+            const d = e.getBoundingClientRect().top - top; if (Math.abs(d + 120) > 12) n++; } return n; }""")
+        rows.append({"y": y, **s, "off_rate": moved})
+    b.close()
+    n = len(rows) or 1
+    summary = {
+        "screens": len(rows),
+        "words_per_screen": round(sum(r["words"] for r in rows) / n),
+        "figure_share": round(sum(r["figure"] for r in rows) / n, 2),
+        "screens_with_motion": sum(1 for r in rows if r["off_rate"] >= 3),
+        "screens_over_80_words": sum(1 for r in rows if r["words"] > 80),
+    }
+    return rows, summary
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check"); c.add_argument("urls", nargs="+"); c.add_argument("--json", action="store_true")
+    s = sub.add_parser("story"); s.add_argument("urls", nargs="+")
+    # Calibrated 2026-10-04: uselemma.ai 0.52 figure share and motion on
+    # 19 of 19 screens; the TTS and T Combinator rebuild Caleb called "ugly
+    # and boring" measured 0.04 / 0.00 figure and 8 / 0 screens of motion.
+    # Words per screen did NOT separate them (Lemma 137, TTS 161, TC 104).
+    s.add_argument("--min-figure", type=float, default=0.35)
+    s.add_argument("--min-motion", type=float, default=0.6)
     i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
     i.add_argument("--ys", help="comma separated scroll positions; default every 900px")
     a = ap.parse_args()
@@ -211,6 +296,17 @@ def main():
                     for f in fails:
                         print(f"        {f}")
                 print(f"site-gate: {bad} problem(s) across {len(out)} page(s)")
+            sys.exit(1 if bad else 0)
+        if a.cmd == "story":
+            bad = 0
+            for u in a.urls:
+                rows, summ = story(pw, u)
+                motion = summ["screens_with_motion"] / max(1, summ["screens"])
+                ok = summ["figure_share"] >= a.min_figure and motion >= a.min_motion
+                bad += not ok
+                print(f"{'ok  ' if ok else 'FAIL'}  {u} {json.dumps(summ)}")
+                if not ok:
+                    print(f"        needs figure share >= {a.min_figure} and motion on >= {a.min_motion:.0%} of screens")
             sys.exit(1 if bad else 0)
         ys = [int(v) for v in a.ys.split(",")] if a.ys else None
         mine = idle(pw, a.url, ys)

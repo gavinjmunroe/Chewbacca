@@ -179,7 +179,7 @@ if group "site-gate"; then
     check  "bad page exits 1" test "$SGRC" -eq 1
     for needle in "horizontal scroll" 'href="#"' "missing #nowhere" "gone.html answered 404" \
                   "no hover and no focus state: BUTTON Inert" "no accessible name" "planted failure" \
-                  "runs under reduced motion"; do
+                  "runs under reduced motion" '"Ghost" text is invisible'; do
       check "bad page flags: $needle" grep -qF -- "$needle" "$TMP/sg.out"
     done
     exits  "clean page passes" 0 "$ROOT/bin/site-gate" check "$SG/good.html"

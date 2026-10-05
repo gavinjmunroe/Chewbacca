@@ -223,6 +223,17 @@ A metaphor stays scenery and never carries meaning on its own. Write the copy
 as one document, `docs/COPY-<site>.md`, by one author, and have builders
 implement it verbatim.
 
+**No hard cuts between sections.** Caleb, 2026-10-04: "There's no creative
+transitions between sections." Both sites had a beautiful pinned story, then
+stacked the sections after it like slides. Lemma never cuts: its bricks
+become diamonds, the diamonds the lattice, the lattice the mark. Gavin's site
+keeps one camera and a flight line from city to city.
+
+Every section hands off to the next through a shared object (a light trail
+that becomes a list's spine, a ground grid that flattens into a page, a sun
+that becomes a colour band). Each handoff is scroll-driven and reversible,
+checked at three points (before, middle, after).
+
 ## Done means
 
 `site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no

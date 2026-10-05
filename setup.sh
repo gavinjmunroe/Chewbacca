@@ -1684,6 +1684,12 @@ _register("PostToolUse", hooks_dir + "/prose-guard.sh", timeout=20,
 # The untrusted-content rule, checked instead of hoped for. A page, a text or a
 # mail body that addresses the agent gets its excerpt put in front of the model
 # with the rule attached. Warns, never blocks. See the hook for the tool list.
+_register("PostToolUse", hooks_dir + "/clay-reply-guard.sh", timeout=5,
+          matcher="Bash",
+          status="Checking campaign replies are read as text, not as a category...")
+
+# Above: an analytics reply category is not a reply. On 2026-10-05 "Interested"
+# was a canned apply-on-our-site redirect and got reported as a lead.
 _register("PostToolUse", hooks_dir + "/untrusted-screen.sh", timeout=15,
           matcher="WebFetch|Bash|mcp__claude-in-chrome__.*|mcp__plugin_playwright_playwright__.*",
           status="Screening what was just read for instructions aimed at the agent...")

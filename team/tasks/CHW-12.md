@@ -1,16 +1,16 @@
 ---
 id: CHW-12
 title: UI/UX research, components and workflow frameworks
-status: done
+status: inbox
 owner: 
 priority: medium
 due: 
 labels: backlog, next
 done_when: Inventory research/read/test coverage and render one multi-step workflow across desktop and mobile against explicit design constraints
-proof: https://github.com/calebnewtonusc/Chewbacca/commit/10f8142fa99b83374bacb72ae2b4553f8b29ddc3
+proof: 
 source: BACKLOG.md CB-5
 created: 2026-10-04
-updated: 2026-10-05
+updated: 2026-10-04
 ---
 
 Backlog status: open.
@@ -20,4 +20,4 @@ Depends on: CB-51
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-5
-- 2026-10-05 Caleb: commit 10f8142 feat: team board in Linear's system with an inbox, and commits that move tasks
+- 2026-10-04 Caleb: undid a false link: commit 10f8142 only described the sync feature

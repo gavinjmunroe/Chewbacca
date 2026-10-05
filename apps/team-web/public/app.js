@@ -1,8 +1,18 @@
 // Board client. Every string from a task goes into the page through
 // textContent, never innerHTML: titles, comments and notes are typed by
 // teammates and commits, and the only markup set by string is the fixed icons.
-const COLUMNS = ["backlog", "todo", "in_progress", "in_review", "done"];
+const BOARD_COLUMNS = ["backlog", "todo", "in_progress", "in_review", "done"];
+const LIST_ORDER = [
+  "in_progress",
+  "in_review",
+  "todo",
+  "backlog",
+  "inbox",
+  "done",
+  "canceled",
+];
 const LABEL = {
+  inbox: "Inbox",
   backlog: "Backlog",
   todo: "Todo",
   in_progress: "In progress",
@@ -17,34 +27,86 @@ const PRIORITY_LABEL = {
   low: "Low",
   none: "No priority",
 };
+// Inbox items imported from BACKLOG.md carry their section as a label; grouping
+// by it keeps a 130-item inbox scannable instead of one undifferentiated wall.
+const INBOX_GROUPS = [
+  ["os", "OS handoff"],
+  ["now", "Now"],
+  ["next", "Next"],
+  ["verify", "Verification gaps"],
+  ["blocked", "Blocked"],
+  ["deferred", "Deferred"],
+];
 // 10s keeps a CLI edit visible on the board before anyone notices a lag, and
 // costs one GitHub listing call per open tab per poll: 360 an hour, well inside
 // the 5,000 an hour each signed-in token gets.
 const POLL_MS = 10000;
+
 const ICON = {
-  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
-  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
-  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>',
-  activity:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
-  link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>',
+  plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
+  x: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+  chev: '<svg class="chev" viewBox="0 0 10 10" fill="currentColor"><path d="M1 3h8L5 8z"/></svg>',
+  inbox:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2 9l2-6h8l2 6v4H2z"/><path d="M2 9h3.5l1 1.5h3L10.5 9H14"/></svg>',
+  me: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="6" r="2.6"/><path d="M3 13.5c.8-2.4 2.7-3.5 5-3.5s4.2 1.1 5 3.5" stroke-linecap="round"/></svg>',
+  list: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4h10M3 8h10M3 12h10"/></svg>',
+  board:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="3.5" height="10" rx="1"/><rect x="6.25" y="3" width="3.5" height="7" rx="1"/><rect x="10.5" y="3" width="3.5" height="5" rx="1"/></svg>',
+  pulse:
+    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8h3l2-4.5 3 9 2-4.5h3"/></svg>',
   github:
-    '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .5Z"/></svg>',
+    '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 .3a8 8 0 0 0-2.5 15.6c.4 0 .5-.2.5-.4v-1.4c-2.2.5-2.7-1-2.7-1-.4-.9-.9-1.2-.9-1.2-.7-.5.1-.5.1-.5.8.1 1.2.8 1.2.8.7 1.3 1.9.9 2.4.7 0-.5.3-.9.5-1.1-1.8-.2-3.6-.9-3.6-4 0-.9.3-1.6.8-2.1-.1-.2-.4-1 .1-2.1 0 0 .7-.2 2.2.8a7.6 7.6 0 0 1 4 0c1.5-1 2.2-.8 2.2-.8.5 1.1.2 1.9.1 2.1.5.5.8 1.2.8 2.1 0 3.1-1.9 3.8-3.6 4 .3.3.6.8.6 1.5v2.2c0 .2.1.5.6.4A8 8 0 0 0 8 .3Z"/></svg>',
 };
+
+function statusIcon(status) {
+  const s = '<svg viewBox="0 0 14 14" width="14" height="14" fill="none">';
+  const ring = (color, dash = "") =>
+    `<circle cx="7" cy="7" r="5.5" stroke="${color}" stroke-width="1.5" ${dash}/>`;
+  const map = {
+    inbox: `${s}${ring("#62666d", 'stroke-dasharray="1.6 1.6"')}</svg>`,
+    backlog: `${s}${ring("#8a8f98", 'stroke-dasharray="2.2 1.6"')}</svg>`,
+    todo: `${s}${ring("#d0d6e0")}</svg>`,
+    in_progress: `${s}${ring("#f2c94c")}<path d="M7 3.5a3.5 3.5 0 0 1 0 7z" fill="#f2c94c"/></svg>`,
+    in_review: `${s}${ring("#4cb782")}<path d="M7 3.5a3.5 3.5 0 1 1-3.5 3.5H7z" fill="#4cb782"/></svg>`,
+    done: `${s}<circle cx="7" cy="7" r="6.25" fill="#5e6ad2"/><path d="M4.4 7.2l1.8 1.8 3.5-3.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    canceled: `${s}<circle cx="7" cy="7" r="6.25" fill="#62666d"/><path d="M5 5l4 4M9 5L5 9" stroke="#0f1011" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+  };
+  return map[status] || map.todo;
+}
+
+function priorityIcon(p) {
+  if (p === "urgent")
+    return '<svg viewBox="0 0 14 14" width="14" height="14"><rect x="1" y="1" width="12" height="12" rx="3" fill="#eb5757"/><path d="M7 4v3.6" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="10" r=".9" fill="#fff"/></svg>';
+  const on = { high: 3, medium: 2, low: 1 }[p] || 0;
+  if (!on)
+    return '<svg viewBox="0 0 14 14" width="14" height="14"><path d="M2.5 7h2M6 7h2M9.5 7h2" stroke="#62666d" stroke-width="1.4" stroke-linecap="round"/></svg>';
+  const bar = (i, h) =>
+    `<rect x="${1.5 + i * 4}" y="${12 - h}" width="3" height="${h}" rx="1" fill="${i < on ? "#d0d6e0" : "#34343a"}"/>`;
+  return `<svg viewBox="0 0 14 14" width="14" height="14">${bar(0, 4)}${bar(1, 7)}${bar(2, 10)}</svg>`;
+}
 
 const state = {
   me: null,
   board: null,
-  filter: "all",
+  view: "inbox",
+  person: null,
+  label: null,
   query: "",
-  tab: "todo",
+  layout: "list",
   feedOpen: false,
   feed: [],
   openId: null,
   dirty: false,
   error: null,
   synced: true,
+  closed: {},
 };
+try {
+  state.layout = localStorage.getItem("team.layout") || "list";
+  state.closed = JSON.parse(localStorage.getItem("team.closed") || "{}");
+} catch {
+  /* private mode: defaults are fine */
+}
 const app = document.getElementById("app");
 
 // ---------- helpers ----------
@@ -54,7 +116,10 @@ function el(tag, attrs = {}, ...children) {
   for (const [k, v] of Object.entries(attrs)) {
     if (v === undefined || v === null || v === false) continue;
     if (k === "class") node.className = v;
-    else if (k === "icon") { if (Object.hasOwn(ICON, v)) node.insertAdjacentHTML("afterbegin", ICON[v]); }
+    else if (k === "icon") {
+      if (Object.hasOwn(ICON, v))
+        node.insertAdjacentHTML("afterbegin", ICON[v]);
+    } else if (k === "svg") node.insertAdjacentHTML("afterbegin", v);
     else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
     else if (k === "value") node.value = v;
     else node.setAttribute(k, v === true ? "" : v);
@@ -63,6 +128,17 @@ function el(tag, attrs = {}, ...children) {
     if (c !== null && c !== undefined && c !== false)
       node.append(c instanceof Node ? c : document.createTextNode(String(c)));
   return node;
+}
+
+function save(key, value) {
+  try {
+    localStorage.setItem(
+      key,
+      typeof value === "string" ? value : JSON.stringify(value),
+    );
+  } catch {
+    /* private mode */
+  }
 }
 
 async function api(path, options = {}) {
@@ -93,68 +169,49 @@ function toast(message, isError = false) {
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
     t.hidden = true;
-  }, 3200);
+  }, 3000);
 }
 
-function hue(name) {
-  let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  return h;
+function member(name) {
+  return state.board?.members.find((m) => m.name === name);
 }
 
-function avatar(name, size = "") {
-  if (!name)
-    return el("span", { class: `avatar none ${size}`, title: "Unassigned" });
-  const a = el(
+function avatar(name) {
+  if (!name) return el("span", { class: "avatar none", title: "Unassigned" });
+  const gh = member(name)?.github;
+  if (gh)
+    return el(
+      "span",
+      { class: "avatar", title: name },
+      el("img", {
+        src: `https://avatars.githubusercontent.com/${encodeURIComponent(gh)}?size=40`,
+        alt: "",
+      }),
+    );
+  return el(
     "span",
-    { class: `avatar ${size}`, title: name },
+    { class: "avatar", title: name },
     name.slice(0, 1).toUpperCase(),
   );
-  a.style.background = `hsl(${hue(name)} 70% 70%)`;
-  return a;
 }
 
-function dueTag(task) {
+function dueText(task) {
   if (!task.due) return null;
-  const today = state.board.today;
   const closed = task.status === "done" || task.status === "canceled";
-  const soon = new Date(`${today}T00:00`);
-  soon.setDate(soon.getDate() + 2);
-  const cls = closed
-    ? ""
-    : task.due < today
-      ? " overdue"
-      : new Date(`${task.due}T00:00`) <= soon
-        ? " soon"
-        : "";
+  const late = !closed && task.due < state.board.today;
   const label = new Date(`${task.due}T00:00`).toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
   });
   return el(
     "span",
-    {
-      class: `tag${cls}`,
-      icon: "cal",
-      title: cls === " overdue" ? "Overdue" : "Due",
-    },
+    { class: `due${late ? " late" : ""}`, title: late ? "Overdue" : "Due" },
     label,
   );
 }
 
-function prio(p) {
-  if (!p || p === "none") return null;
-  return el(
-    "span",
-    {
-      class: `prio p-${p}`,
-      title: PRIORITY_LABEL[p],
-      "aria-label": PRIORITY_LABEL[p],
-    },
-    el("i"),
-    el("i"),
-    el("i"),
-  );
+function labelPill(l) {
+  return el("span", { class: "label" }, el("i"), l);
 }
 
 function ago(iso) {
@@ -165,25 +222,41 @@ function ago(iso) {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-function visibleTasks() {
+function inView(t, { ignoreLabel = false } = {}) {
+  if (state.view === "inbox" && t.status !== "inbox") return false;
+  if (
+    state.view === "mine" &&
+    (t.owner !== state.me.member || t.status === "canceled")
+  )
+    return false;
+  if (
+    state.view === "active" &&
+    !["todo", "in_progress", "in_review"].includes(t.status)
+  )
+    return false;
+  if (state.view === "person" && t.owner !== state.person) return false;
+  if (state.view !== "inbox" && t.status === "inbox" && state.view !== "all")
+    return false;
+  if (!ignoreLabel && state.label && !t.labels.includes(state.label)) return false;
   const q = state.query.trim().toLowerCase();
-  return state.board.tasks.filter((t) => {
-    if (state.filter === "unassigned" && t.owner) return false;
-    if (
-      state.filter !== "all" &&
-      state.filter !== "unassigned" &&
-      t.owner !== state.filter
-    )
-      return false;
-    if (
-      q &&
-      !`${t.id} ${t.title} ${t.owner} ${t.labels.join(" ")}`
-        .toLowerCase()
-        .includes(q)
-    )
-      return false;
-    return true;
-  });
+  if (
+    q &&
+    !`${t.id} ${t.title} ${t.owner} ${t.labels.join(" ")} ${t.source}`
+      .toLowerCase()
+      .includes(q)
+  )
+    return false;
+  return true;
+}
+
+function viewTitle() {
+  return {
+    inbox: "Inbox",
+    mine: "My tasks",
+    active: "Active",
+    all: "All tasks",
+    person: state.person,
+  }[state.view];
 }
 
 // ---------- data ----------
@@ -222,11 +295,13 @@ async function patch(id, changes) {
   Object.assign(task, changes);
   render();
   try {
-    const saved = await api(`/api/tasks/${id}`, {
-      method: "PATCH",
-      body: JSON.stringify(changes),
-    });
-    Object.assign(task, saved);
+    Object.assign(
+      task,
+      await api(`/api/tasks/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(changes),
+      }),
+    );
     state.board.version = "local";
     render();
     loadFeed();
@@ -239,24 +314,37 @@ async function patch(id, changes) {
   }
 }
 
-// ---------- views ----------
+// ---------- shell ----------
 
 function render() {
   if (!state.me) return renderSignIn();
   if (!state.board) {
     app.replaceChildren(
-      header(),
-      state.error ? errorBanner() : skeletonBoard(),
+      el(
+        "div",
+        { class: "boot" },
+        state.error ? errorBanner() : "Loading the board",
+      ),
     );
     return;
   }
-  const layout = el(
-    "div",
-    { class: "layout" },
-    el("div", { class: "main" }, filters(), tabs(), boardView()),
-    feedPanel(),
+  app.replaceChildren(
+    el(
+      "div",
+      { class: "shell" },
+      sidebar(),
+      el(
+        "main",
+        { class: "main" },
+        mobileNav(),
+        topBar(),
+        labelChips(),
+        body(),
+      ),
+    ),
   );
-  app.replaceChildren(header(), layout);
+  if (state.feedOpen) document.body.append(feedPanel());
+  else document.getElementById("feed")?.remove();
   if (state.openId) renderDrawer();
 }
 
@@ -267,64 +355,163 @@ function renderSignIn() {
       { class: "signin" },
       el(
         "div",
-        { class: "signin-card" },
-        el("div", { class: "mark" }, "C"),
-        el("h1", {}, "Chewbacca team board"),
+        { class: "signin-box" },
+        el("div", { class: "word" }, "Chewbacca"),
+        el("h1", {}, "Team board"),
         el(
           "p",
           {},
-          "Who's on what, and what's due. Every task lives in the Chewbacca repo, so the terminal and this page show the same board.",
+          "Every task is a file in the Chewbacca repo. The team CLI and this page read the same files, so a change in one shows up in the other.",
         ),
         el(
           "a",
-          {
-            class: "btn btn-primary btn-wide",
-            href: "/auth/login",
-            icon: "github",
-          },
-          "Sign in with GitHub",
+          { class: "btn btn-inverse", href: "/auth/login", icon: "github" },
+          "Continue with GitHub",
         ),
+        el("p", { class: "fine" }, "For anyone with write access to the repo."),
       ),
     ),
   );
 }
 
-function header() {
+function go(view, extra = {}) {
+  Object.assign(state, { view, person: null, label: null }, extra);
+  render();
+}
+
+function sidebar() {
+  const tasks = state.board.tasks;
+  const count = (fn) => tasks.filter(fn).length;
+  const open = (t) => !["done", "canceled", "inbox"].includes(t.status);
+  const nav = (key, icon, label, n, extra) =>
+    el(
+      "button",
+      {
+        class: `nav${state.view === key && (!extra || state.person === extra.person) ? " on" : ""}`,
+        onclick: () => go(key, extra),
+      },
+      icon instanceof Node ? icon : el("span", { svg: ICON[icon] }),
+      el("span", {}, label),
+      n ? el("span", { class: "n" }, String(n)) : null,
+    );
+  return el(
+    "aside",
+    { class: "side" },
+    el(
+      "div",
+      { class: "ws" },
+      el("span", { class: "ws-mark" }, "C"),
+      "Chewbacca",
+    ),
+    nav(
+      "inbox",
+      "inbox",
+      "Inbox",
+      count((t) => t.status === "inbox"),
+    ),
+    nav(
+      "mine",
+      "me",
+      "My tasks",
+      count((t) => t.owner === state.me.member && open(t)),
+    ),
+    el("div", { class: "nav-label" }, "Team"),
+    nav(
+      "active",
+      "board",
+      "Active",
+      count((t) => ["todo", "in_progress", "in_review"].includes(t.status)),
+    ),
+    nav("all", "list", "All tasks", tasks.length),
+    el("div", { class: "nav-label" }, "People"),
+    ...state.board.members.map((m) =>
+      nav(
+        "person",
+        avatar(m.name),
+        m.name,
+        count((t) => t.owner === m.name && open(t)),
+        { person: m.name },
+      ),
+    ),
+    el(
+      "div",
+      { class: "side-foot" },
+      avatar(state.me.member),
+      el("span", { class: "who" }, state.me.member),
+      el("button", { class: "btn btn-ghost", onclick: signOut }, "Sign out"),
+    ),
+  );
+}
+
+function mobileNav() {
+  const chip = (key, label) =>
+    el(
+      "button",
+      {
+        class: `chip${state.view === key ? " on" : ""}`,
+        onclick: () => go(key),
+      },
+      label,
+    );
+  return el(
+    "nav",
+    { class: "mnav" },
+    chip("inbox", "Inbox"),
+    chip("mine", "Mine"),
+    chip("active", "Active"),
+    chip("all", "All"),
+  );
+}
+
+function topBar() {
+  const shown = state.board.tasks.filter(inView).length;
   const search = el("input", {
     class: "search",
     type: "search",
-    placeholder: "Search tasks",
+    placeholder: "Search",
     "aria-label": "Search tasks",
     value: state.query,
     oninput: (e) => {
       state.query = e.target.value;
-      renderBoardOnly();
+      document.getElementById("body").replaceWith(body());
     },
   });
   search.id = "search";
+  const layoutBtn = (key, icon, label) =>
+    el("button", {
+      class: `btn btn-ghost icon-btn${state.layout === key ? " on" : ""}`,
+      icon,
+      title: label,
+      "aria-label": label,
+      "aria-pressed": String(state.layout === key),
+      onclick: () => {
+        state.layout = key;
+        save("team.layout", key);
+        render();
+      },
+    });
   return el(
     "header",
-    { class: "top" },
+    { class: "bar" },
     el(
-      "div",
-      { class: "brand" },
-      el("span", { class: "mark" }, "C"),
-      "Team",
-      el("small", {}, "Chewbacca"),
+      "h1",
+      {},
+      viewTitle(),
+      " ",
+      el("span", { class: "count" }, String(shown)),
     ),
-    el("div", { class: "spacer" }),
-    el(
-      "span",
-      { class: `sync${state.synced ? "" : " stale"}`, id: "sync" },
-      state.synced ? "Live" : "Reconnecting",
-    ),
+    el("span", { class: "spacer" }),
+    state.synced
+      ? null
+      : el("span", { class: "sync-off", id: "sync" }, "Reconnecting"),
     search,
+    state.view === "inbox" ? null : layoutBtn("list", "list", "List"),
+    state.view === "inbox" ? null : layoutBtn("board", "board", "Board"),
     el("button", {
       class: "btn btn-ghost icon-btn",
-      icon: "activity",
+      icon: "pulse",
       title: "Recent activity",
       "aria-label": "Recent activity",
-      "aria-pressed": String(state.feedOpen),
       onclick: () => {
         state.feedOpen = !state.feedOpen;
         render();
@@ -336,102 +523,195 @@ function header() {
       {
         class: "btn btn-primary",
         icon: "plus",
-        onclick: openCreate,
         title: "New task (C)",
+        onclick: () => openCreate(),
       },
-      el("span", { class: "new-label" }, "New task ", el("kbd", {}, "C")),
-    ),
-    el(
-      "div",
-      { class: "me" },
-      state.me.avatar
-        ? el(
-            "span",
-            { class: "avatar sm" },
-            el("img", { src: state.me.avatar, alt: state.me.member }),
-          )
-        : avatar(state.me.member, "sm"),
-      el("button", { class: "btn btn-ghost", onclick: signOut }, "Sign out"),
+      "New task",
     ),
   );
 }
 
-function filters() {
-  const open = state.board.tasks.filter(
-    (t) => t.status !== "done" && t.status !== "canceled",
-  );
-  const chip = (key, label, count) =>
+function labelChips() {
+  const pool = state.board.tasks.filter((t) => inView(t, { ignoreLabel: true }));
+  const counts = {};
+  for (const t of pool)
+    for (const l of t.labels) counts[l] = (counts[l] || 0) + 1;
+  const labels = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 9);
+  if (!labels.length) return null;
+  return el(
+    "div",
+    { class: "chips" },
     el(
       "button",
       {
-        class: `chip${state.filter === key ? " on" : ""}`,
-        "aria-pressed": String(state.filter === key),
+        class: `chip${!state.label ? " on" : ""}`,
         onclick: () => {
-          state.filter = key;
+          state.label = null;
           render();
         },
       },
-      label,
-      el("span", { class: "count" }, String(count)),
-    );
-  return el(
-    "nav",
-    { class: "filters", "aria-label": "Filter by person" },
-    chip("all", "Everyone", open.length),
-    ...state.board.members.map((m) =>
-      chip(m.name, m.name, open.filter((t) => t.owner === m.name).length),
+      "All",
     ),
-    chip("unassigned", "Unassigned", open.filter((t) => !t.owner).length),
-  );
-}
-
-function tabs() {
-  return el(
-    "nav",
-    { class: "tabs", "aria-label": "Status" },
-    ...COLUMNS.map((s) =>
+    ...labels.map(([l, n]) =>
       el(
         "button",
         {
-          class: `chip${state.tab === s ? " on" : ""}`,
+          class: `chip${state.label === l ? " on" : ""}`,
           onclick: () => {
-            state.tab = s;
+            state.label = state.label === l ? null : l;
             render();
           },
         },
-        el("span", { class: `status-dot s-${s}` }),
-        LABEL[s],
+        l,
+        el("span", { class: "n" }, String(n)),
       ),
     ),
   );
 }
 
-function boardView() {
-  const tasks = visibleTasks();
-  const board = el("section", {
-    class: "board",
-    id: "board",
-    "aria-label": "Task board",
-  });
-  for (const status of COLUMNS) {
+function body() {
+  const tasks = state.board.tasks.filter(inView);
+  const node =
+    state.layout === "board" && state.view !== "inbox"
+      ? boardView(tasks)
+      : listView(tasks);
+  node.id = "body";
+  return node;
+}
+
+// ---------- list ----------
+
+function listView(tasks) {
+  const wrap = el("section", { "aria-label": "Tasks" });
+  if (!tasks.length) {
+    wrap.append(
+      el(
+        "div",
+        { class: "empty-state" },
+        el("h2", {}, state.view === "inbox" ? "Inbox zero" : "Nothing here"),
+        el(
+          "p",
+          {},
+          state.view === "inbox"
+            ? "Every imported item has been triaged into the team's statuses."
+            : "No tasks match this view.",
+        ),
+        el(
+          "button",
+          { class: "btn", icon: "plus", onclick: () => openCreate() },
+          "New task",
+        ),
+      ),
+    );
+    return wrap;
+  }
+  const groups =
+    state.view === "inbox"
+      ? [
+          ...INBOX_GROUPS.map(([key, name]) => [
+            `inbox:${key}`,
+            name,
+            tasks.filter(
+              (t) =>
+                t.labels.includes(key) &&
+                !INBOX_GROUPS.slice(
+                  0,
+                  INBOX_GROUPS.findIndex((g) => g[0] === key),
+                ).some(([k]) => t.labels.includes(k)),
+            ),
+          ]),
+          [
+            "inbox:other",
+            "Other",
+            tasks.filter(
+              (t) => !INBOX_GROUPS.some(([k]) => t.labels.includes(k)),
+            ),
+          ],
+        ]
+      : LIST_ORDER.map((s) => [
+          s,
+          LABEL[s],
+          tasks.filter((t) => t.status === s),
+        ]);
+  for (const [key, name, items] of groups) {
+    if (!items.length) continue;
+    const closed = !!state.closed[key];
+    const status = key.startsWith("inbox") ? "inbox" : key;
+    wrap.append(
+      el(
+        "button",
+        {
+          class: `group-head${closed ? " closed" : ""}`,
+          "aria-expanded": String(!closed),
+          onclick: () => {
+            state.closed[key] = !closed;
+            save("team.closed", state.closed);
+            render();
+          },
+        },
+        el("span", { svg: ICON.chev }),
+        el("span", { svg: statusIcon(status) }),
+        name,
+        el("span", { class: "n" }, String(items.length)),
+      ),
+    );
+    if (!closed) wrap.append(...items.map(row));
+  }
+  return wrap;
+}
+
+function row(t) {
+  return el(
+    "button",
+    {
+      class: `row${["done", "canceled"].includes(t.status) ? " closed" : ""}`,
+      "aria-label": `${t.id} ${t.title}`,
+      onclick: () => openTask(t.id),
+    },
+    el("span", {
+      svg: priorityIcon(t.priority),
+      title: PRIORITY_LABEL[t.priority || "none"],
+    }),
+    el("span", { class: "id" }, t.id),
+    el("span", { svg: statusIcon(t.status), title: LABEL[t.status] }),
+    el("span", { class: "title" }, t.title),
+    el(
+      "span",
+      { class: "meta" },
+      ...t.labels
+        .filter((l) => l !== "backlog")
+        .slice(0, 2)
+        .map(labelPill),
+    ),
+    dueText(t) || el("span"),
+    avatar(t.owner),
+  );
+}
+
+// ---------- board ----------
+
+function boardView(tasks) {
+  const board = el("section", { class: "board", "aria-label": "Task board" });
+  for (const status of BOARD_COLUMNS) {
     const items = tasks.filter((t) => t.status === status);
     const col = el(
       "div",
-      {
-        class: `col${state.tab === status ? " active" : ""}`,
-        "data-status": status,
-      },
+      { class: "col", "data-status": status },
       el(
         "div",
-        { class: `col-head s-${status}` },
-        el("span", { class: `status-dot s-${status}` }),
-        el("span", { class: "col-name" }, LABEL[status]),
-        el("span", { class: "count" }, String(items.length)),
+        { class: "col-head" },
+        el("span", { svg: statusIcon(status) }),
+        LABEL[status],
+        el("span", { class: "n" }, String(items.length)),
       ),
       el(
         "div",
         { class: "cards" },
-        items.length ? items.map(card) : emptyColumn(status),
+        items.length
+          ? items.map(card)
+          : el("div", { class: "col-empty" }, "No tasks"),
       ),
     );
     col.addEventListener("dragover", (e) => {
@@ -442,96 +722,56 @@ function boardView() {
     col.addEventListener("drop", (e) => {
       e.preventDefault();
       col.classList.remove("drop");
-      const id = e.dataTransfer.getData("text/plain");
-      const task = state.board.tasks.find((t) => t.id === id);
+      const task = state.board.tasks.find(
+        (t) => t.id === e.dataTransfer.getData("text/plain"),
+      );
       if (!task || task.status === status) return;
       if (status === "done" && !task.proof) {
-        openTask(id, { askProof: true });
+        openTask(task.id, { askProof: true });
         return;
       }
-      patch(id, { status });
+      patch(task.id, { status });
     });
     board.append(col);
   }
   return board;
 }
 
-function renderBoardOnly() {
-  const old = document.getElementById("board");
-  if (old) old.replaceWith(boardView());
-}
-
-function emptyColumn(status) {
-  const box = el(
-    "div",
-    { class: "empty" },
-    status === "done" ? "Nothing finished yet" : "Nothing here",
-  );
-  if (status === "todo" || status === "backlog")
-    box.append(
-      el(
-        "div",
-        {},
-        el(
-          "button",
-          { class: "btn", icon: "plus", onclick: () => openCreate(status) },
-          "Add a task",
-        ),
-      ),
-    );
-  return box;
-}
-
-function card(task) {
+function card(t) {
   const c = el(
     "button",
     {
-      class: `card${task.status === "done" ? " done" : ""}`,
+      class: "card",
       draggable: "true",
-      "aria-label": `${task.id} ${task.title}`,
-      onclick: () => openTask(task.id),
+      "aria-label": `${t.id} ${t.title}`,
+      onclick: () => openTask(t.id),
     },
     el(
       "div",
-      { class: "card-top" },
-      el("span", {}, task.id),
-      prio(task.priority),
+      { class: "top" },
+      el("span", { svg: priorityIcon(t.priority) }),
+      t.id,
+      avatar(t.owner),
     ),
-    el("div", { class: "card-title" }, task.title),
-    el(
-      "div",
-      { class: "card-meta" },
-      dueTag(task),
-      ...task.labels.slice(0, 3).map((l) => el("span", { class: "tag" }, l)),
-      avatar(task.owner, "sm"),
-    ),
+    el("div", { class: "title" }, t.title),
+    t.labels.length || t.due
+      ? el(
+          "div",
+          { class: "meta" },
+          dueText(t),
+          ...t.labels
+            .filter((l) => l !== "backlog")
+            .slice(0, 2)
+            .map(labelPill),
+        )
+      : null,
   );
   c.addEventListener("dragstart", (e) => {
-    e.dataTransfer.setData("text/plain", task.id);
+    e.dataTransfer.setData("text/plain", t.id);
     c.classList.add("dragging");
   });
   c.addEventListener("dragend", () => c.classList.remove("dragging"));
   return c;
-}
-
-function skeletonBoard() {
-  return el(
-    "section",
-    { class: "board" },
-    ...COLUMNS.map(() =>
-      el(
-        "div",
-        { class: "col" },
-        el("div", { class: "col-head" }, " "),
-        el(
-          "div",
-          { class: "cards" },
-          el("div", { class: "skeleton" }),
-          el("div", { class: "skeleton" }),
-        ),
-      ),
-    ),
-  );
 }
 
 function errorBanner() {
@@ -555,15 +795,21 @@ function errorBanner() {
 }
 
 function renderSync() {
+  const bar = document.querySelector(".bar");
   const s = document.getElementById("sync");
-  if (!s) return;
-  s.className = `sync${state.synced ? "" : " stale"}`;
-  s.textContent = state.synced ? "Live" : "Reconnecting";
+  if (state.synced) s?.remove();
+  else if (bar && !s)
+    bar
+      .querySelector(".spacer")
+      .after(el("span", { class: "sync-off", id: "sync" }, "Reconnecting"));
 }
 
+// ---------- activity ----------
+
 function feedPanel() {
+  document.getElementById("feed")?.remove();
   const panel = el("aside", {
-    class: `feed${state.feedOpen ? " open" : " hidden"}`,
+    class: "feed",
     id: "feed",
     "aria-label": "Recent activity",
   });
@@ -572,13 +818,27 @@ function feedPanel() {
 }
 
 function renderFeed() {
-  const panel = document.getElementById("feed");
-  if (panel) fillFeed(panel);
+  const p = document.getElementById("feed");
+  if (p) fillFeed(p);
 }
 
 function fillFeed(panel) {
   panel.replaceChildren(
-    el("h2", {}, "Recent activity"),
+    el(
+      "div",
+      { class: "feed-head" },
+      "Recent activity",
+      el("span", { class: "spacer" }),
+      el("button", {
+        class: "btn btn-ghost icon-btn",
+        icon: "x",
+        "aria-label": "Close",
+        onclick: () => {
+          state.feedOpen = false;
+          render();
+        },
+      }),
+    ),
     ...(state.feed.length
       ? state.feed.map((f) =>
           el(
@@ -587,10 +847,10 @@ function fillFeed(panel) {
             f.avatar
               ? el(
                   "span",
-                  { class: "avatar sm" },
-                  el("img", { src: f.avatar, alt: f.who }),
+                  { class: "avatar" },
+                  el("img", { src: f.avatar, alt: "" }),
                 )
-              : avatar(f.who, "sm"),
+              : avatar(f.who),
             el(
               "p",
               {},
@@ -601,13 +861,7 @@ function fillFeed(panel) {
             ),
           ),
         )
-      : [
-          el(
-            "p",
-            { class: "hint" },
-            "No changes yet. Edits from the board and the team CLI show up here.",
-          ),
-        ]),
+      : [el("p", { class: "hint", style: null }, "No changes yet.")]),
   );
 }
 
@@ -673,11 +927,13 @@ function renderDrawer() {
   const due = el("input", {
     class: "field",
     type: "date",
+    id: "f-due",
     value: task.due,
     "aria-label": "Due date",
   });
   const labels = el("input", {
     class: "field",
+    id: "f-labels",
     value: task.labels.join(", "),
     placeholder: "onboarding, desktop",
     "aria-label": "Labels",
@@ -714,8 +970,12 @@ function renderDrawer() {
     },
     task.notes,
   );
-  const saveHint = el("span", { class: "hint" }, "");
-  const save = el(
+  const saveHint = el(
+    "span",
+    { class: "hint" },
+    task.source ? `From ${task.source}` : "",
+  );
+  const saveBtn = el(
     "button",
     { class: "btn btn-primary", type: "button" },
     "Save",
@@ -757,7 +1017,7 @@ function renderDrawer() {
     quick({ priority: priority.value }),
   );
 
-  save.addEventListener("click", async () => {
+  saveBtn.addEventListener("click", async () => {
     const changes = {};
     if (title.value.trim() !== task.title) changes.title = title.value;
     if (due.value !== task.due) changes.due = due.value;
@@ -774,15 +1034,15 @@ function renderDrawer() {
       saveHint.textContent = "Nothing changed";
       return;
     }
-    if (changes.title === "") {
+    if (changes.title !== undefined && !changes.title.trim()) {
       title.focus();
       saveHint.textContent = "A task needs a title";
       return;
     }
-    save.disabled = true;
+    saveBtn.disabled = true;
     saveHint.textContent = "Saving";
     const ok = await patch(task.id, changes);
-    save.disabled = false;
+    saveBtn.disabled = false;
     state.dirty = !ok;
     if (ok) {
       state.askProof = false;
@@ -793,7 +1053,7 @@ function renderDrawer() {
 
   const comment = el("input", {
     class: "field",
-    placeholder: "Add a comment",
+    placeholder: "Leave a comment",
     "aria-label": "Comment",
     maxlength: "2000",
   });
@@ -824,14 +1084,7 @@ function renderDrawer() {
     ...[...task.activity].reverse().map((a) => {
       const m = /^(\S+) ([^:]+): (.*)$/.exec(a);
       return m
-        ? el(
-            "li",
-            {},
-            el("b", {}, m[2]),
-            " ",
-            m[3],
-            el("span", { class: "hint" }, ` · ${m[1]}`),
-          )
+        ? el("li", {}, el("b", {}, m[2]), " ", m[3], ` · ${m[1]}`)
         : el("li", {}, a);
     }),
   );
@@ -847,7 +1100,7 @@ function renderDrawer() {
     el(
       "div",
       { class: "drawer-head" },
-      el("span", { class: `status-dot s-${task.status}` }),
+      el("span", { svg: statusIcon(task.status) }),
       task.id,
       el("span", { class: "spacer" }),
       el("button", {
@@ -865,7 +1118,7 @@ function renderDrawer() {
         "div",
         { class: "props" },
         ...prop("Status", status),
-        ...prop("Owner", owner),
+        ...prop("Assignee", owner),
         ...prop("Priority", priority),
         ...prop("Due", due),
         ...prop("Labels", labels),
@@ -884,9 +1137,8 @@ function renderDrawer() {
                 href: task.proof,
                 target: "_blank",
                 rel: "noopener noreferrer",
-                icon: "link",
               },
-              " Open proof",
+              "Open proof",
             )
           : null,
       ),
@@ -908,17 +1160,18 @@ function renderDrawer() {
         { class: "btn btn-ghost", onclick: () => tryClose() },
         "Close",
       ),
-      save,
+      saveBtn,
     ),
   );
 
-  const root = el(
-    "div",
-    { id: "drawer-root" },
-    el("div", { class: "scrim", onclick: () => tryClose() }),
-    drawer,
+  document.body.append(
+    el(
+      "div",
+      { id: "drawer-root" },
+      el("div", { class: "scrim", onclick: () => tryClose() }),
+      drawer,
+    ),
   );
-  document.body.append(root);
   if (!state.askProof) title.focus({ preventScroll: true });
 }
 
@@ -929,24 +1182,24 @@ function tryClose() {
 
 // ---------- create ----------
 
-function openCreate(status = "todo") {
-  if (typeof status !== "string") status = "todo";
+function openCreate() {
   document.getElementById("dialog-root")?.remove();
+  const status = state.view === "inbox" ? "inbox" : "todo";
   const title = el("input", {
-    class: "field",
-    placeholder: "What needs doing",
+    class: "big",
+    placeholder: "Task title",
     "aria-label": "Title",
     maxlength: "200",
     required: true,
   });
   const owner = el(
     "select",
-    { class: "field", "aria-label": "Owner" },
+    { class: "field", "aria-label": "Assignee" },
     el("option", { value: "" }, "Unassigned"),
     ...state.board.members.map((m) => el("option", { value: m.name }, m.name)),
   );
-  if (state.filter !== "all" && state.filter !== "unassigned")
-    owner.value = state.filter;
+  if (state.view === "person") owner.value = state.person;
+  if (state.view === "mine") owner.value = state.me.member;
   const due = el("input", {
     class: "field",
     type: "date",
@@ -971,7 +1224,7 @@ function openCreate(status = "todo") {
     { class: "btn btn-primary", type: "submit" },
     "Create task",
   );
-  const hint = el("span", { class: "hint" }, `Lands in ${LABEL[status]}`);
+  const hint = el("span", { class: "hint" }, "");
   const close = () => document.getElementById("dialog-root")?.remove();
   const form = el(
     "form",
@@ -1009,8 +1262,9 @@ function openCreate(status = "todo") {
         }
       },
     },
+    el("div", { class: "crumb" }, `Chewbacca · New task in ${LABEL[status]}`),
     title,
-    el("div", { class: "row" }, owner, due, priority),
+    el("div", { class: "row3" }, owner, due, priority),
     doneWhen,
     el(
       "div",
@@ -1068,6 +1322,10 @@ document.addEventListener("keydown", (e) => {
     if (document.getElementById("dialog-root"))
       document.getElementById("dialog-root").remove();
     else if (state.openId) tryClose();
+    else if (state.feedOpen) {
+      state.feedOpen = false;
+      render();
+    }
     return;
   }
   if (typing || e.metaKey || e.ctrlKey || e.altKey || !state.board) return;

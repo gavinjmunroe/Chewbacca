@@ -14,4 +14,8 @@ handle so your edits on the web are logged under your name.
 
 A task moves to Done only with proof: a link, a video or a commit.
 
+Commits keep the board in sync: mention `CHW-12` in a commit message and it is logged on
+that task and moved to In progress; write `fixes CHW-12` and it is closed with the commit
+as proof. New work lands in the Inbox to be triaged; `team import` brings BACKLOG.md in.
+
 Built with Chewbacca

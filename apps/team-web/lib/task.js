@@ -104,3 +104,28 @@ export function idNumber(id) {
   const m = ID_PATTERN.exec(id || "");
   return m ? Number(m[1]) : 0;
 }
+
+// Commits -> tasks. tools/team.py (parse_commit_refs, apply_commit) is the other half.
+const TASK_REF = /\bCHW-(\d+)\b/gi;
+const CLOSING_REF = /\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s*:?\s+CHW-(\d+)\b/gi;
+
+export function parseCommitRefs(subject, body) {
+  if (subject.startsWith("team:") || subject.startsWith("Merge ")) return { refs: new Set(), closing: new Set() };
+  const text = `${subject}\n${body}`;
+  const refs = new Set([...text.matchAll(TASK_REF)].map((m) => `CHW-${Number(m[1])}`));
+  const closing = new Set([...text.matchAll(CLOSING_REF)].map((m) => `CHW-${Number(m[1])}`));
+  return { refs, closing };
+}
+
+export function applyCommit(task, sha, who, subject, url, isClosing, date) {
+  if (task.activity.some((a) => a.includes(`commit ${sha.slice(0, 7)}`))) return false;
+  task.activity.push(`${date} ${who}: commit ${sha.slice(0, 7)} ${oneLine(subject).slice(0, 160)}`);
+  if (isClosing && task.status !== "done") {
+    task.status = "done";
+    task.proof = task.proof || url;
+  } else if (["inbox", "backlog", "todo"].includes(task.status)) {
+    task.status = "in_progress";
+  }
+  task.updated = date;
+  return true;
+}

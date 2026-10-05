@@ -344,6 +344,86 @@ def update(repo, task_id, verb, apply=None, message=None, **changes):
     return result["task"]
 
 
+# ---------- commits -> tasks ----------
+
+# A commit that says "fixes CHW-12" closes the task with the commit as proof; any
+# other mention moves a not-started task to In progress. GitHub Actions can't do
+# this here (jobs refuse to start on this account's billing, 2026-10-04), so the
+# CLI and the web board each run it against the newest commits on main. Both are
+# idempotent: a commit already in a task's activity is never logged twice.
+TASK_REF = re.compile(r"\bCHW-(\d+)\b", re.I)
+CLOSING_REF = re.compile(r"\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s*:?\s+CHW-(\d+)\b", re.I)
+# How far back each sync looks. A busy day here was 94 commits (2026-09-20), so
+# 120 covers a full day of pushes between two syncs.
+LINK_WINDOW = 120
+
+
+def parse_commit_refs(subject, body):
+    """(referenced ids, closing ids) for one commit, or two empty sets for task commits."""
+    if subject.startswith("team:") or subject.startswith("Merge "):
+        return set(), set()
+    text = f"{subject}\n{body}"
+    refs = {f"{ID_PREFIX}-{int(n)}" for n in TASK_REF.findall(text)}
+    closing = {f"{ID_PREFIX}-{int(n)}" for n in CLOSING_REF.findall(text)}
+    return refs, closing
+
+
+def apply_commit(task, sha, who, subject, url, closing, date):
+    """Mutate one task for one commit. False when this commit is already logged on it."""
+    if any(f"commit {sha[:7]}" in a for a in task["activity"]):
+        return False
+    task["activity"].append(f"{date} {who}: commit {sha[:7]} {one_line(subject)[:160]}")
+    if closing and task["status"] != "done":
+        task["status"] = "done"
+        task["proof"] = task["proof"] or url
+    elif task["status"] in ("inbox", "backlog", "todo"):
+        task["status"] = "in_progress"
+    task["updated"] = date
+    return True
+
+
+def repo_web_url(repo):
+    url = repo.git("remote", "get-url", repo.remote, check=False).strip()
+    m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$", url)
+    return f"https://github.com/{m.group(1)}" if m else ""
+
+
+def link_commits(repo):
+    """Log recent commits onto the tasks they mention. Returns how many task updates landed."""
+    out = repo.git("log", f"-{LINK_WINDOW}", "--format=%H%x1f%an%x1f%ad%x1f%s%x1f%b%x1e", "--date=short",
+                   repo.ref, check=False)
+    commits = []
+    for rec in out.split("\x1e"):
+        parts = rec.strip("\n").split("\x1f")
+        if len(parts) < 5:
+            continue
+        sha, author, date, subject, body = parts[:5]
+        refs, closing = parse_commit_refs(subject, body)
+        if refs:
+            commits.append((sha, author, date, subject, refs, closing))
+    if not commits:
+        return 0
+    members = load_members(repo)
+    base = repo_web_url(repo)
+    result = {"n": 0}
+
+    def changes():
+        tasks = {t["id"]: t for t in repo.tasks()}
+        touched = set()
+        for sha, author, date, subject, refs, closing in reversed(commits):  # oldest first
+            who = next((m["name"] for m in members if author.lower() in
+                        {(m.get("name") or "").lower(), (m.get("github") or "").lower()}), author)
+            for tid in sorted(refs):
+                if tid in tasks and apply_commit(tasks[tid], sha, who, subject,
+                                                 f"{base}/commit/{sha}" if base else sha, tid in closing, date):
+                    touched.add(tid)
+        result["n"] = len(touched)
+        return {f"{TASK_DIR}/{tid}.md": render(tasks[tid]) for tid in touched}
+
+    repo.write_many(changes, "team: link commits to tasks")
+    return result["n"]
+
+
 # ---------- import ----------
 
 # Sections of BACKLOG.md that hold work still to do. Done and Dead are history,
@@ -483,6 +563,7 @@ def main(argv=None):
         e.add_argument(flag)
     f = sub.add_parser("feed"); f.add_argument("-n", type=int, default=20); f.add_argument("--json", action="store_true")
     o = sub.add_parser("open"); o.add_argument("id", nargs="?")
+    sub.add_parser("sync", help="log recent commits that mention a task onto it")
     ib = sub.add_parser("inbox"); ib.add_argument("--json", action="store_true")
     im = sub.add_parser("import", help="preview, then --apply, BACKLOG.md rows into the inbox")
     im.add_argument("file", nargs="?", default=str(ROOT / "BACKLOG.md")); im.add_argument("--apply", action="store_true")
@@ -494,6 +575,13 @@ def main(argv=None):
     try:
         repo.fetch()
         cmd = a.cmd or "board"
+        if not a.offline and cmd not in ("import", "unimport"):
+            try:
+                linked = link_commits(repo)
+                if linked:
+                    print(f"team: logged recent commits on {linked} task(s)", file=sys.stderr)
+            except TeamError as err:
+                print(f"team: commit sync skipped: {err}", file=sys.stderr)
         if cmd == "board":
             tasks = repo.tasks()
             print(json.dumps(tasks, indent=1) if getattr(a, "json", False) else board(tasks, getattr(a, "all", False)))
@@ -562,6 +650,8 @@ def main(argv=None):
                            repo.ref, "--", TASK_DIR, check=False)
             rows = [dict(zip(("sha", "when", "who", "what"), r.split("\t"))) for r in out.strip().split("\n") if r]
             print(json.dumps(rows, indent=1) if a.json else "\n".join(f"{r['when']}  {r['who']:<16} {r['what']}" for r in rows) or "No activity yet.")
+        elif cmd == "sync":
+            print("team: commits and tasks are in sync")
         elif cmd == "inbox":
             tasks = [t for t in repo.tasks() if t["status"] == "inbox"]
             print(json.dumps(tasks, indent=1) if a.json else f"Inbox: {len(tasks)}\n" + "\n".join(line(t) for t in tasks))

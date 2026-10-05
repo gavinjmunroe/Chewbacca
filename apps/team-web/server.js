@@ -23,6 +23,8 @@ import {
   idNumber,
   oneLine,
   parse,
+  parseCommitRefs,
+  applyCommit,
   render,
 } from "./lib/task.js";
 
@@ -356,6 +358,56 @@ async function updateTask(session, id, body, members) {
   throw httpError(409, "someone else is editing this task, try again");
 }
 
+// ---------- commits -> tasks ----------
+
+// Same job as link_commits in tools/team.py, run from the web side so an open
+// board keeps tasks in step with pushes even when nobody runs the CLI. GitHub
+// Actions would be the natural home, but jobs refuse to start on this account's
+// billing (2026-10-04). 30s between syncs: a push shows up on its task within a
+// poll or three, for one extra commits-API call per half minute.
+const LINK_EVERY_MS = 30000;
+let lastLink = 0;
+
+async function linkCommits(session) {
+  const r = await gh(session.token, `/repos/${REPO}/commits?sha=${BRANCH}&per_page=100`);
+  if (r.status !== 200 || !Array.isArray(r.json)) return 0;
+  const byTask = new Map();
+  for (const c of [...r.json].reverse()) {
+    const [subject, ...rest] = (c.commit?.message || "").split("\n");
+    const { refs, closing } = parseCommitRefs(subject, rest.join("\n"));
+    for (const id of refs) {
+      if (!byTask.has(id)) byTask.set(id, []);
+      byTask.get(id).push({ c, subject, closing: closing.has(id) });
+    }
+  }
+  if (!byTask.size) return 0;
+  const members = await readMembers(session.token);
+  let touched = 0;
+  for (const [id, commits] of byTask) {
+    const path = `/repos/${REPO}/contents/${TASK_DIR}/${id}.md`;
+    for (let attempt = 0; attempt < WRITE_TRIES; attempt++) {
+      const cur = await gh(session.token, `${path}?ref=${BRANCH}`);
+      if (cur.status !== 200) break;
+      const task = parse(unb64(cur.json.content));
+      if (task.id !== id) break;
+      let changed = false;
+      for (const { c, subject, closing } of commits) {
+        const login = c.author?.login || "";
+        const who = members.find((m) => login && (m.github || "").toLowerCase() === login.toLowerCase())?.name || c.commit.author?.name || login || "someone";
+        changed = applyCommit(task, c.sha, who, subject, c.html_url, closing, (c.commit.author?.date || "").slice(0, 10) || today()) || changed;
+      }
+      if (!changed) break;
+      const put = await gh(session.token, path, {
+        method: "PUT",
+        body: JSON.stringify({ message: `team: ${id} link commits`, content: b64(render(task)), sha: cur.json.sha, branch: BRANCH }),
+      });
+      if (put.status === 200) { touched++; break; }
+      if (put.status !== 409 && put.status !== 422) break;
+    }
+  }
+  return touched;
+}
+
 // ---------- http ----------
 
 function send(res, status, body, headers = {}) {
@@ -517,6 +569,10 @@ async function handle(req, res) {
       avatar: session.avatar,
     });
   if (url.pathname === "/api/board" && req.method === "GET") {
+    if (Date.now() - lastLink > LINK_EVERY_MS) {
+      lastLink = Date.now();
+      linkCommits(session).catch((err) => console.error(`team-web commit sync: ${err.message}`));
+    }
     const [board, config] = await Promise.all([
       listTasks(session.token),
       readJsonFile(session.token, "team/config.json", {}),

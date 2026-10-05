@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process";
 
 process.env.SESSION_SECRET = "test-secret-that-is-at-least-32-chars-long";
 const { seal, unseal, cleanChanges } = await import("../server.js");
-const { parse, render, oneLine } = await import("../lib/task.js");
+const { parse, render, oneLine, parseCommitRefs, applyCommit } = await import("../lib/task.js");
 
 const MEMBERS = [{ name: "Caleb", github: "calebnewtonusc" }, { name: "Gavin", github: "gavinjmunroe" }];
 
@@ -86,4 +86,18 @@ test("a note cannot forge activity entries", () => {
 
 test("C1 controls and bidi overrides are stripped too", () => {
   assert.equal(oneLine("a\u009b2Jb\u202Ec\u2066d"), "a2Jbcd");
+});
+
+test("commit refs and their effect match the CLI", () => {
+  const r = parseCommitRefs("feat: x (closes chw-7)", "see CHW-8");
+  assert.deepEqual([...r.refs].sort(), ["CHW-7", "CHW-8"]);
+  assert.deepEqual([...r.closing], ["CHW-7"]);
+  assert.equal(parseCommitRefs("team: CHW-3 comment", "").refs.size, 0);
+  const task = { status: "todo", proof: "", activity: [] };
+  assert.equal(applyCommit(task, "abcdef1234", "Gavin", "wip CHW-8", "u", false, "2026-10-05"), true);
+  assert.equal(task.status, "in_progress");
+  assert.equal(applyCommit(task, "abcdef1234", "Gavin", "wip CHW-8", "u", false, "2026-10-05"), false);
+  applyCommit(task, "9999999aaa", "Gavin", "fixes CHW-8", "https://github.com/x/commit/9999999aaa", true, "2026-10-05");
+  assert.equal(task.status, "done");
+  assert.equal(task.proof, "https://github.com/x/commit/9999999aaa");
 });

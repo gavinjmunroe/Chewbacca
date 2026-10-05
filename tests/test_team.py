@@ -262,6 +262,44 @@ class TeamTest(unittest.TestCase):
         left = [t["title"] for t in json.loads(self.run_team(self.a, "board", "--json")[1])]
         self.assertEqual(left, ["Hand made", "Accurate skill routing"])
 
+    def code_commit(self, message):
+        git(self.b, "pull", "-q", "--rebase", "origin", "main")
+        (self.b / "code.txt").write_text(message)
+        git(self.b, "add", "code.txt")
+        git(self.b, "commit", "-q", "-m", message)
+        git(self.b, "push", "-q", "origin", "main")
+        return git(self.b, "rev-parse", "HEAD").strip()
+
+    def test_a_commit_that_mentions_a_task_moves_it_and_fixes_closes_it(self):
+        self.run_team(self.a, "add", "Install test", "--owner", "Semyon")
+        self.run_team(self.a, "add", "Onboarding fix", "--owner", "Gavin")
+        self.code_commit("wip: timing the install for CHW-1")
+        sha = self.code_commit("feat: no GitHub step in onboarding\n\nFixes CHW-2")
+        code, _, err = self.run_team(self.a, "sync")
+        self.assertEqual(code, 0)
+        self.assertIn("2 task(s)", err)
+        one = team.parse(self.remote_file("team/tasks/CHW-1.md"))
+        two = team.parse(self.remote_file("team/tasks/CHW-2.md"))
+        self.assertEqual(one["status"], "in_progress")
+        self.assertEqual(two["status"], "done")
+        self.assertTrue(two["proof"].endswith(sha) or two["proof"] == sha)
+        self.assertTrue(any(f"commit {sha[:7]}" in x for x in two["activity"]))
+
+    def test_commit_sync_is_idempotent_and_ignores_task_commits(self):
+        self.run_team(self.a, "add", "Thing")
+        self.code_commit("touch CHW-1")
+        self.run_team(self.a, "sync")
+        before = self.commits()
+        _, _, err = self.run_team(self.a, "sync")
+        self.assertEqual(self.commits(), before)
+        self.assertNotIn("task(s)", err)
+        task = team.parse(self.remote_file("team/tasks/CHW-1.md"))
+        self.assertEqual(sum("commit " in x for x in task["activity"]), 1)
+
+    def test_parse_commit_refs(self):
+        self.assertEqual(team.parse_commit_refs("team: CHW-3 comment", ""), (set(), set()))
+        self.assertEqual(team.parse_commit_refs("feat: x (closes chw-7)", "see CHW-8"), ({"CHW-7", "CHW-8"}, {"CHW-7"}))
+
     def test_feed_shows_commits(self):
         self.run_team(self.a, "add", "Feed me")
         _, out, _ = self.run_team(self.a, "feed", "--json")

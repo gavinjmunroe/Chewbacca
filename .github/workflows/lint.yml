@@ -3,8 +3,12 @@ name: Lint
 on:
   push:
     branches: [main]
+    # Task edits from the team board and CLI are one-file commits to main, 140 of
+    # them on the day the board landed; none of them can break a script.
+    paths-ignore: ["team/**"]
   pull_request:
     branches: [main]
+    paths-ignore: ["team/**"]
 
 jobs:
   # The installer is the thing most likely to break and was the only thing not

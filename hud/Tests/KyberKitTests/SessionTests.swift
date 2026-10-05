@@ -32,7 +32,7 @@ struct SessionTests {
         model.apply(try #require(try LineParser.parse(#"to s-abc label="lemma session""#)))
         #expect(model.chatTarget == ChatTarget(surface: "s-abc", label: "lemma session"))
         #expect(model.sendToTarget(#"run the tests, then "push""#))
-        #expect(sent.last == #"e action send row=s-abc surface=s-abc text="run the tests, then \"push\"""#)
+        #expect(sent.last == #"e action send row="s-abc" surface="s-abc" text="run the tests, then \"push\"""#)
         #expect(OutboundEvent.isPrivate(sent.last ?? ""))
     }
 
@@ -45,7 +45,7 @@ struct SessionTests {
         model.apply(try #require(try LineParser.parse("to s-abc label=x")))
         model.dismiss("s-abc")
         #expect(model.chatTarget == nil)
-        #expect(sent.contains("e closed s-abc surface=s-abc"))
+        #expect(sent.contains(#"e closed s-abc surface="s-abc""#))
         // With the card gone, a send goes nowhere rather than to the assistant.
         model.apply(try #require(try LineParser.parse("to s-abc label=x")))
         #expect(model.sendToTarget("late"))
@@ -56,13 +56,13 @@ struct SessionTests {
     func socketRouting() {
         let subs: Set<Int32> = [4, 7]
         let owners: [String: Int32] = ["s-abc": 7, "gone": 9]
-        let send = #"e action send row=s-abc surface=s-abc text="hi""#
+        let send = #"e action send row="s-abc" surface="s-abc" text="hi""#
         #expect(SocketServer.recipients(for: send, subscribers: subs, owners: owners) == [7])
         // Owner gone: a private line is dropped, never handed to hud-listen.
-        let orphan = #"e action send row=gone surface=gone text="hi""#
+        let orphan = #"e action send row="gone" surface="gone" text="hi""#
         #expect(SocketServer.recipients(for: orphan, subscribers: subs, owners: owners).isEmpty)
         // An ordinary press on a surface nobody owns still reaches everyone.
-        let press = "e go b surface=notes"
+        let press = #"e go b surface="notes""#
         #expect(SocketServer.recipients(for: press, subscribers: subs, owners: owners) == subs)
         #expect(SocketServer.recipients(for: "h \"hello\"", subscribers: subs, owners: owners) == subs)
         #expect(SocketServer.owner(of: "@ s-abc at=center w=560") == "s-abc")
@@ -167,7 +167,7 @@ struct SessionTests {
         editor.selectAll(nil)
         editor.insertText("typed", replacementRange: editor.selectedRange())
         #expect(store.spec.data["draft"]?.objectValue?["note"] == .string("typed"))
-        #expect(events.contains(#"v /draft/note typed"#))
+        #expect(events.contains(#"v /draft/note "typed""#))
     }
 
     @Test("the card glass has 16-point corners")

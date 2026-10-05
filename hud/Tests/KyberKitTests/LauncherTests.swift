@@ -25,7 +25,7 @@ struct LauncherTests {
             props: ["value": .binding(DataBinding(pointer: "/lane"))])
         SurfaceView(store: store).segmentedPick(node, [:])("cooking")
         #expect(store.spec.data["lane"] == .string("cooking"))
-        #expect(sent.contains("e action select row=cooking surface=tasks"))
+        #expect(sent.contains(#"e action select row="cooking" surface="tasks""#))
     }
 
     @Test("lanes parse from strings or objects, with counts")
@@ -169,6 +169,6 @@ struct LauncherTests {
         var sent: [String] = []
         store.onEvent = { sent.append($0.line) }
         store.fireRow("open", row: "tasks")
-        #expect(sent == ["e action open row=tasks surface=rail"])
+        #expect(sent == [#"e action open row="tasks" surface="rail""#])
     }
 }

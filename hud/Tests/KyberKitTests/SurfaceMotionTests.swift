@@ -224,8 +224,8 @@ struct SurfaceMotionTests {
         action.send("thread with spaces")
         // The contract with bin/kyber-surfaces, byte for byte.
         #expect(sent == [
-            "e action reply row=thread:abc123 surface=messages",
-            "e action reply row=\"thread with spaces\" surface=messages",
+            #"e action reply row="thread:abc123" surface="messages""#,
+            #"e action reply row="thread with spaces" surface="messages""#,
         ])
     }
 
@@ -237,7 +237,7 @@ struct SurfaceMotionTests {
         model.apply(try #require(try LineParser.parse("@ mail at=left")))
         let store = try #require(model.surfaces.first?.store)
         store.fire("archive", from: "go")
-        #expect(sent == ["e archive go surface=mail"])
+        #expect(sent == [#"e archive go surface="mail""#])
     }
 
     @Test("a row with no id is named by its content, quoted when it has spaces")
@@ -247,7 +247,7 @@ struct SurfaceMotionTests {
         #expect(RowKeys.id(of: items[0]) == nil)
         #expect(key == "Bring the charger")
         let event = OutboundEvent.rowAction(name: "done", row: key, surface: "todo")
-        #expect(event.line == "e action done row=\"Bring the charger\" surface=todo")
+        #expect(event.line == #"e action done row="Bring the charger" surface="todo""#)
     }
 
     @Test("a List, Table and Events with an action draw a button per row",

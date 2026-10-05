@@ -22,13 +22,13 @@ struct ChatTests {
         defer { UserDefaults.standard.removeObject(forKey: OverlayModel.longAnswersKey) }
         let model = OverlayModel()
         #expect(model.longAnswersWritten)
-        #expect(model.preferenceEvent.line == "e prefer voice long=written")
+        #expect(model.preferenceEvent.line == #"e prefer voice long="written""#)
 
         var sent: [String] = []
         model.onEvent = { sent.append($0.line) }
         model.setLongAnswersWritten(false)
         #expect(!model.longAnswersWritten)
-        #expect(sent == ["e prefer voice long=spoken"])
+        #expect(sent == [#"e prefer voice long="spoken""#])
         #expect(!OverlayModel().longAnswersWritten, "the switch is not kept across launches")
     }
 

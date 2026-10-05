@@ -83,27 +83,27 @@ public enum OutboundEvent: Sendable, Equatable {
     public var line: String {
         switch self {
         case .sendTo(let surface, let text):
-            let name = OutboundEvent.opaque(surface)
-            return "e action send row=\(name) surface=\(name) text=\(OutboundEvent.jsonString(text))"
+            let name = OutboundEvent.value(.string(surface))
+            return "e action send row=\(name) surface=\(name) text=\(OutboundEvent.value(.string(text)))"
 
         case .closed(let surface):
-            let name = OutboundEvent.opaque(surface)
-            return "e closed \(name) surface=\(name)"
+            return "e closed \(OutboundEvent.word(surface)) surface=\(OutboundEvent.value(.string(surface)))"
 
         case .rowAction(let name, let row, let surface):
-            var line = "e action \(name) row=\(OutboundEvent.opaque(row))"
-            if let surface { line += " surface=\(OutboundEvent.opaque(surface))" }
+            var line = "e action \(OutboundEvent.word(name)) row=\(OutboundEvent.value(.string(row)))"
+            if let surface { line += " surface=\(OutboundEvent.value(.string(surface)))" }
             return line
 
         case .action(let name, let component, let payload):
             let props = payload
                 .sorted { $0.key < $1.key }
-                .map { "\($0.key)=\(OutboundEvent.encode($0.value))" }
+                .map { "\(OutboundEvent.word($0.key))=\(OutboundEvent.value($0.value))" }
                 .joined(separator: " ")
-            return "e \(name) \(component)\(props.isEmpty ? "" : " " + props)"
+            return "e \(OutboundEvent.word(name)) \(OutboundEvent.word(component))"
+                + (props.isEmpty ? "" : " " + props)
 
         case .value(let pointer, let value):
-            return "v \(pointer) \(OutboundEvent.encode(value))"
+            return "v \(OutboundEvent.word(pointer)) \(OutboundEvent.value(value))"
 
         case .dismissed:
             return "x"
@@ -146,30 +146,6 @@ public enum OutboundEvent: Sendable, Equatable {
         }
     }
 
-    /// Bare words stay bare, because quoting every enum value costs bytes and
-    /// reads worse, and the inbound parser already accepts both.
-    static func encode(_ value: JSON) -> String {
-        switch value {
-        case .string(let s):
-            let bare = !s.isEmpty
-                && s.allSatisfy { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }
-                && !["true", "false", "null"].contains(s)
-            return bare ? s : jsonString(s)
-        case .number(let n):
-            return n == n.rounded() && abs(n) < 1e15 ? String(Int(n)) : String(n)
-        case .bool(let b): return b ? "true" : "false"
-        case .null: return "null"
-        case .array, .object:
-            guard let data = try? JSONSerialization.data(withJSONObject: value.foundationValue),
-                  let text = String(data: data, encoding: .utf8)
-            else { return "null" }
-            return text
-        }
-    }
-
-    /// An id passed through untouched: bare unless it is empty or holds
-    /// whitespace, a quote or a backslash, which would split or break the
-    /// line, and JSON-quoted then.
     /// Whether a line must reach only the surface's owner and is dropped
     /// when there is none, rather than broadcast. A typed message and a
     /// close are both private: broadcast, hud-listen would hand "the user
@@ -190,9 +166,55 @@ public enum OutboundEvent: Sendable, Equatable {
         return rest.split(separator: " ").first.map(String.init)
     }
 
-    static func opaque(_ s: String) -> String {
-        let unsafe = s.isEmpty || s.contains { $0.isWhitespace || $0 == "\"" || $0 == "\\" }
-        return unsafe ? jsonString(s) : s
+    /// The characters a positional word (an action name, a component id, a
+    /// pointer) may hold. Nothing that can open a quote, start a key=value,
+    /// or break a line in any reader.
+    static func isWord(_ s: String) -> Bool {
+        !s.isEmpty && s.count <= 128 && s.unicodeScalars.allSatisfy {
+            ($0.isASCII && (CharacterSet.alphanumerics.contains($0) || "_-.:/".unicodeScalars.contains($0)))
+        }
+    }
+
+    /// A positional word, or `_` in place of every character that is not
+    /// allowed in one. Senders are refused an unsafe action name before it
+    /// gets here (`SurfaceStore.fire`); this is the floor under that, so no
+    /// path can put a space, a quote or an `=` into a positional slot.
+    static func word(_ s: String) -> String {
+        if isWord(s) { return s }
+        let cleaned = String(s.unicodeScalars.map {
+            $0.isASCII && (CharacterSet.alphanumerics.contains($0) || "_-.:/".unicodeScalars.contains($0))
+                ? Character($0) : "_"
+        }.prefix(128))
+        return cleaned.isEmpty ? "_" : cleaned
+    }
+
+    /// A `key=value` value: always one whitespace-free JSON token, never a
+    /// bare word. Strings are JSON strings (`"a b"` keeps its space inside
+    /// the quotes); arrays and objects are compact JSON with every space
+    /// inside them written ` `, so the token never splits. Until
+    /// 2026-10-04 a value was bare unless it held a space or a quote, and
+    /// the Python readers each guessed differently where a bare value ended.
+    /// Line breaks of every kind are escaped, including U+2028, U+2029 and
+    /// U+0085, which Python's `splitlines` treats as newlines.
+    static func value(_ json: JSON) -> String {
+        switch json {
+        case .string(let s): return jsonString(s)
+        case .number(let n): return n == n.rounded() && abs(n) < 1e15 ? String(Int(n)) : String(n)
+        case .bool(let b): return b ? "true" : "false"
+        case .null: return "null"
+        case .array(let items):
+            return "[" + items.map(inner).joined(separator: ",") + "]"
+        case .object(let fields):
+            return "{" + fields.sorted { $0.key < $1.key }
+                .map { "\(inner(.string($0.key))):\(inner($0.value))" }
+                .joined(separator: ",") + "}"
+        }
+    }
+
+    /// A value nested in an array or object: as `value`, with the spaces
+    /// inside its strings escaped so the whole token stays unbroken.
+    private static func inner(_ json: JSON) -> String {
+        value(json).replacingOccurrences(of: " ", with: "\\u0020")
     }
 
     static func jsonString(_ s: String) -> String {
@@ -200,7 +222,12 @@ public enum OutboundEvent: Sendable, Equatable {
             withJSONObject: s, options: [.fragmentsAllowed]),
               let text = String(data: data, encoding: .utf8)
         else { return "\"\"" }
+        // JSONSerialization escapes \n and \r but leaves these raw, and each
+        // one ends a line for `str.splitlines`.
         return text
+            .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+            .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
+            .replacingOccurrences(of: "\u{85}", with: "\\u0085")
     }
 }
 

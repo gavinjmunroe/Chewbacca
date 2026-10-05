@@ -39,6 +39,7 @@ from typing import Callable, Iterable, Iterator
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+import hud_events  # noqa: E402
 
 HOME = Path.home()
 SOCKET = os.environ.get("BOB_HUD_SOCKET", str(HOME / ".bob" / "hud.sock"))
@@ -648,27 +649,10 @@ def git_changes(cwd: str) -> list[dict]:
 
 
 def parse_event(line: str) -> dict | None:
-    """`e <name> <component> key=value ...` into a dict. Values may be
-    JSON-quoted. Returns None for anything else."""
-    if not line.startswith("e "):
-        return None
-    parts = re.findall(r'(?:[^\s"]+="(?:\\.|[^"\\])*")|[^\s]+', line)
-    if len(parts) < 3:
-        return None
-    ev = {"name": parts[1], "component": parts[2]}
-    for token in parts[3:]:
-        key, _, raw = token.partition("=")
-        if raw.startswith('"'):
-            try:
-                raw = json.loads(raw)
-            except ValueError:
-                pass
-        ev[key] = raw
-    if ev["name"] == "action":
-        # `e action <name> row=<id> surface=<surface>`: the component slot
-        # carries the action's own name.
-        ev["name"] = ev["component"]
-    return ev
+    """`e <name> <component> key=value ...` into a dict, through the one
+    shared reader (bin/lib/hud_events.py). None for anything else, and for
+    any line that does not parse exactly: a press half-read is refused."""
+    return hud_events.event(line)
 
 
 class Serve:
@@ -882,7 +866,7 @@ class Serve:
                         print(f"kyber-sessions: {err}", file=sys.stderr)
 
     def run(self, every: float = 2.0, open_first: str = "") -> int:
-        self.send(["listen"])
+        self.send([hud_events.listen_line(SOCKET)])
         threading.Thread(target=self.reader, daemon=True).start()
         if open_first:
             # `serve --open <id>`: the talk key or a Needs-you row on another

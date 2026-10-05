@@ -153,11 +153,11 @@ def test_stream_and_events() -> None:
     out = ks.stream_reply(lines, seen.append)
     check("deltas fold into the reply so far", seen == ["Run", "Running."], seen)
     check("a refused permission comes back to be shown", out["permission_denials"][0]["tool_name"] == "Bash")
-    ev = ks.parse_event('e action send row=s-abc surface=s-abc text="run the tests, then \\"push\\""')
+    ev = ks.parse_event('e action send row="s-abc" surface="s-abc" text="run the tests, then \\"push\\""')
     check("a typed message is read with its quotes intact",
           ev == {"name": "send", "component": "send", "row": "s-abc", "surface": "s-abc",
                  "text": 'run the tests, then "push"'}, ev)
-    ev = ks.parse_event("e action open row=6d901cd1-aaaa surface=sessions")
+    ev = ks.parse_event("e action open row=\"6d901cd1-aaaa\" surface=\"sessions\"")
     check("a row press names the session", ev["name"] == "open" and ev["row"] == "6d901cd1-aaaa")
     check("anything not an event is ignored", ks.parse_event('h "hello"') is None)
     route = ks.route("tell the lemma session to run the tests", sessions=[

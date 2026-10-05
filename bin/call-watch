@@ -29,6 +29,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "lib"))
+import hud_events  # noqa: E402  the listen token (hud/CLAUDE.md, "Who hears events")
 POLL_S = 2.0
 # Two checks in a row before asking: a browser tab that touches the mic for
 # a second (a permission test, a voice search) should not pop a panel.
@@ -178,7 +180,7 @@ class Panel:
             log("Kyber is not running, so there is nowhere to offer the coach.")
             return False
         lines = [
-            "listen",
+            hud_events.listen_line(),
             f"@ {self.SURFACE} at=top w=420",
             'c s Screen title="CALL DETECTED"',
             f"c t Text value={json.dumps(app.label + ' is using your mic. Coach this call?')}",

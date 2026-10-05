@@ -31,7 +31,7 @@ enum RowKeys {
     }
 
     private static func content(of item: JSON) -> String {
-        if case .object = item { return OutboundEvent.encode(item) }
+        if case .object = item { return OutboundEvent.value(item) }
         return item.display
     }
 

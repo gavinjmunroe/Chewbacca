@@ -279,6 +279,14 @@ public final class SurfaceStore {
     }
 
     public func fire(_ action: String, from component: ComponentID, payload: [String: JSON] = [:]) {
+        // An action name is a positional word in the line that goes up. One a
+        // sender wrote with a space or a quote (`action="go surface=x"`) is
+        // refused and reported, never sent with the bad characters replaced:
+        // a press that arrives under a different name is worse than none.
+        guard OutboundEvent.isWord(action) else {
+            report("action \(OutboundEvent.jsonString(action)) is not a word: letters, digits, _ - . : / only")
+            return
+        }
         var payload = payload
         if let surfaceID, payload["surface"] == nil { payload["surface"] = .string(surfaceID) }
         onEvent?(.action(name: action, component: component, payload: payload))
@@ -292,6 +300,10 @@ public final class SurfaceStore {
     /// the thread, not its position, because the list may have changed under
     /// the pointer by the time the line is read.
     public func fireRow(_ action: String, row: String) {
+        guard OutboundEvent.isWord(action) else {
+            report("action \(OutboundEvent.jsonString(action)) is not a word: letters, digits, _ - . : / only")
+            return
+        }
         onEvent?(.rowAction(name: action, row: row, surface: surfaceID))
     }
 

@@ -161,17 +161,17 @@ d /threads [{"id":"thread:abc123","time":"9:04","text":"Sam: lunch?"},{"id":"thr
 Pressing Reply on Sam's row sends exactly:
 
 ```
-e action reply row=thread:abc123 surface=messages
+e action reply row="thread:abc123" surface="messages"
 ```
 
-The line is `e action <name> row=<id> surface=<surface>` and nothing else.
-`<id>` is opaque: the item's `id` field passed through untouched (a graph
-node id like `thread:abc123` is the expected case), bare unless it holds a
-space, a quote or a backslash, and then JSON-quoted. An item with no `id` is
-named by its text, so give rows an `id`. A List item may be a string or
-`{"id":..,"text":..}`. `surface` is the name from `@`. This line is the
-contract with `bin/kyber-surfaces`; `SurfaceMotionTests.rowActionLine` holds
-it byte for byte.
+The line is `e action <name> row=<id> surface=<surface>` and nothing else,
+written as "Events, exactly" below says: `<name>` a word, `<id>` and
+`<surface>` always JSON strings. `<id>` is opaque: the item's `id` field
+passed through untouched (a graph node id like `thread:abc123` is the
+expected case). An item with no `id` is named by its text, so give rows an
+`id`. A List item may be a string or `{"id":..,"text":..}`. `surface` is the
+name from `@`. This line is the contract with `bin/kyber-surfaces`;
+`SurfaceMotionTests.rowActionLine` holds it byte for byte.
 
 Ordinary controls keep their own line, `e <action> <component> ...`, and now
 carry `surface=` too, because component ids are only unique inside one
@@ -249,7 +249,7 @@ and the panel opens with a "To lemma session" chip over its input. What is
 typed then goes up as one private line, to the card's owner only:
 
 ```
-e action send row=s-6d901cd1 surface=s-6d901cd1 text="run the tests"
+e action send row="s-6d901cd1" surface="s-6d901cd1" text="run the tests"
 ```
 
 and the daemon resumes that session with `claude -p --resume <id>` in its
@@ -371,7 +371,7 @@ to its prompt before every run, and keeps every question and answer in
 `superassistant/questions.jsonl` (see `superassistant/README.md`).
 The panel's header has the switch for that, "Speech off for long answers", on
 by default; off, every answer is read out in full. The display sends it to
-whoever is listening as `e prefer voice long=written|spoken`, on every change
+whoever is listening as `e prefer voice long="written"` or `long="spoken"`, on every change
 and again right after a client's `listen`. `w "<text>"` is the answer so far, the whole
 text rather than a delta, and `w "<text>" done=true` closes it. Send it at each
 sentence as the answer is written, so the panel fills as the voice reads. Prose
@@ -420,9 +420,9 @@ It needs Full Disk Access for Kyber.
 
 ## Finding out when you got it wrong
 
-Send `listen` and the display talks back. It answers with its version
-immediately, and after that anything you send that it could not use comes back
-as a problem:
+Send `listen token=<hex>` (see "Who hears events") and the display talks
+back. It answers with its version immediately, and after that anything you
+send that it could not use comes back as a problem:
 
 ```
 v! "kyber/1 verbs=c,>,d,r,@,-,p,s,q,m,u,b,listen"
@@ -432,6 +432,71 @@ v! "kyber/1 verbs=c,>,d,r,@,-,p,s,q,m,u,b,listen"
 Without subscribing you get silence, and silence means nothing at all: a
 misspelled component and a perfect one look identical. If you are writing
 something new, subscribe while you develop it.
+
+## Who hears events
+
+Drawing needs nothing: anything running as this user may write lines. Hearing
+needs the token. What goes up the socket is what the person said (`h`), what
+they typed to a session, and every row and button they pressed, so since
+2026-10-04 it goes only to a listener that proves it may read the user's own
+`~/.bob`:
+
+1. The socket is 0600 in a 0700 folder, and the display checks each
+   connection's peer with `getpeereid`: another user's process is closed on
+   accept.
+2. On every start the display writes a fresh token, 64 hex characters, to
+   `hud.token` beside the socket (`~/.bob/hud.token`, 0600). A token read
+   before a restart stops working.
+3. A client subscribes with exactly
+
+   ```
+   listen token=<the 64 hex characters in ~/.bob/hud.token>
+   ```
+
+   and gets `v! "kyber/1 ..."`, then every event. In Python,
+   `bin/lib/hud_events.py` has `listen_line()`, which reads the token, and
+   `event(line)`, the reader to parse with.
+4. **Compatibility window.** A plain `listen`, or a wrong token, still gets
+   the `v!` version line and one `!` naming the token file, so a client that
+   has not been updated can see why. It may keep drawing. It receives no
+   events, no problems and no `pr` answers, and it cannot own a surface for
+   private lines. Every client must send the token: as of this change
+   hud-listen, kyber-surfaces and kyber-genui still send a plain `listen` and
+   hear nothing until they are updated; `hud press`, call-watch and
+   kyber-sessions send it.
+
+## Events, exactly
+
+Every line up is positional words, then `key=value` pairs:
+
+```
+e action reply row="thread:abc123" surface="messages"
+e go b surface="notes"
+v /draft/note "typed"
+e prefer voice long="written"
+```
+
+- A **word** (the verb, an action name, a component id, a pointer) is ASCII
+  letters, digits and `_ - . : /` only. A sender's action name that is not a
+  word is refused with a `!` and never sent, so `action="go surface=x"`
+  cannot put a key into the line.
+- A **value** is always one JSON token: a string is always a JSON string,
+  even a plain word (`long="written"`, not `long=written`), so `"true"` and
+  `"42"` arrive as strings and an id is never mistaken for a bool or a
+  number. Arrays and objects are compact JSON with every space inside written
+  ` `, so a value never contains a raw space.
+- No raw line break of any kind: `\n`, `\r`, U+2028, U+2029 and U+0085 are
+  all escaped, since Python's `splitlines` ends a line at the last three.
+- A reader parses each value with a JSON decoder from where it starts
+  (`raw_decode`), refuses a line with a key twice, a bare value, or a value
+  running into the next token, and never splits a value on spaces.
+
+`tests/fixtures/hud-events.json` holds the strings that broke this before: a
+row id with a quote and a fake `surface=`, a newline followed by a forged
+event, U+2028, `true`, `42`. Swift must emit exactly the recorded lines
+(`EventFixtureTests`, `HUD_FIXTURE_RECORD=1` rewrites them after a deliberate
+format change) and every Python reader must read the original value back
+(`tests/test_hud_events.py`, which includes kyber-surfaces' own `payload`).
 
 ## Marking the screen
 

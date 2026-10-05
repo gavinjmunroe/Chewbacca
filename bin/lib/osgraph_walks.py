@@ -30,6 +30,7 @@ TIER_WORD = {BLOCKED: "waiting on you", DUE: "due soon", FYI: "FYI"}
 MOST_ROWS = 9
 PER_SOURCE = 3
 DUE_WINDOW_H = 72
+PERSON_ROWS = 5
 BACKLOG_BLOCKING = {"decision", "blocked"}
 
 
@@ -181,7 +182,13 @@ def find_person(g: Graph, ids: Identities, name: str) -> tuple[str, str]:
     if len(exact) == 1:
         return f"person:{exact[0]['id']}", "people store"
     if len(exact) > 1:
-        raise Ambiguous(name, [p["name"] for p in exact])
+        # The people store holds duplicate records (2026-10-04: two "Karthik
+        # Devarakonda"). If exactly one of them is in this week's graph, that
+        # is who the person is in touch with; the caption says there were two.
+        active = [p for p in exact if g.node(f"person:{p['id']}")]
+        if len(active) == 1:
+            return f"person:{active[0]['id']}", f"name, the one of {len(exact)} records you're in touch with"
+        raise Ambiguous(name, [p["name"] + (f" ({p['company']})" if p["company"] else "") for p in exact])
     want = " ".join(name.lower().split())
     people = [p for p in g.nodes("Person") if p["id"] != ME and not p["unresolved"]]
     labelled = [p for p in people if p["label"].lower() == want]
@@ -228,8 +235,65 @@ def person(g: Graph, ids: Identities, name: str, now: datetime) -> dict:
         for task in g.into(alias["id"], "OWED_BY"):
             rows.append(row(g, task, FYI, task["props"].get("updated", ""),
                             f"owner \"{alias['label']}\" in the backlog, unconfirmed as them"))
+    # Five and five: on the first live run (2026-10-04) eight timeline lines
+    # plus nine rows pushed the reply box below the bottom of the screen.
+    line = timeline(g, pid, most=PERSON_ROWS)
+    routes = reply_routes(g, pid)
+    last = next((m["network"] for m in line if not m["from_me"] and m["network"] in routes), "")
     return {"id": pid, "name": me_node["label"], "matched": how, "unresolved": me_node.get("unresolved", False),
-            "rows": rank(rows)}
+            "rows": rank(rows, most=PERSON_ROWS), "timeline": line, "routes": routes,
+            "last_network": last or next(iter(routes), "")}
+
+
+# The network a message node came over. An ingester for another network sets
+# props.network on its nodes ("WhatsApp", "Slack") and needs nothing here.
+NETWORK_BY_TYPE = {"Message": "iMessage", "MailItem": "Mail"}
+
+
+def network_of(node: dict) -> str:
+    return (node.get("props") or {}).get("network") or NETWORK_BY_TYPE.get(node["type"], node["type"])
+
+
+def timeline(g: Graph, pid: str, most: int = 8) -> list[dict]:
+    """One person's conversation across every network, newest first: what
+    they sent anywhere, and what the person sent in their one-to-one threads."""
+    items: dict[str, dict] = {}
+    for node in g.into(pid, "SENT_BY"):
+        if node["type"] in ("Message", "MailItem"):
+            items[node["id"]] = node
+    for thread in g.into(pid, "PARTICIPANT"):
+        if thread["props"].get("group"):
+            continue
+        for msg in g.into(thread["id"], "IN_THREAD"):
+            if msg["props"].get("from_me"):
+                items[msg["id"]] = msg
+    out = []
+    for node in items.values():
+        at = node["props"].get("at") or node.get("observed_at", "")
+        threads = g.out(node["id"], "IN_THREAD")
+        out.append({"id": node["id"], "network": network_of(node), "at": at,
+                    "from_me": bool(node["props"].get("from_me")),
+                    "text": node["label"], "thread": threads[0]["label"] if threads else "",
+                    "group": bool(threads and threads[0]["props"].get("group"))})
+    out.sort(key=lambda m: when_of(m["at"]) if when_of(m["at"]) != float("inf") else 0, reverse=True)
+    return out[:most]
+
+
+def reply_routes(g: Graph, pid: str) -> dict[str, dict]:
+    """Where a reply to this person can go, by network: their newest
+    one-to-one iMessage thread, their newest mail with a sender address. Only
+    routes that exist are offered; a network missing here cannot be picked."""
+    routes: dict[str, dict] = {}
+    threads = [t for t in g.into(pid, "PARTICIPANT")
+               if not t["props"].get("group") and t["props"].get("reply_to")]
+    if threads:
+        t = max(threads, key=lambda x: when_of(x["props"].get("last_at")))
+        routes["iMessage"] = row(g, t, FYI, t["props"].get("last_at", ""), "")
+    mails = [m for m in g.into(pid, "SENT_BY") if m["type"] == "MailItem" and m["props"].get("address")]
+    if mails:
+        m = max(mails, key=lambda x: when_of(x["props"].get("at")))
+        routes["Mail"] = row(g, m, FYI, m["props"].get("at", ""), "")
+    return routes
 
 
 def space(g: Graph, name: str, now: datetime) -> dict:

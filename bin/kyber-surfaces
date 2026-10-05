@@ -654,7 +654,14 @@ def serve_control(daemon: Daemon, path: str) -> socket.socket:
         os.unlink(path)
     except FileNotFoundError:
         pass
-    server.bind(path)
+    # Owner-only from the moment it exists: anything that can connect can
+    # open, close and re-ingest. It has no command that sends; chmod after bind
+    # alone left a moment where the socket was open to the group.
+    old = os.umask(0o077)
+    try:
+        server.bind(path)
+    finally:
+        os.umask(old)
     os.chmod(path, 0o600)
     server.listen(8)
 

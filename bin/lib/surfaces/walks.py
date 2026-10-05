@@ -21,8 +21,10 @@ Rows that came from a rule's guess (a request read out of a text) carry
 from __future__ import annotations
 
 import json
+import sqlite3
 import threading
 from datetime import datetime
+from pathlib import Path
 
 import osgraph_runs
 import osgraph_walks as W
@@ -32,6 +34,8 @@ from . import ACTION_PREFIX, Bind, Context, Provider, Result, SurfaceError, ago,
 # Rows below this confidence say "(guess)". 0.7 sits between the request
 # rule's 0.6 and the 1:1 AWAITS_REPLY_FROM rule's 0.9.
 GUESS_BELOW = 0.7
+# chat.style for a one-to-one thread (43 is a group).
+STYLE_ONE_TO_ONE = 45
 MOST_REPLY_CHARS = 2000
 # Read a sent text back this many times, a second apart. Guessed, never
 # measured: a sent iMessage reaches chat.db well inside a second when warm.
@@ -82,10 +86,17 @@ def row_text(r: dict) -> str:
 
 
 def label_rows(rows: list[dict]) -> list[dict]:
-    for i, r in enumerate(rows):
-        r["pick"] = clip(f"{r['app']}: {r['label']}", 56)
-        if any(x["pick"] == r["pick"] for x in rows[:i]):
-            r["pick"] += f" ({i + 1})"
+    """Give every row the label "Act on" shows. Two rows with the same text
+    are told apart by their node id, never by position: a position suffix
+    ("Mom (3)") can name a different thread after the next refresh reorders
+    the list, and a press would then reach the wrong person."""
+    seen: dict[str, int] = {}
+    for r in rows:
+        base = clip(f"{r['app']}: {r['label']}", 56)
+        seen[base] = seen.get(base, 0) + 1
+    for r in rows:
+        base = clip(f"{r['app']}: {r['label']}", 56)
+        r["pick"] = base if seen[base] == 1 else f"{base} [{r['id'][-6:]}]"
     return rows
 
 
@@ -212,9 +223,20 @@ class WalkSurface(Provider):
         return " · ".join(p for p in parts if p)
 
     def picked(self, data: dict | None, values: dict) -> dict | None:
+        """The row "Act on" names, for DISPLAY (the Go label). Falls back to
+        the first row so the button says something before a pick."""
+        rows = (data or {}).get("rows") or []
+        return self.chosen(data, values) or (rows[0] if rows else None)
+
+    def chosen(self, data: dict | None, values: dict) -> dict | None:
+        """The row "Act on" names, for an ACTION: exactly one row whose label
+        is exactly the picked value, or None. Never a default. The first
+        version fell back to the first row, so a pick that no longer matched
+        (the list refreshed under it) sent the reply to whoever was on top."""
         rows = (data or {}).get("rows") or []
         want = values.get(self.p("pick"))
-        return next((r for r in rows if r["pick"] == want), rows[0] if rows else None)
+        matches = [r for r in rows if r["pick"] == want]
+        return matches[0] if len(matches) == 1 else None
 
     def go_for(self, r: dict | None) -> str:
         if r is None:
@@ -232,9 +254,9 @@ class WalkSurface(Provider):
     # ── actions ──────────────────────────────────────────────────────────
 
     def act(self, ctx: Context, data, values: dict) -> Result:
-        r = self.picked(data, values)
+        r = self.chosen(data, values)
         if r is None:
-            return Result(False, "Pick a row first.")
+            return Result(False, "That row isn't on the list any more. Pick it again.")
         kind = r["type"]
         if kind == "Thread" and r["props"].get("reply_to"):
             return send_reply(ctx, r, str(values.get(self.p("draft")) or "").strip(), self.p("draft"))
@@ -274,17 +296,54 @@ class WalkSurface(Provider):
         return Result(True, "Opened today.", opens="today")
 
 
+def thread_handle(ctx: Context, row_id: str) -> tuple[str | None, str]:
+    """The one handle a 1:1 thread can be answered at, read fresh from chat.db
+    at press time: (handle, "") or (None, why not).
+
+    Fails closed. The row id must name a thread (`thread:imessage:<id>`), every
+    chat row with that identifier must be one-to-one, and together they must
+    have exactly one participant handle, equal to the identifier. Anything
+    else (no such chat, a group, a second handle joined since the list was
+    drawn) sends nothing."""
+    prefix = "thread:imessage:"
+    if not row_id.startswith(prefix) or len(row_id) == len(prefix):
+        return None, "That row isn't a text thread."
+    ident = row_id[len(prefix):]
+    path = Path(ctx.env.get("KYBER_SURFACES_CHAT_DB") or ctx.home / "Library" / "Messages" / "chat.db")
+    try:
+        db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+    except sqlite3.Error:
+        return None, "Messages history isn't readable, so nothing was sent."
+    try:
+        chats = db.execute("SELECT ROWID, style FROM chat WHERE chat_identifier = ?", (ident,)).fetchall()
+        if not chats:
+            return None, "That thread isn't in Messages any more. Nothing was sent."
+        if any(style != STYLE_ONE_TO_ONE for _, style in chats):
+            return None, "Group threads can't be answered from here yet."
+        marks = ",".join("?" * len(chats))
+        handles = {h for (h,) in db.execute(
+            f"SELECT h.id FROM chat_handle_join chj JOIN handle h ON h.ROWID = chj.handle_id "
+            f"WHERE chj.chat_id IN ({marks})", [c[0] for c in chats])}
+    except sqlite3.Error:
+        return None, "Messages history isn't readable, so nothing was sent."
+    finally:
+        db.close()
+    if handles != {ident}:
+        return None, "That thread's people changed since it was drawn. Nothing was sent; check Messages."
+    return ident, ""
+
+
 def send_reply(ctx: Context, r: dict, text: str, draft_ptr: str) -> Result:
-    """Send what the person typed to the thread's own handle, then read the
-    thread back. The handle comes from chat.db's chat row for this thread,
-    never from any message's text."""
-    handle = r["props"].get("reply_to") or ""
-    if not handle:
-        return Result(False, "Group threads can't be answered from here yet.")
+    """Send what the person typed to the exact thread the row names, resolved
+    fresh from chat.db, then read the thread back. The handle never comes
+    from any message's text and never from a default."""
     if not text:
         return Result(False, "Type the reply first.")
     if len(text) > MOST_REPLY_CHARS:
         return Result(False, f"That's over {MOST_REPLY_CHARS} characters. Send it from Messages.")
+    handle, why = thread_handle(ctx, r["id"])
+    if handle is None:
+        return Result(False, why)
     code, out, err = ctx.run(["mac", "messages", "send", handle, text, "--json"])
     if code != 0:
         return Result(False, f"Didn't send: {clip(err or out or 'no answer from Messages', 90)}")
@@ -406,6 +465,7 @@ class Person(WalkSurface):
         self.arg = arg
         self.name = f"person-{slug(arg.removeprefix('person:'))}"
         self.title = "PERSON"
+        self.actions[f"{ACTION_PREFIX}reply"] = self.reply
 
     def walk(self, ctx: Context) -> dict:
         out = W.person(ctx.graph, ctx.ids, self.arg, ctx.now())
@@ -417,11 +477,71 @@ class Person(WalkSurface):
         flag = " Unconfirmed identity: only this handle." if data.get("unresolved") else ""
         return (f"Matched by {how}." if how and how not in ("id", "people store") else "") + flag
 
+    # One person, every network: their timeline merged across iMessage and
+    # Mail (and any network an ingester tags), what is owed either way, and
+    # one composer whose network defaults to the one they used last. The
+    # composer is this surface's primary action, so it has no "Act on".
+    def layout(self) -> list[str]:
+        ids = ["s", "line", "list", "via", "draft", "go", "status"]
+        return [
+            comp(self.cid("s"), "Screen", title=Bind(self.p("title"))),
+            comp(self.cid("line"), "Events", caption=Bind(self.p("line_caption")), items=Bind(self.p("timeline"))),
+            comp(self.cid("list"), "Events", caption=Bind(self.p("caption")), items=Bind(self.p("rows")),
+                 action=f"{ACTION_PREFIX}pivot", actionLabel="Open"),
+            comp(self.cid("via"), "Select", label="Reply on", options=Bind(self.p("networks")),
+                 value=Bind(self.p("via"))),
+            comp(self.cid("draft"), "Field", label="Reply", placeholder="Typed here, sent only by the button",
+                 value=Bind(self.p("draft"))),
+            comp(self.cid("go"), "Button", label=Bind(self.p("go")), action=f"{ACTION_PREFIX}reply",
+                 variant="primary"),
+            comp(self.cid("status"), "Text", value=Bind(self.p("status")), tone="muted"),
+            f"> {' '.join(self.cid(i) for i in ids)}",
+            f"r {self.cid('s')}",
+        ]
+
+    def initial(self) -> dict:
+        return {self.p("draft"): "", self.p("status"): "", self.p("via"): ""}
+
     def model(self, data, error, values, ctx) -> dict:
         out = super().model(data, error, values, ctx)
-        if data:
-            out[self.p("title")] = clip(data.get("name", "").upper(), 30)
+        out.pop(self.p("names"), None)
+        out.pop(self.p("pick"), None)
+        if data is None:
+            out.update({self.p("line_caption"): "", self.p("timeline"): [], self.p("networks"): [],
+                        self.p("go"): "Reply"})
+            return out
+        now = ctx.now()
+        out[self.p("title")] = clip(data.get("name", "").upper(), 30)
+        out[self.p("line_caption")] = "Across " + ", ".join(sorted({m["network"] for m in data["timeline"]})) \
+            if data["timeline"] else "No messages this week"
+        out[self.p("timeline")] = [{
+            "id": m["id"], "time": short_when(m["at"], now),
+            "text": clip(f"{m['network']} · " + ("You" if m["from_me"] else data["name"].split()[0])
+                         + (f" in {m['thread']}" if m["group"] else "") + f": {linkify(m['text'])}", 100),
+            "accent": not m["from_me"] and m is data["timeline"][0]} for m in data["timeline"]]
+        networks = list(data["routes"])
+        out[self.p("networks")] = networks
+        via = values.get(self.p("via")) or data.get("last_network", "")
+        if not values.get(self.p("via")) and data.get("last_network"):
+            out[self.p("via")] = data["last_network"]
+        out[self.p("go")] = {"iMessage": "Send on iMessage", "Mail": "Draft in Mail"}.get(via, "Reply")
         return out
+
+    def reply(self, ctx: Context, data, values: dict) -> Result:
+        """Reply on the network picked in "Reply on", to this person's own
+        route on it. Fails closed: a network they have no route on, or a
+        route that no longer resolves, sends nothing."""
+        via = str(values.get(self.p("via")) or "")
+        routes = (data or {}).get("routes") or {}
+        target = routes.get(via)
+        if target is None:
+            return Result(False, f"No way to reach them on {via or 'that network'} from here.")
+        text = str(values.get(self.p("draft")) or "").strip()
+        if via == "iMessage":
+            return send_reply(ctx, target, text, self.p("draft"))
+        if via == "Mail":
+            return draft_mail(ctx, target, text, self.p("draft"))
+        return Result(False, f"Replying on {via} isn't built yet.")
 
 
 class Space(WalkSurface):

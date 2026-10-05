@@ -303,3 +303,20 @@ nothing infinite under reduced motion. `site-gate idle` shows the ambient
 layer you planned. Every subpage you link exists. Then look at it beside the
 thing you are matching or beating, frame by frame, because the pixels outrank
 every number above.
+
+## Every section names its reader (usctts.com, 2026-10-04)
+
+Caleb, over a beat showing "388 open roles" as dots: "So many things on this
+site provide value to NOONE looking at the site, especially a business that
+doesn't know much abt ai but wants help." Internal stats, our own pipeline
+numbers and curriculum diagrams were built for the builders, not the reader.
+
+- Before building a section, write which reader it serves and what question
+  of theirs it answers. If neither reader is served, it doesn't ship.
+- Show a business owner a thing they recognize: an inbox, a spreadsheet, a
+  list, a lesson. Abstract cubes read as decoration. The same beat lost
+  badly to clay.com until it became a real-looking object.
+- A gate passing is not the page being seen. A fixed background covered the
+  whole bottom of that page while check, story and slop-check all passed;
+  site-gate now fails a heading that paints nothing, and a reviewer that
+  did not build the page looks at the screenshots before anything ships.

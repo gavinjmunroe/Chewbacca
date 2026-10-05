@@ -461,6 +461,14 @@ def review_fixes(d: Path) -> None:
     check("an invite's attendee is a claim, never above CLAIMED_CONFIDENCE",
           attends and all(e["confidence"] <= AM.CLAIMED_CONFIDENCE for e in attends),
           [(e["src"], e["confidence"]) for e in attends])
+    sagar = g.node(f"person:{fx.SAGAR}")
+    if sagar:
+        page = osgraph_walks.person(g, ctx.ids, sagar["label"], ctx.now())
+        invited = [r for r in page.get("rows", []) if r.get("why") == "listed on the invite"]
+        check("Sagar's page shows an invite-listed meeting as a guess, not as fact",
+              invited and all(r.get("confidence", 1.0) <= AM.CLAIMED_CONFIDENCE for r in invited)
+              and not any(r.get("why") == "you'll both be there" for r in page.get("rows", [])),
+              [(r.get("label"), r.get("why"), r.get("confidence")) for r in page.get("rows", [])])
     err = AM.AnarlogError("no such table: sessions", "anarlog_error")
     check("a database with no tables yet is first run, not an error", AM.first_run(err))
     me = d / "meetings.json"

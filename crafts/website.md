@@ -252,6 +252,49 @@ plus a callout on one screen made the run "too hard to comprehend". Show one
 number, one plain sentence and one figure per beat, driven by scroll, and put
 the detail behind a link.
 
+## Learned on tcombinator.org, 2026-10-05
+
+**Text is quiet, the figure is loud.** Measured on uselemma.ai at 1440:
+headings 36px at weight 400, the lead 18px, copy beside the figure on a
+384 + 64 + 544 grid. T Combinator ran a 92px hero, 52px section heads and
+148px numbers, each alone on a screen, and Caleb said it "reads like a
+slide deck" with a "fried" hierarchy. Write one ladder (display, number,
+h2, caption, lead, body, meta) before styling anything, and one primary
+button per screen.
+
+**Mono is a lane for data, never a kicker.** Coordinates, timestamps,
+batch, status, sources: values a machine could have written. A mono label
+over every heading is the median generated page.
+
+**Blend modes stop at stacking contexts.** `mix-blend-mode: screen` on a
+video showed black boxes, because every section had a z-index and the
+blend only saw its own transparent section. Key it instead: draw the
+video into WebGL, alpha is the brightest channel, colour divided by
+alpha. Same for any canvas meant to add light over a sky.
+
+**A sticky background with a negative margin escapes its container.**
+The sky was `position: sticky; margin-bottom: -100vh`, and that margin let
+it slide past `.tc-after` and paint over the unpositioned footer. The
+required "Not affiliated" disclaimer was live and invisible. After any
+full-bleed layer, screenshot the very bottom of the page.
+
+**No button ever jumps** (Caleb: "NEVER have sudden jumps for any button
+ever"). Intercept same-page anchors. Under 2.5 screens, one eased glide.
+Past that, a glide moved 1.85 screens in one frame across a 13-screen pin,
+which is a strobe; dissolve instead (drift and fade out, move under the
+veil, glide the last 0.6 screen while fading in). Measure the worst visible
+per-frame step with a rAF logger; 56px passed.
+
+**Make the case for the reader's real alternative.** The copy said "bring
+YC to LA" and never said why a founder should pick USC kids over Stanford
+and Berkeley kids. Name the alternative the reader is weighing and answer
+it with sourced specifics.
+
+**Manim on a web page:** render light on pure black, re-encode with a
+keyframe every 4 frames for scroll scrubbing, key the poster the same way,
+and zoom by scaling the map, never the camera: Cairo scales stroke width
+with the camera frame and a 20x zoom turned hairlines into ribbons.
+
 ## Done means
 
 `site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no

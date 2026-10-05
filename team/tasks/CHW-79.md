@@ -1,7 +1,7 @@
 ---
 id: CHW-79
 title: Neural mapping and computational neuroscience study
-status: inbox
+status: ideas
 owner: 
 priority: low
 due: 
@@ -20,3 +20,4 @@ Depends on: CB-106
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-108
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

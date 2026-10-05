@@ -1,7 +1,7 @@
 ---
 id: CHW-22
 title: Portal plausibility tests
-status: inbox
+status: ideas
 owner: 
 priority: medium
 due: 
@@ -19,3 +19,4 @@ Evidence: Historical false positives and jitter failures remain regression targe
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-45
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

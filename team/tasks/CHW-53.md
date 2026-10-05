@@ -1,7 +1,7 @@
 ---
 id: CHW-53
 title: Iron Man experience
-status: inbox
+status: ideas
 owner: 
 priority: none
 due: 
@@ -19,3 +19,4 @@ Evidence: Ambition retained, completion criteria undefined
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-24
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

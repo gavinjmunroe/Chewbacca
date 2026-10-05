@@ -1,7 +1,7 @@
 ---
 id: CHW-25
 title: Resourceful, creative, coachable and tasteful
-status: inbox
+status: ideas
 owner: 
 priority: medium
 due: 
@@ -20,3 +20,4 @@ Depends on: CB-0
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-112
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

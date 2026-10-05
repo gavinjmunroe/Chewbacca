@@ -1,7 +1,7 @@
 ---
 id: CHW-95
 title: Hand control
-status: inbox
+status: ideas
 owner: 
 priority: medium
 due: 
@@ -20,3 +20,4 @@ Depends on: CB-45
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-10
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

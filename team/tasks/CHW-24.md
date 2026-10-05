@@ -1,7 +1,7 @@
 ---
 id: CHW-24
 title: Math across the kit
-status: inbox
+status: ideas
 owner: 
 priority: medium
 due: 
@@ -19,3 +19,4 @@ Evidence: Methods and tools exist; broad survey/benefit not verified
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-106
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

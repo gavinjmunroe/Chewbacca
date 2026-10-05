@@ -1,7 +1,7 @@
 ---
 id: CHW-87
 title: Convert any file type (original 27)
-status: inbox
+status: ideas
 owner: 
 priority: low
 due: 
@@ -19,3 +19,4 @@ Evidence: Universal request preserved, literal universality unverified
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-210
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

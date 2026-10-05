@@ -1,7 +1,7 @@
 ---
 id: CHW-63
 title: HUD sound design
-status: inbox
+status: ideas
 owner: 
 priority: low
 due: 
@@ -19,3 +19,4 @@ Evidence: No current acceptance receipt
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-13
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

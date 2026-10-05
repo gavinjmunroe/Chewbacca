@@ -1,7 +1,7 @@
 ---
 id: CHW-80
 title: A formal model of the kit
-status: inbox
+status: ideas
 owner: 
 priority: low
 due: 
@@ -20,3 +20,4 @@ Depends on: CB-106, CB-0, CB-3
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-110
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

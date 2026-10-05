@@ -1,7 +1,7 @@
 ---
 id: CHW-56
 title: Finish the vector-transition
-status: inbox
+status: ideas
 owner: 
 priority: none
 due: 
@@ -19,3 +19,4 @@ Evidence: Original term unresolved; this scoped memory search found no exact mat
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-111
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

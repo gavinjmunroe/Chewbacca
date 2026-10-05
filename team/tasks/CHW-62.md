@@ -1,7 +1,7 @@
 ---
 id: CHW-62
 title: Jarvis voice, Whisper/ElevenLabs alternatives and Plynn
-status: inbox
+status: ideas
 owner: 
 priority: low
 due: 
@@ -20,3 +20,4 @@ Depends on: CB-44
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-12
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

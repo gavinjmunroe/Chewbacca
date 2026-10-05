@@ -13,6 +13,8 @@
 //     under --restricted. The user-level hooks and rules made the first
 //     headless build end on "I committed the project to main" instead of the
 //     two sentences the brief asked for (2026-10-04).
+//   - There is no shell. weft is one MCP tool (bin/weft-mcp) that takes an
+//     argv array and checks it against a per-verb list before running it.
 //   - Anything that reaches outside this Mac or spends money is refused:
 //     putting a trigger live, starting paid infrastructure, deleting, and
 //     answering a person's question on their behalf. On the first build
@@ -28,7 +30,7 @@ const path = require("node:path");
 const readline = require("node:readline");
 const { spawn, spawnSync } = require("node:child_process");
 const view = require("./lib/weft_view.js");
-const { NAME_NOTE, TOOLS, fence, gateDir, packagePlugin, withoutWeftEnv } = require("./lib/weft_fence.js");
+const { NAME_NOTE, TOOLS, fence, mcpConfig, packagePlugin, withoutWeftEnv } = require("./lib/weft_fence.js");
 
 const PROJECTS = process.env.WEFT_PROJECTS || path.join(os.homedir(), "weft-projects");
 const WEFT = process.env.WEFT_BIN || path.join(os.homedir(), ".local", "bin", "weft");
@@ -121,7 +123,9 @@ const hookPath = path.join(fenceDir, `${name}.validate_weft.py`);
 fs.copyFileSync(path.join(dir, ".claude", "hooks", "validate_weft.py"), hookPath);
 const settingsPath = path.join(fenceDir, `${name}.settings.json`);
 const tangleSettings = JSON.parse(fs.readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
-fs.writeFileSync(settingsPath, `${JSON.stringify(fence(tangleSettings, hookPath, path.join(__dirname, "weft-fence-hook")), null, 2)}\n`);
+fs.writeFileSync(settingsPath, `${JSON.stringify(fence(tangleSettings, hookPath), null, 2)}\n`);
+const mcpPath = path.join(fenceDir, `${name}.mcp.json`);
+fs.writeFileSync(mcpPath, `${JSON.stringify(mcpConfig(path.join(__dirname, "weft-mcp"), dir, WEFT), null, 2)}\n`);
 const pluginDir = packagePlugin(dir, path.join(fenceDir, `${name}.plugin`));
 hud(["p thinking"]);
 say("Starting a new agent", false);
@@ -133,11 +137,9 @@ const viewer = spawn(path.join(__dirname, "weft-view"), [dir, "--title", "Your n
 });
 
 
-// `weft` on Tangle's PATH is the gate, which runs the real binary only for
-// the verbs the fence allows. No WEFT_* variable is inherited: several,
+// No WEFT_* variable reaches Tangle or its validate hook: several,
 // WEFT_DISPATCHER_URL and WEFT_TARGET among them, point weft elsewhere.
-const gate = gateDir(path.join(fenceDir, "bin"), path.join(__dirname, "weft-gate"));
-const tangleEnv = { ...withoutWeftEnv(process.env), PATH: `${gate}:${process.env.PATH}`, WEFT_GATE_REAL: WEFT };
+const tangleEnv = withoutWeftEnv(process.env);
 
 const log = fs.createWriteStream(path.join(dir, ".weft", `build-${Date.now()}.jsonl`));
 const tangle = spawn(
@@ -159,6 +161,8 @@ const tangle = spawn(
     TOOLS.join(","),
     "--settings",
     settingsPath,
+    "--mcp-config",
+    mcpPath,
     "--strict-mcp-config",
   ],
   { cwd: dir, stdio: ["ignore", "pipe", "pipe"], env: tangleEnv },

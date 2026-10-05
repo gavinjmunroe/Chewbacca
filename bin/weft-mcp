@@ -1,0 +1,122 @@
+#!/usr/bin/env node
+// weft-mcp: the one tool a fenced Tangle build has for running weft.
+//
+//   weft-mcp <project-dir> <real-weft>
+//
+// A stdio MCP server with a single tool, `weft`, that takes the words after
+// `weft` as a JSON array (and optional stdin), checks them against
+// lib/weft_fence.js SPEC, and runs the real binary with no shell, in the
+// project directory, with no WEFT_ variables. Nothing here is parsed as shell
+// text, which is the point: see the header of lib/weft_fence.js.
+
+"use strict";
+
+const readline = require("node:readline");
+const { spawn } = require("node:child_process");
+const { refusal, withoutWeftEnv } = require("./lib/weft_fence.js");
+
+const [projectDir, realWeft] = process.argv.slice(2);
+if (!projectDir || !realWeft) {
+  process.stderr.write("usage: weft-mcp <project-dir> <real-weft>\n");
+  process.exit(2);
+}
+
+// A first build that compiles a project's own node takes 1 to 3 minutes
+// (weft's weft-running skill); twenty leaves room for a slow run and still
+// ends a hung one.
+const RUN_LIMIT_MS = 20 * 60 * 1000;
+// Tangle reads the tail of a long log; 40 KB kept a whole run's summary on
+// the first live builds without flooding its context.
+const OUTPUT_LIMIT = 40000;
+
+const TOOL = {
+  name: "weft",
+  description:
+    "Run weft in this project. argv is the words after `weft`, one per array item, e.g. [\"run\", \"--target\", \"sum\"]. " +
+    "stdin is optional text fed to the command (validate and parse read the program from stdin). Commands outside this build's list are refused with the reason.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      argv: { type: "array", items: { type: "string" } },
+      stdin: { type: "string" },
+    },
+    required: ["argv"],
+  },
+};
+
+function send(message) {
+  process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...message })}\n`);
+}
+
+function text(content, isError) {
+  return { content: [{ type: "text", text: content }], isError };
+}
+
+function runWeft(argv, stdin) {
+  return new Promise((resolve) => {
+    const child = spawn(realWeft, argv, { cwd: projectDir, env: withoutWeftEnv(process.env), stdio: ["pipe", "pipe", "pipe"] });
+    let out = "";
+    const take = (chunk) => {
+      out += chunk;
+      if (out.length > OUTPUT_LIMIT * 2) out = out.slice(-OUTPUT_LIMIT);
+    };
+    child.stdout.on("data", take);
+    child.stderr.on("data", take);
+    const timer = setTimeout(() => child.kill("SIGTERM"), RUN_LIMIT_MS);
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve(text(`could not run weft: ${error.message}`, true));
+    });
+    child.on("close", (code, signal) => {
+      clearTimeout(timer);
+      const tail = out.length > OUTPUT_LIMIT ? `[earlier output cut]\n${out.slice(-OUTPUT_LIMIT)}` : out;
+      const status = signal ? `stopped by ${signal}` : `exit ${code}`;
+      resolve(text(`${tail}\n[${status}]`, code !== 0));
+    });
+    child.stdin.end(typeof stdin === "string" ? stdin : "");
+  });
+}
+
+async function handle(message) {
+  const { id, method, params } = message;
+  if (method === "initialize") {
+    send({
+      id,
+      result: {
+        protocolVersion: (params && params.protocolVersion) || "2025-06-18",
+        capabilities: { tools: {} },
+        serverInfo: { name: "weft", version: "1" },
+      },
+    });
+  } else if (method === "tools/list") {
+    send({ id, result: { tools: [TOOL] } });
+  } else if (method === "tools/call") {
+    const args = (params && params.arguments) || {};
+    if (!params || params.name !== "weft") {
+      send({ id, result: text(`no tool named ${params && params.name}`, true) });
+      return;
+    }
+    const reason = refusal(args.argv);
+    if (reason) {
+      send({ id, result: text(`refused: ${reason}.`, true) });
+      return;
+    }
+    send({ id, result: await runWeft(args.argv, args.stdin) });
+  } else if (method === "ping") {
+    send({ id, result: {} });
+  } else if (id !== undefined) {
+    send({ id, error: { code: -32601, message: `unknown method ${method}` } });
+  }
+}
+
+readline.createInterface({ input: process.stdin }).on("line", (line) => {
+  let message;
+  try {
+    message = JSON.parse(line);
+  } catch {
+    return;
+  }
+  handle(message).catch((error) => {
+    if (message.id !== undefined) send({ id: message.id, error: { code: -32603, message: error.message } });
+  });
+});

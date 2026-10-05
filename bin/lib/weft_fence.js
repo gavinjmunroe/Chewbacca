@@ -5,236 +5,154 @@ const path = require("node:path");
 
 // The rules a headless Tangle build runs under.
 //
-// Three commit reviews on 2026-10-04 each found a new way past a deny list
-// laid over Tangle's own 53-rule allow list: `weft infra --json start` slipping
-// a prefix deny, `weft test-node` compiling Tangle's Rust with cargo on the Mac,
-// `weft resync` re-activating triggers, `weft run --dispatcher <url>` posting
-// the program anywhere. A CLI with sixty verbs and flags that go before or
-// after the verb does not fit a deny list. So both layers are positive:
-//   - Claude Code allows only the verbs in VERBS, from this file, never from
-//     Tangle's settings. Anything else is refused in -p.
-//   - `weft` on Tangle's PATH is the gate (bin/weft-gate). It reads the argv
-//     the shell actually hands it, refuses any verb not in VERBS and any
-//     target flag however it is spelled, drops WEFT_DISPATCHER_URL, and only
-//     then runs the real binary.
+// Tangle gets no shell. Six commit reviews on 2026-10-04 each found a new way
+// past a policy written over shell text: a flag before the verb, quoting,
+// backslash-newline, zsh glob alternation, a person's .zshrc putting the real
+// weft ahead of a PATH gate, verbs that compile on the host or re-activate
+// triggers. Every one came from a shell standing between the policy and weft.
+// So Bash is not in TOOLS, and weft is reached through one MCP tool
+// (bin/weft-mcp) that takes the argv as a JSON array, checks it against SPEC,
+// and runs the real binary with no shell, in the project directory, with no
+// WEFT_ variables.
+//
+// SPEC is positive per verb: the flags it may carry, whether each takes a
+// value, and how many plain arguments, read from `weft <verb> --help` at
+// 1856da2. Anything not written here is refused. Not here on purpose: going
+// live (activate, resync, wake), infrastructure, deleting (rm, clean, prune,
+// files rm), accounts (connect, token, options), deploying, stopping or
+// cancelling runs, test-node (cargo on the host), catalog update (writes the
+// shared catalog from the network), follow (never returns), and --on /
+// --dispatcher on every verb, which point weft at another install.
 //
 // The rules live outside the project and the build runs under --restricted,
 // which ignores the project and local settings files: Tangle edits files in
 // the project under acceptEdits and once could have rewritten its own rules.
-// --restricted also stops the project's skills and subagents loading, and
-// Tangle cannot build without them, so they are copied, as `weft new` wrote
-// them, into a session plugin outside the project.
-//
-// The gate only works when `weft` resolves to it, and Claude Code runs each
-// command after a shell snapshot built from the person's own zsh startup
-// files: a .zshrc that puts ~/.local/bin first, or aliases weft, would skip it
-// without a word. So the target flags are also refused by a PreToolUse hook
-// (bin/weft-fence-hook) that reads the raw command text before any shell does,
-// and the gate is the third layer rather than the only one.
+// --restricted also stops the project's skills and subagents loading, so they
+// are copied, as `weft new` wrote them, into a session plugin outside it.
 //
 // What the fence does not cover: `weft run` executes the program Tangle wrote,
 // ExecPython and HTTP nodes included, inside Docker, with network.
 
-// Each entry is the verb words that must open the argv. Reading, checking,
-// building, running here, and the version tree. Not here on purpose: going
-// live (activate, resync, wake), infrastructure, deleting (rm, clean,
-// prune), accounts (connect, token, options), deploying, other projects'
-// runs (stop, deactivate, cancel-*), test-node (cargo on the host) and
-// catalog update (writes the shared catalog from the network).
-const VERBS = [
-  ["validate"],
-  ["parse"],
-  ["build"],
-  ["run"],
-  ["describe-nodes"],
-  ["executions"],
-  ["events"],
-  ["logs"],
-  ["status"],
-  ["ps"],
-  ["follow"],
-  ["bake"],
-  ["checkpoint"],
-  ["branch"],
-  ["tree"],
-  ["diff"],
-  ["freeze"],
-  ["examples"],
-  ["files", "ls"],
-  ["files", "inspect"],
-  ["daemon", "status"],
-];
+const VALUE = "value";
+const SWITCH = "switch";
 
-// bake runs a trigger's setup on a container worker without listening, which
-// Tangle needs before `weft run --fire` (first seen on a live build,
-// 2026-10-04). It also takes another project's id and rebuilds that worker,
-// so here it takes flags only: these, each with its value where it has one.
-const BAKE_FLAGS = { "--referenced": 0, "--json": 0, "--running-policy": 1, "--drain-timeout": 1, "--trigger": 1, "--instance": 1 };
+const SPEC = {
+  validate: { flags: { "--file": VALUE }, args: [0, 0] },
+  parse: { flags: { "--file": VALUE }, args: [0, 0] },
+  build: { flags: { "--referenced": SWITCH }, args: [0, 0] },
+  // The plain argument loads examples/<name>.json, whose RunSpec denies
+  // unknown fields and has none that names an install.
+  run: {
+    flags: {
+      "--detach": SWITCH,
+      "--referenced": SWITCH,
+      "--seed": SWITCH,
+      "--seed-until": VALUE,
+      "--seed-before": VALUE,
+      "--root": SWITCH,
+      "--from": VALUE,
+      "--target": VALUE,
+      "--before": VALUE,
+      "--group": VALUE,
+      "--feed": VALUE,
+      "--fire": VALUE,
+      "--emit": VALUE,
+      "--instance": VALUE,
+      "--save": VALUE,
+      "--clear": VALUE,
+      "--long": SWITCH,
+    },
+    args: [0, 1],
+  },
+  // bake runs a trigger's setup on a container worker without listening,
+  // which Tangle needs before `weft run --fire` (seen on a live build,
+  // 2026-10-04). Its plain argument is another project's id, which would
+  // rebuild that worker, so it takes none here.
+  bake: {
+    flags: { "--referenced": SWITCH, "--running-policy": VALUE, "--drain-timeout": VALUE, "--trigger": VALUE, "--instance": VALUE },
+    args: [0, 0],
+  },
+  "describe-nodes": { flags: { "--list": SWITCH, "--stdlib": SWITCH, "--node": VALUE, "--compact": SWITCH }, args: [0, 0] },
+  // --project is left out: another project's runs are not this build's.
+  executions: {
+    flags: { "--limit": VALUE, "--phase": VALUE, "--node": VALUE, "--since": VALUE, "--offset": VALUE, "--status": VALUE, "--instance": VALUE, "--tag": VALUE },
+    args: [0, 0],
+  },
+  events: { flags: { "--node": VALUE, "--kind": VALUE, "--iteration": VALUE, "--full": SWITCH }, args: [1, 1] },
+  logs: { flags: { "--limit": VALUE }, args: [0, 1] },
+  status: { flags: {}, args: [0, 0] },
+  ps: { flags: {}, args: [0, 0] },
+  checkpoint: { flags: { "--root": SWITCH }, args: [0, 1] },
+  branch: { flags: { "--discard": SWITCH }, args: [1, 1] },
+  tree: { flags: {}, args: [0, 0] },
+  diff: { flags: { "--full": SWITCH }, args: [2, 2] },
+  freeze: { flags: { "--expect": VALUE }, args: [1, 2] },
+  examples: { flags: {}, args: [0, 0] },
+  "files ls": { flags: {}, args: [0, 1] },
+  "files inspect": { flags: {}, args: [1, 1] },
+  "daemon status": { flags: {}, args: [0, 0] },
+};
 
-function bakeRefusal(rest) {
-  for (let i = 0; i < rest.length; i += 1) {
-    const [flag, inline] = rest[i].split(/=(.*)/s);
-    if (!(flag in BAKE_FLAGS)) return `weft bake ${rest[i]} is not allowed in this build; bake takes this project only`;
-    if (BAKE_FLAGS[flag] && inline === undefined) i += 1;
-  }
-  return null;
-}
-
-// Global flags weft reads before the verb. --json only changes output.
-const LEADING_OK = ["--json"];
-
-// Flags that point a verb at another install: --dispatcher takes an address,
-// --on reads one from weft.toml, which Tangle can edit.
-const TARGET_FLAGS = ["--dispatcher", "--on"];
-
-const PLUGIN_PARTS = ["skills", "agents", "commands"];
+const TOOL = "mcp__weft__weft";
 
 const NAME_NOTE =
-  "Your skills, commands and helpers are loaded as the tangle plugin, so their names carry a tangle: prefix. " +
-  "When your instructions name node-smith, the weft-language skill or /weft-run, use tangle:node-smith, tangle:weft-language and /tangle:weft-run. " +
-  "In this build weft refuses test-node, activate, infra and account commands; prove a node with weft run instead.";
+  "There is no shell in this build. Run weft through the mcp__weft__weft tool: pass the words after `weft` as the argv array, " +
+  'for example ["run", "--target", "sum"], and pass program text as stdin for validate and parse. ' +
+  "Your skills, commands and helpers are loaded as the tangle plugin, so their names carry a tangle: prefix: " +
+  "node-smith is tangle:node-smith, the weft-language skill is tangle:weft-language. " +
+  "This build cannot use test-node, activate, infra, account or deploy commands; prove a node with weft run instead.";
 
-// No WebFetch or WebSearch: a build has no reason to reach the network
-// except through weft, and weft's network verbs are not in VERBS.
-const TOOLS = ["Bash", "Read", "Edit", "Write", "Glob", "Grep", "Agent", "Skill", "TodoWrite"];
+// No Bash, no WebFetch, no WebSearch: weft is reached through TOOL only.
+const TOOLS = ["Read", "Edit", "Write", "Glob", "Grep", "Agent", "Skill", "TodoWrite"];
 
-// Returns null when the gate may run `weft <argv>`, or the reason it may not.
+// Returns null when `weft <argv>` may run, or the reason it may not. --json
+// is weft's only global flag that is not a target, and only changes output.
 function refusal(argv) {
-  const words = [...argv];
-  while (words.length && words[0].startsWith("-")) {
-    if (!LEADING_OK.includes(words[0])) return `${words[0]} before the verb is not allowed in this build`;
-    words.shift();
+  if (!Array.isArray(argv) || argv.length === 0 || !argv.every((word) => typeof word === "string")) {
+    return "argv must be a non-empty array of strings";
   }
-  for (const word of argv) {
-    if (TARGET_FLAGS.some((flag) => word === flag || word.startsWith(`${flag}=`))) {
-      return `${word.split("=")[0]} points weft at another install, which this build does not do`;
-    }
-  }
-  const verb = VERBS.find((parts) => parts.every((part, i) => words[i] === part));
+  const words = argv.filter((word) => word !== "--json");
+  const verb = [words.slice(0, 2).join(" "), words[0]].find((key) => key && Object.hasOwn(SPEC, key));
   if (!verb) return `weft ${words.slice(0, 2).join(" ")} is not allowed in this build`;
-  if (verb[0] === "bake") return bakeRefusal(words.slice(1));
-  return null;
-}
-
-// For the PreToolUse hook: splits a Bash call's raw command into the words
-// zsh would hand a program, before any shell runs it, and checks those words.
-// Anything that would expand is refused outright rather than modelled ($,
-// backticks, globs, zsh's (a|b) alternation, unquoted {a,b}, a word opening
-// with ~ or =), so every word
-// left is literal. Quoting follows zsh: nothing escapes inside '...'; inside
-// "..." a backslash escapes only $ ` " \ and newline; outside quotes it
-// escapes anything, and backslash-newline disappears. Over-inclusive on
-// purpose: a refused harmless command costs Tangle one retry. Two reviews on
-// 2026-10-04 found shapes a plainer match missed: --dis\<newline>patcher and
-// --on<file.
-const WORD_END = new Set([" ", "\t", "\n", ";", "&", "|", "<", ">"]);
-const REFUSED_PLAIN = { $: "shell expansion", "`": "shell expansion", "*": "wildcards", "?": "wildcards", "[": "wildcards", "(": "parentheses", ")": "parentheses" };
-const DOUBLE_ESCAPES = new Set(["$", "`", '"', "\\", "\n"]);
-
-function shellWords(source) {
-  const words = [];
-  let word = "";
-  let started = false;
-  let state = "plain";
-  let braceOpen = false;
-  const end = () => {
-    if (started) words.push(word);
-    word = "";
-    started = false;
-  };
-  for (let i = 0; i < source.length; i += 1) {
-    const ch = source[i];
-    const next = source[i + 1];
-    if (state === "single") {
-      if (ch === "'") state = "plain";
-      else word += ch;
+  const spec = SPEC[verb];
+  const rest = words.slice(verb.split(" ").length);
+  let plain = 0;
+  for (let i = 0; i < rest.length; i += 1) {
+    const word = rest[i];
+    if (!word.startsWith("-") || word === "-") {
+      plain += 1;
       continue;
     }
-    if (state === "double") {
-      if (ch === '"') state = "plain";
-      else if (ch === "$" || ch === "`") return { refused: "shell expansion" };
-      else if (ch === "\\" && DOUBLE_ESCAPES.has(next)) {
-        if (next !== "\n") word += next;
-        i += 1;
-      } else word += ch;
-      continue;
-    }
-    if (ch === "\\") {
-      if (next !== "\n" && next !== undefined) {
-        word += next;
-        started = true;
-      }
+    const eq = word.indexOf("=");
+    const flag = eq === -1 ? word : word.slice(0, eq);
+    if (!Object.hasOwn(spec.flags, flag)) return `weft ${verb} ${flag} is not allowed in this build`;
+    if (spec.flags[flag] === SWITCH && eq !== -1) return `${flag} takes no value`;
+    if (spec.flags[flag] === VALUE && eq === -1) {
+      // A value that looks like a flag is where weft's parser and this one
+      // could disagree; weft would refuse it anyway.
+      if (i + 1 >= rest.length || rest[i + 1].startsWith("-")) return `${flag} needs a value`;
       i += 1;
-      continue;
-    }
-    if (REFUSED_PLAIN[ch]) return { refused: REFUSED_PLAIN[ch] };
-    if (WORD_END.has(ch)) {
-      end();
-      continue;
-    }
-    // zsh expands an unquoted ~ or = opening a word (home, command path).
-    if (!started && (ch === "~" || ch === "=")) return { refused: "shell expansion" };
-    started = true;
-    if (ch === "'") state = "single";
-    else if (ch === '"') state = "double";
-    else {
-      if (ch === "{") braceOpen = true;
-      else if (ch === "}") braceOpen = false;
-      else if (ch === "," && braceOpen) return { refused: "unquoted {a,b}" };
-      word += ch;
     }
   }
-  end();
-  return { words };
-}
-
-function commandRefusal(text) {
-  const { words, refused } = shellWords(String(text || ""));
-  if (refused) return `${refused} is not allowed in this build; write the value out and quote it`;
-  for (const word of words) {
-    if (word.includes("WEFT_")) return "weft's own environment settings are not set from a command in this build";
-    const flag = TARGET_FLAGS.find((f) => word === f || word.startsWith(`${f}=`));
-    if (flag) return `${flag} points weft at another install, which this build does not do`;
-  }
+  const [min, max] = spec.args;
+  if (plain < min || plain > max) return `weft ${verb} takes ${min === max ? min : `${min} to ${max}`} plain argument(s), not ${plain}`;
   return null;
 }
 
 // weft reads WEFT_DISPATCHER_URL, WEFT_TARGET, WEFT_PUBLIC_URL, WEFT_INSTALL
-// and two dozen more; several point it somewhere else. None is inherited.
-// keep: names to leave in place (the gate's own WEFT_GATE_REAL).
-function withoutWeftEnv(env, keep = []) {
-  const out = {};
-  for (const [key, value] of Object.entries(env)) {
-    if (!key.startsWith("WEFT_") || keep.includes(key)) out[key] = value;
-  }
-  return out;
-}
-
-function allowRules() {
-  return VERBS.map((parts) => `Bash(weft ${parts.join(" ")}:*)`);
-}
-
-// Belt and braces under the allow list: the shapes the reviews found.
-function denyRules() {
-  const rules = [];
-  for (const flag of TARGET_FLAGS) rules.push(`Bash(weft * ${flag} *)`, `Bash(weft * ${flag}=*)`, `Bash(weft ${flag}:*)`);
-  return rules;
+// and two dozen more; several point it somewhere else. None is passed on.
+function withoutWeftEnv(env) {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith("WEFT_")));
 }
 
 // tangleSettings: the parsed .claude/settings.json `weft new` wrote; only its
 // CLAUDE.md exclusions are kept. hookPath: a copy of validate_weft.py outside
-// the project. fenceHookPath: bin/weft-fence-hook.
-function fence(tangleSettings, hookPath, fenceHookPath) {
+// the project.
+function fence(tangleSettings, hookPath) {
   return {
     claudeMdExcludes: tangleSettings.claudeMdExcludes || [],
-    permissions: { allow: allowRules(), deny: denyRules() },
+    permissions: { allow: [TOOL], deny: ["Bash", "WebFetch", "WebSearch"] },
     hooks: {
-      PreToolUse: [
-        {
-          matcher: "Bash",
-          hooks: [{ type: "command", command: `node ${JSON.stringify(fenceHookPath)}`, timeout: 10 }],
-        },
-      ],
       PostToolUse: [
         {
           matcher: "Edit|Write|MultiEdit",
@@ -245,14 +163,29 @@ function fence(tangleSettings, hookPath, fenceHookPath) {
   };
 }
 
+// The --mcp-config for a build: one server, bin/weft-mcp, bound to this
+// project and this weft binary.
+function mcpConfig(serverPath, projectDir, realWeft) {
+  return { mcpServers: { weft: { type: "stdio", command: process.execPath, args: [serverPath, projectDir, realWeft] } } };
+}
+
 // Copies the project's skills, agents and commands into pluginDir, which must
-// sit outside the project, and returns pluginDir.
+// sit outside the project, and returns pluginDir. A helper whose tools list
+// names Bash gets TOOL in its place, since Bash does not exist here.
 function packagePlugin(projectDir, pluginDir) {
   fs.rmSync(pluginDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(pluginDir, ".claude-plugin"), { recursive: true });
-  for (const part of PLUGIN_PARTS) {
+  for (const part of ["skills", "agents", "commands"]) {
     const from = path.join(projectDir, ".claude", part);
     if (fs.existsSync(from)) fs.cpSync(from, path.join(pluginDir, part), { recursive: true });
+  }
+  const agents = path.join(pluginDir, "agents");
+  if (fs.existsSync(agents)) {
+    for (const file of fs.readdirSync(agents).filter((name) => name.endsWith(".md"))) {
+      const full = path.join(agents, file);
+      const text = fs.readFileSync(full, "utf8");
+      fs.writeFileSync(full, text.replace(/^tools:.*$/m, (line) => line.replace(/\bBash\b/, TOOL)));
+    }
   }
   fs.writeFileSync(
     path.join(pluginDir, ".claude-plugin", "plugin.json"),
@@ -261,14 +194,4 @@ function packagePlugin(projectDir, pluginDir) {
   return pluginDir;
 }
 
-// A directory holding only `weft`, linked to the gate, for the front of
-// Tangle's PATH.
-function gateDir(dir, gatePath) {
-  fs.mkdirSync(dir, { recursive: true });
-  const link = path.join(dir, "weft");
-  fs.rmSync(link, { force: true });
-  fs.symlinkSync(gatePath, link);
-  return dir;
-}
-
-module.exports = { NAME_NOTE, TOOLS, VERBS, allowRules, commandRefusal, denyRules, fence, gateDir, packagePlugin, refusal, shellWords, withoutWeftEnv };
+module.exports = { NAME_NOTE, SPEC, TOOL, TOOLS, fence, mcpConfig, packagePlugin, refusal, withoutWeftEnv };

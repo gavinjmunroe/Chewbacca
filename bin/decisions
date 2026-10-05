@@ -5,6 +5,9 @@
     decisions --name route -n 50       one decision type
     decisions stats                    calls, errors, median ms, right/wrong by confidence
     decisions mark <id> right|wrong|unknown [note]    label one by hand
+    decisions join                     outcomes from transcripts (skill-route)
+    decisions calibrate [--target 0.9] floor per decision from labelled outcomes,
+                                       saved to ~/.bob/decision-floors.json
 
 Reads ~/.bob/decisions.jsonl, written by jev.ask(..., decision=...). Local
 only: the log and these figures never go into a repo (TypeSafe's agreement,
@@ -19,6 +22,7 @@ from pathlib import Path
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 import decision_log  # noqa: E402
+import outcome_join  # noqa: E402
 
 
 def show(d: dict) -> str:
@@ -31,12 +35,29 @@ def show(d: dict) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("command", nargs="?", default="tail", choices=["tail", "stats", "mark"])
+    ap.add_argument("command", nargs="?", default="tail", choices=["tail", "stats", "mark", "join", "calibrate"])
     ap.add_argument("rest", nargs="*")
     ap.add_argument("--name")
     ap.add_argument("-n", type=int, default=20)
     ap.add_argument("--json", action="store_true")
+    ap.add_argument("--target", type=float, default=0.9)
+    ap.add_argument("--min-n", type=int, default=30)
     args = ap.parse_args()
+    if args.command == "join":
+        print(json.dumps(outcome_join.join_skill_routes()))
+        return 0
+    if args.command == "calibrate":
+        table = outcome_join.calibrate(args.target, args.min_n)
+        outcome_join.save_floors(table)
+        if args.json:
+            print(json.dumps(table, indent=2))
+            return 0
+        for name, t in sorted(table.items()):
+            floor = t["floor"] if t["floor"] is not None else f"none meets {t['target']:.0%}"
+            print(f"{name}: {t['labelled']} labelled, floor {floor}")
+            for st in t["steps"]:
+                print(f"  p >= {st['at_least']:.2f}: {st['accuracy']:.0%} of {st['n']}")
+        return 0
     if args.command == "mark":
         if len(args.rest) < 2:
             ap.error("mark <id> right|wrong|unknown [note]")

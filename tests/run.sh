@@ -323,6 +323,7 @@ if group "decision-learning"; then
   check "Jev transport shape and credential compatibility" python3 "$ROOT/tests/test_jev_transport.py"
   check "hybrid skill route: code, Jev, model fallback, budgets, verifier and resume" python3 "$ROOT/tests/test_hybrid_route.py"
   check  "shadow skill routing logs Jev and keyword picks side by side, never raises" python3 "$ROOT/tests/test_skill_route_shadow.py"
+  check  "outcomes join from transcripts and calibrate a floor per decision" python3 "$ROOT/tests/test_outcome_join.py"
   check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 

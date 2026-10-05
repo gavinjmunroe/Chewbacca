@@ -208,6 +208,21 @@ over:
 
 Go online for all of this. The best reference is rarely on disk already.
 
+**Copy answers the reader; the picture illustrates the answer.** On
+2026-10-04 the T Combinator animation landed, and Caleb said the copy "makes
+absolutely no sense to a yc company looking at this ... and it makes no
+sense to a USC student". The captions had narrated the animation ("Your
+neighborhood. 232", "One lit window") when they should have answered the
+reader. Before writing a caption:
+- Name each reader and the moment they arrive (here, a founder replying
+  "more info" to a DM, and a student who heard about the club).
+- List the questions they have, in order.
+- Assign one question to each beat.
+
+A metaphor stays scenery and never carries meaning on its own. Write the copy
+as one document, `docs/COPY-<site>.md`, by one author, and have builders
+implement it verbatim.
+
 ## Done means
 
 `site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no

@@ -131,6 +131,11 @@ const viewer = spawn(path.join(__dirname, "weft-view"), [dir, "--title", "Your n
 });
 
 
+// A non-empty WEFT_DISPATCHER_URL points every weft verb at that address, the
+// same reach --dispatcher has, so the build never inherits one.
+const tangleEnv = { ...process.env, PATH: `${path.dirname(WEFT)}:${process.env.PATH}` };
+delete tangleEnv.WEFT_DISPATCHER_URL;
+
 const log = fs.createWriteStream(path.join(dir, ".weft", `build-${Date.now()}.jsonl`));
 const tangle = spawn(
   CLAUDE,
@@ -153,7 +158,7 @@ const tangle = spawn(
     settingsPath,
     "--strict-mcp-config",
   ],
-  { cwd: dir, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, PATH: `${path.dirname(WEFT)}:${process.env.PATH}` } },
+  { cwd: dir, stdio: ["ignore", "pipe", "pipe"], env: tangleEnv },
 );
 
 let result = "";

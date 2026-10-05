@@ -37,6 +37,23 @@ test("a flag before the verb cannot reach a refused verb", () => {
   }
 });
 
+test("no allowed verb compiles Tangle's code on the host or puts a trigger live", () => {
+  // test-node runs a project's Rust with plain cargo outside Docker; resync is
+  // deactivate-then-activate. Both were allowed by the first fence.
+  for (const verb of ["weft test-node", "weft resync"]) {
+    assert.ok(tangle.permissions.allow.some((r) => r.startsWith(`Bash(${verb}`)), `fixture should allow ${verb} before fencing`);
+    assert.ok(!allow.some((r) => r.startsWith(`Bash(${verb}`)), `${verb} is still allowed`);
+  }
+});
+
+test("a target flag after the verb is denied wherever it sits", () => {
+  // `weft run --dispatcher <url>` posts the program to that address.
+  for (const flag of ["--dispatcher", "--on"]) {
+    assert.ok(fenced.permissions.deny.includes(`Bash(weft * ${flag} *)`), `${flag} with a space is not denied`);
+    assert.ok(fenced.permissions.deny.includes(`Bash(weft * ${flag}=*)`), `${flag}= is not denied`);
+  }
+});
+
 test("the build and inspect verbs Tangle needs stay allowed", () => {
   for (const rule of ["Bash(weft validate:*)", "Bash(weft run:*)", "Bash(weft describe-nodes:*)", "Bash(weft events:*)", "Bash(weft freeze:*)"]) {
     assert.ok(allow.includes(rule), `${rule} was dropped`);
@@ -71,4 +88,5 @@ test("weft-build runs Tangle under the fence, never the project's own rules", ()
   assert.ok(!/path\.join\(dir, "\.claude", "settings\.json"\)\s*,?\s*\n\s*"--/.test(source), "the project's settings file is passed as --settings");
   assert.ok(!source.includes('"--setting-sources"'));
   assert.ok(!fenceLib.TOOLS.includes("WebFetch") && !fenceLib.TOOLS.includes("WebSearch"));
+  assert.ok(source.includes("delete tangleEnv.WEFT_DISPATCHER_URL"), "the build can inherit a dispatcher address");
 });

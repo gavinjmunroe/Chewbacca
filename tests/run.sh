@@ -1225,6 +1225,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_kyber_surfaces.py"
   check  "kyber-sessions types into an idle open session through its inbox, refuses a hold, forks on a press" \
     python3 "$ROOT/tests/test_kyber_sessions.py"
+  check  "the agent engine client proves the server is ours, gates writes and exec, and flags a write that may have run" \
+    python3 "$ROOT/tests/test_realm_client.py"
   check  "engines run only remixable, local, spec-declared reads, and oss labels every license" \
     python3 "$ROOT/tests/test_surface_engines.py"
   check  "code is read only, refuses a path with a control, format or bidi character, and runs no repo filter" \

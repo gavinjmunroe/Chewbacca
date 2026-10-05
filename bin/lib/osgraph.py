@@ -31,10 +31,12 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 NODE_TYPES = frozenset({
@@ -132,15 +134,59 @@ CREATE INDEX IF NOT EXISTS nodes_source ON nodes (source);
 """
 
 
+# Message text older than this is deleted from the graph on every ingest. It
+# is the pilot window (7 days), and the graph is a copy of TCC-protected
+# chat.db and Mail data, so it keeps no more than a surface shows.
+RETENTION_DAYS = 7
+# A message or mail stored in the graph keeps this many characters: enough
+# for one line on a panel, not the conversation.
+SNIPPET_CHARS = 80
+
+
+def sidecars(path: str) -> list[str]:
+    return [path + suffix for suffix in ("", "-wal", "-shm", "-journal")]
+
+
 class Graph:
     def __init__(self, path: Path | str | None = None):
         self.path = str(path or default_path())
+        fresh = self.path != ":memory:" and not Path(self.path).exists()
         if self.path != ":memory:":
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(self.path, check_same_thread=False, timeout=10)
-        self.db.row_factory = sqlite3.Row
-        self.db.executescript(SCHEMA)
+        # Owner-only from the first byte. The first version was created 0644,
+        # so a copy of TCC-protected message text was readable by any local
+        # process (push review, 2026-10-04). SQLite gives its -wal, -shm and
+        # -journal files the database file's mode.
+        old = os.umask(0o077)
+        try:
+            self.db = sqlite3.connect(self.path, check_same_thread=False, timeout=10)
+            self.db.row_factory = sqlite3.Row
+            self.db.execute("PRAGMA secure_delete = ON")
+            self.db.executescript(SCHEMA)
+        finally:
+            os.umask(old)
+        if self.path != ":memory:":
+            for f in sidecars(self.path):
+                if os.path.exists(f):
+                    os.chmod(f, 0o600)
+            if fresh:
+                exclude_from_backups(self.path)
         self.lock = threading.RLock()
+
+    def prune(self, now: datetime, days: int = RETENTION_DAYS) -> int:
+        """Delete messages, mail and the tasks read out of them older than
+        `days`, with their edges. Returns how many nodes went."""
+        cutoff = (now - timedelta(days=days)).isoformat()
+        with self.lock, self.db:
+            ids = [r[0] for r in self.db.execute(
+                "SELECT id FROM nodes WHERE (type IN ('Message', 'MailItem') OR id LIKE 'task:imessage:%') "
+                "AND observed_at < ?", (cutoff,))]
+            for i in range(0, len(ids), 500):
+                chunk = ids[i:i + 500]
+                marks = ",".join("?" * len(chunk))
+                self.db.execute(f"DELETE FROM edges WHERE src IN ({marks}) OR dst IN ({marks})", chunk + chunk)
+                self.db.execute(f"DELETE FROM nodes WHERE id IN ({marks})", chunk)
+        return len(ids)
 
     # ── writing ──────────────────────────────────────────────────────────
 
@@ -242,6 +288,29 @@ class Graph:
         }
 
 
+def exclude_from_backups(path: str) -> None:
+    """Keep the graph out of Time Machine. Best effort: off a Mac, or with
+    tmutil refusing, the file is still owner-only."""
+    if os.environ.get("KYBER_OS_GRAPH_NO_TM") or not shutil.which("tmutil"):
+        return
+    try:
+        subprocess.run(["tmutil", "addexclusion", path], capture_output=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
+def forget(path: Path | str | None = None) -> list[str]:
+    """Delete the graph and its sidecar files. Returns what was removed."""
+    gone = []
+    for f in sidecars(str(path or default_path())):
+        try:
+            os.remove(f)
+            gone.append(f)
+        except FileNotFoundError:
+            pass
+    return gone
+
+
 def _node(row) -> dict:
     d = dict(row)
     d["props"] = json.loads(d["props"] or "{}")
@@ -259,10 +328,47 @@ def _edge(row) -> dict:
 
 
 def phone_key(value: str) -> str:
-    """The last ten digits, so "+1 (310) 555-0100" and "3105550100" meet.
-    Numbers shorter than ten digits are kept whole."""
-    digits = re.sub(r"\D", "", value or "")
-    return digits[-10:] if len(digits) >= 10 else digits
+    """A phone number in E.164, compared whole.
+
+    The first version kept the last ten digits, so +44 626 555 0103 and
+    +1 626 555 0103 were one person and a reply could go to the wrong
+    country (push review, 2026-10-04). Now: a leading + keeps every digit; a
+    bare ten-digit number is a US number (+1), because that is how this
+    people store writes them ("6265550103"); an eleven-digit number starting
+    with 1 is the same with the 1 typed. Anything else keeps its digits with
+    no country assumed, so it only ever matches itself."""
+    raw = (value or "").strip()
+    digits = re.sub(r"\D", "", raw)
+    if not digits:
+        return ""
+    if raw.startswith("+"):
+        return "+" + digits
+    if len(digits) == 10:
+        return "+1" + digits
+    if len(digits) == 11 and digits.startswith("1"):
+        return "+" + digits
+    return digits
+
+
+def email_key(value: str) -> str:
+    """An email address compared exactly, case-folded only in ASCII. A
+    non-ASCII address never matches anything: Unicode case folding maps
+    lookalikes onto ASCII (the Kelvin sign lowercases to "k"), which is how
+    a lookalike sender would land on a known person. Plus-addresses are kept
+    whole, so sagar+x@ is not sagar@."""
+    value = (value or "").strip()
+    if not value.isascii() or "@" not in value:
+        return ""
+    return value.lower()
+
+
+def handle_key(handle: str) -> str:
+    handle = (handle or "").strip()
+    if "@" in handle:
+        key = email_key(handle)
+        return "email:" + key if key else ""
+    key = phone_key(handle)
+    return "phone:" + key if key else ""
 
 
 class Identities:
@@ -270,8 +376,10 @@ class Identities:
 
     One phone or email belongs to one person there (its primary key is
     (kind, value)), but formats differ ("(626) ..." vs "+1626..."), so phones
-    meet on their last ten digits. A key that two people share is AMBIGUOUS and
-    resolves to nobody: guessing between them is the merge this refuses."""
+    meet in E.164 and emails exactly (`phone_key`, `email_key`). A key that
+    two people share is AMBIGUOUS and resolves to nobody: guessing between
+    them is the merge this refuses. Nothing here ever adds an alias: a handle
+    seen in a message that is not in the store stays its own node."""
 
     def __init__(self, db_path: Path | str | None = None):
         path = Path(db_path or os.environ.get("PEOPLE_DB")
@@ -295,8 +403,10 @@ class Identities:
             for pid, kind, value in db.execute("SELECT person_id, kind, value FROM identities"):
                 if pid not in self.people:
                     continue
-                key = ("phone:" + phone_key(value)) if kind == "phone" else ("email:" + value.strip().lower())
-                self.by_key.setdefault(key, set()).add(pid)
+                key = handle_key(value) if kind == "email" or "@" in value else (
+                    "phone:" + phone_key(value) if phone_key(value) else "")
+                if key:
+                    self.by_key.setdefault(key, set()).add(pid)
             try:
                 self.tasks = [dict(zip(("id", "person_id", "title", "due_at"), r)) for r in db.execute(
                     "SELECT id, person_id, title, due_at FROM tasks WHERE done_at IS NULL")]
@@ -315,9 +425,8 @@ class Identities:
 
     def resolve(self, handle: str) -> str | None:
         """people id for an iMessage handle or email address, or None."""
-        handle = (handle or "").strip()
-        key = ("email:" + handle.lower()) if "@" in handle else ("phone:" + phone_key(handle))
-        found = self.by_key.get(key) or set()
+        key = handle_key(handle)
+        found = self.by_key.get(key) or set() if key else set()
         return next(iter(found)) if len(found) == 1 else None
 
     def by_name(self, name: str) -> list[dict]:
@@ -329,16 +438,22 @@ class Identities:
                 if want and (p["name"].lower() == want or p["nickname"].lower() == want)]
 
 
-def person_node(ids: Identities, handle: str, label: str = "", source_hint: str = "") -> Node:
-    """The Person a handle is: the people-store person when it resolves, else
-    a node of its own for that exact handle, flagged unresolved."""
-    pid = ids.resolve(handle)
+def person_node(ids: Identities, handle: str, source_hint: str = "", verified: bool = True) -> Node:
+    """The Person a handle is: the people-store person when it resolves (and,
+    for mail, `verified` says the sender passed authentication), else a node
+    of its own for that exact handle, flagged unresolved and labelled with the
+    raw handle. A display name a sender chose ("Karthik Devarakonda" on a new
+    number or a spoofed From) is never a label: the first version used it,
+    so a stranger could appear under a known person's name."""
+    handle = (handle or "").strip()
+    pid = ids.resolve(handle) if verified else None
     if pid:
         p = ids.people[pid]
         return Node(f"person:{pid}", "Person", p["name"], {"company": p["company"]}, 1.0, False)
-    clean = handle.strip().lower() if "@" in handle else (phone_key(handle) or handle.strip())
-    return Node(f"person:handle:{clean}", "Person", label or handle.strip(),
-                {"handle": handle.strip(), "seen_as": source_hint}, 0.5, True)
+    key = handle_key(handle)
+    clean = key.split(":", 1)[1] if key else re.sub(r"[^\w@.+-]", "_", handle.lower())[:80] or "unknown"
+    return Node(f"person:handle:{clean}", "Person", handle or "unknown sender",
+                {"handle": handle, "seen_as": source_hint, "unverified": not verified}, 0.5, True)
 
 
 def me_node() -> Node:

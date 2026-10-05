@@ -84,9 +84,9 @@ def fusion(tmp: Path) -> None:
     law, larsen = osgraph.person_node(ids, "+16265550103"), osgraph.person_node(ids, "+16265550104")
     check("Tyler Law and Tyler Larsen stay two people", law.id != larsen.id and "Law" in law.label
           and "Larsen" in larsen.label, (law.id, larsen.id))
-    stranger = osgraph.person_node(ids, "+15625550199", label="+15625550199")
+    stranger = osgraph.person_node(ids, "+15625550199")
     check("an unsaved number is its own node, flagged unresolved",
-          stranger.unresolved and stranger.id == "person:handle:5625550199", stranger)
+          stranger.unresolved and stranger.id == "person:handle:+15625550199", stranger)
     owners = ingest.owner_people("Caleb + Tyler", ids, "Caleb")
     check("a backlog first name never resolves to one of two Tylers",
           owners[0].id == ME and owners[1].unresolved and owners[1].id == "person:name:tyler", owners)
@@ -139,7 +139,7 @@ def ingested(tmp: Path) -> None:
           len([t for t in g.nodes("Thread") if t["props"]["handle"] == "+16305550101"]) == 1)
     waiting = {e["src"] for e in g.edges(verb="AWAITS_REPLY_FROM", dst=ME)}
     want = {"thread:imessage:+16305550101", "thread:imessage:+16265550104", "thread:imessage:+15625550199",
-            "mail:m1"}
+            "mail:m1", "mail:m3", "mail:m4", "mail:m5"}
     check("AWAITS_REPLY_FROM me is exactly the asks", waiting == want, sorted(waiting))
     check("the injection text waits on no one and became no task",
           "thread:imessage:+13105550105" not in waiting
@@ -210,7 +210,7 @@ def ingested(tmp: Path) -> None:
           pp["rows"][0]["label"] in ("Cathy Newton", "Sagar Tiwari") and pp["rows"][-1]["unresolved"],
           [(r["label"], r["unresolved"]) for r in pp["rows"]])
     cv = W.conversations(g, fx.NOW)
-    check("conversations: N to act on counts the waiting threads and mail", cv["to_act"] == 4, cv["to_act"])
+    check("conversations: N to act on counts the waiting threads and mail", cv["to_act"] == 7, cv["to_act"])
 
     # Snapshot replace: a reply clears the edge on the next pass.
     db = __import__("sqlite3").connect(ctx.env["KYBER_SURFACES_CHAT_DB"])
@@ -224,6 +224,79 @@ def ingested(tmp: Path) -> None:
           not any(e["src"] == "thread:imessage:+16305550101" for e in g.edges(verb="AWAITS_REPLY_FROM", dst=ME)))
 
 
+def identity_spoofing(tmp: Path) -> None:
+    """Push review, 2026-10-04: last-ten-digit phones, Unicode-lowercased
+    emails and sender-chosen names could all land a stranger on a known
+    person."""
+    ids = osgraph.Identities(fx.people_db(tmp / "people.db"))
+    us, uk = osgraph.person_node(ids, "+16265550103"), osgraph.person_node(ids, "+446265550103")
+    check("two numbers differing only in country code are two people",
+          us.id == f"person:{fx.TYLER_LAW}" and uk.unresolved and uk.id != us.id, (us.id, uk.id))
+    check("a bare ten-digit number is read as +1", osgraph.phone_key("626-555-0103") == "+16265550103")
+    check("a number with its own country code keeps it", osgraph.phone_key("+44 626 555 0103") == "+446265550103")
+    check("an email differing only in ASCII case is the same person", ids.resolve("SAGAR@AMBER.EXAMPLE") == fx.SAGAR)
+    for fake in ("sagar+x@amber.example", "s\u0430gar@amber.example", "sagar@amber.example.evil.com",
+                 "\u0455agar@amber.example"):
+        check(f"lookalike {fake!r} is nobody", ids.resolve(fake) is None)
+    check("a Kelvin sign never folds to k", osgraph.email_key("\u212aarthik@amber.example") == "")
+    stranger = osgraph.person_node(ids, "+15555550000")
+    check("a new handle is labelled with itself, whatever name it claims",
+          stranger.label == "+15555550000" and stranger.unresolved)
+    check("person_node takes no display name at all",
+          "label" not in osgraph.person_node.__code__.co_varnames[:osgraph.person_node.__code__.co_argcount])
+    check("a handle never adds an alias: the store is read only",
+          not hasattr(ids, "add") and ids.resolve("+15555550000") is None)
+
+    g, ctx, run, _ = fx.world(tmp / "w")
+    karthik = f"person:{fx.KARTHIK}"
+    sagar = f"person:{fx.SAGAR}"
+    m3 = g.out("mail:m3", "SENT_BY")[0]
+    check("mail From 'Karthik Devarakonda' at a stranger's address is not Karthik",
+          m3["id"] != karthik and m3["unresolved"] and m3["label"] == "karthik.d@evil.example", m3)
+    check("and the panel shows it as the raw address, unverified",
+          g.node("mail:m3")["props"]["from"] == "karthik.d@evil.example" and m3["props"]["unverified"])
+    check("Karthik's walk never shows the spoof",
+          not any("Wire the funds" in m["text"] for m in W.person(g, ctx.ids, "Karthik Devarakonda", fx.NOW)["timeline"]))
+    check("a name lookup still finds the real Karthik", W.find_person(g, ctx.ids, "Karthik Devarakonda")[0] == karthik)
+    senders = {m: g.out(f"mail:{m}", "SENT_BY")[0]["id"] for m in ("m1", "m4", "m5")}
+    check("Sagar's address with DMARC passing at iCloud is Sagar", senders["m1"] == sagar, senders)
+    check("Sagar's address with DMARC failing is not Sagar", senders["m4"] != sagar, senders)
+    check("a pass header written by the sender, not the receiver, is not Sagar", senders["m5"] != sagar, senders)
+    row = next(r for r in W.needs_you(g, fx.NOW)["rows"] + W.conversations(g, fx.NOW)["rows"] if r["id"] == "mail:m3")
+    check("on needs-you or conversations the spoof carries no person's name",
+          all("Karthik" not in c["label"] for c in row["chips"]) and any("unverified" in c["label"] for c in row["chips"]),
+          row["chips"])
+    import osgraph_ingest
+    calls = []
+    ctx.run = lambda argv: calls.append(argv) or (0, "", "")
+    check("a Message-ID with a quote never reaches AppleScript",
+          osgraph_ingest.auth_headers(ctx, 'x" & do shell script "id') == "" and calls == [])
+
+
+def privacy(tmp: Path) -> None:
+    import os
+    import stat
+    g, ctx, run, _ = fx.world(tmp)
+    files = [f for f in osgraph.sidecars(g.path) if os.path.exists(f)]
+    modes = {Path(f).name: oct(stat.S_IMODE(os.stat(f).st_mode)) for f in files}
+    check("the graph and its sidecar files are owner-only", files and all(m == "0o600" for m in modes.values()), modes)
+    longest = max(len(n["label"]) for n in g.nodes("Message") + g.nodes("MailItem"))
+    check("a message is stored as a snippet, never the whole text", longest <= osgraph.SNIPPET_CHARS, longest)
+    old = (fx.NOW - __import__("datetime").timedelta(days=10)).isoformat()
+    g.apply("seed-old", [Node("message:imessage:OLD", "Message", "ten days old", observed_at=old),
+                         Node("thread:old", "Thread", "old")],
+            [Edge("message:imessage:OLD", "IN_THREAD", "thread:old")])
+    import osgraph_ingest
+    osgraph_ingest.ingest_all(g, ctx, days=30, ids=ctx.ids, only=["imessage"])
+    check("message text past the 7-day retention is deleted with its edges",
+          g.node("message:imessage:OLD") is None and not g.edges(src="message:imessage:OLD"))
+    check("secure_delete is on", g.db.execute("PRAGMA secure_delete").fetchone()[0] == 1)
+    path = g.path
+    g.db.close()
+    gone = osgraph.forget(path)
+    check("forget deletes the graph and its sidecars", path in gone and not os.path.exists(path), gone)
+
+
 def main() -> int:
     ontology()
     reply_rule()
@@ -231,6 +304,10 @@ def main() -> int:
         fusion(Path(d))
     with tempfile.TemporaryDirectory() as d:
         ingested(Path(d))
+    with tempfile.TemporaryDirectory() as d:
+        identity_spoofing(Path(d))
+    with tempfile.TemporaryDirectory() as d:
+        privacy(Path(d))
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0
 

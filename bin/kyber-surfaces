@@ -21,6 +21,7 @@ conversations. A row is a graph node, so a press on it opens that node's walk.
     kyber-surfaces ingest [--days N]                 read every source into the graph now
     kyber-surfaces walk <kind> [arg]                 print a walk's rows, no HUD needed
     kyber-surfaces graph                             counts, and every edge re-checked
+    kyber-surfaces forget                            stop the daemon, delete what it stored
     kyber-surfaces start                             the daemon, in the background (hud-listen runs this)
     kyber-surfaces run                               the daemon, in the foreground
 
@@ -560,6 +561,10 @@ class Daemon:
             return {"ok": not msg.startswith("No space"), "message": msg}
         if cmd == "ingest":
             return {"ok": True, "message": osgraph_ingest.dumps(self.ingest())}
+        if cmd == "quit":
+            # Exits after the reply is written (serve_control does it), so
+            # `forget` can delete the graph with nothing holding it open.
+            return {"ok": True, "message": "stopping", "quit": True}
         if cmd == "list":
             with self.lock:
                 return {"ok": True, "space": self.space, "open": self.snapshot()}
@@ -679,6 +684,8 @@ def serve_control(daemon: Daemon, path: str) -> socket.socket:
             except (json.JSONDecodeError, SurfaceError) as err:
                 reply = {"ok": False, "message": str(err)}
             conn.sendall((json.dumps(reply) + "\n").encode("utf-8"))
+            if reply.get("quit"):
+                os._exit(0)
 
     def accept() -> None:
         while True:
@@ -825,6 +832,31 @@ def cmd_walk(kind: str, arg: str) -> int:
     return 0
 
 
+def cmd_forget() -> int:
+    """Stop the daemon, then delete the graph (and its -wal, -shm and
+    -journal), the agent runs' task copies, and the badge. The next start
+    rebuilds the last 7 days from the sources, which is the point: the graph
+    is a cache, and this is how to empty it."""
+    import osgraph_runs  # noqa: PLC0415
+
+    if running():
+        ask({"cmd": "quit"}, timeout=5.0)
+        deadline = time.monotonic() + 5
+        while running() and time.monotonic() < deadline:
+            time.sleep(0.1)
+    gone = osgraph.forget()
+    if osgraph_runs.RUNS.exists():
+        import shutil  # noqa: PLC0415
+        shutil.rmtree(osgraph_runs.RUNS, ignore_errors=True)
+        gone.append(str(osgraph_runs.RUNS))
+    if BADGES.exists():
+        BADGES.unlink()
+        gone.append(str(BADGES))
+    print("Removed:\n  " + "\n  ".join(gone) if gone else "Nothing was stored.")
+    print("The surfaces daemon is stopped; it rebuilds the last 7 days when it next starts.")
+    return 0
+
+
 def cmd_graph() -> int:
     g = osgraph.Graph()
     print(json.dumps(g.counts(), indent=1))
@@ -853,6 +885,7 @@ def main(argv: list[str] | None = None) -> int:
     w = sub.add_parser("walk", help="print a walk's rows")
     w.add_argument("words", nargs="+")
     sub.add_parser("graph", help="graph counts and an ontology check")
+    sub.add_parser("forget", help="stop the daemon and delete everything it stored")
     sub.add_parser("run", help="the daemon")
     sub.add_parser("start", help="start the daemon in the background if it is not running")
     args = parser.parse_args(argv)
@@ -871,6 +904,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_ingest(args.days)
     if args.cmd == "graph":
         return cmd_graph()
+    if args.cmd == "forget":
+        return cmd_forget()
     if args.cmd in ("open", "walk"):
         at = ""
         words = []

@@ -12,12 +12,15 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "bin" / "lib"))
 sys.dont_write_bytecode = True
+# Test graphs live in temp dirs; never touch Time Machine settings for them.
+os.environ["KYBER_OS_GRAPH_NO_TM"] = "1"
 
 APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
 NOW = datetime(2026, 10, 4, 18, 0, tzinfo=timezone.utc).astimezone()
@@ -150,11 +153,29 @@ REMINDERS = [
     # Two years stale: not today, whatever its flag says.
     {"id": "R2", "title": "lock from high school", "due": "2024-08-18T07:00:00Z", "isCompleted": False},
 ]
+ICLOUD_PASS = (
+    "Authentication-Results: dmarc.icloud.com; dmarc=pass header.from=amber.example\n"
+    "Authentication-Results: dkim-verifier.icloud.com; dkim=pass header.d=amber.example\n")
+# Mail ids -> the headers Mail.app would return for them.
+HEADERS = {
+    "m1": ICLOUD_PASS,
+    # Sagar's real address, but the receiver says DMARC failed.
+    "m4": "Authentication-Results: dmarc.icloud.com; dmarc=fail header.from=amber.example\n",
+    # Sagar's real address and a pass, but written by the sender, not the receiver.
+    "m5": "Authentication-Results: evil.example; dmarc=pass header.from=amber.example\n",
+}
 MAIL = [
     {"id": "m1", "from": "Sagar Tiwari <sagar@amber.example>", "subject": "Terms, see https://github.com/acme/app/issues/12",
      "date": (NOW - timedelta(hours=3)).isoformat(), "isRead": False, "account": "iCloud"},
     {"id": "m2", "from": "TestFlight <no_reply@email.apple.com>", "subject": "Build ready",
      "date": (NOW - timedelta(hours=2)).isoformat(), "isRead": False, "account": "iCloud"},
+    # A stranger using a known person's name.
+    {"id": "m3", "from": "Karthik Devarakonda <karthik.d@evil.example>", "subject": "Wire the funds",
+     "date": (NOW - timedelta(hours=4)).isoformat(), "isRead": False, "account": "iCloud"},
+    {"id": "m4", "from": "Sagar Tiwari <sagar@amber.example>", "subject": "Spoof one",
+     "date": (NOW - timedelta(hours=5)).isoformat(), "isRead": False, "account": "iCloud"},
+    {"id": "m5", "from": "Sagar Tiwari <sagar@amber.example>", "subject": "Spoof two",
+     "date": (NOW - timedelta(hours=5, minutes=5)).isoformat(), "isRead": False, "account": "iCloud"},
 ]
 
 
@@ -185,6 +206,9 @@ class FakeRun:
             return 0, json.dumps(self.history.get(argv[3], [])), ""
         if argv[:3] == ["mac", "mail", "draft"]:
             return 0, "{}", ""
+        if argv[:1] == ["osascript"] and "all headers" in argv[-1]:
+            mid = argv[-1].split('message id is "', 1)[1].split('"', 1)[0]
+            return 0, HEADERS.get(mid, ""), ""
         if name == "hud-music":
             return 0, "make heaven crowded by Josiah Queen, on Spotify, paused.\n", ""
         return 0, "", ""

@@ -90,6 +90,46 @@ rendered inside a JSON string on a `d` line and is never read for
 instructions. Every action is appended to `~/.bob/surfaces-activity.jsonl`
 with its surface, action and outcome, never a message body.
 
+## What is stored, and where
+
+`~/.chewbacca/os-graph.sqlite`, created owner-only (0600, as are its `-wal`,
+`-shm` and `-journal`), with SQLite `secure_delete` on, and excluded from Time
+Machine with `tmutil addexclusion` when it is first made. It holds:
+
+- messages and mail from the last 7 days only, each as an 80-character
+  snippet (the line a panel shows), never the whole text; older ones are
+  deleted on every ingest
+- who sent each, by handle or by people-store id, and which thread
+- tasks: requests read out of texts (as snippets), backlog rows, people-store
+  promises, Reminders, Claude session titles
+- events, assignments and due days
+
+Also on disk: `~/.bob/surface-runs/<run>/task.json` (one task's snippet for an
+agent run), `~/.bob/badges.json` (a count), `~/.bob/surfaces-state.json`
+(which panels are open) and `~/.bob/surfaces-activity.jsonl` (actions and
+outcomes, never a message). `kyber-surfaces forget` stops the daemon and
+deletes the graph, the runs and the badge; the next start rebuilds the last
+7 days from the sources.
+
+## Identity
+
+A phone number is compared whole in E.164 (a bare ten digits is read as +1);
+an email exactly, case-folded in ASCII only, so a lookalike or plus-address is
+a different sender. A handle becomes a known person only through the people
+store, and nothing a message says ever adds one. A sender is labelled with
+the raw handle until then, never with the name they gave.
+
+Mail is fused to a person only when the address is one the people store holds
+AND DMARC passed for its domain, as reported by the receiving provider's own
+`Authentication-Results` line (iCloud, Google or Microsoft authserv-ids).
+Everything else shows as the raw address marked "unverified sender", in no
+one's timeline. Checking takes Mail.app about 10 s per message, so only mail
+from known addresses is checked, three per ingest, and the verdict is kept.
+
+A reply typed on a person's panel goes to that person's thread only if, at the
+press, chat.db still has the thread as one-to-one with that one handle and the
+people store still says the handle is theirs.
+
 ## Networks
 
 `person <name>` is one timeline across every network a message node came over,

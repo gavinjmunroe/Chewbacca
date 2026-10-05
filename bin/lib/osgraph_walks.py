@@ -51,7 +51,9 @@ def chips(g: Graph, node: dict) -> list[dict]:
     for verb in ("PARTICIPANT", "SENT_BY", "OWED_TO"):
         for p in g.out(nid, verb):
             if p["id"] != ME:
-                out.append({"id": p["id"], "label": p["label"] + (" (unconfirmed)" if p["unresolved"] else "")})
+                flag = " (unverified sender)" if p["props"].get("unverified") else (
+                    " (unconfirmed)" if p["unresolved"] else "")
+                out.append({"id": p["id"], "label": p["label"] + flag})
     for s in g.out(nid, "BELONGS_TO"):
         out.append({"id": s["id"], "label": s["label"]})
     seen, unique = set(), []
@@ -289,7 +291,10 @@ def reply_routes(g: Graph, pid: str) -> dict[str, dict]:
     if threads:
         t = max(threads, key=lambda x: when_of(x["props"].get("last_at")))
         routes["iMessage"] = row(g, t, FYI, t["props"].get("last_at", ""), "")
-    mails = [m for m in g.into(pid, "SENT_BY") if m["type"] == "MailItem" and m["props"].get("address")]
+    # Only mail whose sender passed authentication is a way to reach them;
+    # an unverified sender is never fused to a person in the first place.
+    mails = [m for m in g.into(pid, "SENT_BY")
+             if m["type"] == "MailItem" and m["props"].get("address") and m["props"].get("verified")]
     if mails:
         m = max(mails, key=lambda x: when_of(x["props"].get("at")))
         routes["Mail"] = row(g, m, FYI, m["props"].get("at", ""), "")

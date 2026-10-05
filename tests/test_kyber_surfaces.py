@@ -520,6 +520,15 @@ def one_person_every_network(tmp: Path) -> None:
     d.handle_line(f'v /{name}/draft "Got it"')
     d.handle_line(f"e ks-reply {name}-go")
     check("a network he has no route on sends nothing", len(run.sent) == 1, run.sent)
+    # The people store stops saying that number is Sagar: a reply typed on
+    # his panel must not go to it (push review, 2026-10-04).
+    sent_before = len(run.sent)
+    ctx.ids.by_key = {k: v for k, v in ctx.ids.by_key.items() if k != "phone:+16305550101"}
+    d.handle_line(f'v /{name}/via "iMessage"')
+    d.handle_line(f'v /{name}/draft "Got it"')
+    d.handle_line(f"e ks-reply {name}-go")
+    check("a reply from his panel to a number no longer his sends nothing", len(run.sent) == sent_before, run.sent)
+    check("and says so", "isn't theirs" in live.sent.get(f"/{name}/status", ""), live.sent.get(f"/{name}/status"))
     d.open_surface("person", arg="Karthik Devarakonda")
     k = surfaces.make("person", "Karthik Devarakonda").name
     check("Karthik's networks are only the ones he can be reached on",

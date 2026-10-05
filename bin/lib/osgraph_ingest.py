@@ -252,7 +252,8 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
                 words = body_text(text, blob)
                 sender = me if from_me else (people.get(handle).id if handle in people else
                                              snap.add(person_node(ids, handle or ident, source_hint="imessage")))
-                mid = snap.add(Node(f"message:imessage:{guid}", "Message", clip(words, 160) or "Attachment",
+                mid = snap.add(Node(f"message:imessage:{guid}", "Message",
+                                    clip(words, osgraph.SNIPPET_CHARS) or "Attachment",
                                     {"from_me": bool(from_me), "at": at.isoformat()}, observed_at=at.isoformat()))
                 snap.link(mid, "IN_THREAD", tid)
                 snap.link(mid, "SENT_BY", sender)
@@ -263,7 +264,7 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
                         and awaits_me([words], ident, group, known)):
                     who = snap.nodes[sender].label
                     task = snap.add(Node(
-                        f"task:imessage:{guid}", "Task", clip(words, 100),
+                        f"task:imessage:{guid}", "Task", clip(words, osgraph.SNIPPET_CHARS),
                         {"kind": "request", "status": "ready", "guess": True,
                          "provenance": f"from {who}'s text {at.strftime('%-I:%M%p').lower()}",
                          "at": at.isoformat()}, confidence=0.6, observed_at=at.isoformat()))
@@ -288,8 +289,11 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
 
 
 def address_of(sender: str) -> str:
+    """The address in a From line, as written. Not lowercased here: Unicode
+    lowercasing turns some lookalikes into ASCII (the Kelvin sign becomes
+    "k"), so case is folded only by osgraph.email_key, ASCII only."""
     m = ADDRESS.search(sender or "")
-    return ((m.group(1) or m.group(2) or "").strip().strip('"').lower()) if m else ""
+    return (m.group(1) or m.group(2) or "").strip().strip('"') if m else ""
 
 
 def mail_is_person(sender: str) -> bool:
@@ -297,11 +301,67 @@ def mail_is_person(sender: str) -> bool:
     return bool(addr) and not AUTOMATED_MAIL.search(addr) and " via " not in (sender or "").lower()
 
 
+# The receivers whose Authentication-Results lines are believed. Anyone can
+# put an Authentication-Results header in a message they send; only the line
+# the receiving provider added (its authserv-id, the first token) says what
+# the provider checked. Measured 2026-10-04 on Caleb's iCloud inbox: iCloud
+# writes dmarc.icloud.com, dkim-verifier.icloud.com and spf.icloud.com.
+TRUSTED_AUTHSERV = (".icloud.com", ".me.com", "mx.google.com", ".google.com", ".outlook.com",
+                    ".protection.outlook.com")
+# Mail.app's "whose message id is" search took 9.8 s on one message on
+# 2026-10-04, so only senders the people store already knows are checked,
+# a few per ingest, and each verdict is kept on the MailItem node.
+MOST_AUTH_CHECKS = 3
+MESSAGE_ID_SAFE = re.compile(r"^[A-Za-z0-9._%+=@$<>-]{1,200}$")
+
+
+def auth_headers(ctx, message_id: str) -> str:
+    """Every header of one message, from Mail.app. The id comes from the
+    message itself (its Message-ID), so it is checked against a strict
+    character set before it goes inside an AppleScript string."""
+    if not MESSAGE_ID_SAFE.match(message_id or ""):
+        return ""
+    script = ('tell application "Mail"\n'
+              f'  set ms to (messages of inbox whose message id is "{message_id}")\n'
+              '  if (count of ms) is 0 then return ""\n'
+              '  return all headers of item 1 of ms\n'
+              'end tell')
+    code, out, _ = ctx.run(["osascript", "-e", script])
+    return out if code == 0 else ""
+
+
+def sender_verified(headers: str, address: str) -> bool:
+    """DMARC passed for the From domain, as reported by a trusted receiver.
+    Anything else (no header, a fail, a header from an untrusted authserv-id,
+    a different domain) is unverified."""
+    domain = address.rsplit("@", 1)[-1].lower() if "@" in address else ""
+    if not domain:
+        return False
+    unfolded = re.sub(r"\r?\n[ \t]+", " ", headers or "")
+    for line in unfolded.splitlines():
+        name, sep, value = line.partition(":")
+        if not sep or name.strip().lower() != "authentication-results":
+            continue
+        authserv = value.strip().split(";", 1)[0].strip().lower()
+        if not authserv.endswith(TRUSTED_AUTHSERV):
+            continue
+        m = re.search(r"\bdmarc=(\w+)[^;]*?header\.from=([^\s;]+)", value, re.I)
+        if m and m.group(1).lower() == "pass" and m.group(2).strip().lower() == domain:
+            return True
+    return False
+
+
 def mail(graph: Graph, ctx, ids: Identities, days: int = 7, mapping: dict = SPACE_BY_COMPANY) -> dict:
+    """Unread mail. A sender becomes a known Person only when the address is
+    exactly one the people store holds AND DMARC passed for it; the From
+    name is never trusted (push review, 2026-10-04: "Karthik Devarakonda"
+    <attacker@evil> rendered as Karthik). Everyone else is their raw address,
+    flagged unverified."""
     rows = ctx.json(["mac", "mail", "unread", "--limit", "40", "--scan", "60", "--json"], "Mail")
     now = ctx.now()
     snap = Snapshot()
     me = snap.add(me_node())
+    checks = 0
     for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict) or row.get("isRead"):
             continue
@@ -310,14 +370,24 @@ def mail(graph: Graph, ctx, ids: Identities, days: int = 7, mapping: dict = SPAC
             continue
         sender_raw = str(row.get("from", ""))
         address = address_of(sender_raw)
-        name = re.sub(r"<[^>]*>", "", sender_raw).strip().strip('"') or address
-        person = person_node(ids, address or name, label=name, source_hint="mail")
+        mid_key = f"mail:{slug(row.get('id', ''))}"
+        verified = False
+        if address and ids.resolve(address):
+            known = graph.node(mid_key)
+            if known and "verified" in known["props"]:
+                verified = bool(known["props"]["verified"])
+            elif checks < MOST_AUTH_CHECKS:
+                checks += 1
+                verified = sender_verified(auth_headers(ctx, str(row.get("id", ""))), address)
+        person = person_node(ids, address or sender_raw, source_hint="mail", verified=verified)
         pid = snap.add(person)
         human = mail_is_person(sender_raw)
         space = space_for({"props": person.props}, mapping)
-        mid = snap.add(Node(f"mail:{slug(row.get('id', ''))}", "MailItem", clip(row.get("subject") or "(no subject)", 120),
-                            {"app": "Mail", "from": name, "address": address, "automated": not human,
-                             "at": at.isoformat() if at else "", "account": row.get("account", "")},
+        shown = person.label if not person.unresolved else (address or "unknown sender")
+        mid = snap.add(Node(mid_key, "MailItem", clip(row.get("subject") or "(no subject)", osgraph.SNIPPET_CHARS),
+                            {"app": "Mail", "from": shown, "address": address, "automated": not human,
+                             "verified": verified, "at": at.isoformat() if at else "",
+                             "account": row.get("account", "")},
                             observed_at=at.isoformat() if at else ""))
         snap.link(mid, "SENT_BY", pid)
         snap.add(space_node(space))
@@ -533,13 +603,20 @@ def ingest_all(graph: Graph, ctx, days: int = 7, only: list[str] | None = None,
     for name, fn in INGESTERS.items():
         if only and name not in only:
             continue
+        # Message text is never kept past the retention window, however wide
+        # the other sources look.
+        window = min(days, osgraph.RETENTION_DAYS) if name in MESSAGE_SOURCES else days
         try:
-            report[name] = fn(graph, ctx, ids, days=days)
+            report[name] = fn(graph, ctx, ids, days=window)
         except osgraph.OntologyError as err:
             report[name] = {"error": f"ontology: {err}"}
         except Exception as err:  # noqa: BLE001  one dead source must not stop the rest
             report[name] = {"error": clip(str(err), 160)}
+    report["pruned"] = {"nodes": graph.prune(ctx.now())}
     return report
+
+
+MESSAGE_SOURCES = ("imessage", "mail")
 
 
 def dumps(report: dict) -> str:

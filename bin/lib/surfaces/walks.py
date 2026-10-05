@@ -333,10 +333,15 @@ def thread_handle(ctx: Context, row_id: str) -> tuple[str | None, str]:
     return ident, ""
 
 
-def send_reply(ctx: Context, r: dict, text: str, draft_ptr: str) -> Result:
+def send_reply(ctx: Context, r: dict, text: str, draft_ptr: str, person: str = "") -> Result:
     """Send what the person typed to the exact thread the row names, resolved
     fresh from chat.db, then read the thread back. The handle never comes
-    from any message's text and never from a default."""
+    from any message's text and never from a default.
+
+    `person`: when the reply was written on a person's panel, the thread's
+    handle must still be that person in the people store at the press (or
+    be that exact unresolved handle). A thread that stopped resolving to
+    them sends nothing."""
     if not text:
         return Result(False, "Type the reply first.")
     if len(text) > MOST_REPLY_CHARS:
@@ -344,6 +349,8 @@ def send_reply(ctx: Context, r: dict, text: str, draft_ptr: str) -> Result:
     handle, why = thread_handle(ctx, r["id"])
     if handle is None:
         return Result(False, why)
+    if person and not handle_is(ctx, handle, person):
+        return Result(False, "That number isn't theirs in your contacts any more. Nothing was sent.")
     code, out, err = ctx.run(["mac", "messages", "send", handle, text, "--json"])
     if code != 0:
         return Result(False, f"Didn't send: {clip(err or out or 'no answer from Messages', 90)}")
@@ -361,6 +368,16 @@ def send_reply(ctx: Context, r: dict, text: str, draft_ptr: str) -> Result:
             return Result(True, f"Sent to {r['label']}. It's in the thread.", updates={draft_ptr: ""}, reingest=True)
     return Result(False, f"Sent to {r['label']}, but it isn't in the thread yet. Check Messages.",
                   updates={draft_ptr: ""}, reingest=True)
+
+
+def handle_is(ctx: Context, handle: str, person: str) -> bool:
+    import osgraph  # noqa: PLC0415
+
+    ids = ctx.ids if ctx.ids is not None else osgraph.Identities()
+    pid = ids.resolve(handle)
+    if pid:
+        return person == f"person:{pid}"
+    return person == osgraph.person_node(ids, handle).id
 
 
 def draft_mail(ctx: Context, r: dict, text: str, draft_ptr: str) -> Result:
@@ -538,7 +555,7 @@ class Person(WalkSurface):
             return Result(False, f"No way to reach them on {via or 'that network'} from here.")
         text = str(values.get(self.p("draft")) or "").strip()
         if via == "iMessage":
-            return send_reply(ctx, target, text, self.p("draft"))
+            return send_reply(ctx, target, text, self.p("draft"), person=data.get("id", ""))
         if via == "Mail":
             return draft_mail(ctx, target, text, self.p("draft"))
         return Result(False, f"Replying on {via} isn't built yet.")

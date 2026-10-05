@@ -1,0 +1,70 @@
+{
+  "about": "Worked examples for the generator prompt, each taken from a fixed surface that already ships and rewritten so its data is a pointer instead of a pasted literal. `source` names where the layout came from. They double as the fixed-template baseline in the eval: the same layout, resolved against the same data.",
+  "exemplars": [
+    {
+      "name": "overdue",
+      "source": "bin/hud-watch check_overdue",
+      "request": "what am I behind on",
+      "lines": [
+        "c s Screen title=\"OVERDUE\"",
+        "> s wm we",
+        "c wm Metric label=\"Past due\" value=@/q/overdue/count thresholds=[{\"at\":1,\"tone\":\"bad\"}]",
+        "c we Events caption=\"Still marked todo\" items=@/q/overdue/events"
+      ]
+    },
+    {
+      "name": "due-soon",
+      "source": "bin/hud-watch check_due_soon",
+      "request": "anything due in the next two days",
+      "lines": [
+        "c s Screen title=\"DUE IN TWO DAYS\"",
+        "> s de",
+        "c de Events caption=\"Coming up\" items=@/q/due:2/events"
+      ]
+    },
+    {
+      "name": "week",
+      "source": "plynn/Sources/PlynnKit/ChewieRouter.swift THIS WEEK",
+      "request": "what does my week look like",
+      "lines": [
+        "c s Screen title=\"THIS WEEK\"",
+        "> s row ev",
+        "c row Stack direction=grid cols=2 gap=3",
+        "> row m1 m2",
+        "c m1 Metric label=\"Overdue\" value=@/q/overdue/count thresholds=[{\"at\":1,\"tone\":\"bad\"}]",
+        "c m2 Metric label=\"Due this week\" value=@/q/due:7/count",
+        "c ev Events caption=\"Classes and deadlines\" items=@/q/week:7/events"
+      ]
+    },
+    {
+      "name": "people",
+      "source": "hud/demo.bl People, and the RELATIONSHIPS dashboard in hud/CLAUDE.md",
+      "request": "who do I owe a message",
+      "lines": [
+        "c s Screen title=\"OWE A MESSAGE\"",
+        "> s b",
+        "c b Bars caption=\"Days since you last talked\" rows=@/q/reconnect/bars"
+      ]
+    },
+    {
+      "name": "grades",
+      "source": "coursework grade, drawn the way the Table entry in hud/CLAUDE.md says: compare across columns",
+      "request": "where do my grades stand",
+      "lines": [
+        "c s Screen title=\"GRADES\"",
+        "> s tb",
+        "c tb Table columns=[{\"field\":\"course\",\"label\":\"Course\"},{\"field\":\"standing\",\"label\":\"Standing\"},{\"field\":\"graded\",\"label\":\"Graded\"}] rows=@/q/grades/rows"
+      ]
+    },
+    {
+      "name": "shape",
+      "source": "the Diagram entry in hud/CLAUDE.md",
+      "request": "how does a spoken request reach the screen",
+      "lines": [
+        "c s Screen title=\"VOICE TO GLASS\"",
+        "> s d",
+        "c d Diagram aspect=2.4 parts=[{\"t\":\"node\",\"x\":0.15,\"y\":0.5,\"w\":0.2,\"h\":0.3,\"label\":\"Voice\"},{\"t\":\"arrow\",\"x\":0.26,\"y\":0.5,\"x2\":0.39,\"y2\":0.5},{\"t\":\"node\",\"x\":0.5,\"y\":0.5,\"w\":0.2,\"h\":0.3,\"label\":\"Model\"},{\"t\":\"arrow\",\"x\":0.61,\"y\":0.5,\"x2\":0.74,\"y2\":0.5},{\"t\":\"node\",\"x\":0.85,\"y\":0.5,\"w\":0.2,\"h\":0.3,\"label\":\"Glass\"}]"
+      ]
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import Foundation
+import Security
 
 /// A Unix domain socket carrying Kyber Lines in, and events back out.
 ///
@@ -67,6 +68,17 @@ public final class SocketServer: @unchecked Sendable {
     /// anything back. Drawing needs no subscription, so the common case sees
     /// nothing it did not ask for.
     private var subscribers: Set<Int32> = []
+    /// Which connection last drew each surface with `@`.
+    ///
+    /// An event that names a surface (`surface=`) goes only to that
+    /// connection when it is still subscribed. Until 2026-10-04 every press
+    /// went to every listener, so a message typed to a coding session's card
+    /// would also have reached hud-listen, which hands any unknown `e` line to
+    /// its model as "the user pressed send": the person's words run twice,
+    /// by an agent they were not talking to. A surface whose drawer is gone,
+    /// or never listened, still broadcasts, which is how a panel drawn by a
+    /// one-shot `hud draw` keeps reaching the voice.
+    private var owners: [String: Int32] = [:]
     private var running = false
 
     /// One queue per connection, so a slow reader cannot stall the others or
@@ -77,6 +89,60 @@ public final class SocketServer: @unchecked Sendable {
     public init(path: String, onEvent: @escaping @Sendable (Event) -> Void) {
         self.path = path
         self.onEvent = onEvent
+    }
+
+    /// The token a listener presents to receive events: `listen token=<hex>`.
+    ///
+    /// Written fresh on every start to `hud.token` beside the socket, 0600 in
+    /// a 0700 folder. Until 2026-10-04 a plain `listen` from any process was
+    /// handed every event: what was said (`h`), what was typed to a session,
+    /// every row pressed. The socket was 0600 already, so this narrows the
+    /// listeners to processes that can read the user's own `~/.bob` (a
+    /// sandboxed app running as the user cannot), and the per-start token
+    /// means a client that read an old file is refused after a restart.
+    public private(set) var token = ""
+
+    /// Where the token is written: `hud.token` in the socket's folder.
+    public var tokenPath: String {
+        ((path as NSString).deletingLastPathComponent as NSString)
+            .appendingPathComponent("hud.token")
+    }
+
+    /// Whether `listen ...` presented this server's token. Compared in
+    /// constant time, so the reply's timing says nothing about how many
+    /// characters were right.
+    func authorizes(_ line: String) -> Bool {
+        guard !token.isEmpty else { return false }
+        let given = line.split(separator: " ").first { $0.hasPrefix("token=") }
+            .map { String($0.dropFirst("token=".count)) } ?? ""
+        let a = Array(given.utf8), b = Array(token.utf8)
+        guard a.count == b.count else { return false }
+        var diff: UInt8 = 0
+        for i in 0..<a.count { diff |= a[i] ^ b[i] }
+        return diff == 0
+    }
+
+    /// 32 random bytes as hex, written owner-only. A symlink planted at the
+    /// path is refused (`O_NOFOLLOW`), not followed.
+    private func writeToken() throws {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(EIO),
+                          userInfo: [NSLocalizedDescriptionKey: "No randomness for the socket token"])
+        }
+        let fresh = bytes.map { String(format: "%02x", $0) }.joined()
+        let fd = open(tokenPath, O_CREAT | O_WRONLY | O_TRUNC | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard fd >= 0 else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno),
+                          userInfo: [NSLocalizedDescriptionKey: "Could not write \(tokenPath)"])
+        }
+        defer { close(fd) }
+        fchmod(fd, 0o600)
+        let written = fresh.withCString { Foundation.write(fd, $0, strlen($0)) }
+        guard written == fresh.utf8.count else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(EIO))
+        }
+        token = fresh
     }
 
     /// What this build speaks.
@@ -102,7 +168,8 @@ public final class SocketServer: @unchecked Sendable {
     @discardableResult
     public func send(_ line: String) -> Bool {
         lock.lock()
-        let targets = subscribers
+        let targets = Self.recipients(
+            for: line, subscribers: subscribers, owners: owners)
         lock.unlock()
         guard !targets.isEmpty else { return false }
 
@@ -112,6 +179,22 @@ public final class SocketServer: @unchecked Sendable {
             if write(payload, to: fd) { delivered = true }
         }
         return delivered
+    }
+
+    /// Who receives `line`: the surface's owner alone when it is listening;
+    /// nobody for a private line whose owner is not; everyone otherwise.
+    static func recipients(
+        for line: String, subscribers: Set<Int32>, owners: [String: Int32]
+    ) -> Set<Int32> {
+        guard let surface = OutboundEvent.surface(in: line) else { return subscribers }
+        if let owner = owners[surface], subscribers.contains(owner) { return [owner] }
+        return OutboundEvent.isPrivate(line) ? [] : subscribers
+    }
+
+    /// Note which connection drew a surface. Called for every `@` line.
+    static func owner(of line: String) -> String? {
+        guard line.hasPrefix("@ ") else { return nil }
+        return LineParser.tokenize(line).dropFirst().first
     }
 
     /// Write one payload to one client, reporting whether it landed.
@@ -146,7 +229,17 @@ public final class SocketServer: @unchecked Sendable {
         }
         let directory = (path as NSString).deletingLastPathComponent
         try FileManager.default.createDirectory(
-            atPath: directory, withIntermediateDirectories: true)
+            atPath: directory, withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700])
+        // The folder holding the socket and its token is the user's alone.
+        // Only one this user owns is tightened: an override that points the
+        // socket into a shared folder must not chmod someone else's.
+        var folder = stat()
+        if lstat(directory, &folder) == 0, folder.st_uid == geteuid(),
+           (folder.st_mode & S_IFMT) == S_IFDIR {
+            chmod(directory, 0o700)
+        }
+        try writeToken()
 
         // Keep the lock file in place: unlinking it would let a contender lock
         // a different inode. The kernel releases ownership after a crash.
@@ -294,6 +387,16 @@ public final class SocketServer: @unchecked Sendable {
                 continue
             }
 
+            // Only this user's own processes. The socket's 0600 mode already
+            // says so; the kernel's word on the peer is checked as well, so a
+            // mode loosened by anything later is not the only line.
+            var peerUID: uid_t = 0
+            var peerGID: gid_t = 0
+            guard getpeereid(fd, &peerUID, &peerGID) == 0, peerUID == geteuid() else {
+                close(fd)
+                continue
+            }
+
             // A client that hangs up mid-write would otherwise kill the whole
             // process with SIGPIPE, taking the panel with it.
             var on: Int32 = 1
@@ -312,6 +415,9 @@ public final class SocketServer: @unchecked Sendable {
                 self.lock.lock()
                 self.clients.remove(fd)
                 self.subscribers.remove(fd)
+                // A closed descriptor number is reused by the next accept;
+                // a stale entry would route the next client's presses wrong.
+                self.owners = self.owners.filter { $0.value != fd }
                 self.lock.unlock()
                 close(fd)
                 self.onEvent(Event(kind: .ended))
@@ -342,17 +448,37 @@ public final class SocketServer: @unchecked Sendable {
                 // about this connection, not about anything on the glass, and
                 // the parser has no idea which socket a line arrived on.
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
-                if trimmed == "listen" {
-                    lock.lock()
-                    subscribers.insert(fd)
-                    lock.unlock()
+                if trimmed == "listen" || trimmed.hasPrefix("listen ") {
                     // Anything that subscribes is told what it is talking to,
                     // unprompted. A client should never have to guess whether
                     // the verb it is about to use exists in this build.
                     _ = write(
                         OutboundEvent.version(Self.version).line + "\n", to: fd)
+                    guard authorizes(trimmed) else {
+                        // The compatibility window (from 2026-10-04): a
+                        // listen without the token still gets the version,
+                        // and this line saying why nothing else follows. It
+                        // may draw; it receives no events.
+                        _ = write(
+                            OutboundEvent.problem(
+                                "events need `listen token=<hex>`, the token in \(tokenPath); "
+                                + "this connection may draw but receives no events").line + "\n",
+                            to: fd)
+                        continue
+                    }
+                    lock.lock()
+                    subscribers.insert(fd)
+                    lock.unlock()
                     onEvent(Event(kind: .subscribed))
                     continue
+                }
+                if let surface = Self.owner(of: trimmed) {
+                    // Only a listener that showed the token can own a
+                    // surface; an unauthenticated drawer re-addressing
+                    // `s-abc` must not take its owner's private lines away.
+                    lock.lock()
+                    if subscribers.contains(fd) { owners[surface] = fd }
+                    lock.unlock()
                 }
                 if trimmed == "version" {
                     _ = write(

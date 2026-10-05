@@ -1,5 +1,9 @@
 # Architecture
 
+For a full map of the codebase, subsystem by subsystem, read
+[CODEBASE.md](CODEBASE.md). This page is the short version and some of its
+counts are older.
+
 Chewbacca is not a program. It is a set of files that change how an agent you
 already run behaves, plus some command-line tools that agent can call.
 

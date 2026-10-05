@@ -27,6 +27,37 @@ public struct OverlaySurface: Identifiable, Equatable {
     /// which is the default: a panel someone asked for should not vanish while
     /// they are reading it.
     public var expires: Date?
+    /// Where it was summoned from, in the overlay's coordinates: the centre
+    /// of the hyper bar when a request was in flight as it opened, nil when
+    /// it arrived on its own (a daemon, a schedule) and should come in from
+    /// its region's edge. It leaves back the same way. A surface that grows
+    /// out of the thing that asked for it says what caused it; one that slides
+    /// in from a corner only says where it lives.
+    public var summonedFrom: CGPoint?
+    /// Folded to its title because its region ran out of room. See
+    /// `OverlayModel.plan`.
+    public var compact = false
+    /// When it was last opened, re-addressed or touched by the person, as a
+    /// sequence number. The least recent is the one that folds.
+    public var touched = 0
+    /// Which opening of this name it is. A close and a reopen of the same
+    /// name in one burst (kyber-genui's skeleton, then its refresh) are two
+    /// different cards to SwiftUI, so the leaving one's exit never shares an
+    /// identity with the arriving one. Keyed on the bare name, a second
+    /// EXAMS card was left on the glass that neither `-` nor its X could
+    /// reach (reported 2026-10-04).
+    public var instance = 0
+    public var viewID: String { "\(id)#\(instance)" }
+
+    /// Whether this surface is a launcher rail (its Screen holds a Rail). A
+    /// rail owns a lane at its edge: it is not stacked or folded with the
+    /// panels in its region, and they are placed beside it, not over it.
+    @MainActor
+    public var isRail: Bool {
+        let spec = store.spec
+        guard let root = spec.root, let node = spec.elements[root] else { return false }
+        return node.children.contains { spec.elements[$0]?.type == "Rail" }
+    }
 
     /// The usable height of the display, less the margins the layout keeps.
     ///
@@ -41,7 +72,15 @@ public struct OverlaySurface: Identifiable, Equatable {
     public static func == (a: OverlaySurface, b: OverlaySurface) -> Bool {
         a.id == b.id && a.region == b.region && a.slot == b.slot
             && a.width == b.width && a.drag == b.drag && a.urgency == b.urgency && a.chrome == b.chrome && a.expires == b.expires
+            && a.compact == b.compact && a.summonedFrom == b.summonedFrom && a.instance == b.instance
     }
+}
+
+/// The conversation panel's input, addressed to a surface rather than the
+/// assistant.
+public struct ChatTarget: Equatable, Sendable {
+    public let surface: String
+    public let label: String
 }
 
 /// What is on the glass, and where.
@@ -66,6 +105,12 @@ public final class OverlayModel {
 
     private var current: String = "main"
     private var nextDepth = 0
+    private var nextTouch = 0
+    private var nextInstance = 0
+    /// Each surface's height laid out in full, kept apart from `heights`
+    /// because a folded one reports its folded height and the plan has to
+    /// know what unfolding it would cost.
+    private var fullHeights: [String: CGFloat] = [:]
     /// Cancels the self-demote when the state changes before its patience runs
     /// out, which is the normal case.
     @ObservationIgnored private var patienceTask: Task<Void, Never>?
@@ -195,7 +240,12 @@ public final class OverlayModel {
             revision += 1
 
         case .close(let id):
-            if id.isEmpty { reset() } else { close(id) }
+            // A clear from the bridge while an answer is still coming takes
+            // the glass, never the conversation panel. On 2026-10-03 the panel
+            // closed mid-answer and left the pill loading on its own, which
+            // Caleb read as the HUD quitting on him. Escape, the close button,
+            // two globe presses and the menu still close it.
+            if id.isEmpty { reset(keepChat: pill.phase == .working || pill.phase == .hearing || pill.phase == .heard) } else { close(id) }
 
         case .say(let text):
             say(text)
@@ -235,6 +285,16 @@ public final class OverlayModel {
             agentCursorTask?.cancel()
             agentCursor = nil
             revision += 1
+
+        case .chatTarget(let surface, let label):
+            if let surface {
+                chatTarget = ChatTarget(surface: surface, label: label)
+                revision += 1
+                openChat()
+            } else {
+                chatTarget = nil
+                revision += 1
+            }
 
         case .press(let number, let hold):
             let (outcome, center) = PointedStore.shared.press(number, hold: hold)
@@ -447,7 +507,7 @@ public final class OverlayModel {
         }
     }
 
-    public func reset() {
+    public func reset(keepChat: Bool = false) {
         markers = []
         agentCursorTask?.cancel()
         agentCursor = nil
@@ -460,6 +520,7 @@ public final class OverlayModel {
         pillHideTask = nil
         surfaces = []
         heights = [:]
+        fullHeights = [:]
         current = "main"
         nextDepth = 0
         // The conversation survives. Escape takes the glass back; it does
@@ -467,7 +528,7 @@ public final class OverlayModel {
         // forgotten either, and a panel that opens empty over a model that
         // remembers the last exchange is lying about one of them.
         // `clearChat` is the deliberate version.
-        closeChat()
+        if !keepChat { closeChat() }
         revision += 1
     }
 
@@ -545,6 +606,40 @@ public final class OverlayModel {
 
     public func toggleChat() {
         if chatOpen { closeChat() } else { openChat() }
+    }
+
+    /// Who the conversation panel's input is addressed to, when it is not
+    /// the assistant: a coding session's card, set by its owner with `to`.
+    /// Shown as a chip over the input, so a message can never go somewhere
+    /// the person did not see named.
+    public private(set) var chatTarget: ChatTarget?
+
+    /// Take the chip off: the input talks to the assistant again.
+    public func clearChatTarget() {
+        chatTarget = nil
+        revision += 1
+    }
+
+    /// The person pressed send with the panel addressed: the text goes to
+    /// the surface's owner only (see `SocketServer.send`). Returns whether
+    /// it was addressed, so the caller sends to the assistant otherwise.
+    @discardableResult
+    public func sendToTarget(_ text: String) -> Bool {
+        guard let target = chatTarget else { return false }
+        guard surfaces.contains(where: { $0.id == target.surface }) else {
+            // The card was closed: nobody to send to, and the chip goes.
+            clearChatTarget()
+            return true
+        }
+        onEvent?(.sendTo(surface: target.surface, text: text))
+        return true
+    }
+
+    /// The X on a card: take it down and tell whoever drew it.
+    public func dismiss(_ id: String) {
+        close(id)
+        if chatTarget?.surface == id { chatTarget = nil }
+        onEvent?(.closed(surface: id))
     }
 
     /// Forget the conversation. The panel's own button, and "Clear
@@ -745,6 +840,7 @@ public final class OverlayModel {
     public func close(_ id: String) {
         surfaces.removeAll { $0.id == id }
         heights.removeValue(forKey: id)
+        fullHeights.removeValue(forKey: id)
         if current == id { current = surfaces.last?.id ?? "main" }
         relayout()
     }
@@ -762,10 +858,28 @@ public final class OverlayModel {
         guard let index = surfaces.firstIndex(where: { $0.id == id }) else { return }
         nextDepth += 1
         surfaces[index].depth = nextDepth
+        touch(id)
         revision += 1
     }
 
+    /// Mark a surface as the one most recently in use. A `d` stream is the
+    /// panel being kept current, not being looked at, so data does not count:
+    /// a ticking metric in an old panel would otherwise fight the newest one
+    /// for the room. Opening, re-addressing and the person's hand do.
+    public func touch(_ id: String) {
+        guard let index = surfaces.firstIndex(where: { $0.id == id }) else { return }
+        nextTouch += 1
+        surfaces[index].touched = nextTouch
+        if surfaces[index].compact { relayout() }
+    }
+
+    /// A click on a folded card's title: it becomes the most recent, which
+    /// opens it, and the region folds whatever is now least recent instead.
+    public func unfold(_ id: String) { touch(id) }
+
     public func report(height: CGFloat, for id: String) {
+        let folded = surfaces.first { $0.id == id }?.compact ?? false
+        if !folded { fullHeights[id] = height }
         guard abs((heights[id] ?? 0) - height) > 1 else { return }
         heights[id] = height
         relayout()
@@ -798,6 +912,8 @@ public final class OverlayModel {
             if let life { existing.expires = life == 0 ? nil : Date().addingTimeInterval(life) }
             existing.maxHeight = OverlaySurface.ceiling
             if let width { existing.width = width }
+            nextTouch += 1
+            existing.touched = nextTouch
             surfaces[index] = existing
             if existing.expires != nil { startSweep() }
             relayout()
@@ -808,7 +924,8 @@ public final class OverlayModel {
         store.onEvent = { [weak self] event in self?.onEvent?(event) }
 
         nextDepth += 1
-        let surface = OverlaySurface(
+        nextTouch += 1
+        var surface = OverlaySurface(
             id: id, store: store,
             region: region ?? (urgency == .critical ? .center : .topRight),
             width: width ?? (urgency == .critical ? 420 : 380),
@@ -816,6 +933,11 @@ public final class OverlayModel {
             urgency: urgency ?? .normal, chrome: chrome ?? .card,
             maxHeight: OverlaySurface.ceiling,
             expires: life.map { $0 == 0 ? .distantFuture : Date().addingTimeInterval($0) })
+        surface.touched = nextTouch
+        nextInstance += 1
+        surface.instance = nextInstance
+        surface.summonedFrom = summonOrigin
+        store.surfaceID = id
         surfaces.append(surface)
         if surface.expires != nil { startSweep() }
         // Drop the oldest rather than refusing the newest: the one just asked
@@ -823,9 +945,54 @@ public final class OverlayModel {
         if surfaces.count > Self.maxSurfaces {
             let evicted = surfaces.removeFirst()
             heights[evicted.id] = nil
+            fullHeights[evicted.id] = nil
         }
         relayout()
         return surface
+    }
+
+    /// Where a surface opened now would grow from: the hyper bar while a
+    /// request is in flight, since that is what asked for it, and nowhere
+    /// otherwise.
+    var summonOrigin: CGPoint? {
+        guard pill.phase != .hidden, let frame = pillFrame else { return nil }
+        return CGPoint(x: frame.midX, y: frame.midY)
+    }
+
+    /// Between stacked surfaces, and from a surface to the screen's edge.
+    static let stackGap: CGFloat = 12
+    static let screenMargin: CGFloat = 18
+    /// What a folded surface is planned at: its 16pt title line and the
+    /// card's 14 above and below (`SurfaceCard.titleLine`), which is also the
+    /// 44pt unfold target.
+    static let foldedHeight: CGFloat = 44
+
+    /// The height one region's column may use.
+    private var regionCapacity: CGFloat {
+        (OverlayWindow.active?.visibleFrame.height ?? 800) - 2 * Self.screenMargin
+    }
+
+    /// Which surfaces in one region fold to their title so the column fits.
+    ///
+    /// The least recently touched folds first, and the most recent never
+    /// does: it is the one that was just asked for. Pure, so the rule is
+    /// tested without a screen.
+    static func plan(
+        _ column: [(id: String, height: CGFloat, touched: Int)],
+        capacity: CGFloat, gap: CGFloat = stackGap, folded: CGFloat = foldedHeight
+    ) -> Set<String> {
+        guard column.count > 1 else { return [] }
+        func total(_ fold: Set<String>) -> CGFloat {
+            column.reduce(0) { $0 + (fold.contains($1.id) ? folded : $1.height) }
+                + gap * CGFloat(column.count - 1)
+        }
+        let newest = column.max { $0.touched < $1.touched }?.id
+        var fold: Set<String> = []
+        for candidate in column.sorted(by: { $0.touched < $1.touched })
+        where candidate.id != newest && total(fold) > capacity {
+            fold.insert(candidate.id)
+        }
+        return fold
     }
 
     private func relayout() {
@@ -835,7 +1002,29 @@ public final class OverlayModel {
             surfaces[index].slot = used[region, default: 0]
             used[region] = surfaces[index].slot + 1
         }
+        // A column that would run off the screen folds its least recently
+        // touched surfaces to their titles, rather than drawing the newest
+        // over them, which is what the clamp in `origin` used to do.
+        let capacity = regionCapacity
+        for region in Set(surfaces.map(\.region)) {
+            let column = surfaces.filter { $0.region == region && !$0.isRail }.map {
+                (id: $0.id, height: fullHeights[$0.id] ?? heights[$0.id] ?? 120,
+                 touched: $0.touched)
+            }
+            let fold = Self.plan(column, capacity: capacity)
+            for index in surfaces.indices where surfaces[index].region == region {
+                surfaces[index].compact = fold.contains(surfaces[index].id)
+            }
+        }
         revision += 1
+    }
+
+    /// A surface's height as drawn now, folded or not.
+    func drawnHeight(_ surface: OverlaySurface) -> CGFloat {
+        // The measured height in both states, so the column follows the card
+        // as it folds rather than jumping to the folded size before the card
+        // has shrunk.
+        heights[surface.id] ?? (surface.compact ? Self.foldedHeight : 120)
     }
 
     /// Every surface's rectangle, in the overlay's own coordinate space.
@@ -845,7 +1034,7 @@ public final class OverlayModel {
     public var frames: [CGRect] {
         var all = surfaces.map { surface in
             let centre = origin(for: surface)
-            let height = heights[surface.id] ?? 120
+            let height = drawnHeight(surface)
             return CGRect(
                 x: centre.x - surface.width / 2,
                 y: centre.y - height / 2,
@@ -874,33 +1063,30 @@ public final class OverlayModel {
         let leftInset = usable.minX - full.minX
         let rightInset = full.maxX - usable.maxX
 
-        let margin: CGFloat = 18
-        let gap: CGFloat = 12
+        let margin = Self.screenMargin
         let anchor = surface.region.anchor
-
-        // Sum the heights of everything already in this region, so a stack is
-        // spaced by what is actually there rather than by a fixed guess.
-        var above: CGFloat = 0
-        for other in surfaces
-        where other.region == surface.region && other.slot < surface.slot {
-            above += (heights[other.id] ?? 120) + gap
-        }
-
         let width = surface.width
-        let height = heights[surface.id] ?? 120
+        let height = drawnHeight(surface)
 
-        let minX = leftInset + margin
-        let maxX = full.width - rightInset - margin - width
+        // A rail owns its edge's lane: panels on that side sit beside it.
+        let lane = { (edge: Double) -> CGFloat in
+            guard !surface.isRail else { return 0 }
+            let rails = self.surfaces.filter { $0.isRail && $0.region.anchor.x == edge }
+            return rails.map(\.width).max().map { $0 + Self.stackGap } ?? 0
+        }
+        let minX = leftInset + margin + lane(0)
+        let maxX = full.width - rightInset - margin - width - lane(1)
         let minY = topInset + margin
-        let maxY = full.height - bottomInset - margin - height
+        let bottomY = full.height - bottomInset - margin
+        let maxY = bottomY - height
 
-        // SwiftUI's origin is top left with y increasing downward, so an anchor
-        // of 1.0 (the top of the screen) maps to the smaller y.
         let x = minX + max(0, maxX - minX) * anchor.x
-        var y = minY + max(0, maxY - minY) * (1 - anchor.y) + above
-
-        // A tall stack must not run off the bottom of the usable area.
-        y = min(y, maxY)
+        let column = surfaces
+            .filter { $0.region == surface.region && $0.isRail == surface.isRail }
+            .map { (slot: $0.slot, height: drawnHeight($0)) }
+        let y = min(max(Self.columnTop(
+            slot: surface.slot, column: column, anchorY: anchor.y,
+            top: minY, bottom: bottomY), minY), maxY)
 
         // `.position` places a centre, so hand back the centre of the frame,
         // plus wherever the person has dragged it. Past the edge of the
@@ -913,6 +1099,26 @@ public final class OverlayModel {
         return CGPoint(
             x: centre.x + Self.resist(surface.drag.width, within: bounds.x),
             y: centre.y + Self.resist(surface.drag.height, within: bounds.y))
+    }
+
+    /// The top of one surface in its region's column.
+    ///
+    /// The column grows away from its edge: down from the top, up from the
+    /// bottom, and outward from the middle for the three middle regions.
+    /// Until 2026-10-04 it grew downward everywhere and was clamped to the
+    /// bottom, so a second panel at `bottomRight` was drawn over the first.
+    /// The oldest sits at the edge in both corners, so a new arrival never
+    /// shoves the panels already being read.
+    static func columnTop(
+        slot: Int, column: [(slot: Int, height: CGFloat)], anchorY: Double,
+        top: CGFloat, bottom: CGFloat, gap: CGFloat = stackGap
+    ) -> CGFloat {
+        let before = column.filter { $0.slot < slot }.reduce(0) { $0 + $1.height + gap }
+        let own = column.first { $0.slot == slot }?.height ?? 0
+        let stack = column.reduce(0) { $0 + $1.height } + gap * CGFloat(max(0, column.count - 1))
+        if anchorY >= 1 { return top + before }
+        if anchorY <= 0 { return bottom - before - own }
+        return top + max(0, (bottom - top - stack) / 2) + before
     }
 
     /// A third. The figure iOS scroll views give an overscroll feels right
@@ -966,7 +1172,7 @@ public final class OverlayModel {
             copy.drag = .zero
             return copy
         }())
-        let height = heights[id] ?? 120
+        let height = drawnHeight(surface)
         let bounds = dragBounds(centre: resting, width: surface.width, height: height, screen: screen)
         surfaces[index].drag = CGSize(
             width: min(max(translation.width, bounds.x.lowerBound), bounds.x.upperBound),

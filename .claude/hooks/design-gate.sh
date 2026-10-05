@@ -43,7 +43,7 @@ PROMPT_ID=$(printf '%s' "$INPUT" | jq -r '.prompt_id // .session_id // "unknown"
 GUARD="${TMPDIR:-/tmp}/design-gate-$PROMPT_ID"
 [ -f "$GUARD" ] && exit 0
 
-GATE="$HOME/Desktop/2026-Code/ux-engine/bin/design-gate"
+GATE="$HOME/code/tools/ux-engine/bin/design-gate"
 [ -x "$GATE" ] || exit 0
 
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')

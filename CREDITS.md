@@ -80,6 +80,24 @@ The three worth reading even if you never install them:
 - [anthropics/claude-quickstarts](https://github.com/anthropics/claude-quickstarts)
   `computer-use-demo`. The canonical see-act-see loop in under a thousand lines.
 
+The import design came from one repo:
+[31Carlton7/realm](https://github.com/31Carlton7/realm), by Carlton Aikins.
+Its Settings > Import reads Claude Code, Codex and Cursor history with a strict
+split: scan writes nothing, apply writes only the keys the user approved, and
+undo removes only rows its own apply stamped with an origin.
+`chewbacca import scan|apply|undo` (`tools/context_import.py`) takes that
+design. **realm has no license, so no code was copied.** The implementation
+here was written from scratch after reading `apps/server/src/import/`.
+
+The live surfaces (`bin/kyber-surfaces`) take four more ideas from realm's
+`design.md`, read as a design reference only, with no code copied: the "what
+should I look at" page that ranks everything by what it needs from you,
+blocked first (the `needs-you` surface); spaces as bodies of work whose open
+panels persist and restore (`kyber-surfaces space`); an activity log of every
+action a surface takes, outcome only and never the content
+(`kyber-surfaces activity`); and a link shown as what it points at, named
+only where it can be named exactly (`link_name` in `bin/lib/surfaces/`).
+
 Also read: [bytedance/UI-TARS](https://github.com/bytedance/UI-TARS) and
 [UI-TARS-desktop](https://github.com/bytedance/UI-TARS-desktop),
 [trycua/cua](https://github.com/trycua/cua) and
@@ -146,6 +164,17 @@ Ecosystem and method reading, in [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md):
 | OSWorld and OSWorld 2.0, [arXiv 2606.29537](https://arxiv.org/pdf/2606.29537) | Same. The 85% versus 20.6% gap, and the compounding-failure math (twenty steps at 95% is 36%) that makes see-act-see mandatory rather than ceremonial |
 | MacArena [2606.06560](https://arxiv.org/pdf/2606.06560), OSUniverse [2505.03570](https://arxiv.org/pdf/2505.03570), OpenComputer [2605.19769](https://arxiv.org/pdf/2605.19769), ScreenSpot | Same |
 | Daniele Procida, Diátaxis (diataxis.fr) | [crafts/onboarding-kit.md](crafts/onboarding-kit.md) and `skills/kit-builder/`. Tutorial, how-to, reference, explanation, and why mixing two serves neither |
+
+### Data catalogs
+
+`data/oss-apps/apps.json`, the registry behind `oss-apps`, is rebuilt by
+`tools/oss_apps_build.py` from two curated lists. The apps in it belong to their
+own authors, under the licenses recorded per entry.
+
+| Source | Author | License | What it gives this kit |
+| --- | --- | --- | --- |
+| [serhii-londar/open-source-mac-os-apps](https://github.com/serhii-londar/open-source-mac-os-apps) | Serhii Londar and contributors | CC0-1.0 | The catalog of open source macOS apps by category, with languages and websites |
+| [piotrkulpinski/open-source-alternatives](https://github.com/piotrkulpinski/open-source-alternatives) | Piotr Kulpinski, [OpenAlternative](https://openalternative.co) | CC0-1.0 | Open source alternatives to proprietary software by category. Each tool's openalternative.co page supplies its repository and the products it replaces |
 
 ### Craft research
 

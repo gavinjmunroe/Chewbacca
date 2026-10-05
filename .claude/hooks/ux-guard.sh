@@ -19,7 +19,7 @@
 # is not.
 set -uo pipefail
 
-ENGINE="${UX_ENGINE_DIR:-$HOME/Desktop/2026-Code/ux-engine}"
+ENGINE="${UX_ENGINE_DIR:-$HOME/code/tools/ux-engine}"
 [ -x "$ENGINE/bin/ux-lint" ] || exit 0
 
 INPUT="$(cat 2>/dev/null || true)"

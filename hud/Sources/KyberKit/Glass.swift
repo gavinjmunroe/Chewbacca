@@ -284,6 +284,22 @@ extension Urgency {
         }
     }
 
+    /// The wash over a measured ground: thicker the lighter the screen
+    /// behind the card is, so text holds 4.5:1 over a white page without
+    /// darkening the glass over a dark one.
+    ///
+    /// Measured on the glass 2026-10-04 over a white VS Code page at the
+    /// fixed 0.34: prose 4.85:1, the status line 4.20:1, a tool row 4.22:1
+    /// and `HUD.faint` captions 3.63:1, with the composited ground at
+    /// L=0.12 to 0.16. Faint text needs the ground at L<=0.087, which over
+    /// white is a wash near 0.6. Nil (no Screen Recording) keeps the fixed
+    /// wash.
+    func wash(over ground: Double?) -> Double {
+        guard let ground else { return wash }
+        let lift = min(0.3, max(0, ground - 0.3) * 0.46)
+        return min(0.7, wash + lift)
+    }
+
     /// What pools at the bottom of the glass. Only the two that mean
     /// something get a warm one.
     var glow: Color {

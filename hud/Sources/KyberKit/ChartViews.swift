@@ -282,23 +282,33 @@ struct EventsView: View {
     let caption: String
     let items: [JSON]
     let tone: Color
+    /// A button on every row, when the component has `action=`.
+    var rowAction: RowAction?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Keyed by `RowKeys`, not a fresh UUID per render: with a UUID every
+    /// `d` that touched the list rebuilt every row, which is the flash a live
+    /// panel must not have.
     private struct Event: Identifiable {
-        let id = UUID()
+        let id: String
+        let row: String
         let time: String
         let text: String
         let accent: Bool
     }
 
     private var parsed: [Event] {
-        items.compactMap { item in
+        zip(items, RowKeys.keys(items)).compactMap { item, key in
+            let row = RowKeys.id(of: item) ?? key
             guard let object = item.objectValue else {
                 // A plain string is a legitimate event with no timestamp, and
                 // rejecting it would make the simplest possible list fail.
                 guard let text = item.stringValue else { return nil }
-                return Event(time: "", text: text, accent: false)
+                return Event(id: key, row: row, time: "", text: text, accent: false)
             }
             return Event(
+                id: key, row: row,
                 time: object["time"]?.display ?? "",
                 text: object["text"]?.display ?? "",
                 accent: object["accent"] == .bool(true))
@@ -328,6 +338,8 @@ struct EventsView: View {
                     }
                 }
                 .padding(.leading, 14)
+                // Room for the row's button, so text never runs under it.
+                .padding(.trailing, rowAction == nil ? 0 : 72)
                 .padding(.bottom, index == parsed.count - 1 ? 0 : 9)
                 // The rail is drawn as a *background* of the text, not as a
                 // sibling in an HStack.
@@ -357,6 +369,14 @@ struct EventsView: View {
                     }
                     .frame(width: 5)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .trailing) {
+                    if let rowAction {
+                        RowActionButton(action: rowAction, row: event.row)
+                    }
+                }
+                .frame(minHeight: rowAction == nil ? nil : HitTarget.minimum)
+                .transition(RowKeys.transition(reduced: reduceMotion))
             }
         }
     }

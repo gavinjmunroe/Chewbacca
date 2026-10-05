@@ -891,7 +891,7 @@ _installed_scanners=""
 # judgement calls.
 # demo-shoot is a wrapper, not a scanner, but it installs the same way: a
 # small executable in bin/ that needs to reach ~/.local/bin.
-for _tool in ai-scan skill-scan prose-check code-slop demo-shoot craft-gate claude-tab gtme-math gtme-graph gtme-learning gtme-library clay-fixture-check task-graph ux-learning; do
+for _tool in ai-scan skill-scan prose-check code-slop demo-shoot craft-gate site-gate claude-tab gtme-math gtme-graph gtme-learning gtme-library clay-fixture-check task-graph ux-learning; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_scanners="$_installed_scanners $_tool"
@@ -925,7 +925,7 @@ fi
 # remediation was a dead end and the only move left after a refusal was to
 # guess again. A gate that refuses without a runnable next step trains people
 # to route around it.
-UX_ENGINE_DIR="${UX_ENGINE_DIR:-$HOME/Desktop/2026-Code/ux-engine}"
+UX_ENGINE_DIR="${UX_ENGINE_DIR:-$HOME/code/tools/ux-engine}"
 if [ -d "$UX_ENGINE_DIR/bin" ]; then
   mkdir -p "$HOME/.local/bin"
   _ux_linked=""
@@ -979,7 +979,7 @@ fi
 # list-audit is pure stdlib python, no venv and no network, so it installs with
 # no dependency check at all. list-gate ships with it: audit reads a bought file,
 # gate refuses to ship a generated one, and the Stop hook calls the gate by name.
-for _tool in list-audit list-gate kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab; do
+for _tool in list-audit list-gate kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     log "$_tool installed to ~/.local/bin/"
@@ -994,7 +994,7 @@ unset _tool
 # hud calls the others by path, so installing one alone gives a command that
 # fails halfway.
 _installed_hud=""
-for _tool in hud hud-listen hud-runtime hud-codex hud-context hud-watch hud-speak hud-guide hud-music superassistant chewbacca-mcp portal; do
+for _tool in hud hud-listen hud-runtime hud-codex hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions superassistant chewbacca-mcp portal; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_hud="$_installed_hud $_tool"
@@ -1543,6 +1543,17 @@ _register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this reads right in zsh...")
 
+# 2026-10-03: the full suite ran four times in one session, twice on a tree
+# that had not changed, about 15 minutes each.
+_register("PreToolUse", hooks_dir + "/suite-rerun-guard.sh", timeout=10,
+          matcher="Bash",
+          status="Checking this suite run has something new to test...")
+
+# 2026-10-03: three Claude tabs and Codex shared one checkout and collided.
+_register("PreToolUse", hooks_dir + "/repo-overlap-guard.sh", timeout=5,
+          matcher="Edit|Write|MultiEdit|NotebookEdit",
+          status="Checking no other session is editing this checkout...")
+
 # 99.6% of iMessages since 2025 keep their words in attributedBody, not
 # `text`. A `text LIKE` search of chat.db on 2026-10-03 found 1 Pasadena
 # message where decoding found 2,213, and that silence reads as an answer.
@@ -1574,6 +1585,14 @@ _register("PreToolUse", hooks_dir + "/plan-guard.sh", timeout=10,
 _register("PreToolUse", hooks_dir + "/submit-guard.sh", timeout=10,
           matcher="mcp__chrome-devtools__.*|Bash|mcp__peekaboo__.*",
           status="Checking this is not a coursework submission...")
+
+# An outbound campaign never launches on a list the pre-send gate did not pass
+# in full. On 2026-10-04 lists called verified still carried 19 false
+# personalized lines, refused sender domains and two CFOs; the client caught it.
+_register("PreToolUse", hooks_dir + "/launch-guard.sh", timeout=10,
+          matcher="Bash|mcp__peekaboo__.*|mcp__chrome-devtools__.*|"
+                  "mcp__plugin_playwright_playwright__.*",
+          status="Checking a campaign launch has a full pre-send gate pass...")
 
 # Say the ranking rule out loud before ranking, and name what would falsify
 # the answer. Running someone's list top to bottom is not a method.
@@ -1665,6 +1684,12 @@ _register("PostToolUse", hooks_dir + "/prose-guard.sh", timeout=20,
 # The untrusted-content rule, checked instead of hoped for. A page, a text or a
 # mail body that addresses the agent gets its excerpt put in front of the model
 # with the rule attached. Warns, never blocks. See the hook for the tool list.
+_register("PostToolUse", hooks_dir + "/clay-reply-guard.sh", timeout=5,
+          matcher="Bash",
+          status="Checking campaign replies are read as text, not as a category...")
+
+# Above: an analytics reply category is not a reply. On 2026-10-05 "Interested"
+# was a canned apply-on-our-site redirect and got reported as a lead.
 _register("PostToolUse", hooks_dir + "/untrusted-screen.sh", timeout=15,
           matcher="WebFetch|Bash|mcp__claude-in-chrome__.*|mcp__plugin_playwright_playwright__.*",
           status="Screening what was just read for instructions aimed at the agent...")
@@ -2485,7 +2510,7 @@ elif ! command -v uv &>/dev/null; then
   warn "uv not found, skipping macOS-use. Install uv, then re-run:"
   warn "  ./setup.sh --only tools"
 else
-  MU_DIR="$HOME/Projects/macOS-use"
+  MU_DIR="$HOME/code/refs/macOS-use"
   [ -d "$MU_DIR/.git" ] || git clone -q --depth 1 \
     https://github.com/browser-use/macOS-use.git "$MU_DIR" 2>/dev/null || true
   if [ -d "$MU_DIR" ]; then
@@ -2546,7 +2571,7 @@ fi
 # Its own installer (scripts/sync-skills) repoints ~/.claude/CLAUDE.md at the
 # pack's AGENTS.MD, which would replace your global instructions. Do not run
 # it. The loop below does the linking and touches nothing else.
-PACK_DIR="$HOME/Projects/agent-scripts"
+PACK_DIR="$HOME/code/refs/agent-scripts"
 PACK_SKIP="codex-first frontend-design"
 if [ -d "$PACK_DIR/.git" ]; then
   log "agent-scripts already cloned, left alone"

@@ -33,6 +33,35 @@ engine or replace the requested platform work with offline work.
 - Do not send, launch, activate, or schedule campaigns. Prepared copy remains
   draft output in Clay.
 
+## Clay mistakes already paid for, and what now stops each one
+
+Read this list before any Clay work. Each line is a real incident on Jonah
+Graham's Zeutara workspace. A mistake here that has no guard yet gets one in the
+same turn it happens, never only a new line of prose.
+
+- Launching on lists nobody fully checked (2026-10-04: refused sender domains,
+  19 false "X backed Y" lines, two CFOs, prior recipients re-emailed). Guard:
+  `launch-guard.sh` refuses launch, resume or enroll without a full, unchanged
+  `pre_send_gate.py` pass from the last 12 hours.
+- Unverified addresses (2026-09-28: 27% bounced). Guard: the gate refuses any
+  row without a mailbox verifier verdict.
+- A personalized line naming an investment from purchased-file data. Guard: the
+  gate refuses a line with no public `line_source` URL.
+- Reporting Clay's reply category as interest (2026-10-05: "Interested" was
+  Hustle Fund's apply-form redirect). Rule: read the text with zeutara-gtme
+  `scripts/replies.py` before saying anyone replied with interest.
+- Reading an async search as empty (2026-09-22: an hour lost). A fresh
+  `query-mode run` returns an empty page until it populates. Guard:
+  `scripts/clay_run.py` polls and reports a timeout as a timeout.
+- Resuming an old campaign after its audience records were deleted
+  (2026-10-03: every enrolled lead became "Unknown lead"). Rule: check enrolled
+  leads resolve before any resume; launch-guard also blocks resume without a pass.
+- Calling a list ready on our own checks. Rule: read the client's and Sagar's
+  latest feedback first, and turn every item into a gate refusal before saying
+  ready.
+- The CLI cannot launch, write cells or import records. Writes go through a Clay
+  workflow node (`audiences records` upsert) and are read back after.
+
 ## Observe, act, verify, retain
 
 Identify the current state and desired postcondition before each mutation. A

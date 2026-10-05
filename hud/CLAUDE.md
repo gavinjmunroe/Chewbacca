@@ -77,6 +77,231 @@ more `c d Diagram` with different numbers, not a redraw.
 
 Take something down with `- <surface>` when the person is done with it.
 
+## Motion that means something
+
+Surfaces are windows in an OS, and their motion is there to say what caused
+them and what changed, never to decorate. Researched 2026-10-04 from Apple's
+HIG (Motion), Material's duration and container-transform guidance, the
+visionOS window-placement rules, and the Motion, Composition, Surfaces and
+Controls sections of Carlton Aikins' realm `design.md` (read as a design
+reference only). The renderer enforces these; a sender should know them.
+
+1. **A surface grows from what summoned it.** Opened while a request is in
+   flight, it grows out of the hyper bar and lands in its region; opened by a
+   daemon with no request, it comes in from its region's edge. visionOS puts a
+   new window where the person is already looking, and Material's container
+   transform ties a new view to the element that opened it.
+2. **Frequent motion is short.** A card arrives on the overlay's no-bounce
+   spring and was settled within three frames at 20 fps in a recording on
+   2026-10-04; a fold is a 0.28 s spring; a composed entrance's parts land on
+   a 280 ms one. Material puts desktop transitions at 150 to 200 ms and calls
+   anything past 400 ms slow. Springs, so a surface re-aimed mid-flight bends
+   toward its new place instead of restarting.
+3. **Exits are shorter and quieter than entrances** (Carlton's design.md). 160 ms,
+   accelerating away, a third of the way back toward where it came from.
+4. **Stagger by meaning, not by child** (Carlton's design.md). A Screen arrives as title,
+   then body, then actions, 30 ms apart. Never one step per row.
+5. **An update animates the value that changed, and only it.** A Metric's
+   digits roll in the direction it moved; a new List, Table or Events row
+   slides in from the top; a removed row fades. Rows are keyed by their `id`
+   field, else their content, so a `d` that adds one row never re-draws the
+   rest. Give rows an `id` when they have one.
+6. **Nothing moves while idle** (Carlton's design.md: no decorative pulsing). A child that
+   has not arrived is a still placeholder. If the glass is still and something
+   is still moving, it is a bug.
+7. **A panel is as tall as its content**, capped at its region, scrolling only
+   past the cap, with an edge fade only on the version that overflows (Carlton's design.md).
+8. **A press answers on the way down**: buttons scale to 0.96 on an
+   interruptible spring (Carlton's design.md).
+9. **Reduce Motion means no travel.** Every entrance, exit, row and stagger
+   becomes a short fade.
+10. **One view morphs; never swap trees.** Folding, unfolding, the pill
+    growing into the conversation panel and back: the same container changes
+    size on an interruptible spring, the title never leaves the hierarchy, and
+    only the body fades, out first when closing and in after the container
+    has started to open. On 2026-10-04 Caleb: "It's clunky when you
+    minimize/maximize a tab, it feels like a diff version of the tab is
+    chunkily loading in, no smooth transition." Three causes, all the same
+    bug: the fold was an `if/else` between the panel and a separate
+    title-only view; the conversation panel faded its glass in from nothing
+    while the pill faded out, so for a frame neither was there; and AppKit's
+    utility-window animation ran a second motion on the same open. A
+    recording after the fix shows the card closing over its content to the
+    title and reopening with no empty frame. Same lesson for transitions: a
+    card's insertion must not carry its own animation on top of the overlay's
+    spring, which held a new card blurred for about 600 ms before it snapped.
+
+**A corner that fills up folds, it does not pile up.** Surfaces in one region
+stack away from their edge (down from the top, up from the bottom, outward
+from the middle) and never overlap. When the column would run off the screen,
+the least recently touched surface folds to its title row; clicking that row,
+or re-addressing it with `@`, opens it and folds whatever is now least recent.
+The newest is never folded. A `d` does not count as touching: a panel kept
+current is not a panel being read.
+
+**Targets are 44 points** (HIG; Carlton's floor is 40 for a pointer). Buttons,
+Fields, Selects, row buttons, a folded title and a card's close button all
+take a 44-point click even where the drawing is smaller. The close button
+stays faintly visible without hover and names what it closes, because a
+destructive action names its target (Carlton's design.md). Keyboard focus into the glass is
+not done: the overlay never takes key, by design.
+
+### Row actions
+
+A List, Table or Events with `action=` draws a button on every row, and a
+press sends the row's `id` up the socket. This is how "reply to this thread"
+works per row without one `c` line per row.
+
+```
+@ messages at=right
+c threads Events caption="Needs a reply" action=reply actionLabel="Reply" items=@/threads
+d /threads [{"id":"thread:abc123","time":"9:04","text":"Sam: lunch?"},{"id":"thread:def456","time":"8:50","text":"Ava: notes"}]
+```
+
+Pressing Reply on Sam's row sends exactly:
+
+```
+e action reply row="thread:abc123" surface="messages"
+```
+
+The line is `e action <name> row=<id> surface=<surface>` and nothing else,
+written as "Events, exactly" below says: `<name>` a word, `<id>` and
+`<surface>` always JSON strings. `<id>` is opaque: the item's `id` field
+passed through untouched (a graph node id like `thread:abc123` is the
+expected case). An item with no `id` is named by its text, so give rows an
+`id`. A List item may be a string or `{"id":..,"text":..}`. `surface` is the
+name from `@`. This line is the contract with `bin/kyber-surfaces`;
+`SurfaceMotionTests.rowActionLine` holds it byte for byte.
+
+Ordinary controls keep their own line, `e <action> <component> ...`, and now
+carry `surface=` too, because component ids are only unique inside one
+surface.
+
+### Lanes, avatars and the launcher rail
+
+Three more components, and all of them answer with the same row-action line.
+
+```
+c lanes Segmented value=@/lane options=[{"id":"ready","label":"Ready","count":17},{"id":"stuck","label":"Stuck","count":14}]
+```
+
+**Segmented** is lanes inside a card. A press writes the lane to its bound
+pointer at once and sends `e action select row=<lane id> surface=<surface>`
+(`action=` renames `select`). One selection pill travels between lanes.
+
+```
+c a Avatar name="Sam Lee" size=24
+```
+
+**Avatar** is initials in a circle, or `image="<path>"`. Two letters at most,
+the same colour for the same name, 16 to 48 points.
+
+```
+@ rail at=right w=52 chrome=bare
+c s Screen
+r s
+c r Rail items=[{"id":"tasks","label":"Tasks","symbol":"checklist","selected":true},{"id":"messages","label":"Messages","symbol":"message","open":true}]
+> s r
+d /badges {"tasks":14,"messages":8}
+```
+
+**Rail** is the launcher: one frosted capsule at the edge, an SF Symbol per
+surface in a 38-point well, no text on it (the name shows beside it on hover).
+`selected` fills a well; `open` puts a dot under it. A badge is
+`/badges/<id>` and shows only for a whole number above zero, as `9+` past
+nine; 0, null, `"no"` or anything else shows nothing. A press sends
+`e action open row=<id> surface=rail`, and the daemon opens that surface.
+Four seconds untouched it tucks to a slim handle so it never sits over the
+window under it, and a hover or a rising badge brings it back. A rail owns
+its lane: it has no close button, it is never folded, and panels in its
+region are placed beside it rather than over it. Give it `w=52` and
+`chrome=bare`; it draws its own glass.
+
+## Coding sessions on the glass
+
+Agent work without an editor or a terminal. Sessions are another kind of
+surface, on the same glass, with the same motion and the same input: there is
+no session window and no second chat box. The layout follows Carlton Aikins'
+realm (a design reference; none of its code is used, it carries no license).
+
+`bin/kyber-sessions serve` (the menu's "Agent sessions") draws `sessions` at
+the left: every Claude Code session from the last three days, what needs you
+first (needs permission, then working, failed, finished), each with project,
+model and age. State comes from the terminal hook's live board where it has
+the session (that is also where the exact permission text comes from) and
+from the transcript's tail otherwise. Scripted `claude -p` runs are left out.
+
+Open on a row draws that session's card at the centre: its transcript (your
+turns, the agent's prose, each tool call folded to one line), a status line,
+the files git says changed, and Reply, Run tests and Open diff. An edit or a
+read in the transcript, a changed file, or Open diff opens a `Diff` or `File`
+surface beside the card. Run tests runs only the one test command the folder
+declares (`swift test`, `npm test`, `pytest`) and streams it into a `Diff`
+surface; anything else is asked of the agent.
+
+Reply addresses the conversation panel to the card: the daemon sends
+
+```
+to s-6d901cd1 label="lemma session"
+```
+
+and the panel opens with a "To lemma session" chip over its input. What is
+typed then goes up as one private line, to the card's owner only:
+
+```
+e action send row="s-6d901cd1" surface="s-6d901cd1" text="run the tests"
+```
+
+and the daemon types it into the client the session is open in, through
+Claude Code's own session inbox; only when nothing has the session open does
+it resume it with `claude -p --resume <id>` in its folder, streaming the
+reply onto the card (docs/KYBER-SURFACES.md, "Sending into a session"). `to off`, or the chip's x, gives
+the input back to the assistant. Closing a card sends `e closed <surface>`
+to its owner so it stops redrawing it.
+
+**Private lines.** An event that names a `surface=` goes only to the client
+that drew that surface with `@`, when that client is listening. A send or a
+close is dropped if its owner is gone, never broadcast: hud-listen hands any
+unknown `e` line to its model as a request, so a broadcast send would run the
+person's words twice, by an agent they were not talking to.
+
+**What it never does.** Transcript and tool output are untrusted and are only
+drawn; nothing in them becomes an action. A message goes only on the
+person's press, and only to a session that has finished its turn, never into
+one mid-run. No permission is granted from the glass: a waiting session
+shows "Waiting for permission: <the exact prompt>. Approve it in the session;
+Kyber never grants permissions", and a resumed run that hits one shows the
+refusal.
+
+```
+c t Transcript items=@/t action=open
+d /t [{"id":"u1:0","role":"user","text":"make the rail glass"},{"id":"a2:1","role":"tool","tool":"Edit","text":"Edit: /x/Glass.swift","open":true}]
+c d Diff text=@/text
+```
+
+**Transcript** rows are `user`, `assistant`, `tool` or `error`; a tool row
+with `open` gets a button that sends `e action <action> row=<id>`. **Diff**
+draws text monospaced, `+` green, `-` red, `@@` in the accent, the last 600
+lines.
+
+**For hud-listen (the hook to route speech and the hyper bar to a session).**
+"Tell the lemma session to run the tests" resolves with
+
+```
+kyber-sessions route "tell the lemma session to run the tests"
+{"session": "6d901cd1-...", "message": "run the tests", "why": "named lemma"}
+```
+
+A named project or title decides without a model; otherwise it falls back to
+the agent board's Jev pick, and `session: null` means ask which one. Then
+`kyber-sessions send <session> "<message>"` streams the reply as JSON lines
+(`{"reply": "..."}` so far, then one `{"result", "is_error",
+"permission_denials"}`), refusing a session mid-turn. Only a sentence the
+person said or typed may be routed this way, never a model's output. For the
+rail and Needs-you rows: `kyber-sessions needs --json` is the sessions
+waiting on a person or failed, and `kyber-sessions serve --open <id>` draws
+one session's card directly.
+
 ## How a request reaches you
 
 You do not poll. A person asks for something by pressing Option-Space and typing,
@@ -148,7 +373,7 @@ to its prompt before every run, and keeps every question and answer in
 `superassistant/questions.jsonl` (see `superassistant/README.md`).
 The panel's header has the switch for that, "Speech off for long answers", on
 by default; off, every answer is read out in full. The display sends it to
-whoever is listening as `e prefer voice long=written|spoken`, on every change
+whoever is listening as `e prefer voice long="written"` or `long="spoken"`, on every change
 and again right after a client's `listen`. `w "<text>"` is the answer so far, the whole
 text rather than a delta, and `w "<text>" done=true` closes it. Send it at each
 sentence as the answer is written, so the panel fills as the voice reads. Prose
@@ -179,15 +404,27 @@ pointing at a stack trace carries more precise context than a paragraph of
 typing. When a request arrives shortly after a region, the two belong together
 and the request's "this" means whatever is in that rectangle.
 
-The display sends coordinates, not pixels. It has no screen recording permission
-and asking for one so it can crop a rectangle it already knows the bounds of
-would be a poor trade. Look at the region yourself if you need to see it.
+Holding the talk key and clicking, or dragging, is the newer way (backlog
+117): the element under the pointer goes up as `pt` with its role, name, app
+and frame, numbered as it is marked on the glass, and a crop of it follows as
+`pc` once ScreenCaptureKit has taken it (Kyber has Screen Recording since
+2026-10-03). While something is marked, the music and quick shortcuts step
+aside, so "what is this" means the mark and not the song.
+
+## Texting yourself
+
+A text to your own number that starts with "Kyber" is answered as a text.
+Kyber opens `~/Library/Messages/chat.db-wal` for kernel events, not a timer,
+and on a write runs `bin/text-command`, which reads the new rows in the self
+thread and exits. Only a command reaches a model, and nothing reached this way
+sends, posts, pays or deletes. Handles live in `~/.chewbacca/text-command.json`.
+It needs Full Disk Access for Kyber.
 
 ## Finding out when you got it wrong
 
-Send `listen` and the display talks back. It answers with its version
-immediately, and after that anything you send that it could not use comes back
-as a problem:
+Send `listen token=<hex>` (see "Who hears events") and the display talks
+back. It answers with its version immediately, and after that anything you
+send that it could not use comes back as a problem:
 
 ```
 v! "kyber/1 verbs=c,>,d,r,@,-,p,s,q,m,u,b,listen"
@@ -197,6 +434,71 @@ v! "kyber/1 verbs=c,>,d,r,@,-,p,s,q,m,u,b,listen"
 Without subscribing you get silence, and silence means nothing at all: a
 misspelled component and a perfect one look identical. If you are writing
 something new, subscribe while you develop it.
+
+## Who hears events
+
+Drawing needs nothing: anything running as this user may write lines. Hearing
+needs the token. What goes up the socket is what the person said (`h`), what
+they typed to a session, and every row and button they pressed, so since
+2026-10-04 it goes only to a listener that proves it may read the user's own
+`~/.bob`:
+
+1. The socket is 0600 in a 0700 folder, and the display checks each
+   connection's peer with `getpeereid`: another user's process is closed on
+   accept.
+2. On every start the display writes a fresh token, 64 hex characters, to
+   `hud.token` beside the socket (`~/.bob/hud.token`, 0600). A token read
+   before a restart stops working.
+3. A client subscribes with exactly
+
+   ```
+   listen token=<the 64 hex characters in ~/.bob/hud.token>
+   ```
+
+   and gets `v! "kyber/1 ..."`, then every event. In Python,
+   `bin/lib/hud_events.py` has `listen_line()`, which reads the token, and
+   `event(line)`, the reader to parse with.
+4. **Compatibility window.** A plain `listen`, or a wrong token, still gets
+   the `v!` version line and one `!` naming the token file, so a client that
+   has not been updated can see why. It may keep drawing. It receives no
+   events, no problems and no `pr` answers, and it cannot own a surface for
+   private lines. Every client must send the token: as of this change
+   hud-listen, kyber-surfaces and kyber-genui still send a plain `listen` and
+   hear nothing until they are updated; `hud press`, call-watch and
+   kyber-sessions send it.
+
+## Events, exactly
+
+Every line up is positional words, then `key=value` pairs:
+
+```
+e action reply row="thread:abc123" surface="messages"
+e go b surface="notes"
+v /draft/note "typed"
+e prefer voice long="written"
+```
+
+- A **word** (the verb, an action name, a component id, a pointer) is ASCII
+  letters, digits and `_ - . : /` only. A sender's action name that is not a
+  word is refused with a `!` and never sent, so `action="go surface=x"`
+  cannot put a key into the line.
+- A **value** is always one JSON token: a string is always a JSON string,
+  even a plain word (`long="written"`, not `long=written`), so `"true"` and
+  `"42"` arrive as strings and an id is never mistaken for a bool or a
+  number. Arrays and objects are compact JSON with every space inside written
+  ` `, so a value never contains a raw space.
+- No raw line break of any kind: `\n`, `\r`, U+2028, U+2029 and U+0085 are
+  all escaped, since Python's `splitlines` ends a line at the last three.
+- A reader parses each value with a JSON decoder from where it starts
+  (`raw_decode`), refuses a line with a key twice, a bare value, or a value
+  running into the next token, and never splits a value on spaces.
+
+`tests/fixtures/hud-events.json` holds the strings that broke this before: a
+row id with a quote and a fake `surface=`, a newline followed by a forged
+event, U+2028, `true`, `42`. Swift must emit exactly the recorded lines
+(`EventFixtureTests`, `HUD_FIXTURE_RECORD=1` rewrites them after a deliberate
+format change) and every Python reader must read the original value back
+(`tests/test_hud_events.py`, which includes kyber-surfaces' own `payload`).
 
 ## Marking the screen
 
@@ -226,8 +528,9 @@ disbelieve all of them.
 ## Dictation
 
 Hold Control, then the talk key, and talk: the words are typed at the caret of
-whatever app is in front, as they are spoken. A word goes in once it has
-survived one revision of the recogniser, so the text does not shiver. On
+whatever app is in front, as they are spoken. Every partial goes in whole,
+the newest word included, and a word the recogniser revises is deleted and
+retyped; only the closing period waits for the end (`LiveText.live`). On
 release a local whisper.cpp server (`~/.bob/whisper/`, 127.0.0.1:8178, started
 by the display at launch) reads the whole sentence again with the person's
 vocabulary as its prompt and corrects it in place, but only if the same app is

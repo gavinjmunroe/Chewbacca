@@ -57,7 +57,7 @@ Do not rediscover these. They were verified today, 2026-09-20:
 - people.db: 3,349 people, 9,675 observations, 3,937 interactions, 237MB
 - chat.db: 632,390 messages total, 255,133 sent by me
 - ~/second-brain: 4,072 markdown files, 1.46M words, 1,039 commits
-- 140 git repos under ~/Desktop/2026-Code
+- 140 git repos under ~/code
 - chewbacca repo: 217,827 lines, 421 commits
 - coursework CLI with a live syllabus ledger
 - skills that already sense: watch-skill (live screen watching), peekaboo,

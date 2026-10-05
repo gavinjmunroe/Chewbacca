@@ -337,7 +337,7 @@ struct OutboundEventTests {
         #expect(OutboundEvent.action(
             name: "add", component: "btn",
             payload: ["collection": .string("books"), "index": .number(2)]).line
-            == "e add btn collection=books index=2")
+            == #"e add btn collection="books" index=2"#)
         #expect(OutboundEvent.value(pointer: "/draft/title", value: .string("Turtle Island")).line
             == #"v /draft/title "Turtle Island""#)
         #expect(OutboundEvent.dismissed.line == "x")
@@ -355,13 +355,15 @@ struct OutboundEventTests {
         #expect(op == .data(path: "/a", value: .string("x=y")))
     }
 
-    @Test("keeps bare words bare and quotes what needs it")
+    @Test("every string value is JSON-quoted, even a bare word")
     func encoding() {
-        #expect(OutboundEvent.encode(.string("primary")) == "primary")
-        #expect(OutboundEvent.encode(.string("two words")) == #""two words""#)
-        #expect(OutboundEvent.encode(.string("true")) == #""true""#)
-        #expect(OutboundEvent.encode(.bool(true)) == "true")
-        #expect(OutboundEvent.encode(.number(42)) == "42")
+        // Bare until 2026-10-04; see `OutboundEvent.value` for why not now.
+        #expect(OutboundEvent.value(.string("primary")) == #""primary""#)
+        #expect(OutboundEvent.value(.string("two words")) == #""two words""#)
+        #expect(OutboundEvent.value(.string("true")) == #""true""#)
+        #expect(OutboundEvent.value(.bool(true)) == "true")
+        #expect(OutboundEvent.value(.number(42)) == "42")
+        #expect(OutboundEvent.value(.array([.string("a b")])) == "[\"a\\u0020b\"]")
     }
 }
 
@@ -910,7 +912,7 @@ struct GuideTests {
         #expect(sent.isEmpty)
         // Four points outside the rectangle, on the ring.
         #expect(model.hit(at: CGPoint(x: 96, y: 110)))
-        #expect(sent == ["e hit guide label=Next"])
+        #expect(sent == [#"e hit guide label="Next""#])
     }
 
     @Test("a plain mark is a note, not a control")

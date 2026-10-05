@@ -22,13 +22,13 @@ struct ChatTests {
         defer { UserDefaults.standard.removeObject(forKey: OverlayModel.longAnswersKey) }
         let model = OverlayModel()
         #expect(model.longAnswersWritten)
-        #expect(model.preferenceEvent.line == "e prefer voice long=written")
+        #expect(model.preferenceEvent.line == #"e prefer voice long="written""#)
 
         var sent: [String] = []
         model.onEvent = { sent.append($0.line) }
         model.setLongAnswersWritten(false)
         #expect(!model.longAnswersWritten)
-        #expect(sent == ["e prefer voice long=spoken"])
+        #expect(sent == [#"e prefer voice long="spoken""#])
         #expect(!OverlayModel().longAnswersWritten, "the switch is not kept across launches")
     }
 
@@ -219,5 +219,19 @@ struct ChatTests {
         model.closeChat()
         model.openChat()
         #expect(model.chatOpenings == 2)
+    }
+
+    @Test("a clear from the bridge mid-answer keeps the panel; one after it closes it")
+    func clearWhileThinkingKeepsPanel() {
+        // 2026-10-03: the panel closed while Kyber was still answering and
+        // left the pill loading on its own.
+        let model = OverlayModel()
+        model.openChat()
+        model.apply(.presence(.thinking, amplitude: nil))
+        model.apply(.close(id: ""))
+        #expect(model.chatOpen, "a clear mid-answer must not close the panel")
+        model.apply(.presence(.dormant, amplitude: nil))
+        model.reset()
+        #expect(!model.chatOpen, "a deliberate reset still closes it")
     }
 }

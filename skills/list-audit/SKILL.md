@@ -247,3 +247,29 @@ match there gets nothing. What offends a recipient is two messages about the
 **same** thing, so make that the hard rule, one contact per firm per campaign,
 and let the firm-wide ceiling scale with how many people that firm has. Different
 partners in different practices are different audiences.
+
+## A personalized line is a factual claim under someone's name
+
+"Antler backed Break the Love" is a statement the recipient can check in ten
+seconds, and they are the one person guaranteed to know the answer. On one
+engagement the per-lead lines were written from portfolio data in a purchased
+file, a gate declared the lists ready, and the client's own review then cut 19
+lines naming investments that never happened (Lead Edge/Bumble,
+Accel/CoinTracker) and rewrote 13 more. A false line is worse than no line:
+it tells an investor the sender did not do the reading.
+
+Every line that names an investment carries a public source URL on the row
+(the firm's portfolio page, a press release, Crunchbase), and the gate refuses
+a line without one. Purchased-file portfolio columns are leads for that search,
+never the source.
+
+## The client's review is the real gate, so run it first
+
+The same review caught four more things the gate had never been told about: 97
+sender inboxes on domains the client had ruled out, two CFOs, people emailed
+by an earlier wave getting a second first touch, and no auto-pause when one
+person at a firm replies. A gate that passes only proves the checks you thought
+of. Before calling a list ready, read the client's latest feedback and turn
+each item into a refusal, and make a check fail when the column it needs is
+missing, because a list of `row_id,email,name,firm` passes every title and line
+check by having nothing to read.

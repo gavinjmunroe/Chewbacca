@@ -266,7 +266,7 @@ struct SocketTests {
         #expect(listener >= 0)
         defer { close(listener) }
         // Subscribing is a line on the wire, not a separate channel.
-        let subscribe = "listen\n"
+        let subscribe = "listen token=\(server.token)\n"
         _ = subscribe.withCString { send(listener, $0, strlen($0), 0) }
         try await Task.sleep(for: .milliseconds(250))
 
@@ -278,6 +278,82 @@ struct SocketTests {
         #expect(count > 0)
         let text = String(decoding: buffer[0..<max(count, 0)], as: UTF8.self)
         #expect(text.contains("show me my week"))
+    }
+
+    /// Everything a client hears in `wait` after sending `lines`.
+    private func exchange(_ fd: Int32, _ lines: String, wait: Duration = .milliseconds(250)) async throws -> String {
+        _ = lines.withCString { send(fd, $0, strlen($0), 0) }
+        try await Task.sleep(for: wait)
+        var heard = ""
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while true {
+            let count = recv(fd, &buffer, buffer.count, MSG_DONTWAIT)
+            if count <= 0 { break }
+            heard += String(decoding: buffer[0..<count], as: UTF8.self)
+        }
+        return heard
+    }
+
+    @Test("a listen without the token is answered but hears no events", arguments: ["listen\n", "listen token=nope\n"])
+    func listenNeedsToken(line: String) async throws {
+        // Until 2026-10-04 a plain `listen` from any process was handed what
+        // was said, what was typed to a session and every row pressed.
+        let path = temporaryPath()
+        let server = SocketServer(path: path) { _ in }
+        try server.start()
+        defer { server.stop() }
+        let stranger = connect(to: path)
+        defer { close(stranger) }
+        let greeting = try await exchange(stranger, line)
+        #expect(greeting.hasPrefix("v! "), "the version ack still comes back")
+        #expect(greeting.contains("listen token="), "and says how to get events")
+        #expect(!server.hasSubscribers)
+        #expect(!server.send(#"h "my private sentence""#))
+        let after = try await exchange(stranger, "")
+        #expect(!after.contains("private"))
+    }
+
+    @Test("the token is written owner-only in an owner-only folder, fresh each start")
+    func tokenFile() throws {
+        let path = temporaryPath()
+        let folder = (path as NSString).deletingLastPathComponent
+        chmod(folder, 0o755)
+        let server = SocketServer(path: path) { _ in }
+        try server.start()
+        let first = server.token
+        var info = stat()
+        #expect(stat(server.tokenPath, &info) == 0 && info.st_mode & 0o777 == 0o600)
+        #expect(stat(folder, &info) == 0 && info.st_mode & 0o777 == 0o700)
+        #expect(stat(path, &info) == 0 && info.st_mode & 0o777 == 0o600)
+        #expect(try String(contentsOfFile: server.tokenPath, encoding: .utf8) == first)
+        #expect(first.count == 64)
+        server.stop()
+        let again = SocketServer(path: path) { _ in }
+        try again.start()
+        defer { again.stop() }
+        #expect(again.token != first, "a token read before a restart stops working")
+        #expect(again.authorizes("listen token=\(again.token)"))
+        #expect(!again.authorizes("listen token=\(first)"))
+        #expect(!again.authorizes("listen"))
+    }
+
+    @Test("an unauthenticated drawer cannot take a surface's private lines")
+    func ownershipNeedsToken() async throws {
+        let path = temporaryPath()
+        let server = SocketServer(path: path) { _ in }
+        try server.start()
+        defer { server.stop() }
+        let owner = connect(to: path)
+        defer { close(owner) }
+        _ = try await exchange(owner, "listen token=\(server.token)\n@ s-abc\n")
+        let thief = connect(to: path)
+        defer { close(thief) }
+        _ = try await exchange(thief, "listen\n@ s-abc\n")
+        #expect(server.send(#"e action send row="s-abc" surface="s-abc" text="secret""#))
+        let ownerHeard = try await exchange(owner, "")
+        let thiefHeard = try await exchange(thief, "")
+        #expect(ownerHeard.contains("secret"))
+        #expect(!thiefHeard.contains("secret"))
     }
 
     @Test("subscribing is reported after the version, so the app can add its own greeting")
@@ -294,7 +370,7 @@ struct SocketTests {
         let listener = connect(to: path)
         #expect(listener >= 0)
         defer { close(listener) }
-        let subscribe = "listen\n"
+        let subscribe = "listen token=\(server.token)\n"
         _ = subscribe.withCString { send(listener, $0, strlen($0), 0) }
         try await Task.sleep(for: .milliseconds(250))
 

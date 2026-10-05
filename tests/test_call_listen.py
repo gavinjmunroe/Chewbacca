@@ -266,7 +266,7 @@ def _bank_listener(picks):
     listener.call = listen.Call()
     listener.coach = type("Writes", (), {"cue": staticmethod(lambda prompt: "SAY: Invented line.")})()
     queue = iter(picks)
-    return listener, lambda bank, heard, recent: next(queue)
+    return listener, lambda bank, heard, recent, **_: next(queue)
 
 
 def test_a_coaching_line_shows_its_line_then_its_alternate_then_nothing():
@@ -562,7 +562,7 @@ def test_the_early_look_fires_once_per_pause_and_only_when_asked():
 
 def test_an_early_look_is_held_unless_jev_is_sure_they_finished():
     listener, pick = _bank_listener(["price", "price"])
-    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, finished=False: pick(bank, heard, recent)
+    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, finished=False, shown="": pick(bank, heard, recent)
     try:
         listen.LAST_PICK.finished = 0.4
         held = listener.cue_for(listen.Line("them", 0.0, 1.0, "so how much is", early=True))
@@ -587,7 +587,7 @@ def test_beginner_mode_holds_one_line_until_said_then_walks_the_script():
         "busy": {"kind": "HANDLE", "line": "Fair, it's busy."},
     }
     listener.beginner = True
-    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, finished=False: pick(bank, heard, recent)
+    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, finished=False, shown="": pick(bank, heard, recent)
     try:
         cue = lambda text: listener.cue_for(listen.Line("them", 0.0, 1.0, text)).cue
         assert cue("hey, yeah i'm here") == "ASK: What made you book the call?"
@@ -605,7 +605,7 @@ def test_beginner_mode_holds_one_line_until_said_then_walks_the_script():
 def test_beginner_mode_never_shows_a_runner_up():
     listener, pick = _bank_listener(["price"])
     listener.beginner = True
-    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, finished=False: pick(bank, heard, recent)
+    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, finished=False, shown="": pick(bank, heard, recent)
     listen.LAST_PICK.scores = {"price": 0.55, "busy": 0.40, "none": 0.05}
     try:
         got = listener.cue_for(listen.Line("them", 0.0, 1.0, "how much is it"))
@@ -613,6 +613,54 @@ def test_beginner_mode_never_shows_a_runner_up():
     finally:
         listen.pick_situation = real
         listen.LAST_PICK.scores = None
+
+
+def test_you_cut_out_shows_the_line_just_said_again():
+    # n3 replay 2026-10-04: "sorry you broke up, say that again" had no
+    # situation, so the line the prospect missed never came back.
+    listener, pick = _bank_listener(["open", "none"])
+    listener.lines = {"open": {"kind": "ASK", "line": "What made you book the call?", "stage": 1}}
+    listener.beginner = True
+    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, finished=False, shown="": pick(bank, heard, recent)
+    try:
+        cue = lambda text: listener.cue_for(listen.Line("them", 0.0, 1.0, text)).cue
+        assert cue("hey i'm here") == "ASK: What made you book the call?"
+        assert listener.heard_you(listen.Line("you", 0.0, 1.0, "what made you book the call"))
+        assert cue("sorry you cut out, say that again?") == "ASK: What made you book the call?"
+        assert listener.call.pending == "ASK: What made you book the call?"  # held until said again
+    finally:
+        listen.pick_situation = real
+
+
+def test_a_long_line_that_mentions_cutting_out_is_still_picked():
+    assert listen.asks_repeat("sorry you broke up there")
+    assert listen.asks_repeat("can you repeat the question")
+    assert not listen.asks_repeat("you cut out a bit but anyway how much is the whole program going to cost me all in")
+    assert not listen.asks_repeat("i cut out sugar last year")
+
+
+def test_an_early_only_situation_retires_once_its_stage_has_shown():
+    bank = {
+        "price-early": {"line": "I'll get into that later.", "until": "pitch"},
+        "pitch": {"line": "Here's how it works.", "stage": 5},
+        "price": {"line": "It's $3,000."},
+    }
+    assert "price-early" in listen.still_open(bank, ["frame"])
+    assert "price-early" not in listen.still_open(bank, ["frame", "pitch"])
+    assert set(listen.still_open(bank, [])) == set(bank)
+
+
+def test_the_picker_is_warmed_on_the_real_bank_before_the_call():
+    listener, _ = _bank_listener([])
+    asked = []
+    real, listen.pick_situation = listen.pick_situation, lambda bank, heard, recent, **_: asked.append(bank) or "none"
+    try:
+        assert listener.warm_picker() is not None
+        assert asked == [listener.lines]
+        listen.pick_situation = lambda bank, heard, recent, **_: None
+        assert listener.warm_picker() is None  # no judgment: the caller falls back
+    finally:
+        listen.pick_situation = real
 
 
 if __name__ == "__main__":

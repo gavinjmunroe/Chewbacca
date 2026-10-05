@@ -2,6 +2,7 @@
 id: CHW-43
 title: Historical disabled-hook registration prerequisite
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: E7: current registration check exists; historical 33-test result not r
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-502
+- 2026-10-04 Caleb: filed under functionality

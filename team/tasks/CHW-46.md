@@ -2,6 +2,7 @@
 id: CHW-46
 title: Teach so the person can work independently
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Original direction request; no human independence outcome verified
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-511
+- 2026-10-04 Caleb: filed under feature

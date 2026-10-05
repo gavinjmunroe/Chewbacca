@@ -2,6 +2,7 @@
 id: CHW-58
 title: GTM data-company research (original 19)
 status: inbox
+area: business
 owner: 
 priority: none
 due: 
@@ -19,3 +20,4 @@ Evidence: Exact originally shared company needs source recovery
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-213
+- 2026-10-04 Caleb: filed under business

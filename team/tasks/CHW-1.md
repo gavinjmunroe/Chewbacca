@@ -2,15 +2,18 @@
 id: CHW-1
 title: Time a clean Chewbacca install on a machine that isn't your dev setup
 status: todo
+area: functionality
 owner: Semyon
 priority: high
 due: 2026-10-06
 labels: onboarding
 done_when: Every spot you got stuck plus total minutes, posted on this task
 proof: 
+source: 
 created: 2026-10-04
 updated: 2026-10-04
 ---
 
 ## Activity
 - 2026-10-04 Caleb: created
+- 2026-10-04 Caleb: filed under functionality

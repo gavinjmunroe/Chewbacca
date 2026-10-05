@@ -2,6 +2,7 @@
 id: CHW-98
 title: Pathspec pre-commit false positives
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical fix, current behavior not retested
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-30
+- 2026-10-04 Caleb: filed under functionality

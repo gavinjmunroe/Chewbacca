@@ -2,6 +2,7 @@
 id: CHW-40
 title: Graph/math/learning baseline and transfer checks
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-106, CB-0
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-407
+- 2026-10-04 Caleb: filed under functionality

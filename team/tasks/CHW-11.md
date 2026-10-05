@@ -2,6 +2,7 @@
 id: CHW-11
 title: Single-paste onboarding, clear permissions, hidden credentials, Mac then Windows
 status: inbox
+area: design
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-513, CB-255
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-2
+- 2026-10-04 Caleb: filed under design

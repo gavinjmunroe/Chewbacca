@@ -2,6 +2,7 @@
 id: CHW-65
 title: Synthesize useful OpenClaw work
 status: inbox
+area: feature
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical broad request, coverage unverified
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-16
+- 2026-10-04 Caleb: filed under feature

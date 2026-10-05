@@ -2,6 +2,7 @@
 id: CHW-50
 title: Kyber: fast enough to drive the computer
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Phase 3 of [docs/KYBER-EVERYTHING.md](docs/KYBER-EVERYTHING.md); whole
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-119
+- 2026-10-04 Caleb: filed under functionality

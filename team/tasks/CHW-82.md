@@ -2,6 +2,7 @@
 id: CHW-82
 title: Local models for low-level work
 status: inbox
+area: functionality
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: On-device precedent does not validate each job
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-114
+- 2026-10-04 Caleb: filed under functionality

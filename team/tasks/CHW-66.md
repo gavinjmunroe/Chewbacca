@@ -2,6 +2,7 @@
 id: CHW-66
 title: Synthesize GTM methods
 status: inbox
+area: business
 owner: 
 priority: low
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-1
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-17
+- 2026-10-04 Caleb: filed under business

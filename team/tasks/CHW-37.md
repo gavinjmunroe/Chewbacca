@@ -2,6 +2,7 @@
 id: CHW-37
 title: Source coverage: plan, clone, read, test, apply, outcome
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical regression target
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-403
+- 2026-10-04 Caleb: filed under functionality

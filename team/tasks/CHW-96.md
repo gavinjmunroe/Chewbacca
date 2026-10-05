@@ -2,6 +2,7 @@
 id: CHW-96
 title: HUD voice build failure
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical environment diagnosis and recovery, not a current build rec
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-28
+- 2026-10-04 Caleb: filed under functionality

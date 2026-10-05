@@ -2,6 +2,7 @@
 id: CHW-31
 title: Minimal profile
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: E5: --minimal/--fast skip sections, whole-flow semantics unverified
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-251
+- 2026-10-04 Caleb: filed under functionality

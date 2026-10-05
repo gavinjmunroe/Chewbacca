@@ -2,6 +2,7 @@
 id: CHW-69
 title: Any LLM through the browser
 status: inbox
+area: feature
 owner: 
 priority: low
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-40
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-23
+- 2026-10-04 Caleb: filed under feature

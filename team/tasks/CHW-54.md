@@ -2,6 +2,7 @@
 id: CHW-54
 title: Remaining group-chat todo
 status: inbox
+area: feature
 owner: 
 priority: none
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical external note was unavailable
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-25
+- 2026-10-04 Caleb: filed under feature

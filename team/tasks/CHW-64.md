@@ -2,6 +2,7 @@
 id: CHW-64
 title: Open-source private meeting capture
 status: inbox
+area: feature
 owner: 
 priority: low
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-15
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-14
+- 2026-10-04 Caleb: filed under feature

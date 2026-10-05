@@ -2,6 +2,7 @@
 id: CHW-9
 title: TTS apex routing and current flow verification
 status: inbox
+area: business
 owner: 
 priority: high
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-4
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-504
+- 2026-10-04 Caleb: filed under business

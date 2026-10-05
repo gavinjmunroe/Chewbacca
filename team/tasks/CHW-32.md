@@ -2,6 +2,7 @@
 id: CHW-32
 title: Signed and pinned installs
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: E5: committed checksum verification exists, signature/pinning proof ab
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-252
+- 2026-10-04 Caleb: filed under functionality

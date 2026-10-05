@@ -2,6 +2,7 @@
 id: CHW-36
 title: Preserve commitments through interruptions
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-38
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-402
+- 2026-10-04 Caleb: filed under functionality

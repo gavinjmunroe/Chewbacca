@@ -2,6 +2,7 @@
 id: CHW-20
 title: Reuse existing OpenVision and other capabilities before rebuilding
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Original request is discovery/reuse behavior, not another hand-trackin
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-41
+- 2026-10-04 Caleb: filed under functionality

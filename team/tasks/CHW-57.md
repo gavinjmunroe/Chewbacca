@@ -2,6 +2,7 @@
 id: CHW-57
 title: Finish interface and ship a beta (legacy 30b)
 status: inbox
+area: business
 owner: 
 priority: none
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-513
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-130
+- 2026-10-04 Caleb: filed under business

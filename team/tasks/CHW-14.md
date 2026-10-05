@@ -2,6 +2,7 @@
 id: CHW-14
 title: Open-source alternatives for useful apps
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Research request retained
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-15
+- 2026-10-04 Caleb: filed under feature

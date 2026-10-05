@@ -2,6 +2,7 @@
 id: CHW-7
 title: Behavioral fitness execution
 status: inbox
+area: functionality
 owner: 
 priority: high
 due: 
@@ -19,3 +20,4 @@ Evidence: E2: one historical dirty-tree run has 186 cases and 34 failure IDs
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-47
+- 2026-10-04 Caleb: filed under functionality

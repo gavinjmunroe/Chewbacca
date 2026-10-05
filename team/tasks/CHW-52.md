@@ -2,6 +2,7 @@
 id: CHW-52
 title: Contributor onboarding changes
 status: inbox
+area: business
 owner: 
 priority: none
 due: 
@@ -19,3 +20,4 @@ Evidence: Specific current requests not established
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-20
+- 2026-10-04 Caleb: filed under business

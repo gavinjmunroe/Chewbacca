@@ -2,6 +2,7 @@
 id: CHW-93
 title: Private GTM engagement delivery
 status: inbox
+area: business
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-18
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-1
+- 2026-10-04 Caleb: filed under business

@@ -2,6 +2,7 @@
 id: CHW-38
 title: Live destination outcomes
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-18
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-405
+- 2026-10-04 Caleb: filed under functionality

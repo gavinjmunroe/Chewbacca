@@ -2,6 +2,7 @@
 id: CHW-15
 title: Expertise in Clay, then other software
 status: inbox
+area: business
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Private fixtures and plans do not establish live workflow completion
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-18
+- 2026-10-04 Caleb: filed under business

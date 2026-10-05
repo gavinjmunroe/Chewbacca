@@ -2,6 +2,7 @@
 id: CHW-90
 title: Telemetry policy
 status: inbox
+area: business
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: Original rejection retained; no telemetry added or authorized
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-257
+- 2026-10-04 Caleb: filed under business

@@ -2,6 +2,7 @@
 id: CHW-8
 title: Installer merges existing instructions
 status: inbox
+area: functionality
 owner: 
 priority: high
 due: 
@@ -19,3 +20,4 @@ Evidence: E5: merge helper called by setup, fresh fixture checks pending
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-250
+- 2026-10-04 Caleb: filed under functionality

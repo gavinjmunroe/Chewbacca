@@ -171,6 +171,27 @@ transfer to any site.
   times in that wave, and once more on 2026-10-04, when it blanked a live
   button.
 
+## A second reference: Gavin Munroe's site
+
+`calebnewtonusc/gavin-munroe`, which Caleb called "insanely creative" on
+2026-10-04. Lemma shows restraint. This site shows invention. What carries
+over:
+
+- **A story as a journey through places.** Each chapter is a city, joined by
+  a flight line drawn on a map, with a stop number and a coordinate readout.
+  A narrative with geography beats a list of sections.
+- **One bold colour block per chapter**, from a single sunset palette, with a
+  dithered or pixel scene inside it. Limiting the palette per scene is what
+  keeps a loud page from turning messy.
+- **The x-ray.** Drag across a scene to see how it's made: skeletons, paths,
+  live readouts. It shows the craft and invites play.
+- **Working demos inside the page,** in OS-style windows, plus Cmd-K to jump
+  anywhere.
+- **`verified` flags on every claim,** with unverified ones hidden in
+  production. That puts the honesty rule in code instead of in a review step.
+- **`reference/STEAL.md`** records what was borrowed from which site and why,
+  so taking inspiration stays deliberate and credited.
+
 ## Done means
 
 `site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no

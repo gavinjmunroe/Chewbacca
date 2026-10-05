@@ -194,54 +194,19 @@
     }
   ],
   "marketplaces": [
-    "Egonex-AI/Understand-Anything",
-    "anthropics/claude-plugins-official",
-    "blader/humanizer",
-    "clay-run/agent-plugins"
+    "anthropics/claude-plugins-official"
   ],
   "plugins": [
-    "bigquery-data-analytics@claude-plugins-official",
-    "claude-md-management@claude-plugins-official",
-    "clay@clay-plugins",
-    "context7@claude-plugins-official",
-    "expo@claude-plugins-official",
-    "feature-dev@claude-plugins-official",
-    "frontend-design@claude-plugins-official",
-    "hookify@claude-plugins-official",
-    "humanizer@humanizer",
-    "pinecone@claude-plugins-official",
     "playwright@claude-plugins-official",
     "pyright-lsp@claude-plugins-official",
     "railway@claude-plugins-official",
     "security-guidance@claude-plugins-official",
     "serena@claude-plugins-official",
-    "session-report@claude-plugins-official",
     "swift-lsp@claude-plugins-official",
     "typescript-lsp@claude-plugins-official",
-    "understand-anything@understand-anything",
     "vercel@claude-plugins-official"
   ],
   "mcp": [
-    {
-      "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch",
-      "description": "Pulls a URL down as markdown the agent can read, no key",
-      "cmd": "uvx",
-      "args": [
-        "mcp-server-fetch"
-      ],
-      "env": [],
-      "name": "fetch"
-    },
-    {
-      "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/time",
-      "description": "Real current time and timezone conversion, no key",
-      "cmd": "uvx",
-      "args": [
-        "mcp-server-time"
-      ],
-      "env": [],
-      "name": "time"
-    },
     {
       "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/git",
       "description": "Reads, searches, and edits a git repo as structured calls, no key",
@@ -251,39 +216,6 @@
       ],
       "env": [],
       "name": "git"
-    },
-    {
-      "url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking",
-      "description": "Externalizes a long chain of reasoning into revisable steps, no key",
-      "cmd": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ],
-      "env": [],
-      "name": "sequential-thinking"
-    },
-    {
-      "url": "https://github.com/antvis/mcp-server-chart",
-      "description": "Renders 25 chart types from data, so an answer can be a picture, no key",
-      "cmd": "npx",
-      "args": [
-        "-y",
-        "@antv/mcp-server-chart"
-      ],
-      "env": [],
-      "name": "chart"
-    },
-    {
-      "url": "https://github.com/steipete/macos-automator-mcp",
-      "description": "AppleScript and JXA as tools, with a script knowledge base, no key",
-      "cmd": "npx",
-      "args": [
-        "-y",
-        "@steipete/macos-automator-mcp@latest"
-      ],
-      "env": [],
-      "name": "macos-automator"
     },
     {
       "url": "https://github.com/exa-labs/exa-mcp-server",

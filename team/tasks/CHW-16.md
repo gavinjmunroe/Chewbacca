@@ -2,6 +2,7 @@
 id: CHW-16
 title: Research me.sh and mog
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: No current comparison established
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-22
+- 2026-10-04 Caleb: filed under feature

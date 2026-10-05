@@ -2,6 +2,7 @@
 id: CHW-84
 title: Memory decay, pruning and retirement (B10)
 status: inbox
+area: functionality
 owner: 
 priority: low
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-203
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-204
+- 2026-10-04 Caleb: filed under functionality

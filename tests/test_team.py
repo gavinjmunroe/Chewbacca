@@ -12,6 +12,9 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+# The suite uses throwaway bare repos named "origin", never the real board.
+os.environ["TEAM_REMOTE"] = "origin"
+os.environ["TEAM_NO_GH"] = "1"
 import team  # noqa: E402
 
 MEMBERS = [{"name": "Caleb", "github": "calebnewtonusc"},
@@ -54,6 +57,7 @@ class TeamTest(unittest.TestCase):
         env = {**self.env, "TEAM_ME": me}
         old = {k: os.environ.get(k) for k in env}
         os.environ.update(env)
+        team._WHO.clear()
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 code = team.main(["--repo", str(repo), *args])
@@ -161,7 +165,7 @@ class TeamTest(unittest.TestCase):
         self.assertEqual(task["done_when"], "line one status: done")
 
     def test_round_trip_keeps_notes_and_activity(self):
-        task = {"id": "CHW-7", "title": "T", "status": "todo", "owner": "", "priority": "none", "due": "",
+        task = {"id": "CHW-7", "title": "T", "status": "todo", "area": "", "parent": "", "owner": "", "priority": "none", "due": "",
                 "labels": ["a", "b"], "done_when": "", "proof": "", "source": "", "created": "2026-10-05", "updated": "",
                 "notes": "Some notes\n\nwith a gap", "activity": ["2026-10-05 Caleb: created"]}
         self.assertEqual(team.parse(team.render(task)), task)
@@ -261,6 +265,96 @@ class TeamTest(unittest.TestCase):
         self.assertIn("kept 1", out)
         left = [t["title"] for t in json.loads(self.run_team(self.a, "board", "--json")[1])]
         self.assertEqual(left, ["Hand made", "Accurate skill routing"])
+
+    def code_commit(self, message):
+        git(self.b, "pull", "-q", "--rebase", "origin", "main")
+        (self.b / "code.txt").write_text(message)
+        git(self.b, "add", "code.txt")
+        git(self.b, "commit", "-q", "-m", message)
+        git(self.b, "push", "-q", "origin", "main")
+        return git(self.b, "rev-parse", "HEAD").strip()
+
+    def test_a_commit_that_mentions_a_task_moves_it_and_fixes_closes_it(self):
+        self.run_team(self.a, "add", "Install test", "--owner", "Semyon")
+        self.run_team(self.a, "add", "Onboarding fix", "--owner", "Gavin")
+        self.code_commit("wip: timing the install for CHW-1")
+        sha = self.code_commit("feat: no GitHub step in onboarding\n\nFixes CHW-2")
+        code, _, err = self.run_team(self.a, "sync")
+        self.assertEqual(code, 0)
+        self.assertIn("2 task(s)", err)
+        one = team.parse(self.remote_file("team/tasks/CHW-1.md"))
+        two = team.parse(self.remote_file("team/tasks/CHW-2.md"))
+        self.assertEqual(one["status"], "in_progress")
+        self.assertEqual(two["status"], "done")
+        self.assertTrue(two["proof"].endswith(sha) or two["proof"] == sha)
+        self.assertTrue(any(f"commit {sha[:7]}" in x for x in two["activity"]))
+
+    def test_commit_sync_is_idempotent_and_ignores_task_commits(self):
+        self.run_team(self.a, "add", "Thing")
+        self.code_commit("touch CHW-1")
+        self.run_team(self.a, "sync")
+        before = self.commits()
+        _, _, err = self.run_team(self.a, "sync")
+        self.assertEqual(self.commits(), before)
+        self.assertNotIn("task(s)", err)
+        task = team.parse(self.remote_file("team/tasks/CHW-1.md"))
+        self.assertEqual(sum("commit " in x for x in task["activity"]), 1)
+
+    def test_prose_in_a_commit_body_is_not_an_instruction(self):
+        # The commit that shipped commit sync closed CHW-12 by describing itself.
+        body = "The board follows Linear's extracted DESIGN.md: near-black, hairlines, one\nlavender accent, a sidebar with Inbox, My tasks, Active, All and each person,\nand a dense list grouped by status (inbox grouped by source). A commit that\nmentions CHW-12 is logged on the task and starts it; \"fixes CHW-12\" closes it\nwith the commit as proof. The CLI and the web server both run that sync,\nsince GitHub Actions jobs refuse to start on this account's billing."
+        self.assertEqual(team.parse_commit_refs("feat: team board in Linear's system", body), (set(), set()))
+        self.assertEqual(team.parse_commit_refs("feat: x", "Fixes CHW-2\nRefs CHW-3, CHW-4"),
+                         ({"CHW-2", "CHW-3", "CHW-4"}, {"CHW-2"}))
+
+    def test_hostile_commit_text_parses_in_linear_time(self):
+        import time
+        start = time.monotonic()
+        team.parse_commit_refs("x " + " " * 100000 + "fixes", ("CHW-1 " * 20000) + "x\n" + " " * 100000 + "!")
+        self.assertLess(time.monotonic() - start, 0.5)
+        self.assertEqual(team.parse_commit_refs("fixes   CHW-9", ""), ({"CHW-9"}, {"CHW-9"}))
+
+    def test_parse_commit_refs(self):
+        self.assertEqual(team.parse_commit_refs("team: CHW-3 comment", ""), (set(), set()))
+        self.assertEqual(team.parse_commit_refs("feat: x (closes chw-7)", "CHW-8"), ({"CHW-7", "CHW-8"}, {"CHW-7"}))
+
+    def test_idea_bin_stays_off_the_default_board(self):
+        self.run_team(self.a, "add", "Real work")
+        self.run_team(self.a, "add", "Portal sparkles", "--status", "ideas")
+        _, out, _ = self.run_team(self.a, "board")
+        self.assertIn("Real work", out)
+        self.assertNotIn("Portal sparkles", out)
+        self.assertIn("Idea bin: 1", out)
+
+    def test_area_is_one_of_four(self):
+        self.assertEqual(self.run_team(self.a, "add", "Make it pretty", "--area", "design")[0], 0)
+        self.assertEqual(team.parse(self.remote_file("team/tasks/CHW-1.md"))["area"], "design")
+        code, _, err = self.run_team(self.a, "add", "X", "--area", "vibes")
+        self.assertEqual(code, 1)
+        self.assertIn("feature, functionality, design, business", err)
+
+    def test_sub_tasks_need_a_real_parent_and_show_progress(self):
+        self.run_team(self.a, "add", "Onboarding")
+        self.assertEqual(self.run_team(self.a, "add", "Write the guide", "--parent", "chw-1")[0], 0)
+        self.assertEqual(self.run_team(self.a, "add", "Bad", "--parent", "CHW-99")[0], 1)
+        self.assertEqual(self.run_team(self.a, "edit", "CHW-1", "--parent", "CHW-1")[0], 1)
+        _, out, _ = self.run_team(self.a, "show", "CHW-1")
+        self.assertIn("Sub-tasks 0/1", out)
+
+    def test_a_fork_checkout_still_targets_the_shared_board(self):
+        fork = pathlib.Path(self.tmp.name) / "fork"
+        git(pathlib.Path(self.tmp.name), "init", "-q", str(fork))
+        git(fork, "remote", "add", "origin", "git@github.com:gavinjmunroe/Chewbacca.git")
+        old = os.environ.pop("TEAM_REMOTE")
+        try:
+            self.assertEqual(team.resolve_remote(fork), team.TEAM_URL)
+            git(fork, "remote", "add", "upstream", "https://github.com/calebnewtonusc/Chewbacca.git")
+            self.assertEqual(team.resolve_remote(fork), "upstream")
+            self.assertEqual(team.Repo(fork).ref, "upstream/main")
+            git(fork, "remote", "remove", "upstream")
+            self.assertEqual(team.Repo(fork).ref, team.FETCHED_REF)
+        finally:
+            os.environ["TEAM_REMOTE"] = old
 
     def test_feed_shows_commits(self):
         self.run_team(self.a, "add", "Feed me")

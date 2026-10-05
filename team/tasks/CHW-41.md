@@ -2,6 +2,7 @@
 id: CHW-41
 title: Check tool errors and business result
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical regression target
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-408
+- 2026-10-04 Caleb: filed under functionality

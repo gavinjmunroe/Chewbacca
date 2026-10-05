@@ -2,6 +2,7 @@
 id: CHW-35
 title: Portability including Windows
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-513
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-255
+- 2026-10-04 Caleb: filed under feature

@@ -2,6 +2,7 @@
 id: CHW-51
 title: Kyber: talk while it works
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Phase 4 of [docs/KYBER-EVERYTHING.md](docs/KYBER-EVERYTHING.md); a mid
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-120
+- 2026-10-04 Caleb: filed under feature

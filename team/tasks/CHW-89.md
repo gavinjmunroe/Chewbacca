@@ -2,6 +2,7 @@
 id: CHW-89
 title: Nonterminal people/context view
 status: inbox
+area: design
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical request retained without private counts
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-256
+- 2026-10-04 Caleb: filed under design

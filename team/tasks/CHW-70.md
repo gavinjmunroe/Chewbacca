@@ -2,6 +2,7 @@
 id: CHW-70
 title: Team overlap prevention
 status: inbox
+area: functionality
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical check-in/hook proposal, execution unverified
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-27
+- 2026-10-04 Caleb: filed under functionality

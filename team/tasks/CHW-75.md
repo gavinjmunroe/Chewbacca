@@ -1,7 +1,7 @@
 ---
 id: CHW-75
 title: Spoken portal arming and dashboard contained in ring
-status: inbox
+status: ideas
 owner: 
 priority: low
 due: 
@@ -20,3 +20,4 @@ Depends on: CB-39
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-43
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

@@ -662,6 +662,17 @@ function findPerson(needle, { required = true } = {}) {
     )
     .all(`%${needle}%`);
   if (like.length === 1) return like[0];
+  // A FIRST NAME BEATS A NAME THAT MERELY CONTAINS IT. On 2026-10-05 "gavin"
+  // matched Gavin Munroe plus "Gregory Gavin Lee UCLA", "Jake UIUX Gavin's
+  // Friend" and "Semyon Gavin's Friend", and `people note gavin` refused.
+  // Contact names here are decorated with who introduced them, so the only
+  // row that is actually called Gavin is the one whose name starts with it.
+  // Two real first-name matches (Tyler Law, Tyler Larsen) still refuse below.
+  const first = d
+    .prepare("SELECT * FROM people WHERE deleted_at IS NULL AND lower(name) LIKE lower(?) ORDER BY name")
+    .all(`${needle}%`)
+    .filter((p) => nameTokens(p.name)[0] === String(needle).toLowerCase());
+  if (first.length === 1) return first[0];
   if (like.length > 1) {
     die(
       `"${needle}" matches ${like.length} people:\n` +
@@ -7064,6 +7075,40 @@ function cmdFact(argv) {
 // The reader lives in the mac kit because decoding attributedBody is fiddly and
 // already solved there. Without that decode you see about 5% of a real library
 // and almost nothing the user sent.
+// WHO "GAVIN" MEANS WHEN YOU ARE READING TEXTS. The store holds five people
+// whose first name is Gavin, so findPerson rightly refuses to guess, which is
+// what a write needs. Reading is different: the person someone asks to "scan
+// texts with" is the one they are texting now, and a wrong pick costs one
+// visible line, not a corrupted record. So ambiguity resolves to the most
+// recently texted candidate, and the others are named so a miss is obvious.
+// Message bodies and group-chat names are written by other people, and an
+// ESC byte in one is a terminal escape sequence when printed raw: it can
+// recolor, retitle or rewrite what is on screen. Strip C0/C1 controls except
+// newline and tab before anything from chat.db reaches the terminal.
+const printable = (s) => String(s).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
+
+function textPartner(d, needle) {
+  const n = String(needle).toLowerCase();
+  const exact = d
+    .prepare("SELECT * FROM people WHERE deleted_at IS NULL AND (id = ? OR handle = ? OR lower(name) = ?)")
+    .all(needle, needle, n);
+  if (exact.length === 1) return exact[0];
+  const like = exact.length
+    ? exact
+    : d.prepare("SELECT * FROM people WHERE deleted_at IS NULL AND lower(name) LIKE ?").all(`%${n}%`);
+  if (like.length <= 1) return like[0] || null;
+  const first = like.filter((p) => nameTokens(p.name)[0] === n);
+  const pool = first.length ? first : like;
+  const last = d.prepare("SELECT max(sent_at) t FROM messages WHERE person_id = ?");
+  const ranked = pool
+    .map((p) => ({ p, t: last.get(p.id).t || "" }))
+    .sort((a, b) => (a.t < b.t ? 1 : a.t > b.t ? -1 : 0));
+  if (!ranked[0].t) return null;
+  const others = ranked.slice(1, 6).map((r) => r.p.name);
+  say(c.dim(`  "${needle}" = ${ranked[0].p.name}, texted most recently. Also: ${others.join(", ")}`));
+  return ranked[0].p;
+}
+
 function textsReader() {
   const here = path.dirname(fs.realpathSync(process.argv[1]));
   for (const cand of [
@@ -7397,25 +7442,42 @@ function cmdTexts(argv) {
     say("");
     for (const r of rows)
       say(
-        `  ${c.dim(r.sent_at.slice(0, 16))}  ${c.b(r.who.padEnd(20).slice(0, 20))} ${r.from_me ? c.cyn("->") : "<-"} ${r.body.replace(/\s+/g, " ").slice(0, 90)}`,
+        `  ${c.dim(r.sent_at.slice(0, 16))}  ${c.b(printable(r.who).padEnd(20).slice(0, 20))} ${r.from_me ? c.cyn("->") : "<-"} ${printable(r.body).replace(/\s+/g, " ").slice(0, 90)}`,
       );
     say(`\n  ${rows.length} results\n`);
     return;
   }
 
   // the running log
-  const days = Number(flags.days || 3);
+  //
+  // "Read my texts with Gavin" took eight tool calls on 2026-10-05 because of
+  // three bugs here, each of which looked like a different problem:
+  // - ORDER BY ASC LIMIT kept the OLDEST 300 rows, so `--days 14` silently
+  //   ended eleven days ago and the newest messages were the ones dropped.
+  // - `lower(who) LIKE %gavin%` pulled every thread whose contact name
+  //   mentions him ("Jake UIUX Gavin's Friend") into his log.
+  // - bodies were cut at 100 characters, and the message that mattered was a
+  //   1,400-character proposal, so the reader fell back to raw chat.db.
+  // One person now means their messages only, newest kept, printed whole, and
+  // with no --days the window is their whole history rather than three days.
   const who = flags.who || rest.join(" ") || null;
+  const person = who ? textPartner(d, who) : null;
+  const days = Number(flags.days || (person ? 36500 : 3));
+  const limit = Number(flags.limit || 300);
+  const full = Boolean(flags.full || person);
   let sql = `SELECT who, from_me, body, sent_at FROM messages
               WHERE julianday('now') - julianday(sent_at) <= ?`;
   const args = [days];
-  if (who) {
-    sql += " AND (lower(who) LIKE ? OR person_id = (SELECT id FROM people WHERE lower(name) LIKE ? LIMIT 1))";
-    args.push("%" + who.toLowerCase() + "%", "%" + who.toLowerCase() + "%");
+  if (person) {
+    sql += " AND person_id = ?";
+    args.push(person.id);
+  } else if (who) {
+    sql += " AND lower(who) LIKE ?";
+    args.push("%" + who.toLowerCase() + "%");
   }
-  sql += " ORDER BY sent_at ASC LIMIT ?";
-  args.push(Number(flags.limit || 300));
-  const rows = d.prepare(sql).all(...args);
+  sql += " ORDER BY sent_at DESC LIMIT ?";
+  args.push(limit);
+  const rows = d.prepare(sql).all(...args).reverse();
   if (!rows.length) {
     const any = d.prepare("SELECT count(*) n FROM messages").get().n;
     return say(
@@ -7425,15 +7487,18 @@ function cmdTexts(argv) {
     );
   }
   say("");
+  if (rows.length === limit)
+    say(c.dim(`  showing the newest ${limit}; --limit N for more`));
   let last = null;
   for (const r of rows) {
     if (r.who !== last) {
-      say(`\n${c.cyn(r.who)}`);
+      say(`\n${c.cyn(printable(r.who))}`);
       last = r.who;
     }
-    say(
-      `  ${c.dim(r.sent_at.slice(5, 16))} ${r.from_me ? c.cyn("->") : "  "} ${r.body.replace(/\s+/g, " ").slice(0, 100)}`,
-    );
+    const body = full
+      ? printable(r.body).replace(/\n/g, "\n                 ")
+      : printable(r.body).replace(/\s+/g, " ").slice(0, 100);
+    say(`  ${c.dim(r.sent_at.slice(5, 16))} ${r.from_me ? c.cyn("->") : "  "} ${body}`);
   }
   say("");
 }

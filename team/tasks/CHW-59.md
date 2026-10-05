@@ -2,6 +2,7 @@
 id: CHW-59
 title: Self-correcting outreach
 status: inbox
+area: business
 owner: 
 priority: low
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-0, CB-1
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-6
+- 2026-10-04 Caleb: filed under business

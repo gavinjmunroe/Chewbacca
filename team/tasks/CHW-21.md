@@ -2,6 +2,7 @@
 id: CHW-21
 title: Voice/chat capability parity
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-3
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-44
+- 2026-10-04 Caleb: filed under feature

@@ -29,7 +29,7 @@ my texts" as permission to read, not permission to republish.
 ```bash
 people texts sync                     # pull new messages in, incremental
 people texts --days 3                 # the running log
-people texts --who maggie --days 30   # one person
+people texts maggie                   # one person: newest 300, full text, one call
 people texts search "the japan trip"  # full text, all history
 people texts stats                    # how much is stored, when it last synced
 ```
@@ -62,8 +62,14 @@ When they ask what someone said, read the thread and answer in your own words.
 > "what did maggie say about the trip"
 
 ```bash
-people texts --who maggie --days 60
+people texts maggie
 ```
+
+That one call is the whole read. It resolves the name to the person you texted
+most recently (five people are called Gavin; it says which one it picked),
+keeps only their messages, prints bodies whole, and keeps the newest rows. Do
+not add `--days`, do not grep chat.db, do not decode attributedBody by hand:
+on 2026-10-05 that detour took eight tool calls for one thread.
 
 Then answer. Quote a line when the wording matters and paraphrase when it does
 not. Do not dump forty messages back at them: they were there, they want the

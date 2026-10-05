@@ -2,6 +2,7 @@
 id: CHW-5
 title: Accurate skill routing
 status: inbox
+area: functionality
 owner: 
 priority: high
 due: 
@@ -19,3 +20,4 @@ Evidence: E4: router is present and wired; historical absence claim withdrawn
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-3
+- 2026-10-04 Caleb: filed under functionality

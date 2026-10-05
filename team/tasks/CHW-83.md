@@ -1,7 +1,7 @@
 ---
 id: CHW-83
 title: Humor experiments (legacy second 51)
-status: inbox
+status: ideas
 owner: 
 priority: low
 due: 
@@ -19,3 +19,4 @@ Evidence: Historical experiment plan; no fresh ratings/outcomes
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-151
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

@@ -2,6 +2,7 @@
 id: CHW-49
 title: Kyber: the desk of live panels
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: Opal desktop (no ID yet)
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-118
+- 2026-10-04 Caleb: filed under feature

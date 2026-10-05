@@ -2,6 +2,7 @@
 id: CHW-74
 title: Browser bridge transport
 status: inbox
+area: functionality
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: Code present; historical parked decision retained
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-40
+- 2026-10-04 Caleb: filed under functionality

@@ -2,6 +2,7 @@
 id: CHW-48
 title: Kyber: point and say
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Phase 1 of [docs/KYBER-EVERYTHING.md](docs/KYBER-EVERYTHING.md); only 
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-117
+- 2026-10-04 Caleb: filed under feature

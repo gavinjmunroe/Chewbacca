@@ -2,6 +2,7 @@
 id: CHW-13
 title: Animation extraction from live UX
 status: inbox
+area: design
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical partial implementation; prior-art overlap acknowledged
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-7
+- 2026-10-04 Caleb: filed under design

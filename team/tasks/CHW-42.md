@@ -2,6 +2,7 @@
 id: CHW-42
 title: Fitness records which cases fail
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: E2: failed_cases includes IDs and reasons; historical ledger has 34 ID
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-500
+- 2026-10-04 Caleb: filed under functionality

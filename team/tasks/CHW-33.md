@@ -2,6 +2,7 @@
 id: CHW-33
 title: One durable store and arbitration
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: Two-store overlap historically noted
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-253
+- 2026-10-04 Caleb: filed under functionality

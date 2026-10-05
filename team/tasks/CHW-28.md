@@ -2,6 +2,7 @@
 id: CHW-28
 title: Learn software and share tested procedures (original 26)
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-32, CB-41
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-209
+- 2026-10-04 Caleb: filed under feature

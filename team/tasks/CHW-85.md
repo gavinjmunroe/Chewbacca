@@ -2,6 +2,7 @@
 id: CHW-85
 title: Research supplied video playlist (original 23)
 status: inbox
+area: feature
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: Original URL preserved in private archive, read coverage unknown
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-207
+- 2026-10-04 Caleb: filed under feature

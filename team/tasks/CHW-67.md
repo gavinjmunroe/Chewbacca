@@ -2,6 +2,7 @@
 id: CHW-67
 title: LinkedIn data workflow
 status: inbox
+area: business
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical paused scrape is not current execution proof
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-19
+- 2026-10-04 Caleb: filed under business

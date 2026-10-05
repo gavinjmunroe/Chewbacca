@@ -179,7 +179,8 @@ if group "site-gate"; then
     check  "bad page exits 1" test "$SGRC" -eq 1
     for needle in "horizontal scroll" 'href="#"' "missing #nowhere" "gone.html answered 404" \
                   "no hover and no focus state: BUTTON Inert" "no accessible name" "planted failure" \
-                  "runs under reduced motion" '"Ghost" text is invisible' 'heading-plus-line grid of 6 cards'; do
+                  "runs under reduced motion" '"Ghost" text is invisible' 'heading-plus-line grid of 6 cards' \
+                  'heading paints nothing (covered or invisible): Covered people'; do
       check "bad page flags: $needle" grep -qF -- "$needle" "$TMP/sg.out"
     done
     exits  "clean page passes" 0 "$ROOT/bin/site-gate" check "$SG/good.html"
@@ -215,6 +216,9 @@ if group "people"; then
     # order them correctly is the lateness term.
     check "reconnect ranks by lateness when every score is zero" \
       bash "$ROOT/tests/reconnect_ranking.sh" "${P[@]}"
+
+    check "texts <name> reads one person's newest messages whole" \
+      bash "$ROOT/tests/texts_reader.sh" "${P[@]}"
 
     check  "score runs" "${P[@]}" score
     check  "birthdays runs" "${P[@]}" birthdays --days 30
@@ -1219,6 +1223,20 @@ if group "hud"; then
     python3 "$ROOT/tests/test_osgraph.py"
   check  "surfaces draw valid ops, refresh with d only, and send only on a press" \
     python3 "$ROOT/tests/test_kyber_surfaces.py"
+  check  "kyber-sessions types into an idle open session through its inbox, refuses a hold, forks on a press" \
+    python3 "$ROOT/tests/test_kyber_sessions.py"
+  check  "engines run only remixable, local, spec-declared reads, and oss labels every license" \
+    python3 "$ROOT/tests/test_surface_engines.py"
+  check  "code is read only, refuses a path with a control, format or bidi character, and runs no repo filter" \
+    python3 "$ROOT/tests/test_surface_code.py"
+  check  "notes appends one line only to a text-only pinned note and reads it back" \
+    python3 "$ROOT/tests/test_surface_notes.py"
+  check  "github runs one read-only graphql call and refuses every write" \
+    python3 "$ROOT/tests/test_surface_github.py"
+  check  "whatsapp sends only to the opened 1:1 chat, verifies the new id, and an unlinked account is a note" \
+    python3 "$ROOT/tests/test_surface_whatsapp.py"
+  check  "the launcher lists only real surfaces and the hud-apps sentence reaches it, not genui" \
+    python3 "$ROOT/tests/test_surface_apps.py"
   check  "a sentence opens the right surface and a near miss goes to the model" \
     python3 "$ROOT/tests/test_surface_intent.py"
   check  "apps.json names a replacement or says not yet for every app" \

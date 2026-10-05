@@ -281,20 +281,28 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
     return empty
 
 
-KINDS = ("needs-you", "today", "tasks", "conversations", "people", "person", "space", "music", "files")
-# Kinds that need an argument: `person karthik`, `space school`.
-PARAMETRIC = ("person", "space")
+KINDS = ("needs-you", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
+         "oss", "engine", "code", "notes", "github", "whatsapp", "apps")
+# Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
+# `oss` is not one: it opens empty, and "what replaces Notion" seeds its query
+# with the preset {"/oss/q": "Notion"} instead.
+PARAMETRIC = ("person", "space", "engine")
 
 
 def make(kind: str, arg: str = "") -> Provider:
     """A provider instance. Walk surfaces read the graph; music and files are
     thin surfaces over their own CLI and folder."""
-    from . import files, music, walks  # noqa: PLC0415  cycle-free lazy load
+    from . import apps, code, engine, files, github, music, notes, oss, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
 
+    if kind == "engine":
+        return engine.EngineSurface(arg)
+    if kind == "oss":
+        return oss.Oss(arg)
     table = {
         "needs-you": walks.NeedsYou, "today": walks.Today, "tasks": walks.Tasks,
         "conversations": walks.Conversations, "people": walks.People,
         "music": music.Music, "files": files.Files,
+        "code": code.Code, "notes": notes.Notes, "github": github.GitHub, "whatsapp": whatsapp.WhatsApp, "apps": apps.Apps,
     }
     if kind == "person":
         return walks.Person(arg)
@@ -317,6 +325,11 @@ ALIASES = {
     "contacts": "people", "friends": "people",
     "spotify": "music", "player": "music", "song": "music", "playing": "music",
     "downloads": "files", "finder": "files", "file": "files",
+    "alternatives": "oss", "alternative": "oss", "replace": "oss", "replaces": "oss",
+    "open-source": "oss", "opensource": "oss", "oss-apps": "oss", "engines": "oss",
+    "changes": "code", "diff": "code", "diffs": "code", "repos": "code", "vscode": "code",
+    "note": "notes", "apple-notes": "notes",
+    "launcher": "apps", "launchpad": "apps", "dock": "apps", "surfaces": "apps", "wa": "whatsapp", "whats-app": "whatsapp", "gh": "github", "prs": "github", "pulls": "github", "pull-requests": "github", "reviews": "github",
 }
 
 

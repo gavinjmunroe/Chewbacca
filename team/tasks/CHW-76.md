@@ -1,7 +1,7 @@
 ---
 id: CHW-76
 title: Portal reach, size and gain defaults
-status: inbox
+status: ideas
 owner: 
 priority: low
 due: 
@@ -20,3 +20,4 @@ Depends on: CB-45
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-49
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish

@@ -2,6 +2,7 @@
 id: CHW-29
 title: Synthesize both MCP catalogs (original 6/7)
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-8
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-212
+- 2026-10-04 Caleb: filed under feature

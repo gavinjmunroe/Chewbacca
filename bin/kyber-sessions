@@ -5,7 +5,10 @@
     kyber-sessions --json              the same as JSON (--all adds scripted `claude -p` runs)
     kyber-sessions needs --json        only the sessions waiting on a person
     kyber-sessions stream <id>         a session's transcript as JSON lines (--follow keeps going)
-    kyber-sessions send <id> <text>    one message to a finished session, reply streamed as JSON lines
+    kyber-sessions send <id> <text>    one message to an idle session, reply streamed as JSON lines
+    kyber-sessions send --fork <id> <text>  the same into a new headless copy of it
+                                       (--fork only as the first word after send; an id
+                                       prefix must name exactly one session)
     kyber-sessions run <id> <what>     an allowlisted command in its folder: status, diff, tests
     kyber-sessions route "<words>"     which session a sentence is for (the hook for hud-listen)
     kyber-sessions serve [--open <id>] draw the sessions surface and answer its presses
@@ -18,8 +21,22 @@ read-only.
 
 Everything read from a transcript is untrusted: it is drawn, never acted on.
 Nothing here grants a permission. A message is sent only when the person
-presses send in the conversation panel addressed to a session (`to`), and
-only to a session that has finished its turn, never into one mid-run.
+presses send (the card's own Send, or the conversation panel addressed to a
+session with `to`), and only to a session that is idle, never into one
+mid-run.
+
+How it gets there depends on whether the session is open in a client right
+now. Open (VS Code, a terminal, any interactive claude): through the inbox
+Claude Code gives every running session (bin/lib/sessions_inbox.py), so the
+text lands in the window Caleb left it in. Not open: `claude -p --resume`
+in its folder, as before, with the text on stdin so it can never be read as
+a flag. A session open somewhere is never resumed by a second process,
+because two writers on one transcript fork the conversation.
+
+Whether an open session would hold the message is predicted from the
+permission mode in its transcript, which only a turn writes. A mode switched
+in VS Code after the last turn is not seen; if Claude Code then holds the
+message, the transcript says so and the send reports `held`, not delivered.
 
 Layout design follows Carlton Aikins' realm (github.com/31Carlton7/realm,
 unlicensed, read as a design reference only; no code from it is used).
@@ -40,6 +57,7 @@ from typing import Callable, Iterable, Iterator
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 import hud_events  # noqa: E402
+import sessions_inbox  # noqa: E402
 
 HOME = Path.home()
 SOCKET = os.environ.get("BOB_HUD_SOCKET", str(HOME / ".bob" / "hud.sock"))
@@ -73,6 +91,12 @@ INTERACTIVE = frozenset({"cli", "claude-vscode", "claude-desktop"})
 MAX_ROWS = 9
 # How many turns a session card draws.
 CARD_TURNS = 40
+# How long a first Run tests press stays armed. A folder's test script is the
+# folder's own code (`npm test` runs whatever package.json says), so one press
+# on a card for a cloned repo ran it unread; a push security review flagged
+# that on 2026-10-05. The first press now shows the command and folder, and
+# only a second press inside this window runs it. Guessed, never measured.
+TESTS_CONFIRM_S = 15.0
 
 RANK = {"needs": 0, "working": 1, "failed": 2, "finished": 3}
 WORDS = {"needs": "needs you", "working": "working", "failed": "failed", "finished": "finished"}
@@ -190,9 +214,11 @@ def tool_line(use: dict) -> str:
 
 def meta(entries: list[dict]) -> dict:
     """Title, model and folder: the newest of each in the tail."""
-    out = {"title": "", "model": "", "cwd": ""}
+    out = {"title": "", "model": "", "cwd": "", "mode": ""}
     points = {str(e.get("entrypoint")) for e in entries if e.get("entrypoint")}
     for e in reversed(entries):
+        if not out["mode"] and e.get("permissionMode"):
+            out["mode"] = str(e["permissionMode"])
         if not out["title"]:
             out["title"] = str(e.get("customTitle") or e.get("aiTitle") or e.get("summary") or "").strip() \
                 if e.get("type") in ("custom-title", "ai-title", "summary") else ""
@@ -200,7 +226,7 @@ def meta(entries: list[dict]) -> dict:
             out["model"] = str((e.get("message") or {}).get("model") or "")
         if not out["cwd"] and e.get("cwd"):
             out["cwd"] = str(e["cwd"])
-        if out["title"] and out["model"] and out["cwd"]:
+        if out["title"] and out["model"] and out["cwd"] and out["mode"]:
             break
     out["interactive"] = bool(points & INTERACTIVE) or not points
     if not out["title"]:
@@ -266,16 +292,39 @@ def cached_entries(path: Path) -> list[dict]:
     return entries
 
 
+# Modes read from behind the tail, keyed like `_parsed`. Measured 2026-10-05
+# with --all: 43 of 461 Claude rows had no permissionMode in their last
+# 768 KB, so --json showed their mode as ""; with this fallback, 3 did (their
+# transcripts never record one). A review the same day saw open bypass
+# sessions among the empty ones.
+_modes: dict[str, tuple[tuple[int, int], str]] = {}
+
+
+def effective_mode(path: Path, tail_mode: str) -> str:
+    """The tail's mode, else the newest one anywhere in the transcript."""
+    if tail_mode:
+        return tail_mode
+    st = path.stat()
+    stamp = (st.st_size, st.st_mtime_ns)
+    hit = _modes.get(str(path))
+    if hit and hit[0] == stamp:
+        return hit[1]
+    mode = sessions_inbox.last_mode(path)
+    _modes[str(path)] = (stamp, mode)
+    return mode
+
+
 def from_transcript(config: Path, path: Path, now: float) -> dict:
     entries = cached_entries(path)
     mtime = path.stat().st_mtime
     state, detail = classify(entries, now - mtime)
     m = meta(entries)
+    m["mode"] = effective_mode(path, m["mode"])
     cwd = m["cwd"]
     return {
         "id": path.stem, "agent": "claude", "config": str(config), "transcript": str(path),
         "cwd": cwd, "project": project_of(cwd) if cwd else path.parent.name,
-        "interactive": m["interactive"],
+        "interactive": m["interactive"], "mode": m["mode"],
         "title": m["title"], "model": short_model(m["model"]), "last": mtime,
         "state": state, "detail": detail, "ask": "",
     }
@@ -309,6 +358,25 @@ def codex_sessions(now: float) -> Iterator[dict]:
         }
 
 
+def merge_live(sessions: dict[str, dict], live: dict[str, dict]) -> None:
+    """Claude Code's own registry says which sessions are open in a client
+    right now, and whether each is idle or busy. That beats every guess from
+    a transcript's tail; the hook's board, merged after this, still wins on
+    "waiting on you", the one thing the registry does not say."""
+    for sid, rec in live.items():
+        s = sessions.get(sid)
+        if s is None:
+            continue
+        s["open_in"] = sessions_inbox.client_name(rec)
+        s["live"] = str(rec.get("status") or "")
+        if s["live"] == "busy" and s["state"] in ("finished", "failed"):
+            # Mid-turn by the registry. A stalled tool call stays "needs":
+            # busy is also what a turn sitting on a permission dialog says.
+            s["state"], s["detail"] = "working", ""
+        elif s["live"] == "idle" and s["state"] in ("working", "needs", "failed"):
+            s["state"], s["detail"] = "finished", ""
+
+
 def merge_board(sessions: dict[str, dict], board: dict) -> None:
     """The hook saw the session live: its state wins, and it is the only
     source of the exact permission text."""
@@ -331,7 +399,8 @@ def order(rows: Iterable[dict]) -> list[dict]:
     return sorted(rows, key=lambda s: (RANK.get(s["state"], 9), -s["last"]))
 
 
-def discover(now: float | None = None, board: dict | None = None, everything: bool = False) -> list[dict]:
+def discover(now: float | None = None, board: dict | None = None, everything: bool = False,
+             live: dict | None = None) -> list[dict]:
     now = time.time() if now is None else now
     found: dict[str, dict] = {}
     for config, path in claude_transcripts(now):
@@ -345,6 +414,11 @@ def discover(now: float | None = None, board: dict | None = None, everything: bo
             board = agent_board.load()
         except Exception:  # the board is a bonus; listing works without it
             board = {}
+    try:
+        live = sessions_inbox.live_records(CLAUDE_DIRS) if live is None else live
+    except OSError:
+        live = {}
+    merge_live(found, live)
     merge_board(found, board)
     for s in codex_sessions(now):
         found.setdefault(s["id"], s)
@@ -352,12 +426,26 @@ def discover(now: float | None = None, board: dict | None = None, everything: bo
     return order(rows)
 
 
-def find(sid: str, now: float | None = None) -> dict | None:
+def matches(sid: str, now: float | None = None) -> list[dict]:
+    """Every session `sid` names: the one whose id it is exactly, else each
+    whose id starts with it (or, from eight characters, ends with it, for a
+    Codex rollout's uuid tail)."""
     if not sid:
-        return None
+        return []
     rows = discover(now, everything=True)
-    return next((s for s in rows if s["id"] == sid or s["id"].startswith(sid)
-                 or (len(sid) >= 8 and s["id"].endswith(sid))), None)
+    exact = [s for s in rows if s["id"] == sid]
+    if exact:
+        return exact[:1]
+    return [s for s in rows if s["id"].startswith(sid) or (len(sid) >= 8 and s["id"].endswith(sid))]
+
+
+def find(sid: str, now: float | None = None) -> dict | None:
+    """The one session `sid` names, or None when it names none or several.
+    Measured 2026-10-05: 33 of the 481 sessions `--all` lists started with
+    "b", and taking the first match would have typed into one the person
+    never named."""
+    hits = matches(sid, now)
+    return hits[0] if len(hits) == 1 else None
 
 
 # ── Turning a transcript into rows for the glass ─────────────────────────────
@@ -366,7 +454,17 @@ def card_items(entries: list[dict], limit: int = CARD_TURNS) -> list[dict]:
     """Rows for a `Transcript` component: the person, the prose, and each
     tool call folded to one line. Text is only ever displayed."""
     items: list[dict] = []
+    plain = sessions_inbox.clean
     for e in entries:
+        peer = sessions_inbox.peer_body(e) if e.get("isMeta") and not e.get("isSidechain") else None
+        if peer is not None:
+            # A message that came in through the inbox. One with no reply
+            # address is the glass's own send; one from another session says so.
+            origin = e.get("origin") if isinstance(e.get("origin"), dict) else {}
+            who = "" if origin.get("from") in (None, "unknown") else "From another session: "
+            items.append({"id": f"{e.get('uuid') or len(items)}:0", "role": "user",
+                          "text": (who + plain(peer))[:4000]})
+            continue
         if not is_turn(e):
             continue
         uid = str(e.get("uuid") or len(items))
@@ -377,11 +475,11 @@ def card_items(entries: list[dict], limit: int = CARD_TURNS) -> list[dict]:
                 text = str(b["text"]).strip()
                 if e["type"] == "user" and text.startswith("<"):
                     continue  # a command or hook wrapper, not something they typed
-                items.append({"id": key, "role": e["type"], "text": text[:4000]})
+                items.append({"id": key, "role": e["type"], "text": plain(text)[:4000]})
             elif kind == "tool_use":
                 args = b.get("input") if isinstance(b.get("input"), dict) else {}
-                item = {"id": key, "role": "tool", "tool": str(b.get("name") or "tool"),
-                        "text": tool_line(b)}
+                item = {"id": key, "role": "tool", "tool": plain(str(b.get("name") or "tool")),
+                        "text": plain(tool_line(b))}
                 if b.get("name") in ("Read", "Edit", "Write", "MultiEdit") and args.get("file_path"):
                     item["open"] = True
                 items.append(item)
@@ -389,7 +487,7 @@ def card_items(entries: list[dict], limit: int = CARD_TURNS) -> list[dict]:
                 body = b.get("content")
                 text = body if isinstance(body, str) else " ".join(
                     str(c.get("text") or "") for c in body or [] if isinstance(c, dict))
-                items.append({"id": key, "role": "error", "text": " ".join(text.split())[:300]})
+                items.append({"id": key, "role": "error", "text": plain(" ".join(text.split()))[:300]})
     return items[-limit:]
 
 
@@ -479,18 +577,71 @@ def run_streaming(argv: list[str], cwd: str, on_line: Callable[[str], None], tim
 
 # ── Sending ──────────────────────────────────────────────────────────────────
 
-def send_argv(session: dict, text: str) -> list[str]:
-    # No permission flag of any kind: in print mode a tool that needs
-    # approval is refused, and the refusal is shown, never answered here.
-    return [CLAUDE_BIN, "-p", text, "--resume", session["id"],
-            "--output-format", "stream-json", "--verbose", "--include-partial-messages"]
+SESSION_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,127}")
 
 
-def can_send(session: dict) -> str | None:
+def send_argv(session: dict, fork: bool = False) -> list[str]:
+    """The `claude -p` command line. The message is not in it: it goes on
+    stdin (see `send`), because a bare positional starting with "-" is read
+    as a flag (`claude -p "--version"` printed the version, 2026-10-05).
+    No permission flag of any kind: the run gets the mode Caleb's own
+    settings give every session, nothing here adds or raises one, and in
+    print mode a tool that would need approval is refused and the refusal
+    shown, never answered here."""
+    sid = str(session["id"])
+    if not SESSION_ID.fullmatch(sid):
+        raise ValueError("not a session id")
+    return [CLAUDE_BIN, "-p", "--resume", sid,
+            "--output-format", "stream-json", "--verbose", "--include-partial-messages"] \
+        + (["--fork-session"] if fork else [])
+
+
+_LOOKUP = object()
+
+
+def live_record(session: dict) -> dict | None:
+    """The registry record of the client this session is open in right now,
+    read fresh, or None when nothing has it open."""
+    if session.get("agent") != "claude":
+        return None
+    try:
+        return sessions_inbox.live_records(CLAUDE_DIRS).get(session["id"])
+    except OSError:
+        return None
+
+
+def held_reason(session: dict, rec: dict) -> str | None:
+    """Why Claude Code would hold a message to this open session rather
+    than hand it to the model, predicted before anything is sent."""
+    config = Path(session.get("config") or HOME / ".claude")
+    policy = sessions_inbox.inbound_policy(session.get("cwd") or "", config)
+    mode = session.get("mode") or sessions_inbox.last_mode(Path(session.get("transcript") or "/nonexistent"))
+    return sessions_inbox.hold_reason(mode, policy, sessions_inbox.client_name(rec))
+
+
+def can_fork(session: dict) -> str | None:
+    """Why this session cannot be forked into a new headless one now. A fork
+    copies the conversation into a new session id and leaves the original,
+    open or not, untouched."""
+    if session.get("agent") != "claude":
+        return "Codex sessions are read-only here."
+    if session.get("state") in ("working", "needs") or session.get("live") == "busy":
+        return "It is mid-turn. Fork it once it is idle."
+    if not session.get("cwd") or not Path(session["cwd"]).is_dir():
+        return "Its folder is gone."
+    return None
+
+
+def can_send(session: dict, rec: object = _LOOKUP) -> str | None:
     """Why a message cannot go to this session now, or None when it can."""
     if session.get("agent") != "claude":
         return "Codex sessions are read-only here."
-    if session.get("state") in ("working", "needs"):
+    if session.get("state") == "needs":
+        return "It is waiting on you for a permission. Answer it in its own window."
+    record = live_record(session) if rec is _LOOKUP else rec
+    if isinstance(record, dict):
+        return sessions_inbox.why_not(record) or held_reason(session, record)
+    if session.get("state") == "working":
         return "It is mid-turn. Wait for it to finish, or answer it in its own window."
     if not session.get("cwd") or not Path(session["cwd"]).is_dir():
         return "Its folder is gone."
@@ -522,16 +673,67 @@ def stream_reply(proc_lines: Iterable[str], on_text: Callable[[str], None]) -> d
     return result
 
 
-def send(session: dict, text: str, on_text: Callable[[str], None]) -> dict:
-    why = can_send(session)
-    if why:
-        return {"is_error": True, "result": why}
-    proc = subprocess.Popen(send_argv(session, text), cwd=session["cwd"], stdout=subprocess.PIPE,
-                            stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, text=True,
+def send_open(session: dict, rec: dict, text: str, on_text: Callable[[str], None]) -> dict:
+    """Into the client it is open in, through its inbox, then the reply read
+    back from its transcript. Arrival is proved by the transcript, not by the
+    socket accepting the bytes."""
+    path = Path(session["transcript"])
+    offset = sessions_inbox.size_of(path)
+    try:
+        sessions_inbox.deliver(rec, text)
+    except sessions_inbox.Refused as err:
+        return {"is_error": True, "result": str(err), "delivered": False, "via": "inbox"}
+
+    def status() -> str | None:
+        now = live_record(session)
+        return str(now.get("status") or "") if now else None
+
+    out = sessions_inbox.follow(path, offset, text, status, on_text, poll_s=0.5)
+    out["via"] = "inbox"
+    out["open_in"] = sessions_inbox.client_name(rec)
+    return out
+
+
+def send(session: dict, text: str, on_text: Callable[[str], None], fork: bool = False) -> dict:
+    """One message. Open in a client: into it. Not open: resumed headless.
+    `fork`: a new headless session copied from this one, whatever has it
+    open, for when the open one cannot take a message from here."""
+    text = sessions_inbox.clean(text)
+    if not text:
+        return {"is_error": True, "result": "Nothing to send."}
+    if fork:
+        why = can_fork(session)
+        if why:
+            return {"is_error": True, "result": why}
+    else:
+        rec = live_record(session)
+        why = can_send(session, rec)
+        if why:
+            return {"is_error": True, "result": why}
+        if rec is not None:
+            return send_open(session, rec, text, on_text)
+    try:
+        argv = send_argv(session, fork)
+    except ValueError:
+        return {"is_error": True, "result": "That is not a session id this can resume."}
+    proc = subprocess.Popen(argv, cwd=session["cwd"], stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL, stdin=subprocess.PIPE, text=True,
                             env=scrubbed_env(Path(session["config"]) if session.get("config") else None))
-    assert proc.stdout is not None
+    assert proc.stdin is not None and proc.stdout is not None
+
+    def feed() -> None:
+        # Written from a thread and closed, so a prompt longer than the pipe
+        # buffer cannot stall against the reply being read below.
+        try:
+            proc.stdin.write(text)
+            proc.stdin.close()
+        except (BrokenPipeError, OSError):
+            pass
+
+    threading.Thread(target=feed, daemon=True).start()
     result = stream_reply(proc.stdout, on_text)
     proc.wait()
+    result["via"] = "fork" if fork else "resume"
     return result
 
 
@@ -579,7 +781,7 @@ def session_rows(sessions: list[dict], now: float) -> list[dict]:
         bits = [WORDS.get(s["state"], s["state"]), s["model"], age_words(now - s["last"])]
         rows.append({
             "id": s["id"], "accent": s["state"] == "needs",
-            "text": f"{s['project']}: {s['title'] or 'untitled'}"[:90],
+            "text": sessions_inbox.clean(f"{s['project']}: {s['title'] or 'untitled'}")[:90],
             "time": " · ".join(b for b in bits if b),
         })
     return rows
@@ -596,7 +798,9 @@ def sessions_surface(rows: list[dict]) -> list[str]:
     ]
 
 
-def status_line(s: dict) -> tuple[str, str]:
+def status_line(s: dict, why: str | None = None) -> tuple[str, str]:
+    """`why` is can_send's refusal for a session that looks idle, so the card
+    says before anything is typed that Send will not reach it."""
     if s["state"] == "needs":
         ask = s.get("ask") or s.get("detail") or "a tool call"
         return ("Waiting for permission: " + ask + ". Approve it in the session; "
@@ -605,28 +809,47 @@ def status_line(s: dict) -> tuple[str, str]:
         return ("Failed: " + (s.get("detail") or "see the last turn"), "error")
     if s["state"] == "working":
         return ("Working" + (": " + s["detail"] if s.get("detail") else ""), "info")
-    return ("Finished. Reply goes to this session.", "success")
+    if why:
+        return (why, "warning")
+    if s.get("open_in"):
+        return (f"Idle in {s['open_in']}. Send types into that open session.", "success")
+    return ("Finished. Send resumes this session.", "success")
 
 
-def card_surface(s: dict, items: list[dict], changes: list[dict]) -> list[str]:
+def draft_pointer(name: str) -> str:
+    """The card's message Field. Namespaced by the card, because a Field's
+    `v` line names the pointer and not the surface."""
+    return f"/{name}/draft"
+
+
+def card_surface(s: dict, items: list[dict], changes: list[dict], why: str | None = None) -> list[str]:
     name = surface_name(s["id"])
-    message, level = status_line(s)
+    message, level = status_line(s, why)
+    # Title, model and the status detail come out of the transcript, which
+    # other people's text (tool lines, file paths, a pasted message) writes
+    # into. A review on 2026-10-05 drew `fix \u202egnp.exe` on the card, so
+    # every transcript-derived string passes the same clean as a send.
+    message = sessions_inbox.clean(message)
     title = f"{s['project'].upper()}"
     return [
         f"@ {name} at=center w=560",
         f"c s Screen title={q(title)}",
         "r s",
-        f"c sub Text value={q((s['title'] or '') + (' · ' + s['model'] if s['model'] else ''))} tone=muted",
+        f"c sub Text value={q(sessions_inbox.clean((s['title'] or '') + (' · ' + s['model'] if s['model'] else '')))} tone=muted",
         "c st Status message=@/status/message level=@/status/level",
         "c t Transcript items=@/t action=open",
         "c live Text value=@/live",
         'c ch List caption="Changed" items=@/changes action=diff actionLabel="Diff"',
+        f'c msg Field label="Message" placeholder="Typed here, sent only by Send" value=@{draft_pointer(name)}',
         "c acts Stack direction=horizontal gap=2",
-        'c reply Button label="Reply" action=reply variant=primary',
+        'c go Button label="Send" action=send variant=primary',
+        'c fork Button label="Fork and send" action=fork',
+        'c reply Button label="Reply" action=reply',
         'c tests Button label="Run tests" action=tests',
         'c diff Button label="Open diff" action=diff',
-        "> acts reply tests diff",
-        "> s sub st t live ch acts",
+        "> acts go fork reply tests diff",
+        "> s sub st t live ch msg acts",
+        f'd {draft_pointer(name)} ""',
         f"d /status {json.dumps({'message': message, 'level': level})}",
         f"d /t {json.dumps(items)}",
         f"d /changes {json.dumps(changes)}",
@@ -666,6 +889,11 @@ class Serve:
         self.cards: dict[str, dict] = {}  # surface name -> session
         self.seen: dict[str, tuple] = {}  # surface name -> last drawn stamp
         self.rows_drawn = ""
+        # What is typed into each card's message Field, by surface name. Only
+        # the person's Send press reads it; typing alone never sends.
+        self.drafts: dict[str, str] = {}
+        # Surface name -> when Run tests was first pressed on that card.
+        self.tests_armed: dict[str, float] = {}
         self.closed = False
         # False once the person closes the list: redrawing it would bring
         # back a surface they just took down.
@@ -694,7 +922,7 @@ class Serve:
         name = surface_name(s["id"])
         self.cards[name] = s
         entries = tail_entries(Path(s["transcript"]))
-        self.send(card_surface(s, card_items(entries), git_changes(s["cwd"])))
+        self.send(card_surface(s, card_items(entries), git_changes(s["cwd"]), self.blocked(s)))
         self.seen[name] = (Path(s["transcript"]).stat().st_mtime, s["state"])
 
     def refresh_cards(self) -> None:
@@ -710,7 +938,8 @@ class Serve:
                 continue
             self.seen[name] = stamp
             self.cards[name] = s
-            message, level = status_line(s)
+            message, level = status_line(s, self.blocked(s))
+            message = sessions_inbox.clean(message)
             entries = tail_entries(Path(s["transcript"]))
             self.send([f"@ {name}",
                        f"d /status {json.dumps({'message': message, 'level': level})}",
@@ -719,7 +948,8 @@ class Serve:
 
     def show_text(self, name: str, title: str, text: str, beside: str) -> None:
         """A Diff surface beside the card: read-only text, coloured as a diff."""
-        lines = text.splitlines()[-600:]
+        lines = sessions_inbox.clean(text).splitlines()[-600:]
+        title = sessions_inbox.clean(title)
         self.send([f"@ {name} at=right w=520", f"c s Screen title={q(title)}", "r s",
                    "c d Diff text=@/text", "> s d", f"d /text {json.dumps(chr(10).join(lines))}"])
 
@@ -764,6 +994,7 @@ class Serve:
             return
         if ev["name"] == "closed":
             self.cards.pop(surface, None)
+            self.drafts.pop(surface, None)
             return
         if ev["name"] == "reply":
             why = can_send(find(s["id"]) or s)
@@ -775,14 +1006,49 @@ class Serve:
             text = str(ev.get("text") or "").strip()
             if text:
                 threading.Thread(target=self.send_message, args=(surface, text), daemon=True).start()
+        elif ev["name"] in ("send", "fork") and ev.get("component") in ("go", "fork") and "row" not in ev:
+            # The card's own Send or Fork: whatever the person typed into its
+            # Field. A refusal keeps the draft, so Fork can take it next.
+            fork = ev["name"] == "fork"
+            text = self.drafts.get(surface, "").strip()
+            if not text:
+                self.send([f"@ {surface}", f"d /status {json.dumps({'message': 'Type a message first.', 'level': 'warning'})}"])
+                return
+            now = find(s["id"]) or s
+            why = can_fork(now) if fork else can_send(now)
+            if why:
+                self.send([f"@ {surface}", f"d /status {json.dumps({'message': why, 'level': 'warning'})}"])
+                return
+            self.drafts[surface] = ""
+            self.send([f"@ {surface}", f'd {draft_pointer(surface)} ""'])
+            threading.Thread(target=self.send_message, args=(surface, text, fork), daemon=True).start()
         elif ev["name"] == "diff" and ev.get("row"):
             # A changed file's own row: its diff, or the file itself when git
             # has nothing to diff (untracked).
             self.open_change(s, str(ev["row"]))
+        elif ev["name"] == "tests" and not self.confirm_tests(surface, s):
+            return
         elif ev["name"] in ("tests", "diff"):
             threading.Thread(target=self.run_into, args=(s, ev["name"]), daemon=True).start()
         elif ev["name"] == "open" and ev.get("row"):
             self.open_item(s, str(ev["row"]))
+
+    def confirm_tests(self, surface: str, s: dict, now: float | None = None) -> bool:
+        """True on the second Run tests press within TESTS_CONFIRM_S. The
+        first one only shows what would run, and where."""
+        now = time.monotonic() if now is None else now
+        argv = allowlisted("tests", Path(s["cwd"]))
+        if argv is None:
+            return True  # nothing would run; run_into says so
+        armed = self.tests_armed.pop(surface, None)
+        if armed is not None and now - armed <= TESTS_CONFIRM_S:
+            return True
+        self.tests_armed[surface] = now
+        self.show_text(surface_name(s["id"]) + "-run", "TESTS · " + s["project"],
+                       f"$ {' '.join(argv)}\nin {s['cwd']}\n\n"
+                       "This runs the folder's own test script, which can run any code.\n"
+                       f"Press Run tests again within {int(TESTS_CONFIRM_S)} seconds to run it.", "")
+        return False
 
     def open_change(self, s: dict, rel: str) -> None:
         changed = {c["id"] for c in git_changes(s["cwd"])}
@@ -817,31 +1083,64 @@ class Serve:
             self.show_text(surface_name(s["id"]) + "-diff", "EDIT · " + Path(str(args.get("file_path"))).name,
                            edit_diff(use), "")
 
-    def send_message(self, surface: str, text: str) -> None:
+    @staticmethod
+    def blocked(s: dict) -> str | None:
+        """can_send's refusal for a session that is otherwise idle and open,
+        so the card can say it up front. Mid-turn states say themselves."""
+        return can_send(s) if s.get("open_in") and s["state"] == "finished" else None
+
+    def on_value(self, line: str) -> None:
+        """`v /<card>/draft "typed"`: keep what is in a card's Field. Any other
+        pointer, or a card this client did not draw, is ignored."""
+        parts = line.split(None, 2)
+        if len(parts) != 3:
+            return
+        pointer = parts[1]
+        name = pointer[1:-len("/draft")] if pointer.startswith("/") and pointer.endswith("/draft") else ""
+        if name not in self.cards:
+            return
+        try:
+            value = json.loads(parts[2])
+        except ValueError:
+            return
+        if isinstance(value, str):
+            self.drafts[name] = value
+
+    def send_message(self, surface: str, text: str, fork: bool = False) -> None:
         s = find(self.cards[surface]["id"])
         if not s:
             return
-        why = can_send(s)
+        why = can_fork(s) if fork else can_send(s)
         if why:
             self.send([f"@ {surface}", f"d /status {json.dumps({'message': why, 'level': 'warning'})}"])
             return
-        self.send([f"@ {surface}", f"d /status {json.dumps({'message': 'Sending. Replying below.', 'level': 'info'})}",
-                   f"d /live {q('You: ' + text)}"])
+        where = "into a fork of it" if fork else f"into {s['open_in']}" if s.get("open_in") else "by resuming it"
+        self.send([f"@ {surface}", f"d /status {json.dumps({'message': f'Sending {where}. Replying below.', 'level': 'info'})}",
+                   f"d /live {q('You: ' + sessions_inbox.clean(text))}"])
         last = [0.0]
 
         def on_text(reply: str) -> None:
             if time.monotonic() - last[0] > 0.15:
                 last[0] = time.monotonic()
-                self.send([f"@ {surface}", f"d /live {q(reply)}"])
+                self.send([f"@ {surface}", f"d /live {q(sessions_inbox.clean(reply))}"])
 
-        result = send(s, text, on_text)
+        result = send(s, text, on_text, fork=fork)
         denied = result.get("permission_denials") or []
         if denied:
             names = ", ".join(str(d.get("tool_name") or "a tool") for d in denied)
             message = f"It asked to use {names}, which needs approval. Approve it in the session."
             self.send([f"@ {surface}", f"d /status {json.dumps({'message': message, 'level': 'warning'})}"])
         elif result.get("is_error"):
-            self.send([f"@ {surface}", f"d /status {json.dumps({'message': str(result.get('result') or 'Failed'), 'level': 'error'})}"])
+            level = "warning" if result.get("held") else "error"
+            self.send([f"@ {surface}", f"d /status {json.dumps({'message': sessions_inbox.clean(str(result.get('result') or 'Failed'))[:300], 'level': level})}"])
+        elif result.get("via") == "inbox":
+            message = f"Delivered into {result.get('open_in') or 'the open session'}. It reads it as a teammate's request."
+            self.send([f"@ {surface}", f"d /status {json.dumps({'message': message, 'level': 'success'})}"])
+        elif result.get("via") == "fork" and result.get("session_id"):
+            new = str(result["session_id"])
+            message = f"Forked into {new[:8]}, which has its own card. This one is unchanged."
+            self.send([f"@ {surface}", f"d /status {json.dumps({'message': message, 'level': 'success'})}"])
+            self.open_card(new)
         self.send([f"@ {surface}", 'd /live ""'])
 
     def reader(self) -> None:
@@ -858,6 +1157,9 @@ class Serve:
                 if line.startswith(("e ", "!")):
                     # The log says what was pressed, never what was typed.
                     print(f"kyber-sessions: {line.split(' text=')[0][:200]}", file=sys.stderr, flush=True)
+                if line.startswith("v ") and not line.startswith("v! "):
+                    self.on_value(line)
+                    continue
                 ev = parse_event(line)
                 if ev:
                     try:
@@ -926,14 +1228,22 @@ def main(argv: list[str]) -> int:
                 for item in card_items(tail_entries(path, 64_000), limit=5):
                     print(json.dumps(item), flush=True)
         return 0
-    if cmd == "send" and len(rest) >= 2:
-        s = find(rest[0])
-        if not s:
-            print("no such session", file=sys.stderr)
+    # Only a leading --fork is a flag. Anywhere else it is part of the message.
+    fork = cmd == "send" and rest[:1] == ["--fork"]
+    words = rest[1:] if fork else rest
+    if cmd == "send" and len(words) >= 2:
+        hits = matches(words[0])
+        if len(hits) != 1:
+            print(f"{len(hits)} sessions match {words[0]!r}; give more of the id" if hits
+                  else "no such session", file=sys.stderr)
             return 1
-        result = send(s, " ".join(rest[1:]), lambda t: print(json.dumps({"reply": t}), flush=True))
+        s = hits[0]
+        result = send(s, " ".join(words[1:]), lambda t: print(json.dumps({"reply": t}), flush=True), fork=fork)
         print(json.dumps({"result": result.get("result"), "is_error": bool(result.get("is_error")),
-                          "permission_denials": result.get("permission_denials") or []}))
+                          "permission_denials": result.get("permission_denials") or [],
+                          "via": result.get("via", ""), "delivered": result.get("delivered"),
+                          "held": bool(result.get("held")),
+                          "session": result.get("session_id") if fork else s["id"]}))
         return 1 if result.get("is_error") else 0
     if cmd == "run" and len(rest) >= 2:
         s = find(rest[0])

@@ -2,6 +2,7 @@
 id: CHW-91
 title: Actual overlapping agent-capacity evidence
 status: inbox
+area: functionality
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: Queue capacity is not concurrent execution proof
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-404
+- 2026-10-04 Caleb: filed under functionality

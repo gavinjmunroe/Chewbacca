@@ -2,6 +2,8 @@
 id: CHW-12
 title: Fix onboarding so a non-builder finishes with no GitHub step
 status: in_progress
+area: design
+parent: CHW-11
 owner: Gavin
 priority: high
 due: 2026-10-07

@@ -2,6 +2,7 @@
 id: CHW-17
 title: Interpret corrections as learning signals
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-0
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-32
+- 2026-10-04 Caleb: filed under functionality

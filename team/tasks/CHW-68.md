@@ -1,9 +1,11 @@
 ---
 id: CHW-68
 title: Doctor Strange effects
-status: inbox
+status: ideas
+area: 
+parent: 
 owner: 
-priority: low
+priority: none
 due: 
 labels: backlog, deferred
 done_when: Separate demo target and visible render/recovery checks; preserve original effect ambition without calling it released
@@ -20,3 +22,5 @@ Depends on: CB-45
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-21
+- 2026-10-04 Caleb: moved to Idea bin: spectacle or speculative, no definition of done a teammate could finish
+- 2026-10-04 Caleb: edited priority

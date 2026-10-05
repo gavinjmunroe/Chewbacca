@@ -4,8 +4,8 @@
   "about": "Each Mac app -> what on the HUD replaces it. Status is what works today on this Mac, not the plan. `oss` links ids in data/oss-apps/apps.json.",
   "counts": {
    "replaced": 5,
-   "partial": 12,
-   "not yet": 23
+   "partial": 15,
+   "not yet": 20
   },
   "total": 40,
   "with_oss": 20
@@ -159,8 +159,8 @@
     "needs-you",
     "tasks"
    ],
-   "works": "Claude sessions waiting on a permission, bring the tab forward",
-   "missing": "typing into a session from the glass",
+   "works": "Claude sessions waiting on a permission, bring the tab forward; type into an idle session from its card (kyber-sessions send, through Claude Code's own inbox)",
+   "missing": "a session with permission prompts off holds messages from outside unless crossSessionInbound is accept",
    "oss": [
     {
      "id": "alacritty/alacritty",
@@ -317,10 +317,12 @@
   },
   {
    "app": "WhatsApp",
-   "status": "not yet",
-   "surfaces": [],
-   "works": "",
-   "missing": "wacli exists but is not an ingester yet",
+   "status": "partial",
+   "surfaces": [
+    "whatsapp"
+   ],
+   "works": "recent chats and their last lines; reply to an opened 1:1 chat with read-back of the new message id",
+   "missing": "group replies, attachments, and linking: WhatsApp has to be paired once by QR from the phone",
    "oss": [
     {
      "id": "signalapp/signal-android",
@@ -365,10 +367,12 @@
   },
   {
    "app": "Notes",
-   "status": "not yet",
-   "surfaces": [],
-   "works": "",
-   "missing": "`mac notes` exists, not ingested",
+   "status": "partial",
+   "surfaces": [
+    "notes"
+   ],
+   "works": "the 6 newest notes with folder and age, the picked one previewed; append one line to a text-only note (HTML allowlist, attachment count 0, pinned note id, one press at a time, read back)",
+   "missing": "no search, no new note, no edit or delete; notes with images, tables, attachments, links or bulleted lists are read-only from the glass",
    "oss": []
   },
   {
@@ -689,10 +693,12 @@
   },
   {
    "app": "GitHub",
-   "status": "not yet",
-   "surfaces": [],
-   "works": "",
-   "missing": "gh exists, not ingested",
+   "status": "partial",
+   "surfaces": [
+    "github"
+   ],
+   "works": "the PRs waiting on his review, his own PRs with failing CI or changes requested, issues assigned to him, and whether main is green in each local repo, from one read-only gh graphql call; a picked PR shows its checks and the first lines of its body",
+   "missing": "Merging, approving, commenting and any other write (read-only by design: gh graphql reads only, with drill-downs); Notifications inbox, Discussions, Actions logs and re-running checks; Only his 100 most recently updated open PRs are checked for failing CI; any beyond that are counted as unchecked, not inspected",
    "oss": [
     {
      "id": "go-gitea/gitea",

@@ -2,6 +2,7 @@
 id: CHW-71
 title: More Scripture, NASB95
 status: inbox
+area: feature
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: Proverbs integration exists historically; broader selection unresolved
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-31
+- 2026-10-04 Caleb: filed under feature

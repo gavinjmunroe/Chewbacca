@@ -2,6 +2,7 @@
 id: CHW-12
 title: UI/UX research, components and workflow frameworks
 status: inbox
+area: design
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,5 @@ Depends on: CB-51
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-5
+- 2026-10-04 Caleb: undid a false link: commit 10f8142 only described the sync feature
+- 2026-10-04 Caleb: filed under design

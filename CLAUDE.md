@@ -241,7 +241,6 @@ These MCP servers are mandatory for D1-level vibe coding. Each one eliminates a 
 | **puppeteer**           | `@modelcontextprotocol/server-puppeteer`           | Screenshot any URL, test UI, scrape data                            |
 | **memory**              | `@modelcontextprotocol/server-memory`              | Persist facts across sessions, no re-explaining context            |
 | **supabase**            | `mcp-server-supabase`                              | Manage tables, run migrations, check RLS from chat                  |
-| **sequential-thinking** | `@modelcontextprotocol/server-sequential-thinking` | Force step-by-step reasoning on complex multi-step problems         |
 | **composio**            | Composio MCP URL                                   | GitHub, Gmail, Google Calendar, Todoist, Vercel, Slack: 100+ tools |
 
 Config lives at your project root `.mcp.json` or `~/.claude/.mcp.json`.

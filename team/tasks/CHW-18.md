@@ -2,6 +2,7 @@
 id: CHW-18
 title: Graph-engineering competence
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-3
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-34
+- 2026-10-04 Caleb: filed under functionality

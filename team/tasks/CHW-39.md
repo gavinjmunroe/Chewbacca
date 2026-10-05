@@ -2,6 +2,7 @@
 id: CHW-39
 title: Turn source insights into behavioral tests
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-403
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-406
+- 2026-10-04 Caleb: filed under functionality

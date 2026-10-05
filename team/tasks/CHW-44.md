@@ -2,6 +2,7 @@
 id: CHW-44
 title: Acquire unfamiliar expertise on demand
 status: inbox
+area: feature
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-0
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-509
+- 2026-10-04 Caleb: filed under feature

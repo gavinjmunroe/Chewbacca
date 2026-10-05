@@ -2,6 +2,7 @@
 id: CHW-23
 title: Strategy for upgrades, fixes, research and refactoring
 status: inbox
+area: business
 owner: 
 priority: medium
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-26, CB-106
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-46
+- 2026-10-04 Caleb: filed under business

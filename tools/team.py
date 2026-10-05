@@ -36,6 +36,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -43,12 +44,15 @@ import webbrowser
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TASK_DIR = "team/tasks"
-STATUSES = ["inbox", "backlog", "todo", "in_progress", "in_review", "done", "canceled"]
+STATUSES = ["inbox", "backlog", "todo", "in_progress", "in_review", "done", "ideas", "canceled"]
 LABELS = {"inbox": "Inbox", "backlog": "Backlog", "todo": "Todo", "in_progress": "In progress",
-          "in_review": "In review", "done": "Done", "canceled": "Canceled"}
+          "in_review": "In review", "done": "Done", "ideas": "Idea bin", "canceled": "Canceled"}
 PRIORITIES = ["urgent", "high", "medium", "low", "none"]
-FIELDS = ["id", "title", "status", "owner", "priority", "due", "labels",
+FIELDS = ["id", "title", "status", "area", "parent", "owner", "priority", "due", "labels",
           "done_when", "proof", "source", "created", "updated"]
+# One area per task, so the board splits cleanly four ways (Caleb, 2026-10-04:
+# "Separate features, functionality, design, business").
+AREAS = ["feature", "functionality", "design", "business"]
 ID_PREFIX = "CHW"
 # A push loses the race when the website or a teammate committed in between.
 # Three tries covers two writers landing in the same second; past that the
@@ -131,11 +135,33 @@ def id_number(task_id):
 
 # ---------- git plumbing ----------
 
+# The board lives on this repo's main, whatever the local checkout calls it.
+# Gavin works from a fork whose origin is gavinjmunroe/Chewbacca, so "origin"
+# would have filed his tasks on his fork while everyone else read the real one.
+TEAM_SLUG = "calebnewtonusc/Chewbacca"
+TEAM_URL = f"https://github.com/{TEAM_SLUG}.git"
+FETCHED_REF = "refs/remotes/team-board/main"
+
+
+def resolve_remote(path):
+    """A remote pointing at TEAM_SLUG by any name, else the repo URL itself."""
+    if os.environ.get("TEAM_REMOTE"):
+        return os.environ["TEAM_REMOTE"]
+    out = subprocess.run(["git", "-C", str(path), "remote", "-v"], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and re.search(rf"github\.com[:/]{re.escape(TEAM_SLUG)}(?:\.git)?$", parts[1], re.I):
+            return parts[0]
+    return TEAM_URL
+
+
 class Repo:
-    def __init__(self, path, remote="origin", branch="main", offline=False):
+    def __init__(self, path, remote=None, branch="main", offline=False):
         self.path = pathlib.Path(path)
-        self.remote, self.branch, self.offline = remote, branch, offline
-        self.ref = f"{remote}/{branch}"
+        self.branch, self.offline = branch, offline
+        self.remote = remote or resolve_remote(self.path)
+        # A named remote keeps its normal tracking ref; a bare URL gets its own.
+        self.ref = FETCHED_REF if "://" in self.remote or self.remote.startswith("git@") else f"{self.remote}/{branch}"
 
     def git(self, *args, env=None, inp=None, check=True):
         p = subprocess.run(["git", "-C", str(self.path), *args], capture_output=True,
@@ -147,7 +173,8 @@ class Repo:
     def fetch(self):
         if self.offline:
             return
-        p = subprocess.run(["git", "-C", str(self.path), "fetch", "-q", self.remote, self.branch],
+        spec = f"{self.branch}:{FETCHED_REF}" if self.ref == FETCHED_REF else self.branch
+        p = subprocess.run(["git", "-C", str(self.path), "fetch", "-q", self.remote, spec],
                            capture_output=True, text=True)
         if p.returncode != 0:
             print(f"team: fetch failed, showing the last fetched board ({p.stderr.strip()[:120]})",
@@ -203,7 +230,7 @@ class Repo:
             p = subprocess.run(["git", "-C", str(self.path), "push", "-q", self.remote,
                                 f"{commit}:refs/heads/{self.branch}"], capture_output=True, text=True)
             if p.returncode == 0:
-                self.git("update-ref", f"refs/remotes/{self.ref}", commit)
+                self.git("update-ref", self.ref if self.ref.startswith("refs/") else f"refs/remotes/{self.ref}", commit)
                 return commit
         raise TeamError(f"push kept losing the race after {PUSH_TRIES} tries: {p.stderr.strip()[:200]}")
 
@@ -233,7 +260,7 @@ class Repo:
             p = subprocess.run(["git", "-C", str(self.path), "push", "-q", self.remote,
                                 f"{commit}:refs/heads/{self.branch}"], capture_output=True, text=True)
             if p.returncode == 0:
-                self.git("update-ref", f"refs/remotes/{self.ref}", commit)
+                self.git("update-ref", self.ref if self.ref.startswith("refs/") else f"refs/remotes/{self.ref}", commit)
                 return commit
         raise TeamError(f"push kept losing the race after {PUSH_TRIES} tries: {p.stderr.strip()[:200]}")
 
@@ -244,13 +271,29 @@ def today():
     return os.environ.get("TEAM_TODAY") or dt.date.today().isoformat()
 
 
+_WHO = {}
+
+
 def me(repo):
-    name = os.environ.get("TEAM_ME") or repo.git("config", "user.name", check=False).strip()
+    """Who is running this: TEAM_ME, else git user.name, else the gh login, matched to members.json.
+    A teammate's git name is often not their GitHub login, which left "team mine" empty."""
+    if "me" in _WHO:
+        return _WHO["me"]
     members = load_members(repo)
-    for m in members:
-        if name and name.lower() in {(m.get("name") or "").lower(), (m.get("github") or "").lower()}:
-            return m["name"]
-    return name
+
+    def match(name):
+        return next((m["name"] for m in members if name and name.lower() in
+                     {(m.get("name") or "").lower(), (m.get("github") or "").lower()}), None)
+
+    if os.environ.get("TEAM_ME"):
+        return match(os.environ["TEAM_ME"]) or os.environ["TEAM_ME"]
+    git_name = repo.git("config", "user.name", check=False).strip()
+    found = match(git_name)
+    if not found and not os.environ.get("TEAM_NO_GH"):
+        p = subprocess.run(["gh", "api", "user", "-q", ".login"], capture_output=True, text=True) if shutil.which("gh") else None
+        found = match(p.stdout.strip()) if p and p.returncode == 0 else None
+    _WHO["me"] = found or git_name
+    return _WHO["me"]
 
 
 def load_members(repo):
@@ -306,7 +349,13 @@ def add(repo, a):
         raise TeamError(f"status is one of {', '.join(STATUSES)}")
     if a.priority and a.priority not in PRIORITIES:
         raise TeamError(f"priority is one of {', '.join(PRIORITIES)}")
-    task = {"title": one_line(a.title), "status": status,
+    area = getattr(a, "area", None) or ""
+    if area and area not in AREAS:
+        raise TeamError(f"area is one of {', '.join(AREAS)}")
+    parent = (getattr(a, "parent", None) or "").upper()
+    if parent:
+        find(repo, parent)  # a parent has to exist
+    task = {"title": one_line(a.title), "status": status, "area": area, "parent": parent,
             "owner": resolve_owner(repo, a.owner), "priority": a.priority or "none",
             "due": check_date(a.due or ""), "labels": [x.strip() for x in (a.labels or "").split(",") if x.strip()],
             "done_when": a.done_when or "", "proof": "", "source": one_line(getattr(a, "source", "") or ""),
@@ -342,6 +391,108 @@ def update(repo, task_id, verb, apply=None, message=None, **changes):
     find(repo, task_id)  # a missing task fails before any git work
     repo.write(f"{TASK_DIR}/{task_id}.md", build, f"team: {task_id} {message or verb}")
     return result["task"]
+
+
+# ---------- commits -> tasks ----------
+
+# A commit that says "fixes CHW-12" closes the task with the commit as proof; any
+# other mention moves a not-started task to In progress. GitHub Actions can't do
+# this here (jobs refuse to start on this account's billing, 2026-10-04), so the
+# CLI and the web board each run it against the newest commits on main. Both are
+# idempotent: a commit already in a task's activity is never logged twice.
+TASK_REF = re.compile(r"\bCHW-(\d+)\b", re.I)
+CLOSING_REF = re.compile(r"\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?):? CHW-(\d+)\b", re.I)
+# How far back each sync looks. A busy day here was 94 commits (2026-09-20), so
+# 120 covers a full day of pushes between two syncs.
+LINK_WINDOW = 120
+
+
+# Only the subject line and trailer-style body lines count ("Fixes CHW-2", "Refs CHW-3,
+# CHW-4"). On 2026-10-04 the commit that shipped this feature explained it in its
+# own body ('"fixes CHW-12" closes it') and the sync closed CHW-12 with that commit
+# as proof. Prose that mentions an id is a description, not an instruction.
+TRAILER = re.compile(r"(?:(fix(?:es|ed)?|close[sd]?|resolve[sd]?)|refs?|part of)?:? ?(CHW-\d+(?:[ ,]+CHW-\d+)*)[ ,]*", re.I)
+# Commit text is untrusted input to these regexes. A trailer is a short line, so
+# anything longer is skipped, and the subject is cut, keeping every match linear
+# (the first trailer pattern nested quantifiers; security review, 2026-10-04).
+MAX_REF_LINE = 200
+
+
+def parse_commit_refs(subject, body):
+    """(referenced ids, closing ids) for one commit, or two empty sets for task commits."""
+    if subject.startswith("team:") or subject.startswith("Merge "):
+        return set(), set()
+    subject = " ".join(subject[:MAX_REF_LINE * 2].split())
+    refs = {f"{ID_PREFIX}-{int(n)}" for n in TASK_REF.findall(subject)}
+    closing = {f"{ID_PREFIX}-{int(n)}" for n in CLOSING_REF.findall(subject)}
+    for line in body.splitlines():
+        line = " ".join(line.split())
+        if len(line) > MAX_REF_LINE:
+            continue
+        m = TRAILER.fullmatch(line)
+        if not m:
+            continue
+        ids = {f"{ID_PREFIX}-{int(n)}" for n in TASK_REF.findall(m.group(2))}
+        refs |= ids
+        if m.group(1):
+            closing |= ids
+    return refs, closing
+
+
+def apply_commit(task, sha, who, subject, url, closing, date):
+    """Mutate one task for one commit. False when this commit is already logged on it."""
+    if any(f"commit {sha[:7]}" in a for a in task["activity"]):
+        return False
+    task["activity"].append(f"{date} {who}: commit {sha[:7]} {one_line(subject)[:160]}")
+    if closing and task["status"] != "done":
+        task["status"] = "done"
+        task["proof"] = task["proof"] or url
+    elif task["status"] in ("inbox", "backlog", "todo"):
+        task["status"] = "in_progress"
+    task["updated"] = date
+    return True
+
+
+def repo_web_url(repo):
+    url = repo.remote if repo.ref == FETCHED_REF else repo.git("remote", "get-url", repo.remote, check=False).strip()
+    m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$", url)
+    return f"https://github.com/{m.group(1)}" if m else ""
+
+
+def link_commits(repo):
+    """Log recent commits onto the tasks they mention. Returns how many task updates landed."""
+    out = repo.git("log", f"-{LINK_WINDOW}", "--format=%H%x1f%an%x1f%ad%x1f%s%x1f%b%x1e", "--date=short",
+                   repo.ref, check=False)
+    commits = []
+    for rec in out.split("\x1e"):
+        parts = rec.strip("\n").split("\x1f")
+        if len(parts) < 5:
+            continue
+        sha, author, date, subject, body = parts[:5]
+        refs, closing = parse_commit_refs(subject, body)
+        if refs:
+            commits.append((sha, author, date, subject, refs, closing))
+    if not commits:
+        return 0
+    members = load_members(repo)
+    base = repo_web_url(repo)
+    result = {"n": 0}
+
+    def changes():
+        tasks = {t["id"]: t for t in repo.tasks()}
+        touched = set()
+        for sha, author, date, subject, refs, closing in reversed(commits):  # oldest first
+            who = next((m["name"] for m in members if author.lower() in
+                        {(m.get("name") or "").lower(), (m.get("github") or "").lower()}), author)
+            for tid in sorted(refs):
+                if tid in tasks and apply_commit(tasks[tid], sha, who, subject,
+                                                 f"{base}/commit/{sha}" if base else sha, tid in closing, date):
+                    touched.add(tid)
+        result["n"] = len(touched)
+        return {f"{TASK_DIR}/{tid}.md": render(tasks[tid]) for tid in touched}
+
+    repo.write_many(changes, "team: link commits to tasks")
+    return result["n"]
 
 
 # ---------- import ----------
@@ -445,7 +596,7 @@ def board(tasks, show_closed=False):
             out += [line(t) for t in group[-8:]]
             out.append("")
             continue
-        if s in ("done", "canceled") and not show_closed:
+        if s in ("done", "ideas", "canceled") and not show_closed:
             if group:
                 out.append(f"{LABELS[s]}: {len(group)} (team board --all to list)")
             continue
@@ -471,7 +622,7 @@ def main(argv=None):
     b = sub.add_parser("board"); b.add_argument("--all", action="store_true"); b.add_argument("--json", action="store_true")
     m = sub.add_parser("mine"); m.add_argument("--json", action="store_true")
     x = sub.add_parser("add"); x.add_argument("title")
-    for flag in ("--owner", "--due", "--priority", "--done-when", "--labels", "--status", "--notes", "--source"):
+    for flag in ("--owner", "--due", "--priority", "--done-when", "--labels", "--status", "--notes", "--source", "--area", "--parent"):
         x.add_argument(flag)
     s = sub.add_parser("show"); s.add_argument("id"); s.add_argument("--json", action="store_true")
     mv = sub.add_parser("move"); mv.add_argument("id"); mv.add_argument("status", choices=STATUSES)
@@ -479,10 +630,11 @@ def main(argv=None):
     d = sub.add_parser("done"); d.add_argument("id"); d.add_argument("--proof", default="")
     c = sub.add_parser("comment"); c.add_argument("id"); c.add_argument("text")
     e = sub.add_parser("edit"); e.add_argument("id")
-    for flag in ("--title", "--due", "--priority", "--done-when", "--labels", "--proof", "--notes"):
+    for flag in ("--title", "--due", "--priority", "--done-when", "--labels", "--proof", "--notes", "--area", "--parent"):
         e.add_argument(flag)
     f = sub.add_parser("feed"); f.add_argument("-n", type=int, default=20); f.add_argument("--json", action="store_true")
     o = sub.add_parser("open"); o.add_argument("id", nargs="?")
+    sub.add_parser("sync", help="log recent commits that mention a task onto it")
     ib = sub.add_parser("inbox"); ib.add_argument("--json", action="store_true")
     im = sub.add_parser("import", help="preview, then --apply, BACKLOG.md rows into the inbox")
     im.add_argument("file", nargs="?", default=str(ROOT / "BACKLOG.md")); im.add_argument("--apply", action="store_true")
@@ -494,6 +646,13 @@ def main(argv=None):
     try:
         repo.fetch()
         cmd = a.cmd or "board"
+        if not a.offline and cmd not in ("import", "unimport"):
+            try:
+                linked = link_commits(repo)
+                if linked:
+                    print(f"team: logged recent commits on {linked} task(s)", file=sys.stderr)
+            except TeamError as err:
+                print(f"team: commit sync skipped: {err}", file=sys.stderr)
         if cmd == "board":
             tasks = repo.tasks()
             print(json.dumps(tasks, indent=1) if getattr(a, "json", False) else board(tasks, getattr(a, "all", False)))
@@ -520,6 +679,12 @@ def main(argv=None):
                         print(f"  {k.replace('_', ' ')}: {t[k]}")
                 if t["labels"]:
                     print(f"  labels: {', '.join(t['labels'])}")
+                kids = [k for k in repo.tasks() if k["parent"] == t["id"]]
+                if kids:
+                    done = sum(k["status"] == "done" for k in kids)
+                    print(f"\nSub-tasks {done}/{len(kids)}:\n" + "\n".join(line(k) for k in kids))
+                if t["parent"]:
+                    print(f"  parent: {t['parent']}")
                 if t["notes"]:
                     print("\n" + t["notes"])
                 if t["activity"]:
@@ -545,16 +710,24 @@ def main(argv=None):
             print(f"comment added to {t['id']}")
         elif cmd == "edit":
             changes = {}
-            for k in ("title", "due", "priority", "done_when", "proof", "notes"):
+            if a.parent is not None:
+                a.parent = a.parent.upper()
+                if a.parent:
+                    if a.parent == a.id.upper():
+                        raise TeamError("a task can't be its own parent")
+                    find(repo, a.parent)
+            for k in ("title", "due", "priority", "done_when", "proof", "notes", "area", "parent"):
                 v = getattr(a, k)
                 if v is not None:
                     changes[k] = check_date(v) if k == "due" else v
             if a.labels is not None:
                 changes["labels"] = [x.strip() for x in a.labels.split(",") if x.strip()]
+            if changes.get("area") and changes["area"] not in AREAS:
+                raise TeamError(f"area is one of {', '.join(AREAS)}")
             if "priority" in changes and changes["priority"] not in PRIORITIES:
                 raise TeamError(f"priority is one of {', '.join(PRIORITIES)}")
             if not changes:
-                raise TeamError("nothing to edit; pass --title, --due, --priority, --done-when, --labels, --proof or --notes")
+                raise TeamError("nothing to edit; pass --title, --due, --priority, --done-when, --labels, --proof, --notes or --area")
             t = update(repo, a.id, "edited " + ", ".join(k.replace("_", " ") for k in changes), **changes)
             print(f"{t['id']} updated")
         elif cmd == "feed":
@@ -562,6 +735,8 @@ def main(argv=None):
                            repo.ref, "--", TASK_DIR, check=False)
             rows = [dict(zip(("sha", "when", "who", "what"), r.split("\t"))) for r in out.strip().split("\n") if r]
             print(json.dumps(rows, indent=1) if a.json else "\n".join(f"{r['when']}  {r['who']:<16} {r['what']}" for r in rows) or "No activity yet.")
+        elif cmd == "sync":
+            print("team: commits and tasks are in sync")
         elif cmd == "inbox":
             tasks = [t for t in repo.tasks() if t["status"] == "inbox"]
             print(json.dumps(tasks, indent=1) if a.json else f"Inbox: {len(tasks)}\n" + "\n".join(line(t) for t in tasks))

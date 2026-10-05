@@ -2,6 +2,7 @@
 id: CHW-77
 title: Work through 59 design sources
 status: inbox
+area: design
 owner: 
 priority: low
 due: 
@@ -19,3 +20,4 @@ Evidence: Historical source inventory, not proof all were read
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-51
+- 2026-10-04 Caleb: filed under design

@@ -2,6 +2,7 @@
 id: CHW-72
 title: Reorganize and refactor files
 status: inbox
+area: functionality
 owner: 
 priority: low
 due: 
@@ -20,3 +21,4 @@ Depends on: CB-26
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-33
+- 2026-10-04 Caleb: filed under functionality

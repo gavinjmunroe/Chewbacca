@@ -2,6 +2,7 @@
 id: CHW-19
 title: Coursework policy on voice path
 status: inbox
+area: functionality
 owner: 
 priority: medium
 due: 
@@ -19,3 +20,4 @@ Evidence: P2: historical blanket ban superseded; no personal course details belo
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-37
+- 2026-10-04 Caleb: filed under functionality

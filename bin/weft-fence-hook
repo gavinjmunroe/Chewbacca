@@ -1,0 +1,33 @@
+#!/usr/bin/env node
+// weft-fence-hook: PreToolUse hook for a fenced Tangle build.
+//
+// Reads the hook payload on stdin and refuses a Bash call whose raw command
+// would point weft at another install or expand into something unchecked
+// (lib/weft_fence.js commandRefusal). Exit 2 blocks the call and hands the
+// reason back to Tangle. A payload that cannot be read is refused too: this
+// hook fails closed.
+
+"use strict";
+
+const { commandRefusal } = require("./lib/weft_fence.js");
+
+let input = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  input += chunk;
+});
+process.stdin.on("end", () => {
+  let command;
+  try {
+    command = JSON.parse(input).tool_input.command;
+  } catch {
+    process.stderr.write("weft-fence-hook: could not read the command, so it was not run.\n");
+    process.exit(2);
+  }
+  const reason = commandRefusal(command);
+  if (reason) {
+    process.stderr.write(`weft-fence-hook: ${reason}.\n`);
+    process.exit(2);
+  }
+  process.exit(0);
+});

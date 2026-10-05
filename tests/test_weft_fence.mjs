@@ -20,7 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
 const fenceLib = require("../bin/lib/weft_fence.js");
 const tangle = JSON.parse(readFileSync(join(here, "fixtures", "weft", "tangle-settings.json"), "utf8"));
-const fenced = fenceLib.fence(tangle, "/outside/validate_weft.py");
+const fenced = fenceLib.fence(tangle, "/outside/validate_weft.py", "/chewbacca/bin/weft-fence-hook");
 const allow = fenced.permissions.allow;
 
 // Every one of these was allowed by Tangle's own list, an earlier fence, or
@@ -77,6 +77,39 @@ test("a target flag is denied in the permission layer too, wherever it sits", ()
   }
 });
 
+// The hook reads the raw command, so it holds even when a person's .zshrc
+// puts the real weft ahead of the gate. Each of these got past a layer once
+// or would get past a plain text match.
+test("the hook refuses target flags however the shell would spell them", () => {
+  const refused = [
+    "weft run --dispatcher http://x",
+    "weft run '--dispatcher' x",
+    'weft run "--di"spatcher x',
+    "weft run --dispa\\tcher x",
+    "weft run $'\\x2d-on' p",
+    "weft run --{on,x} p",
+    "weft run --o? p",
+    "weft run --on=prod",
+    "weft validate && weft status --on p",
+    "WEFT_DISPATCHER_URL=x weft run",
+    "weft run `echo --on` p",
+  ];
+  for (const command of refused) assert.ok(fenceLib.commandRefusal(command), `let through: ${command}`);
+  const allowed = ["weft run --once", "weft run --target online", `weft run --from 'lookup={"a":1,"b":2}'`, "weft validate", "weft describe-nodes --node LlmInference --compact"];
+  for (const command of allowed) assert.equal(fenceLib.commandRefusal(command), null, `refused: ${command}`);
+});
+
+test("the hook is wired before every Bash call and fails closed", () => {
+  const pre = fenced.hooks.PreToolUse[0];
+  assert.equal(pre.matcher, "Bash");
+  assert.equal(pre.hooks[0].command, 'node "/chewbacca/bin/weft-fence-hook"');
+  const hook = join(here, "..", "bin", "weft-fence-hook");
+  const run = (input) => spawnSync("node", [hook], { input, encoding: "utf8" });
+  assert.equal(run(JSON.stringify({ tool_input: { command: "weft status" } })).status, 0);
+  assert.equal(run(JSON.stringify({ tool_input: { command: "weft run --on prod" } })).status, 2);
+  assert.equal(run("not json").status, 2);
+});
+
 test("the gate runs the real weft only when allowed, without the dispatcher variable", () => {
   const root = mkdtempSync(join(tmpdir(), "weft-gate-"));
   const fake = join(root, "fake-weft");
@@ -120,5 +153,7 @@ test("weft-build runs Tangle under the fence and the gate", () => {
   assert.ok(!source.includes('"--setting-sources"'));
   assert.ok(source.includes("gateDir("), "the gate is not on Tangle's PATH");
   assert.ok(source.includes("delete tangleEnv.WEFT_DISPATCHER_URL"));
+  assert.ok(source.includes('"weft-fence-hook"'), "the hook is not wired into the build");
+  assert.ok(/freeName\(slugFrom\(/.test(source), "--name reaches a path unslugged");
   assert.ok(!fenceLib.TOOLS.includes("WebFetch") && !fenceLib.TOOLS.includes("WebSearch"));
 });

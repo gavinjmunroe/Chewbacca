@@ -1150,6 +1150,7 @@ if group "weft"; then
   check "weft-view parses"  node --check "$ROOT/bin/weft-view"
   check "weft-build parses" node --check "$ROOT/bin/weft-build"
   check "weft-gate parses"  node --check "$ROOT/bin/weft-gate"
+  check "weft-fence-hook parses" node --check "$ROOT/bin/weft-fence-hook"
 fi
 
 if group "pytest"; then

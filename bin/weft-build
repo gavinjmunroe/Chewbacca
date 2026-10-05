@@ -100,7 +100,9 @@ function say(text, step) {
 
 
 fs.mkdirSync(PROJECTS, { recursive: true });
-const name = freeName(nameAt !== -1 && args[nameAt + 1] ? args[nameAt + 1] : slugFrom(brief));
+// The name becomes a folder under PROJECTS and file names under the fence
+// directory, so it is slugged like a brief: "--name ../x" cannot leave either.
+const name = freeName(slugFrom(nameAt !== -1 && args[nameAt + 1] ? args[nameAt + 1] : brief));
 const made = spawnSync(WEFT, ["new", name, "--assistant", "claude-code"], { cwd: PROJECTS, encoding: "utf8" });
 if (made.status !== 0) {
   process.stderr.write(`weft-build: weft new failed: ${(made.stderr || made.stdout || "").trim()}\n`);
@@ -119,7 +121,7 @@ const hookPath = path.join(fenceDir, `${name}.validate_weft.py`);
 fs.copyFileSync(path.join(dir, ".claude", "hooks", "validate_weft.py"), hookPath);
 const settingsPath = path.join(fenceDir, `${name}.settings.json`);
 const tangleSettings = JSON.parse(fs.readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
-fs.writeFileSync(settingsPath, `${JSON.stringify(fence(tangleSettings, hookPath), null, 2)}\n`);
+fs.writeFileSync(settingsPath, `${JSON.stringify(fence(tangleSettings, hookPath, path.join(__dirname, "weft-fence-hook")), null, 2)}\n`);
 const pluginDir = packagePlugin(dir, path.join(fenceDir, `${name}.plugin`));
 hud(["p thinking"]);
 say("Starting a new agent", false);

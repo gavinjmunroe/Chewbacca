@@ -25,6 +25,13 @@ const path = require("node:path");
 // Tangle cannot build without them, so they are copied, as `weft new` wrote
 // them, into a session plugin outside the project.
 //
+// The gate only works when `weft` resolves to it, and Claude Code runs each
+// command after a shell snapshot built from the person's own zsh startup
+// files: a .zshrc that puts ~/.local/bin first, or aliases weft, would skip it
+// without a word. So the target flags are also refused by a PreToolUse hook
+// (bin/weft-fence-hook) that reads the raw command text before any shell does,
+// and the gate is the third layer rather than the only one.
+//
 // What the fence does not cover: `weft run` executes the program Tangle wrote,
 // ExecPython and HTTP nodes included, inside Docker, with network.
 
@@ -92,6 +99,55 @@ function refusal(argv) {
   return null;
 }
 
+// For the PreToolUse hook: reads a Bash call's raw command the way the shell
+// will, before any shell does. Anything that would expand ($, backticks,
+// unquoted {a,b} and globs) is refused outright, so the literal words left are
+// exactly what weft would receive, and those are checked for the target flags
+// and the dispatcher variable. Over-inclusive on purpose: a refused harmless
+// command costs Tangle one retry; $'\x2d-on' or --{on,x} slipping through
+// would cost the program.
+function commandRefusal(text) {
+  const source = String(text || "");
+  let literal = "";
+  let state = "plain";
+  let braceOpen = false;
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i];
+    if (state === "single") {
+      if (ch === "'") state = "plain";
+      else literal += ch;
+      continue;
+    }
+    if (ch === "\\") {
+      literal += source[i + 1] || "";
+      i += 1;
+      continue;
+    }
+    if (ch === "$" || ch === "`") return "shell expansion is not allowed in this build; write the value out";
+    if (state === "double") {
+      if (ch === '"') state = "plain";
+      else literal += ch;
+      continue;
+    }
+    if (ch === "'") state = "single";
+    else if (ch === '"') state = "double";
+    else if (ch === "*" || ch === "?" || ch === "[") return "unquoted wildcards are not allowed in this build; quote the value";
+    else {
+      if (ch === "{") braceOpen = true;
+      else if (ch === "}") braceOpen = false;
+      else if (ch === "," && braceOpen) return "unquoted {a,b} is not allowed in this build; quote the value";
+      literal += ch;
+    }
+  }
+  if (/WEFT_DISPATCHER_URL/.test(literal)) return "WEFT_DISPATCHER_URL points weft at another install, which this build does not do";
+  for (const flag of TARGET_FLAGS) {
+    if (new RegExp(`(^|[\\s;&|(])${flag}(=|[\\s;&|)]|$)`).test(literal)) {
+      return `${flag} points weft at another install, which this build does not do`;
+    }
+  }
+  return null;
+}
+
 function allowRules() {
   return VERBS.map((parts) => `Bash(weft ${parts.join(" ")}:*)`);
 }
@@ -105,12 +161,18 @@ function denyRules() {
 
 // tangleSettings: the parsed .claude/settings.json `weft new` wrote; only its
 // CLAUDE.md exclusions are kept. hookPath: a copy of validate_weft.py outside
-// the project.
-function fence(tangleSettings, hookPath) {
+// the project. fenceHookPath: bin/weft-fence-hook.
+function fence(tangleSettings, hookPath, fenceHookPath) {
   return {
     claudeMdExcludes: tangleSettings.claudeMdExcludes || [],
     permissions: { allow: allowRules(), deny: denyRules() },
     hooks: {
+      PreToolUse: [
+        {
+          matcher: "Bash",
+          hooks: [{ type: "command", command: `node ${JSON.stringify(fenceHookPath)}`, timeout: 10 }],
+        },
+      ],
       PostToolUse: [
         {
           matcher: "Edit|Write|MultiEdit",
@@ -147,4 +209,4 @@ function gateDir(dir, gatePath) {
   return dir;
 }
 
-module.exports = { NAME_NOTE, TOOLS, VERBS, allowRules, denyRules, fence, gateDir, packagePlugin, refusal };
+module.exports = { NAME_NOTE, TOOLS, VERBS, allowRules, commandRefusal, denyRules, fence, gateDir, packagePlugin, refusal };

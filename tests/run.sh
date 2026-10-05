@@ -1235,6 +1235,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_surface_github.py"
   check  "whatsapp sends only to the opened 1:1 chat, verifies the new id, and an unlinked account is a note" \
     python3 "$ROOT/tests/test_surface_whatsapp.py"
+  check  "the launcher lists only real surfaces and the hud-apps sentence reaches it, not genui" \
+    python3 "$ROOT/tests/test_surface_apps.py"
   check  "a sentence opens the right surface and a near miss goes to the model" \
     python3 "$ROOT/tests/test_surface_intent.py"
   check  "apps.json names a replacement or says not yet for every app" \

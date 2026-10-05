@@ -70,6 +70,8 @@ BADGES = Path(os.environ.get("KYBER_SURFACES_BADGES", str(BOB / "badges.json")))
 CONFIG = Path(os.environ.get("KYBER_SURFACES_CONFIG", str(Path.home() / ".chewbacca" / "surfaces.json")))
 LOG = Path.home() / "Library" / "Logs" / "com.calebnewton.chewbacca.surfaces.log"
 
+# Surfaces that keep their own edge (a rail) and never take a column slot.
+PINNED = ("apps",)
 REGIONS = ("topLeft", "top", "topRight", "left", "center", "right", "bottomLeft", "bottom", "bottomRight")
 # Every region belongs to one of three columns, and a surface is placed by
 # column, anchored at the column's top (see Daemon.place for why).
@@ -254,9 +256,11 @@ class Daemon:
         `tasks` at bottomRight grew tall enough to cover `person` at right,
         because a tall panel anchored low and one anchored mid share a column."""
         wanted = asked if asked in REGIONS else own
+        if getattr(self.open.get(name) and self.open[name].provider, "pinned", False) or name in PINNED:
+            return own
         counts = {c: 0 for c in COLUMNS.values()}
         for n, s in self.open.items():
-            if n != name:
+            if n != name and n not in PINNED:
                 counts[COLUMNS[s.region]] = counts.get(COLUMNS[s.region], 0) + 1
         column = COLUMNS.get(wanted, "topRight")
         if counts.get(column, 0) == 0:
@@ -296,6 +300,9 @@ class Daemon:
     def draw(self, live: Live, full: bool = True) -> None:
         p = live.provider
         head = f"@ {p.name} at={live.region} w={p.width}"
+        if getattr(p, "chrome", ""):
+            # A rail draws its own glass (hud/CLAUDE.md, the launcher rail).
+            head += f" chrome={p.chrome}"
         if not full:
             self.hud.send([head])
             self.push(live, extra=dict(live.values))
@@ -431,6 +438,13 @@ class Daemon:
                 if "row" not in extra:
                     return
                 extra["row"] = str(extra["row"])
+                if live is not None and ev["name"] == "open" and hasattr(live.provider, "opens"):
+                    # A launcher rail press: open that surface, and only one
+                    # the rail itself lists.
+                    kind = live.provider.opens(extra["row"])
+                    if kind:
+                        self.spawn(lambda: self.open_surface(kind))
+                    return
                 if live is not None:
                     self.on_action(ev["name"], live.provider.cid("list"), extra)
                 elif ev["name"] == f"{ACTION_PREFIX}pivot":

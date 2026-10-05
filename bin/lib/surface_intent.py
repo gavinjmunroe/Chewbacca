@@ -73,8 +73,11 @@ NOUNS = {
     "notes": r"(?:notes|apple notes|latest notes|recent notes)",
     "github": r"(?:github|prs|pull requests|reviews|review requests|ci)",
     "code": r"(?:code changes|changes|diffs?|what changed|repos)",
+    # "Show me the built in hud apps" went to genui on 2026-10-05, and the
+    # model drew six boxes that named two surfaces that do not exist.
+    "apps": r"(?:(?:built ?in |kyber |hud )*(?:hud )?apps|(?:all )?(?:the )?surfaces|launcher|launchpad|everything (?:kyber|the hud) (?:has|can do))",
 }
-SHOW_SHAPES = [(name, re.compile(rf"^{SHOW} {MY}{noun}(?: (?:on|up on) (?:the )?(?:screen|glass|hud))?$"))
+SHOW_SHAPES = [(name, re.compile(rf"^{SHOW} {MY}{noun}(?: (?:on|up on) (?:the )?(?:screen|glass|hud))?(?: (?:right )?now)?$"))
                for name, noun in NOUNS.items()]
 EXTRA = [
     ("music", re.compile(r"^what(?:'s|s| is) (?:playing|on|this song)(?: right now)?$")),
@@ -83,6 +86,7 @@ EXTRA = [
         r"^(?:what(?:'s|s| is) up|what do i (?:need|have) to do|what needs (?:me|my attention|doing)"
         r"|what should i (?:look at|do next|work on)|what(?:'s|s| is) waiting on me|anything (?:need|needs) me)"
         r"(?: today| right now| now)?$")),
+    ("apps", re.compile(r"^(?:what (?:apps|surfaces) (?:are there|do (?:i|you) have)|what can (?:kyber|the hud) do)(?: now)?$")),
 ]
 SPACE = re.compile(
     r"^(?:open|switch to|go to|pull up|show|bring up|load)(?: up)? (?:my |the )?"

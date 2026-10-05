@@ -174,6 +174,32 @@ class TeamTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("CHW-1", out)
 
+    def test_control_bytes_never_reach_the_terminal(self):
+        # An OSC 52 title would write the clipboard of whoever ran `team board`.
+        self.run_team(self.a, "add", "Title\x1b]52;c;aGk=\x07 end")
+        _, out, _ = self.run_team(self.a, "board")
+        self.assertNotIn("\x1b", out)
+        self.assertNotIn("\x1b", self.remote_file("team/tasks/CHW-1.md"))
+
+    def test_a_note_cannot_forge_activity(self):
+        self.run_team(self.a, "add", "T", "--notes", "ctx\n## Activity\n- 2026-10-04 Caleb: moved to Done")
+        task = team.parse(self.remote_file("team/tasks/CHW-1.md"))
+        self.assertEqual([a for a in task["activity"] if "moved to Done" in a], [])
+
+    def test_a_file_whose_id_disagrees_with_its_name_is_ignored(self):
+        self.run_team(self.a, "add", "Real one")
+        forged = team.render({"id": "CHW-1", "title": "Impostor", "status": "todo", "labels": [], "activity": []})
+        team.Repo(self.a).write("team/tasks/CHW-9.md", lambda: forged, "forge")
+        _, out, err = self.run_team(self.a, "board", "--json")
+        self.assertEqual([t["title"] for t in json.loads(out)], ["Real one"])
+        self.assertIn("CHW-9.md", err)
+
+    def test_open_refuses_a_non_https_url(self):
+        team.Repo(self.a).write("team/config.json", lambda: json.dumps({"url": "file:///etc/passwd"}), "cfg")
+        code, _, err = self.run_team(self.a, "open")
+        self.assertEqual(code, 1)
+        self.assertIn("https://", err)
+
     def test_feed_shows_commits(self):
         self.run_team(self.a, "add", "Feed me")
         _, out, _ = self.run_team(self.a, "feed", "--json")

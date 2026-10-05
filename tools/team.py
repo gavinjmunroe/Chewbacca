@@ -86,9 +86,28 @@ def parse(text):
     return task
 
 
+# Terminal control bytes, minus tab and newline. A task title arrives from the
+# web board or a teammate's push and gets printed raw by `team board`; an OSC 52
+# sequence in it would write the clipboard of whoever ran the command
+# (security review of 62e59f1, 2026-10-04).
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+ACTIVITY_HEADING = "## Activity"
+
+
+def clean(value):
+    return CONTROL.sub("", str(value or ""))
+
+
 def one_line(value):
     """Frontmatter values are single lines; a newline would end the field early."""
-    return re.sub(r"\s+", " ", str(value or "")).strip()
+    return re.sub(r"\s+", " ", clean(value)).strip()
+
+
+def safe_notes(notes):
+    """A note line reading exactly '## Activity' would split the file there and
+    turn the rest of the note into fake activity entries, so it is demoted."""
+    lines = clean(notes).strip().split("\n")
+    return "\n".join("### Activity" if l.strip() == ACTIVITY_HEADING else l for l in lines)
 
 
 def render(task):
@@ -98,7 +117,7 @@ def render(task):
         out.append(f"{f}: {one_line(v)}")
     out.append("---")
     if task.get("notes"):
-        out += ["", task["notes"].strip()]
+        out += ["", safe_notes(task["notes"])]
     out += ["", "## Activity"] + [f"- {one_line(a)}" for a in task.get("activity", [])]
     return "\n".join(out) + "\n"
 
@@ -143,9 +162,17 @@ class Repo:
         out = []
         for f in self.files():
             try:
-                out.append(parse(self.read(f)))
+                task = parse(self.read(f))
             except TeamError as e:
                 print(f"team: skipping {f}: {e}", file=sys.stderr)
+                continue
+            # The file name is the identity. A file whose id field disagrees
+            # (CHW-5.md saying id: CHW-1) would show a second CHW-1, and editing
+            # it would write the real CHW-1.md.
+            if task["id"] != pathlib.PurePosixPath(f).stem:
+                print(f"team: skipping {f}: its id field says {task['id']!r}", file=sys.stderr)
+                continue
+            out.append(task)
         return sorted(out, key=lambda t: id_number(t["id"]))
 
     def write(self, path, make_content, message, create=False):
@@ -223,9 +250,12 @@ def check_date(value):
 def find(repo, task_id):
     task_id = task_id.upper()
     path = f"{TASK_DIR}/{task_id}.md"
-    if path not in repo.files():
+    if not re.fullmatch(rf"{ID_PREFIX}-\d+", task_id) or path not in repo.files():
         raise TeamError(f"no task {task_id}")
-    return parse(repo.read(path))
+    task = parse(repo.read(path))
+    if task["id"] != task_id:
+        raise TeamError(f"{path} has a mismatched id field ({task['id']!r})")
+    return task
 
 
 def log(task, who, text):
@@ -288,6 +318,7 @@ def overdue(task):
 
 
 def line(t):
+    t = {k: one_line(v) if isinstance(v, str) else v for k, v in t.items()}
     due = f" due {t['due']}" + (" OVERDUE" if overdue(t) else "") if t["due"] else ""
     owner = f"  @{t['owner']}" if t["owner"] else "  unassigned"
     pri = f" [{t['priority']}]" if t["priority"] not in ("", "none") else ""
@@ -411,9 +442,12 @@ def main(argv=None):
             rows = [dict(zip(("sha", "when", "who", "what"), r.split("\t"))) for r in out.strip().split("\n") if r]
             print(json.dumps(rows, indent=1) if a.json else "\n".join(f"{r['when']}  {r['who']:<16} {r['what']}" for r in rows) or "No activity yet.")
         elif cmd == "open":
-            url = config(repo).get("url")
+            url = str(config(repo).get("url") or "")
             if not url:
                 raise TeamError("team/config.json has no url yet")
+            # config.json is editable by anyone with push access; only a web page opens.
+            if not re.fullmatch(r"https://[^\s]+", url):
+                raise TeamError("team/config.json url must be an https:// address")
             url = f"{url.rstrip('/')}/#{a.id.upper()}" if a.id else url
             webbrowser.open(url)
             print(url)

@@ -26,10 +26,18 @@ export const STATUSES = [
 export const PRIORITIES = ["urgent", "high", "medium", "low", "none"];
 export const ID_PATTERN = /^CHW-(\d+)$/;
 
+// Terminal control bytes, minus tab and newline: see CONTROL in tools/team.py.
+const CONTROL = /[\x00-\x08\x0b-\x1f\x7f]/g;
+export const clean = (value) => String(value ?? "").replace(CONTROL, "");
+
 export function oneLine(value) {
-  return String(value ?? "")
-    .replace(/\s+/g, " ")
-    .trim();
+  return clean(value).replace(/\s+/g, " ").trim();
+}
+
+// See safe_notes in tools/team.py: a bare "## Activity" line inside notes
+// would split the file and forge activity entries.
+export function safeNotes(notes) {
+  return clean(notes).trim().split("\n").map((l) => (l.trim() === "## Activity" ? "### Activity" : l)).join("\n");
 }
 
 export function parse(text) {
@@ -81,7 +89,7 @@ export function render(task) {
     out.push(`${f}: ${oneLine(v)}`);
   }
   out.push("---");
-  if (task.notes) out.push("", task.notes.trim());
+  if (task.notes) out.push("", safeNotes(task.notes));
   out.push(
     "",
     "## Activity",

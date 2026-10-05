@@ -19,6 +19,7 @@ import {
   ID_PATTERN,
   PRIORITIES,
   STATUSES,
+  clean,
   idNumber,
   oneLine,
   parse,
@@ -35,9 +36,15 @@ const PUBLIC_URL = (env.PUBLIC_URL || "http://localhost:3000").replace(
   "",
 );
 const TZ = env.TEAM_TZ || "America/Los_Angeles";
-const KEY = createHash("sha256")
-  .update(env.SESSION_SECRET || "")
-  .digest();
+// Fail closed. The first version fell back to sha256("") whenever NODE_ENV was
+// not "production", and Railway does not set NODE_ENV, so a deploy missing the
+// variable would have signed every session with a key anyone can compute.
+// 32 characters is the floor for a random secret; TEAM_DEV=1 is for local runs only.
+const SECRET = env.SESSION_SECRET || (env.TEAM_DEV === "1" ? "local-dev-only" : "");
+if (SECRET.length < 32 && env.TEAM_DEV !== "1") {
+  throw new Error("SESSION_SECRET must be set to at least 32 random characters (TEAM_DEV=1 for local runs)");
+}
+const KEY = createHash("sha256").update(SECRET).digest();
 const SECURE = PUBLIC_URL.startsWith("https://");
 // Same reasoning as PUSH_TRIES in tools/team.py: two writers in one second is
 // the realistic worst case for a five-person team.
@@ -54,12 +61,17 @@ const LIMITS = {
   label: 40,
 };
 
-if (!env.SESSION_SECRET && env.NODE_ENV === "production")
-  throw new Error("SESSION_SECRET is required");
 
 // ---------- sessions: the GitHub token lives only in an encrypted cookie ----------
 
+// A cookie's Max-Age only asks the browser to forget it. The expiry inside the
+// sealed payload is what makes a copied cookie stop working (security review
+// of 62e59f1: without it, a stolen value decrypted forever). Two weeks means a
+// teammate signs in about twice a month.
+const SESSION_DAYS = 14;
+
 function seal(data) {
+  data = { ...data, exp: Date.now() + SESSION_DAYS * 86400000 };
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", KEY, iv);
   const body = Buffer.concat([
@@ -74,12 +86,13 @@ function unseal(value) {
     const raw = Buffer.from(value, "base64url");
     const decipher = createDecipheriv("aes-256-gcm", KEY, raw.subarray(0, 12));
     decipher.setAuthTag(raw.subarray(12, 28));
-    return JSON.parse(
+    const data = JSON.parse(
       Buffer.concat([
         decipher.update(raw.subarray(28)),
         decipher.final(),
       ]).toString("utf8"),
     );
+    return typeof data?.exp === "number" && data.exp > Date.now() ? data : null;
   } catch {
     return null;
   }
@@ -125,7 +138,16 @@ async function gh(token, path, options = {}) {
 
 const b64 = (s) => Buffer.from(s, "utf8").toString("base64");
 const unb64 = (s) => Buffer.from(s, "base64").toString("utf8");
+// Keyed by blob sha, so an entry never goes stale, only unused. A five-person
+// board edits a few dozen times a day; 2,000 entries is weeks of history.
+const BLOB_CACHE_MAX = 2000;
 const blobCache = new Map();
+
+async function readMembers(token) {
+  const members = await readJsonFile(token, "team/members.json", []);
+  // A members.json that parses but is not a list would make every request 500.
+  return Array.isArray(members) ? members.filter((m) => m && typeof m.name === "string") : [];
+}
 
 async function readJsonFile(token, path, fallback) {
   const r = await gh(token, `/repos/${REPO}/contents/${path}?ref=${BRANCH}`);
@@ -154,12 +176,15 @@ async function listTasks(token) {
         const blob = await gh(token, `/repos/${REPO}/git/blobs/${f.sha}`);
         if (blob.status !== 200) return null;
         try {
+          if (blobCache.size >= BLOB_CACHE_MAX) blobCache.clear();
           blobCache.set(f.sha, parse(unb64(blob.json.content)));
         } catch {
           return null;
         }
       }
-      return blobCache.get(f.sha);
+      const task = blobCache.get(f.sha);
+      // The file name is the identity; see Repo.tasks in tools/team.py.
+      return task.id === f.name.slice(0, -3) ? task : null;
     }),
   );
   const version = createHash("sha1")
@@ -189,7 +214,7 @@ function text(value, field, { required = false } = {}) {
     return undefined;
   }
   if (typeof value !== "string") throw httpError(400, `${field} must be text`);
-  const v = field === "notes" ? value.trim() : oneLine(value);
+  const v = field === "notes" ? clean(value).trim() : oneLine(value);
   if (required && !v) throw httpError(400, `${field} is required`);
   if (v.length > LIMITS[field]) throw httpError(400, `${field} is too long`);
   return v;
@@ -432,7 +457,7 @@ async function handle(req, res) {
     const [user, repo, members] = await Promise.all([
       gh(token, "/user"),
       gh(token, `/repos/${REPO}`),
-      readJsonFile(token, "team/members.json", []),
+      readMembers(token),
     ]);
     if (repo.status !== 200 || !repo.json?.permissions?.push) {
       return send(
@@ -443,23 +468,32 @@ async function handle(req, res) {
       );
     }
     const login = user.json.login;
+    // A GitHub profile name is self-chosen, so someone not in members.json
+    // could call themselves "Caleb" in the activity log. Only the login, then.
     const member =
       members.find(
         (m) => (m.github || "").toLowerCase() === login.toLowerCase(),
-      )?.name ||
-      user.json.name ||
-      login;
+      )?.name || login;
     const sealed = seal({ token, login, member, avatar: user.json.avatar_url });
     return send(res, 302, "", {
       Location: "/",
       "Set-Cookie": [
-        cookie("team_session", sealed, 60 * 60 * 24 * 30),
+        cookie("team_session", sealed, SESSION_DAYS * 86400),
         cookie("team_state", "", 0),
       ],
     });
   }
 
   if (url.pathname === "/auth/logout" && req.method === "POST") {
+    // Clearing the cookie leaves the token live on GitHub; revoke it too.
+    if (session?.token && env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) {
+      const basic = Buffer.from(`${env.GITHUB_CLIENT_ID}:${env.GITHUB_CLIENT_SECRET}`).toString("base64");
+      await fetch(`https://api.github.com/applications/${env.GITHUB_CLIENT_ID}/token`, {
+        method: "DELETE",
+        headers: { Authorization: `Basic ${basic}`, Accept: "application/vnd.github+json", "User-Agent": "chewbacca-team", "Content-Type": "application/json" },
+        body: JSON.stringify({ access_token: session.token }),
+      }).catch((err) => console.error(`team-web logout: token revoke failed: ${err.message}`));
+    }
     return send(
       res,
       200,
@@ -475,7 +509,7 @@ async function handle(req, res) {
   if (req.method !== "GET" && req.headers["x-team-request"] !== "1")
     return send(res, 403, { error: "bad request origin" });
 
-  const members = await readJsonFile(session.token, "team/members.json", []);
+  const members = await readMembers(session.token);
   if (url.pathname === "/api/me")
     return send(res, 200, {
       login: session.login,

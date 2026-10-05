@@ -156,6 +156,17 @@ Ecosystem and method reading, in [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md):
 | MacArena [2606.06560](https://arxiv.org/pdf/2606.06560), OSUniverse [2505.03570](https://arxiv.org/pdf/2505.03570), OpenComputer [2605.19769](https://arxiv.org/pdf/2605.19769), ScreenSpot | Same |
 | Daniele Procida, Diátaxis (diataxis.fr) | [crafts/onboarding-kit.md](crafts/onboarding-kit.md) and `skills/kit-builder/`. Tutorial, how-to, reference, explanation, and why mixing two serves neither |
 
+### Data catalogs
+
+`data/oss-apps/apps.json`, the registry behind `oss-apps`, is rebuilt by
+`tools/oss_apps_build.py` from two curated lists. The apps in it belong to their
+own authors, under the licenses recorded per entry.
+
+| Source | Author | License | What it gives this kit |
+| --- | --- | --- | --- |
+| [serhii-londar/open-source-mac-os-apps](https://github.com/serhii-londar/open-source-mac-os-apps) | Serhii Londar and contributors | CC0-1.0 | The catalog of open source macOS apps by category, with languages and websites |
+| [piotrkulpinski/open-source-alternatives](https://github.com/piotrkulpinski/open-source-alternatives) | Piotr Kulpinski, [OpenAlternative](https://openalternative.co) | CC0-1.0 | Open source alternatives to proprietary software by category. Each tool's openalternative.co page supplies its repository and the products it replaces |
+
 ### Craft research
 
 Five genres studied before producing in them, because driving the tool is not

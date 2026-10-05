@@ -353,6 +353,17 @@ if group "decision-learning"; then
   check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 
+# Open source app registry: offline, reads the committed data/oss-apps/apps.json.
+if group "oss-apps"; then
+  expect "oss-apps appears in help" "chewbacca oss-apps" bash "$ROOT/bin/chewbacca" --help
+  check  "oss-apps dispatches" bash "$ROOT/bin/chewbacca" oss-apps --help
+  ln -s "$ROOT/bin/oss-apps" "$TMP/oss-apps"
+  check  "oss-apps resolves installed symlink" "$TMP/oss-apps" --help
+  check  "registry parses, lookups work, AGPL is never remixable" python3 "$ROOT/tests/test_oss_apps.py"
+  expect "replaces Notion finds AFFiNE" "toeverything/AFFiNE" bash "$ROOT/bin/chewbacca" oss-apps replaces Notion --limit 0
+  check  "stats --json is valid JSON" bash -c "python3 '$ROOT/bin/oss-apps' stats --json | python3 -m json.tool"
+fi
+
 # ── GTM engineering ───────────────────────────────────────────────────────────
 if group "gtme"; then
   check "workflow graph validates evidence and bounds execution" python3 "$ROOT/tests/test_gtme_graph.py"

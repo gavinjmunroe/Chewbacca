@@ -1,0 +1,27 @@
+{
+  "skill": "oss-apps",
+  "cases": [
+    {
+      "prompt": "What's an open source alternative to Notion I could fork and build on?",
+      "expect_tools": ["oss-apps"],
+      "why": "the fork question is a license question; AppFlowy is AGPL and AFFiNE is MIT open core",
+      "reject": ["recommending AppFlowy as a base without saying it is AGPL"]
+    },
+    {
+      "prompt": "Is there an open source version of Bartender for the Mac menu bar?",
+      "expect_tools": ["oss-apps"],
+      "why": "a Mac utility mapping that lives in curated.json, not OpenAlternative"
+    },
+    {
+      "prompt": "Give me open source Tauri apps with a permissive license we can remix into a new app",
+      "expect_tools": ["oss-apps"],
+      "why": "remixable plus a stack filter is exactly what the registry answers"
+    },
+    {
+      "prompt": "Can we reuse code from Immich in a product we sell?",
+      "expect_tools": ["oss-apps"],
+      "why": "AGPL: the answer is no without releasing source, and the registry says so",
+      "reject": ["saying yes because it is open source"]
+    }
+  ]
+}

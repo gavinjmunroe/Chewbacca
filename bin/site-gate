@@ -258,7 +258,21 @@ def story(pw, url):
         rows.append({"y": y, **s, "off_rate": moved})
     b.close()
     n = len(rows) or 1
+    # The longest pinned scene: a sticky element whose scroll runway (its
+    # parent's height) is at least three viewports. uselemma.ai's hero runs
+    # 1200vh; Caleb, 2026-10-04: "Scroll activated intentional scenes like the
+    # lemma one are a MUST".
+    b2 = launch(pw); pg2 = b2.new_page(viewport={"width": 1440, "height": 900})
+    pg2.goto(url, wait_until="networkidle", timeout=60000); pg2.wait_for_timeout(1500)
+    pinned = pg2.evaluate("""() => { let best = 0; for (const e of document.querySelectorAll('body *')) {
+        if (getComputedStyle(e).position !== 'sticky' || !e.parentElement) continue;
+        // a scene fills the screen; a sticky nav or sidebar label does not
+        if (e.getBoundingClientRect().height < 0.6 * innerHeight) continue;
+        best = Math.max(best, e.parentElement.getBoundingClientRect().height / innerHeight); }
+        return Math.round(best * 10) / 10; }""")
+    b2.close()
     summary = {
+        "pinned_scene_screens": pinned,
         "screens": len(rows),
         "words_per_screen": round(sum(r["words"] for r in rows) / n),
         "figure_share": round(sum(r["figure"] for r in rows) / n, 2),
@@ -278,6 +292,8 @@ def main():
     # Words per screen did NOT separate them (Lemma 137, TTS 161, TC 104).
     s.add_argument("--min-figure", type=float, default=0.35)
     s.add_argument("--min-motion", type=float, default=0.6)
+    s.add_argument("--min-pinned", type=float, default=3.0,
+                   help="viewports of runway the longest pinned scene needs")
     i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
     i.add_argument("--ys", help="comma separated scroll positions; default every 900px")
     a = ap.parse_args()
@@ -302,11 +318,13 @@ def main():
             for u in a.urls:
                 rows, summ = story(pw, u)
                 motion = summ["screens_with_motion"] / max(1, summ["screens"])
-                ok = summ["figure_share"] >= a.min_figure and motion >= a.min_motion
+                ok = (summ["figure_share"] >= a.min_figure and motion >= a.min_motion
+                      and summ["pinned_scene_screens"] >= a.min_pinned)
                 bad += not ok
                 print(f"{'ok  ' if ok else 'FAIL'}  {u} {json.dumps(summ)}")
                 if not ok:
-                    print(f"        needs figure share >= {a.min_figure} and motion on >= {a.min_motion:.0%} of screens")
+                    print(f"        needs figure share >= {a.min_figure}, motion on >= {a.min_motion:.0%} of screens,"
+                          f" and a pinned scroll scene of >= {a.min_pinned} screens")
             sys.exit(1 if bad else 0)
         ys = [int(v) for v in a.ys.split(",")] if a.ys else None
         mine = idle(pw, a.url, ys)

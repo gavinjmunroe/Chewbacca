@@ -1,0 +1,11 @@
+{
+  "name": "chewbacca-team-web",
+  "private": true,
+  "type": "module",
+  "description": "The Chewbacca team board. Tasks live in the repo; this serves and edits them through GitHub.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  }
+}

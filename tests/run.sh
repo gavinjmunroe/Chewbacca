@@ -373,6 +373,16 @@ if group "gtme"; then
   check "Clay exports match the frozen fixture by stable identity" python3 "$ROOT/tests/test_clay_fixture_check.py"
 fi
 
+# ── team board ────────────────────────────────────────────────────────────────
+if group "team"; then
+  check "team writes one-file commits, keeps edits through races, refuses bad input" python3 "$ROOT/tests/test_team.py"
+  if command -v node >/dev/null 2>&1; then
+    check "team-web sessions, validation and the shared task format agree with the CLI" node --test "$ROOT"/apps/team-web/test/*.test.js
+  else
+    skip "team-web sessions, validation and the shared task format agree with the CLI" "no node"
+  fi
+fi
+
 # ── tools ─────────────────────────────────────────────────────────────────────
 if group "tools"; then
   check "counts handles conflict stages and whitespace paths" python3 "$ROOT/tests/test_counts.py"

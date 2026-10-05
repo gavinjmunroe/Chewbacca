@@ -109,3 +109,10 @@ test("prose in a commit body is not an instruction", () => {
   assert.deepEqual([...t.refs].sort(), ["CHW-2", "CHW-3", "CHW-4"]);
   assert.deepEqual([...t.closing], ["CHW-2"]);
 });
+
+test("hostile commit text parses in linear time", () => {
+  const start = performance.now();
+  parseCommitRefs("x " + " ".repeat(100000) + "fixes", "CHW-1 ".repeat(20000) + "x\n" + " ".repeat(100000) + "!");
+  assert.ok(performance.now() - start < 500);
+  assert.deepEqual([...parseCommitRefs("fixes   CHW-9", "").closing], ["CHW-9"]);
+});

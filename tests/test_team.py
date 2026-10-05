@@ -303,6 +303,13 @@ class TeamTest(unittest.TestCase):
         self.assertEqual(team.parse_commit_refs("feat: x", "Fixes CHW-2\nRefs CHW-3, CHW-4"),
                          ({"CHW-2", "CHW-3", "CHW-4"}, {"CHW-2"}))
 
+    def test_hostile_commit_text_parses_in_linear_time(self):
+        import time
+        start = time.monotonic()
+        team.parse_commit_refs("x " + " " * 100000 + "fixes", ("CHW-1 " * 20000) + "x\n" + " " * 100000 + "!")
+        self.assertLess(time.monotonic() - start, 0.5)
+        self.assertEqual(team.parse_commit_refs("fixes   CHW-9", ""), ({"CHW-9"}, {"CHW-9"}))
+
     def test_parse_commit_refs(self):
         self.assertEqual(team.parse_commit_refs("team: CHW-3 comment", ""), (set(), set()))
         self.assertEqual(team.parse_commit_refs("feat: x (closes chw-7)", "CHW-8"), ({"CHW-7", "CHW-8"}, {"CHW-7"}))

@@ -107,17 +107,21 @@ export function idNumber(id) {
 
 // Commits -> tasks. tools/team.py (parse_commit_refs, apply_commit) is the other half.
 const TASK_REF = /\bCHW-(\d+)\b/gi;
-const CLOSING_REF = /\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s*:?\s+CHW-(\d+)\b/gi;
+const CLOSING_REF = /\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?):? CHW-(\d+)\b/gi;
 
 // Subject line plus trailer-style body lines only; see TRAILER in tools/team.py.
-const TRAILER = /^\s*(?:(fix(?:es|ed)?|close[sd]?|resolve[sd]?)|refs?|part of)?\s*:?\s*((?:CHW-\d+[\s,]*)+)$/i;
+const TRAILER = /^(?:(fix(?:es|ed)?|close[sd]?|resolve[sd]?)|refs?|part of)?:? ?(CHW-\d+(?:[ ,]+CHW-\d+)*)[ ,]*$/i;
+const MAX_REF_LINE = 200; // see MAX_REF_LINE in tools/team.py
 const ids = (text) => new Set([...text.matchAll(TASK_REF)].map((m) => `CHW-${Number(m[1])}`));
 
 export function parseCommitRefs(subject, body) {
   if (subject.startsWith("team:") || subject.startsWith("Merge ")) return { refs: new Set(), closing: new Set() };
+  subject = subject.slice(0, MAX_REF_LINE * 2).replace(/\s+/g, " ");
   const refs = ids(subject);
   const closing = new Set([...subject.matchAll(CLOSING_REF)].map((m) => `CHW-${Number(m[1])}`));
-  for (const line of body.split("\n")) {
+  for (const raw of body.split("\n")) {
+    const line = raw.trim().replace(/\s+/g, " ");
+    if (line.length > MAX_REF_LINE) continue;
     const m = TRAILER.exec(line);
     if (!m) continue;
     for (const id of ids(m[2])) { refs.add(id); if (m[1]) closing.add(id); }

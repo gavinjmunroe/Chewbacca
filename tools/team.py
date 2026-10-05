@@ -352,7 +352,7 @@ def update(repo, task_id, verb, apply=None, message=None, **changes):
 # CLI and the web board each run it against the newest commits on main. Both are
 # idempotent: a commit already in a task's activity is never logged twice.
 TASK_REF = re.compile(r"\bCHW-(\d+)\b", re.I)
-CLOSING_REF = re.compile(r"\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s*:?\s+CHW-(\d+)\b", re.I)
+CLOSING_REF = re.compile(r"\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?):? CHW-(\d+)\b", re.I)
 # How far back each sync looks. A busy day here was 94 commits (2026-09-20), so
 # 120 covers a full day of pushes between two syncs.
 LINK_WINDOW = 120
@@ -362,17 +362,25 @@ LINK_WINDOW = 120
 # CHW-4"). On 2026-10-04 the commit that shipped this feature explained it in its
 # own body ('"fixes CHW-12" closes it') and the sync closed CHW-12 with that commit
 # as proof. Prose that mentions an id is a description, not an instruction.
-TRAILER = re.compile(r"^\s*(?:(fix(?:es|ed)?|close[sd]?|resolve[sd]?)|refs?|part of)?\s*:?\s*((?:CHW-\d+[\s,]*)+)$", re.I)
+TRAILER = re.compile(r"(?:(fix(?:es|ed)?|close[sd]?|resolve[sd]?)|refs?|part of)?:? ?(CHW-\d+(?:[ ,]+CHW-\d+)*)[ ,]*", re.I)
+# Commit text is untrusted input to these regexes. A trailer is a short line, so
+# anything longer is skipped, and the subject is cut, keeping every match linear
+# (the first trailer pattern nested quantifiers; security review, 2026-10-04).
+MAX_REF_LINE = 200
 
 
 def parse_commit_refs(subject, body):
     """(referenced ids, closing ids) for one commit, or two empty sets for task commits."""
     if subject.startswith("team:") or subject.startswith("Merge "):
         return set(), set()
+    subject = " ".join(subject[:MAX_REF_LINE * 2].split())
     refs = {f"{ID_PREFIX}-{int(n)}" for n in TASK_REF.findall(subject)}
     closing = {f"{ID_PREFIX}-{int(n)}" for n in CLOSING_REF.findall(subject)}
     for line in body.splitlines():
-        m = TRAILER.match(line)
+        line = " ".join(line.split())
+        if len(line) > MAX_REF_LINE:
+            continue
+        m = TRAILER.fullmatch(line)
         if not m:
             continue
         ids = {f"{ID_PREFIX}-{int(n)}" for n in TASK_REF.findall(m.group(2))}

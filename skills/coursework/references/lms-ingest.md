@@ -12,11 +12,11 @@ This procedure already exists. Run it rather than rebuilding it.
 course-ingest --school acc --signin                      # once, a human signs in
 course-ingest --school example --calendar "Fall 2026"    # every time after
 course-ingest --school example --calendar "Fall 2026" --dry-run
-node ~/Chewbacca/procedures/course-ingest/verify.mjs acc
+node ~/Chewbacca/library/procedures/course-ingest/verify.mjs acc
 ```
 
 Full doctrine, the endpoint map, and the four routes into a signed-in session
-that do not work, in `~/Chewbacca/procedures/course-ingest/PROCEDURE.md`. Read
+that do not work, in `~/Chewbacca/library/procedures/course-ingest/PROCEDURE.md`. Read
 it before touching any of this.
 
 ## What the LMS cannot tell you

@@ -118,8 +118,8 @@ gitignored Swift build output (`hud/.build`, `voice/.build`, `plynn/.build`).
 | `voice/` | Optional Swift text-to-speech server (Kokoro on CoreML). |
 | `plynn/` | A retired dictation app kept as a parts bin. Not built or installed. |
 | `team/` | The team task board: one markdown file per task. Its web UI is `apps/team-web/`. |
-| `library/` | What the agent reads and replays, no services. `methods/` (question sets per kind of work), `crafts/` (researched genre rules), `maps/` (per-website knowledge, `maps/<host>/MAP.md`), `procedures/` (tasks learned once and replayed: stays, Blackboard ingest, LinkedIn), `learning/` (navigation graphs), `decisions/` (labeled Jev decision sets), `templates/` (coursework, guide page), `snippets/`, `examples/` (a sample app), `prompts/`, `research/` (one memo). |
-| `config/` | Data files code reads. `settings/` (settings template, generated `toolkit.json`), `instructions/` (the shared agent-neutral instructions), `runtimes/` (runtime profiles), `genui/` (catalog and policy for model-composed HUD panels), `surfaces/` and `data/` (HUD surface, engine and open-source app registries), `fanout/` (Jev fan-out predicates), `patches/` (a note on a retired third-party patch). |
+| `library/` | What the agent reads and replays, no services. `methods/` (question sets per kind of work), `crafts/` (researched genre rules), `maps/` (per-website knowledge, `maps/<host>/MAP.md`), `procedures/` (tasks learned once and replayed: stays, Blackboard ingest, LinkedIn), `learning/` (navigation graphs), `decisions/` (labeled Jev decision sets), `templates/` (starter components and API routes, coursework ledgers, the guide page), `snippets/`, `examples/` (a sample app), `prompts/`, `research/` (one memo). |
+| `config/` | Settings and data files the code reads, plus one note. `settings/` (settings template, generated `toolkit.json`), `instructions/` (the shared agent-neutral instructions), `runtimes/` (runtime profiles), `genui/` (catalog and policy for model-composed HUD panels), `surfaces/` and `data/` (HUD surface, engine and open-source app registries), `fanout/` (Jev fan-out predicates), `patches/` (a note on a retired third-party patch). |
 | `apps/` | Small standalone programs. `team-web/` (the team board UI), `call/` (`ears.swift`, audio capture for the call coach), `extensions/` (the ChatGPT bridge extension), `mcp/amber/` (the Amber MCP server), `texts/` (textbook ingest and reader). |
 | `tests/` | About 230 files: `tests/run.sh` plus Python, bash and Node tests. |
 | `docs/` | About 87 docs. See [Where to read next](#where-to-read-next). |
@@ -179,11 +179,15 @@ hooks. The authoritative hook list is the `_register` calls in `setup.sh`.
 
 ### Permissions
 
-`setup.sh` sets `defaultMode` to `bypassPermissions`, so nothing prompts. The
-`deny` list in the installed settings holds what stays blocked anyway: no-undo
-operations, turning off a macOS protection, reading a secret into context, and
-piping a download into a shell. It is a string match, not a sandbox.
-`docs/THREAT-MODEL.md` says what that buys and what it does not cover.
+`setup.sh` leaves Claude Code's permission prompts on (`defaultMode:
+default`) unless it is run with `--bypass-permissions`. Either way it adds a
+`deny` list: no-undo operations (`rm -rf` on root or home, force pushes,
+`gh repo delete`, `dropdb`) and reads that would pull a secret into context
+(`.env`, `~/.ssh`, `~/.aws`, Claude's own credentials). `deny` beats `allow`.
+The template `config/settings/settings.json`, used by `install.sh` and
+`start.ps1`, does set `bypassPermissions` and carries a longer deny list. It is
+a string match, not a sandbox: `docs/THREAT-MODEL.md` says what that does not
+cover.
 
 ### Removing it
 

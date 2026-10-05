@@ -8,7 +8,7 @@
 # Apple Events" on (chrome-js --check). Deleting is public and drops endorsements: show the
 # person the names first. There is no "keep only" mode on purpose, so every deletion is named.
 emulate -L zsh
-C=${0:A:h:h:h}/bin/chrome-js
+C=${0:A:h:h:h:h}/bin/chrome-js
 LIST="https://www.linkedin.com/in/me/details/skills/"
 js() { $C --match linkedin.com --eval "$1" 2>/dev/null; }
 # 40 polls of 0.25 s. The edit form rendered within about 1 s on every successful run of

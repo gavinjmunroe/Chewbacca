@@ -6,7 +6,7 @@
 # never git add -A. Two sessions ran in this repo today and one commit already
 # absorbed the other's files under an unrelated message."
 #
-# The next commit did it again. Commit a99042a, about library/methods/, swallowed
+# The next commit did it again. Commit a99042a, about methods/, swallowed
 # README.md, setup.sh and SHA256SUMS.txt from the other session.
 #
 # STAGING BY FILENAME DOES NOT PREVENT THIS. `git add <my files>` is careful

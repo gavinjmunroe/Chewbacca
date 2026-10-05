@@ -70,7 +70,7 @@ TEMPLATE = ROOT / "bin" / "propose-voice.md"
 # The judge, the loop itself, and tier C from docs/SELF-LEARNING.md.
 PROTECTED = ("tests/voice_cases.py", "tests/evolve.sh", "tests/fitness.sh",
              "bin/evolve", "bin/fitness", "bin/propose", "bin/propose-voice.md",
-             "bin/reflect", "bin/lib/learnloop.py", ".claude/", "settings/",
+             "bin/reflect", "bin/lib/learnloop.py", ".claude/", "config/settings/",
              "setup.sh", "install.sh", ".github/")
 TOOLS = "Read,Edit,Write,Grep,Glob,Bash"
 ALLOWED = ["Bash(python3 tests/*)", "Bash(python3 bin/*)", "Bash(bash tests/*)",

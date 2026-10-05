@@ -1389,7 +1389,7 @@ h["PostToolUse"] = [
     # index holding two authors, and stop-check attributes dirty files.
     #
     # THIS WAS MISSING UNTIL 2026-09-21 AND BOTH GUARDS WERE INERT EVERYWHERE.
-    # The kit's config/settings/settings.json registered it; this installer never did,
+    # The kit's settings/settings.json registered it; this installer never did,
     # so ~/.chewbacca/write-log.tsv did not exist on the author's own machine
     # and pre-commit silently allowed every commit. Its own test covers that
     # state as "no write log: stays silent", so nothing failed and nothing said

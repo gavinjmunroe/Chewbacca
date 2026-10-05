@@ -151,7 +151,7 @@ def clear_engine(pid: int | None = None) -> None:
 # (2026-10-05). CHEWBACCA_REALM_REF overrides it for a deliberate upgrade.
 # Refuses every WebSocket upgrade that carries an Origin header, so a web page
 # cannot reach the engine (see the file's own comment).
-ORIGIN_GUARD = Path(__file__).resolve().parent.parent / "data" / "realm" / "origin-guard.mjs"
+ORIGIN_GUARD = Path(__file__).resolve().parent.parent / "config" / "data" / "realm" / "origin-guard.mjs"
 PINNED_REF = os.environ.get("CHEWBACCA_REALM_REF", "0ae5b8b5739e6165360e4b0679302b7b5afdd4b1")
 
 

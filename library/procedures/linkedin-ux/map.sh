@@ -7,7 +7,7 @@
 # The snapshots hold names of people and message previews, so they go to a private folder,
 # $LINKEDIN_UX_DIR (default ~/dev/gavin-context/research/linkedin-ux/pages), never this repo.
 emulate -L zsh; zmodload zsh/datetime
-HERE=${0:A:h}; C=${HERE:h:h}/bin/chrome-js
+HERE=${0:A:h}; C=${HERE:h:h:h}/bin/chrome-js
 OUT=${LINKEDIN_UX_DIR:-$HOME/dev/gavin-context/research/linkedin-ux}/pages; mkdir -p $OUT
 js() { $C --match linkedin.com --eval "$1" 2>/dev/null; }
 go() { js "location.href='$1';1" >/dev/null; }

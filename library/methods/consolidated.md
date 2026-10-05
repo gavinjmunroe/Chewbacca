@@ -14,7 +14,7 @@ Knowledge that is retrieved does not fire; knowledge that is injected or enforce
 Earned by 9 episodes:
 
 - `dd4dc619` scars: ask the question this kit's last failure would have caught
-- `a99042ac` library/methods/: name the process and the falsifier before building, enforced not filed
+- `a99042ac` methods/: name the process and the falsifier before building, enforced not filed
 - `12f5ddb7` feat(list-audit): dedupe at every level the recipient experiences
 - `38d21f41` test: cover guide trends and trigger cases, and make hud-listen pytest-runnable
 - `5966e3b4` fix: stop-check repeated the same warning against unchanged state

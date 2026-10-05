@@ -16,7 +16,7 @@ But most of that 2.8 GB is not an asset:
 | | | |
 |---|---|---|
 | `audio-venv` | 897 MB | a Python venv. `pip install` reproduces it |
-| `library/methods/`, `craft/` | 48 KB | copies of files already in the repo |
+| `methods/`, `craft/` | 48 KB | copies of files already in the repo |
 | `logs`, `cache`, `stop-check` | 700 KB | operational exhaust |
 | **`people/`** | **1.9 GB, 249 MB db** | **not reproducible by anyone** |
 | **`scars.json`** | **53 failures** | **not reproducible by anyone** |

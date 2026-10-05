@@ -16,6 +16,7 @@ and accepts on top of it.
 | `bin/lib/osgraph_runs.py`              | Go: a task handed to `claude -p` in plan mode, and its real status                                                                                      |
 | `bin/lib/surfaces/`                    | The panels: walks.py for the graph walks, music.py and files.py as thin surfaces                                                                        |
 | `bin/lib/surfaces/oss.py`, `engine.py` | "what replaces X" from the oss registry with license buckets; and open source engines drawn from `config/data/surfaces/engines.json`                           |
+| `bin/lib/surfaces/agents.py`           | Claude sessions on the Realm engine: read, start, send, answer a permission, interrupt, fork                                                            |
 | `bin/lib/sessions_inbox.py`            | Send into an open, idle Claude Code session through its own inbox, for `bin/kyber-sessions`                                                             |
 | `bin/lib/surface_intent.py`            | "Show my day", "show me Karthik": the no-model fast path in `hud-listen`                                                                                |
 | `config/data/surfaces/apps.json`              | Each Mac app, what replaces it, and an honest status                                                                                                    |
@@ -276,6 +277,53 @@ with the steps in order and Anarlog's own `doctor` line, never an error.
 meetings supersede it for calls and do not replace it.
 `tests/test_surface_meetings.py` runs against fixtures shaped exactly like the
 CLI's JSON (`tests/fixtures/anarlog`).
+
+## Agents
+
+`agents` (`bin/lib/surfaces/agents.py`, `surfaces.agents.Agents`, region
+center) replaces opening VS Code to talk to Claude. The engine is Realm
+(github.com/31Carlton7/realm, Carlton Aikins, with his permission given on
+2026-10-05), run headless by `bin/realm-engine` and reached only through
+`bin/lib/realm_client.py`, which proves the server by pid, port owner and
+realmHome before the first call and refuses a write not passed `write=True`.
+Aliases: `vscode`, `vs-code`, `claude`, `sessions`, `agent`, `realm`. Spoken:
+"show my agents", "pull up my claude sessions", "open the coding agents". A
+bare "show my sessions" and "show me Claude" stay with the model.
+
+The list is every session the engine has, by space, with its state in words
+(waiting on you, working, failed, idle), what needs him first, and a header
+count ("3 sessions · 1 waiting on you · 1 working"). Open pins a session: its
+newest 14 turns in a Transcript, read by polling `sessions.events` after the
+last seq seen, every 2 s while it works and every 10 s idle (a whole fetch
+measured 0.06 to 0.21 s on 2026-10-05). A refresh that fails after the
+engine had answered keeps the last rows and drops every verb row.
+
+Every verb is a row button on an Events component, so the press carries the
+id that was drawn, and a verb that does not apply has no row and is not
+drawn. Each row says what it touches and whether it can be undone.
+
+| Verb             | Shown when                                      | Does                                                                                                                                                                                                                                |
+| ---------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Start the engine | the engine is down                              | `realm-engine start` (or build, then start, when Realm is not built); nothing else is offered                                                                                                                                       |
+| Send             | the pinned session is idle                      | `sessions.send` to the pinned id, read back from the transcript; a second press in flight refuses; a maybe_applied failure says it may have sent and is never retried, and the same text is refused once it shows in the transcript |
+| Allow once, Deny | the pinned session waits on a request           | `sessions.respondPermission` for that requestId only, re-checked as still pending at the press; never `allow_always`                                                                                                                |
+| Interrupt        | the pinned session is working                   | `sessions.interrupt`; what it already changed stays changed                                                                                                                                                                         |
+| Fork             | the pinned session is idle and has a checkpoint | `sessions.fork` from its newest checkpoint: a new worktree and session, the original untouched                                                                                                                                      |
+| Start            | a folder is picked                              | `sessions.create`, agent claude, permission mode `default` (asks before every tool), in that folder's project, making a space and a project (and a profile on a fresh engine) only when none exists                                 |
+
+The folder comes from a Select, never a typed path: folders sessions already
+run in, then git repos under the code root (`KYBER_CODE_ROOT`, default
+~/code) by last commit, 24 at most. The press must name the folder the
+Select holds, and the folder must still resolve to the same place.
+
+A pending request shows its tool and whole input as JSON. Allow once is
+offered only when that is exactly the input: one over 1,200 characters, or
+one holding a control, format or bidi character (stripped for display), gets
+Deny only. Turns, titles, space names, paths and tool input are stripped of
+Unicode category C and U+2028/9 before any `d` line, and result lines, which
+the activity log keeps, name a folder and never a message or a title.
+`tests/test_surface_agents.py` runs against an in-memory engine that enforces
+realm_client's own write gate.
 
 ## Sending into a session
 

@@ -52,6 +52,10 @@ def main() -> int:
         ("hide the tasks", "close", "tasks", ""),
         ("close everything", "close", "all", ""),
         ("Kyber, show my day please", "open", "today", ""),
+        ("show my agents", "open", "agents", ""),
+        ("pull up my claude sessions", "open", "agents", ""),
+        ("open the coding agents", "open", "agents", ""),
+        ("close the agents", "close", "agents", ""),
     ]
     for said, verb, name, arg in takes:
         got = si.parse(said, resolve_person=resolver)
@@ -76,6 +80,10 @@ def main() -> int:
         "open my work",
         # A question about a surface is a question.
         "why did my tasks close",
+        # Too loose for the agents panel: kyber-sessions, and a person.
+        "show my sessions",
+        "Show me Claude",
+        "show my agents and tell the lemma one to run the tests",
         "",
     ]
     for said in refuses:

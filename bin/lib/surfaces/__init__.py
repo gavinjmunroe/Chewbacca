@@ -282,7 +282,7 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
 
 
 KINDS = ("needs-you", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
-         "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "apps")
+         "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps")
 # Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
 # `oss` is not one: it opens empty, and "what replaces Notion" seeds its query
 # with the preset {"/oss/q": "Notion"} instead.
@@ -292,7 +292,7 @@ PARAMETRIC = ("person", "space", "engine")
 def make(kind: str, arg: str = "") -> Provider:
     """A provider instance. Walk surfaces read the graph; music and files are
     thin surfaces over their own CLI and folder."""
-    from . import apps, code, engine, files, github, meetings, music, notes, oss, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
+    from . import agents, apps, code, engine, files, github, meetings, music, notes, oss, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
 
     if kind == "engine":
         return engine.EngineSurface(arg)
@@ -303,7 +303,7 @@ def make(kind: str, arg: str = "") -> Provider:
         "conversations": walks.Conversations, "people": walks.People,
         "music": music.Music, "files": files.Files,
         "code": code.Code, "notes": notes.Notes, "github": github.GitHub, "whatsapp": whatsapp.WhatsApp,
-        "meetings": meetings.Meetings, "apps": apps.Apps,
+        "meetings": meetings.Meetings, "agents": agents.Agents, "apps": apps.Apps,
     }
     if kind == "person":
         return walks.Person(arg)
@@ -328,11 +328,14 @@ ALIASES = {
     "downloads": "files", "finder": "files", "file": "files",
     "alternatives": "oss", "alternative": "oss", "replace": "oss", "replaces": "oss",
     "open-source": "oss", "opensource": "oss", "oss-apps": "oss", "engines": "oss",
-    "changes": "code", "diff": "code", "diffs": "code", "repos": "code", "vscode": "code",
+    "changes": "code", "diff": "code", "diffs": "code", "repos": "code",
     "note": "notes", "apple-notes": "notes",
     "launcher": "apps", "launchpad": "apps", "dock": "apps", "surfaces": "apps", "wa": "whatsapp", "whats-app": "whatsapp", "gh": "github", "prs": "github", "pulls": "github", "pull-requests": "github", "reviews": "github",
     "granola": "meetings", "anarlog": "meetings", "meeting": "meetings", "calls": "meetings", "call": "meetings",
     "notes-from-meetings": "meetings", "meeting-notes": "meetings",
+    # VS Code was opened to talk to Claude; the code panel only reads diffs.
+    "vscode": "agents", "vs-code": "agents", "claude": "agents", "sessions": "agents", "agent": "agents",
+    "agent-sessions": "agents", "realm": "agents",
 }
 
 

@@ -74,6 +74,12 @@ NOUNS = {
     "github": r"(?:github|prs|pull requests|reviews|review requests|ci)",
     "code": r"(?:code changes|changes|diffs?|what changed|repos)",
     "meetings": r"(?:meetings|calls|meeting notes|call notes|granola|anarlog|(?:latest|recent|last) (?:meetings?|calls?))",
+    # The Realm engine's Claude sessions. Typed, `kyber-surfaces open
+    # sessions` and `open claude` reach it through ALIASES; spoken, only
+    # phrases that name agents do: "show my sessions" could mean
+    # kyber-sessions' panel and "show me Claude" a person, so both stay with
+    # the model, which can ask.
+    "agents": r"(?:agents|coding agents|agent sessions|claude sessions|claude code sessions|realm sessions)",
     # "Show me the built in hud apps" went to genui on 2026-10-05, and the
     # model drew six boxes that named two surfaces that do not exist.
     "apps": r"(?:(?:built ?in |kyber |hud )*(?:hud )?apps|(?:all )?(?:the )?surfaces|launcher|launchpad|everything (?:kyber|the hud) (?:has|can do))",
@@ -103,7 +109,7 @@ SPACE_MODE = re.compile(r"^(?P<space>school|amber|zeutara|chewbacca|personal) (?
 CLOSE = re.compile(
     r"^(?:close|hide|take down|dismiss|get rid of) (?:my |the )?"
     r"(?P<what>day|today|calendar|messages|texts|mail|email|inbox|conversations|tasks|to ?dos?|people|"
-    r"music|player|downloads|files|needs you|notes|github|prs|code|changes|meetings|calls|granola|"
+    r"music|player|downloads|files|needs you|notes|github|prs|code|changes|meetings|calls|granola|agents|"
     r"all(?: the)? surfaces|surfaces|everything)(?: surface| panel)?$")
 CLOSE_NAMES = {"day": "today", "calendar": "today", "texts": "conversations", "messages": "conversations",
                "mail": "conversations", "email": "conversations", "inbox": "conversations",
@@ -238,5 +244,5 @@ def perform(command: Command, run=subprocess.run, ask=None) -> Outcome:
               "files": "Downloads are up.", "needs-you": "Here's what needs you.", "person": "They're up.",
               "oss": "The alternatives are up.", "engine": "The engine's up.",
               "code": "What changed is up.", "notes": "Your notes are up.", "github": "GitHub's up.",
-              "meetings": "Your meetings are up."}
+              "meetings": "Your meetings are up.", "agents": "Your agent sessions are up."}
     return Outcome(True, spoken.get(command.name, "It's up."))

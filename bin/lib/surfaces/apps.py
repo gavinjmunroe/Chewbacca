@@ -27,13 +27,13 @@ BADGES = Path.home() / ".bob" / "badges.json"
 NOT_LISTED = ("person", "space", "engine", "apps")
 # Order is by what gets opened most: what is waiting first, then the day,
 # then the conversations and the work.
-ORDER = ("needs-you", "today", "conversations", "whatsapp", "meetings", "tasks", "people", "code", "github",
-         "notes", "files", "music", "oss")
+ORDER = ("needs-you", "today", "conversations", "whatsapp", "meetings", "tasks", "people", "agents", "code",
+         "github", "notes", "files", "music", "oss")
 SYMBOLS = {
     "needs-you": "bell.badge", "today": "calendar", "conversations": "message", "whatsapp": "phone.bubble",
     "tasks": "checklist", "people": "person.2", "code": "chevron.left.forwardslash.chevron.right",
     "github": "arrow.triangle.branch", "notes": "note.text", "files": "folder", "music": "music.note",
-    "oss": "shippingbox", "meetings": "waveform",
+    "oss": "shippingbox", "meetings": "waveform", "agents": "terminal",
 }
 LABELS = {"needs-you": "Needs you", "oss": "Open source", "github": "GitHub", "whatsapp": "WhatsApp"}
 

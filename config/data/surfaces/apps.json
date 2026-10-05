@@ -4,11 +4,11 @@
   "about": "Each Mac app -> what on the HUD replaces it. Status is what works today on this Mac, not the plan. `oss` links ids in config/data/oss-apps/apps.json.",
   "counts": {
    "replaced": 5,
-   "partial": 16,
+   "partial": 17,
    "not yet": 19
   },
-  "total": 40,
-  "with_oss": 20
+  "total": 41,
+  "with_oss": 21
  },
  "apps": [
   {
@@ -180,6 +180,28 @@
     {
      "id": "zellij-org/zellij",
      "name": "Zellij",
+     "remixable": true
+    }
+   ]
+  },
+  {
+   "app": "VS Code",
+   "status": "partial",
+   "surfaces": [
+    "agents",
+    "code"
+   ],
+   "works": "Claude sessions run by the realm engine with no editor open: every session with its space and state, what needs you first; the newest turns; start a session in a folder picked from a list; type and Send to the session you opened; a pending permission shows its exact tool and input with Allow once or Deny; Interrupt and Fork; the code panel shows what changed and the diff",
+   "missing": "Editing a file by hand; Claude Code sessions started in VS Code or a terminal are not in the engine and stay on the sessions panel; Allow always is never offered, and a request too long to show whole or holding hidden characters can only be denied from the glass; one agent (Claude), not the engine's others; the engine must be started first (one press)",
+   "oss": [
+    {
+     "id": "microsoft/vscode",
+     "name": "Visual Studio Code",
+     "remixable": true
+    },
+    {
+     "id": "vscodium/vscodium",
+     "name": "VSCodium",
      "remixable": true
     }
    ]

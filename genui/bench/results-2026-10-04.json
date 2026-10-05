@@ -1,0 +1,506 @@
+{
+  "rows": [
+    {
+      "n": 1,
+      "request": "compare my three classes' grades",
+      "first_try_valid": false,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 2,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 3197.2,
+      "model_done_ms": 8272.4,
+      "complete_ms": 8272.6,
+      "queries": [
+        "grades"
+      ],
+      "problems": [
+        "the surface shows up to 18 rows; at most 12. Drop a list or bind a count instead"
+      ],
+      "lines": [
+        "c s Screen title=\"GRADES BY COURSE\"",
+        "> s tb",
+        "c tb Table caption=\"Standing in each course\" columns=[{\"field\":\"course\",\"label\":\"Course\"},{\"field\":\"standing\",\"label\":\"Standing\"},{\"field\":\"graded\",\"label\":\"Graded\"},{\"field\":\"remaining\",\"label\":\"Left\"}] rows=@/q/grades/rows"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 2,
+      "request": "who have I not texted back this week",
+      "first_try_valid": false,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 2,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 2847.8,
+      "model_done_ms": 8447.0,
+      "complete_ms": 8447.2,
+      "queries": [
+        "unreplied:7"
+      ],
+      "problems": [
+        "line 1: only c, > and @ lines belong in a layout, not 's'",
+        "the first line must be c s Screen title=\"...\""
+      ],
+      "lines": [
+        "c s Screen title=\"AWAITING YOUR REPLY\"",
+        "> s m t",
+        "c m Metric label=\"Threads waiting\" value=@/q/unreplied:7/count thresholds=[{\"at\":1,\"tone\":\"warn\"}]",
+        "c t Table caption=\"They wrote last\" columns=[{\"field\":\"who\",\"label\":\"Who\"},{\"field\":\"waiting\",\"label\":\"Waiting\"},{\"field\":\"channel\",\"label\":\"Channel\"}] rows=@/q/unreplied:7/rows"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 3,
+      "request": "show my client's outbound campaign numbers",
+      "first_try_valid": false,
+      "valid_after_repair": false,
+      "fallback": true,
+      "attempts": 2,
+      "skeleton_ms": 0.6,
+      "first_component_ms": null,
+      "model_done_ms": 16921.0,
+      "complete_ms": 16921.0,
+      "queries": [],
+      "problems": [
+        "line 3: campaign needs an argument: campaign or client name",
+        "line 4: campaign needs an argument: campaign or client name",
+        "line 2: > s lists tb, which was never declared with c",
+        "line 2: > s lists st, which was never declared with c",
+        "repair: line 3: Heading.level=3 must be between 1 and 2",
+        "repair: line 2: > s lists hd, which was never declared with c"
+      ],
+      "lines": [
+        "c s Screen title=\"CLIENT'S OUTBOUND CAMPAIGN NUMBE\"",
+        "> s fb",
+        "c fb Status message=\"No view for this one. Heading.level=3 must be between 1 and 2\" level=warning"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 4,
+      "request": "plan my Tuesday",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.5,
+      "first_component_ms": 2490.7,
+      "model_done_ms": 3977.0,
+      "complete_ms": 4021.4,
+      "queries": [
+        "day:Tuesday",
+        "overdue"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"TUESDAY\"",
+        "> s row ev",
+        "c row Stack direction=grid cols=2 gap=3",
+        "c ev Events caption=\"Tuesday: classes, deadlines, events\" items=@/q/day:Tuesday/events",
+        "> row m1 m2",
+        "c m1 Metric label=\"On Tuesday\" value=@/q/day:Tuesday/count",
+        "c m2 Metric label=\"Overdue now\" value=@/q/overdue/count thresholds=[{\"at\":1,\"tone\":\"bad\"}]"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 5,
+      "request": "what's due before my midterm",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.4,
+      "first_component_ms": 2347.2,
+      "model_done_ms": 3410.5,
+      "complete_ms": 3410.6,
+      "queries": [
+        "before-exam"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"BEFORE THE MIDTERM\"",
+        "> s m ev",
+        "c m Metric label=\"Items due first\" value=@/q/before-exam/count",
+        "c ev Events caption=\"Next exam, then what lands before it\" items=@/q/before-exam/events"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 6,
+      "request": "what's due this week",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 2546.4,
+      "model_done_ms": 3798.2,
+      "complete_ms": 3798.3,
+      "queries": [
+        "due:7",
+        "overdue"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"DUE THIS WEEK\"",
+        "> s row ev",
+        "c row Stack direction=grid cols=2 gap=3",
+        "> row m1 m2",
+        "c m1 Metric label=\"Overdue\" value=@/q/overdue/count thresholds=[{\"at\":1,\"tone\":\"bad\"}]",
+        "c m2 Metric label=\"Due in 7 days\" value=@/q/due:7/count",
+        "c ev Events caption=\"Deadlines\" items=@/q/due:7/events"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 7,
+      "request": "am I behind on anything",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 3346.8,
+      "model_done_ms": 4655.1,
+      "complete_ms": 4655.2,
+      "queries": [
+        "overdue",
+        "unreplied"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"BEHIND ON\"",
+        "> s row ev st",
+        "c row Stack direction=grid cols=2 gap=3",
+        "> row m1 m2",
+        "c m1 Metric label=\"Overdue\" value=@/q/overdue/count thresholds=[{\"at\":1,\"tone\":\"bad\"}]",
+        "c m2 Metric label=\"Owed replies\" value=@/q/unreplied/count",
+        "c ev Events caption=\"Past due, still todo\" items=@/q/overdue/events tone=bad",
+        "c st Status message=@/q/overdue/note level=info"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 8,
+      "request": "how busy is my week, day by day",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 2863.4,
+      "model_done_ms": 4417.9,
+      "complete_ms": 4417.9,
+      "queries": [
+        "overdue",
+        "week:7"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"WEEK BY DAY\"",
+        "> s row wb",
+        "c row Stack direction=grid cols=2 gap=3",
+        "> row m1 m2",
+        "c m1 Metric label=\"Items this week\" value=@/q/week:7/count",
+        "c m2 Metric label=\"Overdue\" value=@/q/overdue/count thresholds=[{\"at\":1,\"tone\":\"bad\"}]",
+        "c wb Bars caption=\"Classes, deadlines and events per day\" rows=@/q/week:7/bars"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 9,
+      "request": "who should I reach out to",
+      "first_try_valid": false,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 2,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 2866.7,
+      "model_done_ms": 7532.8,
+      "complete_ms": 7532.9,
+      "queries": [
+        "reconnect",
+        "unreplied"
+      ],
+      "problems": [
+        "the surface shows up to 15 rows; at most 12. Drop a list or bind a count instead"
+      ],
+      "lines": [
+        "c s Screen title=\"REACH OUT\"",
+        "> s b m",
+        "c b Bars caption=\"Days since you last talked\" rows=@/q/reconnect/bars",
+        "c m Metric label=\"Threads awaiting your reply\" value=@/q/unreplied/count thresholds=[{\"at\":1,\"tone\":\"warn\"}]"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 10,
+      "request": "what promises have I made to people",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 3276.7,
+      "model_done_ms": 3277.9,
+      "complete_ms": 3323.1,
+      "queries": [
+        "tasks"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"PROMISES MADE\"",
+        "> s tb",
+        "c tb Table caption=\"Open promises\" columns=[{\"field\":\"task\",\"label\":\"Promise\"},{\"field\":\"who\",\"label\":\"Who\"},{\"field\":\"status\",\"label\":\"Status\"}] rows=@/q/tasks/rows"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 11,
+      "request": "when are my exams",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 2855.9,
+      "model_done_ms": 3244.9,
+      "complete_ms": 3244.9,
+      "queries": [
+        "exams:90"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"EXAMS\"",
+        "> s m ev",
+        "c m Metric label=\"Exams in 90 days\" value=@/q/exams:90/count",
+        "c ev Events caption=\"Exams and midterms ahead\" items=@/q/exams:90/events"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 12,
+      "request": "what do I have tomorrow",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 3774.3,
+      "model_done_ms": 4315.5,
+      "complete_ms": 4315.5,
+      "queries": [
+        "day:tomorrow"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"TOMORROW\"",
+        "> s ev st",
+        "c ev Events caption=\"Monday, classes, deadlines and events\" items=@/q/day:tomorrow/events",
+        "c st Status message=@/q/day:tomorrow/note level=info"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 13,
+      "request": "how does the HUD get data from a query onto the screen",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 4337.7,
+      "model_done_ms": 5532.9,
+      "complete_ms": 5532.9,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"QUERY TO GLASS\"",
+        "> s d t",
+        "c d Diagram aspect=2.6 parts=[{\"t\":\"node\",\"x\":0.12,\"y\":0.5,\"w\":0.18,\"h\":0.28,\"label\":\"Pointer\"},{\"t\":\"arrow\",\"x\":0.21,\"y\":0.5,\"x2\":0.33,\"y2\":0.5},{\"t\":\"node\",\"x\":0.42,\"y\":0.5,\"w\":0.18,\"h\":0.28,\"label\":\"Query\"},{\"t\":\"arrow\",\"x\":0.51,\"y\":0.5,\"x2\":0.63,\"y2\":0.5},{\"t\":\"node\",\"x\":0.72,\"y\":0.5,\"w\":0.18,\"h\":0.28,\"label\":\"View\"},{\"t\":\"arrow\",\"x\":0.81,\"y\":0.5,\"x2\":0.91,\"y2\":0.5},{\"t\":\"node\",\"x\":0.97,\"y\":0.5,\"w\":0.14,\"h\":0.28,\"label\":\"Panel\"}]",
+        "c t Text value=\"The layout names a pointer, the view shapes the rows, the panel paints them. No value is written by hand.\" tone=muted"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 14,
+      "request": "show my BISC 101 deadlines",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.4,
+      "first_component_ms": 3078.1,
+      "model_done_ms": 3687.2,
+      "complete_ms": 3687.3,
+      "queries": [
+        "course:BISC101"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"BISC 101 DEADLINES\"",
+        "> s tb st",
+        "c tb Table caption=\"Overdue first, then soonest\" columns=[{\"field\":\"name\",\"label\":\"Item\"},{\"field\":\"type\",\"label\":\"Type\"},{\"field\":\"date\",\"label\":\"Date\"},{\"field\":\"days\",\"label\":\"Days\"},{\"field\":\"status\",\"label\":\"Status\"}] rows=@/q/course:BISC101/rows",
+        "c st Status message=@/q/course:BISC101/note level=info"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 15,
+      "request": "what's on my calendar this week",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 3116.2,
+      "model_done_ms": 3116.4,
+      "complete_ms": 3201.5,
+      "queries": [
+        "calendar:7"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"CALENDAR THIS WEEK\"",
+        "> s ce",
+        "c ce Events caption=\"Next 7 days\" items=@/q/calendar:7/events"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 16,
+      "request": "how many things are due in the next two weeks, by class",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 3194.4,
+      "model_done_ms": 3643.8,
+      "complete_ms": 3643.8,
+      "queries": [
+        "due:14"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"DUE IN 14 DAYS\"",
+        "> s m b",
+        "c m Metric label=\"Items due\" value=@/q/due:14/count",
+        "c b Bars caption=\"By course\" rows=@/q/due:14/bars"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 17,
+      "request": "what's the plan for today",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 3484.6,
+      "model_done_ms": 3485.2,
+      "complete_ms": 3607.5,
+      "queries": [
+        "day:today"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"TODAY\"",
+        "> s de",
+        "c de Events caption=\"Sunday, classes, deadlines and events\" items=@/q/day:today/events"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 18,
+      "request": "show me everything I owe anyone, school and people",
+      "first_try_valid": false,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 2,
+      "skeleton_ms": 0.3,
+      "first_component_ms": 6084.4,
+      "model_done_ms": 99248.6,
+      "complete_ms": 99248.7,
+      "queries": [
+        "due:7",
+        "overdue",
+        "tasks",
+        "unreplied"
+      ],
+      "problems": [
+        "line 9: Heading.level=3 must be between 1 and 2",
+        "line 11: Heading.level=3 must be between 1 and 2",
+        "line 2: > s lists h1, which was never declared with c",
+        "line 2: > s lists h2, which was never declared with c",
+        "the surface shows up to 15 rows; at most 12. Drop a list or bind a count instead"
+      ],
+      "lines": [
+        "c s Screen title=\"EVERYTHING I OWE\"",
+        "> s row h1 ev h2 tk",
+        "c row Stack direction=grid cols=2 gap=3",
+        "> row m1 m2 m3 m4",
+        "c m1 Metric label=\"Overdue\" value=@/q/overdue/count thresholds=[{\"at\":1,\"tone\":\"bad\"}]",
+        "c m2 Metric label=\"Due this week\" value=@/q/due:7/count",
+        "c m3 Metric label=\"Promises open\" value=@/q/tasks/count",
+        "c m4 Metric label=\"Unanswered\" value=@/q/unreplied/count thresholds=[{\"at\":1,\"tone\":\"warn\"}]",
+        "c h1 Heading text=\"Coursework\" level=2",
+        "c ev Events caption=\"Overdue first, then soonest\" items=@/q/due:7/events",
+        "c h2 Heading text=\"People\" level=2",
+        "c tk Events caption=\"Open promises\" items=@/q/tasks/events"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 19,
+      "request": "which class has the most work coming up",
+      "first_try_valid": false,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 2,
+      "skeleton_ms": 0.5,
+      "first_component_ms": 4128.3,
+      "model_done_ms": 9480.9,
+      "complete_ms": 9481.0,
+      "queries": [
+        "due:14"
+      ],
+      "problems": [
+        "the surface shows up to 18 rows; at most 12. Drop a list or bind a count instead"
+      ],
+      "lines": [
+        "c s Screen title=\"WORKLOAD BY CLASS\"",
+        "> s m b",
+        "c m Metric label=\"Due in 14 days\" value=@/q/due:14/count",
+        "c b Bars caption=\"Items coming up per course\" rows=@/q/due:14/bars"
+      ],
+      "display_problems": []
+    },
+    {
+      "n": 20,
+      "request": "give me a spot to jot a note about the Amber pitch",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.4,
+      "first_component_ms": 5348.9,
+      "model_done_ms": 5729.6,
+      "complete_ms": 5729.6,
+      "queries": [
+        "campaign:Amber"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"AMBER PITCH NOTE\"",
+        "> s f b",
+        "c f Field label=\"Note\" value=@/draft/amber-note placeholder=\"Jot it here\" kind=text",
+        "c b Bars caption=\"Amber campaign numbers\" rows=@/q/campaign:Amber/bars"
+      ],
+      "display_problems": []
+    }
+  ]
+}

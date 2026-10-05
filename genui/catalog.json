@@ -1,0 +1,505 @@
+{
+  "version": 1,
+  "about": "The HUD component vocabulary as data. Checked against the generated block in hud/CLAUDE.md and against the props hud/Sources/KyberKit/SurfaceView.swift actually reads, by tests/test_kyber_genui.py and `kyber-genui catalog --check`. Prop types: string, number, bool, enum, array, object, json, pointer. `bindable` means the prop may be `@/pointer`; `view` names the data shape a bound pointer must resolve to; `rows` marks a prop that puts rows on screen; `renderer` false marks a prop the docs show but the renderer never reads. A `rowaction` puts a button on every row and sends `e action <name> row=<id>`.",
+  "verbs": [
+    "@",
+    "c",
+    ">",
+    "d",
+    "r",
+    "-",
+    "s",
+    "w",
+    "q",
+    "t",
+    "m",
+    "u",
+    "listen"
+  ],
+  "surface": {
+    "at": [
+      "topLeft",
+      "top",
+      "topRight",
+      "left",
+      "center",
+      "right",
+      "bottomLeft",
+      "bottom",
+      "bottomRight"
+    ],
+    "urgency": [
+      "ambient",
+      "normal",
+      "alert",
+      "critical"
+    ],
+    "chrome": [
+      "card",
+      "bare",
+      "bracket"
+    ]
+  },
+  "tones": [
+    "accent",
+    "good",
+    "positive",
+    "success",
+    "warn",
+    "warning",
+    "bad",
+    "negative",
+    "danger",
+    "critical",
+    "muted"
+  ],
+  "components": {
+    "Screen": {
+      "family": "Structure",
+      "container": true,
+      "props": {
+        "title": {
+          "type": "string",
+          "bindable": false
+        }
+      }
+    },
+    "Stack": {
+      "family": "Structure",
+      "container": true,
+      "props": {
+        "direction": {
+          "type": "enum",
+          "values": [
+            "vertical",
+            "horizontal",
+            "grid"
+          ]
+        },
+        "cols": {
+          "type": "number",
+          "min": 1,
+          "max": 4
+        },
+        "gap": {
+          "type": "number",
+          "min": 0,
+          "max": 8
+        }
+      }
+    },
+    "Heading": {
+      "family": "Prose",
+      "props": {
+        "text": {
+          "type": "string"
+        },
+        "level": {
+          "type": "number",
+          "min": 1,
+          "max": 2
+        }
+      }
+    },
+    "Text": {
+      "family": "Prose",
+      "props": {
+        "value": {
+          "type": "string",
+          "bindable": true,
+          "view": "note"
+        },
+        "tone": {
+          "type": "enum",
+          "values": [
+            "muted"
+          ]
+        }
+      }
+    },
+    "List": {
+      "family": "Prose",
+      "props": {
+        "items": {
+          "type": "array",
+          "items": "string",
+          "bindable": true,
+          "view": "list",
+          "rows": true,
+          "data": true
+        },
+        "ordered": {
+          "type": "bool"
+        },
+        "action": {
+          "type": "rowaction"
+        },
+        "actionLabel": {
+          "type": "string"
+        }
+      }
+    },
+    "Metric": {
+      "family": "Data",
+      "props": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "json",
+          "bindable": true,
+          "view": "scalar",
+          "data": true
+        },
+        "unit": {
+          "type": "string"
+        },
+        "thresholds": {
+          "type": "array",
+          "items": "threshold"
+        }
+      }
+    },
+    "Table": {
+      "family": "Data",
+      "props": {
+        "caption": {
+          "type": "string"
+        },
+        "columns": {
+          "type": "array",
+          "items": "column"
+        },
+        "rows": {
+          "type": "array",
+          "items": "object",
+          "bindable": true,
+          "view": "rows",
+          "rows": true,
+          "data": true
+        },
+        "action": {
+          "type": "rowaction"
+        },
+        "actionLabel": {
+          "type": "string"
+        }
+      }
+    },
+    "Status": {
+      "family": "Data",
+      "props": {
+        "message": {
+          "type": "string",
+          "bindable": true,
+          "view": "note"
+        },
+        "level": {
+          "type": "enum",
+          "values": [
+            "info",
+            "success",
+            "warning",
+            "error"
+          ]
+        }
+      }
+    },
+    "Sparkline": {
+      "family": "Dashboard",
+      "props": {
+        "label": {
+          "type": "string"
+        },
+        "points": {
+          "type": "array",
+          "items": "number",
+          "bindable": true,
+          "view": "series",
+          "data": true
+        },
+        "value": {
+          "type": "json",
+          "bindable": true,
+          "view": "scalar",
+          "data": true
+        },
+        "tone": {
+          "type": "tone"
+        }
+      }
+    },
+    "Bars": {
+      "family": "Dashboard",
+      "props": {
+        "caption": {
+          "type": "string"
+        },
+        "rows": {
+          "type": "array",
+          "items": "bar",
+          "bindable": true,
+          "view": "bars",
+          "rows": true,
+          "data": true
+        },
+        "tone": {
+          "type": "tone"
+        }
+      }
+    },
+    "Ring": {
+      "family": "Dashboard",
+      "props": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number",
+          "min": 0,
+          "max": 1,
+          "bindable": true,
+          "view": "ratio",
+          "data": true
+        },
+        "caption": {
+          "type": "string",
+          "bindable": true,
+          "view": "note"
+        },
+        "tone": {
+          "type": "tone"
+        },
+        "thresholds": {
+          "type": "array",
+          "items": "threshold"
+        }
+      }
+    },
+    "Events": {
+      "family": "Dashboard",
+      "props": {
+        "caption": {
+          "type": "string"
+        },
+        "items": {
+          "type": "array",
+          "items": "event",
+          "bindable": true,
+          "view": "events",
+          "rows": true,
+          "data": true
+        },
+        "tone": {
+          "type": "tone"
+        },
+        "action": {
+          "type": "rowaction"
+        },
+        "actionLabel": {
+          "type": "string"
+        }
+      }
+    },
+    "Diagram": {
+      "family": "Anything else",
+      "props": {
+        "aspect": {
+          "type": "number",
+          "min": 0.5,
+          "max": 4
+        },
+        "parts": {
+          "type": "array",
+          "items": "part"
+        },
+        "tone": {
+          "type": "tone"
+        }
+      }
+    },
+    "File": {
+      "family": "Anything else",
+      "props": {
+        "path": {
+          "type": "string"
+        },
+        "editable": {
+          "type": "bool"
+        },
+        "page": {
+          "type": "number",
+          "min": 1
+        }
+      }
+    },
+    "Button": {
+      "family": "Controls",
+      "props": {
+        "label": {
+          "type": "string"
+        },
+        "action": {
+          "type": "action"
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "primary",
+            "secondary"
+          ]
+        },
+        "collection": {
+          "type": "json"
+        }
+      }
+    },
+    "Field": {
+      "family": "Controls",
+      "props": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "pointer",
+          "bindable": true,
+          "view": "draft"
+        },
+        "placeholder": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "enum",
+          "values": [
+            "text",
+            "number"
+          ]
+        },
+        "bind": {
+          "type": "string",
+          "renderer": false
+        }
+      }
+    },
+    "Select": {
+      "family": "Controls",
+      "props": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "pointer",
+          "bindable": true,
+          "view": "draft"
+        },
+        "options": {
+          "type": "array",
+          "items": "string"
+        },
+        "bind": {
+          "type": "string",
+          "renderer": false
+        }
+      }
+    },
+    "Checkbox": {
+      "family": "Controls",
+      "props": {
+        "label": {
+          "type": "string"
+        },
+        "value": {
+          "type": "pointer",
+          "bindable": true,
+          "view": "draft"
+        },
+        "bind": {
+          "type": "string",
+          "renderer": false
+        }
+      }
+    },
+    "Segmented": {
+      "family": "Controls",
+      "props": {
+        "value": {
+          "type": "pointer",
+          "bindable": true,
+          "view": "draft"
+        },
+        "options": {
+          "type": "array",
+          "items": "json"
+        },
+        "action": {
+          "type": "rowaction"
+        }
+      }
+    },
+    "Avatar": {
+      "family": "Data",
+      "props": {
+        "name": {
+          "type": "string",
+          "data": true
+        },
+        "size": {
+          "type": "number",
+          "min": 16,
+          "max": 48
+        },
+        "image": {
+          "type": "string"
+        }
+      }
+    },
+    "Rail": {
+      "family": "Structure",
+      "props": {
+        "items": {
+          "type": "array",
+          "items": "object"
+        }
+      }
+    }
+  },
+  "shapes": {
+    "threshold": {
+      "required": [
+        "at",
+        "tone"
+      ]
+    },
+    "column": {
+      "required": [
+        "field"
+      ],
+      "optional": [
+        "label"
+      ]
+    },
+    "bar": {
+      "required": [
+        "label",
+        "value"
+      ],
+      "optional": [
+        "display"
+      ]
+    },
+    "event": {
+      "required": [
+        "text"
+      ],
+      "optional": [
+        "time",
+        "accent"
+      ]
+    },
+    "part": {
+      "required": [
+        "t"
+      ]
+    }
+  }
+}

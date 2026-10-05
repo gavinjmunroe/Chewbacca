@@ -370,12 +370,16 @@ def mail(graph: Graph, ctx, ids: Identities, days: int = 7, mapping: dict = SPAC
             continue
         sender_raw = str(row.get("from", ""))
         address = address_of(sender_raw)
-        mid_key = f"mail:{slug(row.get('id', ''))}"
+        message_id = str(row.get("id", ""))
+        mid_key = osgraph.node_key("mail", "mail", row.get("account", ""), message_id)
         verified = False
         if address and ids.resolve(address):
+            # A kept verdict counts only for this exact message from this
+            # exact address; anything else is checked again or stays false.
             known = graph.node(mid_key)
-            if known and "verified" in known["props"]:
-                verified = bool(known["props"]["verified"])
+            kept = (known or {}).get("props") or {}
+            if "verified" in kept and kept.get("verified_for") == address and kept.get("message_id") == message_id:
+                verified = bool(kept["verified"])
             elif checks < MOST_AUTH_CHECKS:
                 checks += 1
                 verified = sender_verified(auth_headers(ctx, str(row.get("id", ""))), address)
@@ -386,7 +390,8 @@ def mail(graph: Graph, ctx, ids: Identities, days: int = 7, mapping: dict = SPAC
         shown = person.label if not person.unresolved else (address or "unknown sender")
         mid = snap.add(Node(mid_key, "MailItem", clip(row.get("subject") or "(no subject)", osgraph.SNIPPET_CHARS),
                             {"app": "Mail", "from": shown, "address": address, "automated": not human,
-                             "verified": verified, "at": at.isoformat() if at else "",
+                             "verified": verified, "verified_for": address, "message_id": message_id,
+                             "at": at.isoformat() if at else "",
                              "account": row.get("account", "")},
                             observed_at=at.isoformat() if at else ""))
         snap.link(mid, "SENT_BY", pid)
@@ -418,7 +423,7 @@ def coursework(graph: Graph, ctx, ids: Identities, days: int = 14) -> dict:
             if not isinstance(row, dict) or not row.get("name"):
                 continue
             course = str(row.get("course") or "")
-            aid = snap.add(Node(f"assignment:{slug(course)}:{slug(row['name'])}", "Assignment",
+            aid = snap.add(Node(osgraph.node_key("assignment", "coursework", course, row["name"]), "Assignment",
                                 clip(f"{course} {row['name']}", 90),
                                 {"course": course, "status": row.get("status") or "", "overdue": bucket == "overdue",
                                  "type": row.get("type") or "", "app": "Class"}))
@@ -445,8 +450,8 @@ def calendar(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
             continue
         day = (datetime.fromisoformat(row["start"].replace("Z", "+00:00")).date()
                if row.get("isAllDay") else start.date()).isoformat()
-        key = row.get("id") or f"{slug(row['title'])}-{row['start']}"
-        eid = snap.add(Node(f"event:{slug(key)}", "Event", clip(row["title"], 80),
+        eid = snap.add(Node(osgraph.node_key("event", "calendar", row.get("id") or "", row["title"], row["start"]),
+                            "Event", clip(row["title"], 80),
                             {"start": start.isoformat(), "end": str(row.get("end") or ""),
                              "all_day": bool(row.get("isAllDay")), "calendar": row.get("calendar", ""),
                              "app": "Calendar"}))
@@ -487,7 +492,8 @@ def owner_people(owner: str, ids: Identities, me_name: str) -> list[Node]:
             p = found[0]
             out.append(Node(f"person:{p['id']}", "Person", p["name"], {"company": p["company"]}))
         else:
-            out.append(Node(f"person:name:{slug(name)}", "Person", name, {"named_in": "backlog"}, 0.4, True))
+            out.append(Node(osgraph.node_key("person", "backlog-name", name), "Person", name,
+                            {"named_in": "backlog"}, 0.4, True))
     return out
 
 
@@ -498,7 +504,8 @@ def backlog(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
     for path in backlog_paths(ctx):
         project = path.parent.name
         space = "amber" if any(w in project.lower() for w in ("amber", "zeutara")) else "personal"
-        pid = snap.add(Node(f"project:{slug(project)}", "Project", project, {"path": str(path.parent)}))
+        pid = snap.add(Node(osgraph.node_key("project", "backlog", str(path.parent)), "Project", project,
+                            {"path": str(path.parent)}))
         snap.add(space_node(space))
         snap.link(pid, "BELONGS_TO", f"space:{space}")
         with path.open(newline="", encoding="utf-8") as f:
@@ -506,7 +513,8 @@ def backlog(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
                 status = (item.get("status") or "").strip().lower()
                 if status not in BACKLOG_LIVE:
                     continue
-                tid = snap.add(Node(f"task:backlog:{slug(project)}:{slug(item.get('id') or item.get('title'))}", "Task",
+                tid = snap.add(Node(osgraph.node_key("task", "backlog", str(path), item.get("id") or "",
+                                                     item.get("title") or ""), "Task",
                                     clip(item.get("title") or item.get("id"), 100),
                                     {"kind": "backlog", "status": status, "priority": item.get("priority", ""),
                                      "lane": item.get("lane", ""), "next": clip(item.get("next_action"), 160),
@@ -559,7 +567,8 @@ def reminders(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
         due = osgraph_time(row.get("due"))
         if due is None or due < now - timedelta(days=days):
             continue
-        tid = snap.add(Node(f"task:reminder:{slug(row.get('id') or row['title'])}", "Task", clip(row["title"], 100),
+        tid = snap.add(Node(osgraph.node_key("task", "reminders", row.get("id") or "", row["title"]), "Task",
+                            clip(row["title"], 100),
                             {"kind": "promise", "status": "ready", "app": "Reminders",
                              "provenance": f"Reminders, {row.get('list') or 'list'}"}))
         snap.link(tid, "OWED_BY", me)
@@ -578,7 +587,7 @@ def agents(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
     for s in agent_board.ordered(agent_board.load()):
         at = datetime.fromtimestamp(float(s.get("t") or 0)).astimezone().isoformat()
         status = {"waiting": "stuck", "running": "cooking", "done": "done"}.get(s["state"], "ready")
-        tid = snap.add(Node(f"task:agent:{slug(s['session'])}", "Task", clip(agent_board.name(s), 80),
+        tid = snap.add(Node(osgraph.node_key("task", "agents", s["session"]), "Task", clip(agent_board.name(s), 80),
                             {"kind": "agent", "status": status, "tty": s.get("tty") or "",
                              "doing": clip(s.get("text"), 100), "at": at,
                              "provenance": f"Claude session in {s.get('folder', '')}"}, observed_at=at))

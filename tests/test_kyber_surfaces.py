@@ -213,8 +213,7 @@ def safety(tmp: Path) -> None:
     log = (tmp / "activity.jsonl").read_text()
     check("the activity log has the action and outcome, never the body",
           '"action": "act"' in log and "Monday works" not in log, log)
-    mail = next(r for r in d.open["needs-you"].data["rows"] if r["type"] == "MailItem") \
-        if any(r["type"] == "MailItem" for r in d.open["needs-you"].data["rows"]) else None
+    mail = next((r for r in d.open["needs-you"].data["rows"] if r["type"] == "MailItem"), None)
     if mail:
         d.handle_line(f'v /needs-you/pick {json.dumps(mail["pick"])}')
         d.handle_line('v /needs-you/draft "Sounds right"')

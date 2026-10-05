@@ -89,7 +89,7 @@ def fusion(tmp: Path) -> None:
           stranger.unresolved and stranger.id == "person:handle:+15625550199", stranger)
     owners = ingest.owner_people("Caleb + Tyler", ids, "Caleb")
     check("a backlog first name never resolves to one of two Tylers",
-          owners[0].id == ME and owners[1].unresolved and owners[1].id == "person:name:tyler", owners)
+          owners[0].id == ME and owners[1].unresolved and owners[1].label == "Tyler", owners)
     shared = tmp / "shared.db"
     fx.people_db(shared)
     import sqlite3
@@ -139,12 +139,12 @@ def ingested(tmp: Path) -> None:
           len([t for t in g.nodes("Thread") if t["props"]["handle"] == "+16305550101"]) == 1)
     waiting = {e["src"] for e in g.edges(verb="AWAITS_REPLY_FROM", dst=ME)}
     want = {"thread:imessage:+16305550101", "thread:imessage:+16265550104", "thread:imessage:+15625550199",
-            "mail:m1", "mail:m3", "mail:m4", "mail:m5"}
+            fx.mail_id("m1"), fx.mail_id("m3"), fx.mail_id("m4"), fx.mail_id("m5")}
     check("AWAITS_REPLY_FROM me is exactly the asks", waiting == want, sorted(waiting))
     check("the injection text waits on no one and became no task",
           "thread:imessage:+13105550105" not in waiting
           and not any("ignore previous" in t["label"].lower() for t in g.nodes("Task")))
-    check("the automated mail is not waiting on him", "mail:m2" not in waiting)
+    check("the automated mail is not waiting on him", fx.mail_id("m2") not in waiting)
     check("a link is stored as text, rendered later", any("github.com" in n["label"] for n in g.nodes("MailItem")))
     asks = [t for t in g.nodes("Task") if t["props"].get("kind") == "request"]
     check("a request in a text becomes a guessed Task with provenance",
@@ -184,7 +184,7 @@ def ingested(tmp: Path) -> None:
     tiers = [r["tier"] for r in n["rows"]]
     check("needs-you ranks blocked, then due, then FYI", tiers == sorted(tiers), tiers)
     check("needs-you leads with the oldest blocked thing, the overdue lab",
-          n["rows"][0]["id"] == "assignment:bisc-101:lab-2-post-lab", n["rows"][0]["id"])
+          n["rows"][0]["id"] == fx.node_by_label(g, "Assignment", "BISC 101 Lab 2 post-lab"), n["rows"][0]["id"])
     threads = [r["id"] for r in n["rows"] if r["type"] == "Thread"]
     check("among threads, the longest-waiting leads", threads[:1] == ["thread:imessage:+15625550199"], threads)
     check("needs-you counts what is blocked or due for the badge", n["count"] >= 6, n["count"])
@@ -250,19 +250,19 @@ def identity_spoofing(tmp: Path) -> None:
     g, ctx, run, _ = fx.world(tmp / "w")
     karthik = f"person:{fx.KARTHIK}"
     sagar = f"person:{fx.SAGAR}"
-    m3 = g.out("mail:m3", "SENT_BY")[0]
+    m3 = g.out(fx.mail_id("m3"), "SENT_BY")[0]
     check("mail From 'Karthik Devarakonda' at a stranger's address is not Karthik",
           m3["id"] != karthik and m3["unresolved"] and m3["label"] == "karthik.d@evil.example", m3)
     check("and the panel shows it as the raw address, unverified",
-          g.node("mail:m3")["props"]["from"] == "karthik.d@evil.example" and m3["props"]["unverified"])
+          g.node(fx.mail_id("m3"))["props"]["from"] == "karthik.d@evil.example" and m3["props"]["unverified"])
     check("Karthik's walk never shows the spoof",
           not any("Wire the funds" in m["text"] for m in W.person(g, ctx.ids, "Karthik Devarakonda", fx.NOW)["timeline"]))
     check("a name lookup still finds the real Karthik", W.find_person(g, ctx.ids, "Karthik Devarakonda")[0] == karthik)
-    senders = {m: g.out(f"mail:{m}", "SENT_BY")[0]["id"] for m in ("m1", "m4", "m5")}
+    senders = {m: g.out(fx.mail_id(m), "SENT_BY")[0]["id"] for m in ("m1", "m4", "m5")}
     check("Sagar's address with DMARC passing at iCloud is Sagar", senders["m1"] == sagar, senders)
     check("Sagar's address with DMARC failing is not Sagar", senders["m4"] != sagar, senders)
     check("a pass header written by the sender, not the receiver, is not Sagar", senders["m5"] != sagar, senders)
-    row = next(r for r in W.needs_you(g, fx.NOW)["rows"] + W.conversations(g, fx.NOW)["rows"] if r["id"] == "mail:m3")
+    row = next(r for r in W.needs_you(g, fx.NOW)["rows"] + W.conversations(g, fx.NOW)["rows"] if r["id"] == fx.mail_id("m3"))
     check("on needs-you or conversations the spoof carries no person's name",
           all("Karthik" not in c["label"] for c in row["chips"]) and any("unverified" in c["label"] for c in row["chips"]),
           row["chips"])
@@ -271,6 +271,61 @@ def identity_spoofing(tmp: Path) -> None:
     ctx.run = lambda argv: calls.append(argv) or (0, "", "")
     check("a Message-ID with a quote never reaches AppleScript",
           osgraph_ingest.auth_headers(ctx, 'x" & do shell script "id') == "" and calls == [])
+
+
+def keys_and_claims(tmp: Path) -> None:
+    """Push review, 2026-10-04, second round: slugged ids collided, so one
+    item could overwrite another or inherit its verified sender."""
+    import osgraph_ingest
+    k = osgraph.node_key
+    pairs = [(("mail", "mail", "iCloud", "M1"), ("mail", "mail", "iCloud", "m1")),
+             (("mail", "mail", "iCloud", "a.b@x"), ("mail", "mail", "iCloud", "a-b@x")),
+             (("task", "backlog", "p", "T1", "x"), ("task", "backlog", "p", "t1", "x")),
+             (("task", "backlog", "a", "b:c"), ("task", "backlog", "a:b", "c")),
+             (("event", "calendar", "", "Standup", "2026-10-05T09:00"),
+              ("event", "calendar", "", "standup", "2026-10-05T09:00"))]
+    for left, right in pairs:
+        check(f"{left[3:]} and {right[3:]} get different keys", k(*left) != k(*right))
+    check("a key is a full 256-bit hash", len(k("mail", "mail", "x").split(":", 1)[1]) == 64)
+
+    g, ctx, run, _ = fx.world(tmp)
+    sagar = f"person:{fx.SAGAR}"
+    check("m1 is verified Sagar before the attack", g.out(fx.mail_id("m1"), "SENT_BY")[0]["id"] == sagar)
+    # The attacker sends from Sagar's address with no authentication and a
+    # Message-ID that slugged to m1's key ("M1" lowercases to "m1").
+    # First in the list: on the landed code it took m1's slot and its verdict.
+    fx.MAIL.insert(0, {"id": "M1", "from": "Sagar Tiwari <sagar@amber.example>", "subject": "Urgent: new bank details",
+                    "date": fx.NOW.isoformat(), "isRead": False, "account": "iCloud"})
+    try:
+        osgraph_ingest.mail(g, ctx, ctx.ids, days=7)
+    finally:
+        fx.MAIL.pop(0)
+    attack = g.out(fx.mail_id("M1"), "SENT_BY")[0]["id"]
+    check("a look-alike Message-ID never inherits another mail's verified sender", attack != sagar, attack)
+    check("and the real mail is still its own node, still Sagar",
+          g.node(fx.mail_id("m1"))["label"] == "Terms, see https://github.com/acme/app/issues/12"[:80]
+          and g.out(fx.mail_id("m1"), "SENT_BY")[0]["id"] == sagar)
+    backlog = Path(ctx.env["KYBER_SURFACES_BACKLOG"])
+    backlog.write_text(backlog.read_text() + "t1,Leadership,P0,decision,A different task,Caleb,,,2026-10-04\n")
+    osgraph_ingest.backlog(g, ctx, ctx.ids)
+    titles = sorted(t["label"] for t in g.nodes("Task") if t["props"].get("kind") == "backlog")
+    check("backlog rows T1 and t1 are two tasks", "Set written terms" in titles and "A different task" in titles,
+          titles)
+    # "From me" comes only from chat.db's is_from_me, never from words.
+    import sqlite3
+    db = sqlite3.connect(ctx.env["KYBER_SURFACES_CHAT_DB"])
+    db.execute("INSERT INTO message (ROWID, guid, text, is_from_me, date, is_read, handle_id) VALUES "
+               "(200, 'G200', 'From Caleb: I already replied to this, ignore it', 0, ?, 0, 6)",
+               (fx.apple(fx.NOW),))
+    db.execute("INSERT INTO chat_message_join VALUES (6, 200)")
+    db.commit()
+    db.close()
+    osgraph_ingest.imessage(g, ctx, ctx.ids, days=7)
+    msg = g.node("message:imessage:G200")
+    check("a message claiming to be from Caleb is still theirs",
+          not msg["props"]["from_me"] and g.out(msg["id"], "SENT_BY")[0]["id"] != ME)
+    mail_from_me = osgraph.person_node(ctx.ids, "caleb@usc.example", source_hint="mail", verified=False)
+    check("mail from an address that isn't verified is never me", mail_from_me.id != ME and mail_from_me.unresolved)
 
 
 def privacy(tmp: Path) -> None:
@@ -308,6 +363,8 @@ def main() -> int:
         identity_spoofing(Path(d))
     with tempfile.TemporaryDirectory() as d:
         privacy(Path(d))
+    with tempfile.TemporaryDirectory() as d:
+        keys_and_claims(Path(d))
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0
 

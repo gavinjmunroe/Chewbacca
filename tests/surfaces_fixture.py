@@ -179,6 +179,17 @@ MAIL = [
 ]
 
 
+def mail_id(message_id: str, account: str = "iCloud") -> str:
+    import osgraph
+    return osgraph.node_key("mail", "mail", account, message_id)
+
+
+def node_by_label(g, kind: str, label: str) -> str:
+    found = [n["id"] for n in g.nodes(kind) if n["label"] == label]
+    assert len(found) == 1, (kind, label, found)
+    return found[0]
+
+
 class FakeRun:
     """Stands in for every CLI. Records each argv; `sent` is what reached a
     send, which is the number every safety test checks."""

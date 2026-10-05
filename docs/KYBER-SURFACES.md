@@ -74,14 +74,14 @@ the press into a model turn. `h` (speech) is never read by the daemon.
 
 ## What Go does, by node type
 
-| Row                        | Go                                                                                                                                |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Thread (1:1) | sends the typed reply to the exact thread the picked row names, its handle read fresh from chat.db at the press; a pick that matches no single row, a thread gone from chat.db, or a thread whose people changed sends nothing and says why; then reads the thread back |
-| Thread (group)             | opens the person; group replies are not done from the glass                                                                       |
-| MailItem                   | `mac mail draft`, never a send                                                                                                    |
-| Task from an agent session | brings its Terminal tab forward                                                                                                   |
-| Any other Task | `claude -p --restricted --tools Read --strict-mcp-config --permission-mode plan` in its own directory; the prompt is fixed text plus the node id, the task's words are in `task.json` there, and the run can read only that directory and reach no network; Cooking while the process lives, Done on exit 0, Stuck otherwise |
-| Person, Space              | opens its walk                                                                                                                    |
+| Row                        | Go                                                                                                                                                                                                                                                                                                                           |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Thread (1:1)               | sends the typed reply to the exact thread the picked row names, its handle read fresh from chat.db at the press; a pick that matches no single row, a thread gone from chat.db, or a thread whose people changed sends nothing and says why; then reads the thread back                                                      |
+| Thread (group)             | opens the person; group replies are not done from the glass                                                                                                                                                                                                                                                                  |
+| MailItem                   | `mac mail draft`, never a send                                                                                                                                                                                                                                                                                               |
+| Task from an agent session | brings its Terminal tab forward                                                                                                                                                                                                                                                                                              |
+| Any other Task             | `claude -p --restricted --tools Read --strict-mcp-config --permission-mode plan` in its own directory; the prompt is fixed text plus the node id, the task's words are in `task.json` there, and the run can read only that directory and reach no network; Cooking while the process lives, Done on exit 0, Stuck otherwise |
+| Person, Space              | opens its walk                                                                                                                                                                                                                                                                                                               |
 
 Downloads opens only passive documents (PDF, images, text, Markdown, CSV) that are regular files, not links, still inside Downloads after resolving; everything else is "Reveal in Finder" only.
 
@@ -126,6 +126,13 @@ Everything else shows as the raw address marked "unverified sender", in no
 one's timeline. Checking takes Mail.app about 10 s per message, so only mail
 from known addresses is checked, three per ingest, and the verdict is kept.
 
+"From me" comes only from chat.db's `is_from_me`; no text, display name or
+mail header makes anything Caleb's own. A node whose own id is free text (a
+mail's Message-ID, a backlog row, an event, a reminder, an agent session) is
+keyed by the full sha256 of the JSON-encoded source, kind and exact id, so two
+near-identical ids are two nodes. A mail's verified verdict is reused only for
+that exact Message-ID from that exact address.
+
 A reply typed on a person's panel goes to that person's thread only if, at the
 press, chat.db still has the thread as one-to-one with that one handle and the
 people store still says the handle is theirs.
@@ -138,12 +145,12 @@ to the network that person used last. Only networks the person can actually
 be reached on are offered, and the button says what it will do ("Send on
 iMessage", "Draft in Mail").
 
-| Network | Reads | Writes |
-| --- | --- | --- |
-| iMessage | live: chat.db, read only, `attributedBody` decoded | on a press, to the 1:1 thread resolved fresh, read back with `mac messages history` |
-| Mail | live: unread mail from people via `mac mail unread` | drafts only |
-| WhatsApp | not yet: `wacli doctor` on 2026-10-04 says not authenticated, 0 messages; it needs the QR scanned on his phone | not built until reads are verified |
-| Slack | not yet: no Slack CLI on this Mac, and the Slack MCP is a connector an agent session holds, not something the daemon can call | not built |
+| Network  | Reads                                                                                                                         | Writes                                                                              |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| iMessage | live: chat.db, read only, `attributedBody` decoded                                                                            | on a press, to the 1:1 thread resolved fresh, read back with `mac messages history` |
+| Mail     | live: unread mail from people via `mac mail unread`                                                                           | drafts only                                                                         |
+| WhatsApp | not yet: `wacli doctor` on 2026-10-04 says not authenticated, 0 messages; it needs the QR scanned on his phone                | not built until reads are verified                                                  |
+| Slack    | not yet: no Slack CLI on this Mac, and the Slack MCP is a connector an agent session holds, not something the daemon can call | not built                                                                           |
 
 A new network is an ingester that writes Message and Thread nodes with
 `props.network` set, Persons fused through the people store, and nothing in

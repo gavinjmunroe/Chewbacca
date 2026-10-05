@@ -28,6 +28,7 @@ AWAITS_REPLY_FROM edge on the next pass instead of lingering.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -458,6 +459,19 @@ def person_node(ids: Identities, handle: str, source_hint: str = "", verified: b
 
 def me_node() -> Node:
     return Node(ME, "Person", os.environ.get("KYBER_SURFACES_OWNER") or "Me", {"me": True}, 1.0, False)
+
+
+def node_key(kind: str, source: str, *parts) -> str:
+    """A node id for anything whose own id is free text: the full sha256 of
+    the JSON-encoded (source, kind, exact parts), prefixed with the kind.
+
+    The first version slugged the text (lowercased, punctuation to "-", cut
+    at 60), so Message-IDs "M1" and "m1", or backlog rows "T1" and "t1", were
+    one node, and a mail could inherit another mail's verified sender (push
+    review, 2026-10-04). JSON keeps the parts apart, so ("a", "b:c") and
+    ("a:b", "c") differ, and nothing is truncated."""
+    blob = json.dumps([source, kind, *[str(p) for p in parts]], ensure_ascii=False)
+    return f"{kind}:{hashlib.sha256(blob.encode('utf-8')).hexdigest()}"
 
 
 def day_node(day: str) -> Node:

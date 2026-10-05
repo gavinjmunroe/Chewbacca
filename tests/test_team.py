@@ -296,9 +296,16 @@ class TeamTest(unittest.TestCase):
         task = team.parse(self.remote_file("team/tasks/CHW-1.md"))
         self.assertEqual(sum("commit " in x for x in task["activity"]), 1)
 
+    def test_prose_in_a_commit_body_is_not_an_instruction(self):
+        # The commit that shipped commit sync closed CHW-12 by describing itself.
+        body = "The board follows Linear's extracted DESIGN.md: near-black, hairlines, one\nlavender accent, a sidebar with Inbox, My tasks, Active, All and each person,\nand a dense list grouped by status (inbox grouped by source). A commit that\nmentions CHW-12 is logged on the task and starts it; \"fixes CHW-12\" closes it\nwith the commit as proof. The CLI and the web server both run that sync,\nsince GitHub Actions jobs refuse to start on this account's billing."
+        self.assertEqual(team.parse_commit_refs("feat: team board in Linear's system", body), (set(), set()))
+        self.assertEqual(team.parse_commit_refs("feat: x", "Fixes CHW-2\nRefs CHW-3, CHW-4"),
+                         ({"CHW-2", "CHW-3", "CHW-4"}, {"CHW-2"}))
+
     def test_parse_commit_refs(self):
         self.assertEqual(team.parse_commit_refs("team: CHW-3 comment", ""), (set(), set()))
-        self.assertEqual(team.parse_commit_refs("feat: x (closes chw-7)", "see CHW-8"), ({"CHW-7", "CHW-8"}, {"CHW-7"}))
+        self.assertEqual(team.parse_commit_refs("feat: x (closes chw-7)", "CHW-8"), ({"CHW-7", "CHW-8"}, {"CHW-7"}))
 
     def test_feed_shows_commits(self):
         self.run_team(self.a, "add", "Feed me")

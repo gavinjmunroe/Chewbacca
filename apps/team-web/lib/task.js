@@ -109,11 +109,19 @@ export function idNumber(id) {
 const TASK_REF = /\bCHW-(\d+)\b/gi;
 const CLOSING_REF = /\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s*:?\s+CHW-(\d+)\b/gi;
 
+// Subject line plus trailer-style body lines only; see TRAILER in tools/team.py.
+const TRAILER = /^\s*(?:(fix(?:es|ed)?|close[sd]?|resolve[sd]?)|refs?|part of)?\s*:?\s*((?:CHW-\d+[\s,]*)+)$/i;
+const ids = (text) => new Set([...text.matchAll(TASK_REF)].map((m) => `CHW-${Number(m[1])}`));
+
 export function parseCommitRefs(subject, body) {
   if (subject.startsWith("team:") || subject.startsWith("Merge ")) return { refs: new Set(), closing: new Set() };
-  const text = `${subject}\n${body}`;
-  const refs = new Set([...text.matchAll(TASK_REF)].map((m) => `CHW-${Number(m[1])}`));
-  const closing = new Set([...text.matchAll(CLOSING_REF)].map((m) => `CHW-${Number(m[1])}`));
+  const refs = ids(subject);
+  const closing = new Set([...subject.matchAll(CLOSING_REF)].map((m) => `CHW-${Number(m[1])}`));
+  for (const line of body.split("\n")) {
+    const m = TRAILER.exec(line);
+    if (!m) continue;
+    for (const id of ids(m[2])) { refs.add(id); if (m[1]) closing.add(id); }
+  }
   return { refs, closing };
 }
 

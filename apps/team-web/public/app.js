@@ -906,12 +906,17 @@ function renderDrawer() {
       }),
     );
 
-  const title = el("input", {
+  // A textarea, so a long title wraps instead of being cut off at the drawer edge.
+  const title = el("textarea", {
     class: "title-input",
-    value: task.title,
+    rows: "1",
     "aria-label": "Title",
     maxlength: "200",
-  });
+  }, task.title);
+  const fitTitle = () => { title.style.height = "auto"; title.style.height = `${title.scrollHeight}px`; };
+  title.addEventListener("input", fitTitle);
+  title.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); title.blur(); } });
+  requestAnimationFrame(fitTitle);
   const status = select("status", state.board.statuses, task.status, LABEL);
   const owner = select(
     "owner",

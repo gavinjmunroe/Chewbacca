@@ -358,13 +358,27 @@ CLOSING_REF = re.compile(r"\b(?:fix(?:es|ed)?|close[sd]?|resolve[sd]?)\s*:?\s+CH
 LINK_WINDOW = 120
 
 
+# Only the subject line and trailer-style body lines count ("Fixes CHW-2", "Refs CHW-3,
+# CHW-4"). On 2026-10-04 the commit that shipped this feature explained it in its
+# own body ('"fixes CHW-12" closes it') and the sync closed CHW-12 with that commit
+# as proof. Prose that mentions an id is a description, not an instruction.
+TRAILER = re.compile(r"^\s*(?:(fix(?:es|ed)?|close[sd]?|resolve[sd]?)|refs?|part of)?\s*:?\s*((?:CHW-\d+[\s,]*)+)$", re.I)
+
+
 def parse_commit_refs(subject, body):
     """(referenced ids, closing ids) for one commit, or two empty sets for task commits."""
     if subject.startswith("team:") or subject.startswith("Merge "):
         return set(), set()
-    text = f"{subject}\n{body}"
-    refs = {f"{ID_PREFIX}-{int(n)}" for n in TASK_REF.findall(text)}
-    closing = {f"{ID_PREFIX}-{int(n)}" for n in CLOSING_REF.findall(text)}
+    refs = {f"{ID_PREFIX}-{int(n)}" for n in TASK_REF.findall(subject)}
+    closing = {f"{ID_PREFIX}-{int(n)}" for n in CLOSING_REF.findall(subject)}
+    for line in body.splitlines():
+        m = TRAILER.match(line)
+        if not m:
+            continue
+        ids = {f"{ID_PREFIX}-{int(n)}" for n in TASK_REF.findall(m.group(2))}
+        refs |= ids
+        if m.group(1):
+            closing |= ids
     return refs, closing
 
 

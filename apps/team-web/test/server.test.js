@@ -89,7 +89,7 @@ test("C1 controls and bidi overrides are stripped too", () => {
 });
 
 test("commit refs and their effect match the CLI", () => {
-  const r = parseCommitRefs("feat: x (closes chw-7)", "see CHW-8");
+  const r = parseCommitRefs("feat: x (closes chw-7)", "CHW-8");
   assert.deepEqual([...r.refs].sort(), ["CHW-7", "CHW-8"]);
   assert.deepEqual([...r.closing], ["CHW-7"]);
   assert.equal(parseCommitRefs("team: CHW-3 comment", "").refs.size, 0);
@@ -100,4 +100,12 @@ test("commit refs and their effect match the CLI", () => {
   applyCommit(task, "9999999aaa", "Gavin", "fixes CHW-8", "https://github.com/x/commit/9999999aaa", true, "2026-10-05");
   assert.equal(task.status, "done");
   assert.equal(task.proof, "https://github.com/x/commit/9999999aaa");
+});
+
+test("prose in a commit body is not an instruction", () => {
+  const r = parseCommitRefs("feat: team board in Linear's system", "The board follows Linear's extracted DESIGN.md: near-black, hairlines, one\nlavender accent, a sidebar with Inbox, My tasks, Active, All and each person,\nand a dense list grouped by status (inbox grouped by source). A commit that\nmentions CHW-12 is logged on the task and starts it; \"fixes CHW-12\" closes it\nwith the commit as proof. The CLI and the web server both run that sync,\nsince GitHub Actions jobs refuse to start on this account's billing.");
+  assert.equal(r.refs.size, 0);
+  const t = parseCommitRefs("feat: x", "Fixes CHW-2\nRefs CHW-3, CHW-4");
+  assert.deepEqual([...t.refs].sort(), ["CHW-2", "CHW-3", "CHW-4"]);
+  assert.deepEqual([...t.closing], ["CHW-2"]);
 });

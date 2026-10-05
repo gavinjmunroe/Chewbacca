@@ -350,6 +350,7 @@ if group "decision-learning"; then
   check "bounded Clay replay and stale rejection" python3 "$ROOT/tests/test_clay_review.py"
   check "Jev transport shape and credential compatibility" python3 "$ROOT/tests/test_jev_transport.py"
   check "hybrid skill route: code, Jev, model fallback, budgets, verifier and resume" python3 "$ROOT/tests/test_hybrid_route.py"
+  check  "shadow skill routing logs Jev and keyword picks side by side, never raises" python3 "$ROOT/tests/test_skill_route_shadow.py"
   check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 
@@ -396,6 +397,7 @@ if group "tools"; then
   check  "native write tracking observes content and workspace changes" python3 "$ROOT/tests/test_write_log.py"
   check  "preflight describes setup.sh accurately" python3 "$ROOT/tests/test_preflight.py"
   check  "context cost --json is valid" bash -c "python3 '$ROOT/tools/context_cost.py' --json | python3 -m json.tool"
+  check  "context-budget attributes a session's opening tokens by source" python3 "$ROOT/tests/test_context_budget.py"
   # Not --check: every commit made after the last regeneration invalidates it,
   # so a --check here would fail on the commit that adds a test.
   check  "changelog generates" env PYTHONPATH="$ROOT/tools" python3 -c 'import changelog; assert changelog.build().startswith("# Changelog")'

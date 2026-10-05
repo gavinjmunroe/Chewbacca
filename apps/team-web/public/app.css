@@ -1020,7 +1020,8 @@ input[type="date"].field {
 /* table */
 .table-wrap { overflow-x: auto; }
 .table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.table th { position: sticky; top: 48px; z-index: 4; height: 34px; padding: 0 10px; text-align: left; font-weight: 500; font-size: 12px; color: var(--ink-3); background: var(--s1); border-bottom: 1px solid var(--line); white-space: nowrap; }
+/* Not sticky: inside .table-wrap (overflow-x) a sticky top of 48px pushed the header down over the first group row. */
+.table th { height: 34px; padding: 0 10px; text-align: left; font-weight: 500; font-size: 12px; color: var(--ink-3); background: var(--s1); border-bottom: 1px solid var(--line); white-space: nowrap; }
 .table td { height: 38px; padding: 0 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
 .table tbody tr { cursor: pointer; transition: background-color var(--fast) var(--ease); }
 .table tbody tr:hover { background: var(--s2); }

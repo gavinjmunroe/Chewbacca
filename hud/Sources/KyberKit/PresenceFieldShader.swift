@@ -72,8 +72,9 @@ static inline float bandPerimeter(float x, float y, float W, float H) {
     return s / (2.0 * W + 2.0 * H);
 }
 
-static inline float perimeterRound(float2 uv, float W, float R, float top) {
-    float x = uv.x * W, y = uv.y - top, H = 1.0 - top;
+static inline float perimeterRound(float2 uv, float W, float R, float4 inset) {
+    float x = uv.x * W - inset.y, y = uv.y - inset.x, H = 1.0 - inset.x - inset.z;
+    W = W - inset.y - inset.w;
     float2 c = float2(clamp(x, R, W - R), clamp(y, R, H - R));
     float2 d = float2(x, y) - c;
     if (d.x == 0.0 || d.y == 0.0) return bandPerimeter(x, y, W, H);
@@ -159,6 +160,14 @@ struct Uniforms {
     /// 1 for the copy in the window above the menu bar, which draws only the
     /// strip, and only as a tint.
     float menuOnly;
+    /// The Dock's side, in screen heights, the way `top` is the menu bar's.
+    /// The Dock sits above this window, so on a screen where it is pinned to
+    /// the bottom, left or right the band on that side was drawn behind it:
+    /// "make it so you can see all 4 sides of the hud" (2026-10-04, with a
+    /// screenshot of the bottom edge under the Finder icon). 0 when hidden.
+    float dockBottom;
+    float dockLeft;
+    float dockRight;
 };
 
 /// How loud the voice was, one sample every RIPPLE_STEP seconds, newest first.
@@ -205,9 +214,11 @@ static inline float pixelHash(float2 p, uint salt) {
 /// circle and the square screen corner comes back negative, as does the strip
 /// under the menu bar; the caller reads negative as face at the glass, and the
 /// brushing keeps counting rows through it, so the texture never stops.
-static inline float edgeDistance(float2 uv, float W, float R, float top) {
-    float dx = min(uv.x * W, (1.0 - uv.x) * W);
-    float dy = min(uv.y - top, 1.0 - uv.y);
+/// `inset` is top, left, bottom, right, in screen heights: the menu bar and
+/// the Dock, which both sit above this window.
+static inline float edgeDistance(float2 uv, float W, float R, float4 inset) {
+    float dx = min(uv.x * W - inset.y, (1.0 - uv.x) * W - inset.w);
+    float dy = min(uv.y - inset.x, 1.0 - inset.z - uv.y);
     float2 k = float2(R - dx, R - dy);
     if (k.x > 0.0 && k.y > 0.0) return R - length(k);
     return min(dx, dy);
@@ -262,7 +273,8 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // icons stay on top. The band's cut and bevel stay under the bar, where
     // they can be seen. There, the distance comes back negative; the surface
     // reads it as face at the glass, the brushing keeps counting rows.
-    float eRaw = edgeDistance(uv, W, depth + 0.012, U.top);
+    float4 inset = float4(U.top, U.dockLeft, U.dockBottom, U.dockRight);
+    float eRaw = edgeDistance(uv, W, depth + 0.012, inset);
     float e = max(eRaw, 0.0);
     // How far in the seating shadow reaches past the inner edge, in screen
     // heights: about 2.5 pt on an 800 pt display.
@@ -311,7 +323,7 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // Cells counted in whole numbers round the frame and wrapped, so the
     // texture meets itself at the top-left corner, where the perimeter goes
     // from 1 back to 0. Unwrapped, that corner drew a hard diagonal seam.
-    float round = perimeterRound(uv, W, depth + 0.012, U.top);
+    float round = perimeterRound(uv, W, depth + 0.012, inset);
     float cells = max(floor(P * size.y / 60.0), 1.0);
     float alongPx = round * cells + runPx / 60.0;
     float cell = fmod(floor(alongPx), cells);

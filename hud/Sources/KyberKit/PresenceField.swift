@@ -715,6 +715,15 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
             Float(max(screen.frame.maxY - screen.visibleFrame.maxY, 0))
                 / Float(max(view.bounds.height, 1))
         } ?? 0
+        // The Dock, the same way: visibleFrame leaves it out on whichever
+        // side it is pinned, and is the whole side when it hides itself.
+        let dock: (bottom: Float, left: Float, right: Float) = view.window?.screen.map { screen in
+            let h = Float(max(view.bounds.height, 1))
+            let full = screen.frame, usable = screen.visibleFrame
+            return (Float(max(usable.minY - full.minY, 0)) / h,
+                    Float(max(usable.minX - full.minX, 0)) / h,
+                    Float(max(full.maxX - usable.maxX, 0)) / h)
+        } ?? (0, 0, 0)
         // `rest` is points in the table and screen heights in the shader.
         let restTarget = Float(style.rest) / Float(max(view.bounds.height, 1))
         let pointer = Self.pointer
@@ -848,7 +857,10 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
             pillOn: pillOn.shown,
             top: menuBar,
             drift: drift.shown,
-            menuOnly: frame.menuBarOnly ? 1 : 0)
+            menuOnly: frame.menuBarOnly ? 1 : 0,
+            dockBottom: dock.bottom,
+            dockLeft: dock.left,
+            dockRight: dock.right)
         pipeline.encode(
             buffer, into: pass, width: Int(size.width), height: Int(size.height),
             uniforms: &uniforms, voice: voice)

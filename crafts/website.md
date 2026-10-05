@@ -131,6 +131,46 @@ the most tasteful site ever." What made it tasteful is checkable:
 More tools on the page is not more ambition. Pick the one that draws this
 story best.
 
+## What Lemma's design system teaches, measured
+
+These come from Wave 2 of the replica (`lemma-replica/docs/waves/W2-design-system.md`),
+where matching its design system took the score from 29% to 59%. They
+transfer to any site.
+
+- **Choose the face by measurement, not by name.** Figtree matched the
+  reference's cap height and x-height exactly. Inter ran 4% and 9% large, and
+  that size difference read as "heavier" more than the letterforms did.
+  Self-host it. Use two or three faces in strict lanes: one sans for display
+  and body, and mono only for small labels.
+- **Light type, flat leading.**
+  - Headings at weight 400 (bold is the amateur tell), 36/43.2, tracked
+    -0.01em.
+  - The lead at 18/28, in the same ink at 65% opacity, sitting 8px under the
+    heading.
+  - Few type tuples, and every one used on purpose.
+- **Ink, not black.** A dark indigo ink, a muted version of the same ink, a
+  warm off-white ground, and one accent.
+- **Containers:**
+  - two widths, a narrow 880 and a wide 1280, with padding inside the
+    container
+  - a 384 + 64 + 544 grid for copy beside a figure
+  - one left edge that every heading shares (224 on all four feature blocks)
+- **Figures are one family:**
+  - hairline strokes (0.12 to 0.25 in a normalised 0 to 100 viewBox)
+  - one accent
+  - each figure sitting in a padded well inside a 1px frame
+- **Repeated sets are neither uniform nor random.** Ten of the twelve on the
+  reference were uniform. The other two used a four-value palette in a fixed
+  sequence. Read which before you draw.
+- **Where a value is applied matters.** Opacity on a group renders
+  differently from opacity on its children whenever things overlap.
+- **Controls are square-cornered and quiet:** a dark-ink primary, a light grey
+  secondary, and hover, focus and pressed each measured. The effects are
+  often group-triggered, so hover by hovering.
+- **In CSS, last does not mean winning.** Specificity beat source order three
+  times in that wave, and once more on 2026-10-04, when it blanked a live
+  button.
+
 ## Done means
 
 `site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no

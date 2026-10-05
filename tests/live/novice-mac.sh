@@ -102,7 +102,7 @@ set timeout 60
 log_user 0
 log_file -a $env(TRANSCRIPT)
 proc ev {kind text} {
-  set f [open $env(EVENTS) a]
+  set f [open $::env(EVENTS) a]
   puts $f "[clock seconds]|$kind|[string map {"\n" " " "\r" ""} $text]"
   close $f
 }
@@ -143,8 +143,8 @@ MINUTES=$(awk -v s="$((END - START))" 'BEGIN{printf "%.1f", s/60}')
 # inferred. A session that died before printing one has no code at all.
 exit_from() { awk -F'|' '$2=="exit"{print $3}' "$1" 2>/dev/null | tail -1; }
 EXIT_CODE="$(exit_from "$EVENTS")"
-HUMAN=$(grep -c '|human|' "$EVENTS" 2>/dev/null || true)
-STALLS=$(grep -c '|stall|' "$EVENTS" 2>/dev/null || true)
+HUMAN=$(grep -c '|human|' "$EVENTS" 2>/dev/null); HUMAN=${HUMAN:-0}
+STALLS=$(grep -c '|stall|' "$EVENTS" 2>/dev/null); STALLS=${STALLS:-0}
 
 {
   echo "# Novice install receipt, $(date '+%Y-%m-%d %H:%M')"

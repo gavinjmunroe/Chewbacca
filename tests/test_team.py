@@ -12,6 +12,9 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tools"))
+# The suite uses throwaway bare repos named "origin", never the real board.
+os.environ["TEAM_REMOTE"] = "origin"
+os.environ["TEAM_NO_GH"] = "1"
 import team  # noqa: E402
 
 MEMBERS = [{"name": "Caleb", "github": "calebnewtonusc"},
@@ -54,6 +57,7 @@ class TeamTest(unittest.TestCase):
         env = {**self.env, "TEAM_ME": me}
         old = {k: os.environ.get(k) for k in env}
         os.environ.update(env)
+        team._WHO.clear()
         try:
             with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 code = team.main(["--repo", str(repo), *args])
@@ -161,7 +165,7 @@ class TeamTest(unittest.TestCase):
         self.assertEqual(task["done_when"], "line one status: done")
 
     def test_round_trip_keeps_notes_and_activity(self):
-        task = {"id": "CHW-7", "title": "T", "status": "todo", "area": "", "owner": "", "priority": "none", "due": "",
+        task = {"id": "CHW-7", "title": "T", "status": "todo", "area": "", "parent": "", "owner": "", "priority": "none", "due": "",
                 "labels": ["a", "b"], "done_when": "", "proof": "", "source": "", "created": "2026-10-05", "updated": "",
                 "notes": "Some notes\n\nwith a gap", "activity": ["2026-10-05 Caleb: created"]}
         self.assertEqual(team.parse(team.render(task)), task)
@@ -328,6 +332,29 @@ class TeamTest(unittest.TestCase):
         code, _, err = self.run_team(self.a, "add", "X", "--area", "vibes")
         self.assertEqual(code, 1)
         self.assertIn("feature, functionality, design, business", err)
+
+    def test_sub_tasks_need_a_real_parent_and_show_progress(self):
+        self.run_team(self.a, "add", "Onboarding")
+        self.assertEqual(self.run_team(self.a, "add", "Write the guide", "--parent", "chw-1")[0], 0)
+        self.assertEqual(self.run_team(self.a, "add", "Bad", "--parent", "CHW-99")[0], 1)
+        self.assertEqual(self.run_team(self.a, "edit", "CHW-1", "--parent", "CHW-1")[0], 1)
+        _, out, _ = self.run_team(self.a, "show", "CHW-1")
+        self.assertIn("Sub-tasks 0/1", out)
+
+    def test_a_fork_checkout_still_targets_the_shared_board(self):
+        fork = pathlib.Path(self.tmp.name) / "fork"
+        git(pathlib.Path(self.tmp.name), "init", "-q", str(fork))
+        git(fork, "remote", "add", "origin", "git@github.com:gavinjmunroe/Chewbacca.git")
+        old = os.environ.pop("TEAM_REMOTE")
+        try:
+            self.assertEqual(team.resolve_remote(fork), team.TEAM_URL)
+            git(fork, "remote", "add", "upstream", "https://github.com/calebnewtonusc/Chewbacca.git")
+            self.assertEqual(team.resolve_remote(fork), "upstream")
+            self.assertEqual(team.Repo(fork).ref, "upstream/main")
+            git(fork, "remote", "remove", "upstream")
+            self.assertEqual(team.Repo(fork).ref, team.FETCHED_REF)
+        finally:
+            os.environ["TEAM_REMOTE"] = old
 
     def test_feed_shows_commits(self):
         self.run_team(self.a, "add", "Feed me")

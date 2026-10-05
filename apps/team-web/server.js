@@ -233,6 +233,11 @@ function cleanChanges(body, members) {
     if (!STATUSES.includes(body.status)) throw httpError(400, "unknown status");
     out.status = body.status;
   }
+  if (body.parent !== undefined) {
+    if (typeof body.parent !== "string" || (body.parent !== "" && !ID_PATTERN.test(body.parent)))
+      throw httpError(400, "parent is a task id like CHW-3");
+    out.parent = body.parent;
+  }
   if (body.area !== undefined) {
     if (body.area !== "" && !AREAS.includes(body.area)) throw httpError(400, "unknown area");
     out.area = body.area;
@@ -330,6 +335,7 @@ async function updateTask(session, id, body, members) {
   const comment = text(body.comment, "comment");
   if (!Object.keys(changes).length && !comment)
     throw httpError(400, "nothing to change");
+  if (changes.parent === id) throw httpError(400, "a task can't be its own parent");
   if (changes.status === "done" && !changes.proof) {
     const current = (await listTasks(session.token)).tasks.find(
       (t) => t.id === id,
@@ -412,6 +418,58 @@ async function linkCommits(session) {
     }
   }
   return touched;
+}
+
+// ---------- bulk edit ----------
+
+// Triage means changing dozens of tasks at once: 109 sat in the inbox the day
+// this landed. One commit for the whole batch through the git data API, so a
+// bulk edit is one line in history and one CI-ignored push, not 109.
+const BULK_MAX = 200;
+const BULK_FIELDS = new Set(["status", "owner", "priority", "area", "parent"]);
+
+async function bulkUpdate(session, body, members) {
+  const ids = Array.isArray(body.ids) ? [...new Set(body.ids)] : [];
+  if (!ids.length || ids.length > BULK_MAX || !ids.every((id) => typeof id === "string" && ID_PATTERN.test(id)))
+    throw httpError(400, `ids must be 1 to ${BULK_MAX} task ids`);
+  const raw = body.changes && typeof body.changes === "object" ? body.changes : {};
+  if (Object.keys(raw).some((k) => !BULK_FIELDS.has(k))) throw httpError(400, "bulk edit changes status, owner, priority, area or parent");
+  const changes = cleanChanges(raw, members);
+  if (!Object.keys(changes).length) throw httpError(400, "nothing to change");
+  if (changes.status === "done") throw httpError(400, "done needs proof per task; mark those one at a time");
+  const verb = verbFor(changes);
+  for (let attempt = 0; attempt < WRITE_TRIES; attempt++) {
+    const ref = await gh(session.token, `/repos/${REPO}/git/ref/heads/${BRANCH}`);
+    if (ref.status !== 200) throw httpError(502, "GitHub did not return the branch");
+    const head = ref.json.object.sha;
+    const commit = await gh(session.token, `/repos/${REPO}/git/commits/${head}`);
+    if (commit.status !== 200) throw httpError(502, "GitHub did not return the commit");
+    const files = await Promise.all(ids.map((id) => gh(session.token, `/repos/${REPO}/contents/${TASK_DIR}/${id}.md?ref=${head}`)));
+    const tree = [];
+    const updated = [];
+    files.forEach((f, i) => {
+      if (f.status !== 200) return;
+      const task = parse(unb64(f.json.content));
+      if (task.id !== ids[i] || changes.parent === task.id) return;
+      Object.assign(task, changes, { updated: today() });
+      task.activity.push(`${today()} ${session.member}: ${verb}`);
+      tree.push({ path: `${TASK_DIR}/${task.id}.md`, mode: "100644", type: "blob", content: render(task) });
+      updated.push(task);
+    });
+    if (!tree.length) throw httpError(404, "none of those tasks exist");
+    const newTree = await gh(session.token, `/repos/${REPO}/git/trees`, { method: "POST", body: JSON.stringify({ base_tree: commit.json.tree.sha, tree }) });
+    if (newTree.status !== 201) throw httpError(502, "GitHub refused the tree");
+    const newCommit = await gh(session.token, `/repos/${REPO}/git/commits`, {
+      method: "POST",
+      body: JSON.stringify({ message: `team: bulk ${verb} (${tree.length} tasks)`, tree: newTree.json.sha, parents: [head] }),
+    });
+    if (newCommit.status !== 201) throw httpError(502, "GitHub refused the commit");
+    const move = await gh(session.token, `/repos/${REPO}/git/refs/heads/${BRANCH}`, { method: "PATCH", body: JSON.stringify({ sha: newCommit.json.sha, force: false }) });
+    if (move.status === 200) return { updated };
+    // 422: main moved under us (not a fast-forward). Rebuild on the new head.
+    if (move.status !== 422) throw httpError(502, "GitHub refused to move the branch");
+  }
+  throw httpError(409, "the board kept changing underneath this edit, try again");
 }
 
 // ---------- http ----------
@@ -590,6 +648,7 @@ async function handle(req, res) {
       statuses: STATUSES,
       priorities: PRIORITIES,
       areas: AREAS,
+      repo: REPO,
       today: today(),
     });
   }
@@ -618,6 +677,9 @@ async function handle(req, res) {
       201,
       await createTask(session, await readBody(req), members),
     );
+  }
+  if (url.pathname === "/api/bulk" && req.method === "POST") {
+    return send(res, 200, await bulkUpdate(session, await readBody(req), members));
   }
   const m = /^\/api\/tasks\/(CHW-\d+)$/.exec(url.pathname);
   if (m && req.method === "PATCH")
@@ -652,4 +714,4 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   );
 }
 
-export { seal, unseal, cleanChanges, FIELDS };
+export { seal, unseal, cleanChanges, bulkUpdate, FIELDS };

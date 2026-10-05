@@ -21,6 +21,10 @@ Run `team`. It reads the fetched `origin/main`, so it shows what the web board s
 | Link commits now | `team sync` (every `team` command also does it) |
 | Open in a browser | `team open CHW-3` |
 
+It always targets calebnewtonusc/Chewbacca: a remote pointing there by any name, or the URL
+itself, so a fork checkout never files tasks on the fork. It knows who you are from
+`TEAM_ME`, your git name, or your `gh` login, matched against `team/members.json`.
+
 Rules the tool enforces, so do not work around them:
 
 - Owners must be in `team/members.json`. An unknown name is refused with the list.

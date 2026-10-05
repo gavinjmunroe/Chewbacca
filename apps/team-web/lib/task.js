@@ -7,6 +7,7 @@ export const FIELDS = [
   "title",
   "status",
   "area",
+  "parent",
   "owner",
   "priority",
   "due",

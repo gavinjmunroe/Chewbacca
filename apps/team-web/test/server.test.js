@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 process.env.SESSION_SECRET = "test-secret-that-is-at-least-32-chars-long";
-const { seal, unseal, cleanChanges } = await import("../server.js");
+const { seal, unseal, cleanChanges, bulkUpdate } = await import("../server.js");
 const { parse, render, oneLine, parseCommitRefs, applyCommit } = await import("../lib/task.js");
 
 const MEMBERS = [{ name: "Caleb", github: "calebnewtonusc" }, { name: "Gavin", github: "gavinjmunroe" }];
@@ -121,4 +121,13 @@ test("area must be one of the four", () => {
   assert.equal(cleanChanges({ area: "business" }, MEMBERS).area, "business");
   assert.equal(cleanChanges({ area: "" }, MEMBERS).area, "");
   assert.throws(() => cleanChanges({ area: "vibes" }, MEMBERS), /area/);
+});
+
+test("bulk edit refuses bad input before touching GitHub", async () => {
+  const session = { token: "x", member: "Caleb" };
+  await assert.rejects(bulkUpdate(session, { ids: [], changes: { area: "design" } }, MEMBERS), /ids/);
+  await assert.rejects(bulkUpdate(session, { ids: ["../x"], changes: { area: "design" } }, MEMBERS), /ids/);
+  await assert.rejects(bulkUpdate(session, { ids: ["CHW-1"], changes: { title: "renamed" } }, MEMBERS), /bulk edit changes/);
+  await assert.rejects(bulkUpdate(session, { ids: ["CHW-1"], changes: { status: "done" } }, MEMBERS), /proof/);
+  await assert.rejects(bulkUpdate(session, { ids: ["CHW-1"], changes: { parent: "nope" } }, MEMBERS), /parent/);
 });

@@ -36,6 +36,7 @@ import json
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -47,7 +48,7 @@ STATUSES = ["inbox", "backlog", "todo", "in_progress", "in_review", "done", "ide
 LABELS = {"inbox": "Inbox", "backlog": "Backlog", "todo": "Todo", "in_progress": "In progress",
           "in_review": "In review", "done": "Done", "ideas": "Idea bin", "canceled": "Canceled"}
 PRIORITIES = ["urgent", "high", "medium", "low", "none"]
-FIELDS = ["id", "title", "status", "area", "owner", "priority", "due", "labels",
+FIELDS = ["id", "title", "status", "area", "parent", "owner", "priority", "due", "labels",
           "done_when", "proof", "source", "created", "updated"]
 # One area per task, so the board splits cleanly four ways (Caleb, 2026-10-04:
 # "Separate features, functionality, design, business").
@@ -134,11 +135,33 @@ def id_number(task_id):
 
 # ---------- git plumbing ----------
 
+# The board lives on this repo's main, whatever the local checkout calls it.
+# Gavin works from a fork whose origin is gavinjmunroe/Chewbacca, so "origin"
+# would have filed his tasks on his fork while everyone else read the real one.
+TEAM_SLUG = "calebnewtonusc/Chewbacca"
+TEAM_URL = f"https://github.com/{TEAM_SLUG}.git"
+FETCHED_REF = "refs/remotes/team-board/main"
+
+
+def resolve_remote(path):
+    """A remote pointing at TEAM_SLUG by any name, else the repo URL itself."""
+    if os.environ.get("TEAM_REMOTE"):
+        return os.environ["TEAM_REMOTE"]
+    out = subprocess.run(["git", "-C", str(path), "remote", "-v"], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and re.search(rf"github\.com[:/]{re.escape(TEAM_SLUG)}(?:\.git)?$", parts[1], re.I):
+            return parts[0]
+    return TEAM_URL
+
+
 class Repo:
-    def __init__(self, path, remote="origin", branch="main", offline=False):
+    def __init__(self, path, remote=None, branch="main", offline=False):
         self.path = pathlib.Path(path)
-        self.remote, self.branch, self.offline = remote, branch, offline
-        self.ref = f"{remote}/{branch}"
+        self.branch, self.offline = branch, offline
+        self.remote = remote or resolve_remote(self.path)
+        # A named remote keeps its normal tracking ref; a bare URL gets its own.
+        self.ref = FETCHED_REF if "://" in self.remote or self.remote.startswith("git@") else f"{self.remote}/{branch}"
 
     def git(self, *args, env=None, inp=None, check=True):
         p = subprocess.run(["git", "-C", str(self.path), *args], capture_output=True,
@@ -150,7 +173,8 @@ class Repo:
     def fetch(self):
         if self.offline:
             return
-        p = subprocess.run(["git", "-C", str(self.path), "fetch", "-q", self.remote, self.branch],
+        spec = f"{self.branch}:{FETCHED_REF}" if self.ref == FETCHED_REF else self.branch
+        p = subprocess.run(["git", "-C", str(self.path), "fetch", "-q", self.remote, spec],
                            capture_output=True, text=True)
         if p.returncode != 0:
             print(f"team: fetch failed, showing the last fetched board ({p.stderr.strip()[:120]})",
@@ -206,7 +230,7 @@ class Repo:
             p = subprocess.run(["git", "-C", str(self.path), "push", "-q", self.remote,
                                 f"{commit}:refs/heads/{self.branch}"], capture_output=True, text=True)
             if p.returncode == 0:
-                self.git("update-ref", f"refs/remotes/{self.ref}", commit)
+                self.git("update-ref", self.ref if self.ref.startswith("refs/") else f"refs/remotes/{self.ref}", commit)
                 return commit
         raise TeamError(f"push kept losing the race after {PUSH_TRIES} tries: {p.stderr.strip()[:200]}")
 
@@ -236,7 +260,7 @@ class Repo:
             p = subprocess.run(["git", "-C", str(self.path), "push", "-q", self.remote,
                                 f"{commit}:refs/heads/{self.branch}"], capture_output=True, text=True)
             if p.returncode == 0:
-                self.git("update-ref", f"refs/remotes/{self.ref}", commit)
+                self.git("update-ref", self.ref if self.ref.startswith("refs/") else f"refs/remotes/{self.ref}", commit)
                 return commit
         raise TeamError(f"push kept losing the race after {PUSH_TRIES} tries: {p.stderr.strip()[:200]}")
 
@@ -247,13 +271,29 @@ def today():
     return os.environ.get("TEAM_TODAY") or dt.date.today().isoformat()
 
 
+_WHO = {}
+
+
 def me(repo):
-    name = os.environ.get("TEAM_ME") or repo.git("config", "user.name", check=False).strip()
+    """Who is running this: TEAM_ME, else git user.name, else the gh login, matched to members.json.
+    A teammate's git name is often not their GitHub login, which left "team mine" empty."""
+    if "me" in _WHO:
+        return _WHO["me"]
     members = load_members(repo)
-    for m in members:
-        if name and name.lower() in {(m.get("name") or "").lower(), (m.get("github") or "").lower()}:
-            return m["name"]
-    return name
+
+    def match(name):
+        return next((m["name"] for m in members if name and name.lower() in
+                     {(m.get("name") or "").lower(), (m.get("github") or "").lower()}), None)
+
+    if os.environ.get("TEAM_ME"):
+        return match(os.environ["TEAM_ME"]) or os.environ["TEAM_ME"]
+    git_name = repo.git("config", "user.name", check=False).strip()
+    found = match(git_name)
+    if not found and not os.environ.get("TEAM_NO_GH"):
+        p = subprocess.run(["gh", "api", "user", "-q", ".login"], capture_output=True, text=True) if shutil.which("gh") else None
+        found = match(p.stdout.strip()) if p and p.returncode == 0 else None
+    _WHO["me"] = found or git_name
+    return _WHO["me"]
 
 
 def load_members(repo):
@@ -312,7 +352,10 @@ def add(repo, a):
     area = getattr(a, "area", None) or ""
     if area and area not in AREAS:
         raise TeamError(f"area is one of {', '.join(AREAS)}")
-    task = {"title": one_line(a.title), "status": status, "area": area,
+    parent = (getattr(a, "parent", None) or "").upper()
+    if parent:
+        find(repo, parent)  # a parent has to exist
+    task = {"title": one_line(a.title), "status": status, "area": area, "parent": parent,
             "owner": resolve_owner(repo, a.owner), "priority": a.priority or "none",
             "due": check_date(a.due or ""), "labels": [x.strip() for x in (a.labels or "").split(",") if x.strip()],
             "done_when": a.done_when or "", "proof": "", "source": one_line(getattr(a, "source", "") or ""),
@@ -411,7 +454,7 @@ def apply_commit(task, sha, who, subject, url, closing, date):
 
 
 def repo_web_url(repo):
-    url = repo.git("remote", "get-url", repo.remote, check=False).strip()
+    url = repo.remote if repo.ref == FETCHED_REF else repo.git("remote", "get-url", repo.remote, check=False).strip()
     m = re.search(r"github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$", url)
     return f"https://github.com/{m.group(1)}" if m else ""
 
@@ -579,7 +622,7 @@ def main(argv=None):
     b = sub.add_parser("board"); b.add_argument("--all", action="store_true"); b.add_argument("--json", action="store_true")
     m = sub.add_parser("mine"); m.add_argument("--json", action="store_true")
     x = sub.add_parser("add"); x.add_argument("title")
-    for flag in ("--owner", "--due", "--priority", "--done-when", "--labels", "--status", "--notes", "--source", "--area"):
+    for flag in ("--owner", "--due", "--priority", "--done-when", "--labels", "--status", "--notes", "--source", "--area", "--parent"):
         x.add_argument(flag)
     s = sub.add_parser("show"); s.add_argument("id"); s.add_argument("--json", action="store_true")
     mv = sub.add_parser("move"); mv.add_argument("id"); mv.add_argument("status", choices=STATUSES)
@@ -587,7 +630,7 @@ def main(argv=None):
     d = sub.add_parser("done"); d.add_argument("id"); d.add_argument("--proof", default="")
     c = sub.add_parser("comment"); c.add_argument("id"); c.add_argument("text")
     e = sub.add_parser("edit"); e.add_argument("id")
-    for flag in ("--title", "--due", "--priority", "--done-when", "--labels", "--proof", "--notes", "--area"):
+    for flag in ("--title", "--due", "--priority", "--done-when", "--labels", "--proof", "--notes", "--area", "--parent"):
         e.add_argument(flag)
     f = sub.add_parser("feed"); f.add_argument("-n", type=int, default=20); f.add_argument("--json", action="store_true")
     o = sub.add_parser("open"); o.add_argument("id", nargs="?")
@@ -636,6 +679,12 @@ def main(argv=None):
                         print(f"  {k.replace('_', ' ')}: {t[k]}")
                 if t["labels"]:
                     print(f"  labels: {', '.join(t['labels'])}")
+                kids = [k for k in repo.tasks() if k["parent"] == t["id"]]
+                if kids:
+                    done = sum(k["status"] == "done" for k in kids)
+                    print(f"\nSub-tasks {done}/{len(kids)}:\n" + "\n".join(line(k) for k in kids))
+                if t["parent"]:
+                    print(f"  parent: {t['parent']}")
                 if t["notes"]:
                     print("\n" + t["notes"])
                 if t["activity"]:
@@ -661,7 +710,13 @@ def main(argv=None):
             print(f"comment added to {t['id']}")
         elif cmd == "edit":
             changes = {}
-            for k in ("title", "due", "priority", "done_when", "proof", "notes", "area"):
+            if a.parent is not None:
+                a.parent = a.parent.upper()
+                if a.parent:
+                    if a.parent == a.id.upper():
+                        raise TeamError("a task can't be its own parent")
+                    find(repo, a.parent)
+            for k in ("title", "due", "priority", "done_when", "proof", "notes", "area", "parent"):
                 v = getattr(a, k)
                 if v is not None:
                     changes[k] = check_date(v) if k == "due" else v

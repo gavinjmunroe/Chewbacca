@@ -9,6 +9,15 @@ board and nothing to sync.
 - In a browser: the URL in `config.json`, signed in with GitHub. Anyone with write
   access to this repo can use it, and every edit is a commit under their name.
 
+Getting set up, for anyone on the team:
+
+1. Make sure Caleb has added your GitHub account to the repo (the board's sign-in checks it).
+2. Open the board URL in `config.json` and continue with GitHub. That's all the web side needs.
+3. For the terminal, pull Chewbacca and rerun `./setup.sh`, which links `team`. It works from a
+   fork too: it always reads and writes calebnewtonusc/Chewbacca, never your fork.
+
+Press `?` on the board for filters, keyboard shortcuts and the commit syntax.
+
 `members.json` is who a task can be assigned to. Add yourself with your GitHub
 handle so your edits on the web are logged under your name.
 

@@ -63,7 +63,9 @@ def subject():
                     event = json.loads(line)
                 except ValueError:
                     continue
-                if event.get("type") != "user":
+                # Hook feedback, agent messages and the compaction summary are
+                # user events too. Only the person's own prompt names a commit.
+                if event.get("type") != "user" or event.get("isMeta") or event.get("isCompactSummary"):
                     continue
                 content = (event.get("message") or {}).get("content")
                 if isinstance(content, str) and content.strip() and not content.startswith("<"):

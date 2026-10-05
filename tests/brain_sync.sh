@@ -22,7 +22,10 @@ echo seed > "$BRAIN/seed.md"; g add seed.md; g commit -q -m seed
 LOG="$TEST_DIR/write-log.tsv"
 echo mine > "$BRAIN/a.md"; echo mine > "$BRAIN/b.md"; echo theirs > "$BRAIN/c.md"
 printf '1\tS1\t%s\twrite\n1\tS1\t%s\tbash\n1\tS2\t%s\twrite\n' "$BRAIN/a.md" "$BRAIN/b.md" "$BRAIN/c.md" > "$LOG"
-printf '%s\n' '{"type":"user","message":{"content":"save the stack audit"}}' > "$TEST_DIR/t.jsonl"
+{ printf '%s\n' '{"type":"user","message":{"content":"save the stack audit"}}'
+  printf '%s\n' '{"type":"user","isMeta":true,"message":{"content":"Stop hook feedback: rewrite"}}'
+  printf '%s\n' '{"type":"user","isCompactSummary":true,"message":{"content":"This session is being continued"}}'
+} > "$TEST_DIR/t.jsonl"
 
 run(){ printf '{"session_id":"%s","transcript_path":"%s"}' "$1" "$TEST_DIR/t.jsonl" \
   | env HOME="$TEST_HOME" CHEWBACCA_WRITE_LOG="$LOG" CHEWBACCA_LOG_DIR="$TEST_DIR/logs" bash "$HOOK" >/dev/null 2>&1; }

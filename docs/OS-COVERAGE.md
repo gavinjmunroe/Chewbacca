@@ -60,6 +60,28 @@ FaceTime or WhatsApp. That is a gap in its `replaces` mapping, not proof none
 exist: add the mappings to `data/oss-apps/curated.json` and rerun before
 deciding those rows.
 
+## Networks are kept, their clients are replaced
+
+Caleb, 2026-10-04: "apps like slack or imessage we hv found ways to tap into
+those, but ideally we would make a better ux to interact w them through,
+instead of having to go inside the apps."
+
+Two kinds of app, and they get opposite treatment:
+
+- A tool only Caleb uses (Notes, a meeting recorder, a design tool) can be
+  swapped for an open source engine underneath, because nobody else is on it.
+- A network other people are on (iMessage, Slack, WhatsApp, Gmail, GroupMe)
+  stays, because the people are the point. What goes is its app. The OS reads
+  and writes through the access already tapped (`chat.db` and `mac messages`,
+  the Slack MCP, `wacli`, the Gmail connector) and draws one client for all of
+  them.
+
+That client is person-first: a conversation with Karthik is one thread on the
+glass whether his last message came by iMessage, Slack or email, and the reply
+goes back on the network he used last unless Caleb picks another. Replying,
+reacting and reading never require the original app. Sending stays on
+Caleb's press and is read back from the network afterwards.
+
 ## The rule for every new platform
 
 Each one is the same three parts, so adding one is a recipe, not a project:

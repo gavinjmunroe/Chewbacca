@@ -147,6 +147,14 @@ def clear_engine(pid: int | None = None) -> None:
 
 # build
 
+# The upstream commit this kit's engine client and tests were verified against
+# (2026-10-05). CHEWBACCA_REALM_REF overrides it for a deliberate upgrade.
+# Refuses every WebSocket upgrade that carries an Origin header, so a web page
+# cannot reach the engine (see the file's own comment).
+ORIGIN_GUARD = Path(__file__).resolve().parent.parent / "data" / "realm" / "origin-guard.mjs"
+PINNED_REF = os.environ.get("CHEWBACCA_REALM_REF", "0ae5b8b5739e6165360e4b0679302b7b5afdd4b1")
+
+
 def build(force: bool) -> int:
     git, pnpm, node = tool("CHEWBACCA_GIT", "git"), tool("CHEWBACCA_PNPM", "pnpm"), tool("CHEWBACCA_NODE", "node")
     if not node:
@@ -160,8 +168,19 @@ def build(force: bool) -> int:
             return die("git not found, and realm is not checked out")
         REALM_DIR.parent.mkdir(parents=True, exist_ok=True)
         print(f"cloning {REPO_URL} into {REALM_DIR}", file=sys.stderr)
-        if subprocess.run([git, "clone", "--depth", "1", REPO_URL, str(REALM_DIR)]).returncode:
+        if subprocess.run([git, "clone", REPO_URL, str(REALM_DIR)]).returncode:
             return die("clone failed")
+    # Build only the commit this kit was verified against. `pnpm install` and
+    # the build run code from the checkout, so building whatever main holds
+    # today would run code nobody here has read (security review, 2026-10-05).
+    # Moving to a newer commit is a deliberate change to PINNED_REF.
+    if git and (REALM_DIR / ".git").exists():
+        if source_stamp(git) != PINNED_REF:
+            subprocess.run([git, "-C", str(REALM_DIR), "fetch", "--quiet", "origin", PINNED_REF])
+            if subprocess.run([git, "-C", str(REALM_DIR), "checkout", "--quiet", "--detach", PINNED_REF]).returncode:
+                return die(f"could not check out the pinned commit {PINNED_REF[:12]} in {REALM_DIR}")
+    if source_stamp(git) != PINNED_REF:
+        return die(f"{REALM_DIR} is not at the pinned commit {PINNED_REF[:12]}; refusing to run its build")
     stamp = home() / "build.json"
     head = source_stamp(git)
     if not force and main_js().exists() and head and _read_json(stamp).get("source") == head:
@@ -242,12 +261,13 @@ def _spawn_locked(node: str, h: Path, detach: bool) -> tuple[subprocess.Popen, d
     clear_engine()
     ready_path = h / "engine.out"
     env = dict(os.environ, REALM_HOME=str(h),
-               REALM_PORT=os.environ.get("CHEWBACCA_REALM_PORT", "0"))
+               REALM_PORT=os.environ.get("CHEWBACCA_REALM_PORT", "0"),
+               CHEWBACCA_REALM_MAIN=str(main_js()))
     env.pop("ELECTRON_RUN_AS_NODE", None)
     # stdout goes to a file, not a pipe: a detached server outlives this
     # process, and a later write to a closed pipe would raise EPIPE in it.
     with open(ready_path, "w") as out, open(h / "engine.log", "a") as log:
-        proc = subprocess.Popen([node, str(main_js())], cwd=REALM_DIR, env=env,
+        proc = subprocess.Popen([node, "--import", ORIGIN_GUARD.as_uri(), str(main_js())], cwd=REALM_DIR, env=env,
                                 stdin=subprocess.DEVNULL, stdout=out, stderr=log,
                                 start_new_session=detach)
     deadline = time.monotonic() + READY_TIMEOUT_S

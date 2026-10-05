@@ -225,9 +225,29 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def same_origin(self) -> bool:
+        port = self.server.server_address[1]
+        own = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        if self.headers.get("Host", "") not in own:
+            return False
+        origin = self.headers.get("Origin")
+        if origin is not None and origin not in {f"http://{h}" for h in own}:
+            return False
+        ctype = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
+        return ctype == "application/json"
+
     def do_POST(self):
         if self.path != "/progress":
             self.send_error(404)
+            return
+        # Any web page open in the browser can POST to 127.0.0.1:7374, and the
+        # sidecar it would overwrite is read by later agent sessions. A review
+        # of the pushed handler flagged that on 2026-10-05. The guide page
+        # itself always sends JSON from its own origin, so require exactly that:
+        # a JSON body cannot cross origins without a CORS preflight this server
+        # never answers, and the Host check stops a DNS-rebound name.
+        if not self.same_origin():
+            self.send_error(403, "only the guide page itself may save progress")
             return
         try:
             raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))

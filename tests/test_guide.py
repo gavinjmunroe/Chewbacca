@@ -505,12 +505,12 @@ def main() -> int:
             t = threading.Thread(target=srv.serve_forever, daemon=True)
             t.start()
 
-            def post(path, body):
+            def post(path, body, headers=None):
                 data = json.dumps(body).encode()
                 req = urllib.request.Request(
                     f"http://127.0.0.1:{port}{path}",
                     data=data,
-                    headers={"Content-Type": "application/json"},
+                    headers=headers or {"Content-Type": "application/json"},
                     method="POST",
                 )
                 try:
@@ -556,6 +556,24 @@ def main() -> int:
             status = post("/progress", {"path": "srv-test.html", "state": []})
             check("POST handler: non-object state returns 400", status == 400)
             check("POST handler: refused state leaves the sidecar alone",
+                  json.loads(sc_path.read_text())["topic-a"]["correct"] == 4)
+
+            # Another web page in the same browser cannot write progress. A
+            # form or text/plain POST needs no preflight, so it is the attack.
+            hostile = {"path": "srv-test.html", "state": {"topic-a": {"correct": 0}}}
+            check("POST handler: a text/plain cross-site post is refused",
+                  post("/progress", hostile, {"Content-Type": "text/plain"}) == 403)
+            check("POST handler: another site's Origin is refused",
+                  post("/progress", hostile, {"Content-Type": "application/json",
+                                              "Origin": "https://evil.example"}) == 403)
+            check("POST handler: a rebound Host name is refused",
+                  post("/progress", hostile, {"Content-Type": "application/json",
+                                              "Host": f"evil.example:{port}"}) == 403)
+            check("POST handler: the guide's own origin still saves",
+                  post("/progress", {"path": "srv-test.html", "state": json.loads(sc_path.read_text())},
+                       {"Content-Type": "application/json",
+                        "Origin": f"http://127.0.0.1:{port}"}) == 204)
+            check("POST handler: refused posts left the sidecar alone",
                   json.loads(sc_path.read_text())["topic-a"]["correct"] == 4)
 
             # POST to wrong endpoint returns 404.

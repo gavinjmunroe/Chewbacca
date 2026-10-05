@@ -192,6 +192,22 @@ over:
 - **`reference/STEAL.md`** records what was borrowed from which site and why,
   so taking inspiration stays deliberate and credited.
 
+**Steal like an artist, and write it down.** Gavin's method, from his
+`reference/STEAL.md`:
+- Before building, study the practitioners: an Awwwards juror's criteria (art
+  direction, directed motion, 60fps) and The Pudding's scrollytelling rules
+  (one step, one visible change; reversible; never hijack the scroll).
+- Take techniques from the best sites online, and record each one in a
+  STEAL.md table: From, What, Why it is ours. Include a "Not stolen, on
+  purpose" list.
+- Use real data, such as real geography from openly licensed GeoJSON or
+  topojson projected with d3-geo, with attribution where the licence asks
+  for it.
+- Self-host every library at a pinned version with sha256 sums, and never use
+  a runtime CDN import.
+
+Go online for all of this. The best reference is rarely on disk already.
+
 ## Done means
 
 `site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no

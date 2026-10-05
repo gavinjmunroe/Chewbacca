@@ -312,6 +312,11 @@ def me_emails(env: dict | None) -> set[str]:
     return {k for k in (osgraph.email_key(x) for x in raw.split(",")) if k}
 
 
+# Confidence for an attendee taken from an invite: a claim, not an observation.
+# Guessed, never measured; it only has to sit below the walks' fact threshold.
+CLAIMED_CONFIDENCE = 0.5
+
+
 def attendee_node(ids: Identities, participant: dict, mine: set[str]) -> Node | None:
     """The Person an attendee is, by email only. No email, no node: a display
     name is whatever the calendar or the other side typed, and "Tyler" is two
@@ -452,11 +457,21 @@ def build(details: list[dict], ids: Identities, now: datetime, days: int = osgra
             node = attendee_node(ids, p, mine)
             if node is None:
                 continue
-            pid = snap.add(node)
-            snap.link(pid, "ATTENDS", eid, confidence=node.confidence)
             if p.get("human_id"):
                 by_human[str(p["human_id"])] = node
-        first_known = next((n for n in by_human.values() if not n.unresolved and n.id != ME), None)
+            if node.id == ME:
+                # The owner is already linked by recording it. An invite that
+                # lists the owner's address proves nothing more.
+                continue
+            pid = snap.add(node)
+            # An attendee list is whatever the invite's author typed: anyone
+            # can put Sagar's address on an invite (security review,
+            # 2026-10-05). The person fusion stands, but "was in this meeting"
+            # stays a claim, below the confidence a walk treats as fact.
+            snap.link(pid, "ATTENDS", eid, confidence=min(node.confidence, CLAIMED_CONFIDENCE))
+        # The space a meeting files under is not picked from a claimed attendee
+        # either: one forged address would file a stranger's call under Amber.
+        first_known = None
         space = space_for({"props": first_known.props} if first_known else None, mapping or SPACE_BY_COMPANY)
         snap.add(space_node(space))
         snap.link(eid, "BELONGS_TO", f"space:{space}")

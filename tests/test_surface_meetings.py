@@ -457,6 +457,10 @@ def review_fixes(d: Path) -> None:
     check("a guessed action item never draws on Today", days and not (guesses & shown), (days, guesses & shown))
     check("an address with an escape character makes no Person",
           AM.attendee_node(osgraph.Identities(), {"email": "evil\x1b[2J@x.com"}, set()) is None)
+    attends = [e for e in g.edges(verb="ATTENDS") if e["src"] != osgraph.ME]
+    check("an invite's attendee is a claim, never above CLAIMED_CONFIDENCE",
+          attends and all(e["confidence"] <= AM.CLAIMED_CONFIDENCE for e in attends),
+          [(e["src"], e["confidence"]) for e in attends])
     err = AM.AnarlogError("no such table: sessions", "anarlog_error")
     check("a database with no tables yet is first run, not an error", AM.first_run(err))
     me = d / "meetings.json"

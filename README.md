@@ -62,7 +62,7 @@ publication. Use `skills/setup/SKILL.md` for a requested setup.
 
 <!-- BEGIN GENERATED: counts -->
 
-One command installs **57 slash commands, 125 skills (50 written here, 8 cloned from upstream, 67 from 3 skill packs), 12 MCP servers, 49 hooks, 4 subagents, 9 command-line tools and 12 always-on standards (plus 3 that load only when the work calls for them).** About 258,000 lines, every one of them plain text you can read.
+One command installs **57 slash commands, 125 skills (50 written here, 8 cloned from upstream, 67 from 3 skill packs), 12 MCP servers, 49 hooks, 4 subagents, 9 command-line tools and 12 always-on standards (plus 3 that load only when the work calls for them).** About 259,000 lines, every one of them plain text you can read.
 
 <!-- END GENERATED: counts -->
 
@@ -275,6 +275,7 @@ with a cost ceiling.
 | [docs/](docs/README.md)                            | Index of everything below                    |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | When something is broken, by symptom         |
 | [docs/FAQ.md](docs/FAQ.md)                         | The short answers                            |
+| [docs/CODEBASE.md](docs/CODEBASE.md)               | The whole codebase, explained for a newcomer |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)       | How the pieces fit together                  |
 | [docs/1000.md](docs/1000.md)                       | Every known gap, numbered                    |
 | [docs/ROADMAP.md](docs/ROADMAP.md)                 | Which of those are next                      |

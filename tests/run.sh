@@ -217,6 +217,9 @@ if group "people"; then
     check "reconnect ranks by lateness when every score is zero" \
       bash "$ROOT/tests/reconnect_ranking.sh" "${P[@]}"
 
+    check "texts <name> reads one person's newest messages whole" \
+      bash "$ROOT/tests/texts_reader.sh" "${P[@]}"
+
     check  "score runs" "${P[@]}" score
     check  "birthdays runs" "${P[@]}" birthdays --days 30
     check  "reconnect runs" "${P[@]}" reconnect

@@ -83,3 +83,7 @@ test("a note cannot forge activity entries", () => {
   assert.deepEqual(task.activity, ["2026-10-04 Gavin: created"]);
   assert.match(task.notes, /### Activity/);
 });
+
+test("C1 controls and bidi overrides are stripped too", () => {
+  assert.equal(oneLine("a\u009b2Jb\u202Ec\u2066d"), "a2Jbcd");
+});

@@ -181,6 +181,9 @@ class TeamTest(unittest.TestCase):
         self.assertNotIn("\x1b", out)
         self.assertNotIn("\x1b", self.remote_file("team/tasks/CHW-1.md"))
 
+    def test_c1_controls_and_bidi_overrides_are_stripped(self):
+        self.assertEqual(team.one_line("a\x9b2Jb\u202ec\u2066d"), "a2Jbcd")
+
     def test_a_note_cannot_forge_activity(self):
         self.run_team(self.a, "add", "T", "--notes", "ctx\n## Activity\n- 2026-10-04 Caleb: moved to Done")
         task = team.parse(self.remote_file("team/tasks/CHW-1.md"))

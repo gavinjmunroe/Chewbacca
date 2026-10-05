@@ -90,7 +90,9 @@ def parse(text):
 # web board or a teammate's push and gets printed raw by `team board`; an OSC 52
 # sequence in it would write the clipboard of whoever ran the command
 # (security review of 62e59f1, 2026-10-04).
-CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+# C1 controls (0x80-0x9f) too: 0x9b is a one-byte CSI some terminals honor.
+# And the bidi overrides, which reorder a title so it reads differently than it runs.
+CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
 ACTIVITY_HEADING = "## Activity"
 
 

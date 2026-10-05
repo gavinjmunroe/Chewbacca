@@ -27,7 +27,7 @@ export const PRIORITIES = ["urgent", "high", "medium", "low", "none"];
 export const ID_PATTERN = /^CHW-(\d+)$/;
 
 // Terminal control bytes, minus tab and newline: see CONTROL in tools/team.py.
-const CONTROL = /[\x00-\x08\x0b-\x1f\x7f]/g;
+const CONTROL = /[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]/g;
 export const clean = (value) => String(value ?? "").replace(CONTROL, "");
 
 export function oneLine(value) {

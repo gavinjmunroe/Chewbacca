@@ -189,6 +189,40 @@ def check_page(pw, url, out):
                 if hov == base and foc == base:
                     inert.append(pg.evaluate("e => (e.tagName + ' ' + (e.getAttribute('aria-label') || e.textContent || '').trim().slice(0,40))", el))
             fails += [f"no hover and no focus state: {x}" for x in inert]
+            # Text that paints nothing. On 2026-10-04 a fixed sky gradient at
+            # z-index 0 covered usctts.com's people, both doors and the
+            # footer at every width: the DOM was there and clickable, so every
+            # check above passed, and a reviewer found 2,200px of empty sky.
+            # Shoot each heading, hide its text, shoot again: no difference
+            # means a visitor can't see it.
+            covered = []
+            for i in range(pg.evaluate("document.querySelectorAll('h1,h2,h3').length")):
+                if i >= 24:
+                    break
+                try:
+                    box = pg.evaluate(f"""(() => {{ const e = document.querySelectorAll('h1,h2,h3')[{i}];
+                        e.scrollIntoView({{block: 'center'}});
+                        const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+                        if (r.width < 8 || r.height < 8 || s.visibility === 'hidden' || s.display === 'none') return null;
+                        return {{x: Math.max(0, r.x), y: Math.max(0, r.y), w: Math.min(r.width, innerWidth - Math.max(0, r.x)),
+                                 h: Math.min(r.height, innerHeight - Math.max(0, r.y)), t: e.textContent.trim().slice(0, 40)}}; }})()""")
+                    if not box or box["w"] < 8 or box["h"] < 8:
+                        continue
+                    pg.wait_for_timeout(700)
+                    clip = {k: box[k] for k in ("x", "y")} | {"width": box["w"], "height": box["h"]}
+                    a = pg.screenshot(clip=clip)
+                    pg.evaluate(f"""(() => {{ const e = document.querySelectorAll('h1,h2,h3')[{i}];
+                        e.dataset.sgColor = e.style.color; e.style.setProperty('color', 'transparent', 'important');
+                        e.querySelectorAll('*').forEach(c => c.style.setProperty('color', 'transparent', 'important')); }})()""")
+                    pg.wait_for_timeout(60)
+                    b2 = pg.screenshot(clip=clip)
+                    pg.evaluate(f"""(() => {{ const e = document.querySelectorAll('h1,h2,h3')[{i}];
+                        e.style.color = e.dataset.sgColor || ''; e.querySelectorAll('*').forEach(c => c.style.removeProperty('color')); }})()""")
+                    if a == b2:
+                        covered.append(box["t"])
+                except Exception:
+                    continue
+            fails += [f"heading paints nothing (covered or invisible): {x}" for x in covered]
         if expect == 404:
             errs = [e for e in errs if "404" not in e]
         fails += [f"{w}: console: {e[:160]}" for e in errs]

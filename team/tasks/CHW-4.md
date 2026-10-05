@@ -15,3 +15,4 @@ updated: 2026-10-04
 ## Activity
 - 2026-10-04 Caleb: created
 - 2026-10-04 Caleb: Board is live: this comment came from the web
+- 2026-10-04 Caleb: And this one came from the team CLI

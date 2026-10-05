@@ -356,7 +356,7 @@ real commit; nothing here is written by hand.
 - update skills/second-brain/SKILL.md
 - update setup.sh
 - update setup.sh
-- update settings/settings.json
+- update config/settings/settings.json
 - update doctor.sh
 - update README.md
 - update setup.sh

@@ -275,6 +275,35 @@ fi
 # ── 3. Download ──────────────────────────────────────────────────────────────
 step "Downloading Chewbacca"
 
+# ~/.chewbacca is the install AND the state folder: the people database, logs,
+# the learning loop, review receipts and runtime receipts all live beside the
+# repo files. An update used to move the folder aside, unpack the new release
+# and delete the old folder, which took all of that with it (found reading the
+# code on 2026-10-05). So everything the release did not ship is carried over:
+# any top-level entry the new tree lacks, and the voice log, which is
+# gitignored inside a repo folder.
+carry_state() {
+  local prev="$1" new="$2" entry
+  [ -d "$prev" ] || return 0
+  for entry in "$prev"/* "$prev"/.[!.]*; do
+    [ -e "$entry" ] || [ -L "$entry" ] || continue
+    [ -e "$new/${entry##*/}" ] || [ -L "$new/${entry##*/}" ] || mv "$entry" "$new/"
+  done
+  for entry in "$prev"/superassistant/*.jsonl; do
+    [ -e "$entry" ] || continue
+    mkdir -p "$new/superassistant"
+    [ -e "$new/superassistant/${entry##*/}" ] || mv "$entry" "$new/superassistant/"
+  done
+}
+
+restore_previous() {
+  if [ -d "$HOME_DIR.previous" ]; then
+    rm -rf "$HOME_DIR"
+    mv "$HOME_DIR.previous" "$HOME_DIR"
+    echo "      Your previous install was put back."
+  fi
+}
+
 if [ -d "$HOME_DIR" ]; then
   work "found an existing install, updating it in place"
   rm -rf "$HOME_DIR.previous"
@@ -292,14 +321,9 @@ else
 fi
 if ! curl -fsSL --max-time 120 "$TARBALL" | tar -xz -C "$HOME_DIR" --strip-components=1; then
   bad "Download failed.${REF:+ Is $REF a real tag?}"
-  if [ -d "$HOME_DIR.previous" ]; then
-    rm -rf "$HOME_DIR"
-    mv "$HOME_DIR.previous" "$HOME_DIR"
-    echo "      Your previous install was put back."
-  fi
+  restore_previous
   exit 1
 fi
-rm -rf "$HOME_DIR.previous"
 chmod +x "$HOME_DIR"/*.sh "$HOME_DIR"/bin/* 2>/dev/null || true
 
 # Verify what was just downloaded against the checksums committed in the repo.
@@ -333,9 +357,12 @@ if [ -f "$HOME_DIR/SHA256SUMS.txt" ] && command -v shasum >/dev/null 2>&1; then
   else
     bad "$MISMATCH file(s) do not match the committed checksums."
     echo "      Stopping. Report this: https://github.com/$REPO/issues"
+    restore_previous
     exit 1
   fi
 fi
+carry_state "$HOME_DIR.previous" "$HOME_DIR"
+rm -rf "$HOME_DIR.previous"
 ok "$HOME_DIR"
 
 # `chewbacca` on PATH, so update, doctor, and uninstall are one word each and

@@ -82,6 +82,6 @@ verified edit, inspect its accounting instead of generating duplicate notes.
 Training note, 2026-09-23: a site task repeated across many items (28 LinkedIn skills) ran
 one hand-driven click at a time until the person said "go faster". After the first item works
 by hand, script the rest: poll the page instead of sleeping, and prove the result by rereading.
-Keep the script as a procedure (`procedures/linkedin-skills`) so the lesson is code, not prose.
+Keep the script as a procedure (`library/procedures/linkedin-skills`) so the lesson is code, not prose.
 
 Training note, 2026-09-23: mathematical, creative and proprietary standards now require measured transfer, discriminating alternatives and private verified assets. Saving a lesson alone no longer implies future behavior changed.

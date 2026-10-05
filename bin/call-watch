@@ -307,7 +307,7 @@ class Watcher:
 
 def main() -> int:
     if subprocess.run(["which", "call-ears"], capture_output=True).returncode != 0:
-        log("call-ears is not built: sh call/build.sh in the Chewbacca checkout")
+        log("call-ears is not built: sh apps/call/build.sh in the Chewbacca checkout")
         return 1
     watcher = Watcher(Panel())
     log("watching for calls")

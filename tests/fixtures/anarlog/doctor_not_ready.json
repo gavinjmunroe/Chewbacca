@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "command": "doctor",
+  "data": {
+    "cli_version": "1.4.28",
+    "ready": false,
+    "database": {
+      "path": "/nonexistent/app.db",
+      "exists": false,
+      "opened_read_only": false,
+      "schema_ready": false,
+      "error": "database file does not exist"
+    }
+  }
+}

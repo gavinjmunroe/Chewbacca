@@ -8,7 +8,7 @@
     fanout scan [--days 1]                           what the gate would write, writes nothing
 
 Everything lives in ~/.chewbacca/fanout (FANOUT_DIR), mode 600, never in git.
-The predicates are fanout/predicates/*.json in this repo. `--sample PATH` and
+The predicates are config/fanout/predicates/*.json in this repo. `--sample PATH` and
 `--labels PATH` point any command at other files, which is how the tests run.
 """
 import argparse

@@ -6,7 +6,7 @@
     method pick "<task>"       classify a task and print its questions
     method pick "<task>" --terse   the short form the hook injects
 
-crafts/ answers what makes a good ARTIFACT. This answers how to run the WORK.
+library/crafts/ answers what makes a good ARTIFACT. This answers how to run the WORK.
 
 Deterministic and model-free, because it runs on every prompt and a
 classifier that costs a second per turn gets removed within a week.
@@ -17,7 +17,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DIR = ROOT / "methods"
+DIR = ROOT / "library" / "methods"
 HOME = pathlib.Path.home() / ".chewbacca" / "methods"
 
 # Ordered: the first match wins, so the more specific patterns come first.
@@ -39,7 +39,7 @@ SIGNALS = [
 FALSIFIER = "What result would tell me this was the wrong approach?"
 CHEAPEST = "What is the cheapest thing that would produce that result if true?"
 
-# One standing check per process, from Proverbs. See methods/proverbs.md.
+# One standing check per process, from Proverbs. See library/methods/proverbs.md.
 #
 # Caleb asked on 2026-09-21 that Proverbs shape how this thing decides rather
 # than sit in a knowledge bank. A doctrine nothing reads is a knowledge bank,
@@ -119,7 +119,7 @@ def main():
     a = ap.parse_args()
 
     if not a.name:
-        print("processes. crafts/ is what makes a good artifact; this is how "
+        print("processes. library/crafts/ is what makes a good artifact; this is how "
               "to run the work.\n")
         for n in available():
             first = (read(n) or "").split("\n")

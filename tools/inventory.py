@@ -3,14 +3,14 @@
 
 Run it from anywhere:  python3 tools/inventory.py
 It rewrites the generated regions of README.md, setup.sh, and
-settings/toolkit.json to match the skills, plugins, MCP servers and CLI
+config/settings/toolkit.json to match the skills, plugins, MCP servers and CLI
 tools actually present, so adding a skill updates the repo without anyone
 remembering to.
 
 The kit's README table and setup.sh install list used to be hand-maintained, so
 every skill or plugin added to the local machine silently made the public repo
 wrong. This reads what is actually installed and rewrites the generated regions
-of README.md, setup.sh, and settings/toolkit.json to match.
+of README.md, setup.sh, and config/settings/toolkit.json to match.
 
 What it will publish:
   - skills carrying a .source file (an upstream public repo)
@@ -1191,7 +1191,7 @@ def main():
     # filesystem, so a run from a process with a narrower PATH used to delete
     # real tools from the product and take setup.sh and REFERENCE.md with them.
     # Losing an entry is now a refusal that names what went missing.
-    toolkit = REPO / "settings/toolkit.json"
+    toolkit = REPO / "config/settings/toolkit.json"
     prior = []
     if toolkit.is_file():
         try:
@@ -1236,7 +1236,7 @@ def main():
     if not toolkit.is_file() or toolkit.read_text(encoding="utf-8") != rendered:
         toolkit.parent.mkdir(parents=True, exist_ok=True)
         toolkit.write_text(rendered, encoding="utf-8")
-        changed.append("settings/toolkit.json")
+        changed.append("config/settings/toolkit.json")
 
     readme = REPO / "README.md"
     # The inventory tables live in the reference doc, not on the front door.

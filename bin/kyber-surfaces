@@ -449,7 +449,7 @@ class Daemon:
                     self.on_action(ev["name"], live.provider.cid("list"), extra)
                 elif ev["name"] == f"{ACTION_PREFIX}pivot":
                     # A row button on a panel kyber-genui drew (registered in
-                    # surfaces/genui-queries.json): open the row's node walk.
+                    # config/surfaces/genui-queries.json): open the row's node walk.
                     self.pivot_from_elsewhere(extra["row"])
                 return
             self.on_action(ev["name"], ev["component"], extra)

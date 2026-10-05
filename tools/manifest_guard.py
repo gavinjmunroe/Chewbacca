@@ -18,7 +18,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 MANIFEST = "SHA256SUMS.txt"
-PATTERNS = ("*.sh", "*.ps1", "bin/*", "bin/lib/*", "tools/*.py", ".claude/hooks/*.sh")
+PATTERNS = ("*.sh", "*.ps1", "bin/*", "bin/lib/*", "bin/lib/people/*", "tools/*.py", ".claude/hooks/*.sh")
 
 
 def staged():

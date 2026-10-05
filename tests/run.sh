@@ -315,7 +315,7 @@ if group "doctor"; then
   # The mutant: with every rule present the same check must go quiet, or it is
   # reporting the weather rather than the install.
   cp "$ROOT/.claude/rules/"*.md "$D/.claude/rules/"
-  cp "$ROOT/instructions/agent-neutral.md" "$D/.claude/rules/agent-neutral.md"
+  cp "$ROOT/config/instructions/agent-neutral.md" "$D/.claude/rules/agent-neutral.md"
   expect "and passes once they are all there" "always-on imports resolve" \
     bash -c "HOME='$D' bash '$ROOT/doctor.sh' 2>&1"
 
@@ -336,7 +336,7 @@ if group "ux-learning"; then
   ln -s "$ROOT/bin/ux-learning" "$TMP/ux-learning"
   check "UX learning resolves installed symlink" "$TMP/ux-learning" --help
   check "UX learning evidence and routing" python3 "$ROOT/tests/test_ux_learning.py"
-  check "Clay map validates" python3 "$ROOT/bin/ux-learning" validate "$ROOT/learning/clay-navigation/package.json"
+  check "Clay map validates" python3 "$ROOT/bin/ux-learning" validate "$ROOT/library/learning/clay-navigation/package.json"
   check "shared instruction export is current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 
@@ -359,7 +359,7 @@ if group "decision-learning"; then
   check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 
-# Open source app registry: offline, reads the committed data/oss-apps/apps.json.
+# Open source app registry: offline, reads the committed config/data/oss-apps/apps.json.
 if group "oss-apps"; then
   expect "oss-apps appears in help" "chewbacca oss-apps" bash "$ROOT/bin/chewbacca" --help
   check  "oss-apps dispatches" bash "$ROOT/bin/chewbacca" oss-apps --help
@@ -400,6 +400,7 @@ if group "tools"; then
   check  "a reply that hands over a command is refused" python3 "$ROOT/tests/test_handoff_check.py"
   check  "a correction must change the kit, not just the reply" python3 "$ROOT/tests/test_durable_check.py"
   check  "native write tracking observes content and workspace changes" python3 "$ROOT/tests/test_write_log.py"
+  check  "no code reaches a folder at its pre-2026-10-05 top-level path" python3 "$ROOT/tests/test_moved_paths.py"
   check  "preflight describes setup.sh accurately" python3 "$ROOT/tests/test_preflight.py"
   check  "context cost --json is valid" bash -c "python3 '$ROOT/tools/context_cost.py' --json | python3 -m json.tool"
   check  "context-budget attributes a session's opening tokens by source" python3 "$ROOT/tests/test_context_budget.py"
@@ -413,6 +414,7 @@ if group "tools"; then
     skip "memory compact dry run is safe" "no second-brain on this machine"
   fi
   check  "secret scan finds nothing in the repo" python3 "$ROOT/bin/secret-scan" "$ROOT"
+  check  "browser-bridge runs nothing a web page could use to run code" python3 "$ROOT/tests/test_browser_bridge.py"
   check  "checksums are current" python3 "$ROOT/tools/checksums.py" --check
   # The checksum file is not decoration. start.sh verifies every downloaded
   # file against it and aborts the install on a single mismatch. On 2026-09-19
@@ -483,7 +485,7 @@ if group "tools"; then
   # which craft-gate copy gets found first.
   for g in study-guide daily-brief onboarding-kit; do
     CRAFT_DIR="$TMP/craft-all" python3 "$ROOT/bin/craft-gate" "$g" \
-      --record "$ROOT/crafts/$g.md" >/dev/null 2>&1
+      --record "$ROOT/library/crafts/$g.md" >/dev/null 2>&1
   done
 
   check  "guide new fails closed with no craft-gate reachable" \
@@ -515,7 +517,7 @@ if group "tools"; then
   check  "claude-tab classifies run state and guards its own tab" python3 "$ROOT/tests/test_claude_tab.py"
   # The house style here is deliberately high-comment, so the one thing that
   # would make this tool useless is firing on its own codebase.
-  check  "code-slop is quiet on this codebase" bash -c "python3 '$ROOT/bin/code-slop' '$ROOT/bin/people' '$ROOT/bin/slop-check' '$ROOT/bin/code-slop' $ROOT/bin/lib/*.js --max 0"
+  check  "code-slop is quiet on this codebase" bash -c "python3 '$ROOT/bin/code-slop' '$ROOT/bin/people' '$ROOT/bin/slop-check' '$ROOT/bin/code-slop' $ROOT/bin/lib/*.js $ROOT/bin/lib/people/*.js --max 0"
 fi
 
 # ── installer ─────────────────────────────────────────────────────────────────
@@ -617,6 +619,9 @@ if group "installer"; then
   # 18 research files and a whole session of UI work that read none of them.
   check  "design-context fires on design work only" \
     bash "$ROOT/tests/design_context.sh" "$ROOT"
+
+  check  "brain-sync commits one turn's writes once, and only this session's" \
+    bash "$ROOT/tests/brain_sync.sh"
 
   # Six hooks were on disk and registered nowhere on 2026-09-22, including the
   # two built after Caleb had to ask for the same thing four times. A hook the
@@ -738,6 +743,8 @@ if group "installer"; then
     exits "start.sh refuses ambiguous $_flag" 2 bash "$ROOT/start.sh" "$_flag" --dry-run
   done
   exits "an unknown flag stops before installation" 2 bash "$ROOT/start.sh" --nonsense --dry-run
+  check  "an update through start.sh keeps the state in ~/.chewbacca" bash "$ROOT/tests/start_carry_state.sh"
+  check  "setup links every tool Kyber.app runs from ~/.local/bin" bash "$ROOT/tests/kyber_tools_linked.sh"
   # --version used to silently mean "pin to this tag", so it ate the next
   # argument and never printed a version.
   check  "start.sh --version prints a version" bash -c "
@@ -850,7 +857,7 @@ if group "installer"; then
   # Caleb, 2026-09-21, handing over Proverbs: "this should dictate the way
   # chewbacca lives. Not just as something deep in it's knowledge bank, but
   # ingested into it's living infra on how to make decisions". A verse that only
-  # sits in methods/proverbs.md is the knowledge bank he ruled out, so the guard
+  # sits in library/methods/proverbs.md is the knowledge bank he ruled out, so the guard
   # has to reach the block injected before work starts.
   check  "every process carries its standing check into the injection" bash -c '
     for m in debug experiment research creative decision build consolidated; do
@@ -888,7 +895,7 @@ if group "installer"; then
 
   # It shipped to one machine once before and never reached anybody else.
   check  "the skill router is registered in the shipped settings" \
-    grep -q "skill-route.sh" "$ROOT/settings/settings.json"
+    grep -q "skill-route.sh" "$ROOT/config/settings/settings.json"
 
   check  "no process was added without a standing check" bash -c '
     sigs=$(grep -cE "^    \(.[a-z]+., r." "$1/bin/method")
@@ -1225,6 +1232,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_kyber_surfaces.py"
   check  "kyber-sessions types into an idle open session through its inbox, refuses a hold, forks on a press" \
     python3 "$ROOT/tests/test_kyber_sessions.py"
+  check  "the agent engine client proves the server is ours, gates writes and exec, and flags a write that may have run" \
+    python3 "$ROOT/tests/test_realm_client.py"
   check  "engines run only remixable, local, spec-declared reads, and oss labels every license" \
     python3 "$ROOT/tests/test_surface_engines.py"
   check  "code is read only, refuses a path with a control, format or bidi character, and runs no repo filter" \
@@ -1235,6 +1244,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_surface_github.py"
   check  "whatsapp sends only to the opened 1:1 chat, verifies the new id, and an unlinked account is a note" \
     python3 "$ROOT/tests/test_surface_whatsapp.py"
+  check  "meetings reads Anarlog only through its CLI, first run is a state, and action items stay guesses" \
+    python3 "$ROOT/tests/test_surface_meetings.py"
   check  "the launcher lists only real surfaces and the hud-apps sentence reaches it, not genui" \
     python3 "$ROOT/tests/test_surface_apps.py"
   check  "a sentence opens the right surface and a near miss goes to the model" \
@@ -1278,6 +1289,7 @@ if group "pytest"; then
   else
     skip "the suite collects under pytest" "no pytest and no uv"
   fi
+  check "no Python file uses an undefined name" bash "$ROOT/tests/undefined_names.sh"
 fi
 
 # ── call ──────────────────────────────────────────────────────────────────────
@@ -1295,11 +1307,11 @@ if group "guide"; then
   # store holding the study-guide notes. Seeded from the repo rather than
   # stubbed out, so these tests still run against the real gate.
   export CRAFT_DIR="$TMP/guide-craft"
-  python3 "$ROOT/bin/craft-gate" study-guide --record "$ROOT/crafts/study-guide.md" >/dev/null 2>&1
+  python3 "$ROOT/bin/craft-gate" study-guide --record "$ROOT/library/crafts/study-guide.md" >/dev/null 2>&1
   G=("python3" "$ROOT/bin/guide")
   check  "guide compiles"            python3 -m py_compile "$ROOT/bin/guide"
   check  "unit tests pass"           python3 "$ROOT/tests/test_guide.py"
-  check  "the template exists"       test -f "$ROOT/templates/guide.html"
+  check  "the template exists"       test -f "$ROOT/library/templates/guide.html"
   check  "new writes a guide"        "${G[@]}" new "cache coherence" --course CSCI170
   check  "the file landed"           test -f "$TMP/guides/cache-coherence.html"
   expect "the title carries the course" "CSCI170" cat "$TMP/guides/cache-coherence.html"

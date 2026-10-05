@@ -3,7 +3,8 @@
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
 type hook_init >/dev/null 2>&1 && hook_init format-and-sync.sh 20
-# PostToolUse: format the file that was just written, then sync context repos.
+# PostToolUse: format the file that was just written. Committing the context
+# repos is brain-sync.sh's job, once per turn, at Stop.
 #
 # Why this is a script and not an inline settings.json command:
 #
@@ -16,9 +17,6 @@ type hook_init >/dev/null 2>&1 && hook_init format-and-sync.sh 20
 #      costs seconds per edit. A project-local or global binary is used first
 #      and npx is the last resort.
 #
-#   3. Staging is by filename. `git add .` in a context repo sweeps up
-#      .DS_Store and any stray .env, which contradicts rules/git.md.
-#
 # Config comes from ~/.claude/d1-config.sh, written by setup.sh.
 
 set -uo pipefail
@@ -26,9 +24,6 @@ set -uo pipefail
 CONFIG="$HOME/.claude/d1-config.sh"
 # shellcheck source=/dev/null
 [ -f "$CONFIG" ] && . "$CONFIG"
-
-PERSONAL_CONTEXT_DIR="${PERSONAL_CONTEXT_DIR:-}"
-PUBLIC_CONTEXT_DIR="${PUBLIC_CONTEXT_DIR:-}"
 
 f="$(jq -r '.tool_input.file_path // .tool_response.filePath // empty' 2>/dev/null)"
 [ -n "$f" ] || exit 0
@@ -116,50 +111,10 @@ if should_format; then
   fi
 fi
 
-# ── Sync context repos ────────────────────────────────────────────────────────
-#
-# The commit stays in the foreground: it is local, it is milliseconds, and the
-# order it lands in matters. The push does not. Nobody reads its result, the
-# exit code was already being discarded, and it is this hook's entire slow tail:
-# 167ms median against 14.2s at worst, with every one of those seconds blocking
-# the tool call that triggered the write.
-#
-# Serialized with a lock so two writes a second apart do not race to the remote.
-# A push that cannot get the lock is dropped rather than queued, which is safe
-# because `git push origin HEAD` sends every local commit: the next push carries
-# whatever a dropped one would have.
-push_async() {
-  local repo="$1" lock="$repo/.git/chewbacca-push.lock"
-  # trap - EXIT because the subshell inherits the hook's exit trap and would
-  # otherwise log a second, wildly wrong duration for the hook after it ended.
-  ( trap - EXIT
-    if [ -d "$lock" ]; then
-      holder="$(cat "$lock/pid" 2>/dev/null)"
-      [ -n "$holder" ] && kill -0 "$holder" 2>/dev/null && exit 0
-      rm -rf "$lock" 2>/dev/null   # its holder died mid-push
-    fi
-    mkdir "$lock" 2>/dev/null || exit 0
-    echo $$ > "$lock/pid" 2>/dev/null
-    git -C "$repo" push -q origin HEAD 2>/dev/null
-    rm -rf "$lock" 2>/dev/null ) >/dev/null 2>&1 &
-  disown 2>/dev/null || true
-}
-
-sync_repo() {
-  local repo="$1" file="$2" rel
-  [ -n "$repo" ] || return 0
-  [ -d "$repo/.git" ] || return 0
-  case "$file" in "$repo"/*) ;; *) return 0 ;; esac
-
-  rel="${file#"$repo"/}"
-  cd "$repo" || return 0
-  git add -- "$rel" 2>/dev/null || return 0
-  git diff --cached --quiet && return 0
-  git commit -q -m "chore: update $rel" 2>/dev/null || return 0
-  push_async "$repo"
-}
-
-sync_repo "$PERSONAL_CONTEXT_DIR" "$f"
-sync_repo "$PUBLIC_CONTEXT_DIR" "$f"
+# ── Context repos ─────────────────────────────────────────────────────────────
+# The commit and push that used to follow here moved to brain-sync.sh, a Stop
+# hook, on 2026-10-05. One commit per write left 16 of the brain's last 40
+# commits reading "chore: update <file>", and missed every Bash write. Now the
+# turn's writes land as one commit named after the turn.
 
 exit 0

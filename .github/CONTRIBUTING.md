@@ -58,7 +58,7 @@ Before adding a new command, rule, template, or snippet, open an issue first des
 | Slash commands | `.claude/commands/` | `kebab-case.md`        |
 | Rules          | `.claude/rules/`    | `kebab-case.md`        |
 | Templates      | `templates/`        | `descriptive-name.ext` |
-| Snippets       | `snippets/`         | `descriptive-name.ext` |
+| Snippets       | `library/snippets/`         | `descriptive-name.ext` |
 | Documentation  | `docs/`             | `UPPER-CASE.md`        |
 
 ## License
@@ -88,8 +88,12 @@ in CI is 60 rather than 0.
 
 ## Adding a skill
 
+Write `skills/<name>/SKILL.md` and `skills/<name>/evals/evals.json` yourself;
+the `skill-forge` skill walks through the order that matters. `add-skill.sh`
+does not scaffold anything. It installs someone else's skill from a repo:
+
 ```bash
-./add-skill.sh <name>          # scaffolds SKILL.md and evals/
+./add-skill.sh <git-url> [--path skills/<name>] [--project]
 ```
 
 A skill is accepted when all of this is true:

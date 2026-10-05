@@ -6,13 +6,13 @@ questions somebody thought of in advance. Everything else used to get a
 sentence on the pill. This asks a model for a layout instead, and it keeps the
 model to the job a model is good at and away from the two it is bad at:
 
-- The model picks components from a closed catalog (genui/catalog.json, checked
+- The model picks components from a closed catalog (config/genui/catalog.json, checked
   against hud/CLAUDE.md and the Swift renderer) and writes Kyber Lines.
 - The model never sees the data. It binds props to pointers like
   `@/q/due:14/events`, and the resolver here runs the real query and sends the
   `d` line. A number on the glass is a number something read.
 - The model never invents an action. A Button's action must be in
-  genui/policy.json, and anything else is refused before it is drawn.
+  config/genui/policy.json, and anything else is refused before it is drawn.
 
 Every line is validated before it reaches the socket, the whole surface is
 validated at the end, one repair attempt gets the precise errors, and after
@@ -53,7 +53,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parent.parent
-GENUI = ROOT / "genui"
+GENUI = ROOT / "config" / "genui"
 CATALOG_PATH = GENUI / "catalog.json"
 POLICY_PATH = GENUI / "policy.json"
 EXEMPLARS_PATH = GENUI / "exemplars.json"
@@ -547,7 +547,7 @@ def provider_manifests() -> list[Path]:
     env = os.environ.get("GENUI_QUERIES")
     if env:
         return [Path(p) for p in env.split(os.pathsep) if p]
-    return [ROOT / "surfaces" / "genui-queries.json"]
+    return [ROOT / "config" / "surfaces" / "genui-queries.json"]
 
 
 def all_queries() -> dict[str, Query]:
@@ -1631,12 +1631,12 @@ def catalog_drift(doc: Path = HUD_DOC, renderer: Path = RENDERER) -> list[str]:
     comps = CATALOG["components"]
     documented = doc_components(doc_block(doc), doc.read_text(encoding="utf-8"))
     for name in sorted(set(documented) - set(comps)):
-        out.append(f"{doc.name} documents {name}, which genui/catalog.json does not have")
+        out.append(f"{doc.name} documents {name}, which config/genui/catalog.json does not have")
     for name in sorted(set(comps) - set(documented)):
-        out.append(f"genui/catalog.json has {name}, which {doc.name} does not document")
+        out.append(f"config/genui/catalog.json has {name}, which {doc.name} does not document")
     for name, props in documented.items():
         for prop in sorted(props - set(comps.get(name, {}).get("props", {}))):
-            out.append(f"{doc.name} shows {name}.{prop}, which genui/catalog.json does not have")
+            out.append(f"{doc.name} shows {name}.{prop}, which config/genui/catalog.json does not have")
     if not renderer.is_file():
         # A renderer that moved must fail the check, not skip it.
         return out + [f"{renderer} is missing, so the catalog cannot be checked against it"]
@@ -1651,21 +1651,21 @@ def catalog_drift(doc: Path = HUD_DOC, renderer: Path = RENDERER) -> list[str]:
         for name in sorted(set(comps) - types):
             out.append(f"{renderer.name} has no case for {name}")
         for name in sorted(types - set(comps)):
-            out.append(f"{renderer.name} draws {name}, which genui/catalog.json does not have")
+            out.append(f"{renderer.name} draws {name}, which config/genui/catalog.json does not have")
         live = {k for c in comps.values() for k, v in c["props"].items() if v.get("renderer", True)}
         for prop in sorted(every - live):
             out.append(f"{renderer.name} reads {prop}, which no catalog component declares")
         for prop in sorted(live - every):
-            out.append(f"genui/catalog.json declares {prop}, which {renderer.name} never reads")
+            out.append(f"config/genui/catalog.json declares {prop}, which {renderer.name} never reads")
         for name, keys in ((n, k) for n, k in per.items() if n != "__default__"):
             for key in sorted(keys - set(comps.get(name, {}).get("props", {}))):
-                out.append(f"{renderer.name} reads {name}.{key}, which genui/catalog.json does not declare")
+                out.append(f"{renderer.name} reads {name}.{key}, which config/genui/catalog.json does not declare")
             # And the other way, per component: a catalog prop its own case
             # never reads, unless a shared helper reads it. Without this,
             # Metric.caption passed because Table reads a caption.
             declared = {k for k, v in comps.get(name, {}).get("props", {}).items() if v.get("renderer", True)}
             for key in sorted(declared - keys - shared):
-                out.append(f"genui/catalog.json declares {name}.{key}, which its case in {renderer.name} never reads")
+                out.append(f"config/genui/catalog.json declares {name}.{key}, which its case in {renderer.name} never reads")
     return out
 
 

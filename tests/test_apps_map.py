@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""data/surfaces/apps.json: every app names its status honestly, a replaced or
+"""config/data/surfaces/apps.json: every app names its status honestly, a replaced or
 partial app names a surface that exists, and every open-source link points at
-a real row of data/oss-apps/apps.json."""
+a real row of config/data/oss-apps/apps.json."""
 import json
 import sys
 from pathlib import Path
@@ -23,7 +23,7 @@ TOOLS = {"hud-music", "hud-listen quick path", "hud-listen opener"}
 
 
 def main() -> int:
-    body = json.loads((ROOT / "data" / "surfaces" / "apps.json").read_text())
+    body = json.loads((ROOT / "config" / "data" / "surfaces" / "apps.json").read_text())
     apps = body["apps"]
     check("statuses are the three honest words", all(a["status"] in ("replaced", "partial", "not yet") for a in apps))
     for a in apps:
@@ -35,11 +35,11 @@ def main() -> int:
             check(f"{a['app']}: says what is missing", bool(a["missing"]))
     counts = {s: sum(1 for a in apps if a["status"] == s) for s in ("replaced", "partial", "not yet")}
     check("the counts in meta are the counts in the list", counts == body["meta"]["counts"], counts)
-    oss_path = ROOT / "data" / "oss-apps" / "apps.json"
+    oss_path = ROOT / "config" / "data" / "oss-apps" / "apps.json"
     if oss_path.exists():
         ids = {a["id"] for a in json.loads(oss_path.read_text())["apps"]}
         links = [o["id"] for a in apps for o in a["oss"]]
-        check("every oss link is a row of data/oss-apps/apps.json", all(i in ids for i in links),
+        check("every oss link is a row of config/data/oss-apps/apps.json", all(i in ids for i in links),
               [i for i in links if i not in ids])
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0

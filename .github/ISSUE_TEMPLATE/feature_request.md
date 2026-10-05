@@ -14,7 +14,7 @@ A clear description of the new command, rule, template, or snippet.
 - [ ] Slash command (`.claude/commands/`)
 - [ ] Rule (`.claude/rules/`)
 - [ ] Template (`templates/`)
-- [ ] Snippet (`snippets/`)
+- [ ] Snippet (`library/snippets/`)
 - [ ] Hook (`settings.json`)
 - [ ] Documentation (`docs/`)
 - [ ] Ecosystem link (`ECOSYSTEM.md`)

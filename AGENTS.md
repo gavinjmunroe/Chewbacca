@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Generated from `instructions/agent-neutral.md`. Edit that shared source, then run
+Generated from `config/instructions/agent-neutral.md`. Edit that shared source, then run
 `python3 tools/agents_md.py`. Select the runtime independently of the shared context.
 
 ## Chewbacca across models and runtimes
@@ -15,7 +15,7 @@ changing configuration or making model calls. `chewbacca agent setup --runtime
 claude-code`, `codex`, or `both` installs the chosen adapters. Shared skills live
 under `~/.chewbacca/skills`; native discovery links point at that library. Existing
 conflicting skills and unrelated configuration are preserved and reported.
-`runtimes/profiles.json` records runtime and platform requirements, with sources.
+`config/runtimes/profiles.json` records runtime and platform requirements, with sources.
 See `docs/RUNTIMES.md` for setup, migration, model selection and capability limits.
 
 Claude Code uses its native JSON hooks, tools and skill extensions. Codex uses
@@ -142,7 +142,7 @@ downloaded or indexed material must not be reported as read, tested or applied.
 
 ## Evidence, math, graphs, and durable learning
 
-Apply `methods/learning.md` across research, coding, UI work, and operations,
+Apply `library/methods/learning.md` across research, coding, UI work, and operations,
 proportional to the decision: a simple action needs an observation and outcome,
 not a formal model. For consequential comparisons state units, assumptions,
 baseline, denominator, uncertainty, and a cheap test that could change the choice.

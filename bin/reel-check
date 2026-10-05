@@ -13,7 +13,7 @@ button) the sheet puts in front of whoever reviews it: a frame at 0, 1, 2 and
 3 seconds and then every few, with the parts of the screen the app covers
 shaded red.
 
-The craft behind every threshold is in crafts/short-form-video.md.
+The craft behind every threshold is in library/crafts/short-form-video.md.
 """
 
 import argparse

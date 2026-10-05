@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The realm engine as a per-user launch agent. A template: `realm-engine plist`
+  fills the double-underscore placeholders for this Mac and prints it. The wirer writes that
+  to ~/Library/LaunchAgents/com.chewbacca.realm.plist and loads it with
+  `launchctl bootstrap gui/$(id -u) <path>`.
+
+  `realm-engine run` stays in the foreground, writes engine.json once the
+  server prints its ready line, and removes it when the server exits.
+  KeepAlive restarts it only after a crash: `realm-engine stop` sends SIGTERM,
+  the server exits 0, and launchd leaves it down until the next login. A run
+  that finds an engine already up also exits 0, so it is not retried forever.
+
+  Python is `/usr/bin/env python3` on the PATH below (or CHEWBACCA_PYTHON),
+  never a versioned Homebrew path that an upgrade deletes.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>__LABEL__</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/env</string>
+    <string>__PYTHON__</string>
+    <string>__ENGINE__</string>
+    <string>run</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__REALM_DIR__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>CHEWBACCA_REALM_HOME</key>
+    <string>__REALM_HOME__</string>
+    <key>CHEWBACCA_REALM_DIR</key>
+    <string>__REALM_DIR__</string>
+    <key>CHEWBACCA_NODE</key>
+    <string>__NODE__</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <!-- Guessed, never measured: a crash loop retries at most every 10 s. -->
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>__REALM_HOME__/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>__REALM_HOME__/launchd.log</string>
+</dict>
+</plist>

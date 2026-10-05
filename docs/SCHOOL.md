@@ -34,7 +34,7 @@ Start it with `/syllabus <path>`. That command loads the `coursework` skill,
 reads the whole PDF, and writes one course file. It takes a few minutes per
 course, once a term. Everything after it is a shell call.
 
-The shape is in [templates/coursework/course.yml](../templates/coursework/course.yml).
+The shape is in [library/templates/coursework/course.yml](../library/templates/coursework/course.yml).
 The parts that matter:
 
 **`policies.ai`, quoted verbatim.** Not summarized. "AI is restricted" is

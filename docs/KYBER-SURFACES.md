@@ -15,10 +15,10 @@ and accepts on top of it.
 | `bin/lib/osgraph_walks.py`             | needs-you, today, person, space, tasks, people, conversations, and the competency questions                                                             |
 | `bin/lib/osgraph_runs.py`              | Go: a task handed to `claude -p` in plan mode, and its real status                                                                                      |
 | `bin/lib/surfaces/`                    | The panels: walks.py for the graph walks, music.py and files.py as thin surfaces                                                                        |
-| `bin/lib/surfaces/oss.py`, `engine.py` | "what replaces X" from the oss registry with license buckets; and open source engines drawn from `data/surfaces/engines.json`                           |
+| `bin/lib/surfaces/oss.py`, `engine.py` | "what replaces X" from the oss registry with license buckets; and open source engines drawn from `config/data/surfaces/engines.json`                           |
 | `bin/lib/sessions_inbox.py`            | Send into an open, idle Claude Code session through its own inbox, for `bin/kyber-sessions`                                                             |
 | `bin/lib/surface_intent.py`            | "Show my day", "show me Karthik": the no-model fast path in `hud-listen`                                                                                |
-| `data/surfaces/apps.json`              | Each Mac app, what replaces it, and an honest status                                                                                                    |
+| `config/data/surfaces/apps.json`              | Each Mac app, what replaces it, and an honest status                                                                                                    |
 
 ## Ontology
 
@@ -149,7 +149,7 @@ classes' grades", "who have I not texted back"), goes from `hud-listen` to
 voice says one line; anything else hands the request to the model in words. A
 second half that acts ("and email Swain") keeps it with the model. A
 `genui-refresh` or `genui-close` press runs `kyber-genui event` with the
-pressed surface and never reaches the model. `surfaces/genui-queries.json`
+pressed surface and never reaches the model. `config/surfaces/genui-queries.json`
 registers four walks kyber-genui may bind (`unreplied`, `needs`,
 `person:<name>`, `conversations`), each `kyber-surfaces walk <kind> --json`
 rows of label, network, age, reason and node id, and one row action,
@@ -186,11 +186,11 @@ the surfaces changes.
 ## Engines
 
 An engine is an open source program already running on this Mac (Ollama,
-Tailscale) drawn as a panel from one entry in `data/surfaces/engines.json`:
+Tailscale) drawn as a panel from one entry in `config/data/surfaces/engines.json`:
 the repo it comes from, how to tell it is installed (absolute binary paths, or
 a localhost URL), one read (the binary plus fixed args, or a GET to 127.0.0.1)
 and which JSON keys become a row's title, subtitle and detail. Adding one is a
-JSON entry, not code. An entry whose repo is not in `data/oss-apps/apps.json`,
+JSON entry, not code. An entry whose repo is not in `config/data/oss-apps/apps.json`,
 or is not remixable, or that names any other host, is refused when the file
 loads. Nothing from the glass or from an engine's output reaches a command or
 a URL; redirects and proxies are not followed; output over 1 MB is refused;
@@ -240,6 +240,42 @@ one action, `ks-detail`, moves the pick to a fetched row and runs nothing.
 Only his 100 most recently updated open PRs are checked for failing CI, and
 any beyond that are counted as unchecked. Merging, approving, commenting,
 notifications, Discussions, Actions logs and re-running checks are not built.
+
+## Meetings
+
+`meetings` (`bin/lib/surfaces/meetings.py`, `surfaces.meetings.Meetings`,
+region right) replaces opening Granola to see what a call said. The engine is
+Anarlog (MIT, github.com/fastrepl/anarlog), which records the mic and the
+system audio, transcribes on this Mac and keeps meetings in its own SQLite.
+Nothing here opens that SQLite: every read is `anarlog --json` with `--source
+local` and `ANARLOG_ANALYTICS=0`, and only `doctor`, `meetings list`, `meetings
+get` and `meetings transcript` are ever run (`bin/lib/ingest_meetings.py`).
+Aliases: `granola`, `anarlog`, `meeting`, `calls`, `notes-from-meetings`.
+Spoken: "show my meetings", "what did we decide", "what came out of my call".
+
+The list is the 6 newest meetings with who was there; Open shows the summary,
+the lines under its Decisions heading, the open action items and one 200-word
+transcript page with Next. Its actions are `ks-open`, `ks-next` and `ks-add`.
+`ks-add` is the one press that writes: it makes one promoted Task in the OS
+graph (source `meetings-promoted`, kind `promise`), which the tasks lanes
+read and the Docket's queue (docs/AFTER-PANES.md, not built yet) can take
+from `_attention()`, and touches nothing else.
+
+In the graph each meeting in the 7-day window is an Event, attendees with an
+email are Persons fused only through the people store's identities (never by
+first name), and each open action item is a Task EXTRACTED_FROM its meeting,
+kind `meeting-action`, marked as a guess with confidence 0.5, because
+Anarlog's model wrote it. `KYBER_MEETINGS_ME` (comma separated addresses)
+names his own emails, so an item assigned to him gets OWED_BY me. The
+`meetings` ingester runs with the daemon's others and keeps the message
+retention window; the transcript is never stored.
+
+A Mac where Anarlog was never opened, or not installed, is a first-run state
+with the steps in order and Anarlog's own `doctor` line, never an error.
+`bin/room-listen` still records the mic to `~/.chewbacca/room/live.txt`;
+meetings supersede it for calls and do not replace it.
+`tests/test_surface_meetings.py` runs against fixtures shaped exactly like the
+CLI's JSON (`tests/fixtures/anarlog`).
 
 ## Sending into a session
 

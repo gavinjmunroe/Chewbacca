@@ -24,7 +24,7 @@ The dedicated web reader could not access these URLs; the independent HTTP fetch
 
 ## E2: learning implementation versus outcomes
 
-Inspected `bin/fitness.behavioural`: it consumes per-case JSON, persists failed IDs/reasons and per-skill counts. Inspected `bin/evolve`: it reads case IDs and has a retention gate; the gate is deliberately not automatic merge authorization.
+Inspected `behavioural()` in `bin/fitness`: it consumes per-case JSON, persists failed IDs/reasons and per-skill counts. Inspected `bin/evolve`: it reads case IDs and has a retention gate; the gate is deliberately not automatic merge authorization.
 
 `python3 tests/test_evolve_gate.py` exited 0, reporting 0 failures. Its fixture tests include refusal of newly failing cases and failed suites, ranking candidates, missing evidence and no merge. This establishes CB-501's bounded test claim, not a real learned improvement.
 

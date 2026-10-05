@@ -6,7 +6,7 @@
     scars find "<task>" --terse   the two lines a hook injects
     scars reindex              rebuild from git history
 
-WHY THIS AND NOT MORE GENERIC QUESTIONS. methods/ asks the same six questions
+WHY THIS AND NOT MORE GENERIC QUESTIONS. library/methods/ asks the same six questions
 forever. It never gets cheaper and never gets sharper, which makes it a
 checklist, and expertise is mostly knowing which questions to skip.
 

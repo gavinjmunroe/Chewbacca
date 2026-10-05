@@ -297,7 +297,7 @@ function loadLedger() {
       `no ledger at ${DIR}\n` +
         `Create one:  mkdir -p ${DIR}/courses\n` +
         `Then ask Claude to run /syllabus on a syllabus PDF, or copy\n` +
-        `templates/course.yml from the kit into ${DIR}/courses/.`,
+        `library/templates/coursework/course.yml from the kit into ${DIR}/courses/.`,
     );
   }
   const semesterFile = path.join(DIR, "semester.yml");

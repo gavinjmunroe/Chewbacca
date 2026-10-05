@@ -1,0 +1,78 @@
+{
+  "about": "Open source engines drawn on the Kyber glass by bin/lib/surfaces/engine.py. Each repo must be in config/data/oss-apps/apps.json and remixable, or the entry is refused. A read is the detected binary plus fixed args, or a GET to 127.0.0.1. Nothing here is ever installed or started from the glass.",
+  "engines": [
+    {
+      "id": "ollama-models",
+      "title": "Ollama models",
+      "repo": "ollama/ollama",
+      "replaces": "LM Studio",
+      "detect": { "url": "http://127.0.0.1:11434/api/version" },
+      "read": { "url": "http://127.0.0.1:11434/api/tags" },
+      "rows": "models",
+      "row": {
+        "title": "name",
+        "subtitle": "details.parameter_size",
+        "detail": "size"
+      },
+      "labels": { "title": "Model", "subtitle": "Params", "detail": "On disk" },
+      "format": { "detail": "bytes" },
+      "install": "brew install ollama",
+      "refresh": 60
+    },
+    {
+      "id": "ollama-loaded",
+      "title": "Ollama in memory",
+      "repo": "ollama/ollama",
+      "replaces": "Activity Monitor for models",
+      "detect": { "url": "http://127.0.0.1:11434/api/version" },
+      "read": { "url": "http://127.0.0.1:11434/api/ps" },
+      "rows": "models",
+      "row": {
+        "title": "name",
+        "subtitle": "size_vram",
+        "detail": "expires_at"
+      },
+      "labels": { "title": "Model", "subtitle": "Memory", "detail": "Unloads" },
+      "format": { "subtitle": "bytes", "detail": "ago" },
+      "install": "brew install ollama",
+      "refresh": 15
+    },
+    {
+      "id": "tailscale-peers",
+      "title": "Tailscale peers",
+      "repo": "tailscale/tailscale",
+      "replaces": "the Tailscale menu bar app",
+      "detect": {
+        "bin": [
+          "/opt/homebrew/bin/tailscale",
+          "/usr/local/bin/tailscale",
+          "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+        ]
+      },
+      "read": { "args": ["status", "--json"] },
+      "rows": "Peer.*",
+      "row": { "title": "HostName", "subtitle": "Online", "detail": "OS" },
+      "labels": { "title": "Device", "subtitle": "Online", "detail": "OS" },
+      "install": "brew install tailscale",
+      "refresh": 60
+    },
+    {
+      "id": "gitea-repos",
+      "title": "Gitea repos",
+      "repo": "go-gitea/gitea",
+      "replaces": "GitHub in a browser tab",
+      "detect": { "bin": ["/opt/homebrew/bin/gitea", "/usr/local/bin/gitea"] },
+      "read": { "url": "http://127.0.0.1:3000/api/v1/repos/search?limit=12" },
+      "rows": "data",
+      "row": {
+        "title": "full_name",
+        "subtitle": "description",
+        "detail": "updated_at"
+      },
+      "labels": { "title": "Repo", "subtitle": "About", "detail": "Updated" },
+      "format": { "detail": "ago" },
+      "install": "brew install gitea",
+      "refresh": 120
+    }
+  ]
+}

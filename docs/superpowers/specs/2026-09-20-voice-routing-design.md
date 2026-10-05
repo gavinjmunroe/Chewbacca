@@ -241,7 +241,7 @@ needs to say so once. Assistant-bound sentences show nothing new.
 | `mac/lib/terminal.py`              | new: tab discovery, ensure, draft, submit, clear                                                                                        |
 | `mac/bin/chewie`                   | new verb `terminal {tabs,ensure,draft,submit,clear}`                                                                                    |
 | `bin/hud-agent.md`                 | the drafting rules, the memory line, never submit                                                                                       |
-| `hud/Sources/BobHUDKit/Pill.swift` | only if the existing line op cannot hold a transient message; expected no change                                                        |
+| `hud/Sources/KyberKit/Pill.swift` | only if the existing line op cannot hold a transient message; expected no change                                                        |
 | `tests/test_route.py`              | the routing table                                                                                                                       |
 | `tests/test_memory.py`             | round-trip and rotation                                                                                                                 |
 | `tests/test_terminal.py`           | tab discovery and tab choice against a fixture; paste, submit and clear are manual and opt-in because they open a window                |

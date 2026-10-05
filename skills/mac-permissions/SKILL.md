@@ -103,4 +103,4 @@ That is worth telling the user plainly rather than burying it in an installer.
 Two real mitigations: keep grants on a terminal they control rather than a
 general-purpose app, and put anything long-running or internet-driven in a VM.
 
-Full detail: `docs/PERMISSIONS.md`.
+Full detail: `docs/mac/PERMISSIONS.md`.

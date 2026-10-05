@@ -118,7 +118,7 @@ Reading the source PDF instead is the failure to avoid. It burns the session on
 one chapter and returns a worse answer than a search that cost four hundred
 words.
 
-To ingest a new one, `~/Chewbacca/texts/ingest/ingest.py scan <pdf>` prints the
+To ingest a new one, `~/Chewbacca/apps/texts/ingest/ingest.py scan <pdf>` prints the
 chapter plan and writes nothing. Read the plan before `apply` files 500 pages
 under the wrong headings.
 

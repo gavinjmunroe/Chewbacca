@@ -1,0 +1,740 @@
+#!/usr/bin/env node
+// @ts-nocheck
+// node:sqlite is still flagged experimental and warns on every run.
+process.removeAllListeners("warning");
+/**
+ * amber-mcp: Amber's contacts over MCP, one person's store on one person's disk.
+ *
+ * Drop a file of thousands of contacts into Claude, Perplexity or ChatGPT with
+ * this attached, and they land deduplicated in that user's Amber.
+ *
+ * Three rules shape everything here.
+ *
+ * 1. PREVIEW WRITES NOTHING. `preview_import` reads, matches and answers. The
+ *    only thing it saves is the plan itself, under plans/, so `apply_import`
+ *    can write exactly the rows the person looked at and nothing else.
+ *    review-discipline.md: scanning must not write.
+ *
+ * 2. EVERY WRITE IS UNDOABLE. Rows an import creates carry its batch id, and
+ *    every blank it fills is logged, so `undo_import` removes that batch and
+ *    touches nothing typed by hand or added by another import.
+ *
+ * 3. ONE PROCESS, ONE PERSON. The store is ~/.chewbacca/users/<user>/contacts.db,
+ *    mode 0600 in a 0700 directory. The user is fixed when the server starts
+ *    (AMBER_USER, default the OS account) and no tool takes a user argument, so
+ *    no call can reach anyone else's contacts. That is deliverables 1 and 2 in
+ *    their smallest honest form: siloed per person, on device.
+ *
+ * Why a file path and not only inline rows: a model cannot emit ten thousand
+ * contacts as tool arguments. Measured shape: one contact is about 40 tokens
+ * of JSON, so 10,000 is roughly 400k output tokens, past every client's limit.
+ * Inline rows are for the small case (a pasted list, a screenshot, a few pages
+ * of a PDF the model read); `file` is for the real one.
+ *
+ * Zero dependencies. Node 22.5+ for node:sqlite.
+ *
+ *   amber-mcp                 stdio, for Claude Desktop, Claude Code, Codex
+ *   amber-mcp --http 7789     streamable HTTP on 127.0.0.1, for browser clients
+ */
+
+"use strict";
+
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const http = require("node:http");
+const crypto = require("node:crypto");
+const { execFileSync } = require("node:child_process");
+const { DatabaseSync } = require("node:sqlite");
+
+const PROTOCOL = "2025-06-18";
+// Refuse, never rewrite. A sanitiser that keeps dots let AMBER_USER=".." put
+// the store at ~/.chewbacca itself, and any rewrite can turn two different ids
+// into one directory. Same rule as bin/amber-user (e2's catch, 2026-09-23).
+const USER_ID = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+const USER = String(process.env.AMBER_USER || os.userInfo().username.toLowerCase());
+if (!USER_ID.test(USER)) {
+  process.stderr.write(`amber-mcp: "${USER}" is not a valid Amber user id. Set AMBER_USER to lowercase letters, digits, - or _.\n`);
+  process.exit(2);
+}
+// One root per person, shared with the rest of Amber (profile, people store,
+// log), so a tenant test that isolates a user isolates their contacts too.
+const ROOT = process.env.AMBER_HOME || path.join(os.homedir(), ".chewbacca", "users");
+const DIR = path.join(ROOT, USER);
+const PLANS = path.join(DIR, "plans");
+
+// ── Store ────────────────────────────────────────────────────────────────────
+
+let _db;
+function db() {
+  if (_db) return _db;
+  fs.mkdirSync(PLANS, { recursive: true, mode: 0o700 });
+  fs.chmodSync(DIR, 0o700);
+  const file = path.join(DIR, "contacts.db");
+  _db = new DatabaseSync(file);
+  fs.chmodSync(file, 0o600);
+  _db.exec(`
+    PRAGMA journal_mode = WAL;
+    CREATE TABLE IF NOT EXISTS contacts (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT, phone TEXT, company TEXT, title TEXT, linkedin TEXT, notes TEXT,
+      source TEXT,
+      import_batch TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS contacts_batch_idx ON contacts(import_batch);
+    CREATE TABLE IF NOT EXISTS filled (
+      batch TEXT NOT NULL, contact_id TEXT NOT NULL, field TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS imports (
+      batch TEXT PRIMARY KEY, source TEXT, added INTEGER, merged INTEGER,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now')), undone_at TEXT
+    );
+  `);
+  return _db;
+}
+
+const FIELDS = ["email", "phone", "company", "title", "linkedin", "notes"];
+
+// ── Normalising and matching ─────────────────────────────────────────────────
+
+const clean = (v) => {
+  if (v === null || v === undefined) return null;
+  if (Array.isArray(v)) return clean(v[0]);
+  if (typeof v === "object") return clean(v.value ?? v.address ?? null);
+  const s = String(v).replace(/\s+/g, " ").trim();
+  return s && !/^(n\/?a|null|none|nan|-)$/i.test(s) ? s : null;
+};
+
+const normEmail = (e) => {
+  const s = clean(e);
+  return s && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s) ? s.toLowerCase() : null;
+};
+
+// Last ten digits, so +1 (512) 555-0100 and 512.555.0100 are one number.
+// Fewer than seven digits is an extension or a typo, never an identity.
+const normPhone = (p) => {
+  const d = String(clean(p) || "").replace(/\D/g, "");
+  return d.length >= 7 ? d.slice(-10) : null;
+};
+
+const normLinkedin = (u) => {
+  const m = String(clean(u) || "").toLowerCase().match(/linkedin\.com\/in\/([^/?#\s]+)/);
+  return m ? m[1].replace(/\/+$/, "") : null;
+};
+
+// Legal suffixes are noise for matching. The key can never collapse to empty,
+// because "Capital Group" is a real firm made entirely of words that look like
+// noise (list-audit skill, the a16z entity lesson).
+const SUFFIX = /\b(inc|llc|ltd|limited|corp|corporation|co|company|plc|gmbh|lp|llp)\b\.?/g;
+const normCompany = (c) => {
+  const s = String(clean(c) || "").toLowerCase().replace(/[^\w\s]/g, " ");
+  const stripped = s.replace(SUFFIX, " ").replace(/\s+/g, " ").trim();
+  return stripped || s.trim() || null;
+};
+
+const normName = (n) => String(clean(n) || "").toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, "").replace(/\s+/g, " ").trim() || null;
+
+// A name alone is not an identity: two John Smiths are two people. Name counts
+// only together with a company.
+function keys(c) {
+  const k = [];
+  if (c.email) k.push("e:" + normEmail(c.email));
+  if (c.linkedin) k.push("l:" + normLinkedin(c.linkedin));
+  if (c.phone) k.push("p:" + normPhone(c.phone));
+  const n = normName(c.name), co = normCompany(c.company);
+  if (n && co) k.push("nc:" + n + "|" + co);
+  return k;
+}
+
+function tidy(raw) {
+  const c = {
+    name: clean(raw.name ?? raw.full_name ?? raw.fullName ??
+      [clean(raw.first_name ?? raw.firstName), clean(raw.last_name ?? raw.lastName)].filter(Boolean).join(" ")),
+    email: normEmail(raw.email ?? raw.email_address ?? raw.emails),
+    phone: clean(raw.phone ?? raw.phone_number ?? raw.mobile ?? raw.phones),
+    company: clean(raw.company ?? raw.organization ?? raw.org ?? raw.employer),
+    title: clean(raw.title ?? raw.job_title ?? raw.role ?? raw.position),
+    linkedin: clean(raw.linkedin ?? raw.linkedin_url ?? raw.linkedinUrl),
+    notes: clean(raw.notes ?? raw.note),
+  };
+  if (c.phone && !normPhone(c.phone)) c.phone = null;
+  if (c.linkedin && !normLinkedin(c.linkedin)) c.linkedin = null;
+  // No name but an email: use the local part rather than drop a reachable person.
+  if (!c.name && c.email) c.name = c.email.split("@")[0];
+  return c;
+}
+
+// ── Reading files ────────────────────────────────────────────────────────────
+
+function parseCsv(text) {
+  const delim = (text.split("\n")[0].match(/\t/g) || []).length > (text.split("\n")[0].match(/,/g) || []).length ? "\t" : ",";
+  const rows = [];
+  let row = [], field = "", q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') q = false;
+      else field += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === delim) { row.push(field); field = ""; }
+    else if (ch === "\n" || ch === "\r") {
+      if (ch === "\r" && text[i + 1] === "\n") i++;
+      row.push(field); field = "";
+      if (row.some((f) => f.trim())) rows.push(row);
+      row = [];
+    } else field += ch;
+  }
+  if (field || row.length) { row.push(field); if (row.some((f) => f.trim())) rows.push(row); }
+  if (rows.length < 2) return [];
+  const head = rows[0].map((h) => h.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, ""));
+  return rows.slice(1).map((r) => Object.fromEntries(head.map((h, i) => [h, r[i]])));
+}
+
+function parseVcf(text) {
+  return text.split(/END:VCARD/i).map((card) => {
+    const get = (tag) => {
+      const m = card.match(new RegExp("^" + tag + "(?:;[^:]*)?:(.*)$", "im"));
+      return m ? m[1].trim() : null;
+    };
+    const n = get("N");
+    const fromN = n ? n.split(";").slice(0, 2).reverse().filter(Boolean).join(" ") : null;
+    return { name: get("FN") || fromN, email: get("EMAIL"), phone: get("TEL"), company: (get("ORG") || "").split(";")[0] || null, title: get("TITLE") };
+  }).filter((c) => c.name || c.email);
+}
+
+// A PDF has no rows, only text. The honest reading is: one contact per line
+// that carries an email, with the words before it as the name. It is marked
+// low confidence in the preview, because a PDF laid out as cards or columns
+// will misread, and the person should look before applying.
+function parsePdf(file) {
+  let text;
+  try {
+    text = execFileSync("pdftotext", ["-layout", file, "-"], { encoding: "utf8", maxBuffer: 1 << 28 });
+  } catch {
+    throw new Error("Reading a PDF needs pdftotext (brew install poppler). Or export the list as CSV.");
+  }
+  const out = [];
+  for (const line of text.split("\n")) {
+    const email = (line.match(/[^\s@,;<>()]+@[^\s@,;<>()]+\.[A-Za-z]{2,}/) || [])[0];
+    if (!email) continue;
+    const cols = line.split(/\s{2,}|\t/).map((s) => s.trim()).filter(Boolean);
+    const rest = cols.filter((s) => !s.includes(email));
+    const phone = rest.find((s) => (s.match(/\d/g) || []).length >= 7 && !/[a-z]{3}/i.test(s)) || null;
+    const words = rest.filter((s) => s !== phone);
+    out.push({ name: words[0] || null, company: words[1] || null, title: words[2] || null, email, phone });
+  }
+  return out;
+}
+
+// `file` comes from a model, and a model can be steered by whatever document it
+// just read. Without these limits, "import ~/.ssh/id_ed25519" parses a private
+// key as a CSV and echoes its first lines back in the preview sample. So a path
+// must resolve (symlinks followed) inside one of the import folders, carry a
+// contacts extension, and contain no dot-directory on the way.
+const EXTS = new Set([".csv", ".tsv", ".vcf", ".json", ".pdf"]);
+const IMPORT_DIRS = (process.env.AMBER_IMPORT_DIRS
+  ? process.env.AMBER_IMPORT_DIRS.split(path.delimiter)
+  : ["Downloads", "Documents", "Desktop"].map((d) => path.join(os.homedir(), d))
+).filter(Boolean).map((d) => { try { return fs.realpathSync(d); } catch { return path.resolve(d); } });
+
+function readFile(file) {
+  const asked = path.resolve(String(file).replace(/^~(?=\/)/, os.homedir()));
+  if (!fs.existsSync(asked)) throw new Error(`No file at ${asked}`);
+  const f = fs.realpathSync(asked);
+  const ext = path.extname(f).toLowerCase();
+  const inside = IMPORT_DIRS.find((d) => f.startsWith(d + path.sep));
+  if (!inside)
+    throw new Error(`Amber only reads contact files from ${IMPORT_DIRS.join(", ")}. Move the file into one of those first.`);
+  if (f.slice(inside.length).split(path.sep).some((part) => part.startsWith(".")))
+    throw new Error("Amber does not read hidden files or folders.");
+  if (!EXTS.has(ext)) throw new Error(`Amber reads ${[...EXTS].join(", ")} files, not ${ext || "files with no extension"}.`);
+  if (ext === ".pdf") return { rows: parsePdf(f), kind: "pdf" };
+  const text = fs.readFileSync(f, "utf8").replace(/^﻿/, "");
+  if (ext === ".vcf") return { rows: parseVcf(text), kind: "vcard" };
+  if (ext === ".json") {
+    const j = JSON.parse(text);
+    return { rows: Array.isArray(j) ? j : j.contacts || [], kind: "json" };
+  }
+  return { rows: parseCsv(text), kind: ext === ".tsv" ? "tsv" : "csv" };
+}
+
+// ── Preview and apply ────────────────────────────────────────────────────────
+
+function fingerprint() {
+  const r = db().prepare("SELECT COUNT(*) n, COALESCE(MAX(rowid),0) m FROM contacts").get();
+  return `${r.n}:${r.m}`;
+}
+
+function preview({ contacts, file, source }) {
+  let rows = [], kind = "inline";
+  if (file) ({ rows, kind } = readFile(file));
+  if (Array.isArray(contacts)) rows = rows.concat(contacts);
+  if (!rows.length) throw new Error("Nothing to import. Pass `file` (a path to CSV, TSV, vCard, JSON or PDF) or `contacts` (an array).");
+
+  const rejected = [];
+  const incoming = [];
+  rows.forEach((raw, i) => {
+    const c = tidy(raw || {});
+    if (!c.name) return rejected.push({ row: i + 1, reason: "no name and no email" });
+    if (!c.email && !c.phone && !c.linkedin) return rejected.push({ row: i + 1, name: c.name, reason: "no way to reach them (no email, phone or LinkedIn)" });
+    incoming.push(c);
+  });
+
+  // Collapse duplicates inside the file first: union by shared key.
+  const parent = incoming.map((_, i) => i);
+  const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const owner = new Map();
+  incoming.forEach((c, i) => {
+    for (const k of keys(c)) {
+      if (owner.has(k)) parent[find(i)] = find(owner.get(k));
+      else owner.set(k, i);
+    }
+  });
+  const groups = new Map();
+  incoming.forEach((c, i) => {
+    const g = find(i);
+    const into = groups.get(g);
+    if (!into) return groups.set(g, { ...c });
+    for (const f of ["name", ...FIELDS]) if (!into[f] && c[f]) into[f] = c[f];
+  });
+  const unique = [...groups.values()];
+  const dupesInFile = incoming.length - unique.length;
+
+  // Then match against what the store already holds.
+  const index = new Map();
+  for (const e of db().prepare(`SELECT id, name, ${FIELDS.join(", ")} FROM contacts`).all())
+    for (const k of keys(e)) if (!index.has(k)) index.set(k, e);
+
+  const add = [], merge = [];
+  let unchanged = 0;
+  for (const c of unique) {
+    const hit = keys(c).map((k) => index.get(k)).find(Boolean);
+    if (!hit) { add.push(c); continue; }
+    // Fill blanks only. An import never overwrites something already there.
+    const fill = {};
+    for (const f of FIELDS) if (c[f] && !hit[f]) fill[f] = c[f];
+    if (Object.keys(fill).length) merge.push({ id: hit.id, name: hit.name, fill });
+    else unchanged++;
+  }
+
+  const batch = crypto.randomBytes(6).toString("hex");
+  const plan = { batch, source: clean(source) || (file ? path.basename(String(file)) : "inline"), kind, fingerprint: fingerprint(), add, merge, created: new Date().toISOString() };
+  fs.writeFileSync(path.join(PLANS, batch + ".json"), JSON.stringify(plan), { mode: 0o600 });
+
+  const lines = [
+    `Preview for ${USER}'s Amber (nothing written yet). Import id: ${batch}`,
+    ``,
+    `Read ${rows.length} rows from ${kind === "inline" ? "the conversation" : `a ${kind} file`}.`,
+    `  ${add.length} new people to add`,
+    `  ${merge.length} already in Amber, with blank fields to fill in`,
+    `  ${unchanged} already in Amber with nothing new`,
+    `  ${dupesInFile} duplicates inside the file, collapsed`,
+    `  ${rejected.length} rows rejected`,
+  ];
+  if (kind === "pdf") lines.push(``, `This came from a PDF, which has no real columns. Check the sample below reads correctly before applying.`);
+  const show = (c) => `  ${c.name}${c.title ? ", " + c.title : ""}${c.company ? " at " + c.company : ""}${c.email ? " <" + c.email + ">" : ""}`;
+  if (add.length) lines.push(``, `Sample of new people:`, ...add.slice(0, 5).map(show));
+  if (merge.length) lines.push(``, `Sample of fills:`, ...merge.slice(0, 3).map((m) => `  ${m.name}: ${Object.keys(m.fill).join(", ")}`));
+  if (rejected.length) lines.push(``, `Sample of rejects:`, ...rejected.slice(0, 3).map((r) => `  row ${r.row}${r.name ? " (" + r.name + ")" : ""}: ${r.reason}`));
+  lines.push(``, `To save it, call apply_import with import_id "${batch}". Show the person these numbers first.`);
+  return lines.join("\n");
+}
+
+function apply({ import_id }) {
+  const id = String(import_id || "").replace(/[^a-f0-9]/g, "");
+  const file = path.join(PLANS, id + ".json");
+  if (!id || !fs.existsSync(file)) throw new Error(`No preview with id ${import_id}. Run preview_import first.`);
+  const plan = JSON.parse(fs.readFileSync(file, "utf8"));
+  // The preview was a promise about a specific store. If anything changed
+  // since, the numbers the person approved are no longer the numbers.
+  if (plan.fingerprint !== fingerprint())
+    throw new Error("Amber changed since this preview, so its numbers are stale. Run preview_import again.");
+
+  const d = db();
+  const ins = d.prepare(`INSERT INTO contacts (id, name, ${FIELDS.join(", ")}, source, import_batch) VALUES (?,?,?,?,?,?,?,?,?,?)`);
+  const log = d.prepare("INSERT INTO filled (batch, contact_id, field) VALUES (?,?,?)");
+  d.exec("BEGIN");
+  try {
+    for (const c of plan.add) ins.run(crypto.randomUUID(), c.name, ...FIELDS.map((f) => c[f] ?? null), plan.source, plan.batch);
+    for (const m of plan.merge)
+      for (const [f, v] of Object.entries(m.fill)) {
+        if (!FIELDS.includes(f)) continue;
+        const r = d.prepare(`UPDATE contacts SET ${f} = ? WHERE id = ? AND ${f} IS NULL`).run(v, m.id);
+        if (r.changes) log.run(plan.batch, m.id, f);
+      }
+    d.prepare("INSERT INTO imports (batch, source, added, merged) VALUES (?,?,?,?)").run(plan.batch, plan.source, plan.add.length, plan.merge.length);
+    d.exec("COMMIT");
+  } catch (e) {
+    d.exec("ROLLBACK");
+    throw e;
+  }
+  fs.unlinkSync(file);
+  const total = d.prepare("SELECT COUNT(*) n FROM contacts").get().n;
+  return `Saved to ${USER}'s Amber: ${plan.add.length} added, ${plan.merge.length} filled in. ${total} people in total. Undo with undo_import "${plan.batch}".`;
+}
+
+function undo({ import_id }) {
+  const id = String(import_id || "").replace(/[^a-f0-9]/g, "");
+  const d = db();
+  const row = d.prepare("SELECT * FROM imports WHERE batch = ?").get(id);
+  if (!row) throw new Error(`No applied import with id ${import_id}.`);
+  if (row.undone_at) return `Import ${id} was already undone at ${row.undone_at}.`;
+  d.exec("BEGIN");
+  try {
+    const removed = d.prepare("DELETE FROM contacts WHERE import_batch = ?").run(id).changes;
+    let cleared = 0;
+    for (const f of d.prepare("SELECT contact_id, field FROM filled WHERE batch = ?").all(id))
+      if (FIELDS.includes(f.field)) cleared += d.prepare(`UPDATE contacts SET ${f.field} = NULL WHERE id = ?`).run(f.contact_id).changes;
+    d.prepare("DELETE FROM filled WHERE batch = ?").run(id);
+    d.prepare("UPDATE imports SET undone_at = datetime('now') WHERE batch = ?").run(id);
+    d.exec("COMMIT");
+    return `Undid import ${id}: removed ${removed} people it added and cleared ${cleared} fields it filled. Nothing else was touched.`;
+  } catch (e) {
+    d.exec("ROLLBACK");
+    throw e;
+  }
+}
+
+function search({ query, limit }) {
+  const q = `%${String(query || "").trim()}%`;
+  const where = "WHERE name LIKE ? OR company LIKE ? OR title LIKE ? OR email LIKE ? OR notes LIKE ?";
+  const d = db();
+  // The total comes back with every answer. Without it a model asked "how many
+  // at Northstar" counted a capped page and guessed: it said 402 when the store
+  // held 360 (end-to-end run, 2026-09-23).
+  const total = d.prepare(`SELECT COUNT(*) n FROM contacts ${where}`).get(q, q, q, q, q).n;
+  if (!total) return `No one in ${USER}'s Amber matches "${query}".`;
+  const cap = Math.min(Number(limit) || 25, 200);
+  const rows = d.prepare(`SELECT name, title, company, email, phone FROM contacts ${where} ORDER BY name LIMIT ?`).all(q, q, q, q, q, cap);
+  const head = total > rows.length ? `${total} people match "${query}". Showing the first ${rows.length}.` : `${total} people match "${query}".`;
+  return [head, ...rows.map((c) => `${c.name}${c.title ? ", " + c.title : ""}${c.company ? " at " + c.company : ""}${c.email ? " <" + c.email + ">" : ""}${c.phone ? " " + c.phone : ""}`)].join("\n");
+}
+
+function summary() {
+  const d = db();
+  const n = d.prepare("SELECT COUNT(*) n FROM contacts").get().n;
+  // Group by the same firm key the matcher uses, so "Northstar Ventures" and
+  // "Northstar Ventures LLC" are one firm here too, named by its commonest spelling.
+  const firms = new Map();
+  for (const r of d.prepare("SELECT company, COUNT(*) n FROM contacts WHERE company IS NOT NULL GROUP BY company").all()) {
+    const k = normCompany(r.company);
+    const f = firms.get(k) || { n: 0, best: r.company, bestN: 0 };
+    f.n += r.n;
+    if (r.n > f.bestN) Object.assign(f, { best: r.company, bestN: r.n });
+    firms.set(k, f);
+  }
+  const companies = [...firms.values()].sort((a, b) => b.n - a.n).slice(0, 10).map((f) => ({ company: f.best, n: f.n }));
+  const imports = d.prepare("SELECT * FROM imports ORDER BY applied_at DESC LIMIT 10").all();
+  return [
+    `${USER}'s Amber holds ${n} people.`,
+    companies.length ? `Most common companies: ${companies.map((c) => `${c.company} (${c.n})`).join(", ")}` : "",
+    imports.length ? `Imports:\n${imports.map((i) => `  ${i.batch}  ${i.source}  +${i.added} added, ${i.merged} filled  ${i.applied_at}${i.undone_at ? "  (undone)" : ""}`).join("\n")}` : "No imports yet.",
+  ].filter(Boolean).join("\n");
+}
+
+// ── Knowing the person ───────────────────────────────────────────────────────
+//
+// Karthik's first deliverable asks three things of one person's agent: that it
+// knows whose it is, remembers what it was told in an earlier session, and
+// never sees anyone else's. The people store (bin/people) already holds the
+// memory; these tools run it with PEOPLE_DIR inside this user's root, so the
+// isolation is the same path-level isolation the tenant test proves, and a
+// fact survives because it went to disk, not into a context window.
+
+const PEOPLE_BIN = path.join(path.dirname(fs.realpathSync(__filename)), "..", "..", "..", "bin", "people");
+
+function people(...args) {
+  const peopleDir = path.join(DIR, "people");
+  fs.mkdirSync(peopleDir, { recursive: true, mode: 0o700 });
+  try {
+    return execFileSync(PEOPLE_BIN, args, {
+      encoding: "utf8",
+      timeout: 20000,
+      env: { ...process.env, PEOPLE_DIR: peopleDir, AMBER_ROOT: DIR, AMBER_USER: USER, NO_COLOR: "1" },
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+  } catch (e) {
+    const said = String(e.stderr || e.stdout || e.message).trim();
+    throw new Error(said || "the people store did not answer");
+  }
+}
+
+function profileName() {
+  try {
+    const m = fs.readFileSync(path.join(DIR, "profile.md"), "utf8").match(/^name: (.+)$/m);
+    return m ? m[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+function hello() {
+  const name = profileName();
+  const today = JSON.parse(people("today", "--json") || "{}");
+  const aboutYou = JSON.parse(people("me", "--list", "--json", "--limit", "12") || "[]");
+  return JSON.stringify({
+    you: { id: USER, name: name || USER },
+    what_you_have_told_me_about_yourself: aboutYou,
+    today,
+    how_to_answer:
+      "Greet the person by first name. Lead with anything due or owed, then who is worth a message. " +
+      "Use what they have told you about themselves to decide how to talk to them. Say nothing about other users: there are none in this store.",
+  });
+}
+
+function remember({ about, fact }) {
+  const said = String(fact || "").trim();
+  const who = String(about || "me").trim();
+  if (!said) throw new Error("remember needs a fact");
+  if (/^(me|myself|i|the user)$/i.test(who)) {
+    people("me", said);
+    return `Remembered about ${profileName() || USER}: ${said}`;
+  }
+  try {
+    return people("note", who, said);
+  } catch (e) {
+    // Someone new: add them, then note it. Only when nobody matches: an
+    // ambiguous name is refused by the store and passed back to be resolved.
+    if (!/no one|nobody|not found|no match/i.test(e.message)) throw e;
+    people("add", who);
+    return people("note", who, said);
+  }
+}
+
+function recall({ about, query }) {
+  const person = String(about || "").trim();
+  if (/^(me|myself|i|the user)$/i.test(person))
+    return people("me", "--list", "--json", ...(query ? ["--search", String(query)] : []));
+  if (person) return people("search", "--person", person, "--json", ...(query ? [String(query)] : []));
+  const words = String(query || "").match(/[\p{L}\p{N}]{3,}/gu) || [];
+  if (!words.length) throw new Error("recall needs a person or some words to look for");
+  // Any word, not all of them: "Sam's new job" should find "Sam started at Ramp".
+  return people("search", words.map((w) => `"${w}"`).join(" OR "), "--json");
+}
+
+// ── Tools ────────────────────────────────────────────────────────────────────
+
+const CONTACT = {
+  type: "object",
+  properties: Object.fromEntries(["name", ...FIELDS].map((f) => [f, { type: "string" }])),
+};
+
+const TOOLS = [
+  {
+    name: "hello",
+    description:
+      "Call this first in every conversation, and whenever the person greets you. Returns who this Amber belongs to, what they have told you about themselves, and what is due today: dates, people to check in on, things they owe, who is worth a message. Greet them by name and lead with what is due.",
+    inputSchema: { type: "object", properties: {} },
+    run: hello,
+  },
+  {
+    name: "remember",
+    description:
+      "Save something the person told you, so a later conversation knows it. `about` is a person's name, or 'me' for a fact about the person themselves (a preference, how they like to be talked to, what they are working on). Use whenever they share news about someone or about themselves.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        about: { type: "string", description: "A person's name, or 'me'" },
+        fact: { type: "string", description: "What to remember, in plain words" },
+      },
+      required: ["fact"],
+    },
+    run: remember,
+  },
+  {
+    name: "recall",
+    description:
+      "Look up what the person has told you before. Pass `about` for everything about one person (or 'me'), `query` for a few keywords across everyone, or both.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        about: { type: "string", description: "A person's name, or 'me'" },
+        query: { type: "string", description: "A few keywords" },
+      },
+    },
+    run: recall,
+  },
+  {
+    name: "preview_import",
+    description:
+      "Step 1 of adding contacts to the user's Amber. Reads a contact list and reports what WOULD happen: how many are new, how many are already known, duplicates collapsed, rows rejected. Writes nothing. For a file on the user's computer (CSV, TSV, vCard, JSON or PDF), pass its path as `file`; always do this for large lists. For a few contacts you read from a document or the conversation, pass them as `contacts`. Show the person the numbers, then call apply_import.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        file: { type: "string", description: "Path to a contacts file on this computer" },
+        contacts: { type: "array", items: CONTACT, description: "Contacts you extracted yourself, for small lists" },
+        source: { type: "string", description: "Where the list came from, e.g. 'SaaStr 2026 attendee list'" },
+      },
+    },
+    run: preview,
+  },
+  {
+    name: "apply_import",
+    description: "Step 2. Saves exactly the contacts a preview_import reported, and nothing else. Call only after showing the person the preview's numbers.",
+    inputSchema: { type: "object", properties: { import_id: { type: "string" } }, required: ["import_id"] },
+    run: apply,
+  },
+  {
+    name: "undo_import",
+    description: "Removes the people an earlier import added and clears the fields it filled in. Touches nothing else.",
+    inputSchema: { type: "object", properties: { import_id: { type: "string" } }, required: ["import_id"] },
+    run: undo,
+  },
+  {
+    name: "search_contacts",
+    description: "Find people in the user's Amber by name, company, title, email or notes. Use for 'who do I know at X', 'find everyone in fintech'.",
+    inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } }, required: ["query"] },
+    run: search,
+  },
+  {
+    name: "amber_summary",
+    description: "How many people are in the user's Amber, the most common companies, and the import history.",
+    inputSchema: { type: "object", properties: {} },
+    run: summary,
+  },
+];
+
+// ── Protocol ─────────────────────────────────────────────────────────────────
+
+async function handle(msg) {
+  const { id, method, params } = msg || {};
+  const reply = (result) => ({ jsonrpc: "2.0", id, result });
+  const fail = (code, message) => ({ jsonrpc: "2.0", id, error: { code, message } });
+  if (method === "initialize")
+    return reply({ protocolVersion: PROTOCOL, capabilities: { tools: {} }, serverInfo: { name: "amber", version: "0.1.0" } });
+  if (method === "notifications/initialized") return null;
+  if (method === "tools/list")
+    return reply({ tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema })) });
+  if (method === "tools/call") {
+    const tool = TOOLS.find((t) => t.name === params?.name);
+    if (!tool) return fail(-32602, `no tool named ${params?.name}`);
+    try {
+      return reply({ content: [{ type: "text", text: await tool.run(params.arguments || {}) }] });
+    } catch (e) {
+      return reply({ content: [{ type: "text", text: e.message }], isError: true });
+    }
+  }
+  if (id === undefined) return null;
+  return fail(-32601, `unknown method ${method}`);
+}
+
+function serveStdio() {
+  let buf = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", async (chunk) => {
+    buf += chunk;
+    let nl;
+    while ((nl = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      let out;
+      try {
+        out = await handle(JSON.parse(line));
+      } catch {
+        out = { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } };
+      }
+      if (out) process.stdout.write(JSON.stringify(out) + "\n");
+    }
+  });
+}
+
+// Binding to 127.0.0.1 keeps the network out but not the browser: any page the
+// person has open can POST to localhost. So HTTP needs three locks.
+//   Host must be localhost or 127.0.0.1, which defeats DNS rebinding.
+//   Origin, when a browser sends one, must be on AMBER_ALLOWED_ORIGINS (empty
+//     by default), and CORS headers go only to those origins.
+//   A bearer token from a 0600 file in the user's own directory.
+function token() {
+  const f = path.join(DIR, "token");
+  db();
+  if (!fs.existsSync(f)) fs.writeFileSync(f, crypto.randomBytes(24).toString("hex") + "\n", { mode: 0o600 });
+  return fs.readFileSync(f, "utf8").trim();
+}
+
+function serveHttp(port) {
+  const secret = token();
+  const allowed = new Set((process.env.AMBER_ALLOWED_ORIGINS || "").split(",").map((s) => s.trim()).filter(Boolean));
+  const hosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+  const equal = (a, b) => a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  http
+    .createServer((req, res) => {
+      const origin = req.headers.origin;
+      if (!hosts.has(String(req.headers.host || ""))) return res.writeHead(403).end("bad host");
+      if (origin && !allowed.has(origin)) return res.writeHead(403).end("origin not allowed");
+      if (origin) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Vary", "Origin");
+        res.setHeader("Access-Control-Allow-Headers", "content-type, mcp-protocol-version, authorization");
+      }
+      if (req.method === "OPTIONS") return res.writeHead(204).end();
+      const auth = String(req.headers.authorization || "").replace(/^Bearer\s+/i, "");
+      if (!equal(auth, secret)) return res.writeHead(401).end("missing or wrong token");
+      if (req.method === "GET")
+        return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ name: "amber", protocol: PROTOCOL }));
+      if (req.method !== "POST") return res.writeHead(405).end();
+      let body = "";
+      // 20 MB: an inline batch of a few thousand contacts fits, a runaway does not.
+      req.on("data", (d) => { body += d; if (body.length > 20e6) req.destroy(); });
+      req.on("end", async () => {
+        let out;
+        try { out = await handle(JSON.parse(body)); } catch { out = { jsonrpc: "2.0", id: null, error: { code: -32700, message: "parse error" } }; }
+        if (!out) return res.writeHead(202).end();
+        res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(out));
+      });
+    })
+    .listen(port, "127.0.0.1", () =>
+      process.stderr.write(`amber-mcp for ${USER} on http://127.0.0.1:${port}. Bearer token in ${path.join(DIR, "token")}\n`),
+    );
+}
+
+// `amber-mcp install` puts Amber into the apps a person already uses. What it
+// prints never says "MCP": Caleb's brief was that the letters alone make a
+// non-technical person think this is not for them. Each config is backed up
+// before it is touched, and one that does not parse is left alone and named.
+function install() {
+  const self = fs.realpathSync(__filename);
+  const entry = { command: self, env: { AMBER_USER: USER } };
+  const said = [];
+  const targets = [
+    ["Claude Desktop", path.join(os.homedir(), "Library/Application Support/Claude/claude_desktop_config.json")],
+    ["Claude Code", path.join(os.homedir(), ".claude.json")],
+  ];
+  for (const [app, file] of targets) {
+    if (!fs.existsSync(file)) continue;
+    let cfg;
+    try {
+      cfg = JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch {
+      said.push(`${app}: skipped, its settings file did not read cleanly, so it was left exactly as it was`);
+      continue;
+    }
+    cfg.mcpServers = cfg.mcpServers || {};
+    const had = cfg.mcpServers.amber;
+    if (had && had.command === self && had.env?.AMBER_USER === USER) {
+      said.push(`${app}: Amber is already there`);
+      continue;
+    }
+    fs.copyFileSync(file, file + ".before-amber");
+    cfg.mcpServers.amber = entry;
+    fs.writeFileSync(file, JSON.stringify(cfg, null, 2) + "\n");
+    said.push(`${app}: Amber added. Quit and reopen ${app} to see it.`);
+  }
+  // Perplexity keeps its connectors behind its own settings screen, not a file
+  // this can edit, so hand over the exact line to paste.
+  if (fs.existsSync("/Applications/Perplexity.app"))
+    said.push(`Perplexity: open Settings, Connectors, Add Connector, name it Amber, and paste this as the command:\n  AMBER_USER=${USER} ${self}`);
+  if (!said.length) said.push("No Claude Desktop, Claude Code or Perplexity is installed here yet. Install one, then run this again.");
+  process.stdout.write(
+    [...said, "", `Your contacts stay on this Mac, in ${DIR}.`,
+      `Try: "Add the contacts in my Downloads folder file investors.csv to Amber."`].join("\n") + "\n",
+  );
+}
+
+const i = process.argv.indexOf("--http");
+if (process.argv[2] === "install") install();
+else if (i !== -1) serveHttp(Number(process.argv[i + 1]) || 7789);
+else serveStdio();

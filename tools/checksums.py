@@ -20,7 +20,10 @@ REPO = Path(__file__).resolve().parent.parent
 OUT = REPO / "SHA256SUMS.txt"
 # The files that run. Documentation changing does not need to invalidate this,
 # and a checksum file that churns on every doc edit is one people stop reading.
-PATTERNS = ("*.sh", "*.ps1", "bin/*", "bin/lib/*", "tools/*.py", ".claude/hooks/*.sh", "runtimes/*.json")
+# bin/lib/people/* is named on its own because a glob does not recurse, and
+# bin/people is a dispatcher that runs nothing without the modules there.
+PATTERNS = ("*.sh", "*.ps1", "bin/*", "bin/lib/*", "bin/lib/people/*", "tools/*.py", ".claude/hooks/*.sh",
+            "config/runtimes/*.json")
 
 
 def files():

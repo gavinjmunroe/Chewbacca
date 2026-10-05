@@ -10,7 +10,7 @@ For anything longer than a couple of steps, do not freehand a sequence of comman
 Compile the request into one formal plan, check it, run it, and read the trace.
 
 The reason is arithmetic, not style. Twenty improvised steps at 95% reliability each
-is a 36% success rate (see `docs/BENCHMARKS.md`). A checked plan that stops at the
+is a 36% success rate (see `docs/mac/BENCHMARKS.md`). A checked plan that stops at the
 first failure and gates every irreversible action does not compound errors that way.
 This is the Genie / executable-semantic-parser idea (Campagna, Xu, Lam; Liang):
 compile intent into a typed, checkable representation that runs or errors cleanly,
@@ -18,7 +18,7 @@ rather than letting the model improvise.
 
 ## The grammar
 
-`data/grammar.json` defines the command space: `stream => query* => action*`.
+`mac/data/grammar.json` defines the command space: `stream => query* => action*`.
 
 - **stream** - when it runs: `now`, `every`, `on_text`, `on_file`, `on_calendar`
 - **query** - reads, no side effects: `texts`, `screen`, `web`, `app_data`, `file`

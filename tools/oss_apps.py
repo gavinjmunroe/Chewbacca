@@ -7,13 +7,13 @@
   oss-apps remixable [<term>]       only permissive licenses, safe to build on and ship
   oss-apps show <owner/repo|name>   one entry in full
   oss-apps stats                    counts, sources, and what could not be fetched
-  oss-apps build [--offline]        rebuild data/oss-apps/apps.json from the sources
+  oss-apps build [--offline]        rebuild config/data/oss-apps/apps.json from the sources
 
 Filters on every list: --remixable [--with-caveats], --stack <s>, --limit N (default 25, 0 = all), --json.
 
 remixable is true only for a permissive SPDX license GitHub detected itself
 (MIT, Apache, BSD, ISC and friends). MPL-2.0 and open-core repos a person read
-and recorded in data/oss-apps/curated.json are remixable_with_caveat instead,
+and recorded in config/data/oss-apps/curated.json are remixable_with_caveat instead,
 listed by --with-caveats with the caveat printed. GPL, AGPL, no license,
 source-available and anything GitHub could not classify are false.
 """
@@ -26,7 +26,7 @@ import runpy
 import sys
 
 REPO = Path(__file__).resolve().parent.parent
-DATA = Path(os.environ.get("OSS_APPS_DATA", REPO / "data" / "oss-apps" / "apps.json"))
+DATA = Path(os.environ.get("OSS_APPS_DATA", REPO / "config" / "data" / "oss-apps" / "apps.json"))
 
 
 def load(path=None):

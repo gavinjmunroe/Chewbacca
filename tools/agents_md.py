@@ -4,13 +4,13 @@ import argparse
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SOURCE = REPO / "instructions/agent-neutral.md"
+SOURCE = REPO / "config/instructions/agent-neutral.md"
 # Codex's default project instruction budget is 32 KiB, including ancestor files.
 MAX_BYTES = 24 * 1024
 
 
 def render():
-    text = ("# AGENTS.md\n\nGenerated from `instructions/agent-neutral.md`. "
+    text = ("# AGENTS.md\n\nGenerated from `config/instructions/agent-neutral.md`. "
             "Edit that shared source, then run\n`python3 tools/agents_md.py`. "
             "Select the runtime independently of the shared context.\n\n" + SOURCE.read_text(encoding="utf-8"))
     if len(text.encode("utf-8")) > MAX_BYTES:

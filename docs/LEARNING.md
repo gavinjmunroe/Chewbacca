@@ -201,7 +201,7 @@ the part that does not depend on any of that.
 
 A kit that optimises its own score will optimise the score. Goodhart is the
 default outcome of every step above, and the counterweight is already
-written in `methods/doctrine.md`: the test is whether the people
+written in `library/methods/doctrine.md`: the test is whether the people
 around us are being transformed, and whether they can now do something they
 could not, **eventually without it**.
 

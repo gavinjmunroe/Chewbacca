@@ -3961,7 +3961,7 @@ class Listener:
         if ok:
             self.turns += 1
             self.last_usage = run.usage
-            self.recent.append((req.said, run.answer() or run.text))
+            self.recent.append((said, run.answer() or run.text))
         report = {
             "started": started,
             "wait": None if asked_at is None else max(0.0, started - asked_at),

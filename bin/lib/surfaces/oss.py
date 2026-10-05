@@ -1,7 +1,7 @@
 """oss: "what replaces Notion", answered on the glass from the open source
 registry, with each answer's license said plainly.
 
-Rows come from data/oss-apps/apps.json through tools/oss_apps.py's own
+Rows come from config/data/oss-apps/apps.json through tools/oss_apps.py's own
 functions (replaces first, search when nothing replaces it by name), so the
 glass and the `oss-apps` CLI can never disagree. Each row carries one of four
 license buckets:
@@ -12,7 +12,7 @@ license buckets:
     none        no license, source-available, or one GitHub could not classify
 
 "More" on a row shows that one entry in full. Under the list sit the engines
-from data/surfaces/engines.json: running, installed, or not installed with the
+from config/data/surfaces/engines.json: running, installed, or not installed with the
 install hint as words. "Show" on an installed engine opens its own panel.
 
 Read only. Nothing here opens a URL, clones a repo or installs anything. A
@@ -55,7 +55,7 @@ def tool():
 
 def registry(ctx: Context | None = None) -> dict:
     env = ctx.env if ctx is not None else os.environ
-    path = Path(env.get("OSS_APPS_DATA") or REPO / "data" / "oss-apps" / "apps.json")
+    path = Path(env.get("OSS_APPS_DATA") or REPO / "config" / "data" / "oss-apps" / "apps.json")
     try:
         key = (str(path), path.stat().st_mtime_ns)
     except OSError as err:

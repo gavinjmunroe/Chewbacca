@@ -48,4 +48,4 @@ Owned tabs open in the background of the Chrome profile Browser Harness attaches
 
 ## After a run
 
-When a site taught you something (a URL, a control's real name, a mistake), add it to `maps/<host>/MAP.md` the same way hud-agent.md asks for any website task.
+When a site taught you something (a URL, a control's real name, a mistake), add it to `library/maps/<host>/MAP.md` the same way hud-agent.md asks for any website task.

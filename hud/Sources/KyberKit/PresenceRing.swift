@@ -1,3 +1,5 @@
+import AppKit
+import QuartzCore
 import SwiftUI
 
 /// Is it there, is it listening, is it working, is it stuck.
@@ -14,7 +16,8 @@ import SwiftUI
 public enum Presence: String, Sendable, CaseIterable {
     /// Running, not listening, nothing in flight. Static and nearly invisible.
     case dormant
-    /// Listening for address. A slow breath.
+    /// Listening for address. Bright and still: listening is the resting
+    /// state of a session, and nothing moves while idle.
     case attentive
     /// Hearing speech directed at it. Thickness tracks amplitude.
     case hearing
@@ -74,81 +77,81 @@ public enum Presence: String, Sendable, CaseIterable {
 /// Gavin, 2026-09-23, looking at the green ring: "i hate how it looks, can you
 /// make it a * symbol and just have it pulsate and change color and spin when
 /// thinking." So the mark is six arms from one centre, and the states keep
-/// their motion signatures on it: still when dormant or done, breathing when
-/// attentive, swelling with the voice, and spinning while it works. Thinking
-/// adds a pulse and a slow walk around the colour wheel, because it is the one
-/// state that has to be readable from the corner of an eye.
+/// their motion signatures on it: still when dormant, attentive or done,
+/// swelling with the voice, and spinning while it works. Thinking adds a pulse
+/// and a slow walk around the colour wheel, because it is the one state that
+/// has to be readable from the corner of an eye.
 ///
-/// Drawn with plain SwiftUI animations rather than a per-frame timeline. This
-/// runs for the entire life of the session, and a `TimelineView(.animation)`
-/// redrawing at 60fps forever is a battery bug that ships to everyone.
-/// Repeating animations are handed to Core Animation and cost nothing while
-/// they run.
+/// Every continuous motion runs on Core Animation, in the render server, and
+/// none of it touches SwiftUI. Until 2026-10-05 the breath, spin, pulse and
+/// hue walk were SwiftUI `repeatForever` animations, on the assumption that
+/// SwiftUI hands those to Core Animation. On macOS it does not: the hosting
+/// view re-rendered the whole full-screen overlay at display rate for as long
+/// as one ran. Measured that day on Caleb's Mac, glass cleared, `ps` each
+/// second over 10 s: `attentive` cost 30.6% CPU with the breath and 9.2% with
+/// the ring held still on the same build, and flipping the state back to
+/// `dormant` left it at 17.3%, because SwiftUI does not stop a repeating
+/// animation when the value driving it changes. Here every animation is a
+/// `CABasicAnimation` under a named key and is removed by that key when the
+/// state changes, so a state that does not move costs nothing at all.
 struct PresenceRing: View {
     let presence: Presence
     /// 0 to 1, only read in `.hearing` and `.speaking`. Voice amplitude.
     let amplitude: Double
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var breathing = false
-    @State private var spinning = false
-    @State private var pulsing = false
-    @State private var hueWalk = false
-    @State private var pulses = 0
+    @Environment(\.hudOffscreen) private var offscreen
 
-    private let size: CGFloat = 16
+    static let size: CGFloat = 16
 
     var body: some View {
-        Asterisk(arms: 6)
-            .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-            .frame(width: size, height: size)
-            .rotationEffect(.degrees(spinning ? 360 : 0))
-            .animation(spinAnimation, value: spinning)
-            .scaleEffect(scale)
-            .hueRotation(.degrees(hueWalk ? 360 : 0))
-            .animation(
-                Motion.repeating(.linear(duration: 3).repeatForever(autoreverses: false),
-                                 reduced: reduceMotion),
-                value: hueWalk)
-            .opacity(presence == .dormant ? 0.3 : 1)
-            .shadow(color: tint.opacity(glow), radius: 6)
-            .animation(Motion.fade(0.35, reduced: reduceMotion), value: presence)
-            .animation(.linear(duration: 0.06), value: amplitude)
-            .onAppear { restart() }
-            .onChange(of: presence) { _, _ in restart() }
-            .accessibilityLabel("Chewbacca \(presence.rawValue)")
+        Group {
+            if offscreen {
+                // `ImageRenderer` cannot draw an `NSViewRepresentable`, so a
+                // snapshot gets the same mark, still, at its resting pose.
+                Asterisk(arms: 6)
+                    .stroke(presence.tint, style: StrokeStyle(
+                        lineWidth: RingLook.lineWidth(presence, amplitude), lineCap: .round))
+                    .scaleEffect(RingLook.scale(presence, amplitude))
+                    .opacity(RingLook.opacity(presence))
+                    .shadow(color: presence.tint.opacity(RingLook.glow(presence)), radius: 6)
+            } else {
+                RingLayer(presence: presence, amplitude: amplitude, reduceMotion: reduceMotion)
+            }
+        }
+        .frame(width: Self.size, height: Self.size)
+        .allowsHitTesting(false)
+        .accessibilityElement()
+        .accessibilityLabel("Chewbacca \(presence.rawValue)")
+    }
+}
+
+/// The resting look of each state, shared by the live layer and the snapshot.
+enum RingLook {
+    static func voice(_ presence: Presence, _ amplitude: Double) -> Double {
+        presence.voiced ? min(max(amplitude, 0), 1) : 0
     }
 
-    private var tint: Color { presence.tint }
-
-    private var voice: Double { presence.voiced ? min(max(amplitude, 0), 1) : 0 }
-
-    private var lineWidth: CGFloat {
+    static func lineWidth(_ presence: Presence, _ amplitude: Double) -> CGFloat {
         switch presence {
         case .attention, .failed: return 2.4
-        default: return 2.0 + 1.2 * voice
+        default: return 2.0 + 1.2 * voice(presence, amplitude)
         }
     }
 
-    private var scale: CGFloat {
+    /// The scale a state rests at. The moving states pulse around 1.
+    static func scale(_ presence: Presence, _ amplitude: Double) -> CGFloat {
         switch presence {
-        case .attentive: return breathing ? 1.08 : 0.92
-        case .hearing, .speaking: return 1 + 0.3 * voice
-        case .thinking, .acting: return pulsing ? 1.14 : 0.86
-        case .attention, .failed: return pulses % 2 == 1 ? 1.25 : 1
+        case .hearing, .speaking: return 1 + 0.3 * voice(presence, amplitude)
         default: return 1
         }
     }
 
-    /// Thinking turns steadily; acting turns faster, so something being done
-    /// to the machine reads differently from something being considered.
-    private var spinAnimation: Animation? {
-        let period = presence == .acting ? 1.0 : 2.4
-        return Motion.repeating(.linear(duration: period).repeatForever(autoreverses: false),
-                                reduced: reduceMotion)
+    static func opacity(_ presence: Presence) -> Double {
+        presence == .dormant ? 0.3 : 1
     }
 
-    private var glow: Double {
+    static func glow(_ presence: Presence) -> Double {
         switch presence {
         case .dormant: return 0
         case .attention, .failed: return 0.7
@@ -156,41 +159,179 @@ struct PresenceRing: View {
         }
     }
 
-    private func restart() {
-        // Only stop the turn when the next state does not turn, so going from
-        // thinking to acting keeps spinning instead of snapping back to zero.
-        let turning = presence == .thinking || presence == .acting
-        if !turning { spinning = false; pulsing = false }
-        if presence != .thinking { hueWalk = false }
-        pulses = 0
-        breathing = false
-        guard !reduceMotion else { return }
+    /// Thinking turns steadily; acting turns faster, so something being done
+    /// to the machine reads differently from something being considered.
+    /// Nil for a state that does not turn.
+    static func spinPeriod(_ presence: Presence) -> Double? {
+        switch presence {
+        case .thinking: return 2.4
+        case .acting: return 1.0
+        default: return nil
+        }
+    }
+}
+
+/// The asterisk as a `CAShapeLayer`, so its motion lives in the render server.
+private struct RingLayer: NSViewRepresentable {
+    let presence: Presence
+    let amplitude: Double
+    let reduceMotion: Bool
+
+    func makeNSView(context: Context) -> RingLayerView { RingLayerView() }
+
+    func updateNSView(_ view: RingLayerView, context: Context) {
+        view.apply(presence: presence, amplitude: amplitude, reduceMotion: reduceMotion)
+    }
+}
+
+final class RingLayerView: NSView {
+    /// Carries the scale: the resting one, the voice and the pulse.
+    private let scaler = CALayer()
+    /// Carries the turn and the stroke.
+    private let mark = CAShapeLayer()
+
+    private var shown: Presence?
+    private var shownReduced = false
+
+    private enum Key {
+        static let spin = "kyber.spin"
+        static let pulse = "kyber.pulse"
+        static let hue = "kyber.hue"
+        static let beat = "kyber.beat"
+        static let all = [spin, pulse, hue, beat]
+    }
+
+    init() {
+        super.init(frame: NSRect(x: 0, y: 0, width: PresenceRing.size, height: PresenceRing.size))
+        wantsLayer = true
+        layer?.masksToBounds = false
+        mark.fillColor = nil
+        mark.lineCap = .round
+        mark.shadowOffset = .zero
+        // SwiftUI drew this glow at radius 6. A layer's radius blurs wider for
+        // the same number; 4 is guessed by eye, never measured.
+        mark.shadowRadius = 4
+        scaler.addSublayer(mark)
+        layer?.addSublayer(scaler)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    // The ring is never a target: clicks pass to whatever is under it.
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        scaler.frame = bounds
+        mark.frame = scaler.bounds
+        mark.path = Asterisk(arms: 6).path(in: mark.bounds).cgPath
+        CATransaction.commit()
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        let scale = window?.backingScaleFactor ?? 2
+        scaler.contentsScale = scale
+        mark.contentsScale = scale
+    }
+
+    func apply(presence: Presence, amplitude: Double, reduceMotion: Bool) {
+        let changed = presence != shown || reduceMotion != shownReduced
+        let previous = shown
+        shown = presence
+        shownReduced = reduceMotion
+
+        // The resting values. A voice level arrives many times a second and
+        // gets the short ease it had in SwiftUI; a state change fades.
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(changed ? (reduceMotion ? 0.1 : 0.35) : 0.06)
+        let tint = NSColor(presence.tint).cgColor
+        mark.strokeColor = tint
+        mark.shadowColor = tint
+        mark.shadowOpacity = Float(RingLook.glow(presence))
+        mark.lineWidth = RingLook.lineWidth(presence, amplitude)
+        mark.opacity = Float(RingLook.opacity(presence))
+        let rest = RingLook.scale(presence, amplitude)
+        scaler.transform = CATransform3DMakeScale(rest, rest, 1)
+        CATransaction.commit()
+
+        guard changed else { return }
+        restart(from: previous, to: presence, reduced: reduceMotion)
+    }
+
+    private func restart(from previous: Presence?, to presence: Presence, reduced: Bool) {
+        let period = RingLook.spinPeriod(presence)
+        // Only stop the turn and the pulse when the next state does not turn,
+        // so going from thinking to acting keeps spinning from where it is
+        // instead of snapping back to zero.
+        let turning = period != nil && previous.flatMap(RingLook.spinPeriod) != nil
+        let angle = (mark.presentation()?.value(forKeyPath: "transform.rotation.z") as? Double) ?? 0
+        for key in Key.all where !(turning && !reduced && (key == Key.spin || key == Key.pulse)) {
+            mark.removeAnimation(forKey: key)
+            scaler.removeAnimation(forKey: key)
+        }
+        guard !reduced else { return }
 
         switch presence {
-        case .attentive:
-            // A four-second breath: slow enough to read as breathing.
-            withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) {
-                breathing = true
-            }
         case .thinking, .acting:
-            if !spinning { spinning = true }
-            if !pulsing {
-                withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                    pulsing = true
-                }
+            if let period, mark.animation(forKey: Key.spin) == nil || previous.flatMap(RingLook.spinPeriod) != period {
+                let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+                // AppKit layers are not flipped, so positive is anticlockwise.
+                // Negative keeps the clockwise turn SwiftUI drew.
+                let start = turning ? angle : 0
+                spin.fromValue = start
+                spin.toValue = start - 2 * Double.pi
+                spin.duration = period
+                spin.repeatCount = .infinity
+                spin.isRemovedOnCompletion = false
+                mark.add(spin, forKey: Key.spin)
             }
-            if presence == .thinking && !hueWalk { hueWalk = true }
+            if scaler.animation(forKey: Key.pulse) == nil {
+                let pulse = CABasicAnimation(keyPath: "transform.scale")
+                pulse.fromValue = 0.86
+                pulse.toValue = 1.14
+                pulse.duration = 0.6
+                pulse.autoreverses = true
+                pulse.repeatCount = .infinity
+                pulse.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                pulse.isRemovedOnCompletion = false
+                scaler.add(pulse, forKey: Key.pulse)
+            }
+            if presence == .thinking {
+                let hue = CAKeyframeAnimation(keyPath: "strokeColor")
+                hue.values = Self.hueWheel(from: NSColor(presence.tint), steps: 12)
+                hue.duration = 3
+                hue.repeatCount = .infinity
+                hue.isRemovedOnCompletion = false
+                mark.add(hue, forKey: Key.hue)
+            }
         case .attention, .failed:
             // Two pulses, then hold. A thing that pulses forever is a thing
-            // people learn to ignore.
-            Task { @MainActor in
-                for _ in 0..<4 {
-                    withAnimation(.easeInOut(duration: 0.22)) { pulses += 1 }
-                    try? await Task.sleep(for: .milliseconds(240))
-                }
-            }
+            // people learn to ignore. Four 0.24 s steps, as before.
+            let beat = CAKeyframeAnimation(keyPath: "transform.scale")
+            beat.values = [1, 1.25, 1, 1.25, 1]
+            beat.keyTimes = [0, 0.25, 0.5, 0.75, 1]
+            beat.duration = 0.96
+            beat.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            scaler.add(beat, forKey: Key.beat)
         default:
+            // Dormant, attentive, hearing, speaking and done hold still. The
+            // voiced two move only with the level that arrives from outside.
             break
+        }
+    }
+
+    /// The tint walked once round the colour wheel, ending where it began.
+    static func hueWheel(from colour: NSColor, steps: Int) -> [CGColor] {
+        let rgb = colour.usingColorSpace(.sRGB) ?? colour
+        var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
+        rgb.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        return (0...steps).map { step in
+            let turned = (hue + CGFloat(step) / CGFloat(steps)).truncatingRemainder(dividingBy: 1)
+            return NSColor(hue: turned, saturation: saturation, brightness: brightness, alpha: alpha).cgColor
         }
     }
 }

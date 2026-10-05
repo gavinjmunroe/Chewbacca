@@ -55,7 +55,7 @@ echo -e "  ${GRN}✓${NC} ~/.claude/commands ($(ls "$SCRIPT_DIR/.claude/commands
 # to be at that path for the imports to resolve in any project.
 mkdir -p "$HOME/.claude/rules"
 cp "$SCRIPT_DIR/.claude/rules/"*.md "$HOME/.claude/rules/"
-cp "$SCRIPT_DIR/instructions/agent-neutral.md" "$HOME/.claude/rules/agent-neutral.md"
+cp "$SCRIPT_DIR/config/instructions/agent-neutral.md" "$HOME/.claude/rules/agent-neutral.md"
 echo -e "  ${GRN}✓${NC} ~/.claude/rules ($(ls "$SCRIPT_DIR/.claude/rules/" | wc -l | tr -d ' ') always-on rules)"
 
 # Skills load on demand, including the twelve stack-specific standards.
@@ -69,12 +69,12 @@ fi
 SETTINGS_DEST="$HOME/.claude/settings.json"
 if [ ! -f "$SETTINGS_DEST" ]; then
   mkdir -p "$HOME/.claude"
-  cp "$SCRIPT_DIR/settings/settings.json" "$SETTINGS_DEST"
+  cp "$SCRIPT_DIR/config/settings/settings.json" "$SETTINGS_DEST"
   # The next step tells the user to paste tokens in here.
   chmod 600 "$SETTINGS_DEST"
   echo -e "  ${GRN}✓${NC} ~/.claude/settings.json (created)"
 else
-  echo -e "  ${YLW}!${NC} ~/.claude/settings.json exists, merge settings/settings.json manually"
+  echo -e "  ${YLW}!${NC} ~/.claude/settings.json exists, merge config/settings/settings.json manually"
 fi
 
 echo ""

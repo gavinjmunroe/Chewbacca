@@ -28,11 +28,10 @@ import http.server
 import socketserver
 import threading
 import webbrowser
-from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TEMPLATE = ROOT / "templates" / "guide.html"
+TEMPLATE = ROOT / "library" / "templates" / "guide.html"
 DIR = Path(os.environ.get("GUIDE_DIR", "guides")).resolve()
 
 
@@ -219,6 +218,63 @@ def cmd_new(args):
 
 
 # ── open ──────────────────────────────────────────────────────────────────────
+class Handler(http.server.SimpleHTTPRequestHandler):
+    def __init__(self, *a, **kw):
+        super().__init__(*a, directory=str(DIR), **kw)
+
+    def log_message(self, *a):
+        pass
+
+    def same_origin(self) -> bool:
+        port = self.server.server_address[1]
+        own = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        if self.headers.get("Host", "") not in own:
+            return False
+        origin = self.headers.get("Origin")
+        if origin is not None and origin not in {f"http://{h}" for h in own}:
+            return False
+        ctype = self.headers.get("Content-Type", "").split(";")[0].strip().lower()
+        return ctype == "application/json"
+
+    def do_POST(self):
+        if self.path != "/progress":
+            self.send_error(404)
+            return
+        # Any web page open in the browser can POST to 127.0.0.1:7374, and the
+        # sidecar it would overwrite is read by later agent sessions. A review
+        # of the pushed handler flagged that on 2026-10-05. The guide page
+        # itself always sends JSON from its own origin, so require exactly that:
+        # a JSON body cannot cross origins without a CORS preflight this server
+        # never answers, and the Host check stops a DNS-rebound name.
+        if not self.same_origin():
+            self.send_error(403, "only the guide page itself may save progress")
+            return
+        try:
+            raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            payload = json.loads(raw)
+            # The browser reports its own pathname. Resolve it inside DIR and
+            # refuse anything that escapes: this is a local server, but it is
+            # still a server taking a path from a page.
+            rel = Path(payload.get("path", "")).name
+            page = (DIR / rel).resolve()
+            if page.parent != DIR or not page.is_file():
+                self.send_error(400, "unknown guide")
+                return
+            state = payload.get("state", {})
+            # progress and list call .get on every topic record, so one
+            # non-object here would make both crash on every later read.
+            if not isinstance(state, dict) or not all(
+                    isinstance(t, dict) for t in state.values()):
+                self.send_error(400, "state must map topics to records")
+                return
+            sidecar(page).write_text(json.dumps(state, indent=2))
+        except (ValueError, OSError, TypeError) as e:
+            self.send_error(400, str(e))
+            return
+        self.send_response(204)
+        self.end_headers()
+
+
 def cmd_open(args):
     """Serve the guide dir over localhost.
 
@@ -232,38 +288,6 @@ def cmd_open(args):
     port = 7374
     if "--port" in args:
         port = int(args[args.index("--port") + 1])
-
-    class Handler(http.server.SimpleHTTPRequestHandler):
-        def __init__(self, *a, **kw):
-            super().__init__(*a, directory=str(DIR), **kw)
-
-        def log_message(self, *a):
-            pass
-
-        def do_POST(self):
-            if self.path != "/progress":
-                self.send_error(404)
-                return
-            try:
-                raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-                payload = json.loads(raw)
-                # The browser reports its own pathname. Resolve it inside DIR and
-                # refuse anything that escapes: this is a local server, but it is
-                # still a server taking a path from a page.
-                rel = Path(payload.get("path", "")).name
-                page = (DIR / rel).resolve()
-                if page.parent != DIR or not page.is_file():
-                    self.send_error(400, "unknown guide")
-                    return
-                state = payload.get("state", {})
-                for topic in state.values():
-                    topic.setdefault("at", datetime.now(timezone.utc).isoformat())
-                sidecar(page).write_text(json.dumps(state, indent=2))
-            except (ValueError, OSError, TypeError) as e:
-                self.send_error(400, str(e))
-                return
-            self.send_response(204)
-            self.end_headers()
 
     if not DIR.is_dir():
         die(f"no guides directory at {DIR}. Make one: guide new \"a topic\"")
@@ -289,7 +313,7 @@ def cmd_open(args):
 def cmd_progress(args):
     as_json = "--json" in args
     args = [a for a in args if a != "--json"]
-    pages = [resolve(args[0])] if args else sorted(DIR.glob("*.html")) if DIR.is_dir() else []
+    pages = [resolve(args[0])] if args else sorted(DIR.glob("*.html"))
     if args and not pages[0]:
         die(f"no guide named '{args[0]}'. Try: guide list")
 
@@ -322,9 +346,6 @@ def cmd_progress(args):
 
 
 def cmd_list(args):
-    if not DIR.is_dir():
-        print(f"no guides yet in {DIR}")
-        return
     pages = sorted(DIR.glob("*.html"))
     if not pages:
         print(f"no guides yet in {DIR}")

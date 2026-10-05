@@ -59,12 +59,12 @@ cp -r .claude/ /path/to/your/project/.claude/
 
 ### 3. Merge settings
 
-Open `settings/settings.json` and merge its contents into `~/.claude/settings.json`.
+Open `config/settings/settings.json` and merge its contents into `~/.claude/settings.json`.
 
 If you don't have `~/.claude/settings.json` yet, just copy it:
 
 ```bash
-cp settings/settings.json ~/.claude/settings.json
+cp config/settings/settings.json ~/.claude/settings.json
 ```
 
 If you already have one, manually merge the `hooks` and `env` blocks.
@@ -141,7 +141,7 @@ Invoke it with `/command-name` in Claude Code.
 Claude Code stays the primary agent after setup. Codex is optional: an existing
 installation is detected, and absence does not fail setup or doctor. From this
 repository, `codex` discovers generated `AGENTS.md`. Setup refreshes that export
-from `instructions/agent-neutral.md` and installs the same source for Claude.
+from `config/instructions/agent-neutral.md` and installs the same source for Claude.
 It also installs the native [Codex hook adapter](CODEX-HOOKS.md). Review and trust
 its five definitions in Codex before they run; unrelated hooks are preserved.
 

@@ -1,4 +1,4 @@
-"""Tests for mcp/amber/amber-mcp, driven over stdio the way a client drives it.
+"""Tests for apps/mcp/amber/amber-mcp, driven over stdio the way a client drives it.
 
 The acceptance test is Caleb's own from the 2026-09-23 call: a file of 10,000
 contacts goes in and comes out deduplicated in one user's Amber. Everything
@@ -19,7 +19,7 @@ import tempfile
 import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SERVER = ROOT / "mcp" / "amber" / "amber-mcp"
+SERVER = ROOT / "apps" / "mcp" / "amber" / "amber-mcp"
 PASSED = FAILED = 0
 
 
@@ -223,7 +223,7 @@ def main():
           cfg["mcpServers"]["amber"]["env"]["AMBER_USER"] == "gavin" and cfg["mcpServers"]["other"] and cfg["keep"] == 1, cfg)
     check("install backs the config up first", (desk / "claude_desktop_config.json.before-amber").exists())
     check("a config that does not parse is left untouched", (fake / ".claude.json").read_text() == "{ not json", r.stdout)
-    # The paste-this command is the server's own path, mcp/amber/amber-mcp, so
+    # The paste-this command is the server's own path, apps/mcp/amber/amber-mcp, so
     # it is taken out first: the rule is about the words, and checking the whole
     # output failed on every machine whatever the words said.
     words = r.stdout.replace(str(SERVER), "").replace(str(SERVER.parent), "")

@@ -45,7 +45,7 @@ chewie plan run   plan.json    # execute, verify, log; confirm-gated actions nee
 chewie log                     # read the trace afterward
 ```
 
-The grammar is `data/grammar.json` (stream => query => action, every param typed). The
+The grammar is `mac/data/grammar.json` (stream => query => action, every param typed). The
 `mac-runtime` skill has the full pattern. This is the Genie / executable-semantic-parser
 idea (Campagna/Xu/Lam; Liang): compile intent into a checkable command, run or error
 cleanly.
@@ -143,6 +143,6 @@ docs/             the research: layers, permissions, workarounds, landscape
 data/             the same thing as JSON, for agents that would rather parse
 ```
 
-`data/layers.json` is the routing table as data. `data/failure-modes.json` is every
+`mac/data/layers.json` is the routing table as data. `mac/data/failure-modes.json` is every
 break with its detector. If you are an agent that would rather read JSON than prose,
 read those two and skip the docs.

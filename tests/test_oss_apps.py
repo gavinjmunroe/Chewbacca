@@ -21,7 +21,7 @@ def module(name):
 
 cli = module("oss_apps")
 builder = module("oss_apps_build")
-DATA = cli.load(ROOT / "data" / "oss-apps" / "apps.json")
+DATA = cli.load(ROOT / "config" / "data" / "oss-apps" / "apps.json")
 APPS = DATA["apps"]
 BY_ID = {a["id"]: a for a in APPS}
 
@@ -173,7 +173,7 @@ class BuildSafetyTests(unittest.TestCase):
             builder.check_missing_jump(9, 60)
 
     def test_no_github_refuses_to_overwrite_the_registry(self):
-        registry = ROOT / "data" / "oss-apps" / "apps.json"
+        registry = ROOT / "config" / "data" / "oss-apps" / "apps.json"
         before = registry.stat().st_mtime_ns
         with contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(builder.main(["--no-github"]), 2)

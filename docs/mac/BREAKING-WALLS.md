@@ -39,7 +39,7 @@ version wrongly reported as a canvas.
 
 **Was:** `do JavaScript` failed because two toggles are off by default.
 
-**Now:** `lib/enable-safari-js.sh` flips `IncludeDevelopMenu` and
+**Now:** `mac/lib/enable-safari-js.sh` flips `IncludeDevelopMenu` and
 `AllowJavaScriptFromAppleEvents`. Quit Safari once after running it.
 
 ### Canvas apps
@@ -106,7 +106,7 @@ The reliability problem is not any single wall. It is that twenty improvised ste
 virtual assistants by compiling natural language into a typed, checkable formal command
 that runs or errors cleanly, instead of letting the model freehand.
 
-`data/grammar.json` is that grammar for Mac control: `stream => query => action`, every
+`mac/data/grammar.json` is that grammar for Mac control: `stream => query => action`, every
 parameter typed, every irreversible action carrying `confirm` in its signature so the
 gate is part of the type, not a runtime afterthought. `chewie plan check` type-checks a
 plan before anything runs; `chewie plan run` executes and stops at the first failure.

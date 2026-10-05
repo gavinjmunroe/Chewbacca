@@ -142,7 +142,7 @@ export TAVILY_API_KEY=tvly-...
 
 To change the catalog, edit `KIT_MCP` in [tools/inventory.py](../tools/inventory.py) and run
 `python3 tools/inventory.py`. It rewrites the README table, this installer block, and
-`settings/toolkit.json` together. Hand-editing any of the three loses the edit on the next run.
+`config/settings/toolkit.json` together. Hand-editing any of the three loses the edit on the next run.
 
 ## MCP servers you host yourself
 

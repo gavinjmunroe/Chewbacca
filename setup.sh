@@ -513,7 +513,7 @@ install_backend_launchers() {
 install_agent_neutral_rule() {
   local dst="$HOME/.claude/rules/agent-neutral.md"
   mkdir -p "$HOME/.claude/rules"
-  cp "$SCRIPT_DIR/instructions/agent-neutral.md" "$dst"
+  cp "$SCRIPT_DIR/config/instructions/agent-neutral.md" "$dst"
 }
 
 install_agent_instructions() {
@@ -968,10 +968,10 @@ done
 # The crafts this kit has already studied. Seeded so the research happens once
 # and every machine inherits it; craft-gate refuses to produce in a craft with
 # no notes, so an empty store would block the demo tooling on a fresh install.
-if [ -d "$SCRIPT_DIR/crafts" ]; then
+if [ -d "$SCRIPT_DIR/library/crafts" ]; then
   mkdir -p "$HOME/.chewbacca/craft"
-  cp "$SCRIPT_DIR/crafts/"*.md "$HOME/.chewbacca/craft/" 2>/dev/null || true
-  log "seeded $(ls "$SCRIPT_DIR/crafts" | wc -l | tr -d ' ') craft notes"
+  cp "$SCRIPT_DIR/library/crafts/"*.md "$HOME/.chewbacca/craft/" 2>/dev/null || true
+  log "seeded $(ls "$SCRIPT_DIR/library/crafts" | wc -l | tr -d ' ') craft notes"
 fi
 
 # The opener gate reads the word a reply must open with from here. Written
@@ -1060,9 +1060,11 @@ unset _tool
 # turns what is said to it into an answer, hud-context reports what is in front
 # of the person, hud-speak reads the answer aloud. They go in together because
 # hud calls the others by path, so installing one alone gives a command that
-# fails halfway.
+# fails halfway. Kyber.app itself runs hud-listen, kyber-sessions and
+# text-command from ~/.local/bin; text-command was missing from this list until
+# 2026-10-05, so a text to yourself woke Kyber and ran a path that did not exist.
 _installed_hud=""
-for _tool in hud hud-listen hud-runtime hud-codex hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions superassistant chewbacca-mcp portal; do
+for _tool in hud hud-listen hud-runtime hud-codex hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_hud="$_installed_hud $_tool"
@@ -1133,10 +1135,10 @@ if [ -f "$SCRIPT_DIR/bin/coursework" ]; then
   link_tool coursework
   COURSEWORK_HOME="${COURSEWORK_DIR:-$HOME/coursework}"
   mkdir -p "$COURSEWORK_HOME/courses" "$COURSEWORK_HOME/syllabi" "$COURSEWORK_HOME/templates"
-  cp "$SCRIPT_DIR/templates/coursework/"*.yml "$COURSEWORK_HOME/templates/" 2>/dev/null || true
+  cp "$SCRIPT_DIR/library/templates/coursework/"*.yml "$COURSEWORK_HOME/templates/" 2>/dev/null || true
   mkdir -p "$COURSEWORK_HOME/texts"
   # A course textbook is half a million words, so it is ingested once into
-  # $COURSEWORK_HOME/texts and searched from there. See texts/README.md.
+  # $COURSEWORK_HOME/texts and searched from there. See apps/texts/README.md.
   [ -f "$SCRIPT_DIR/bin/textbook" ] && link_tool textbook
   log "coursework installed to ~/.local/bin/, ledger at $COURSEWORK_HOME"
   echo "    Next: run /syllabus on a syllabus PDF to fill the ledger."
@@ -1446,25 +1448,6 @@ h["Stop"] = [{"hooks": [{
     "timeout": 5,
     "statusMessage": "Checking the reply opens the way you asked...",
 }]}, {"hooks": [{
-    # Caleb, 2026-09-27, three messages in a row: "Don't assume anything to be
-    # linear." "Don't expect any placements to be uniform." "Don't assume
-    # patterns." All three about one page, and all three right: it shipped a
-    # wall of 42 identical rectangles in a perfect lattice where every fourth
-    # one failed, because the code said `i % 4 === 1`.
-    #
-    # Uniformity and a modulus are not stylistic slips. They are the signature
-    # of having stopped looking, and they are what an agent reaches for by
-    # default because they are the shortest code that fills a space.
-    #
-    # "Linear where the measurement curved" was the third thing he named and
-    # is not detectable from source, since a linear map is only wrong relative
-    # to data the file does not contain. That one stays in the rules. These
-    # two are detectable because they are self-evidently invented.
-    "type": "command",
-    "command": hooks_dir + "/assumption-guard.sh",
-    "timeout": 15,
-    "statusMessage": "Checking for invented structure...",
-}]}, {"hooks": [{
     # 39 hooks were registered on 2026-09-27 and not one of them looked at a
     # rendered image. slop-guard blocked a reply that night over a single em
     # dash while a page shipped across four commits with a collapsed figure,
@@ -1551,7 +1534,12 @@ h["Stop"] = [{"hooks": [{
 # Inert without ~/.chewbacca/opener-marker, same as prayer-guard.
 _register("UserPromptSubmit", hooks_dir + "/prayer-remind.sh", timeout=5)
 
-_register("UserPromptSubmit", hooks_dir + "/coursework-context.sh", timeout=10)
+# coursework-context.sh is not registered for Claude Code. It emits a
+# SessionStart payload, and on UserPromptSubmit Claude Code dropped it on every
+# prompt: a process start and a ledger read per prompt for nothing.
+# session-context.sh already puts the same deadlines in at session start. The
+# Codex adapter still calls it (tools/codex_hooks.py), which reads the text
+# whatever the event name says.
 
 # A kit already built is worth nothing if the next session answers the question
 # in a chat window instead. This matches the prompt against every kit's
@@ -1681,6 +1669,14 @@ _register("UserPromptSubmit", hooks_dir + "/method-guard.sh", timeout=8,
 _register("UserPromptSubmit", hooks_dir + "/skill-route.sh", timeout=8,
           status="Checking whether a skill already covers this...")
 
+# brain-recall pulls the memories that answer a prompt into context by meaning,
+# so MEMORY.md's byte budget stops deciding what a session can recall. Built
+# 2026-10-03 and registered nowhere until 2026-10-05 (CHW-140), the same
+# built-but-never-fires failure as skill-route above. Silent below its cosine
+# bar and when Ollama or the brain index is missing.
+_register("UserPromptSubmit", hooks_dir + "/brain-recall.sh", timeout=5,
+          status="Recalling what the brain knows about this...")
+
 # The router's advice for graph-engineering was skipped twice in two sessions.
 # skill-gate refuses the first tool call once until the named skill is loaded.
 _register("PreToolUse", hooks_dir + "/skill-gate.sh", timeout=5)
@@ -1733,6 +1729,11 @@ _register("Stop", hooks_dir + "/kit-debt.sh", timeout=15,
 _register("Stop", hooks_dir + "/stale-read-guard.sh", timeout=5,
           status="Checking no unfinished job was called silent...")
 
+# One brain commit per turn, named after the turn, in place of format-and-sync's
+# one commit per write. See the hook's header for the 2026-10-05 history count.
+_register("Stop", hooks_dir + "/brain-sync.sh", timeout=15,
+          status="Saving the brain...")
+
 # The pull half. kit-autopush made the remote the default for work leaving this
 # machine; nothing made it the default for work arriving. `chewbacca update`
 # could always pull and always needed somebody to remember, which is the exact
@@ -1748,6 +1749,17 @@ _register("SessionStart", hooks_dir + "/kit-autopull.sh", timeout=20,
 _register("PostToolUse", hooks_dir + "/prose-guard.sh", timeout=20,
           matcher="Write|Edit",
           status="Checking the prose against the writing rules...")
+
+# Caleb, 2026-09-27, three messages in a row: "Don't assume anything to be
+# linear." "Don't expect any placements to be uniform." "Don't assume
+# patterns." All three about one page that shipped 42 identical rectangles in
+# a lattice where every fourth one failed, because the code said `i % 4 === 1`.
+# The hook reads `.tool_input.file_path`, so it belongs here. It was registered
+# under Stop until 2026-10-05, where that field never exists, so it exited 0 on
+# every turn and had never checked a file.
+_register("PostToolUse", hooks_dir + "/assumption-guard.sh", timeout=15,
+          matcher="Write|Edit",
+          status="Checking for invented structure...")
 
 # The untrusted-content rule, checked instead of hoped for. A page, a text or a
 # mail body that addresses the agent gets its excerpt put in front of the model
@@ -1793,6 +1805,28 @@ if _pc:
 # One status line: model, directory, branch, context used, session cost.
 settings["statusLine"] = {"type": "command", "command": hooks_dir + "/statusline.sh"}
 
+# Hooks this machine has opted out of, by basename, one per line in
+# ~/.chewbacca/skip-hooks or space-separated in D1_SKIP_HOOKS. Without this,
+# removing a hook from settings.json lasted until the next `chewbacca update`,
+# which re-runs this block and registers everything again. Applied last, so it
+# wins over every registration above. Only hooks named here are touched.
+_skip = set(env("D1_SKIP_HOOKS", "").split())
+_skip_file = os.path.expanduser("~/.chewbacca/skip-hooks")
+if os.path.exists(_skip_file):
+    with open(_skip_file) as f:
+        _skip |= {line.split("#")[0].strip() for line in f} - {""}
+if _skip:
+    for _event in list(h):
+        for _entry in h[_event]:
+            # Any token, not only the first: a shared check is registered as
+            # `python3 shared_checks.py run write-log.sh`.
+            _entry["hooks"] = [hook for hook in _entry.get("hooks", [])
+                               if not {os.path.basename(t) for t in str(hook.get("command", "")).split()} & _skip]
+        h[_event] = [e for e in h[_event] if e.get("hooks")]
+        if not h[_event]:
+            del h[_event]
+    print("Hooks skipped by ~/.chewbacca/skip-hooks: " + ", ".join(sorted(_skip)))
+
 # The file now holds an Anthropic key and a GitHub PAT. Write it atomically so
 # a crash cannot truncate it, and 0600 so it is not world-readable.
 tmp_path = settings_path + ".tmp"
@@ -1814,10 +1848,10 @@ if should_run editor; then
 # permissions.defaultMode above is only half of it. The VS Code extension gates
 # bypass mode behind its own setting, so with the CLI configured and the editor
 # not, you still get prompted inside the editor. This merges the keys from
-# settings/vscode-settings.json into whichever editors are installed.
+# config/settings/vscode-settings.json into whichever editors are installed.
 section "Wiring editor settings"
 
-export D1_EDITOR_TEMPLATE="$SCRIPT_DIR/settings/vscode-settings.json"
+export D1_EDITOR_TEMPLATE="$SCRIPT_DIR/config/settings/vscode-settings.json"
 
 python3 << 'PYEDITOR'
 import json, os, re, shutil
@@ -1827,7 +1861,7 @@ try:
     with open(template_path) as f:
         template = json.load(f)
 except Exception:
-    print("  ! settings/vscode-settings.json not readable, skipping editors")
+    print("  ! config/settings/vscode-settings.json not readable, skipping editors")
     raise SystemExit(0)
 
 # Keys starting with _comment document the template. They are not settings.

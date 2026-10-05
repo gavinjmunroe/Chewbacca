@@ -282,7 +282,7 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
 
 
 KINDS = ("needs-you", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
-         "oss", "engine", "code", "notes", "github", "whatsapp", "apps")
+         "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "apps")
 # Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
 # `oss` is not one: it opens empty, and "what replaces Notion" seeds its query
 # with the preset {"/oss/q": "Notion"} instead.
@@ -292,7 +292,7 @@ PARAMETRIC = ("person", "space", "engine")
 def make(kind: str, arg: str = "") -> Provider:
     """A provider instance. Walk surfaces read the graph; music and files are
     thin surfaces over their own CLI and folder."""
-    from . import apps, code, engine, files, github, music, notes, oss, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
+    from . import apps, code, engine, files, github, meetings, music, notes, oss, walks, whatsapp  # noqa: PLC0415  cycle-free lazy load
 
     if kind == "engine":
         return engine.EngineSurface(arg)
@@ -302,7 +302,8 @@ def make(kind: str, arg: str = "") -> Provider:
         "needs-you": walks.NeedsYou, "today": walks.Today, "tasks": walks.Tasks,
         "conversations": walks.Conversations, "people": walks.People,
         "music": music.Music, "files": files.Files,
-        "code": code.Code, "notes": notes.Notes, "github": github.GitHub, "whatsapp": whatsapp.WhatsApp, "apps": apps.Apps,
+        "code": code.Code, "notes": notes.Notes, "github": github.GitHub, "whatsapp": whatsapp.WhatsApp,
+        "meetings": meetings.Meetings, "apps": apps.Apps,
     }
     if kind == "person":
         return walks.Person(arg)
@@ -330,6 +331,8 @@ ALIASES = {
     "changes": "code", "diff": "code", "diffs": "code", "repos": "code", "vscode": "code",
     "note": "notes", "apple-notes": "notes",
     "launcher": "apps", "launchpad": "apps", "dock": "apps", "surfaces": "apps", "wa": "whatsapp", "whats-app": "whatsapp", "gh": "github", "prs": "github", "pulls": "github", "pull-requests": "github", "reviews": "github",
+    "granola": "meetings", "anarlog": "meetings", "meeting": "meetings", "calls": "meetings", "call": "meetings",
+    "notes-from-meetings": "meetings", "meeting-notes": "meetings",
 }
 
 

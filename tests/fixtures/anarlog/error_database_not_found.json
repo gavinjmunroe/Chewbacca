@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "database_not_found",
+    "exit_code": 3,
+    "message": "Anarlog database not found at /nonexistent/app.db; start Anarlog once or pass --db-path"
+  },
+  "schema_version": "1"
+}

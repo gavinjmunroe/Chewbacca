@@ -24,7 +24,7 @@ class IntegrationTests(unittest.TestCase):
         text = export.render()
         self.assertLess(len(text.encode()), 24576)
         self.assertEqual((ROOT / 'AGENTS.md').read_text(), text)
-        self.assertIn((ROOT / 'instructions/agent-neutral.md').read_text(), text)
+        self.assertIn((ROOT / 'config/instructions/agent-neutral.md').read_text(), text)
         for forbidden in ('FIRST WORDS', 'Stop hook runs', 'CLAUDE_CODE_MAX_', '\n@', '\npaths:'):
             self.assertNotIn(forbidden, text)
         self.assertIn('The user chooses the model and host', text)
@@ -102,7 +102,7 @@ class IntegrationTests(unittest.TestCase):
             # Shared standards must load in every runtime even with hooks off.
             # A Codex-only paths filter hid them from ordinary Claude work.
             installed = (Path(temp) / '.claude/rules/agent-neutral.md').read_text()
-            source = (ROOT / 'instructions/agent-neutral.md').read_text()
+            source = (ROOT / 'config/instructions/agent-neutral.md').read_text()
             self.assertEqual(installed, source, 'shared standards drifted or became path-scoped')
             self.assertFalse(installed.startswith('---\n'), 'shared standards must remain always-on')
             self.assertEqual(list(runtime.iterdir()), [sentinel])

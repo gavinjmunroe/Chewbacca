@@ -5,7 +5,7 @@ Learned rebuilding uselemma.ai (2026-09-22 to 10-03). The replica matched the
 reference's layout for a week and still read as dead, because the layers a
 screenshot cannot see were missing: what moves at rest, what every control
 does under a hand, and where every control goes. The craft is written in
-crafts/website.md. Prose does not fire, so this is the half that does.
+library/crafts/website.md. Prose does not fire, so this is the half that does.
 
     site-gate check <url> [<url>...]   exit 1 on any failure below
                                         (write url@404 for a page meant to 404)

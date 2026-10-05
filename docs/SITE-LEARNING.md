@@ -47,7 +47,7 @@ The pattern: explore with the model once, keep the deterministic skeleton,
 and fall back to the model only at the step that broke. It is the plan in
 LEARNING-TO-ACT.md, arrived at independently. The one place Chewbacca differs
 is on purpose: the cache is a plain directory a person can read and edit
-(`procedures/<name>/`), not an opaque store.
+(`library/procedures/<name>/`), not an opaque store.
 
 The counterweight is a 2026 budget-matched study. Memory modules that feed
 learned _text_ back into the prompt did no better than simply giving the agent
@@ -88,7 +88,7 @@ watch item, not a build.
 ```
 site find "places to stay in lisbon"      # procedures, maps and saved pages that fit, best first
 site snap https://example.com             # the page as the tree: controls by role and name
-site snap https://example.com --save      # filed under maps/<host>/pages/, MAP.md started
+site snap https://example.com --save      # filed under library/maps/<host>/pages/, MAP.md started
 site show example.com                     # the map and every page read so far
 ```
 
@@ -135,7 +135,7 @@ building, not proof it works everywhere.
 2. **The recorder.** Every chewie, chrome-js and Playwright step in a
    free-form session gets appended to a trace, as described in LEARNING-TO-ACT.md.
 3. **Distill and self-heal.** Turn a successful trace into
-   `procedures/<name>/run.py` with role-and-name locators. On a failed step,
+   `library/procedures/<name>/run.py` with role-and-name locators. On a failed step,
    hand that one step to the model and rewrite it, the way Stagehand does.
 4. **Element embeddings**, only once a renamed control actually breaks a
    procedure.

@@ -44,7 +44,7 @@ def _seed_craft(guide_dir: str) -> None:
     """
     store = Path(guide_dir).parent / "craft"
     store.mkdir(parents=True, exist_ok=True)
-    src = BIN.parent.parent / "crafts" / "study-guide.md"
+    src = BIN.parent.parent / "library" / "crafts" / "study-guide.md"
     if src.is_file():
         shutil.copy2(src, store / "study-guide.md")
     os.environ["CRAFT_DIR"] = str(store)
@@ -497,46 +497,20 @@ def main() -> int:
             srv_guide.write_text("<html></html>")
             gs = load(srv_gdir)
 
-            # Build the Handler class the same way cmd_open does.
-            import http.server as _hs
-
-            class _Handler(_hs.SimpleHTTPRequestHandler):
-                def __init__(self, *a, **kw):
-                    super().__init__(*a, directory=srv_gdir, **kw)
-                def log_message(self, *a):
-                    pass
-                def do_POST(self):
-                    if self.path != "/progress":
-                        self.send_error(404)
-                        return
-                    try:
-                        raw = self.rfile.read(int(self.headers.get("Content-Length", 0)))
-                        payload = json.loads(raw)
-                        rel = Path(payload.get("path", "")).name
-                        page = (Path(srv_gdir) / rel).resolve()
-                        if page.parent != Path(srv_gdir).resolve() or not page.is_file():
-                            self.send_error(400, "unknown guide")
-                            return
-                        state = payload.get("state", {})
-                        gs.sidecar(page).write_text(json.dumps(state, indent=2))
-                    except (ValueError, OSError, TypeError) as e:
-                        self.send_error(400, str(e))
-                        return
-                    self.send_response(204)
-                    self.end_headers()
-
+            # The real handler, not a copy: a copy drifts from bin/guide and
+            # then tests code nobody runs.
             socketserver.TCPServer.allow_reuse_address = True
-            srv = socketserver.TCPServer(("127.0.0.1", 0), _Handler)
+            srv = socketserver.TCPServer(("127.0.0.1", 0), gs.Handler)
             port = srv.server_address[1]
             t = threading.Thread(target=srv.serve_forever, daemon=True)
             t.start()
 
-            def post(path, body):
+            def post(path, body, headers=None):
                 data = json.dumps(body).encode()
                 req = urllib.request.Request(
                     f"http://127.0.0.1:{port}{path}",
                     data=data,
-                    headers={"Content-Type": "application/json"},
+                    headers=headers or {"Content-Type": "application/json"},
                     method="POST",
                 )
                 try:
@@ -572,6 +546,35 @@ def main() -> int:
                 "state": {},
             })
             check("POST handler: nonexistent guide returns 400", status == 400)
+
+            # A topic that is not a record is refused, and the sidecar kept.
+            status = post("/progress", {
+                "path": "srv-test.html",
+                "state": {"topic-a": "garbage"},
+            })
+            check("POST handler: non-object topic returns 400", status == 400)
+            status = post("/progress", {"path": "srv-test.html", "state": []})
+            check("POST handler: non-object state returns 400", status == 400)
+            check("POST handler: refused state leaves the sidecar alone",
+                  json.loads(sc_path.read_text())["topic-a"]["correct"] == 4)
+
+            # Another web page in the same browser cannot write progress. A
+            # form or text/plain POST needs no preflight, so it is the attack.
+            hostile = {"path": "srv-test.html", "state": {"topic-a": {"correct": 0}}}
+            check("POST handler: a text/plain cross-site post is refused",
+                  post("/progress", hostile, {"Content-Type": "text/plain"}) == 403)
+            check("POST handler: another site's Origin is refused",
+                  post("/progress", hostile, {"Content-Type": "application/json",
+                                              "Origin": "https://evil.example"}) == 403)
+            check("POST handler: a rebound Host name is refused",
+                  post("/progress", hostile, {"Content-Type": "application/json",
+                                              "Host": f"evil.example:{port}"}) == 403)
+            check("POST handler: the guide's own origin still saves",
+                  post("/progress", {"path": "srv-test.html", "state": json.loads(sc_path.read_text())},
+                       {"Content-Type": "application/json",
+                        "Origin": f"http://127.0.0.1:{port}"}) == 204)
+            check("POST handler: refused posts left the sidecar alone",
+                  json.loads(sc_path.read_text())["topic-a"]["correct"] == 4)
 
             # POST to wrong endpoint returns 404.
             status = post("/not-progress", {"path": "srv-test.html", "state": {}})

@@ -16,17 +16,32 @@ import agent_context as context
 import agent_skills as skills
 
 ROOT = Path(__file__).resolve().parents[1]
-SPECS = ROOT / 'runtimes/profiles.json'
+SPECS = ROOT / 'config/runtimes/profiles.json'
 BEGIN = '<!-- CHEWBACCA RUNTIME BEGIN -->'
 END = '<!-- CHEWBACCA RUNTIME END -->'
 
 # These checks accept Claude's native JSON. Side-effect hooks (sync, push,
 # permission dialogs, app control) remain opt-in through their native setup.
 CLAUDE_CHECKS = {
-    'UserPromptSubmit': ['coursework-context.sh', 'kit-route.sh', 'skill-route.sh', 'method-guard.sh', 'model-route.sh'],
+    'UserPromptSubmit': ['kit-route.sh', 'skill-route.sh', 'method-guard.sh', 'model-route.sh'],
     'PreToolUse': ['write-log.sh', 'submit-guard.sh', 'browser-ux-guard.sh', 'env-guard.sh', 'fusion-guard.sh', 'ux-guard.sh'],
     'PostToolUse': ['write-log.sh', 'prose-guard.sh', 'untrusted-screen.sh'],
     'Stop': ['slop-guard.sh', 'prayer-guard.sh', 'handoff-guard.sh', 'durable-guard.sh', 'vibe-guard.sh'],
+}
+
+# The same tool matchers setup.sh registers. Without them every check ran on
+# every tool call: on 2026-10-05 the matcher-less PreToolUse write-log had run
+# on every Read and Grep for weeks, and each call its PostToolUse partner never
+# saw left a snapshot behind, 24,758 files and 276 MB in ~/.chewbacca/session-state.
+CLAUDE_MATCHERS = {
+    'write-log.sh': 'Write|Edit|Bash|NotebookEdit',
+    'submit-guard.sh': 'mcp__chrome-devtools__.*|Bash|mcp__peekaboo__.*',
+    'browser-ux-guard.sh': 'Bash|mcp__peekaboo__.*',
+    'env-guard.sh': 'Write',
+    'fusion-guard.sh': 'Write|Edit|MultiEdit',
+    'ux-guard.sh': 'Write|Edit',
+    'prose-guard.sh': 'Write|Edit',
+    'untrusted-screen.sh': 'WebFetch|Bash|mcp__claude-in-chrome__.*|mcp__plugin_playwright_playwright__.*',
 }
 
 
@@ -190,7 +205,7 @@ def remove(name):
 def instruction_block(spec):
     notes = '\n'.join('- ' + note for note in spec['notes'])
     return (f'{BEGIN}\n## Chewbacca runtime: {spec["label"]}\n\n'
-            f'Read `{ROOT / "instructions/agent-neutral.md"}` for shared guidance.\n'
+            f'Read `{ROOT / "config/instructions/agent-neutral.md"}` for shared guidance.\n'
             f'Shared skills: `{shared_home() / "skills"}`.\n\n{notes}\n\n'
             f'{spec["model_discovery"]}\n{END}')
 
@@ -198,7 +213,7 @@ def instruction_block(spec):
 def export(name, destination):
     spec = registry()['runtimes'][name]
     # An export must be portable and public: no local brain path or contents.
-    text = (ROOT / 'instructions/agent-neutral.md').read_text()
+    text = (ROOT / 'config/instructions/agent-neutral.md').read_text()
     text += '\n## Runtime integration\n\n' + '\n'.join('- ' + note for note in spec['notes']) + '\n'
     destination.mkdir(parents=True, exist_ok=True)
     target = destination / spec['instruction_file']
@@ -244,11 +259,20 @@ def claude_hooks():
         existing = set()
         for group in groups:
             for handler in group.get('hooks', []):
-                existing.update(Path(token).name for token in shlex.split(handler.get('command', '')))
+                names = {Path(token).name for token in shlex.split(handler.get('command', ''))}
+                existing.update(names)
+                # Repair a matcher-less group this function wrote before
+                # matchers existed. Only its own shared_checks entries.
+                matcher = next((CLAUDE_MATCHERS[n] for n in names if n in CLAUDE_MATCHERS), None)
+                if matcher and 'shared_checks.py' in names and not group.get('matcher') and event in ('PreToolUse', 'PostToolUse'):
+                    group['matcher'] = matcher
         for script in scripts:
             if script not in existing:
                 command = shlex.join([sys.executable, str(ROOT / 'tools/shared_checks.py'), 'run', script])
-                groups.append({'hooks': [{'type': 'command', 'command': command, 'timeout': 20}]})
+                group = {'hooks': [{'type': 'command', 'command': command, 'timeout': 20}]}
+                if event in ('PreToolUse', 'PostToolUse') and script in CLAUDE_MATCHERS:
+                    group = {'matcher': CLAUDE_MATCHERS[script], **group}
+                groups.append(group)
     if not any('format-and-sync.sh' in str(group) or 'shared_checks.py' in str(group) and 'format' in str(group) for group in hooks.get('PostToolUse', [])):
         hooks.setdefault('PostToolUse', []).append({'matcher': 'Write|Edit', 'hooks': [{'type': 'command', 'command': shlex.join([sys.executable, str(ROOT / 'tools/shared_checks.py'), 'format']), 'timeout': 30}]})
     if not hooks.get('SessionStart'):

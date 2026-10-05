@@ -1,7 +1,7 @@
 # Docs
 
-Nineteen files with no index, so everyone started at the longest one. Find what
-you actually want here.
+Without an index, everyone started at the longest file. Find what you actually
+want here.
 
 ## Start here
 
@@ -13,7 +13,6 @@ you actually want here.
 | A question, quickly | [FAQ.md](FAQ.md) |
 | A word you do not recognize | [GLOSSARY.md](GLOSSARY.md) |
 | The whole codebase, for a newcomer | [CODEBASE.md](CODEBASE.md) |
-| How the pieces fit | [ARCHITECTURE.md](ARCHITECTURE.md) |
 | Everything, in order | [REFERENCE.md](REFERENCE.md) |
 
 ## By subject

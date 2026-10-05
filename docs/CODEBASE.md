@@ -63,7 +63,7 @@ Think of it as five layers stacked on the agent:
                                    |
                                    v
                  3. TOOLS   bin/ (CLIs), tools/ (Python), mac/ (chewie),
-                            mcp/ and bin/*-mcp (MCP servers)
+                            apps/mcp/ and bin/*-mcp (MCP servers)
                                    |
                                    v
                  4. STATE   second brain repo (private markdown),
@@ -104,7 +104,7 @@ gitignored Swift build output (`hud/.build`, `voice/.build`, `plynn/.build`).
 | Directory | What it is |
 | --- | --- |
 | `CLAUDE.md` | The global standards. `setup.sh` merges it into `~/.claude/CLAUDE.md`, so editing it changes every session on every installed machine. |
-| `AGENTS.md` | Generated from `instructions/agent-neutral.md` for Codex and other agents. Never edit by hand. |
+| `AGENTS.md` | Generated from `config/instructions/agent-neutral.md` for Codex and other agents. Never edit by hand. |
 | `.claude/rules/` | 14 standards files (git, security, writing, naming, typescript, review, context discipline, and so on). |
 | `.claude/hooks/` | About 49 bash hooks plus `lib.sh`. The enforcement layer. |
 | `.claude/commands/` | 57 slash commands (dev workflow, school, Mac, personal ops). |
@@ -117,21 +117,13 @@ gitignored Swift build output (`hud/.build`, `voice/.build`, `plynn/.build`).
 | `hud/` | **Kyber**, the Swift macOS overlay app (formerly BobHUD). |
 | `voice/` | Optional Swift text-to-speech server (Kokoro on CoreML). |
 | `plynn/` | A retired dictation app kept as a parts bin. Not built or installed. |
-| `call/` | `ears.swift`, the audio capture binary for the call coach. |
-| `genui/` | Catalog, policy and benchmark for model-composed HUD panels. |
-| `surfaces/`, `data/` | Registries for HUD surfaces, local "engines" and the open-source app catalog. |
-| `team/`, `apps/team-web/` | The team task board: one markdown file per task, plus its web UI. |
-| `methods/` | Question sets for each kind of work (build, debug, research, decision...). |
-| `crafts/` | Researched rules for genres (demo video, short-form video, web UX...). |
-| `maps/` | Per-website knowledge, `maps/<host>/MAP.md`. |
-| `procedures/` | Tasks learned once and replayed (Airbnb/Booking comparison, Blackboard ingest, LinkedIn). |
-| `learning/`, `decisions/`, `fanout/` | Learned navigation graphs, labeled Jev decision sets, the Jev fan-out experiment. |
-| `second-brain/`, `templates/` | Templates for the private context repo and for coursework. |
-| `settings/` | A settings template and `toolkit.json` (generated list of plugins, MCP servers, skill packs). |
-| `runtimes/`, `instructions/` | Runtime profiles (Claude Code, Codex, exports) and the shared agent-neutral instructions. |
+| `team/` | The team task board: one markdown file per task. Its web UI is `apps/team-web/`. |
+| `library/` | What the agent reads and replays, no services. `methods/` (question sets per kind of work), `crafts/` (researched genre rules), `maps/` (per-website knowledge, `maps/<host>/MAP.md`), `procedures/` (tasks learned once and replayed: stays, Blackboard ingest, LinkedIn), `learning/` (navigation graphs), `decisions/` (labeled Jev decision sets), `templates/` (starter components and API routes, coursework ledgers, the guide page), `snippets/`, `examples/` (a sample app), `prompts/`, `research/` (one memo). |
+| `config/` | Settings and data files the code reads, plus one note. `settings/` (settings template, generated `toolkit.json`), `instructions/` (the shared agent-neutral instructions), `runtimes/` (runtime profiles), `genui/` (catalog and policy for model-composed HUD panels), `surfaces/` and `data/` (HUD surface, engine and open-source app registries), `fanout/` (Jev fan-out predicates), `patches/` (a note on a retired third-party patch). |
+| `apps/` | Small standalone programs. `team-web/` (the team board UI), `call/` (`ears.swift`, audio capture for the call coach), `extensions/` (the ChatGPT bridge extension), `mcp/amber/` (the Amber MCP server), `texts/` (textbook ingest and reader). |
 | `tests/` | About 230 files: `tests/run.sh` plus Python, bash and Node tests. |
 | `docs/` | About 87 docs. See [Where to read next](#where-to-read-next). |
-| `extensions/`, `prompts/`, `snippets/`, `examples/`, `texts/`, `research/`, `work/`, `patches/` | Smaller support folders: a ChatGPT bridge extension, one runtime prompt, code snippets, a sample app, textbook ingest tooling, one memo, one prompt, third-party patches. |
+| `second-brain/` | Templates for the private context repo. |
 | `setup.sh`, `start.sh`, `start.ps1`, `install.sh`, `uninstall.sh`, `doctor.sh`, `add-skill.sh` | Install, repair and removal. |
 
 Two folders appear on some machines but are **gitignored and not part of the
@@ -149,7 +141,7 @@ corpus).
 | `start.sh` | The `curl ... | bash` path. Downloads a tarball into `~/.chewbacca`, verifies every covered file against `SHA256SUMS.txt`, runs `bin/bootstrap.sh` (Xcode tools, Homebrew), then `setup.sh`. `--dry-run` changes nothing. |
 | `setup.sh` | The real installer, about 2,900 lines of bash in named sections. |
 | `start.ps1` | Windows: copies the portable configuration only. |
-| `install.sh` | Small per-project install. Copies files and the `settings/settings.json` template. |
+| `install.sh` | Small per-project install. Copies files and the `config/settings/settings.json` template. |
 | `uninstall.sh` | Removes what setup added. `--dry-run` first. |
 | `doctor.sh` | Proves the install works. Exit 0 clean, 1 warnings, 2 broken. `--fix` repairs the safe things. |
 
@@ -181,9 +173,21 @@ Setup installs **no launchd agents**. Background jobs are opt-in through the
 tool that owns them (`hud-autostart`, `maintain --install`,
 `chewbacca-bridge`, `people`, `mac/app/install-brief.sh`).
 
-**Important:** `settings/settings.json` is a template used by `install.sh` and
+**Important:** `config/settings/settings.json` is a template used by `install.sh` and
 `start.ps1`. It is not what `setup.sh` installs, and it registers far fewer
 hooks. The authoritative hook list is the `_register` calls in `setup.sh`.
+
+### Permissions
+
+`setup.sh` leaves Claude Code's permission prompts on (`defaultMode:
+default`) unless it is run with `--bypass-permissions`. Either way it adds a
+`deny` list: no-undo operations (`rm -rf` on root or home, force pushes,
+`gh repo delete`, `dropdb`) and reads that would pull a secret into context
+(`.env`, `~/.ssh`, `~/.aws`, Claude's own credentials). `deny` beats `allow`.
+The template `config/settings/settings.json`, used by `install.sh` and
+`start.ps1`, does set `bypassPermissions` and carries a longer deny list. It is
+a string match, not a sandbox: `docs/THREAT-MODEL.md` says what that does not
+cover.
 
 ### Removing it
 
@@ -297,7 +301,7 @@ Families, roughly: Mac control (`mac-*`, `hud`), school (`coursework`,
 
 Beyond the first-party skills, setup installs about 8 cloned upstream skills
 and 3 skill packs. Those live outside the repo and are listed in
-`settings/toolkit.json`.
+`config/settings/toolkit.json`.
 
 `stack-rules` deserves a note: it holds twelve stack-specific standards
 (components, API, database, deployment, accessibility...) that would cost about
@@ -318,10 +322,10 @@ auditing the personal context repo.
 | Thing | What it is | Where |
 | --- | --- | --- |
 | **Kit** | A separate repo a person lives inside for weeks while an agent walks them through a long, scored process (an application, an appeal). Carries state in `PROGRESS.md`, a phase machine in its `CLAUDE.md`, scripts for the arithmetic, and a named hard line it refuses to cross. Discovered by a `.kit` marker file. | Own repos. `bin/kits` finds them; `kit-route.sh` routes to them; `skills/kit-builder` says when something deserves to be one. |
-| **Procedure** | A task done once by hand, traced, distilled to a script, replayed once before it is kept. Files: `PROCEDURE.md`, `params.json`, `run.*`, `verify.*`, `effects` (read-only, writes-local or outbound), `stats.json`. | `procedures/<name>/`, with a `bin/` shim (for example `bin/stays`). `bin/site find` searches them. |
-| **Method** | A short set of questions for one kind of work, opening with a falsifier and the cheapest test. | `methods/*.md`, injected by `method-guard.sh`. |
-| **Craft** | Researched rules for a genre, with sources. `bin/craft-gate <genre>` fails closed when no notes exist, so production cannot skip research. | `crafts/`, copied to `~/.chewbacca/craft/`. |
-| **Map** | What is known about one website: URLs, selectors, quirks, mistakes already paid for. | `maps/<host>/MAP.md`, written by `bin/site snap`. |
+| **Procedure** | A task done once by hand, traced, distilled to a script, replayed once before it is kept. Files: `PROCEDURE.md`, `params.json`, `run.*`, `verify.*`, `effects` (read-only, writes-local or outbound), `stats.json`. | `library/procedures/<name>/`, with a `bin/` shim (for example `bin/stays`). `bin/site find` searches them. |
+| **Method** | A short set of questions for one kind of work, opening with a falsifier and the cheapest test. | `library/methods/*.md`, injected by `method-guard.sh`. |
+| **Craft** | Researched rules for a genre, with sources. `bin/craft-gate <genre>` fails closed when no notes exist, so production cannot skip research. | `library/crafts/`, copied to `~/.chewbacca/craft/`. |
+| **Map** | What is known about one website: URLs, selectors, quirks, mistakes already paid for. | `library/maps/<host>/MAP.md`, written by `bin/site snap`. |
 
 `docs/LEARNING-TO-ACT.md` is the spec for procedures. It is honest that the
 recorder and distiller are not built yet: procedures are currently written by
@@ -374,11 +378,11 @@ looks tiny, read the module it runs.
 | Server | File | Tools |
 | --- | --- | --- |
 | chewbacca | `bin/chewbacca-mcp` (Node, stdio or HTTP) | `who_do_i_know`, `person_brief`, `who_am_i_overdue_with`, `whats_due`, `course_ai_policy`. Read-only wrappers over `people` and `coursework`. |
-| amber | `mcp/amber/amber-mcp` | Per-user contact memory with preview, apply and undo for imports. |
+| amber | `apps/mcp/amber/amber-mcp` | Per-user contact memory with preview, apply and undo for imports. |
 | weft | `bin/weft-mcp` | One `weft` tool whose argv is checked by `bin/lib/weft_fence.js`. |
 
 Setup also registers third-party MCP servers (peekaboo, git and
-others). Those are listed in `settings/toolkit.json`.
+others). Those are listed in `config/settings/toolkit.json`.
 
 ---
 
@@ -557,7 +561,7 @@ Key files:
   not a destination.
 - `bin/hud-agent.md`. The voice agent's rules.
 - `bin/superassistant`. Builds the voice agent's system prompt from
-  `hud-agent.md`, `methods/doctrine.md`, a few rules, a names-only skill index,
+  `hud-agent.md`, `library/methods/doctrine.md`, a few rules, a names-only skill index,
   and a digest of the second brain (identity, NOW, people, memory index). It
   is rebuilt before every run and rewritten only when the text changes, so the
   prompt cache survives. Also logs every question and answer.
@@ -566,7 +570,7 @@ Key files:
 - `tools/hud_runtime.py`. Whether the voice runs on Claude or Codex, claimed by
   the session hooks.
 
-The call coach is a sibling: `call/ears.swift` captures the microphone and the
+The call coach is a sibling: `apps/call/ears.swift` captures the microphone and the
 other side's system audio, `bin/call-listen` segments and transcribes it with
 its own whisper server and shows cues on the glass (rules first, then Jev
 choosing a line from a bank, then a warm model), and `bin/call-watch` offers
@@ -609,9 +613,9 @@ press never becomes a model turn.
 ### Generated panels
 
 `bin/kyber-genui` handles a panel request no fixed surface covers. A model
-composes the layout from a closed catalog (`genui/catalog.json`), binds data
+composes the layout from a closed catalog (`config/genui/catalog.json`), binds data
 only by reference, never sees the data itself, and may only use the button
-actions in `genui/policy.json`. Every line is validated; a failed layout gets
+actions in `config/genui/policy.json`. Every line is validated; a failed layout gets
 one repair and then a plain fallback panel.
 
 ### Claude sessions on the glass
@@ -623,10 +627,10 @@ nothing has it open. It never sends mid-turn and never grants permissions.
 
 ### Local engines and the open-source catalog
 
-`data/oss-apps/apps.json` is a catalog of open-source Mac apps with licenses
+`config/data/oss-apps/apps.json` is a catalog of open-source Mac apps with licenses
 (built by `tools/oss_apps_build.py`, queried with `bin/oss-apps`). The engine
 surface renders an open-source program already running locally (Ollama,
-Tailscale, Gitea) from `data/surfaces/engines.json`, and refuses any engine
+Tailscale, Gitea) from `config/data/surfaces/engines.json`, and refuses any engine
 that is not permissively licensed in that catalog.
 
 ---
@@ -679,7 +683,7 @@ reflect  ->  cases  ->  propose  ->  evolve --expect --gate --branch  ->  learn/
   weak triggers. It measures coverage and conformance, not quality.
 - **Rules learned from failures** take a separate path: `bin/scars` mines
   postmortems from commit messages, `bin/consolidate --promote` writes proposed
-  rules into `methods/consolidated.md`, and `bin/maintain` runs the cycle
+  rules into `library/methods/consolidated.md`, and `bin/maintain` runs the cycle
   nightly if installed.
 
 `docs/SELF-LEARNING.md` and `docs/LEARNING-TO-ACT.md` describe the intent and
@@ -742,7 +746,7 @@ and `team/config.json` hold the people and the board URL.
 
 Claude Code is the primary runtime. Codex is supported as a second one, and
 other hosts (ChatGPT in a browser, Perplexity Computer, generic) get a public
-instruction export. `runtimes/profiles.json` lists each runtime's instruction
+instruction export. `config/runtimes/profiles.json` lists each runtime's instruction
 file, skills folder and hook support.
 
 - `tools/agent_runtime.py` (`chewbacca agent plan|setup|status|remove`) links
@@ -754,7 +758,19 @@ file, skills folder and hook support.
   Code runs. Where Codex cannot block (desktop), failures are recorded
   privately.
 - `AGENTS.md` is generated by `tools/agents_md.py` under a 24 KiB ceiling so
-  it fits Codex's project instruction budget.
+  it fits Codex's project instruction budget. Its source is
+  `config/instructions/agent-neutral.md`, which setup also installs as a Claude rule.
+  `python3 tools/agents_md.py --check` checks freshness without writing; never
+  edit `AGENTS.md` by hand.
+- Codex is optional. Setup never installs it or makes it the default, and
+  doctor reports a missing Codex as a normal state. ChatGPT Web, the signed-in
+  browser model behind `mac-use` and the reverse gateway, is a separate backend
+  from both coding agents.
+- `chewbacca status --json` and `chewbacca doctor` report each backend as
+  `missing`, `installed` (present, unproven), `unhealthy` (failed a probe) or
+  `healthy` (passed one), from `tools/backend_health.py`, without a model
+  call. Only `chewbacca live codex` or `chewbacca live chatgpt` proves a model
+  round trip; `CHEWBACCA_CODEX_LIVE=1` adds a small read-only Codex check.
 
 ---
 
@@ -805,14 +821,14 @@ One workflow, `.github/workflows/lint.yml`, on pushes and pull requests to
 | `tools/agents_md.py` | `AGENTS.md` | `--check` in the suite |
 | `tools/checksums.py` | `SHA256SUMS.txt` | `--check` (working tree) and `committed_checksums.py` (committed blobs) in CI |
 | `tools/changelog.py` | `CHANGELOG.md` | built from commit messages |
-| `tools/inventory.py` | README badges, `docs/REFERENCE.md`, setup.sh extension lists, `settings/toolkit.json` | **none**: it reads what is installed on the current machine. Never run it on a tree bound for `main`. |
+| `tools/inventory.py` | README badges, `docs/REFERENCE.md`, setup.sh extension lists, `config/settings/toolkit.json` | **none**: it reads what is installed on the current machine. Never run it on a tree bound for `main`. |
 
 Never hand-edit between `BEGIN GENERATED` and `END GENERATED` markers.
 
 ### Release integrity
 
 `SHA256SUMS.txt` covers every script the installer runs (`*.sh`, `*.ps1`,
-`bin/*`, `bin/lib/*`, `tools/*.py`, hooks, `runtimes/*.json`). `start.sh`
+`bin/*`, `bin/lib/*`, `tools/*.py`, hooks, `config/runtimes/*.json`). `start.sh`
 refuses to install if any downloaded file does not match. So **any change to a
 covered file must be committed together with a regenerated `SHA256SUMS.txt`**.
 The pre-commit hook (`.githooks/pre-commit`, through
@@ -864,7 +880,7 @@ Note that `~/.chewbacca` has two jobs: it is the state folder, and for
 4. Docs or skills changed: `python3 bin/slop-check <paths> --max 60` and
    `python3 tools/linkcheck.py`. A new skill needs `evals/evals.json` with at
    least four cases, one of them a rejection.
-5. If `instructions/agent-neutral.md` changed, run `python3 tools/agents_md.py`;
+5. If `config/instructions/agent-neutral.md` changed, run `python3 tools/agents_md.py`;
    if skills, commands or rules were added or removed, run `python3 tools/counts.py`.
 6. A covered script changed: `python3 tools/checksums.py` and stage
    `SHA256SUMS.txt` with it.
@@ -886,7 +902,7 @@ have a description written as the phrases people actually use.
 1. **Copied versus linked.** Hooks, rules, commands and agents are copied into
    `~/.claude`; skills and tools are symlinked. If a hook edit "does nothing",
    rerun setup.
-2. **Two settings files.** `settings/settings.json` is a template for the small
+2. **Two settings files.** `config/settings/settings.json` is a template for the small
    installers. `setup.sh` builds the real one.
 3. **Rules arrive twice in this repo.** Working inside the Chewbacca checkout,
    the project's `.claude/rules` and the installed user rules both load.
@@ -903,7 +919,7 @@ have a description written as the phrases people actually use.
    Never `open -n` Terminal from an agent.
 9. **Shared checkout.** Expect other sessions' uncommitted work in `git
    status`. The pre-commit hook refuses an index holding two sessions' files.
-10. **Docs drift.** Several older docs (`ARCHITECTURE.md`, `GLOSSARY.md`,
+10. **Docs drift.** Several older docs (`GLOSSARY.md`,
     `SKILLS.md`) quote counts from earlier versions. Trust `tools/counts.py`
     and the code.
 11. **`kits/` and `asa/` are not in git**, even when they are on disk.

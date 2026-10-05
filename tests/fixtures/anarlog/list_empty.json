@@ -1,0 +1,12 @@
+{
+  "schema_version": "1",
+  "command": "meetings.list",
+  "data": [],
+  "pagination": {
+    "offset": 0,
+    "limit": 20,
+    "returned": 0,
+    "total": null,
+    "next_offset": null
+  }
+}

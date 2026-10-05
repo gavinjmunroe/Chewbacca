@@ -258,7 +258,7 @@ def main():
         print(root)
         return 0
     if args.command == 'read':
-        print('## Shared Chewbacca guidance\n\n' + (REPO / 'instructions/agent-neutral.md').read_text())
+        print('## Shared Chewbacca guidance\n\n' + (REPO / 'config/instructions/agent-neutral.md').read_text())
         pending = context_for(os.getcwd())
         if pending:
             print('\n' + pending)

@@ -4,7 +4,7 @@
   CUSTOMIZATION POINT: Session opener
   The section below is an example of a personal ritual that runs at the start of every response.
   Replace it with whatever grounds YOUR workflow: a mantra, a checklist, a design principle, or delete it entirely.
-  The hook in settings.json that triggers this is also optional. See settings/README.md.
+  The hook in settings.json that triggers this is also optional. See config/settings/README.md.
 -->
 
 ## SESSION OPENER (CUSTOMIZABLE)
@@ -35,7 +35,7 @@ be discovered.
 @~/.claude/rules/agent-neutral.md
 
 The shared evidence, math, graph, and durable-learning method applies across work
-through the agent-neutral instructions; `methods/learning.md` gives the procedure.
+through the agent-neutral instructions; `library/methods/learning.md` gives the procedure.
 Use it proportionally, preserve disabled hooks, and distinguish tested recipes
 from claims of mastery. Applying the method never authorizes hook activation.
 

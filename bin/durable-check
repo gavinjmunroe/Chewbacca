@@ -78,7 +78,7 @@ def wrote_policy(session_id, since=None, log=WRITE_LOG):
             kit = Path(__file__).resolve().parents[1]
             target = Path(path).resolve()
             runtime_surface = any(root == target.parent or root in target.parents
-                                  for root in (kit / "tools", kit / "instructions"))
+                                  for root in (kit / "tools", kit / "config" / "instructions"))
             if runtime_surface or any(m in path for m in POLICY):
                 out.append(path)
     except OSError:

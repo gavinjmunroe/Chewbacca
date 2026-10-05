@@ -58,3 +58,33 @@ git diff --cached --name-only
 the index holds files far older than the newest one. Enable it with
 `git config core.hooksPath .githooks`. It is a backstop: it cannot catch a
 file a build step regenerated seconds ago.
+
+## One task, one worktree
+
+**Never edit a checkout another session might be using.** Start each task in
+its own worktree on a short branch cut from the latest main:
+
+```bash
+git fetch upstream main
+git worktree add -b fix/slug ../wt-slug upstream/main   # or EnterWorktree in Claude Code
+```
+
+On 2026-10-05 the shared `~/Chewbacca` checkout sat 18 commits behind main
+holding another session's edits, eleven stray worktrees had piled up, and a
+fork's main diverged from upstream because sessions pushed whatever their
+checkout held. A worktree costs one command and makes every one of those
+impossible. Remove it when the branch lands: `git worktree remove ../wt-slug`.
+
+## Pulling and pushing
+
+- `git config --global pull.ff only`, `fetch.prune true`, `rerere.enabled true`.
+  A pull then never makes a surprise merge, dead remote branches disappear, and
+  a conflict resolved once is resolved the same way next time.
+- To catch up, fetch and merge (or rebase your own unpublished branch) on
+  purpose: `git fetch upstream && git merge upstream/main`.
+- Before pushing, merge the latest main into your branch and let
+  `.githooks/pre-push` run. It checks what the push touches (syntax, counts,
+  checksums, undefined Python names, doc links, hook registration) in a few
+  seconds. Run `bash tests/run.sh` as well for anything large.
+- Main stays green. A red check on main is fixed or quarantined the day it
+  appears, because a main that is always a little red hides the next failure.

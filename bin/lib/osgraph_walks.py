@@ -154,6 +154,11 @@ def today(g: Graph, now: datetime) -> dict:
     day = now.date().isoformat()
     rows = []
     for node in g.into(f"day:{day}", "DUE_ON"):
+        # An action item Anarlog guessed out of a meeting can belong to anyone
+        # in the room; on 2026-10-05 one assigned to Sagar drew on Caleb's
+        # Today. A guess stays off the day until the person promotes it.
+        if node["props"].get("guess"):
+            continue
         start = node["props"].get("start", "")
         rows.append(row(g, node, DUE, start or day, "today"))
     for node in g.nodes("Assignment"):
@@ -230,8 +235,20 @@ def person(g: Graph, ids: Identities, name: str, now: datetime) -> dict:
     for task in g.into(pid, "OWED_BY"):
         if task["props"].get("kind") == "backlog":
             rows.append(row(g, task, FYI, task["props"].get("updated", ""), "they own it"))
-    for event in g.out(pid, "ATTENDS"):
-        rows.append(row(g, event, DUE, event["props"].get("start", ""), "you'll both be there"))
+    for edge in g.edges(src=pid, verb="ATTENDS"):
+        event = g.node(edge["dst"])
+        if not event:
+            continue
+        # A meeting attendee taken from an invite is linked below fact
+        # confidence (ingest_meetings.CLAIMED_CONFIDENCE): anyone can put an
+        # address on an invite. The row carries the edge's confidence, so the
+        # glass marks it a guess instead of stating it (security review,
+        # 2026-10-05: the cap was ignored here).
+        claimed = edge.get("confidence", 1.0) < 1.0
+        r = row(g, event, DUE, event["props"].get("start", ""),
+                "listed on the invite" if claimed else "you'll both be there")
+        r["confidence"] = min(r.get("confidence", 1.0), edge.get("confidence", 1.0))
+        rows.append(r)
     first = (me_node["label"].split() or [name])[0]
     for alias in also_named(g, name) + (also_named(g, first) if first.lower() != name.lower() else []):
         for task in g.into(alias["id"], "OWED_BY"):
@@ -439,6 +456,8 @@ def due_before(g: Graph, anchor_label: str) -> list[dict]:
         if e["src"] == anchors[0]["id"] or e["dst"][4:] >= cutoff:
             continue
         node = g.node(e["src"])
+        if node and node["props"].get("guess"):
+            continue
         if node and any(o["dst"] == ME for o in g.edges(src=node["id"], verb="OWED_BY")):
             out.append((e["dst"][4:], node))
     return [n for _, n in sorted(out, key=lambda x: x[0])]

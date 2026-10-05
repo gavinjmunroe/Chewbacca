@@ -1,0 +1,441 @@
+#!/usr/bin/env python3
+"""Build, start, stop and check the realm engine that Kyber drives.
+
+    realm-engine build [--force]    clone realm if missing, filtered pnpm install + build
+    realm-engine start              spawn the server detached, write engine.json (0600)
+    realm-engine run                the same in the foreground (what launchd runs)
+    realm-engine stop               SIGTERM the engine named in engine.json
+    realm-engine status [--json]    running, pid, port, built, reachable
+    realm-engine plist              print the launchd plist filled for this Mac
+
+realm is Carlton Aikins' local-first agent control plane
+(github.com/31Carlton7/realm). Its checkout is read only here: this script
+clones it and builds it in place and never edits a file in it.
+
+Paths, all overridable so a stranger's Mac works with no edits:
+    CHEWBACCA_REALM_DIR    the checkout      (default ~/code/vendor/realm)
+    CHEWBACCA_REALM_HOME   realm's data home (default ~/.chewbacca/realm)
+    CHEWBACCA_REALM_PORT   fixed port        (default 0, any free port)
+    CHEWBACCA_NODE, CHEWBACCA_PNPM, CHEWBACCA_GIT   the binaries to use
+    CHEWBACCA_PYTHON       the python the launch agent runs (default: python3 on PATH)
+
+Exit codes: 0 done, 1 failed or refused, 2 usage, 3 status says not running.
+`run` exits 0 when it refuses because an engine is already up, so launchd's
+KeepAlive does not retry a refusal every ThrottleInterval forever.
+
+The server's socket has no auth: anything on this Mac that can reach
+127.0.0.1 can drive it. It binds only to loopback; nothing here exposes it.
+"""
+from __future__ import annotations
+
+import fcntl
+import json
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.dont_write_bytecode = True
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import realm_client  # noqa: E402
+
+REPO_URL = "https://github.com/31Carlton7/realm.git"
+REALM_DIR = Path(os.environ.get("CHEWBACCA_REALM_DIR")
+                 or Path.home() / "code" / "vendor" / "realm").expanduser()
+PLIST_TEMPLATE = ROOT / "config" / "data" / "realm" / "com.chewbacca.realm.plist"
+LABEL = "com.chewbacca.realm"
+# Only the server and the workspace packages it imports. The full workspace
+# install pulls a Hugeicons Pro package that needs a paid token; this filter
+# built apps/server/dist/main.js without it on 2026-10-05.
+FILTER = "@realm/server..."
+# How long to wait for the {"type":"ready"} line. Measured 2026-10-05 on
+# Caleb's Mac: start returned in 0.55 s with a fresh, empty home. 60 s covers
+# a first-run migration on a slow disk; guessed, never measured there.
+READY_TIMEOUT_S = 60.0
+# How long stop waits after SIGTERM before SIGKILL. realm's shutdown closes
+# its sockets and the SQLite handle; guessed, never measured.
+STOP_GRACE_S = 5.0
+
+
+def home() -> Path:
+    return realm_client.realm_home()
+
+
+def main_js() -> Path:
+    return REALM_DIR / "apps" / "server" / "dist" / "main.js"
+
+
+def tool(env_name: str, name: str) -> str | None:
+    return os.environ.get(env_name) or shutil.which(name)
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def die(msg: str, code: int = 1) -> int:
+    print(f"realm-engine: {msg}", file=sys.stderr)
+    return code
+
+
+class Refused(Exception):
+    """Another engine already owns this home. Not a failure worth retrying."""
+
+
+def is_engine_pid(pid: int) -> bool:
+    """The pid is a realm server on this REALM_HOME, not a recycled or unrelated pid."""
+    return realm_client.is_realm_server(pid, home())
+
+
+def strays(realm_home: Path) -> list[int]:
+    """Realm servers already running on this home without an engine.json.
+
+    Two servers on one realm.db race its migrations and writes. Found
+    2026-10-05: a hand-started server sat on ~/.chewbacca/realm with no
+    engine.json, and start would have launched a second one beside it.
+    """
+    try:
+        out = subprocess.run(["ps", "-axww", "-o", "pid=,command="],
+                             capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    found = []
+    for line in out.splitlines():
+        pid_s, _, cmd = line.strip().partition(" ")
+        if "dist/main.js" not in cmd or not pid_s.isdigit():
+            continue
+        pid = int(pid_s)
+        if pid != os.getpid() and realm_client.is_realm_server(pid, realm_home):
+            found.append(pid)
+    return found
+
+
+def live_engine() -> dict | None:
+    try:
+        data = realm_client.read_engine(home())
+    except realm_client.RealmUnavailable:
+        return None
+    return data if is_engine_pid(data["pid"]) else None
+
+
+def write_engine(data: dict) -> None:
+    h = home()
+    path = realm_client.engine_file(h)
+    tmp = path.with_suffix(f".tmp{os.getpid()}")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump(data, f)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def clear_engine(pid: int | None = None) -> None:
+    path = realm_client.engine_file(home())
+    try:
+        if pid is not None:
+            if json.loads(path.read_text()).get("pid") != pid:
+                return
+        path.unlink()
+    except (OSError, ValueError):
+        pass
+
+
+# build
+
+# The upstream commit this kit's engine client and tests were verified against
+# (2026-10-05). CHEWBACCA_REALM_REF overrides it for a deliberate upgrade.
+# Refuses every WebSocket upgrade that carries an Origin header, so a web page
+# cannot reach the engine (see the file's own comment).
+ORIGIN_GUARD = Path(__file__).resolve().parent.parent / "config" / "data" / "realm" / "origin-guard.mjs"
+PINNED_REF = os.environ.get("CHEWBACCA_REALM_REF", "0ae5b8b5739e6165360e4b0679302b7b5afdd4b1")
+
+
+def build(force: bool) -> int:
+    git, pnpm, node = tool("CHEWBACCA_GIT", "git"), tool("CHEWBACCA_PNPM", "pnpm"), tool("CHEWBACCA_NODE", "node")
+    if not node:
+        return die("node not found; realm needs Node 22.13 or newer (CHEWBACCA_NODE to point at one)")
+    if not pnpm:
+        return die("pnpm not found; `corepack enable` or `npm i -g pnpm` installs it (CHEWBACCA_PNPM to point at one)")
+    if not (REALM_DIR / "package.json").exists():
+        if REALM_DIR.exists() and any(REALM_DIR.iterdir()):
+            return die(f"{REALM_DIR} exists and is not a realm checkout; set CHEWBACCA_REALM_DIR")
+        if not git:
+            return die("git not found, and realm is not checked out")
+        REALM_DIR.parent.mkdir(parents=True, exist_ok=True)
+        print(f"cloning {REPO_URL} into {REALM_DIR}", file=sys.stderr)
+        if subprocess.run([git, "clone", REPO_URL, str(REALM_DIR)]).returncode:
+            return die("clone failed")
+    # Build only the commit this kit was verified against. `pnpm install` and
+    # the build run code from the checkout, so building whatever main holds
+    # today would run code nobody here has read (security review, 2026-10-05).
+    # Moving to a newer commit is a deliberate change to PINNED_REF.
+    if git and (REALM_DIR / ".git").exists():
+        if source_stamp(git) != PINNED_REF:
+            subprocess.run([git, "-C", str(REALM_DIR), "fetch", "--quiet", "origin", PINNED_REF])
+            if subprocess.run([git, "-C", str(REALM_DIR), "checkout", "--quiet", "--detach", PINNED_REF]).returncode:
+                return die(f"could not check out the pinned commit {PINNED_REF[:12]} in {REALM_DIR}")
+    if source_stamp(git) != PINNED_REF:
+        return die(f"{REALM_DIR} is not at the pinned commit {PINNED_REF[:12]}; refusing to run its build")
+    stamp = home() / "build.json"
+    head = source_stamp(git)
+    if not force and main_js().exists() and head and _read_json(stamp).get("source") == head:
+        print(f"realm already built at {head[:12]}", file=sys.stderr)
+        return 0
+    steps = [
+        [pnpm, "install", "--filter", FILTER, "--frozen-lockfile"],
+        [pnpm, "--filter", FILTER, "build"],
+    ]
+    for cmd in steps:
+        print("$ " + " ".join(cmd[1:]), file=sys.stderr)
+        if subprocess.run(cmd, cwd=REALM_DIR).returncode:
+            return die(f"`pnpm {' '.join(cmd[1:])}` failed in {REALM_DIR}")
+    if not main_js().exists():
+        return die(f"build finished but {main_js()} is missing")
+    home().mkdir(parents=True, exist_ok=True)
+    stamp.write_text(json.dumps({"source": head, "built": now()}) + "\n")
+    print(f"built {main_js()}", file=sys.stderr)
+    return 0
+
+
+def source_stamp(git: str | None) -> str:
+    """The checkout's HEAD, or "" when it is not a git repo (which always rebuilds)."""
+    if git and (REALM_DIR / ".git").exists():
+        out = subprocess.run([git, "-C", str(REALM_DIR), "rev-parse", "HEAD"],
+                             capture_output=True, text=True)
+        if out.returncode == 0:
+            return out.stdout.strip()
+    return ""
+
+
+def _read_json(path: Path) -> dict:
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+# start / run / stop
+
+def spawn(detach: bool) -> tuple[subprocess.Popen, dict] | int:
+    """Start one server. Raises Refused when this home already has one.
+
+    The whole check-then-spawn runs under an exclusive flock on
+    REALM_HOME/engine.lock. Without it two concurrent starts both truncated
+    engine.out, and one could record its own pid beside the other's port
+    (verifier, 2026-10-05; both then died on "database is locked"). flock
+    rather than an O_EXCL file because the kernel drops it if we crash.
+    """
+    node = tool("CHEWBACCA_NODE", "node")
+    if not node:
+        return die("node not found (CHEWBACCA_NODE to point at one)")
+    if not main_js().exists():
+        return die(f"{main_js()} missing; run realm-engine build")
+    h = home()
+    h.mkdir(parents=True, exist_ok=True)
+    os.chmod(h, 0o700)
+    lock = os.open(h / "engine.lock", os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise Refused(f"another realm-engine start is in progress on {h}") from None
+        return _spawn_locked(node, h, detach)
+    finally:
+        os.close(lock)
+
+
+def _spawn_locked(node: str, h: Path, detach: bool) -> tuple[subprocess.Popen, dict] | int:
+    running = live_engine()
+    if running:
+        raise Refused(f"already running: pid {running['pid']} port {running['port']}")
+    stray = strays(h)
+    if stray:
+        raise Refused(f"a realm server is already using {h} without engine.json (pid "
+                      f"{', '.join(map(str, stray))}); stop it first")
+    clear_engine()
+    ready_path = h / "engine.out"
+    env = dict(os.environ, REALM_HOME=str(h),
+               REALM_PORT=os.environ.get("CHEWBACCA_REALM_PORT", "0"),
+               CHEWBACCA_REALM_MAIN=str(main_js()))
+    env.pop("ELECTRON_RUN_AS_NODE", None)
+    # stdout goes to a file, not a pipe: a detached server outlives this
+    # process, and a later write to a closed pipe would raise EPIPE in it.
+    with open(ready_path, "w") as out, open(h / "engine.log", "a") as log:
+        proc = subprocess.Popen([node, "--import", ORIGIN_GUARD.as_uri(), str(main_js())], cwd=REALM_DIR, env=env,
+                                stdin=subprocess.DEVNULL, stdout=out, stderr=log,
+                                start_new_session=detach)
+    deadline = time.monotonic() + READY_TIMEOUT_S
+    while time.monotonic() < deadline:
+        line = ready_path.read_text().split("\n", 1)
+        if len(line) > 1:
+            try:
+                msg = json.loads(line[0])
+            except ValueError:
+                msg = {}
+            if msg.get("type") == "ready" and isinstance(msg.get("port"), int):
+                data = {"pid": proc.pid, "port": msg["port"], "started": now()}
+                write_engine(data)
+                return proc, data
+            proc.terminate()
+            return die(f"engine did not start: {line[0][:300]} (log: {h / 'engine.log'})")
+        if proc.poll() is not None:
+            return die(f"engine exited with {proc.returncode} before ready (log: {h / 'engine.log'})")
+        time.sleep(0.1)
+    proc.terminate()
+    return die(f"engine not ready after {READY_TIMEOUT_S:.0f}s (log: {h / 'engine.log'})")
+
+
+def start() -> int:
+    try:
+        got = spawn(detach=True)
+    except Refused as e:
+        return die(str(e))
+    if isinstance(got, int):
+        return got
+    _, data = got
+    print(json.dumps(data))
+    return 0
+
+
+def run() -> int:
+    try:
+        got = spawn(detach=False)
+    except Refused as e:
+        print(f"realm-engine: {e}; nothing to run", file=sys.stderr)
+        return 0
+    if isinstance(got, int):
+        return got
+    proc, data = got
+
+    def forward(signum: int, _frame: object) -> None:
+        proc.send_signal(signum)
+
+    signal.signal(signal.SIGTERM, forward)
+    signal.signal(signal.SIGINT, forward)
+    print(json.dumps(data), flush=True)
+    try:
+        code = proc.wait()
+    finally:
+        clear_engine(proc.pid)
+    return code
+
+
+def stop() -> int:
+    try:
+        data = realm_client.read_engine(home())
+    except realm_client.RealmUnavailable as e:
+        clear_engine()
+        print(f"not running ({e})", file=sys.stderr)
+        return 0
+    pid = data["pid"]
+    if not is_engine_pid(pid):
+        clear_engine(pid)
+        print(f"pid {pid} is not a realm server; cleared engine.json", file=sys.stderr)
+        return 0
+    os.kill(pid, signal.SIGTERM)
+    deadline = time.monotonic() + STOP_GRACE_S
+    while time.monotonic() < deadline and realm_client.pid_alive(pid):
+        time.sleep(0.1)
+    if realm_client.pid_alive(pid) and is_engine_pid(pid):
+        os.kill(pid, signal.SIGKILL)
+    clear_engine(pid)
+    print(f"stopped pid {pid}", file=sys.stderr)
+    return 0
+
+
+def status(as_json: bool) -> int:
+    h = home()
+    info: dict = {"running": False, "home": str(h), "dir": str(REALM_DIR),
+                  "built": main_js().exists(), "build": _read_json(h / "build.json") or None,
+                  "launchd": LABEL}
+    eng = live_engine()
+    if eng:
+        info.update(running=True, pid=eng["pid"], port=eng["port"], started=eng.get("started"))
+        try:
+            sysinfo = realm_client.call("system.info", timeout=3, home=h)
+            info.update(reachable=True, version=sysinfo.get("version") if isinstance(sysinfo, dict) else None)
+        except realm_client.RealmError as e:
+            info.update(reachable=False, error=str(e))
+    else:
+        stray = strays(h)
+        if stray:
+            info["strays"] = stray
+    if as_json:
+        print(json.dumps(info))
+    elif info["running"]:
+        print(f"running pid {info['pid']} on 127.0.0.1:{info['port']} "
+              f"({'reachable' if info.get('reachable') else 'NOT reachable'}), home {h}")
+    else:
+        extra = f", strays {info['strays']}" if info.get("strays") else ""
+        print(f"not running, {'built' if info['built'] else 'not built'}, home {h}{extra}")
+    return 0 if info["running"] else 3
+
+
+def plist() -> int:
+    """The launchd template filled for this Mac. Printed, never installed.
+
+    launchd starts jobs with PATH=/usr/bin:/bin:/usr/sbin:/sbin, and children
+    of the engine (claude, codex, git) then fail to launch with no error in
+    any log; seen 2026-09-21 with the HUD. So PATH is taken from this shell.
+
+    The agent runs `/usr/bin/env python3`, resolved on that PATH, not
+    sys.executable: on this Mac that was
+    /opt/homebrew/opt/python@3.14/bin/python3.14, which a brew upgrade
+    removes, and the agent would then fail at every login without a word.
+    """
+    node = tool("CHEWBACCA_NODE", "node")
+    if not node:
+        return die("node not found (CHEWBACCA_NODE to point at one)")
+    path = os.environ.get("PATH", "")
+    node_dir = os.path.dirname(os.path.abspath(node))
+    if node_dir not in path.split(":"):
+        path = f"{node_dir}:{path}"
+    subs = {
+        "__LABEL__": LABEL,
+        "__PYTHON__": os.environ.get("CHEWBACCA_PYTHON") or "python3",
+        "__ENGINE__": str(Path(__file__).resolve()),
+        "__REALM_HOME__": str(home()),
+        "__REALM_DIR__": str(REALM_DIR),
+        "__NODE__": node,
+        "__PATH__": path,
+        "__HOME__": str(Path.home()),
+    }
+    text = PLIST_TEMPLATE.read_text()
+    for key, value in subs.items():
+        text = text.replace(key, _xml(value))
+    sys.stdout.write(text)
+    return 0
+
+
+def _xml(value: str) -> str:
+    return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    cmd, rest = argv[0], argv[1:]
+    if cmd == "build":
+        return build("--force" in rest)
+    if cmd == "start":
+        return start()
+    if cmd == "run":
+        return run()
+    if cmd == "stop":
+        return stop()
+    if cmd == "status":
+        return status("--json" in rest)
+    if cmd == "plist":
+        return plist()
+    return die(f"unknown command {cmd!r}; see realm-engine --help", 2)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

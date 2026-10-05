@@ -320,7 +320,7 @@ The `setup.sh` script collects your name, GitHub username, and API keys, then:
 2. Creates `claude-context` (public GitHub repo) with operational instructions
 3. Writes `~/.claude/settings.json`, pointing at the hook scripts
 4. Installs commands, rules, subagents, and hooks into `~/.claude/`
-5. Installs the skills, marketplaces, and plugins listed in [settings/toolkit.json](../settings/toolkit.json)
+5. Installs the skills, marketplaces, and plugins listed in [config/settings/toolkit.json](../config/settings/toolkit.json)
 6. Configures Composio MCP if you have a URL
 7. Runs `doctor.sh` and refuses to claim success if anything failed
 
@@ -498,7 +498,7 @@ mode behind its own switch, `claudeCode.allowDangerouslySkipPermissions`, and
 ignores the CLI setting until that switch is on, which is why people set
 `defaultMode` and keep getting prompted anyway. `setup.sh` now merges both keys
 plus `claudeCode.initialPermissionMode` into your editor's user `settings.json`,
-from the template in [`settings/vscode-settings.json`](../settings/vscode-settings.json).
+from the template in [`config/settings/vscode-settings.json`](../config/settings/vscode-settings.json).
 VS Code, VS Code Insiders, Cursor, VSCodium, and Windsurf are all handled, and
 only the editors actually installed are touched. Restart the editor afterward.
 
@@ -688,28 +688,28 @@ The vibe coding landscape is growing fast. **[ECOSYSTEM.md](ECOSYSTEM.md)** is o
 
 | File                                                             | What It Is                                                                 |
 | ---------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| [templates/cloudflare-worker.ts](../templates/cloudflare-worker.ts) | Complete Worker + D1 entry point with CORS, error handling, JSON helpers   |
-| [templates/d1-migration.sql](../templates/d1-migration.sql)         | Migration template with standard columns, indexes, and auto-update trigger |
-| [templates/hero.tsx](../templates/hero.tsx)                         | Hero section with gradient text and CTA buttons                            |
-| [templates/navbar.tsx](../templates/navbar.tsx)                     | Scroll-aware navbar                                                        |
-| [templates/card.tsx](../templates/card.tsx)                         | Dark mode card with hover states                                           |
-| [templates/api-route.ts](../templates/api-route.ts)                 | Next.js API route with Zod validation                                      |
-| [templates/page.tsx](../templates/page.tsx)                         | Page with loading/error/empty states                                       |
-| [templates/globals.css](../templates/globals.css)                   | Tailwind globals with dark mode                                            |
-| [templates/loading.tsx](../templates/loading.tsx)                   | Skeleton loader                                                            |
-| [templates/error.tsx](../templates/error.tsx)                       | Error boundary                                                             |
-| [templates/not-found.tsx](../templates/not-found.tsx)               | 404 page                                                                   |
+| [library/templates/cloudflare-worker.ts](../library/templates/cloudflare-worker.ts) | Complete Worker + D1 entry point with CORS, error handling, JSON helpers   |
+| [library/templates/d1-migration.sql](../library/templates/d1-migration.sql)         | Migration template with standard columns, indexes, and auto-update trigger |
+| [library/templates/hero.tsx](../library/templates/hero.tsx)                         | Hero section with gradient text and CTA buttons                            |
+| [library/templates/navbar.tsx](../library/templates/navbar.tsx)                     | Scroll-aware navbar                                                        |
+| [library/templates/card.tsx](../library/templates/card.tsx)                         | Dark mode card with hover states                                           |
+| [library/templates/api-route.ts](../library/templates/api-route.ts)                 | Next.js API route with Zod validation                                      |
+| [library/templates/page.tsx](../library/templates/page.tsx)                         | Page with loading/error/empty states                                       |
+| [library/templates/globals.css](../library/templates/globals.css)                   | Tailwind globals with dark mode                                            |
+| [library/templates/loading.tsx](../library/templates/loading.tsx)                   | Skeleton loader                                                            |
+| [library/templates/error.tsx](../library/templates/error.tsx)                       | Error boundary                                                             |
+| [library/templates/not-found.tsx](../library/templates/not-found.tsx)               | 404 page                                                                   |
 
 ### Snippets (copy-paste patterns)
 
 | File                                                       | What It Is                                         |
 | ---------------------------------------------------------- | -------------------------------------------------- |
-| [snippets/drizzle-d1.ts](../snippets/drizzle-d1.ts)           | Drizzle ORM + D1 schema, types, and query examples |
-| [snippets/wrangler.toml](../snippets/wrangler.toml)           | Annotated wrangler config with all binding types   |
-| [snippets/useScrollNav.tsx](../snippets/useScrollNav.tsx)     | Scroll-aware navbar hook                           |
-| [snippets/tailwind.config.ts](../snippets/tailwind.config.ts) | Tailwind config with custom theme                  |
-| [snippets/prettierrc.json](../snippets/prettierrc.json)       | Prettier config                                    |
-| [snippets/gitignore.txt](../snippets/gitignore.txt)           | Standard .gitignore                                |
+| [library/snippets/drizzle-d1.ts](../library/snippets/drizzle-d1.ts)           | Drizzle ORM + D1 schema, types, and query examples |
+| [library/snippets/wrangler.toml](../library/snippets/wrangler.toml)           | Annotated wrangler config with all binding types   |
+| [library/snippets/useScrollNav.tsx](../library/snippets/useScrollNav.tsx)     | Scroll-aware navbar hook                           |
+| [library/snippets/tailwind.config.ts](../library/snippets/tailwind.config.ts) | Tailwind config with custom theme                  |
+| [library/snippets/prettierrc.json](../library/snippets/prettierrc.json)       | Prettier config                                    |
+| [library/snippets/gitignore.txt](../library/snippets/gitignore.txt)           | Standard .gitignore                                |
 
 ---
 
@@ -812,7 +812,7 @@ fires, which is the thing that matters most.
 
 That table is generated. [tools/inventory.py](../tools/inventory.py) reads what is actually
 installed on the author's machine and rewrites it, along with the install list in
-`setup.sh` and the manifest at [settings/toolkit.json](../settings/toolkit.json). A
+`setup.sh` and the manifest at [config/settings/toolkit.json](../config/settings/toolkit.json). A
 skill reaches this list only if it carries a public upstream URL or ships in this
 repo, so a personal skill added locally stays local. MCP servers are opt-in by
 name for the same reason.
@@ -938,7 +938,7 @@ under AGPL-3.0, which would relicense an MIT project by contagion.
 A working Cloudflare Worker + D1 todo API you can deploy in 60 seconds:
 
 ```bash
-cd examples/todo-app
+cd library/examples/todo-app
 npm install
 wrangler d1 create todo-db
 # Copy the database_id into wrangler.toml
@@ -948,7 +948,7 @@ wrangler dev
 
 Then hit `http://localhost:8787/api/todos` to see it running.
 
-See [examples/todo-app/README.md](../examples/todo-app/README.md) for full details.
+See [library/examples/todo-app/README.md](../library/examples/todo-app/README.md) for full details.
 
 ---
 
@@ -1002,7 +1002,7 @@ Chewbacca/
 ├── plynn/                       # vendored dictation app + Chewie (MIT, Carlton Aikins)
 ├── templates/                   # Full starter files (Worker, migration, components)
 │   └── coursework/              # semester.yml and course.yml, the ledger shape
-├── snippets/                    # Copy-paste patterns (Drizzle, wrangler, hooks)
+├── library/snippets/                    # Copy-paste patterns (Drizzle, wrangler, hooks)
 ├── skills/
 │   ├── second-brain/            # Operating the personal context repo
 │   ├── graph-engineering/       # Knowledge graphs and agent task graphs

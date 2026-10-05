@@ -391,9 +391,9 @@ struct SurfaceCard: View {
         // takes the plain layout when it fits and swaps in a scrolling one when
         // it does not, so a short panel is still sized to its content.
         ViewThatFits(in: .vertical) {
-            SurfaceView(store: surface.store)
+            SurfaceView(store: surface.store, pendingTitle: LoadingView.title(fromID: surface.id))
             ScrollView(.vertical, showsIndicators: false) {
-                SurfaceView(store: surface.store)
+                SurfaceView(store: surface.store, pendingTitle: LoadingView.title(fromID: surface.id))
             }
             .scrollBounceBehavior(.basedOnSize)
             // A dissolve at the bottom edge, and only on the version that

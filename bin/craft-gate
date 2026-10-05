@@ -21,7 +21,7 @@ produces. With no craft notes for the genre it exits 1 and the production stops.
     craft-gate demo-video --record <file>   file the research
 
 Notes live in ~/.chewbacca/craft/<genre>.md, so the research happens once and
-every later session inherits it. The repo seeds crafts/ with what has been
+every later session inherits it. The repo seeds library/crafts/ with what has been
 studied already; setup.sh copies them in.
 """
 
@@ -33,7 +33,7 @@ from pathlib import Path
 
 HOME = Path.home()
 STORE = Path(os.environ.get("CRAFT_DIR", HOME / ".chewbacca/craft"))
-SEED = Path(__file__).resolve().parent.parent / "crafts"
+SEED = Path(__file__).resolve().parent.parent / "library" / "crafts"
 
 # A file shorter than this is somebody typing "do it well" to get past the gate.
 # Set from the demo-video notes, the only real example when this was written:

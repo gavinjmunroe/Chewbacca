@@ -1,6 +1,6 @@
 """JevBacca's kill test, run on one person's texts before any company's.
 
-Every message is checked against the predicate library in fanout/predicates/
+Every message is checked against the predicate library in config/fanout/predicates/
 by three architectures, and each is scored against hand labels:
 
     A  Claude reads every message against every predicate.
@@ -33,7 +33,7 @@ from pathlib import Path
 import jev
 
 ROOT = Path(__file__).resolve().parent.parent.parent
-PREDICATES_DIR = ROOT / "fanout" / "predicates"
+PREDICATES_DIR = ROOT / "config" / "fanout" / "predicates"
 DATA_DIR = Path(os.environ.get("FANOUT_DIR", Path.home() / ".chewbacca" / "fanout"))
 
 CLAUDE_CMD = os.environ.get(

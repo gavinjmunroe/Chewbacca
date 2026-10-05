@@ -5,7 +5,7 @@ everyday task on the glass, after a second agent re-checked each claim against
 the repo itself. Two can be an `engines.json` entry; the rest need a surface
 written in code, because `bin/lib/surfaces/engine.py` only runs a detected
 binary with fixed args or a plain GET to 127.0.0.1. The two spec entries sit in
-`data/surfaces/engines.proposed.json`, outside the loader's path.
+`config/data/surfaces/engines.proposed.json`, outside the loader's path.
 
 The order is by app time removed, using the 14-day foreground hours in
 [OS-COVERAGE.md](OS-COVERAGE.md). Chrome sites have no per-site hours there,
@@ -22,7 +22,7 @@ library with typed `chat.db` reads (`getMessages`, `listChats` with
 `bin` and no HTTP server, so it can't be a spec. Not installed, and
 `STARRED-AUDIT.md` skipped it as too narrow. It removes only part of the 7.1
 hours, because Messages is already partial on the glass: what it adds is the
-three missing pieces in `data/surfaces/apps.json` (group replies, attachments,
+three missing pieces in `config/data/surfaces/apps.json` (group replies, attachments,
 starting a thread). Sends resolve when osascript exits, not on delivery, so the
 existing read-back rule still applies. To bring it live: compare it against
 the `mac messages` and `texts` paths first, then wrap it in a small Node
@@ -38,7 +38,7 @@ installed and signed in, so its use is Drive first and a fallback if gog's
 OAuth client breaks. Setup still needs a Cloud project, but `gws auth setup`
 creates it through `gcloud`, which is installed, and Caleb approves OAuth once
 in a browser. To bring it live: add `googleworkspace/cli` to
-`data/oss-apps/apps.json` as Apache-2.0 and remixable, since engine.py refuses
+`config/data/oss-apps/apps.json` as Apache-2.0 and remixable, since engine.py refuses
 it until then.
 
 **3. fastrepl/anarlog (engine).** Replaces Granola, 0.8 hours. MIT for the
@@ -74,7 +74,7 @@ tenth in Chrome, so the time it removes is small. MIT. The `openpencil` CLI
 `info`, `query` and `lint`, all with `--json`, and there is an MCP server.
 Every read needs a file path, which a fixed-args spec can only hard-code, so a
 surface has to choose the file. It doesn't touch Figma cloud files, which the
-Figma connector already reads and writes. It is in `data/oss-apps/apps.json`
+Figma connector already reads and writes. It is in `config/data/oss-apps/apps.json`
 as MIT and remixable, and already listed under Figma in `apps.json`. Not
 installed. To bring it live: `npm install -g @open-pencil/cli`, then a surface
 that runs `openpencil info --json` on the newest `.fig` in Downloads.
@@ -86,7 +86,7 @@ it as not remixable until someone records the license in `curated.json`. It
 runs as a multi-container Docker stack, and its CLI (`onyx-cli search` and
 `ask`, both with `--json`) needs a query that changes each time plus a personal
 access token. Not installed, and `STARRED-AUDIT.md` skipped it. To bring it
-live: record its license in `data/oss-apps/curated.json`, and only then weigh a
+live: record its license in `config/data/oss-apps/curated.json`, and only then weigh a
 Docker stack against the connectors already signed in.
 
 **7. vercel/sdk (surface idea).** Replaces the Vercel dashboard in Chrome,

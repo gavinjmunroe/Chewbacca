@@ -31,7 +31,7 @@ as a suggestion in November.
 mkdir -p "${COURSEWORK_DIR:-$HOME/coursework}/courses"
 ```
 
-Write `courses/<code-slug>.yml` using `templates/coursework/course.yml` as the
+Write `courses/<code-slug>.yml` using `library/templates/coursework/course.yml` as the
 shape. Every deliverable carries `source` naming the page it came from. Copy the
 syllabus itself into `syllabi/` so any claim can be re-checked later.
 

@@ -1,0 +1,128 @@
+{
+  "schema_version": "1",
+  "command": "meetings.transcript",
+  "data": {
+    "meeting_id": "m-amber",
+    "text": "word201 word202 word203 word204 word205 word206 word207 word208 word209 word210 word211 word212 word213 word214 word215 word216 word217 word218 word219 word220 word221 word222 word223 word224 word225 word226 word227 word228 word229 word230 word231 word232 word233 word234 word235 word236 word237",
+    "words": [
+      {
+        "text": "word201"
+      },
+      {
+        "text": "word202"
+      },
+      {
+        "text": "word203"
+      },
+      {
+        "text": "word204"
+      },
+      {
+        "text": "word205"
+      },
+      {
+        "text": "word206"
+      },
+      {
+        "text": "word207"
+      },
+      {
+        "text": "word208"
+      },
+      {
+        "text": "word209"
+      },
+      {
+        "text": "word210"
+      },
+      {
+        "text": "word211"
+      },
+      {
+        "text": "word212"
+      },
+      {
+        "text": "word213"
+      },
+      {
+        "text": "word214"
+      },
+      {
+        "text": "word215"
+      },
+      {
+        "text": "word216"
+      },
+      {
+        "text": "word217"
+      },
+      {
+        "text": "word218"
+      },
+      {
+        "text": "word219"
+      },
+      {
+        "text": "word220"
+      },
+      {
+        "text": "word221"
+      },
+      {
+        "text": "word222"
+      },
+      {
+        "text": "word223"
+      },
+      {
+        "text": "word224"
+      },
+      {
+        "text": "word225"
+      },
+      {
+        "text": "word226"
+      },
+      {
+        "text": "word227"
+      },
+      {
+        "text": "word228"
+      },
+      {
+        "text": "word229"
+      },
+      {
+        "text": "word230"
+      },
+      {
+        "text": "word231"
+      },
+      {
+        "text": "word232"
+      },
+      {
+        "text": "word233"
+      },
+      {
+        "text": "word234"
+      },
+      {
+        "text": "word235"
+      },
+      {
+        "text": "word236"
+      },
+      {
+        "text": "word237"
+      }
+    ]
+  },
+  "pagination": {
+    "offset": 200,
+    "limit": 200,
+    "returned": 37,
+    "total": null,
+    "next_offset": null
+  }
+}

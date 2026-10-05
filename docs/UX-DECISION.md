@@ -6,7 +6,7 @@ host's supported UI tool still executes and observes the outcome. This is not an
 autonomous browser driver or a replacement for task authorization.
 
 ```sh
-chewbacca ux-decision learning/clay-navigation/package.json \
+chewbacca ux-decision library/learning/clay-navigation/package.json \
   --observation observation.json --goal saved --max-age-seconds 30
 ```
 

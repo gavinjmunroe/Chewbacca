@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild data/oss-apps/apps.json from the two public catalogs it is made of.
+"""Rebuild config/data/oss-apps/apps.json from the two public catalogs it is made of.
 
   python3 tools/oss_apps_build.py              fetch, enrich, write
   python3 tools/oss_apps_build.py --offline    reuse the cache, fetch nothing
@@ -14,7 +14,7 @@ Sources, both CC0-1.0:
 
 Licenses come from GitHub's own SPDX detection (one GraphQL call per 50
 repos), never from a guess. Where GitHub cannot classify a LICENSE file it
-says NOASSERTION, and so does this file. data/oss-apps/curated.json carries
+says NOASSERTION, and so does this file. config/data/oss-apps/curated.json carries
 the hand-read exceptions and the Mac apps neither catalog maps to a
 proprietary product.
 
@@ -41,7 +41,7 @@ import urllib.error
 import urllib.request
 
 REPO = Path(__file__).resolve().parent.parent
-DATA = REPO / "data" / "oss-apps"
+DATA = REPO / "config" / "data" / "oss-apps"
 OUT = DATA / "apps.json"
 CURATED = DATA / "curated.json"
 CACHE = Path(os.environ.get("OSS_APPS_CACHE", Path.home() / ".cache" / "chewbacca" / "oss-apps"))
@@ -585,7 +585,7 @@ def build(offline=False, use_github=True, refresh=False):
     meta = {
         "generated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "generator": "tools/oss_apps_build.py",
-        "sources": [MACOS_SOURCE, ALTS_SOURCE, {"id": "curated", "file": "data/oss-apps/curated.json"}],
+        "sources": [MACOS_SOURCE, ALTS_SOURCE, {"id": "curated", "file": "config/data/oss-apps/curated.json"}],
         "counts": {
             "apps": len(out),
             "remixable": sum(r["remixable"] for r in out),
@@ -625,7 +625,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     degraded = args.no_github or (not args.offline and not shutil.which("gh"))
     if degraded and args.out.resolve() == OUT.resolve():
-        log("refusing to overwrite data/oss-apps/apps.json without GitHub licenses "
+        log("refusing to overwrite config/data/oss-apps/apps.json without GitHub licenses "
             "(--no-github, or gh not installed). Pass --out to write elsewhere.")
         return 2
     previous = None

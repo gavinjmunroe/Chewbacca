@@ -12,7 +12,7 @@ the tools. The tools are the easy half. What makes a Short work is written down
 by people who make them for a living, and it is almost all decided before a
 frame renders: a first frame that works muted, hook and foreshadow in three
 seconds, a mechanism pulling to the end, a cut right after the payoff. Read
-[crafts/short-form-video.md](../../crafts/short-form-video.md) before anything
+[library/crafts/short-form-video.md](../../library/crafts/short-form-video.md) before anything
 else. Every rule below points back to it.
 
 ## The order
@@ -25,8 +25,8 @@ else. Every rule below points back to it.
 2. **Pick the route** from [references/routes.md](references/routes.md):
    code-drawn, Blender headless, Higgsfield, or Blender blocking into Seedance.
    Pick by what done means for the picture, not by which tool was named.
-   For Higgsfield, read his live log first:
-   `~/dev/gavin-context/research/higgsfield/LEARNING.md`. For a shot whose
+   For Higgsfield, read the live log in the context repo first:
+   `~/dev/<name>-context/research/higgsfield/LEARNING.md`. For a shot whose
    camera or blocking must hold, follow
    [references/blender-to-seedance.md](references/blender-to-seedance.md).
    For a montage of footage cut to a song, measure three references with
@@ -61,18 +61,18 @@ else. Every rule below points back to it.
 
 ## Never
 
-- **Never post, schedule or upload.** Publishing goes out under his name; the
+- **Never post, schedule or upload.** Publishing goes out under their name; the
   deliverable is a file and a note of where it is.
 - **Never generate a real person's face or voice without that person's
   consent**, and never a public figure's at all.
 - **Never put a number on screen the render does not make true.** "1,000
   dominoes" is the field's count, checked in `timings.json`.
 - **Never run a Higgsfield job without `higgsfield generate cost` first** and
-  the number said out loud, and never buy a plan or credits on his behalf.
+  the number said out loud, and never buy a plan or credits on their behalf.
   Every new fact or mistake goes into the Higgsfield log the same turn.
-- **Never repost footage he did not make**, and never export with another
+- **Never repost footage they did not make**, and never export with another
   app's watermark. Instagram stops recommending both.
-- **Never open Blender's window.** Headless only; he works on this Mac.
+- **Never open Blender's window.** Headless only; the user works on this Mac.
 
 ## Worked example: the domino reveal, 2026-09-27
 

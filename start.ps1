@@ -196,7 +196,7 @@ function Copy-Set ($srcDir, $dstDir, $label) {
 # agent-neutral.md is imported by CLAUDE.md at a fixed path, so it has to land
 # in rules/ whatever else happens. Copied before the rules are counted, or the
 # count reports one fewer rule than is actually installed.
-$neutral = Join-Path $CbHome "instructions\agent-neutral.md"
+$neutral = Join-Path $CbHome "config\instructions\agent-neutral.md"
 if (Test-Path $neutral) { Copy-Item $neutral (Join-Path $Claude "rules\agent-neutral.md") -Force }
 
 Copy-Set (Join-Path $CbHome ".claude\commands")      (Join-Path $Claude "commands")      "commands"      | Out-Null
@@ -273,7 +273,7 @@ instructions take precedence. The original is at $(Split-Path $backup -Leaf).
 
 # settings.json is never overwritten. Someone who already uses Claude Code has
 # permissions and hooks in there that are theirs.
-$settingsSrc = Join-Path $CbHome "settings\settings.json"
+$settingsSrc = Join-Path $CbHome "config\settings\settings.json"
 $settingsDst = Join-Path $Claude "settings.json"
 if ((Test-Path $settingsSrc) -and -not (Test-Path $settingsDst)) {
   Copy-Item $settingsSrc $settingsDst

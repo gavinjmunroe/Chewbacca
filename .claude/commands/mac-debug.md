@@ -4,7 +4,7 @@ description: Debug a failing Mac automation
 
 Debug this: $ARGUMENTS
 
-Load the `mac-debug` skill. Match the symptom against `data/failure-modes.json` before
+Load the `mac-debug` skill. Match the symptom against `mac/data/failure-modes.json` before
 you retry anything.
 
 Do not escalate to a screenshot to route around a failing accessibility read. A failing

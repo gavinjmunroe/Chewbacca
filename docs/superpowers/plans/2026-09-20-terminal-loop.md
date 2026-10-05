@@ -36,8 +36,8 @@
 | `bin/lib/terminal_state.py` (new) | Folds events into one state; tails the file; builds the `t` line. |
 | `bin/lib/route.py` | `answer_word`, `terminal_stop_word`. |
 | `bin/hud-listen` | The watcher thread, announcements, the answer and stop words, `e terminal focus`. |
-| `hud/Sources/BobHUDKit/{Spec,LineParser,OverlayModel,OverlayView}.swift`, `TerminalStrip.swift` (new) | The `t` line, the strip, the click. |
-| `tests/test_terminal_events.py` (new), `tests/test_terminal_state.py` (new), `tests/test_terminal.py`, `tests/test_route.py`, `tests/test_hud_listen.py`, `hud/Tests/BobHUDKitTests/ParserTests.swift`, `ChatTests.swift`, `tests/live/terminal-loop.sh` (new), `tests/run.sh` | Tests. |
+| `hud/Sources/KyberKit/{Spec,LineParser,OverlayModel,OverlayView}.swift`, `TerminalStrip.swift` (new) | The `t` line, the strip, the click. |
+| `tests/test_terminal_events.py` (new), `tests/test_terminal_state.py` (new), `tests/test_terminal.py`, `tests/test_route.py`, `tests/test_hud_listen.py`, `hud/Tests/KyberKitTests/ParserTests.swift`, `ChatTests.swift`, `tests/live/terminal-loop.sh` (new), `tests/run.sh` | Tests. |
 | `docs/VOICE-DESIGN.md`, `docs/REFERENCE.md`, `hud/CLAUDE.md`, `skills/hud/SKILL.md` | Docs and the wire tables. |
 
 ---
@@ -1337,13 +1337,13 @@ git commit -m "feat: hud-listen hears the terminal, answers its permission by vo
 ### Task 6: The `t` line and the strip in the HUD
 
 **Files:**
-- Modify: `hud/Sources/BobHUDKit/Spec.swift` (the `Op` enum, after `case queued(Int)`)
-- Modify: `hud/Sources/BobHUDKit/LineParser.swift` (a `case "t":` before `case "q":`)
-- Modify: `hud/Sources/BobHUDKit/OverlayModel.swift` (a stored strip, `apply`, `focusTerminal()`)
-- Create: `hud/Sources/BobHUDKit/TerminalStrip.swift`
-- Modify: `hud/Sources/BobHUDKit/OverlayView.swift` (mount under the pill)
+- Modify: `hud/Sources/KyberKit/Spec.swift` (the `Op` enum, after `case queued(Int)`)
+- Modify: `hud/Sources/KyberKit/LineParser.swift` (a `case "t":` before `case "q":`)
+- Modify: `hud/Sources/KyberKit/OverlayModel.swift` (a stored strip, `apply`, `focusTerminal()`)
+- Create: `hud/Sources/KyberKit/TerminalStrip.swift`
+- Modify: `hud/Sources/KyberKit/OverlayView.swift` (mount under the pill)
 - Modify: `hud/CLAUDE.md:22-25`, `skills/hud/SKILL.md:58-60`
-- Test: `hud/Tests/BobHUDKitTests/ParserTests.swift`, `hud/Tests/BobHUDKitTests/ChatTests.swift`
+- Test: `hud/Tests/KyberKitTests/ParserTests.swift`, `hud/Tests/KyberKitTests/ChatTests.swift`
 
 **Interfaces:**
 - Consumes: `Presence` colours in `PresenceRing.swift` (`HUD.good`, `HUD.warn`), `OutboundEvent.action`, `OverlayView.bottomInset`, `PillView.pillLift`.
@@ -1351,7 +1351,7 @@ git commit -m "feat: hud-listen hears the terminal, answers its permission by vo
 
 - [ ] **Step 1: Write the failing parser tests**
 
-The parser tests go in `hud/Tests/BobHUDKitTests/ParserTests.swift` after the `say` tests:
+The parser tests go in `hud/Tests/KyberKitTests/ParserTests.swift` after the `say` tests:
 
 ```swift
     @Test("the terminal strip is one JSON string and a state")
@@ -1369,7 +1369,7 @@ The parser tests go in `hud/Tests/BobHUDKitTests/ParserTests.swift` after the `s
     }
 ```
 
-The model test is a new test in the suite in `hud/Tests/BobHUDKitTests/ChatTests.swift`:
+The model test is a new test in the suite in `hud/Tests/KyberKitTests/ChatTests.swift`:
 
 ```swift
     @Test("the terminal strip is held, taken down, and its click reaches the bridge")
@@ -1480,7 +1480,7 @@ The click handler is a public method next to `cancelRun`, and it sends the same 
 
 - [ ] **Step 6: The view**
 
-Create `hud/Sources/BobHUDKit/TerminalStrip.swift`:
+Create `hud/Sources/KyberKit/TerminalStrip.swift`:
 
 ```swift
 import SwiftUI
@@ -1567,7 +1567,7 @@ Expected: all pass, two more than before in ParserTests and one more in ChatTest
 - [ ] **Step 9: Commit**
 
 ```bash
-git add hud/Sources/BobHUDKit/Spec.swift hud/Sources/BobHUDKit/LineParser.swift hud/Sources/BobHUDKit/OverlayModel.swift hud/Sources/BobHUDKit/OverlayView.swift hud/Sources/BobHUDKit/TerminalStrip.swift hud/Tests/BobHUDKitTests/ParserTests.swift hud/Tests/BobHUDKitTests/ChatTests.swift hud/CLAUDE.md skills/hud/SKILL.md
+git add hud/Sources/KyberKit/Spec.swift hud/Sources/KyberKit/LineParser.swift hud/Sources/KyberKit/OverlayModel.swift hud/Sources/KyberKit/OverlayView.swift hud/Sources/KyberKit/TerminalStrip.swift hud/Tests/KyberKitTests/ParserTests.swift hud/Tests/KyberKitTests/ChatTests.swift hud/CLAUDE.md skills/hud/SKILL.md
 git commit -m "feat: a terminal strip under the pill, driven by the t line"
 ```
 

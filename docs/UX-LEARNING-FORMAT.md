@@ -6,10 +6,10 @@ It never executes action text, clicks, runs a campaign, promotes a lesson, or
 changes agent hooks. Run it from the repository root:
 
 ```sh
-python3 bin/ux-learning validate learning/clay-navigation/package.json
-python3 bin/ux-learning route learning/clay-navigation/package.json --start start-state --goal goal-state
-python3 bin/ux-learning record learning/clay-navigation/package.json --receipt receipt.json --store /path/to/private/ux-store
-python3 bin/ux-learning status learning/clay-navigation/package.json --store /path/to/private/ux-store
+python3 bin/ux-learning validate library/learning/clay-navigation/package.json
+python3 bin/ux-learning route library/learning/clay-navigation/package.json --start start-state --goal goal-state
+python3 bin/ux-learning record library/learning/clay-navigation/package.json --receipt receipt.json --store /path/to/private/ux-store
+python3 bin/ux-learning status library/learning/clay-navigation/package.json --store /path/to/private/ux-store
 ```
 
 Use actual state IDs from the map. The launcher resolves its implementation relative

@@ -3,7 +3,7 @@
 
     site find "places to stay in lisbon"      # procedures and maps that fit, best first
     site snap https://www.airbnb.com          # the page as an agent reads it, saves nothing
-    site snap https://www.airbnb.com --save   # same, filed under maps/<host>/pages/
+    site snap https://www.airbnb.com --save   # same, filed under library/maps/<host>/pages/
     site show airbnb.com                      # the map and every page read so far
 
 WHY FIND COMES FIRST. docs/LEARNING-TO-ACT.md names "retrieval before acting"
@@ -44,8 +44,8 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parent.parent
-MAPS = Path(os.environ.get("SITE_MAPS", ROOT / "maps"))
-PROCEDURES = Path(os.environ.get("SITE_PROCEDURES", ROOT / "procedures"))
+MAPS = Path(os.environ.get("SITE_MAPS", ROOT / "library" / "maps"))
+PROCEDURES = Path(os.environ.get("SITE_PROCEDURES", ROOT / "library" / "procedures"))
 
 CONTROL_ROLES = (
     "button", "link", "textbox", "searchbox", "combobox", "checkbox", "radio",
@@ -229,7 +229,7 @@ def main(argv=None):
     f.add_argument("--json", action="store_true")
     s = sub.add_parser("snap", help="read a page as an agent reads it")
     s.add_argument("url")
-    s.add_argument("--save", action="store_true", help="file it under maps/<host>/pages/")
+    s.add_argument("--save", action="store_true", help="file it under library/maps/<host>/pages/")
     s.add_argument("--timeout", type=int, default=30, help="seconds")
     s.add_argument("--json", action="store_true")
     s.add_argument("--tree", action="store_true", help="print the whole snapshot")

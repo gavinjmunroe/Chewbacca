@@ -36,7 +36,7 @@ session openers and permission bypass remain separate choices.
 | ---------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | Personal context | Private brain; path in `~/.chewbacca/context.json`                    | Load live files at startup without exporting personal contents              |
 | Skills           | Repo `skills/`, installed through `~/.chewbacca/skills`               | Claude `.claude/skills`; Codex `.agents/skills`; preserve conflicting names |
-| Standards        | `instructions/agent-neutral.md` and historical `.claude/rules/` paths | Native instruction discovery and tool-specific interpretation               |
+| Standards        | `config/instructions/agent-neutral.md` and historical `.claude/rules/` paths | Native instruction discovery and tool-specific interpretation               |
 | Checks           | `tools/shared_checks.py` and historical `.claude/hooks/` scripts      | Claude JSON events; Codex multi-file patches and native output schema       |
 | Models           | Host's configured model and provider                                  | Native model IDs, reasoning settings, context limits and authentication     |
 | Machine access   | Installed tools                                                       | Grants for the actual host app and OS                                       |
@@ -150,7 +150,7 @@ Exports contain public guidance and preserve existing text. The Perplexity expor
 also packages every skill as an upload-ready zip; see [Perplexity](PERPLEXITY.md). Configure the target
 host to load the export. Hooks and native skill/tool discovery remain unverified.
 
-Add runtime requirements and official sources in `runtimes/profiles.json`, then
+Add runtime requirements and official sources in `config/runtimes/profiles.json`, then
 implement the native serializer and event translator. New hosts begin as export
 adapters. Add a fresh-home test covering configuration preservation, a real guard
 refusal, a permitted operation and missing dependencies before enabling native

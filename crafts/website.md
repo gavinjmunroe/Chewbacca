@@ -118,6 +118,19 @@ a figure on most screens. `site-gate story` exits 1 under 0.35 figure share or
 under 60% of screens with scroll-linked motion. A restraint rule never
 overrides this; restraint applies to colour and claims, not to the craft.
 
+**Spectacle is held by taste.** Caleb, the same night: "Be tasteful. Lemma had
+the most tasteful site ever." What made it tasteful is checkable:
+- one visual language, with every figure drawn from the same vocabulary and
+  stroke family
+- one accent with one meaning, on a calm ground
+- motion only where it tells the story, never bouncing
+- a lot of space
+- no element that looks imported from a tool's default style (a 3Blue1Brown
+  black box, stock three.js lighting)
+
+More tools on the page is not more ambition. Pick the one that draws this
+story best.
+
 ## Done means
 
 `site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no

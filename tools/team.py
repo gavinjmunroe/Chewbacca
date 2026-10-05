@@ -344,7 +344,7 @@ def main(argv=None):
         cmd = a.cmd or "board"
         if cmd == "board":
             tasks = repo.tasks()
-            print(json.dumps(tasks, indent=1) if a.json else board(tasks, a.all))
+            print(json.dumps(tasks, indent=1) if getattr(a, "json", False) else board(tasks, getattr(a, "all", False)))
         elif cmd == "mine":
             who = me(repo)
             tasks = [t for t in repo.tasks() if t["owner"].lower() == who.lower() and t["status"] not in ("done", "canceled")]

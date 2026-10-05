@@ -166,6 +166,14 @@ class TeamTest(unittest.TestCase):
                 "notes": "Some notes\n\nwith a gap", "activity": ["2026-10-05 Caleb: created"]}
         self.assertEqual(team.parse(team.render(task)), task)
 
+    def test_bare_team_shows_the_board(self):
+        # `team` with no subcommand crashed on 2026-10-04: the board branch read
+        # a.json and a.all, which only the `board` subparser defines.
+        self.run_team(self.a, "add", "Visible")
+        code, out, _ = self.run_team(self.a)
+        self.assertEqual(code, 0)
+        self.assertIn("CHW-1", out)
+
     def test_feed_shows_commits(self):
         self.run_team(self.a, "add", "Feed me")
         _, out, _ = self.run_team(self.a, "feed", "--json")

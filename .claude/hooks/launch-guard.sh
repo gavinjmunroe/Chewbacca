@@ -28,8 +28,16 @@ type hook_init >/dev/null 2>&1 && hook_init launch-guard.sh 10
 set -uo pipefail
 
 payload="$(cat)"
-tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
-blob="$(printf '%s' "$payload" | jq -r '.tool_input // {} | tostring' 2>/dev/null)"
+if command -v jq >/dev/null 2>&1; then
+  tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
+  blob="$(printf '%s' "$payload" | jq -r '.tool_input // {} | tostring' 2>/dev/null)"
+else
+  # No jq means no receipt check either, so fail closed on anything launch-like.
+  printf '%s' "$payload" | tr '[:upper:]' '[:lower:]' |
+    grep -qE 'launch|resume|unpause|enroll|send-gate-receipt' &&
+    { echo "launch-guard: jq is missing, cannot verify a gate pass" >&2; exit 2; }
+  exit 0
+fi
 [ -n "$blob" ] || exit 0
 
 state="$HOME/.chewbacca/state"
@@ -47,11 +55,13 @@ refuse() {
 launching=0
 case "$tool" in
   Bash)
-    # The receipt is written by the gate and nothing else. A shell write to it
-    # is a forged pass (security review, 2026-10-05).
-    if printf '%s' "$lower" | grep -q 'send-gate-receipt'; then
-      printf '%s' "$lower" | grep -q 'pre_send_gate.py' ||
-        refuse "only scripts/pre_send_gate.py may touch the send-gate receipt."
+    # The receipt and the last-URL state are written by the gate and this hook,
+    # never by a shell command. The gate writes from inside Python, so its own
+    # command line never names the file, and no mention is exempt: an earlier
+    # version exempted commands naming pre_send_gate.py, which a comment could
+    # fake (security review, 2026-10-05).
+    if printf '%s' "$lower" | grep -qE 'send-gate-receipt|launch-guard-last-url'; then
+      refuse "only scripts/pre_send_gate.py may write the send-gate receipt."
     fi
     if printf '%s' "$lower" | grep -q 'chewie' &&
        printf '%s' "$lower" | grep -qE 'click|eval' &&
@@ -71,18 +81,21 @@ case "$tool" in
     ;;
   mcp__chrome-devtools__*|mcp__plugin_playwright_playwright__*)
     url="$(printf '%s' "$payload" | jq -r '.tool_input.url // empty' 2>/dev/null)"
+    if [ -n "$url" ]; then
+      mkdir -p "$state" 2>/dev/null
+      printf '%s' "$url" > "$lasturl" 2>/dev/null
+    fi
     case "$tool" in
-      *navigate*|*new_page*)
-        if [ -n "$url" ]; then
-          mkdir -p "$state" 2>/dev/null
-          printf '%s' "$url" > "$lasturl" 2>/dev/null
-        fi
-        exit 0 ;;
-      *click*|*press_key*|*fill*|*type*|*evaluate*|*run_code*|*select_option*)
+      *navigate*|*new_page*) exit 0 ;;
+      *click*|*press_key*|*fill*|*type*|*evaluate*|*run_code*|*select_option*|*drag*|*hover*)
+        # Any Clay page counts, not just a campaign URL: an in-app link click
+        # changes the page without a navigate call, so the recorded URL can lag
+        # (security review, 2026-10-05: the campaign-only match failed open).
         last="$(cat "$lasturl" 2>/dev/null || true)"
-        if printf '%s' "$last" | grep -qiE 'app\.clay\.com/.*campaign'; then
+        if printf '%s' "$last" | grep -qiE 'clay\.com'; then
           launching=1
         fi
+        printf '%s' "$lower" | grep -qE "$WORDS" && launching=1
         ;;
     esac
     ;;

@@ -135,11 +135,15 @@ public struct SurfaceView: View {
             // as one thing.
             return AnyView(
                 VStack(alignment: .leading, spacing: 14) {
-                    Text(p["title"]?.display ?? "")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .kerning(0.4)
-                        .foregroundStyle(HUD.ink)
-                        .modifier(Stagger(part: .title))
+                    // No title, no line: a launcher rail has nothing to
+                    // name, and an empty Text still takes 14 of gap.
+                    if let title = p["title"]?.display, !title.isEmpty {
+                        Text(title)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .kerning(0.4)
+                            .foregroundStyle(HUD.ink)
+                            .modifier(Stagger(part: .title))
+                    }
                     ForEach(element.children, id: \.self) { child in
                         node(child, ancestors: ancestors)
                             .modifier(Stagger(part: isAction(child) ? .actions : .body))
@@ -467,6 +471,48 @@ public struct SurfaceView: View {
                             }))
                     .disabled(pointer == nil)
                 })
+
+        default:
+            return launcher(element, p)
+        }
+    }
+
+    /// What a press on a lane does: write the lane locally, then send
+    /// `e action <action> row=<lane> surface=<surface>` (`action` defaults to
+    /// `select`). A Rail press is the same line with `open`.
+    func segmentedPick(_ element: ComponentNode, _ p: [String: JSON]) -> (String) -> Void {
+        let pointer = store.binding(element, "value")
+        let action = p["action"]?.stringValue ?? "select"
+        return { [store] id in
+            if let pointer { store.write(pointer, .string(id)) }
+            store.fireRow(action, row: id)
+        }
+    }
+
+    /// Segmented lanes, an avatar, and the launcher rail. Split out for the
+    /// same type-checking reason as the other families.
+    private func launcher(_ element: ComponentNode, _ p: [String: JSON]) -> AnyView {
+        switch element.type {
+        case "Segmented":
+            let options = SegmentedView.options(p["options"]?.arrayValue ?? [])
+            return AnyView(
+                SegmentedView(
+                    options: options,
+                    selected: p["value"]?.display ?? options.first?.id ?? "",
+                    onPick: segmentedPick(element, p)))
+
+        case "Avatar":
+            return AnyView(
+                AvatarView(
+                    name: p["name"]?.display ?? "",
+                    image: p["image"]?.stringValue,
+                    size: CGFloat(min(max(p["size"]?.doubleValue ?? 24, 16), 48))))
+
+        case "Rail":
+            return AnyView(
+                RailView(
+                    entries: RailView.entries(p["items"]?.arrayValue ?? [], data: store.spec.data),
+                    onOpen: { [store] id in store.fireRow("open", row: id) }))
 
         default:
             // A component the panel does not know draws nothing rather than an

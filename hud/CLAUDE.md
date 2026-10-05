@@ -177,6 +177,46 @@ Ordinary controls keep their own line, `e <action> <component> ...`, and now
 carry `surface=` too, because component ids are only unique inside one
 surface.
 
+### Lanes, avatars and the launcher rail
+
+Three more components, and all of them answer with the same row-action line.
+
+```
+c lanes Segmented value=@/lane options=[{"id":"ready","label":"Ready","count":17},{"id":"stuck","label":"Stuck","count":14}]
+```
+
+**Segmented** is lanes inside a card. A press writes the lane to its bound
+pointer at once and sends `e action select row=<lane id> surface=<surface>`
+(`action=` renames `select`). One selection pill travels between lanes.
+
+```
+c a Avatar name="Sam Lee" size=24
+```
+
+**Avatar** is initials in a circle, or `image="<path>"`. Two letters at most,
+the same colour for the same name, 16 to 48 points.
+
+```
+@ rail at=right w=52 chrome=bare
+c s Screen
+r s
+c r Rail items=[{"id":"tasks","label":"Tasks","symbol":"checklist","selected":true},{"id":"messages","label":"Messages","symbol":"message","open":true}]
+> s r
+d /badges {"tasks":14,"messages":8}
+```
+
+**Rail** is the launcher: one frosted capsule at the edge, an SF Symbol per
+surface in a 38-point well, no text on it (the name shows beside it on hover).
+`selected` fills a well; `open` puts a dot under it. A badge is
+`/badges/<id>` and shows only for a whole number above zero, as `9+` past
+nine; 0, null, `"no"` or anything else shows nothing. A press sends
+`e action open row=<id> surface=rail`, and the daemon opens that surface.
+Four seconds untouched it tucks to a slim handle so it never sits over the
+window under it, and a hover or a rising badge brings it back. A rail owns
+its lane: it has no close button, it is never folded, and panels in its
+region are placed beside it rather than over it. Give it `w=52` and
+`chrome=bare`; it draws its own glass.
+
 ## How a request reaches you
 
 You do not poll. A person asks for something by pressing Option-Space and typing,

@@ -448,10 +448,11 @@ enum JSONDecoding {
     static func convert(_ any: Any) -> JSON {
         switch any {
         case let s as String: return .string(s)
-        case let b as Bool: return .bool(b)
+        // NSNumber before Bool. `as Bool` bridges any NSNumber that is 0 or
+        // 1, so with Bool first every 0 and 1 inside a JSON value became a
+        // bool: `d /badges {"mail":0}` drew a badge reading "no" (found on
+        // the glass 2026-10-04), and a table cell of 1 read "yes".
         case let n as NSNumber:
-            // NSNumber does not distinguish bool from number, so check the type
-            // encoding before falling through to a double.
             if CFGetTypeID(n) == CFBooleanGetTypeID() { return .bool(n.boolValue) }
             return .number(n.doubleValue)
         case let a as [Any]: return .array(a.map(convert))

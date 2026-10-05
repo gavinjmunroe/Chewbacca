@@ -41,6 +41,16 @@ public struct OverlaySurface: Identifiable, Equatable {
     /// sequence number. The least recent is the one that folds.
     public var touched = 0
 
+    /// Whether this surface is a launcher rail (its Screen holds a Rail). A
+    /// rail owns a lane at its edge: it is not stacked or folded with the
+    /// panels in its region, and they are placed beside it, not over it.
+    @MainActor
+    public var isRail: Bool {
+        let spec = store.spec
+        guard let root = spec.root, let node = spec.elements[root] else { return false }
+        return node.children.contains { spec.elements[$0]?.type == "Rail" }
+    }
+
     /// The usable height of the display, less the margins the layout keeps.
     ///
     /// Read at open time rather than stored once, so plugging in a monitor or
@@ -935,7 +945,7 @@ public final class OverlayModel {
         // over them, which is what the clamp in `origin` used to do.
         let capacity = regionCapacity
         for region in Set(surfaces.map(\.region)) {
-            let column = surfaces.filter { $0.region == region }.map {
+            let column = surfaces.filter { $0.region == region && !$0.isRail }.map {
                 (id: $0.id, height: fullHeights[$0.id] ?? heights[$0.id] ?? 120,
                  touched: $0.touched)
             }
@@ -996,15 +1006,21 @@ public final class OverlayModel {
         let width = surface.width
         let height = drawnHeight(surface)
 
-        let minX = leftInset + margin
-        let maxX = full.width - rightInset - margin - width
+        // A rail owns its edge's lane: panels on that side sit beside it.
+        let lane = { (edge: Double) -> CGFloat in
+            guard !surface.isRail else { return 0 }
+            let rails = self.surfaces.filter { $0.isRail && $0.region.anchor.x == edge }
+            return rails.map(\.width).max().map { $0 + Self.stackGap } ?? 0
+        }
+        let minX = leftInset + margin + lane(0)
+        let maxX = full.width - rightInset - margin - width - lane(1)
         let minY = topInset + margin
         let bottomY = full.height - bottomInset - margin
         let maxY = bottomY - height
 
         let x = minX + max(0, maxX - minX) * anchor.x
         let column = surfaces
-            .filter { $0.region == surface.region }
+            .filter { $0.region == surface.region && $0.isRail == surface.isRail }
             .map { (slot: $0.slot, height: drawnHeight($0)) }
         let y = min(max(Self.columnTop(
             slot: surface.slot, column: column, anchorY: anchor.y,

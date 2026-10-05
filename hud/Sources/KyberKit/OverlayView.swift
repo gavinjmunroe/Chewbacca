@@ -358,6 +358,9 @@ struct SurfaceCard: View {
     /// and below, a folded card is 44, the target floor.
     static let titleLine: CGFloat = 16
 
+    /// Whether this surface is a launcher rail: its Screen holds a Rail.
+    private var isRail: Bool { surface.isRail }
+
     /// The Screen's title, for the folded card and the close button's name.
     private var title: String {
         let store = surface.store
@@ -411,9 +414,10 @@ struct SurfaceCard: View {
             .frame(height: surface.compact ? Self.titleLine : nil, alignment: .top)
             .clipped()
             .environment(\.hudFolded, surface.compact)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // A rail brings its own capsule and sits flush in its lane.
+            .padding(.horizontal, isRail ? 0 : 16)
+            .padding(.vertical, isRail ? 0 : 14)
+            .frame(maxWidth: .infinity, alignment: isRail ? .center : .leading)
             .modifier(SurfaceChrome(chrome: surface.chrome, lit: lit, urgency: surface.urgency))
             .overlay {
                 if surface.compact {
@@ -426,10 +430,14 @@ struct SurfaceCard: View {
                 // never vanishes entirely: a hover-only close is no close at
                 // all without fine pointer control (bd_2026-Code-cnr). It
                 // names what it closes, as a destructive action should.
-                CloseButton(
-                    action: onDismiss, help: title.isEmpty ? "Close" : "Close \(title)",
-                    hit: HitTarget.minimum)
-                    .opacity(hovering ? 1 : 0.35)
+                // A launcher rail is chrome, not a panel: it has no X, and
+                // one peeked over its corner on the first screenshot.
+                if !isRail {
+                    CloseButton(
+                        action: onDismiss, help: title.isEmpty ? "Close" : "Close \(title)",
+                        hit: HitTarget.minimum)
+                        .opacity(hovering ? 1 : 0.35)
+                }
             }
             // The fold is a spring so a click mid-fold reverses from where
             // the card is; `snappy` is 0.28 s, settled by about 250 ms.

@@ -97,11 +97,7 @@ finishes.
 
 | Server                | Runs                                            | What you get                                 |
 | --------------------- | ----------------------------------------------- | -------------------------------------------- |
-| `fetch`               | `uvx mcp-server-fetch`                          | A URL pulled down as markdown                |
-| `time`                | `uvx mcp-server-time`                           | Real current time and timezone math          |
 | `git`                 | `uvx mcp-server-git`                            | Repo reads, searches, and commits as calls   |
-| `sequential-thinking` | `npx @modelcontextprotocol/server-sequential-thinking` | Long reasoning as revisable steps     |
-| `chart`               | `npx @antv/mcp-server-chart`                    | 25 chart types rendered from data            |
 | `chrome-devtools`     | `npx chrome-devtools-mcp@latest`                | Drive a real Chrome by DOM, not by pixels    |
 
 **`chrome-devtools` is the one worth knowing about.** Everything else here is a
@@ -197,22 +193,19 @@ From the official marketplace:
 
 | Plugin                    | What it gives you                                                      |
 | ------------------------- | ---------------------------------------------------------------------- |
-| `context7`                | Current library docs on demand, instead of the model's training recall |
 | `serena`                  | Symbol-level code navigation and editing across a project              |
 | `playwright`              | Browser automation for testing UI and scraping                         |
 | `vercel`                  | Deploy, env vars, AI SDK, Next.js guidance                             |
 | `railway`                 | Services, databases, environments, deploy troubleshooting              |
-| `expo`                    | React Native builds, EAS, app store submission                         |
-| `pinecone`                | Vector index management and search                                     |
-| `bigquery-data-analytics` | Warehouse queries, forecasting, AI functions                           |
 
-`context7` earns its place fastest. It fetches real documentation for whatever library you are
-using, which kills the failure mode where a model confidently writes an API that was renamed
-eighteen months ago.
+context7, expo, pinecone, bigquery-data-analytics and the fetch, time, sequential-thinking and
+chart servers were dropped from the default install on 2026-10-05. Two weeks of transcripts on a
+machine that had all of them showed zero calls, and every installed tool is paid for in context on
+every session. Install one by hand when a project needs it.
 
 Supabase is not on that list on purpose. It is wired as an MCP server in `.mcp.json` rather than a
 plugin, because what you want from it is a live connection to your actual project, not packaged
-guidance. Same reasoning for `filesystem`, `github`, and `sequential-thinking`.
+guidance. Same reasoning for `filesystem` and `github`.
 
 ## Order of operations
 
@@ -224,7 +217,7 @@ Reach for the lightest thing that works.
 4. A plugin, if someone already built and versioned it
 5. An MCP server, if it needs live data from a running service
 
-Writing a skill for something `context7` already does is wasted work. Writing a rule when a one-line
+Writing a skill for something an installed plugin already does is wasted work. Writing a rule when a one-line
 `CLAUDE.md` sentence would do is worse, because rules files are another thing to keep current.
 
 ## Verifying what is installed

@@ -377,7 +377,7 @@ looks tiny, read the module it runs.
 | amber | `mcp/amber/amber-mcp` | Per-user contact memory with preview, apply and undo for imports. |
 | weft | `bin/weft-mcp` | One `weft` tool whose argv is checked by `bin/lib/weft_fence.js`. |
 
-Setup also registers third-party MCP servers (peekaboo, macos-automator and
+Setup also registers third-party MCP servers (peekaboo, git and
 others). Those are listed in `settings/toolkit.json`.
 
 ---

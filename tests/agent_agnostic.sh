@@ -26,24 +26,48 @@ grep -qE '^\s+To start it any time: open Terminal and type \$\{B\}claude\$\{N\}'
 grep -q 'for a in claude codex gemini; do' "$ROOT/setup.sh" \
   || fail "setup.sh no longer checks for an existing agent"
 
-# 3. Behavioral: with codex on PATH and claude absent, the detection picks
-#    codex and the install branch is the no-op one.
-out="$(PATH="$FAKE:/usr/bin:/bin" bash -c '
-  KIT_AGENT=""
-  for a in claude codex gemini; do
-    if command -v "$a" >/dev/null 2>&1; then KIT_AGENT="$a"; break; fi
-  done
-  printf "%s" "$KIT_AGENT"
-')"
-[ "$out" = "codex" ] || fail "with only codex on PATH the agent resolved to '$out'"
+# 3. Behavioral, against setup.sh itself. Checks 3 and 4 used to run a pasted
+#    copy of the detection loop, which kept passing whatever setup.sh did.
+#    CHEWBACCA_CLAUDE_CODE_INSTALLER stands in for claude.ai/install.sh, so
+#    nothing is downloaded: the stand-in writes ~/.local/bin/claude the way
+#    the native installer does, or fails.
+BASE=/usr/bin:/bin:/usr/sbin:/sbin
+printf '#!/bin/sh\nmkdir -p "$HOME/.local/bin"; printf "#!/bin/sh\\necho claude\\n" > "$HOME/.local/bin/claude"; chmod +x "$HOME/.local/bin/claude"\n' > "$FAKE/works.sh"
+printf '#!/bin/sh\nexit 1\n' > "$FAKE/fails.sh"
+run_agent() {  # home, path, installer, [profile]
+  mkdir -p "$1"
+  HOME="$1" PATH="$2" CHEWBACCA_CLAUDE_CODE_INSTALLER="file://$FAKE/$3" \
+    bash "$ROOT/setup.sh" --only coding-agent --profile "${4:-personal}" --name CI 2>&1 | sed 's/\x1b\[[0-9;]*m//g'
+}
 
-# 4. And on a bare machine it still installs something, or the kit is useless.
-out2="$(PATH="/usr/bin:/bin" bash -c '
-  KIT_AGENT=""
-  for a in claude codex gemini; do
-    if command -v "$a" >/dev/null 2>&1; then KIT_AGENT="$a"; break; fi
-  done
-  printf "%s" "$KIT_AGENT"
-')"
-[ -z "$out2" ] || fail "a bare machine resolved an agent it does not have: '$out2'"
+# Codex already here: used, and nothing is installed. Sam's case.
+out="$(run_agent "$FAKE/h-codex" "$FAKE:$BASE" works.sh)"
+echo "$out" | grep -q "using the agent already installed: codex" || fail "with codex on PATH setup.sh did not use it"
+[ -e "$FAKE/h-codex/.local/bin/claude" ] && fail "installed Claude Code on a Mac that already runs Codex"
+
+# Bare Mac: Claude Code is installed, and the plan is named before it is.
+out="$(run_agent "$FAKE/h-bare" "$BASE" works.sh)"
+[ -x "$FAKE/h-bare/.local/bin/claude" ] || fail "a bare Mac got no agent"
+plan_at=$(echo "$out" | grep -n "needs a paid Claude plan" | head -1 | cut -d: -f1)
+done_at=$(echo "$out" | grep -n "Claude Code installed" | head -1 | cut -d: -f1)
+[ -n "$plan_at" ] || fail "never says Claude Code needs a paid Claude plan"
+[ -n "$done_at" ] && [ "$plan_at" -lt "$done_at" ] || fail "the plan requirement is not said before the install"
+echo "$out" | grep -q "free tier works" && fail "claims the free tier works, which Anthropic says it does not"
+
+# Installer down: a warning and the one line to run later, never a dead stop.
+run_agent "$FAKE/h-down" "$BASE" fails.sh > "$FAKE/down.out"; rc=${PIPESTATUS[0]}
+[ "$rc" -eq 0 ] || fail "a failed Claude Code download stopped the whole install (exit $rc)"
+grep -q "claude.ai/install.sh" "$FAKE/down.out" || fail "a failed download does not say how to add Claude Code later"
+
+# Nothing to download at all. With no pipefail, curl failing feeds bash an
+# empty script that exits 0, so only the check for the binary tells this
+# apart from success.
+out="$(run_agent "$FAKE/h-gone" "$BASE" no-such-installer.sh)"
+echo "$out" | grep -q "Claude Code installed" && fail "a download that never happened reported Claude Code installed"
+echo "$out" | grep -q "did not install" || fail "a failed download was not reported"
+
+# Portable promises ~/.claude and nothing else, so it never installs a binary.
+HOME="$FAKE/h-port" PATH="$BASE" CHEWBACCA_CLAUDE_CODE_INSTALLER="file://$FAKE/works.sh" \
+  bash "$ROOT/setup.sh" --profile portable --name CI >/dev/null 2>&1
+[ -e "$FAKE/h-port/.local/bin/claude" ] && fail "the portable profile installed Claude Code"
 exit 0

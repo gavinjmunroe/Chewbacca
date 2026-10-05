@@ -42,7 +42,12 @@ done <<< "$out"
 
 # And the prerequisite has to be named, not just implied.
 echo "$out" | grep -q "needs Homebrew" || fail "never says node and jq need Homebrew first"
-echo "$out" | grep -q "needs node"     || fail "never says the claude CLI needs node first"
+# Claude Code comes from Anthropic's native installer, which needs no node, so
+# the old "needs node first" line would now be a false dead end. What a bare
+# Mac must hear instead is the plan it needs: the free claude.ai plan does not
+# include Claude Code, and the sign-in screen is the wrong place to learn that.
+echo "$out" | grep -q "paid Claude plan" || fail "never says Claude Code needs a paid Claude plan"
+echo "$out" | grep -q "anthropic-ai/claude-code" && fail "sends a bare Mac to npm for Claude Code again"
 
 # Nothing about GitHub belongs in a profile that creates no repos.
 echo "$out" | grep -qi "gh auth login" && fail "demands a GitHub account in the personal profile"

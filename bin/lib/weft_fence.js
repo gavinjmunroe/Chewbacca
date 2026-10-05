@@ -21,14 +21,25 @@ const path = require("node:path");
 // live (activate, resync, wake), infrastructure, deleting (rm, clean, prune,
 // files rm), accounts (connect, token, options), deploying, stopping or
 // cancelling runs, test-node (cargo on the host), catalog update (writes the
-// shared catalog from the network), follow (never returns), and --on /
-// --dispatcher on every verb, which point weft at another install.
+// shared catalog from the network), follow (never returns), ps and files
+// (every project on the install), and --on / --dispatcher on every verb,
+// which point weft at another install.
 //
 // The rules live outside the project and the build runs under --restricted,
 // which ignores the project and local settings files: Tangle edits files in
 // the project under acceptEdits and once could have rewritten its own rules.
 // --restricted also stops the project's skills and subagents loading, so they
 // are copied, as `weft new` wrote them, into a session plugin outside it.
+//
+// The argv is not the whole story: weft also acts on the files Tangle writes.
+// The seventh review (2026-10-04) found `@asset("/any/path", String)`, which
+// weft reads from anywhere on the Mac and uploads at compile; a canary file in
+// /private/tmp came back in a run's output. And weft loads the nearest .env
+// above its working directory, so a .env Tangle writes could set
+// WEFT_DISPATCHER_URL after the scrub. So every call also runs under
+// sandboxProfile: no reads in the home folder, /private/tmp or the per-user
+// temp area except this project and weft's own install, no read of the
+// project's .env, and no network except this Mac.
 //
 // What the fence does not cover: `weft run` executes the program Tangle wrote,
 // ExecPython and HTTP nodes included, inside Docker, with network.
@@ -73,7 +84,8 @@ const SPEC = {
     args: [0, 0],
   },
   "describe-nodes": { flags: { "--list": SWITCH, "--stdlib": SWITCH, "--node": VALUE, "--compact": SWITCH }, args: [0, 0] },
-  // --project is left out: another project's runs are not this build's.
+  // weft lists every project's runs without --project, so weft-mcp adds this
+  // project's id itself (scopedArgv); Tangle cannot pass one.
   executions: {
     flags: { "--limit": VALUE, "--phase": VALUE, "--node": VALUE, "--since": VALUE, "--offset": VALUE, "--status": VALUE, "--instance": VALUE, "--tag": VALUE },
     args: [0, 0],
@@ -81,15 +93,12 @@ const SPEC = {
   events: { flags: { "--node": VALUE, "--kind": VALUE, "--iteration": VALUE, "--full": SWITCH }, args: [1, 1] },
   logs: { flags: { "--limit": VALUE }, args: [0, 1] },
   status: { flags: {}, args: [0, 0] },
-  ps: { flags: {}, args: [0, 0] },
   checkpoint: { flags: { "--root": SWITCH }, args: [0, 1] },
   branch: { flags: { "--discard": SWITCH }, args: [1, 1] },
   tree: { flags: {}, args: [0, 0] },
   diff: { flags: { "--full": SWITCH }, args: [2, 2] },
   freeze: { flags: { "--expect": VALUE }, args: [1, 2] },
   examples: { flags: {}, args: [0, 0] },
-  "files ls": { flags: {}, args: [0, 1] },
-  "files inspect": { flags: {}, args: [1, 1] },
   "daemon status": { flags: {}, args: [0, 0] },
 };
 
@@ -105,44 +114,137 @@ const NAME_NOTE =
 // No Bash, no WebFetch, no WebSearch: weft is reached through TOOL only.
 const TOOLS = ["Read", "Edit", "Write", "Glob", "Grep", "Agent", "Skill", "TodoWrite"];
 
-// Returns null when `weft <argv>` may run, or the reason it may not. --json
-// is weft's only global flag that is not a target, and only changes output.
-function refusal(argv) {
+// Splits argv by SPEC into { verb, plain, flags } or { error }. --json is
+// weft's only global flag that is not a target, and only changes output.
+function parse(argv) {
   if (!Array.isArray(argv) || argv.length === 0 || !argv.every((word) => typeof word === "string")) {
-    return "argv must be a non-empty array of strings";
+    return { error: "argv must be a non-empty array of strings" };
   }
   const words = argv.filter((word) => word !== "--json");
   const verb = [words.slice(0, 2).join(" "), words[0]].find((key) => key && Object.hasOwn(SPEC, key));
-  if (!verb) return `weft ${words.slice(0, 2).join(" ")} is not allowed in this build`;
+  if (!verb) return { error: `weft ${words.slice(0, 2).join(" ")} is not allowed in this build` };
   const spec = SPEC[verb];
   const rest = words.slice(verb.split(" ").length);
-  let plain = 0;
+  const plain = [];
+  const flags = [];
   for (let i = 0; i < rest.length; i += 1) {
     const word = rest[i];
     if (!word.startsWith("-") || word === "-") {
-      plain += 1;
+      plain.push(word);
       continue;
     }
     const eq = word.indexOf("=");
     const flag = eq === -1 ? word : word.slice(0, eq);
-    if (!Object.hasOwn(spec.flags, flag)) return `weft ${verb} ${flag} is not allowed in this build`;
-    if (spec.flags[flag] === SWITCH && eq !== -1) return `${flag} takes no value`;
-    if (spec.flags[flag] === VALUE && eq === -1) {
+    if (!Object.hasOwn(spec.flags, flag)) return { error: `weft ${verb} ${flag} is not allowed in this build` };
+    if (spec.flags[flag] === SWITCH) {
+      if (eq !== -1) return { error: `${flag} takes no value` };
+      flags.push([flag, null]);
+    } else if (eq !== -1) {
+      flags.push([flag, word.slice(eq + 1)]);
+    } else {
       // A value that looks like a flag is where weft's parser and this one
       // could disagree; weft would refuse it anyway.
-      if (i + 1 >= rest.length || rest[i + 1].startsWith("-")) return `${flag} needs a value`;
+      if (i + 1 >= rest.length || rest[i + 1].startsWith("-")) return { error: `${flag} needs a value` };
+      flags.push([flag, rest[i + 1]]);
       i += 1;
     }
   }
   const [min, max] = spec.args;
-  if (plain < min || plain > max) return `weft ${verb} takes ${min === max ? min : `${min} to ${max}`} plain argument(s), not ${plain}`;
+  if (plain.length < min || plain.length > max) {
+    return { error: `weft ${verb} takes ${min === max ? min : `${min} to ${max}`} plain argument(s), not ${plain.length}` };
+  }
+  return { verb, plain, flags };
+}
+
+// Returns null when `weft <argv>` may run as far as its shape goes, or the
+// reason it may not. scopeRefusal checks the ids in it against this project.
+function refusal(argv) {
+  return parse(argv).error || null;
+}
+
+// weft takes any execution or version id on the install, and a prefix of one,
+// whatever project it belongs to: from a fresh project, `weft events <id>
+// --full` printed another project's run, inputs and outputs included, and
+// `weft freeze` copied it into this one (2026-10-04). So an id must be a whole
+// id this project owns, and an example name a plain name, which also keeps
+// examples/<name>.json inside examples/.
+const EXAMPLE_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+
+const REFERENCE_WORDS = {
+  example: "a plain example name",
+  "example:": "example:<name>",
+  execution: "a whole execution id of this project",
+  version: "a whole version id of this project",
+};
+
+// Which plain arguments and flag values are references, and of what kinds.
+function references({ verb, plain, flags }) {
+  const out = [];
+  const add = (value, kinds) => value !== undefined && out.push({ value, kinds });
+  if (verb === "run") add(plain[0], ["example"]);
+  if (verb === "freeze") {
+    add(plain[0], ["example"]);
+    add(plain[1], ["execution"]);
+  }
+  if (verb === "events" || verb === "logs") add(plain[0], ["execution"]);
+  if (verb === "diff") plain.forEach((ref) => add(ref, ["execution", "example:"]));
+  if (verb === "branch") add(plain[0], ["execution", "version"]);
+  for (const [flag, value] of flags) if (flag === "--save") add(value, ["example"]);
+  return out;
+}
+
+// True when checking argv needs this project's execution or version ids.
+function needsIds(argv) {
+  const parsed = parse(argv);
+  return !parsed.error && references(parsed).some(({ kinds }) => kinds.includes("execution") || kinds.includes("version"));
+}
+
+// owned: { executions: Set, versions: Set } of this project's whole ids.
+function scopeRefusal(argv, owned) {
+  const parsed = parse(argv);
+  if (parsed.error) return parsed.error;
+  for (const { value, kinds } of references(parsed)) {
+    const ok =
+      (kinds.includes("example") && EXAMPLE_NAME.test(value)) ||
+      (kinds.includes("example:") && value.startsWith("example:") && EXAMPLE_NAME.test(value.slice(8))) ||
+      (kinds.includes("execution") && owned.executions.has(value)) ||
+      (kinds.includes("version") && owned.versions.has(value));
+    if (!ok) return `${value} is not ${kinds.map((kind) => REFERENCE_WORDS[kind]).join(" or ")}`;
+  }
   return null;
+}
+
+// The argv weft-mcp runs: executions is pinned to this project.
+function scopedArgv(argv, projectId) {
+  return parse(argv).verb === "executions" ? [...argv, "--project", projectId] : argv;
 }
 
 // weft reads WEFT_DISPATCHER_URL, WEFT_TARGET, WEFT_PUBLIC_URL, WEFT_INSTALL
 // and two dozen more; several point it somewhere else. None is passed on.
 function withoutWeftEnv(env) {
   return Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith("WEFT_")));
+}
+
+// A sandbox-exec profile for one weft call. Paths must be real paths, since
+// the sandbox matches after symlinks resolve (/tmp is /private/tmp). The last
+// matching rule wins, so the project's .env is denied after the project is
+// allowed. ~/.env stays readable because weft loads it on every call from a
+// project under home, sandboxed or not, and dotenv fails on an unreadable one.
+function sandboxProfile({ project, home, weftHome }) {
+  const quote = (value) => `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  const sub = (value) => `(subpath ${quote(value)})`;
+  return [
+    "(version 1)",
+    "(allow default)",
+    `(deny file-read-data ${sub(home)} ${sub("/private/tmp")} ${sub("/private/var/folders")} ${sub("/Volumes")})`,
+    `(allow file-read-data ${sub(project)} ${sub(weftHome)} ${sub(path.join(home, ".docker"))} ${sub(path.join(home, ".colima"))} (literal ${quote(path.join(home, ".env"))}))`,
+    `(deny file-read-data (literal ${quote(path.join(project, ".env"))}))`,
+    `(deny file-write* ${sub(home)} ${sub("/private/tmp")} ${sub("/private/var/folders")})`,
+    `(allow file-write* ${sub(project)} ${sub(weftHome)})`,
+    "(deny network-outbound)",
+    '(allow network-outbound (remote ip "localhost:*") (remote unix-socket))',
+    "",
+  ].join("\n");
 }
 
 // tangleSettings: the parsed .claude/settings.json `weft new` wrote; only its
@@ -164,9 +266,9 @@ function fence(tangleSettings, hookPath) {
 }
 
 // The --mcp-config for a build: one server, bin/weft-mcp, bound to this
-// project and this weft binary.
-function mcpConfig(serverPath, projectDir, realWeft) {
-  return { mcpServers: { weft: { type: "stdio", command: process.execPath, args: [serverPath, projectDir, realWeft] } } };
+// project, its id and this weft binary.
+function mcpConfig(serverPath, projectDir, realWeft, projectId) {
+  return { mcpServers: { weft: { type: "stdio", command: process.execPath, args: [serverPath, projectDir, realWeft, projectId] } } };
 }
 
 // Copies the project's skills, agents and commands into pluginDir, which must
@@ -194,4 +296,4 @@ function packagePlugin(projectDir, pluginDir) {
   return pluginDir;
 }
 
-module.exports = { NAME_NOTE, SPEC, TOOL, TOOLS, fence, mcpConfig, packagePlugin, refusal, withoutWeftEnv };
+module.exports = { NAME_NOTE, SPEC, TOOL, TOOLS, fence, mcpConfig, needsIds, packagePlugin, refusal, sandboxProfile, scopeRefusal, scopedArgv, withoutWeftEnv };

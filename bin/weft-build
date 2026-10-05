@@ -124,8 +124,15 @@ fs.copyFileSync(path.join(dir, ".claude", "hooks", "validate_weft.py"), hookPath
 const settingsPath = path.join(fenceDir, `${name}.settings.json`);
 const tangleSettings = JSON.parse(fs.readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
 fs.writeFileSync(settingsPath, `${JSON.stringify(fence(tangleSettings, hookPath), null, 2)}\n`);
+// weft new wrote this id a moment ago and Tangle has not run yet, so it is
+// the one to pin: weft-mcp refuses every call once weft.toml names another.
+const projectId = (fs.readFileSync(path.join(dir, "weft.toml"), "utf8").match(/^id\s*=\s*"([0-9a-f-]{36})"/m) || [])[1];
+if (!projectId) {
+  process.stderr.write(`weft-build: no project id in ${path.join(dir, "weft.toml")}\n`);
+  process.exit(1);
+}
 const mcpPath = path.join(fenceDir, `${name}.mcp.json`);
-fs.writeFileSync(mcpPath, `${JSON.stringify(mcpConfig(path.join(__dirname, "weft-mcp"), dir, WEFT), null, 2)}\n`);
+fs.writeFileSync(mcpPath, `${JSON.stringify(mcpConfig(path.join(__dirname, "weft-mcp"), dir, WEFT, projectId), null, 2)}\n`);
 const pluginDir = packagePlugin(dir, path.join(fenceDir, `${name}.plugin`));
 hud(["p thinking"]);
 say("Starting a new agent", false);

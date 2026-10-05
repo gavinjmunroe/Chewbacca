@@ -56,6 +56,9 @@ const ESCAPES = [
   ["files", "download", "x"],
   ["daemon", "stop"],
   ["follow", "x"],
+  ["ps"],
+  ["files", "ls"],
+  ["files", "inspect", "x"],
   ["ru"],
 ];
 
@@ -75,7 +78,6 @@ const ALLOWED = [
   ["events", "exec-1", "--node", "sum", "--full"],
   ["diff", "exec-1", "example:sum", "--full"],
   ["freeze", "sum", "exec-1"],
-  ["files", "ls"],
   ["daemon", "status"],
 ];
 
@@ -89,6 +91,35 @@ test("malformed calls are refused rather than guessed at", () => {
 
 test("the build, run and inspect calls Tangle makes go through", () => {
   for (const argv of ALLOWED) assert.equal(fenceLib.refusal(argv), null, `weft ${argv.join(" ")} was refused`);
+});
+
+test("ids must be whole ids this project owns, and example names plain names", () => {
+  const owned = { executions: new Set(["exec-own"]), versions: new Set(["version-own"]) };
+  for (const argv of [
+    ["events", "exec-own"],
+    ["logs"],
+    ["freeze", "sum", "exec-own"],
+    ["diff", "exec-own", "example:sum"],
+    ["branch", "version-own"],
+    ["run", "sum", "--save", "sum-2"],
+  ]) {
+    assert.equal(fenceLib.scopeRefusal(argv, owned), null, `weft ${argv.join(" ")} was refused`);
+  }
+  for (const argv of [
+    ["events", "exec-other"],
+    ["events", "exec"],
+    ["logs", "exec-other"],
+    ["freeze", "steal", "exec-other"],
+    ["freeze", "../outside"],
+    ["diff", "exec-own", "example:../x"],
+    ["branch", "version-other"],
+    ["run", "../../x"],
+    ["run", "--save", "a/b"],
+  ]) {
+    assert.ok(fenceLib.scopeRefusal(argv, owned), `weft ${argv.join(" ")} got through`);
+  }
+  assert.deepEqual(fenceLib.scopedArgv(["executions", "--limit", "5"], "P"), ["executions", "--limit", "5", "--project", "P"]);
+  assert.deepEqual(fenceLib.scopedArgv(["run"], "P"), ["run"]);
 });
 
 test("every flag in the spec is one the installed weft has", { skip: !existsSync(join(homedir(), ".local", "bin", "weft")) && "weft not installed" }, () => {
@@ -130,19 +161,38 @@ test("the session plugin carries skills and agents, and its helpers get the weft
 });
 
 // Drives bin/weft-mcp the way Claude Code does, against a stand-in weft that
-// records what it was handed.
-function mcpSession(calls) {
+// records what it was handed and what it could read. The stand-in sits in an
+// install folder of its own (share/bin/weft) like the real one, and the
+// canary sits beside the project, outside both.
+const PROJECT_ID = "11111111-2222-3333-4444-555555555555";
+
+function mcpSession(calls, { statusId = PROJECT_ID, registered = true, dotenv = false } = {}) {
   const root = mkdtempSync(join(tmpdir(), "weft-mcp-"));
   const project = join(root, "project");
   mkdirSync(project);
-  const record = join(root, "record.jsonl");
-  const fake = join(root, "weft");
+  if (dotenv) writeFileSync(join(project, ".env"), "WEFT_DISPATCHER_URL=http://127.0.0.1:9\n");
+  const canary = join(root, "canary.txt");
+  writeFileSync(canary, "secret-canary\n");
+  mkdirSync(join(root, "share", "bin"), { recursive: true });
+  const record = join(project, "record.jsonl");
+  const fake = join(root, "share", "bin", "weft");
+  const canRead = (file) => `(() => { try { require("fs").readFileSync(${JSON.stringify(file)}); return true; } catch { return false; } })()`;
   writeFileSync(
     fake,
-    `#!/usr/bin/env node\nrequire("fs").appendFileSync(${JSON.stringify(record)}, JSON.stringify({argv: process.argv.slice(2), cwd: process.cwd(), weftEnv: Object.keys(process.env).filter((k) => k.startsWith("WEFT_")), stdin: require("fs").readFileSync(0, "utf8")}) + "\\n");\nprocess.stdout.write("ok");\n`,
+    [
+      "#!/usr/bin/env node",
+      "const fs = require('fs');",
+      "const argv = process.argv.slice(2);",
+      `fs.appendFileSync(${JSON.stringify(record)}, JSON.stringify({argv, cwd: process.cwd(), weftEnv: Object.keys(process.env).filter((k) => k.startsWith("WEFT_")), stdin: fs.readFileSync(0, "utf8"), canary: ${canRead(canary)}, dotenv: ${canRead(join(project, ".env"))}}) + "\\n");`,
+      `if (argv[0] === "status") process.stdout.write(JSON.stringify(${registered} ? { id: ${JSON.stringify(statusId)} } : { registered: false, project_id: ${JSON.stringify(statusId)} }));`,
+      `else if (argv[0] === "executions" && argv.includes("--offset")) process.stdout.write(JSON.stringify({ executions: [{ execution_id: "exec-own", project_id: ${JSON.stringify(PROJECT_ID)} }, { execution_id: "exec-other", project_id: "someone-else" }], total: 2 }));`,
+      `else if (argv[0] === "tree") process.stdout.write(JSON.stringify({ versions: [{ id: "version-own" }] }));`,
+      "else process.stdout.write('ok');",
+      "",
+    ].join("\n"),
   );
   chmodSync(fake, 0o755);
-  const server = spawn(process.execPath, [join(here, "..", "bin", "weft-mcp"), project, fake], {
+  const server = spawn(process.execPath, [join(here, "..", "bin", "weft-mcp"), project, fake, PROJECT_ID], {
     env: { ...process.env, WEFT_DISPATCHER_URL: "http://127.0.0.1:9", WEFT_TARGET: "prod" },
   });
   const messages = [
@@ -172,19 +222,25 @@ function mcpSession(calls) {
   });
 }
 
-test("the weft tool runs exactly the argv it was handed, with no shell, here, and without WEFT_ settings", async () => {
+const onMac = existsSync("/usr/bin/sandbox-exec") || "no sandbox-exec";
+
+test("the weft tool runs exactly the argv it was handed, with no shell, here, and without WEFT_ settings", { skip: onMac !== true && onMac }, async () => {
   const literal = ["run", "--from", 'x=$(touch /tmp/weft-mcp-pwned);`id`'];
   const { replies, ran, project } = await mcpSession([{ argv: literal }, { argv: ["validate"], stdin: "a = Text { value: \"x\" }\n" }]);
   assert.deepEqual(replies.get(1).result.tools.map((tool) => tool.name), ["weft"]);
   assert.equal(replies.get(10).result.isError, false);
-  // The two calls run side by side, so the record is matched by argv.
-  assert.equal(ran.length, 2);
+  // The calls run side by side, so the record is matched by argv. Each is
+  // preceded by weft's own `status --json`, run in the same sandbox.
+  assert.equal(ran.filter((call) => call.argv[0] === "status").length, 2);
+  assert.ok(ran.every((call) => call.canary === false), "a check ran outside the sandbox");
   const run = ran.find((call) => call.argv[0] === "run");
   const validate = ran.find((call) => call.argv[0] === "validate");
   assert.deepEqual(run.argv, literal);
   assert.equal(run.cwd, realpathSync(project));
   assert.deepEqual(run.weftEnv, []);
   assert.equal(validate.stdin, 'a = Text { value: "x" }\n');
+  // The sandbox: a file beside the project is unreadable.
+  assert.equal(run.canary, false, "weft could read a file outside the project");
   assert.ok(!existsSync("/tmp/weft-mcp-pwned"));
 });
 
@@ -196,6 +252,40 @@ test("the weft tool refuses before running anything", async () => {
     assert.match(replies.get(10 + i).result.content[0].text, /^refused: /);
   }
   assert.deepEqual(ran, []);
+});
+
+test("the weft tool checks ids against this project and pins executions to it", { skip: onMac !== true && onMac }, async () => {
+  const calls = [{ argv: ["events", "exec-own"] }, { argv: ["events", "exec-other"] }, { argv: ["executions"] }];
+  const { replies, ran } = await mcpSession(calls);
+  assert.equal(replies.get(10).result.isError, false);
+  assert.match(replies.get(11).result.content[0].text, /^refused: exec-other is not a whole execution id of this project/);
+  assert.ok(!ran.some((call) => call.argv[0] === "events" && call.argv[1] === "exec-other"), "the other project's run was read");
+  const listed = ran.find((call) => call.argv[0] === "executions" && !call.argv.includes("--offset"));
+  assert.deepEqual(listed.argv, ["executions", "--project", PROJECT_ID]);
+});
+
+test("a .env at the project root stops weft before it runs, and the sandbox would not let weft read it", { skip: onMac !== true && onMac }, async () => {
+  const { replies, ran } = await mcpSession([{ argv: ["status"] }], { dotenv: true });
+  assert.match(replies.get(10).result.content[0].text, /^refused: a \.env at the project root/);
+  assert.deepEqual(ran, []);
+  const profile = fenceLib.sandboxProfile({ project: "/p", home: "/h", weftHome: "/h/.local/share/weft" });
+  const lines = profile.split("\n");
+  const allow = lines.findIndex((line) => line.startsWith("(allow file-read-data") && line.includes('"/p"'));
+  const deny = lines.findIndex((line) => line === '(deny file-read-data (literal "/p/.env"))');
+  assert.ok(allow !== -1 && deny > allow, "the .env deny must come after the project allow, since the last rule wins");
+});
+
+test("a project that has never run is recognised by the id weft reports for it", { skip: onMac !== true && onMac }, async () => {
+  const { replies } = await mcpSession([{ argv: ["validate"] }], { registered: false });
+  assert.equal(replies.get(10).result.isError, false);
+  const swapped = await mcpSession([{ argv: ["validate"] }], { registered: false, statusId: "99999999-0000-0000-0000-000000000000" });
+  assert.match(swapped.replies.get(10).result.content[0].text, /^refused: weft.toml no longer names/);
+});
+
+test("the weft tool refuses everything once weft.toml names another project", { skip: onMac !== true && onMac }, async () => {
+  const { replies, ran } = await mcpSession([{ argv: ["run"] }], { statusId: "99999999-0000-0000-0000-000000000000" });
+  assert.match(replies.get(10).result.content[0].text, /^refused: weft.toml no longer names/);
+  assert.deepEqual(ran.map((call) => call.argv[0]), ["status"]);
 });
 
 test("weft-build runs Tangle with no shell and only the weft tool", () => {

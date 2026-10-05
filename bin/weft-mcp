@@ -1,25 +1,48 @@
 #!/usr/bin/env node
 // weft-mcp: the one tool a fenced Tangle build has for running weft.
 //
-//   weft-mcp <project-dir> <real-weft>
+//   weft-mcp <project-dir> <real-weft> <project-id>
+//
+// <project-id> is read from weft.toml by weft-build before Tangle runs. Every
+// call first asks weft (`status --json`) which project it is in and refuses
+// if that is no longer it: Tangle can edit weft.toml, and weft acts on
+// whatever project id the file names, another project's included.
 //
 // A stdio MCP server with a single tool, `weft`, that takes the words after
 // `weft` as a JSON array (and optional stdin), checks them against
 // lib/weft_fence.js SPEC, and runs the real binary with no shell, in the
-// project directory, with no WEFT_ variables. Nothing here is parsed as shell
-// text, which is the point: see the header of lib/weft_fence.js.
+// project directory, with no WEFT_ variables, under sandboxProfile. Nothing
+// here is parsed as shell text, which is the point: see the header of
+// lib/weft_fence.js. With no sandbox-exec (not a Mac) it runs nothing.
 
 "use strict";
 
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 const readline = require("node:readline");
 const { spawn } = require("node:child_process");
-const { refusal, withoutWeftEnv } = require("./lib/weft_fence.js");
+const { needsIds, refusal, sandboxProfile, scopeRefusal, scopedArgv, withoutWeftEnv } = require("./lib/weft_fence.js");
 
-const [projectDir, realWeft] = process.argv.slice(2);
-if (!projectDir || !realWeft) {
-  process.stderr.write("usage: weft-mcp <project-dir> <real-weft>\n");
+const [projectDir, realWeft, projectId] = process.argv.slice(2);
+if (!projectDir || !realWeft || !projectId) {
+  process.stderr.write("usage: weft-mcp <project-dir> <real-weft> <project-id>\n");
   process.exit(2);
 }
+
+const SANDBOX = "/usr/bin/sandbox-exec";
+// Real paths, because the sandbox matches after symlinks resolve:
+// ~/.local/bin/weft links into ~/.local/share/weft/bin.
+const project = fs.realpathSync(projectDir);
+const weft = fs.realpathSync(realWeft);
+const scratch = path.join(project, ".weft", "tmp");
+const home = fs.realpathSync(os.homedir());
+// weft's install is its binary's grandparent (~/.local/share/weft). A weft
+// sitting straight in ~/bin would make that the whole home folder, so such an
+// install is refused rather than allowed wholesale.
+const weftHome = path.dirname(path.dirname(weft));
+const weftHomeTooWide = home === weftHome || home.startsWith(`${weftHome}${path.sep}`) || weftHome === path.sep;
+const profile = sandboxProfile({ project, home, weftHome });
 
 // A first build that compiles a project's own node takes 1 to 3 minutes
 // (weft's weft-running skill); twenty leaves room for a slow run and still
@@ -52,29 +75,81 @@ function text(content, isError) {
   return { content: [{ type: "text", text: content }], isError };
 }
 
-function runWeft(argv, stdin) {
+// Runs `weft <argv>` in the sandbox. Resolves { code, signal, stdout, output }
+// where output is stdout and stderr interleaved and cut to its tail.
+function spawnWeft(argv, stdin) {
   return new Promise((resolve) => {
-    const child = spawn(realWeft, argv, { cwd: projectDir, env: withoutWeftEnv(process.env), stdio: ["pipe", "pipe", "pipe"] });
-    let out = "";
+    fs.mkdirSync(scratch, { recursive: true });
+    const env = { ...withoutWeftEnv(process.env), TMPDIR: scratch };
+    const child = spawn(SANDBOX, ["-p", profile, weft, ...argv], { cwd: project, env, stdio: ["pipe", "pipe", "pipe"] });
+    let stdout = "";
+    let output = "";
     const take = (chunk) => {
-      out += chunk;
-      if (out.length > OUTPUT_LIMIT * 2) out = out.slice(-OUTPUT_LIMIT);
+      output += chunk;
+      if (output.length > OUTPUT_LIMIT * 2) output = output.slice(-OUTPUT_LIMIT);
     };
-    child.stdout.on("data", take);
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+      take(chunk);
+    });
     child.stderr.on("data", take);
     const timer = setTimeout(() => child.kill("SIGTERM"), RUN_LIMIT_MS);
     child.on("error", (error) => {
       clearTimeout(timer);
-      resolve(text(`could not run weft: ${error.message}`, true));
+      resolve({ code: null, signal: null, stdout: "", output: `could not run weft: ${error.message}` });
     });
     child.on("close", (code, signal) => {
       clearTimeout(timer);
-      const tail = out.length > OUTPUT_LIMIT ? `[earlier output cut]\n${out.slice(-OUTPUT_LIMIT)}` : out;
-      const status = signal ? `stopped by ${signal}` : `exit ${code}`;
-      resolve(text(`${tail}\n[${status}]`, code !== 0));
+      resolve({ code, signal, stdout, output });
     });
     child.stdin.end(typeof stdin === "string" ? stdin : "");
   });
+}
+
+async function weftJson(argv) {
+  const result = await spawnWeft([...argv, "--json"], "");
+  if (result.code !== 0) throw new Error(`weft ${argv.join(" ")} failed: ${result.output.trim().slice(-300)}`);
+  return JSON.parse(result.stdout);
+}
+
+// This project's whole execution and version ids. executions comes a page
+// at a time (the dispatcher caps a page), so it is walked with --offset.
+async function ownedIds() {
+  const executions = new Set();
+  for (let offset = 0; ; ) {
+    const page = await weftJson(["executions", "--project", projectId, "--limit", "1000", "--offset", String(offset)]);
+    for (const run of page.executions || []) if (run.project_id === projectId) executions.add(run.execution_id);
+    offset += (page.executions || []).length;
+    if (!(page.executions || []).length || offset >= page.total) break;
+  }
+  const tree = await weftJson(["tree"]);
+  const versions = new Set((tree.versions || []).map((version) => version.id));
+  return { executions, versions };
+}
+
+async function callWeft(argv, stdin) {
+  if (weftHomeTooWide) return `weft at ${weft} has no install folder of its own, so the sandbox cannot be drawn around it`;
+  if (!fs.existsSync(SANDBOX)) return "this build runs weft only inside sandbox-exec, and it is not on this machine";
+  const shape = refusal(argv);
+  if (shape) return shape;
+  // weft would load it and could be pointed elsewhere by it, so the sandbox
+  // denies the read and every call would fail on it anyway; this says why.
+  // Tangle has no way to delete a file, so the person has to.
+  if (fs.existsSync(path.join(project, ".env"))) {
+    return "a .env at the project root sets weft's own settings, so weft does not run while one is there, even empty; ask the person to delete it";
+  }
+  // A registered project answers { id }; one that has never run answers
+  // { registered: false, project_id } (seen on the first fenced build).
+  const status = await weftJson(["status"]);
+  if ((status.registered === false ? status.project_id : status.id) !== projectId) return "weft.toml no longer names this build's project; put its [package] id back";
+  if (needsIds(argv)) {
+    const scope = scopeRefusal(argv, await ownedIds());
+    if (scope) return scope;
+  }
+  const result = await spawnWeft(scopedArgv(argv, projectId), stdin);
+  const tail = result.output.length > OUTPUT_LIMIT ? `[earlier output cut]\n${result.output.slice(-OUTPUT_LIMIT)}` : result.output;
+  const ended = result.signal ? `stopped by ${result.signal}` : `exit ${result.code}`;
+  return text(`${tail}\n[${ended}]`, result.code !== 0);
 }
 
 async function handle(message) {
@@ -96,12 +171,13 @@ async function handle(message) {
       send({ id, result: text(`no tool named ${params && params.name}`, true) });
       return;
     }
-    const reason = refusal(args.argv);
-    if (reason) {
-      send({ id, result: text(`refused: ${reason}.`, true) });
-      return;
+    let outcome;
+    try {
+      outcome = await callWeft(args.argv, args.stdin);
+    } catch (error) {
+      outcome = `could not check the call: ${error.message}`;
     }
-    send({ id, result: await runWeft(args.argv, args.stdin) });
+    send({ id, result: typeof outcome === "string" ? text(`refused: ${outcome}.`, true) : outcome });
   } else if (method === "ping") {
     send({ id, result: {} });
   } else if (id !== undefined) {

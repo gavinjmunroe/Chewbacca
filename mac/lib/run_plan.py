@@ -206,7 +206,7 @@ def main():
         # that the UI actually responded, not just that the command returned 0.
         verified = ""
         if a.get("verify"):
-            v = _jarvis("see", "--app", a["verify"])
+            v = _chewie("see", "--app", a["verify"])
             verified = "verified" if v.returncode == 0 else "verify failed"
         tr.log(f"action:{a['name']}", "ok",
                (getattr(r, "stdout", "") or "").strip()[:120] or verified, ms=ms)

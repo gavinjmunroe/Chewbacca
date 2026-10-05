@@ -277,7 +277,14 @@ path, number, hold = sys.argv[1], sys.argv[2], sys.argv[3]
 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 sock.connect(path)
 line = f"press {number}" + (f" hold={hold}" if hold else "")
-sock.sendall(f"listen\n{line}\n".encode())
+# Events, the `pr` answer included, go only to a listener that shows the
+# display's per-start token (hud/CLAUDE.md, "Who hears events").
+import os
+try:
+    token = open(os.path.join(os.path.dirname(path), "hud.token")).read().strip()
+except OSError:
+    token = ""
+sock.sendall(f"listen token={token}\n{line}\n".encode())
 sock.settimeout(0.25)
 buffer, deadline = b"", time.monotonic() + 2.0
 while time.monotonic() < deadline:

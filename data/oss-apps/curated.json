@@ -1,0 +1,241 @@
+{
+ "must_include": [
+  {
+   "repo": "AppFlowy-IO/AppFlowy",
+   "name": "AppFlowy",
+   "category": "Productivity & Utilities / Note Taking & Knowledge Management"
+  },
+  {
+   "repo": "toeverything/AFFiNE",
+   "name": "AFFiNE",
+   "category": "Productivity & Utilities / Note Taking & Knowledge Management"
+  },
+  {
+   "repo": "immich-app/immich",
+   "name": "Immich",
+   "category": "Content & Publishing / Digital Asset Management (DAM)"
+  },
+  {
+   "repo": "Stirling-Tools/Stirling-PDF",
+   "name": "Stirling-PDF",
+   "category": "Business Software / Document Management & E-Signatures"
+  },
+  {
+   "repo": "makeplane/plane",
+   "name": "Plane",
+   "category": "Business Software / Project & Work Management"
+  },
+  {
+   "repo": "medusajs/medusa",
+   "name": "Medusa",
+   "category": "Business Software / E-commerce Platforms"
+  },
+  {
+   "repo": "open-pencil/open-pencil",
+   "name": "OpenPencil",
+   "category": "Miscellaneous / Design & Prototyping"
+  }
+ ],
+ "replaces": {
+  "AppFlowy-IO/AppFlowy": [
+   "Notion"
+  ],
+  "toeverything/AFFiNE": [
+   "Notion",
+   "Miro"
+  ],
+  "immich-app/immich": [
+   "Google Photos",
+   "iCloud Photos"
+  ],
+  "Stirling-Tools/Stirling-PDF": [
+   "Adobe Acrobat"
+  ],
+  "makeplane/plane": [
+   "Jira",
+   "Linear",
+   "Asana"
+  ],
+  "medusajs/medusa": [
+   "Shopify"
+  ],
+  "open-pencil/open-pencil": [
+   "Figma"
+  ],
+  "exelban/stats": [
+   "iStat Menus"
+  ],
+  "gao-sun/eul": [
+   "iStat Menus"
+  ],
+  "rxhanson/Rectangle": [
+   "Magnet",
+   "BetterSnapTool"
+  ],
+  "mrkai77/Loop": [
+   "Magnet"
+  ],
+  "eczarny/spectacle": [
+   "Magnet"
+  ],
+  "jordanbaird/Ice": [
+   "Bartender"
+  ],
+  "dwarvesf/hidden": [
+   "Bartender"
+  ],
+  "Mortennn/Dozer": [
+   "Bartender"
+  ],
+  "lwouis/alt-tab-macos": [
+   "Witch",
+   "Contexts"
+  ],
+  "p0deje/Maccy": [
+   "Paste",
+   "Pastebot"
+  ],
+  "Clipy/Clipy": [
+   "Paste",
+   "Pastebot"
+  ],
+  "hluk/CopyQ": [
+   "Paste",
+   "Pastebot"
+  ],
+  "Caldis/Mos": [
+   "SmoothScroll"
+  ],
+  "flameshot-org/flameshot": [
+   "CleanShot X",
+   "Snagit"
+  ],
+  "wulkano/Kap": [
+   "CleanShot X",
+   "ScreenFlow"
+  ],
+  "iina/iina": [
+   "QuickTime Player",
+   "Infuse"
+  ],
+  "videolan/vlc": [
+   "QuickTime Player"
+  ],
+  "mpv-player/mpv": [
+   "QuickTime Player"
+  ],
+  "marktext/marktext": [
+   "Typora"
+  ],
+  "Zettlr/Zettlr": [
+   "Typora",
+   "Ulysses"
+  ],
+  "MacDownApp/macdown": [
+   "Typora"
+  ],
+  "Foundry376/Mailspring": [
+   "Spark",
+   "Airmail"
+  ],
+  "readest/readest": [
+   "Apple Books",
+   "Kindle"
+  ],
+  "sqlitebrowser/sqlitebrowser": [
+   "TablePlus"
+  ],
+  "Sequel-Ace/Sequel-Ace": [
+   "TablePlus",
+   "Navicat"
+  ],
+  "dbgate/dbgate": [
+   "TablePlus",
+   "Navicat",
+   "DataGrip"
+  ],
+  "desktop/desktop": [
+   "Tower",
+   "Fork"
+  ],
+  "git-up/GitUp": [
+   "Tower",
+   "Fork"
+  ],
+  "cerebroapp/cerebro": [
+   "Alfred",
+   "Raycast"
+  ],
+  "ospfranco/sol": [
+   "Raycast",
+   "Alfred"
+  ],
+  "Ranchero-Software/NetNewsWire": [
+   "Reeder"
+  ],
+  "cryptomator/cryptomator": [
+   "Boxcryptor"
+  ],
+  "objective-see/LuLu": [
+   "Little Snitch"
+  ],
+  "keeweb/keeweb": [
+   "1Password"
+  ],
+  "aonez/Keka": [
+   "BetterZip"
+  ],
+  "peazip/PeaZip": [
+   "BetterZip"
+  ],
+  "arsenetar/dupeguru": [
+   "Gemini 2 (MacPaw)"
+  ],
+  "ExistentialAudio/BlackHole": [
+   "Loopback"
+  ],
+  "kyleneideck/BackgroundMusic": [
+   "SoundSource"
+  ],
+  "glushchenko/fsnotes": [
+   "Bear"
+  ],
+  "coteditor/CotEditor": [
+   "BBEdit"
+  ],
+  "textmate/textmate": [
+   "Sublime Text",
+   "BBEdit"
+  ],
+  "agalwood/Motrix": [
+   "Folx"
+  ],
+  "alienator88/Pearcleaner": [
+   "CleanMyMac",
+   "AppCleaner"
+  ],
+  "handbrake/handbrake": [
+   "Apple Compressor"
+  ]
+ },
+ "license_overrides": {
+  "toeverything/affine": {
+   "license": "MIT",
+   "remixable": false,
+   "note": "open core: packages/backend and packages/common/native are under the AFFiNE Enterprise Edition license; everything else is MIT (root LICENSE read 2026-10-04)",
+   "with_caveat": true
+  },
+  "stirling-tools/stirling-pdf": {
+   "license": "MIT",
+   "remixable": false,
+   "note": "open core: app/proprietary, app/saas, engine/ and several frontend/editor/src subfolders carry their own licenses; everything else is MIT (root LICENSE read 2026-10-04)",
+   "with_caveat": true
+  },
+  "medusajs/medusa": {
+   "license": "MIT",
+   "remixable": false,
+   "note": "open core: the Enterprise Edition materials named in ENTERPRISE-LICENSE.md are not MIT; the rest of the repository is (root LICENSE read 2026-10-04)",
+   "with_caveat": true
+  }
+ }
+}

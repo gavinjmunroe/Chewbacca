@@ -99,16 +99,14 @@ public struct RunClock: Sendable {
 
 /// The capsule at the bottom of the glass.
 ///
-/// Clear glass, in the Apple sense: the screen itself through a capsule that
-/// adds a highlight, a rim and a shadow, and nothing that hides what is
-/// behind it. It was white for a day, then the cards' dark frost for an
-/// hour, and on 2026-09-19 the ask became "bubble/glass apple style pill,
-/// fully translucent, clear and white text". macOS 15 has no lens to
-/// borrow: NSVisualEffectView blurs at one radius under a tint and reads as
-/// frost, so the glass here is a faint white tint, light entering from the
-/// top left, a darker underside and a rim. The white ink carries its own
-/// shadow, which is what keeps it readable over a white document; the
-/// snapshot test draws it over both grounds for that reason.
+/// A solid capsule of black titanium, the same material as the frame round
+/// the screen: dark, opaque, lit from above along a one-pixel rim, and
+/// seated with a hairline and a soft shadow. It was white for a day, clear
+/// glass for two weeks, then drawn by the presence field as a bead of the
+/// edge's material, and on 2026-10-04 that one was "not clean, looks like
+/// shit": the field's soft rim never lined up with the words and the X on
+/// top of it. Drawn here, from the same shape that clips the content, it
+/// cannot drift. White ink on an opaque body needs no shadow to read.
 struct PillView: View {
     let state: PillState
     let presence: Presence
@@ -122,8 +120,8 @@ struct PillView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
-    /// Always false now: the bar's body is dark smoke from the field, so the
-    /// ink is white whatever is behind it.
+    /// Always false now: the bar's body is opaque black titanium, so the ink
+    /// is white whatever is behind it.
     private var darkInk: Bool { false }
     /// Whether the completion sweep has faded. Flipped by the phase task, so
     /// the bar finishes in colour and then gets out from under the answer.
@@ -185,12 +183,6 @@ struct PillView: View {
             Text(line)
                 .font(.system(size: 13, weight: .medium, design: .rounded))
                 .foregroundStyle(ink)
-                // White on clear glass is white on whatever is behind it. The
-                // shadow is the legibility: 0.45 at two points is the least
-                // that still reads over a white page. Guessed, never measured.
-                // Over a measured light ground the ink is dark instead and
-                // the shadow turns to a faint lift of white.
-                .shadow(color: darkInk ? .white.opacity(0.4) : .black.opacity(0.45), radius: 2, y: 1)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .id(line)
@@ -230,14 +222,29 @@ struct PillView: View {
                         value: progress)
             }
         }
-        // No glass. The body is drawn by the presence field, out of the same
-        // liquid as the band round the screen, so the bar and the edge are one
-        // material: asked for on 2026-09-23, "i want the hyperbar to feel apart
-        // of the edge display... it seems like a different thing right now".
-        // What is left here is a faint lift under the pointer, the one hint
-        // that the capsule opens, and the clip for the progress fill.
-        .background { shape.fill(Color.white.opacity(hovering ? 0.07 : 0)) }
         .clipShape(shape)
+        // The rim: one pixel, lit from above and fading down the sides, over
+        // the progress fill so the fill reads as inside the capsule.
+        .overlay {
+            shape.strokeBorder(
+                LinearGradient(
+                    colors: [.white.opacity(0.26), .white.opacity(0.05)],
+                    startPoint: .top, endPoint: .bottom),
+                lineWidth: 1)
+        }
+        // The body, outside the clip so its shadow can fall. Black titanium,
+        // a little lighter at the top where the light comes from; a hairline
+        // of black separates it from a light page; the lift under the pointer
+        // is the one hint that the capsule opens.
+        .background {
+            shape
+                .fill(LinearGradient(
+                    colors: [Color(white: 0.11), Color(white: 0.055)],
+                    startPoint: .top, endPoint: .bottom))
+                .overlay { shape.fill(Color.white.opacity(hovering ? 0.06 : 0)) }
+                .overlay { shape.stroke(Color.black.opacity(0.6), lineWidth: 1) }
+                .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+        }
         // The whole capsule is the button. The X inside it is a Button of
         // its own and wins the click, so this only fires on the glass.
         .contentShape(shape)
@@ -275,7 +282,6 @@ struct PillView: View {
             // because white on HUD.warn is 1.5:1 and a phone camera cannot
             // read it.
             .foregroundStyle(late ? .black.opacity(0.85) : ink.opacity(0.78))
-            .shadow(color: darkInk ? .white.opacity(late ? 0 : 0.4) : .black.opacity(late ? 0 : 0.45), radius: 2, y: 1)
             .padding(.horizontal, late ? 5 : 0)
             .padding(.vertical, late ? 1 : 0)
             // Past p90 the counter sits on amber rather than turning amber:

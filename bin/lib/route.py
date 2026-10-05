@@ -483,8 +483,14 @@ def _ask_model(prompt: str, timeout: float, argv: list[str] | None = None) -> st
     argv = _model_cmd() if argv is None else argv
     if not argv:
         return None
+    # Auto-memory off. These calls summarize or classify a few sentences; the
+    # memory index adds nothing to that and can put a client's name into a
+    # summary the voice later says aloud. Measured 2026-10-04, `claude -p
+    # --model haiku`, one question: 88,431 prompt tokens with it, 78,858 to
+    # 79,353 without.
+    env = dict(os.environ, CLAUDE_CODE_DISABLE_AUTO_MEMORY="1")
     try:
-        result = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=timeout)
+        result = subprocess.run(argv, input=prompt, capture_output=True, text=True, timeout=timeout, env=env)
     except (OSError, subprocess.TimeoutExpired):
         return None
     if result.returncode != 0:

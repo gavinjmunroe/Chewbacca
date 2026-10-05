@@ -93,6 +93,9 @@ export COURSEWORK_DIR="$TMP/coursework"
 export CHEWBACCA_LOG_DIR="$TMP/logs"
 export SUPERASSISTANT_DIR="$TMP/superassistant"
 export BOB_DECISIONS="$TMP/decisions.jsonl"
+# brain-recall and skill-route log every prompt they see; without this, every
+# suite run would write its test prompts into the real private shadow log.
+export ROUTE_SHADOW_LOG="$TMP/route-shadow.jsonl"
 
 group() { CURRENT="$1"; [ -n "$ONLY" ] && [ "$ONLY" != "$1" ] && return 1
           echo -e "\n${BLD}$1${NC}"; return 0; }
@@ -162,6 +165,30 @@ if group "learning tools"; then
     check "$tool unit tests" python3 "$ROOT/tests/test_$module.py"
   done
   check "agent-neutral export is current" python3 "$ROOT/tools/agents_md.py" --check
+fi
+
+# A gate that has never refused anything proves nothing (2026-09-21), so each
+# failure class is planted in bad.html and the clean page must pass.
+if group "site-gate"; then
+  if python3 -c "import playwright, PIL" 2>/dev/null; then
+    SGPORT=$((20000 + RANDOM % 20000))
+    ( cd "$ROOT/tests/fixtures/site-gate" && exec python3 -m http.server "$SGPORT" >/dev/null 2>&1 ) & SGPID=$!
+    sleep 1
+    SG="http://127.0.0.1:$SGPORT"
+    "$ROOT/bin/site-gate" check "$SG/bad.html" >"$TMP/sg.out" 2>&1; SGRC=$?
+    check  "bad page exits 1" test "$SGRC" -eq 1
+    for needle in "horizontal scroll" 'href="#"' "missing #nowhere" "gone.html answered 404" \
+                  "no hover and no focus state: BUTTON Inert" "no accessible name" "planted failure" \
+                  "runs under reduced motion" '"Ghost" text is invisible' 'heading-plus-line grid of 6 cards'; do
+      check "bad page flags: $needle" grep -qF -- "$needle" "$TMP/sg.out"
+    done
+    exits  "clean page passes" 0 "$ROOT/bin/site-gate" check "$SG/good.html"
+    exits  "a page marked @404 that 404s passes" 0 "$ROOT/bin/site-gate" check "$SG/missing.html@404"
+    exits  "the same 404 unmarked fails" 1 "$ROOT/bin/site-gate" check "$SG/missing.html"
+    kill "$SGPID" 2>/dev/null; wait "$SGPID" 2>/dev/null
+  else
+    skip "site-gate" "playwright or Pillow missing"
+  fi
 fi
 
 # ── people ────────────────────────────────────────────────────────────────────
@@ -267,6 +294,7 @@ if group "doctor"; then
   check  "--help works" bash "$ROOT/doctor.sh" --help
   exits  "an unknown flag exits 2" 2 bash "$ROOT/doctor.sh" --nonsense
   check  "--json is valid JSON" bash -c "bash '$ROOT/doctor.sh' --json | python3 -m json.tool"
+  check  "--json stays valid JSON when a leak is found" bash "$ROOT/tests/test_doctor_json_leak.sh"
   expect "--json carries severities" '"severity"' bash -c "bash '$ROOT/doctor.sh' --json"
   expect "--json carries sections" '"section"' bash -c "bash '$ROOT/doctor.sh' --json"
 
@@ -325,6 +353,17 @@ if group "decision-learning"; then
   check "shared instruction export stays current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 
+# Open source app registry: offline, reads the committed data/oss-apps/apps.json.
+if group "oss-apps"; then
+  expect "oss-apps appears in help" "chewbacca oss-apps" bash "$ROOT/bin/chewbacca" --help
+  check  "oss-apps dispatches" bash "$ROOT/bin/chewbacca" oss-apps --help
+  ln -s "$ROOT/bin/oss-apps" "$TMP/oss-apps"
+  check  "oss-apps resolves installed symlink" "$TMP/oss-apps" --help
+  check  "registry parses, lookups work, AGPL is never remixable" python3 "$ROOT/tests/test_oss_apps.py"
+  expect "replaces Notion finds AFFiNE" "toeverything/AFFiNE" bash "$ROOT/bin/chewbacca" oss-apps replaces Notion --limit 0
+  check  "stats --json is valid JSON" bash -c "python3 '$ROOT/bin/oss-apps' stats --json | python3 -m json.tool"
+fi
+
 # ── GTM engineering ───────────────────────────────────────────────────────────
 if group "gtme"; then
   check "workflow graph validates evidence and bounds execution" python3 "$ROOT/tests/test_gtme_graph.py"
@@ -332,6 +371,16 @@ if group "gtme"; then
   check "research library preserves source and reading status" python3 "$ROOT/tests/test_gtme_library.py"
   check "learning promotion requires paired holdouts and preserved regressions" python3 "$ROOT/tests/test_gtme_learning.py"
   check "Clay exports match the frozen fixture by stable identity" python3 "$ROOT/tests/test_clay_fixture_check.py"
+fi
+
+# ── team board ────────────────────────────────────────────────────────────────
+if group "team"; then
+  check "team writes one-file commits, keeps edits through races, refuses bad input" python3 "$ROOT/tests/test_team.py"
+  if command -v node >/dev/null 2>&1; then
+    check "team-web sessions, validation and the shared task format agree with the CLI" node --test "$ROOT"/apps/team-web/test/*.test.js
+  else
+    skip "team-web sessions, validation and the shared task format agree with the CLI" "no node"
+  fi
 fi
 
 # ── tools ─────────────────────────────────────────────────────────────────────
@@ -352,6 +401,7 @@ if group "tools"; then
   check  "changelog generates" env PYTHONPATH="$ROOT/tools" python3 -c 'import changelog; assert changelog.build().startswith("# Changelog")'
   if [ -f "$HOME/second-brain/memory/MEMORY.md" ]; then
     check "memory compact dry run is safe" python3 "$ROOT/tools/memory_compact.py" --dry-run
+    check "memory index terse form converts and reruns clean" python3 "$ROOT/tests/test_memory_terse.py"
   else
     skip "memory compact dry run is safe" "no second-brain on this machine"
   fi
@@ -550,6 +600,12 @@ if group "installer"; then
 
   check  "stale-read-guard refuses a silence claim while jobs are outstanding" \
     bash "$ROOT/tests/stale_read_guard.sh"
+
+  check  "suite-rerun-guard refuses a repeat full run on an unchanged tree" \
+    bash "$ROOT/tests/suite_rerun_guard.sh"
+
+  check  "repo-overlap-guard warns once when another session shares the checkout" \
+    bash "$ROOT/tests/repo_overlap_guard.sh"
 
   # 18 research files and a whole session of UI work that read none of them.
   check  "design-context fires on design work only" \
@@ -803,7 +859,7 @@ if group "installer"; then
   # while skills/graph-engineering sat there holding the task-graph rules.
   check  "the skill router names a skill for a request one covers" bash -c '
     out=$(printf "%s" "{\"prompt\":\"build a knowledge graph and dedupe entities across sources\",\"cwd\":\"$1\"}" \
-      | "$1/.claude/hooks/skill-route.sh" 2>/dev/null)
+      | SKILL_ROUTE_NO_VECTOR=1 "$1/.claude/hooks/skill-route.sh" 2>/dev/null)
     case "$out" in *graph-engineering*) : ;;
       *) echo "router said nothing for a graph request"; exit 1 ;; esac' _ "$ROOT"
 
@@ -811,8 +867,17 @@ if group "installer"; then
   # the failure it exists to prevent. Silence is the common case.
   check  "the skill router stays silent on an unrelated prompt" bash -c '
     out=$(printf "%s" "{\"prompt\":\"whats the weather like today\",\"cwd\":\"$1\"}" \
-      | "$1/.claude/hooks/skill-route.sh" 2>/dev/null)
+      | SKILL_ROUTE_NO_VECTOR=1 "$1/.claude/hooks/skill-route.sh" 2>/dev/null)
     [ -z "$out" ] || { echo "routed noise: $out"; exit 1; }' _ "$ROOT"
+
+  # The meaning-first path (2026-10-03). With Ollama unreachable it has to fall
+  # back to the stem matcher rather than go quiet, or one stopped app silences
+  # the router everywhere.
+  check  "the skill router falls back to keywords when Ollama is down" bash -c '
+    out=$(printf "%s" "{\"prompt\":\"build a knowledge graph and dedupe entities across sources\",\"cwd\":\"$1\"}" \
+      | OLLAMA_HOST=http://127.0.0.1:9 CHEWBACCA_HOME="$(mktemp -d)" "$1/.claude/hooks/skill-route.sh" 2>/dev/null)
+    case "$out" in *graph-engineering*) : ;;
+      *) echo "fallback said nothing: $out"; exit 1 ;; esac' _ "$ROOT"
 
   # It shipped to one machine once before and never reached anybody else.
   check  "the skill router is registered in the shipped settings" \
@@ -897,8 +962,19 @@ if group "CLAUDE.md merge"; then
     bash "$ROOT/bin/lib/merge-claude-md.sh" "$M/CLAUDE.md" "$M/standards.md"
 fi
 
+# ── context import ────────────────────────────────────────────────────────────
+# Onboarding reads other tools' notes. Scan must write nothing, apply only the
+# approved keys, undo only its own notes, and planted orders stay quoted text.
+if group "context import"; then
+  expect "import is in help" "chewbacca import" bash "$ROOT/bin/chewbacca" --help
+  check  "scan, apply and undo against a temp HOME" python3 "$ROOT/tests/test_context_import.py"
+fi
+
 # ── hooks ─────────────────────────────────────────────────────────────────────
 if group "hooks"; then
+  check "brain-recall speaks only over the cosine bar" bash "$ROOT/tests/brain_recall.sh"
+  check "router shadow log never blocks a hook or lands in a repo" bash "$ROOT/tests/route_shadow.sh"
+  check "route_tune follows its written rule and refuses under 50 rows" bash "$ROOT/tests/route_tune.sh"
   check "formatter handles a broken Node runtime" python3 "$ROOT/tests/test_formatter_runtime.py"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   # A hook must never fail the session, whatever it is handed.
@@ -1128,7 +1204,22 @@ if group "hud"; then
   check  "ux-do acts on what was meant, asks when unsure, never presses send" python3 "$ROOT/tests/test_ux.py"
   check  "every named Jev decision is logged and joined to what happened" python3 "$ROOT/tests/test_decision_log.py"
   check  "math, time, conversions and weather are computed, never guessed" python3 "$ROOT/tests/test_quick.py"
+  check  "open takes a new terminal, Chrome or Sheets and refuses a task" python3 "$ROOT/tests/test_opener.py"
+  check  "agenda reads today or the week aloud and refuses a task" python3 "$ROOT/tests/test_agenda.py"
+  check  "a text to yourself starting with Kyber is a command, nothing else is" python3 "$ROOT/tests/test_text_command.py"
   check  "a replayed sentence takes the path the voice would take" python3 "$ROOT/tests/test_fast_path.py"
+  # The OS graph and the surfaces drawn from it. Fixture chat.db, people
+  # store, backlog and mail in a temp dir and a fake display, so nothing real
+  # is read and nothing is sent.
+  check  "kyber-surfaces parses" python3 -m py_compile "$ROOT/bin/kyber-surfaces"
+  check  "the OS graph refuses bad edges, fuses only via people, answers its questions" \
+    python3 "$ROOT/tests/test_osgraph.py"
+  check  "surfaces draw valid ops, refresh with d only, and send only on a press" \
+    python3 "$ROOT/tests/test_kyber_surfaces.py"
+  check  "a sentence opens the right surface and a near miss goes to the model" \
+    python3 "$ROOT/tests/test_surface_intent.py"
+  check  "apps.json names a replacement or says not yet for every app" \
+    python3 "$ROOT/tests/test_apps_map.py"
   check  "reflect harvests both logs, replays them, and writes only when told" python3 "$ROOT/tests/test_reflect.py"
   check  "held-out cases stay hidden from the proposer and can fail a fix" python3 "$ROOT/tests/test_holdout.py"
   check  "web-record keeps the path, never what was typed" python3 "$ROOT/tests/test_web_record.py"
@@ -1274,6 +1365,7 @@ if group "reasoning backends"; then
   check "chewbacca-bridge runs only its fixed tools" python3 "$ROOT/tests/test_chewbacca_bridge.py"
   check "gateway protocol and execution" python3 "$ROOT/tests/test_chatgpt_gateway.py"
   check "provider selection and ownership" python3 "$ROOT/tests/test_mac_use_providers.py"
+  check "run_plan calls only functions that exist" python3 "$ROOT/tests/test_run_plan_names.py"
   check "Codex shared instructions and optional health" python3 "$ROOT/tests/test_codex.py"
   check "Codex personal context startup" python3 "$ROOT/tests/test_codex_context.py"
   check "Codex native lifecycle hooks" python3 "$ROOT/tests/test_codex_hooks.py"

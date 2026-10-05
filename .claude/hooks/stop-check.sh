@@ -72,7 +72,7 @@ fi
 # then springs on them is worse than saying nothing.
 #
 # So attribute the dirty tracked files before reporting them. write-log.tsv
-# holds "epoch<TAB>session_id<TAB>absolute path". Everything here degrades to
+# holds "epoch<TAB>session_id<TAB>absolute path[<TAB>edit|bash]". Everything here degrades to
 # the previous behaviour when the log is missing, empty, unreadable, or when
 # jq is absent, because a guard that suppresses a real warning on a bad day is
 # worse than one that occasionally repeats itself.
@@ -94,18 +94,59 @@ if command -v jq >/dev/null 2>&1; then
   _SID="$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)"
 fi
 _WLOG="${CHEWBACCA_WRITE_LOG:-$HOME/.chewbacca/write-log.tsv}"
+# Rows carry an optional 4th column: "edit" when the tool named the file it
+# wrote, "bash" when the path was inferred from a before/after diff. A diff
+# cannot tell this session's write from another live session's write inside
+# the same window, and on 2026-10-03 four extract tabs writing into one repo
+# had one tab credited with another's file every turn. So when the latest row
+# for a path is inferred and another session has an exact row for it, that
+# session owns the file. Old three-column rows still parse: one written in the
+# same append as rows for other paths (same session, under 10ms apart) was a
+# diff, a lone one is treated as exact, which is the previous behaviour.
+#
+# EXACT_WINDOW: how long before the inferred row another session's exact
+# edit still counts. Guessed, never measured; long enough to cover a slow
+# Write hook landing after the Bash row, short enough that a file this
+# session reworks a day later is not handed back to whoever first wrote it.
 if [ -n "$_SID" ] && [ -s "$_WLOG" ]; then
-  while IFS= read -r _f; do
-    [ -n "$_f" ] || continue
-    _last="$(grep -F "	$REPO_ROOT/$_f" "$_WLOG" 2>/dev/null | tail -1)"
-    [ -n "$_last" ] || continue
-    _author="$(printf '%s' "$_last" | cut -f2)"
+  _AUTHORS="$(printf '%s\n' "$_ATTR_PATHS" | awk -F'\t' -v root="$REPO_ROOT/" -v window=300 '
+    # git lists a wholly untracked folder as "dir/", so a folder entry owns
+    # every logged path under it, as the old prefix grep did.
+    FNR == NR { if ($0 == "") next; if ($0 ~ /\/$/) dirs[root $0] = 1; else want[root $0] = 1; next }
+    {
+      key = ""
+      if ($3 in want) key = $3
+      else for (d in dirs) if (index($3, d) == 1) { key = d; break }
+      batch = 0
+      if (NF < 4 && prev_sid == $2 && prev_path != $3 && ($1 - prev_ts) < 0.01 && ($1 - prev_ts) > -0.01) {
+        batch = 1
+        if (prev_legacy && prev_key != "") weak[prev_key, n[prev_key]] = 1
+      }
+      prev_ts = $1; prev_sid = $2; prev_path = $3; prev_legacy = (NF < 4); prev_key = key
+      if (key == "") next
+      i = ++n[key]; ts[key, i] = $1; sid[key, i] = $2
+      weak[key, i] = ($4 == "bash") || (NF < 4 && batch)
+    }
+    END {
+      for (p in n) {
+        last = n[p]; who = sid[p, last]
+        if (weak[p, last]) {
+          for (i = 1; i < last; i++)
+            if (!weak[p, i] && sid[p, i] != who && ts[p, i] >= ts[p, last] - window) owner = sid[p, i]
+          if (owner != "") who = owner
+          owner = ""
+        }
+        print who
+      }
+    }' - "$_WLOG" 2>/dev/null)"
+  while IFS= read -r _author; do
+    [ -n "$_author" ] || continue
     if [ "$_author" = "$_SID" ]; then
       MINE_COUNT=$((MINE_COUNT + 1))
     else
       OTHERS_COUNT=$((OTHERS_COUNT + 1))
     fi
-  done <<< "$_ATTR_PATHS"
+  done <<< "$_AUTHORS"
 fi
 
 # Repeating a warning the user has already seen and declined to act on is the

@@ -117,6 +117,12 @@ public final class SurfaceStore {
     /// is a legitimate state: a surface streamed and the agent walked away.
     public var onEvent: ((OutboundEvent) -> Void)?
 
+    /// The surface this store draws, set when the overlay opens it. Every
+    /// action carries it as `surface=`, because component ids are only unique
+    /// inside one surface and a daemon with five panels open needs to know
+    /// which `reply` was pressed.
+    public var surfaceID: String?
+
     /// Bumped on every change so SwiftUI redraws even though `spec` is a value
     /// type nested several levels deep.
     public private(set) var revision = 0
@@ -151,7 +157,7 @@ public final class SurfaceStore {
     private func applyOne(_ op: Op) {
         switch op {
         case .surface, .close, .presence, .mark, .unmark, .say, .step, .write, .queued,
-             .terminal, .terminalOff, .agentCursor, .agentCursorOff, .press:
+             .terminal, .terminalOff, .agentCursor, .agentCursorOff, .press, .chatTarget:
             // Routed by the overlay, which owns which surface is current and
             // what the ring and the pill are doing. A store knows about one
             // surface's contents and deliberately nothing about the glass
@@ -273,7 +279,32 @@ public final class SurfaceStore {
     }
 
     public func fire(_ action: String, from component: ComponentID, payload: [String: JSON] = [:]) {
+        // An action name is a positional word in the line that goes up. One a
+        // sender wrote with a space or a quote (`action="go surface=x"`) is
+        // refused and reported, never sent with the bad characters replaced:
+        // a press that arrives under a different name is worse than none.
+        guard OutboundEvent.isWord(action) else {
+            report("action \(OutboundEvent.jsonString(action)) is not a word: letters, digits, _ - . : / only")
+            return
+        }
+        var payload = payload
+        if let surfaceID, payload["surface"] == nil { payload["surface"] = .string(surfaceID) }
         onEvent?(.action(name: action, component: component, payload: payload))
+    }
+
+    /// A row's action: a button on one row of a List, Table or Events.
+    ///
+    /// `e action <name> row=<id> surface=<surface>` (see
+    /// `OutboundEvent.rowAction`). The row id is the item's own `id` field
+    /// when it has one, which is the point: "reply to this thread" has to name
+    /// the thread, not its position, because the list may have changed under
+    /// the pointer by the time the line is read.
+    public func fireRow(_ action: String, row: String) {
+        guard OutboundEvent.isWord(action) else {
+            report("action \(OutboundEvent.jsonString(action)) is not a word: letters, digits, _ - . : / only")
+            return
+        }
+        onEvent?(.rowAction(name: action, row: row, surface: surfaceID))
     }
 
     /// The pointer a component's prop is bound to, if any.

@@ -84,16 +84,23 @@ public struct SurfaceView: View {
     /// seconds, and the erasure costs nothing a person could perceive in a panel
     /// that redraws a few times a second.
     private func render(_ element: ComponentNode, ancestors: Set<ComponentID>) -> AnyView {
-        let p = store.resolved(element)
+        var p = store.resolved(element)
+        // `bind=/draft/note` is how hud/CLAUDE.md writes a control, and until
+        // 2026-10-04 only `value=@/draft/note` worked: the documented Field
+        // drew an input that could not be typed into. Both are read now, and
+        // `bind=` shows the value at its pointer.
+        if element.props["bind"] != nil, let pointer = boundPointer(element) {
+            p["value"] = Pointer.get(store.spec.data, pointer)
+        }
         switch element.type {
         case "Screen", "Stack":
             return container(element, p, ancestors)
         case "Heading", "Text", "List":
             return prose(element, p)
         case "Metric", "Table", "Status":
-            return data(p, type: element.type)
+            return data(p, type: element.type, id: element.id)
         case "Sparkline", "Bars", "Ring", "Events":
-            return chart(p, type: element.type)
+            return chart(p, type: element.type, id: element.id)
         case "File":
             let path = p["path"]?.stringValue ?? ""
             return AnyView(
@@ -129,13 +136,26 @@ public struct SurfaceView: View {
         _ element: ComponentNode, _ p: [String: JSON], _ ancestors: Set<ComponentID>
     ) -> AnyView {
         if element.type == "Screen" {
+            // A composed entrance staggers by meaning, not by child: the
+            // title, then the body, then the actions (realm's design.md). One
+            // step per part, never one per row, so a twenty-row list arrives
+            // as one thing.
             return AnyView(
                 VStack(alignment: .leading, spacing: 14) {
-                    Text(p["title"]?.display ?? "")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .kerning(0.4)
-                        .foregroundStyle(HUD.ink)
-                    children(of: element, ancestors: ancestors)
+                    // No title, no line: a launcher rail has nothing to
+                    // name, and an empty Text still takes 14 of gap.
+                    if let title = p["title"]?.display, !title.isEmpty {
+                        Text(title)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .kerning(0.4)
+                            .foregroundStyle(HUD.ink)
+                            .modifier(Stagger(part: .title))
+                    }
+                    ForEach(element.children, id: \.self) { child in
+                        node(child, ancestors: ancestors)
+                            .modifier(Stagger(part: isAction(child) ? .actions : .body))
+                            .modifier(FoldFade())
+                    }
                 })
         }
 
@@ -175,6 +195,28 @@ public struct SurfaceView: View {
             })
     }
 
+    /// Where a control writes: `bind=/pointer` (the documented form), then
+    /// `bind=@/pointer`, then `value=@/pointer`. Nil leaves it read-only.
+    func boundPointer(_ element: ComponentNode) -> String? {
+        switch element.props["bind"] {
+        case .literal(.string(let pointer))? where pointer.hasPrefix("/"):
+            return pointer
+        case .binding(let binding)?:
+            return binding.pointer
+        default:
+            return store.binding(element, "value")
+        }
+    }
+
+    /// Whether a Screen's child is its actions: a Button, or a Stack of
+    /// nothing but Buttons.
+    func isAction(_ id: ComponentID) -> Bool {
+        guard let node = store.spec.elements[id] else { return false }
+        if node.type == "Button" { return true }
+        guard node.type == "Stack", !node.children.isEmpty else { return false }
+        return node.children.allSatisfy { store.spec.elements[$0]?.type == "Button" }
+    }
+
     private func prose(_ element: ComponentNode, _ p: [String: JSON]) -> AnyView {
         switch element.type {
         case "Heading":
@@ -196,11 +238,21 @@ public struct SurfaceView: View {
         default:
             let items = p["items"]?.arrayValue ?? []
             let ordered = p["ordered"] == .bool(true)
-            return AnyView(ListView(items: items, ordered: ordered))
+            return AnyView(ListView(
+                items: items, ordered: ordered, rowAction: rowAction(p, element.id)))
         }
     }
 
-    private func data(_ p: [String: JSON], type: String) -> AnyView {
+    /// The button every row of a List, Table or Events carries when the
+    /// component has `action=`. See `SurfaceStore.fireRow`.
+    func rowAction(_ p: [String: JSON], _ id: ComponentID) -> RowAction? {
+        RowAction(p) { [store] row in
+            guard let name = p["action"]?.stringValue else { return }
+            store.fireRow(name, row: row)
+        }
+    }
+
+    private func data(_ p: [String: JSON], type: String, id: ComponentID) -> AnyView {
         switch type {
         case "Metric":
             let value = p["value"]?.display ?? ""
@@ -211,12 +263,13 @@ public struct SurfaceView: View {
                     value: value,
                     unit: p["unit"]?.stringValue,
                     tone: tone,
-                    toneName: Self.thresholdName(p, value: p["value"]?.doubleValue))
+                    toneName: Self.thresholdName(p, value: p["value"]?.doubleValue),
+                    number: p["value"]?.doubleValue)
                     // Digits roll rather than cutting. A number that changes
                     // under your eye is the one thing on a HUD you always want
-                    // to have noticed.
-                    .contentTransition(.numericText())
-                    .animation(Motion.smooth(reduced: Motion.systemReduced), value: value))
+                    // to have noticed. Only the value animates: the label and
+                    // the card around it do not move.
+                    .animation(Motion.gentle(reduced: Motion.systemReduced), value: value))
 
         case "Table":
             let columns = (p["columns"]?.arrayValue ?? []).compactMap { column -> Column? in
@@ -229,8 +282,8 @@ public struct SurfaceView: View {
                 TableView(
                     caption: p["caption"]?.display ?? "",
                     columns: columns,
-                    rows: rows)
-                    .animation(Motion.smooth(reduced: Motion.systemReduced), value: rows.count)
+                    rows: rows,
+                    rowAction: rowAction(p, id))
                     .accessibilityElement(children: .contain)
                     .accessibilityLabel(
                         (p["caption"]?.display ?? "Table")
@@ -260,7 +313,7 @@ public struct SurfaceView: View {
     /// dashboard where each panel picks its own colour is unreadable, so the
     /// model has to ask for a different one deliberately and gets the house cyan
     /// when it does not.
-    private func chart(_ p: [String: JSON], type: String) -> AnyView {
+    private func chart(_ p: [String: JSON], type: String, id: ComponentID) -> AnyView {
         let tone = HUD.tone(p["tone"]?.stringValue)
         switch type {
         case "Sparkline":
@@ -293,7 +346,8 @@ public struct SurfaceView: View {
                 EventsView(
                     caption: p["caption"]?.display ?? "",
                     items: p["items"]?.arrayValue ?? [],
-                    tone: tone))
+                    tone: tone,
+                    rowAction: rowAction(p, id)))
         }
     }
 
@@ -367,7 +421,7 @@ public struct SurfaceView: View {
                 .buttonStyle(HUDButtonStyle(primary: primary)))
 
         case "Checkbox":
-            let pointer = store.binding(element, "value")
+            let pointer = boundPointer(element)
             return AnyView(
                 Toggle(
                     isOn: Binding(
@@ -383,31 +437,48 @@ public struct SurfaceView: View {
                 .disabled(pointer == nil))
 
         case "Select":
-            let pointer = store.binding(element, "value")
+            let pointer = boundPointer(element)
             let options = (p["options"]?.arrayValue ?? []).map(\.display)
             return AnyView(
                 LabeledControl(label: p["label"]?.display ?? "") {
-                    Picker("", selection: Binding(
-                        get: { p["value"]?.display ?? "" },
-                        set: { next in
-                            guard let pointer else { return }
-                            store.write(pointer, .string(next))
-                        })
-                    ) {
-                        Text("—").tag("")
-                        ForEach(options, id: \.self) { Text($0).tag($0) }
+                    // A menu with a drawn label rather than a Picker: the
+                    // system pop-up is 22 points tall and cannot be made
+                    // taller, and the whole 44-point label opens this one.
+                    Menu {
+                        ForEach(options, id: \.self) { option in
+                            Button(option) {
+                                guard let pointer else { return }
+                                store.write(pointer, .string(option))
+                            }
+                        }
+                    } label: {
+                        HStack {
+                            Text((p["value"]?.display).flatMap { $0.isEmpty ? nil : $0 } ?? "Choose")
+                                .font(.system(size: 12))
+                                .foregroundStyle(HUD.ink.opacity(0.92))
+                            Spacer(minLength: 6)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(HUD.faint)
+                        }
+                        .padding(.horizontal, 10)
+                        .frame(maxWidth: .infinity, minHeight: HitTarget.minimum)
+                        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+                        .contentShape(Rectangle())
                     }
-                    .labelsHidden()
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
                     .disabled(pointer == nil)
                 })
 
         case "Field":
-            let pointer = store.binding(element, "value")
+            let pointer = boundPointer(element)
             let numeric = p["kind"]?.stringValue == "number"
             return AnyView(
                 LabeledControl(label: p["label"]?.display ?? "") {
-                    TextField(
-                        p["placeholder"]?.display ?? "",
+                    HUDField(
+                        placeholder: p["placeholder"]?.display ?? "",
                         text: Binding(
                             get: { p["value"]?.display ?? "" },
                             set: { next in
@@ -417,12 +488,61 @@ public struct SurfaceView: View {
                                 store.write(
                                     pointer,
                                     numeric ? .number(Double(next) ?? 0) : .string(next))
-                            })
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 12))
+                            }))
                     .disabled(pointer == nil)
                 })
+
+        default:
+            return launcher(element, p)
+        }
+    }
+
+    /// What a press on a lane does: write the lane locally, then send
+    /// `e action <action> row=<lane> surface=<surface>` (`action` defaults to
+    /// `select`). A Rail press is the same line with `open`.
+    func segmentedPick(_ element: ComponentNode, _ p: [String: JSON]) -> (String) -> Void {
+        let pointer = boundPointer(element)
+        let action = p["action"]?.stringValue ?? "select"
+        return { [store] id in
+            if let pointer { store.write(pointer, .string(id)) }
+            store.fireRow(action, row: id)
+        }
+    }
+
+    /// Segmented lanes, an avatar, and the launcher rail. Split out for the
+    /// same type-checking reason as the other families.
+    private func launcher(_ element: ComponentNode, _ p: [String: JSON]) -> AnyView {
+        switch element.type {
+        case "Segmented":
+            let options = SegmentedView.options(p["options"]?.arrayValue ?? [])
+            return AnyView(
+                SegmentedView(
+                    options: options,
+                    selected: p["value"]?.display ?? options.first?.id ?? "",
+                    onPick: segmentedPick(element, p)))
+
+        case "Avatar":
+            return AnyView(
+                AvatarView(
+                    name: p["name"]?.display ?? "",
+                    image: p["image"]?.stringValue,
+                    size: CGFloat(min(max(p["size"]?.doubleValue ?? 24, 16), 48))))
+
+        case "Transcript":
+            let action = p["action"]?.stringValue
+            return AnyView(
+                TranscriptView(
+                    items: TranscriptView.items(p["items"]?.arrayValue ?? []),
+                    onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
+
+        case "Diff":
+            return AnyView(DiffView(text: p["text"]?.display ?? ""))
+
+        case "Rail":
+            return AnyView(
+                RailView(
+                    entries: RailView.entries(p["items"]?.arrayValue ?? [], data: store.spec.data),
+                    onOpen: { [store] id in store.fireRow("open", row: id) }))
 
         default:
             // A component the panel does not know draws nothing rather than an
@@ -432,11 +552,89 @@ public struct SurfaceView: View {
     }
 }
 
+/// The body of a folding surface: out first, in last.
+///
+/// Folding, it fades in 90 ms, before the card has closed far enough to clip
+/// it mid-line. Unfolding, it waits 80 ms for the card to start opening and
+/// then fades in, so nothing is drawn into a frame too small to hold it.
+struct FoldFade: ViewModifier {
+    @Environment(\.hudFolded) private var folded
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(folded ? 0 : 1)
+            .animation(
+                folded
+                    ? .easeOut(duration: 0.09)
+                    : .easeOut(duration: reduceMotion ? 0.1 : 0.18).delay(reduceMotion ? 0 : 0.08),
+                value: folded)
+    }
+}
+
+/// One semantic part of a composed entrance.
+///
+/// 30 ms apart, so the actions, the last part, land 60 ms after the title and
+/// the whole card is settled by about 340 ms: the card's own arrival is 280.
+/// Played once, when the part first appears; a later `d` changes values in
+/// place and replays nothing. Offscreen (snapshots) and under Reduce Motion it
+/// starts where it ends.
+struct Stagger: ViewModifier {
+    enum Part: Int { case title = 0, body = 1, actions = 2 }
+    let part: Part
+
+    static let step = 0.03
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hudOffscreen) private var offscreen
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        let visible = shown || offscreen || reduceMotion
+        return content
+            .opacity(visible ? 1 : 0)
+            .offset(y: visible ? 0 : 6)
+            .onAppear {
+                guard !shown else { return }
+                withAnimation(
+                    SurfaceEntrance.arrive.delay(Self.step * Double(part.rawValue))
+                ) { shown = true }
+            }
+    }
+}
+
 /// Named so the table's column list is not an inferred tuple array, which is
 /// another thing the type checker charges for.
 struct Column: Hashable {
     let field: String
     let label: String
+}
+
+/// A text field whose target is 44 points tall.
+///
+/// The rounded-border field was 22 points, half the floor. The text itself
+/// stays 12 point; the box around it grows, and a click anywhere in the box
+/// focuses the field rather than only a click on the line of text.
+struct HUDField: View {
+    let placeholder: String
+    @Binding var text: String
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField(placeholder, text: $text)
+            .textFieldStyle(.plain)
+            .font(.system(size: 12))
+            .focused($focused)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: HitTarget.minimum)
+            .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+            .overlay {
+                RoundedRectangle(cornerRadius: 9)
+                    .strokeBorder(focused ? HUD.accent.opacity(0.7) : .white.opacity(0.12))
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { focused = true }
+    }
 }
 
 /// A label above its control, so a narrow panel does not squeeze the input.
@@ -465,27 +663,79 @@ struct HUDButtonStyle: ButtonStyle {
                 primary ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary),
                 in: Capsule())
             .foregroundStyle(primary ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
-            .opacity(configuration.isPressed ? 0.7 : 1)
-            .animation(Motion.press(reduced: Motion.systemReduced), value: configuration.isPressed)
+            // The capsule stays small; the target around it does not. 44
+            // points is the floor for anything pressed (bd_2026-Code-cnr).
+            .frame(minWidth: HitTarget.minimum, minHeight: HitTarget.minimum)
+            .contentShape(Rectangle())
+            .modifier(PressScale(pressed: configuration.isPressed))
+    }
+}
+
+/// A press goes down to 0.96 and comes back on a spring, so a release
+/// halfway through the press reverses from wherever it is (realm's design.md:
+/// "Buttons may scale to 0.96 while pressed. Keep the transition
+/// interruptible."). Reduce Motion keeps the dim and drops the scale.
+struct PressScale: ViewModifier {
+    let pressed: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(pressed && !reduceMotion ? 0.96 : 1)
+            .opacity(pressed ? 0.8 : 1)
+            .animation(Motion.snappy(reduced: reduceMotion), value: pressed)
+    }
+}
+
+/// The style for a row's button: the press of `HUDButtonStyle` with no
+/// fill of its own, since `RowActionButton` draws the capsule.
+struct RowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.modifier(PressScale(pressed: configuration.isPressed))
     }
 }
 
 struct ListView: View {
     let items: [JSON]
     let ordered: Bool
+    var rowAction: RowAction?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private struct Row: Identifiable {
+        let id: String
+        let row: String
+        let index: Int
+        let text: String
+    }
+
+    /// An item is a string, or an object with `text` (and `id` for an
+    /// action to name it by).
+    private var rows: [Row] {
+        zip(items, RowKeys.keys(items)).enumerated().map { index, pair in
+            let (item, key) = pair
+            let text = item.objectValue?["text"]?.display ?? item.display
+            return Row(id: key, row: RowKeys.id(of: item) ?? key, index: index, text: text)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                HStack(alignment: .top, spacing: 7) {
-                    Text(ordered ? "\(index + 1)." : "▸")
+            ForEach(rows) { row in
+                HStack(alignment: rowAction == nil ? .top : .center, spacing: 7) {
+                    Text(ordered ? "\(row.index + 1)." : "▸")
                         .font(.system(size: 11, design: .monospaced))
                         .foregroundStyle(HUD.accent.opacity(0.8))
-                    Text(item.display)
+                    Text(row.text)
                         .font(.system(size: 12.5))
                         .foregroundStyle(HUD.ink.opacity(0.9))
                         .fixedSize(horizontal: false, vertical: true)
+                    if let rowAction {
+                        Spacer(minLength: 6)
+                        RowActionButton(action: rowAction, row: row.row)
+                    }
                 }
+                .transition(RowKeys.transition(reduced: reduceMotion))
             }
         }
     }
@@ -503,6 +753,9 @@ struct MetricView: View {
     /// The tone by name, so it can be spoken and drawn as a symbol. Colour
     /// alone is not a signal for everyone.
     var toneName: String?
+    /// The value as a number, when it is one, so the digits roll in the
+    /// direction it moved: up for a rise, down for a fall. Nil cross-fades.
+    var number: Double?
 
     var body: some View {
         content
@@ -539,7 +792,7 @@ struct MetricView: View {
                     // The glow follows the tone too, so a number that has gone
                     // red is red in its light as well as its ink.
                     .shadow(color: (tone ?? HUD.accent).opacity(0.5), radius: 9)
-                    .contentTransition(.numericText())
+                    .contentTransition(number.map { .numericText(value: $0) } ?? .opacity)
                 if let unit {
                     Text(unit)
                         .font(.system(size: 10, weight: .medium))
@@ -561,6 +814,9 @@ struct TableView: View {
     let caption: String
     let columns: [Column]
     let rows: [JSON]
+    var rowAction: RowAction?
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -583,8 +839,9 @@ struct TableView: View {
                                 .kerning(0.9)
                                 .foregroundStyle(HUD.accent.opacity(0.75))
                         }
+                        if rowAction != nil { Color.clear.gridCellUnsizedAxes([.horizontal, .vertical]) }
                     }
-                    ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    ForEach(Array(zip(rows, RowKeys.keys(rows))), id: \.1) { row, key in
                         GridRow {
                             ForEach(columns, id: \.self) { column in
                                 Text(row.objectValue?[column.field]?.display ?? "")
@@ -593,7 +850,12 @@ struct TableView: View {
                                     .lineLimit(1)
                                     .truncationMode(.tail)
                             }
+                            if let rowAction {
+                                RowActionButton(action: rowAction, row: RowKeys.id(of: row) ?? key)
+                                    .gridColumnAlignment(.trailing)
+                            }
                         }
+                        .transition(RowKeys.transition(reduced: reduceMotion))
                     }
                 }
             }
@@ -631,22 +893,18 @@ struct StatusView: View {
 /// and the thing replacing it need the same measure. A rectangle that becomes
 /// text reflows, and the eye reads that reflow as a page reload rather than as
 /// the same content continuing to arrive.
+///
+/// Still. It used to shimmer forever, which is the decorative pulsing realm's
+/// design.md rules out and the "nothing moves while idle" rule in
+/// hud/CLAUDE.md forbids: a child that never arrives would have pulsed in the
+/// corner of somebody's eye until the panel was closed.
 struct PlaceholderView: View {
-    @State private var shimmer = false
-
     var body: some View {
         RoundedRectangle(cornerRadius: 3)
             .fill(.quaternary)
             .frame(height: 11)
             .frame(maxWidth: 150, alignment: .leading)
-            .opacity(shimmer ? 0.9 : 0.45)
-            .task {
-                // Respect the system setting rather than animating regardless.
-                guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
-                withAnimation(.easeInOut(duration: 0.85).repeatForever(autoreverses: true)) {
-                    shimmer = true
-                }
-            }
+            .opacity(0.6)
             .accessibilityHidden(true)
     }
 }

@@ -27,7 +27,7 @@ import argparse, json, os, pathlib, subprocess, sys, time
 # can never be satisfied gets ignored, which is how it went unnoticed since 9/20.
 def _kit_root():
     here = pathlib.Path(__file__).resolve()
-    for c in [here.parent.parent, *(pathlib.Path.home() / "Desktop/2026-Code/projects" / n
+    for c in [here.parent.parent, *(pathlib.Path.home() / "code" / n
                                     for n in ("chewbacca", "Chewbacca"))]:
         if (c / ".git").exists() and (c / "bin" / "kit-debt").exists():
             return c
@@ -48,8 +48,10 @@ def kit_commits(hours):
 
 def work_dirs(hours):
     """Project repos touched recently, excluding the kit and the context store."""
-    roots = [pathlib.Path.home() / "Desktop/2026-Code/projects",
-             pathlib.Path.home() / "Desktop/2026-Code"]
+    # ~/code holds one level of groups (amber, work, school...) since the
+    # 2026-10-03 reorg, so a repo sits at ~/code/<group>/<repo>.
+    code = pathlib.Path.home() / "code"
+    roots = [code] + [code / g for g in ("kits", "amber", "work", "school", "personal", "tools")]
     cutoff = time.time() - hours * 3600
     seen = {}
     for base in roots:

@@ -1,0 +1,1867 @@
+#!/usr/bin/env python3
+"""Generate a HUD surface for a request nobody built a surface for.
+
+Fixed surfaces (the week, what is overdue, who you owe a message) cover the
+questions somebody thought of in advance. Everything else used to get a
+sentence on the pill. This asks a model for a layout instead, and it keeps the
+model to the job a model is good at and away from the two it is bad at:
+
+- The model picks components from a closed catalog (genui/catalog.json, checked
+  against hud/CLAUDE.md and the Swift renderer) and writes Kyber Lines.
+- The model never sees the data. It binds props to pointers like
+  `@/q/due:14/events`, and the resolver here runs the real query and sends the
+  `d` line. A number on the glass is a number something read.
+- The model never invents an action. A Button's action must be in
+  genui/policy.json, and anything else is refused before it is drawn.
+
+Every line is validated before it reaches the socket, the whole surface is
+validated at the end, one repair attempt gets the precise errors, and after
+that the request falls back to a plain status panel. The skeleton (Screen and
+`r`) is on the glass before the model has been asked anything.
+
+Usage:
+    kyber-genui "<request>" [--dry-run] [--pin NAME] [--at REGION] [--json]
+    kyber-genui preset NAME [--dry-run]       redraw a pinned surface, fresh data, no model
+    kyber-genui presets                       list pinned surfaces
+    kyber-genui fixed NAME [--at REGION]      draw an exemplar's fixed layout with fresh data
+    kyber-genui validate [FILE|-]             validate Kyber Lines as a generated surface
+    kyber-genui catalog [--check|--prompt]    the vocabulary, or the drift check
+    kyber-genui queries                       the query vocabulary the model may bind to
+    kyber-genui event <action> <component>    handle a press on a generated surface
+    kyber-genui bench [--requests FILE] [--out FILE] [--only N,..]
+
+Design and sources: docs/GENUI.md.
+"""
+
+from __future__ import annotations
+
+import argparse
+import difflib
+import json
+import os
+import re
+import shlex
+import socket
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
+from pathlib import Path
+from typing import Any, Callable
+
+ROOT = Path(__file__).resolve().parent.parent
+GENUI = ROOT / "genui"
+CATALOG_PATH = GENUI / "catalog.json"
+POLICY_PATH = GENUI / "policy.json"
+EXEMPLARS_PATH = GENUI / "exemplars.json"
+HUD_DOC = ROOT / "hud" / "CLAUDE.md"
+RENDERER = ROOT / "hud" / "Sources" / "KyberKit" / "SurfaceView.swift"
+SOCKET = os.environ.get("BOB_HUD_SOCKET", str(Path.home() / ".bob" / "hud.sock"))
+STATE = Path(os.environ.get("GENUI_STATE_DIR", str(Path.home() / ".bob" / "genui")))
+USER_SETTINGS = Path.home() / ".claude" / "settings.json"
+SURFACE = "genui"
+ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+EM_DASH = chr(0x2014)
+# The skeleton line, the fallback status and the empty-state notes. A model
+# that declared `qn0` had its Metric replaced by a note (review, 2026-10-04).
+RESERVED_ID = re.compile(r"^(sk|fb|qn[0-9]+)$")
+# Built from code points, not written as escapes: a formatter on this machine
+# rewrites escapes in string literals into the invisible characters themselves.
+UNSAFE_TEXT = re.compile("[" + "".join(
+    re.escape(chr(lo)) + "-" + re.escape(chr(hi))
+    for lo, hi in [(0x00, 0x1F), (0x7F, 0x85), (0x2028, 0x2029), (0x202A, 0x202E), (0x2066, 0x2069)]) + "]")
+
+
+def load_json(path: Path) -> dict:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+CATALOG = load_json(CATALOG_PATH)
+POLICY = load_json(POLICY_PATH)
+LIMITS = POLICY["limits"]
+
+
+# Kyber Lines, ported from hud/Sources/KyberKit/LineParser.swift so a line
+# this validator accepts is a line the display parses the same way.
+
+def tokenize(line: str) -> list[str]:
+    out: list[str] = []
+    i, n = 0, len(line)
+    while i < n:
+        while i < n and line[i] in " \t":
+            i += 1
+        if i >= n:
+            break
+        start, depth, in_string, escaped = i, 0, False, False
+        while i < n:
+            ch = line[i]
+            if in_string:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_string = False
+            elif ch == '"':
+                in_string = True
+            elif ch in "{[":
+                depth += 1
+            elif ch in "}]":
+                depth -= 1
+            elif ch in " \t" and depth == 0:
+                break
+            i += 1
+        if in_string or depth != 0:
+            out.append(line[start:])
+            return out
+        out.append(line[start:i])
+    return out
+
+
+def split_pair(token: str) -> tuple[str, str] | None:
+    in_string = escaped = False
+    for i, ch in enumerate(token):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch == "=":
+            return token[:i], token[i + 1:]
+    return None
+
+
+@dataclass
+class Value:
+    kind: str  # literal | binding | computed | broken
+    value: Any = None
+
+
+def parse_value(raw: str) -> Value:
+    if raw.startswith("@"):
+        return Value("binding", raw[1:])
+    if raw.startswith("!"):
+        return Value("literal", raw[1:])
+    if raw in ("true", "false"):
+        return Value("literal", raw == "true")
+    if raw == "null":
+        return Value("literal", None)
+    if raw[:1] in ('"', "{", "["):
+        try:
+            # NaN and Infinity are not JSON to the display, which then keeps
+            # the whole prop as a bare string; refuse them here the same way.
+            parsed = json.loads(raw, parse_constant=_no_constant)
+        except ValueError:
+            # The display takes this as a bare string and draws it verbatim,
+            # which is never what was meant by a bracket.
+            return Value("broken", raw)
+        if isinstance(parsed, dict):
+            if any(k in parsed for k in ("$count", "$sum", "$avg")):
+                return Value("computed", parsed)
+            if set(parsed) == {"$bind"} and isinstance(parsed["$bind"], str):
+                return Value("binding", parsed["$bind"])
+        return Value("literal", parsed)
+    # Python's int() takes "0_3" and non-ASCII digits; Swift's Double() takes
+    # neither, so only a plain decimal is a number here too.
+    if re.fullmatch(r"-?[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)?", raw):
+        return Value("literal", float(raw) if any(c in raw for c in ".eE") else int(raw))
+    return Value("literal", raw)
+
+
+def _no_constant(name: str) -> Any:
+    raise ValueError(f"{name} is not JSON")
+
+
+# The query vocabulary. The model binds to these by name; it never sees what
+# they return. Every string that comes back is somebody else's text (a class
+# name, a calendar title, a contact) and goes onto the glass as data only.
+
+VIEWS = ("rows", "events", "list", "bars", "count", "series", "note", "ratio")
+SCALAR_VIEWS = ("count",)
+
+
+@dataclass
+class Query:
+    name: str
+    description: str
+    fields: list[str]
+    views: tuple[str, ...]
+    fetch: Callable[[str | None], dict]
+    arg: dict = field(default_factory=dict)
+    scalars: tuple[str, ...] = ()
+    provider: str = "builtin"
+
+    def check_arg(self, arg: str | None) -> str | None:
+        kind = self.arg.get("kind")
+        if arg is None:
+            if self.arg.get("required"):
+                return f"{self.name} needs an argument: {self.arg.get('help', '')}".strip()
+            return None
+        if not kind:
+            return f"{self.name} takes no argument"
+        if kind == "int":
+            if not re.fullmatch(r"\d{1,3}", arg):
+                return f"{self.name}:{arg} needs a whole number"
+            lo, hi = self.arg.get("min", 1), self.arg.get("max", 365)
+            if not lo <= int(arg) <= hi:
+                return f"{self.name}:{arg} must be between {lo} and {hi}"
+        if kind == "enum" and arg.lower() not in self.arg.get("values", []):
+            return f"{self.name}:{arg} must be one of {', '.join(self.arg['values'])}"
+        # No spaces: the pointer is one token on a Kyber line, and a space ends it.
+        # No leading dash: the argument lands in a provider's argv, and
+        # `campaign:--help` would hand it a flag the model chose.
+        if kind in ("text", "enum") and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,39}", arg):
+            return f"{self.name}:{arg} must start with a letter or digit and use only letters, digits, . _ and -"
+        return None
+
+
+def clean(text: Any, limit: int = 90) -> str:
+    """Somebody else's string, made safe to put on the glass and nothing else."""
+    # Controls, plus the line separators and bidi overrides that let a calendar
+    # title draw as two lines or backwards inside one row.
+    out = UNSAFE_TEXT.sub(" ",
+                 str(text if text is not None else ""))
+    out = " ".join(out.split())
+    return out if len(out) <= limit else out[: limit - 1].rstrip() + "..."
+
+
+def run_json(argv: list[str], timeout: float = 20) -> Any:
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    text = proc.stdout.strip() or proc.stderr.strip()
+    try:
+        parsed = json.loads(text)
+    except ValueError:
+        raise RuntimeError(clean(text or f"{argv[0]} exited {proc.returncode}", 120))
+    if isinstance(parsed, dict) and isinstance(parsed.get("error"), dict):
+        raise RuntimeError(clean(parsed["error"].get("message", "failed"), 120))
+    return parsed
+
+
+def run_text(argv: list[str], timeout: float = 20) -> str:
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    if proc.returncode != 0:
+        raise RuntimeError(clean(proc.stderr or f"{argv[0]} exited {proc.returncode}", 120))
+    return proc.stdout
+
+
+def short_date(iso: str) -> str:
+    try:
+        return datetime.strptime(iso[:10], "%Y-%m-%d").strftime("%a %b %-d")
+    except ValueError:
+        return clean(iso, 16)
+
+
+def days_until(iso: str) -> int | None:
+    try:
+        return (datetime.strptime(iso[:10], "%Y-%m-%d").date() - date.today()).days
+    except ValueError:
+        return None
+
+
+def fixture(name: str) -> dict | None:
+    """A recorded answer for a query, for tests and a reproducible eval."""
+    folder = os.environ.get("GENUI_FIXTURES")
+    if not folder:
+        return None
+    path = Path(folder) / f"{name}.json"
+    return load_json(path) if path.is_file() else None
+
+
+def coursework_items(days: int) -> tuple[list[dict], list[dict]]:
+    data = run_json(["coursework", "due", "--days", str(days), "--json"])
+    return list(data.get("overdue") or []), list(data.get("upcoming") or [])
+
+
+def due_row(item: dict, overdue: bool) -> dict:
+    when = item.get("date") or str(item.get("due") or "")[:10]
+    left = days_until(when)
+    return {
+        "course": clean(item.get("course"), 24),
+        "name": clean(item.get("name"), 70),
+        "date": short_date(when),
+        "iso": when,
+        "days": left if left is not None else "",
+        "type": clean(item.get("type"), 16),
+        "status": "overdue" if overdue else clean(item.get("status"), 12),
+    }
+
+
+def fetch_due(arg: str | None) -> dict:
+    days = int(arg or 14)
+    overdue, upcoming = coursework_items(days)
+    rows = [due_row(i, True) for i in overdue] + [due_row(i, False) for i in upcoming]
+    return {"rows": rows, "note": "" if rows else f"Nothing due in the next {days} days."}
+
+
+def fetch_overdue(_: str | None) -> dict:
+    overdue, _upcoming = coursework_items(1)
+    rows = [due_row(i, True) for i in overdue]
+    return {"rows": rows, "note": "" if rows else "Nothing overdue."}
+
+
+EXAM_WORDS = re.compile(r"\b(exam|midterm|final|test)\b", re.I)
+
+
+def fetch_exams(arg: str | None) -> dict:
+    days = int(arg or 90)
+    _overdue, upcoming = coursework_items(days)
+    rows = [due_row(i, False) for i in upcoming
+            if EXAM_WORDS.search(f"{i.get('type')} {i.get('name')}")]
+    return {"rows": rows, "note": "" if rows else f"No exam in the ledger in the next {days} days."}
+
+
+def fetch_before_exam(arg: str | None) -> dict:
+    _overdue, upcoming = coursework_items(120)
+    exams = [i for i in upcoming if EXAM_WORDS.search(f"{i.get('type')} {i.get('name')}")
+             and (not arg or arg.lower().replace(" ", "") in str(i.get("course", "")).lower().replace(" ", ""))]
+    if not exams:
+        return {"rows": [], "note": "No upcoming exam in the ledger" + (f" for {arg}." if arg else ".")}
+    exam = exams[0]
+    cutoff = exam.get("date") or str(exam.get("due"))[:10]
+    rows = [due_row(i, False) for i in upcoming
+            if (i.get("date") or "") < cutoff and i is not exam]
+    head = due_row(exam, False)
+    head["exam"] = True
+    # The exam goes first, not last: every view is capped, and a list of what
+    # is due before the exam that cuts the exam off answers nothing.
+    return {"rows": [head] + rows, "count": len(rows),
+            "note": "" if rows else "Nothing else is due before it."}
+
+
+def fetch_course(arg: str | None) -> dict:
+    want = (arg or "").lower().replace(" ", "")
+    overdue, upcoming = coursework_items(120)
+    rows = [due_row(i, i in overdue) for i in overdue + upcoming
+            if want and want in str(i.get("course", "")).lower().replace(" ", "")]
+    return {"rows": rows, "note": "" if rows else f"Nothing due for {arg} in the ledger."}
+
+
+def fetch_grades(_: str | None) -> dict:
+    rows = []
+    for item in run_json(["coursework", "grade", "--json"]):
+        graded = item.get("graded")
+        if item.get("model") == "contract":
+            standing, value = "contract grade", None
+        elif not graded:
+            standing, value = "no grades yet", None
+        else:
+            value = round(float(item.get("standing") or 0), 1)
+            standing = f"{value:g}%"
+        rows.append({
+            "course": clean(item.get("course"), 24),
+            "standing": standing,
+            "value": value,
+            "graded": graded if graded is not None else "",
+            "remaining": round(float(item.get("remaining") or 0)) if item.get("remaining") is not None else "",
+        })
+    scored = [r["value"] for r in rows if isinstance(r["value"], (int, float))]
+    note = "" if scored else "No course has a graded item in the ledger yet."
+    return {"rows": rows, "note": note,
+            "scalars": {"average": f"{sum(scored) / len(scored):.1f}%" if scored else "none"}}
+
+
+WEEKDAYS = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+def week_rows(days: int) -> list[dict]:
+    rows = []
+    for day in run_json(["coursework", "week", "--days", str(days), "--json"]):
+        when = day.get("date", "")
+        label = short_date(when)
+        for c in day.get("classes") or []:
+            rows.append({
+                "iso": when, "day": label, "time": clean(c.get("start"), 8),
+                "what": f"{clean(c.get('course'), 24)} {clean(c.get('label'), 16)}".strip(),
+                "where": clean(c.get("room"), 30), "kind": "class",
+            })
+        for d in day.get("due") or []:
+            rows.append({
+                "iso": when, "day": label, "time": "due",
+                "what": f"{clean(d.get('course'), 24)}: {clean(d.get('name'), 60)}",
+                "where": "", "kind": "due",
+            })
+    return rows
+
+
+def calendar_rows(days: int) -> tuple[list[dict], str]:
+    try:
+        events = run_json(["mac", "calendar", "list", "--from", "today", "--to", f"+{days}d", "--json"])
+    except (RuntimeError, OSError, subprocess.TimeoutExpired) as err:
+        return [], f"Calendar unavailable: {clean(err, 80)}"
+    rows = []
+    for e in events if isinstance(events, list) else events.get("events", []):
+        start = str(e.get("start") or e.get("startDate") or "")
+        rows.append({
+            "iso": start[:10], "day": short_date(start), "time": start[11:16] or "all day",
+            "what": clean(e.get("title"), 60), "where": clean(e.get("location"), 30),
+            "kind": "event",
+        })
+    return rows, ""
+
+
+def resolve_day(arg: str | None) -> date:
+    word = (arg or "today").lower()
+    today = date.today()
+    if word == "today":
+        return today
+    if word == "tomorrow":
+        return today + timedelta(days=1)
+    if word in WEEKDAYS:
+        ahead = (WEEKDAYS.index(word) - today.weekday()) % 7
+        return today + timedelta(days=ahead)
+    return datetime.strptime(word, "%Y-%m-%d").date()
+
+
+def fetch_week(arg: str | None) -> dict:
+    days = int(arg or 7)
+    rows = week_rows(days)
+    cal, problem = calendar_rows(days)
+    rows = sorted(rows + cal, key=lambda r: (r["iso"], r["time"]))
+    return {"rows": rows, "note": problem if not rows else "",
+            "series": [sum(1 for r in rows if r["iso"] == (date.today() + timedelta(days=i)).isoformat())
+                       for i in range(days)]}
+
+
+def fetch_day(arg: str | None) -> dict:
+    target = resolve_day(arg)
+    span = (target - date.today()).days + 1
+    rows = [r for r in week_rows(max(span, 1)) if r["iso"] == target.isoformat()]
+    cal, problem = calendar_rows(max(span, 1))
+    rows += [r for r in cal if r["iso"] == target.isoformat()]
+    rows.sort(key=lambda r: r["time"])
+    note = "" if rows else f"Nothing on {target.strftime('%A')} in the ledger" + (
+        f". {problem}" if problem else ".")
+    return {"rows": rows, "note": note}
+
+
+def fetch_calendar(arg: str | None) -> dict:
+    rows, problem = calendar_rows(int(arg or 7))
+    return {"rows": rows, "unavailable": bool(problem) and not rows,
+            "note": problem or ("" if rows else "No calendar events in that window.")}
+
+
+RECONNECT_RE = re.compile(r"^\s{2}(.+?)\s{2,}(\d+)d ago \(want every (\d+)d\)")
+
+
+def fetch_reconnect(arg: str | None) -> dict:
+    text = run_text(["people", "reconnect", "--limit", str(int(arg or 9))])
+    rows = []
+    for line in text.splitlines():
+        m = RECONNECT_RE.match(line)
+        if m:
+            rows.append({"name": clean(m.group(1), 30), "days": int(m.group(2)),
+                         "cadence": f"every {m.group(3)}d", "since": f"{m.group(2)}d"})
+    return {"rows": rows, "note": "" if rows else "Nobody is past their cadence."}
+
+
+TASK_RE = re.compile(r"^\s{2}([0-9a-f]{6})\s+(.+?)\s{2,}(.+?)\s{2,}(.+)$")
+
+
+def fetch_tasks(_: str | None) -> dict:
+    rows = []
+    for line in run_text(["people", "tasks"]).splitlines():
+        m = TASK_RE.match(line)
+        if m:
+            rows.append({"ref": m.group(1), "task": clean(m.group(2), 50),
+                         "who": clean(m.group(3), 30), "status": clean(m.group(4), 20)})
+    return {"rows": rows, "note": "" if rows else "No open promises to anyone."}
+
+
+def no_source(name: str) -> Callable[[str | None], dict]:
+    def fetch(_: str | None) -> dict:
+        return {"rows": [], "note": f"No data source for {name} yet.", "unavailable": True}
+    return fetch
+
+
+def builtin_queries() -> dict[str, Query]:
+    ints = lambda default, hi: {"kind": "int", "default": default, "min": 1, "max": hi,  # noqa: E731
+                                "help": f"days ahead, default {default}"}
+    due_fields = ["course", "name", "date", "days", "type", "status"]
+    every = ("rows", "events", "list", "bars", "count", "note")
+    qs = [
+        Query("due", "coursework deadlines, overdue first then soonest", due_fields, every, fetch_due, ints(14, 120)),
+        Query("overdue", "coursework past due and still todo", due_fields, every, fetch_overdue),
+        Query("exams", "exams and midterms in the ledger", due_fields, every, fetch_exams, ints(90, 180)),
+        Query("before-exam", "the next exam first, then everything due before it. Optional course code",
+              due_fields + ["exam"], every, fetch_before_exam,
+              {"kind": "text", "help": "course code like BISC101"}),
+        Query("course", "one course's deadlines, overdue first. Argument: course code",
+              due_fields, every, fetch_course, {"kind": "text", "required": True, "help": "course code like BISC101"}),
+        Query("grades", "standing in each course from the ledger", ["course", "standing", "graded", "remaining"],
+              ("rows", "bars", "list", "count", "note"), fetch_grades, scalars=("average",)),
+        Query("week", "classes, deadlines and calendar events for the next N days",
+              ["day", "time", "what", "where", "kind"], ("rows", "events", "list", "bars", "count", "series", "note"),
+              fetch_week, ints(7, 14)),
+        Query("day", "one day's classes, deadlines and events",
+              ["time", "what", "where", "kind"], ("rows", "events", "list", "count", "note"), fetch_day,
+              {"kind": "enum", "values": ["today", "tomorrow"] + WEEKDAYS, "required": True,
+               "help": "today, tomorrow, or a weekday"}),
+        Query("calendar", "calendar events for the next N days", ["day", "time", "what", "where"],
+              ("rows", "events", "list", "count", "note"), fetch_calendar, ints(7, 30)),
+        Query("reconnect", "people past their own contact cadence, longest first",
+              ["name", "since", "cadence"], ("rows", "events", "list", "bars", "count", "note"), fetch_reconnect,
+              ints(9, 30)),
+        Query("tasks", "open promises to people", ["task", "who", "status"],
+              ("rows", "events", "list", "count", "note"), fetch_tasks),
+        Query("unreplied", "message threads where they wrote last and nobody answered, oldest first",
+              ["who", "waiting", "channel", "last"], ("rows", "events", "list", "bars", "count", "note"),
+              no_source("unreplied threads"), ints(7, 60), provider="graph"),
+        Query("campaign", "outbound campaign numbers by metric. Argument: campaign or client name",
+              ["metric", "value", "change"], ("rows", "bars", "list", "count", "note"), no_source("campaigns"),
+              {"kind": "text", "required": True, "help": "campaign or client name"}, provider="graph"),
+    ]
+    return {q.name: q for q in qs}
+
+
+def provider_query(spec: dict) -> Query:
+    """A query another tool registered, run as argv with no shell."""
+    argv = [str(a) for a in spec["argv"]]
+    name = str(spec["name"])
+
+    def fetch(arg: str | None) -> dict:
+        full = [a.replace("{arg}", arg or str(spec.get("arg", {}).get("default", ""))) for a in argv]
+        out = run_json(full, timeout=float(spec.get("timeout", 20)))
+        out = out if isinstance(out, dict) else {"rows": out}
+        # A provider keeps its own field names; `rename` maps them onto the
+        # ones the views read (kyber-surfaces rows say label/app/why).
+        rename = spec.get("rename") or {}
+        if rename and isinstance(out.get("rows"), list):
+            out["rows"] = [{rename.get(k, k): v for k, v in row.items()} if isinstance(row, dict) else row
+                           for row in out["rows"]]
+        return out
+
+    return Query(name, str(spec.get("description", "")), [str(f) for f in spec.get("fields", [])],
+                 tuple(v for v in spec.get("views", ["rows", "list", "count", "note"]) if v in VIEWS),
+                 fetch, dict(spec.get("arg") or {}), tuple(spec.get("scalars", ())),
+                 provider=str(spec.get("provider", "provider")))
+
+
+def provider_manifests() -> list[Path]:
+    env = os.environ.get("GENUI_QUERIES")
+    if env:
+        return [Path(p) for p in env.split(os.pathsep) if p]
+    return [ROOT / "surfaces" / "genui-queries.json"]
+
+
+def all_queries() -> dict[str, Query]:
+    queries = builtin_queries()
+    for path in provider_manifests():
+        if not path.is_file():
+            continue
+        try:
+            manifest = load_json(path)
+            for spec in manifest.get("queries", []):
+                queries[str(spec["name"])] = provider_query(spec)
+            # A row button is only allowed once whoever handles its press says so.
+            for name, about in (manifest.get("row_actions") or {}).items():
+                if re.fullmatch(r"[a-z][a-z0-9-]{0,30}", str(name)):
+                    POLICY["row_actions"][str(name)] = str(about)
+        except (ValueError, KeyError, TypeError) as err:
+            print(f"kyber-genui: ignoring {path}: {err}", file=sys.stderr)
+    return queries
+
+
+def view_maps(name: str) -> dict:
+    """How a query's rows become each view. Provider queries say so themselves."""
+    pick = lambda *keys: lambda r: next((r[k] for k in keys if r.get(k) not in (None, "")), "")  # noqa: E731
+    return {
+        "events": lambda r: {
+            "time": r.get("date") or (f"{r.get('day', '')} {r.get('time', '')}".strip()) or r.get("since")
+            or r.get("waiting") or r.get("status", ""),
+            "text": " ".join(str(x) for x in (
+                f"{r['course']}: {r['name']}" if r.get("course") and r.get("name") else pick("what", "task", "name", "who", "metric")(r),
+                f"({r['who']})" if r.get("task") and r.get("who") else "") if x),
+            "accent": r.get("status") == "overdue" or bool(r.get("exam")) or r.get("kind") == "due"
+            or (isinstance(r.get("days"), int) and r["days"] <= 1),
+        },
+        "list": lambda r: " ".join(str(x) for x in (
+            f"{r['course']}: {r['name']}" if r.get("course") and r.get("name") else pick(
+                "what", "task", "name", "who", "metric", "course")(r),
+            f"({r.get('date') or r.get('since') or r.get('standing') or r.get('time') or ''})".replace("()", ""),
+        ) if x),
+    }
+
+
+def bars_view(name: str, rows: list[dict]) -> list[dict]:
+    if name == "grades":
+        return [{"label": r["course"], "value": r["value"], "display": r["standing"]}
+                for r in rows if isinstance(r.get("value"), (int, float))]
+    if name in ("reconnect",):
+        return [{"label": r["name"], "value": r["days"], "display": r["since"]} for r in rows]
+    if name == "campaign":
+        out = []
+        for r in rows:
+            try:
+                out.append({"label": r["metric"], "value": float(str(r["value"]).replace(",", "").rstrip("%")),
+                            "display": str(r["value"])})
+            except (KeyError, ValueError):
+                continue
+        return out
+    key = "course" if rows and "course" in rows[0] else "day" if rows and "day" in rows[0] else None
+    if key is None:
+        return []
+    counts: dict[str, int] = {}
+    for r in rows:
+        counts[str(r.get(key))] = counts.get(str(r.get(key)), 0) + 1
+    return [{"label": k, "value": v, "display": str(v)} for k, v in counts.items()]
+
+
+def provided_bars(raw: dict) -> list[dict]:
+    """Bars a provider computed itself, kept only where they have a label and a number."""
+    out = []
+    for bar in raw.get("bars", []):
+        if isinstance(bar, dict) and isinstance(bar.get("value"), (int, float)) and bar.get("label"):
+            out.append({"label": clean(bar["label"], 30), "value": bar["value"],
+                        "display": clean(bar.get("display", bar["value"]), 16)})
+    return out
+
+
+def shape(name: str, raw: dict) -> dict:
+    """Every view of one query's answer, capped, so any pointer into it resolves."""
+    caps = POLICY["row_caps"]
+    rows = [r for r in raw.get("rows", []) if isinstance(r, dict)]
+    rows = [{k: (clean(v) if isinstance(v, str) else v) for k, v in r.items()} for r in rows]
+    maps = view_maps(name)
+    out: dict[str, Any] = {
+        "rows": rows[: caps["rows"]],
+        "events": [maps["events"](r) for r in rows[: caps["events"]]],
+        "list": [maps["list"](r) for r in rows[: caps["list"]]],
+        "bars": provided_bars(raw)[: caps["bars"]] if isinstance(raw.get("bars"), list) else bars_view(name, rows)[: caps["bars"]],
+        "count": None if raw.get("unavailable") else raw["count"] if isinstance(raw.get("count"), int) else len(rows),
+        "note": clean(raw.get("note", ""), 120),
+        "series": [n for n in raw.get("series", []) if isinstance(n, (int, float))],
+        "more": max(0, len(rows) - caps["rows"]),
+    }
+    if isinstance(raw.get("ratio"), (int, float)):
+        out["ratio"] = max(0.0, min(1.0, float(raw["ratio"])))
+    for key, value in (raw.get("scalars") or {}).items():
+        out[str(key)] = clean(value, 24) if isinstance(value, str) else value
+    return out
+
+
+def resolve(queries: dict[str, Query], key: str) -> dict:
+    """Run one query, `name` or `name:arg`, and return every view of it."""
+    name, _, arg = key.partition(":")
+    query = queries[name]
+    recorded = None
+    if os.environ.get("GENUI_FIXTURES"):
+        recorded = fixture(key.replace(":", "_")) or fixture(name) or {"rows": [], "note": f"no fixture for {key}"}
+    try:
+        raw = recorded if recorded is not None else query.fetch(arg or None)
+    except (RuntimeError, OSError, ValueError, subprocess.TimeoutExpired) as err:
+        raw = {"rows": [], "note": f"Could not read {name}: {clean(err, 80)}", "unavailable": True}
+    return shape(name, raw)
+
+
+# Validation. Errors are written for the repair prompt: what is wrong, on which
+# line, and what would be right, because a model handed "invalid" guesses again.
+
+@dataclass
+class Problem:
+    line: int
+    code: str
+    message: str
+
+    def __str__(self) -> str:
+        return f"line {self.line}: {self.message}" if self.line else self.message
+
+
+@dataclass
+class Component:
+    id: str
+    type: str
+    props: dict[str, Value]
+    line: int
+
+
+@dataclass
+class Surface:
+    components: dict[str, Component] = field(default_factory=dict)
+    children: dict[str, list[str]] = field(default_factory=dict)
+    children_line: dict[str, int] = field(default_factory=dict)
+    at: str | None = None
+    width: int | None = None
+    queries: set[str] = field(default_factory=set)
+    accepted: list[str] = field(default_factory=list)
+    problems: list[Problem] = field(default_factory=list)
+
+
+def suggest(word: str, options) -> str:
+    near = difflib.get_close_matches(word, list(options), n=1)
+    return f" Did you mean {near[0]}?" if near else ""
+
+
+def check_shape(item_kind: str, value: Any, where: str) -> str | None:
+    if item_kind == "string":
+        return None if isinstance(value, str) else f"{where} items must be strings"
+    if item_kind == "number":
+        return None if isinstance(value, (int, float)) and not isinstance(value, bool) else f"{where} items must be numbers"
+    if item_kind == "object":
+        return None if isinstance(value, dict) else f"{where} items must be objects"
+    spec = CATALOG["shapes"].get(item_kind)
+    if spec is None:
+        return None
+    if not isinstance(value, dict):
+        return f"{where} items must be objects with {', '.join(spec['required'])}"
+    missing = [k for k in spec["required"] if k not in value]
+    return f"{where} item is missing {', '.join(missing)}" if missing else None
+
+
+def check_pointer(pointer: str, comp: str, prop: str, spec: dict, queries: dict[str, Query],
+                  surface: Surface) -> str | None:
+    view = spec.get("view")
+    if view == "draft":
+        if not re.fullmatch(r"/draft/[A-Za-z0-9_-]{1,40}", pointer):
+            return f"{comp}.{prop} binds to the panel's own draft: write {prop}=@/draft/<name>"
+        return None
+    if pointer.startswith(POLICY["draft_prefix"]):
+        return f"{comp}.{prop} cannot read /draft/; draft pointers are for Field, Select and Checkbox"
+    m = re.fullmatch(r"/q/([a-z-]+)(?::([^/]+))?/([a-z]+)", pointer)
+    if not m:
+        return (f"{comp}.{prop}=@{pointer} is not a query pointer. Write @/q/<query>/<view> "
+                f"or @/q/<query>:<arg>/<view>, for example @/q/due:7/{view if view in VIEWS else 'events'}")
+    name, arg, got = m.group(1), m.group(2), m.group(3)
+    if name not in queries:
+        return f"unknown query {name}.{suggest(name, queries)} Queries: {', '.join(sorted(queries))}"
+    query = queries[name]
+    bad_arg = query.check_arg(arg)
+    if bad_arg:
+        return bad_arg
+    wanted = ("count",) + query.scalars if view == "scalar" else (view,)
+    if got not in wanted:
+        return f"{comp}.{prop} needs the {' or '.join(wanted)} view, not {got}: write @/q/{name}{':' + arg if arg else ''}/{wanted[0]}"
+    if view != "scalar" and got not in query.views:
+        return f"query {name} has no {got} view. It has {', '.join(query.views)}"
+    if view == "scalar" and got not in ("count",) + query.scalars:
+        return f"query {name} has no {got} value"
+    surface.queries.add(f"{name}:{arg}" if arg else name)
+    return None
+
+
+def check_literal(comp: str, prop: str, spec: dict, value: Any) -> str | None:
+    kind = spec["type"]
+    where = f"{comp}.{prop}"
+    if spec.get("data") and not (value is None or (isinstance(value, (str, list)) and len(value) == 0)):
+        return (f"{where} is data written by the model. Bind it to a query instead, for example "
+                f"{prop}=@/q/due:7/{spec.get('view') if spec.get('view') != 'scalar' else 'count'}")
+    if kind in ("string",):
+        if not isinstance(value, (str, int, float)) or isinstance(value, bool):
+            return f"{where} must be a string"
+        # Text has its own, longer limit; every other string is a label.
+        if prop != "value" and len(str(value)) > LIMITS["label_chars"]:
+            return f"{where} is over {LIMITS['label_chars']} characters; a label is read at a glance"
+    elif kind == "number":
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return f"{where} must be a number"
+        lo, hi = spec.get("min"), spec.get("max")
+        if (lo is not None and value < lo) or (hi is not None and value > hi):
+            return f"{where}={value} must be between {lo} and {hi}"
+    elif kind == "bool":
+        if not isinstance(value, bool):
+            return f"{where} must be true or false"
+    elif kind == "enum":
+        if value not in spec["values"]:
+            return f"{where}={value} must be one of {', '.join(spec['values'])}"
+    elif kind == "tone":
+        if value not in CATALOG["tones"]:
+            return f"{where}={value} must be one of good, warn, bad, accent"
+    elif kind == "action":
+        if value not in POLICY["actions"]:
+            return (f"{where}={value} is not an allowed action. Allowed: {', '.join(POLICY['actions'])}. "
+                    "Leave the Button out if none fits")
+    elif kind == "rowaction":
+        allowed = POLICY.get("row_actions") or {}
+        if value not in allowed:
+            return (f"{where}={value} is a row button, and no handler is registered for "
+                    f"{'it' if allowed else 'any row action on a generated surface'}. Leave action= off")
+    elif kind == "pointer":
+        return f"{where} must be bound: {prop}=@/draft/<name>"
+    elif kind == "array":
+        if not isinstance(value, list):
+            return f"{where} must be a JSON array with no spaces inside"
+        for item in value:
+            bad = check_shape(spec.get("items", ""), item, where)
+            if bad:
+                return bad
+    return None
+
+
+def check_component(tokens: list[str], n: int, surface: Surface, queries: dict[str, Query]) -> Problem | None:
+    if len(tokens) < 3:
+        return Problem(n, "malformed", "`c` needs an id and a type")
+    cid, ctype = tokens[1], tokens[2]
+    if not ID_RE.match(cid) or cid.startswith("__"):
+        return Problem(n, "bad_id", f"id {cid!r} must be letters, digits, - or _")
+    if RESERVED_ID.match(cid):
+        return Problem(n, "reserved_id", f"id {cid} is reserved for kyber-genui's own lines; pick another")
+    components = CATALOG["components"]
+    if ctype not in components:
+        return Problem(n, "unknown_component", f"{ctype} is not a component.{suggest(ctype, components)}")
+    if ctype == "Screen" and cid != "s":
+        return Problem(n, "second_screen", "only one Screen, and its id is s")
+    if cid == "s" and ctype != "Screen":
+        return Problem(n, "root_type", "s is the root and must be a Screen")
+    if ctype in POLICY["excluded_components"] and ctype != "Screen":
+        return Problem(n, "excluded", f"{ctype} is not available here: {POLICY['excluded_components'][ctype]}")
+    existing = surface.components.get(cid)
+    if existing and existing.type != ctype:
+        return Problem(n, "id_reused", f"id {cid} is already a {existing.type}")
+    props_spec = components[ctype]["props"]
+    props: dict[str, Value] = {}
+    for token in tokens[3:]:
+        pair = split_pair(token)
+        if pair is None:
+            return Problem(n, "malformed", f"expected key=value, got {clean(token, 40)!r}")
+        key, raw = pair
+        if key not in props_spec:
+            return Problem(n, "unknown_prop", f"{ctype} has no prop {key}.{suggest(key, props_spec)} "
+                           f"Props: {', '.join(k for k, v in props_spec.items() if v.get('renderer', True))}")
+        spec = props_spec[key]
+        if spec.get("renderer") is False:
+            return Problem(n, "dead_prop", f"{ctype}.{key} is never read by the renderer and draws a "
+                           f"disabled control. Write value=@/draft/<name> instead")
+        if EM_DASH in raw:
+            # House rule, and the model broke it on the glass on 2026-10-04:
+            # a caption read "Monday", an em dash, then "classes, deadlines, events".
+            return Problem(n, "em_dash", f"{ctype}.{key} has an em dash; use a comma or a colon")
+        value = parse_value(raw)
+        if value.kind == "broken":
+            return Problem(n, "bad_json", f"{ctype}.{key} is not valid JSON. Arrays and objects take "
+                           "no spaces and double-quoted keys")
+        if value.kind == "binding":
+            if not spec.get("bindable"):
+                return Problem(n, "not_bindable", f"{ctype}.{key} cannot be bound to data")
+            bad = check_pointer(value.value, ctype, key, spec, queries, surface)
+        elif value.kind == "computed":
+            op = next(k for k in ("$count", "$sum", "$avg") if k in value.value)
+            path = value.value[op]
+            bad = None if spec.get("view") == "scalar" and isinstance(path, str) else \
+                f"{ctype}.{key} cannot be computed"
+            if bad is None:
+                bad = check_pointer(path, ctype, key, {"view": "rows"}, queries, surface)
+            if bad is None and op != "$count":
+                # The display needs a string field for $sum and $avg, or it
+                # keeps the object as a literal; and a field the query does
+                # not have computes to 0, a number nobody read.
+                name = path.split("/")[2].split(":")[0]
+                fieldname = value.value.get("field")
+                if not isinstance(fieldname, str) or fieldname not in queries[name].fields:
+                    bad = f"{op} needs field= naming one of {name}'s fields: {', '.join(queries[name].fields)}"
+        else:
+            bad = check_literal(ctype, key, spec, value.value)
+        if bad:
+            return Problem(n, "bad_value", bad)
+        props[key] = value
+    if ctype == "Button" and "action" not in props:
+        return Problem(n, "no_action", "a Button needs action= from the allowed list, or no Button")
+    if ctype in ("Field", "Select", "Checkbox") and "value" not in props:
+        return Problem(n, "unbound_control", f"{ctype} needs value=@/draft/<name>")
+    if ctype == "Screen":
+        title = props.get("title")
+        if not title or not str(title.value).strip():
+            return Problem(n, "no_title", "the Screen needs a short title")
+        if len(str(title.value)) > LIMITS["title_chars"]:
+            return Problem(n, "long_title", f"the title is over {LIMITS['title_chars']} characters")
+    if ctype == "Text" and props.get("value") and props["value"].kind == "literal" \
+            and len(str(props["value"].value)) > LIMITS["text_chars"]:
+        return Problem(n, "long_text", f"Text is over {LIMITS['text_chars']} characters; a glance cannot read it")
+    if ctype == "Diagram":
+        parts = props.get("parts")
+        if parts is None or parts.kind != "literal" or not parts.value:
+            return Problem(n, "empty_diagram", "a Diagram needs parts")
+        if len(parts.value) > LIMITS["diagram_parts"]:
+            return Problem(n, "busy_diagram", f"more than {LIMITS['diagram_parts']} diagram parts")
+    if ctype == "Table":
+        rows, cols = props.get("rows"), props.get("columns")
+        if rows is None or cols is None:
+            return Problem(n, "table_incomplete", "a Table needs columns= and rows=@/q/<query>/rows")
+        if rows.kind == "binding":
+            name = rows.value.split("/")[2].split(":")[0]
+            known = queries[name].fields if name in queries else []
+            stray = [c["field"] for c in cols.value if c["field"] not in known]
+            if stray:
+                return Problem(n, "unknown_field", f"Table columns {', '.join(stray)} are not fields of "
+                               f"{name}. Its fields: {', '.join(known)}")
+    surface.components[cid] = Component(cid, ctype, props, n)
+    return None
+
+
+def check_surface_line(tokens: list[str], n: int, surface: Surface) -> Problem | None:
+    for token in tokens[2:]:
+        pair = split_pair(token)
+        if not pair:
+            return Problem(n, "malformed", f"expected key=value after @, got {clean(token, 30)!r}")
+        key, raw = pair
+        if key == "at":
+            if raw not in CATALOG["surface"]["at"]:
+                return Problem(n, "bad_region", f"at={raw} must be one of {', '.join(CATALOG['surface']['at'])}")
+            surface.at = raw
+        elif key == "w":
+            if not raw.isdigit() or not 280 <= int(raw) <= 560:
+                return Problem(n, "bad_width", "w must be a number of points from 280 to 560")
+            surface.width = int(raw)
+        else:
+            return Problem(n, "bad_surface_prop", f"only at= and w= may be set here, not {key}")
+    return None
+
+
+def check_line(line: str, n: int, surface: Surface, queries: dict[str, Query]) -> Problem | None:
+    """Validate one line as it streams. Accepted lines are recorded on the surface."""
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        return None
+    tokens = tokenize(stripped)
+    verb = tokens[0]
+    if verb == "c":
+        problem = check_component(tokens, n, surface, queries)
+    elif verb == ">":
+        if len(tokens) < 3:
+            problem = Problem(n, "malformed", "`>` needs a parent and at least one child")
+        elif not all(ID_RE.match(t) for t in tokens[1:]):
+            problem = Problem(n, "bad_id", "ids are letters, digits, - or _")
+        elif len(set(tokens[2:])) != len(tokens[2:]):
+            # `> s e e e` drew the same Events three times past the row cap.
+            problem = Problem(n, "duplicate_child", f"> {tokens[1]} lists a child more than once")
+        elif any(RESERVED_ID.match(t) for t in tokens[1:]):
+            problem = Problem(n, "reserved_id", "sk, fb and qn<n> are reserved for kyber-genui's own lines")
+        else:
+            surface.children[tokens[1]] = tokens[2:]
+            surface.children_line[tokens[1]] = n
+            problem = None
+    elif verb == "@":
+        problem = check_surface_line(tokens, n, surface)
+    elif verb == "d":
+        problem = Problem(n, "data_line", "do not write d lines: data comes from the queries you bind to")
+    elif verb == "r":
+        problem = Problem(n, "root_line", "do not write r: the root is s and is already drawn")
+    else:
+        problem = Problem(n, "unknown_verb", f"only c, > and @ lines belong in a layout, not {verb!r}")
+    if problem is None and verb in ("c", ">"):
+        surface.accepted.append(stripped)
+    return problem
+
+
+def row_count(comp: Component) -> int:
+    total = 0
+    caps = POLICY["row_caps"]
+    for key, spec in CATALOG["components"][comp.type]["props"].items():
+        if not spec.get("rows") or key not in comp.props:
+            continue
+        value = comp.props[key]
+        if value.kind == "binding":
+            total += caps.get(spec.get("view", ""), caps["rows"])
+        elif value.kind == "literal" and isinstance(value.value, list):
+            total += len(value.value)
+    return total
+
+
+def check_structure(surface: Surface) -> list[Problem]:
+    out: list[Problem] = []
+    comps = surface.components
+    if "s" not in comps:
+        return [Problem(0, "no_screen", 'the first line must be c s Screen title="..."')]
+    if not surface.children.get("s"):
+        out.append(Problem(0, "empty_screen", "attach the components to the Screen: > s <id> <id> ..."))
+    for parent, kids in surface.children.items():
+        line = surface.children_line.get(parent, 0)
+        if parent not in comps:
+            out.append(Problem(line, "missing_parent", f"> {parent}: there is no component {parent}"))
+            continue
+        if not CATALOG["components"][comps[parent].type].get("container"):
+            out.append(Problem(line, "not_container", f"{parent} is a {comps[parent].type} and cannot have children"))
+        for kid in kids:
+            if kid not in comps:
+                out.append(Problem(line, "missing_child", f"> {parent} lists {kid}, which was never declared with c"))
+    seen: set[str] = set()
+    parents: dict[str, str] = {}
+
+    def walk(node: str, path: tuple[str, ...]) -> None:
+        if node in path:
+            out.append(Problem(0, "cycle", f"{node} contains itself"))
+            return
+        seen.add(node)
+        for kid in surface.children.get(node, []):
+            if kid in parents and parents[kid] != node:
+                out.append(Problem(0, "two_parents", f"{kid} is under both {parents[kid]} and {node}"))
+            parents[kid] = node
+            if kid in comps:
+                walk(kid, path + (node,))
+
+    walk("s", ())
+    for cid, comp in comps.items():
+        if cid not in seen:
+            out.append(Problem(comp.line, "orphan", f"{cid} is declared but never attached; add it to a > line or drop it"))
+        if comp.type == "Stack" and not surface.children.get(cid):
+            out.append(Problem(comp.line, "empty_stack", f"Stack {cid} has no children"))
+    if len(comps) > LIMITS["components"]:
+        out.append(Problem(0, "too_many", f"{len(comps)} components; keep it to {LIMITS['components']}. "
+                           "Drop the least useful ones"))
+    buttons = [c for c in comps.values() if c.type == "Button"]
+    primary = [c for c in buttons if c.props.get("variant") and c.props["variant"].value == "primary"]
+    if len(primary) > LIMITS["primary_buttons"]:
+        out.append(Problem(primary[1].line, "two_primaries", "more than one primary Button; one per surface"))
+    if len(buttons) > LIMITS["buttons"]:
+        out.append(Problem(buttons[-1].line, "too_many_buttons", f"more than {LIMITS['buttons']} Buttons"))
+    texts = [c for c in comps.values() if c.type == "Text"]
+    if len(texts) > LIMITS["text_components"]:
+        out.append(Problem(texts[-1].line, "too_much_prose",
+                           f"{len(texts)} Text components; prose is the thing a glance cannot do"))
+    total = 0
+    for comp in comps.values():
+        rows = row_count(comp)
+        if rows > LIMITS["rows_per_component"]:
+            out.append(Problem(comp.line, "too_many_rows",
+                               f"{comp.id} shows {rows} rows; at most {LIMITS['rows_per_component']}"))
+        total += rows
+    if total > LIMITS["rows_per_surface"]:
+        out.append(Problem(0, "too_many_rows",
+                           f"the surface shows up to {total} rows; at most {LIMITS['rows_per_surface']}. "
+                           "Drop a list or bind a count instead"))
+    return out
+
+
+def validate(text: str, queries: dict[str, Query] | None = None) -> tuple[Surface, list[Problem]]:
+    queries = queries or all_queries()
+    surface = Surface()
+    problems: list[Problem] = []
+    for n, line in enumerate(strip_fences(text).splitlines(), 1):
+        problem = check_line(line, n, surface, queries)
+        if problem:
+            problems.append(problem)
+    return surface, problems + check_structure(surface)
+
+
+def strip_fences(text: str) -> str:
+    return "\n".join(line for line in text.splitlines() if not line.strip().startswith("```"))
+
+
+# The prompt. Built from the catalog, the policy, the query registry and the
+# exemplars every time, never hand-written, so it cannot fall behind them.
+
+RULES = """\
+You lay out one panel for a heads-up display. You write Kyber Lines and nothing else:
+no prose, no code fences, no explanation. One line per op.
+
+  c <id> <Type> prop=value ...     declare a component
+  > <parent> <child> <child> ...   attach children, in display order
+  @ genui at=<region> w=<points>   optional, first line only: where it goes and how wide
+
+The root already exists: it is `s`, a Screen. Your first line is `c s Screen title="..."`
+with a short title in caps, and your second is `> s ...` listing its children, so the
+panel paints while the rest arrives. Then declare each child.
+
+DATA IS BOUND, NEVER WRITTEN. You cannot see any data and must not invent any. Every
+number, row, date or name comes from a query pointer: `@/q/<query>/<view>` or
+`@/q/<query>:<arg>/<view>`. The display fills it in. A literal number, list or row
+you type yourself is refused.
+
+Views and the props that take them:
+  rows    Table.rows (columns must use the query's fields)
+  events  Events.items
+  list    List.items
+  bars    Bars.rows
+  count   Metric.value (or a named value the query lists)
+  series  Sparkline.points
+  note    Text.value or Status.message: why a view is empty, or ""
+
+Rules:
+- Only components and props from the catalog below. Arrays and objects take no spaces.
+- At most {components} components, at most {rows_surface} rows on the whole panel
+  ({events} per Events, {rows} per Table, Bars or List). One group answers one question.
+- At most one Button with variant=primary, at most {buttons} Buttons, and only these
+  actions: {actions}. Most panels need no Button.
+- At most {texts} Text components, each under {text_chars} characters. Never restate in
+  prose what a chart already shows.
+- Metric for one number that matters; Table to compare columns; Bars for one magnitude
+  per row; Events for things with times; Diagram when the answer is a shape. Ring only
+  for a real proportion with a ceiling.
+- Use a Stack direction=grid cols=2 for two to four Metrics side by side.
+- If no query answers the request, do not fake one: draw what you can bind and a Status
+  or Text binding the closest query's note, or a Diagram if the answer is a structure.
+- Controls (Field, Select, Checkbox) bind value=@/draft/<name>. Rarely needed.
+- No em dashes in any text: use a comma or a colon.
+"""
+
+
+def catalog_prompt() -> str:
+    out = []
+    for name, comp in CATALOG["components"].items():
+        if name in POLICY["excluded_components"] and name != "Screen":
+            continue
+        props = []
+        for key, spec in comp["props"].items():
+            if spec.get("renderer") is False:
+                continue
+            kind = spec["type"]
+            if (kind == "rowaction" or key == "actionLabel") and not POLICY.get("row_actions"):
+                continue
+            if kind == "rowaction":
+                kind = "|".join(POLICY["row_actions"])
+            if kind == "enum":
+                kind = "|".join(spec["values"])
+            elif kind == "tone":
+                kind = "good|warn|bad"
+            elif kind == "action":
+                kind = "|".join(POLICY["actions"])
+            elif kind == "array" and spec.get("items") in CATALOG["shapes"]:
+                shp = CATALOG["shapes"][spec["items"]]
+                kind = "[{" + ",".join(shp["required"] + [k + "?" for k in shp.get("optional", [])]) + "}]"
+            if spec.get("view"):
+                kind += f" (@{spec['view']})" if kind != "pointer" else ""
+            props.append(f"{key}:{kind}")
+        out.append(f"  {name}: {', '.join(props)}")
+    return "\n".join(out)
+
+
+def queries_prompt(queries: dict[str, Query]) -> str:
+    out = []
+    for q in queries.values():
+        arg = ""
+        if q.arg.get("kind"):
+            arg = f":<{q.arg.get('help', 'arg')}>" + ("" if q.arg.get("required") else "?")
+        views = ",".join(q.views) + ("," + ",".join(q.scalars) if q.scalars else "")
+        out.append(f"  {q.name}{arg}  {q.description}. fields: {','.join(q.fields)}. views: {views}")
+    return "\n".join(out)
+
+
+def exemplars_prompt() -> str:
+    out = []
+    for ex in load_json(EXEMPLARS_PATH)["exemplars"]:
+        out.append(f"Request: {ex['request']}\n" + "\n".join(ex["lines"]))
+    return "\n\n".join(out)
+
+
+def system_prompt(queries: dict[str, Query]) -> str:
+    rules = RULES.format(
+        components=LIMITS["components"], rows_surface=LIMITS["rows_per_surface"],
+        events=POLICY["row_caps"]["events"], rows=POLICY["row_caps"]["rows"],
+        buttons=LIMITS["buttons"], actions=", ".join(POLICY["actions"]),
+        texts=LIMITS["text_components"], text_chars=LIMITS["text_chars"])
+    return (f"{rules}\nToday is {date.today():%A %Y-%m-%d}.\n\nCATALOG\n{catalog_prompt()}\n\n"
+            f"QUERIES\n{queries_prompt(queries)}\n\nEXAMPLES\n\n{exemplars_prompt()}\n")
+
+
+# The model. The same Claude Code the voice uses, made lean the way hud-listen
+# makes it lean (bin/hud-listen agent_flags): local settings only, so no
+# session-briefing hooks, plus no tools at all, because a layout needs none
+# and a model with no tools cannot act on anything it was shown.
+
+def model_command() -> list[str]:
+    raw = os.environ.get("GENUI_MODEL_CMD") or os.environ.get("BOB_MODEL_CMD") or "claude -p"
+    return shlex.split(raw)
+
+
+def is_claude(argv: list[str]) -> bool:
+    return bool(argv) and Path(argv[0]).name == "claude"
+
+
+def claude_flags(prompt_file: Path) -> list[str]:
+    flags = [
+        "--setting-sources", "local",
+        "--tools", "",
+        "--strict-mcp-config", "--mcp-config", json.dumps({"mcpServers": {}}),
+        "--system-prompt-file", str(prompt_file),
+        "--no-session-persistence",
+        "--output-format", "stream-json", "--verbose", "--include-partial-messages",
+    ]
+    model = os.environ.get("GENUI_MODEL")
+    if not model:
+        try:
+            model = json.loads(USER_SETTINGS.read_text(encoding="utf-8")).get("model")
+        except (OSError, ValueError):
+            model = None
+    if isinstance(model, str) and model:
+        flags += ["--model", model]
+    effort = os.environ.get("GENUI_EFFORT")
+    if effort:
+        flags += ["--effort", effort]
+    return flags
+
+
+def stream_model(request: str, system: str, on_line: Callable[[str], None], timeout: float = 120) -> str:
+    """Ask once, call on_line for each complete line as it arrives, return all text."""
+    argv = model_command()
+    STATE.mkdir(parents=True, exist_ok=True)
+    prompt_file = STATE / "prompt.md"
+    prompt_file.write_text(system, encoding="utf-8")
+    env = dict(os.environ)
+    env["CHEWBACCA_HUD_CHILD"] = "1"
+    # `--setting-sources local` still loads the auto-memory index. Measured
+    # 2026-10-04: 8,319 prompt tokens with it, 615 without, and with it the
+    # model bound `campaign:<a client name from memory>` for "my client's
+    # campaign", a name the request never said. A layout needs no memory.
+    env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    if is_claude(argv):
+        argv = argv + claude_flags(prompt_file)
+        stdin_text = request
+    else:
+        stdin_text = f"{system}\n\nRequest: {request}\n"
+    # A file, not a pipe: nobody reads stderr while the model streams, and a
+    # full pipe would block the child until the timer killed it.
+    errfile = tempfile.TemporaryFile()
+    proc = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errfile,
+                            text=True, env=env, cwd=str(Path.home()))
+    timer = threading.Timer(timeout, proc.kill)
+    timer.start()
+    buffer, full, result = "", [], ""
+    seen_delta = False
+
+    def feed(text: str) -> None:
+        nonlocal buffer
+        full.append(text)
+        buffer += text
+        while "\n" in buffer:
+            line, buffer = buffer.split("\n", 1)
+            on_line(line)
+
+    try:
+        assert proc.stdin is not None and proc.stdout is not None
+        proc.stdin.write(stdin_text)
+        proc.stdin.close()
+        for raw in proc.stdout:
+            if not is_claude(argv[:1]):
+                feed(raw)
+                continue
+            try:
+                event = json.loads(raw)
+            except ValueError:
+                continue
+            kind = event.get("type")
+            if kind == "stream_event":
+                delta = (event.get("event") or {}).get("delta") or {}
+                if delta.get("type") == "text_delta":
+                    seen_delta = True
+                    feed(delta.get("text", ""))
+            elif kind == "assistant" and not seen_delta:
+                for block in (event.get("message") or {}).get("content") or []:
+                    if block.get("type") == "text":
+                        feed(block.get("text", ""))
+            elif kind == "result":
+                result = str(event.get("result") or "")
+        proc.wait()
+    finally:
+        timer.cancel()
+    if buffer.strip():
+        on_line(buffer)
+    text = "".join(full)
+    if not text and proc.returncode:
+        errfile.seek(0)
+        err = errfile.read().decode("utf-8", "replace") or result
+        raise RuntimeError(clean(err or f"model exited {proc.returncode}", 160))
+    return text or result
+
+
+# Drawing.
+
+class Sink:
+    """Where lines go: the live display, or stdout for --dry-run."""
+
+    def __init__(self, dry: bool, surface: str):
+        self.dry = dry
+        self.surface = surface
+        self.sock: socket.socket | None = None
+        self.sent: list[str] = []
+        self.problems: list[str] = []
+        self.lock = threading.Lock()
+        self.closed = False
+        if not dry:
+            self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.sock.connect(SOCKET)
+            # Without the token the display sends drawing acks and no events
+            # (hud/CLAUDE.md, "Who hears events").
+            try:
+                token = (Path(SOCKET).parent / "hud.token").read_text(encoding="utf-8").strip()
+            except OSError:
+                token = ""
+            line = f"listen token={token}" if re.fullmatch(r"[0-9a-f]{64}", token) else "listen"
+            self.sock.sendall((line + "\n").encode())
+            threading.Thread(target=self._read, daemon=True).start()
+
+    def _read(self) -> None:
+        assert self.sock is not None
+        buf = b""
+        while True:
+            try:
+                chunk = self.sock.recv(4096)
+            except OSError:
+                return
+            if not chunk:
+                return
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                text = line.decode("utf-8", "replace")
+                if text.startswith("! "):
+                    self.problems.append(text[2:])
+
+    def send(self, *lines: str) -> None:
+        with self.lock:
+            # A query that answers after the panel is finished has nowhere to
+            # go; dropping it beats an OSError that kills its thread.
+            if self.closed:
+                return
+            self.sent.extend(lines)
+            payload = "".join(line + "\n" for line in lines)
+            if self.dry:
+                sys.stdout.write(payload)
+                sys.stdout.flush()
+            elif self.sock is not None:
+                try:
+                    self.sock.sendall(payload.encode("utf-8"))
+                except OSError:
+                    self.closed = True
+
+    def close(self) -> None:
+        if self.sock is not None:
+            time.sleep(0.3)
+        with self.lock:
+            self.closed = True
+            if self.sock is not None:
+                self.sock.close()
+
+
+def title_guess(request: str) -> str:
+    words = re.sub(r"[^A-Za-z0-9 ']", " ", request).split()
+    drop = {"show", "me", "my", "the", "a", "an", "what", "whats", "what's", "please", "pull", "up", "who", "is", "are"}
+    kept = [w for w in words if w.lower() not in drop][:4] or ["Working"]
+    return " ".join(kept).upper()[: LIMITS["title_chars"]]
+
+
+@dataclass
+class Run:
+    request: str
+    lines: list[str] = field(default_factory=list)
+    problems: list[str] = field(default_factory=list)
+    repaired: bool = False
+    fallback: bool = False
+    first_try_valid: bool = False
+    final_valid: bool = False
+    skeleton_ms: float = 0
+    first_component_ms: float | None = None
+    model_done_ms: float = 0
+    complete_ms: float = 0
+    attempts: int = 0
+    display_problems: list[str] = field(default_factory=list)
+    queries: list[str] = field(default_factory=list)
+
+
+class Resolver:
+    """Runs each bound query once, in parallel with the model, and sends `d`."""
+
+    def __init__(self, queries: dict[str, Query], sink: Sink):
+        self.queries = queries
+        self.sink = sink
+        self.started: dict[str, threading.Thread] = {}
+        self.results: dict[str, dict] = {}
+        self.lock = threading.Lock()
+
+    def want(self, key: str) -> None:
+        if key in self.started:
+            return
+        thread = threading.Thread(target=self._run, args=(key,), daemon=True)
+        self.started[key] = thread
+        thread.start()
+
+    def _run(self, key: str) -> None:
+        try:
+            data = resolve(self.queries, key)
+        except Exception as err:  # noqa: BLE001
+            # A shaping bug in one query must still put a reason on the
+            # panel; a dead thread left the grades table blank with no word
+            # of why (2026-10-04, KeyError on a row with no name).
+            data = shape(key.split(":")[0], {"rows": [], "note": f"Could not shape {key}: {clean(err, 60)}"})
+        with self.lock:
+            self.results[key] = data
+        self.sink.send(f"d /q/{key} {json.dumps(data, separators=(',', ':'), ensure_ascii=False)}")
+
+    def snapshot(self) -> dict[str, dict]:
+        with self.lock:
+            return dict(self.results)
+
+    # week and day run two subprocesses back to back, each with a 20 s
+    # timeout, so anything under 40 s can cut off a slow but real answer.
+    def wait(self, timeout: float = 45) -> None:
+        end = time.monotonic() + timeout
+        for thread in list(self.started.values()):
+            thread.join(max(0.0, end - time.monotonic()))
+
+
+def repair_prompt(request: str, text: str, problems: list[Problem]) -> str:
+    listed = "\n".join(f"- {p}" for p in problems[:12])
+    return (f"{request}\n\nYour previous layout was refused. Problems:\n{listed}\n\n"
+            f"Previous layout:\n{text.strip()}\n\nWrite the whole corrected layout, lines only.")
+
+
+def fallback_lines(request: str, why: str) -> list[str]:
+    return [
+        f'c s Screen title={json.dumps(title_guess(request))}',
+        "> s fb",
+        f"c fb Status message={json.dumps(clean('No view for this one. ' + why, 120))} level=warning",
+    ]
+
+
+def note_lines(resolver: Resolver, children: list[str], lines: list[str], keys: set[str]) -> list[str]:
+    """An honest empty state: a query that came back empty says why, on the panel.
+
+    Skipped for a query whose note the layout already binds: on 2026-10-04 the
+    model's own Status and this one both said "Nothing overdue." on one panel.
+    """
+    bound = " ".join(lines)
+    def empty_bound_view(key: str, data: dict) -> bool:
+        # A Bars bound to grades drew a caption over nothing on 2026-10-04:
+        # five courses, none graded, so count was 5 and the bars view empty.
+        views = re.findall(rf"/q/{re.escape(key)}/([a-z]+)", bound)
+        return any(isinstance(data.get(v), list) and not data[v] for v in views)
+
+    # Only queries the final layout binds: a repaired layout that dropped
+    # `overdue` still got "Nothing overdue." from the refused first attempt.
+    notes = [(k, v["note"]) for k, v in sorted(resolver.snapshot().items())
+             if k in keys and v.get("note") and (not v.get("count") or empty_bound_view(k, v))
+             and f"/q/{k}/note" not in bound]
+    if not notes:
+        return []
+    lines, ids = [], []
+    for i, (key, note) in enumerate(notes[:2]):
+        cid = f"qn{i}"
+        ids.append(cid)
+        lines.append(f"c {cid} Status message={json.dumps(note)} level=info")
+    return lines + [f"> s {' '.join(children + ids)}"]
+
+
+def generate(request: str, *, dry: bool = False, at: str | None = None, surface_name: str = SURFACE,
+             model: Callable[[str, str, Callable[[str], None]], str] | None = None,
+             sink: Sink | None = None) -> Run:
+    started = time.monotonic()
+    ms = lambda: round((time.monotonic() - started) * 1000, 1)  # noqa: E731
+    run = Run(request)
+    queries = all_queries()
+    sink = sink or Sink(dry, surface_name)
+    model = model or stream_model
+    system = system_prompt(queries)
+    region = at or "topRight"
+
+    sink.send(f"- {surface_name}", f"@ {surface_name} at={region} w=400",
+              f"c s Screen title={json.dumps(title_guess(request))}",
+              'c sk Text value="Building this view" tone=muted', "> s sk", "r s")
+    run.skeleton_ms = ms()
+    resolver = Resolver(queries, sink)
+
+    def attempt(prompt: str, live: bool) -> tuple[str, Surface, list[Problem]]:
+        surface = Surface()
+        problems: list[Problem] = []
+        counter = [0]
+
+        def on_line(line: str) -> None:
+            counter[0] += 1
+            n = counter[0]
+            stripped = line.strip()
+            if not stripped or stripped.startswith("```") or stripped.startswith("#"):
+                return
+            before = set(surface.queries)
+            problem = check_line(stripped, n, surface, queries)
+            if problem:
+                problems.append(problem)
+                return
+            if not live or stripped.startswith("@"):
+                return
+            for key in surface.queries - before:
+                resolver.want(key)
+            sink.send(stripped)
+            if run.first_component_ms is None and stripped.startswith("c ") and not stripped.startswith("c s "):
+                run.first_component_ms = ms()
+
+        run.attempts += 1
+        text = model(prompt, system, on_line)
+        return text, surface, problems + check_structure(surface)
+
+    try:
+        text, surface, problems = attempt(request, live=True)
+        run.first_try_valid = not problems
+        if problems:
+            run.problems = [str(p) for p in problems]
+            text, surface, problems = attempt(repair_prompt(request, text, problems), live=False)
+            run.repaired = not problems
+            if problems:
+                run.problems += [f"repair: {p}" for p in problems]
+            else:
+                for key in surface.queries:
+                    resolver.want(key)
+                sink.send(*surface.accepted)
+                if run.first_component_ms is None:
+                    run.first_component_ms = ms()
+    except (RuntimeError, OSError, subprocess.SubprocessError) as err:
+        problems = [Problem(0, "model_failed", str(err))]
+        run.problems.append(str(err))
+        surface = Surface()
+    run.model_done_ms = ms()
+
+    if problems:
+        run.fallback = True
+        reason = problems[0].message if problems else "the model did not answer"
+        run.lines = fallback_lines(request, reason)
+        sink.send(*run.lines)
+    else:
+        run.final_valid = True
+        run.lines = list(surface.accepted)
+        run.queries = sorted(surface.queries)
+        resolver.wait()
+        extra = note_lines(resolver, surface.children.get("s", []), surface.accepted, surface.queries)
+        if extra:
+            sink.send(*extra)
+    if surface.at and not at and not run.fallback:
+        sink.send(f"@ {surface_name} at={surface.at}" + (f" w={surface.width}" if surface.width else ""))
+    run.complete_ms = ms()
+    if not dry:
+        sink.close()
+        run.display_problems = list(sink.problems)
+    remember(surface_name, run, surface)
+    return run
+
+
+def remember(surface_name: str, run: Run, surface: Surface) -> None:
+    STATE.mkdir(parents=True, exist_ok=True)
+    record = json.dumps({
+        "surface": surface_name, "request": run.request, "lines": run.lines,
+        "at": surface.at, "width": surface.width, "valid": run.final_valid,
+    }, indent=2)
+    (STATE / "last.json").write_text(record, encoding="utf-8")
+    # Refresh acts on the surface that was pressed, so each surface keeps its
+    # own last good layout; a fallback elsewhere must not erase it.
+    if run.final_valid and re.fullmatch(r"[A-Za-z0-9_-]{1,40}", surface_name):
+        (STATE / f"layout-{surface_name}.json").write_text(record, encoding="utf-8")
+
+
+def draw_layout(lines: list[str], *, dry: bool, surface_name: str = SURFACE, at: str = "topRight",
+                width: int = 400) -> list[str]:
+    """Draw a stored layout with fresh data and no model: a preset, or a refresh."""
+    queries = all_queries()
+    surface, problems = validate("\n".join(lines), queries)
+    if problems:
+        raise SystemExit("refusing a stored layout that no longer validates:\n" +
+                         "\n".join(f"  {p}" for p in problems))
+    sink = Sink(dry, surface_name)
+    # Root right after the Screen, so a cut-off stream has still drawn something.
+    screen = [line for line in surface.accepted if line.startswith("c s ")]
+    rest = [line for line in surface.accepted if not line.startswith("c s ")]
+    sink.send(f"@ {surface_name} at={at} w={width}", *screen, "r s", *rest)
+    resolver = Resolver(queries, sink)
+    for key in surface.queries:
+        resolver.want(key)
+    resolver.wait()
+    extra = note_lines(resolver, surface.children.get("s", []), surface.accepted, surface.queries)
+    if extra:
+        sink.send(*extra)
+    sink.close()
+    return sink.problems
+
+
+# Drift check: the catalog against the doc a model reads and the renderer that draws.
+
+def doc_block(path: Path = HUD_DOC) -> str:
+    text = path.read_text(encoding="utf-8")
+    start, end = text.index("<!-- generated: components -->"), text.index("<!-- /generated -->")
+    return text[start:end]
+
+
+def doc_components(block: str, examples: str | None = None) -> dict[str, set[str]]:
+    """Components the doc names in its generated block, and every prop its `c` examples use.
+
+    Examples are read from the whole file, not only the block: Avatar, Rail
+    and Segmented arrived on 2026-10-04 documented by hand below the block,
+    and a check that read only the block called them undocumented.
+    """
+    found: dict[str, set[str]] = {}
+    for name in re.findall(r"^- \*\*([A-Z][A-Za-z]+)\*\*", block, re.M):
+        found.setdefault(name, set())
+    for line in re.findall(r"^\s*(c [^\n]+)$", examples if examples is not None else block, re.M):
+        tokens = tokenize(line.strip())
+        if len(tokens) >= 3 and re.fullmatch(r"[A-Z][A-Za-z]+", tokens[2]):
+            found.setdefault(tokens[2], set()).update(
+                pair[0] for pair in (split_pair(t) for t in tokens[3:]) if pair)
+    return found
+
+
+def renderer_reads(path: Path = RENDERER) -> tuple[set[str], dict[str, set[str]], set[str], set[str]]:
+    """Props SurfaceView.swift reads: all, per `case` label, the types it handles, and the shared ones.
+
+    Shared means read outside any `case`: a family helper like the
+    thresholds, the Screen title in `container`, or a default branch.
+    """
+    text = path.read_text(encoding="utf-8")
+    every = set(re.findall(r'\bp\["([A-Za-z]+)"\]', text))
+    per: dict[str, set[str]] = {}
+    current: list[str] = []
+    types: set[str] = set()
+    shared: set[str] = set()
+    for line in text.splitlines():
+        labels = re.match(r'\s*case ((?:"[A-Z][A-Za-z]+"(?:, )?)+):', line)
+        if labels:
+            current = re.findall(r'"([A-Z][A-Za-z]+)"', labels.group(1))
+            types.update(current)
+            continue
+        # A `default:` branch belongs to whichever types fell through to it,
+        # which a line scan cannot name; its reads count for no type and are
+        # not shared either, or every prop a default branch reads would
+        # excuse the same name on any component.
+        if re.match(r"\s*default:", line):
+            current = ["__default__"]
+        elif re.match(r"\s*(private func|func |static func)", line):
+            current = []
+        for key in re.findall(r'\bp\["([A-Za-z]+)"\]', line):
+            if not current:
+                shared.add(key)
+            for label in current:
+                per.setdefault(label, set()).add(key)
+        for key in re.findall(r'store\.binding\(element, "([A-Za-z]+)"\)', line):
+            every.add(key)
+            for label in current:
+                per.setdefault(label, set()).add(key)
+    return every, per, types, shared
+
+
+def catalog_drift(doc: Path = HUD_DOC, renderer: Path = RENDERER) -> list[str]:
+    out: list[str] = []
+    comps = CATALOG["components"]
+    documented = doc_components(doc_block(doc), doc.read_text(encoding="utf-8"))
+    for name in sorted(set(documented) - set(comps)):
+        out.append(f"{doc.name} documents {name}, which genui/catalog.json does not have")
+    for name in sorted(set(comps) - set(documented)):
+        out.append(f"genui/catalog.json has {name}, which {doc.name} does not document")
+    for name, props in documented.items():
+        for prop in sorted(props - set(comps.get(name, {}).get("props", {}))):
+            out.append(f"{doc.name} shows {name}.{prop}, which genui/catalog.json does not have")
+    if not renderer.is_file():
+        # A renderer that moved must fail the check, not skip it.
+        return out + [f"{renderer} is missing, so the catalog cannot be checked against it"]
+    if renderer.is_file():
+        every, per, types, shared = renderer_reads(renderer)
+        # Row buttons read their label in Rows.swift, from the same props.
+        rows = renderer.with_name("Rows.swift")
+        if rows.is_file():
+            row_keys = set(re.findall(r'\bprops\["([A-Za-z]+)"\]', rows.read_text(encoding="utf-8")))
+            every |= row_keys
+            shared |= row_keys
+        for name in sorted(set(comps) - types):
+            out.append(f"{renderer.name} has no case for {name}")
+        for name in sorted(types - set(comps)):
+            out.append(f"{renderer.name} draws {name}, which genui/catalog.json does not have")
+        live = {k for c in comps.values() for k, v in c["props"].items() if v.get("renderer", True)}
+        for prop in sorted(every - live):
+            out.append(f"{renderer.name} reads {prop}, which no catalog component declares")
+        for prop in sorted(live - every):
+            out.append(f"genui/catalog.json declares {prop}, which {renderer.name} never reads")
+        for name, keys in ((n, k) for n, k in per.items() if n != "__default__"):
+            for key in sorted(keys - set(comps.get(name, {}).get("props", {}))):
+                out.append(f"{renderer.name} reads {name}.{key}, which genui/catalog.json does not declare")
+            # And the other way, per component: a catalog prop its own case
+            # never reads, unless a shared helper reads it. Without this,
+            # Metric.caption passed because Table reads a caption.
+            declared = {k for k, v in comps.get(name, {}).get("props", {}).items() if v.get("renderer", True)}
+            for key in sorted(declared - keys - shared):
+                out.append(f"genui/catalog.json declares {name}.{key}, which its case in {renderer.name} never reads")
+    return out
+
+
+# Eval.
+
+def run_eval(path: Path, out: Path | None, only: set[int] | None, live: bool) -> int:
+    requests = load_json(path)["requests"]
+    rows = []
+    for i, item in enumerate(requests, 1):
+        if only and i not in only:
+            continue
+        buf = DevNull()
+        run = generate(item["request"], dry=not live, sink=None if live else buf, surface_name=SURFACE)
+        row = {
+            "n": i, "request": item["request"], "first_try_valid": run.first_try_valid,
+            "valid_after_repair": run.final_valid, "fallback": run.fallback, "attempts": run.attempts,
+            "skeleton_ms": run.skeleton_ms, "first_component_ms": run.first_component_ms,
+            "model_done_ms": run.model_done_ms, "complete_ms": run.complete_ms,
+            "queries": run.queries, "problems": run.problems[:6], "lines": run.lines,
+            "display_problems": run.display_problems,
+        }
+        rows.append(row)
+        print(json.dumps({k: row[k] for k in ("n", "first_try_valid", "valid_after_repair", "first_component_ms",
+                                               "complete_ms", "queries")}), flush=True)
+        if out:
+            out.write_text(json.dumps({"rows": rows}, indent=2), encoding="utf-8")
+    first = sum(r["first_try_valid"] for r in rows)
+    after = sum(r["valid_after_repair"] for r in rows)
+    print(f"first try {first}/{len(rows)}, after repair {after}/{len(rows)}")
+    return 0
+
+
+class DevNull(Sink):
+    def __init__(self) -> None:  # noqa: D107
+        self.dry = True
+        self.sock = None
+        self.sent = []
+        self.problems = []
+        self.lock = threading.Lock()
+
+    def send(self, *lines: str) -> None:
+        with self.lock:
+            self.sent.extend(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    commands = {"preset", "presets", "fixed", "validate", "catalog", "queries", "event", "bench"}
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    if argv[0] not in commands:
+        argv = ["draw"] + argv
+    parser = argparse.ArgumentParser(prog="kyber-genui")
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    p = sub.add_parser("draw")
+    p.add_argument("request")
+    p.add_argument("--dry-run", action="store_true")
+    p.add_argument("--pin")
+    p.add_argument("--at", choices=CATALOG["surface"]["at"])
+    p.add_argument("--surface", default=SURFACE)
+    p.add_argument("--json", action="store_true")
+    for name in ("preset", "fixed"):
+        p = sub.add_parser(name)
+        p.add_argument("name")
+        p.add_argument("--dry-run", action="store_true")
+        p.add_argument("--at", choices=CATALOG["surface"]["at"])
+        p.add_argument("--surface", default=SURFACE)
+    sub.add_parser("presets")
+    p = sub.add_parser("validate")
+    p.add_argument("file", nargs="?", default="-")
+    p = sub.add_parser("catalog")
+    p.add_argument("--check", action="store_true")
+    p.add_argument("--prompt", action="store_true")
+    sub.add_parser("queries")
+    p = sub.add_parser("event")
+    p.add_argument("action")
+    p.add_argument("component", nargs="?", default="")
+    p.add_argument("--surface", default=None, help="the surface= the display sent with the press")
+    p = sub.add_parser("bench")
+    p.add_argument("--requests", default=str(GENUI / "bench" / "requests.json"))
+    p.add_argument("--out")
+    p.add_argument("--only")
+    p.add_argument("--live", action="store_true", help="draw each one on the display")
+    args = parser.parse_args(argv)
+
+    if args.cmd == "draw":
+        if not args.dry_run and not Path(SOCKET).exists():
+            print("The display is not running: no socket at " + SOCKET, file=sys.stderr)
+            return 1
+        run = generate(args.request, dry=args.dry_run, at=args.at, surface_name=args.surface)
+        report = {k: getattr(run, k) for k in ("first_try_valid", "repaired", "fallback", "skeleton_ms",
+                                                "first_component_ms", "complete_ms", "problems",
+                                                "display_problems", "queries")}
+        print(json.dumps(report, indent=2) if args.json else
+              f"{'valid' if run.final_valid else 'fallback'}"
+              f"{' after repair' if run.repaired else ''}: first component {run.first_component_ms} ms, "
+              f"complete {run.complete_ms} ms" + "".join(f"\n  {p}" for p in run.problems + run.display_problems),
+              file=sys.stderr)
+        if args.pin:
+            if not run.final_valid:
+                print("not pinned: the surface did not validate", file=sys.stderr)
+                return 1
+            pin(args.pin, run)
+        return 0 if run.final_valid else 2
+    if args.cmd in ("preset", "fixed"):
+        if args.cmd == "fixed":
+            found = [e for e in load_json(EXEMPLARS_PATH)["exemplars"] if e["name"] == args.name]
+            if not found:
+                print(f"no fixed surface {args.name}", file=sys.stderr)
+                return 1
+            data = {"lines": found[0]["lines"]}
+        else:
+            data = load_json(preset_path(args.name))
+        problems = draw_layout(data["lines"], dry=args.dry_run, surface_name=args.surface,
+                               at=args.at or data.get("at") or "topRight", width=data.get("width") or 400)
+        for problem in problems:
+            print(f"display: {problem}", file=sys.stderr)
+        return 0
+    if args.cmd == "presets":
+        for path in sorted((STATE / "presets").glob("*.json")):
+            print(f"{path.stem:20} {load_json(path).get('request', '')}")
+        return 0
+    if args.cmd == "validate":
+        text = sys.stdin.read() if args.file == "-" else Path(args.file).read_text(encoding="utf-8")
+        _surface, problems = validate(text)
+        for problem in problems:
+            print(problem)
+        print("valid" if not problems else f"{len(problems)} problems", file=sys.stderr)
+        return 0 if not problems else 1
+    if args.cmd == "catalog":
+        if args.check:
+            drift = catalog_drift()
+            for line in drift:
+                print(line)
+            print("catalog matches hud/CLAUDE.md and the renderer" if not drift else
+                  f"{len(drift)} disagreements", file=sys.stderr)
+            return 0 if not drift else 1
+        print(system_prompt(all_queries()) if args.prompt else json.dumps(CATALOG, indent=2))
+        return 0
+    if args.cmd == "queries":
+        print(queries_prompt(all_queries()))
+        return 0
+    if args.cmd == "event":
+        return handle_event(args.action, args.component, args.surface)
+    if args.cmd == "bench":
+        only = {int(x) for x in args.only.split(",")} if args.only else None
+        return run_eval(Path(args.requests), Path(args.out) if args.out else None, only, args.live)
+    return 2
+
+
+def preset_path(name: str) -> Path:
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
+        raise SystemExit("a preset name is letters, digits, - or _")
+    return STATE / "presets" / f"{name}.json"
+
+
+def pin(name: str, run: Run) -> None:
+    """Save the layout, not the data: a pinned surface redraws with fresh numbers."""
+    path = preset_path(name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    last = load_json(STATE / "last.json")
+    path.write_text(json.dumps({"request": run.request, "lines": run.lines, "at": last.get("at"),
+                                "width": last.get("width"), "pinned": datetime.now().isoformat(timespec="seconds")},
+                               indent=2), encoding="utf-8")
+    print(f"pinned as {name}: kyber-genui preset {name}", file=sys.stderr)
+
+
+def handle_event(action: str, component: str, surface: str | None = None) -> int:
+    """`e genui-refresh <id> surface=<name>` and `e genui-close ...` from a generated surface.
+
+    Acts on the surface the press came from, read from `surface=` which the
+    display sends with every control since 2026-10-04, and falls back to the
+    default surface name when an older display leaves it off.
+    """
+    if action not in POLICY["actions"]:
+        print(f"not a genui action: {action}", file=sys.stderr)
+        return 2
+    name = surface or SURFACE
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
+        print(f"not a surface name: {name}", file=sys.stderr)
+        return 2
+    if action == "genui-close":
+        sink = Sink(False, name)
+        sink.send(f"- {name}")
+        sink.close()
+        return 0
+    path = STATE / f"layout-{name}.json"
+    if not path.is_file():
+        print(f"nothing to refresh on {name}", file=sys.stderr)
+        return 1
+    layout = load_json(path)
+    draw_layout(layout["lines"], dry=False, surface_name=name, at=layout.get("at") or "topRight",
+                width=layout.get("width") or 400)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

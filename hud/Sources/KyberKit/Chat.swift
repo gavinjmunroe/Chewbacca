@@ -104,13 +104,21 @@ public final class ChatWindow: NSPanel {
         isFloatingPanel = true
         // Floating, not modal: it stays over the work and gets out of the
         // way of a dialog, which is what a chat beside the work should do.
-        level = .floating
+        // One step above the glass, which is also `.floating` and is ordered
+        // front every time anything draws. At the same level, the panel sat
+        // under a session card while addressed to it, its input covered by
+        // the card it was talking to (screenshot, 2026-10-04).
+        level = NSWindow.Level(rawValue: NSWindow.Level.floating.rawValue + 1)
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         backgroundColor = .clear
         isOpaque = false
         hasShadow = false
         hidesOnDeactivate = false
-        animationBehavior = .utilityWindow
+        // None: the grow out of the pill is the animation. AppKit's utility
+        // window fade ran on top of it, a second, unrelated motion on the
+        // same open, which is part of what read as the panel "chunkily
+        // loading in" (2026-10-04).
+        animationBehavior = .none
         minSize = NSSize(width: 380, height: 260)
 
         contentView = NSHostingView(
@@ -238,6 +246,16 @@ struct ChatPanel: View {
             rule
             composer
         }
+        // The words, not the glass: the glass is the pill and is drawn from
+        // the first frame (see `GrowFromPill`). The words wait until the
+        // glass has opened far enough to hold them, and on the way back they
+        // go first, by the same curve run backward.
+        .opacity(GrowFromPill.contentOpacity(stage.open || offscreen ? 1 : 0))
+        .animation(
+            stage.open
+                ? .easeOut(duration: reduceMotion ? 0.1 : 0.18).delay(reduceMotion ? 0 : 0.1)
+                : .easeOut(duration: 0.08),
+            value: stage.open)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // The cards' frost, not the pill's clear glass: paragraphs need a
         // ground, and a page of white text over a white document is the
@@ -430,20 +448,59 @@ struct ChatPanel: View {
         }
     }
 
+    /// Who the input goes to, when it is not the assistant. Named on the
+    /// input itself, so a message is never sent somewhere unseen.
+    @ViewBuilder
+    private var addressee: some View {
+        if let target = model.chatTarget {
+            HStack(spacing: 6) {
+                Text("To")
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(HUD.faint)
+                Text(target.label)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(HUD.ink)
+                    .lineLimit(1)
+                Button { model.clearChatTarget() } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(HUD.dim)
+                        .frame(width: 18, height: 18)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Talk to the assistant instead")
+                .accessibilityLabel("Stop addressing \(target.label)")
+            }
+            .padding(.leading, 9)
+            .padding(.trailing, 3)
+            .padding(.vertical, 2)
+            .background(HUD.accent.opacity(0.18), in: Capsule())
+            .overlay(Capsule().strokeBorder(HUD.accent.opacity(0.45), lineWidth: 0.5))
+            .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .leading)))
+        }
+    }
+
+    private var prompt: String {
+        model.chatTarget.map { "Message \($0.label)" } ?? "Ask anything"
+    }
+
     private var composer: some View {
         VStack(alignment: .leading, spacing: 6) {
+            addressee
+                .animation(Motion.snappy(reduced: reduceMotion), value: model.chatTarget)
             HStack(alignment: .bottom, spacing: 10) {
                 if offscreen {
                     // `ImageRenderer` cannot draw an AppKit text field; it
                     // comes out as a prohibition sign on a yellow bar. The
                     // snapshot gets the field's own prompt in its place.
-                    Text("Ask anything")
+                    Text(prompt)
                         .font(.system(size: 13))
                         .foregroundStyle(HUD.faint)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     TextField(
-                        "", text: $draft, prompt: Text("Ask anything").foregroundStyle(HUD.faint),
+                        "", text: $draft, prompt: Text(prompt).foregroundStyle(HUD.faint),
                         axis: .vertical
                     )
                     .textFieldStyle(.plain)
@@ -452,10 +509,10 @@ struct ChatPanel: View {
                     .lineLimit(1...6)
                     .focused($focused)
                     .onSubmit(submit)
-                    .accessibilityLabel("Ask anything")
+                    .accessibilityLabel(prompt)
                 }
 
-                if working {
+                if working && model.chatTarget == nil {
                     IconButton(symbol: "stop.fill", help: "Stop", tint: HUD.bad, action: onStop)
                         .transition(.scale(scale: 0.6).combined(with: .opacity))
                 } else {
@@ -491,6 +548,9 @@ struct ChatPanel: View {
     }
 
     private var hint: String {
+        if let target = model.chatTarget {
+            return "Return sends to \(target.label). Permissions are approved in the session, never here."
+        }
         if working {
             return model.pill.queued > 0
                 ? "\(model.pill.queued) waiting. Return sends another, Escape closes."
@@ -655,8 +715,13 @@ nonisolated struct GrowFromPill: ViewModifier, Animatable {
         let p = min(max(progress, 0), 1)
         let pill = from == .zero ? Self.fallback : from
         return content
-            // Nothing readable until the capsule is most of the way open.
-            .opacity(min(1, max(0, (p - 0.15) / 0.5)))
+            // The glass is whole from the first frame. Until 2026-10-04 the
+            // whole panel, glass and words, faded in from nothing while the
+            // pill on the glass faded out, so for a moment neither was
+            // there, and then a half-built panel came up: "it feels like a
+            // diff version of the tab is chunkily loading in". Now the
+            // capsule the person clicked is the thing that grows, and only
+            // the words wait (`contentOpacity`).
             .mask {
                 GeometryReader { proxy in
                     let full = proxy.size
@@ -674,6 +739,11 @@ nonisolated struct GrowFromPill: ViewModifier, Animatable {
                 }
             }
     }
+
+    /// The words' opacity: 0 or 1, animated by the caller with a delay on
+    /// the way in and none on the way out, so they appear after the glass
+    /// starts to open and leave before it starts to close.
+    static func contentOpacity(_ open: Double) -> Double { open >= 0.5 ? 1 : 0 }
 
     private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: Double) -> CGFloat {
         a + (b - a) * CGFloat(t)

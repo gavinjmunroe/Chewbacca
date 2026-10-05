@@ -93,9 +93,9 @@ fixable() {
   local what="$1"; shift
   if [ "$FIX" -eq 1 ]; then
     if "$@" >/dev/null 2>&1; then
-      FIXED=$((FIXED+1)); echo -e "  ${GRN}fixed${NC} $what"; return 0
+      FIXED=$((FIXED+1)); [ "$JSON" -eq 1 ] || echo -e "  ${GRN}fixed${NC} $what"; return 0
     fi
-    echo -e "  ${RED}could not fix${NC} $what"; return 1
+    [ "$JSON" -eq 1 ] || echo -e "  ${RED}could not fix${NC} $what"; return 1
   fi
   return 1
 }
@@ -861,7 +861,9 @@ LEAKS="$(grep -rlE 'Bearer [A-Za-z0-9_-]{32}|sk-ant-[A-Za-z0-9]{20}|ghp_[A-Za-z0
   "$CLAUDE_DIR/commands" "$CLAUDE_DIR/rules" "$CLAUDE_DIR/skills" 2>/dev/null | head -5)"
 if [ -n "$LEAKS" ]; then
   bad "hardcoded credential in installed files:" "use an env var instead"
-  printf '        %s\n' $LEAKS
+  # Plain text only: in --json mode a bare path ahead of the object made the
+  # whole report unparseable (2026-10-03, a vendored X client in last30days).
+  [ "$JSON" -eq 1 ] || printf '        %s\n' $LEAKS
 else
   ok "no hardcoded credentials in commands, rules, or skills"
 fi

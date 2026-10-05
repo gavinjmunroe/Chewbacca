@@ -65,13 +65,14 @@ COMMANDS=(
   "gtme-learning|compare paired workflow experiments offline"
   "gtme-library|index and search a local source corpus"
   "clay-fixture-check|compare a CSV export with an expected fixture"
+  "oss-apps|open source apps that replace a Mac app, and which can be remixed"
   "task-graph|track local jobs, ownership, and dependencies"
   "ux-learning|record UX evidence and inspect portable navigation maps"
   "live|check the real tools on this machine, not just the install"
   "guide|interactive study guides that remember what you got wrong"
   "triggers|say things out loud and see whether any skill fires"
   "export|bundle this machine's kit state"
-  "import|restore a bundle onto this machine"
+  "import|bring in what your other AI tools know (scan, apply, undo), or restore a bundle"
   "completion|print shell completion for zsh, bash, or fish"
   "add-skill|add a skill to the kit"
   "install|copy the standards into the current project"
@@ -107,7 +108,7 @@ repo_version() { cat "$ROOT/VERSION" 2>/dev/null || echo "unknown"; }
 installed_version() { cat "$STATE/version" 2>/dev/null || echo "unrecorded"; }
 
 case "${1:-}" in
-task-graph|graph-fuse|review-gate|work-ledger|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|clay-fixture-check)
+task-graph|graph-fuse|review-gate|work-ledger|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|clay-fixture-check|oss-apps)
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"
@@ -232,6 +233,11 @@ export)
   ;;
 import)
   shift
+  # scan, apply and undo bring in what Claude Code, Codex, Cursor or a chat
+  # export already know. Anything else is a bundle path for the restore.
+  case "${1:-}" in
+  scan|apply|undo) exec python3 "$ROOT/tools/context_import.py" "$@" ;;
+  esac
   run bin/lib/import.sh "$@"
   ;;
 completion)

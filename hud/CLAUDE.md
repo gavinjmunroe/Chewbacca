@@ -108,7 +108,13 @@ reference only). The renderer enforces these; a sender should know them.
    rest. Give rows an `id` when they have one.
 6. **Nothing moves while idle** (Carlton's design.md: no decorative pulsing). A child that
    has not arrived is a still placeholder. If the glass is still and something
-   is still moving, it is a bug.
+   is still moving, it is a bug. A SwiftUI `repeatForever` is not free here:
+   on macOS it re-renders the whole full-screen overlay at display rate, and
+   it does not stop when the value driving it flips back. On 2026-10-05 the
+   ring's breath alone cost 21 points of CPU and the glittering attentive
+   band 9 more, all day, because listening is always on. Anything that must
+   move continuously goes on a `CALayer` animation under a key it removes on
+   state change (see `RingLayerView` in PresenceRing.swift).
 7. **A panel is as tall as its content**, capped at its region, scrolling only
    past the cap, with an edge fade only on the version that overflows (Carlton's design.md).
 8. **A press answers on the way down**: buttons scale to 0.96 on an

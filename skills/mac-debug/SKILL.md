@@ -104,4 +104,4 @@ Xcode) shows the real role, title, and available actions.
 Three failures on the same action: stop and report what you tried and what you saw. Do
 not loop, and do not switch layers to route around a diagnosis you have not made.
 
-Full list with detectors: `docs/WORKAROUNDS.md` and `data/failure-modes.json`.
+Full list with detectors: `docs/mac/WORKAROUNDS.md` and `mac/data/failure-modes.json`.

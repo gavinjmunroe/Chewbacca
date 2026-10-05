@@ -60,7 +60,7 @@ sqlite3 "file:$HOME/Library/Messages/chat.db?mode=ro" \
 
 Two things bite: the Apple epoch is 2001, not 1970, and on Ventura and later `text` is
 often NULL because bodies moved to `attributedBody` as a hex-encoded blob. See
-`docs/05-DATA-LAYER.md`.
+`docs/mac/05-DATA-LAYER.md`.
 
 Other stores: Safari `~/Library/Safari/History.db`, Photos
 `~/Pictures/Photos Library.photoslibrary/database/Photos.sqlite`, Calendar

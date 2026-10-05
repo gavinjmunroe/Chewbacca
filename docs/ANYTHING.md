@@ -333,9 +333,9 @@ using anything else" makes each leg wider:
   invite descriptions. `untrusted-content.md` is a prompt, not a boundary.
 - **Egress.** `run_shell`, `chewie run`, the web bridge, the network.
 
-And prompting is off by default. [ARCHITECTURE.md](ARCHITECTURE.md): "Nothing
-prompts. Bypass mode is on by default, with a deny list for what stays
-blocked." `mac/data/failure-modes.json` already marks prompt injection
+And prompting is off by default. [CODEBASE.md](CODEBASE.md#permissions): setup sets
+`bypassPermissions`, "so nothing prompts," with a deny list for what stays
+blocked. `mac/data/failure-modes.json` already marks prompt injection
 `severity: critical` with a detect field reading "not reliably detectable;
 treat as always present." That is the correct assessment and nothing acts on
 it.

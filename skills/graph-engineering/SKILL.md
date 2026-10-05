@@ -204,10 +204,10 @@ has done:
 2. **Fake verification.** The verifier reads the worker's own reasoning
    instead of ground truth. On 2026-09-21 a fix was reported done three times
    while the claim was checked against the code's arithmetic rather than the
-   running screen. `hooks/vibe-guard.sh` is the answer to this one.
+   running screen. `.claude/hooks/vibe-guard.sh` is the answer to this one.
 3. **Synthesis bottleneck.** Hundreds of findings into one prompt, so the
    model reasons over a truncated middle while producing output that looks
-   complete. `hooks/list-guard.sh` exists because five investor lists were
+   complete. `.claude/hooks/list-guard.sh` exists because five investor lists were
    called finished four times with 2,121 duplicate people in them.
 
 ### Ten rules, same source
@@ -298,7 +298,7 @@ working rules. Retrieval over it has to fall back to term overlap, which is why
 
 **His item 1 is already here, arrived at without reading him:** _"where a rule
 keeps being violated, promote it to a hook that refuses."_ That is
-`hooks/vibe-guard.sh` and `hooks/fusion-guard.sh`, both written 2026-09-21
+`.claude/hooks/vibe-guard.sh` and `.claude/hooks/fusion-guard.sh`, both written 2026-09-21
 after the same mistake happened twice. His items 2 and 4, decay and pruning of
 banks that only ever grow, and climbing past prompt text, are not done.
 

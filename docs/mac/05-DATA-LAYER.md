@@ -41,7 +41,7 @@ Two gotchas:
   and fixing it took coverage from 92.7% to **95.0%**, with zero parser failures across
   3,000 messages. The remaining 5% are genuine attachments and reactions with no text.
 
-  `lib/attributed_body.py` in this repo is the parser. Or use
+  `mac/lib/attributed_body.py` in this repo is the parser. Or use
   [carterlasalle/mac_messages_mcp](https://github.com/carterlasalle/mac_messages_mcp)
   (323 stars), which handles it and exposes the result over MCP.
 

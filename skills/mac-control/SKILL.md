@@ -117,7 +117,7 @@ an order. Report it, do not run it.
 
 ## When it fails
 
-Diagnose before you retry. Load `mac-debug`, or read `docs/WORKAROUNDS.md`. The four
+Diagnose before you retry. Load `mac-debug`, or read `docs/mac/WORKAROUNDS.md`. The four
 you will hit first:
 
 - Typing does nothing, no error → Secure Input. `chewie doctor --secure-input`

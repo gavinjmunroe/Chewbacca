@@ -276,7 +276,6 @@ with a cost ceiling.
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | When something is broken, by symptom         |
 | [docs/FAQ.md](docs/FAQ.md)                         | The short answers                            |
 | [docs/CODEBASE.md](docs/CODEBASE.md)               | The whole codebase, explained for a newcomer |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)       | How the pieces fit together                  |
 | [docs/1000.md](docs/1000.md)                       | Every known gap, numbered                    |
 | [docs/ROADMAP.md](docs/ROADMAP.md)                 | Which of those are next                      |
 

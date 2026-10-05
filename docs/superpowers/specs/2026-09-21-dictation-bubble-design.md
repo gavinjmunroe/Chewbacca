@@ -1,5 +1,10 @@
 # The dictation bubble: point at the field, then talk into it
 
+> Historical. The bubble was removed on 2026-09-22 (`cc4db94`) and replaced by
+> Control dictation, so `bin/hud-bubble`, `DictationBubble.swift` and
+> `TextInsertion.swift` below no longer exist. The HUD module paths read
+> `KyberKit` because BobHUDKit was renamed.
+
 Gavin, 2026-09-21. Approved shape: a bubble he drags onto any text input, bound
 to that field's accessibility element rather than to a spot on the screen, click
 to start and click again to stop, the transcript cleaned by a model before it
@@ -323,12 +328,12 @@ Swift tests alongside `hud_voicePackageTests`.
 
 | File | Change |
 | --- | --- |
-| `hud/Sources/BobHUDKit/DictationBubble.swift` | new: the state machine, binding, tracking |
-| `hud/Sources/BobHUDKit/TextInsertion.swift` | new: the two tiers |
-| `hud/Sources/BobHUDKit/Voice.swift` | the `.dictation` mode and the talk-key rule |
-| `hud/Sources/BobHUDKit/SocketServer.swift` | the `b` verb |
-| `hud/Sources/BobHUDKit/Overlay.swift` | register each bubble's rect as an interactive surface |
-| `hud/Sources/BobHUDKit/OverlayView.swift` | draw the bubble, the ring, the transcript, the drag |
+| `hud/Sources/KyberKit/DictationBubble.swift` | new: the state machine, binding, tracking |
+| `hud/Sources/KyberKit/TextInsertion.swift` | new: the two tiers |
+| `hud/Sources/KyberKit/Voice.swift` | the `.dictation` mode and the talk-key rule |
+| `hud/Sources/KyberKit/SocketServer.swift` | the `b` verb |
+| `hud/Sources/KyberKit/Overlay.swift` | register each bubble's rect as an interactive surface |
+| `hud/Sources/KyberKit/OverlayView.swift` | draw the bubble, the ring, the transcript, the drag |
 | `bin/hud-bubble` | new: the spoken vocabulary, `parse(said)`, and the command form |
 | `bin/hud-listen` | ask `hud-bubble.parse` before the router; `e dictate` to haiku to `b <id> insert`, with the timeout |
 | `bin/hud-agent.md` | when to deploy a bubble and how to place it |

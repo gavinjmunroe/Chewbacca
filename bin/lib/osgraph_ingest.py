@@ -15,7 +15,9 @@ before the window is widened.
 Not ingested, on purpose: the room-listen transcript (~/.chewbacca/room) has
 times but no date and no speaker, so a sentence in it cannot be owed by
 anyone; Granola's cache is encrypted to Granola-signed code
-(memory, reference_granola_live_transcript).
+(memory, reference_granola_live_transcript). Calls come in through Anarlog
+instead ("meetings" below, bin/lib/ingest_meetings.py), which supersedes
+room-listen for calls without replacing it.
 """
 from __future__ import annotations
 
@@ -606,10 +608,20 @@ def whatsapp(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
     return ingest_whatsapp.whatsapp(graph, ctx, ids, days=days)
 
 
+def meetings(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
+    """Meetings through Anarlog's CLI, read-only. Imported here, not at the
+    top, so a Mac without Anarlog still loads every other source. A database
+    Anarlog has not made yet is a note in the report, never an error
+    (ingest_meetings.meetings)."""
+    import ingest_meetings  # noqa: PLC0415
+
+    return ingest_meetings.meetings(graph, ctx, ids, days=days)
+
+
 INGESTERS = {
     "imessage": imessage, "mail": mail, "coursework": coursework, "calendar": calendar,
     "backlog": backlog, "people": people_tasks, "reminders": reminders, "agents": agents,
-    "whatsapp": whatsapp,
+    "whatsapp": whatsapp, "meetings": meetings,
 }
 
 
@@ -635,7 +647,9 @@ def ingest_all(graph: Graph, ctx, days: int = 7, only: list[str] | None = None,
     return report
 
 
-MESSAGE_SOURCES = ("imessage", "mail", "whatsapp")
+# Meetings ride the message window too: a meeting's snippet and transcript
+# words are other people's words, kept no longer than a text is.
+MESSAGE_SOURCES = ("imessage", "mail", "whatsapp", "meetings")
 
 
 def dumps(report: dict) -> str:

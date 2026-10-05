@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "command": "doctor",
+  "data": {
+    "cli_version": "1.4.28",
+    "ready": true,
+    "database": {
+      "path": "/Users/example/Library/Application Support/anarlog/app.db",
+      "exists": true,
+      "opened_read_only": true,
+      "schema_ready": true,
+      "error": null
+    }
+  }
+}

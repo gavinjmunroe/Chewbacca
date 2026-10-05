@@ -1240,6 +1240,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_surface_github.py"
   check  "whatsapp sends only to the opened 1:1 chat, verifies the new id, and an unlinked account is a note" \
     python3 "$ROOT/tests/test_surface_whatsapp.py"
+  check  "meetings reads Anarlog only through its CLI, first run is a state, and action items stay guesses" \
+    python3 "$ROOT/tests/test_surface_meetings.py"
   check  "the launcher lists only real surfaces and the hud-apps sentence reaches it, not genui" \
     python3 "$ROOT/tests/test_surface_apps.py"
   check  "a sentence opens the right surface and a near miss goes to the model" \

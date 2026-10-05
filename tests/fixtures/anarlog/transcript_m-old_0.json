@@ -1,0 +1,23 @@
+{
+  "schema_version": "1",
+  "command": "meetings.transcript",
+  "data": {
+    "meeting_id": "m-old",
+    "text": "old words",
+    "words": [
+      {
+        "text": "old"
+      },
+      {
+        "text": "words"
+      }
+    ]
+  },
+  "pagination": {
+    "offset": 0,
+    "limit": 200,
+    "returned": 2,
+    "total": null,
+    "next_offset": null
+  }
+}

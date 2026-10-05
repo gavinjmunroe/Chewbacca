@@ -21,7 +21,7 @@ kyber-surfaces close all
 ```
 
 Kinds: `needs-you`, `today`, `tasks`, `conversations`, `people`,
-`person <name>`, `space <name>`, `music`, `files`. `kyber-surfaces list` shows
+`person <name>`, `space <name>`, `music`, `files`, `meetings`. `kyber-surfaces list` shows
 what is open and where; `activity` shows what the panels did.
 
 ## What a surface that replaces an app contains

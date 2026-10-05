@@ -20,7 +20,7 @@ only the ranking is trusted. Re-measure before reordering.
 | FaceTime | 3.4   | a call surface: start, accept, who is on             | not started |
 | Codex    | 3.3   | session surfaces, Codex transcripts                  | building    |
 | Notes    | 1.5   | `notes` surface over Apple Notes via `mac notes`: newest 6, preview, append one line to a text-only note | partial     |
-| Granola  | 0.8   | call transcripts into the graph (anarlog or Granola) | not started |
+| Granola  | 0.8   | `meetings` surface over Anarlog's CLI: calls, decisions, action items as guessed tasks, transcript pages; ingested into the graph | partial     |
 | Slack    | 0.7   | a Slack surface over the Slack MCP, read first       | not started |
 | Finder   | 0.7   | `files` surface                                      | building    |
 | WhatsApp | 0.4   | threads into the graph via `wacli`                   | not started |

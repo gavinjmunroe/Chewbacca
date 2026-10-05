@@ -1,0 +1,16 @@
+{
+  "schema_version": "1",
+  "command": "meetings.transcript",
+  "data": {
+    "meeting_id": "m-tts",
+    "text": "",
+    "words": []
+  },
+  "pagination": {
+    "offset": 0,
+    "limit": 200,
+    "returned": 0,
+    "total": null,
+    "next_offset": null
+  }
+}

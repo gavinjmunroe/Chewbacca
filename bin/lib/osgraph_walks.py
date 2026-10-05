@@ -154,6 +154,11 @@ def today(g: Graph, now: datetime) -> dict:
     day = now.date().isoformat()
     rows = []
     for node in g.into(f"day:{day}", "DUE_ON"):
+        # An action item Anarlog guessed out of a meeting can belong to anyone
+        # in the room; on 2026-10-05 one assigned to Sagar drew on Caleb's
+        # Today. A guess stays off the day until the person promotes it.
+        if node["props"].get("guess"):
+            continue
         start = node["props"].get("start", "")
         rows.append(row(g, node, DUE, start or day, "today"))
     for node in g.nodes("Assignment"):
@@ -439,6 +444,8 @@ def due_before(g: Graph, anchor_label: str) -> list[dict]:
         if e["src"] == anchors[0]["id"] or e["dst"][4:] >= cutoff:
             continue
         node = g.node(e["src"])
+        if node and node["props"].get("guess"):
+            continue
         if node and any(o["dst"] == ME for o in g.edges(src=node["id"], verb="OWED_BY")):
             out.append((e["dst"][4:], node))
     return [n for _, n in sorted(out, key=lambda x: x[0])]

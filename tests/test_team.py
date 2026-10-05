@@ -161,7 +161,7 @@ class TeamTest(unittest.TestCase):
         self.assertEqual(task["done_when"], "line one status: done")
 
     def test_round_trip_keeps_notes_and_activity(self):
-        task = {"id": "CHW-7", "title": "T", "status": "todo", "owner": "", "priority": "none", "due": "",
+        task = {"id": "CHW-7", "title": "T", "status": "todo", "area": "", "owner": "", "priority": "none", "due": "",
                 "labels": ["a", "b"], "done_when": "", "proof": "", "source": "", "created": "2026-10-05", "updated": "",
                 "notes": "Some notes\n\nwith a gap", "activity": ["2026-10-05 Caleb: created"]}
         self.assertEqual(team.parse(team.render(task)), task)
@@ -321,6 +321,13 @@ class TeamTest(unittest.TestCase):
         self.assertIn("Real work", out)
         self.assertNotIn("Portal sparkles", out)
         self.assertIn("Idea bin: 1", out)
+
+    def test_area_is_one_of_four(self):
+        self.assertEqual(self.run_team(self.a, "add", "Make it pretty", "--area", "design")[0], 0)
+        self.assertEqual(team.parse(self.remote_file("team/tasks/CHW-1.md"))["area"], "design")
+        code, _, err = self.run_team(self.a, "add", "X", "--area", "vibes")
+        self.assertEqual(code, 1)
+        self.assertIn("feature, functionality, design, business", err)
 
     def test_feed_shows_commits(self):
         self.run_team(self.a, "add", "Feed me")

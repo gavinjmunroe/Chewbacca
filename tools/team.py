@@ -47,8 +47,11 @@ STATUSES = ["inbox", "backlog", "todo", "in_progress", "in_review", "done", "ide
 LABELS = {"inbox": "Inbox", "backlog": "Backlog", "todo": "Todo", "in_progress": "In progress",
           "in_review": "In review", "done": "Done", "ideas": "Idea bin", "canceled": "Canceled"}
 PRIORITIES = ["urgent", "high", "medium", "low", "none"]
-FIELDS = ["id", "title", "status", "owner", "priority", "due", "labels",
+FIELDS = ["id", "title", "status", "area", "owner", "priority", "due", "labels",
           "done_when", "proof", "source", "created", "updated"]
+# One area per task, so the board splits cleanly four ways (Caleb, 2026-10-04:
+# "Separate features, functionality, design, business").
+AREAS = ["feature", "functionality", "design", "business"]
 ID_PREFIX = "CHW"
 # A push loses the race when the website or a teammate committed in between.
 # Three tries covers two writers landing in the same second; past that the
@@ -306,7 +309,10 @@ def add(repo, a):
         raise TeamError(f"status is one of {', '.join(STATUSES)}")
     if a.priority and a.priority not in PRIORITIES:
         raise TeamError(f"priority is one of {', '.join(PRIORITIES)}")
-    task = {"title": one_line(a.title), "status": status,
+    area = getattr(a, "area", None) or ""
+    if area and area not in AREAS:
+        raise TeamError(f"area is one of {', '.join(AREAS)}")
+    task = {"title": one_line(a.title), "status": status, "area": area,
             "owner": resolve_owner(repo, a.owner), "priority": a.priority or "none",
             "due": check_date(a.due or ""), "labels": [x.strip() for x in (a.labels or "").split(",") if x.strip()],
             "done_when": a.done_when or "", "proof": "", "source": one_line(getattr(a, "source", "") or ""),
@@ -573,7 +579,7 @@ def main(argv=None):
     b = sub.add_parser("board"); b.add_argument("--all", action="store_true"); b.add_argument("--json", action="store_true")
     m = sub.add_parser("mine"); m.add_argument("--json", action="store_true")
     x = sub.add_parser("add"); x.add_argument("title")
-    for flag in ("--owner", "--due", "--priority", "--done-when", "--labels", "--status", "--notes", "--source"):
+    for flag in ("--owner", "--due", "--priority", "--done-when", "--labels", "--status", "--notes", "--source", "--area"):
         x.add_argument(flag)
     s = sub.add_parser("show"); s.add_argument("id"); s.add_argument("--json", action="store_true")
     mv = sub.add_parser("move"); mv.add_argument("id"); mv.add_argument("status", choices=STATUSES)
@@ -581,7 +587,7 @@ def main(argv=None):
     d = sub.add_parser("done"); d.add_argument("id"); d.add_argument("--proof", default="")
     c = sub.add_parser("comment"); c.add_argument("id"); c.add_argument("text")
     e = sub.add_parser("edit"); e.add_argument("id")
-    for flag in ("--title", "--due", "--priority", "--done-when", "--labels", "--proof", "--notes"):
+    for flag in ("--title", "--due", "--priority", "--done-when", "--labels", "--proof", "--notes", "--area"):
         e.add_argument(flag)
     f = sub.add_parser("feed"); f.add_argument("-n", type=int, default=20); f.add_argument("--json", action="store_true")
     o = sub.add_parser("open"); o.add_argument("id", nargs="?")
@@ -655,16 +661,18 @@ def main(argv=None):
             print(f"comment added to {t['id']}")
         elif cmd == "edit":
             changes = {}
-            for k in ("title", "due", "priority", "done_when", "proof", "notes"):
+            for k in ("title", "due", "priority", "done_when", "proof", "notes", "area"):
                 v = getattr(a, k)
                 if v is not None:
                     changes[k] = check_date(v) if k == "due" else v
             if a.labels is not None:
                 changes["labels"] = [x.strip() for x in a.labels.split(",") if x.strip()]
+            if changes.get("area") and changes["area"] not in AREAS:
+                raise TeamError(f"area is one of {', '.join(AREAS)}")
             if "priority" in changes and changes["priority"] not in PRIORITIES:
                 raise TeamError(f"priority is one of {', '.join(PRIORITIES)}")
             if not changes:
-                raise TeamError("nothing to edit; pass --title, --due, --priority, --done-when, --labels, --proof or --notes")
+                raise TeamError("nothing to edit; pass --title, --due, --priority, --done-when, --labels, --proof, --notes or --area")
             t = update(repo, a.id, "edited " + ", ".join(k.replace("_", " ") for k in changes), **changes)
             print(f"{t['id']} updated")
         elif cmd == "feed":

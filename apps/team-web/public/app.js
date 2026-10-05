@@ -43,6 +43,13 @@ const INBOX_GROUPS = [
 // costs one GitHub listing call per open tab per poll: 360 an hour, well inside
 // the 5,000 an hour each signed-in token gets.
 const POLL_MS = 10000;
+const AREA_ICON = {
+  feature: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M8 2l1.7 3.6 3.9.5-2.9 2.7.8 3.9L8 10.8 4.5 12.7l.8-3.9L2.4 6.1l3.9-.5z"/></svg>',
+  functionality: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M10.5 2.5a3 3 0 0 0-3.9 3.9L2.5 10.5l3 3 4.1-4.1a3 3 0 0 0 3.9-3.9l-1.8 1.8-2-.5-.5-2z"/></svg>',
+  design: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="5.8"/><circle cx="5.8" cy="6.3" r=".9" fill="currentColor"/><circle cx="8.6" cy="5" r=".9" fill="currentColor"/><circle cx="10.7" cy="7.3" r=".9" fill="currentColor"/></svg>',
+  business: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><rect x="2" y="5" width="12" height="8.5" rx="1.5"/><path d="M5.5 5V3.5h5V5"/></svg>',
+};
+const AREA_LABEL = { feature: "Features", functionality: "Functionality", design: "Design", business: "Business" };
 
 const ICON = {
   plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3v10M3 8h10"/></svg>',
@@ -242,7 +249,8 @@ function inView(t, { ignoreLabel = false } = {}) {
   )
     return false;
   if (state.view === "person" && t.owner !== state.person) return false;
-  if (state.view !== "inbox" && t.status === "inbox" && state.view !== "all")
+  if (state.view === "area" && t.area !== state.area) return false;
+  if (state.view !== "inbox" && t.status === "inbox" && !["all", "area"].includes(state.view))
     return false;
   if (!ignoreLabel && state.label && !t.labels.includes(state.label)) return false;
   const q = state.query.trim().toLowerCase();
@@ -264,6 +272,7 @@ function viewTitle() {
     all: "All tasks",
     ideas: "Idea bin",
     person: state.person,
+    area: AREA_LABEL[state.area],
   }[state.view];
 }
 
@@ -383,7 +392,7 @@ function renderSignIn() {
 }
 
 function go(view, extra = {}) {
-  Object.assign(state, { view, person: null, label: null }, extra);
+  Object.assign(state, { view, person: null, area: null, label: null }, extra);
   render();
 }
 
@@ -395,10 +404,10 @@ function sidebar() {
     el(
       "button",
       {
-        class: `nav${state.view === key && (!extra || state.person === extra.person) ? " on" : ""}`,
+        class: `nav${state.view === key && (!extra || (extra.person ? state.person === extra.person : state.area === extra.area)) ? " on" : ""}`,
         onclick: () => go(key, extra),
       },
-      icon instanceof Node ? icon : el("span", { svg: ICON[icon] }),
+      icon instanceof Node ? icon : el("span", { svg: icon.startsWith("<svg") ? icon : ICON[icon] }),
       el("span", {}, label),
       n ? el("span", { class: "n" }, String(n)) : null,
     );
@@ -432,6 +441,10 @@ function sidebar() {
     ),
     nav("all", "list", "All tasks", count((t) => t.status !== "ideas")),
     nav("ideas", "bulb", "Idea bin", count((t) => t.status === "ideas")),
+    el("div", { class: "nav-label" }, "Areas"),
+    ...Object.entries(AREA_LABEL).map(([key, name]) =>
+      nav("area", AREA_ICON[key], name, count((t) => t.area === key && !["done", "canceled", "ideas"].includes(t.status)), { area: key }),
+    ),
     el("div", { class: "nav-label" }, "People"),
     ...state.board.members.map((m) =>
       nav(
@@ -619,25 +632,12 @@ function listView(tasks) {
   const groups =
     state.view === "inbox"
       ? [
-          ...INBOX_GROUPS.map(([key, name]) => [
+          ...Object.entries(AREA_LABEL).map(([key, name]) => [
             `inbox:${key}`,
             name,
-            tasks.filter(
-              (t) =>
-                t.labels.includes(key) &&
-                !INBOX_GROUPS.slice(
-                  0,
-                  INBOX_GROUPS.findIndex((g) => g[0] === key),
-                ).some(([k]) => t.labels.includes(k)),
-            ),
+            tasks.filter((t) => t.area === key),
           ]),
-          [
-            "inbox:other",
-            "Other",
-            tasks.filter(
-              (t) => !INBOX_GROUPS.some(([k]) => t.labels.includes(k)),
-            ),
-          ],
+          ["inbox:none", "No area", tasks.filter((t) => !AREA_LABEL[t.area])],
         ]
       : LIST_ORDER.map((s) => [
           s,
@@ -938,6 +938,7 @@ function renderDrawer() {
     task.priority || "none",
     PRIORITY_LABEL,
   );
+  const area = select("area", ["", ...Object.keys(AREA_LABEL)], task.area || "", { "": "No area", ...AREA_LABEL });
   const due = el("input", {
     class: "field",
     type: "date",
@@ -1027,6 +1028,7 @@ function renderDrawer() {
     );
   });
   owner.addEventListener("change", () => quick({ owner: owner.value }));
+  area.addEventListener("change", () => quick({ area: area.value }));
   priority.addEventListener("change", () =>
     quick({ priority: priority.value }),
   );
@@ -1133,6 +1135,7 @@ function renderDrawer() {
         { class: "props" },
         ...prop("Status", status),
         ...prop("Assignee", owner),
+        ...prop("Area", area),
         ...prop("Priority", priority),
         ...prop("Due", due),
         ...prop("Labels", labels),
@@ -1227,6 +1230,13 @@ function openCreate() {
     ),
   );
   priority.value = "none";
+  const areaPick = el(
+    "select",
+    { class: "field", "aria-label": "Area" },
+    el("option", { value: "" }, "No area"),
+    ...Object.entries(AREA_LABEL).map(([k, v]) => el("option", { value: k }, v)),
+  );
+  if (state.view === "area") areaPick.value = state.area;
   const doneWhen = el("textarea", {
     class: "field",
     placeholder: "Done when (optional)",
@@ -1259,6 +1269,7 @@ function openCreate() {
               owner: owner.value,
               due: due.value,
               priority: priority.value,
+              area: areaPick.value,
               done_when: doneWhen.value,
               status,
             }),
@@ -1279,6 +1290,7 @@ function openCreate() {
     el("div", { class: "crumb" }, `Chewbacca · New task in ${LABEL[status]}`),
     title,
     el("div", { class: "row3" }, owner, due, priority),
+    areaPick,
     doneWhen,
     el(
       "div",

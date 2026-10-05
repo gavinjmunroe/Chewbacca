@@ -6,6 +6,7 @@ export const FIELDS = [
   "id",
   "title",
   "status",
+  "area",
   "owner",
   "priority",
   "due",
@@ -26,6 +27,7 @@ export const STATUSES = [
   "ideas",
   "canceled",
 ];
+export const AREAS = ["feature", "functionality", "design", "business"];
 export const PRIORITIES = ["urgent", "high", "medium", "low", "none"];
 export const ID_PATTERN = /^CHW-(\d+)$/;
 

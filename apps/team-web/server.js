@@ -18,6 +18,7 @@ import {
   FIELDS,
   ID_PATTERN,
   PRIORITIES,
+  AREAS,
   STATUSES,
   clean,
   idNumber,
@@ -232,6 +233,10 @@ function cleanChanges(body, members) {
     if (!STATUSES.includes(body.status)) throw httpError(400, "unknown status");
     out.status = body.status;
   }
+  if (body.area !== undefined) {
+    if (body.area !== "" && !AREAS.includes(body.area)) throw httpError(400, "unknown area");
+    out.area = body.area;
+  }
   if (body.priority !== undefined) {
     if (!PRIORITIES.includes(body.priority))
       throw httpError(400, "unknown priority");
@@ -287,6 +292,7 @@ async function createTask(session, body, members) {
       id,
       title: changes.title,
       status: changes.status || "todo",
+      area: changes.area || "",
       owner: changes.owner || "",
       priority: changes.priority || "none",
       due: changes.due || "",
@@ -583,6 +589,7 @@ async function handle(req, res) {
       config,
       statuses: STATUSES,
       priorities: PRIORITIES,
+      areas: AREAS,
       today: today(),
     });
   }

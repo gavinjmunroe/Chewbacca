@@ -116,3 +116,9 @@ test("hostile commit text parses in linear time", () => {
   assert.ok(performance.now() - start < 500);
   assert.deepEqual([...parseCommitRefs("fixes   CHW-9", "").closing], ["CHW-9"]);
 });
+
+test("area must be one of the four", () => {
+  assert.equal(cleanChanges({ area: "business" }, MEMBERS).area, "business");
+  assert.equal(cleanChanges({ area: "" }, MEMBERS).area, "");
+  assert.throws(() => cleanChanges({ area: "vibes" }, MEMBERS), /area/);
+});

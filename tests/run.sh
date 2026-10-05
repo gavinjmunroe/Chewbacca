@@ -516,7 +516,7 @@ if group "tools"; then
   check  "claude-tab classifies run state and guards its own tab" python3 "$ROOT/tests/test_claude_tab.py"
   # The house style here is deliberately high-comment, so the one thing that
   # would make this tool useless is firing on its own codebase.
-  check  "code-slop is quiet on this codebase" bash -c "python3 '$ROOT/bin/code-slop' '$ROOT/bin/people' '$ROOT/bin/slop-check' '$ROOT/bin/code-slop' $ROOT/bin/lib/*.js --max 0"
+  check  "code-slop is quiet on this codebase" bash -c "python3 '$ROOT/bin/code-slop' '$ROOT/bin/people' '$ROOT/bin/slop-check' '$ROOT/bin/code-slop' $ROOT/bin/lib/*.js $ROOT/bin/lib/people/*.js --max 0"
 fi
 
 # ── installer ─────────────────────────────────────────────────────────────────

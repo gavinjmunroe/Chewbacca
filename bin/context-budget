@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""context-budget: where a session's opening context goes, and what is never used.
+
+    context-budget                     the newest main session: tokens by source
+    context-budget --session <id|path> one session
+    context-budget usage [-n 400]      per enabled plugin: skill and MCP calls in the
+                                       last n transcripts, so unused ones can go
+    --json                             machine-readable
+
+Claude Code writes every startup attachment into the transcript (instruction files,
+hook output, the skill list, deferred tool names, agent list, MCP instructions),
+so the split is read, not guessed. Only the system prompt and built-in tool schemas
+are not recorded; they show as the residual against the first turn's real usage.
+
+Characters become tokens at 2.8 per token: the same 34,646-character prompt was
+12,407 tokens on Sonnet 5 (docs/HYBRID-ROUTE.md). Haiku 4.5 runs about 3.9, so
+on Haiku every estimate here is high. The first-turn total is exact.
+"""
+import argparse
+import collections
+import json
+import os
+import sys
+from pathlib import Path
+
+CHARS_PER_TOKEN = 2.8
+PROJECTS = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude")) / "projects"
+SETTINGS = Path(os.environ.get("CLAUDE_CONFIG_DIR", Path.home() / ".claude")) / "settings.json"
+
+
+def tokens(chars: int) -> int:
+    return round(chars / CHARS_PER_TOKEN)
+
+
+def rows(path: Path) -> list:
+    out = []
+    with open(path, errors="ignore") as fh:
+        for line in fh:
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
+    return out
+
+
+def first_usage(rs: list) -> dict:
+    for r in rs:
+        m = r.get("message")
+        if r.get("type") == "assistant" and isinstance(m, dict) and m.get("usage"):
+            return m["usage"]
+    return {}
+
+
+def is_main_session(rs: list) -> bool:
+    return any((r.get("attachment") or {}).get("type") == "instructions" for r in rs[:80])
+
+
+def newest_main_session() -> Path:
+    files = sorted(PROJECTS.glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for f in files[:60]:
+        if is_main_session(rows(f)):
+            return f
+    sys.exit("context-budget: no main session transcript found under " + str(PROJECTS))
+
+
+def find_session(arg: str) -> Path:
+    p = Path(arg).expanduser()
+    if p.exists():
+        return p
+    hits = sorted(PROJECTS.glob(f"*/{arg}*.jsonl"))
+    if not hits:
+        sys.exit(f"context-budget: no transcript matches {arg}")
+    return hits[0]
+
+
+def skill_group(line: str) -> str:
+    name = line[2:].split(": ", 1)[0].strip()
+    return name.split(":", 1)[0] if ":" in name else "(unprefixed skills)"
+
+
+def tool_group(name: str) -> str:
+    if name.startswith("mcp__"):
+        return "mcp:" + name.split("__")[1]
+    return "(built-in deferred)"
+
+
+def label_text(text: str) -> str:
+    first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+    return first[:60]
+
+
+def budget(path: Path) -> dict:
+    rs = rows(path)
+    sources = collections.Counter()
+    for r in rs:
+        if r.get("type") == "assistant":
+            break
+        a = r.get("attachment")
+        if not isinstance(a, dict):
+            continue
+        kind = a.get("type")
+        if kind == "instructions":
+            for f in a.get("files") or []:
+                sources["file " + f["path"].replace(str(Path.home()), "~")] += len(f.get("content") or "")
+        elif kind == "skill_listing":
+            for line in (a.get("content") or "").splitlines():
+                if line.startswith("- "):
+                    sources["skills " + skill_group(line)] += len(line) + 1
+        elif kind == "deferred_tools_delta":
+            for name in a.get("addedLines") or a.get("addedNames") or []:
+                sources["tools " + tool_group(name)] += len(name) + 1
+        elif kind == "agent_listing_delta":
+            sources["agent list"] += sum(len(x) for x in a.get("addedLines") or [])
+        elif kind == "mcp_instructions_delta":
+            for name, block in zip(a.get("addedNames") or [], a.get("addedBlocks") or []):
+                sources["mcp instructions " + name] += len(block)
+        elif kind == "hook_additional_context":
+            for item in a.get("content") or []:
+                if isinstance(item, str):
+                    sources["hook context: " + label_text(item)] += len(item)
+        elif kind == "hook_success" and a.get("content"):
+            sources["hook " + (a.get("command") or "")[:50]] += len(a["content"])
+        elif kind == "hook_system_message":
+            sources["hook message"] += len(json.dumps(a.get("content") or ""))
+        elif kind in ("plan_mode", "environment", "session_context", "prompt_snapshot"):
+            sources[kind] += len(json.dumps(a))
+    u = first_usage(rs)
+    first = sum(u.get(k, 0) for k in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+    est = {k: tokens(v) for k, v in sources.items()}
+    return {
+        "session": path.stem,
+        "first_turn_tokens": first,
+        "attributed_tokens_est": sum(est.values()),
+        "residual_tokens_est": first - sum(est.values()) if first else None,
+        "sources": dict(sorted(est.items(), key=lambda kv: -kv[1])),
+    }
+
+
+def plugin_of_skill(skill: str) -> str:
+    return skill.split(":", 1)[0] if ":" in skill else ""
+
+
+def plugin_of_server(server: str) -> str:
+    # plugin MCP servers are named plugin_<plugin>_<server>
+    if server.startswith("plugin_"):
+        return server[len("plugin_"):].split("_", 1)[0]
+    return ""
+
+
+def usage(n: int) -> dict:
+    enabled = {}
+    try:
+        enabled = json.loads(SETTINGS.read_text()).get("enabledPlugins", {})
+    except (OSError, ValueError):
+        pass
+    plugins = {k.split("@", 1)[0]: v for k, v in enabled.items()}
+    skill_calls = collections.Counter()
+    mcp_calls = collections.Counter()
+    files = sorted(PROJECTS.glob("*/*.jsonl"), key=lambda p: p.stat().st_mtime)[-n:]
+    for f in files:
+        with open(f, errors="ignore") as fh:
+            for line in fh:
+                if '"tool_use"' not in line:
+                    continue
+                try:
+                    m = json.loads(line).get("message")
+                except ValueError:
+                    continue
+                if not isinstance(m, dict):
+                    continue
+                for c in m.get("content") or []:
+                    if not isinstance(c, dict) or c.get("type") != "tool_use":
+                        continue
+                    name = c.get("name", "")
+                    if name == "Skill":
+                        p = plugin_of_skill((c.get("input") or {}).get("skill", ""))
+                        if p:
+                            skill_calls[p] += 1
+                    elif name.startswith("mcp__"):
+                        p = plugin_of_server(name.split("__")[1])
+                        if p:
+                            mcp_calls[p] += 1
+    report = []
+    for p, on in sorted(plugins.items()):
+        report.append({"plugin": p, "enabled": bool(on), "skill_calls": skill_calls[p], "mcp_calls": mcp_calls[p]})
+    report.sort(key=lambda r: (r["skill_calls"] + r["mcp_calls"], r["plugin"]))
+    return {"transcripts": len(files), "plugins": report}
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("command", nargs="?", default="budget", choices=["budget", "usage"])
+    ap.add_argument("--session")
+    ap.add_argument("-n", type=int, default=400)
+    ap.add_argument("--top", type=int, default=30)
+    ap.add_argument("--json", action="store_true")
+    args = ap.parse_args()
+
+    if args.command == "usage":
+        out = usage(args.n)
+        if args.json:
+            print(json.dumps(out, indent=2))
+            return
+        print(f"{out['transcripts']} transcripts")
+        for r in out["plugins"]:
+            flag = "on " if r["enabled"] else "off"
+            print(f"  {flag} {r['plugin']:32} skills {r['skill_calls']:4}  mcp {r['mcp_calls']:4}")
+        return
+
+    path = find_session(args.session) if args.session else newest_main_session()
+    out = budget(path)
+    if args.json:
+        print(json.dumps(out, indent=2))
+        return
+    print(f"session {out['session']}")
+    print(f"first turn      {out['first_turn_tokens']:>8,} tokens (exact)")
+    print(f"attributed      {out['attributed_tokens_est']:>8,} (estimate)")
+    if out["residual_tokens_est"] is not None:
+        print(f"system + tools  {out['residual_tokens_est']:>8,} (residual)")
+    print()
+    for k, v in list(out["sources"].items())[: args.top]:
+        print(f"  {v:>7,}  {k}")
+
+
+if __name__ == "__main__":
+    main()

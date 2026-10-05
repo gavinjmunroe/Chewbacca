@@ -48,17 +48,8 @@ trusting arm C.
 Claude arm. This checks that the pipeline works. It is not the kill test,
 because the messages were written to match the predicates.
 
-| Arm | Recall | Precision | To review | Claude $                  | Jev tokens | Seconds |
-| --- | ------ | --------- | --------- | ------------------------- | ---------- | ------- |
-| A   | 0.900  | 0.735     | 49        | 0.0074 (0.0525 first run) | 0          | 2.7     |
-| B   | 0.775  | 0.969     | 32        | 0.0085                    | 0          | 6.7     |
-| C   | 0.950  | 0.655     | 58        | 0.0229                    | 46,416     | 35.0    |
-
-C found the most, and also surfaced the most noise, so the kill rule fired. Two
-things in that table are artifacts:
-
-- Claude's prices after the first run are prompt-cache reads, because the same
-  prompts ran several times. On the real sample, run each arm once.
-- C's precision is set by the guessed thresholds, and C was the slowest arm.
+The kill rule fired on the fixture. The per-arm figures are kept privately,
+because arm C's are Jev performance results, which TypeSafe's terms do not
+allow publishing. Re-measure with `fanout score` on your own labels.
 
 Built with Chewbacca

@@ -4,8 +4,8 @@
   "about": "Each Mac app -> what on the HUD replaces it. Status is what works today on this Mac, not the plan. `oss` links ids in data/oss-apps/apps.json.",
   "counts": {
    "replaced": 5,
-   "partial": 15,
-   "not yet": 20
+   "partial": 16,
+   "not yet": 19
   },
   "total": 40,
   "with_oss": 20
@@ -377,10 +377,12 @@
   },
   {
    "app": "Granola",
-   "status": "not yet",
-   "surfaces": [],
-   "works": "",
-   "missing": "its cache is encrypted to Granola-signed code; room-listen has no speakers or dates",
+   "status": "partial",
+   "surfaces": [
+    "meetings"
+   ],
+   "works": "newest calls from Anarlog's CLI (read only, --source local): who was there, summary, Decisions lines, open action items, transcript a page at a time; an action item becomes a task only when Add to tasks is pressed",
+   "missing": "recording is started in Anarlog, not from the glass; Granola's own history stays in Granola (its cache is encrypted to Granola-signed code); tested on fixtures only, no real call recorded on this Mac yet",
    "oss": [
     {
      "id": "amicalhq/amical",

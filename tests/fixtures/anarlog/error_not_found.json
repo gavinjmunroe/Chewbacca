@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "not_found",
+    "exit_code": 2,
+    "message": "meeting 'nope' not found"
+  },
+  "schema_version": "1"
+}

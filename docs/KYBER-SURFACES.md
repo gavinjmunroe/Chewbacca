@@ -241,6 +241,42 @@ Only his 100 most recently updated open PRs are checked for failing CI, and
 any beyond that are counted as unchecked. Merging, approving, commenting,
 notifications, Discussions, Actions logs and re-running checks are not built.
 
+## Meetings
+
+`meetings` (`bin/lib/surfaces/meetings.py`, `surfaces.meetings.Meetings`,
+region right) replaces opening Granola to see what a call said. The engine is
+Anarlog (MIT, github.com/fastrepl/anarlog), which records the mic and the
+system audio, transcribes on this Mac and keeps meetings in its own SQLite.
+Nothing here opens that SQLite: every read is `anarlog --json` with `--source
+local` and `ANARLOG_ANALYTICS=0`, and only `doctor`, `meetings list`, `meetings
+get` and `meetings transcript` are ever run (`bin/lib/ingest_meetings.py`).
+Aliases: `granola`, `anarlog`, `meeting`, `calls`, `notes-from-meetings`.
+Spoken: "show my meetings", "what did we decide", "what came out of my call".
+
+The list is the 6 newest meetings with who was there; Open shows the summary,
+the lines under its Decisions heading, the open action items and one 200-word
+transcript page with Next. Its actions are `ks-open`, `ks-next` and `ks-add`.
+`ks-add` is the one press that writes: it makes one promoted Task in the OS
+graph (source `meetings-promoted`, kind `promise`), which the tasks lanes
+read and the Docket's queue (docs/AFTER-PANES.md, not built yet) can take
+from `_attention()`, and touches nothing else.
+
+In the graph each meeting in the 7-day window is an Event, attendees with an
+email are Persons fused only through the people store's identities (never by
+first name), and each open action item is a Task EXTRACTED_FROM its meeting,
+kind `meeting-action`, marked as a guess with confidence 0.5, because
+Anarlog's model wrote it. `KYBER_MEETINGS_ME` (comma separated addresses)
+names his own emails, so an item assigned to him gets OWED_BY me. The
+`meetings` ingester runs with the daemon's others and keeps the message
+retention window; the transcript is never stored.
+
+A Mac where Anarlog was never opened, or not installed, is a first-run state
+with the steps in order and Anarlog's own `doctor` line, never an error.
+`bin/room-listen` still records the mic to `~/.chewbacca/room/live.txt`;
+meetings supersede it for calls and do not replace it.
+`tests/test_surface_meetings.py` runs against fixtures shaped exactly like the
+CLI's JSON (`tests/fixtures/anarlog`).
+
 ## Sending into a session
 
 A session card has a Message field (`c msg Field ... value=@/<card>/draft`)

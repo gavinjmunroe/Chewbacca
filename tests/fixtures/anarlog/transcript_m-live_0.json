@@ -1,0 +1,35 @@
+{
+  "schema_version": "1",
+  "command": "meetings.transcript",
+  "data": {
+    "meeting_id": "m-live",
+    "text": "Jonah: can you hear me \u202eokay",
+    "words": [
+      {
+        "text": "Jonah:"
+      },
+      {
+        "text": "can"
+      },
+      {
+        "text": "you"
+      },
+      {
+        "text": "hear"
+      },
+      {
+        "text": "me"
+      },
+      {
+        "text": "\u202eokay"
+      }
+    ]
+  },
+  "pagination": {
+    "offset": 0,
+    "limit": 200,
+    "returned": 6,
+    "total": null,
+    "next_offset": null
+  }
+}

@@ -100,6 +100,9 @@ def main() -> int:
           all(rule.count(" ") >= 1 and not rule.startswith("Bash(date") for rule in tc.ALLOW), tc.ALLOW)
     check("the trigger is a whole word", tc.command_in("Kyberish thing", "kyber") is None)
     check("the trigger takes punctuation after it", tc.command_in("Kyber: hi", "kyber") == "hi")
+    check("the brain's own briefs are never commands, with or without a trigger",
+          tc.command_in("Chewbacca: Morning. Kyber what do I have today", "kyber") is None
+          and tc.command_in("Chewbacca: digest done", "") is None)
 
     # With no trigger word: every plain text is a command, links and the
     # script's own replies are not.

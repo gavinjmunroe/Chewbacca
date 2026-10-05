@@ -1060,9 +1060,11 @@ unset _tool
 # turns what is said to it into an answer, hud-context reports what is in front
 # of the person, hud-speak reads the answer aloud. They go in together because
 # hud calls the others by path, so installing one alone gives a command that
-# fails halfway.
+# fails halfway. Kyber.app itself runs hud-listen, kyber-sessions and
+# text-command from ~/.local/bin; text-command was missing from this list until
+# 2026-10-05, so a text to yourself woke Kyber and ran a path that did not exist.
 _installed_hud=""
-for _tool in hud hud-listen hud-runtime hud-codex hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions superassistant chewbacca-mcp portal; do
+for _tool in hud hud-listen hud-runtime hud-codex hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_hud="$_installed_hud $_tool"

@@ -88,8 +88,12 @@ in CI is 60 rather than 0.
 
 ## Adding a skill
 
+Write `skills/<name>/SKILL.md` and `skills/<name>/evals/evals.json` yourself;
+the `skill-forge` skill walks through the order that matters. `add-skill.sh`
+does not scaffold anything. It installs someone else's skill from a repo:
+
 ```bash
-./add-skill.sh <name>          # scaffolds SKILL.md and evals/
+./add-skill.sh <git-url> [--path skills/<name>] [--project]
 ```
 
 A skill is accepted when all of this is true:

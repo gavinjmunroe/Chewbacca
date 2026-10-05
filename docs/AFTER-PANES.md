@@ -42,7 +42,7 @@ Three judges scored each direction from 1 to 10 on four things: a stranger's fir
 
 The third judge picked Summoned Answer, and that judge's objection is the strongest one against the Docket. A card permanently in the center is wrong for an overlay that sits over VS Code all day. That judge also counted about six bare surfaces in the Docket's rim, strip, trail and card. The recommendation below takes the Docket's core and adopts that objection.
 
-All three judges agreed on four facts. Grow-in-place from a corner slot to the center is a transform across two surfaces, and the renderer can't do it yet: `matchedGeometryEffect` exists only in `hud/Sources/KyberKit/Launcher.swift`. The overlay never takes key, so every typed reply goes through the hyper bar's `to` chip ([hud/CLAUDE.md](../hud/CLAUDE.md), line 147). The permission job saves no presses in any direction. The Zeutara job doesn't work in any direction until something writes MailItem nodes from `replies.py` (in the private `work/zeutara-gtme` checkout).
+All three judges agreed on four facts. Grow-in-place from a corner slot to the center is a transform across two surfaces, and the renderer can't do it yet: `matchedGeometryEffect` exists only in `hud/Sources/KyberKit/Launcher.swift`. The overlay never takes key, so every typed reply goes through the hyper bar's `to` chip ([hud/CLAUDE.md](../hud/CLAUDE.md), line 147). The permission job saves no presses in any direction. The Zeutara job doesn't work in any direction until something writes MailItem nodes from `replies.py` in the zeutara-gtme repo (`scripts/replies.py`), which lives outside this one.
 
 ## The recommended design
 

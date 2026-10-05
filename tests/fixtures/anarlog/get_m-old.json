@@ -1,0 +1,42 @@
+{
+  "schema_version": "1",
+  "command": "meetings.get",
+  "data": {
+    "id": "m-old",
+    "title": "Old planning",
+    "kind": "meeting",
+    "status": "active",
+    "created_at": "2026-09-20T16:00:00Z",
+    "updated_at": "2026-09-20T16:30:00Z",
+    "started_at": "2026-09-20T16:00:00Z",
+    "ended_at": "2026-09-20T16:30:00Z",
+    "timezone": "America/Los_Angeles",
+    "language": "en",
+    "series_id": "",
+    "folder_path": null,
+    "note": null,
+    "summaries": [
+      {
+        "id": "s-old",
+        "kind": "summary",
+        "template_id": "",
+        "title": "Summary",
+        "markdown": "- An old plan",
+        "sort_order": 0,
+        "created_at": "2026-10-04T15:46:00Z",
+        "updated_at": "2026-10-04T15:46:00Z"
+      }
+    ],
+    "participants": [],
+    "action_items": [
+      {
+        "id": "o1",
+        "assignee_human_id": "",
+        "status": "open",
+        "text": "Something from three weeks ago",
+        "due_at": "",
+        "completed_at": null
+      }
+    ]
+  }
+}

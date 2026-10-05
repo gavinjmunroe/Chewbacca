@@ -1,0 +1,32 @@
+{
+  "schema_version": "1",
+  "command": "meetings.get",
+  "data": {
+    "id": "m-live",
+    "title": "Zeutara wave 2 check-in",
+    "kind": "meeting",
+    "status": "active",
+    "created_at": "2026-10-04T17:40:00Z",
+    "updated_at": "2026-10-04T17:40:00Z",
+    "started_at": "2026-10-04T17:40:00Z",
+    "ended_at": "",
+    "timezone": "America/Los_Angeles",
+    "language": "en",
+    "series_id": "",
+    "folder_path": null,
+    "note": null,
+    "summaries": [],
+    "participants": [
+      {
+        "human_id": "h-jonah",
+        "display_name": "Karthik Devarakonda",
+        "email": "jonah@zeutara.example",
+        "role": "attendee",
+        "job_title": "",
+        "organization_id": "",
+        "organization_name": ""
+      }
+    ],
+    "action_items": []
+  }
+}

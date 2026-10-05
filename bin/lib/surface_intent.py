@@ -73,6 +73,7 @@ NOUNS = {
     "notes": r"(?:notes|apple notes|latest notes|recent notes)",
     "github": r"(?:github|prs|pull requests|reviews|review requests|ci)",
     "code": r"(?:code changes|changes|diffs?|what changed|repos)",
+    "meetings": r"(?:meetings|calls|meeting notes|call notes|granola|anarlog|(?:latest|recent|last) (?:meetings?|calls?))",
     # "Show me the built in hud apps" went to genui on 2026-10-05, and the
     # model drew six boxes that named two surfaces that do not exist.
     "apps": r"(?:(?:built ?in |kyber |hud )*(?:hud )?apps|(?:all )?(?:the )?surfaces|launcher|launchpad|everything (?:kyber|the hud) (?:has|can do))",
@@ -86,6 +87,12 @@ EXTRA = [
         r"^(?:what(?:'s|s| is) up|what do i (?:need|have) to do|what needs (?:me|my attention|doing)"
         r"|what should i (?:look at|do next|work on)|what(?:'s|s| is) waiting on me|anything (?:need|needs) me)"
         r"(?: today| right now| now)?$")),
+    # "What did we decide", "what came out of my call": the meetings panel,
+    # whose detail carries the Decisions lines and the action items.
+    ("meetings", re.compile(
+        r"^(?:what did (?:we|they|i) (?:decide|agree(?: on)?)(?: (?:on|in) (?:the|my|that) (?:call|meeting))?"
+        r"|what came out of (?:my|the|that) (?:last )?(?:call|meeting)"
+        r"|what (?:was|got) decided(?: (?:on|in) (?:the|my|that) (?:call|meeting))?)(?: today)?$")),
     ("apps", re.compile(r"^(?:what (?:apps|surfaces) (?:are there|do (?:i|you) have)|what can (?:kyber|the hud) do)(?: now)?$")),
 ]
 SPACE = re.compile(
@@ -96,12 +103,13 @@ SPACE_MODE = re.compile(r"^(?P<space>school|amber|zeutara|chewbacca|personal) (?
 CLOSE = re.compile(
     r"^(?:close|hide|take down|dismiss|get rid of) (?:my |the )?"
     r"(?P<what>day|today|calendar|messages|texts|mail|email|inbox|conversations|tasks|to ?dos?|people|"
-    r"music|player|downloads|files|needs you|notes|github|prs|code|changes|"
+    r"music|player|downloads|files|needs you|notes|github|prs|code|changes|meetings|calls|granola|"
     r"all(?: the)? surfaces|surfaces|everything)(?: surface| panel)?$")
 CLOSE_NAMES = {"day": "today", "calendar": "today", "texts": "conversations", "messages": "conversations",
                "mail": "conversations", "email": "conversations", "inbox": "conversations",
                "player": "music", "downloads": "files", "needs you": "needs-you", "todo": "tasks",
-               "todos": "tasks", "to do": "tasks", "to dos": "tasks", "prs": "github", "changes": "code"}
+               "todos": "tasks", "to do": "tasks", "to dos": "tasks", "prs": "github", "changes": "code",
+               "calls": "meetings", "granola": "meetings"}
 # "Show me Karthik", "pull up Sagar Tiwari": a name, cased as a name, after a
 # show verb. Lowercase words never count, so "show me the weather" is not a
 # person before the graph is even asked.
@@ -115,7 +123,7 @@ OSS_QUERY = re.compile(r"^what (?:replaces|can replace|is an open source alterna
 ENGINE = re.compile(r"^(?:(?:ok|okay|hey|kyber),? )?show (?:me )?(?:the )?engine (?P<id>[a-z0-9-]+)[.!?]?$")
 NOT_PEOPLE = {"google", "chrome", "terminal", "safari", "sheets", "finder", "spotify", "notion", "slack",
               "messages", "mail", "calendar", "kyber", "chewbacca", "amber", "youtube", "claude", "gmail",
-              "github", "notes"}
+              "github", "notes", "granola", "anarlog"}
 
 
 def find_person(name: str):
@@ -229,5 +237,6 @@ def perform(command: Command, run=subprocess.run, ask=None) -> Outcome:
               "tasks": "Your tasks are up.", "people": "Your people are up.", "music": "The player's up.",
               "files": "Downloads are up.", "needs-you": "Here's what needs you.", "person": "They're up.",
               "oss": "The alternatives are up.", "engine": "The engine's up.",
-              "code": "What changed is up.", "notes": "Your notes are up.", "github": "GitHub's up."}
+              "code": "What changed is up.", "notes": "Your notes are up.", "github": "GitHub's up.",
+              "meetings": "Your meetings are up."}
     return Outcome(True, spoken.get(command.name, "It's up."))

@@ -1,7 +1,7 @@
 # Docs
 
-Nineteen files with no index, so everyone started at the longest one. Find what
-you actually want here.
+Without an index, everyone started at the longest file. Find what you actually
+want here.
 
 ## Start here
 

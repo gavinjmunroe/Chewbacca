@@ -137,6 +137,29 @@ A reply typed on a person's panel goes to that person's thread only if, at the
 press, chat.db still has the thread as one-to-one with that one handle and the
 people store still says the handle is theirs.
 
+## Generated panels
+
+A request no fixed surface takes, shaped like a panel ("compare my three
+classes' grades", "who have I not texted back"), goes from `hud-listen` to
+`kyber-genui "<request>" --json` in a thread: exit 0 leaves the panel and the
+voice says one line; anything else hands the request to the model in words. A
+second half that acts ("and email Swain") keeps it with the model. A
+`genui-refresh` or `genui-close` press runs `kyber-genui event` with the
+pressed surface and never reaches the model. `surfaces/genui-queries.json`
+registers four walks kyber-genui may bind (`unreplied`, `needs`,
+`person:<name>`, `conversations`), each `kyber-surfaces walk <kind> --json`
+rows of label, network, age, reason and node id, and one row action,
+`ks-pivot`, which opens the row's own panel.
+
+Auto-memory: hud-listen's summary and classifier calls now run with
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1` (88,431 prompt tokens on, 78,858 to 79,353
+off, `claude -p --model haiku`, 2026-10-04). The answering agent keeps it: its
+spoken answers use the brain on purpose. Measured the same day with its lean
+flags, one turn, it costs about 7,700 tokens a cold turn (20,232 on, 12,537
+off in the one off-run that read no stray cache; two other off-runs reported
+111k and 206k cache reads with the same 810 to 3,252 new tokens, which is
+cache accounting, not prompt size).
+
 ## Networks
 
 `person <name>` is one timeline across every network a message node came over,

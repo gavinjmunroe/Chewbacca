@@ -87,12 +87,20 @@ TABLE = [
     ("close my texts", "surface"),
     ("What do I have today", "agenda"),
     ("show my texts from Sam and reply that I'm late", None),
+    # Generated panels (docs/GENUI.md), 2026-10-04: a shape no fixed surface takes.
+    ("compare my three classes' grades", "genui"),
+    ("who have I not texted back this week", "genui"),
+    ("plan my Tuesday", "genui"),
+    ("show my grades and email Professor Swain", None),
+    ("tell me about the Civil War", None),
 ]
 
 
 def ask_paths(source: str) -> list[str]:
     """The no-model checks at the top of `ask`, in order, read off the source."""
+    # `ask` ends where it hands the request to the model, `to_assistant`.
     body = source.split("    def ask(", 1)[1].split("        req = Request(", 1)[0]
+    body = body.split("self.to_assistant(said", 1)[0]
     return re.findall(r"self\.(\w+)\(said", body)
 
 

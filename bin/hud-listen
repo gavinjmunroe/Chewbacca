@@ -64,6 +64,30 @@ OPEN = os.environ.get("HUD_OPEN", "on") != "off"
 # and the surfaces daemon is not started with the listener.
 SURFACES = os.environ.get("HUD_SURFACES", "on") != "off"
 KYBER_SURFACES = Path(__file__).resolve().parent / "kyber-surfaces"
+# HUD_GENUI=off: a request shaped like a panel ("compare my three classes'
+# grades") goes to the model in words instead of to kyber-genui (docs/GENUI.md).
+GENUI = os.environ.get("HUD_GENUI", "on") != "off"
+KYBER_GENUI = Path(__file__).resolve().parent / "kyber-genui"
+# kyber-genui paints its skeleton in under a millisecond and finished in 3.2
+# to 16.9 s on its 20-request bench (2026-10-04, one outlier at 99 s). Past
+# this the request goes to the model in words instead.
+GENUI_TIMEOUT_S = 30.0
+# Requests that want a panel: the sentence opens with a verb that asks to see
+# something laid out. Whole-request only, so "show my texts from Sam and reply
+# that I'm late" (a second half that acts) still goes to the model.
+GENUI_SHAPE = re.compile(
+    r"^(?:(?:ok|okay|so|hey|kyber|please|can you|could you)[ ,]+)*"
+    r"(?:show(?: me)?|compare|chart|graph|plot|visuali[sz]e|lay out|map out|break down|"
+    r"plan(?: out)?|list|pull up|put up|draw|who have i not|who haven'?t i|how many|what(?:'s| is) due)\b",
+    re.I)
+GENUI_ACTS = re.compile(
+    r"\b(?:reply|respond|text (?:him|her|them|back)|send|tell|email|book|schedule|move|cancel|delete|pay|"
+    r"buy|post|remind|call)\b", re.I)
+
+
+def wants_genui(said: str) -> bool:
+    words = " ".join((said or "").split())
+    return bool(GENUI_SHAPE.match(words)) and not GENUI_ACTS.search(words)
 
 # HUD_ROUTE=off: every sentence goes to the assistant and nothing is written
 # to ~/.bob/memory, which is how the fake-display test runs without a
@@ -1241,6 +1265,7 @@ FAST_PATHS = {
     "music_request": "music",
     "open_request": "open",
     "agenda_request": "agenda",
+    "genui_request": "genui",
     "handle_agents_word": "agents",
 }
 # These need a pending draft, a waiting agent or a live terminal to decide, and
@@ -1301,6 +1326,8 @@ def fast_path(said: str) -> str | None:
             pass
     if ROUTE and route.agent_status_word(said):
         return "agents"
+    if GENUI and wants_genui(said):
+        return "genui"
     return None
 
 
@@ -1769,6 +1796,17 @@ class Listener:
                 threading.Thread(
                     target=lambda: self.terminal("focus", voice_memory.project().get("tty")), daemon=True,
                 ).start()
+            elif action.startswith("genui-"):
+                # A Refresh or Close on a generated panel: kyber-genui redraws
+                # or closes the surface that was pressed, with no model turn.
+                # `component` is "<id> surface=<name> ...".
+                name = next((w.split("=", 1)[1].strip('"') for w in component.split()[1:]
+                             if w.startswith("surface=")), None)
+                argv = [str(KYBER_GENUI), "event", action, component.split()[0] if component else ""]
+                if name:
+                    argv += ["--surface", name]
+                threading.Thread(target=lambda: subprocess.run(argv, capture_output=True, timeout=60),
+                                 daemon=True).start()
             elif action.startswith("ks-") or (action == "action" and component.startswith("ks-")):
                 # A surface's own control (bin/kyber-surfaces owns every
                 # `ks-` action and acts on it). Asked here as well, a press of
@@ -2338,6 +2376,15 @@ class Listener:
             return
         if not typed and not relayed and dest is None and self.handle_agents_word(said):
             return
+        # A request shaped like a panel that no fixed surface took: draw one
+        # with kyber-genui, and only if that falls back does it reach the model.
+        if GENUI and not relayed and not pointing and dest is None and self.genui_request(said, typed):
+            return
+        self.to_assistant(said, typed=typed, relayed=relayed, dest=dest, tty=tty, agent=agent)
+
+    def to_assistant(self, said: str, typed: bool = False, relayed: bool = False, dest: str | None = None,
+                     tty: str = "", agent: str = "") -> None:
+        """Hand a request to the answering model: now, queued, or as an interruption."""
         req = Request(
             said=said, spoken_at=time.monotonic(), pointed=self.pointing(),
             marks=self.pointed_marks(), typed=typed, relayed=relayed, dest=dest, tty=tty, agent=agent,
@@ -2556,6 +2603,39 @@ class Listener:
             subprocess.run([str(KYBER_SURFACES), "start"], capture_output=True, text=True, timeout=15)
         except (OSError, subprocess.TimeoutExpired) as err:
             self.log("surfaces daemon did not start:", err)
+
+    def genui_request(self, said: str, typed: bool) -> bool:
+        """Draw a generated panel for a request shaped like one (docs/GENUI.md,
+        step 1). Exit 0 means a valid panel is on the glass and the voice says
+        one line; anything else means it fell back, and the request goes to the
+        model in words, as if this had not been tried."""
+        if self.in_flight() or not wants_genui(said):
+            return False
+
+        def work() -> None:
+            started = time.monotonic()
+            try:
+                done = subprocess.run([str(KYBER_GENUI), said, "--json"], capture_output=True, text=True,
+                                      timeout=GENUI_TIMEOUT_S)
+                code = done.returncode
+            except (OSError, subprocess.TimeoutExpired) as err:
+                self.log("genui failed:", err)
+                code = -1
+            self.log(f"genui: exit {code} in {(time.monotonic() - started) * 1000:.0f}ms")
+            if code != 0:
+                self.to_assistant(said, typed=typed)
+                return
+            answer = "It's on the glass."
+            req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+            self.remember(req, answer, True, "done")
+            self.send("s " + json.dumps(answer))
+            self.send("w " + json.dumps(answer) + " done=true")
+            if not typed:
+                self.speak(answer)
+            self.settle_unless_running("done", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
 
     def surface_request(self, said: str, typed: bool) -> bool:
         """"Show my day", "what do I need to do", "show me Karthik": open or

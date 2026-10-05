@@ -534,6 +534,82 @@ def one_person_every_network(tmp: Path) -> None:
           json.loads(d.open[k].sent[f"/{k}/networks"]) == ["iMessage"], d.open[k].sent.get(f"/{k}/networks"))
 
 
+def genui_wiring(tmp: Path) -> None:
+    """docs/GENUI.md steps 1, 3 and 4, against fixture data and stubs."""
+    from unittest.mock import Mock, patch
+    g, ctx, run, _ = fx.world(tmp)
+    rows = ks.walk_data("unreplied", "", ctx)["rows"]
+    glass = [ks.glass_row(r, fx.NOW) for r in rows]
+    check("unreplied lists every thread and mail waiting on a reply",
+          {r["id"] for r in rows} >= {"thread:imessage:+16305550101", "thread:imessage:+16265550104"}, [r["id"] for r in rows])
+    check("a walk row for genui has only label, network, age, why, tier, people and id",
+          all(set(r) == {"id", "label", "app", "why", "waiting", "tier", "people"} for r in glass), glass[:1])
+    asks = [ks.glass_row(r, fx.NOW) for r in ks.walk_data("tasks", "", ctx)["rows"] if r["app"] == "Ask"]
+    check("an ask read out of a text is named by who asked, never by its words",
+          asks and not any("terms by Monday" in r["label"] for r in asks)
+          and any(r["label"].startswith("from Sagar Tiwari's text") for r in asks), [r["label"] for r in asks])
+    manifest = json.loads((fx.ROOT / "surfaces" / "genui-queries.json").read_text())
+    check("the manifest's walks are ones kyber-surfaces has",
+          all(q["argv"][:3] in (["kyber-surfaces", "walk", "unreplied"], ["kyber-surfaces", "walk", "needs-you"],
+                                ["kyber-surfaces", "walk", "person"], ["kyber-surfaces", "walk", "conversations"])
+              for q in manifest["queries"]))
+    check("the one row action it allows is the pivot the daemon handles", list(manifest["row_actions"]) == ["ks-pivot"])
+
+    d, hud = make_daemon(ctx, tmp)
+    d.handle_line(f"e action ks-pivot row=person:{fx.SAGAR} surface=genui")
+    check("a row press on a generated panel opens that person's walk",
+          surfaces.make("person", f"person:{fx.SAGAR}").name in d.open, list(d.open))
+
+    os.environ.setdefault("BOB_DIR", tempfile.mkdtemp())
+    os.environ.setdefault("SUPERASSISTANT_DIR", tempfile.mkdtemp())
+    m = sys.modules.get("hud_listen_for_surfaces")
+    if m is None:
+        loader = SourceFileLoader("hud_listen_for_surfaces", str(fx.ROOT / "bin" / "hud-listen"))
+        m = module_from_spec(spec_from_loader("hud_listen_for_surfaces", loader))
+        sys.modules["hud_listen_for_surfaces"] = m
+        loader.exec_module(m)
+    listener = m.Listener.__new__(m.Listener)
+    for name in ("log", "ask", "remember", "send", "speak", "settle_unless_running", "to_assistant"):
+        setattr(listener, name, Mock())
+    listener.in_flight = Mock(return_value=False)
+    ran = []
+
+    class Done:
+        def __init__(self, code):
+            self.returncode = code
+
+    def fake_run(argv, **kw):
+        ran.append(argv)
+        return Done(0)
+
+    with patch.object(m.subprocess, "run", fake_run), patch.object(m.threading, "Thread") as thread:
+        thread.side_effect = lambda target, daemon=True, args=(): type("T", (), {"start": lambda self: target()})()
+        listener.handle("e genui-refresh s surface=genui-2")
+        check("a genui press runs kyber-genui event for that surface, not the model",
+              ran and ran[-1][1:] == ["event", "genui-refresh", "s", "--surface", "genui-2"] and not listener.ask.called,
+              ran)
+        check("a request shaped like a panel is taken", listener.genui_request("compare my three classes' grades", False))
+        check("exit 0 leaves the panel and says one line, no model",
+              not listener.to_assistant.called and listener.speak.call_args.args[0] == "It's on the glass.")
+    with patch.object(m.subprocess, "run", lambda argv, **kw: Done(2)), patch.object(m.threading, "Thread") as thread:
+        thread.side_effect = lambda target, daemon=True, args=(): type("T", (), {"start": lambda self: target()})()
+        listener.genui_request("plan my Tuesday", True)
+        check("a fallback hands the request to the model in words",
+              listener.to_assistant.call_args.args[0] == "plan my Tuesday")
+    check("a plain question is not a panel", not listener.genui_request("tell me about the Civil War", False))
+
+    import route
+    seen = {}
+
+    class Out:
+        returncode, stdout = 0, '{"result": "a summary"}'
+
+    with patch.object(route.subprocess, "run", lambda argv, **kw: seen.update(kw) or Out()):
+        route._ask_model("summarize", 5.0, ["claude", "-p"])
+    check("hud-listen's helper model calls run with auto-memory off",
+          (seen.get("env") or {}).get("CLAUDE_CODE_DISABLE_AUTO_MEMORY") == "1")
+
+
 def payload_parse() -> None:
     check("payload reads row and collection as JSON",
           ks.payload('collection="x" row="person:p 1"') == {"collection": "x", "row": "person:p 1"},
@@ -543,7 +619,8 @@ def payload_parse() -> None:
 def main() -> int:
     payload_parse()
     listener_ignores_surface_actions()
-    for fn in (drawing, safety, security, one_person_every_network, files_and_music, spaces_and_state,
+    for fn in (drawing, safety, security, one_person_every_network, genui_wiring, files_and_music,
+               spaces_and_state,
                socket_protocol):
         with tempfile.TemporaryDirectory() as d:
             fn(Path(d))

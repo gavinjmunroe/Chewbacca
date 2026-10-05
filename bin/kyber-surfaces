@@ -427,6 +427,10 @@ class Daemon:
                 if live is not None and "row" in extra:
                     extra["row"] = str(extra["row"])
                     self.on_action(parts[2], live.provider.cid("list"), extra)
+                elif parts[2] == f"{ACTION_PREFIX}pivot" and "row" in extra:
+                    # A row button on a panel kyber-genui drew (registered in
+                    # surfaces/genui-queries.json): open the row's node walk.
+                    self.pivot_from_elsewhere(str(extra["row"]))
         elif line.startswith("e "):
             parts = line.split(None, 3)
             if len(parts) >= 3:
@@ -447,6 +451,17 @@ class Daemon:
             self.save()
         elif line.startswith("! "):
             log(f"display: {line[2:]}")
+
+    def pivot_from_elsewhere(self, node_id: str) -> None:
+        from surfaces.walks import WalkSurface  # noqa: PLC0415
+
+        def work() -> None:
+            result = WalkSurface().pivot(self.ctx, None, {"row": node_id})
+            self.record("genui", f"{ACTION_PREFIX}pivot", result)
+            if result.opens:
+                self.open_surface(result.opens, arg=result.opens_arg)
+
+        self.spawn(work)
 
     def on_value(self, pointer: str, value) -> None:
         with self.lock:
@@ -816,14 +831,57 @@ def cmd_ingest(days: int) -> int:
     return 0 if not any(isinstance(v, dict) and v.get("error") for v in report.values()) else 1
 
 
-def cmd_walk(kind: str, arg: str) -> int:
-    ctx = live_context()
+TIER_NAMES = ("waiting on you", "due soon", "FYI")
+
+
+def glass_row(r: dict, now) -> dict:
+    """One walk row as kyber-genui may draw it: a label, the network, how
+    long it has waited, why, and the node id for a row button. Never the
+    node's props, and never message text: a request read out of a text is
+    named by who asked, not by what they wrote (docs/GENUI.md, step 4)."""
+    from surfaces.walks import short_when  # noqa: PLC0415
+
+    label = r.get("label", "")
+    if r.get("type") == "Task" and (r.get("props") or {}).get("kind") == "request":
+        label = (r.get("props") or {}).get("provenance") or "an ask in a text"
+    return {"id": r.get("id", ""), "label": label, "app": r.get("app", ""), "why": r.get("why", ""),
+            "waiting": short_when(r.get("when", ""), now), "tier": TIER_NAMES[r.get("tier", 2)],
+            "people": [c["label"] for c in r.get("chips", []) if c["id"].startswith("person:")][:2]}
+
+
+def walk_data(kind: str, arg: str, ctx) -> dict:
+    """A walk's data. `unreplied` is needs-you narrowed to what waits on a
+    reply, which is the question "who have I not texted back" asks."""
+    if kind == "unreplied":
+        import osgraph_walks  # noqa: PLC0415
+
+        # Every thread and mail waiting on a reply, oldest first, not the
+        # nine-row, three-per-source cut needs-you makes. Twelve is the most
+        # rows kyber-genui lets one surface show.
+        rows = [r for r in osgraph_walks._attention(ctx.graph, ctx.now()) if r["type"] in ("Thread", "MailItem")]
+        rows = sorted(rows, key=lambda r: osgraph_walks.when_of(r["when"]))
+        return {"rows": rows[:12], "count": len(rows)}
     provider = surfaces.make(kind, arg) if kind in surfaces.PARAMETRIC else surfaces.make(kind)
+    return provider.fetch(ctx)
+
+
+def cmd_walk(kind: str, arg: str, as_json: bool = False) -> int:
+    ctx = live_context()
     try:
-        data = provider.fetch(ctx)
+        data = walk_data(kind, arg, ctx)
     except SurfaceError as err:
+        if as_json:
+            print(json.dumps({"rows": [], "note": str(err)}))
+            return 0
         print(err)
         return 1
+    if as_json:
+        now = ctx.now()
+        rows = [glass_row(r, now) for r in data.get("rows", [])]
+        out = {"rows": rows, "count": data.get("count", len(rows)),
+               "note": "" if rows else "Nothing here right now."}
+        print(json.dumps(out, default=str))
+        return 0
     for r in data.get("rows", []):
         print(f"{['WAIT', 'DUE ', 'FYI '][r.get('tier', 2)]}  {r.get('app', ''):10} {r.get('label', '')[:60]}"
               f"  [{r.get('why', '')}]  {r.get('id', '')}")
@@ -885,6 +943,7 @@ def main(argv: list[str] | None = None) -> int:
     i.add_argument("--days", type=int, default=INGEST_DAYS)
     w = sub.add_parser("walk", help="print a walk's rows")
     w.add_argument("words", nargs="+")
+    w.add_argument("--json", action="store_true", help="rows for kyber-genui: {\"rows\": [...]}")
     sub.add_parser("graph", help="graph counts and an ontology check")
     sub.add_parser("forget", help="stop the daemon and delete everything it stored")
     sub.add_parser("run", help="the daemon")
@@ -916,6 +975,8 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 words.append(word)
         kind, arg = split_spec(" ".join(words))
+        if args.cmd == "walk" and words and words[0] == "unreplied":
+            kind, arg = "unreplied", ""
         if kind is None:
             print(f"No surface called {words[0] if words else ''}. There's {', '.join(surfaces.KINDS)}.",
                   file=sys.stderr)
@@ -927,7 +988,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"at= takes one of {', '.join(REGIONS)}", file=sys.stderr)
             return 2
         if args.cmd == "walk":
-            return cmd_walk(kind, arg)
+            return cmd_walk(kind, arg, as_json=args.json)
         return via_daemon({"cmd": "open", "name": kind, "arg": arg, "at": at})
     if args.cmd == "close":
         if not running():

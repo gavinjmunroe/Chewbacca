@@ -1590,7 +1590,8 @@ _register("PreToolUse", hooks_dir + "/submit-guard.sh", timeout=10,
 # in full. On 2026-10-04 lists called verified still carried 19 false
 # personalized lines, refused sender domains and two CFOs; the client caught it.
 _register("PreToolUse", hooks_dir + "/launch-guard.sh", timeout=10,
-          matcher="Bash|mcp__peekaboo__.*",
+          matcher="Bash|mcp__peekaboo__.*|mcp__chrome-devtools__.*|"
+                  "mcp__plugin_playwright_playwright__.*",
           status="Checking a campaign launch has a full pre-send gate pass...")
 
 # Say the ranking rule out loud before ranking, and name what would falsify

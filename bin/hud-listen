@@ -82,6 +82,17 @@ def asks_dir() -> Path:
     return voice_memory.MEMORY / "asks"
 
 SOCKET = os.environ.get("BOB_HUD_SOCKET", str(Path.home() / ".bob" / "hud.sock"))
+
+
+def listen_line(socket_path: str) -> str:
+    """`listen token=<hex>` from the token Kyber writes beside its socket on
+    every start; plain `listen` gets drawing acks and no events (hud/CLAUDE.md,
+    "Who hears events")."""
+    try:
+        token = (Path(socket_path).parent / "hud.token").read_text(encoding="utf-8").strip()
+    except OSError:
+        return "listen"
+    return f"listen token={token}" if re.fullmatch(r"[0-9a-f]{64}", token) else "listen"
 # Whoever started this listener, read as early as possible. The display
 # spawns it as a child, so when the display is replaced (KeepAlive, a
 # rebuild) this listener is reparented and the number changes. BACKLOG #50:
@@ -1635,7 +1646,7 @@ class Listener:
             # Ask to hear events. Without this the display sends nothing back,
             # which is the point: a transcript of everything the person says
             # should not reach a process that only ever wanted to draw a panel.
-            self.send("listen")
+            self.send(listen_line(SOCKET))
             self.send("p attentive")
 
             buffer = b""

@@ -55,6 +55,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 
+import hud_events  # noqa: E402
 import osgraph  # noqa: E402
 import osgraph_ingest  # noqa: E402
 import surfaces  # noqa: E402
@@ -629,7 +630,7 @@ class HudLink:
             delay = 0.5
             with self.lock:
                 self.sock = sock
-            self.send(["listen"])
+            self.send([hud_events.listen_line()])
             if self.daemon:
                 self.daemon.redraw_all()
             buffer = b""

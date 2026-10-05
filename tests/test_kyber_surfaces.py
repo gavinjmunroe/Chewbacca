@@ -336,7 +336,7 @@ def socket_protocol(tmp: Path) -> None:
     deadline = time.time() + 5
     while not got and time.time() < deadline:
         time.sleep(0.05)
-    check("the daemon subscribes with listen first", got[:1] == ["listen"], got[:2])
+    check("the daemon subscribes with listen first", bool(got) and re.fullmatch(r"listen( token=[0-9a-f]{64})?", got[0]) is not None, got[:2])
     d.open_surface("needs-you")
     before = len(got)
     d.refresh("needs-you")

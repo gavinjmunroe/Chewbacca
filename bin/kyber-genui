@@ -1274,7 +1274,14 @@ class Sink:
         if not dry:
             self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self.sock.connect(SOCKET)
-            self.sock.sendall(b"listen\n")
+            # Without the token the display sends drawing acks and no events
+            # (hud/CLAUDE.md, "Who hears events").
+            try:
+                token = (Path(SOCKET).parent / "hud.token").read_text(encoding="utf-8").strip()
+            except OSError:
+                token = ""
+            line = f"listen token={token}" if re.fullmatch(r"[0-9a-f]{64}", token) else "listen"
+            self.sock.sendall((line + "\n").encode())
             threading.Thread(target=self._read, daemon=True).start()
 
     def _read(self) -> None:

@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+// weft-gate: the `weft` a fenced Tangle build sees on its PATH.
+//
+// Checks the argv the shell actually passed against lib/weft_fence.js, then
+// runs the real weft (WEFT_GATE_REAL, else ~/.local/bin/weft) with
+// WEFT_DISPATCHER_URL removed. A refused command exits 2 with the reason on
+// stderr, which Tangle reads like any other tool error.
+
+"use strict";
+
+const os = require("node:os");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+const { refusal } = require("./lib/weft_fence.js");
+
+const argv = process.argv.slice(2);
+const reason = refusal(argv);
+if (reason) {
+  process.stderr.write(`weft-gate: ${reason}.\n`);
+  process.exit(2);
+}
+
+const real = process.env.WEFT_GATE_REAL || path.join(os.homedir(), ".local", "bin", "weft");
+const env = { ...process.env };
+delete env.WEFT_DISPATCHER_URL;
+const result = spawnSync(real, argv, { stdio: "inherit", env });
+if (result.error) {
+  process.stderr.write(`weft-gate: could not run ${real}: ${result.error.message}\n`);
+  process.exit(1);
+}
+process.exit(result.status === null ? 1 : result.status);

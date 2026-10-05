@@ -1149,6 +1149,7 @@ if group "weft"; then
   check "a headless Tangle build cannot widen its own rules" node --test "$ROOT/tests/test_weft_fence.mjs"
   check "weft-view parses"  node --check "$ROOT/bin/weft-view"
   check "weft-build parses" node --check "$ROOT/bin/weft-build"
+  check "weft-gate parses"  node --check "$ROOT/bin/weft-gate"
 fi
 
 if group "pytest"; then

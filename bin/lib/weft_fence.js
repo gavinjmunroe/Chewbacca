@@ -3,100 +3,113 @@
 const fs = require("node:fs");
 const path = require("node:path");
 
-// The rules a headless Tangle build runs under, built from the settings
-// `weft new` wrote into the project before Tangle ever ran.
+// The rules a headless Tangle build runs under.
 //
-// Escapes found by two commit reviews on 2026-10-04 set the shape:
-//   - Tangle's own list allows `weft infra --json:*`, so a deny on
-//     `weft infra start` never matched `weft infra --json start`. A deny list
-//     of prefixes cannot keep up with flags placed before the verb, so the
-//     allow list is filtered instead: anything not allowed is refused in -p.
-//   - weft test-node compiles a project's own Rust nodes with plain cargo and
-//     runs them on this Mac, outside Docker, so it is refused; a node Tangle
-//     writes is proved by `weft run`, which builds and runs it in a container.
-//   - The project's .claude/settings.json was the rule file, and Tangle runs
-//     with acceptEdits inside that project, so it could rewrite its own rules
-//     mid-build. The fenced copy lives outside the project, and the build runs
-//     under --restricted, which ignores the project and local settings files.
+// Three commit reviews on 2026-10-04 each found a new way past a deny list
+// laid over Tangle's own 53-rule allow list: `weft infra --json start` slipping
+// a prefix deny, `weft test-node` compiling Tangle's Rust with cargo on the Mac,
+// `weft resync` re-activating triggers, `weft run --dispatcher <url>` posting
+// the program anywhere. A CLI with sixty verbs and flags that go before or
+// after the verb does not fit a deny list. So both layers are positive:
+//   - Claude Code allows only the verbs in VERBS, from this file, never from
+//     Tangle's settings. Anything else is refused in -p.
+//   - `weft` on Tangle's PATH is the gate (bin/weft-gate). It reads the argv
+//     the shell actually hands it, refuses any verb not in VERBS and any
+//     target flag however it is spelled, drops WEFT_DISPATCHER_URL, and only
+//     then runs the real binary.
 //
+// The rules live outside the project and the build runs under --restricted,
+// which ignores the project and local settings files: Tangle edits files in
+// the project under acceptEdits and once could have rewritten its own rules.
 // --restricted also stops the project's skills and subagents loading, and
-// Tangle cannot build without them (its weft-* skills, node-smith and five
-// more helpers). They are copied, as `weft new` wrote them, into a session
-// plugin outside the project. A plugin's names carry its prefix, so Tangle is
-// told the mapping once rather than its files being edited.
+// Tangle cannot build without them, so they are copied, as `weft new` wrote
+// them, into a session plugin outside the project.
+//
+// What the fence does not cover: `weft run` executes the program Tangle wrote,
+// ExecPython and HTTP nodes included, inside Docker, with network.
 
-const REFUSED = [
-  "weft activate",
-  "weft resync",
-  "weft test-node",
-  "weft infra start",
-  "weft infra upgrade",
-  "weft infra press",
-  "weft rm",
-  "weft clean",
-  "weft prune",
-  "weft connect",
-  "weft token",
-  "weft deploy",
-  "weft domain",
-  "curl",
-  "git push",
+// Each entry is the verb words that must open the argv. Reading, checking,
+// building, running here, and the version tree. Not here on purpose: going
+// live (activate, resync, bake, wake), infrastructure, deleting (rm, clean,
+// prune), accounts (connect, token, options), deploying, other projects'
+// runs (stop, deactivate, cancel-*), test-node (cargo on the host) and
+// catalog update (writes the shared catalog from the network).
+const VERBS = [
+  ["validate"],
+  ["parse"],
+  ["build"],
+  ["run"],
+  ["describe-nodes"],
+  ["executions"],
+  ["events"],
+  ["logs"],
+  ["status"],
+  ["ps"],
+  ["follow"],
+  ["checkpoint"],
+  ["branch"],
+  ["tree"],
+  ["diff"],
+  ["freeze"],
+  ["examples"],
+  ["files", "ls"],
+  ["files", "inspect"],
+  ["daemon", "status"],
 ];
 
-// Flags weft accepts before the verb. Each one turns a denied verb into a
-// command no prefix rule recognises.
-const LEADING_FLAGS = ["--json", "--on", "--dispatcher"];
+// Global flags weft reads before the verb. --json only changes output.
+const LEADING_OK = ["--json"];
 
-// Flags that point an allowed verb at another install. `weft run --dispatcher
-// <url>` posts the whole program to that address, and `--on` reads its address
-// from weft.toml, which Tangle can edit. Found by the second commit review,
-// 2026-10-04. Matched anywhere in the command, not only as a prefix.
+// Flags that point a verb at another install: --dispatcher takes an address,
+// --on reads one from weft.toml, which Tangle can edit.
 const TARGET_FLAGS = ["--dispatcher", "--on"];
 
 const PLUGIN_PARTS = ["skills", "agents", "commands"];
 
 const NAME_NOTE =
   "Your skills, commands and helpers are loaded as the tangle plugin, so their names carry a tangle: prefix. " +
-  "When your instructions name node-smith, the weft-language skill or /weft-run, use tangle:node-smith, tangle:weft-language and /tangle:weft-run.";
+  "When your instructions name node-smith, the weft-language skill or /weft-run, use tangle:node-smith, tangle:weft-language and /tangle:weft-run. " +
+  "In this build weft refuses test-node, activate, infra and account commands; prove a node with weft run instead.";
 
 // No WebFetch or WebSearch: a build has no reason to reach the network
-// except through weft, and weft's network verbs are the refused ones.
+// except through weft, and weft's network verbs are not in VERBS.
 const TOOLS = ["Bash", "Read", "Edit", "Write", "Glob", "Grep", "Agent", "Skill", "TodoWrite"];
 
-function command(rule) {
-  const match = /^Bash\((.*)\)$/.exec(rule);
-  return match ? match[1].replace(/:\*$/, "").trim() : null;
+// Returns null when the gate may run `weft <argv>`, or the reason it may not.
+function refusal(argv) {
+  const words = [...argv];
+  while (words.length && words[0].startsWith("-")) {
+    if (!LEADING_OK.includes(words[0])) return `${words[0]} before the verb is not allowed in this build`;
+    words.shift();
+  }
+  for (const word of argv) {
+    if (TARGET_FLAGS.some((flag) => word === flag || word.startsWith(`${flag}=`))) {
+      return `${word.split("=")[0]} points weft at another install, which this build does not do`;
+    }
+  }
+  const verb = VERBS.find((parts) => parts.every((part, i) => words[i] === part));
+  if (!verb) return `weft ${words.slice(0, 2).join(" ")} is not allowed in this build`;
+  return null;
 }
 
-function refused(cmd) {
-  return REFUSED.some((prefix) => cmd === prefix || cmd.startsWith(`${prefix} `));
+function allowRules() {
+  return VERBS.map((parts) => `Bash(weft ${parts.join(" ")}:*)`);
 }
 
-function allowed(rule) {
-  const cmd = command(rule);
-  if (cmd === null) return false;
-  if (refused(cmd)) return false;
-  return !cmd.split(/\s+/).some((word) => word.startsWith("--"));
-}
-
+// Belt and braces under the allow list: the shapes the reviews found.
 function denyRules() {
-  const rules = REFUSED.map((cmd) => `Bash(${cmd}:*)`);
-  for (const flag of LEADING_FLAGS) {
-    rules.push(`Bash(weft ${flag}:*)`, `Bash(weft infra ${flag}:*)`);
-  }
-  for (const flag of TARGET_FLAGS) {
-    rules.push(`Bash(weft * ${flag} *)`, `Bash(weft * ${flag}=*)`);
-  }
+  const rules = [];
+  for (const flag of TARGET_FLAGS) rules.push(`Bash(weft * ${flag} *)`, `Bash(weft * ${flag}=*)`, `Bash(weft ${flag}:*)`);
   return rules;
 }
 
-// tangleSettings: the parsed .claude/settings.json `weft new` wrote.
-// hookPath: an absolute path to a copy of validate_weft.py outside the project.
+// tangleSettings: the parsed .claude/settings.json `weft new` wrote; only its
+// CLAUDE.md exclusions are kept. hookPath: a copy of validate_weft.py outside
+// the project.
 function fence(tangleSettings, hookPath) {
-  const allow = ((tangleSettings.permissions || {}).allow || []).filter(allowed);
   return {
     claudeMdExcludes: tangleSettings.claudeMdExcludes || [],
-    permissions: { allow, deny: denyRules() },
+    permissions: { allow: allowRules(), deny: denyRules() },
     hooks: {
       PostToolUse: [
         {
@@ -124,4 +137,14 @@ function packagePlugin(projectDir, pluginDir) {
   return pluginDir;
 }
 
-module.exports = { NAME_NOTE, REFUSED, TOOLS, allowed, denyRules, fence, packagePlugin };
+// A directory holding only `weft`, linked to the gate, for the front of
+// Tangle's PATH.
+function gateDir(dir, gatePath) {
+  fs.mkdirSync(dir, { recursive: true });
+  const link = path.join(dir, "weft");
+  fs.rmSync(link, { force: true });
+  fs.symlinkSync(gatePath, link);
+  return dir;
+}
+
+module.exports = { NAME_NOTE, TOOLS, VERBS, allowRules, denyRules, fence, gateDir, packagePlugin, refusal };

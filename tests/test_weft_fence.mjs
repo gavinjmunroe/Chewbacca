@@ -1,14 +1,16 @@
-// The rules a headless Tangle build runs under (bin/lib/weft_fence.js).
+// The rules a headless Tangle build runs under (bin/lib/weft_fence.js) and
+// the gate that stands in for `weft` on its PATH (bin/weft-gate).
 //
 // tangle-settings.json is the .claude/settings.json `weft new --assistant
-// claude-code` wrote on 2026-10-04 (Tangle 0.6.0). The commit review found two
-// escapes in the first fence; each has a test here that fails on that version.
+// claude-code` wrote on 2026-10-04 (Tangle 0.6.0). Three commit reviews that
+// day each found a way past the fence; every one has a test here.
 //
 //   node --test tests/test_weft_fence.mjs
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -21,43 +23,74 @@ const tangle = JSON.parse(readFileSync(join(here, "fixtures", "weft", "tangle-se
 const fenced = fenceLib.fence(tangle, "/outside/validate_weft.py");
 const allow = fenced.permissions.allow;
 
-test("no refused verb survives in the allow list", () => {
-  for (const verb of ["weft activate", "weft infra start", "weft infra upgrade", "weft rm", "weft clean", "weft connect", "weft token"]) {
-    assert.ok(tangle.permissions.allow.some((r) => r.startsWith(`Bash(${verb}`)), `fixture should allow ${verb} before fencing`);
-    assert.ok(!allow.some((r) => r.startsWith(`Bash(${verb}`)), `${verb} is still allowed`);
+// Every one of these was allowed by Tangle's own list, an earlier fence, or
+// both. activate and resync put triggers live, infra start spends money,
+// test-node runs Tangle's Rust on the host, the rest delete or reach accounts.
+const ESCAPES = [
+  ["activate"],
+  ["resync"],
+  ["bake"],
+  ["wake"],
+  ["test-node"],
+  ["infra", "start"],
+  ["infra", "--json", "start"],
+  ["--json", "activate"],
+  ["--on", "prod", "run"],
+  ["run", "--dispatcher", "http://127.0.0.1:9"],
+  ["run", "--dispatcher=http://127.0.0.1:9"],
+  ["status", "--on", "prod"],
+  ["events", "--on=prod", "x"],
+  ["rm", "x"],
+  ["clean"],
+  ["connect", "slack"],
+  ["token", "mint"],
+  ["deactivate", "--mode", "wipe"],
+  ["stop", "other-project"],
+  ["cancel-running", "x"],
+  ["catalog", "update"],
+  ["options", "x"],
+  ["files", "rm", "x"],
+  ["daemon", "stop"],
+];
+
+test("the allow list comes from the fence, never from Tangle's settings", () => {
+  assert.ok(tangle.permissions.allow.includes("Bash(weft infra --json:*)"), "fixture changed");
+  assert.deepEqual(allow, fenceLib.allowRules());
+  assert.ok(!allow.some((r) => r.includes("--")), "an allow rule carries a flag");
+  assert.ok(!allow.some((r) => !r.startsWith("Bash(weft ")), "something other than weft is allowed");
+});
+
+test("the gate refuses every escape the reviews found", () => {
+  for (const argv of ESCAPES) assert.ok(fenceLib.refusal(argv), `weft ${argv.join(" ")} was let through`);
+});
+
+test("the gate lets the build and inspect verbs through", () => {
+  for (const argv of [["validate"], ["run"], ["run", "--target", "sum"], ["--json", "status"], ["describe-nodes", "--list"], ["events", "abc", "--full"], ["freeze", "ok", "abc"], ["files", "ls"], ["daemon", "status"]]) {
+    assert.equal(fenceLib.refusal(argv), null, `weft ${argv.join(" ")} was refused`);
   }
 });
 
-test("a flag before the verb cannot reach a refused verb", () => {
-  // Tangle ships `weft infra --json:*`, which covered `weft infra --json start`.
-  assert.ok(tangle.permissions.allow.includes("Bash(weft infra --json:*)"));
-  assert.ok(!allow.some((r) => /--/.test(r)), "an allow rule with a flag in its prefix survived");
-  for (const rule of ["Bash(weft --json:*)", "Bash(weft infra --json:*)", "Bash(weft --on:*)", "Bash(weft --dispatcher:*)"]) {
-    assert.ok(fenced.permissions.deny.includes(rule), `${rule} is not denied`);
-  }
-});
-
-test("no allowed verb compiles Tangle's code on the host or puts a trigger live", () => {
-  // test-node runs a project's Rust with plain cargo outside Docker; resync is
-  // deactivate-then-activate. Both were allowed by the first fence.
-  for (const verb of ["weft test-node", "weft resync"]) {
-    assert.ok(tangle.permissions.allow.some((r) => r.startsWith(`Bash(${verb}`)), `fixture should allow ${verb} before fencing`);
-    assert.ok(!allow.some((r) => r.startsWith(`Bash(${verb}`)), `${verb} is still allowed`);
-  }
-});
-
-test("a target flag after the verb is denied wherever it sits", () => {
-  // `weft run --dispatcher <url>` posts the program to that address.
+test("a target flag is denied in the permission layer too, wherever it sits", () => {
   for (const flag of ["--dispatcher", "--on"]) {
-    assert.ok(fenced.permissions.deny.includes(`Bash(weft * ${flag} *)`), `${flag} with a space is not denied`);
-    assert.ok(fenced.permissions.deny.includes(`Bash(weft * ${flag}=*)`), `${flag}= is not denied`);
+    assert.ok(fenced.permissions.deny.includes(`Bash(weft * ${flag} *)`));
+    assert.ok(fenced.permissions.deny.includes(`Bash(weft * ${flag}=*)`));
   }
 });
 
-test("the build and inspect verbs Tangle needs stay allowed", () => {
-  for (const rule of ["Bash(weft validate:*)", "Bash(weft run:*)", "Bash(weft describe-nodes:*)", "Bash(weft events:*)", "Bash(weft freeze:*)"]) {
-    assert.ok(allow.includes(rule), `${rule} was dropped`);
-  }
+test("the gate runs the real weft only when allowed, without the dispatcher variable", () => {
+  const root = mkdtempSync(join(tmpdir(), "weft-gate-"));
+  const fake = join(root, "fake-weft");
+  writeFileSync(fake, `#!/bin/sh\necho "ran: $* dispatcher=[$WEFT_DISPATCHER_URL]"\n`);
+  chmodSync(fake, 0o755);
+  const dir = fenceLib.gateDir(join(root, "bin"), join(here, "..", "bin", "weft-gate"));
+  const env = { ...process.env, PATH: `${dir}:${process.env.PATH}`, WEFT_GATE_REAL: fake, WEFT_DISPATCHER_URL: "http://127.0.0.1:9" };
+  const ok = spawnSync("weft", ["status"], { env, encoding: "utf8" });
+  assert.equal(ok.status, 0);
+  assert.equal(ok.stdout.trim(), "ran: status dispatcher=[]");
+  const no = spawnSync("weft", ["activate"], { env, encoding: "utf8" });
+  assert.equal(no.status, 2);
+  assert.equal(no.stdout, "");
+  assert.match(no.stderr, /not allowed in this build/);
 });
 
 test("the validate hook runs from the copy outside the project", () => {
@@ -81,12 +114,11 @@ test("the session plugin carries skills and agents and nothing that sets rules",
   assert.ok(!existsSync(join(plugin, "hooks")));
 });
 
-test("weft-build runs Tangle under the fence, never the project's own rules", () => {
+test("weft-build runs Tangle under the fence and the gate", () => {
   const source = readFileSync(join(here, "..", "bin", "weft-build"), "utf8");
-  assert.ok(source.includes('"--restricted"'));
-  assert.ok(source.includes('"--plugin-dir"'));
-  assert.ok(!/path\.join\(dir, "\.claude", "settings\.json"\)\s*,?\s*\n\s*"--/.test(source), "the project's settings file is passed as --settings");
+  for (const flag of ['"--restricted"', '"--plugin-dir"']) assert.ok(source.includes(flag), `${flag} is gone`);
   assert.ok(!source.includes('"--setting-sources"'));
+  assert.ok(source.includes("gateDir("), "the gate is not on Tangle's PATH");
+  assert.ok(source.includes("delete tangleEnv.WEFT_DISPATCHER_URL"));
   assert.ok(!fenceLib.TOOLS.includes("WebFetch") && !fenceLib.TOOLS.includes("WebSearch"));
-  assert.ok(source.includes("delete tangleEnv.WEFT_DISPATCHER_URL"), "the build can inherit a dispatcher address");
 });

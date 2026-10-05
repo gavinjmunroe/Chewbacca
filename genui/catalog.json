@@ -461,6 +461,26 @@
           "items": "object"
         }
       }
+    },
+    "Transcript": {
+      "family": "Anything else",
+      "props": {
+        "items": {
+          "type": "array",
+          "items": "object"
+        },
+        "action": {
+          "type": "rowaction"
+        }
+      }
+    },
+    "Diff": {
+      "family": "Anything else",
+      "props": {
+        "text": {
+          "type": "string"
+        }
+      }
     }
   },
   "shapes": {

@@ -601,15 +601,22 @@ def load_lines(brain: Path | None, offer: str | None) -> dict[str, dict] | None:
 _jev = None
 
 
+_JEV_LOAD = threading.Lock()
+
+
 def jev_client():
     """bin/lib/jev.py by path: tools/ is earlier on sys.path and its jev.py
     is the command-line tool, which has no ask()."""
     global _jev
-    if _jev is None:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("jev_client", HERE / "lib" / "jev.py")
-        _jev = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(_jev)
+    # Locked, and published only once loaded: the 2026-10-04 replay warmed
+    # three calls at once and one got the module half-built ("no attribute ask").
+    with _JEV_LOAD:
+        if _jev is None:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location("jev_client", HERE / "lib" / "jev.py")
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            _jev = module
     return _jev
 
 
@@ -643,8 +650,11 @@ FINISHED = {
 }
 
 
-def pick_situation(bank: dict[str, dict], heard: str, recent: str, finished: bool = False) -> str | None:
-    """One Jev choice over the bank's situations; None when Jev gives no judgment."""
+def pick_situation(bank: dict[str, dict], heard: str, recent: str, finished: bool = False,
+                   shown: str = "") -> str | None:
+    """One Jev choice over the bank's situations; None when Jev gives no judgment.
+    `shown` names the situations already on screen this call, oldest first: the
+    last six lines cannot say whether the pitch or the price has happened."""
     jev = jev_client()
     criteria = {sid: s["when"] for sid, s in bank.items()}
     question = {"situation": {
@@ -665,13 +675,25 @@ def pick_situation(bank: dict[str, dict], heard: str, recent: str, finished: boo
             "instructions": {"question": "The prospect paused after saying `heard`. Are they done, or mid-thought?"},
             "criteria": FINISHED,
         }
-    answers = jev.ask({"heard": heard, "call_so_far": recent}, question, decision="call-pick")
+    inputs = {"heard": heard, "call_so_far": recent}
+    if shown:
+        inputs["shown_so_far"] = shown
+    answers = jev.ask(inputs, question, decision="call-pick")
     answer = answers.get("situation") if isinstance(answers, dict) else None
     LAST_PICK.scores = answer.get("probabilities") if isinstance(answer, dict) else None
     done = answers.get("finished") if finished and isinstance(answers, dict) else None
     scores = done.get("probabilities") if isinstance(done, dict) else None
     LAST_PICK.finished = scores.get("done") if isinstance(scores, dict) and isinstance(scores.get("done"), (int, float)) else None
     return valid_pick(answer, criteria)
+
+
+def still_open(bank: dict[str, dict], path: list[str]) -> dict[str, dict]:
+    """The situations a pick may still choose. One marked "until" a main-path
+    id retires once that id has been on screen: on the 2026-10-04 Northline
+    replay, the price asked after the pitch got "I'll get into that later"
+    on 4 of 138 lines, with the pitch already in the picker's view."""
+    seen = set(path)
+    return {sid: s for sid, s in bank.items() if s.get("until") not in seen}
 
 
 def valid_pick(answer, criteria: dict) -> str | None:
@@ -728,6 +750,23 @@ def cue_overlap(cue: str, said: str) -> float:
         return 0.0
     match = difflib.SequenceMatcher(None, a, b)
     return sum(block.size for block in match.get_matching_blocks()) / len(a)
+
+
+# "Sorry, you cut out" wants the line just said, again. Short lines only: a
+# long one carries its own question ("you cut out, but how much is it?").
+# n3 replay 2026-10-04: a dropped line had no situation and nothing came back.
+REPEAT_ASK = re.compile(r"\b(?:say (?:that|it) again|repeat (?:that|it|the question)|come again|"
+                        r"you (?:cut|broke|kept cutting|were breaking|are breaking) (?:out|up)|"
+                        r"didn'?t (?:catch|hear) (?:that|you|the question)|you froze)\b", re.I)
+REPEAT_MAX_WORDS = 14
+# Situations named to the picker as already shown. Guessed, never measured:
+# 20 covers a full discovery on the 2026-10-04 Northline script (about 35
+# stages) back to the frame, without sending every line of a long call.
+PATH_SHOWN = 20
+
+
+def asks_repeat(text: str) -> bool:
+    return len(text.split()) <= REPEAT_MAX_WORDS and bool(REPEAT_ASK.search(text))
 
 
 def next_stage(bank: dict[str, dict], after: int) -> tuple[int, str] | None:
@@ -981,6 +1020,8 @@ class Call:
     pending: str = ""  # --beginner: the line on screen the rep has not said yet
     stage_at: int = 0  # --beginner: the furthest script stage shown
     resume: str = ""  # --beginner: a script line an objection cut off, owed next
+    last_cue: str = ""  # the last line put on screen, for "you cut out, say that again"
+    path: list[str] = field(default_factory=list)  # situation ids that reached the screen, in order
 
     def talk_share(self) -> int | None:
         with self.lock:
@@ -1258,6 +1299,10 @@ class Listener:
     def steady(self, result: "CueResult", picked: str | None, advance: bool = True) -> "CueResult":
         """--beginner: one line, never a blank screen. A new line replaces the
         one up; no new line keeps the unsaid one, or moves the script on."""
+        if result.cue:
+            self.call.last_cue = result.cue
+            if picked and picked not in ("none", "check"):
+                self.call.path.append(picked)
         if not getattr(self, "beginner", False):
             return result
         result.runner_up = ""
@@ -1286,8 +1331,20 @@ class Listener:
             if found:
                 self.call.stage_at, sid = found
                 self.call.pending = situation_cue(self.lines, sid) or ""
+                self.call.path.append(sid)
         result.cue = self.call.pending or None
+        if result.cue:
+            self.call.last_cue = result.cue
         return result
+
+    def warm_picker(self) -> float | None:
+        """One throwaway pick over the real bank before the call starts. In the
+        2026-10-04 replays the first pick of a call took about 5 s, twice, and
+        one came back empty; every pick after it took about 0.2 s. With a bank,
+        every cue is a Jev pick, so the Haiku writer is never started."""
+        started = time.monotonic()
+        picked = pick_situation(self.lines, "hey, can you hear me okay?", "")
+        return None if picked is None else time.monotonic() - started
 
     def heard_you(self, line: Line) -> bool:
         """--beginner: the rep said the line on screen, so it comes down."""
@@ -1302,6 +1359,8 @@ class Listener:
         it measures is what a call shows."""
         if is_filler(line.text):
             return self.steady(CueResult("NONE", None, 0.0), None, advance=False)
+        if self.call.last_cue and asks_repeat(line.text):
+            return self.steady(CueResult("REPEAT", self.call.last_cue, 0.0), None)
         routed = route(line.text, answers(read_capped(self.standing, STANDING_CAP) if self.standing else ""))
         if routed:
             return self.steady(CueResult("ROUTED", f"SAY: {routed}", 0.0), None)
@@ -1309,9 +1368,12 @@ class Listener:
             started = time.monotonic()
             recent = self.call.recent(6)
             look = {"finished": True} if line.early else {}
-            picked = pick_situation(self.lines, line.text, recent, **look)
+            if self.call.path:
+                look["shown"] = ", ".join(self.call.path[-PATH_SHOWN:])
+            open_now = still_open(self.lines, self.call.path)
+            picked = pick_situation(open_now, line.text, recent, **look)
             if picked is None:
-                picked = pick_situation(self.lines, line.text, recent, **look)
+                picked = pick_situation(open_now, line.text, recent, **look)
             took = time.monotonic() - started
             # An early look shows nothing unless Jev is sure the thought is
             # done; the final turn, 400 ms later, is cued as before.
@@ -1413,7 +1475,14 @@ class Listener:
         if self.card:
             log(f"card: {self.card}" + ("" if self.card.is_file() else " (NOT FOUND, continuing without it)"))
         self.screen.set("cue", "Warming up")
-        took = self.coach.warm()
+        took, warmed = None, "cue model"
+        if self.lines_only:
+            took, warmed = self.warm_picker(), "Jev picker"
+            if took is None:
+                log("Jev did not answer the warm-up pick; falling back to written cues.")
+                self.lines_only = self.beginner = False
+        if not self.lines_only:
+            took, warmed = self.coach.warm(), "cue model"
         if took is None:
             log("The cue model did not start. Is `claude` signed in?")
             self.whisper.stop()
@@ -1424,7 +1493,7 @@ class Listener:
             self.coach.stop()
             self.screen.close()
             return 1
-        log(f"cue model warm in {took:.1f}s; transcribing with {model.name}")
+        log(f"{warmed} warm in {took:.1f}s; transcribing with {model.name}")
         if self.standing and self.standing.exists() and len(self.standing.read_text()) > STANDING_CAP:
             log(f"{self.standing} is over {STANDING_CAP} characters; the coach only reads the first {STANDING_CAP}")
 

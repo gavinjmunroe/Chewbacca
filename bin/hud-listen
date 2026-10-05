@@ -74,11 +74,13 @@ KYBER_GENUI = Path(__file__).resolve().parent / "kyber-genui"
 GENUI_TIMEOUT_S = 30.0
 # Requests that want a panel: the sentence opens with a verb that asks to see
 # something laid out. Whole-request only, so "show my texts from Sam and reply
-# that I'm late" (a second half that acts) still goes to the model.
+# that I'm late" (a second half that acts) still goes to the model. A question
+# with a one-line answer ("what is due this week?", "how many...") is not a
+# panel: it gets a sentence.
 GENUI_SHAPE = re.compile(
     r"^(?:(?:ok|okay|so|hey|kyber|please|can you|could you)[ ,]+)*"
     r"(?:show(?: me)?|compare|chart|graph|plot|visuali[sz]e|lay out|map out|break down|"
-    r"plan(?: out)?|list|pull up|put up|draw|who have i not|who haven'?t i|how many|what(?:'s| is) due)\b",
+    r"plan(?: out)?|list|pull up|put up|draw|who have i not|who haven'?t i)\b",
     re.I)
 GENUI_ACTS = re.compile(
     r"\b(?:reply|respond|text (?:him|her|them|back)|send|tell|email|book|schedule|move|cancel|delete|pay|"

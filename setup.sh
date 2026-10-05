@@ -1586,6 +1586,13 @@ _register("PreToolUse", hooks_dir + "/submit-guard.sh", timeout=10,
           matcher="mcp__chrome-devtools__.*|Bash|mcp__peekaboo__.*",
           status="Checking this is not a coursework submission...")
 
+# An outbound campaign never launches on a list the pre-send gate did not pass
+# in full. On 2026-10-04 lists called verified still carried 19 false
+# personalized lines, refused sender domains and two CFOs; the client caught it.
+_register("PreToolUse", hooks_dir + "/launch-guard.sh", timeout=10,
+          matcher="Bash|mcp__peekaboo__.*",
+          status="Checking a campaign launch has a full pre-send gate pass...")
+
 # Say the ranking rule out loud before ranking, and name what would falsify
 # the answer. Running someone's list top to bottom is not a method.
 _register("UserPromptSubmit", hooks_dir + "/method-guard.sh", timeout=8,

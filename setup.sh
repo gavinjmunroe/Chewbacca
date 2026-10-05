@@ -1988,23 +1988,16 @@ mcp.setdefault("mcpServers", {})
 composio_url = env("D1_COMPOSIO_URL", "").strip()
 composio_key = env("D1_COMPOSIO_KEY", "").strip()
 
-# Two servers that need no account, no key, and no running service, so they can
-# be wired unconditionally. setdefault, so an existing entry is never clobbered.
+# One server that needs no account, no key, and no running service, so it can
+# be wired unconditionally. sequential-thinking and blender were dropped
+# 2026-10-05: zero calls across two weeks of transcripts on the machine that
+# had them, and every listed tool is paid for in context each session. setdefault, so an existing entry is never clobbered.
 # Everything else is left to the user: ~/.claude.json is where client hostnames
 # and API keys live.
 mcp["mcpServers"].setdefault("filesystem", {
     "command": "npx",
     "args": ["-y", "@modelcontextprotocol/server-filesystem", os.path.expanduser("~")],
 })
-mcp["mcpServers"].setdefault("sequential-thinking", {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
-})
-
-# Blender only when Blender is actually installed. Registering it otherwise
-# gives a server that fails every call, which reads as a broken kit.
-if os.path.isdir("/Applications/Blender.app"):
-    mcp["mcpServers"].setdefault("blender", {"command": "uvx", "args": ["blender-mcp"]})
 
 if composio_url:
     mcp["mcpServers"]["composio"] = {
@@ -2269,9 +2262,7 @@ fi
 
 if [ "$PLUGINS_OK" -eq 1 ]; then
   for m in \
-    Egonex-AI/Understand-Anything \
     anthropics/claude-plugins-official \
-    blader/humanizer \
     clay-run/agent-plugins; do
     claude plugin marketplace add "$m" </dev/null &>/dev/null || true
   done
@@ -2279,25 +2270,13 @@ if [ "$PLUGINS_OK" -eq 1 ]; then
 
   PLUGIN_FAILED=0
   for p in \
-    bigquery-data-analytics@claude-plugins-official \
-    claude-md-management@claude-plugins-official \
-    clay@clay-plugins \
-    context7@claude-plugins-official \
-    expo@claude-plugins-official \
-    feature-dev@claude-plugins-official \
-    frontend-design@claude-plugins-official \
-    hookify@claude-plugins-official \
-    humanizer@humanizer \
-    pinecone@claude-plugins-official \
     playwright@claude-plugins-official \
     pyright-lsp@claude-plugins-official \
     railway@claude-plugins-official \
     security-guidance@claude-plugins-official \
     serena@claude-plugins-official \
-    session-report@claude-plugins-official \
     swift-lsp@claude-plugins-official \
     typescript-lsp@claude-plugins-official \
-    understand-anything@understand-anything \
     vercel@claude-plugins-official; do
     if claude plugin install "$p" --scope user </dev/null &>/dev/null; then
       log "installed ${p%%@*}"
@@ -2341,12 +2320,7 @@ if [ "$PLUGINS_OK" -eq 1 ]; then
       warn "could not register $M_NAME"
     fi
   done <<'KEYLESS_MCP'
-fetch|uvx|mcp-server-fetch
-time|uvx|mcp-server-time
 git|uvx|mcp-server-git
-sequential-thinking|npx|-y @modelcontextprotocol/server-sequential-thinking
-chart|npx|-y @antv/mcp-server-chart
-macos-automator|npx|-y @steipete/macos-automator-mcp@latest
 KEYLESS_MCP
 
   while IFS='|' read -r M_NAME M_CMD M_ARGS M_ENV; do
@@ -2702,16 +2676,6 @@ else
     warn "uv missing, so site-fast is skipped"
   fi
 
-  if command -v claude &>/dev/null; then
-    if claude mcp list 2>/dev/null | grep -q "^macos-automator:"; then
-      log "macos-automator already registered"
-    elif claude mcp add --scope user macos-automator \
-      -- npx -y @steipete/macos-automator-mcp@latest &>/dev/null; then
-      log "macos-automator registered (AppleScript and JXA over MCP)"
-    else
-      warn "could not register macos-automator"
-    fi
-  fi
 
   # Accessibility and Screen Recording cannot be granted by any script. tccutil
   # can remove a grant and never add one, and only an MDM profile can pre-grant.

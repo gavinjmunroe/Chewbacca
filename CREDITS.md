@@ -89,6 +89,15 @@ undo removes only rows its own apply stamped with an origin.
 design. **realm has no license, so no code was copied.** The implementation
 here was written from scratch after reading `apps/server/src/import/`.
 
+The live surfaces (`bin/kyber-surfaces`) take four more ideas from realm's
+`design.md`, read as a design reference only, with no code copied: the "what
+should I look at" page that ranks everything by what it needs from you,
+blocked first (the `needs-you` surface); spaces as bodies of work whose open
+panels persist and restore (`kyber-surfaces space`); an activity log of every
+action a surface takes, outcome only and never the content
+(`kyber-surfaces activity`); and a link shown as what it points at, named
+only where it can be named exactly (`link_name` in `bin/lib/surfaces/`).
+
 Also read: [bytedance/UI-TARS](https://github.com/bytedance/UI-TARS) and
 [UI-TARS-desktop](https://github.com/bytedance/UI-TARS-desktop),
 [trycua/cua](https://github.com/trycua/cua) and

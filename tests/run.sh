@@ -1198,6 +1198,18 @@ if group "hud"; then
   check  "agenda reads today or the week aloud and refuses a task" python3 "$ROOT/tests/test_agenda.py"
   check  "a text to yourself starting with Kyber is a command, nothing else is" python3 "$ROOT/tests/test_text_command.py"
   check  "a replayed sentence takes the path the voice would take" python3 "$ROOT/tests/test_fast_path.py"
+  # The OS graph and the surfaces drawn from it. Fixture chat.db, people
+  # store, backlog and mail in a temp dir and a fake display, so nothing real
+  # is read and nothing is sent.
+  check  "kyber-surfaces parses" python3 -m py_compile "$ROOT/bin/kyber-surfaces"
+  check  "the OS graph refuses bad edges, fuses only via people, answers its questions" \
+    python3 "$ROOT/tests/test_osgraph.py"
+  check  "surfaces draw valid ops, refresh with d only, and send only on a press" \
+    python3 "$ROOT/tests/test_kyber_surfaces.py"
+  check  "a sentence opens the right surface and a near miss goes to the model" \
+    python3 "$ROOT/tests/test_surface_intent.py"
+  check  "apps.json names a replacement or says not yet for every app" \
+    python3 "$ROOT/tests/test_apps_map.py"
   check  "reflect harvests both logs, replays them, and writes only when told" python3 "$ROOT/tests/test_reflect.py"
   check  "held-out cases stay hidden from the proposer and can fail a fix" python3 "$ROOT/tests/test_holdout.py"
   check  "web-record keeps the path, never what was typed" python3 "$ROOT/tests/test_web_record.py"

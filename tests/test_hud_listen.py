@@ -1331,7 +1331,9 @@ def listener_env(directory: str, path: str) -> dict[str, str]:
     )
     return dict(
         os.environ, HUD_TEST_ENTRY=str(entry),
-        BOB_HUD_SOCKET=path, HUD_NAMES="off", HUD_ROUTE="off",
+        # HUD_SURFACES=off: the listener otherwise starts the real surfaces
+        # daemon against the developer's ~/.bob.
+        BOB_HUD_SOCKET=path, HUD_NAMES="off", HUD_ROUTE="off", HUD_SURFACES="off",
         HUD_VOICE="off", BOB_MEMORY_DIR=os.path.join(directory, "mem"),
         SUPERASSISTANT_DIR=os.path.join(directory, "superassistant"),
         BOB_NAMES=os.path.join(directory, "names.txt"),

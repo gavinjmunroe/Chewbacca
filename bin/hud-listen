@@ -49,6 +49,7 @@ import decision_log  # noqa: E402
 import quick  # noqa: E402
 import opener  # noqa: E402
 import agenda  # noqa: E402
+import surface_intent  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import hud_runtime  # noqa: E402
 
@@ -58,6 +59,11 @@ QUICK = os.environ.get("HUD_QUICK", "on") != "off"
 # HUD_OPEN=off: "open a new terminal window" and the Chrome and Sheets
 # openers go to the model instead of being done here (bin/lib/opener.py).
 OPEN = os.environ.get("HUD_OPEN", "on") != "off"
+# HUD_SURFACES=off: "show my day", "what do I need to do", "show me Karthik"
+# go to the model instead of opening a live surface (bin/lib/surface_intent.py),
+# and the surfaces daemon is not started with the listener.
+SURFACES = os.environ.get("HUD_SURFACES", "on") != "off"
+KYBER_SURFACES = Path(__file__).resolve().parent / "kyber-surfaces"
 
 # HUD_ROUTE=off: every sentence goes to the assistant and nothing is written
 # to ~/.bob/memory, which is how the fake-display test runs without a
@@ -1220,6 +1226,7 @@ FAST_PATHS = {
     "connection_check": "connection",
     "pleasantry": "pleasantry",
     "quick_answer": "quick",
+    "surface_request": "surface",
     "music_request": "music",
     "open_request": "open",
     "agenda_request": "agenda",
@@ -1256,6 +1263,12 @@ def fast_path(said: str) -> str | None:
             if quick.answer(said):
                 return "quick"
         except Exception:  # noqa: BLE001  the bridge falls through on the same error
+            pass
+    if SURFACES:
+        try:
+            if surface_intent.parse(said) is not None:
+                return "surface"
+        except Exception:  # noqa: BLE001
             pass
     module = music()
     if module is not None:
@@ -1572,6 +1585,13 @@ class Listener:
         self.prime()
         if ROUTE:
             threading.Thread(target=self.watch_terminal, daemon=True).start()
+        if SURFACES:
+            # Started from here so the daemon is a child of Kyber's process
+            # tree and reads Calendar and Messages under Kyber's grants, which
+            # a daemon started from a terminal does not have (TCC attributes a
+            # read to the app that launched the process). `start` is a no-op
+            # when it is already running.
+            threading.Thread(target=self.start_surfaces, daemon=True).start()
 
         delay = 0.5
         announced = False
@@ -1738,6 +1758,11 @@ class Listener:
                 threading.Thread(
                     target=lambda: self.terminal("focus", voice_memory.project().get("tty")), daemon=True,
                 ).start()
+            elif action.startswith("ks-") or (action == "action" and component.startswith("ks-")):
+                # A surface's own control (bin/kyber-surfaces owns every
+                # `ks-` action and acts on it). Asked here as well, a press of
+                # Send would also become a model turn about pressing Send.
+                pass
             elif action.startswith("call-"):
                 # `e call-start` and `e call-dismiss` are the call offer's
                 # buttons, and call-watch acts on them. Asked here as well,
@@ -2282,6 +2307,10 @@ class Listener:
         pointing = bool(self.pointed_marks())
         if QUICK and not relayed and not pointing and self.quick_answer(said, typed):
             return
+        # A surface before music: "what's playing" opens the player panel and
+        # says the song, where the music path only said it.
+        if SURFACES and not relayed and not pointing and self.surface_request(said, typed):
+            return
         if not relayed and not pointing and self.music_request(said, typed):
             return
         if OPEN and not relayed and not pointing and self.open_request(said, typed):
@@ -2501,6 +2530,47 @@ class Listener:
                 outcome = opener.Outcome(False, "That didn't open.")
             answer = outcome.line
             self.log(f"open: {command.kind} in {(time.monotonic() - started) * 1000:.0f}ms:", answer)
+            self.remember(req, answer, outcome.ok, "done" if outcome.ok else "failed")
+            self.send("s " + json.dumps(answer))
+            self.send("w " + json.dumps(answer) + " done=true")
+            if not typed:
+                self.speak(answer)
+            self.settle_unless_running("done", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def start_surfaces(self) -> None:
+        try:
+            subprocess.run([str(KYBER_SURFACES), "start"], capture_output=True, text=True, timeout=15)
+        except (OSError, subprocess.TimeoutExpired) as err:
+            self.log("surfaces daemon did not start:", err)
+
+    def surface_request(self, said: str, typed: bool) -> bool:
+        """"Show my day", "what do I need to do", "show me Karthik": open or
+        close a live surface with no model turn. See bin/lib/surface_intent.py
+        for which sentences count. The panel is the answer; the voice says one
+        line, so a surface is never read aloud."""
+        if self.in_flight():
+            return False
+        try:
+            command = surface_intent.parse(said)
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("surface failed:", err)
+            return False
+        if command is None:
+            return False
+        req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+
+        def work() -> None:
+            started = time.monotonic()
+            try:
+                outcome = surface_intent.perform(command)
+            except Exception as err:  # noqa: BLE001
+                self.log("surface failed:", err)
+                outcome = surface_intent.Outcome(False, "That surface didn't open.")
+            answer = outcome.line
+            self.log(f"surface: {command.verb} {command.name} in {(time.monotonic() - started) * 1000:.0f}ms:", answer)
             self.remember(req, answer, outcome.ok, "done" if outcome.ok else "failed")
             self.send("s " + json.dumps(answer))
             self.send("w " + json.dumps(answer) + " done=true")

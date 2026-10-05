@@ -79,6 +79,14 @@ TABLE = [
     ("OK now open Google sheets and label it Valencia", None),
     ("Open new Claude window", None),
     ("Open a bubble", None),
+    # Live surfaces (bin/lib/surface_intent.py), 2026-10-04.
+    ("Show my day", "surface"),
+    ("What do I need to do?", "surface"),
+    ("Check my inbox", "surface"),
+    ("What's playing?", "surface"),
+    ("close my texts", "surface"),
+    ("What do I have today", "agenda"),
+    ("show my texts from Sam and reply that I'm late", None),
 ]
 
 

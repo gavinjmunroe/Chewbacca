@@ -10,6 +10,7 @@ import base64
 import fcntl
 import hashlib
 import json
+import re
 import os
 import plistlib
 import socket
@@ -599,6 +600,10 @@ def test_engine_file():
         check("a home that is only the space path's parent is another home",
               not rc.is_realm_server(near.pid, spaced))
 
+        # These two exercise the system.info half of connect(), so the port
+        # ownership half (test_security_review_fixes) is taken as passed here.
+        real_owner = rc.port_owner
+        rc.port_owner = lambda _port: proc.pid
         wrong = Fake(realm_server(home / "someone-else"))
         put({"pid": proc.pid, "port": wrong.port})
         e = raises(lambda: rc.call("sessions.get", {"id": "s"}, home=home), rc.RealmUnavailable)
@@ -646,13 +651,45 @@ def test_engine_file():
         for pr in procs:
             pr.kill()
             pr.wait()
-
+    rc.port_owner = real_owner
 
 def test_read_methods_are_reads():
     verbs = {"send", "write", "create", "delete", "ship", "stage", "unstage", "respondPermission",
              "update", "set", "fork", "interrupt", "openPath", "run", "start", "kill", "rename"}
     writes = [m for m in rc.READ_METHODS if m.split(".", 1)[1] in verbs]
     check("READ_METHODS holds no write-shaped name", not writes, writes)
+
+
+def test_security_review_fixes():
+    """Three findings from the 2026-10-05 security review."""
+    # 1. A squatter on the engine's port: system.info is a claim anyone can
+    #    make, so connect() must refuse when the port's listener is not the pid.
+    with tempfile.TemporaryDirectory() as d:
+        home = Path(d)
+        squatter = Fake(realm_server(home))
+        proc = fake_engine_proc(home)
+        try:
+            time.sleep(0.2)
+            path = rc.engine_file(home)
+            path.write_text(json.dumps({"pid": proc.pid, "port": squatter.port}))
+            os.chmod(path, 0o600)
+            e = raises(lambda: rc.connect(home=home), rc.RealmUnavailable)
+            check("connect refuses a port whose listener is not the engine pid",
+                  isinstance(e, rc.RealmUnavailable) and "held by pid" in str(e), e)
+        finally:
+            proc.kill()
+    check("port_owner names this process for a port it listens on",
+          rc.port_owner(Fake(realm_server(Path("/tmp"))).port) == os.getpid())
+    # 2 and 3. The engine builds only a pinned commit and starts behind the
+    #    Origin guard.
+    src = (ROOT / "bin" / "realm-engine").read_text()
+    pin = re.search(r'"CHEWBACCA_REALM_REF", "([0-9a-f]+)"', src)
+    check("the engine pins a full upstream commit", bool(pin) and len(pin.group(1)) == 40, pin)
+    check("the build refuses a checkout that is not at the pin", "refusing to run its build" in src)
+    check("the server starts with the origin guard loaded", '"--import", ORIGIN_GUARD.as_uri()' in src)
+    guard = (ROOT / "data" / "realm" / "origin-guard.mjs").read_text()
+    check("the guard refuses any upgrade that carries an Origin",
+          "req.headers.origin !== undefined" in guard and "403" in guard)
 
 
 def test_engine_cli():
@@ -700,8 +737,11 @@ def test_engine_cli():
               code == 0 and "already running" in err, (code, err))
         code, out, _ = cli("status", "--json")
         st = json.loads(out)
-        check("status reports running and reachable",
-              code == 0 and st["running"] and st.get("reachable") is True, st)
+        # The fake server listens in this test process, outside the fake
+        # node's process tree, which is exactly the squatter case the
+        # 2026-10-05 review found: status must say running but refuse it.
+        check("status reports running, and refuses a port the engine does not own",
+              st["running"] and st.get("reachable") is False and "held by pid" in str(st.get("error")), st)
         pid = data.get("pid")
         code, out, err = cli("stop")
         check("stop exits 0", code == 0, err)
@@ -809,6 +849,7 @@ def main():
     test_engine_file()
     test_read_methods_are_reads()
     test_engine_cli()
+    test_security_review_fixes()
     print(f"\n{'FAILED ' + str(failed) if failed else 'all passed'}")
     return 1 if failed else 0
 

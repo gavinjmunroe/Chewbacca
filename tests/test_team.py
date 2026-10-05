@@ -314,6 +314,14 @@ class TeamTest(unittest.TestCase):
         self.assertEqual(team.parse_commit_refs("team: CHW-3 comment", ""), (set(), set()))
         self.assertEqual(team.parse_commit_refs("feat: x (closes chw-7)", "CHW-8"), ({"CHW-7", "CHW-8"}, {"CHW-7"}))
 
+    def test_idea_bin_stays_off_the_default_board(self):
+        self.run_team(self.a, "add", "Real work")
+        self.run_team(self.a, "add", "Portal sparkles", "--status", "ideas")
+        _, out, _ = self.run_team(self.a, "board")
+        self.assertIn("Real work", out)
+        self.assertNotIn("Portal sparkles", out)
+        self.assertIn("Idea bin: 1", out)
+
     def test_feed_shows_commits(self):
         self.run_team(self.a, "add", "Feed me")
         _, out, _ = self.run_team(self.a, "feed", "--json")

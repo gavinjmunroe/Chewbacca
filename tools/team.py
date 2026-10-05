@@ -43,9 +43,9 @@ import webbrowser
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 TASK_DIR = "team/tasks"
-STATUSES = ["inbox", "backlog", "todo", "in_progress", "in_review", "done", "canceled"]
+STATUSES = ["inbox", "backlog", "todo", "in_progress", "in_review", "done", "ideas", "canceled"]
 LABELS = {"inbox": "Inbox", "backlog": "Backlog", "todo": "Todo", "in_progress": "In progress",
-          "in_review": "In review", "done": "Done", "canceled": "Canceled"}
+          "in_review": "In review", "done": "Done", "ideas": "Idea bin", "canceled": "Canceled"}
 PRIORITIES = ["urgent", "high", "medium", "low", "none"]
 FIELDS = ["id", "title", "status", "owner", "priority", "due", "labels",
           "done_when", "proof", "source", "created", "updated"]
@@ -547,7 +547,7 @@ def board(tasks, show_closed=False):
             out += [line(t) for t in group[-8:]]
             out.append("")
             continue
-        if s in ("done", "canceled") and not show_closed:
+        if s in ("done", "ideas", "canceled") and not show_closed:
             if group:
                 out.append(f"{LABELS[s]}: {len(group)} (team board --all to list)")
             continue

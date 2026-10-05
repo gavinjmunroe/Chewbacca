@@ -9,6 +9,7 @@ const LIST_ORDER = [
   "backlog",
   "inbox",
   "done",
+  "ideas",
   "canceled",
 ];
 const LABEL = {
@@ -18,6 +19,7 @@ const LABEL = {
   in_progress: "In progress",
   in_review: "In review",
   done: "Done",
+  ideas: "Idea bin",
   canceled: "Canceled",
 };
 const PRIORITY_LABEL = {
@@ -52,6 +54,7 @@ const ICON = {
   list: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M3 4h10M3 8h10M3 12h10"/></svg>',
   board:
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="3.5" height="10" rx="1"/><rect x="6.25" y="3" width="3.5" height="7" rx="1"/><rect x="10.5" y="3" width="3.5" height="5" rx="1"/></svg>',
+  bulb: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12.5h4M6.5 14.5h3M8 1.8a4.2 4.2 0 0 0-2.4 7.6c.5.4.9 1 .9 1.6v.5h3v-.5c0-.6.4-1.2.9-1.6A4.2 4.2 0 0 0 8 1.8z"/></svg>',
   pulse:
     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8h3l2-4.5 3 9 2-4.5h3"/></svg>',
   github:
@@ -69,6 +72,7 @@ function statusIcon(status) {
     in_progress: `${s}${ring("#f2c94c")}<path d="M7 3.5a3.5 3.5 0 0 1 0 7z" fill="#f2c94c"/></svg>`,
     in_review: `${s}${ring("#4cb782")}<path d="M7 3.5a3.5 3.5 0 1 1-3.5 3.5H7z" fill="#4cb782"/></svg>`,
     done: `${s}<circle cx="7" cy="7" r="6.25" fill="#5e6ad2"/><path d="M4.4 7.2l1.8 1.8 3.5-3.6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+    ideas: `${s}<circle cx="7" cy="7" r="5.5" stroke="#62666d" stroke-width="1.5" stroke-dasharray="0.8 2.2" stroke-linecap="round"/><circle cx="7" cy="7" r="1.6" fill="#8a8f98"/></svg>`,
     canceled: `${s}<circle cx="7" cy="7" r="6.25" fill="#62666d"/><path d="M5 5l4 4M9 5L5 9" stroke="#0f1011" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   };
   return map[status] || map.todo;
@@ -224,6 +228,9 @@ function ago(iso) {
 
 function inView(t, { ignoreLabel = false } = {}) {
   if (state.view === "inbox" && t.status !== "inbox") return false;
+  // The idea bin keeps spectacle and speculative items saved but out of every
+  // other view, so the board shows only work someone could finish.
+  if ((state.view === "ideas") !== (t.status === "ideas")) return false;
   if (
     state.view === "mine" &&
     (t.owner !== state.me.member || t.status === "canceled")
@@ -255,6 +262,7 @@ function viewTitle() {
     mine: "My tasks",
     active: "Active",
     all: "All tasks",
+    ideas: "Idea bin",
     person: state.person,
   }[state.view];
 }
@@ -422,7 +430,8 @@ function sidebar() {
       "Active",
       count((t) => ["todo", "in_progress", "in_review"].includes(t.status)),
     ),
-    nav("all", "list", "All tasks", tasks.length),
+    nav("all", "list", "All tasks", count((t) => t.status !== "ideas")),
+    nav("ideas", "bulb", "Idea bin", count((t) => t.status === "ideas")),
     el("div", { class: "nav-label" }, "People"),
     ...state.board.members.map((m) =>
       nav(

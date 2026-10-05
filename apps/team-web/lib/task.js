@@ -23,6 +23,7 @@ export const STATUSES = [
   "in_progress",
   "in_review",
   "done",
+  "ideas",
   "canceled",
 ];
 export const PRIORITIES = ["urgent", "high", "medium", "low", "none"];

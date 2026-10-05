@@ -222,6 +222,8 @@ class ImportFlow(unittest.TestCase):
         self.run_cli("apply", item["key"])
         index = (self.brain / "memory" / "MEMORY.md").read_text()
         self.assertNotIn("curl", index)
+        front = (self.brain / "memory" / f"import_{item['key']}.md").read_text().split("---", 2)[1]
+        self.assertNotIn("curl", front)
         self.assertIn(f"import_{item['key']}", index)
 
     def test_apply_then_undo_on_a_missing_notes_folder_leaves_nothing(self):

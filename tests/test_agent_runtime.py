@@ -170,6 +170,24 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(allowed.returncode, 0, allowed.stderr)
         self.assertFalse(context.codex_home().exists())
 
+    def test_tool_checks_carry_matchers_and_an_old_matcherless_one_is_repaired(self):
+        # 2026-10-05: a matcher-less PreToolUse write-log ran on every Read and
+        # Grep and left 24,758 orphan snapshots in ~/.chewbacca/session-state.
+        home = self.home / '.claude'
+        home.mkdir()
+        old = ' '.join([sys.executable, str(ROOT / 'tools/shared_checks.py'), 'run', 'write-log.sh'])
+        (home / 'settings.json').write_text(json.dumps(
+            {'hooks': {'PreToolUse': [{'hooks': [{'type': 'command', 'command': old}]}]}}))
+        runtime.setup('claude-code')
+        data = json.loads((home / 'settings.json').read_text())
+        for event in ('PreToolUse', 'PostToolUse'):
+            for group in data['hooks'][event]:
+                if 'shared_checks.py run' in json.dumps(group):
+                    self.assertTrue(group.get('matcher'), (event, group))
+        pre = [g for g in data['hooks']['PreToolUse'] if 'write-log.sh' in json.dumps(g)]
+        self.assertEqual(len(pre), 1)
+        self.assertEqual(pre[0]['matcher'], 'Write|Edit|Bash|NotebookEdit')
+
     def test_plan_and_status_do_not_write_or_call_models(self):
         with patch.object(runtime.shutil, 'which', return_value=None):
             runtime.plan('both')

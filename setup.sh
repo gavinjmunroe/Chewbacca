@@ -1448,25 +1448,6 @@ h["Stop"] = [{"hooks": [{
     "timeout": 5,
     "statusMessage": "Checking the reply opens the way you asked...",
 }]}, {"hooks": [{
-    # Caleb, 2026-09-27, three messages in a row: "Don't assume anything to be
-    # linear." "Don't expect any placements to be uniform." "Don't assume
-    # patterns." All three about one page, and all three right: it shipped a
-    # wall of 42 identical rectangles in a perfect lattice where every fourth
-    # one failed, because the code said `i % 4 === 1`.
-    #
-    # Uniformity and a modulus are not stylistic slips. They are the signature
-    # of having stopped looking, and they are what an agent reaches for by
-    # default because they are the shortest code that fills a space.
-    #
-    # "Linear where the measurement curved" was the third thing he named and
-    # is not detectable from source, since a linear map is only wrong relative
-    # to data the file does not contain. That one stays in the rules. These
-    # two are detectable because they are self-evidently invented.
-    "type": "command",
-    "command": hooks_dir + "/assumption-guard.sh",
-    "timeout": 15,
-    "statusMessage": "Checking for invented structure...",
-}]}, {"hooks": [{
     # 39 hooks were registered on 2026-09-27 and not one of them looked at a
     # rendered image. slop-guard blocked a reply that night over a single em
     # dash while a page shipped across four commits with a collapsed figure,
@@ -1553,7 +1534,12 @@ h["Stop"] = [{"hooks": [{
 # Inert without ~/.chewbacca/opener-marker, same as prayer-guard.
 _register("UserPromptSubmit", hooks_dir + "/prayer-remind.sh", timeout=5)
 
-_register("UserPromptSubmit", hooks_dir + "/coursework-context.sh", timeout=10)
+# coursework-context.sh is not registered for Claude Code. It emits a
+# SessionStart payload, and on UserPromptSubmit Claude Code dropped it on every
+# prompt: a process start and a ledger read per prompt for nothing.
+# session-context.sh already puts the same deadlines in at session start. The
+# Codex adapter still calls it (tools/codex_hooks.py), which reads the text
+# whatever the event name says.
 
 # A kit already built is worth nothing if the next session answers the question
 # in a chat window instead. This matches the prompt against every kit's
@@ -1751,6 +1737,17 @@ _register("PostToolUse", hooks_dir + "/prose-guard.sh", timeout=20,
           matcher="Write|Edit",
           status="Checking the prose against the writing rules...")
 
+# Caleb, 2026-09-27, three messages in a row: "Don't assume anything to be
+# linear." "Don't expect any placements to be uniform." "Don't assume
+# patterns." All three about one page that shipped 42 identical rectangles in
+# a lattice where every fourth one failed, because the code said `i % 4 === 1`.
+# The hook reads `.tool_input.file_path`, so it belongs here. It was registered
+# under Stop until 2026-10-05, where that field never exists, so it exited 0 on
+# every turn and had never checked a file.
+_register("PostToolUse", hooks_dir + "/assumption-guard.sh", timeout=15,
+          matcher="Write|Edit",
+          status="Checking for invented structure...")
+
 # The untrusted-content rule, checked instead of hoped for. A page, a text or a
 # mail body that addresses the agent gets its excerpt put in front of the model
 # with the rule attached. Warns, never blocks. See the hook for the tool list.
@@ -1794,6 +1791,28 @@ if _pc:
 
 # One status line: model, directory, branch, context used, session cost.
 settings["statusLine"] = {"type": "command", "command": hooks_dir + "/statusline.sh"}
+
+# Hooks this machine has opted out of, by basename, one per line in
+# ~/.chewbacca/skip-hooks or space-separated in D1_SKIP_HOOKS. Without this,
+# removing a hook from settings.json lasted until the next `chewbacca update`,
+# which re-runs this block and registers everything again. Applied last, so it
+# wins over every registration above. Only hooks named here are touched.
+_skip = set(env("D1_SKIP_HOOKS", "").split())
+_skip_file = os.path.expanduser("~/.chewbacca/skip-hooks")
+if os.path.exists(_skip_file):
+    with open(_skip_file) as f:
+        _skip |= {line.split("#")[0].strip() for line in f} - {""}
+if _skip:
+    for _event in list(h):
+        for _entry in h[_event]:
+            # Any token, not only the first: a shared check is registered as
+            # `python3 shared_checks.py run write-log.sh`.
+            _entry["hooks"] = [hook for hook in _entry.get("hooks", [])
+                               if not {os.path.basename(t) for t in str(hook.get("command", "")).split()} & _skip]
+        h[_event] = [e for e in h[_event] if e.get("hooks")]
+        if not h[_event]:
+            del h[_event]
+    print("Hooks skipped by ~/.chewbacca/skip-hooks: " + ", ".join(sorted(_skip)))
 
 # The file now holds an Anthropic key and a GitHub PAT. Write it atomically so
 # a crash cannot truncate it, and 0600 so it is not world-readable.

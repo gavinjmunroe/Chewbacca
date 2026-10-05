@@ -92,10 +92,30 @@ def main() -> int:
     (opened / ".claude").mkdir()
     run(block, opened, opener="prayer")
     twice = run(block, opened, opener="prayer")
-    for name in ("coursework-context.sh", "kit-route.sh"):
+    for name in ("prayer-remind.sh", "kit-route.sh"):
         check(f"{name} is registered once on a re-run with a session opener",
               commands(twice, "UserPromptSubmit").count(name) == 1,
               str(commands(twice, "UserPromptSubmit")))
+
+    # assumption-guard reads .tool_input.file_path. Under Stop that field
+    # never exists, so until 2026-10-05 it exited 0 on every turn.
+    check("assumption-guard is not a Stop hook", "assumption-guard.sh" not in commands(first, "Stop"))
+    post = [e for e in first["hooks"]["PostToolUse"]
+            if any("assumption-guard.sh" in str(h.get("command")) for h in e["hooks"])]
+    check("assumption-guard runs after writes", len(post) == 1 and post[0].get("matcher") == "Write|Edit", str(post))
+    check("coursework-context is not a per-prompt hook",
+          "coursework-context.sh" not in commands(twice, "UserPromptSubmit"))
+
+    # A machine's opt-outs survive a re-run, which is what `chewbacca update` does.
+    skipping = pathlib.Path(tempfile.mkdtemp())
+    (skipping / ".claude").mkdir()
+    (skipping / ".chewbacca").mkdir()
+    (skipping / ".chewbacca" / "skip-hooks").write_text("kit-autopush.sh  # never pushed\nmodel-route.sh\n")
+    run(block, skipping)
+    skipped = run(block, skipping)
+    every = [c for event in skipped["hooks"] for c in commands(skipped, event)]
+    check("a skipped hook stays out after a re-run", "kit-autopush.sh" not in every and "model-route.sh" not in every, str(every))
+    check("hooks not named in skip-hooks are untouched", "slop-guard.sh" in every and "write-log.sh" in every)
 
     print(f"\n{PASSED} passed, {FAILED} failed")
     return 1 if FAILED else 0

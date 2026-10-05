@@ -32,5 +32,14 @@ out=$(run "why is the deploy failing on railway")
 [ -z "$out" ] && ok "silent on a deploy question" \
   || no "fired on a deploy question"
 
+# `ui` as a substring fired on 45 of 300 prompts on 2026-10-05.
+out=$(run "build a quick guide to the test suite")
+[ -z "$out" ] && ok "silent when ui only appears inside build, quick, guide and suite" \
+  || no "fired on ui inside another word"
+
+out=$(run "the ui on the settings page feels cramped")
+printf '%s' "$out" | grep -q "400ms TOTAL" && ok "still fires on ui as a word" \
+  || no "did not fire on ui as a word"
+
 printf '\n  %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

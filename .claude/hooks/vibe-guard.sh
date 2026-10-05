@@ -60,8 +60,18 @@ LOWER=$(printf '%s' "$MSG" | tr '[:upper:]' '[:lower:]')
 
 # FOUND, NOT HARDCODED. The first version of this pointed at one person's
 # Desktop, which is the "works on my machine" failure the kit keeps paying for.
+#
+# The checkout comes from d1-config.sh, as kit-autopull resolves it. setup.sh
+# COPIES this file to ~/.claude/hooks, where ../../bin is ~/bin, so the first
+# candidate only works when run from the repo. Without the config lookup the
+# installed copy found nothing and exited on all 88 runs logged by 2026-10-05.
+REPO="${CHEWBACCA_REPO_DIR:-}"
+if [ -z "$REPO" ] && [ -f "$HOME/.claude/d1-config.sh" ]; then
+  REPO="$(. "$HOME/.claude/d1-config.sh" 2>/dev/null; printf '%s' "${CHEWBACCA_REPO_DIR:-}")"
+fi
 CLOSEOUT=""
 for c in "$(dirname "${BASH_SOURCE[0]}")/../../bin/closeout" \
+         ${REPO:+"$REPO/bin/closeout"} \
          "$HOME/.local/bin/closeout" \
          "$HOME/code/chewbacca/bin/closeout"; do
   [ -x "$c" ] && { CLOSEOUT="$c"; break; }
@@ -210,6 +220,7 @@ EVIDENCE=$(evidence)
 [ "$EVIDENCE" = "0" ] || exit 0
 
 JEV_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../bin/lib" 2>/dev/null && pwd)"
+[ -n "$JEV_LIB" ] || { [ -n "$REPO" ] && [ -d "$REPO/bin/lib" ] && JEV_LIB="$REPO/bin/lib"; }
 if [ -n "${VIBE_GUARD_JEV_STUB+set}" ]; then
   # Test seam: "claim,report" probabilities instead of a network call.
   ANSWER="$VIBE_GUARD_JEV_STUB"

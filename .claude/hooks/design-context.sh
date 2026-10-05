@@ -37,7 +37,13 @@ PROMPT=$(printf '%s' "$PAYLOAD" | jq -r '.prompt // empty')
 
 # Only fire on work that actually renders something. A shell-script session
 # must not carry the animation rules.
-echo "$PROMPT" | grep -qiE 'design|ui|ux|css|animat|scroll|hover|layout|landing|hero|component|page|site|website|gizmo|svg|motion|typograph|spacing|color|colour' || exit 0
+#
+# Short words match whole words only. As substrings, `ui` fired on "build",
+# "quick", "guide" and "suite": 45 of 300 prompts on 2026-10-05, about 2,000
+# characters each, including a hook audit that never mentioned a page.
+echo "$PROMPT" | grep -qiE 'design|animat|scroll|hover|layout|landing|component|website|gizmo|motion|typograph|spacing' \
+  || echo "$PROMPT" | grep -qiwE 'ui|ux|css|hero|page|pages|site|sites|svg|color|colour' \
+  || exit 0
 
 # The engine adds what this project has learned. The hard numbers below do not
 # need it, and exiting when it was absent meant every Mac but the author's got

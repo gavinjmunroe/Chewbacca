@@ -560,6 +560,36 @@ def _xor(payload: bytes, mask: bytes) -> bytes:
     return (int.from_bytes(payload, "big") ^ key).to_bytes(n, "big")
 
 
+def descends_from(pid: int | None, ancestor: int) -> bool:
+    """pid is ancestor or one of its children's children. The engine's own
+    process listens today; a wrapper that forks the listener still counts,
+    anything outside its tree does not. Bounded walk up the ppid chain."""
+    for _ in range(16):
+        if pid is None or pid <= 1:
+            return False
+        if pid == ancestor:
+            return True
+        try:
+            out = subprocess.run(["ps", "-o", "ppid=", "-p", str(pid)], capture_output=True,
+                                 text=True, timeout=5).stdout.strip()
+            pid = int(out) if out else None
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            return False
+    return False
+
+
+def port_owner(port: int) -> int | None:
+    """The pid listening on 127.0.0.1:port, or None. One lsof read; a port with
+    several listeners or none is None, which connect() treats as not ours."""
+    try:
+        out = subprocess.run(["lsof", "-nP", f"-iTCP@127.0.0.1:{int(port)}", "-sTCP:LISTEN", "-Fp"],
+                             capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+    pids = {int(line[1:]) for line in out.splitlines() if line.startswith("p") and line[1:].isdigit()}
+    return pids.pop() if len(pids) == 1 else None
+
+
 def connect(timeout: float = 5.0, home: Path | None = None) -> Connection:
     """A connection to the engine in engine.json, proven to serve this home.
 
@@ -568,7 +598,16 @@ def connect(timeout: float = 5.0, home: Path | None = None) -> Connection:
     before the caller gets the connection.
     """
     home = home or realm_home()
-    conn = Connection(read_engine(home)["port"], timeout=timeout, _token=_PROVEN)
+    eng = read_engine(home)
+    # system.info is the server's own claim, and any local process can answer
+    # it with our realmHome (security review, 2026-10-05). The socket on that
+    # port has to belong to the pid engine.json names, checked before we
+    # connect, so a squatter on a dead engine's port is refused unheard.
+    owner = port_owner(eng["port"])
+    if not descends_from(owner, eng["pid"]):
+        raise RealmUnavailable(f"port {eng['port']} is held by pid {owner}, not the engine "
+                               f"(pid {eng['pid']}); run realm-engine start")
+    conn = Connection(eng["port"], timeout=timeout, _token=_PROVEN)
     try:
         info = conn.call("system.info", timeout=timeout)
         served = info.get("realmHome") if isinstance(info, dict) else None

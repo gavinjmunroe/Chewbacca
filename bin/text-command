@@ -145,6 +145,11 @@ KEPT_REPLIES = 20
 
 def command_in(words: str, trigger: str) -> str | None:
     """What was asked, with the trigger word taken off, or None."""
+    # The brain's own texts (gavin-context bin/text-me: the morning and evening briefs, digest
+    # results) all start "Chewbacca:". On 2026-10-03 this answered two of them within seconds,
+    # and the briefs quote friends' messages, which must never become a command.
+    if words.lstrip().startswith("Chewbacca:"):
+        return None
     if not trigger:
         asked = words.strip()
         return None if not asked or URL.search(asked) else asked

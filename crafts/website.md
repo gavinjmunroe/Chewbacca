@@ -234,6 +234,12 @@ that becomes a list's spine, a ground grid that flattens into a page, a sun
 that becomes a colour band). Each handoff is scroll-driven and reversible,
 checked at three points (before, middle, after).
 
+**No heading-plus-line grids.** Caleb, on a six-cell "Money / Cohort / Your
+time / Paper / Leaving" grid: "Header, subheader X6 screams SO AI." Repeated
+cards with a small label and one line, and stat tiles, are the most
+recognisable generated-page pattern. Say it as a paragraph in the owner's
+voice (here, his own DM), as a real figure, or as a real list.
+
 ## Done means
 
 `site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no

@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 // weft-mcp: the one tool a fenced Tangle build has for running weft.
 //
-//   weft-mcp <project-dir> <real-weft> <project-id>
+//   weft-mcp <project-dir> <runner> <project-id>
+//
+// <runner> runs weft somewhere else and speaks one protocol: the first line
+// of its stdin is JSON {"argv": [...], "cwd": "..."}, the rest is weft's own
+// stdin, and its exit code and output are weft's. In use it is bin/weft-box
+// with `run`, which hands the call to weft inside the weft-box VM: weft never
+// runs on the Mac, so nothing it reads or uploads can be the person's
+// (mac/weft-box/weft-box.yaml says why).
 //
 // <project-id> is read from weft.toml by weft-build before Tangle runs. Every
 // call first asks weft (`status --json`) which project it is in and refuses
@@ -10,39 +17,28 @@
 //
 // A stdio MCP server with a single tool, `weft`, that takes the words after
 // `weft` as a JSON array (and optional stdin), checks them against
-// lib/weft_fence.js SPEC, and runs the real binary with no shell, in the
-// project directory, with no WEFT_ variables, under sandboxProfile. Nothing
-// here is parsed as shell text, which is the point: see the header of
-// lib/weft_fence.js. With no sandbox-exec (not a Mac) it runs nothing.
+// lib/weft_fence.js SPEC, and hands them to the runner as data. Nothing here
+// is parsed as shell text, which is the point: see the header of
+// lib/weft_fence.js.
 
 "use strict";
 
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
 const readline = require("node:readline");
 const { spawn } = require("node:child_process");
-const { needsIds, refusal, sandboxProfile, scopeRefusal, scopedArgv, withoutWeftEnv } = require("./lib/weft_fence.js");
+const { needsIds, refusal, scopeRefusal, scopedArgv } = require("./lib/weft_fence.js");
 
-const [projectDir, realWeft, projectId] = process.argv.slice(2);
-if (!projectDir || !realWeft || !projectId) {
-  process.stderr.write("usage: weft-mcp <project-dir> <real-weft> <project-id>\n");
+const [projectDir, runner, projectId] = process.argv.slice(2);
+if (!projectDir || !runner || !projectId) {
+  process.stderr.write("usage: weft-mcp <project-dir> <runner> <project-id>\n");
   process.exit(2);
 }
 
-const SANDBOX = "/usr/bin/sandbox-exec";
-// Real paths, because the sandbox matches after symlinks resolve:
-// ~/.local/bin/weft links into ~/.local/share/weft/bin.
 const project = fs.realpathSync(projectDir);
-const weft = fs.realpathSync(realWeft);
-const scratch = path.join(project, ".weft", "tmp");
-const home = fs.realpathSync(os.homedir());
-// weft's install is its binary's grandparent (~/.local/share/weft). A weft
-// sitting straight in ~/bin would make that the whole home folder, so such an
-// install is refused rather than allowed wholesale.
-const weftHome = path.dirname(path.dirname(weft));
-const weftHomeTooWide = home === weftHome || home.startsWith(`${weftHome}${path.sep}`) || weftHome === path.sep;
-const profile = sandboxProfile({ project, home, weftHome });
+// The projects folder is the VM's one mount, and weft there loads the
+// nearest .env above the project, so the folder's own .env counts too.
+const envFiles = [path.join(project, ".env"), path.join(path.dirname(project), ".env")];
 
 // A first build that compiles a project's own node takes 1 to 3 minutes
 // (weft's weft-running skill); twenty leaves room for a slow run and still
@@ -75,13 +71,11 @@ function text(content, isError) {
   return { content: [{ type: "text", text: content }], isError };
 }
 
-// Runs `weft <argv>` in the sandbox. Resolves { code, signal, stdout, output }
+// Runs `weft <argv>` through the runner. Resolves { code, signal, stdout, output }
 // where output is stdout and stderr interleaved and cut to its tail.
 function spawnWeft(argv, stdin) {
   return new Promise((resolve) => {
-    fs.mkdirSync(scratch, { recursive: true });
-    const env = { ...withoutWeftEnv(process.env), TMPDIR: scratch };
-    const child = spawn(SANDBOX, ["-p", profile, weft, ...argv], { cwd: project, env, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn(runner, ["run"], { cwd: project, stdio: ["pipe", "pipe", "pipe"] });
     let stdout = "";
     let output = "";
     const take = (chunk) => {
@@ -96,12 +90,14 @@ function spawnWeft(argv, stdin) {
     const timer = setTimeout(() => child.kill("SIGTERM"), RUN_LIMIT_MS);
     child.on("error", (error) => {
       clearTimeout(timer);
-      resolve({ code: null, signal: null, stdout: "", output: `could not run weft: ${error.message}` });
+      resolve({ code: null, signal: null, stdout: "", output: `could not reach weft: ${error.message}` });
     });
     child.on("close", (code, signal) => {
       clearTimeout(timer);
       resolve({ code, signal, stdout, output });
     });
+    child.stdin.on("error", () => {});
+    child.stdin.write(`${JSON.stringify({ argv, cwd: project })}\n`);
     child.stdin.end(typeof stdin === "string" ? stdin : "");
   });
 }
@@ -128,16 +124,12 @@ async function ownedIds() {
 }
 
 async function callWeft(argv, stdin) {
-  if (weftHomeTooWide) return `weft at ${weft} has no install folder of its own, so the sandbox cannot be drawn around it`;
-  if (!fs.existsSync(SANDBOX)) return "this build runs weft only inside sandbox-exec, and it is not on this machine";
   const shape = refusal(argv);
   if (shape) return shape;
-  // weft would load it and could be pointed elsewhere by it, so the sandbox
-  // denies the read and every call would fail on it anyway; this says why.
+  // weft would load it, and a .env can point weft at another install.
   // Tangle has no way to delete a file, so the person has to.
-  if (fs.existsSync(path.join(project, ".env"))) {
-    return "a .env at the project root sets weft's own settings, so weft does not run while one is there, even empty; ask the person to delete it";
-  }
+  const env = envFiles.find((file) => fs.existsSync(file));
+  if (env) return `${env} sets weft's own settings, so weft does not run while it is there, even empty; ask the person to delete it`;
   // A registered project answers { id }; one that has never run answers
   // { registered: false, project_id } (seen on the first fenced build).
   const status = await weftJson(["status"]);

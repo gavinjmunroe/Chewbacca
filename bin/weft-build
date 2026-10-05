@@ -15,6 +15,9 @@
 //     two sentences the brief asked for (2026-10-04).
 //   - There is no shell. weft is one MCP tool (bin/weft-mcp) that takes an
 //     argv array and checks it against a per-verb list before running it.
+//   - weft does not run on this Mac during a build. The MCP tool and the
+//     validate hook both reach weft inside the weft-box VM (bin/weft-box),
+//     which sees ~/weft-projects and nothing else of the person's.
 //   - Anything that reaches outside this Mac or spends money is refused:
 //     putting a trigger live, starting paid infrastructure, deleting, and
 //     answering a person's question on their behalf. On the first build
@@ -34,6 +37,7 @@ const { NAME_NOTE, TOOLS, fence, mcpConfig, packagePlugin, withoutWeftEnv } = re
 
 const PROJECTS = process.env.WEFT_PROJECTS || path.join(os.homedir(), "weft-projects");
 const WEFT = process.env.WEFT_BIN || path.join(os.homedir(), ".local", "bin", "weft");
+const BOX = process.env.WEFT_BOX_BIN || path.join(__dirname, "weft-box");
 const CLAUDE = process.env.CLAUDE_BIN || "claude";
 const SOCKET = process.env.KYBER_SOCKET || path.join(os.homedir(), ".bob", "hud.sock");
 
@@ -100,6 +104,13 @@ function say(text, step) {
   hud([`s ${view.quote(text)}${step ? " step=true" : ""}`]);
 }
 
+// Checked before anything is made, so a stopped VM costs the person a
+// sentence rather than a half-built project.
+const box = spawnSync(BOX, ["status"], { encoding: "utf8" });
+if (box.status !== 0) {
+  process.stderr.write(`weft-build: the weft VM is not ready (${(box.stdout || box.stderr || "").trim().replace(/\n/g, "; ")}); weft-box start, or weft-box create the first time\n`);
+  process.exit(1);
+}
 
 fs.mkdirSync(PROJECTS, { recursive: true });
 // The name becomes a folder under PROJECTS and file names under the fence
@@ -121,9 +132,13 @@ const fenceDir = path.join(os.homedir(), ".chewbacca", "weft-build");
 fs.mkdirSync(fenceDir, { recursive: true });
 const hookPath = path.join(fenceDir, `${name}.validate_weft.py`);
 fs.copyFileSync(path.join(dir, ".claude", "hooks", "validate_weft.py"), hookPath);
+// The hook finds weft on PATH; this one is a shim into the VM.
+const shimDir = path.join(fenceDir, `${name}.bin`);
+fs.mkdirSync(shimDir, { recursive: true });
+fs.writeFileSync(path.join(shimDir, "weft"), `#!/bin/bash\nexec ${JSON.stringify(BOX)} weft "$@"\n`, { mode: 0o755 });
 const settingsPath = path.join(fenceDir, `${name}.settings.json`);
 const tangleSettings = JSON.parse(fs.readFileSync(path.join(dir, ".claude", "settings.json"), "utf8"));
-fs.writeFileSync(settingsPath, `${JSON.stringify(fence(tangleSettings, hookPath), null, 2)}\n`);
+fs.writeFileSync(settingsPath, `${JSON.stringify(fence(tangleSettings, hookPath, shimDir), null, 2)}\n`);
 // weft new wrote this id a moment ago and Tangle has not run yet, so it is
 // the one to pin: weft-mcp refuses every call once weft.toml names another.
 const projectId = (fs.readFileSync(path.join(dir, "weft.toml"), "utf8").match(/^id\s*=\s*"([0-9a-f-]{36})"/m) || [])[1];
@@ -132,7 +147,7 @@ if (!projectId) {
   process.exit(1);
 }
 const mcpPath = path.join(fenceDir, `${name}.mcp.json`);
-fs.writeFileSync(mcpPath, `${JSON.stringify(mcpConfig(path.join(__dirname, "weft-mcp"), dir, WEFT, projectId), null, 2)}\n`);
+fs.writeFileSync(mcpPath, `${JSON.stringify(mcpConfig(path.join(__dirname, "weft-mcp"), dir, BOX, projectId), null, 2)}\n`);
 const pluginDir = packagePlugin(dir, path.join(fenceDir, `${name}.plugin`));
 hud(["p thinking"]);
 say("Starting a new agent", false);

@@ -1,0 +1,93 @@
+# The VM a fenced Tangle build's weft runs in (bin/weft-box creates it).
+#
+# Eight commit reviews on 2026-10-04 each found another way a hostile build
+# could make weft, running on the Mac, read or send something of the
+# person's: @asset on any path, a .env above the project, weft's own key file,
+# another project's runs. Every one needed weft to share a filesystem with
+# the person. Here it shares exactly one folder, ~/weft-projects, mounted at
+# the same path (Lima's default mount point), so a project's paths read the
+# same on both sides. The home folder, ~/.env, the Keychain and every other
+# folder on the Mac do not exist in this machine.
+
+minimumLimaVersion: "2.0.0"
+# No `base:`. A Lima template base merges its mounts into this file's, and
+# the default template mounts the whole home folder read-only: the first VM
+# built from `base: template:ubuntu-24.04` (2026-10-04) showed ~/.env and
+# ~/.local inside. So the image is named here and nothing is inherited.
+images:
+  - location: https://cloud-images.ubuntu.com/releases/noble/release-20260926/ubuntu-24.04-server-cloudimg-arm64.img
+    arch: aarch64
+    digest: sha256:1d6bffe64b848468ac97f821d369a4846d983de1800ccf6b5ec8853e85cefc55
+  - location: https://cloud-images.ubuntu.com/releases/noble/release-20260926/ubuntu-24.04-server-cloudimg-amd64.img
+    arch: x86_64
+    digest: sha256:6a81c37564db9b1ee84e141922625e1d7c5b389b99bb3c572e0243607d5bb4d2
+vmType: vz
+mountType: virtiofs
+
+# 4 CPUs and 8 GiB is what colima had when the fenced builds of 2026-10-04
+# (an adder, a trigger with bake) ran clean; less was never tried. 60 GiB:
+# weft caps its BuildKit cache at 20 and target/ at 15 (setup.sh), and its
+# builder base images are about 1.4 GiB each.
+cpus: 4
+memory: 8GiB
+disk: 60GiB
+
+# Only the projects folder. bin/weft-box writes its real path over
+# __PROJECTS__.
+mounts:
+  - location: "__PROJECTS__"
+    writable: true
+
+# Only the dispatcher's public port reaches the Mac, where weft-view and the
+# Kyber panel read its live events. Postgres, the object store and the
+# internal ports stay inside.
+portForwards:
+  - guestPort: 14111
+    hostIP: 127.0.0.1
+  - guestPortRange: [1, 65535]
+    ignore: true
+
+# weft brings its own Docker; Lima's containerd would only take memory.
+containerd:
+  system: false
+  user: false
+
+# No ssh agent, no host Docker socket, no host gpg: nothing of the Mac's
+# credentials is handed in.
+ssh:
+  forwardAgent: false
+  loadDotSSHPubKeys: false
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux
+      export DEBIAN_FRONTEND=noninteractive
+      command -v docker >/dev/null || { apt-get update; apt-get install -y docker.io docker-buildx git curl jq; }
+      usermod -aG docker "{{.User}}"
+      install -m 0755 /dev/stdin /usr/local/bin/weft-argv <<'RUNNER'
+      #!/usr/bin/python3
+      # Runs `weft <argv>` with no shell. The first line of stdin is JSON
+      # {"argv": [...], "cwd": "..."}; everything after it is weft's own
+      # stdin, read straight off fd 0 so no buffer swallows it. Only cwd
+      # under the projects mount is accepted, and WEFT_ variables are dropped.
+      import json, os, sys
+      line = b""
+      while not line.endswith(b"\n"):
+          byte = os.read(0, 1)
+          if not byte:
+              break
+          line += byte
+      request = json.loads(line)
+      argv, cwd = request["argv"], os.path.realpath(request["cwd"])
+      root = "__PROJECTS__"
+      if not (isinstance(argv, list) and all(isinstance(word, str) for word in argv)):
+          sys.exit("weft-argv: argv must be a list of strings")
+      if cwd != root and not cwd.startswith(root + os.sep):
+          sys.exit("weft-argv: cwd is outside the projects folder")
+      env = {key: value for key, value in os.environ.items() if not key.startswith("WEFT_")}
+      os.chdir(cwd)
+      weft = os.path.expanduser("~/.local/bin/weft")
+      os.execve(weft, [weft, *argv], env)
+      RUNNER

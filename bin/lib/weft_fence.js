@@ -32,17 +32,20 @@ const path = require("node:path");
 // are copied, as `weft new` wrote them, into a session plugin outside it.
 //
 // The argv is not the whole story: weft also acts on the files Tangle writes.
-// The seventh review (2026-10-04) found `@asset("/any/path", String)`, which
-// weft reads from anywhere on the Mac and uploads at compile; a canary file in
-// /private/tmp came back in a run's output. And weft loads the nearest .env
-// above its working directory, so a .env Tangle writes could set
-// WEFT_DISPATCHER_URL after the scrub. So every call also runs under
-// sandboxProfile: no reads in the home folder, /private/tmp or the per-user
-// temp area except this project and weft's own install, no read of the
-// project's .env, and no network except this Mac.
+// The seventh and eighth reviews (2026-10-04) found `@asset("/any/path",
+// String)`, which weft reads from anywhere it can see and uploads at compile,
+// a .env above the project that weft loads, and weft's own key file. A
+// sandbox-exec profile around weft on the Mac closed some and each review
+// found the next. So weft no longer runs on the Mac during a build: weft-mcp
+// and the validate hook hand every call to weft inside the weft-box VM
+// (bin/weft-box, mac/weft-box/weft-box.yaml), whose only view of the Mac is
+// ~/weft-projects. What a hostile program can reach there is the projects
+// folder and the VM's own weft install, which holds no key of the person's.
 //
 // What the fence does not cover: `weft run` executes the program Tangle wrote,
-// ExecPython and HTTP nodes included, inside Docker, with network.
+// ExecPython and HTTP nodes included, inside Docker in the VM, with network.
+// It can reach the internet and ~/weft-projects, other builds' folders
+// included, and nothing else of the Mac's.
 
 const VALUE = "value";
 const SWITCH = "switch";
@@ -225,32 +228,11 @@ function withoutWeftEnv(env) {
   return Object.fromEntries(Object.entries(env).filter(([key]) => !key.startsWith("WEFT_")));
 }
 
-// A sandbox-exec profile for one weft call. Paths must be real paths, since
-// the sandbox matches after symlinks resolve (/tmp is /private/tmp). The last
-// matching rule wins, so the project's .env is denied after the project is
-// allowed. ~/.env stays readable because weft loads it on every call from a
-// project under home, sandboxed or not, and dotenv fails on an unreadable one.
-function sandboxProfile({ project, home, weftHome }) {
-  const quote = (value) => `"${String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
-  const sub = (value) => `(subpath ${quote(value)})`;
-  return [
-    "(version 1)",
-    "(allow default)",
-    `(deny file-read-data ${sub(home)} ${sub("/private/tmp")} ${sub("/private/var/folders")} ${sub("/Volumes")})`,
-    `(allow file-read-data ${sub(project)} ${sub(weftHome)} ${sub(path.join(home, ".docker"))} ${sub(path.join(home, ".colima"))} (literal ${quote(path.join(home, ".env"))}))`,
-    `(deny file-read-data (literal ${quote(path.join(project, ".env"))}))`,
-    `(deny file-write* ${sub(home)} ${sub("/private/tmp")} ${sub("/private/var/folders")})`,
-    `(allow file-write* ${sub(project)} ${sub(weftHome)})`,
-    "(deny network-outbound)",
-    '(allow network-outbound (remote ip "localhost:*") (remote unix-socket))',
-    "",
-  ].join("\n");
-}
-
 // tangleSettings: the parsed .claude/settings.json `weft new` wrote; only its
 // CLAUDE.md exclusions are kept. hookPath: a copy of validate_weft.py outside
-// the project.
-function fence(tangleSettings, hookPath) {
+// the project. shimDir: a folder whose `weft` runs weft in the VM; it leads
+// the hook's PATH, which the hook searches for weft (shutil.which).
+function fence(tangleSettings, hookPath, shimDir) {
   return {
     claudeMdExcludes: tangleSettings.claudeMdExcludes || [],
     permissions: { allow: [TOOL], deny: ["Bash", "WebFetch", "WebSearch"] },
@@ -258,7 +240,7 @@ function fence(tangleSettings, hookPath) {
       PostToolUse: [
         {
           matcher: "Edit|Write|MultiEdit",
-          hooks: [{ type: "command", command: `python3 ${JSON.stringify(hookPath)}`, timeout: 120 }],
+          hooks: [{ type: "command", command: `PATH=${JSON.stringify(`${shimDir}:/usr/bin:/bin`)} python3 ${JSON.stringify(hookPath)}`, timeout: 120 }],
         },
       ],
     },
@@ -266,9 +248,9 @@ function fence(tangleSettings, hookPath) {
 }
 
 // The --mcp-config for a build: one server, bin/weft-mcp, bound to this
-// project, its id and this weft binary.
-function mcpConfig(serverPath, projectDir, realWeft, projectId) {
-  return { mcpServers: { weft: { type: "stdio", command: process.execPath, args: [serverPath, projectDir, realWeft, projectId] } } };
+// project, its id and the runner that reaches weft (bin/weft-box).
+function mcpConfig(serverPath, projectDir, runner, projectId) {
+  return { mcpServers: { weft: { type: "stdio", command: process.execPath, args: [serverPath, projectDir, runner, projectId] } } };
 }
 
 // Copies the project's skills, agents and commands into pluginDir, which must
@@ -296,4 +278,4 @@ function packagePlugin(projectDir, pluginDir) {
   return pluginDir;
 }
 
-module.exports = { NAME_NOTE, SPEC, TOOL, TOOLS, fence, mcpConfig, needsIds, packagePlugin, refusal, sandboxProfile, scopeRefusal, scopedArgv, withoutWeftEnv };
+module.exports = { NAME_NOTE, SPEC, TOOL, TOOLS, fence, mcpConfig, needsIds, packagePlugin, refusal, scopeRefusal, scopedArgv, withoutWeftEnv };

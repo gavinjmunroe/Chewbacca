@@ -1,0 +1,120 @@
+#!/bin/bash
+# The VM a fenced Tangle build's weft runs in.
+#
+#   weft-box create     make the VM, install weft inside it, start its runtime
+#   weft-box status     is the VM up, and does weft's runtime answer
+#   weft-box start      boot it (after a restart of the Mac)
+#   weft-box stop       shut it down
+#   weft-box run        one weft call, for bin/weft-mcp: the first line of
+#                       stdin is JSON {"argv": [...], "cwd": "..."}, the rest
+#                       is weft's stdin
+#   weft-box weft ...   `weft ...` in the VM from the current folder, which
+#                       must be under ~/weft-projects; Tangle's validate hook
+#                       reaches it through a `weft` shim weft-build writes
+#
+# weft inside the VM sees one folder of the Mac, ~/weft-projects, and none of
+# the person's files, keys or other folders: mac/weft-box/weft-box.yaml says
+# why. Its runtime's public port, 14111, is forwarded to 127.0.0.1 on the Mac,
+# where weft-view reads the live events.
+set -euo pipefail
+
+# Tangle's validate hook runs this through a shim with PATH cut to
+# /usr/bin:/bin, where limactl is not (Homebrew's prefix is): the first VM
+# build's hook reported "limactl isn't installed" on every edit (2026-10-04).
+PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+NAME="${WEFT_BOX_NAME:-weft-box}"
+PROJECTS="${WEFT_PROJECTS:-$HOME/weft-projects}"
+WEFT_REPO="https://github.com/WeaveMindAI/weft"
+MANIFEST="$WEFT_REPO/releases/download/latest/manifest.json"
+
+need_lima() {
+  command -v limactl >/dev/null || { echo "weft-box: limactl is not installed (brew install lima)" >&2; exit 1; }
+}
+
+running() {
+  [[ "$(limactl list --format '{{.Status}}' "$NAME" 2>/dev/null)" == "Running" ]]
+}
+
+# weft's setup downloads prebuilt binaries only when the checkout is exactly
+# the commit its published manifest names, and compiles all of weft (Rust,
+# tens of minutes, about 15 GB) otherwise. So the VM checks out that commit.
+published_commit() {
+  curl -fsSL --max-time 15 "$MANIFEST" | sed -n 's/.*"commit": *"\([0-9a-f]*\)".*/\1/p'
+}
+
+create() {
+  need_lima
+  if limactl list --format '{{.Name}}' 2>/dev/null | grep -qx "$NAME"; then
+    echo "weft-box: $NAME already exists; weft-box start boots it" >&2
+    exit 1
+  fi
+  if lsof -nP -iTCP:14111 -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "weft-box: something on this Mac already listens on 14111 (a weft runtime outside the VM?); stop it first" >&2
+    exit 1
+  fi
+  mkdir -p "$PROJECTS"
+  local projects config commit
+  projects="$(cd "$PROJECTS" && pwd -P)"
+  config="$(mktemp -t weft-box).yaml"
+  sed "s#__PROJECTS__#$projects#g" "$ROOT/mac/weft-box/weft-box.yaml" >"$config"
+  limactl create --tty=false --name "$NAME" "$config"
+  rm -f "$config"
+  limactl start --tty=false "$NAME"
+  # Once more, so the docker group the provision script added is in every
+  # session, the user's systemd manager (weft's runtime) included.
+  limactl stop "$NAME" >/dev/null
+  limactl start --tty=false "$NAME"
+  commit="$(published_commit)"
+  [[ -n "$commit" ]] || { echo "weft-box: could not read weft's published manifest" >&2; exit 1; }
+  limactl shell --tty=false --workdir / "$NAME" bash -s -- "$WEFT_REPO" "$commit" <<'INSTALL'
+set -euo pipefail
+repo="$1" commit="$2"
+sudo loginctl enable-linger "$USER"
+[[ -d ~/weft ]] || git clone --quiet "$repo" ~/weft
+git -C ~/weft fetch --quiet origin
+git -C ~/weft checkout --quiet "$commit"
+[[ -f ~/weft/access-apps.json ]] || cp ~/weft/access-apps.example.json ~/weft/access-apps.json
+cd ~/weft && ./setup.sh --cli --daemon --no-public-url
+INSTALL
+  status
+}
+
+status() {
+  need_lima
+  if ! running; then
+    echo "$NAME: not running"
+    return 1
+  fi
+  echo "$NAME: running"
+  if curl -fsS --max-time 3 http://127.0.0.1:14111/projects >/dev/null; then
+    echo "weft runtime: answering on 127.0.0.1:14111"
+  else
+    echo "weft runtime: not answering on 127.0.0.1:14111"
+    return 1
+  fi
+}
+
+case "${1:-}" in
+  create) create ;;
+  status) status ;;
+  start) need_lima; limactl start --tty=false "$NAME" ;;
+  stop) need_lima; limactl stop "$NAME" ;;
+  weft)
+    shift
+    need_lima
+    running || { echo "weft-box: $NAME is not running; weft-box start" >&2; exit 1; }
+    request="$(python3 -c 'import json, os, sys; print(json.dumps({"argv": sys.argv[1:], "cwd": os.getcwd()}))' "$@")"
+    { printf '%s\n' "$request"; cat; } | limactl shell --tty=false --workdir / "$NAME" weft-argv
+    ;;
+  run)
+    need_lima
+    running || { echo "weft-box: $NAME is not running; weft-box start" >&2; exit 1; }
+    exec limactl shell --tty=false --workdir / "$NAME" weft-argv
+    ;;
+  *)
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+    exit 2
+    ;;
+esac

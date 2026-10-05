@@ -99,10 +99,18 @@ struct FieldTests {
             for: Presence.dormant.field, closing: false, settled: false, parting: false) == 30)
     }
 
+    @Test("listening is a still state: it parks once eased in")
+    func attentiveIsStill() {
+        // 2026-10-05: a 30fps attentive band cost 9.2% CPU for as long as
+        // listening was on, which is all day. Nothing moves while idle.
+        #expect(!Presence.attentive.field.animating)
+        #expect(!Presence.dormant.field.animating)
+    }
+
     @Test("a live state that has settled runs at its own pace")
     func settledPaces() {
         #expect(PresenceFieldRenderer.rate(
-            for: Presence.attentive.field, closing: false, settled: true, parting: false) == 30)
+            for: Presence.thinking.field, closing: false, settled: true, parting: false) == 30)
         #expect(PresenceFieldRenderer.rate(
             for: Presence.hearing.field, closing: false, settled: true, parting: false) == 60)
     }

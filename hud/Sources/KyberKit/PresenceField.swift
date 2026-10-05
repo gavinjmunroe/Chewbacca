@@ -107,12 +107,19 @@ extension Presence {
             return .init(
                 rest: 0, drift: 0, tint: FieldTint.steel, pulse: 0, fps: 1, animating: false)
         case .attentive:
-            // 30fps, was 20: since 2026-10-04 every grain glitters on its own
-            // cycle and glints flash for about half a second, and at 20 the
-            // flashes stepped visibly.
+            // Still: eased in, one frame, then parked, like `dormant`.
+            //
+            // It glittered at 30fps (was 20 before 2026-10-04, when the grains
+            // got their own cycles). But listening is the resting state of a
+            // session, on for hours, and hud/CLAUDE.md rule 6 says nothing
+            // moves while idle. Measured 2026-10-05 on Caleb's Mac, glass
+            // cleared, ring held still, `ps` each second over 10 s: 9.2% CPU in
+            // `attentive` against 0% in `dormant`, all of it this band redrawn
+            // full screen thirty times a second. The pointer still parts it
+            // and it parks again once settled.
             return .init(
-                rest: 20, drift: 0.5, tint: FieldTint.steel, pulse: 0, fps: 30,
-                animating: true)
+                rest: 20, drift: 0.5, tint: FieldTint.steel, pulse: 0, fps: 1,
+                animating: false)
         case .hearing, .speaking:
             // The two states driven from outside. `rest` here is a floor and
             // the voice adds to it, so 60fps is not decoration: it is the rate

@@ -19,9 +19,12 @@ import SwiftUI
 @MainActor
 public struct SurfaceView: View {
     private let store: SurfaceStore
+    /// What to call the surface until its own Screen title arrives.
+    private let pendingTitle: String
 
-    public init(store: SurfaceStore) {
+    public init(store: SurfaceStore, pendingTitle: String = "") {
         self.store = store
+        self.pendingTitle = pendingTitle
     }
 
     public var body: some View {
@@ -29,7 +32,7 @@ public struct SurfaceView: View {
             if store.isReady, let root = store.spec.root {
                 node(root, ancestors: [])
             } else {
-                ThinkingView()
+                LoadingView(title: pendingTitle)
             }
         }
         // A spring, not an ease: `d` lines can arrive faster than any
@@ -910,27 +913,40 @@ struct PlaceholderView: View {
 }
 
 /// Shown between a request arriving and the root resolving.
-struct ThinkingView: View {
-    @State private var phase = 0.0
+///
+/// The surface's name in the Screen title's type, and one "Loading" line. It
+/// was three dots and nothing else, ticked by a task every 60 ms: on
+/// 2026-10-05 Caleb saw two of them stacked top right while the people and
+/// github surfaces fetched, and a panel with no name and no words reads as
+/// broken. Still, because a fetch that never answers would otherwise move in
+/// the corner of somebody's eye until the panel was closed (hud/CLAUDE.md
+/// rule 6), and the tick re-rendered the overlay sixteen times a second.
+struct LoadingView: View {
+    let title: String
 
     var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<3, id: \.self) { i in
-                Circle()
-                    .fill(.secondary)
-                    .frame(width: 5, height: 5)
-                    .opacity(0.35 + 0.5 * abs(sin(phase + Double(i) * 0.7)))
+        VStack(alignment: .leading, spacing: 14) {
+            if !title.isEmpty {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .kerning(0.4)
+                    .foregroundStyle(HUD.ink)
             }
+            Text("Loading")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(HUD.faint)
         }
-        .frame(maxWidth: .infinity, alignment: .center)
-        .padding(.vertical, 10)
-        .task {
-            guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(60))
-                phase += 0.22
-            }
-        }
-        .accessibilityLabel("Building")
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// A surface id as a title: `github` is "Github", `my-meetings` is
+    /// "My meetings". Sentence case, like every other heading here.
+    static func title(fromID id: String) -> String {
+        let words = id.replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "_", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        guard let first = words.first else { return "" }
+        return first.uppercased() + words.dropFirst()
     }
 }

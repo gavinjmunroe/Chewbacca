@@ -6,8 +6,8 @@
 # their own PATTERNS tuple, and committed_checksums.py already carried a comment
 # saying they must be kept in step.
 #
-# On 2026-09-22 they were not. checksums.py had gained "config/runtimes/*.json" and the
-# other had not, so the manifest listed config/runtimes/profiles.json and the verifier
+# On 2026-09-22 they were not. checksums.py had gained "runtimes/*.json" and the
+# other had not, so the manifest listed runtimes/profiles.json and the verifier
 # could not account for the entry. It reported HEAD as undescribed while the
 # hash was byte-identical in the manifest, on disk and at HEAD. A false positive
 # in the one gate whose whole job is telling you an install would refuse, which

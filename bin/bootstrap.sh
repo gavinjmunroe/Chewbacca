@@ -178,25 +178,36 @@ else
   fi
 fi
 
-step "The claude CLI"
-if command -v claude &>/dev/null; then
-  ok "claude"
-elif command -v npm &>/dev/null && [ "$CHECK_ONLY" -eq 0 ]; then
-  if npm install -g @anthropic-ai/claude-code &>/dev/null; then
-    ok "claude installed"
+# An agent to drive the kit. Any one already here is used, so a Codex or
+# Gemini user is never pushed toward a Claude purchase (Sam, 2026-09-19). On a
+# Mac with none, Anthropic's native installer: no Node needed, which the npm
+# route here required and a bare Mac does not have. The plan it needs is said
+# before the download, because the free claude.ai plan does not include
+# Claude Code and finding that out at the sign-in screen is a dead end.
+step "Your agent"
+AGENT_HERE=""
+for a in claude codex gemini; do
+  if command -v "$a" &>/dev/null; then AGENT_HERE="$a"; break; fi
+done
+if [ -z "$AGENT_HERE" ] && [ -x "$HOME/.local/bin/claude" ]; then
+  AGENT_HERE="claude"; export PATH="$HOME/.local/bin:$PATH"
+fi
+if [ -n "$AGENT_HERE" ]; then
+  ok "$AGENT_HERE"
+elif [ "$CHECK_ONLY" -eq 1 ]; then
+  miss "no agent yet. Setup installs Claude Code, which needs a paid Claude plan (Pro, Max, Team or Enterprise)"
+else
+  echo "    Installing Claude Code from Anthropic. It is free to download; using it"
+  echo "    needs a paid Claude plan (Pro, Max, Team or Enterprise) or an Anthropic"
+  echo "    Console account. The free claude.ai plan does not include it."
+  if curl -fsSL "${CHEWBACCA_CLAUDE_CODE_INSTALLER:-https://claude.ai/install.sh}" 2>/dev/null | bash &>/dev/null \
+    && [ -x "$HOME/.local/bin/claude" ]; then
+    export PATH="$HOME/.local/bin:$PATH"
+    ok "Claude Code installed. You sign in the first time it opens."
   else
-    blocked "run: npm install -g @anthropic-ai/claude-code"
+    blocked "run: curl -fsSL https://claude.ai/install.sh | bash"
     NEEDS_HUMAN=1
   fi
-elif ! command -v npm &>/dev/null; then
-  # Same dead end as brew above: npm does not exist on a machine that has no
-  # node, so telling someone to run it is telling them nothing.
-  blocked "the claude CLI needs node. Install node first (above), then: npm install -g @anthropic-ai/claude-code"
-  NEEDS_HUMAN=1
-else
-  # Not optional. Without it setup.sh installs no plugins at all.
-  blocked "run: npm install -g @anthropic-ai/claude-code"
-  NEEDS_HUMAN=1
 fi
 
 if [ "$NEEDS_GITHUB" -eq 1 ]; then

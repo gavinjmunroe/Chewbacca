@@ -158,7 +158,7 @@ Behaviors, both off unless asked for:
 
 Re-running:
   --only <section>             Run one section. Safe to repeat.
-                               prereq repos settings editor desktop mcp rules
+                               prereq agent repos settings editor desktop mcp rules
                                plugins tools agents mac plynn verify
   --dry-run                    Print what would run and exit.
   -h, --help                   This text.
@@ -359,14 +359,14 @@ fi
 # indicator nobody asked for.
 #
 #     ./setup.sh --only plynn     still installs it
-SECTIONS="prereq repos settings editor desktop mcp rules skills plugins tools agents verify manifest"
+SECTIONS="prereq agent repos settings editor desktop mcp rules skills plugins tools agents verify manifest"
 if [ -n "$ONLY" ]; then
   case " $SECTIONS " in
     *" $ONLY "*) ;;
     *) err "unknown section: $ONLY"; err "one of: $SECTIONS"; exit 2 ;;
   esac
 fi
-PORTABLE_SECTIONS=" settings rules skills agents manifest verify "
+PORTABLE_SECTIONS=" agent settings rules skills agents manifest verify "
 should_run() {
   case " $SKIP_SECTIONS " in
     *" $1 "*) SKIPPED+=("$1 (--skip)"); return 1 ;;
@@ -540,6 +540,10 @@ if [ "$DRY_RUN" -eq 1 ]; then
   echo "  repo dir:        $WORKSPACE_DIR"
   echo "  session opener:  $SESSION_OPENER"
   echo "  bypass perms:    $BYPASS_PERMS"
+  _dry_agent=""
+  for a in claude codex gemini; do command -v "$a" &>/dev/null && { _dry_agent="$a"; break; }; done
+  [ -z "$_dry_agent" ] && [ -x "$HOME/.local/bin/claude" ] && _dry_agent="claude"
+  echo "  agent:           ${_dry_agent:-none found, Claude Code would be installed (needs a paid Claude plan)}"
   for pair in "anthropic:$ANTHROPIC_KEY" "github:$GITHUB_PAT" "todoist:$TODOIST_TOKEN"; do
     [ -n "${pair#*:}" ] && echo "  credential:      ${pair%%:*} (would be written to settings.json)"
   done
@@ -653,6 +657,61 @@ fi
 if [ "$NO_GITHUB" -eq 0 ]; then
   GITHUB_USER="${GITHUB_USER:-$(gh api user --jq .login 2>/dev/null || true)}"
 fi
+fi
+
+# Outside the agent section on purpose. Claude Code's native installer lands
+# in ~/.local/bin, which a shell opened before it ran does not have on PATH,
+# and `--only plugins` skips the agent section, so the plugins step would
+# report no claude on a Mac that has one.
+KIT_AGENT=""
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *)
+  [ -x "$HOME/.local/bin/claude" ] && export PATH="$HOME/.local/bin:$PATH" ;;
+esac
+
+# ── An agent to drive all of this ────────────────────────────────────────────
+if should_run agent; then
+  # INSTALL AN AGENT ONLY IF THEY HAVE NONE, AND SAY WHAT IT COSTS FIRST.
+  #
+  # This used to install Claude Code whenever `claude` was missing, full
+  # stop. On 2026-09-19 that put Sam, who runs Codex, in front of a
+  # Claude credits purchase during the install of a kit sold as model
+  # agnostic. He said so and stopped: "how is this model agnostic? i
+  # don't want to add claude credits." A second tester said the same.
+  # So an agent already here is used and nothing is installed.
+  #
+  # With no agent at all the kit does nothing, and Kyber's voice runs on
+  # `claude -p`, so a bare Mac still gets Claude Code (Gavin, 2026-10-05). Two
+  # things changed from the npm version that lived in the plugins section:
+  # it ran only when npm existed and only when plugins ran, so `--fast` and a
+  # Mac where Homebrew failed got no agent and a dead end on the last screen;
+  # and it said "the free tier works", which Anthropic's setup page
+  # contradicts: "The free claude.ai plan does not include Claude Code
+  # access." Anthropic's native installer needs no Node, lands in
+  # ~/.local/bin, and is signed and notarized. The plan requirement is
+  # printed before the download, so nobody meets it as a surprise.
+  CLAUDE_CODE_INSTALLER="${CHEWBACCA_CLAUDE_CODE_INSTALLER:-https://claude.ai/install.sh}"
+  section "Your agent"
+  for a in claude codex gemini; do
+    if command -v "$a" &>/dev/null; then KIT_AGENT="$a"; break; fi
+  done
+
+  if [ -n "$KIT_AGENT" ]; then
+    log "using the agent already installed: $KIT_AGENT"
+  else
+    log "No coding agent on this machine, so Chewbacca is installing Claude Code from Anthropic."
+    warn "Claude Code is free to download. Using it needs a paid Claude plan: Pro, Max,"
+    warn "  Team or Enterprise, or an Anthropic Console account. The free claude.ai plan"
+    warn "  does not include it. You sign in the first time it opens."
+    if curl -fsSL "$CLAUDE_CODE_INSTALLER" 2>/dev/null | bash >/dev/null 2>&1 \
+      && [ -x "$HOME/.local/bin/claude" ]; then
+      export PATH="$HOME/.local/bin:$PATH"
+      KIT_AGENT="claude"
+      log "Claude Code installed"
+    else
+      warn "Claude Code did not install. Everything else still installs. To add it later:"
+      warn "  curl -fsSL https://claude.ai/install.sh | bash"
+    fi
+  fi
 fi
 
 # ── Collect info ──────────────────────────────────────────────────────────────
@@ -2220,35 +2279,6 @@ no-ai-slop|https://github.com/petergyang/no-ai-slop|skills/no-ai-slop|MIT|peterg
 thinking-out-loud|https://github.com/Shubhamsaboo/awesome-llm-apps|agent_skills/thinking-out-loud|Apache-2.0|Shubhamsaboo
 youtube-transcripts|https://github.com/calebnewtonusc/claude-youtube-transcripts|skills/youtube-transcripts|MIT|calebnewtonusc
 UPSTREAM_SKILLS
-
-# INSTALL AN AGENT ONLY IF THEY HAVE NONE.
-#
-# This used to install Claude Code whenever `claude` was missing, full
-# stop. On 2026-09-19 that put Sam, who runs Codex, in front of a
-# Claude credits purchase during the install of a kit sold as model
-# agnostic. He said so and stopped: "how is this model agnostic? i
-# don't want to add claude credits." A second tester said the same. Neither has
-# onboarded since. Installing a second paid subscription nobody asked
-# for is not a missing-dependency fix, it is the product contradicting
-# its own claim on the last screen.
-#
-# If any supported agent is already here, use it and install nothing.
-# The plugins that genuinely need Claude warn on their own.
-KIT_AGENT=""
-for a in claude codex gemini; do
-  if command -v "$a" &>/dev/null; then KIT_AGENT="$a"; break; fi
-done
-
-if [ -n "$KIT_AGENT" ]; then
-  log "using the agent already installed: $KIT_AGENT"
-elif command -v npm &>/dev/null; then
-  log "no coding agent found, installing Claude Code (the free tier works)"
-  npm install -g @anthropic-ai/claude-code &>/dev/null \
-    && { KIT_AGENT="claude"; log "claude CLI installed"; } \
-    || warn "could not install an agent: npm install -g @anthropic-ai/claude-code"
-else
-  warn "no coding agent and no npm. Install Claude Code, Codex or Gemini CLI first."
-fi
 
 # `command -v claude` only proves a binary is on PATH. It does not prove
 # the CLI can do anything, and on a machine where it was npm-installed a

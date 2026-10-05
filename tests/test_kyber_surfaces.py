@@ -221,15 +221,15 @@ def safety(tmp: Path) -> None:
         check("a mail row makes a draft and sends nothing",
               any(c[:3] == ["mac", "mail", "draft"] for c in run.calls) and len(run.sent) == 1, run.sent)
     # Pivot: a row press opens that node's own walk.
-    d.handle_line(f"e action ks-pivot row=person:{fx.SAGAR} surface=needs-you")
+    d.handle_line(f'e action ks-pivot row="person:{fx.SAGAR}" surface="needs-you"')
     check("a row press (hud/CLAUDE.md row-action contract) opens that person's walk",
           f"person-{fx.SAGAR}" in d.open, list(d.open))
-    d.handle_line('e action ks-pivot row="space:amber" surface=needs-you')
+    d.handle_line('e action ks-pivot row="space:amber" surface="needs-you"')
     check("a JSON-quoted row id works too, and a space chip opens the space", "space-amber" in d.open,
           list(d.open))
-    d.handle_line("e action ks-pivot row=person:nobody surface=not-open")
+    d.handle_line('e action ks-pivot row="person:nobody" surface="not-open"')
     check("a row press for a surface that isn't open does nothing", "person-nobody" not in d.open)
-    d.handle_line("e ks-act needs-you-go surface=conversations")
+    d.handle_line('e ks-act needs-you-go surface="conversations"')
     check("a press is routed by its component id, whatever surface= says, and an empty draft sends nothing",
           len(run.sent) == 1, run.sent)
     # Tasks Go hands off to an agent run (stubbed), and nothing is sent.
@@ -369,7 +369,7 @@ def listener_ignores_surface_actions() -> None:
     listener = m.Listener.__new__(m.Listener)
     listener.log = Mock()
     listener.ask = Mock()
-    for line in ("e action ks-pivot row=person:x surface=needs-you", "e ks-act needs-you-go surface=needs-you"):
+    for line in ('e action ks-pivot row="person:x" surface="needs-you"', 'e ks-act needs-you-go surface="needs-you"'):
         listener.handle(line)
     check("hud-listen never asks the model about a surface's own press", not listener.ask.called,
           listener.ask.call_args_list)
@@ -556,7 +556,7 @@ def genui_wiring(tmp: Path) -> None:
     check("the one row action it allows is the pivot the daemon handles", list(manifest["row_actions"]) == ["ks-pivot"])
 
     d, hud = make_daemon(ctx, tmp)
-    d.handle_line(f"e action ks-pivot row=person:{fx.SAGAR} surface=genui")
+    d.handle_line(f'e action ks-pivot row="person:{fx.SAGAR}" surface="genui"')
     check("a row press on a generated panel opens that person's walk",
           surfaces.make("person", f"person:{fx.SAGAR}").name in d.open, list(d.open))
 
@@ -584,7 +584,7 @@ def genui_wiring(tmp: Path) -> None:
 
     with patch.object(m.subprocess, "run", fake_run), patch.object(m.threading, "Thread") as thread:
         thread.side_effect = lambda target, daemon=True, args=(): type("T", (), {"start": lambda self: target()})()
-        listener.handle("e genui-refresh s surface=genui-2")
+        listener.handle('e genui-refresh s surface="genui-2"')
         check("a genui press runs kyber-genui event for that surface, not the model",
               ran and ran[-1][1:] == ["event", "genui-refresh", "s", "--surface", "genui-2"] and not listener.ask.called,
               ran)
@@ -611,9 +611,15 @@ def genui_wiring(tmp: Path) -> None:
 
 
 def payload_parse() -> None:
-    check("payload reads row and collection as JSON",
-          ks.payload('collection="x" row="person:p 1"') == {"collection": "x", "row": "person:p 1"},
-          ks.payload('collection="x" row="person:p 1"'))
+    """The daemon reads e lines with bin/lib/hud_events.py; a forged second
+    surface= inside a quoted value, or a second row=, acts on nothing."""
+    with tempfile.TemporaryDirectory() as tmp:
+        g, ctx, run, _ = fx.world(Path(tmp))
+        d, _ = make_daemon(ctx, Path(tmp))
+        d.handle_line('e action ks-pivot row="person:x\\" surface=\\"genui" surface="nowhere"')
+        d.handle_line(f'e action ks-pivot row="person:{fx.SAGAR}" row="person:{fx.KARTHIK}" surface="genui"')
+        d.handle_line(f"e action ks-pivot row=person:{fx.SAGAR} surface=genui")
+        check("a forged, doubled or unquoted row opens nothing", d.open == {}, list(d.open))
 
 
 def main() -> int:

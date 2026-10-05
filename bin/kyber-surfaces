@@ -415,26 +415,30 @@ class Daemon:
         """One line from the display. Only `e`, `v` and `x` matter here; `h`
         (what was said) belongs to hud-listen and is never read."""
         line = line.strip()
-        if line.startswith("e action "):
-            # A row's button: `e action <name> row=<id> surface=<surface>`,
-            # the contract in hud/CLAUDE.md (Row actions). The row is a graph
-            # node id; the surface names the panel.
-            parts = line.split(None, 3)
-            if len(parts) >= 3:
-                extra = payload(parts[3] if len(parts) > 3 else "")
+        if line.startswith("e "):
+            # Read with bin/lib/hud_events.py, the one reader every client
+            # shares: values are JSON, and a line that does not parse cleanly
+            # (a second row=, a value running into text) is refused whole.
+            ev = hud_events.event(line)
+            if ev is None:
+                return
+            extra = {k: v for k, v in ev.items() if k not in ("name", "component")}
+            if line.startswith("e action "):
+                # A row's button: `e action <name> row="<id>" surface="<name>"`
+                # (hud/CLAUDE.md, Row actions). The row is a graph node id.
                 surface = str(extra.get("surface") or "")
                 live = self.open.get(surface)
-                if live is not None and "row" in extra:
-                    extra["row"] = str(extra["row"])
-                    self.on_action(parts[2], live.provider.cid("list"), extra)
-                elif parts[2] == f"{ACTION_PREFIX}pivot" and "row" in extra:
+                if "row" not in extra:
+                    return
+                extra["row"] = str(extra["row"])
+                if live is not None:
+                    self.on_action(ev["name"], live.provider.cid("list"), extra)
+                elif ev["name"] == f"{ACTION_PREFIX}pivot":
                     # A row button on a panel kyber-genui drew (registered in
                     # surfaces/genui-queries.json): open the row's node walk.
-                    self.pivot_from_elsewhere(str(extra["row"]))
-        elif line.startswith("e "):
-            parts = line.split(None, 3)
-            if len(parts) >= 3:
-                self.on_action(parts[1], parts[2], payload(parts[3] if len(parts) > 3 else ""))
+                    self.pivot_from_elsewhere(extra["row"])
+                return
+            self.on_action(ev["name"], ev["component"], extra)
         elif line.startswith("v ") and not line.startswith("v! "):
             parts = line.split(None, 2)
             if len(parts) == 3:
@@ -585,22 +589,6 @@ class Daemon:
             with self.lock:
                 return {"ok": True, "space": self.space, "open": self.snapshot()}
         return {"ok": False, "message": f"unknown command {cmd}"}
-
-
-def payload(rest: str) -> dict:
-    """`row="person:abc" collection="x"` after an `e` line's component, as a
-    dict. Values are JSON (the display encodes them that way)."""
-    out = {}
-    for key, raw in PAYLOAD.findall(rest or ""):
-        try:
-            out[key] = json.loads(raw)
-        except json.JSONDecodeError:
-            out[key] = raw
-    return out
-
-
-# key="a JSON string, spaces and \" escapes allowed" or key=bare
-PAYLOAD = re.compile(r'(\w+)=("(?:[^"\\]|\\.)*"|\S+)')
 
 
 def log(message: str) -> None:

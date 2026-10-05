@@ -195,41 +195,67 @@ final class SystemAudio: NSObject, SCStreamOutput, SCStreamDelegate {
 
 final class Microphone {
     let writer: Writer
-    let engine = AVAudioEngine()
+    var engine = AVAudioEngine()
     let resampler = Resampler()
+    private var observer: NSObjectProtocol?
+    private let restarts = DispatchQueue(label: "ears.mic.restart")
 
     init(writer: Writer) {
         self.writer = writer
-        // A call app turning on voice processing reconfigures the input, and
-        // AVAudioEngine stops without a word when that happens: on the
-        // 2026-10-02 FaceTime call the mic went silent from the first second.
-        NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
-        ) { [weak self] _ in
-            guard let self else { return }
-            note("microphone reconfigured, restarting")
-            self.engine.inputNode.removeTap(onBus: 0)
-            do {
-                try self.start()
-            } catch {
-                note("microphone restart failed: \(error.localizedDescription)")
-            }
-        }
     }
 
     func start() throws {
         let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0 else {
+        let hardware = input.inputFormat(forBus: 0)
+        guard hardware.sampleRate > 0 else {
             throw NSError(domain: "ears", code: 2, userInfo: [
                 NSLocalizedDescriptionKey: "no microphone input (permission, or no device)"])
         }
-        input.installTap(onBus: 0, bufferSize: 1600, format: format) { [weak self] buffer, _ in
+        // format nil: the tap takes whatever the input bus delivers. Asking for
+        // outputFormat(forBus:) after a device change returned the old format,
+        // and installTap threw "Input HW format and tap format not matching",
+        // an Objective-C exception Swift cannot catch, killing the 2026-10-04
+        // Meet transcript mid-call. The Resampler follows any format change.
+        input.installTap(onBus: 0, bufferSize: 1600, format: nil) { [weak self] buffer, _ in
             guard let self else { return }
             self.writer.write(source: 0, samples: self.resampler.convert(buffer))
         }
         try engine.start()
-        note("microphone on: \(Int(format.sampleRate)) Hz, \(format.channelCount) ch")
+        watch()
+        note("microphone on: \(Int(hardware.sampleRate)) Hz, \(hardware.channelCount) ch")
+    }
+
+    // A call app turning on voice processing reconfigures the input, and
+    // AVAudioEngine stops without a word when that happens: on the
+    // 2026-10-02 FaceTime call the mic went silent from the first second.
+    private func watch() {
+        if let observer { NotificationCenter.default.removeObserver(observer) }
+        observer = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            note("microphone reconfigured, restarting")
+            self.restarts.async { self.restart(attempt: 1) }
+        }
+    }
+
+    // A fresh engine each time: the old one's input node can keep reporting
+    // the device it had. The new device can read 0 Hz for a moment mid-switch,
+    // so a failed start is retried. Ten tries half a second apart is guessed,
+    // never measured.
+    private func restart(attempt: Int) {
+        engine.inputNode.removeTap(onBus: 0)
+        engine.stop()
+        engine = AVAudioEngine()
+        do {
+            try start()
+        } catch {
+            guard attempt < 10 else {
+                note("microphone restart failed: \(error.localizedDescription)")
+                return
+            }
+            restarts.asyncAfter(deadline: .now() + 0.5) { self.restart(attempt: attempt + 1) }
+        }
     }
 }
 

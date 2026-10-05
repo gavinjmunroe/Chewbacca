@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
-process.env.SESSION_SECRET = "test-secret-that-is-at-least-32-chars-long";
+process.env.SESSION_SECRET = "test-secret-that-is-at-least-32-chars-long"; // secret-scan: allow, a fixture, not a credential
 const { seal, unseal, cleanChanges, bulkUpdate } = await import("../server.js");
 const { parse, render, oneLine, parseCommitRefs, applyCommit } = await import("../lib/task.js");
 

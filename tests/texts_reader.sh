@@ -25,7 +25,8 @@ sqlite3 "$DB" "
   INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at) VALUES (990001, '$MUNROE', 'Gavin Munroe', '+15550001', 0, 'NEWEST', datetime('now','-1 minute'));
   INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at) VALUES (990002, '$MUNROE', 'Gavin Munroe', '+15550001', 0, '$LONG', datetime('now','-2 minute'));
   INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at) VALUES (990003, '$JAKE', 'Jake Gavin''s Friend', '+15550002', 0, 'JAKELINE', datetime('now','-3 minute'));
-  INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at) VALUES (990004, '$CHOW', 'Gavin Chow', '+15550003', 0, 'CHOWLINE', datetime('now','-30 day'));"
+  INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at) VALUES (990004, '$CHOW', 'Gavin Chow', '+15550003', 0, 'CHOWLINE', datetime('now','-30 day'));
+  INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at) VALUES (990005, '$MUNROE', 'Gavin Munroe', '+15550001', 0, 'ESC' || char(27) || ']0;pwned' || char(7) || 'DONE', datetime('now','-4 minute'));"
 
 fail() { echo "$1" >&2; printf '%s\n' "$out" | tail -5 >&2; exit 1; }
 
@@ -38,4 +39,9 @@ grep -q "CHOWLINE" <<<"$out"        && fail "a different Gavin's messages leaked
 
 out="$("$P" texts --days 30 --who gavin 2>&1)"
 grep -q "NEWEST" <<<"$out"          || fail "--days with --who still drops the newest message"
+# A text is written by someone else. An ESC byte printed raw is a terminal
+# escape sequence, so the reader must strip controls before printing.
+out="$("$P" texts gavin 2>&1)"
+grep -q "ESC]0;pwnedDONE" <<<"$out"  || fail "the escape-carrying message did not print at all"
+printf '%s' "$out" | LC_ALL=C grep -q "$(printf '\033')\]0;" && fail "raw ESC from a message body reached the terminal"
 exit 0

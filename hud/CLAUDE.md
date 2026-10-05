@@ -77,6 +77,106 @@ more `c d Diagram` with different numbers, not a redraw.
 
 Take something down with `- <surface>` when the person is done with it.
 
+## Motion that means something
+
+Surfaces are windows in an OS, and their motion is there to say what caused
+them and what changed, never to decorate. Researched 2026-10-04 from Apple's
+HIG (Motion), Material's duration and container-transform guidance, the
+visionOS window-placement rules, and the Motion, Composition, Surfaces and
+Controls sections of Carlton Aikins' realm `design.md` (read as a design
+reference only). The renderer enforces these; a sender should know them.
+
+1. **A surface grows from what summoned it.** Opened while a request is in
+   flight, it grows out of the hyper bar and lands in its region; opened by a
+   daemon with no request, it comes in from its region's edge. visionOS puts a
+   new window where the person is already looking, and Material's container
+   transform ties a new view to the element that opened it.
+2. **Frequent motion is short.** A card arrives on the overlay's no-bounce
+   spring and was settled within three frames at 20 fps in a recording on
+   2026-10-04; a fold is a 0.28 s spring; a composed entrance's parts land on
+   a 280 ms one. Material puts desktop transitions at 150 to 200 ms and calls
+   anything past 400 ms slow. Springs, so a surface re-aimed mid-flight bends
+   toward its new place instead of restarting.
+3. **Exits are shorter and quieter than entrances** (Carlton's design.md). 160 ms,
+   accelerating away, a third of the way back toward where it came from.
+4. **Stagger by meaning, not by child** (Carlton's design.md). A Screen arrives as title,
+   then body, then actions, 30 ms apart. Never one step per row.
+5. **An update animates the value that changed, and only it.** A Metric's
+   digits roll in the direction it moved; a new List, Table or Events row
+   slides in from the top; a removed row fades. Rows are keyed by their `id`
+   field, else their content, so a `d` that adds one row never re-draws the
+   rest. Give rows an `id` when they have one.
+6. **Nothing moves while idle** (Carlton's design.md: no decorative pulsing). A child that
+   has not arrived is a still placeholder. If the glass is still and something
+   is still moving, it is a bug.
+7. **A panel is as tall as its content**, capped at its region, scrolling only
+   past the cap, with an edge fade only on the version that overflows (Carlton's design.md).
+8. **A press answers on the way down**: buttons scale to 0.96 on an
+   interruptible spring (Carlton's design.md).
+9. **Reduce Motion means no travel.** Every entrance, exit, row and stagger
+   becomes a short fade.
+10. **One view morphs; never swap trees.** Folding, unfolding, the pill
+    growing into the conversation panel and back: the same container changes
+    size on an interruptible spring, the title never leaves the hierarchy, and
+    only the body fades, out first when closing and in after the container
+    has started to open. On 2026-10-04 Caleb: "It's clunky when you
+    minimize/maximize a tab, it feels like a diff version of the tab is
+    chunkily loading in, no smooth transition." Three causes, all the same
+    bug: the fold was an `if/else` between the panel and a separate
+    title-only view; the conversation panel faded its glass in from nothing
+    while the pill faded out, so for a frame neither was there; and AppKit's
+    utility-window animation ran a second motion on the same open. A
+    recording after the fix shows the card closing over its content to the
+    title and reopening with no empty frame. Same lesson for transitions: a
+    card's insertion must not carry its own animation on top of the overlay's
+    spring, which held a new card blurred for about 600 ms before it snapped.
+
+**A corner that fills up folds, it does not pile up.** Surfaces in one region
+stack away from their edge (down from the top, up from the bottom, outward
+from the middle) and never overlap. When the column would run off the screen,
+the least recently touched surface folds to its title row; clicking that row,
+or re-addressing it with `@`, opens it and folds whatever is now least recent.
+The newest is never folded. A `d` does not count as touching: a panel kept
+current is not a panel being read.
+
+**Targets are 44 points** (HIG; Carlton's floor is 40 for a pointer). Buttons,
+Fields, Selects, row buttons, a folded title and a card's close button all
+take a 44-point click even where the drawing is smaller. The close button
+stays faintly visible without hover and names what it closes, because a
+destructive action names its target (Carlton's design.md). Keyboard focus into the glass is
+not done: the overlay never takes key, by design.
+
+### Row actions
+
+A List, Table or Events with `action=` draws a button on every row, and a
+press sends the row's `id` up the socket. This is how "reply to this thread"
+works per row without one `c` line per row.
+
+```
+@ messages at=right
+c threads Events caption="Needs a reply" action=reply actionLabel="Reply" items=@/threads
+d /threads [{"id":"thread:abc123","time":"9:04","text":"Sam: lunch?"},{"id":"thread:def456","time":"8:50","text":"Ava: notes"}]
+```
+
+Pressing Reply on Sam's row sends exactly:
+
+```
+e action reply row=thread:abc123 surface=messages
+```
+
+The line is `e action <name> row=<id> surface=<surface>` and nothing else.
+`<id>` is opaque: the item's `id` field passed through untouched (a graph
+node id like `thread:abc123` is the expected case), bare unless it holds a
+space, a quote or a backslash, and then JSON-quoted. An item with no `id` is
+named by its text, so give rows an `id`. A List item may be a string or
+`{"id":..,"text":..}`. `surface` is the name from `@`. This line is the
+contract with `bin/kyber-surfaces`; `SurfaceMotionTests.rowActionLine` holds
+it byte for byte.
+
+Ordinary controls keep their own line, `e <action> <component> ...`, and now
+carry `surface=` too, because component ids are only unique inside one
+surface.
+
 ## How a request reaches you
 
 You do not poll. A person asks for something by pressing Option-Space and typing,

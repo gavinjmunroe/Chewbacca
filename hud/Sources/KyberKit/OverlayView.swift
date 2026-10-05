@@ -109,7 +109,7 @@ public struct OverlayView: View {
             // the person has ever watched lives. Above every surface, under
             // the ring. Gone while the conversation panel is up: the panel
             // is the pill grown, and it stands where the pill stood.
-            if model.pill.phase != .hidden && !model.chatOpen {
+            if model.pill.phase != .hidden {
                 PillView(
                     state: model.pill, presence: model.presence, amplitude: model.amplitude,
                     clock: model.clock, onCancel: { model.cancelRun() },
@@ -132,6 +132,18 @@ public struct OverlayView: View {
                             active: SurfaceEntrance(progress: 0, from: .bottom),
                             identity: SurfaceEntrance(progress: 1, from: .bottom)),
                         removal: .opacity.combined(with: .scale(scale: 0.96))))
+                    // While the conversation panel is up the pill stays in
+                    // the tree and is only hidden: the panel is the pill
+                    // grown, so the pill goes the instant the panel's glass
+                    // stands where it stood, and comes back only once the
+                    // panel has folded back into it (0.26 s, `conceal`).
+                    // Removing it with a fade, as until 2026-10-04, left a
+                    // moment where both or neither were on screen.
+                    .opacity(model.chatOpen ? 0 : 1)
+                    .allowsHitTesting(!model.chatOpen)
+                    .animation(
+                        model.chatOpen ? nil : .easeOut(duration: 0.06).delay(0.24),
+                        value: model.chatOpen)
                     .zIndex(9998)
             }
 
@@ -151,12 +163,33 @@ public struct OverlayView: View {
             }
 
             ForEach(model.surfaces) { surface in
-                SurfaceCard(
+                card(surface)
+            }
+        }
+        .animation(Motion.smooth(reduced: reduceMotion), value: model.revision)
+        .environment(\.hudEnergy, model.presence.energy)
+        .task {
+            // The screen behind the pill, for its lens and its ink. Only
+            // while the pill is up; nothing is sampled otherwise.
+            await BackdropSampler.shared.follow { [model] in model.pillFrame }
+        }
+        .ignoresSafeArea()
+    }
+
+    private func card(_ surface: OverlaySurface) -> some View {
+        let centre = model.origin(for: surface)
+        // From the card's resting centre to where it was summoned from, so it
+        // grows out of the hyper bar and goes back into it.
+        let summon = surface.summonedFrom.map {
+            CGSize(width: $0.x - centre.x, height: $0.y - centre.y)
+        }
+        return SurfaceCard(
                     surface: surface,
                     onDismiss: { model.close(surface.id) },
                     onDrag: { model.move(surface.id, by: $0) },
                     onSettle: { model.settle(surface.id, at: $0) },
-                    onGrab: { model.raise(surface.id) })
+                    onGrab: { model.raise(surface.id) },
+                    onUnfold: { model.unfold(surface.id) })
                     .frame(width: surface.width)
                     .background {
                         GeometryReader { proxy in
@@ -173,23 +206,10 @@ public struct OverlayView: View {
                     // the top-left of the screen, so nothing on any surface could
                     // be clicked and dragging could never start. `.position`
                     // moves the layout itself, which is what was wanted.
-                    .position(model.origin(for: surface))
-                    .transition(.asymmetric(
-                        insertion: .modifier(
-                            active: SurfaceEntrance(progress: 0, from: surface.region),
-                            identity: SurfaceEntrance(progress: 1, from: surface.region)),
-                        removal: .opacity.combined(with: .scale(scale: 0.96))))
+                    .position(centre)
+                    .transition(SurfaceEntrance.transition(
+                        region: surface.region, summon: summon, reduced: reduceMotion))
                     .zIndex(Double(surface.depth))
-            }
-        }
-        .animation(Motion.smooth(reduced: reduceMotion), value: model.revision)
-        .environment(\.hudEnergy, model.presence.energy)
-        .task {
-            // The screen behind the pill, for its lens and its ink. Only
-            // while the pill is up; nothing is sampled otherwise.
-            await BackdropSampler.shared.follow { [model] in model.pillFrame }
-        }
-        .ignoresSafeArea()
     }
 }
 
@@ -204,23 +224,103 @@ public struct OverlayView: View {
 nonisolated struct SurfaceEntrance: ViewModifier, Animatable {
     var progress: Double
     let from: Region
+    /// From the card's centre to the point it was summoned from. Set, the
+    /// card grows out of that point (Material's container transform, done
+    /// with a scale and a travel because the hyper bar is not a view in this
+    /// tree); nil, it comes in from its region's edge.
+    var summon: CGSize?
+    /// How much of the way back to the source it is drawn at progress 0.
+    /// One on the way in. Less on the way out, so an exit is quieter than
+    /// the entrance it mirrors.
+    var reach: Double = 1
+    /// Reduce Motion: opacity only, nothing travels or scales.
+    var reduced = false
 
     var animatableData: Double {
         get { progress }
         set { progress = newValue }
     }
 
-    func body(content: Content) -> some View {
-        let travel = 26.0 * (1 - progress)
-        let anchor = from.anchor
-        return content
-            .opacity(progress)
-            .blur(radius: 9 * (1 - progress))
-            .scaleEffect(0.94 + 0.06 * progress)
-            .offset(
-                x: travel * (anchor.x - 0.5) * 2,
-                y: travel * (0.5 - anchor.y) * 2)
+    /// Where the card is drawn at `progress`: one function, so the drawing
+    /// and the tests read the same numbers.
+    struct Pose: Equatable {
+        var opacity: Double
+        var blur: Double
+        var scale: Double
+        var offset: CGSize
     }
+
+    var pose: Pose {
+        let rest = 1 - progress
+        if reduced {
+            return Pose(opacity: progress, blur: 0, scale: 1, offset: .zero)
+        }
+        if let summon {
+            return Pose(
+                opacity: progress, blur: 6 * rest,
+                scale: 1 - Self.summonShrink * rest * reach,
+                offset: CGSize(
+                    width: summon.width * rest * reach,
+                    height: summon.height * rest * reach))
+        }
+        let travel = 26.0 * rest * reach
+        let anchor = from.anchor
+        return Pose(
+            opacity: progress, blur: 9 * rest,
+            scale: 1 - 0.06 * rest * reach,
+            offset: CGSize(
+                width: travel * (anchor.x - 0.5) * 2,
+                height: travel * (0.5 - anchor.y) * 2))
+    }
+
+    func body(content: Content) -> some View {
+        let pose = pose
+        return content
+            .opacity(pose.opacity)
+            .blur(radius: pose.blur)
+            .scaleEffect(pose.scale)
+            .offset(pose.offset)
+    }
+
+    /// How small a summoned card starts: 0.45 of its size, about the hyper
+    /// bar's own height against a 120-point card. Tuned against the eye
+    /// on 2026-10-04.
+    static let summonShrink = 0.55
+
+    /// The entrance rides the overlay's own `Motion.smooth` spring, and the
+    /// exit is shorter and quieter: 160 ms, accelerating away, and only a
+    /// third of the way back to where it came from. Material puts desktop
+    /// transitions at 150 to 200 ms and entering over exiting; Carlton's
+    /// design.md says exits are shorter and quieter than entrances.
+    ///
+    /// The insertion carries no animation of its own. With `arrive` attached
+    /// to it, a screen recording on 2026-10-04 (60 fps, read at 20) showed a
+    /// new card held blurred at half opacity for about 600 ms and then snap
+    /// sharp: the attached spring and the overlay's revision spring fought
+    /// over the same insertion. Without it the same card settled in three
+    /// frames. The removal has nothing to fight and keeps its own.
+    static func transition(region: Region, summon: CGSize?, reduced: Bool) -> AnyTransition {
+        func at(_ progress: Double, reach: Double) -> SurfaceEntrance {
+            SurfaceEntrance(
+                progress: progress, from: region, summon: summon, reach: reach, reduced: reduced)
+        }
+        let leave: Animation = reduced ? .easeOut(duration: 0.1) : depart
+        return .asymmetric(
+            insertion: .modifier(active: at(0, reach: 1), identity: at(1, reach: 1)),
+            removal: .modifier(
+                active: at(0, reach: departReach), identity: at(1, reach: departReach))
+                .animation(leave))
+    }
+
+    /// A spring with no bounce whose perceived duration is 280 ms, for the
+    /// parts of a composed entrance (`Stagger`). A spring rather than an ease
+    /// so a part interrupted mid-flight bends instead of restarting.
+    static let arriveDuration = 0.28
+    static let departDuration = 0.16
+    /// Of the way back to its source a leaving card travels.
+    static let departReach = 0.35
+    static let arrive = Animation.spring(duration: arriveDuration, bounce: 0)
+    static let depart = Animation.easeIn(duration: departDuration)
 }
 
 /// One surface: the material, the light, the edge.
@@ -242,6 +342,8 @@ struct SurfaceCard: View {
     /// clamps it to the screen.
     var onSettle: (CGSize) -> Void = { _ in }
     let onGrab: () -> Void
+    /// A click on a folded card's title opens it.
+    var onUnfold: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
@@ -250,6 +352,18 @@ struct SurfaceCard: View {
     /// surface, not kept here, because a settle can move it after release
     /// and a copy kept here made the next drag jump by the difference.
     @State private var start: CGSize?
+
+    /// The height of a Screen's title line, which is all a folded card
+    /// shows: 13pt semibold rounded lays out at 16. With the card's 14 above
+    /// and below, a folded card is 44, the target floor.
+    static let titleLine: CGFloat = 16
+
+    /// The Screen's title, for the folded card and the close button's name.
+    private var title: String {
+        let store = surface.store
+        guard let root = store.spec.root, let node = store.spec.elements[root] else { return "" }
+        return store.resolved(node)["title"]?.display ?? ""
+    }
 
     var body: some View {
         // Never taller than the screen.
@@ -265,6 +379,17 @@ struct SurfaceCard: View {
                 SurfaceView(store: surface.store)
             }
             .scrollBounceBehavior(.basedOnSize)
+            // A dissolve at the bottom edge, and only on the version that
+            // overflows: a panel that fits wears no band, because a fade says
+            // something is under it (Carlton's design.md).
+            .mask {
+                VStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(
+                        colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                        .frame(height: 22)
+                }
+            }
         }
             .frame(maxHeight: surface.maxHeight)
             // Hug the content vertically.
@@ -275,15 +400,40 @@ struct SurfaceCard: View {
             // in the middle. `fixedSize` tells the card to take its ideal height
             // and ignore the offer.
             .fixedSize(horizontal: false, vertical: true)
+            // Folding is this one card getting shorter, never a second view
+            // swapped in. The first fold (2026-10-04) was an if/else between
+            // the panel and a title-only view, and Caleb: "it feels like a
+            // diff version of the tab is chunkily loading in, no smooth
+            // transition". Now the frame closes over the content to the
+            // title's line, the title never leaves the hierarchy, and the
+            // body fades out first and back in after the card has started
+            // to open (`SurfaceView` reads `hudFolded`).
+            .frame(height: surface.compact ? Self.titleLine : nil, alignment: .top)
+            .clipped()
+            .environment(\.hudFolded, surface.compact)
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
             .modifier(SurfaceChrome(chrome: surface.chrome, lit: lit, urgency: surface.urgency))
-            .overlay(alignment: .topTrailing) {
-                CloseButton(action: onDismiss)
-                    .padding(9)
-                    .opacity(hovering ? 1 : 0)
+            .overlay {
+                if surface.compact {
+                    FoldedTitle(title: title, onUnfold: onUnfold)
+                        .transition(.opacity)
+                }
             }
+            .overlay(alignment: .topTrailing) {
+                // The X stays 18 points to look at and is 44 to hit, and it
+                // never vanishes entirely: a hover-only close is no close at
+                // all without fine pointer control (bd_2026-Code-cnr). It
+                // names what it closes, as a destructive action should.
+                CloseButton(
+                    action: onDismiss, help: title.isEmpty ? "Close" : "Close \(title)",
+                    hit: HitTarget.minimum)
+                    .opacity(hovering ? 1 : 0.35)
+            }
+            // The fold is a spring so a click mid-fold reverses from where
+            // the card is; `snappy` is 0.28 s, settled by about 250 ms.
+            .animation(Motion.snappy(reduced: reduceMotion), value: surface.compact)
             // No grow while dragged. It was a 1.02 scale, and any scale
             // that is not 1 resamples every glyph on the card: the text went
             // soft the moment a press moved four points (2026-09-22).
@@ -343,6 +493,36 @@ struct SurfaceCard: View {
             // dark desktop is a white rectangle, and there is no version of that
             // which looks like anything but a bug.
             .environment(\.colorScheme, .dark)
+    }
+}
+
+/// The target over a surface folded to its title because its region ran
+/// out of room.
+///
+/// The whole folded card is the target, 44 points tall, and a click opens it
+/// back up; the region then folds whatever is now least recently used. It
+/// draws no title of its own: the card's own title is still there, because
+/// folding only shortens the card (see `SurfaceCard`). Just a chevron, left
+/// of the close button, saying there is more.
+struct FoldedTitle: View {
+    let title: String
+    let onUnfold: () -> Void
+
+    var body: some View {
+        Button(action: onUnfold) {
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(HUD.accent.opacity(0.8))
+                .padding(.trailing, HitTarget.minimum)
+                .frame(
+                    maxWidth: .infinity, maxHeight: .infinity,
+                    alignment: .trailing)
+                .frame(minHeight: HitTarget.minimum)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title.isEmpty ? "Folded surface" : "\(title), folded")
+        .accessibilityHint("Opens it")
     }
 }
 
@@ -622,6 +802,9 @@ struct CloseButton: View {
     /// What the X does here. A card is dismissed; the pill discards a
     /// transcript or stops a run, and the tooltip should say which.
     var help: String = "Dismiss"
+    /// The square that takes the click. The circle stays 18; a surface card
+    /// passes 44 so the target meets the floor without the mark growing.
+    var hit: CGFloat = 18
     @State private var hovering = false
 
     public var body: some View {
@@ -631,6 +814,8 @@ struct CloseButton: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 18, height: 18)
                 .background(.quaternary, in: Circle())
+                .frame(width: hit, height: hit)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .opacity(hovering ? 1 : 0.75)
@@ -660,6 +845,17 @@ extension EnvironmentValues {
         get { self[HUDOffscreenKey.self] }
         set { self[HUDOffscreenKey.self] = newValue }
     }
+
+    /// Whether the surface is folded to its title. The body fades on it; the
+    /// title does not.
+    var hudFolded: Bool {
+        get { self[HUDFoldedKey.self] }
+        set { self[HUDFoldedKey.self] = newValue }
+    }
+}
+
+struct HUDFoldedKey: EnvironmentKey {
+    static let defaultValue = false
 }
 
 struct VisualEffect: View {

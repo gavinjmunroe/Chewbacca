@@ -117,6 +117,12 @@ public final class SurfaceStore {
     /// is a legitimate state: a surface streamed and the agent walked away.
     public var onEvent: ((OutboundEvent) -> Void)?
 
+    /// The surface this store draws, set when the overlay opens it. Every
+    /// action carries it as `surface=`, because component ids are only unique
+    /// inside one surface and a daemon with five panels open needs to know
+    /// which `reply` was pressed.
+    public var surfaceID: String?
+
     /// Bumped on every change so SwiftUI redraws even though `spec` is a value
     /// type nested several levels deep.
     public private(set) var revision = 0
@@ -273,7 +279,20 @@ public final class SurfaceStore {
     }
 
     public func fire(_ action: String, from component: ComponentID, payload: [String: JSON] = [:]) {
+        var payload = payload
+        if let surfaceID, payload["surface"] == nil { payload["surface"] = .string(surfaceID) }
         onEvent?(.action(name: action, component: component, payload: payload))
+    }
+
+    /// A row's action: a button on one row of a List, Table or Events.
+    ///
+    /// `e action <name> row=<id> surface=<surface>` (see
+    /// `OutboundEvent.rowAction`). The row id is the item's own `id` field
+    /// when it has one, which is the point: "reply to this thread" has to name
+    /// the thread, not its position, because the list may have changed under
+    /// the pointer by the time the line is read.
+    public func fireRow(_ action: String, row: String) {
+        onEvent?(.rowAction(name: action, row: row, surface: surfaceID))
     }
 
     /// The pointer a component's prop is bound to, if any.

@@ -110,7 +110,11 @@ public final class ChatWindow: NSPanel {
         isOpaque = false
         hasShadow = false
         hidesOnDeactivate = false
-        animationBehavior = .utilityWindow
+        // None: the grow out of the pill is the animation. AppKit's utility
+        // window fade ran on top of it, a second, unrelated motion on the
+        // same open, which is part of what read as the panel "chunkily
+        // loading in" (2026-10-04).
+        animationBehavior = .none
         minSize = NSSize(width: 380, height: 260)
 
         contentView = NSHostingView(
@@ -238,6 +242,16 @@ struct ChatPanel: View {
             rule
             composer
         }
+        // The words, not the glass: the glass is the pill and is drawn from
+        // the first frame (see `GrowFromPill`). The words wait until the
+        // glass has opened far enough to hold them, and on the way back they
+        // go first, by the same curve run backward.
+        .opacity(GrowFromPill.contentOpacity(stage.open || offscreen ? 1 : 0))
+        .animation(
+            stage.open
+                ? .easeOut(duration: reduceMotion ? 0.1 : 0.18).delay(reduceMotion ? 0 : 0.1)
+                : .easeOut(duration: 0.08),
+            value: stage.open)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // The cards' frost, not the pill's clear glass: paragraphs need a
         // ground, and a page of white text over a white document is the
@@ -655,8 +669,13 @@ nonisolated struct GrowFromPill: ViewModifier, Animatable {
         let p = min(max(progress, 0), 1)
         let pill = from == .zero ? Self.fallback : from
         return content
-            // Nothing readable until the capsule is most of the way open.
-            .opacity(min(1, max(0, (p - 0.15) / 0.5)))
+            // The glass is whole from the first frame. Until 2026-10-04 the
+            // whole panel, glass and words, faded in from nothing while the
+            // pill on the glass faded out, so for a moment neither was
+            // there, and then a half-built panel came up: "it feels like a
+            // diff version of the tab is chunkily loading in". Now the
+            // capsule the person clicked is the thing that grows, and only
+            // the words wait (`contentOpacity`).
             .mask {
                 GeometryReader { proxy in
                     let full = proxy.size
@@ -674,6 +693,11 @@ nonisolated struct GrowFromPill: ViewModifier, Animatable {
                 }
             }
     }
+
+    /// The words' opacity: 0 or 1, animated by the caller with a delay on
+    /// the way in and none on the way out, so they appear after the glass
+    /// starts to open and leave before it starts to close.
+    static func contentOpacity(_ open: Double) -> Double { open >= 0.5 ? 1 : 0 }
 
     private func lerp(_ a: CGFloat, _ b: CGFloat, _ t: Double) -> CGFloat {
         a + (b - a) * CGFloat(t)

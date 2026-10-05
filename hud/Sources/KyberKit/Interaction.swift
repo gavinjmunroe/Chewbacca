@@ -61,9 +61,23 @@ public enum OutboundEvent: Sendable, Equatable {
     /// keeps talking over me when I try to speak" (2026-09-20). A listener
     /// that does not know the line ignores it.
     case talkKey(down: Bool)
+    /// A button on one row of a List, Table or Events was pressed.
+    ///
+    /// `e action <name> row=<id> surface=<surface>`, exactly: the contract
+    /// with `bin/kyber-surfaces`, which reads the row as an opaque id (a
+    /// graph node like `thread:abc123`) and the surface as the panel it
+    /// opened. Both are bare unless they hold a space or a quote, then
+    /// JSON-quoted. Not `.action`, whose second word is a component id and
+    /// whose encoding quotes a colon.
+    case rowAction(name: String, row: String, surface: String?)
 
     public var line: String {
         switch self {
+        case .rowAction(let name, let row, let surface):
+            var line = "e action \(name) row=\(OutboundEvent.opaque(row))"
+            if let surface { line += " surface=\(OutboundEvent.opaque(surface))" }
+            return line
+
         case .action(let name, let component, let payload):
             let props = payload
                 .sorted { $0.key < $1.key }
@@ -134,6 +148,14 @@ public enum OutboundEvent: Sendable, Equatable {
             else { return "null" }
             return text
         }
+    }
+
+    /// An id passed through untouched: bare unless it is empty or holds
+    /// whitespace, a quote or a backslash, which would split or break the
+    /// line, and JSON-quoted then.
+    static func opaque(_ s: String) -> String {
+        let unsafe = s.isEmpty || s.contains { $0.isWhitespace || $0 == "\"" || $0 == "\\" }
+        return unsafe ? jsonString(s) : s
     }
 
     static func jsonString(_ s: String) -> String {

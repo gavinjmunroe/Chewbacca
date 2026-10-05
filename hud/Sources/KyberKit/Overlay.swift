@@ -99,8 +99,18 @@ public final class OverlayWindow: NSPanel {
     /// bounds.
     public func fitToScreen() {
         guard let screen = Self.active else { return }
+        if let strip, strip.frame != screen.frame { strip.setFrame(screen.frame, display: true) }
         guard frame != screen.frame else { return }
         setFrame(screen.frame, display: true)
+    }
+
+    /// The frame's tint over the menu bar, in its own window above it. Shown,
+    /// hidden and fitted with this one, so hiding the HUD hides it too.
+    public var strip: NSWindow?
+
+    public override func orderOut(_ sender: Any?) {
+        strip?.orderOut(sender)
+        super.orderOut(sender)
     }
 
     /// The display the glass lives on: the main display in the arrangement,
@@ -118,6 +128,7 @@ public final class OverlayWindow: NSPanel {
     public func show() {
         fitToScreen()
         orderFrontRegardless()
+        strip?.orderFrontRegardless()
     }
 
     /// Accept mouse events only while the pointer is over a surface.
@@ -175,4 +186,41 @@ final class PassThroughHostingView: NSHostingView<AnyView> {
     required init?(coder: NSCoder) {
         fatalError("not used")
     }
+}
+
+
+/// The one piece of the frame that has to sit above the menu bar.
+///
+/// The frame's window is at `.floating`, under the menu bar, and the menu bar
+/// shows only the desktop picture through itself, never a window. So the
+/// strip of frame under it, drawn on 2026-10-04 after "its not filling the
+/// top 100%", never showed. This window is above the menu bar, the size of
+/// the screen so the field's coordinates match the main one exactly, draws
+/// nothing but that strip at half strength, and never takes a click: the
+/// menu bar under it works as if it were not there.
+@MainActor
+public final class MenuBarStripWindow: NSPanel {
+    public init(content: some View) {
+        let frame = OverlayWindow.active?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        super.init(
+            contentRect: frame,
+            styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
+            backing: .buffered,
+            defer: false)
+        isFloatingPanel = true
+        // Above the menu bar and its status items, below the menus they open.
+        level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 1)
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        backgroundColor = .clear
+        isOpaque = false
+        hasShadow = false
+        hidesOnDeactivate = false
+        ignoresMouseEvents = true
+        animationBehavior = .none
+        contentView = NSHostingView(rootView: content)
+        setFrame(frame, display: false)
+    }
+
+    public override var canBecomeKey: Bool { false }
+    public override var canBecomeMain: Bool { false }
 }

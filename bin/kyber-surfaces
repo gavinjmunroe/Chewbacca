@@ -1,0 +1,992 @@
+#!/usr/bin/env python3
+"""Live surfaces on the HUD glass: graph walks drawn without a model, kept current.
+
+"make chewbacca an OS that eliminates the need to open any app ... dynamically
+populating ur screen and animating into existence not just to be cool but to
+be functional" (Caleb, 2026-10-04), then "graph engineer harder". Every source
+he opens an app for is ingested into one typed graph (bin/lib/osgraph*.py),
+and every surface is a walk over it: what needs him, today, one person across
+every app, one body of work, his tasks by real run status, his people, his
+conversations. A row is a graph node, so a press on it opens that node's walk.
+
+    kyber-surfaces open <kind> [arg] [at=<region>]   draw a surface and keep it live
+                                                     kinds: needs-you today tasks people
+                                                     conversations person <name> space <name>
+                                                     music files
+    kyber-surfaces close <name|all>                  take it down
+    kyber-surfaces list                              what exists, what is open, where
+    kyber-surfaces space <name>                      a body of work's surfaces, together
+    kyber-surfaces spaces                            the spaces and what each opens
+    kyber-surfaces activity [--limit N]              what the surfaces did, newest last
+    kyber-surfaces ingest [--days N]                 read every source into the graph now
+    kyber-surfaces walk <kind> [arg]                 print a walk's rows, no HUD needed
+    kyber-surfaces graph                             counts, and every edge re-checked
+    kyber-surfaces forget                            stop the daemon, delete what it stored
+    kyber-surfaces start                             the daemon, in the background (hud-listen runs this)
+    kyber-surfaces run                               the daemon, in the foreground
+
+The wire format is hud/CLAUDE.md; what this sends and accepts is in
+docs/KYBER-SURFACES.md.
+
+HOW IT STAYS CHEAP. A surface is drawn once (`@`, `c`, `>`, `r`) with every
+changing prop bound to a pointer. A refresh walks the graph, diffs the data
+model against what was last sent, and sends `@ <name>` plus only the `d` lines
+that changed. Nothing is redrawn, so nothing flickers.
+
+WHAT MAY SEND. Only a Button press reaches an action, the press is the person's
+approval, and every action is in a provider's `actions` table under the `ks-`
+prefix. Message and mail text is rendered and never read for instructions
+(.claude/rules/untrusted-content.md). Each action lands in the activity log
+with its surface and outcome, never a message body.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import socket
+import subprocess
+import sys
+import threading
+import time
+from datetime import datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+
+import hud_events  # noqa: E402
+import osgraph  # noqa: E402
+import osgraph_ingest  # noqa: E402
+import surfaces  # noqa: E402
+from surfaces import ACTION_PREFIX, Context, Result, SurfaceError, data_line  # noqa: E402
+
+BOB = Path(os.environ.get("BOB_DIR", str(Path.home() / ".bob")))
+HUD_SOCKET = os.environ.get("BOB_HUD_SOCKET", str(BOB / "hud.sock"))
+CONTROL = os.environ.get("KYBER_SURFACES_SOCK", str(BOB / "surfaces.sock"))
+STATE = Path(os.environ.get("KYBER_SURFACES_STATE", str(BOB / "surfaces-state.json")))
+ACTIVITY = Path(os.environ.get("KYBER_SURFACES_ACTIVITY", str(BOB / "surfaces-activity.jsonl")))
+BADGES = Path(os.environ.get("KYBER_SURFACES_BADGES", str(BOB / "badges.json")))
+CONFIG = Path(os.environ.get("KYBER_SURFACES_CONFIG", str(Path.home() / ".chewbacca" / "surfaces.json")))
+LOG = Path.home() / "Library" / "Logs" / "com.calebnewton.chewbacca.surfaces.log"
+
+REGIONS = ("topLeft", "top", "topRight", "left", "center", "right", "bottomLeft", "bottom", "bottomRight")
+# Every region belongs to one of three columns, and a surface is placed by
+# column, anchored at the column's top (see Daemon.place for why).
+COLUMNS = {"topLeft": "topLeft", "left": "topLeft", "bottomLeft": "topLeft",
+           "top": "top", "center": "top", "bottom": "top",
+           "topRight": "topRight", "right": "topRight", "bottomRight": "topRight"}
+# The sides before the middle, because the middle is where the person works.
+FALLBACK_COLUMNS = ("topRight", "topLeft", "top")
+# The HUD keeps at most 12 surfaces and evicts the oldest (OverlayModel
+# maxSurfaces). Its own guide says two or three is a workspace and six is a
+# mess, so this stops one short of the mess.
+MOST_OPEN = 5
+# How long `open` waits for a daemon it just started. Guessed, never measured;
+# the daemon binds its socket before its first ingest, so this only covers a
+# slow interpreter start.
+START_WAIT_S = 4.0
+# Activity rows kept; older ones are trimmed on write. Guessed, never measured.
+ACTIVITY_KEEP = 2000
+# Seconds between ingests. A full 7-day ingest took 4.2 to 5.3 s on
+# 2026-10-04 (imessage dominates), so once a minute costs under a tenth of one core.
+INGEST_EVERY_S = 60.0
+# The pilot window (brief, 2026-10-04: "ingest only the last 7 days ... then
+# widen"). KYBER_SURFACES_DAYS widens it.
+INGEST_DAYS = int(os.environ.get("KYBER_SURFACES_DAYS") or 7)
+
+# Bodies of work, after Realm's spaces (design.md, Carlton Aikins): one name
+# opens its own walk plus the surfaces that work needs. Overridden by "spaces"
+# in ~/.chewbacca/surfaces.json.
+DEFAULT_SPACES = {
+    "school": ["space school", "today", "files"],
+    "amber": ["space amber", "needs-you", "conversations"],
+    "chewbacca": ["space chewbacca", "tasks"],
+    "personal": ["space personal", "conversations", "music"],
+}
+SPACE_ALIASES = {"zeutara": "amber", "work": "amber", "class": "school", "classes": "school",
+                 "kit": "chewbacca", "home": "personal", "me": "personal"}
+
+
+def spaces_config() -> dict:
+    try:
+        body = json.loads(CONFIG.read_text())
+        spaces = body.get("spaces") if isinstance(body, dict) else None
+        if isinstance(spaces, dict) and spaces:
+            return {str(k).lower(): [str(s) for s in v] for k, v in spaces.items() if isinstance(v, list)}
+    except (OSError, json.JSONDecodeError):
+        pass
+    return dict(DEFAULT_SPACES)
+
+
+def space_name(word: str, spaces: dict) -> str | None:
+    key = (word or "").strip().lower()
+    key = SPACE_ALIASES.get(key, key)
+    return key if key in spaces else None
+
+
+def split_spec(spec: str, arg: str = "") -> tuple[str | None, str]:
+    """"person karthik" -> ("person", "karthik"); "texts" -> ("conversations", "")."""
+    words = (spec or "").strip().split(None, 1)
+    if not words:
+        return None, arg
+    kind = surfaces.resolve(words[0])
+    return kind, (arg or (words[1] if len(words) > 1 else "")).strip()
+
+
+class Live:
+    """One open surface: where it is, what it last showed, what was typed."""
+
+    def __init__(self, provider, kind: str, arg: str, region: str):
+        self.provider = provider
+        self.kind = kind
+        self.arg = arg
+        self.region = region
+        self.data = None
+        self.error: str | None = None
+        self.sent: dict[str, str] = {}
+        self.values: dict = {}
+        self.due = 0.0
+        self.busy = False
+
+
+class Daemon:
+    def __init__(self, hud, ctx: Context | None = None, state_path: Path = STATE,
+                 activity_path: Path = ACTIVITY, badges_path: Path = BADGES, spaces: dict | None = None,
+                 clock=time.monotonic, spawn=None, ingest=None, make=None):
+        self.hud = hud
+        self.ctx = ctx or Context()
+        self.state_path = state_path
+        self.activity_path = activity_path
+        self.badges_path = badges_path
+        self.spaces = spaces if spaces is not None else spaces_config()
+        self.clock = clock
+        self.spawn = spawn or (lambda fn: threading.Thread(target=fn, daemon=True).start())
+        self.ingester = ingest
+        self.make = make or surfaces.make
+        self.open: dict[str, Live] = {}
+        self.space = ""
+        self.space_sets: dict[str, dict] = {}
+        self.lock = threading.RLock()
+        self.next_ingest = 0.0
+        self.ingesting = False
+
+    # ── the graph ────────────────────────────────────────────────────────
+
+    def ingest(self) -> dict:
+        """Read every source into the graph, then refresh every open surface
+        and the badge. Never two at once."""
+        with self.lock:
+            if self.ingesting:
+                return {}
+            self.ingesting = True
+        try:
+            if self.ingester is not None:
+                report = self.ingester(self.ctx)
+            else:
+                self.ctx.ids = osgraph.Identities()
+                report = osgraph_ingest.ingest_all(self.ctx.graph, self.ctx, days=INGEST_DAYS, ids=self.ctx.ids)
+            errors = {}
+            for source, counts in report.items():
+                if isinstance(counts, dict) and counts.get("error"):
+                    errors[source] = counts["error"]
+                    log(f"ingest {source}: {counts['error']}")
+            # Surfaces name a failed source in their caption (walks.py).
+            self.ctx.ingest_errors = errors
+        finally:
+            with self.lock:
+                self.ingesting = False
+                self.next_ingest = self.clock() + INGEST_EVERY_S
+                for live in self.open.values():
+                    live.due = 0.0
+        self.write_badges()
+        return report
+
+    def write_badges(self) -> None:
+        if self.ctx.graph is None:
+            return
+        try:
+            import osgraph_walks  # noqa: PLC0415
+
+            count = osgraph_walks.needs_you(self.ctx.graph, self.ctx.now())["count"]
+            self.badges_path.parent.mkdir(parents=True, exist_ok=True)
+            self.badges_path.write_text(json.dumps({"needsYou": count, "at": self.ctx.now().isoformat()}))
+        except Exception as err:  # noqa: BLE001  a badge never takes the daemon down
+            log(f"badge: {err}")
+
+    # ── state ────────────────────────────────────────────────────────────
+
+    def snapshot(self) -> dict:
+        return {n: {"kind": s.kind, "arg": s.arg, "region": s.region} for n, s in self.open.items()}
+
+    def save(self) -> None:
+        with self.lock:
+            if self.space:
+                self.space_sets[self.space] = self.snapshot()
+            body = {"space": self.space, "open": self.snapshot(), "spaces": self.space_sets}
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.state_path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(body, indent=1))
+            tmp.replace(self.state_path)
+        except OSError as err:
+            log(f"state not saved: {err}")
+
+    def restore(self) -> None:
+        try:
+            body = json.loads(self.state_path.read_text())
+        except (OSError, json.JSONDecodeError):
+            return
+        self.space = str(body.get("space") or "")
+        self.space_sets = {k: v for k, v in (body.get("spaces") or {}).items() if isinstance(v, dict)}
+        for spec in (body.get("open") or {}).values():
+            if isinstance(spec, dict) and spec.get("kind") in surfaces.KINDS:
+                self.open_surface(spec["kind"], spec.get("region") or None, arg=spec.get("arg") or "", save=False)
+
+    # ── drawing ──────────────────────────────────────────────────────────
+
+    def place(self, name: str, own: str, asked: str | None) -> str:
+        """One surface per screen column, top-anchored, until every column
+        has one; after that a surface joins the emptiest column's region,
+        where the HUD stacks it in the next slot below.
+
+        Regions alone were not enough: on the first live run (2026-10-04)
+        `tasks` at bottomRight grew tall enough to cover `person` at right,
+        because a tall panel anchored low and one anchored mid share a column."""
+        wanted = asked if asked in REGIONS else own
+        counts = {c: 0 for c in COLUMNS.values()}
+        for n, s in self.open.items():
+            if n != name:
+                counts[COLUMNS[s.region]] = counts.get(COLUMNS[s.region], 0) + 1
+        column = COLUMNS.get(wanted, "topRight")
+        if counts.get(column, 0) == 0:
+            return column
+        return min(FALLBACK_COLUMNS, key=lambda c: (counts.get(c, 0), FALLBACK_COLUMNS.index(c)))
+
+    def open_surface(self, spec: str, region: str | None = None, preset: dict | None = None,
+                     save: bool = True, arg: str = "") -> str:
+        kind, arg = split_spec(spec, arg)
+        if kind is None:
+            return f"No surface called {spec}. There's {', '.join(surfaces.KINDS)}."
+        if kind in surfaces.PARAMETRIC and not arg:
+            return f"No surface called {kind} without a name: `{kind} <name>`."
+        provider = self.make(kind, arg) if kind in surfaces.PARAMETRIC else self.make(kind)
+        name = provider.name
+        with self.lock:
+            live = self.open.get(name)
+            if live is None:
+                if len(self.open) >= MOST_OPEN:
+                    self.close_surface(next(iter(self.open)), save=False)
+                live = Live(provider, kind, arg, self.place(name, provider.region, region))
+                self.open[name] = live
+                fresh = True
+            else:
+                fresh = False
+                if region in REGIONS and region != live.region:
+                    live.region = self.place(name, provider.region, region)
+            if preset:
+                live.values.update(preset)
+            self.draw(live, full=fresh)
+            live.due = 0.0
+        if save:
+            self.save()
+        self.spawn(lambda: self.refresh(name))
+        return f"{name} is up, {live.region}."
+
+    def draw(self, live: Live, full: bool = True) -> None:
+        p = live.provider
+        head = f"@ {p.name} at={live.region} w={p.width}"
+        if not full:
+            self.hud.send([head])
+            self.push(live, extra=dict(live.values))
+            return
+        live.sent = {}
+        initial = p.initial()
+        initial.update({k: v for k, v in live.values.items() if k.startswith(f"/{p.name}/")})
+        lines = [head] + p.layout()
+        try:
+            model = p.model(live.data, live.error, live.values, self.ctx)
+        except Exception as err:  # noqa: BLE001  a provider bug shows on its panel, not as a dead daemon
+            model = {p.p("note"): f"This surface hit a bug: {err}"}
+        for pointer, value in {**initial, **model}.items():
+            lines.append(data_line(pointer, value))
+            live.sent[pointer] = json.dumps(value, sort_keys=True)
+            if pointer in initial:
+                live.values.setdefault(pointer, value)
+        self.hud.send(lines)
+
+    def push(self, live: Live, extra: dict | None = None) -> list[str]:
+        """Send only what changed: `@ <name>` and its `d` lines, or nothing."""
+        p = live.provider
+        try:
+            model = p.model(live.data, live.error, live.values, self.ctx)
+        except Exception as err:  # noqa: BLE001
+            model = {p.p("note"): f"This surface hit a bug: {err}"}
+        model.update(extra or {})
+        owned = set(p.initial())
+        lines = []
+        for pointer, value in model.items():
+            encoded = json.dumps(value, sort_keys=True)
+            if live.sent.get(pointer) == encoded:
+                continue
+            live.sent[pointer] = encoded
+            lines.append(data_line(pointer, value))
+            # A control's value set from here counts as its value until the
+            # person changes it, so the next refresh does not re-pick it.
+            if pointer in owned:
+                live.values[pointer] = value
+        if lines:
+            self.hud.send([f"@ {p.name}"] + lines)
+        return lines
+
+    def close_surface(self, name: str, save: bool = True) -> str:
+        with self.lock:
+            if name == "all":
+                for n in list(self.open):
+                    self.hud.send([f"- {n}"])
+                self.open.clear()
+            else:
+                if name not in self.open:
+                    kind, arg = split_spec(name)
+                    if kind:
+                        try:
+                            name = self.make(kind, arg).name if kind in surfaces.PARAMETRIC else kind
+                        except Exception:  # noqa: BLE001
+                            pass
+                if self.open.pop(name, None) is None:
+                    return f"{name} wasn't open."
+                self.hud.send([f"- {name}"])
+        if save:
+            self.save()
+        return f"Closed {name}."
+
+    def redraw_all(self) -> None:
+        """After the display comes back: it lost every surface when it died."""
+        with self.lock:
+            for live in self.open.values():
+                self.draw(live, full=True)
+
+    # ── refreshing ───────────────────────────────────────────────────────
+
+    def refresh(self, name: str) -> None:
+        with self.lock:
+            live = self.open.get(name)
+            if live is None or live.busy:
+                return
+            live.busy = True
+        try:
+            data = live.provider.fetch(self.ctx)
+            if isinstance(data, dict):
+                data["_at"] = self.ctx.now()
+            error = None
+        except SurfaceError as err:
+            data, error = live.data, str(err)
+        except Exception as err:  # noqa: BLE001  the panel says so; the daemon lives
+            data, error = live.data, f"{name} broke: {err}"
+            log(f"fetch {name}: {err!r}")
+        with self.lock:
+            live.busy = False
+            if self.open.get(name) is not live:
+                return
+            live.data, live.error = data, error
+            live.due = self.clock() + live.provider.refresh
+            self.push(live)
+
+    def tick(self) -> None:
+        now = self.clock()
+        if now >= self.next_ingest and not self.ingesting:
+            self.next_ingest = now + INGEST_EVERY_S
+            self.spawn(self.ingest)
+        with self.lock:
+            due = [n for n, s in self.open.items() if not s.busy and s.due <= now]
+        for name in due:
+            self.spawn(lambda n=name: self.refresh(n))
+
+    # ── events from the display ──────────────────────────────────────────
+
+    def owner_of(self, component: str) -> Live | None:
+        best = None
+        for name, live in self.open.items():
+            if component.startswith(name + "-") and (best is None or len(name) > len(best.provider.name)):
+                best = live
+        return best
+
+    def handle_line(self, line: str) -> None:
+        """One line from the display. Only `e`, `v` and `x` matter here; `h`
+        (what was said) belongs to hud-listen and is never read."""
+        line = line.strip()
+        if line.startswith("e "):
+            # Read with bin/lib/hud_events.py, the one reader every client
+            # shares: values are JSON, and a line that does not parse cleanly
+            # (a second row=, a value running into text) is refused whole.
+            ev = hud_events.event(line)
+            if ev is None:
+                return
+            extra = {k: v for k, v in ev.items() if k not in ("name", "component")}
+            if line.startswith("e action "):
+                # A row's button: `e action <name> row="<id>" surface="<name>"`
+                # (hud/CLAUDE.md, Row actions). The row is a graph node id.
+                surface = str(extra.get("surface") or "")
+                live = self.open.get(surface)
+                if "row" not in extra:
+                    return
+                extra["row"] = str(extra["row"])
+                if live is not None:
+                    self.on_action(ev["name"], live.provider.cid("list"), extra)
+                elif ev["name"] == f"{ACTION_PREFIX}pivot":
+                    # A row button on a panel kyber-genui drew (registered in
+                    # surfaces/genui-queries.json): open the row's node walk.
+                    self.pivot_from_elsewhere(extra["row"])
+                return
+            self.on_action(ev["name"], ev["component"], extra)
+        elif line.startswith("v ") and not line.startswith("v! "):
+            parts = line.split(None, 2)
+            if len(parts) == 3:
+                try:
+                    value = json.loads(parts[2])
+                except json.JSONDecodeError:
+                    return
+                self.on_value(parts[1], value)
+        elif line == "x":
+            # Two quick presses of the talk key: the display cleared the glass.
+            # Show nothing afterwards (hud/CLAUDE.md), so forget what was open.
+            with self.lock:
+                self.open.clear()
+            self.save()
+        elif line.startswith("! "):
+            log(f"display: {line[2:]}")
+
+    def pivot_from_elsewhere(self, node_id: str) -> None:
+        from surfaces.walks import WalkSurface  # noqa: PLC0415
+
+        def work() -> None:
+            result = WalkSurface().pivot(self.ctx, None, {"row": node_id})
+            self.record("genui", f"{ACTION_PREFIX}pivot", result)
+            if result.opens:
+                self.open_surface(result.opens, arg=result.opens_arg)
+
+        self.spawn(work)
+
+    def on_value(self, pointer: str, value) -> None:
+        with self.lock:
+            for name, live in self.open.items():
+                if pointer.startswith(f"/{name}/"):
+                    live.values[pointer] = value
+                    # The panel already shows what was typed; record it as sent
+                    # so a push does not echo it back over the next keystroke.
+                    live.sent[pointer] = json.dumps(value, sort_keys=True)
+                    self.push(live)
+                    return
+
+    def on_action(self, action: str, component: str, extra: dict | None = None) -> None:
+        if not action.startswith(ACTION_PREFIX):
+            return
+        with self.lock:
+            # Controls carry surface= since 5467543; ids alone are only unique
+            # inside one surface. Older displays send no surface, so the id's
+            # prefix is the fallback.
+            named = str((extra or {}).get("surface") or "")
+            live = self.open.get(named) if named else None
+            live = live if live is not None and component.startswith(live.provider.name + "-") else None
+            live = live or self.owner_of(component)
+            if live is None:
+                return
+            handler = live.provider.actions.get(action)
+            if handler is None:
+                log(f"no {action} on {live.provider.name}")
+                return
+            status = live.provider.p("status")
+            self.push(live, extra={status: "Working…"})
+            data, values = live.data, {**live.values, **(extra or {})}
+
+        def work() -> None:
+            try:
+                result = handler(self.ctx, data, values)
+            except SurfaceError as err:
+                result = Result(False, str(err))
+            except Exception as err:  # noqa: BLE001
+                result = Result(False, f"That didn't work: {err}")
+                log(f"action {action}: {err!r}")
+            self.record(live.provider.name, action, result)
+            with self.lock:
+                if self.open.get(live.provider.name) is live:
+                    live.values.update(result.updates)
+                    self.push(live, extra={status: result.line, **result.updates})
+            if result.opens:
+                self.open_surface(result.opens, arg=result.opens_arg, preset=result.preset)
+            if result.reingest:
+                self.ingest()
+            if result.refetch or result.reingest:
+                self.refresh(live.provider.name)
+
+        self.spawn(work)
+
+    def record(self, surface: str, action: str, result: Result) -> None:
+        row = {"t": datetime.now().astimezone().isoformat(timespec="seconds"), "surface": surface,
+               "action": action.removeprefix(ACTION_PREFIX), "ok": result.ok, "outcome": result.line}
+        try:
+            self.activity_path.parent.mkdir(parents=True, exist_ok=True)
+            with self.activity_path.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(row) + "\n")
+            lines = self.activity_path.read_text(encoding="utf-8").splitlines()
+            if len(lines) > ACTIVITY_KEEP:
+                self.activity_path.write_text("\n".join(lines[-ACTIVITY_KEEP:]) + "\n", encoding="utf-8")
+        except OSError as err:
+            log(f"activity not written: {err}")
+
+    # ── spaces ───────────────────────────────────────────────────────────
+
+    def open_space(self, word: str) -> str:
+        name = space_name(word, self.spaces)
+        if name is None:
+            return f"No space called {word}. There's {', '.join(self.spaces)}."
+        self.save()  # keeps the outgoing space's set
+        saved = self.space_sets.get(name)
+        if saved:
+            want = [(s.get("kind", ""), s.get("arg", ""), s.get("region") or None) for s in saved.values()]
+        else:
+            want = [(*split_spec(m), None) for m in self.spaces[name]]
+        keep = set()
+        for kind, arg, _ in want:
+            if kind:
+                try:
+                    keep.add(self.make(kind, arg).name if kind in surfaces.PARAMETRIC else kind)
+                except Exception:  # noqa: BLE001
+                    pass
+        with self.lock:
+            for n in list(self.open):
+                if n not in keep:
+                    self.close_surface(n, save=False)
+            self.space = name
+        for kind, arg, region in want:
+            if kind:
+                self.open_surface(kind, region, arg=arg, save=False)
+        self.save()
+        return f"{name.capitalize()} space: {', '.join(sorted(keep))}."
+
+    # ── control socket ───────────────────────────────────────────────────
+
+    def command(self, body: dict) -> dict:
+        cmd = body.get("cmd")
+        if cmd == "ping":
+            return {"ok": True}
+        if cmd == "open":
+            msg = self.open_surface(str(body.get("name", "")), body.get("at") or None, body.get("preset") or None,
+                                    arg=str(body.get("arg") or ""))
+            return {"ok": msg.endswith(".") and not msg.startswith("No surface"), "message": msg}
+        if cmd == "close":
+            return {"ok": True, "message": self.close_surface(str(body.get("name", "")))}
+        if cmd == "space":
+            msg = self.open_space(str(body.get("name", "")))
+            return {"ok": not msg.startswith("No space"), "message": msg}
+        if cmd == "ingest":
+            return {"ok": True, "message": osgraph_ingest.dumps(self.ingest())}
+        if cmd == "quit":
+            # Exits after the reply is written (serve_control does it), so
+            # `forget` can delete the graph with nothing holding it open.
+            return {"ok": True, "message": "stopping", "quit": True}
+        if cmd == "list":
+            with self.lock:
+                return {"ok": True, "space": self.space, "open": self.snapshot()}
+        return {"ok": False, "message": f"unknown command {cmd}"}
+
+
+def log(message: str) -> None:
+    print(f"{datetime.now():%H:%M:%S} {message}", file=sys.stderr, flush=True)
+
+
+class HudLink:
+    """The connection to Kyber: reconnects forever, subscribes with `listen`,
+    redraws everything after a reconnect, and feeds every line to the daemon."""
+
+    def __init__(self, path: str = HUD_SOCKET):
+        self.path = path
+        self.sock: socket.socket | None = None
+        self.lock = threading.Lock()
+        self.daemon: Daemon | None = None
+
+    def send(self, lines: list[str]) -> bool:
+        if not lines:
+            return True
+        payload_bytes = ("\n".join(lines) + "\n").encode("utf-8")
+        with self.lock:
+            if self.sock is None:
+                return False
+            try:
+                self.sock.sendall(payload_bytes)
+                return True
+            except OSError:
+                self.sock = None
+                return False
+
+    def loop(self) -> None:
+        delay = 0.5
+        while True:
+            try:
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                sock.connect(self.path)
+            except OSError:
+                time.sleep(delay)
+                # Capped: a display back after an hour is picked up in seconds.
+                delay = min(delay * 2, 5.0)
+                continue
+            delay = 0.5
+            with self.lock:
+                self.sock = sock
+            self.send([hud_events.listen_line()])
+            if self.daemon:
+                self.daemon.redraw_all()
+            buffer = b""
+            try:
+                while True:
+                    chunk = sock.recv(65536)
+                    if not chunk:
+                        break
+                    buffer += chunk
+                    while b"\n" in buffer:
+                        raw, buffer = buffer.split(b"\n", 1)
+                        if self.daemon:
+                            self.daemon.handle_line(raw.decode("utf-8", "replace"))
+            except OSError:
+                pass
+            with self.lock:
+                self.sock = None
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+
+def serve_control(daemon: Daemon, path: str) -> socket.socket:
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+    # Owner-only from the moment it exists: anything that can connect can
+    # open, close and re-ingest. It has no command that sends; chmod after bind
+    # alone left a moment where the socket was open to the group.
+    old = os.umask(0o077)
+    try:
+        server.bind(path)
+    finally:
+        os.umask(old)
+    os.chmod(path, 0o600)
+    server.listen(8)
+
+    def client(conn: socket.socket) -> None:
+        with conn:
+            buffer = b""
+            while b"\n" not in buffer:
+                chunk = conn.recv(65536)
+                if not chunk:
+                    return
+                buffer += chunk
+            try:
+                body = json.loads(buffer.split(b"\n", 1)[0])
+                reply = daemon.command(body if isinstance(body, dict) else {})
+            except (json.JSONDecodeError, SurfaceError) as err:
+                reply = {"ok": False, "message": str(err)}
+            conn.sendall((json.dumps(reply) + "\n").encode("utf-8"))
+            if reply.get("quit"):
+                os._exit(0)
+
+    def accept() -> None:
+        while True:
+            try:
+                conn, _ = server.accept()
+            except OSError:
+                return
+            threading.Thread(target=client, args=(conn,), daemon=True).start()
+
+    threading.Thread(target=accept, daemon=True).start()
+    return server
+
+
+def ask(body: dict, path: str = CONTROL, timeout: float = 30.0) -> dict | None:
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+            s.settimeout(timeout)
+            s.connect(path)
+            s.sendall((json.dumps(body) + "\n").encode("utf-8"))
+            buffer = b""
+            while b"\n" not in buffer:
+                chunk = s.recv(65536)
+                if not chunk:
+                    break
+                buffer += chunk
+        return json.loads(buffer.split(b"\n", 1)[0]) if buffer else None
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def running() -> bool:
+    return bool(ask({"cmd": "ping"}, timeout=2.0))
+
+
+def start_daemon() -> bool:
+    if running():
+        return True
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    with LOG.open("a") as out:
+        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "run"], stdin=subprocess.DEVNULL,
+                         stdout=out, stderr=out, start_new_session=True)
+    deadline = time.monotonic() + START_WAIT_S
+    while time.monotonic() < deadline:
+        if running():
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def live_context() -> Context:
+    ctx = Context()
+    ctx.graph = osgraph.Graph()
+    ctx.ids = osgraph.Identities()
+    return ctx
+
+
+def cmd_run() -> int:
+    if running():
+        print("kyber-surfaces is already running", file=sys.stderr)
+        return 0
+    BOB.mkdir(parents=True, exist_ok=True)
+    link = HudLink()
+    daemon = Daemon(link, ctx=live_context())
+    link.daemon = daemon
+    serve_control(daemon, CONTROL)
+    daemon.restore()
+    threading.Thread(target=link.loop, daemon=True).start()
+    log(f"surfaces daemon up: {CONTROL} -> {HUD_SOCKET}, graph {daemon.ctx.graph.path}")
+    try:
+        while True:
+            daemon.tick()
+            time.sleep(0.5)
+    except KeyboardInterrupt:
+        return 0
+
+
+def via_daemon(body: dict) -> int:
+    if not start_daemon():
+        print(f"the surfaces daemon didn't start; see {LOG}", file=sys.stderr)
+        return 1
+    reply = ask(body) or {"ok": False, "message": "no answer from the daemon"}
+    print(reply.get("message") or json.dumps(reply))
+    return 0 if reply.get("ok") else 1
+
+
+def cmd_list() -> int:
+    reply = ask({"cmd": "list"}, timeout=2.0) if running() else None
+    opened = (reply or {}).get("open") or {}
+    for kind in surfaces.KINDS:
+        where = ", ".join(f"{n} {s['region']}" for n, s in opened.items() if s.get("kind") == kind) or "closed"
+        sample = surfaces.make(kind, "x") if kind in surfaces.PARAMETRIC else surfaces.make(kind)
+        print(f"{kind:14} {where:30} replaces {sample.replaces}")
+    if reply is None:
+        print("(daemon not running; `kyber-surfaces open <kind>` starts it)")
+    elif reply.get("space"):
+        print(f"space: {reply['space']}")
+    return 0
+
+
+def cmd_spaces() -> int:
+    for name, members in spaces_config().items():
+        print(f"{name:10} {', '.join(members)}")
+    return 0
+
+
+def cmd_activity(limit: int) -> int:
+    try:
+        rows = ACTIVITY.read_text(encoding="utf-8").splitlines()[-limit:]
+    except OSError:
+        print("No activity yet.")
+        return 0
+    for raw in rows:
+        try:
+            row = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        mark = "ok  " if row.get("ok") else "fail"
+        print(f"{row.get('t', '')[:19]}  {mark}  {row.get('surface', ''):14} {row.get('action', ''):7} "
+              f"{row.get('outcome', '')}")
+    return 0
+
+
+def cmd_ingest(days: int) -> int:
+    ctx = live_context()
+    report = osgraph_ingest.ingest_all(ctx.graph, ctx, days=days, ids=ctx.ids)
+    print(osgraph_ingest.dumps(report))
+    return 0 if not any(isinstance(v, dict) and v.get("error") for v in report.values()) else 1
+
+
+TIER_NAMES = ("waiting on you", "due soon", "FYI")
+
+
+def glass_row(r: dict, now) -> dict:
+    """One walk row as kyber-genui may draw it: a label, the network, how
+    long it has waited, why, and the node id for a row button. Never the
+    node's props, and never message text: a request read out of a text is
+    named by who asked, not by what they wrote (docs/GENUI.md, step 4)."""
+    from surfaces.walks import short_when  # noqa: PLC0415
+
+    label = r.get("label", "")
+    if r.get("type") == "Task" and (r.get("props") or {}).get("kind") == "request":
+        label = (r.get("props") or {}).get("provenance") or "an ask in a text"
+    return {"id": r.get("id", ""), "label": label, "app": r.get("app", ""), "why": r.get("why", ""),
+            "waiting": short_when(r.get("when", ""), now), "tier": TIER_NAMES[r.get("tier", 2)],
+            "people": [c["label"] for c in r.get("chips", []) if c["id"].startswith("person:")][:2]}
+
+
+def walk_data(kind: str, arg: str, ctx) -> dict:
+    """A walk's data. `unreplied` is needs-you narrowed to what waits on a
+    reply, which is the question "who have I not texted back" asks."""
+    if kind == "unreplied":
+        import osgraph_walks  # noqa: PLC0415
+
+        # Every thread and mail waiting on a reply, oldest first, not the
+        # nine-row, three-per-source cut needs-you makes. Twelve is the most
+        # rows kyber-genui lets one surface show.
+        rows = [r for r in osgraph_walks._attention(ctx.graph, ctx.now()) if r["type"] in ("Thread", "MailItem")]
+        rows = sorted(rows, key=lambda r: osgraph_walks.when_of(r["when"]))
+        return {"rows": rows[:12], "count": len(rows)}
+    provider = surfaces.make(kind, arg) if kind in surfaces.PARAMETRIC else surfaces.make(kind)
+    return provider.fetch(ctx)
+
+
+def cmd_walk(kind: str, arg: str, as_json: bool = False) -> int:
+    ctx = live_context()
+    try:
+        data = walk_data(kind, arg, ctx)
+    except SurfaceError as err:
+        if as_json:
+            print(json.dumps({"rows": [], "note": str(err)}))
+            return 0
+        print(err)
+        return 1
+    if as_json:
+        now = ctx.now()
+        rows = [glass_row(r, now) for r in data.get("rows", [])]
+        out = {"rows": rows, "count": data.get("count", len(rows)),
+               "note": "" if rows else "Nothing here right now."}
+        print(json.dumps(out, default=str))
+        return 0
+    for r in data.get("rows", []):
+        print(f"{['WAIT', 'DUE ', 'FYI '][r.get('tier', 2)]}  {r.get('app', ''):10} {r.get('label', '')[:60]}"
+              f"  [{r.get('why', '')}]  {r.get('id', '')}")
+    extras = {k: v for k, v in data.items() if k in ("count", "tiers", "counts", "to_act", "total", "matched")}
+    if extras:
+        print(json.dumps(extras, default=str))
+    return 0
+
+
+def cmd_forget() -> int:
+    """Stop the daemon, then delete the graph (and its -wal, -shm and
+    -journal), the agent runs' task copies, and the badge. The next start
+    rebuilds the last 7 days from the sources, which is the point: the graph
+    is a cache, and this is how to empty it."""
+    import osgraph_runs  # noqa: PLC0415
+
+    if running():
+        ask({"cmd": "quit"}, timeout=5.0)
+        deadline = time.monotonic() + 5
+        while running() and time.monotonic() < deadline:
+            time.sleep(0.1)
+    gone = osgraph.forget()
+    if osgraph_runs.RUNS.exists():
+        import shutil  # noqa: PLC0415
+        shutil.rmtree(osgraph_runs.RUNS, ignore_errors=True)
+        gone.append(str(osgraph_runs.RUNS))
+    if BADGES.exists():
+        BADGES.unlink()
+        gone.append(str(BADGES))
+    print("Removed:\n  " + "\n  ".join(gone) if gone else "Nothing was stored.")
+    print("The surfaces daemon is stopped; it rebuilds the last 7 days when it next starts.")
+    return 0
+
+
+def cmd_graph() -> int:
+    g = osgraph.Graph()
+    print(json.dumps(g.counts(), indent=1))
+    problems = g.validate()
+    print(f"{len(problems)} edges break the ontology")
+    for p in problems[:20]:
+        print("  " + p)
+    return 1 if problems else 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="kyber-surfaces", description=__doc__.split("\n\n")[0])
+    sub = parser.add_subparsers(dest="cmd", required=True)
+    o = sub.add_parser("open", help="draw a surface and keep it live")
+    o.add_argument("words", nargs="+", help="<kind> [arg] [at=<region>]")
+    c = sub.add_parser("close", help="take a surface down")
+    c.add_argument("words", nargs="+")
+    sub.add_parser("list", help="surfaces, and which are open")
+    s = sub.add_parser("space", help="open a body of work's surfaces together")
+    s.add_argument("name")
+    sub.add_parser("spaces", help="the spaces and their surfaces")
+    a = sub.add_parser("activity", help="what the surfaces did")
+    a.add_argument("--limit", type=int, default=30)
+    i = sub.add_parser("ingest", help="read every source into the graph now")
+    i.add_argument("--days", type=int, default=INGEST_DAYS)
+    w = sub.add_parser("walk", help="print a walk's rows")
+    w.add_argument("words", nargs="+")
+    w.add_argument("--json", action="store_true", help="rows for kyber-genui: {\"rows\": [...]}")
+    sub.add_parser("graph", help="graph counts and an ontology check")
+    sub.add_parser("forget", help="stop the daemon and delete everything it stored")
+    sub.add_parser("run", help="the daemon")
+    sub.add_parser("start", help="start the daemon in the background if it is not running")
+    args = parser.parse_args(argv)
+
+    if args.cmd == "run":
+        return cmd_run()
+    if args.cmd == "start":
+        return 0 if start_daemon() else 1
+    if args.cmd == "list":
+        return cmd_list()
+    if args.cmd == "spaces":
+        return cmd_spaces()
+    if args.cmd == "activity":
+        return cmd_activity(args.limit)
+    if args.cmd == "ingest":
+        return cmd_ingest(args.days)
+    if args.cmd == "graph":
+        return cmd_graph()
+    if args.cmd == "forget":
+        return cmd_forget()
+    if args.cmd in ("open", "walk"):
+        at = ""
+        words = []
+        for word in args.words:
+            if word.startswith("at="):
+                at = word[3:]
+            else:
+                words.append(word)
+        kind, arg = split_spec(" ".join(words))
+        if args.cmd == "walk" and words and words[0] == "unreplied":
+            kind, arg = "unreplied", ""
+        if kind is None:
+            print(f"No surface called {words[0] if words else ''}. There's {', '.join(surfaces.KINDS)}.",
+                  file=sys.stderr)
+            return 2
+        if kind in surfaces.PARAMETRIC and not arg:
+            print(f"`{kind}` needs a name: kyber-surfaces {args.cmd} {kind} <name>", file=sys.stderr)
+            return 2
+        if at and at not in REGIONS:
+            print(f"at= takes one of {', '.join(REGIONS)}", file=sys.stderr)
+            return 2
+        if args.cmd == "walk":
+            return cmd_walk(kind, arg, as_json=args.json)
+        return via_daemon({"cmd": "open", "name": kind, "arg": arg, "at": at})
+    if args.cmd == "close":
+        if not running():
+            print("Nothing is open.")
+            return 0
+        return via_daemon({"cmd": "close", "name": " ".join(args.words)})
+    if args.cmd == "space":
+        return via_daemon({"cmd": "space", "name": args.name})
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

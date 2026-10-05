@@ -1,0 +1,36 @@
+{
+  "skill": "kyber-surfaces",
+  "cases": [
+    {
+      "prompt": "What do I need to do?",
+      "expect_behavior": "open the needs-you surface and say one line, not read the list aloud"
+    },
+    {
+      "prompt": "Show me Karthik",
+      "expect_behavior": "kyber-surfaces open person Karthik: one person across texts, mail, calendar and tasks"
+    },
+    {
+      "prompt": "Show me Tyler",
+      "reject": ["opening either Tyler's surface"],
+      "why": "two people share the first name; ask which one"
+    },
+    {
+      "prompt": "Open my school space",
+      "expect_behavior": "kyber-surfaces space school"
+    },
+    {
+      "prompt": "Is Sagar waiting on me?",
+      "reject": ["opening a surface"],
+      "why": "a yes-or-no question gets a sentence; read kyber-surfaces walk person Sagar first"
+    },
+    {
+      "prompt": "Reply to Sam that I'm running late",
+      "reject": ["sending from the surface without the person pressing Go"],
+      "why": "only a press on the glass sends"
+    },
+    {
+      "prompt": "Add a WhatsApp source to the surfaces",
+      "expect_behavior": "an ingester in osgraph_ingest.py with fixture data and a precision check, using existing node and edge types"
+    }
+  ]
+}

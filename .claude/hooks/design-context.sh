@@ -43,7 +43,7 @@ echo "$PROMPT" | grep -qiE 'design|ui|ux|css|animat|scroll|hover|layout|landing|
 # need it, and exiting when it was absent meant every Mac but the author's got
 # no design context at all: on 2026-09-24 the hook was silent on "make the hero
 # scroll animation smoother" here, and its own test had failed for as long.
-ENGINE="${UX_ENGINE:-$HOME/Desktop/2026-Code/ux-engine}"
+ENGINE="${UX_ENGINE:-$HOME/code/tools/ux-engine}"
 
 AVOID=""
 if [ -x "$ENGINE/bin/ux-trial" ]; then

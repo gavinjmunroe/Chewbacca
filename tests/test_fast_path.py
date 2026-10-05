@@ -66,12 +66,41 @@ TABLE = [
     ("good morning what's on my calendar", None),
     ("Give me an entire review on the Holocaust", None),
     ("", None),
+    # The slow "open" requests in the voice log to 2026-09-27, 6.8 s median.
+    ("Open up Google sheets", "open"),
+    ("Open up a Google Chrome window on my monitor screen", "open"),
+    ("Open a chrome window on my laptop screen", "open"),
+    ("Open up a new Google Chrome window and pull up sheets", "open"),
+    ("Open up a new chrome window to get a Google sheet going", "open"),
+    ("Open a new terminal window", "open"),
+    ("Open a new terminal war", "open"),
+    ("Open a new terminal", "open"),
+    # Same verb, and a task or a second half no opener can do.
+    ("OK now open Google sheets and label it Valencia", None),
+    ("Open new Claude window", None),
+    ("Open a bubble", None),
+    # Live surfaces (bin/lib/surface_intent.py), 2026-10-04.
+    ("Show my day", "surface"),
+    ("What do I need to do?", "surface"),
+    ("Check my inbox", "surface"),
+    ("What's playing?", "surface"),
+    ("close my texts", "surface"),
+    ("What do I have today", "agenda"),
+    ("show my texts from Sam and reply that I'm late", None),
+    # Generated panels (docs/GENUI.md), 2026-10-04: a shape no fixed surface takes.
+    ("compare my three classes' grades", "genui"),
+    ("who have I not texted back this week", "genui"),
+    ("plan my Tuesday", "genui"),
+    ("show my grades and email Professor Swain", None),
+    ("tell me about the Civil War", None),
 ]
 
 
 def ask_paths(source: str) -> list[str]:
     """The no-model checks at the top of `ask`, in order, read off the source."""
+    # `ask` ends where it hands the request to the model, `to_assistant`.
     body = source.split("    def ask(", 1)[1].split("        req = Request(", 1)[0]
+    body = body.split("self.to_assistant(said", 1)[0]
     return re.findall(r"self\.(\w+)\(said", body)
 
 

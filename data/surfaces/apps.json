@@ -1,0 +1,765 @@
+{
+ "meta": {
+  "generated": "2026-10-04",
+  "about": "Each Mac app -> what on the HUD replaces it. Status is what works today on this Mac, not the plan. `oss` links ids in data/oss-apps/apps.json.",
+  "counts": {
+   "replaced": 5,
+   "partial": 12,
+   "not yet": 23
+  },
+  "total": 40,
+  "with_oss": 20
+ },
+ "apps": [
+  {
+   "app": "Messages",
+   "status": "partial",
+   "surfaces": [
+    "needs-you",
+    "conversations",
+    "person <name>"
+   ],
+   "works": "unanswered 1:1 threads, last lines, reply with read-back verify",
+   "missing": "group replies, attachments, starting a new thread",
+   "oss": []
+  },
+  {
+   "app": "Mail",
+   "status": "partial",
+   "surfaces": [
+    "needs-you",
+    "conversations",
+    "person <name>"
+   ],
+   "works": "unread mail from people, Mail drafts of replies",
+   "missing": "sending, search, anything already read",
+   "oss": []
+  },
+  {
+   "app": "Calendar",
+   "status": "partial",
+   "surfaces": [
+    "today",
+    "needs-you",
+    "person <name>"
+   ],
+   "works": "today's events and who attends, via `mac calendar`",
+   "missing": "creating or moving events; needs Calendar access for the process that runs the daemon",
+   "oss": []
+  },
+  {
+   "app": "Reminders",
+   "status": "partial",
+   "surfaces": [
+    "today",
+    "tasks"
+   ],
+   "works": "open reminders due in the window",
+   "missing": "completing or adding one",
+   "oss": []
+  },
+  {
+   "app": "Contacts",
+   "status": "partial",
+   "surfaces": [
+    "people",
+    "person <name>"
+   ],
+   "works": "who you talk to, ranked by the people store, one node per human across handles",
+   "missing": "editing a contact",
+   "oss": []
+  },
+  {
+   "app": "Spotify",
+   "status": "replaced",
+   "surfaces": [
+    "music",
+    "hud-music"
+   ],
+   "works": "now playing, play/pause, back, skip, play by name by voice",
+   "missing": "",
+   "oss": [
+    {
+     "id": "navidrome/navidrome",
+     "name": "Navidrome",
+     "remixable": false
+    },
+    {
+     "id": "nukeop/nuclear",
+     "name": "Nuclear",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Music",
+   "status": "replaced",
+   "surfaces": [
+    "music",
+    "hud-music"
+   ],
+   "works": "now playing, play/pause, back, skip",
+   "missing": "",
+   "oss": []
+  },
+  {
+   "app": "Finder",
+   "status": "partial",
+   "surfaces": [
+    "files"
+   ],
+   "works": "newest Downloads, preview, open",
+   "missing": "any other folder, moving, renaming",
+   "oss": []
+  },
+  {
+   "app": "Preview",
+   "status": "partial",
+   "surfaces": [
+    "files"
+   ],
+   "works": "PDF and image preview on the glass",
+   "missing": "markup, signing",
+   "oss": []
+  },
+  {
+   "app": "Brightspace",
+   "status": "partial",
+   "surfaces": [
+    "today",
+    "needs-you",
+    "space school"
+   ],
+   "works": "what is due and overdue, from the coursework ledger",
+   "missing": "submitting, grades, the brightspace CLI is not ingested yet",
+   "oss": []
+  },
+  {
+   "app": "Blackboard",
+   "status": "partial",
+   "surfaces": [
+    "today",
+    "needs-you",
+    "space school"
+   ],
+   "works": "deadlines from the coursework ledger",
+   "missing": "anything inside Blackboard",
+   "oss": [
+    {
+     "id": "learnhouse/learnhouse",
+     "name": "LearnHouse",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Terminal",
+   "status": "partial",
+   "surfaces": [
+    "needs-you",
+    "tasks"
+   ],
+   "works": "Claude sessions waiting on a permission, bring the tab forward",
+   "missing": "typing into a session from the glass",
+   "oss": [
+    {
+     "id": "alacritty/alacritty",
+     "name": "Alacritty",
+     "remixable": true
+    },
+    {
+     "id": "ghostty-org/ghostty",
+     "name": "Ghostty",
+     "remixable": true
+    },
+    {
+     "id": "wavetermdev/waveterm",
+     "name": "WaveTerm",
+     "remixable": true
+    },
+    {
+     "id": "zellij-org/zellij",
+     "name": "Zellij",
+     "remixable": true
+    }
+   ]
+  },
+  {
+   "app": "Todoist",
+   "status": "partial",
+   "surfaces": [
+    "tasks"
+   ],
+   "works": "Ready/Cooking/Stuck/Done from texts, mail, promises, the backlog and real runs",
+   "missing": "Todoist's own tasks are not ingested",
+   "oss": [
+    {
+     "id": "johannesjo/super-productivity",
+     "name": "Super Productivity",
+     "remixable": true
+    },
+    {
+     "id": "donetick/donetick",
+     "name": "Donetick",
+     "remixable": false
+    },
+    {
+     "id": "freeterapp/freeter",
+     "name": "Freeter",
+     "remixable": false
+    },
+    {
+     "id": "hcengineering/platform",
+     "name": "Huly",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Things",
+   "status": "partial",
+   "surfaces": [
+    "tasks"
+   ],
+   "works": "same lanes as Todoist",
+   "missing": "Things' own tasks are not ingested",
+   "oss": []
+  },
+  {
+   "app": "Notion",
+   "status": "not yet",
+   "surfaces": [
+    "space amber"
+   ],
+   "works": "the Amber backlog.csv as tasks in the amber space",
+   "missing": "Notion itself; no Notion source",
+   "oss": [
+    {
+     "id": "beaver-notes/beaver-notes",
+     "name": "Beaver Notes",
+     "remixable": true
+    },
+    {
+     "id": "busabase/busabase",
+     "name": "Busabase",
+     "remixable": true
+    },
+    {
+     "id": "colanode/colanode",
+     "name": "Colanode",
+     "remixable": true
+    },
+    {
+     "id": "suitenumerique/docs",
+     "name": "Docs",
+     "remixable": true
+    }
+   ]
+  },
+  {
+   "app": "Calculator",
+   "status": "replaced",
+   "surfaces": [
+    "hud-listen quick path"
+   ],
+   "works": "math by voice, computed, no model",
+   "missing": "",
+   "oss": []
+  },
+  {
+   "app": "Clock",
+   "status": "replaced",
+   "surfaces": [
+    "hud-listen quick path"
+   ],
+   "works": "time, date, by voice",
+   "missing": "",
+   "oss": []
+  },
+  {
+   "app": "Weather",
+   "status": "replaced",
+   "surfaces": [
+    "hud-listen quick path"
+   ],
+   "works": "weather by voice",
+   "missing": "",
+   "oss": []
+  },
+  {
+   "app": "Slack",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no Slack source in the graph; the Slack MCP connector is not wired to the daemon",
+   "oss": [
+    {
+     "id": "block/buzz",
+     "name": "Buzz",
+     "remixable": true
+    },
+    {
+     "id": "basecamp/once-campfire",
+     "name": "Campfire",
+     "remixable": true
+    },
+    {
+     "id": "colanode/colanode",
+     "name": "Colanode",
+     "remixable": true
+    },
+    {
+     "id": "zulip/zulip",
+     "name": "Zulip",
+     "remixable": true
+    }
+   ]
+  },
+  {
+   "app": "WhatsApp",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "wacli exists but is not an ingester yet",
+   "oss": [
+    {
+     "id": "signalapp/signal-android",
+     "name": "Signal",
+     "remixable": false
+    },
+    {
+     "id": "linagora/twake-on-matrix",
+     "name": "Twake Chat",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Discord",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no source",
+   "oss": [
+    {
+     "id": "cinnyapp/cinny",
+     "name": "Cinny",
+     "remixable": false
+    },
+    {
+     "id": "element-hq/element-web",
+     "name": "Element",
+     "remixable": false
+    },
+    {
+     "id": "fluxerapp/fluxer",
+     "name": "Fluxer",
+     "remixable": false
+    },
+    {
+     "id": "mezonai/mezon",
+     "name": "Mezon",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Notes",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "`mac notes` exists, not ingested",
+   "oss": []
+  },
+  {
+   "app": "Granola",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "its cache is encrypted to Granola-signed code; room-listen has no speakers or dates",
+   "oss": [
+    {
+     "id": "amicalhq/amical",
+     "name": "Amical",
+     "remixable": true
+    },
+    {
+     "id": "fastrepl/anarlog",
+     "name": "Anarlog",
+     "remixable": true
+    },
+    {
+     "id": "zackriya-solutions/meetily",
+     "name": "Meetily",
+     "remixable": true
+    },
+    {
+     "id": "silverstein/minutes",
+     "name": "Minutes",
+     "remixable": true
+    }
+   ]
+  },
+  {
+   "app": "Gmail",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "only through Mail.app accounts; the Gmail connector is not wired",
+   "oss": [
+    {
+     "id": "tutao/tutanota",
+     "name": "Tuta",
+     "remixable": false
+    },
+    {
+     "id": "linagora/tmail-flutter",
+     "name": "Twake Mail",
+     "remixable": false
+    },
+    {
+     "id": "un/inbox",
+     "name": "UnInbox",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Google Calendar",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "only through Calendar.app accounts",
+   "oss": []
+  },
+  {
+   "app": "Google Drive",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no source",
+   "oss": [
+    {
+     "id": "opencloud-eu/opencloud",
+     "name": "OpenCloud",
+     "remixable": true
+    },
+    {
+     "id": "owncloud/ocis",
+     "name": "ownCloud",
+     "remixable": true
+    },
+    {
+     "id": "ente-io/ente",
+     "name": "Ente",
+     "remixable": false
+    },
+    {
+     "id": "mickael-kerjean/filestash",
+     "name": "Filestash",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Google Docs",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no source",
+   "oss": [
+    {
+     "id": "suitenumerique/docs",
+     "name": "Docs",
+     "remixable": true
+    },
+    {
+     "id": "collaboraonline/online",
+     "name": "Collabora Online",
+     "remixable": false
+    },
+    {
+     "id": "cryptpad/cryptpad",
+     "name": "CryptPad",
+     "remixable": false
+    },
+    {
+     "id": "libreoffice/core",
+     "name": "LibreOffice",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Google Sheets",
+   "status": "not yet",
+   "surfaces": [
+    "hud-listen opener"
+   ],
+   "works": "opening Sheets by voice",
+   "missing": "reading or editing a sheet",
+   "oss": [
+    {
+     "id": "gristlabs/grist-core",
+     "name": "Grist",
+     "remixable": true
+    },
+    {
+     "id": "ironcalc/ironcalc",
+     "name": "IronCalc",
+     "remixable": true
+    },
+    {
+     "id": "collaboraonline/online",
+     "name": "Collabora Online",
+     "remixable": false
+    },
+    {
+     "id": "cryptpad/cryptpad",
+     "name": "CryptPad",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Safari",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no browser surface",
+   "oss": [
+    {
+     "id": "ladybirdbrowser/ladybird",
+     "name": "Ladybird",
+     "remixable": true
+    },
+    {
+     "id": "brave/brave-browser",
+     "name": "Brave Browser",
+     "remixable": false
+    },
+    {
+     "id": "multiboxlabs/flow-browser",
+     "name": "Flow",
+     "remixable": false
+    },
+    {
+     "id": "imputnet/helium",
+     "name": "Helium",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Google Chrome",
+   "status": "not yet",
+   "surfaces": [
+    "hud-listen opener"
+   ],
+   "works": "a new window by voice",
+   "missing": "no browser surface",
+   "oss": [
+    {
+     "id": "ladybirdbrowser/ladybird",
+     "name": "Ladybird",
+     "remixable": true
+    },
+    {
+     "id": "brave/brave-browser",
+     "name": "Brave Browser",
+     "remixable": false
+    },
+    {
+     "id": "multiboxlabs/flow-browser",
+     "name": "Flow",
+     "remixable": false
+    },
+    {
+     "id": "imputnet/helium",
+     "name": "Helium",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Photos",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no source",
+   "oss": []
+  },
+  {
+   "app": "FaceTime",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no source",
+   "oss": []
+  },
+  {
+   "app": "Zoom",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no source",
+   "oss": [
+    {
+     "id": "jitsi/jitsi-meet",
+     "name": "Jitsi",
+     "remixable": true
+    },
+    {
+     "id": "wireapp/wire",
+     "name": "Wire",
+     "remixable": false
+    },
+    {
+     "id": "workadventure/workadventure",
+     "name": "Workadventure",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Maps",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no source",
+   "oss": []
+  },
+  {
+   "app": "Obsidian",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "the second brain is not a graph source yet",
+   "oss": [
+    {
+     "id": "beaver-notes/beaver-notes",
+     "name": "Beaver Notes",
+     "remixable": true
+    },
+    {
+     "id": "usememos/memos",
+     "name": "Memos",
+     "remixable": true
+    },
+    {
+     "id": "silverbulletmd/silverbullet",
+     "name": "Silverbullet",
+     "remixable": true
+    },
+    {
+     "id": "anyproto/anytype-ts",
+     "name": "AnyType",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Linear",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no source",
+   "oss": [
+    {
+     "id": "usekaneo/kaneo",
+     "name": "Kaneo",
+     "remixable": true
+    },
+    {
+     "id": "ever-co/ever-teams",
+     "name": "Ever Teams",
+     "remixable": false
+    },
+    {
+     "id": "hcengineering/platform",
+     "name": "Huly",
+     "remixable": false
+    },
+    {
+     "id": "techulus/manage",
+     "name": "Manage",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "GitHub",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "gh exists, not ingested",
+   "oss": [
+    {
+     "id": "go-gitea/gitea",
+     "name": "Gitea",
+     "remixable": true
+    },
+    {
+     "id": "gogs/gogs",
+     "name": "Gogs",
+     "remixable": true
+    },
+    {
+     "id": "harness/harness",
+     "name": "Harness",
+     "remixable": true
+    },
+    {
+     "id": "https://codeberg.org/forgejo/forgejo",
+     "name": "Forgejo",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Figma",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "no source",
+   "oss": [
+    {
+     "id": "graphiteeditor/graphite",
+     "name": "Graphite",
+     "remixable": true
+    },
+    {
+     "id": "gridaco/grida",
+     "name": "Grida",
+     "remixable": true
+    },
+    {
+     "id": "open-pencil/open-pencil",
+     "name": "OpenPencil",
+     "remixable": true
+    },
+    {
+     "id": "https://gitlab.com/inkscape/inkscape",
+     "name": "Inkscape",
+     "remixable": false
+    }
+   ]
+  },
+  {
+   "app": "Venmo",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "and it should not be: nothing on the glass pays",
+   "oss": []
+  },
+  {
+   "app": "System Settings",
+   "status": "not yet",
+   "surfaces": [],
+   "works": "",
+   "missing": "out of scope",
+   "oss": []
+  }
+ ]
+}

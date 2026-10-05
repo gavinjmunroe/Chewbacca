@@ -391,6 +391,19 @@ public enum LineParser {
             }
             return .queued(count)
 
+        case "to":
+            // `to <surface> label="<who>"` or `to off`.
+            guard tokens.count >= 2 else {
+                throw LineParseError.malformed("`to` needs a surface, or off", line: trimmed)
+            }
+            if tokens[1] == "off" { return .chatTarget(surface: nil, label: "") }
+            var label = tokens[1]
+            for token in tokens.dropFirst(2) {
+                guard let (key, raw) = splitPair(token), key == "label" else { continue }
+                if case .string(let text)? = JSONDecoding.parse(raw) { label = text } else { label = raw }
+            }
+            return .chatTarget(surface: tokens[1], label: String(label.prefix(60)))
+
         case "r":
             guard tokens.count == 2 else {
                 throw LineParseError.malformed("`r` takes exactly one id", line: trimmed)
@@ -448,10 +461,11 @@ enum JSONDecoding {
     static func convert(_ any: Any) -> JSON {
         switch any {
         case let s as String: return .string(s)
-        case let b as Bool: return .bool(b)
+        // NSNumber before Bool. `as Bool` bridges any NSNumber that is 0 or
+        // 1, so with Bool first every 0 and 1 inside a JSON value became a
+        // bool: `d /badges {"mail":0}` drew a badge reading "no" (found on
+        // the glass 2026-10-04), and a table cell of 1 read "yes".
         case let n as NSNumber:
-            // NSNumber does not distinguish bool from number, so check the type
-            // encoding before falling through to a double.
             if CFGetTypeID(n) == CFBooleanGetTypeID() { return .bool(n.boolValue) }
             return .number(n.doubleValue)
         case let a as [Any]: return .array(a.map(convert))

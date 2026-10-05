@@ -11,7 +11,7 @@ command -v jq >/dev/null 2>&1 || { echo "  skip: jq not installed"; exit 0; }
 TEST_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEST_DIR"' EXIT
 TEST_HOME="$TEST_DIR/home"
-mkdir -p "$TEST_HOME/Desktop/2026-Code/ux-engine"
+mkdir -p "$TEST_HOME/code/tools/ux-engine"
 
 run(){ printf '{"prompt":"%s"}' "$1" | env HOME="$TEST_HOME" CHEWBACCA_LOG_DIR="$TEST_DIR/logs" bash "$HOOK" 2>/dev/null; }
 

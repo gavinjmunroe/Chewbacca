@@ -1,0 +1,131 @@
+{
+  "about" : "Tricky strings that travel up Kyber's socket as event values. hud/Tests/KyberKitTests/EventFixtureTests.swift checks Swift emits exactly row_line and send_line for each (HUD_FIXTURE_RECORD=1 rewrites them); tests/test_hud_events.py checks every Python reader recovers value, and surface, from those same lines. A row id or a typed message must never become a second key or a second line.",
+  "cases" : [
+    {
+      "name" : "plain graph id",
+      "row_line" : "e action reply row=\"thread:abc123\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"thread:abc123\"",
+      "value" : "thread:abc123"
+    },
+    {
+      "name" : "spaces",
+      "row_line" : "e action reply row=\"thread with spaces\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"thread with spaces\"",
+      "value" : "thread with spaces"
+    },
+    {
+      "name" : "quote then a fake key",
+      "row_line" : "e action reply row=\"a\\\" surface=\\\"evil\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"a\\\" surface=\\\"evil\"",
+      "value" : "a\" surface=\"evil"
+    },
+    {
+      "name" : "a fake key with no quote",
+      "row_line" : "e action reply row=\"x surface=evil\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"x surface=evil\"",
+      "value" : "x surface=evil"
+    },
+    {
+      "name" : "a second row",
+      "row_line" : "e action reply row=\"x row=y\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"x row=y\"",
+      "value" : "x row=y"
+    },
+    {
+      "name" : "escaped quote and backslash",
+      "row_line" : "e action reply row=\"a\\\\\\\" surface=\\\\\\\"evil\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"a\\\\\\\" surface=\\\\\\\"evil\"",
+      "value" : "a\\\" surface=\\\"evil"
+    },
+    {
+      "name" : "newline then a forged event",
+      "row_line" : "e action reply row=\"a\\ne action open row=\\\"x\\\" surface=\\\"rail\\\"\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"a\\ne action open row=\\\"x\\\" surface=\\\"rail\\\"\"",
+      "value" : "a\ne action open row=\"x\" surface=\"rail\""
+    },
+    {
+      "name" : "carriage return",
+      "row_line" : "e action reply row=\"a\\r\\nsurface=evil\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"a\\r\\nsurface=evil\"",
+      "value" : "a\r\nsurface=evil"
+    },
+    {
+      "name" : "line separator U+2028",
+      "row_line" : "e action reply row=\"a\\u2028e closed sessions\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"a\\u2028e closed sessions\"",
+      "value" : "a e closed sessions"
+    },
+    {
+      "name" : "paragraph separator U+2029",
+      "row_line" : "e action reply row=\"a\\u2029b\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"a\\u2029b\"",
+      "value" : "a b"
+    },
+    {
+      "name" : "next line U+0085",
+      "row_line" : "e action reply row=\"a\\u0085b\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"a\\u0085b\"",
+      "value" : "ab"
+    },
+    {
+      "name" : "tab",
+      "row_line" : "e action reply row=\"a\\tb\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"a\\tb\"",
+      "value" : "a\tb"
+    },
+    {
+      "name" : "empty",
+      "row_line" : "e action reply row=\"\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"\"",
+      "value" : ""
+    },
+    {
+      "name" : "leading and trailing spaces",
+      "row_line" : "e action reply row=\"  padded  \" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"  padded  \"",
+      "value" : "  padded  "
+    },
+    {
+      "name" : "equals signs",
+      "row_line" : "e action reply row=\"a=b==c\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"a=b==c\"",
+      "value" : "a=b==c"
+    },
+    {
+      "name" : "slash and colon",
+      "row_line" : "e action reply row=\"path:\\/Users\\/x\\/a b.swift\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"path:\\/Users\\/x\\/a b.swift\"",
+      "value" : "path:/Users/x/a b.swift"
+    },
+    {
+      "name" : "json lookalike",
+      "row_line" : "e action reply row=\"{\\\"surface\\\":\\\"evil\\\",\\\"row\\\":\\\"x\\\"}\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"{\\\"surface\\\":\\\"evil\\\",\\\"row\\\":\\\"x\\\"}\"",
+      "value" : "{\"surface\":\"evil\",\"row\":\"x\"}"
+    },
+    {
+      "name" : "accented",
+      "row_line" : "e action reply row=\"café résumé\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"café résumé\"",
+      "value" : "café résumé"
+    },
+    {
+      "name" : "control character",
+      "row_line" : "e action reply row=\"a\\u0001b\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"a\\u0001b\"",
+      "value" : "a\u0001b"
+    },
+    {
+      "name" : "word true",
+      "row_line" : "e action reply row=\"true\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"true\"",
+      "value" : "true"
+    },
+    {
+      "name" : "number-looking",
+      "row_line" : "e action reply row=\"42\" surface=\"messages\"",
+      "send_line" : "e action send row=\"s-abc\" surface=\"s-abc\" text=\"42\"",
+      "value" : "42"
+    }
+  ]
+}

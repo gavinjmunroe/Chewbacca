@@ -1,0 +1,37 @@
+{
+  "about": "Twenty frozen requests. Do not edit them to make a run look better; add new ones at the end. `nearest` names the fixed surface (an exemplar in genui/exemplars.json) a screenshot compares against, or null when nothing fixed covers it.",
+  "requests": [
+    { "request": "compare my three classes' grades", "nearest": "grades" },
+    { "request": "who have I not texted back this week", "nearest": "people" },
+    { "request": "show my client's outbound campaign numbers", "nearest": null },
+    { "request": "plan my Tuesday", "nearest": "week" },
+    { "request": "what's due before my midterm", "nearest": "due-soon" },
+    { "request": "what's due this week", "nearest": "due-soon" },
+    { "request": "am I behind on anything", "nearest": "overdue" },
+    { "request": "how busy is my week, day by day", "nearest": "week" },
+    { "request": "who should I reach out to", "nearest": "people" },
+    { "request": "what promises have I made to people", "nearest": null },
+    { "request": "when are my exams", "nearest": null },
+    { "request": "what do I have tomorrow", "nearest": "week" },
+    {
+      "request": "how does the HUD get data from a query onto the screen",
+      "nearest": "shape"
+    },
+    { "request": "show my BISC 101 deadlines", "nearest": "due-soon" },
+    { "request": "what's on my calendar this week", "nearest": "week" },
+    {
+      "request": "how many things are due in the next two weeks, by class",
+      "nearest": null
+    },
+    { "request": "what's the plan for today", "nearest": "week" },
+    {
+      "request": "show me everything I owe anyone, school and people",
+      "nearest": "overdue"
+    },
+    { "request": "which class has the most work coming up", "nearest": null },
+    {
+      "request": "give me a spot to jot a note about the Amber pitch",
+      "nearest": null
+    }
+  ]
+}

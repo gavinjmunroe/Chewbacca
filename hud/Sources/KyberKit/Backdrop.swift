@@ -2,6 +2,7 @@ import AppKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import Observation
+import OSLog
 // ScreenCaptureKit predates Sendable: its content and screenshot types are
 // plain classes the compiler cannot vouch for, and they never leave this
 // actor here.
@@ -114,6 +115,72 @@ public final class BackdropSampler {
         lens.refraction = 1.4
         guard let bent = lens.outputImage?.cropped(to: image.extent) else { return nil }
         return context.createCGImage(bent, from: image.extent)
+    }
+
+    /// The filter `ground(under:)` reuses: the display, less this app's own
+    /// windows, so a card never measures itself.
+    @ObservationIgnored private var groundFilter: SCContentFilter?
+
+    /// How light the screen is under a rectangle, 0 to 1, from one 32 by
+    /// 32 capture. Nil without Screen Recording, which leaves the wash at its
+    /// fixed value. Read when a card is placed or moved, never on a timer:
+    /// nothing on the glass changes while it is idle.
+    public func ground(under rect: CGRect) async -> Double? {
+        guard rect.width > 4, rect.height > 4 else { return nil }
+        guard CGPreflightScreenCaptureAccess() else {
+            Self.log.info("ground skipped: no Screen Recording")
+            return nil
+        }
+        if groundFilter == nil { groundFilter = await Self.filter() }
+        guard let filter = groundFilter else {
+            Self.log.info("ground skipped: no display filter")
+            return nil
+        }
+        let config = SCStreamConfiguration()
+        config.sourceRect = rect
+        config.width = 32
+        config.height = 32
+        config.showsCursor = false
+        guard let shot = try? await SCScreenshotManager.captureImage(
+            contentFilter: filter, configuration: config)
+        else {
+            Self.log.info("ground skipped: capture failed")
+            return nil
+        }
+        let value = Self.brightGround(shot)
+        Self.log.info("ground \(value ?? -1, format: .fixed(precision: 2)) at \(Int(rect.minX)),\(Int(rect.minY))")
+        return value
+    }
+
+    private static let log = Logger(subsystem: "kyber", category: "backdrop")
+
+    /// The 80th percentile of luminance, not the mean. Text fails over the
+    /// bright parts of what is behind it, and a page of dense black text on
+    /// white averaged 0.41 under a card on 2026-10-04, which barely moved
+    /// the wash while its white gaps still sank the captions to 3.5:1.
+    static func brightGround(_ image: CGImage) -> Double? {
+        let width = image.width, height = image.height
+        guard width > 0, height > 0 else { return nil }
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &pixels, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        var values: [Double] = []
+        values.reserveCapacity(width * height)
+        for i in stride(from: 0, to: pixels.count, by: 4) {
+            values.append((0.2126 * Double(pixels[i]) + 0.7152 * Double(pixels[i + 1])
+                + 0.0722 * Double(pixels[i + 2])) / 255)
+        }
+        return percentile(values, 0.8)
+    }
+
+    static func percentile(_ values: [Double], _ p: Double) -> Double? {
+        guard !values.isEmpty else { return nil }
+        let sorted = values.sorted()
+        return sorted[min(sorted.count - 1, Int(Double(sorted.count - 1) * p))]
     }
 
     private func average(_ image: CIImage) -> Double? {

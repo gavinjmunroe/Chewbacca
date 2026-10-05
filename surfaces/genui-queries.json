@@ -1,0 +1,49 @@
+{
+  "about": "Graph walks kyber-genui may bind to (docs/GENUI.md, step 4). Each runs bin/kyber-surfaces with no shell and prints {\"rows\": [...]}: labels, networks, ages and node ids, never a message body.",
+  "queries": [
+    {
+      "name": "unreplied",
+      "description": "threads and mail waiting on your reply, oldest first, across every network",
+      "argv": ["kyber-surfaces", "walk", "unreplied", "--json"],
+      "rename": { "label": "who", "app": "channel" },
+      "fields": ["who", "channel", "waiting", "why"],
+      "views": ["rows", "events", "list", "count", "note"],
+      "provider": "graph"
+    },
+    {
+      "name": "needs",
+      "description": "everything waiting on you across texts, mail, classes, agents and the backlog: blocked first, then due soon",
+      "argv": ["kyber-surfaces", "walk", "needs-you", "--json"],
+      "rename": { "label": "what", "app": "channel" },
+      "fields": ["what", "channel", "waiting", "why", "tier"],
+      "views": ["rows", "events", "list", "count", "note"],
+      "provider": "graph"
+    },
+    {
+      "name": "person",
+      "description": "one person across every network: their threads, mail, what you owe them. Argument: their full name",
+      "argv": ["kyber-surfaces", "walk", "person", "{arg}", "--json"],
+      "arg": {
+        "kind": "text",
+        "required": true,
+        "help": "a person's full name, like Karthik Devarakonda"
+      },
+      "rename": { "label": "what", "app": "channel" },
+      "fields": ["what", "channel", "waiting", "why"],
+      "views": ["rows", "events", "list", "count", "note"],
+      "provider": "graph"
+    },
+    {
+      "name": "conversations",
+      "description": "this week's threads and mail, the ones to act on first",
+      "argv": ["kyber-surfaces", "walk", "conversations", "--json"],
+      "rename": { "label": "who", "app": "channel" },
+      "fields": ["who", "channel", "waiting", "why"],
+      "views": ["rows", "events", "list", "count", "note"],
+      "provider": "graph"
+    }
+  ],
+  "row_actions": {
+    "ks-pivot": "kyber-surfaces opens that row's own panel: a person, a space, tasks or today"
+  }
+}

@@ -11,7 +11,7 @@
 
 set -euo pipefail
 ORG=amberintelligence
-PROJECTS="${HOME}/Desktop/2026-Code/projects"
+PROJECTS="${HOME}/code/amber"
 STATE="${HOME}/.chewbacca/amber-last-pull"
 CLONE=0
 DAYS=""

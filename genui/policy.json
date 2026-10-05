@@ -1,0 +1,35 @@
+{
+  "about": "What generated surfaces may use, on top of what the HUD accepts. The catalog says what the renderer can draw; this says what a model is trusted to draw on its own. Every number carries why it is this number, in docs/GENUI.md under Limits. `row_actions` is empty on purpose: a row button needs a handler for `e action <name> row=<id>`, and the surfaces daemon registers its names here when it has one.",
+  "excluded_components": {
+    "File": "an editable File writes to disk on save, and a generated path is a path nobody chose",
+    "Screen": "the root Screen is s and is written by kyber-genui; a second Screen is never right",
+    "Rail": "the launcher owns its own lane and is drawn by bin/kyber-surfaces, one per screen",
+    "Segmented": "a press goes up as e action select, and nothing handles that for a generated surface yet",
+    "Avatar": "its name is a person's name the model would have to write, and image is a path nobody chose"
+  },
+  "actions": {
+    "genui-refresh": "re-run the queries behind this surface and update its data in place",
+    "genui-close": "take this surface down"
+  },
+  "limits": {
+    "rows_per_component": 9,
+    "rows_per_surface": 12,
+    "components": 14,
+    "primary_buttons": 1,
+    "buttons": 2,
+    "text_components": 2,
+    "text_chars": 140,
+    "title_chars": 32,
+    "diagram_parts": 16,
+    "label_chars": 80
+  },
+  "row_caps": {
+    "rows": 9,
+    "bars": 9,
+    "list": 9,
+    "events": 6
+  },
+  "draft_prefix": "/draft/",
+  "query_prefix": "/q/",
+  "row_actions": {}
+}

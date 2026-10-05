@@ -2,7 +2,7 @@
 # chewbacca import: restore a bundle written by chewbacca export.
 set -uo pipefail
 SRC="${1:-}"
-[ -f "$SRC" ] || { echo "usage: chewbacca import <bundle.tar.gz>" >&2; exit 2; }
+[ -f "$SRC" ] || { echo "usage: chewbacca import <bundle.tar.gz>, or chewbacca import scan|apply|undo" >&2; exit 2; }
 STATE="$HOME/.chewbacca"
 CLAUDE_DIR="$HOME/.claude"
 GRN='\033[0;32m'; YLW='\033[1;33m'; NC='\033[0m'

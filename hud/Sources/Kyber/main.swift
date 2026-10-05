@@ -45,6 +45,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Talk key plus trackpad: the event tap, whether the talk key is down for
     /// the assistant (not dictation), and where a click being held began.
     private var pointTap: CFMachPort?
+    private var listenerCheck: Timer?
+    private var watchdog = ListenerWatchdog()
     private var talkHeldForPointing = false
     private var pointStart: CGPoint?
     // `voice` is internal, not private: Control-dictation in
@@ -81,6 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let overlay = OverlayWindow(content: OverlayView(model: model))
+        overlay.strip = MenuBarStripWindow(content: MenuBarStripView(model: model))
         self.overlay = overlay
         overlay.show()
 
@@ -150,6 +153,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak server] in
             guard let self, let server, !server.hasSubscribers else { return }
             _ = self.startListener()
+        }
+        // A text to yourself starting with "Kyber" is answered as a text.
+        TextTrigger.shared.start()
+        // And kept up after that, so a bridge that dies is back before the
+        // next sentence rather than because of it. See `ListenerWatchdog`.
+        listenerCheck = Timer.scheduledTimer(
+            withTimeInterval: ListenerWatchdog.interval, repeats: true
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.checkListener() }
+        }
+    }
+
+    private func checkListener() {
+        let connected = server?.hasSubscribers ?? false
+        guard watchdog.shouldStart(connected: connected) else { return }
+        if startListener() {
+            watchdog.started()
+            Self.keys.notice("listener.restart attempt=\(self.watchdog.failedStarts)")
         }
     }
 
@@ -374,7 +395,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chat = ChatWindow(
             model: model,
             onSubmit: { [weak self] asked in
-                Task { @MainActor in self?.dispatch(asked, typed: true) }
+                Task { @MainActor in
+                    guard let self else { return }
+                    // Addressed to a session's card: it goes to that card's
+                    // owner and nowhere else, not to the assistant as well.
+                    if self.model.sendToTarget(asked) { return }
+                    self.dispatch(asked, typed: true)
+                }
             },
             onSpeak: { [weak self] text in
                 // Read aloud on request: the bridge owns the voice, so this
@@ -1068,6 +1095,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         chatItem.target = self
         menu.addItem(chatItem)
 
+        let sessionsItem = NSMenuItem(
+            title: "Agent sessions", action: #selector(sessionsFromMenu), keyEquivalent: "")
+        sessionsItem.target = self
+        menu.addItem(sessionsItem)
+
         let clearItem = NSMenuItem(
             title: "Clear everything", action: #selector(clearFromMenu), keyEquivalent: "\u{1b}")
         clearItem.target = self
@@ -1183,6 +1215,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func askFromMenu() { showCommandBar() }
     @objc private func chatFromMenu() { model.openChat() }
+
+    /// Start `kyber-sessions serve`, which draws the sessions surface and
+    /// answers its presses. It holds its own lock, so a second start while
+    /// one is running exits at once instead of drawing twice.
+    @objc private func sessionsFromMenu() {
+        let candidates = [
+            FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".local/bin/kyber-sessions").path,
+            "/usr/local/bin/kyber-sessions",
+            "/opt/homebrew/bin/kyber-sessions",
+        ]
+        guard let exe = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+        else {
+            model.fail("kyber-sessions is not installed. Run setup.sh.", hold: 4)
+            return
+        }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: exe)
+        p.arguments = ["serve"]
+        p.standardOutput = FileHandle.nullDevice
+        let log = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".bob/kyber-sessions.log")
+        FileManager.default.createFile(atPath: log.path, contents: nil)
+        p.standardError = (try? FileHandle(forWritingTo: log)) ?? FileHandle.nullDevice
+        try? p.run()
+    }
     @objc private func toggleFromMenu() { toggle() }
     @objc private func clearFromMenu() { dismissAll() }
 

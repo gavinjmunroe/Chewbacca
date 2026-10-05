@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""Label the router shadow log, one keypress per prompt.
+
+brain-recall.sh and skill-route.sh append a row for every prompt to
+~/.chewbacca/state/route-shadow.jsonl: the prompt's first 80 characters, the
+top three candidates with scores, and what was actually shown. This walks the
+rows nobody has labeled yet and asks what the right answer was.
+
+  route-label                  label everything unlabeled, newest first
+  route-label --hook skill-route
+  route-label --stats          counts only, no prompting
+
+Keys, one press each:
+  1 2 3   that candidate is the right one (the skill or memory that answers it)
+  y       what was shown is right; on a silent row, silence was right
+  n       nothing should have been shown
+  o       something should have been shown, but it is not among the three
+  s       skip this row for now          q   quit
+
+Labels go to route-labels.jsonl beside the log, keyed by row id, and carry a
+copy of the candidates so tools/route_tune.py needs only that one file. Both
+files hold prompt text, so this refuses to write into any git work tree.
+
+Rows the hook gated before scoring (a slash command, machine traffic, no
+`brain` installed) have nothing to label and are skipped. So are stem-matcher
+rows from skill-route: their scores are not cosines and no cosine threshold
+applies to them.
+
+Not a tty (a pipe, a test), keys are read from stdin one character at a time,
+whitespace ignored.
+"""
+
+import argparse
+import json
+import os
+import sys
+import time
+
+
+def state_dir():
+    home = os.environ.get("CHEWBACCA_HOME") or "~/.chewbacca"
+    return os.path.join(os.path.expanduser(home), "state")
+
+
+def inside_git(path):
+    probe = os.path.dirname(os.path.realpath(path))
+    while True:
+        if os.path.exists(os.path.join(probe, ".git")):
+            return True
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return False
+        probe = parent
+
+
+def read_jsonl(path):
+    rows = []
+    try:
+        with open(path, encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    rows.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return rows
+
+
+def labelable(row):
+    if row.get("gate") or not row.get("id"):
+        return False
+    if row.get("hook") == "skill-route" and row.get("method") != "vector":
+        return False
+    return bool(row.get("candidates"))
+
+
+class Keys:
+    """One keypress at a time: raw mode on a tty, characters from a pipe."""
+
+    def __init__(self):
+        self.tty = sys.stdin.isatty()
+
+    def get(self):
+        if not self.tty:
+            while True:
+                ch = sys.stdin.read(1)
+                if ch == "":
+                    return "q"
+                if not ch.isspace():
+                    return ch.lower()
+        import termios
+        import tty
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setraw(fd)
+            ch = sys.stdin.read(1)
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        if ch in ("\x03", "\x04"):
+            return "q"
+        return ch.lower()
+
+
+def truth_for(key, row):
+    """(truth, outside) for a key, or None when the key labels nothing."""
+    cands = [c["name"] for c in row.get("candidates", [])]
+    if key in "123" and int(key) <= len(cands):
+        return cands[int(key) - 1], False
+    if key == "y":
+        # The shown candidate with the highest score, not shown[0]: brain-recall
+        # lists files in brain's fused-rank order while route_tune judges the
+        # top cosine, so shown[0] could be a lower-scored file and every such
+        # row would read as a false positive.
+        shown = set(row.get("shown") or [])
+        best = [c for c in row.get("candidates", []) if c["name"] in shown]
+        return (max(best, key=lambda c: c["score"])["name"] if best else None), False
+    if key == "n":
+        return None, False
+    if key == "o":
+        return None, True
+    return None
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    ap.add_argument("--log", default=os.environ.get("ROUTE_SHADOW_LOG")
+                    or os.path.join(state_dir(), "route-shadow.jsonl"))
+    ap.add_argument("--labels", default=os.environ.get("ROUTE_LABELS")
+                    or os.path.join(state_dir(), "route-labels.jsonl"))
+    ap.add_argument("--hook", choices=["brain-recall", "skill-route"])
+    ap.add_argument("--stats", action="store_true")
+    args = ap.parse_args()
+
+    if inside_git(args.labels):
+        print(f"route-label: refusing to write labels inside a git work tree: {args.labels}",
+              file=sys.stderr)
+        return 2
+
+    rows = read_jsonl(args.log)
+    # A label answers the prompt, not the row: the same prompt logged twice
+    # (retyped, or two tabs) is labeled once and counted once by the tuner.
+    labels = read_jsonl(args.labels)
+    done = {r.get("id") for r in labels} | {(r.get("hook"), r.get("prompt_sha")) for r in labels}
+    todo = [r for r in rows if labelable(r) and r["id"] not in done
+            and (r.get("hook"), r.get("prompt_sha")) not in done
+            and (not args.hook or r.get("hook") == args.hook)]
+    # The same prompt typed twice in a row is one question, not two labels.
+    seen, queue = set(), []
+    for r in reversed(todo):
+        k = (r.get("hook"), r.get("prompt_sha"))
+        if k in seen:
+            continue
+        seen.add(k)
+        queue.append(r)
+
+    if args.stats:
+        by = {}
+        for r in labels:
+            by[r.get("hook")] = by.get(r.get("hook"), 0) + 1
+        print(f"{len(rows)} rows logged, {len(queue)} waiting for a label")
+        for hook in ("brain-recall", "skill-route"):
+            print(f"  {hook}: {by.get(hook, 0)} labeled")
+        return 0
+    if not queue:
+        print("Nothing to label.")
+        return 0
+
+    keys = Keys()
+    os.makedirs(os.path.dirname(os.path.realpath(args.labels)), mode=0o700, exist_ok=True)
+    wrote = 0
+    for i, row in enumerate(queue, 1):
+        print(f"\n[{i}/{len(queue)}] {row.get('hook')}  {row.get('ts', '')}")
+        print(f"  prompt: {row.get('prompt80', '')}")
+        for n, c in enumerate(row.get("candidates", []), 1):
+            mark = "  shown" if c["name"] in (row.get("shown") or []) else ""
+            print(f"  {n}  {c['score']:.3f}  {c['name']}{mark}")
+        print("  shown: " + (", ".join(row.get("shown") or []) or "(nothing)"))
+        print("  1-3 right one, y shown is right, n nothing fits, o right one not listed, s skip, q quit: ",
+              end="", flush=True)
+        while True:
+            key = keys.get()
+            if key in ("q", "s"):
+                break
+            got = truth_for(key, row)
+            if got is not None:
+                break
+        print(key)
+        if key == "q":
+            break
+        if key == "s":
+            continue
+        truth, outside = got
+        label = {"id": row["id"], "hook": row.get("hook"), "prompt_sha": row.get("prompt_sha"),
+                 "truth": truth, "outside": outside, "key": key, "method": row.get("method"),
+                 "candidates": row.get("candidates", []), "shown": row.get("shown") or [],
+                 "labeled_at": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+        fd = os.open(args.labels, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        try:
+            os.write(fd, (json.dumps(label, separators=(",", ":")) + "\n").encode())
+        finally:
+            os.close(fd)
+        wrote += 1
+    print(f"\n{wrote} labeled. tools/route_tune.py reads them.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

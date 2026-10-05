@@ -63,7 +63,7 @@ LOWER=$(printf '%s' "$MSG" | tr '[:upper:]' '[:lower:]')
 CLOSEOUT=""
 for c in "$(dirname "${BASH_SOURCE[0]}")/../../bin/closeout" \
          "$HOME/.local/bin/closeout" \
-         "$HOME/Desktop/2026-Code/projects/chewbacca/bin/closeout"; do
+         "$HOME/code/chewbacca/bin/closeout"; do
   [ -x "$c" ] && { CLOSEOUT="$c"; break; }
 done
 [ -n "$CLOSEOUT" ] || exit 0

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "package_id": "clay-navigation",
-  "revision": "2026-09-23.1",
+  "revision": "2026-10-06.1",
   "title": "Clay direct AI columns and bounded tests",
   "cost_unit": "relative_effort",
   "states": [
@@ -68,6 +68,50 @@
     {
       "id": "campaign-sent",
       "label": "Campaign launched or sent"
+    },
+    {
+      "id": "home",
+      "label": "Workspace home with Find leads button"
+    },
+    {
+      "id": "find-leads-menu",
+      "label": "Find leads menu: Search directly > People"
+    },
+    {
+      "id": "find-people-chat",
+      "label": "Find People page, Chat tab textarea 'I'm looking for...'"
+    },
+    {
+      "id": "search-ready",
+      "label": "Chat says Search is ready, preview shows ~N found"
+    },
+    {
+      "id": "save-options",
+      "label": "Continue: radios all/custom count and destination table/audiences/enrich"
+    },
+    {
+      "id": "enrich-select",
+      "label": "Enrich people: suggested enrichments with per-row cost"
+    },
+    {
+      "id": "people-table",
+      "label": "Workbook table created with Work email waterfall columns"
+    },
+    {
+      "id": "run-menu",
+      "label": "Column menu > Run column submenu shows N rows and credit total"
+    },
+    {
+      "id": "campaign-draft",
+      "label": "Campaign page in Draft, Lead setup shows lead count"
+    },
+    {
+      "id": "launch-dialog",
+      "label": "Launch dialog: 'Your sequence includes N leads'"
+    },
+    {
+      "id": "campaign-active",
+      "label": "Campaign Active, leads enrolled in analytics"
     }
   ],
   "edges": [
@@ -220,6 +264,116 @@
       "status": "documented",
       "cost": 1,
       "forbidden": true
+    },
+    {
+      "id": "open-find-people",
+      "from": "home",
+      "to": "find-leads-menu",
+      "action": "Click 'Find leads', then under 'Search directly' the 'People' button",
+      "postcondition": "Find leads menu visible",
+      "status": "observed",
+      "cost": 1,
+      "forbidden": false
+    },
+    {
+      "id": "open-people-search",
+      "from": "find-leads-menu",
+      "to": "find-people-chat",
+      "action": "Click People under Search directly",
+      "postcondition": "URL is /chats/<cc_id>, Find People heading",
+      "status": "observed",
+      "cost": 1,
+      "forbidden": false
+    },
+    {
+      "id": "chat-icp",
+      "from": "find-people-chat",
+      "to": "search-ready",
+      "action": "Click Chat tab, set the textarea to <ICP_SENTENCE> with the native value setter, dispatch input, press Enter",
+      "postcondition": "'Search is ready.' and '~N found' in Preview",
+      "status": "observed",
+      "cost": 2,
+      "forbidden": false
+    },
+    {
+      "id": "save-to-table",
+      "from": "search-ready",
+      "to": "save-options",
+      "action": "Click Continue",
+      "postcondition": "radio inputs value=all|custom and table",
+      "status": "observed",
+      "cost": 1,
+      "forbidden": false
+    },
+    {
+      "id": "choose-table",
+      "from": "save-options",
+      "to": "enrich-select",
+      "action": "Pick custom with <ROW_LIMIT> or all, pick table, click Save",
+      "postcondition": "Enrich people screen lists per-row costs",
+      "status": "observed",
+      "cost": 1,
+      "forbidden": false
+    },
+    {
+      "id": "add-work-email",
+      "from": "enrich-select",
+      "to": "people-table",
+      "action": "Click the Work email option, click 'Save and run 10 rows'",
+      "postcondition": "Table URL /workbooks/<wb>/tables/<t> with Find work email columns",
+      "status": "observed",
+      "cost": 2,
+      "forbidden": false
+    },
+    {
+      "id": "open-run-column",
+      "from": "people-table",
+      "to": "run-menu",
+      "action": "Click the 'Find work email' header, hover 'Run column' (pointerover + ArrowRight opens the nested menu)",
+      "postcondition": "'Run N empty or out-of-date rows' with credit total",
+      "status": "observed",
+      "cost": 2,
+      "forbidden": false
+    },
+    {
+      "id": "open-draft",
+      "from": "home",
+      "to": "campaign-draft",
+      "action": "Navigate to /campaigns/<CAMPAIGN_ID>",
+      "postcondition": "Status Draft, Lead setup count equals the intended people count",
+      "status": "observed",
+      "cost": 1,
+      "forbidden": false
+    },
+    {
+      "id": "open-launch",
+      "from": "campaign-draft",
+      "to": "launch-dialog",
+      "action": "Click 'Launch sequence'",
+      "postcondition": "Dialog reads 'includes N leads'; N must equal the people count",
+      "status": "observed",
+      "cost": 1,
+      "forbidden": false
+    },
+    {
+      "id": "confirm-launch",
+      "from": "launch-dialog",
+      "to": "campaign-active",
+      "action": "Click 'Confirm and launch' only after a full pre_send_gate pass",
+      "postcondition": "clay campaigns get shows active; analytics totalLeads equals N",
+      "status": "observed",
+      "cost": 1,
+      "forbidden": false
+    },
+    {
+      "id": "unstick-enrollment",
+      "from": "campaign-active",
+      "to": "campaign-active",
+      "action": "If analytics totalLeads stays 0 while Lead setup shows N: Pause > Pause sequence, then Resume > Resume sequence",
+      "postcondition": "totalLeads becomes N (Vertocol Jonah list 2026-10-06: 0 to 82)",
+      "status": "observed",
+      "cost": 2,
+      "forbidden": false
     }
   ],
   "notes": "Observed edges reflect the live operator session handoff on 2026-09-23, not an authenticated witness or independent replay. Import and save/run/copy completion remain documented. Equal unit costs are unmeasured planning estimates. Coverage is limited; no mastery claim. Private evidence is not included."

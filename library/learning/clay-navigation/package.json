@@ -370,7 +370,7 @@
       "from": "campaign-active",
       "to": "campaign-active",
       "action": "If analytics totalLeads stays 0 while Lead setup shows N: Pause > Pause sequence, then Resume > Resume sequence",
-      "postcondition": "totalLeads becomes N (Vertocol Jonah list 2026-10-06: 0 to 82)",
+      "postcondition": "totalLeads becomes N (observed 2026-10-06: 0 to N after one pause and resume)",
       "status": "observed",
       "cost": 2,
       "forbidden": false

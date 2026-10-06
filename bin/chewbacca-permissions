@@ -1,0 +1,407 @@
+#!/usr/bin/env python3
+"""What macOS has to allow before Chewbacca works, and a guide through each grant.
+
+    chewbacca-permissions plan                 JSON: every grant, and which are missing
+    chewbacca-permissions guide                walk each missing grant, one at a time
+    chewbacca-permissions guide --only microphone
+    chewbacca-permissions check --app A --permission P   exit 0 granted, 1 not, 2 cannot tell
+
+Two apps need grants, and nothing else does:
+
+- Kyber (/Applications/Kyber.app), the display: Accessibility to read and drive
+  other apps, Screen and System Audio Recording to see the screen, and the
+  Microphone to hear you.
+- The terminal or editor running Claude Code: Full Disk Access, because
+  ~/Library/Messages/chat.db is the one file the texts features need and macOS
+  hides it from everything else. A CLI has no bundle of its own, so macOS
+  charges the request to the .app at the top of its process chain, which is the
+  app that has to be in the list.
+
+`guide` floats Anarlog's permission card over System Settings for each one (the
+Swift helper in mac/permission-guide, built on first use) and moves on by
+itself as soon as the grant is detected. Nothing here can grant anything:
+`tccutil` only resets and TCC.db is SIP protected, so every grant is a person
+dropping an app into a list or flipping a switch. This file only reads.
+"""
+
+from __future__ import annotations
+
+import argparse
+import importlib.util
+import json
+import os
+import plistlib
+import shlex
+import sqlite3
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+HELPER_DIR = ROOT / "mac" / "permission-guide"
+HELPER = HELPER_DIR / ".build" / "release" / "permission-guide"
+
+SYSTEM_TCC = "/Library/Application Support/com.apple.TCC/TCC.db"
+USER_TCC = str(Path.home() / "Library/Application Support/com.apple.TCC/TCC.db")
+CHAT_DB = Path.home() / "Library/Messages/chat.db"
+
+# Same ids, panes and services as mac/permission-guide/.../Permission.swift.
+# tests/test_permission_guide.py fails if the two ever disagree.
+PERMISSIONS = {
+    "accessibility": ("Accessibility", "kTCCServiceAccessibility"),
+    "screen-recording-and-system-audio": ("Screen & System Audio Recording", "kTCCServiceScreenCapture"),
+    "microphone": ("Microphone", "kTCCServiceMicrophone"),
+    "full-disk-access": ("Full Disk Access", "kTCCServiceSystemPolicyAllFiles"),
+    "calendars": ("Calendars", "kTCCServiceCalendar"),
+    "contacts": ("Contacts", "kTCCServiceAddressBook"),
+    "automation": ("Automation", "kTCCServiceAppleEvents"),
+}
+
+# What Chewbacca actually needs, in the order `guide` walks it. Full Disk Access
+# goes first on purpose: both TCC databases are readable only with it, so once
+# the host has it the Kyber steps can be detected from outside Kyber instead of
+# waiting for the person to close each card by hand.
+NEEDS = [
+    ("host", "full-disk-access", "read Messages (chat.db) for the texts features"),
+    ("kyber", "accessibility", "read other apps' controls and click and type for you"),
+    ("kyber", "screen-recording-and-system-audio", "see what is on the screen"),
+    ("kyber", "microphone", "hear you while you hold the globe key"),
+]
+
+# Hosts worth offering when the process chain names none (a launchd job, ssh).
+KNOWN_HOSTS = [
+    "/Applications/Visual Studio Code.app",
+    "/Applications/Cursor.app",
+    "/Applications/Claude.app",
+    "/Applications/Codex.app",
+    "/Applications/iTerm.app",
+    "/Applications/Ghostty.app",
+    "/Applications/Warp.app",
+    "/System/Applications/Utilities/Terminal.app",
+]
+
+
+def kyber_app() -> Path:
+    return Path(os.environ.get("CHEWBACCA_KYBER_APP", "/Applications/Kyber.app"))
+
+
+def tcc_paths() -> list[str]:
+    return [os.environ.get("CHEWBACCA_TCC_SYSTEM_DB", SYSTEM_TCC),
+            os.environ.get("CHEWBACCA_TCC_USER_DB", USER_TCC)]
+
+
+def bundle_id(app: Path) -> str | None:
+    try:
+        with open(app / "Contents" / "Info.plist", "rb") as handle:
+            value = plistlib.load(handle).get("CFBundleIdentifier")
+    except (OSError, plistlib.InvalidFileException, ValueError):
+        return None
+    return value if isinstance(value, str) else None
+
+
+def app_name(app: Path) -> str:
+    """The name the Privacy list shows, which is the bundle's file name.
+
+    Not CFBundleName: VS Code's is "Code" while System Settings lists
+    "Visual Studio Code" (seen 2026-10-05). The helper uses the same rule.
+    """
+    return app.stem
+
+
+def outermost_app(executable: str) -> Path | None:
+    """`/A.app/Contents/Frameworks/B.app/Contents/MacOS/b` belongs to /A.app."""
+    marker = executable.find(".app/")
+    if marker < 0:
+        return None
+    return Path(executable[:marker + len(".app")])
+
+
+def chain_host(start_pid: int | None = None) -> Path | None:
+    """The first ancestor that lives inside an app bundle.
+
+    Observed in this repo on 2026-10-05: zsh, then Claude Code's native binary
+    under ~/.vscode, then "Code Helper (Plugin)" inside Visual Studio Code.app's
+    Frameworks, then Code itself. The first bundled ancestor already names VS
+    Code once it is cut back to its outermost .app, which is the app TCC
+    charges and therefore the one that has to be in the list.
+    """
+    pid = start_pid if start_pid is not None else os.getppid()
+    # Deep enough for tmux inside a shell inside an editor; a chain is never
+    # this long in practice, the bound only stops a cycle from spinning.
+    for _ in range(32):
+        if pid <= 1:
+            return None
+        try:
+            out = subprocess.run(["/bin/ps", "-o", "ppid=,comm=", "-p", str(pid)],
+                                 capture_output=True, text=True, timeout=5).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if not out:
+            return None
+        parent, _, command = out.partition(" ")
+        app = outermost_app(command.strip())
+        if app is not None and app.exists():
+            return app
+        try:
+            pid = int(parent)
+        except ValueError:
+            return None
+    return None
+
+
+def resolve_host(flag: str | None) -> tuple[Path | None, str]:
+    if flag:
+        return Path(flag), "flag"
+    if os.environ.get("CHEWBACCA_HOST_APP"):
+        return Path(os.environ["CHEWBACCA_HOST_APP"]), "env"
+    found = chain_host()
+    return (found, "process-chain") if found else (None, "none")
+
+
+def tcc_status(service: str, clients: list[str]) -> str:
+    """granted, denied, or unknown when neither database can be opened.
+
+    Both databases open only for a process whose responsible app holds Full
+    Disk Access, so on a fresh Mac this answers unknown, and unknown is never
+    reported as missing: it means nobody can tell from out here.
+    """
+    readable = False
+    marks = ",".join("?" for _ in clients)
+    for path in tcc_paths():
+        try:
+            con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+            try:
+                rows = con.execute(
+                    f"select auth_value from access where service = ? and client in ({marks})",
+                    [service, *clients]).fetchall()
+            finally:
+                con.close()
+        except sqlite3.Error:
+            continue
+        readable = True
+        # auth_value 2 is allowed in every TCC schema since Big Sur.
+        if any(row[0] == 2 for row in rows):
+            return "granted"
+    return "denied" if readable else "unknown"
+
+
+def readable_with_full_disk_access() -> str | None:
+    """Whether THIS process can read a file only Full Disk Access opens.
+
+    That answers for the app at the top of this process's chain, which is the
+    same check doctor.sh makes on chat.db. TCC.db stands in on a Mac where
+    Messages was never opened and chat.db does not exist.
+    """
+    for path in (CHAT_DB, Path(tcc_paths()[0])):
+        if not path.exists():
+            continue
+        try:
+            with open(path, "rb") as handle:
+                handle.read(1)
+            return "granted"
+        except OSError:
+            return "denied"
+    return None
+
+
+def axgrant_state() -> str:
+    spec = importlib.util.spec_from_file_location("axgrant", ROOT / "bin" / "lib" / "axgrant.py")
+    if spec is None or spec.loader is None:
+        return "unknown"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.state(client=bundle_id(kyber_app()) or module.CLIENT, app=kyber_app(),
+                        db=Path(tcc_paths()[0]))
+
+
+def status_for(app: Path, permission: str, is_chain_host: bool) -> tuple[str, str]:
+    if not (app / "Contents" / "Info.plist").exists():
+        return "app-missing", "filesystem"
+    if permission == "full-disk-access" and is_chain_host:
+        direct = readable_with_full_disk_access()
+        if direct is not None:
+            return direct, "read-probe"
+    clients = [c for c in (bundle_id(app), str(app)) if c]
+    status = tcc_status(PERMISSIONS[permission][1], clients)
+    # A grant recorded against an older ad-hoc build reads as on in System
+    # Settings and authorizes nothing (bin/lib/axgrant.py has the incident).
+    if status == "granted" and permission == "accessibility" and app == kyber_app():
+        if axgrant_state() == "stale":
+            return "stale", "tcc-database"
+    return status, "tcc-database"
+
+
+def helper_built() -> bool:
+    if not HELPER.exists():
+        return False
+    built = HELPER.stat().st_mtime
+    sources = [HELPER_DIR / "Package.swift", *HELPER_DIR.glob("Sources/**/*.swift")]
+    return all(source.stat().st_mtime <= built for source in sources)
+
+
+def plan(host_flag: str | None) -> dict:
+    host, detected_by = resolve_host(host_flag)
+    is_chain_host = detected_by == "process-chain"
+    needs = []
+    for target, permission, why in NEEDS:
+        app = kyber_app() if target == "kyber" else host
+        entry = {
+            "id": f"{target}.{permission}",
+            "target": target,
+            "permission": permission,
+            "pane": PERMISSIONS[permission][0],
+            "why": why,
+        }
+        if app is None:
+            entry.update(app=None, app_name=None, status="host-unknown", source="process-chain")
+        else:
+            status, source = status_for(app, permission, target == "host" and is_chain_host)
+            entry.update(app=str(app), app_name=app_name(app), status=status, source=source)
+        needs.append(entry)
+    return {
+        "host": {"app": str(host) if host else None, "detected_by": detected_by},
+        "needs": needs,
+        "missing": [n["id"] for n in needs if n["status"] != "granted"],
+        "helper": {"path": str(HELPER), "built": helper_built()},
+    }
+
+
+def build_helper() -> bool:
+    if helper_built():
+        return True
+    print("Building the permission guide (once, about a minute)...", file=sys.stderr)
+    try:
+        done = subprocess.run(["swift", "build", "-c", "release", "--package-path", str(HELPER_DIR)],
+                              stdout=sys.stderr, stderr=sys.stderr)
+    except FileNotFoundError:
+        print("swift is missing. Install Apple's command line tools with `xcode-select --install`, "
+              "then run this again.", file=sys.stderr)
+        return False
+    return done.returncode == 0 and HELPER.exists()
+
+
+def pick_host() -> Path | None:
+    """Ask which app runs Claude Code, only when the chain named none."""
+    candidates = [Path(p) for p in KNOWN_HOSTS if Path(p).exists()]
+    if not candidates or not sys.stdin.isatty():
+        return None
+    print("Which app are you running Claude Code in?")
+    for index, app in enumerate(candidates, 1):
+        print(f"  {index}. {app_name(app)}")
+    answer = input("Number: ").strip()
+    if answer.isdigit() and 1 <= int(answer) <= len(candidates):
+        return candidates[int(answer) - 1]
+    return None
+
+
+def guide(args: argparse.Namespace) -> int:
+    known = [permission for _, permission, _ in NEEDS]
+    if args.only and args.only not in known:
+        print(f"--only takes one of: {', '.join(known)}", file=sys.stderr)
+        return 2
+    report = plan(args.host_app)
+    steps = [n for n in report["needs"]
+             if (not args.only or n["permission"] == args.only)
+             and (args.include_granted or n["status"] != "granted")]
+    if any(n["status"] == "host-unknown" for n in steps):
+        picked = pick_host()
+        if picked is None:
+            print("Could not tell which app runs this session. Pass --host-app with its .app path.",
+                  file=sys.stderr)
+            return 2
+        report = plan(str(picked))
+        steps = [n for n in report["needs"]
+                 if (not args.only or n["permission"] == args.only)
+                 and (args.include_granted or n["status"] != "granted")]
+    if not steps:
+        print("Everything Chewbacca needs is already allowed.")
+        return 0
+    if not build_helper():
+        return 1
+
+    results = []
+    for number, step in enumerate(steps, 1):
+        if step["status"] == "app-missing":
+            print(f"{number} of {len(steps)}: skipped, {step['app']} is not installed.")
+            results.append((step, "app-missing"))
+            continue
+        print(f"{number} of {len(steps)}: {step['pane']} for {step['app_name']}, to {step['why']}.")
+        if step["status"] == "unknown":
+            print("  This Mac will not say when it is on, so close the card once it is.")
+        if step["permission"] == "microphone":
+            print(f"  {step['app_name']} shows up in that list after it asks once: "
+                  "hold the globe key in it, then switch it on here.")
+        command = [str(HELPER), "guide", "--app", step["app"], "--permission", step["permission"],
+                   "--timeout", str(args.timeout)]
+        if step["source"] == "read-probe":
+            command.append("--self")
+        else:
+            command += ["--check-command", " ".join(shlex.quote(part) for part in [
+                sys.executable, str(Path(__file__).resolve()), "check",
+                "--app", step["app"], "--permission", step["permission"]])]
+        if args.hold:
+            command.append("--hold")
+        # The helper writes to the same stdout; without this, a piped run
+        # printed its result before the step it belonged to.
+        sys.stdout.flush()
+        code = subprocess.run(command).returncode
+        outcome = {0: "granted", 3: "dismissed", 4: "timed out", 5: "settings would not open"}.get(
+            code, f"failed ({code})")
+        print(f"  {outcome}")
+        results.append((step, outcome))
+
+    # Only grants this run changed need a relaunch; a preview of one that was
+    # already on (--include-granted) must not send anyone off to restart apps.
+    granted = [step for step, outcome in results
+               if outcome == "granted" and step["status"] != "granted"]
+    if any(step["target"] == "host" for step in granted):
+        print("Quit and reopen the app running this session so Full Disk Access takes effect.")
+    if any(step["target"] == "kyber" and step["permission"] == "accessibility" for step in granted):
+        print("Quit and reopen Kyber so Accessibility takes effect.")
+    return 0 if all(outcome == "granted" for _, outcome in results) else 1
+
+
+def check(args: argparse.Namespace) -> int:
+    if args.permission not in PERMISSIONS:
+        print(f"unknown permission {args.permission}", file=sys.stderr)
+        return 2
+    app = Path(args.app)
+    host, detected_by = resolve_host(None)
+    is_chain_host = detected_by == "process-chain" and host == app
+    status, _ = status_for(app, args.permission, args.permission == "full-disk-access" and is_chain_host)
+    return {"granted": 0, "unknown": 2}.get(status, 1)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="chewbacca-permissions",
+                                     description="What macOS has to allow for Chewbacca, and a guide through it.")
+    sub = parser.add_subparsers(dest="command", required=True)
+    plan_parser = sub.add_parser("plan", help="print every grant and which are missing, as JSON")
+    plan_parser.add_argument("--host-app", help="the .app running Claude Code, if not detected")
+    guide_parser = sub.add_parser("guide", help="walk each missing grant with the card over System Settings")
+    guide_parser.add_argument("--only", help="just this permission")
+    guide_parser.add_argument("--host-app", help="the .app running Claude Code, if not detected")
+    guide_parser.add_argument("--include-granted", action="store_true",
+                              help="walk grants that already exist too (previews)")
+    guide_parser.add_argument("--hold", action="store_true",
+                              help="keep each card up until it is closed, even once granted")
+    guide_parser.add_argument("--timeout", type=float, default=600,
+                              help="seconds before a card gives up (default 600)")
+    check_parser = sub.add_parser("check", help="exit 0 granted, 1 not, 2 cannot tell")
+    check_parser.add_argument("--app", required=True)
+    check_parser.add_argument("--permission", required=True)
+    args = parser.parse_args(argv)
+
+    if args.command == "plan":
+        print(json.dumps(plan(args.host_app), indent=2))
+        return 0
+    if args.command == "guide":
+        if args.timeout <= 0:
+            print("--timeout must be positive", file=sys.stderr)
+            return 2
+        return guide(args)
+    return check(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

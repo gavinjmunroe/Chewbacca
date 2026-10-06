@@ -50,6 +50,8 @@ hud/build/
 voice/.build/
 # call-ears, built by apps/call/build.sh
 apps/call/.build/
+# The permission card, built on first use by bin/chewbacca-permissions
+mac/permission-guide/.build/
 
 # A2A course material and its pipeline: reference for the second brain,
 # not a project to publish.

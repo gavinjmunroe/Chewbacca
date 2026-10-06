@@ -86,6 +86,11 @@ through by hand and they will have to redo every one.
 
 One toggle at a time. Do not list all five.
 
+For Chewbacca's own grants, run `chewbacca-permissions guide` instead of
+reciting the steps: it opens each pane and floats a card over System Settings
+with the app as a row to drag into the list, and moves on by itself once the
+grant lands. `chewbacca-permissions plan` prints what is still missing as JSON.
+
 1. Open System Settings > Privacy & Security > Accessibility
 2. Click +, add the app `chewie doctor` named
 3. Make sure the toggle is actually ON, not just listed

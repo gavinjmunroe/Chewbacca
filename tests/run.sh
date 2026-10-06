@@ -323,6 +323,12 @@ if group "doctor"; then
   # median was 108ms, and a p95 over 11 samples is noise, not a measurement.
   check "doctor judges hooks on p95 with a sample floor" \
     bash -c "grep -q 'MIN_RUNS_FOR_VERDICT' '$ROOT/doctor.sh'"
+
+  # The grants doctor reports missing, and the card that walks a person
+  # through them. Fixture TCC databases and fake app bundles; the helper is
+  # built and asked to describe, never to draw, so no grant is read or changed.
+  check "permissions plan reads every grant and the guide helper builds" \
+    python3 "$ROOT/tests/test_permission_guide.py"
 fi
 
 if group "jev"; then

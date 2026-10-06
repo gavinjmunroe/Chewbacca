@@ -21,6 +21,7 @@ Shipped inside this repo, or cloned onto the machine by `setup.sh`.
 | Source | Author | License | What it gives this kit |
 | --- | --- | --- | --- |
 | [31Carlton7/plynn](https://github.com/31Carlton7/plynn) | Carlton Aikins | MIT | On-device Mac dictation. **Forked and vendored** at `plynn/`, ported back to macOS 15 and given the Chewie voice route. See [plynn/NOTICE.md](plynn/NOTICE.md) |
+| [fastrepl/anarlog](https://github.com/fastrepl/anarlog) | fastrepl | MIT | The macOS permission assistant: the card pinned over System Settings, its sketch arrow, guide cursor, hatched drag placeholder, motion and placement, and the drag of the app's own file URL into a Privacy list. **Ported** from Rust and objc2 (`plugins/permissions`, `crates/overlay-kit`, read at `abbaf07f9e40`) to Swift in `mac/permission-guide/`, driven by `bin/chewbacca-permissions` |
 | [31Carlton7/mac-cli](https://github.com/31Carlton7/mac-cli) | Carlton Aikins | MIT | The `mac` command. Cloned and built by `setup.sh` |
 | [31Carlton7/skills](https://github.com/31Carlton7/skills) | Carlton Aikins | see upstream | The `deslop` skill, which holds the judgement half of code slop review |
 | [openclaw/Peekaboo](https://github.com/openclaw/Peekaboo) | Peter Steinberger | MIT | The widest macOS control surface anywhere: see, click, type, menus, Dock, Spaces, dialogs, windows |

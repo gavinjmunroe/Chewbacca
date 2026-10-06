@@ -5,6 +5,16 @@ description: "Build and evaluate GTM workflows in Clay: ICP, signals, list build
 
 # GTM engineering
 
+## Read these first, every time (2026-10-06: skipping them cost a day)
+
+Before building anything for a client, load what already exists, in this order:
+the client handoff (`START-HERE.md` in its repo), the team's latest texts and Slack for
+their process, the second brain's `wiki/cold-email-craft.md` (founder story beats
+recipient personalization; first sends are measurement), and the
+`library/learning/clay-navigation` map. Drive Clay with `jev-browse` (goals that work
+whatever state a panel is in), fall back to `chewie web eval` only when jev blocks.
+Then build it their way and stop.
+
 Start with the business outcome, its denominator, maturity window, and budget. Read existing client instructions and approved ICP before designing a workflow. Keep customer data and research corpora private.
 
 ## Reuse before building

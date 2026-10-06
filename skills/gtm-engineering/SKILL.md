@@ -55,3 +55,26 @@ parameters only from multiple observed instances. A UX receipt or graph route
 is a partial learning aid, not a free-form recorder, automatic distiller,
 retrieval engine, registry, or proof of mastery. Preserve failed attempts and
 corrections with private evidence, and share only reviewed generalized lessons.
+
+## Choosing the route, enforced 2026-10-06
+
+Default to Clay-native for bulk work: rows into a Clay table (Find People or
+import), enrichment columns (Work email waterfall, Validate email, AI or
+Claygent with a source field), price ONE row from the credit balance before and
+after, then Run column and send the table or audience to the campaign.
+`.claude/hooks/clay-native-guard.sh` refuses shell loops of per-row Clay
+workflow or action test runs, because on 2026-10-05 that pattern took a night
+and a Claygent loop burned ~3,400 client credits on 150 rows (~21 credits a row)
+before anyone priced a row.
+
+Use graph engineering instead when it is cheaper than the credit spend and the
+data is reusable: firm -> invested_in -> company -> in_sector, built once from
+each firm's own portfolio page (free HTTP, a no-tools model, a Jev check per
+edge, `scripts/portfolio_graph.py` in zeutara-gtme), then walked per lead.
+Measured 2026-10-05: zero Clay credits, but only 10 of 309 leads got a line,
+because most portfolio pages are logo-only. Decide by cost per verified usable
+line, not by habit.
+
+A live campaign does not pull in contacts added to its segment after launch
+(2026-10-06, Goldies Wave 2 stayed at 18 when the segment grew to 53). Finish
+the segment, then launch; add later contacts as a new campaign.

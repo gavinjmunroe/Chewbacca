@@ -180,3 +180,15 @@ Each of these cost a turn once. Each is a check now.
 - Edge key on `nodes create` is `incomingEdges: [{"sourceNode": "<trigger node id>"}]`, not `sourceNodeId`.
 - A paused campaign accepts `campaigns sequence edit` with `updateStep` only. Leads can't be removed and exclusion audiences can't be set from the CLI.
 - Clay rejected CLI 1.0.0 as unsupported. The plugin's `scripts/install-cli.sh --version <cli-min-version>` installs a current one at `~/.local/bin/clay`.
+
+## Find People to emailable table, driven live 2026-10-05
+
+Fastest net-new lead pull in Clay, ~2 minutes for 500 people:
+
+1. Home: "Find leads" button, then under "Search directly" the "People" button. Opens `/chats/<cc_id>` (Find People).
+2. Click the "Chat" tab, type a plain-English ICP into the `textarea` ("I'm looking for..."), press Enter. Clay's agent builds the filters (job title similar to, Company: Industry, Company: Products and services) and shows "~N found". 9,116 consumer-seed VC partners and 551 fintech-infra VC partners came back this way.
+3. "Continue" shows radios `input[value=all|custom]` (custom has a number input) and destinations `write_to_audiences|enrich|save_search|table`. Pick `table`, press "Save". No credits yet.
+4. Enrich screen: tick "Work email" (~0.6 credits/row, a 7-provider waterfall with validation), "Save and run 10 rows". Creates `/workbooks/<wb>/tables/<t>`.
+5. In the table, header button "Find work email" > menuitem "Run column" (nested; open it with pointerover + ArrowRight) > "Run N empty or out-of-date rows" shows the credit total before you press.
+
+Driving notes: `chewie web eval` with `CHEWIE_WEB_FRAME=<url substring>` targets an existing tab; passing a URL as the second arg opens a NEW tab instead. `chewie web read <url>` hangs on this SPA (waits for a load event). jev-browse returned `blocked` in ~200ms on these pages on 10-05 even with a live connection: unresolved.

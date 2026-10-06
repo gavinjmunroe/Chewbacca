@@ -76,5 +76,5 @@ because most portfolio pages are logo-only. Decide by cost per verified usable
 line, not by habit.
 
 A live campaign does not pull in contacts added to its segment after launch
-(2026-10-06, Goldies Wave 2 stayed at 18 when the segment grew to 53). Finish
+(2026-10-06, a live campaign stayed at 18 leads when its segment grew to 53). Finish
 the segment, then launch; add later contacts as a new campaign.

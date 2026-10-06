@@ -25,6 +25,18 @@ assert kd.main() == 0, "should be clear when the kit has commits"
 kd.kit_commits = lambda h: []
 kd.work_dirs  = lambda h: {}
 assert kd.main() == 0, "should be clear when there was no project work"
+# a satellite tool repo that ships skills counts as the kit, not as project work
+import pathlib, tempfile, subprocess as sp
+home = pathlib.Path(tempfile.mkdtemp())
+sat = home / "code" / "tools" / "sat"; (sat / "skills").mkdir(parents=True)
+sp.run(["git", "init", "-q", str(sat)], check=True)
+plain = home / "code" / "tools" / "plain"; plain.mkdir(parents=True)
+sp.run(["git", "init", "-q", str(plain)], check=True)
+real_home = pathlib.Path.home
+pathlib.Path.home = classmethod(lambda cls: home)
+names = {d.name for d in kd.satellites()}
+pathlib.Path.home = real_home
+assert names == {"sat"}, f"satellites should be only skill-shipping tool repos, got {names}"
 print("LOGIC_OK")
 PY
 if [ $? -eq 0 ]; then ok "fires when owed, quiet when clear"; else no "logic wrong"; fi

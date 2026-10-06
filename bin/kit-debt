@@ -39,12 +39,30 @@ def git(args, cwd=ROOT):
     r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True)
     return r.stdout.strip() if r.returncode == 0 else ""
 
+def satellites():
+    """Tool repos that install skills into the kit, so a lesson can land there.
+
+    On 2026-10-06 the brief fallback fix went into Nova (ea1c138, code plus a
+    test) and this hook kept refusing the turn three times, because only the
+    Chewbacca checkout counted. Scoped to ~/code/tools on purpose: refs/,
+    vendor/ and personal/ also hold repos with a skills/ dir and are not kit."""
+    tools = pathlib.Path.home() / "code" / "tools"
+    if not tools.is_dir():
+        return []
+    return [d for d in tools.iterdir()
+            if (d / ".git").exists() and (d / "skills").is_dir()
+            and d.resolve() != ROOT.resolve()]
+
 def kit_commits(hours):
     # --all, not HEAD. Work often lands on main from a worktree while the main
     # checkout sits on a feature branch, and HEAD-only counting scored that as
     # zero on 2026-09-26 for a commit that was already pushed to main.
-    out = git(["log", "--all", f"--since={hours} hours ago", "--format=%h %s"])
-    return [l for l in out.splitlines() if l.strip()]
+    lines = []
+    for repo in [ROOT, *satellites()]:
+        out = git(["log", "--all", f"--since={hours} hours ago", "--format=%h %s"], cwd=repo)
+        tag = "" if repo == ROOT else f"{repo.name}: "
+        lines += [tag + l for l in out.splitlines() if l.strip()]
+    return lines
 
 def work_dirs(hours):
     """Project repos touched recently, excluding the kit and the context store."""
@@ -59,6 +77,8 @@ def work_dirs(hours):
             continue
         for d in base.iterdir():
             if not (d / ".git").exists() or d.resolve() == ROOT.resolve():
+                continue
+            if d.resolve() in {x.resolve() for x in satellites()}:
                 continue
             if d.name == "second-brain":
                 continue
@@ -86,7 +106,7 @@ def main():
             where = ", ".join(f"{k} ({v} commits)" for k, v in sorted(busy.items(), key=lambda x: -x[1]))
             print("This session shipped work but taught the kit nothing.")
             print(f"  worked in: {where}")
-            print(f"  chewbacca commits in the last {a.hours}h: 0")
+            print(f"  kit commits (chewbacca + skill-shipping tools) in the last {a.hours}h: 0")
             print("  Name one thing that went wrong or got learned, and make it a tool, a")
             print("  gate, a test or a skill section. Prose in a memory file does not fire.")
         return 1 if owes else 0

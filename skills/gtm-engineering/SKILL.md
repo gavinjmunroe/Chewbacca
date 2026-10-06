@@ -78,3 +78,8 @@ line, not by habit.
 A live campaign does not pull in contacts added to its segment after launch
 (2026-10-06, a live campaign stayed at 18 leads when its segment grew to 53). Finish
 the segment, then launch; add later contacts as a new campaign.
+
+Build the suppression list from actual sends (campaign activity, analytics, the
+send log), never from enrollment. On 2026-10-05 every contact ever enrolled in a
+paused campaign was treated as emailed, which hid ~1,400 never-emailed contacts
+of the client's own list for a whole night.

@@ -27,7 +27,9 @@ cmd="$(jq -r '.tool_input.command // empty' 2>/dev/null)"
 case "$cmd" in *CLAY_LOOP_OK=*) exit 0 ;; esac
 
 PER_ROW='(workflows[^a-z]+runs[^a-z]+test|workflows[^a-z]+actions[^a-z]+test)'
-LOOP='(\bfor\b|\bwhile\b|ThreadPool|\.map\(|xargs)'
+# "for" alone matched prose inside a prompt ("one sentence for a cold email") on
+# 2026-10-06 and blocked a one-row pricing call; a loop has "for NAME in".
+LOOP='(\bfor [A-Za-z_][A-Za-z0-9_]* in\b|\bwhile\b|ThreadPool|\.map\(|xargs)'
 hit=""
 # Inline: a shell or python loop in the command itself.
 if printf '%s' "$cmd" | grep -qE "$PER_ROW" && printf '%s' "$cmd" | grep -qE "$LOOP"; then hit="inline loop"; fi

@@ -6,7 +6,7 @@ f6b1b2e1ce432d92722bca1371d33973a5dc99290c6af3d2562e0f2893a5faae  .claude/hooks/
 0364a3ce1bc457e30bd14b24b69cd7d67807748efef5d1e325f5a5e00f16988f  .claude/hooks/brain-sync.sh
 4a1c8a14231bfe159c20cb876d414bff7182d32b0362a3e5507b1054a08c6aa3  .claude/hooks/browser-ux-guard.sh
 de060f6f4523dd4f70eee84d70a079bd6f7247e70ec8122b8f69e7396a693d44  .claude/hooks/chatdb-guard.sh
-be7ee6a942f71801989271a65415dd63971ff9649dfa4817d3f711cb37657271  .claude/hooks/clay-native-guard.sh
+0cde272521f1895512eb323bc1935b89dd73a1ad3fe02419c82ecf63f03b2c74  .claude/hooks/clay-native-guard.sh
 8a59c2db66769c8fb7f5f7fc160d44b4518c9be1e5287d02f4531116f44186fd  .claude/hooks/clay-reply-guard.sh
 2b4c3d09aa7d44acece030a70da076a4ee8baae96d348342758125de661bdc38  .claude/hooks/coursework-context.sh
 a3e18bcd6add576630c0107bfddb91422d278f1af5defa1d403ed005b2d88978  .claude/hooks/design-context.sh

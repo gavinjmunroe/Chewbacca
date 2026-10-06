@@ -18,4 +18,6 @@ printf 'import subprocess\nsubprocess.run(["clay","workflows","runs","test","wf"
 [ "$(run "clay workflows actions test pkg key --inputs '{}'")" = 0 ] && ok "one action test allowed" || no "one action test allowed"
 [ "$(run "CLAY_LOOP_OK='5-row fixture' python3 $TMP/loop.py")" = 0 ] && ok "override with a reason allowed" || no "override with a reason allowed"
 [ "$(run "clay campaigns list")" = 0 ] && ok "unrelated clay command allowed" || no "unrelated clay command allowed"
+printf 'import subprocess\np="one sentence for a cold email"\nsubprocess.run(["clay","workflows","actions","test","pkg","key"])\n' > "$TMP/prose.py"
+[ "$(run "python3 $TMP/prose.py")" = 0 ] && ok "the word for in prose is not a loop" || no "the word for in prose is not a loop"
 echo "  $pass passed, $fail failed"; [ "$fail" -eq 0 ]

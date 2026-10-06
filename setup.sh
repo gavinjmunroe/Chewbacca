@@ -1650,6 +1650,12 @@ _register("PreToolUse", hooks_dir + "/launch-guard.sh", timeout=10,
                   "mcp__plugin_playwright_playwright__.*",
           status="Checking a campaign launch has a full pre-send gate pass...")
 
+# Bulk Clay work goes through Clay tables, not shell loops of per-row workflow
+# or action test runs. On 2026-10-05 that pattern took a night and a Claygent
+# loop burned ~3,400 client credits on 150 rows before a row was priced.
+_register("PreToolUse", hooks_dir + "/clay-native-guard.sh", timeout=5,
+          matcher="Bash")
+
 # Say the ranking rule out loud before ranking, and name what would falsify
 # the answer. Running someone's list top to bottom is not a method.
 _register("UserPromptSubmit", hooks_dir + "/method-guard.sh", timeout=8,

@@ -135,6 +135,26 @@ def main() -> int:
         check("guide with nothing missing opens nothing and says so",
               "already allowed" in run([sys.executable, str(CLI), "guide"], env).stdout)
 
+        # Meeting capture's grants belong to the host, not Kyber, and stay out
+        # of the default walk.
+        capture = json.loads(run([sys.executable, str(CLI), "plan", "--for", "capture"], env).stdout)
+        check("plan --for capture names the host's screen and mic, screen first",
+              [n["id"] for n in capture["needs"]] == ["host.screen-recording-and-system-audio", "host.microphone"],
+              str([n["id"] for n in capture["needs"]]))
+        check("the host has neither in the fixtures, so both are missing",
+              capture["missing"] == ["host.screen-recording-and-system-audio", "host.microphone"],
+              str(capture["missing"]))
+        granted = tcc_db(work / "system-capture.db", everything + [
+            ("kTCCServiceScreenCapture", "com.microsoft.VSCode", 2)])
+        mic = tcc_db(work / "user-capture.db", [("kTCCServiceMicrophone", "com.microsoft.VSCode", 2)])
+        capture = json.loads(run([sys.executable, str(CLI), "plan", "--for", "capture"],
+                                 {**env, "CHEWBACCA_TCC_SYSTEM_DB": str(granted),
+                                  "CHEWBACCA_TCC_USER_DB": str(mic)}).stdout)
+        check("and once the host has both, nothing is missing", capture["missing"] == [], str(capture["missing"]))
+        check("guide --for capture --only refuses a grant capture does not need",
+              run([sys.executable, str(CLI), "guide", "--for", "capture", "--only", "accessibility"],
+                  env).returncode == 2)
+
         check("a helper inside a bundle belongs to the outermost app",
               perms.outermost_app("/Applications/Visual Studio Code.app/Contents/Frameworks/"
                                   "Code Helper (Plugin).app/Contents/MacOS/Code Helper (Plugin)")

@@ -4,6 +4,8 @@
     chewbacca-permissions plan                 JSON: every grant, and which are missing
     chewbacca-permissions guide                walk each missing grant, one at a time
     chewbacca-permissions guide --only microphone
+    chewbacca-permissions plan --for capture   meeting capture's two grants, for the app running it
+    chewbacca-permissions guide --for capture --only screen-recording-and-system-audio
     chewbacca-permissions check --app A --permission P   exit 0 granted, 1 not, 2 cannot tell
 
 Two apps need grants, and nothing else does:
@@ -67,6 +69,18 @@ NEEDS = [
     ("kyber", "screen-recording-and-system-audio", "see what is on the screen"),
     ("kyber", "microphone", "hear you while you hold the globe key"),
 ]
+
+# Meeting capture (bin/room-capture) runs as a child of whatever starts it, so
+# macOS charges its Microphone and Screen & System Audio Recording to the app
+# at the top of that chain, the same "host" Full Disk Access is checked for.
+# It is its own list so the default walk above stays the four grants every
+# Chewbacca install needs; `--for capture` swaps it in. Screen first: without
+# it a call records only your side, and that is the one people miss.
+CAPTURE_NEEDS = [
+    ("host", "screen-recording-and-system-audio", "hear the other side of a call (system audio)"),
+    ("host", "microphone", "hear your side of a call"),
+]
+SETS = {"chewbacca": NEEDS, "capture": CAPTURE_NEEDS}
 
 # Hosts worth offering when the process chain names none (a launchd job, ssh).
 KNOWN_HOSTS = [
@@ -239,11 +253,11 @@ def helper_built() -> bool:
     return all(source.stat().st_mtime <= built for source in sources)
 
 
-def plan(host_flag: str | None) -> dict:
+def plan(host_flag: str | None, which: str = "chewbacca") -> dict:
     host, detected_by = resolve_host(host_flag)
     is_chain_host = detected_by == "process-chain"
     needs = []
-    for target, permission, why in NEEDS:
+    for target, permission, why in SETS[which]:
         app = kyber_app() if target == "kyber" else host
         entry = {
             "id": f"{target}.{permission}",
@@ -295,11 +309,11 @@ def pick_host() -> Path | None:
 
 
 def guide(args: argparse.Namespace) -> int:
-    known = [permission for _, permission, _ in NEEDS]
+    known = [permission for _, permission, _ in SETS[args.for_]]
     if args.only and args.only not in known:
         print(f"--only takes one of: {', '.join(known)}", file=sys.stderr)
         return 2
-    report = plan(args.host_app)
+    report = plan(args.host_app, args.for_)
     steps = [n for n in report["needs"]
              if (not args.only or n["permission"] == args.only)
              and (args.include_granted or n["status"] != "granted")]
@@ -309,7 +323,7 @@ def guide(args: argparse.Namespace) -> int:
             print("Could not tell which app runs this session. Pass --host-app with its .app path.",
                   file=sys.stderr)
             return 2
-        report = plan(str(picked))
+        report = plan(str(picked), args.for_)
         steps = [n for n in report["needs"]
                  if (not args.only or n["permission"] == args.only)
                  and (args.include_granted or n["status"] != "granted")]
@@ -328,9 +342,12 @@ def guide(args: argparse.Namespace) -> int:
         print(f"{number} of {len(steps)}: {step['pane']} for {step['app_name']}, to {step['why']}.")
         if step["status"] == "unknown":
             print("  This Mac will not say when it is on, so close the card once it is.")
-        if step["permission"] == "microphone":
+        if step["permission"] == "microphone" and step["target"] == "kyber":
             print(f"  {step['app_name']} shows up in that list after it asks once: "
                   "hold the globe key in it, then switch it on here.")
+        elif step["permission"] == "microphone":
+            print(f"  {step['app_name']} shows up in that list after it asks once: "
+                  "run `room-capture start` in it, then switch it on here.")
         command = [str(HELPER), "guide", "--app", step["app"], "--permission", step["permission"],
                    "--timeout", str(args.timeout)]
         if step["source"] == "read-probe":
@@ -378,9 +395,13 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     plan_parser = sub.add_parser("plan", help="print every grant and which are missing, as JSON")
     plan_parser.add_argument("--host-app", help="the .app running Claude Code, if not detected")
+    plan_parser.add_argument("--for", dest="for_", choices=sorted(SETS), default="chewbacca",
+                             help="which grants: Chewbacca's (default) or meeting capture's")
     guide_parser = sub.add_parser("guide", help="walk each missing grant with the card over System Settings")
     guide_parser.add_argument("--only", help="just this permission")
     guide_parser.add_argument("--host-app", help="the .app running Claude Code, if not detected")
+    guide_parser.add_argument("--for", dest="for_", choices=sorted(SETS), default="chewbacca",
+                              help="which grants: Chewbacca's (default) or meeting capture's")
     guide_parser.add_argument("--include-granted", action="store_true",
                               help="walk grants that already exist too (previews)")
     guide_parser.add_argument("--hold", action="store_true",
@@ -393,7 +414,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.command == "plan":
-        print(json.dumps(plan(args.host_app), indent=2))
+        print(json.dumps(plan(args.host_app, args.for_), indent=2))
         return 0
     if args.command == "guide":
         if args.timeout <= 0:

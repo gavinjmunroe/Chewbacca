@@ -46,7 +46,7 @@ import osgraph  # noqa: E402
 import osgraph_walks  # noqa: E402
 import surfaces  # noqa: E402
 from surfaces import Context  # noqa: E402
-from surfaces.meetings import INSTALL_STEP, Meetings  # noqa: E402
+from surfaces.meetings import INSTALL_STEP, NO_MEETINGS, Meetings  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "anarlog"
 BIN = "/opt/fake/anarlog"
@@ -147,10 +147,12 @@ def only_reads(cli: FakeAnarlog) -> bool:
 
 
 def first_run(tmp: Path) -> None:
+    # Since native capture (2026-10-05) the headline is the same in all three
+    # states: Anarlog's state is the doctor line's job, not the panel's.
     for state, headline, doctor_has in (
-            ("unset", AM.NOT_SET_UP, "database file does not exist"),
-            ("empty", "Anarlog is set up. No meetings yet.", "ready: yes"),
-            ("missing", AM.NOT_INSTALLED, "")):
+            ("unset", NO_MEETINGS, "database file does not exist"),
+            ("empty", NO_MEETINGS, "ready: yes"),
+            ("missing", NO_MEETINGS, "")):
         cli = FakeAnarlog(state)
         (tmp / state).mkdir()
         ctx = world(tmp / state, cli)
@@ -163,7 +165,12 @@ def first_run(tmp: Path) -> None:
         steps = [s["text"] for s in value(lines, "/meetings/setup") or []]
         doctor = value(lines, "/meetings/doctor") or ""
         if state == "missing":
-            check("missing: the first step says how to install it", steps and INSTALL_STEP in steps[0], steps)
+            # Caleb, 2026-10-05: "Anarlog shouldn't be it's own app". The
+            # first step was "Install Anarlog"; it is now the Start capture press.
+            check("missing: the first step is Start capture, never installing a second app",
+                  steps and "Start capture" in steps[0] and not any(INSTALL_STEP in s for s in steps), steps)
+            check("missing: the button offers Start capture", value(lines, "/meetings/captureLabel") == "Start capture",
+                  value(lines, "/meetings/captureLabel"))
             check("missing: no doctor line when there is no CLI to ask", doctor == "", doctor)
         else:
             check(f"{state}: shows Anarlog's own doctor answer", doctor_has in doctor, doctor)

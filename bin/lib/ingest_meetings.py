@@ -48,6 +48,14 @@ that variable says 1, true or yes (apps/cli/src/analytics.rs:68-72,
 error_reporting.rs:4-7); it is opt-in today, and pinning it off keeps a
 stray export in a shell profile from turning it on under the daemon.
 
+NATIVE MEETINGS COME FIRST. Chewbacca now records meetings itself
+(mac/room-capture and bin/lib/meeting_capture.py, which writes each one to
+~/.chewbacca/meetings/<id>.json in exactly the shapes below). Every read here
+asks that folder first and the Anarlog CLI second: a Mac that only ever used
+native capture never needs Anarlog installed, and one that used both sees
+both, newest first. Once native meetings exist, an Anarlog error no longer
+blanks the panel; it is kept on `anarlog_note` for the caller to show.
+
 Meeting content is someone else's words and is untrusted: control, format
 and bidi characters are stripped before anything reaches a label, nothing
 here reads it for instructions, and nothing here sends it anywhere.
@@ -73,6 +81,7 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import meeting_capture as MC
 import osgraph
 from osgraph import ME, Graph, Identities, Node, day_node, me_node, person_node, space_node
 
@@ -213,15 +222,50 @@ def doctor(ctx) -> dict:
             "schema_ready": bool(db.get("schema_ready")), "error": clean(db.get("error"), 120)}
 
 
-def list_meetings(ctx, limit: int = MOST_MEETINGS) -> list[dict]:
+def home_of(ctx) -> Path:
+    return Path(getattr(ctx, "home", None) or Path.home())
+
+
+# The last Anarlog error swallowed because native meetings were there to show.
+anarlog_note = ""
+
+
+def list_anarlog(ctx, limit: int = MOST_MEETINGS) -> list[dict]:
     body = call(ctx, "Anarlog meetings", "meetings", "--source", "local", "list", "--limit", str(limit),
                 "--offset", "0")
     rows = body.get("data")
-    return [m for m in rows if isinstance(m, dict) and MEETING_ID.match(str(m.get("id") or ""))] \
-        if isinstance(rows, list) else []
+    return [m for m in rows if isinstance(m, dict) and MEETING_ID.match(str(m.get("id") or ""))
+            and not MC.is_native(m.get("id"))] if isinstance(rows, list) else []
+
+
+def list_meetings(ctx, limit: int = MOST_MEETINGS) -> list[dict]:
+    """Native meetings first, then Anarlog's, newest first, `limit` in all.
+    With no native meeting this is exactly the Anarlog read, errors and all."""
+    global anarlog_note
+    native = MC.list_items(home_of(ctx), limit)
+    anarlog_note = ""
+    try:
+        others = list_anarlog(ctx, limit)
+    except AnarlogError as err:
+        if not native:
+            raise
+        anarlog_note = "" if first_run(err) else str(err)
+        others = []
+    rows = native + others
+    rows.sort(key=lambda m: iso_key(started(m)), reverse=True)
+    return rows[:limit]
+
+
+def iso_key(moment: datetime | None) -> str:
+    return moment.astimezone(timezone.utc).isoformat() if moment else ""
 
 
 def get_meeting(ctx, meeting_id: str) -> dict:
+    if MC.is_native(meeting_id):
+        native = MC.get(home_of(ctx), meeting_id)
+        if native is None:
+            raise AnarlogError("That meeting isn't on this Mac any more", "not_found")
+        return native
     if not MEETING_ID.match(meeting_id or ""):
         raise AnarlogError("That isn't an Anarlog meeting id", "invalid")
     data = call(ctx, "Anarlog meeting", "meetings", "--source", "local", "get", "--", meeting_id).get("data")
@@ -233,11 +277,16 @@ def get_meeting(ctx, meeting_id: str) -> dict:
 def transcript_page(ctx, meeting_id: str, offset: int = 0, limit: int = TRANSCRIPT_WORDS) -> dict:
     """One bounded page: its words as one cleaned line, where it starts, how
     many words came back, and where the next page starts (None at the end)."""
-    if not MEETING_ID.match(meeting_id or ""):
-        raise AnarlogError("That isn't an Anarlog meeting id", "invalid")
     offset = max(0, int(offset))
-    body = call(ctx, "Anarlog transcript", "meetings", "--source", "local", "transcript", "--limit",
-                str(limit), "--offset", str(offset), "--", meeting_id)
+    if MC.is_native(meeting_id):
+        body = MC.transcript_body(home_of(ctx), meeting_id, offset, limit)
+        if body is None:
+            raise AnarlogError("That meeting isn't on this Mac any more", "not_found")
+    elif not MEETING_ID.match(meeting_id or ""):
+        raise AnarlogError("That isn't an Anarlog meeting id", "invalid")
+    else:
+        body = call(ctx, "Anarlog transcript", "meetings", "--source", "local", "transcript", "--limit",
+                    str(limit), "--offset", str(offset), "--", meeting_id)
     data = body.get("data") if isinstance(body.get("data"), dict) else {}
     page = body.get("pagination") if isinstance(body.get("pagination"), dict) else {}
     nxt = page.get("next_offset")
@@ -286,6 +335,16 @@ def open_items(meeting: dict) -> list[dict]:
     items = meeting.get("action_items") if isinstance(meeting.get("action_items"), list) else []
     return [i for i in items if isinstance(i, dict) and clean(i.get("text"))
             and str(i.get("status") or "").lower() not in DONE_STATUSES and not i.get("completed_at")]
+
+
+def app_of(meeting: dict) -> str:
+    """Who recorded it: Chewbacca's own capture, or Anarlog."""
+    return MC.APP if meeting.get("app") == MC.APP or MC.is_native(meeting.get("id")) else APP
+
+
+def whose(meeting: dict) -> str:
+    """Whose model wrote a meeting's summary and action items."""
+    return "Claude's" if app_of(meeting) == MC.APP else "Anarlog's"
 
 
 def participants(meeting: dict) -> list[dict]:
@@ -420,7 +479,7 @@ def event_node(meeting: dict, now: datetime, days: int, keep_snippet: bool = Tru
     start = started(meeting)
     inside = start is not None and start >= now - timedelta(days=min(days, osgraph.RETENTION_DAYS))
     props = {"start": start.isoformat() if start else "", "end": str(meeting.get("ended_at") or ""),
-             "all_day": False, "app": APP, "meeting_id": str(meeting.get("id")),
+             "all_day": False, "app": app_of(meeting), "meeting_id": str(meeting.get("id")),
              "folder": clean(meeting.get("folder_path"), 60), "live": is_live(meeting, now)}
     if keep_snippet and inside:
         props["summary"] = snippet(meeting)
@@ -484,10 +543,10 @@ def build(details: list[dict], ids: Identities, now: datetime, days: int = osgra
             assignee = by_human.get(str(item.get("assignee_human_id") or ""))
             is_kept = tid in keep
             tnode = snap.add(Node(tid, "Task", clean(item.get("text"), 100), {
-                "kind": "meeting-action", "status": "ready", "guess": True, "app": APP,
+                "kind": "meeting-action", "status": "ready", "guess": True, "app": app_of(meeting),
                 "promoted": is_kept, "meeting_id": mid_raw, "item_id": iid,
                 "item_status": clean(item.get("status"), 20),
-                "provenance": f"from {title} {start.strftime('%-I:%M%p').lower()} (Anarlog's guess)",
+                "provenance": f"from {title} {start.strftime('%-I:%M%p').lower()} ({whose(meeting)} guess)",
                 "at": start.isoformat()}, confidence=GUESS_CONFIDENCE, observed_at=start.isoformat()))
             snap.link(tnode, "EXTRACTED_FROM", eid)
             snap.link(tnode, "BELONGS_TO", f"space:{space}")
@@ -596,10 +655,10 @@ def promote(graph: Graph, meeting: dict, item: dict, now: datetime) -> str:
         if pid not in snap.nodes:
             title = clean(meeting.get("title"), 40) or "a meeting"
             snap.add(Node(pid, "Task", clean(item.get("text"), 100), {
-                "kind": "promise", "status": "ready", "app": APP, "promoted": True, "from_task": guess,
+                "kind": "promise", "status": "ready", "app": app_of(meeting), "promoted": True, "from_task": guess,
                 "meeting_id": mid_raw, "item_id": iid, "meeting_title": clean(meeting.get("title"), 80),
                 "meeting_at": start.isoformat() if start else "", "added_at": now.isoformat(),
-                "provenance": f"added from {title} (Anarlog's words)", "at": now.isoformat()},
+                "provenance": f"added from {title} ({whose(meeting)} words)", "at": now.isoformat()},
                 1.0, observed_at=now.isoformat()))
             snap.link(pid, "OWED_BY", ME)
             if graph.node(eid):

@@ -1,0 +1,283 @@
+#!/usr/bin/env python3
+"""Record a meeting on this Mac: your mic and the call's audio, transcribed here.
+
+    room-capture start [--no-mic] [--json]    begin recording, in the background
+    room-capture stop [--wait SECONDS] [--json]
+                                              stop; wait for the last lines and the summary
+    room-capture status [--json]              recording or not, what was heard, the last meeting
+
+This is what replaced Anarlog as a separate app (Caleb, 2026-10-05: "Anarlog
+shouldn't be it's own app"). Two processes run while it records:
+
+- mac/room-capture, a Swift helper built here on first use, which hears the
+  microphone and the Mac's own output through ScreenCaptureKit and writes
+  15 s, 16 kHz mono WAV chunks into ~/.chewbacca/room-capture/chunks (0700).
+- bin/lib/meeting_capture.py, which transcribes each chunk with mlx-whisper,
+  deletes it, and keeps ~/.chewbacca/meetings/<id>.json (0600) current. The
+  meetings surface on the glass and the OS graph read those files.
+
+Audio and transcripts stay on this Mac. The one exception is the summary: when
+a meeting ends, its transcript goes through `claude -p` to write the summary
+and the action items. CHEWBACCA_MEETING_SUMMARY=0 turns that off.
+
+The grants it needs are the app running it (your terminal or editor, or Kyber
+when started from the glass): Screen & System Audio Recording for the call's
+side and Microphone for yours. Start says exactly which are missing and how to
+switch them on with `chewbacca-permissions guide --for capture`.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+
+import meeting_capture as MC  # noqa: E402
+
+PACKAGE = ROOT / "mac" / "room-capture"
+HELPER = Path(os.environ.get("ROOM_CAPTURE_HELPER") or PACKAGE / ".build" / "release" / "room-capture")
+WATCHER = ROOT / "bin" / "lib" / "meeting_capture.py"
+PERMISSIONS = ROOT / "bin" / "chewbacca-permissions"
+# 15 s matches bin/room-listen: long enough that whisper hears whole
+# sentences, short enough that the glass lags the room by under half a minute.
+# Guessed there, never measured against other lengths.
+CHUNK_S = 15
+# How long start waits for the helper's first status before reporting. The
+# helper wrote "recording" within a second on 2026-10-05; ScreenCaptureKit's
+# first permission prompt can hold it longer, which is fine to report as
+# "starting".
+FIRST_STATUS_S = 4.0
+# stop waits this long for the watcher to transcribe the last chunk and write
+# the summary (claude -p's own ceiling, SUMMARY_TIMEOUT_S, plus a minute for
+# the last chunks).
+STOP_WAIT_S = MC.SUMMARY_TIMEOUT_S + 60
+
+GUIDE = "chewbacca-permissions guide --for capture --only {permission}"
+NAMES = {"screen-recording-and-system-audio": "Screen & System Audio Recording", "microphone": "Microphone"}
+
+
+def home() -> Path:
+    return Path(os.environ.get("HOME") or Path.home())
+
+
+def say(message: str, as_json: bool, **extra) -> None:
+    if as_json:
+        print(json.dumps({"message": message, **extra}))
+    else:
+        print(message)
+
+
+def helper_built() -> bool:
+    if not HELPER.exists():
+        return False
+    built = HELPER.stat().st_mtime
+    sources = [PACKAGE / "Package.swift", PACKAGE / "Info.plist", *PACKAGE.glob("Sources/**/*.swift")]
+    return all(s.stat().st_mtime <= built for s in sources if s.exists())
+
+
+def build_helper() -> str:
+    """'' when the helper is ready, else what went wrong in one line."""
+    if helper_built():
+        return ""
+    print("Building the capture helper (once, under a minute)...", file=sys.stderr)
+    try:
+        done = subprocess.run(["swift", "build", "-c", "release", "--package-path", str(PACKAGE)],
+                              stdout=sys.stderr, stderr=sys.stderr)
+    except FileNotFoundError:
+        return "swift is missing. Install Apple's command line tools with `xcode-select --install`."
+    if done.returncode != 0 or not HELPER.exists():
+        return f"The capture helper did not build (swift exited {done.returncode}); the log is above."
+    # A comment-only edit recompiles to the same bytes and swift leaves the
+    # binary's mtime alone, so without this every start rebuilt (2026-10-05).
+    os.utime(HELPER)
+    return ""
+
+
+def probe() -> dict:
+    """The helper's own view of its grants. It never prompts."""
+    try:
+        out = subprocess.run([str(HELPER), "--probe"], capture_output=True, text=True, timeout=15).stdout
+        body = json.loads(out.strip().splitlines()[-1])
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def missing_grants(state: dict, use_mic: bool) -> list[dict]:
+    """Each grant the helper can see is off, with the command that walks it.
+    A microphone nobody has asked for yet is not missing: macOS asks on start."""
+    app = str(state.get("responsible_app") or "")
+    out = []
+    if state.get("screen") != "granted":
+        out.append({"permission": "screen-recording-and-system-audio", "app": app,
+                    "why": "without it only your side of a call is recorded"})
+    if use_mic and state.get("mic") in ("denied", "restricted"):
+        out.append({"permission": "microphone", "app": app, "why": "without it only the call's side is recorded"})
+    for item in out:
+        item["guide"] = GUIDE.format(permission=item["permission"]) + (
+            f" --host-app {json.dumps(app)}" if app.endswith(".app") else "")
+    return out
+
+
+def spawn(argv: list[str], log: Path) -> int:
+    fd = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=fd, stderr=fd, start_new_session=True,
+                                cwd=str(MC.capture_dir(home())))
+    finally:
+        os.close(fd)
+    return proc.pid
+
+
+def write_pid(path: Path, pid: int) -> None:
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(str(pid))
+
+
+def start(args) -> int:
+    state = MC.capture_state(home())
+    if state["running"]:
+        say("Already recording. Run `room-capture stop` first; a second capture would hear the same call twice.",
+            args.json, ok=False, running=True)
+        return 1
+    problem = build_helper()
+    if problem:
+        say(problem, args.json, ok=False)
+        return 1
+    grants = probe()
+    missing = missing_grants(grants, not args.no_mic)
+    app = grants.get("responsible_app") or "the app running this"
+    for item in missing:
+        if not args.json:
+            print(f"Missing: {NAMES[item['permission']]} for {Path(app).stem if app.endswith('.app') else app}, "
+                  f"{item['why']}.\n  Switch it on with: {item['guide']}")
+    if missing and len(missing) == (2 if not args.no_mic else 1):
+        if sys.stdin.isatty() and not args.json:
+            if input("Open the guide for these now? [y/N] ").strip().lower().startswith("y"):
+                for item in missing:
+                    subprocess.run([sys.executable, str(PERMISSIONS), "guide", "--for", "capture",
+                                    "--only", item["permission"]]
+                                   + (["--host-app", app] if str(app).endswith(".app") else []))
+                grants = probe()
+                missing = missing_grants(grants, not args.no_mic)
+        if missing and len(missing) == (2 if not args.no_mic else 1):
+            say("Nothing to record yet: switch on the grants above, then start again.", args.json, ok=False,
+                missing=missing)
+            return 2
+
+    base = MC.private_dir(MC.capture_dir(home()))
+    MC.private_dir(MC.chunks_dir(home()))
+    MC.private_dir(MC.meetings_dir(home()))
+    for stale in ("status.json", "watcher.json"):
+        try:
+            (base / stale).unlink()
+        except FileNotFoundError:
+            pass
+    argv = [str(HELPER), "--out", str(MC.chunks_dir(home())), "--chunk", str(CHUNK_S),
+            "--status", str(base / "status.json")] + (["--no-mic"] if args.no_mic else [])
+    helper = spawn(argv, base / "helper.log")
+    write_pid(base / "helper.pid", helper)
+    watcher = spawn([sys.executable, str(WATCHER), "watch", "--helper-pid", str(helper)], base / "watcher.log")
+    write_pid(base / "watcher.pid", watcher)
+
+    status: dict = {}
+    deadline = time.time() + FIRST_STATUS_S
+    while time.time() < deadline:
+        status = MC.load(base / "status.json") or {}
+        if status.get("state") == "recording" and "system" in status:
+            break
+        time.sleep(0.25)
+    sides = []
+    if str(status.get("system", "")).startswith("on"):
+        sides.append("the call audio")
+    if str(status.get("mic", "")).startswith("on"):
+        sides.append("your mic")
+    heard = " and ".join(sides) if sides else "nothing yet (still starting)"
+    message = f"Recording {heard}. Stop with `room-capture stop`."
+    if missing:
+        message += " " + " ".join(f"{NAMES[m['permission']]} is off: {m['guide']}" for m in missing)
+    say(message, args.json, ok=True, helper_pid=helper, watcher_pid=watcher, status=status, missing=missing)
+    return 0
+
+
+def stop(args) -> int:
+    base = MC.capture_dir(home())
+    state = MC.capture_state(home())
+    if not state["running"] and not state["watcher_running"]:
+        closed = MC.finalize_stale(home())
+        say("Not recording." + (f" Closed {len(closed)} meeting(s) left open." if closed else ""), args.json,
+            ok=True, running=False)
+        return 0
+    if state["running"]:
+        try:
+            os.kill(state["helper_pid"], signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    watcher = MC.read_pid(base / "watcher.pid")
+    deadline = time.time() + max(0.0, args.wait)
+    while time.time() < deadline and MC.pid_alive(watcher, "meeting_capture"):
+        time.sleep(0.5)
+    if MC.pid_alive(watcher, "meeting_capture"):
+        say("Stopped recording. The last lines and the summary are still being written; "
+            "the meeting shows on the glass when they land.", args.json, ok=True, finishing=True)
+        return 0
+    stats = MC.load(base / "watcher.json") or {}
+    meetings = stats.get("meetings") or []
+    if meetings:
+        meeting = MC.read_meeting(home(), meetings[-1]) or {}
+        lines = len(meeting.get("lines") or [])
+        note = meeting.get("summary_note") or ("Summary written." if meeting.get("summary") else "")
+        message = (f"Stopped. Saved {meeting.get('title') or meetings[-1]}: {lines} line(s) from "
+                   f"{stats.get('chunks', 0)} chunk(s). {note}").strip()
+        say(message, args.json, ok=True, meeting=meetings[-1],
+            path=str(MC.meetings_dir(home()) / f"{meetings[-1]}.json"), stats=stats)
+    else:
+        say(f"Stopped. Nothing was said: {stats.get('chunks', 0)} chunk(s) transcribed, "
+            f"{stats.get('empty', 0)} empty, so no meeting was saved.", args.json, ok=True, stats=stats)
+    return 0
+
+
+def status(args) -> int:
+    state = MC.capture_state(home())
+    last = MC.list_items(home(), 1)
+    body = {"running": state["running"], "since": state["since"].isoformat() if state["since"] else None,
+            "helper": state["status"], "watcher": state["stats"], "last_meeting": last[0] if last else None}
+    if args.json:
+        print(json.dumps(body, indent=1, default=str))
+        return 0
+    if state["running"]:
+        s = state["status"]
+        print(f"Recording since {body['since'] or 'just now'}: system audio {s.get('system', '?')}, "
+              f"mic {s.get('mic', '?')}, {state['stats'].get('chunks', 0)} chunk(s) transcribed.")
+    else:
+        print("Not recording.")
+    if last:
+        print(f"Last meeting: {last[0]['title']} ({last[0]['started_at']}, {last[0]['status']}).")
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser(prog="room-capture", description="Record a meeting on this Mac.")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    s = sub.add_parser("start")
+    s.add_argument("--no-mic", action="store_true", help="record only the call audio")
+    s.add_argument("--json", action="store_true")
+    t = sub.add_parser("stop")
+    t.add_argument("--wait", type=float, default=STOP_WAIT_S, help="seconds to wait for the summary")
+    t.add_argument("--json", action="store_true")
+    u = sub.add_parser("status")
+    u.add_argument("--json", action="store_true")
+    a = p.parse_args(argv)
+    return {"start": start, "stop": stop, "status": status}[a.cmd](a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

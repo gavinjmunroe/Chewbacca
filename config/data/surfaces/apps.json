@@ -403,8 +403,8 @@
    "surfaces": [
     "meetings"
    ],
-   "works": "newest calls from Anarlog's CLI (read only, --source local): who was there, summary, Decisions lines, open action items, transcript a page at a time; an action item becomes a task only when Add to tasks is pressed",
-   "missing": "recording is started in Anarlog, not from the glass; Granola's own history stays in Granola (its cache is encrypted to Granola-signed code); tested on fixtures only, no real call recorded on this Mac yet",
+   "works": "Start capture on the glass (bin/room-capture) records the mic and the call audio, transcribes on this Mac and deletes each chunk; newest calls, native first then Anarlog's CLI (read only, --source local): who was there, a summary and Decisions lines marked as Claude's guess, open action items, transcript a page at a time; an action item becomes a task only when Add to tasks is pressed",
+   "missing": "no speaker names (one mixed track); Granola's own history stays in Granola (its cache is encrypted to Granola-signed code); a 20 s live capture is the only real recording so far, no full call yet",
    "oss": [
     {
      "id": "amicalhq/amical",

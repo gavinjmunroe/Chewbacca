@@ -52,6 +52,7 @@ voice/.build/
 apps/call/.build/
 # The permission card, built on first use by bin/chewbacca-permissions
 mac/permission-guide/.build/
+mac/room-capture/.build/
 
 # A2A course material and its pipeline: reference for the second brain,
 # not a project to publish.

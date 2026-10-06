@@ -15,11 +15,11 @@ and accepts on top of it.
 | `bin/lib/osgraph_walks.py`             | needs-you, today, person, space, tasks, people, conversations, and the competency questions                                                             |
 | `bin/lib/osgraph_runs.py`              | Go: a task handed to `claude -p` in plan mode, and its real status                                                                                      |
 | `bin/lib/surfaces/`                    | The panels: walks.py for the graph walks, music.py and files.py as thin surfaces                                                                        |
-| `bin/lib/surfaces/oss.py`, `engine.py` | "what replaces X" from the oss registry with license buckets; and open source engines drawn from `config/data/surfaces/engines.json`                           |
+| `bin/lib/surfaces/oss.py`, `engine.py` | "what replaces X" from the oss registry with license buckets; and open source engines drawn from `config/data/surfaces/engines.json`                    |
 | `bin/lib/surfaces/agents.py`           | Claude sessions on the Realm engine: read, start, send, answer a permission, interrupt, fork                                                            |
 | `bin/lib/sessions_inbox.py`            | Send into an open, idle Claude Code session through its own inbox, for `bin/kyber-sessions`                                                             |
 | `bin/lib/surface_intent.py`            | "Show my day", "show me Karthik": the no-model fast path in `hud-listen`                                                                                |
-| `config/data/surfaces/apps.json`              | Each Mac app, what replaces it, and an honest status                                                                                                    |
+| `config/data/surfaces/apps.json`       | Each Mac app, what replaces it, and an honest status                                                                                                    |
 
 ## Ontology
 
@@ -245,18 +245,44 @@ notifications, Discussions, Actions logs and re-running checks are not built.
 ## Meetings
 
 `meetings` (`bin/lib/surfaces/meetings.py`, `surfaces.meetings.Meetings`,
-region right) replaces opening Granola to see what a call said. The engine is
-Anarlog (MIT, github.com/fastrepl/anarlog), which records the mic and the
-system audio, transcribes on this Mac and keeps meetings in its own SQLite.
-Nothing here opens that SQLite: every read is `anarlog --json` with `--source
-local` and `ANARLOG_ANALYTICS=0`, and only `doctor`, `meetings list`, `meetings
-get` and `meetings transcript` are ever run (`bin/lib/ingest_meetings.py`).
+region right) replaces opening Granola to see what a call said. Chewbacca
+records meetings itself, so Anarlog is no longer a separate app anyone has to
+run:
+
+- `bin/room-capture start|stop|status` runs `mac/room-capture`, a SwiftPM
+  helper built on first use, which hears the microphone and the Mac's own
+  output (ScreenCaptureKit, `capturesAudio` with `excludesCurrentProcessAudio`)
+  and writes 15 s, 16 kHz mono WAV chunks to `~/.chewbacca/room-capture/chunks`
+  (0700). A second start is refused.
+- `bin/lib/meeting_capture.py` transcribes each chunk with the mlx-whisper
+  model `bin/room-listen` uses, deletes the chunk as soon as it is transcribed,
+  cuts a meeting after ten minutes of silence, names it after the calendar
+  event it overlaps (`mac calendar list --json`, when Calendars is readable),
+  and writes `~/.chewbacca/meetings/<id>.json` (0600).
+- **Audio and transcripts never leave the Mac**, with one switchable
+  exception: when a meeting ends its transcript goes through `claude -p` (the
+  local Claude Code CLI, which sends it to Anthropic) with every tool, MCP
+  server and setting off, to write a summary, a Decisions list and action
+  items. Both are marked as guesses. `CHEWBACCA_MEETING_SUMMARY=0` turns the
+  step off and nothing is sent.
+- The grants belong to the app running capture (the terminal, the editor, or
+  Kyber from the glass): Screen & System Audio Recording and Microphone.
+  `room-capture start` names any that are off and the command that walks them:
+  `chewbacca-permissions guide --for capture --only <id>`.
+
+Anarlog (MIT, github.com/fastrepl/anarlog) is still read as a fallback for
+anyone who used it. Nothing here opens its SQLite: every read is `anarlog
+--json` with `--source local` and `ANARLOG_ANALYTICS=0`, and only `doctor`,
+`meetings list`, `meetings get` and `meetings transcript` are ever run
+(`bin/lib/ingest_meetings.py`). Native meetings are read first; once any
+exist, an Anarlog that is missing or broken no longer blanks the panel.
 Aliases: `granola`, `anarlog`, `meeting`, `calls`, `notes-from-meetings`.
 Spoken: "show my meetings", "what did we decide", "what came out of my call".
 
 The list is the 6 newest meetings with who was there; Open shows the summary,
 the lines under its Decisions heading, the open action items and one 200-word
-transcript page with Next. Its actions are `ks-open`, `ks-next` and `ks-add`.
+transcript page with Next. Its actions are `ks-open`, `ks-next`, `ks-add` and
+`ks-capture`, which runs `bin/room-capture start`, or `stop` while it records.
 `ks-add` is the one press that writes: it makes one promoted Task in the OS
 graph (source `meetings-promoted`, kind `promise`), which the tasks lanes
 read and the Docket's queue (docs/AFTER-PANES.md, not built yet) can take
@@ -265,18 +291,21 @@ from `_attention()`, and touches nothing else.
 In the graph each meeting in the 7-day window is an Event, attendees with an
 email are Persons fused only through the people store's identities (never by
 first name), and each open action item is a Task EXTRACTED_FROM its meeting,
-kind `meeting-action`, marked as a guess with confidence 0.5, because
-Anarlog's model wrote it. `KYBER_MEETINGS_ME` (comma separated addresses)
+kind `meeting-action`, marked as a guess with confidence 0.5, because a model
+wrote it (Claude's for a native meeting, Anarlog's for one of its own). `KYBER_MEETINGS_ME` (comma separated addresses)
 names his own emails, so an item assigned to him gets OWED_BY me. The
 `meetings` ingester runs with the daemon's others and keeps the message
 retention window; the transcript is never stored.
 
-A Mac where Anarlog was never opened, or not installed, is a first-run state
-with the steps in order and Anarlog's own `doctor` line, never an error.
+With no meeting recorded yet the panel is a first-run state, never an error:
+the steps in order, one Start capture press, and Anarlog's own `doctor` line
+when it is installed. While capture runs the top line says "Recording now" and
+the button reads Stop capture.
 `bin/room-listen` still records the mic to `~/.chewbacca/room/live.txt`;
 meetings supersede it for calls and do not replace it.
 `tests/test_surface_meetings.py` runs against fixtures shaped exactly like the
-CLI's JSON (`tests/fixtures/anarlog`).
+CLI's JSON (`tests/fixtures/anarlog`); `tests/test_meeting_capture.py` runs
+native capture on fixture chunks with no audio and no model.
 
 ## Agents
 

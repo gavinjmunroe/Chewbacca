@@ -1,18 +1,22 @@
 """meetings: the latest calls, what was decided, and what is owed from them.
 
-Replaces opening Granola (or Anarlog) to see what a call said. A thin surface
-over Anarlog's CLI (bin/lib/ingest_meetings.py does the reading, read only,
+Replaces opening Granola (or Anarlog) to see what a call said. Meetings come
+from Chewbacca's own capture first (mac/room-capture records the mic and the
+call audio, bin/lib/meeting_capture.py transcribes on this Mac and writes
+~/.chewbacca/meetings/) and from Anarlog's CLI second, for anyone who already
+used it (bin/lib/ingest_meetings.py does the reading, read only,
 `--source local`, telemetry pinned off): the list is the newest meetings with
 who was there and when; Open on a row shows that meeting's summary, the lines
 under its Decisions heading, its open action items, and one bounded page of
 its transcript with Next. A meeting with a start and no end that began
 within the last few hours is named as recording at the top.
 
-FIRST RUN IS A STATE, NOT AN ERROR. On a Mac where Anarlog was never opened,
-or not installed, the panel says what to do in order, for someone who has
-never heard of it, and shows Anarlog's own `doctor` answer underneath, so
-the person can see what Anarlog itself reports. The same steps show when
-Anarlog is ready and simply has no meetings yet.
+FIRST RUN IS A STATE, NOT AN ERROR. With no meeting recorded yet the panel
+says what to do in order, for someone who has never heard of any of this,
+and offers one press, Start capture, which runs `bin/room-capture start`.
+Anarlog is never required; when it is installed its own `doctor` answer shows
+underneath, so the person can see what it reports. While capture runs the
+top line says "Recording now" and the same button reads Stop capture.
 
 THE ONE PRESS THAT WRITES. "Add to tasks" on an action item writes one
 promoted Task into the OS graph (ingest_meetings.promote) and nothing else:
@@ -28,11 +32,13 @@ and no outcome line here quotes a meeting.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import ingest_meetings as AM
+import meeting_capture as MC
 import osgraph
 
 from . import ACTION_PREFIX, Bind, Context, Provider, Result, SurfaceError, ago, clip, clock, comp, note_for
@@ -54,15 +60,27 @@ PAGE_CHARS = 1400
 # the call ends, and this is how long the panel can lag it.
 REFRESH_S = 30.0
 PURPOSE = "What your calls said, and what you owe from them"
+NO_MEETINGS = "No meetings recorded yet."
 STEPS = [
-    "Open Anarlog from Applications once. It makes its database the first time it runs.",
-    "When macOS asks, allow Microphone, and allow Screen & System Audio Recording so the other side "
-    "of a call is heard too. Both live in System Settings > Privacy & Security.",
-    "When a call starts, press record in Anarlog. It transcribes on this Mac; nothing is uploaded "
-    "unless you turn on its Cloud.",
-    "Nothing to run here: this panel asks Anarlog for new meetings every 30 seconds.",
+    "Press Start capture when a call begins. Chewbacca records this Mac's microphone and the call's "
+    "audio, and nothing else.",
+    "The first time, macOS asks to allow Microphone and Screen & System Audio Recording for the app "
+    "running it. Both live in System Settings > Privacy & Security, and "
+    "`chewbacca-permissions guide --for capture` walks you through them.",
+    "Every 15 seconds of audio is transcribed on this Mac, then deleted. Press Stop capture when the "
+    "call ends to record the end of it; Claude then writes a summary and action items from the "
+    "transcript, unless CHEWBACCA_MEETING_SUMMARY=0 keeps it on this Mac.",
 ]
+ANARLOG_OPEN_STEP = "Already use Anarlog? Open Anarlog once from Applications and its meetings show here too."
+ANARLOG_READY_STEP = "Anarlog is set up as well, so anything it records shows here too."
+# Kept for anyone importing it; the panel no longer asks anyone to install a
+# second app (Caleb, 2026-10-05: "Anarlog shouldn't be it's own app").
 INSTALL_STEP = "Install Anarlog (github.com/fastrepl/anarlog), which puts an `anarlog` command on this Mac."
+ROOM_CAPTURE = Path(__file__).resolve().parents[2] / "room-capture"
+# The first press builds the Swift helper (6.6 s on this Mac on 2026-10-05,
+# about a minute for the permission guide's on a cold machine), so the press
+# waits this long before calling it failed.
+START_TIMEOUT_S = 180.0
 
 
 def tilde(path: str, home: Path) -> str:
@@ -115,7 +133,7 @@ class Meetings(Provider):
     def __init__(self) -> None:
         super().__init__()
         self.actions = {f"{ACTION_PREFIX}open": self.open, f"{ACTION_PREFIX}add": self.add,
-                        f"{ACTION_PREFIX}next": self.next_page}
+                        f"{ACTION_PREFIX}next": self.next_page, f"{ACTION_PREFIX}capture": self.capture}
         # The meeting whose detail shows, by Anarlog id. Set only by open().
         self.opened = ""
         # id -> (updated_at, meeting): an unchanged meeting is not re-read.
@@ -125,16 +143,26 @@ class Meetings(Provider):
 
     # ── reading ──────────────────────────────────────────────────────────
 
+    @staticmethod
+    def capture_state(ctx: Context) -> dict:
+        """Whether native capture is recording now, and since when."""
+        try:
+            state = MC.capture_state(Path(ctx.home))
+        except OSError:
+            return {"running": False, "since": None}
+        return {"running": bool(state.get("running")), "since": state.get("since")}
+
     def fetch(self, ctx: Context) -> dict:
         now = ctx.now()
+        capture = self.capture_state(ctx)
         try:
             listed = AM.list_meetings(ctx, AM.MOST_MEETINGS)
         except AM.AnarlogError as err:
             if AM.first_run(err):
-                return self.setup(ctx, err)
+                return self.setup(ctx, err, capture)
             raise SurfaceError(str(err)) from None
         if not listed:
-            return self.setup(ctx, None)
+            return self.setup(ctx, None, capture)
         # The panel shows the newest MOST_ROWS; the graph gets every listed
         # meeting inside the retention window, so a busy week past six calls
         # is not dropped from the graph by the panel's own row limit.
@@ -172,11 +200,12 @@ class Meetings(Provider):
             except AM.AnarlogError as err:
                 self._page = {"meeting_id": shown["id"], "offset": 0, "text": "", "returned": 0, "next": None,
                               "error": str(err)}
-        return {"rows": rows, "graph_note": graph_note,
-                "live": next((r for r in rows if r["live"]), None)}
+        return {"rows": rows, "graph_note": graph_note or AM.anarlog_note,
+                "live": next((r for r in rows if r["live"]), None), "capture": capture}
 
-    def setup(self, ctx: Context, err: AM.AnarlogError | None) -> dict:
-        """The first-run state, with Anarlog's own doctor answer. Never raised."""
+    def setup(self, ctx: Context, err: AM.AnarlogError | None, capture: dict | None = None) -> dict:
+        """The first-run state: native capture's steps, then Anarlog's own
+        doctor answer when it is installed. Never raised."""
         report = None
         if err is None or err.code != "not_installed":
             try:
@@ -184,19 +213,14 @@ class Meetings(Provider):
             except AM.AnarlogError:
                 report = None
         installed = not (err is not None and err.code == "not_installed")
-        steps = ([] if installed else [INSTALL_STEP]) + list(STEPS)
-        if report and report["ready"] and err is None:
-            headline = "Anarlog is set up. No meetings yet."
-            # Open-once is done. The permission step stays: a database
-            # existing says nothing about whether macOS allowed the mic.
-            steps = steps[1:]
-        elif not installed:
-            headline = AM.NOT_INSTALLED
-        else:
-            headline = AM.NOT_SET_UP
-        return {"rows": [], "setup": {"headline": headline, "steps": steps,
+        steps = list(STEPS)
+        if installed:
+            # A database existing says nothing about whether macOS allowed
+            # the mic, so the permission step above stays either way.
+            steps.append(ANARLOG_READY_STEP if report and report["ready"] and err is None else ANARLOG_OPEN_STEP)
+        return {"rows": [], "setup": {"headline": NO_MEETINGS, "steps": steps,
                                       "doctor": doctor_line(report, Path(ctx.home)) if installed else ""},
-                "graph_note": "", "live": None}
+                "graph_note": "", "live": None, "capture": capture or {"running": False, "since": None}}
 
     @staticmethod
     def who(meeting: dict, ids: osgraph.Identities, mine: set[str]) -> list[str]:
@@ -240,17 +264,20 @@ class Meetings(Provider):
                 "folder": AM.clean(meeting.get("folder_path"), 40), "who": self.who(meeting, ids, mine),
                 "summary": lines_of(AM.summary_text(meeting), SUMMARY_LINES),
                 "decisions": [clip(x, LINE_WIDTH) for x in AM.decisions(meeting)[:DECISION_LINES]],
-                "items": items, "meeting": meeting}
+                "items": items, "meeting": meeting, "native": AM.app_of(meeting) == MC.APP,
+                "summary_note": AM.clean(meeting.get("summary_note"), LINE_WIDTH)}
 
     # ── drawing ──────────────────────────────────────────────────────────
 
     def layout(self) -> list[str]:
-        ids = ["s", "purpose", "live", "note", "setup", "doctor", "list", "head", "meta", "summary", "decisions",
+        ids = ["s", "purpose", "live", "capture", "note", "setup", "doctor", "list", "head", "meta", "summary", "decisions",
                "items", "transcript", "next", "status"]
         return [
             comp(self.cid("s"), "Screen", title=self.title),
             comp(self.cid("purpose"), "Text", value=PURPOSE, tone="muted"),
             comp(self.cid("live"), "Text", value=Bind(self.p("live"))),
+            comp(self.cid("capture"), "Button", label=Bind(self.p("captureLabel")), action=f"{ACTION_PREFIX}capture",
+                 variant="primary"),
             comp(self.cid("note"), "Text", value=Bind(self.p("note")), tone="muted"),
             comp(self.cid("setup"), "List", items=Bind(self.p("setup"))),
             comp(self.cid("doctor"), "Text", value=Bind(self.p("doctor")), tone="muted"),
@@ -276,7 +303,7 @@ class Meetings(Provider):
         return {self.p("live"): "", self.p("setup"): [], self.p("doctor"): "", self.p("caption"): "",
                 self.p("rows"): [], self.p("head"): "", self.p("meta"): "", self.p("summary"): [],
                 self.p("decisions"): [], self.p("itemsCaption"): "", self.p("items"): [],
-                self.p("transcript"): "", self.p("nextLabel"): "Next"}
+                self.p("transcript"): "", self.p("nextLabel"): "Next", self.p("captureLabel"): "Start capture"}
 
     def shown(self, data) -> dict | None:
         rows = (data or {}).get("rows") or []
@@ -288,6 +315,13 @@ class Meetings(Provider):
             out[self.p("note")] = note_for(None, error, "")
             return out
         now = ctx.now()
+        capture = data.get("capture") or {}
+        out[self.p("captureLabel")] = "Stop capture" if capture.get("running") else "Start capture"
+        if capture.get("running"):
+            since = ago(capture["since"], now) if capture.get("since") else ""
+            began = f", started {since} ago" if since not in ("", "now") else ""
+            out[self.p("live")] = (f"Recording now{began}: this Mac's mic and the call audio. The first lines "
+                                   "show about 15 seconds after someone speaks.")
         setup = data.get("setup")
         if setup:
             out[self.p("note")] = note_for(data, error, setup["headline"], data.get("_at"))
@@ -296,7 +330,15 @@ class Meetings(Provider):
             return out
         rows = data["rows"]
         live = data.get("live")
-        if live:
+        if live and live["native"] and not capture.get("running"):
+            # A native meeting with no end and no capture running: the
+            # watcher is still writing its last lines and summary.
+            out[self.p("live")] = f"Finishing {live['title']}: the last lines and the summary land shortly."
+        elif live and live["native"]:
+            since = ago(live["start"], now) if live["start"] else ""
+            began = f"started {since} ago" if since not in ("", "now") else "just started"
+            out[self.p("live")] = f"Recording now: {live['title']}, {began}. Press Stop capture when it ends."
+        elif live:
             since = ago(live["start"], now) if live["start"] else ""
             began = f"started {since} ago" if since not in ("", "now") else "just started"
             out[self.p("live")] = f"Recording now: {live['title']}, {began}. Anarlog shows no end time yet."
@@ -318,11 +360,18 @@ class Meetings(Provider):
         meta = [when_text] + ([r["length"]] if r["length"] else []) + ([r["folder"]] if r["folder"] else [])
         out[self.p("head")] = r["title"]
         out[self.p("meta")] = " · ".join(meta + ([f"with {', '.join(r['who'])}"] if r["who"] else []))
-        out[self.p("summary")] = ([{"id": f"s{i}", "text": t} for i, t in enumerate(r["summary"])]
-                                  or [{"id": "s0", "text": "No summary yet. Anarlog writes one after the call."}])
+        if r["native"]:
+            empty = r["summary_note"] or "No summary yet. Claude writes one from the transcript when capture stops."
+            out[self.p("summary")] = ([{"id": "s-guess", "text": "Claude's guess from the transcript:"}]
+                                      + [{"id": f"s{i}", "text": t} for i, t in enumerate(r["summary"])]
+                                      if r["summary"] else [{"id": "s0", "text": empty}])
+        else:
+            out[self.p("summary")] = ([{"id": f"s{i}", "text": t} for i, t in enumerate(r["summary"])]
+                                      or [{"id": "s0", "text": "No summary yet. Anarlog writes one after the call."}])
+        whose = AM.whose(r["meeting"])
         out[self.p("decisions")] = ([{"id": f"d{i}", "text": f"Decided: {t}"} for i, t in enumerate(r["decisions"])]
-                                    or [{"id": "d0", "text": "No Decisions section in Anarlog's summary."}])
-        out[self.p("itemsCaption")] = ("Action items · Anarlog's guesses, check before adding" if r["items"]
+                                    or [{"id": "d0", "text": f"No Decisions section in {whose} summary."}])
+        out[self.p("itemsCaption")] = (f"Action items · {whose} guesses, check before adding" if r["items"]
                                        else "No open action items.")
         out[self.p("items")] = [{
             "id": i["id"], "accent": not i["added"],
@@ -394,5 +443,28 @@ class Meetings(Provider):
             return Result(False, f"Not added: {clip(str(err), 80)}")
         i["added"] = True
         due = " It's due " + i["due"] + "." if i["due"] else ""
-        return Result(True, f"Added to your tasks from the meeting. Still Anarlog's words, so check them.{due}",
-                      refetch=True)
+        return Result(True, f"Added to your tasks from the meeting. Still {AM.whose(r['meeting'])} words, "
+                            f"so check them.{due}", refetch=True)
+
+    def capture(self, ctx: Context, data, values: dict) -> Result:
+        """Start capture, or stop it when it runs. The press is the approval;
+        the outcome line is bin/room-capture's own, cleaned, never a meeting's
+        words."""
+        running = self.capture_state(ctx)["running"]
+        tool = str((ctx.env or {}).get("KYBER_ROOM_CAPTURE") or ROOM_CAPTURE)
+        argv = [tool, "stop", "--wait", "0", "--json"] if running else [tool, "start", "--json"]
+        try:
+            code, out, err = ctx.run(argv, timeout=START_TIMEOUT_S)
+        except TypeError:
+            code, out, err = ctx.run(argv)
+        try:
+            body = json.loads(out or "{}")
+        except ValueError:
+            body = {}
+        line = AM.clean(body.get("message") if isinstance(body, dict) else "", 160)
+        if not line:
+            line = AM.clean((err or out or "").splitlines()[0] if (err or out) else "", 160)
+        verb = "stop" if running else "start"
+        if code != 0:
+            return Result(False, line or f"room-capture {verb} failed ({code}).", refetch=True)
+        return Result(True, line or ("Stopped." if running else "Recording."), refetch=True)

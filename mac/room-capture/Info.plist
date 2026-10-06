@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.chewbacca.room-capture</string>
+	<key>CFBundleName</key>
+	<string>room-capture</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Chewbacca records your side of a meeting so it can write the transcript on this Mac. Audio never leaves the Mac and is deleted once transcribed.</string>
+</dict>
+</plist>

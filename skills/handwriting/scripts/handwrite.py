@@ -376,12 +376,49 @@ def _finish(alpha, tool, surface, seed):
     return alpha
 
 
-def ink_onto(page, alpha, color):
-    """Multiply ink into the paper so the grain shows through the mark."""
+def ink_onto(page, alpha, color, follow=1.0):
+    """Lay ink INTO the surface, so it takes the surface's shape and light.
+
+    Caleb, 2026-10-07, on a marker label on crinkled masking tape: "The aug 9
+    looks like it is floating above the tape." The ink was one flat black
+    layer over a wrinkled surface. Real ink sits in the material, so three
+    things now come from the page itself:
+
+      bend    the stroke shifts a pixel or two down the slope of each crease,
+              the way a pen tip rides over a wrinkle
+      soak    coverage follows the fibre: ink catches less on the high ridges
+              and pools a little in the valleys
+      light   the surface's own light and shadow keep going across the ink,
+              so a crease that is bright on the tape is still bright through
+              the black
+
+    `follow` scales all three; 0 gives the old flat composite.
+    """
+    from scipy.ndimage import gaussian_filter, map_coordinates
+
     arr = np.asarray(page, dtype=np.float32) / 255
     c = np.array(color[:3], dtype=np.float32) / 255
+    lum = arr[..., :3].mean(axis=2)
+    if follow > 0:
+        # Relief: how much brighter or darker each spot is than its
+        # neighbourhood. Creases and fibre show up here, flat colour does not.
+        broad = gaussian_filter(lum, 6) + 1e-4
+        relief = lum / broad
+        # bend: push the ink along the slope of the large-scale shape
+        shape = gaussian_filter(lum, 3)
+        gy, gx = np.gradient(shape)
+        h, w = alpha.shape
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        k = 22.0 * follow
+        alpha = map_coordinates(alpha, [yy - gy * k, xx - gx * k], order=1, mode="nearest").astype(np.float32)
+        # soak: ridges (relief > 1) take a little less ink, valleys a little more
+        alpha = np.clip(alpha * (1 - (relief - 1) * 2.2 * follow), 0, 1)
     a = alpha[..., None]
     rgb = arr[..., :3] * (1 - a * (1 - c))
+    if follow > 0:
+        # light: the surface's shading carries on through the ink
+        lit = np.clip(1 + (relief - 1) * 1.6 * follow, 0.6, 1.5)[..., None]
+        rgb = np.clip(rgb * (1 - a + a * lit), 0, 1)
     out = np.concatenate([rgb, arr[..., 3:4]], axis=2)
     page.paste(Image.fromarray((out * 255).astype(np.uint8), "RGBA"))
 
@@ -663,7 +700,7 @@ def _speed_pressure(pts, writer, rng):
     return np.clip(p, 0.2, 1.6)
 
 
-def write_learned(page, lines, x, baselines, style=3, bias=0.6, tool="ballpoint", color=(28, 34, 80), size=24, surface="notebook", seed=0, pressure=1.0, slant=0.0, max_width=None, trim_tail=False, tries=6):
+def write_learned(page, lines, x, baselines, style=3, bias=0.6, tool="ballpoint", color=(28, 34, 80), size=24, surface="notebook", seed=0, pressure=1.0, slant=0.0, max_width=None, trim_tail=False, tries=6, follow=1.0):
     """Write lines with learned human strokes. size is the x-height in px.
 
     style picks one of the model's 13 primed writers, bias how careful they
@@ -724,7 +761,7 @@ def write_learned(page, lines, x, baselines, style=3, bias=0.6, tool="ballpoint"
             pres = np.interp(np.linspace(0, 1, len(p)), np.linspace(0, 1, len(pres)), pres)
             _stamp_stroke(alpha, p, pres, pen_w, opacity, soft, tool, rng)
         boxes.append(tuple(lo))
-    ink_onto(page, _finish(alpha, tool, surface, seed), color)
+    ink_onto(page, _finish(alpha, tool, surface, seed), color, follow)
     # Where each line actually landed, so a strike-through or a circle drawn
     # afterwards goes round the real words rather than a guessed width.
     return boxes

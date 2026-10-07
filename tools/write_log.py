@@ -13,8 +13,19 @@ import tempfile
 import time
 
 
+# Every git call here runs inside repositories the session merely cd'd into,
+# so their own config must not get to execute anything. A commit security
+# review on 2026-10-06 showed `git status` running a planted core.fsmonitor;
+# a planted clean filter in .gitattributes is the same class. fsmonitor off,
+# hooks to /dev/null, and attributes read from the empty tree close both,
+# and status output is unchanged (tests/test_write_log.py).
+EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+SAFE = ['git', '-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null',
+        f'--attr-source={EMPTY_TREE}', '--no-optional-locks']
+
+
 def git(repo, *args):
-    result = subprocess.run(['git', '-C', str(repo), *args], capture_output=True, timeout=5)
+    result = subprocess.run([*SAFE, '-C', str(repo), *args], capture_output=True, timeout=5)
     if result.returncode:
         raise ValueError('repository observation unavailable')
     return result.stdout
@@ -141,7 +152,7 @@ def repositories(payload):
         for candidate in paths:
             while not candidate.is_dir() and candidate != candidate.parent:
                 candidate = candidate.parent
-            result = subprocess.run(['git', '-C', str(candidate), 'rev-parse', '--show-toplevel'],
+            result = subprocess.run([*SAFE, '-C', str(candidate), 'rev-parse', '--show-toplevel'],
                                     capture_output=True, timeout=5)
             if result.returncode == 0:
                 found.add(Path(os.fsdecode(result.stdout).strip()).resolve())
@@ -161,7 +172,7 @@ IMPLICIT = set()
 
 
 def head(repo):
-    result = subprocess.run(['git', '-C', str(repo), 'rev-parse', '--verify', 'HEAD'],
+    result = subprocess.run([*SAFE, '-C', str(repo), 'rev-parse', '--verify', 'HEAD'],
                             capture_output=True, timeout=5)
     return result.stdout.decode().strip() if result.returncode == 0 else None
 
@@ -201,8 +212,7 @@ def observe(repo, log, state):
     names = set()
     # --no-optional-locks: every session now runs this against the brain, and
     # the index refresh's lock would race brain-sync's own commit.
-    fields = git(repo, '--no-optional-locks', 'status', '--porcelain=v1', '-z',
-                 '--untracked-files=all').split(b'\0')
+    fields = git(repo, 'status', '--porcelain=v1', '-z', '--untracked-files=all').split(b'\0')
     i = 0
     while i < len(fields):
         entry = fields[i]

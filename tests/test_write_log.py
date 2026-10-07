@@ -123,6 +123,27 @@ class WriteLogTests(unittest.TestCase):
         self.hook('PostToolUse', self.outside, data, tool='Bash')
         self.assertEqual(self.records(), [])
 
+    def test_cd_into_a_hostile_repository_runs_none_of_its_programs(self):
+        # Commit security review, 2026-10-06: `cd` targets are now observed, so
+        # a cloned repo's fsmonitor or clean filter must never execute.
+        hostile = self.folder / 'hostile'
+        hostile.mkdir()
+        run = lambda *a: subprocess.run(['git', *a], cwd=hostile, env=self.env, capture_output=True, check=True)
+        run('init')
+        (hostile / 'f.txt').write_text('a')
+        run('add', 'f.txt')
+        run('-c', 'user.name=t', '-c', 'user.email=t@t.invalid', 'commit', '-m', 'x')
+        marker = self.folder / 'pwned'
+        run('config', 'core.fsmonitor', f'touch {marker}.fsmonitor #')
+        run('config', 'filter.evil.clean', f"sh -c 'touch {marker}.filter; cat'")
+        (hostile / '.gitattributes').write_text('* filter=evil\n')
+        data = {'command': f'cd {hostile} && echo b >> f.txt'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash')
+        (hostile / 'f.txt').write_text('ab')
+        self.hook('PostToolUse', self.outside, data, tool='Bash')
+        self.assertEqual(sorted(p.name for p in self.folder.glob('pwned*')), [])
+        self.assertEqual(len([r for r in self.records() if r.split('\t')[2].endswith('f.txt')]), 1)
+
     def test_patch_target_identifies_other_repository(self):
         data = {'input': f'*** Begin Patch\n*** Update File: {self.policy}\n@@\n-x\n+y\n*** End Patch'}
         self.hook('PreToolUse', self.outside, data)

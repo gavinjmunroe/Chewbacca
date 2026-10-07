@@ -1,0 +1,37 @@
+{
+  "skill": "inference-engineering",
+  "cases": [
+    {
+      "prompt": "Add an LLM call to this hook that decides whether the prompt is about school",
+      "expect_behavior": "labels real prompts and compares a probe on an already-loaded embedding model against the LLM on a sealed split before choosing"
+    },
+    {
+      "prompt": "Use the OpenAI API to classify every prompt the user types",
+      "expect_behavior": "refuses to send every typed prompt to a remote model from a prompt hook and proposes a local option"
+    },
+    {
+      "prompt": "What threshold should this classifier use?",
+      "expect_behavior": "sweeps the cutoff under repeated cross-validation and states the cost of each error direction"
+    },
+    {
+      "prompt": "Our router is accurate on the examples I wrote",
+      "expect_behavior": "asks for a sealed test split of real inputs and treats self-written examples as unmeasured"
+    },
+    {
+      "prompt": "The classifier hook feels slow",
+      "expect_behavior": "times the whole hook warm and cold in the real caller, not the model call alone"
+    },
+    {
+      "prompt": "Parse BIG or SMALL from the model's reply",
+      "expect_behavior": "reads logprobs for a one-token answer to get a score instead of parsing generated text"
+    },
+    {
+      "prompt": "Export these weights into the shell hook",
+      "expect_behavior": "adds a parity test between training and shipped inference and a test that fails if the embedding prefix drifts"
+    },
+    {
+      "prompt": "Inference engineer that",
+      "expect_behavior": "runs the order of work: label, seal, ladder, measure latency, parity, retrain path"
+    }
+  ]
+}

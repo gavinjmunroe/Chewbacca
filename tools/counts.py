@@ -28,6 +28,26 @@ def claude_md():
     return (REPO / "CLAUDE.md").read_text(encoding="utf-8")
 
 
+def rule_files():
+    """Every standard that installs into ~/.claude/rules, by file name."""
+    files = {f.name: f for f in (REPO / ".claude/rules").glob("*.md")}
+    neutral = REPO / "config/instructions/agent-neutral.md"
+    if neutral.is_file():
+        files[neutral.name] = neutral
+    return files
+
+
+def always_rules():
+    """Rules that load every session: imported by CLAUDE.md, or carrying no
+    `paths:` scope, which Claude Code loads on its own. Counting only imports
+    broke on 2026-10-06, when duplicate imports of unscoped rules were removed
+    and six always-on rules suddenly read as on-demand."""
+    imported = set(re.findall(r"^@~/\.claude/rules/([^\s]+\.md)", claude_md(), re.M))
+    unscoped = {name for name, f in rule_files().items()
+                if not re.search(r"^paths:", f.read_text(encoding="utf-8").split("\n---", 1)[0], re.M)}
+    return (imported | unscoped) & set(rule_files())
+
+
 def counts():
     toolkit = json.loads((REPO / "config/settings/toolkit.json").read_text(encoding="utf-8"))
     vendored = len(list((REPO / "skills").glob("*/SKILL.md")))
@@ -35,10 +55,8 @@ def counts():
     packed = sum(p["count"] for p in toolkit["packs"])
     return {
         "commands": len(list((REPO / ".claude/commands").glob("*.md"))),
-        "rules": len(re.findall(r"^@~/\.claude/rules/", claude_md(), re.M)),
-        "rules_on_demand": len(list((REPO / ".claude/rules").glob("*.md")))
-                           + int((REPO / "config/instructions/agent-neutral.md").is_file())
-                           - len(re.findall(r"^@~/\.claude/rules/", claude_md(), re.M)),
+        "rules": len(always_rules()),
+        "rules_on_demand": len(rule_files()) - len(always_rules()),
         "hooks": len(list((REPO / ".claude/hooks").glob("*.sh"))),
         "subagents": len(list((REPO / ".claude/agents").glob("*.md"))),
         "skills_own": vendored,

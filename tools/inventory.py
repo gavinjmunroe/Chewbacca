@@ -265,7 +265,7 @@ CLI_TOOLS = {
             '  warn "uv not found, skipping macOS-use. Install uv, then re-run:"',
             '  warn "  ./setup.sh --only tools"',
             'else',
-            '  MU_DIR="$HOME/Projects/macOS-use"',
+            '  MU_DIR="$HOME/code/refs/macOS-use"',
             '  [ -d "$MU_DIR/.git" ] || git clone -q --depth 1 \\',
             '    https://github.com/browser-use/macOS-use.git "$MU_DIR" 2>/dev/null || true',
             '  if [ -d "$MU_DIR" ]; then',

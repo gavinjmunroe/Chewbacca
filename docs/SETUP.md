@@ -147,7 +147,7 @@ its five definitions in Codex before they run; unrelated hooks are preserved.
 
 Setup links `mac-use`, `chatgpt-tab`, and `chatgpt-gateway` into `~/.local/bin`
 on repeated runs. macOS-use owns only the upstream runtime and venv, selected by
-`MACOS_USE_HOME` or `~/Projects/macOS-use`. Existing runtime installations do not
+`MACOS_USE_HOME` or `~/code/refs/macOS-use` (older installs: `~/Projects/macOS-use`). Existing runtime installations do not
 prevent launcher updates. See [macOS app control](MACOS-APP-CONTROL.md) for Chrome
 permissions, provider selection, and the browser security boundary.
 

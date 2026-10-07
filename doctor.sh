@@ -516,11 +516,21 @@ else
     warn "summarize missing (brew install steipete/tap/summarize)"
 
   if command -v mac-use >/dev/null 2>&1; then
-    if [ -x "${MACOS_USE_HOME:-$HOME/Projects/macOS-use}/.venv/bin/python" ]; then
+    # Same resolution as bin/mac-use: MACOS_USE_HOME, else whichever has a venv.
+    if [ -n "${MACOS_USE_HOME:-}" ]; then
+      MACOS_USE="$MACOS_USE_HOME"
+    else
+      MACOS_USE="$HOME/code/refs/macOS-use"
+      for _d in "$HOME/code/refs/macOS-use" "$HOME/Projects/macOS-use"; do
+        [ -x "$_d/.venv/bin/python" ] && { MACOS_USE="$_d"; break; }
+      done
+    fi
+    _mu="$MACOS_USE"
+    if [ -x "$_mu/.venv/bin/python" ]; then
       ok "mac-use present"
     else
       bad "mac-use on PATH but its venv is missing, every run will exit 1" \
-        "cd ~/Projects/macOS-use && uv venv --python 3.11 && uv pip install -e ."
+        "$([ -d "$_mu" ] && echo "cd $_mu && uv venv --python 3.11 && uv pip install -e ." || echo "./setup.sh --only tools")"
     fi
   else
     warn "mac-use missing, no natural-language app automation"
@@ -725,8 +735,11 @@ while IFS= read -r pair; do
     ok "$tool on PATH (promised by: $skills)"
   else
     for_profile student || continue
+    # Name the file that exists: oss-apps lives in bin/, chewie in mac/bin/,
+    # and a hint pointing at a missing path is worse than no hint.
+    _src="bin/$tool"; [ -e "$REPO_DIR_EARLY/$_src" ] || _src="mac/bin/$tool"
     bad "$tool is missing but $skills tell the agent to run it" \
-      "./setup.sh, or: ln -sf \"\$PWD/mac/bin/$tool\" ~/.local/bin/$tool" major
+      "./setup.sh, or: ln -sf \"$REPO_DIR_EARLY/$_src\" ~/.local/bin/$tool" major
   fi
 done <<< "$TOOL_MAP"
 
@@ -1054,6 +1067,20 @@ else
   fi
 fi
 
+# Unscoped rules load from ~/.claude/rules on their own and are no longer
+# imported (2026-10-06), so the import check above cannot see a failed install
+# of them. Check every rule the repo ships is actually on disk.
+RULES_MISSING=""
+for _r in "$REPO_DIR_EARLY"/.claude/rules/*.md "$REPO_DIR_EARLY/config/instructions/agent-neutral.md"; do
+  [ -f "$_r" ] || continue
+  [ -f "$HOME/.claude/rules/$(basename "$_r")" ] || RULES_MISSING="$RULES_MISSING $(basename "$_r")"
+done
+if [ -n "$RULES_MISSING" ]; then
+  bad "$(echo $RULES_MISSING | wc -w | tr -d ' ') rule(s) not installed in ~/.claude/rules:$RULES_MISSING" "chewbacca setup" major
+else
+  ok "every shipped rule is installed in ~/.claude/rules"
+fi
+
 # ── Hook health ───────────────────────────────────────────────────────────────
 section "MCP servers"
 
@@ -1141,10 +1168,12 @@ else
   # Guards deliberately exit 2 to refuse an action. On 2026-09-21 all 69
   # reported failures were refusals, so disabling working guards made this
   # check greener. Keep refusals visible, separate from crashes and timeouts.
+  # Gates refuse by design too: on 2026-10-06 skill-gate's 96 refusals read as
+  # 96 crashes because only *-guard.sh names were recognised.
   hook_failures() {
-    awk -F'|' '$4 != "ok" && !($4 == "exit2" && $2 ~ /-guard\.sh$/) {n++} END {print n+0}' "$1"
+    awk -F'|' '$4 != "ok" && !($4 == "exit2" && $2 ~ /-(guard|gate)\.sh$/) {n++} END {print n+0}' "$1"
   }
-  HOOK_BLOCKS=$(awk -F'|' '$4 == "exit2" && $2 ~ /-guard\.sh$/ {n++} END {print n+0}' "$HOOK_WINDOW_LOG")
+  HOOK_BLOCKS=$(awk -F'|' '$4 == "exit2" && $2 ~ /-(guard|gate)\.sh$/ {n++} END {print n+0}' "$HOOK_WINDOW_LOG")
   HOOK_FAILS=$(hook_failures "$HOOK_WINDOW_LOG")
   HOOK_FAILS_EVER=$(hook_failures "$HOOK_LOG")
   HOOK_FAILS_OLD=$((HOOK_FAILS_EVER - HOOK_FAILS))

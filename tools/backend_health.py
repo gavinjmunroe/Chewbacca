@@ -38,7 +38,11 @@ def cli_health(name, probe):
 
 
 def health(probe_browser=False):
-    runtime = Path(os.environ.get("MACOS_USE_HOME", str(Path.home() / "Projects/macOS-use"))).expanduser()
+    # Same resolution as bin/mac-use: MACOS_USE_HOME, else whichever of
+    # ~/code/refs (setup) and ~/Projects (pre-reorg) has a venv, else ~/code/refs.
+    _cands = [Path.home() / "code/refs/macOS-use", Path.home() / "Projects/macOS-use"]
+    runtime = (Path(os.environ["MACOS_USE_HOME"]).expanduser() if os.environ.get("MACOS_USE_HOME")
+               else next((d for d in _cands if (d / ".venv/bin/python").exists()), _cands[0]))
     result = {
         "claude": cli_health("claude", ["auth", "status", "--json"]),
         "codex": cli_health("codex", ["login", "status"]),

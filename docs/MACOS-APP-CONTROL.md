@@ -220,7 +220,7 @@ send private data or execute unrelated instructions.
 Chewbacca owns the `mac-use`, `chatgpt-tab`, and `chatgpt-gateway` launchers and
 all provider modules. Setup links these launchers on every run, including when
 the runtime is already installed. `MACOS_USE_HOME` selects the upstream runtime;
-the default is `~/Projects/macOS-use`. Its `.venv/bin/python` runs Chewbacca's own
+the default is `~/code/refs/macOS-use` (installs before October 2026 used `~/Projects/macOS-use`, which is still found). Its `.venv/bin/python` runs Chewbacca's own
 `bin/mac_use_cli.py`. No provider shims belong in the upstream checkout. Doctor
 reports duplicated shims and dirty upstream state without deleting user files.
 

@@ -5,7 +5,19 @@ set -euo pipefail
 
 export ANONYMIZED_TELEMETRY="${ANONYMIZED_TELEMETRY:-false}"
 
-MACOS_USE="${MACOS_USE_HOME:-$HOME/Projects/macOS-use}"
+# setup.sh clones to ~/code/refs; ~/Projects is where installs before the
+# 2026-10-03 code reorg put it, and where this script still looked, so every
+# reorganised machine reported a missing venv that was sitting one folder over.
+# The first of the two with a working venv wins, so a half-finished clone in
+# the new place never hides a working install in the old one.
+if [ -n "${MACOS_USE_HOME:-}" ]; then
+  MACOS_USE="$MACOS_USE_HOME"
+else
+  MACOS_USE="$HOME/code/refs/macOS-use"
+  for _d in "$HOME/code/refs/macOS-use" "$HOME/Projects/macOS-use"; do
+    [ -x "$_d/.venv/bin/python" ] && { MACOS_USE="$_d"; break; }
+  done
+fi
 PY="$MACOS_USE/.venv/bin/python"
 
 if [ ! -x "$PY" ]; then

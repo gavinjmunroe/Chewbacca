@@ -6,6 +6,9 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT
 export CHEWBACCA_HOME="$TMP/home"
+# Run directly, outside run.sh, this file refused dozens of times into the real
+# hooks.log on 2026-10-06 and turned doctor red with 96 "failures".
+export CHEWBACCA_LOG_DIR="$TMP/logs"
 mkdir -p "$CHEWBACCA_HOME/skills/graph-engineering"
 cp "$ROOT/skills/graph-engineering/SKILL.md" "$CHEWBACCA_HOME/skills/graph-engineering/"
 fail=0

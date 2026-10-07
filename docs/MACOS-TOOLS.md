@@ -119,10 +119,10 @@ mac-use --provider anthropic "create a note titled Groceries"
 Manual install, if you are not running `setup.sh`:
 
 ```bash
-git clone https://github.com/browser-use/macOS-use.git ~/Projects/macOS-use
-cd ~/Projects/macOS-use && uv venv --python 3.11
+git clone https://github.com/browser-use/macOS-use.git ~/code/refs/macOS-use
+cd ~/code/refs/macOS-use && uv venv --python 3.11
 uv pip install --python .venv/bin/python --editable .
-cp bin/mac_use_cli.py ~/Projects/macOS-use/mac_use_cli.py
+cp bin/mac_use_cli.py ~/code/refs/macOS-use/mac_use_cli.py
 cp bin/mac-use ~/.local/bin/mac-use && chmod +x ~/.local/bin/mac-use
 ```
 

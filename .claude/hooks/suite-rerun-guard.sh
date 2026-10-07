@@ -25,9 +25,48 @@ payload="$(cat)"
 cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty')"
 [ -n "$cmd" ] || exit 0
 
-# Full suite only: run.sh followed by nothing, a pipe, a redirect or a
-# separator. `tests/run.sh hud` names a group and is always allowed.
-printf '%s' "$cmd" | grep -qE 'tests/run\.sh[[:space:]]*($|[|;&>)]|2>)' || exit 0
+# Full suite only: run.sh followed by nothing but redirects. `tests/run.sh
+# hud` names a group and is always allowed.
+# Only an EXECUTION of the full suite counts. On 2026-10-06 `grep ...
+# tests/run.sh | head` and `sed -n ... tests/run.sh;` each recorded a
+# fingerprint as if the suite had run, so the next command, `bash -n
+# tests/run.sh && ...`, was refused as a repeat and the edits chained after it
+# never happened. A first fix allowlisted wrappers (bash, time, nohup) and a
+# review the same night found it missed `timeout 900 bash tests/run.sh`,
+# `caffeinate -i ...` and a quoted path. So this is a blocklist: run.sh is
+# executed unless the command word only READS it, or the shell is `-n`.
+CMD="$cmd" python3 -I -c '
+import os, re, shlex, sys
+READERS = {"grep", "egrep", "fgrep", "rg", "sed", "awk", "cat", "head", "tail", "less",
+           "more", "wc", "diff", "cp", "mv", "ls", "git", "echo", "printf", "stat",
+           "file", "shellcheck", "shfmt", "open", "code", "vim", "nano", "bat", "touch", "chmod"}
+SEP = r"&&|\|\||;|\n|\|(?!\|)|(?<![>&])&(?![>&])|[()`]"
+for seg in re.split(SEP, os.environ["CMD"]):
+    if "tests/run.sh" not in seg:
+        continue
+    try:
+        toks = shlex.split(seg)
+    except ValueError:
+        toks = seg.split()
+    while toks and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", toks[0]):
+        toks.pop(0)
+    if not toks or os.path.basename(toks[0]) in READERS:
+        continue
+    at = next((i for i, t in enumerate(toks) if t.endswith("tests/run.sh")), None)
+    if at is None or "-n" in toks[1:at]:
+        continue
+    rest, i, group = toks[at + 1:], 0, False
+    while i < len(rest):
+        t = rest[i]
+        if re.match(r"^(\d*>>?|&>>?|<)$", t):
+            i += 2; continue
+        if re.match(r"^(\d*>>?|&>>?|<)", t):
+            i += 1; continue
+        group = True; break
+    if not group:
+        sys.exit(0)
+sys.exit(1)
+' || exit 0
 printf '%s' "$cmd" | grep -q 'CHEWBACCA_SUITE_RERUN=1' && exit 0
 
 # The repository is the one the script lives in when the path is absolute,

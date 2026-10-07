@@ -41,6 +41,21 @@ printf 'changed\n' > "$repo/new.txt"
 expect "a run after the tree changed" 0 "bash tests/run.sh"
 expect "an unrelated command" 0 "git status"
 
+echo "reading run.sh is not running it:"
+session="r-$$-$RANDOM"
+expect "a grep of run.sh" 0 "grep -n check tests/run.sh | head"
+expect "a sed of run.sh" 0 "sed -n 1,5p tests/run.sh; echo"
+expect "a syntax check of run.sh" 0 "bash -n tests/run.sh && echo ok"
+expect "the first real run after those reads" 0 "cd $repo && bash tests/run.sh"
+expect "and a repeat of that real run" 2 "nohup bash tests/run.sh > /tmp/x.log 2>&1"
+expect "a direct ./ run counts too" 2 "./tests/run.sh"
+echo "wrappers a review found the first fix missed:"
+for c in "timeout 900 bash tests/run.sh" "caffeinate -i bash tests/run.sh" "bash \"tests/run.sh\" 2>&1 | tail" \
+         "exec bash tests/run.sh" "bash -o pipefail tests/run.sh" "FOO=\"a b\" bash tests/run.sh"; do
+  expect "repeat via: $c" 2 "$c"
+done
+expect "a group behind a wrapper is still allowed" 0 "timeout 900 bash tests/run.sh hud 2>&1 | tail"
+
 echo "never runs the repo's own git programs:"
 marker="$T/pwned"
 git -C "$repo" config core.fsmonitor "touch $marker #"

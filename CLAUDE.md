@@ -32,7 +32,11 @@ These load into every session, about 4,100 tokens total. They apply
 regardless of language or framework, so they are imported rather than left to
 be discovered.
 
-@~/.claude/rules/agent-neutral.md
+<!-- Rules with no `paths:` scope (agent-neutral, naming, context-discipline,
+do-it-yourself, untrusted-content, research-the-craft) load from ~/.claude/rules
+on their own. Importing them here too loaded each twice, agent-neutral three
+times: ~9.7k tokens a session (chewbacca context, 2026-10-06). The imports below
+are scoped rules this file deliberately makes always-on. -->
 
 The shared evidence, math, graph, and durable-learning method applies across work
 through the agent-neutral instructions; `library/methods/learning.md` gives the procedure.
@@ -42,13 +46,8 @@ from claims of mastery. Applying the method never authorizes hook activation.
 @~/.claude/rules/git.md
 @~/.claude/rules/security.md
 @~/.claude/rules/writing.md
-@~/.claude/rules/naming.md
 @~/.claude/rules/typescript.md
 @~/.claude/rules/review-discipline.md
-@~/.claude/rules/context-discipline.md
-@~/.claude/rules/do-it-yourself.md
-@~/.claude/rules/untrusted-content.md
-@~/.claude/rules/research-the-craft.md
 
 The twelve stack-specific standards (components, api, database, deployment,
 design, performance, state, accessibility, scroll-effects, testing, ux-laws,
@@ -581,4 +580,3 @@ floor measured from the weaker of those two, zero failures or it does not ship. 
 answer the four questions in `STANDARD.md` that no script can check. A kit that passes
 every check and fails those is worse than one that does the reverse.
 
-@~/.claude/rules/agent-neutral.md

@@ -45,12 +45,16 @@ import time
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 HOME = pathlib.Path.home()
 
-MACOS_USE = pathlib.Path(
-    os.environ.get(
-        "MACOS_USE_HOME",
-        str(HOME / "Projects/macOS-use"),
-    )
-).expanduser()
+def _macos_use_home():
+    """MACOS_USE_HOME, else whichever of setup's ~/code/refs and the pre-reorg
+    ~/Projects has a working venv, else setup's location."""
+    if os.environ.get("MACOS_USE_HOME"):
+        return pathlib.Path(os.environ["MACOS_USE_HOME"]).expanduser()
+    candidates = [HOME / "code/refs/macOS-use", HOME / "Projects/macOS-use"]
+    return next((d for d in candidates if (d / ".venv/bin/python").exists()), candidates[0])
+
+
+MACOS_USE = _macos_use_home()
 
 CHATGPT_TAB = os.environ.get(
     "CHATGPT_TAB_PATH",

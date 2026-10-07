@@ -29,13 +29,13 @@ slow)
   ;;
 errors)
   [ -f "$LOGDIR/hooks.log" ] || { echo "No hook log yet."; exit 0; }
-  awk -F'|' '$4 != "ok" && !($4 == "exit2" && $2 ~ /-guard\.sh$/)' "$LOGDIR/hooks.log" | tail -n "$N" ||
+  awk -F'|' '$4 != "ok" && !($4 == "exit2" && $2 ~ /-(guard|gate)\.sh$/)' "$LOGDIR/hooks.log" | tail -n "$N" ||
     echo "No hook has failed since logging started."
   ;;
 stats)
   [ -f "$LOGDIR/hooks.log" ] || { echo "No hook log yet."; exit 0; }
   echo -e "${BLD}Per-hook totals${NC}"
-  awk -F'|' '{n[$2]++; t[$2]+=$3; if($4=="exit2" && $2 ~ /-guard\.sh$/) b[$2]++; else if($4!="ok") e[$2]++}
+  awk -F'|' '{n[$2]++; t[$2]+=$3; if($4=="exit2" && $2 ~ /-(guard|gate)\.sh$/) b[$2]++; else if($4!="ok") e[$2]++}
     END{for(h in n) printf "  %-22s %5d runs  %7.0fms avg  %d failed, %d blocked\n", h, n[h], t[h]/n[h], e[h]+0, b[h]+0}' \
     "$LOGDIR/hooks.log" | sort -k2 -rn
   ;;

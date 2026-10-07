@@ -1428,7 +1428,15 @@ if group "reasoning backends"; then
   check "runtime adapters work independently in fresh homes" python3 "$ROOT/tests/test_agent_runtime.py"
   check "Codex shares skills without replacing personal entries" python3 "$ROOT/tests/test_codex_skills.py"
   check "Codex imports only selected integrations" python3 "$ROOT/tests/test_codex_integrations.py"
-  _model_python="${MACOS_USE_HOME:-$HOME/Projects/macOS-use}/.venv/bin/python"
+  if [ -n "${MACOS_USE_HOME:-}" ]; then
+    MACOS_USE="$MACOS_USE_HOME"
+  else
+    MACOS_USE="$HOME/code/refs/macOS-use"
+    for _d in "$HOME/code/refs/macOS-use" "$HOME/Projects/macOS-use"; do
+      [ -x "$_d/.venv/bin/python" ] && { MACOS_USE="$_d"; break; }
+    done
+  fi
+  _model_python="$MACOS_USE/.venv/bin/python"
   [ -x "$_model_python" ] || _model_python=python3
   if "$_model_python" -c 'import langchain_core, pydantic' >/dev/null 2>&1; then
     check "structured JSON validation and repair" "$_model_python" "$ROOT/tests/test_mac_use_structured.py"

@@ -9,16 +9,29 @@ export CHEWBACCA_HOME="$TMP/home"
 mkdir -p "$CHEWBACCA_HOME/skills/graph-engineering"
 cp "$ROOT/skills/graph-engineering/SKILL.md" "$CHEWBACCA_HOME/skills/graph-engineering/"
 fail=0
-# A fake jev first on PATH, before any route call, so the suite never makes
-# a paid call: it answers 0.9 for prompts carrying BIG, 0.05 otherwise.
-mkdir -p "$TMP/bin"
-cat > "$TMP/bin/jev" <<'J'
-#!/bin/sh
-if grep -q BIG; then s=0.9; else s=0.05; fi
-printf '{"answers":{"big":{"type":"noul","noul":%s}}}' "$s"
-J
-chmod +x "$TMP/bin/jev"
-export PATH="$TMP/bin:$PATH"
+# A fake Ollama before any route call, so the suite never runs a real model:
+# /api/chat answers BIG for prompts carrying BIG, SMALL otherwise; everything
+# else 404s, which sends the vector router to its keyword fallback.
+cat > "$TMP/ollama.py" <<'O'
+import http.server, json, sys
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path != "/api/chat":
+            self.send_response(404); self.end_headers(); return
+        word = "BIG" if "BIG" in body["messages"][-1]["content"] else "SMALL"
+        out = json.dumps({"message": {"content": word}}).encode()
+        self.send_response(200); self.end_headers(); self.wfile.write(out)
+s = http.server.HTTPServer(("127.0.0.1", 0), H)
+print(s.server_port, flush=True)
+s.serve_forever()
+O
+python3 "$TMP/ollama.py" > "$TMP/port" &
+OLLAMA_PID=$!
+trap 'kill $OLLAMA_PID 2>/dev/null; rm -rf "$TMP"' EXIT
+for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$TMP/port" ] && break; sleep 0.2; done
+export OLLAMA_HOST="http://127.0.0.1:$(cat "$TMP/port")"
 route() { jq -n --arg p "$1" '{prompt:$p, session_id:"t1", cwd:"/tmp"}' | HOME="$TMP" sh "$ROOT/.claude/hooks/skill-route.sh" >/dev/null 2>&1; }
 gate() { jq -n --arg t "$1" --arg s "${2:-}" '{session_id:"t1", tool_name:$t, tool_input:{skill:$s}}' | bash "$ROOT/.claude/hooks/skill-gate.sh" >/dev/null 2>&1; echo $?; }
 
@@ -35,22 +48,18 @@ route "someone can opt out but every person went on the trip and it needs approv
 [ ! -e "$CHEWBACCA_HOME/state/skill-required-t1" ] && echo "ok    conversational words don't trigger it" || { echo "FAIL  glue words triggered the gate"; fail=1; }
 
 # 2026-10-06: big work gates the skill even when the prompt never sounds like
-# graphs. "I should never have to tell you." A fake jev on PATH stands in for
-# the classifier, so the suite never makes a paid call: it answers 0.9 for
-# prompts carrying BIG, 0.05 otherwise.
+# graphs. "I should never have to tell you." The fake Ollama above stands in
+# for the local classifier.
 marked() { rm -f "$CHEWBACCA_HOME/state/skill-required-t1"; route "$1"; [ -s "$CHEWBACCA_HOME/state/skill-required-t1" ]; }
 
 rm -rf "$CHEWBACCA_HOME/state/"*-t1
-marked "BIG make chewbacca perfect" && echo "ok    jev yes marks it" || { echo "FAIL  jev yes missed"; fail=1; }
-! marked "Thanks bro that worked great" && echo "ok    jev no stays silent" || { echo "FAIL  jev no gated"; fail=1; }
+marked "BIG make chewbacca perfect" && echo "ok    model BIG marks it" || { echo "FAIL  model BIG missed"; fail=1; }
+! marked "Thanks bro that worked great" && echo "ok    model SMALL stays silent" || { echo "FAIL  model SMALL gated"; fail=1; }
 ! marked "how do I build a BIG graph in neo4j?" && echo "ok    a question never gates" || { echo "FAIL  gated a question"; fail=1; }
 
-# Jev down: the verb fallback still catches the obvious ones.
-for p in "build the Kyber keyboard into amber-ios" "Bro do all the applications" \
-         "fix chewbacca so you actually go through with the plans"; do
-  BIGWORK_JEV=off marked "$p" && echo "ok    fallback marks: $p" || { echo "FAIL  fallback missed: $p"; fail=1; }
-done
-BIGWORK_JEV=off marked "fix the typo in the readme" && { echo "FAIL  fallback gated a typo"; fail=1; } || echo "ok    fallback skips a typo fix"
+# Model down or off: no prompt gate, and no guessing from a word list.
+BIGWORK_LOCAL=off marked "BIG build the Kyber keyboard into amber-ios" && { echo "FAIL  gated with the model off"; fail=1; } || echo "ok    model off means no prompt gate"
+OLLAMA_HOST=http://127.0.0.1:9 marked "BIG build the Kyber keyboard into amber-ios" && { echo "FAIL  gated with the model down"; fail=1; } || echo "ok    model down means no prompt gate"
 
 # Loaded once this session means never gated again, by either path.
 rm -rf "$CHEWBACCA_HOME/state/"*-t1

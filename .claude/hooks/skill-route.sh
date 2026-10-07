@@ -118,18 +118,28 @@ if any(marker in prompt for marker in NOISE):
 # was written and four tool calls ran before anyone asked the question. The
 # trigger he wants is the size of the work, not its vocabulary.
 #
-# Jev decides, the regex is only a fallback. Measured 2026-10-06 on 39 of
-# Caleb's own typed prompts (tests/fixtures/bigwork_prompts.tsv, labeled by the
-# session that built this, so not a sealed set): a verb list caught 5 of 15 big
-# prompts and fired on 3 that were not; Jev's yes/no at 0.25 caught 12 of 15
-# with none. Jev answered in about 0.3s, so the 2s cap only bites when it is
-# down. The prompts both miss ("Bro fix vscode/chewb...") are what the edit
-# counter in skill-gate.sh catches once the work actually starts.
-BIG_Q = ("Is this request multi-step build work (several files, tools, records "
-         "or steps), as opposed to a one-line fix, a question, or chat?")
-BIG_MIN = float(os.environ.get("BIGWORK_JEV_MIN", "0.25"))
-STRONG = r"\b(build|implement|refactor|rewrite|redesign|migrate|scaffold|overhaul|automate|scrape|enrich|integrate|orchestrate|fix chewbacca)\b"
-SCALE = r"\b(all|every|each|whole|entire|across|bulk|batch|everything)\b"
+# A LOCAL model decides, and nothing about the prompt leaves the Mac.
+#
+# 822ed4c sent every typed prompt to Jev (api.typesafe.ai). A commit security
+# review flagged it the same night, and tools/jev.py's own contract says "no
+# prompt hooks": these prompts carry pasted texts, health notes and other
+# people's messages. Measured on 39 of Caleb's own prompts
+# (tests/fixtures/bigwork_prompts.tsv, self-labeled, and this instruction was
+# written after seeing them, so treat the numbers as optimistic):
+#   verb list           5/15 big caught, 3/24 false hits   (dropped entirely)
+#   Jev, remote        12/15, 0/24                         (not allowed here)
+#   embedding kNN-3    10/15, 4/24
+#   llama3.2           9/15, 3/24, 0.13s
+#   llama3.1:8b        8/15, 0/24, 0.31s                   <- this
+# Precision wins because misses have a second net: skill-gate.sh refuses once
+# on the third edited file or an agent spawn. A cold model blows the 2s cap;
+# that prompt simply isn't gated, and the backstop still is.
+BIG_MODEL = os.environ.get("BIGWORK_MODEL", "llama3.1:8b")
+BIG_SYS = ("You label requests sent to a coding agent. Answer BIG if the request asks for "
+           "multi-step build work: changing several files, building or redesigning something, "
+           "cleaning up infrastructure, bulk data work, or making a system work better. Answer "
+           "SMALL for a question, a complaint, chat, a one-line edit, a lookup, or asking for a "
+           "short message to send. Reply with one word.")
 low = prompt.lower()
 question = low.endswith("?") and re.match(r"(how|what|why|when|where|which|who|is|are|does|do|can|should)\b", low)
 sid_early = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("session_id") or ""))
@@ -142,27 +152,30 @@ except OSError:
 
 
 def big_work():
-    """Jev's probability that the prompt is multi-step build work, or the
-    fallback verb test when Jev is off, missing, slow or malformed."""
-    if os.environ.get("BIGWORK_JEV", "on") != "off":
-        import subprocess
-        req = {"model": "jev-1.13.0", "state": {"request": prompt[:2000]},
-               "questions": {"big": {"type": "noul", "instructions": BIG_Q}}}
-        try:
-            r = subprocess.run(["jev", "evaluate", "-"], input=json.dumps(req),
-                               capture_output=True, text=True, timeout=2)
-            score = float(json.loads(r.stdout)["answers"]["big"]["noul"])
-            SHADOW["bigwork_jev"] = round(score, 3)
-            return score >= BIG_MIN
-        except Exception as exc:
-            SHADOW["bigwork_jev_error"] = type(exc).__name__
-    SHADOW["bigwork_fallback"] = True
-    return bool(re.search(STRONG, low) or (re.search(SCALE, low) and len(low.split()) >= 4))
+    """True when the local model labels the prompt BIG. Off, down, cold or
+    malformed all mean False: the edit backstop is the net, not a guess."""
+    if os.environ.get("BIGWORK_LOCAL", "on") == "off":
+        return False
+    import urllib.request
+    host = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+    body = {"model": BIG_MODEL, "stream": False, "keep_alive": "2h",
+            "options": {"temperature": 0, "num_predict": 3},
+            "messages": [{"role": "system", "content": BIG_SYS},
+                         {"role": "user", "content": "Request: " + prompt[:2000]}]}
+    try:
+        req = urllib.request.Request(host + "/api/chat", data=json.dumps(body).encode(),
+                                     headers={"Content-Type": "application/json"})
+        word = json.load(urllib.request.urlopen(req, timeout=2))["message"]["content"]
+    except Exception as exc:
+        SHADOW["bigwork_error"] = type(exc).__name__
+        return False
+    SHADOW["bigwork_label"] = word.strip()[:10]
+    return word.strip().upper().startswith("BIG")
 
 
 # The detached cache-building child re-runs this script on the same payload;
 # letting it write would re-arm a marker the gate already cleared, and it would
-# pay Jev twice for one prompt.
+# run the model twice for one prompt.
 if (sid_early and not question and "graph-engineering" not in LOADED
         and not os.environ.get("SKILL_ROUTE_BUILD_CACHE") and big_work()):
     SHADOW["bigwork"] = True

@@ -117,6 +117,21 @@ If yes, it is not specific enough. Rewrite it.
 
 ---
 
+## TWO SHAPES THAT READ AS GENERATED
+
+Caleb flagged both on 2026-10-06, on copy that had passed every scanner because
+neither was a rule yet. `slop-check` now scores them (`negation-stack`,
+`comma-splice-fragment`), in chat and in files.
+
+- **Not this, not that.** "Not a CRM. Not a Rolodex." A stack of what the
+  thing is not, set for rhythm. Say what it is.
+- **Phrase, comma, phrase.** "Small moments, big impact." "Three numbers, one
+  concept." Two verbless fragments spliced on a comma. Write a sentence with a
+  verb in it.
+
+Text drawn into an image, a render, a canvas or a PDF is copy too, and no hook
+ever reads it. Pipe every string through `slop-check --stdin` before drawing it.
+
 ## COPY TONE
 
 - Direct: say the thing, not the thing around the thing

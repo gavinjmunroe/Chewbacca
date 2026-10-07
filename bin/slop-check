@@ -62,6 +62,21 @@ RULES = [
         ),
     ),
     (
+        # "Not a CRM. Not a Rolodex. Not a Notion doc." Caleb, 2026-10-06, on a
+        # draft that set exactly that on the Amber fridge: "Not this, not that.
+        # AI SLOP WTF". A list of what the thing is not, stacked for rhythm,
+        # reads as generated even when a human wrote it first. Two negations in
+        # a row is the shape; one "not" is ordinary English.
+        "negation-stack",
+        14,
+        "not this, not that: say what it is instead",
+        re.compile(
+            r"(?:^|(?<=[.!?:]\s))(?:not|no|never)\s+(?:a |an |the |just |another )?[^.,;:\n]{1,40}[.,;]\s+"
+            r"(?:and\s+)?(?:not|no|never)\s+(?:a |an |the |just |another )?[^.,;:\n]{1,40}",
+            re.I,
+        ),
+    ),
+    (
         "throat-clearing",
         12,
         "throat-clearing: open on the point",
@@ -182,6 +197,60 @@ def stacked_fragments(text):
     return hits
 
 
+# Words that turn "X, Y" into an ordinary sentence or list rather than a
+# spliced caption.
+COMMA_JOINERS = {
+    "and", "but", "or", "so", "because", "which", "who", "when", "where", "while",
+    "if", "then", "though", "although", "unless", "since", "until", "yes", "no",
+    "please", "thanks", "hi", "hey", "ok", "okay", "well", "also", "however",
+    "e.g.", "i.e.", "etc",
+}
+# Chat is where Caleb reads it, so it costs more there. In reference docs a
+# terse "Three numbers, one concept." is still a tell but the repo gate should
+# go amber, not red, on a style finding in a 400-line manual.
+COMMA_WEIGHT_CHAT = 10
+COMMA_WEIGHT_FILE = 4
+FINITE_VERBS = {
+    "is", "are", "was", "were", "be", "been", "am", "has", "have", "had", "do",
+    "does", "did", "can", "could", "will", "would", "shall", "should", "may",
+    "might", "must", "go", "goes", "get", "gets", "make", "makes", "run", "runs",
+    "use", "uses", "see", "sees", "need", "needs", "want", "wants", "know",
+    "knows", "think", "thinks", "say", "says", "said", "take", "takes", "give",
+    "gives", "keep", "keeps", "let", "lets", "put", "puts", "find", "finds",
+    "work", "works", "look", "looks", "feel", "feels", "come", "comes", "read",
+    "reads", "write", "writes", "show", "shows", "try", "tries", "add", "adds",
+    "fix", "fixes", "build", "builds", "ship", "ships", "open", "opens",
+}
+
+
+def sentences(prose):
+    """Whole sentences with the line they start on.
+
+    Markdown wraps a sentence across lines, so a per-line regex sees the tail of
+    one sentence glued to the head of the next. The first version of the comma
+    check did exactly that and fired 426 times on this repo's docs, mostly on
+    fragments that were never sentences. Paragraphs are joined first; list
+    items, headings, tables, quotes and code are left out.
+    """
+    out, buf, start = [], [], 0
+    for i, line in enumerate(prose.split("\n"), 1):
+        bare = line.strip()
+        if not bare or bare.startswith(("-", "*", "#", "|", ">", "+")) or re.match(r"^\d+[.)]\s", bare):
+            if buf:
+                out.append((start, " ".join(buf)))
+            buf = []
+            continue
+        if not buf:
+            start = i
+        buf.append(bare)
+    if buf:
+        out.append((start, " ".join(buf)))
+    for line_no, para in out:
+        for sent in re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])", para):
+            if sent.strip():
+                yield line_no, sent.strip()
+
+
 def scan(text, chat=False):
     """Score, with diminishing returns per rule.
 
@@ -222,6 +291,33 @@ def scan(text, chat=False):
             }
         )
         per_rule.setdefault("stacked-fragments", [10, 0])[1] += 1
+
+    # Phrase, comma, phrase. "Dad, Dr. Reyes." "big sur '23, all 5 of us."
+    # "Small moments, big impact." Two verbless fragments spliced on a comma
+    # are a caption pretending to be a sentence, and Caleb flagged the shape
+    # by name on 2026-10-06: "phrase comma phrase is often seen as ai slop".
+    # A finite verb anywhere in it makes it a real sentence, so it is skipped.
+    for line_no, sent in sentences(prose):
+        # A label ("In the hud group, after the line:"), a citation ("Wang et
+        # al., 2024.") or a link is reference apparatus, not a caption.
+        if sent.count(",") != 1 or sent.rstrip().endswith(":") or "et al" in sent or "[" in sent:
+            continue
+        left, right = (part.strip(" .!?\"'") for part in sent.split(","))
+        lw, rw = left.split(), right.split()
+        if not (1 <= len(lw) <= 5 and 1 <= len(rw) <= 5):
+            continue
+        if rw[0].lower() in COMMA_JOINERS or lw[0].lower() in COMMA_JOINERS:
+            continue
+        words = [w.lower().strip("'\"()*_") for w in lw + rw]
+        if any(w in FINITE_VERBS or re.search(r"(?:ed|'s|'re|'ve|'ll|'d|n't)$", w) for w in words):
+            continue
+        findings.append({
+            "rule": "comma-splice-fragment",
+            "line": line_no,
+            "why": "phrase, comma, phrase: write a sentence with a verb",
+            "text": sent[:70],
+        })
+        per_rule.setdefault("comma-splice-fragment", [COMMA_WEIGHT_CHAT if chat else COMMA_WEIGHT_FILE, 0])[1] += 1
 
     if chat:
         # Scaffolding a reply with a bolded lead-in on every paragraph is the

@@ -112,6 +112,17 @@ mistake.
 - [library/crafts/interface.md](../../library/crafts/interface.md): the researched rules, from
   Refactoring UI and Atomic Design. Read at step 4.
 
+## Handwriting is never perfect
+
+A handwriting font set straight onto a page repeats the same "e" every time,
+sits exactly on the ruling, and reads as generated at a glance. Caleb, on the
+Amber fridge notes, 2026-10-06: "The handwriting is too perfect bruh" and then
+"Never make perfect handwriting." Draw it glyph by glyph instead: its own
+rotation, size, ink density and pressure for each letter, a baseline that
+wanders as a smooth random walk rather than per-letter noise, a slight blur
+for ink bleed, and lines that start at different indents. The working
+implementation is `scrawl()` in `amber-website/scratch-render/make_items.py`.
+
 ## The hard line
 
 **Never invent a component that has a name in the taxonomy.** A bespoke variant

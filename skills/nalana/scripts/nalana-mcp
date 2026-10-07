@@ -1,0 +1,45 @@
+#!/bin/bash
+# Start Nalana (Caleb's Blender fork) with the MCP for Blender bridge on :9876.
+#
+# Nalana is Blender 5.1.1 under the hood, so it reads add-ons from
+# ~/Library/Application Support/Blender/5.1, not the 5.2 folder plain Blender
+# and `uvx mcp-for-blender install-addon` use by default. On 2026-10-06 the
+# add-on sat only in 5.2, Nalana listened on its own :8766 and nothing on
+# :9876, and every blender MCP call failed with "Could not connect".
+set -euo pipefail
+
+ADDONS="$HOME/Library/Application Support/Blender/5.1/scripts/addons"
+APP=/Applications/Nalana.app/Contents/MacOS/Nalana
+LOG="${TMPDIR:-/tmp}/nalana-mcp.log"
+
+if lsof -nP -iTCP:9876 -sTCP:LISTEN 2>/dev/null | grep -q Nalana; then
+  echo "nalana-mcp: already listening on 9876"; exit 0
+fi
+
+mkdir -p "$ADDONS"
+uvx mcp-for-blender install-addon --addons-dir "$ADDONS" >/dev/null
+
+BOOT="$(mktemp -t nalana-boot).py"
+cat > "$BOOT" <<'PY'
+import bpy, addon_utils
+addon_utils.enable("blender_mcp", default_set=True, persistent=True)
+bpy.ops.wm.save_userpref()
+def _go():
+    bpy.context.scene.blendermcp_auto_start_server = True
+    bpy.ops.blendermcp.start_server()
+bpy.app.timers.register(_go, first_interval=2.0)
+PY
+
+# A running Nalana ignores --python, and its quit dialog cancels an AppleScript
+# quit, so an open copy has to be stopped before the relaunch.
+pkill -x Nalana 2>/dev/null && sleep 3 || true
+nohup "$APP" --python "$BOOT" >"$LOG" 2>&1 &
+
+for _ in $(seq 1 30); do
+  sleep 2
+  if lsof -nP -iTCP:9876 -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "nalana-mcp: listening on 9876 (log $LOG)"; exit 0
+  fi
+done
+echo "nalana-mcp: Nalana never opened 9876, see $LOG" >&2
+exit 1

@@ -19,3 +19,4 @@ updated: 2026-10-06
 - 2026-10-04 Caleb: created
 - 2026-10-04 Caleb: filed under design
 - 2026-10-06 Gavin: assigned to Semyon
+- 2026-10-06 Gavin: Moved to Semyon 2026-10-06: Semyon owns onboarding until a stranger installs cold with nobody helping (Gavin and Caleb call, docs/FIRST-COHORT.md).

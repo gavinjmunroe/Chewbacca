@@ -73,6 +73,12 @@ All on the Amber fridge, 2026-10-06 to 07. Each line is something Caleb caught.
    "a acphi", a 5 that came out as a J). **Read every word back before
    keeping a seed.** Spell numbers out when a digit keeps failing.
 
+8. A Sharpie with a soft grey ring around it reads as a drop shadow, so the
+   label looks like it floats ("I think it's the sharpie looking like it's
+   floating"). Felt tip keeps a firm edge, wicks out only as fibre hairs on
+   porous stock, and lets the surface show through its dye. Ink also has to
+   follow the surface's creases and light (`follow=`), or it sits on top.
+
 ## Before keeping anything
 
 Run the standard's final quality gate, then these, on a zoomed crop:

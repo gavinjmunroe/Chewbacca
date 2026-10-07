@@ -366,10 +366,24 @@ def _finish(alpha, tool, surface, seed):
         catch = np.clip((tooth - 0.3) / 0.35, 0, 1)
         return alpha * (0.15 + 0.85 * catch)
     if tool in ("sharpie", "marker"):
+        # A felt tip leaves a firm edge. On porous stock the dye wicks out
+        # along individual fibres as fine hairs; it never spreads as an even
+        # soft ring. The old version did spread an even gaussian halo, and a
+        # grey ring around a black stroke reads as a drop shadow: Caleb saw
+        # the Sharpie on a tape label "floating". So: firm edge, fibre hairs
+        # only on porous surfaces, and dye that is a touch translucent, so
+        # the surface under it still shows.
         img = Image.fromarray((alpha * 255).astype(np.uint8))
-        spread = img.filter(ImageFilter.GaussianBlur(0.4 + bleed * 1.4))
-        halo = img.filter(ImageFilter.GaussianBlur(1.5 + bleed * 3)).point(lambda v: int(v * (0.1 + bleed * 0.25)))
-        return np.maximum(np.asarray(spread, dtype=np.float32), np.asarray(halo, dtype=np.float32)) / 255
+        edge = np.asarray(img.filter(ImageFilter.GaussianBlur(0.45)), dtype=np.float32) / 255
+        if bleed > 0.2:
+            rng = np.random.default_rng(seed)
+            h, w = alpha.shape
+            fibre = rng.random((h, max(2, w // 6))).astype(np.float32)
+            fibre = np.asarray(Image.fromarray((fibre * 255).astype(np.uint8)).resize((w, h), Image.BILINEAR), dtype=np.float32) / 255
+            reach = np.asarray(img.filter(ImageFilter.MaxFilter(5)), dtype=np.float32) / 255
+            hairs = reach * np.clip((fibre - 0.78) / 0.22, 0, 1) * min(1.0, bleed)
+            edge = np.maximum(edge, hairs * 0.55)
+        return np.clip(edge * 0.93, 0, 1)
     if bleed > 0:
         img = Image.fromarray((alpha * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(bleed))
         return np.asarray(img, dtype=np.float32) / 255

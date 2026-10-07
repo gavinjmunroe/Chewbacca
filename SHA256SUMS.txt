@@ -32,9 +32,9 @@ a9f090aacbcfb0f7b04af9fcc86fe4019877cfcfefda93ea1609f3b34d0fe19e  .claude/hooks/
 baff09b097b67758927ae5ea8ed991dc855687ccd34face005381a4fb432ab42  .claude/hooks/prose-guard.sh
 cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/repo-overlap-guard.sh
 e049f36ce157ecb181fa4e061bbf94d64cb06c8c1053c4523cf9c541485c0a9d  .claude/hooks/session-context.sh
-e51dc4bb123cecf0014fba020e897cf9f52412d1e6ec62066574728fad2c24cc  .claude/hooks/skill-gate.sh
+27f5a3b10557b2b5d239f700e49f1943b1dc7e59832d3860c4296dcdbd28fbb7  .claude/hooks/skill-gate.sh
 a176571c1fc0376648f87d4e84c994142242275bf1fbbd53c0358609a3375137  .claude/hooks/skill-route-shadow.sh
-2c3d6f561d24365f3cfde30806b679b0fcf08d0a74ae25858f2d2f63cf9c1c87  .claude/hooks/skill-route.sh
+69122ff84192a75f4135386e5798408f3ac60be95336975870d340da51be0773  .claude/hooks/skill-route.sh
 eb8e8f5b01b200afd455808647e7c339ecb0b29506ecdde2fc2664747ba13342  .claude/hooks/slop-guard.sh
 0aeb3e7c5d08db6e967001ddd1fc845791f500c5186c3616f9f99d49367c2695  .claude/hooks/stale-read-guard.sh
 991de99509214748f9352ebe1d62e423cf9d78a2b195b099c914315330bf86ea  .claude/hooks/statusline.sh

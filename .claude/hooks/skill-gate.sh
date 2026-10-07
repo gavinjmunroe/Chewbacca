@@ -27,6 +27,41 @@ if [ "$TOOL" = "Skill" ]; then
   ASKED=$(printf '%s' "$INPUT" | jq -r '.tool_input.skill // empty')
   [ -n "$ASKED" ] && mkdir -p "$STATE" && echo "${ASKED##*:}" >> "$STATE/skill-loaded-$SID"
 fi
+
+# BEHAVIOR backstop: the prompt classifier misses some big work (2026-10-06,
+# 3 of 15 labeled big prompts slipped under Jev's cutoff), so the work itself
+# is the second trigger. Spawning an agent or workflow, or touching a THIRD
+# distinct file, without graph-engineering loaded is refused once per session.
+# Three because a two-file fix plus its test is the common small change;
+# guessed, never measured. GRAPH_GATE_FILES overrides it.
+if ! grep -qxF graph-engineering "$STATE/skill-loaded-$SID" 2>/dev/null \
+   && [ ! -e "$STATE/graph-asked-$SID" ]; then
+  # Notes and scratch are not the build: the house rules write memory files
+  # all the time, and a fix + test + memory note is still a small change.
+  WHY=""
+  case "$TOOL" in
+    Agent|Task|Workflow) WHY="spawning $TOOL" ;;
+    Edit|Write|MultiEdit|NotebookEdit)
+      F=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty')
+      case "$F" in "$HOME/second-brain/"*|"$HOME/.claude/"*|/tmp/*|/private/tmp/*|/private/var/folders/*) F="" ;; esac
+      if [ -n "$F" ]; then
+        mkdir -p "$STATE"
+        echo "$F" >> "$STATE/graph-edits-$SID"
+        # sort -u, not a read-then-append check: parallel Edits race that.
+        N=$(sort -u "$STATE/graph-edits-$SID" | wc -l | tr -d ' ')
+        [ "$N" -ge "${GRAPH_GATE_FILES:-3}" ] && WHY="file $N of this session ($F)"
+      fi ;;
+  esac
+  # mkdir is atomic, so parallel tool calls in one message refuse once, not
+  # once each. The prompt marker goes too, or the call the message promises
+  # will go through gets refused a second time by it.
+  if [ -n "$WHY" ] && mkdir "$STATE/graph-asked-$SID" 2>/dev/null; then
+    rm -f "$MARK"
+    echo "skill-gate: this is big work ($WHY) and nobody asked \"should I graph engineer here?\". Load graph-engineering, then decide in one line: what fans out, what verifies from ground truth, or why none of it applies. Refused once; the next call goes through." >&2
+    exit 2
+  fi
+fi
+
 [ -s "$MARK" ] || exit 0
 
 if [ "$TOOL" = "Skill" ]; then

@@ -158,6 +158,12 @@ not variety. Before designing any set of elements, write one line per element:
 the one thing it proves that no other element proves, and why its interaction
 IS that thing working. Two elements with the same line means one of them goes.
 
+On a brand or waitlist site built for aura (teameigen.com is the reference),
+"what it proves" is never a product capability. Caleb, 2026-10-07: "Bro don't
+show the product. Eigen aura farmed by not showing the product." There, each
+element reveals a different true thing about the people and what they
+believe, and the product stays a mystery.
+
 ## Nobody sees it before every state is screenshotted
 
 The same night he opened the draft himself and said "Most of this site looks

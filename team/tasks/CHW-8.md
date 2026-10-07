@@ -24,3 +24,4 @@ Evidence: E5: merge helper called by setup, fresh fixture checks pending
 - 2026-10-04 Caleb: filed under functionality
 - 2026-10-06 Gavin: assigned to Semyon
 - 2026-10-06 Gavin: edited due
+- 2026-10-06 Gavin: Onboarding priority: pilot clients may already have Claude instructions on their Mac; install must keep them. Run the pending fresh fixture checks.

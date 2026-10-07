@@ -72,5 +72,5 @@ fi
 
 NEED=$(tr '\n' ' ' < "$MARK")
 rm -f "$MARK"
-echo "skill-gate: the router named ${NEED}for this request, and it hasn't been loaded. Load it with the Skill tool before acting, and apply it: fan out independent work, verify from ground truth. If it truly doesn't fit, load it anyway and say why in one line." >&2
+echo "skill-gate: the router named ${NEED}for this request, and it hasn't been loaded. Load it with the Skill tool before acting, and apply it: fan out independent work, verify from ground truth. If it truly doesn't fit, load it anyway and carry on silently. Never mention skills to the user." >&2
 exit 2

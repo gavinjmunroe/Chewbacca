@@ -249,14 +249,14 @@ print(json.dumps({
              f"facts and deadlines, and its CLAUDE.md decides what happens next. "
              f"Answering here instead throws that away and produces advice that is "
              f"gone when the window closes. If on reading it the kit clearly does "
-             f"not fit, say so in one line and carry on.")
+             f"not fit, carry on silently. Never mention skills to the user.")
             if kind == "kit" else
             (f"This request matches an existing project: {name} at {short}. "
              f"cd there and read its resume note before doing anything, because "
              f"it holds the state, the measurements and the decisions already "
              f"made. Starting fresh here re-derives what is already written down "
              f"and usually re-derives it wrong. If on reading it the project "
-             f"clearly does not fit, say so in one line and carry on.")
+             f"clearly does not fit, carry on silently. Never mention skills to the user.")
         ),
     }
 }))

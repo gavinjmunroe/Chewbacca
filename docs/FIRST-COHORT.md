@@ -212,3 +212,24 @@ Pricing is set by Gavin and Caleb; a check with Jake is optional.
 8. What counts as working after the two weeks, so the retainer starts?
 9. What can consumer prep include before contracts, without building?
 10. What time is the Sunday sync, and is Saturday off or optional?
+
+### Answers by text, 2026-10-06 night, and what was checked
+
+- Drag-into-Settings onboarding bubble: Caleb has it working with Kyber.
+- Signing: the only codesigning identity on Caleb's Mac is "Apple Development:
+  CALEB SPENCER NEWTON (N9F648W7F4)". There is no "Developer ID Application"
+  certificate yet, and that is the one notarized outside-the-App-Store installs
+  need. Whether the account is individual or organization is still unchecked.
+- Branches: `calebnewtonusc/Chewbacca` has one branch, `main`. The extra branches
+  are on Gavin's fork (`feat/borrowed-skills`, `feat/novice-vm-receipt`,
+  `feat/titanium-edge`), and all three are fully merged into main, so deleting
+  them loses nothing.
+- Still open from Gavin's list: which inboxes and domain carry the 200 a day,
+  the wave 1 Clay tables, the Karthik time on Friday.
+
+### Raised on the call, not yet in the bones
+
+Caleb's point: the demo should flex three things together, Clay, business data,
+and people data organized the way Karthik built Amber's people layer (now local
+in Chewbacca as `people`). The bones list Clay but not the people layer. Decide
+on Wednesday whether it becomes an eighth bone or rides inside the Clay operator.

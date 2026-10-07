@@ -1,0 +1,29 @@
+{
+  "skill": "handwriting",
+  "cases": [
+    {
+      "prompt": "Put a handwritten note from the founder on the landing page",
+      "expect_tools": ["handwriting"],
+      "why": "handwriting drawn into a page is the core trigger",
+      "reject": ["setting the note in a handwriting font", "a flat single-colour paper background"]
+    },
+    {
+      "prompt": "Make a sticky note grocery list in pencil for the mockup",
+      "expect_tools": ["handwriting"],
+      "why": "tool and surface are named; pencil must show graphite catching paper grain",
+      "reject": ["grey ink that looks like a pen", "writing that runs off the note"]
+    },
+    {
+      "prompt": "This handwriting looks too perfect",
+      "expect_tools": ["handwriting"],
+      "why": "the complaint that started the skill; the fix is learned strokes, not more jitter",
+      "reject": ["adding random rotation to font glyphs"]
+    },
+    {
+      "prompt": "Add a kid's crayon drawing with 'love Maya' on it",
+      "expect_tools": ["handwriting"],
+      "why": "crayon on printer paper with a child's hand",
+      "reject": ["keeping a seed without reading every word back"]
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "skill": "nalana",
+  "cases": [
+    {
+      "prompt": "bro we hv nalana",
+      "expect_tools": ["nalana"],
+      "why": "Nalana is the Blender fork, and on 2026-10-06 it was misread as nano banana twice",
+      "reject": ["looking for a Gemini key", "loading nano-banana-pro"]
+    },
+    {
+      "prompt": "Render the scene in Nalana",
+      "expect_tools": ["nalana"],
+      "why": "connect with the launcher first so the MCP add-on lands in Blender/5.1",
+      "reject": ["calling blender MCP tools before port 9876 answers"]
+    }
+  ]
+}

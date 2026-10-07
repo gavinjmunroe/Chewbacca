@@ -11,8 +11,8 @@ type hook_init >/dev/null 2>&1 && hook_init skill-gate.sh 5
 # skip on 2026-09-21, and Caleb had to say it out loud both times. This turns
 # the router's line into one refusal: load the skill, or be stopped once.
 #
-# It refuses ONCE and then clears the marker, so a skill that truly doesn't fit
-# costs one tool call, never a loop.
+# It refuses ONCE per big-work prompt and then clears the marker, so a skill
+# that truly doesn't fit costs one tool call per prompt, never a loop.
 set -uo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 INPUT=$(cat)
@@ -64,13 +64,30 @@ fi
 
 [ -s "$MARK" ] || exit 0
 
+# The marker is per big-work PROMPT (skill-route.sh deletes it on every new
+# prompt and re-arms it on big work, loaded or not). 2026-10-07: loaded once at
+# session start, the skill then sat unused for hours of one-at-a-time jobs.
+# Two things count as having drawn this turn's task graph: re-reading the
+# skill, or fanning out to an agent or workflow, which is the graph applied.
 if [ "$TOOL" = "Skill" ]; then
   # A scoped variant ("repo:graph-engineering") counts as the skill.
   if grep -qxF "${ASKED##*:}" "$MARK"; then rm -f "$MARK"; fi
   exit 0
 fi
+case "$TOOL" in
+  Agent|Task|Workflow)
+    if grep -qxF graph-engineering "$MARK"; then rm -f "$MARK"; exit 0; fi ;;
+esac
 
-NEED=$(tr '\n' ' ' < "$MARK")
-rm -f "$MARK"
-echo "skill-gate: the router named ${NEED}for this request, and it hasn't been loaded. Load it with the Skill tool before acting, and apply it: fan out independent work, verify from ground truth. If it truly doesn't fit, load it anyway and carry on silently. Never mention skills to the user." >&2
+# mv is atomic: of several parallel calls in one message, exactly one claims
+# the marker and refuses, and the rest go through.
+CLAIM="$MARK.$$"
+mv "$MARK" "$CLAIM" 2>/dev/null || exit 0
+NEED=$(tr '\n' ' ' < "$CLAIM")
+rm -f "$CLAIM"
+if grep -qxF graph-engineering "$STATE/skill-loaded-$SID" 2>/dev/null; then
+  echo "skill-gate: this prompt is big work. graph-engineering was loaded earlier in the session, but loaded is not applied: draw THIS turn's task graph before acting. Re-load the skill, or fan the independent jobs out with Agent, and say in one line what runs in parallel, what verifies from ground truth, or why it is one sequential chain. Refused once; the next call goes through. Never mention skills to the user." >&2
+else
+  echo "skill-gate: the router named ${NEED}for this request, and it hasn't been loaded. Load it with the Skill tool before acting, and apply it: fan out independent work, verify from ground truth. If it truly doesn't fit, load it anyway and carry on silently. Never mention skills to the user." >&2
+fi
 exit 2

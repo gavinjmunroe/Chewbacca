@@ -69,12 +69,39 @@ marked "BIG make chewbacca perfect" && echo "ok    probe over cutoff marks it" |
 BIGWORK_LOCAL=off marked "BIG build the Kyber keyboard into amber-ios" && { echo "FAIL  gated with the model off"; fail=1; } || echo "ok    model off means no prompt gate"
 OLLAMA_HOST=http://127.0.0.1:9 marked "BIG build the Kyber keyboard into amber-ios" && { echo "FAIL  gated with the model down"; fail=1; } || echo "ok    model down means no prompt gate"
 
-# Loaded once this session means never gated again, by either path.
+# Loaded this session: a prompt that only SOUNDS like graphs is not gated
+# again, but big work is (below).
 rm -rf "$CHEWBACCA_HOME/state/"*-t1
 [ "$(gate Skill graph-engineering)" = 0 ]
-route "BIG build the Kyber keyboard into amber-ios"
 route "fan out these independent jobs in parallel instead of running them sequentially, and dedupe the entities"
-[ ! -e "$CHEWBACCA_HOME/state/skill-required-t1" ] && echo "ok    already loaded, never gated twice" || { echo "FAIL  re-gated a loaded skill"; fail=1; }
+[ ! -e "$CHEWBACCA_HOME/state/skill-required-t1" ] && echo "ok    already loaded, a graph-sounding prompt is not re-gated" || { echo "FAIL  re-gated a loaded skill on vocabulary"; fail=1; }
+
+# 2026-10-07: loaded at session start, then hours of one-at-a-time jobs with
+# nothing to stop them. The requirement re-arms on every big-work PROMPT.
+BIG2="BIG now render the reel, generate the assets, write the page and prep the deploy"
+rm -rf "$CHEWBACCA_HOME/state/"*-t1
+route "BIG build the onboarding flow"
+[ "$(gate Skill graph-engineering)" = 0 ]
+route "Thanks bro that worked great"
+route "$BIG2"
+r="$(gate Bash)$(gate Bash)"
+[ "$r" = "20" ] && echo "ok    second big prompt in a session re-arms the gate, once" || { echo "FAIL  second big prompt gave $r"; fail=1; }
+route "$BIG2"
+route "ok looks good, keep going"
+[ "$(gate Bash)" = 0 ] && echo "ok    a small prompt does not re-arm, and clears the last turn's marker" || { echo "FAIL  small prompt was gated"; fail=1; }
+route "$BIG2"
+[ "$(gate Skill graph-engineering)$(gate Bash)" = "00" ] && echo "ok    re-loading the skill that turn satisfies it" || { echo "FAIL  re-load did not satisfy"; fail=1; }
+route "$BIG2"
+[ "$(gate Agent)$(gate Bash)" = "00" ] && echo "ok    spawning an agent that turn satisfies it" || { echo "FAIL  agent spawn did not satisfy"; fail=1; }
+route "$BIG2"
+[ "$(gate Skill handwriting)$(gate Bash)" = "02" ] && echo "ok    another skill's load does not satisfy it" || { echo "FAIL  unrelated skill satisfied it"; fail=1; }
+# Parallel calls in one message: exactly one of them refuses.
+route "$BIG2"
+# Wait on these six by pid: a bare wait would block on the fake Ollama.
+pids=""; for i in 1 2 3 4 5 6; do gate Bash > "$TMP/par.$i" & pids="$pids $!"; done
+for p in $pids; do wait "$p"; done
+n=$(cat "$TMP"/par.* | grep -c '^2$')
+[ "$n" = 1 ] && echo "ok    six parallel calls refuse exactly once" || { echo "FAIL  parallel calls refused $n times"; fail=1; }
 
 # Behavior backstop: a third distinct file, or an agent spawn, without the
 # skill loaded is refused once.

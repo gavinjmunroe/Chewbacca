@@ -85,6 +85,18 @@ except Exception:
     raise SystemExit(0)
 
 prompt = (payload.get("prompt") or "").strip()
+# The marker is per TURN, not per session. Every new user prompt starts a new
+# turn, so a requirement the last prompt raised and nobody used dies here, and
+# a "yes go" after a big prompt is not gated on the old one. The detached
+# cache child re-runs on an old payload and must not touch it.
+if not os.environ.get("SKILL_ROUTE_BUILD_CACHE"):
+    _sid = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("session_id") or ""))
+    if _sid:
+        try:
+            os.remove(os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")),
+                                   "state", f"skill-required-{_sid}"))
+        except OSError:
+            pass
 # One row per prompt in the private shadow log, silent prompts included, so
 # VEC_MIN and VEC_GATE can be set from labeled real traffic (bin/route-label,
 # tools/route_tune.py). The detached child that only builds the vector cache
@@ -175,7 +187,15 @@ def big_work():
 # The detached cache-building child re-runs this script on the same payload;
 # letting it write would re-arm a marker the gate already cleared, and it would
 # embed the prompt twice.
-if (sid_early and not question and "graph-engineering" not in LOADED
+#
+# Big work re-arms even when graph-engineering is ALREADY loaded. 2026-10-07:
+# it was loaded at the start of a long session, then for hours rendering,
+# asset generation, page code and deploy prep ran strictly one after another,
+# because a once-per-session gate had nothing left to say. Caleb: "Why tf you
+# not graph engineering I should never have to say this". Loaded is not
+# applied; each big prompt needs its own task graph, so skill-gate.sh refuses
+# that turn's first tool call until the skill is re-read or an agent fans out.
+if (sid_early and not question
         and not os.environ.get("SKILL_ROUTE_BUILD_CACHE") and big_work()):
     SHADOW["bigwork"] = True
     try:

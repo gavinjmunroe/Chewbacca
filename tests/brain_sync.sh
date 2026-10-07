@@ -67,5 +67,19 @@ run S4
 [ "$(git -C "$PUB" log -1 --format=%s)" = "brain: update 1 file(s)" ] && ok "the public repo never carries the prompt" \
   || no "public subject was: $(git -C "$PUB" log -1 --format=%s)"
 
+# 2026-10-06: the brain's own pre-commit lint refused an unindexed note and
+# brain-sync said nothing, so the note sat staged. A refusal is handed back.
+mkdir -p "$BRAIN/.githooks"
+printf '#!/bin/sh\necho "second-brain check failed: 1 memory file missing from MEMORY.md" >&2\nexit 1\n' > "$BRAIN/.githooks/pre-commit"
+chmod +x "$BRAIN/.githooks/pre-commit"; git -C "$BRAIN" config core.hooksPath .githooks
+echo refused > "$BRAIN/r.md"; printf '1\tS5\t%s\twrite\n' "$BRAIN/r.md" >> "$LOG"
+out="$(printf '{"session_id":"S5","transcript_path":"%s"}' "$TEST_DIR/t.jsonl" \
+  | env HOME="$TEST_HOME" CHEWBACCA_WRITE_LOG="$LOG" CHEWBACCA_LOG_DIR="$TEST_DIR/logs" bash "$HOOK" 2>&1)"; rc=$?
+[ "$rc" = 2 ] && printf '%s' "$out" | grep -q "MEMORY.md" && ok "a refused commit exits 2 with the refusal's reason" \
+  || no "refusal was silent (exit $rc): $out"
+printf '{"session_id":"S5","transcript_path":"%s","stop_hook_active":true}' "$TEST_DIR/t.jsonl" \
+  | env HOME="$TEST_HOME" CHEWBACCA_WRITE_LOG="$LOG" CHEWBACCA_LOG_DIR="$TEST_DIR/logs" bash "$HOOK" >/dev/null 2>&1
+[ $? = 0 ] && ok "the retry turn never refuses twice" || no "refused again with stop_hook_active set"
+
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

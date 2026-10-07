@@ -45,6 +45,7 @@ if not repos:
     sys.exit(0)
 
 written = set()
+REFUSED = []
 with open(log, encoding="utf-8", errors="replace") as f:
     for line in f:
         parts = line.rstrip("\n").split("\t")
@@ -116,6 +117,11 @@ for repo in repos:
     body = "\n".join(dirty[:40])
     done = git(repo, "commit", "-q", "-m", head, "-m", body, "--", *dirty)
     if done.returncode != 0:
+        # Silent here meant notes sat staged and unpushed: on 2026-10-06 the
+        # brain's own lint refused an unindexed memory file and nothing said
+        # so. The refusal is the fix list, so hand it back once.
+        why = ((done.stderr or "") + (done.stdout or "")).strip().splitlines()[:8]
+        REFUSED.append((repo, dirty, why))
         continue
     # Same lock format-and-sync used: a dropped push is safe because the next
     # one sends every local commit, and a lock whose holder died is cleared.
@@ -133,5 +139,15 @@ rm -rf "$lock"''', repo],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+
+if REFUSED and not payload.get("stop_hook_active"):
+    for repo, files, why in REFUSED:
+        print(f"brain-sync: the commit in {repo} was refused, so {len(files)} file(s) "
+              f"this session wrote are staged but not saved: {', '.join(files[:6])}", file=sys.stderr)
+        for line in why:
+            print(f"  {line}", file=sys.stderr)
+    print("Fix what it names, then end the turn again; brain-sync retries once.", file=sys.stderr)
+    sys.exit(2)
 PY
+[ $? -eq 2 ] && exit 2
 exit 0

@@ -42,6 +42,9 @@ MUST_FIRE = [
 ]
 
 MUST_NOT_FIRE = [
+    # Naming a decision only the user can make is required, not a handoff.
+    # Refused twice on 2026-10-06 and the same answer reached Caleb three times.
+    "The one call you'll have to make is when someone replies interested.",
     # Reporting what was actually done. The honest, correct shape.
     "I ran the suite: 278 passed, 0 failed.",
     "I pushed to main. I ran `swift build` first and it was clean.",

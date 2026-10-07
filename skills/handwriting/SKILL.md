@@ -5,8 +5,12 @@ description: Make handwriting that a person would believe a hand wrote, on paper
 
 # Handwriting
 
-The standard is [references/standard.md](references/standard.md), Caleb's spec,
-pasted 2026-10-07. Read it before drawing anything. Its first rule is the one
+The standards are [references/standard.md](references/standard.md) for the
+writing and [references/surface-standard.md](references/surface-standard.md)
+for what it is written on, both Caleb's specs, pasted 2026-10-07. Paper on a
+fridge or desk is a physical object with thickness, curl and contact shadows,
+so render it in the 3D scene (see the nalana skill) rather than floating a flat
+image over a render. Read it before drawing anything. Its first rule is the one
 everything else hangs on: **never render text as a handwriting font.**
 
 ## The tool on this Mac

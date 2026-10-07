@@ -23,4 +23,28 @@ route "fan out these independent jobs in parallel instead of running them sequen
 rm -f "$CHEWBACCA_HOME/state/skill-required-t1"
 route "someone can opt out but every person went on the trip and it needs approval"
 [ ! -e "$CHEWBACCA_HOME/state/skill-required-t1" ] && echo "ok    conversational words don't trigger it" || { echo "FAIL  glue words triggered the gate"; fail=1; }
+
+# 2026-10-06: big work gates the skill even when the prompt never sounds like
+# graphs. "I should never have to tell you."
+rm -f "$CHEWBACCA_HOME/state/"skill-*-t1
+for p in "build the Kyber keyboard into amber-ios" \
+         "Bro do all the applications" \
+         "fix chewbacca so you actually go through with the plans" \
+         "scrape every YC company in the batch and enrich the founders"; do
+  rm -f "$CHEWBACCA_HOME/state/skill-required-t1"
+  route "$p"
+  [ -s "$CHEWBACCA_HOME/state/skill-required-t1" ] && echo "ok    big work marks it: $p" || { echo "FAIL  big work missed: $p"; fail=1; }
+done
+for p in "fix the typo in the readme" "how do I build a graph in neo4j?" "Lol I'm cooked"; do
+  rm -f "$CHEWBACCA_HOME/state/skill-required-t1"
+  route "$p"
+  [ ! -e "$CHEWBACCA_HOME/state/skill-required-t1" ] && echo "ok    small or a question stays silent: $p" || { echo "FAIL  gated small work: $p"; fail=1; }
+done
+
+# Loaded once this session means never gated again, by either path.
+rm -f "$CHEWBACCA_HOME/state/"skill-*-t1
+[ "$(gate Skill graph-engineering)" = 0 ]
+route "build the Kyber keyboard into amber-ios"
+route "fan out these independent jobs in parallel instead of running them sequentially, and dedupe the entities"
+[ ! -e "$CHEWBACCA_HOME/state/skill-required-t1" ] && echo "ok    already loaded, never gated twice" || { echo "FAIL  re-gated a loaded skill"; fail=1; }
 exit $fail

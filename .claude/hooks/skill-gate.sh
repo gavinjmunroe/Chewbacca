@@ -18,12 +18,18 @@ command -v jq >/dev/null 2>&1 || exit 0
 INPUT=$(cat)
 SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' | tr -cd 'A-Za-z0-9_-')
 [ -n "$SID" ] || exit 0
-MARK="${CHEWBACCA_HOME:-$HOME/.chewbacca}/state/skill-required-$SID"
-[ -s "$MARK" ] || exit 0
-
+STATE="${CHEWBACCA_HOME:-$HOME/.chewbacca}/state"
+MARK="$STATE/skill-required-$SID"
 TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
+# Record every load, marker or not, so skill-route stops gating a skill that
+# is already in this session's context.
 if [ "$TOOL" = "Skill" ]; then
   ASKED=$(printf '%s' "$INPUT" | jq -r '.tool_input.skill // empty')
+  [ -n "$ASKED" ] && mkdir -p "$STATE" && echo "${ASKED##*:}" >> "$STATE/skill-loaded-$SID"
+fi
+[ -s "$MARK" ] || exit 0
+
+if [ "$TOOL" = "Skill" ]; then
   # A scoped variant ("repo:graph-engineering") counts as the skill.
   if grep -qxF "${ASKED##*:}" "$MARK"; then rm -f "$MARK"; fi
   exit 0

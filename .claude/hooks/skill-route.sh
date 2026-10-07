@@ -109,6 +109,48 @@ if any(marker in prompt for marker in NOISE):
     SHADOW["gate"] = "machine"
     raise SystemExit(0)
 
+# BIG WORK gates graph-engineering whatever the prompt is about.
+#
+# 2026-10-06, Caleb: "Before you do anything big, I need you to think 'Should
+# I graph engineer here' I should never have to tell you". The ENFORCED path
+# below only fires when a prompt SOUNDS like graphs, and a build request almost
+# never does. That very prompt scored 0.45 rounded, under VEC_GATE, so no marker
+# was written and four tool calls ran before anyone asked the question. The
+# trigger he wants is the size of the work, not its vocabulary.
+#
+# Strong verbs are big on their own. Weak ones need a scale word, or a long
+# brief, because "fix the typo in the readme" is not a build. A false positive
+# costs one refused call, once per session; a miss costs Caleb saying it again.
+# Thresholds guessed, never measured: the shadow log's "bigwork" rows are the
+# data to tune them from.
+STRONG = r"\b(build|implement|refactor|rewrite|redesign|migrate|scaffold|overhaul|automate|scrape|enrich|integrate|port|orchestrate|pipeline|fix chewbacca)\b"
+WEAK = r"\b(make|create|add|fix|write|draft|research|generate|deploy|set ?up|wire|process|import|sync|clean ?up|dedupe|merge|ship|run|do)\b"
+SCALE = r"\b(all|every|each|whole|entire|across|bulk|batch|list|lists|everything|\d{2,})\b"
+low = prompt.lower()
+n_words = len(low.split())
+question = low.endswith("?") and re.match(r"(how|what|why|when|where|which|who|is|are|does|do|can|should)\b", low)
+big = (not question and n_words >= 4 and (
+    re.search(STRONG, low)
+    or (re.search(WEAK, low) and (re.search(SCALE, low) or n_words >= 15))))
+sid_early = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("session_id") or ""))
+state_dir = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "state")
+loaded_path = os.path.join(state_dir, f"skill-loaded-{sid_early}")
+try:
+    with open(loaded_path) as fh:
+        LOADED = set(fh.read().split())
+except OSError:
+    LOADED = set()
+# The detached cache-building child re-runs this script on the same payload;
+# letting it write would re-arm a marker the gate already cleared.
+if big and sid_early and "graph-engineering" not in LOADED and not os.environ.get("SKILL_ROUTE_BUILD_CACHE"):
+    SHADOW["bigwork"] = True
+    try:
+        os.makedirs(state_dir, exist_ok=True)
+        with open(os.path.join(state_dir, f"skill-required-{sid_early}"), "w") as fh:
+            fh.write("graph-engineering\n")
+    except OSError:
+        pass
+
 ROOTS = [os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "skills"),
          os.path.expanduser("~/.claude/skills"),
          os.path.expanduser("~/.agents/skills")]
@@ -393,8 +435,11 @@ ENFORCED = {"graph-engineering"}
 # video skill at 0.35, one hundredth over VEC_MIN: fine as a suggestion the
 # model can wave off, wrong as a refusal. 0.45 is guessed, never measured.
 VEC_GATE = 0.45
+# Already loaded this session means the skill is in context: gating again is a
+# refusal that teaches nothing.
 required = [name for s, name, _p, _w in top
-            if name in ENFORCED and (vec is None or s >= VEC_GATE)]
+            if name in ENFORCED and (vec is None or s >= VEC_GATE)
+            and name not in LOADED]
 SHADOW["gate_threshold"] = VEC_GATE
 SHADOW["required"] = required
 sid = re.sub(r"[^A-Za-z0-9_-]", "", str(payload.get("session_id") or ""))

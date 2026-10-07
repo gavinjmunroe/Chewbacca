@@ -112,6 +112,32 @@ mistake.
 - [library/crafts/interface.md](../../library/crafts/interface.md): the researched rules, from
   Refactoring UI and Atomic Design. Read at step 4.
 
+## Ask what it is made of before drawing it
+
+Caleb, 2026-10-07, on the same fridge: "Make sure pencil and pen look like
+pencil and pen, and make sure based on the surface they are on they actually
+look like that surface. Whenever you make smth, ask the questions that will
+lead you to concluding things like this."
+
+Before making any object that stands in for a real one, answer these, and let
+the answers set the rendering:
+
+- What made the mark? Ballpoint is thin, even, a little gloopy where a stroke
+  starts, and skips. Pencil is grey graphite that catches only the tops of the
+  paper grain and shines slightly. A Sharpie is flat black and bleeds on
+  paper but not on plastic. Crayon is waxy and leaves the grain showing.
+- What is it on? Notebook paper takes ink, a sticky note is thin and slightly
+  translucent, a polaroid border is smooth and slick, coated cardstock makes a
+  ballpoint skip.
+- Who made it, and in what hurry? A grocery list is fast and slanting. A card
+  for a wedding is slow. A kid presses hard.
+- How old is it, and what has happened to it since? Sun fade, a fold, tape
+  that yellowed, a magnet that has been moved twice.
+- How is it lit, and does its shadow agree with the room it sits in?
+
+An answer nobody wrote down is a default, and defaults are what read as made
+by a machine.
+
 ## Handwriting is never perfect
 
 A handwriting font set straight onto a page repeats the same "e" every time,

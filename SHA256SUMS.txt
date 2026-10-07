@@ -34,7 +34,7 @@ cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/
 e049f36ce157ecb181fa4e061bbf94d64cb06c8c1053c4523cf9c541485c0a9d  .claude/hooks/session-context.sh
 27f5a3b10557b2b5d239f700e49f1943b1dc7e59832d3860c4296dcdbd28fbb7  .claude/hooks/skill-gate.sh
 a176571c1fc0376648f87d4e84c994142242275bf1fbbd53c0358609a3375137  .claude/hooks/skill-route-shadow.sh
-6200c65e4b88c9c4a96e4716f612ff9743e04ac411b3eccaad89b73b2ad7f544  .claude/hooks/skill-route.sh
+ac36f999aa6edc09f952f6ca1b1ca18efda0cdfef541cd001700f8391855b235  .claude/hooks/skill-route.sh
 eb8e8f5b01b200afd455808647e7c339ecb0b29506ecdde2fc2664747ba13342  .claude/hooks/slop-guard.sh
 0aeb3e7c5d08db6e967001ddd1fc845791f500c5186c3616f9f99d49367c2695  .claude/hooks/stale-read-guard.sh
 991de99509214748f9352ebe1d62e423cf9d78a2b195b099c914315330bf86ea  .claude/hooks/statusline.sh

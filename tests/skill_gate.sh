@@ -9,25 +9,30 @@ export CHEWBACCA_HOME="$TMP/home"
 mkdir -p "$CHEWBACCA_HOME/skills/graph-engineering"
 cp "$ROOT/skills/graph-engineering/SKILL.md" "$CHEWBACCA_HOME/skills/graph-engineering/"
 fail=0
-# A fake Ollama before any route call, so the suite never runs a real model:
-# /api/chat answers BIG for prompts carrying BIG, SMALL otherwise; everything
-# else 404s, which sends the vector router to its keyword fallback.
+# A fake Ollama before any route call, so the suite never runs a real model.
+# The probe's classification embed gets the shipped weight vector itself for
+# prompts carrying BIG and its negative otherwise, so the real PROBE_W decides.
+# Every other call 404s, which sends the vector router to its keyword fallback.
 cat > "$TMP/ollama.py" <<'O'
-import http.server, json, sys
+import base64, http.server, json, re, struct, sys
+src = open(sys.argv[1]).read()
+raw = base64.b64decode(re.search(r'^PROBE_W = "(.+)"', src, re.M).group(1))
+w = list(struct.unpack(f"<{len(raw) // 2}e", raw))
 class H(http.server.BaseHTTPRequestHandler):
     def log_message(self, *a): pass
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        if self.path != "/api/chat":
+        texts = body.get("input") or []
+        if self.path != "/api/embed" or len(texts) != 1 or not texts[0].startswith("task: classification"):
             self.send_response(404); self.end_headers(); return
-        word = "BIG" if "BIG" in body["messages"][-1]["content"] else "SMALL"
-        out = json.dumps({"message": {"content": word}}).encode()
+        sign = 1 if "BIG" in texts[0] else -1
+        out = json.dumps({"embeddings": [[sign * x for x in w]]}).encode()
         self.send_response(200); self.end_headers(); self.wfile.write(out)
 s = http.server.HTTPServer(("127.0.0.1", 0), H)
 print(s.server_port, flush=True)
 s.serve_forever()
 O
-python3 "$TMP/ollama.py" > "$TMP/port" &
+python3 "$TMP/ollama.py" "$ROOT/.claude/hooks/skill-route.sh" > "$TMP/port" &
 OLLAMA_PID=$!
 trap 'kill $OLLAMA_PID 2>/dev/null; rm -rf "$TMP"' EXIT
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$TMP/port" ] && break; sleep 0.2; done
@@ -53,11 +58,11 @@ route "someone can opt out but every person went on the trip and it needs approv
 marked() { rm -f "$CHEWBACCA_HOME/state/skill-required-t1"; route "$1"; [ -s "$CHEWBACCA_HOME/state/skill-required-t1" ]; }
 
 rm -rf "$CHEWBACCA_HOME/state/"*-t1
-marked "BIG make chewbacca perfect" && echo "ok    model BIG marks it" || { echo "FAIL  model BIG missed"; fail=1; }
-! marked "Thanks bro that worked great" && echo "ok    model SMALL stays silent" || { echo "FAIL  model SMALL gated"; fail=1; }
+marked "BIG make chewbacca perfect" && echo "ok    probe over cutoff marks it" || { echo "FAIL  probe over cutoff missed"; fail=1; }
+! marked "Thanks bro that worked great" && echo "ok    probe under cutoff stays silent" || { echo "FAIL  probe under cutoff gated"; fail=1; }
 ! marked "how do I build a BIG graph in neo4j?" && echo "ok    a question never gates" || { echo "FAIL  gated a question"; fail=1; }
 
-# Model down or off: no prompt gate, and no guessing from a word list.
+# Probe down or off: no prompt gate, and no guessing from a word list.
 BIGWORK_LOCAL=off marked "BIG build the Kyber keyboard into amber-ios" && { echo "FAIL  gated with the model off"; fail=1; } || echo "ok    model off means no prompt gate"
 OLLAMA_HOST=http://127.0.0.1:9 marked "BIG build the Kyber keyboard into amber-ios" && { echo "FAIL  gated with the model down"; fail=1; } || echo "ok    model down means no prompt gate"
 
@@ -86,4 +91,8 @@ rm -rf "$CHEWBACCA_HOME/state/"*-t1
 [ "$(gate Skill graph-engineering)" = 0 ]
 r="$(edit /a)$(edit /b)$(edit /c)$(gate Agent)"
 [ "$r" = "0000" ] && echo "ok    loaded skill disables the backstop" || { echo "FAIL  backstop fired after load: $r"; fail=1; }
+# The trainer and the hook must embed with the same prefix, or retrained
+# weights silently score a different vector space.
+PREFIX=$(sed -n 's/^PREFIX = "\(.*\)"$/\1/p' "$ROOT/tools/train_bigwork_probe.py")
+[ -n "$PREFIX" ] && grep -qF "\"$PREFIX\" + prompt" "$ROOT/.claude/hooks/skill-route.sh" && echo "ok    hook and trainer share the embed prefix" || { echo "FAIL  embed prefix drifted between hook and trainer"; fail=1; }
 exit $fail

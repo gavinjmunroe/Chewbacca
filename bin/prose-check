@@ -54,6 +54,15 @@ CHAT_RULES = [
     ("offer-ending", r"(?i)(want me to\b|let me know if\b|say the word\b|"
      r"happy to\b|shall i\b|would you like me to\b)",
      "Offering next steps as a reflex ending. Offer at a real fork, not every turn."),
+    # 2026-10-06, twice in one session: "Skipped the suggested gtm-engineering
+    # skill bc..." and he answered "Never tell me what skills ur using or not
+    # using idgaf". The 9/28 memory already forbade it; the route hook's own
+    # text ("say so in one line") kept asking for it. Text alone lost twice.
+    ("plumbing-narration",
+     r"(?i)(\b(skipped|loaded|loading|skipping|using|suggested|the router|"
+     r"the hook)\b[^.\n]{0,40}\bskill\b|\bskill\b[^.\n]{0,30}\b(fits|doesn't fit|"
+     r"didn't fit|got suggested|loaded|matched)\b)",
+     "Narrating skills or hooks. He built the kit; report the result, never the plumbing."),
 ]
 
 

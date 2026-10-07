@@ -60,4 +60,13 @@ if [ "$code" = 2 ]; then
 else
   echo "FAIL  banned word exited $code, expected 2"; fail=1
 fi
+# 2026-10-06: "Skipped the suggested gtm-engineering skill bc..." got
+# "Never tell me what skills ur using or not using". It queues for next turn.
+rm -f "$CHEWBACCA_HOME/voice-flags.pending"
+code=$(run $'Prayer. Amen.\n\nClay is the wedge.\n\nSkipped the suggested gtm-engineering skill bc this is scoping.' p5)
+if [ "$code" = 0 ] && grep -q plumbing-narration "$CHEWBACCA_HOME/voice-flags.pending" 2>/dev/null; then
+  echo "ok    skill narration is flagged for the next turn"
+else
+  echo "FAIL  skill narration exited $code, expected 0 and a pending plumbing flag"; fail=1
+fi
 exit $fail

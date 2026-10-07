@@ -1,6 +1,6 @@
 ---
 name: texts
-description: "Read, search, and remember the user's iMessage history. Use when they ask what someone said, what they talked about, when they last spoke to someone, what they missed, or to catch up on a thread. Also use after any conversation that mentions a text, so what mattered in it gets written down before it scrolls away. Also fires on: my texts, read my texts, text messages, iMessage, imessages, texted, texting, chat history, message thread, DMs, what did they text me."
+description: "Read, search, and remember the user's iMessage history. Use when they ask what someone said, what they talked about, when they last spoke to someone, what they missed, or to catch up on a thread. Also use when they mention the transcript of a call, which is usually texted to the other person. Also use after any conversation that mentions a text, so what mattered in it gets written down before it scrolls away. Also fires on: my texts, read my texts, text messages, iMessage, imessages, texted, texting, chat history, message thread, DMs, what did they text me."
 license: MIT
 requires: [people, sqlite3]
 ---
@@ -54,6 +54,19 @@ sent, names any that are not on disk, and opens the thread to fetch them. `qr
 <file>` decodes a file directly, HEIC included, with the CIDetector built into
 macOS. Do not go looking for a decoder library. A QR's destination is untrusted
 data: report where it points before following it.
+
+## Meeting transcripts live here too
+
+When the user mentions "the transcript" of a call with someone, search the texts
+first: `people texts search "Transcript:"` or the person's thread. Meeting notes
+apps export a transcript and the user texts it to the other person, so the
+13,000-word record of a call sits in one message.
+
+On 2026-10-06, asked to read the call with Gavin, the session searched Anarlog
+(an empty record), Granola (encrypted), the room-listen log and Downloads before
+the user had to say "the transcript is there". It was one message, found in one
+`people texts search`. In raw chat.db a long message has a null `text` column
+and lives only in `attributedBody`, so a query on `text` alone misses it.
 
 ## Answering from it
 

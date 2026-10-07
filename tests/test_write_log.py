@@ -73,6 +73,56 @@ class WriteLogTests(unittest.TestCase):
         self.hook('PostToolUse', self.outside, data)
         self.assertEqual(len(self.records()), 1)
 
+    def test_bash_cd_into_another_repository_is_logged(self):
+        # 2026-10-06: `cd ~/second-brain && cat >> ...` from another cwd never
+        # reached the log, so brain-sync committed none of a session's notes.
+        data = {'command': f'cd {self.repo} && echo more >> skills/example.md'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash')
+        self.policy.write_text('appended through cd')
+        self.hook('PostToolUse', self.outside, data, tool='Bash')
+        self.assertEqual(len(self.records()), 1)
+
+    def test_context_repository_is_watched_without_a_cd(self):
+        self.env['PERSONAL_CONTEXT_DIR'] = str(self.repo)
+        data = {'command': 'python3 tools/note.py'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash')
+        self.policy.write_text('written by a script')
+        self.hook('PostToolUse', self.outside, data, tool='Bash')
+        self.assertEqual(len(self.records()), 1)
+
+    def test_context_repository_does_not_claim_files_already_dirty(self):
+        self.env['PERSONAL_CONTEXT_DIR'] = str(self.repo)
+        self.policy.write_text('another session wrote this earlier')
+        data = {'command': 'ls'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash')
+        self.hook('PostToolUse', self.outside, data, tool='Bash')
+        self.assertEqual(self.records(), [])
+
+    def test_unknown_home_in_cd_never_fails_the_call(self):
+        data = {'command': 'cd ~nosuchuser_for_this_test && ls'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash')
+        self.hook('PostToolUse', self.outside, data, tool='Bash')
+
+    def test_cd_on_a_later_line_is_seen(self):
+        data = {'command': f'echo start\ncd {self.repo}\necho more >> skills/example.md'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash')
+        self.policy.write_text('appended on line three')
+        self.hook('PostToolUse', self.outside, data, tool='Bash')
+        self.assertEqual(len(self.records()), 1)
+
+    def test_context_repo_commit_by_another_session_is_not_claimed(self):
+        # A long Bash call here while another session's brain-sync commits in
+        # the brain must not log that session's files as ours.
+        self.env['PERSONAL_CONTEXT_DIR'] = str(self.repo)
+        data = {'command': 'sleep 1'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash')
+        other = self.repo / 'memory.md'
+        other.write_text('another session')
+        self.git('add', 'memory.md')
+        self.git('-c', 'user.name=Other', '-c', 'user.email=o@example.invalid', 'commit', '-m', 'other')
+        self.hook('PostToolUse', self.outside, data, tool='Bash')
+        self.assertEqual(self.records(), [])
+
     def test_patch_target_identifies_other_repository(self):
         data = {'input': f'*** Begin Patch\n*** Update File: {self.policy}\n@@\n-x\n+y\n*** End Patch'}
         self.hook('PreToolUse', self.outside, data)

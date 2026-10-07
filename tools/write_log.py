@@ -4,6 +4,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import subprocess
@@ -77,11 +78,53 @@ def touched_in_window(path, start, end):
     return start - MTIME_SLACK <= modified <= end + MTIME_SLACK
 
 
+def context_dirs():
+    """The context repos brain-sync commits from: the env, else setup's
+    ~/.claude/d1-config.sh. Watched on every call because a Bash write there
+    usually runs from somewhere else: on 2026-10-06 a whole session's
+    `cd ~/second-brain && cat >> ...` edits never reached the log, so
+    brain-sync committed none of them."""
+    found = {k: os.environ.get(k) for k in ('PERSONAL_CONTEXT_DIR', 'PUBLIC_CONTEXT_DIR')}
+    config = Path.home() / '.claude/d1-config.sh'
+    try:
+        lines = config.read_text(errors='replace').splitlines() if not all(found.values()) else []
+    except OSError:
+        lines = []
+    for line in lines:
+        key, _, value = line.partition('=')
+        key = key.strip().removeprefix('export ').strip()
+        if key in found and not found[key]:
+            found[key] = value.strip().strip('"').strip("'")
+    dirs = []
+    for value in found.values():
+        if not value:
+            continue
+        try:
+            dirs.append(Path(os.path.expandvars(value)).expanduser())
+        except RuntimeError:
+            continue
+    return [d for d in dirs if str(d)]
+
+
+CD = re.compile(r'(?:^|[;&|(\n]\s*)cd\s+("[^"]+"|\'[^\']+\'|[^\s;&|)]+)', re.M)
+
+
 def repositories(payload):
     cwd = Path(payload.get('cwd') or os.getcwd()).resolve()
     data = payload.get('tool_input') or {}
     data = data if isinstance(data, dict) else {}
     candidates = [cwd]
+    implicit = []
+    if isinstance(data.get('command'), str):
+        # Only a shell call can write somewhere it does not name; Write and
+        # Edit carry file_path. Watching the brain on every Read and Grep
+        # doubled the hook's cost for nothing.
+        implicit = context_dirs()
+        for target in CD.findall(data['command']):
+            try:
+                candidates.append(cwd / Path(target.strip('"').strip("'")).expanduser())
+            except RuntimeError:
+                continue  # `cd ~nosuchuser` must never fail a tool call
     if isinstance(data.get('workdir'), str):
         candidates.append(cwd / data['workdir'])
     for field in ('file_path', 'path'):
@@ -93,15 +136,28 @@ def repositories(payload):
             for prefix in PATCH_PREFIXES:
                 if line.startswith(prefix):
                     candidates.append((cwd / line[len(prefix):]).parent)
-    found = set()
-    for candidate in candidates:
-        while not candidate.is_dir() and candidate != candidate.parent:
-            candidate = candidate.parent
-        result = subprocess.run(['git', '-C', str(candidate), 'rev-parse', '--show-toplevel'],
-                                capture_output=True, timeout=5)
-        if result.returncode == 0:
-            found.add(Path(os.fsdecode(result.stdout).strip()).resolve())
-    return sorted(found)
+    def toplevels(paths):
+        found = set()
+        for candidate in paths:
+            while not candidate.is_dir() and candidate != candidate.parent:
+                candidate = candidate.parent
+            result = subprocess.run(['git', '-C', str(candidate), 'rev-parse', '--show-toplevel'],
+                                    capture_output=True, timeout=5)
+            if result.returncode == 0:
+                found.add(Path(os.fsdecode(result.stdout).strip()).resolve())
+        return found
+
+    explicit = toplevels(candidates)
+    IMPLICIT.clear()
+    IMPLICIT.update(toplevels(implicit) - explicit)
+    return sorted(explicit | IMPLICIT)
+
+
+# Repos watched only because they are context repos, not because the call
+# named them. A commit there during a long Bash call is usually another
+# session's brain-sync (review, 2026-10-06), so commits are never claimed for
+# them; only working-tree changes inside the call's window are.
+IMPLICIT = set()
 
 
 def head(repo):
@@ -138,10 +194,25 @@ def fingerprint(path):
 
 
 def observe(repo, log, state):
+    # One `git status` instead of diff + diff --cached + ls-files: three walks
+    # of a 21k-file brain cost ~120ms per call, paid before AND after every
+    # tool once context repos were watched (2026-10-06). Porcelain v1 -z gives
+    # "XY path", and a rename or copy adds its source as the next field.
     names = set()
-    for args in (('diff', '--name-only', '-z'), ('diff', '--cached', '--name-only', '-z'),
-                 ('ls-files', '--others', '--exclude-standard', '-z')):
-        names.update(os.fsdecode(name) for name in git(repo, *args).split(b'\0') if name)
+    # --no-optional-locks: every session now runs this against the brain, and
+    # the index refresh's lock would race brain-sync's own commit.
+    fields = git(repo, '--no-optional-locks', 'status', '--porcelain=v1', '-z',
+                 '--untracked-files=all').split(b'\0')
+    i = 0
+    while i < len(fields):
+        entry = fields[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        names.add(os.fsdecode(entry[3:]))
+        if entry[:1] in (b'R', b'C') or entry[1:2] in (b'R', b'C'):
+            names.add(os.fsdecode(fields[i]))
+            i += 1
     result = {}
     for name in names:
         path = repo / name
@@ -209,7 +280,7 @@ def record(payload):
                 continue  # Without native call IDs, retain the earliest overlapping baseline.
             if before is not None and not is_pre:
                 changed = {path for path in set(before) | set(after) if before.get(path) != after.get(path)}
-                committed = committed_paths(repo, prior.get('head'), current_head)
+                committed = set() if repo in IMPLICIT else committed_paths(repo, prior.get('head'), current_head)
                 changed.update(committed)
                 started = float(prior.get('started') or 0)
                 claimed = others_exact(log, sid, started - MTIME_SLACK) if started else set()

@@ -225,6 +225,39 @@ Each job is taken from a competitor's own film or launch page. "Faster" means fe
 4. **Meetings stop at the Task.** Opal's whole pitch is the action after the conversation. Chewbacca captures and extracts, but doesn't turn an item into an event or a drafted follow-up in one press, and has no consent line at capture start.
 5. **The privacy line isn't ours yet.** Ghost can say nothing leaves the home. Chewbacca's graph is local, but answers, summaries and Jev calls go to Anthropic and TypeSafe. A local model route for classification and summaries on Apple Silicon is what lets the film say "on the Mac you already own, and nothing leaves it," which is the one sentence no competitor here can say.
 
+## The 2026-10-07 sweep: every piece already ships somewhere
+
+Run after Caleb asked what Chewbacca does that nobody else does. The answer, feature by feature, is almost nothing. Each capability below ships in at least one other product. Marks follow the same rules as above; claims from the two research passes are [read] unless noted.
+
+- **Screen overlay that acts across apps.** Highlight ($40M Series A led by Khosla, 2026-03-24 [snippet]; claims 500K users [snippet]) drafts and stages work, then waits for approval. VoiceOS (YC, 20K+ users, $11.99/mo) acts in Gmail, Slack, iMessage and Finder from the notch. Shadow ($8/mo) keeps meeting audio on the device. Gemini Spark acts on the Mac for $99.99/mo AI Ultra [snippet]. mrmr and Jarvis act through OAuth connectors with a confirmation card.
+- **A native Mac shell around Claude Code and Codex.** Fazm is open source, wraps the real Claude Code, Codex and Gemini CLI loops on the user's own plan, runs up to 40 parallel sessions with push-to-talk and accessibility control. The closest analog found.
+- **Voice routed across many Claude sessions.** noisy-studio (MIT, native Apple Silicon app with a live HUD), claude-voice-multiplexer (phone or browser over WebRTC, local Whisper and Kokoro), CallClaude and call-me (a phone number; call-me has 2,644 stars).
+- **Hooks that refuse "done" without evidence.** groundtruth (Stop hook, 80+ command signatures, SARIF audits) and No Excuses (six hooks, blocks "done" until tests pass). Anthropic Cowork plugins bundle hooks since 2026-01-30 [snippet].
+- **People memory from iMessage.** Dex (YC, 30,000+ users [snippet], reads iMessage on the Mac and syncs the last message plus metadata [snippet]) and Mesh ($8M seed [snippet]).
+- **Agents that run Clay and outbound.** Clay ships Claygent, Sculptor, an Account Research Agent, a CLI plugin for Claude Code and Codex (2026-07-09) and an MCP for reps (2026-07-14); Clay raised $115M at $7.1B on 2026-09-09. Unify (from $1,740/mo [snippet]), 11x, Artisan, Actively and Origami run outbound end to end. Boomerang drafts and routes warm introductions and never sends.
+- **Live call coaching.** Cluely ($15M Series A from a16z [snippet]).
+- **Local agent platform with memory.** OpenClaw, 391,597 stars, menu-bar app, Markdown memory, no people or identity rules.
+
+### Where each one beats Chewbacca today
+
+Packaging. Fazm, noisy-studio, VoiceOS and Highlight install on a stranger's Mac without anyone helping. Chewbacca has not passed that test ([FIRST-COHORT.md](FIRST-COHORT.md)). Clay's own agents have native access to its data marketplace. Unify and 11x manage mailboxes and deliverability. Runcap estimates a run's cost before it starts and caps spend, which Chewbacca has no equivalent for and which is the gap behind the ~21 credits a row Claygent burn.
+
+### The combination nobody was found shipping
+
+Caleb's framing, 2026-10-07: a growth engineer that books meetings through Clay, using the user's own personal context and network as tools. The pieces exist apart. Boomerang and Happenstance work the network, Dex and Mesh hold the people, Clay and Unify run the cold side, Highlight and VoiceOS act on the Mac. No product found joins all four in one agent, on the user's own machine, with the guards that came from running real client outbound. A campaign launch waits for the list audit to pass, two people merge only on more than a first name, and the suppression list comes from actual sends.
+
+This is a claim about absence from two research passes, not a proof. It holds until someone finds the product.
+
+What has to be true before the pitch can say "books you meetings":
+
+1. A meeting booked by the system for a real client, with the path written down: which contact, warm or cold, which source.
+2. The warm side in use. `bin/intro` (warm-intro paths) is built but has no recorded use.
+3. A cold install on a stranger's Mac, which is the packaging gap above.
+
+### A platform risk
+
+On 2026-10-02 Apple said it will add "very explicit user action" before any AI agent gets Full Disk Access, after complaints that Meta's Muse read a columnist's Messages ([capital.com](https://capital.com/en-gb/news/apple-says-it-will-flag-ai-requests-for-mac-data) [read]). Chewbacca's chat.db read depends on Full Disk Access. Onboarding has to make that grant a deliberate, explained step before Apple makes it one.
+
 ## Sources
 
 ### Read
@@ -236,6 +269,13 @@ Each job is taken from a competitor's own film or launch page. "Faster" means fe
 - OPAL: [opal.fashion](https://opal.fashion); Caleb's private brain note `opal.md`; the Opal desktop teardown in [kyber-surfaces SKILL.md](../.claude/skills/kyber-surfaces/SKILL.md)
 - Others: [screenpipe.com](https://screenpipe.com/), [screenpipe pricing](https://screenpipe.com/pricing), screenpipe/screenpipe through the GitHub API, [Granola pricing](https://www.granola.ai/pricing), [TechCrunch on Disco](https://techcrunch.com/2025/12/11/google-debuts-disco-a-gemini-powered-tool-for-making-web-apps-from-browser-tabs)
 - In this repo: [KYBER-SURFACES.md](KYBER-SURFACES.md), [OS-COVERAGE.md](OS-COVERAGE.md), [AFTER-PANES.md](AFTER-PANES.md), [JEV.md](JEV.md), [JEV-BROWSE.md](JEV-BROWSE.md), [RUNTIMES.md](RUNTIMES.md), and Caleb's private brain note `project_chewbacca_os`
+
+### Added 2026-10-07
+
+- Desktop assistants: [highlightai.com](https://highlightai.com), [SiliconANGLE on Highlight's Series A](https://siliconangle.com/2026/03/24/ai-productivity-startup-highlight-ai-raises-40m-appoints-new-ceo/), [shadow.do](https://shadow.do), [voiceos.com](https://voiceos.com), [Gemini for Mac](https://workspaceupdates.googleblog.com/2026/04/now-available-gemini-app-for-mac.html), [Gemini Spark pricing](https://ppc.land/google-restricts-new-mac-ai-agent-to-99-99-ultra-subscribers/), [cluely.com](https://cluely.com), [getmrmr.com](https://getmrmr.com/blog/ai-assistants-that-act-on-your-mac), [getjarvis.eu](https://getjarvis.eu), [fazm.ai](https://fazm.ai/cc), [dottie.ai list](https://dottie.ai/blog/best-ai-assistants-mac/)
+- Claude Code add-ons: [noisy-coding](https://github.com/noisy/noisy-coding), [claude-voice-multiplexer](https://github.com/n33kos/claude-voice-multiplexer), [callclaude](https://github.com/incidentfox/callclaude), [groundtruth](https://github.com/vnmoorthy/groundtruth), [No Excuses](https://hunted.space/product/no-excuses)
+- People and GTM: [Dex pricing](https://getdex.com/pricing), [me.sh](https://me.sh), [Clay Sculptor](https://www.clay.com/sculptor), [Clay roadmap](https://www.clay.com/blog/build-on-clay-clays-product-roadmap-with-ceo-kareem-amin), [unifygtm.com](https://www.unifygtm.com/), [11x.ai](https://www.11x.ai/), [TechCrunch on 11x](https://techcrunch.com/2025/03/24/a16z-and-benchmark-backed-11x-has-been-claiming-customers-it-doesnt-have), [Boomerang on warm-intro agents](https://www.getboomerang.ai/glossaries/ai-agent-for-warm-introductions)
+- Platforms: [OpenClaw macOS docs](https://docs.openclaw.ai/platforms/macos), [Cowork plugins](https://claude.com/docs/cowork/guide/plugins), [Apple on agent data access](https://capital.com/en-gb/news/apple-says-it-will-flag-ai-requests-for-mac-data)
 
 ### Snippet only, or blocked
 

@@ -26,7 +26,10 @@ import sys
 # (id, weight, explanation, compiled pattern). Weight is how much one hit costs.
 # Anything absolute (an em dash, an emoji) is weighted to fail a file alone.
 RULES = [
-    ("em-dash", 40, "em dash: use a colon, period, or comma", re.compile(r"—")),
+    # The en dash is in here too. "19.5–42.4%" went to Caleb in chat on
+    # 2026-10-07 and he read it as exactly what it looks like: "UR USING EM
+    # DASHES". A range is "19.5 to 42.4%".
+    ("em-dash", 40, "em or en dash: use a colon, period, comma, or the word 'to'", re.compile(r"[—–]")),
     (
         "emoji",
         40,

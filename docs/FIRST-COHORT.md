@@ -46,9 +46,11 @@ company whose three seats aren't on Macs goes on a Windows waitlist, not into a
 pilot. The waitlist count is what tells us when Windows is worth building.
 
 **The installer gates revenue.** Nobody is signed until it installs cold on
-their Mac. As of 2026-10-06 the only signing identity is "Chewbacca Local
-Signing". [EVERY-MAC.md](EVERY-MAC.md) puts Developer ID plus notarization at
-weeks, blocked on the Apple Developer account, which Gavin opens. The test that
+their Mac. Caleb has an Apple Developer account. What's missing is a Developer
+ID certificate on the build machine and notarization; the only signing identity
+on Gavin's Mac as of 2026-10-06 is "Chewbacca Local Signing" (see
+[EVERY-MAC.md](EVERY-MAC.md)). Delivery is a link plus a code, then they open
+Claude, and the link must not be shareable. The test that
 counts is someone outside the team installing it cold with nobody helping.
 Outbound and discovery calls start anyway, because calls aren't contracts.
 
@@ -59,9 +61,12 @@ Outbound and discovery calls start anyway, because calls aren't contracts.
 > learn. Every Friday you get the hours it saved each seat, and which software
 > spend it can replace.
 
-- Pilot: **$2,500 one-time** for 30 days and 3 seats, covering install, the Clay
-  build and the first month's tools.
-- After: **$2,000 a month for 3 seats, tools included, plus $500 per added seat.**
+- Price anchor from the 2026-10-06 call: **$7,500 to $10K install, then $2,500
+  to $3K a month**, tools included. To be checked with Jake before the first
+  quote. (The earlier $2,500 pilot and $2,000 a month proposal is superseded.)
+- The written offer is made per prospect once they reply; outbound says what we
+  can do. It has to give value even if they use none of Clay, HubSpot,
+  Salesforce, Pipedrive or HeyReach.
 - HeyReach is optional and only with the client's written ok, because LinkedIn's
   user agreement forbids automation and their accounts carry the risk.
 - Never free.
@@ -148,3 +153,57 @@ Anything that only works for one industry goes on the freeze list.
 6. Does the bundled price leave the right margin over the tools?
 7. What name does outbound use for the product?
 8. Where is the non-technical onboarding demo?
+
+## Update from the Gavin and Caleb call, 2026-10-06 (evening)
+
+Decided:
+
+- 100% B2B contracts first. No consumer building until contracts are in.
+- Wave 1 is staffing and recruiting, venture studios and accelerators, and
+  commercial real estate. Recruiting is the strongest buyer.
+- Any company size, as long as they aren't very technical.
+- Installed on their Mac only, never run from ours. High touch: on call daily
+  for the first two weeks, in person for big installs.
+- Clients bring their own Claude subscription; onboarding already has that step.
+- HeyReach optional, only if the client agrees to HeyReach's terms.
+- Older businesses first, social media agencies after.
+- Sunday night sync plans Monday to Friday.
+- Sending capacity: 200 emails a day through Clay.
+
+Not now: the glass IDE and agent sessions, native meeting capture, the consumer
+USC loop, an online personal agent, per-industry sites, Windows, JevBacca, the
+keyboard, group cards, wearables.
+
+### Next five weeks (owners proposed, confirmed at the Sunday sync)
+
+| Date | What | Owner |
+| --- | --- | --- |
+| Thu Oct 8 | Wave 1 Clay tables for the three industries, first email per industry, warm names texted | Caleb (tables), Gavin (warm) |
+| Fri Oct 9 | Karthik sync: table review, installer plan, pricing check | Caleb, Gavin |
+| Sun Oct 11 | First Sunday sync; Semyon gets his tasks | Gavin, Caleb |
+| Oct 12 to 16 | Cold sends start inside the 200 a day cap; Developer ID and notarization; recruiting HUD v1; cold install test outside the team | Caleb, Gavin, Semyon |
+| Tue Oct 20 | Gate: which industry books calls. A pilot signs only after a cold install passes | Gavin, Caleb |
+| Oct 19 to 30 | Discovery calls, first proposal, in-person install | Gavin, Caleb |
+| Nov 2 to 13 | Pilot 1 live, daily check-ins | all three |
+| Thu Nov 26 | Thanksgiving gate | Gavin, Caleb |
+
+### Who owns what (proposed)
+
+| Person | Owns |
+| --- | --- |
+| Gavin | Recruiting HUD and demo, onboarding until a cold install passes, warm intros, discovery calls, in-person installs, the pricing check with Jake |
+| Caleb | Clay tables and the outbound engine with Karthik, the daily sends, Developer ID and notarization, the drag-into-Settings onboarding bubble |
+| Semyon | Reliability: the cold install test on a clean Mac, backend efficiency, the graph-engineering gates and benchmarks, best practices for every action, the data path |
+
+### Open, for Gavin and Caleb to decide
+
+1. Is the price a $7,500 or $10K install with $2,500 or $3K a month, or per seat with every new hire as a new seat?
+2. Do we send 25 per industry per week, or use the full 200 a day, and what warm-to-cold mix?
+3. Do we rename before the first send or after the first contract, and is it one brand or one site per industry?
+4. In the first pilot, does Chewbacca drive the Clay UI with guide bubbles, or use the Clay API behind the HUD?
+5. Which three things does a recruiter see in the first five minutes?
+6. Is a texting layer an upsell later, or out?
+7. How do we stop a client from sharing the download link?
+8. What counts as working after the two weeks, so the retainer starts?
+9. What can consumer prep include before contracts, without building?
+10. What time is the Sunday sync, and is Saturday off or optional?

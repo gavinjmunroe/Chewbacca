@@ -171,29 +171,34 @@ Decided:
 - Sending capacity: 200 emails a day through Clay.
 
 Not now: the glass IDE and agent sessions, native meeting capture, the consumer
-USC loop, an online personal agent, per-industry sites, Windows, JevBacca, the
-keyboard, group cards, wearables.
+USC loop, an online personal agent.
 
 ### Next five weeks (owners proposed, confirmed at the Sunday sync)
 
 | Date | What | Owner |
 | --- | --- | --- |
-| Thu Oct 8 | Wave 1 Clay tables for the three industries, first email per industry, warm names texted | Caleb (tables), Gavin (warm) |
+| Thu Oct 8 | Clay table for recruiting outbound leads, first emails; Gavin leaves for Utah | Caleb, Karthik |
 | Fri Oct 9 | Karthik sync: table review, installer plan, pricing check | Caleb, Gavin |
 | Sun Oct 11 | First Sunday sync; Semyon gets his tasks | Gavin, Caleb |
-| Oct 12 to 16 | Cold sends start inside the 200 a day cap; Developer ID and notarization; recruiting HUD v1; cold install test outside the team | Caleb, Gavin, Semyon |
+| Oct 12 to 16 | Cold sends start inside the 200 a day cap; Developer ID and notarization; recruiting HUD past the skeleton; Semyon's cold install test | Caleb, Gavin, Semyon |
 | Tue Oct 20 | Gate: which industry books calls. A pilot signs only after a cold install passes | Gavin, Caleb |
 | Oct 19 to 30 | Discovery calls, first proposal, in-person install | Gavin, Caleb |
 | Nov 2 to 13 | Pilot 1 live, daily check-ins | all three |
 | Thu Nov 26 | Thanksgiving gate | Gavin, Caleb |
 
-### Who owns what (proposed)
+### Who owns what
+
+Gavin and Caleb lead together and either can task Semyon.
 
 | Person | Owns |
 | --- | --- |
-| Gavin | Recruiting HUD and demo, onboarding until a cold install passes, warm intros, discovery calls, in-person installs, the pricing check with Jake |
-| Caleb | Clay tables and the outbound engine with Karthik, the daily sends, Developer ID and notarization, the drag-into-Settings onboarding bubble |
-| Semyon | Reliability: the cold install test on a clean Mac, backend efficiency, the graph-engineering gates and benchmarks, best practices for every action, the data path |
+| Gavin | Recruiting HUD (a working skeleton by Sun Oct 11), discovery calls, in-person installs. Working from Utah Oct 8 to 22, can fly out |
+| Caleb | The Clay table for recruiting outbound leads and the email stack, with Karthik; daily sends up to 200 a day; Developer ID and notarization; the drag-into-Settings onboarding bubble |
+| Semyon | Onboarding until a stranger installs it cold with nobody helping; reliability, backend efficiency, the graph-engineering gates and benchmarks, the data path |
+
+Later, not cut: Windows, JevBacca, the keyboard, group cards, wearables.
+Separate sites per industry are probably not happening.
+Pricing is set by Gavin and Caleb; a check with Jake is optional.
 
 ### Open, for Gavin and Caleb to decide
 

@@ -125,3 +125,12 @@ another cycle.
 If you are opening a third review of the same work, the problem is upstream: a
 fact never confirmed, research never done, a requirement never read. Go fix that
 instead of rereading the same files.
+
+"Ready to send?" means open every attachment and read it as the recipient
+before answering, not just the message it rides on. On 2026-10-07 a
+reimbursement text was okayed with its PDF unread, and the PDF then took five
+more rounds: a billing line built on a false claim from the agent's own notes,
+a wrong count, one product listed under two names, and a bullet the user said
+"reads like a resume bullet". Every one was visible on the first read. Per
+line, ask: true per a source rather than per my notes, a name the recipient
+uses, and does it support the ask.

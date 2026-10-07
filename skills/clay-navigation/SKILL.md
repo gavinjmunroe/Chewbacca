@@ -59,6 +59,15 @@ same turn it happens, never only a new line of prose.
 - Calling a list ready on our own checks. Rule: read the client's and Sagar's
   latest feedback first, and turn every item into a gate refusal before saying
   ready.
+- A campaign segment that filters on "last sent is empty" (2026-10-07). Campaigns
+  auto-pause a lead that exits its segment, so stamping leads as sent right after
+  the start would pause every one. Caught before a send. Rule: use that filter only
+  to build the email list, never on the segment a live campaign reads. zeutara-gtme
+  `scripts/midweek_drafts.py` no longer writes it.
+- Fighting the CLI or writing a script when the Clay UI does it in one step
+  (2026-10-05 and again 10-07). Rule: the first time the CLI refuses a shape,
+  drive the UI in his real Chrome. Find People to a table with the Work email
+  waterfall, then the table's bulk "Run N empty rows", took minutes.
 - The CLI cannot launch, write cells or import records. Writes go through a Clay
   workflow node (`audiences records` upsert) and are read back after.
 

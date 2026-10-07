@@ -17,7 +17,10 @@ if lsof -nP -iTCP:9876 -sTCP:LISTEN 2>/dev/null | grep -q Nalana; then
 fi
 
 mkdir -p "$ADDONS"
-uvx mcp-for-blender install-addon --addons-dir "$ADDONS" >/dev/null
+# Pinned: an unpinned uvx runs whatever the index serves today, and this add-on
+# executes inside Nalana with full Python access. 2.1.9 is the version that
+# spoke protocol 13 to the blender MCP on 2026-10-06. Bump it on purpose.
+uvx mcp-for-blender==2.1.9 install-addon --addons-dir "$ADDONS" >/dev/null
 
 BOOT="$(mktemp -t nalana-boot).py"
 cat > "$BOOT" <<'PY'

@@ -60,7 +60,7 @@ HANDOFF = [
     # A decision is not a command. On 2026-10-06 "the one call you'll have to make is
     # when someone replies interested" was refused twice and Caleb got the same answer
     # three times; a judgment only he can make is exactly what the rules tell us to name.
-    (r"\byou'?ll have to\s+(?!make (?:a|the|that|one|this) (?:call|decision|choice)|decide\b)\w+",
+    (r"\byou'?ll have to\s+(?!make\b(?!\s+sure)|decide\b|choose\b)\w+",
      "'you'll have to ...'"),
     (r"\bmake sure (?:you|to)\s+(?:run|install|set|add)\b", "'make sure you run ...'"),
     (r"\bdon'?t forget to\s+(?:run|install|set|add)\b", "'don't forget to run ...'"),

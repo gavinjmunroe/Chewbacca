@@ -280,6 +280,35 @@ class Checks:
             "memory/ or rules/",
         )
 
+    def board_updated(self) -> None:
+        """A project decision recorded in memory today belongs on the team board too.
+
+        2026-10-06: a session produced three product decisions and filed them
+        in memory only, and Caleb had to ask: "update the chewb shared todo. I
+        should never have to say this ever again." The board is what Gavin,
+        Jake and Semyon read; a decision only in his private memory never
+        reaches them.
+        """
+        if not (BRAIN / ".git").exists():
+            self.record(True, "board: no brain, nothing owed", "")
+            return
+        _, proj = run(["git", "log", "--since=midnight", "--name-only",
+                       "--format=", "--", "memory"], BRAIN)
+        touched = sorted({ln for ln in proj.splitlines() if "/project_" in ln})
+        if not touched:
+            self.record(True, "board: no project decisions recorded today", "")
+            return
+        run(["git", "fetch", "-q", "origin", "main"], KIT)
+        _, board = run(["git", "log", "origin/main", "--since=midnight",
+                        "--oneline", "--", "team/tasks"], KIT)
+        self.record(
+            bool(board.strip()),
+            "board: today's project decisions are on the team board",
+            f"{len(board.splitlines())} board commit(s) today" if board.strip() else
+            f"project notes changed today ({', '.join(Path(t).stem for t in touched[:3])}) "
+            "and no team/tasks commit on origin/main: run `team add`",
+        )
+
     def no_scaffolding(self) -> None:
         """Debug scaffolding left in tracked source is not a finished session."""
         markers = ["PROBE:", "XXX-debug", "console.warn('dbg"]
@@ -308,6 +337,7 @@ def main() -> int:
     c.clean(BRAIN, "brain")
     c.pushed(BRAIN, "brain")
     c.lesson_written()
+    c.board_updated()
     c.no_scaffolding()
     # The git half is decided above in about a second. The gates come last so
     # an early FAIL is on screen before the slow part starts.

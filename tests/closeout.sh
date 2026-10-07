@@ -92,6 +92,21 @@ rm -f "$HOME/.chewbacca/closeout-receipt.json"
 guard; code=$?
 [ "$code" = 0 ] && ok "vibe-guard lets the claim through when --fast passes" || bad "vibe-guard after a pass: exit $code $(cat "$T/err")"
 
+# ── a project decision in memory today has to reach the team board ─────────
+# 2026-10-06: three decisions went to memory only, and Caleb had to ask for
+# the shared todo: "I should never have to say this ever again."
+echo decided > "$HOME/second-brain/memory/project_cohort.md"
+git -C "$HOME/second-brain" add -A; git -C "$HOME/second-brain" commit -qm p
+git -C "$HOME/second-brain" push -q
+out=$(python3 "$KIT/bin/closeout" --fast)
+printf '%s' "$out" | grep -q "FAIL  board: today's project decisions" \
+  && ok "a project note with no board commit fails the board check" || bad "board check missed it: $out"
+mkdir -p "$KIT/team/tasks"; echo t > "$KIT/team/tasks/CHW-1.md"
+git -C "$KIT" add -A; git -C "$KIT" commit -qm "team: CHW-1 created"; git -C "$KIT" push -q
+out=$(python3 "$KIT/bin/closeout" --fast)
+printf '%s' "$out" | grep -q "PASS  board: today's project decisions" \
+  && ok "a board commit today clears it" || bad "board check after a task: $out"
+
 echo
 [ "$fail" = 0 ] && echo "closeout answers as it goes, and fast   ok" || echo "$fail failed"
 exit "$fail"

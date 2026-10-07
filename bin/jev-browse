@@ -47,6 +47,13 @@ cmd_install() {
   fi
   git -C "$DIR" fetch -q origin
   git -C "$DIR" checkout -q "$PIN"
+  # Local fixes on top of the pin. 0001: single-page apps (Clay, 2026-10-06) render
+  # their controls after "load", so every run stopped as blocked in ~200 ms.
+  for p in "$HERE/jev-patches/"*.patch; do
+    [ -f "$p" ] || continue
+    if git -C "$DIR" apply --reverse --check "$p" 2>/dev/null; then continue; fi
+    git -C "$DIR" apply "$p" || die "could not apply $(basename "$p") to jev-ultrafast $PIN"
+  done
   (cd "$DIR" && uv sync -q)
   echo "jev-ultrafast $PIN installed at $DIR"
   echo "next: jev-browse doctor"

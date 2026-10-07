@@ -1,0 +1,22 @@
+diff --git a/jev_ultrafast/browser.py b/jev_ultrafast/browser.py
+index 38e3ace..01eda8f 100644
+--- a/jev_ultrafast/browser.py
++++ b/jev_ultrafast/browser.py
+@@ -31,6 +31,17 @@ class Browser:
+             if self.evaluate("document.readyState") == "complete":
+                 break
+             time.sleep(0.02)
++        # Single-page apps (Clay, 2026-10-06) finish "load" before they render any controls,
++        # so the first observation saw zero and the run stopped as blocked in ~200 ms.
++        # Wait until interactive controls exist, capped so a static page costs nothing extra.
++        settle = time.monotonic() + 8
++        while time.monotonic() < settle:
++            try:
++                if (self.evaluate("document.querySelectorAll('button,a[href],input,textarea,[role=button]').length") or 0) >= 5:
++                    break
++            except StalePage:
++                pass
++            time.sleep(0.1)
+ 
+     def call(self, method, **params):
+         return cdp(method, session_id=self.session, **params)

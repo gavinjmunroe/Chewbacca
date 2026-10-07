@@ -519,6 +519,134 @@ def _learned(reqs):
     return [cache[key(r)] for r in reqs]
 
 
+def _trim_tail(strokes, xheight_units):
+    """Drop the stray mark the model writes after a line is finished.
+
+    Off by default: on its first real run it also took the "?" off "button?",
+    because a question mark is exactly a small detached cluster after a gap.
+    Reading candidates back (_best_of) is the reliable fix; use this only for
+    lines that end on a letter.
+
+    Graves-style sampling runs a fixed number of steps, so after the last real
+    character it often scribbles one more small, detached mark: "button?c",
+    "at.a", a lone tick after "at.". On 2026-10-07 every line of the fridge
+    note had one, and a trailing space in the text made it worse. A real
+    last word is wide; the stray is a small cluster sitting after a gap wider
+    than the writer's own word spacing. Drop clusters like that, at most two.
+    """
+    if len(strokes) < 2:
+        return strokes
+    arr = [np.array(s, dtype=float) for s in strokes]
+    for _ in range(2):
+        if len(arr) < 2:
+            break
+        order = sorted(range(len(arr)), key=lambda i: arr[i][:, 0].min())
+        # group strokes into horizontal clusters (words / marks)
+        clusters, cur, right = [], [order[0]], arr[order[0]][:, 0].max()
+        for i in order[1:]:
+            left = arr[i][:, 0].min()
+            if left - right > xheight_units * 0.45:
+                clusters.append(cur)
+                cur = [i]
+            else:
+                cur.append(i)
+            right = max(right, arr[i][:, 0].max())
+        clusters.append(cur)
+        if len(clusters) < 2:
+            break
+        last = clusters[-1]
+        lx0 = min(arr[i][:, 0].min() for i in last)
+        lx1 = max(arr[i][:, 0].max() for i in last)
+        prev_right = max(arr[i][:, 0].max() for i in clusters[-2])
+        gap = lx0 - prev_right
+        if (lx1 - lx0) < xheight_units * 1.1 and gap > xheight_units * 0.45:
+            keep = set(range(len(arr))) - set(last)
+            arr = [arr[i] for i in sorted(keep)]
+        else:
+            break
+    return [a.tolist() for a in arr]
+
+
+READBACK = Path(__file__).resolve().parent / "ocr" / "readback"
+
+
+def _norm(t):
+    import re
+    return re.sub(r"[^a-z0-9?!.,']+", " ", t.lower()).strip()
+
+
+def _readback(images):
+    """Read candidate lines back with Apple Vision (ocr/readback.swift)."""
+    import subprocess
+    import tempfile
+
+    if not READBACK.exists():
+        # Built on first use, so the repo carries source, never a binary.
+        src = READBACK.with_name("readback.swift")
+        r = subprocess.run(["swiftc", "-O", str(src), "-o", str(READBACK)], capture_output=True)
+        if r.returncode != 0:
+            return [None] * len(images)
+    with tempfile.TemporaryDirectory() as d:
+        paths = []
+        for i, im in enumerate(images):
+            pth = Path(d) / f"{i}.png"
+            im.save(pth)
+            paths.append(str(pth))
+        out = subprocess.run([str(READBACK), *paths], capture_output=True, text=True).stdout
+    lines = out.split("\n")
+    return [(lines[i] if i < len(lines) else "") for i in range(len(images))]
+
+
+def _line_image(strokes):
+    """Draw raw model strokes black on white, at a size Vision reads well."""
+    from PIL import ImageDraw as _D
+
+    pts = np.concatenate([np.array(st) for st in strokes])
+    x0, y0 = pts.min(axis=0)
+    x1, y1 = pts.max(axis=0)
+    h = max(1.0, y1 - y0)
+    k = 90.0 / h
+    W, H = int((x1 - x0) * k) + 40, int(h * k) + 40
+    im = Image.new("RGB", (max(W, 60), max(H, 60)), "white")
+    d = _D.Draw(im)
+    for st in strokes:
+        p = [((x - x0) * k + 20, (y - y0) * k + 20) for x, y in st]
+        if len(p) > 1:
+            d.line(p, fill="black", width=3, joint="curve")
+    return im
+
+
+def _best_of(reqs, tries):
+    """Sample each line `tries` times and keep the one that reads back right.
+
+    The model is stochastic and sometimes writes the wrong word ("loreing"
+    for "looking", "21 year of content") or a stray tail ("button?c"). Caleb
+    was told on 2026-10-07 to never put a misspelt word in front of him, and
+    eyeballing seeds proved unreliable because every run differs. Reading each
+    candidate back with Vision and keeping the closest match makes the check
+    part of the tool.
+    """
+    import difflib
+
+    cand_reqs = [dict(r, seed=r["seed"] * 10 + k) for r in reqs for k in range(tries)]
+    cands = _learned(cand_reqs)
+    picked = []
+    for i, r in enumerate(reqs):
+        group = cands[i * tries:(i + 1) * tries]
+        if not r["text"].strip():
+            picked.append([])
+            continue
+        imgs = [_line_image(g) if g else Image.new("RGB", (60, 60), "white") for g in group]
+        reads = _readback(imgs)
+        if all(x is None for x in reads):
+            picked.append(group[0])
+            continue
+        target = _norm(r["text"])
+        scores = [difflib.SequenceMatcher(None, target, _norm(x or "")).ratio() for x in reads]
+        picked.append(group[int(np.argmax(scores))])
+    return picked
+
+
 def _speed_pressure(pts, writer, rng):
     """Pressure from the pen's real speed: slow is heavy, fast is light."""
     n = len(pts)
@@ -535,14 +663,14 @@ def _speed_pressure(pts, writer, rng):
     return np.clip(p, 0.2, 1.6)
 
 
-def write_learned(page, lines, x, baselines, style=3, bias=0.6, tool="ballpoint", color=(28, 34, 80), size=24, surface="notebook", seed=0, pressure=1.0, slant=0.0, max_width=None):
+def write_learned(page, lines, x, baselines, style=3, bias=0.6, tool="ballpoint", color=(28, 34, 80), size=24, surface="notebook", seed=0, pressure=1.0, slant=0.0, max_width=None, trim_tail=False, tries=6):
     """Write lines with learned human strokes. size is the x-height in px.
 
     style picks one of the model's 13 primed writers, bias how careful they
     are. Every line of one note should use the same style: one person.
     """
     reqs = [{"text": ln, "style": style, "bias": bias, "seed": seed * 100 + i} for i, ln in enumerate(lines)]
-    results = _learned(reqs)
+    results = _best_of(reqs, tries) if tries > 1 else _learned(reqs)
     writer = Writer(f"learned:{style}", pressure=pressure)
     rng = random.Random(f"learned:{seed}:{lines}")
     width, opacity, soft = TOOLS[tool]
@@ -552,6 +680,15 @@ def write_learned(page, lines, x, baselines, style=3, bias=0.6, tool="ballpoint"
     # One person writes one size. The scale comes from every line of the note
     # together, so a line of caps does not come out a different size from the
     # line under it. Per-line scaling made one writer twice as big as another.
+    if trim_tail:
+        trimmed = []
+        for strokes in results:
+            if strokes:
+                ys = np.concatenate([np.array(st)[:, 1] for st in strokes])
+                trimmed.append(_trim_tail(strokes, float(np.percentile(ys, 78) - np.percentile(ys, 22))))
+            else:
+                trimmed.append(strokes)
+        results = trimmed
     heights = []
     for strokes in results:
         if strokes:

@@ -149,6 +149,24 @@ wanders as a smooth random walk rather than per-letter noise, a slight blur
 for ink bleed, and lines that start at different indents. The working
 implementation is `scrawl()` in `amber-website/scratch-render/make_items.py`.
 
+## Every element proves something no other element does
+
+Caleb on the Amber fridge, 2026-10-07: "Basic af each element has the same
+ux", then, after eight different animations were proposed: "Wtf is the point
+of diff ux if they're all emphasizing the same thing". Varying the motion is
+not variety. Before designing any set of elements, write one line per element:
+the one thing it proves that no other element proves, and why its interaction
+IS that thing working. Two elements with the same line means one of them goes.
+
+## Nobody sees it before every state is screenshotted
+
+The same night he opened the draft himself and said "Most of this site looks
+terrible", on a join card with double ruled lines, a rejected font and stock
+buttons that one screenshot would have caught. Before any UI goes in front of
+him: screenshot every state (default, each open item, each form, success,
+error) at 1440 and 390, read each image against the stance above, and fix or
+list what is wrong first.
+
 ## The hard line
 
 **Never invent a component that has a name in the taxonomy.** A bespoke variant

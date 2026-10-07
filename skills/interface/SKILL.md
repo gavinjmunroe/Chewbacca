@@ -164,6 +164,17 @@ show the product. Eigen aura farmed by not showing the product." There, each
 element reveals a different true thing about the people and what they
 believe, and the product stays a mystery.
 
+## On a rendered scene, nothing physical is drawn in CSS
+
+Amber fridge, 2026-10-07: the wall clock, the journal's pen, its ribbon and
+its leather cover were each drawn in CSS or SVG over a Cycles render, and
+Caleb called every one fake within the hour ("The clock looks so fake lmao",
+"the bookmark and pen look so fake bruh", "doesn't look like real leather").
+Next to rendered light and shadow, drawn objects always lose. Render every
+physical thing in the scene, or as its own registered layer with matching
+light, and keep the DOM to hit areas, motion and the visitor's own ink. Until
+the render exists, show nothing there.
+
 ## Nobody sees it before every state is screenshotted
 
 The same night he opened the draft himself and said "Most of this site looks

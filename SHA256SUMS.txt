@@ -3,7 +3,7 @@ fe3e089e15005d5e68f1f414519f7256ff37f31a5fb4d9e4853cb83aaa095ab1  .claude/hooks/
 755609b0d6cee26710056a8e13224d7d43ada0b687f7e7f3dc1f8e1bf2d4b477  .claude/hooks/assumption-guard.sh
 66905632eda6e963ed130b09c20ae3765585cf40f8b5927ed19b6c91ba40bdfc  .claude/hooks/auto-push.sh
 f6b1b2e1ce432d92722bca1371d33973a5dc99290c6af3d2562e0f2893a5faae  .claude/hooks/brain-recall.sh
-9df244473552ca81eeb940b322ee8465c018bc1e9f374e82e93390410e78eeed  .claude/hooks/brain-sync.sh
+cd86f2e987b0afe2bf5d6dd578fe3a5eae928c81a18263ae0ba21c943872368d  .claude/hooks/brain-sync.sh
 4a1c8a14231bfe159c20cb876d414bff7182d32b0362a3e5507b1054a08c6aa3  .claude/hooks/browser-ux-guard.sh
 de060f6f4523dd4f70eee84d70a079bd6f7247e70ec8122b8f69e7396a693d44  .claude/hooks/chatdb-guard.sh
 0cde272521f1895512eb323bc1935b89dd73a1ad3fe02419c82ecf63f03b2c74  .claude/hooks/clay-native-guard.sh

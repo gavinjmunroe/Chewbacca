@@ -134,7 +134,17 @@ if [ -d "$lock" ]; then
 fi
 mkdir "$lock" 2>/dev/null || exit 0
 echo $$ > "$lock/pid"
-git -C "$0" push -q origin HEAD >/dev/null 2>&1
+# A phone session commits to the same repo through GitHub (docs/PHONE.md), so
+# the remote can be ahead. A rejected push used to fail silently here and every
+# later push failed the same way. Rebase onto it and push again; a conflict is
+# aborted and left for a person rather than resolved by guessing.
+if ! git -C "$0" push -q origin HEAD >/dev/null 2>&1; then
+  if git -C "$0" pull -q --rebase --autostash origin "$(git -C "$0" branch --show-current)" >/dev/null 2>&1; then
+    git -C "$0" push -q origin HEAD >/dev/null 2>&1
+  else
+    git -C "$0" rebase --abort >/dev/null 2>&1
+  fi
+fi
 rm -rf "$lock"''', repo],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         start_new_session=True,

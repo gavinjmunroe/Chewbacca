@@ -34,6 +34,14 @@ files and `claude/rules/writing.md`, and restates your session opener, since
 `~/.claude/CLAUDE.md` won't load in the cloud. Link `.claude/skills` to
 `../claude/skills` so the cloud session finds the skills.
 
+For the cloud session to act like the Mac one, give the repo a
+`.claude/settings.json` SessionStart hook that runs only when
+`CLAUDE_CODE_REMOTE` is `true`: pull, then name the files your Mac session
+loads (your CLAUDE.md copy, core files, the memory index) and tell it to commit
+and push to main after any turn that writes. Caleb's is `.claude/phone-start.sh`
+in his context repo. On the Mac, `brain-sync` rebases onto what the phone
+pushed before it pushes, so both sides stay one history.
+
 In the Claude app, open Code, pick the repo, and start talking.
 
 What a cloud session can't do: anything that needs the Mac itself (texts,

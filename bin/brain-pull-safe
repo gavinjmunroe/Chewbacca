@@ -22,10 +22,20 @@ import subprocess
 import sys
 
 NOTE_EXT = {".md", ".yml", ".yaml", ".json", ".txt", ".csv", ".tsv"}
-# Instruction files are loaded as orders, not read as notes.
-INSTRUCTION_NAMES = {"CLAUDE.md", "AGENTS.md", "GEMINI.md", "CLAUDE.local.md"}
+# Instruction files are loaded as orders, not read as notes. MEMORY.md is the
+# auto-memory index Claude Code loads into every session.
+INSTRUCTION_NAMES = {"claude.md", "agents.md", "gemini.md", "claude.local.md",
+                     "memory.md", "copilot-instructions.md"}
 # claude/ holds skills the brain's .claude/skills links to; bin/ holds tools.
 BLOCKED_TOP = {"claude", "bin"}
+# Every comparison is lowercased: macOS checks out "Claude/x" and "claude/x"
+# to the same folder, so a case-sensitive check let "CLAUDE.MD" and "Bin/"
+# through on 2026-10-07.
+#
+# A repo adds its own instruction paths, the files its sessions @import, one
+# per line in .brain-pull-protect ("core/" for a folder). That file starts with
+# a dot, so a remote commit can never edit its own protection.
+PROTECT_FILE = ".brain-pull-protect"
 PLAIN_FILE, DELETED = "100644", "000000"
 
 
@@ -33,15 +43,26 @@ def git(repo, *args):
     return subprocess.run(["git", "-C", repo, *args], capture_output=True)
 
 
-def refusal(old_mode, new_mode, path):
-    parts = path.split("/")
+def protected(repo):
+    try:
+        with open(os.path.join(repo, PROTECT_FILE), encoding="utf-8") as f:
+            return [l.strip().lower() for l in f if l.strip() and not l.startswith("#")]
+    except OSError:
+        return []
+
+
+def refusal(old_mode, new_mode, path, protect):
+    low = path.lower()
+    parts = low.split("/")
     if any(p.startswith(".") for p in parts):
         return "dot path"
     if parts[0] in BLOCKED_TOP:
         return f"{parts[0]}/ is code"
     if parts[-1] in INSTRUCTION_NAMES:
         return "instruction file"
-    if os.path.splitext(parts[-1])[1].lower() not in NOTE_EXT:
+    if any(low == p or (p.endswith("/") and low.startswith(p)) for p in protect):
+        return "protected in .brain-pull-protect"
+    if os.path.splitext(parts[-1])[1] not in NOTE_EXT:
         return "not a note type"
     if new_mode not in (PLAIN_FILE, DELETED) or old_mode not in (PLAIN_FILE, DELETED):
         return f"mode {old_mode}->{new_mode}"
@@ -56,10 +77,19 @@ def main():
     branch = git(repo, "branch", "--show-current").stdout.decode().strip()
     if not branch or git(repo, "fetch", "-q", "origin").returncode != 0:
         return 2
-    up = f"origin/{branch}"
-    if git(repo, "merge-base", "--is-ancestor", up, "HEAD").returncode == 0:
+    # Resolve the remote to one commit and use that commit for both the check
+    # and the rebase. Checking origin/main and then rebasing onto origin/main
+    # let a concurrent fetch (brain-sync and the daily sync both pull) swap in
+    # an unchecked commit between the two.
+    ref = git(repo, "rev-parse", "--verify", "-q", f"origin/{branch}^{{commit}}")
+    if ref.returncode != 0:
+        return 2
+    up = ref.stdout.decode().strip()
+    head = git(repo, "rev-parse", "HEAD").stdout.decode().strip()
+    if git(repo, "merge-base", "--is-ancestor", up, head).returncode == 0:
         return 0
-    raw = git(repo, "diff", "--raw", "-z", "--no-renames", "--no-ext-diff", f"HEAD...{up}")
+    protect = protected(repo)
+    raw = git(repo, "diff", "--raw", "-z", "--no-renames", "--no-ext-diff", f"{head}...{up}")
     if raw.returncode != 0:
         return 2
     fields = raw.stdout.decode("utf-8", "surrogateescape").split("\0")
@@ -67,16 +97,20 @@ def main():
     i = 0
     while i + 1 < len(fields) and fields[i].startswith(":"):
         meta, path = fields[i][1:].split(" "), fields[i + 1]
-        why = refusal(meta[0], meta[1], path)
+        why = refusal(meta[0], meta[1], path, protect)
         if why:
             bad.append(f"{path!r} ({why})")
         i += 2
     if bad:
-        print(f"brain-pull-safe: not pulling {up}, it changes: " + ", ".join(bad[:10]), file=sys.stderr)
+        print(f"brain-pull-safe: not pulling {up[:10]}, it changes: " + ", ".join(bad[:10]), file=sys.stderr)
         return 3
+    # Also refuse if HEAD moved since the check, so the rebase applies exactly
+    # the diff that was read.
+    if git(repo, "rev-parse", "HEAD").stdout.decode().strip() != head:
+        return 2
     if git(repo, "rebase", "-q", "--autostash", up).returncode != 0:
         git(repo, "rebase", "--abort")
-        print(f"brain-pull-safe: rebase onto {up} conflicted, aborted", file=sys.stderr)
+        print(f"brain-pull-safe: rebase onto {up[:10]} conflicted, aborted", file=sys.stderr)
         return 4
     return 0
 

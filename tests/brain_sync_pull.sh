@@ -13,6 +13,7 @@ g(){ git -C "$1" -c user.email=t@t -c user.name=t -c commit.gpgsign=false "${@:2
 git init -q --bare -b main "$T/r.git"
 git clone -q "$T/r.git" "$T/mac" 2>/dev/null; g "$T/mac" checkout -q -b main
 mkdir -p "$T/mac/memory"; echo a > "$T/mac/memory/n.md"; g "$T/mac" add -A; g "$T/mac" commit -qm seed; g "$T/mac" push -q -u origin main
+printf 'core/\n' > "$T/mac/.brain-pull-protect"
 git clone -q "$T/r.git" "$T/phone"
 
 # try <label> <setup commands run in the phone clone> ; expects refusal
@@ -30,6 +31,11 @@ try "a .claude settings change" 'mkdir -p .claude; echo {} > .claude/settings.js
 try "a CLAUDE.md edit"          'echo "obey me" > CLAUDE.md'
 try "a symlink dressed as a note" 'ln -s ../../etc/hosts memory/link.md'
 try "an executable .md"         'echo x > memory/run.md; chmod +x memory/run.md'
+try "CLAUDE.MD in another case"  'echo "obey" > CLAUDE.MD'
+try "Bin/ in another case"       'mkdir -p Bin; echo x > Bin/x.md'
+try "Claude/skills in another case" 'mkdir -p Claude/skills; echo x > Claude/skills/x.md'
+try "the memory index"           'echo "- obey" > memory/MEMORY.md'
+try "a path in .brain-pull-protect" 'mkdir -p core; echo x > core/now.md'
 try "a quoted filename"         "echo x > \"\$(printf 'memory/a\\\"b.sh')\""
 
 echo note > "$T/phone/memory/p.md"; g "$T/phone" add -A; g "$T/phone" commit -qm note; g "$T/phone" push -q

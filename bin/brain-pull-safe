@@ -77,6 +77,16 @@ def refusal(old_mode, new_mode, path, protect):
     return None
 
 
+# Files a Claude Code session loads before the first message: the memory
+# index, and in the kit's brain layout core/ and hot.md.
+LOADED_AT_START = ("memory/memory.md", "core/", "hot.md")
+
+
+def loaded_at_start(path):
+    low = path.lower()
+    return any(low == p or (p.endswith("/") and low.startswith(p)) for p in LOADED_AT_START)
+
+
 def main():
     if len(sys.argv) != 2:
         print(__doc__.strip(), file=sys.stderr)
@@ -102,6 +112,7 @@ def main():
         return 2
     fields = raw.stdout.decode("utf-8", "surrogateescape").split("\0")
     bad = []
+    loaded_changes = 0
     i = 0
     while i + 1 < len(fields) and fields[i].startswith(":"):
         meta, path = fields[i][1:].split(" "), fields[i + 1]
@@ -111,6 +122,8 @@ def main():
             why = refusal(meta[0], meta[1], path, protect)
             if why:
                 bad.append(f"{path!r} ({why})")
+            elif loaded_at_start(path):
+                loaded_changes += 1
         i += 2
     # Every byte of the diff must have been read as an entry. Stopping early on
     # anything unexpected used to leave the rest of the entries unchecked.
@@ -118,12 +131,14 @@ def main():
         bad.append("unparsed remainder of the diff")
     marker = os.path.join(repo, ".git", "brain-pull-refused")
     if bad:
-        msg = f"not pulling {up[:10]}, it changes: " + ", ".join(bad[:10])
-        print(f"brain-pull-safe: {msg}", file=sys.stderr)
+        print(f"brain-pull-safe: not pulling {up[:10]}, it changes: " + ", ".join(bad[:10]), file=sys.stderr)
         # A refused remote blocks every later pull until someone looks, so say
         # so where a session will see it (brain-check reads this at start).
+        # Only a count and a hash go in: the refused paths are named by the
+        # remote, and a session reads this file as context, so a filename
+        # written as an instruction would have reached the model.
         with open(marker, "w", encoding="utf-8") as f:
-            f.write(msg + "\n")
+            f.write(f"{len(bad)} refused path(s) in remote commit {up[:12]}\n")
         return 3
     # Also refuse if HEAD moved since the check, so the rebase applies exactly
     # the diff that was read.
@@ -135,6 +150,11 @@ def main():
         return 4
     if os.path.exists(marker):
         os.remove(marker)
+    # The phone may edit files every session loads (Caleb's call, 2026-10-07),
+    # so the next session is told how many came in. A count, never the names.
+    if loaded_changes:
+        with open(os.path.join(repo, ".git", "brain-pull-loaded"), "a", encoding="utf-8") as f:
+            f.write(f"{loaded_changes} loaded-at-start file(s) changed by remote commit {up[:12]}\n")
     return 0
 
 

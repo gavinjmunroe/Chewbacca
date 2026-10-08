@@ -44,6 +44,8 @@ echo b > "$T/mac/memory/m.md"; g "$T/mac" add -A; g "$T/mac" commit -qm mac
 [ -s "$T/mac/.git/brain-pull-refused" ] && ok "a refusal leaves a marker a session will see" || no "no refusal marker"
 "$PULL" "$T/mac"; rc=$?
 [ "$rc" = 0 ] && [ -e "$T/mac/memory/MEMORY.md" ] && ok "the memory index from the phone is pulled" || no "memory index refused (rc $rc)"
+grep -q "1 loaded-at-start" "$T/mac/.git/brain-pull-loaded" 2>/dev/null && ok "a pulled memory index is counted for the next session" || no "loaded-file change not reported"
+grep -q "phone\|p.md" "$T/mac/.git/brain-pull-loaded" "$T/mac/.git/brain-pull-refused" 2>/dev/null && no "a remote filename reached a marker" || ok "markers carry counts, never remote names"
 [ ! -e "$T/mac/.git/brain-pull-refused" ] && ok "a clean pull clears the marker" || no "marker left after a clean pull"
 [ "$rc" = 0 ] && [ -e "$T/mac/memory/p.md" ] && ok "pulls a phone note commit" || no "note not pulled (rc $rc)"
 [ -e "$T/mac/memory/m.md" ] && ok "keeps the Mac's own commit on top" || no "Mac commit lost"

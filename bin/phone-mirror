@@ -32,43 +32,71 @@ fi
 command -v jq >/dev/null || { echo "phone-mirror: needs jq" >&2; exit 2; }
 
 OUT="$BRAIN/claude"
-mkdir -p "$OUT/bin"
+
+# Build in a scratch folder and move it into the repo only after the leak
+# check passes. Writing straight into the repo and checking afterwards left a
+# refused copy sitting in a working tree that brain-sync commits by itself.
+STAGE="$(mktemp -d)"; trap 'rm -rf "$STAGE"' EXIT
+mkdir -p "$STAGE/bin"
 
 # Skills are dereferenced (-L) because most entries in ~/.claude/skills are
 # symlinks into repos a cloud sandbox won't have. Caleb's measured 16M that way.
+# Dotenv files, keys and credential files are never copied, whatever folder
+# they sit in.
 for d in rules hooks commands agents output-styles skills; do
-  [ -d "$CL/$d" ] && rsync -aL --delete \
+  [ -d "$CL/$d" ] || continue
+  rsync -aL \
     --exclude='.git/' --exclude='node_modules' --exclude='.venv' \
     --exclude='__pycache__' --exclude='.DS_Store' \
-    --exclude='*token*' --exclude='*secret*' --exclude='*.key' \
-    "$CL/$d/" "$OUT/$d/" 2>/dev/null
+    --exclude='.env' --exclude='.env.*' --exclude='*.env' \
+    --exclude='*.pem' --exclude='*.p12' --exclude='*.key' --exclude='id_rsa*' --exclude='id_ed25519*' \
+    --exclude='*token*' --exclude='*secret*' --exclude='*credential*' --exclude='.netrc' \
+    "$CL/$d/" "$STAGE/$d/" || { echo "phone-mirror: copying $d failed" >&2; exit 1; }
 done
-[ -f "$CL/CLAUDE.md" ] && cp "$CL/CLAUDE.md" "$OUT/CLAUDE.md"
+[ -f "$CL/CLAUDE.md" ] && cp "$CL/CLAUDE.md" "$STAGE/CLAUDE.md"
 
 # settings.json carries real keys in its env block. Caleb's held a 40-hex
-# Todoist token that none of the patterns below match, so every env value is
-# blanked here rather than trusted to a regex.
+# Todoist token that no pattern below matches, so values are blanked rather
+# than trusted to a regex: every env block at any depth (mcpServers.*.env
+# included), every headers block, and any field whose name says key, token,
+# secret, password or auth. apiKeyHelper and statusLine commands stay, since
+# they name a script rather than hold a value.
 if [ -f "$CL/settings.json" ]; then
-  jq '(.env // {}) |= with_entries(.value = "REDACTED")' "$CL/settings.json" > "$OUT/settings.json"
+  jq 'walk(if type == "object" then
+         with_entries(
+           if (.key == "env" or .key == "headers") and (.value | type) == "object"
+             then .value |= with_entries(.value = "REDACTED")
+           elif (.key | test("token|secret|password|passwd|api[_-]?key|auth"; "i")) and (.value | type) == "string"
+             then .value = "REDACTED"
+           else . end)
+       else . end)' "$CL/settings.json" > "$STAGE/settings.json" \
+    || { echo "phone-mirror: could not redact settings.json" >&2; exit 1; }
 fi
 
 COURSEWORK_BIN="$(cd "$(dirname "$0")" && pwd)/coursework"
-[ -f "$COURSEWORK_BIN" ] && cp "$COURSEWORK_BIN" "$OUT/bin/coursework"
+[ -f "$COURSEWORK_BIN" ] && cp "$COURSEWORK_BIN" "$STAGE/bin/coursework"
 
-# Refuse on a known credential shape, or on any real env value from settings.
-# Each shape needs its full length: a bare "sk-ant-" matched the regex that
-# Caleb's sync-to-d1.sh hook uses to refuse secrets, and blocked his sync.
-# The values are read from a pipe so they never sit in a process list.
-leak=0
-grep -rlqE "clay_scoped_[A-Za-z0-9]{10}|sk-ant-[A-Za-z0-9_-]{20}|sk-[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|github_pat_[A-Za-z0-9_]{20}|AKIA[0-9A-Z]{16}|xox[bp]-[A-Za-z0-9-]{10}" "$OUT" 2>/dev/null && leak=1
+# Refuse on a known credential shape, or on any real secret value from
+# settings.json. Each shape needs its full length: a bare "sk-ant-" matched the
+# regex Caleb's sync-to-d1.sh hook uses to refuse secrets, and blocked his sync.
+# Values go through a pipe so they never sit in a process list. grep exits 2 on
+# an error, and an error counts as a leak: a check that cannot run says no.
+SHAPES='clay_scoped_[A-Za-z0-9]{10}|sk-ant-[A-Za-z0-9_-]{20}|sk-[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|gho_[A-Za-z0-9]{20}|github_pat_[A-Za-z0-9_]{20}|AKIA[0-9A-Z]{16}|xox[bp]-[A-Za-z0-9-]{10}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
+grep -rqE "$SHAPES" "$STAGE"; rc=$?
+[ "$rc" = 1 ] || { echo "phone-mirror: credential shape found (or check failed), nothing written" >&2; exit 1; }
 if [ -f "$CL/settings.json" ]; then
-  vals="$(jq -r '.env // {} | .[] | select(length >= 8)' "$CL/settings.json")"
-  [ -n "$vals" ] && grep -rqF -f <(printf '%s\n' "$vals") "$OUT" 2>/dev/null && leak=1
+  vals="$(jq -r '[paths(scalars) as $p | {p: $p, v: getpath($p)}
+                  | select(($p | map(tostring) | join(".")) | test("(^|\\.)(env|headers)\\.|token|secret|password|passwd|api[_-]?key|auth"; "i"))
+                  | .v | tostring | select(length >= 8)] | .[]' "$CL/settings.json")" \
+    || { echo "phone-mirror: could not read settings.json" >&2; exit 1; }
+  if [ -n "$vals" ]; then
+    grep -rqF -f <(printf '%s\n' "$vals") "$STAGE"; rc=$?
+    [ "$rc" = 1 ] || { echo "phone-mirror: a settings secret reached the copy, nothing written" >&2; exit 1; }
+  fi
 fi
-if [ "$leak" = 1 ]; then
-  echo "phone-mirror: credential found in $OUT, nothing committed" >&2
-  exit 1
-fi
+
+mkdir -p "$OUT"
+rsync -a --delete "$STAGE/" "$OUT/" || { echo "phone-mirror: writing $OUT failed" >&2; exit 1; }
 
 if [ "$PUSH" = 1 ] && [ -n "$(git -C "$BRAIN" status --porcelain -- claude 2>/dev/null)" ]; then
   git -C "$BRAIN" add -- claude

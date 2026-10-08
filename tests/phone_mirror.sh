@@ -40,5 +40,22 @@ echo "SECRET_RE='sk-ant-[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|xox[baprs]-[0-9]{10}
 CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN" 2>/dev/null; rc=$?
 [ "$rc" = 0 ] && ok "a hook's own secret regex is not a leak" || no "regex text exited $rc"
 
+rm "$CL/rules/guard.sh"
+printf '{"env":{"TODOIST_API_TOKEN":"f0126e193b7fb233c00d57d8480de4741106209e"},"mcpServers":{"x":{"env":{"DB":"postgres://u:hunter22pass@h/db"},"headers":{"Authorization":"Bearer abcdefgh12345678"}}},"apiToken":"zzzzzzzz9999"}' > "$CL/settings.json"
+echo "DB=postgres://u:hunter22pass@h/db" > "$CL/rules/.env"
+CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN"; rc=$?
+[ "$rc" = 0 ] && ok "nested settings run is clean" || no "nested run exited $rc"
+[ "$(jq -r '.mcpServers.x.env.DB, .mcpServers.x.headers.Authorization, .apiToken' "$BRAIN/claude/settings.json" | sort -u)" = REDACTED ] \
+  && ok "mcpServers env, headers and token-named fields redacted" || no "a nested secret survived"
+[ ! -e "$BRAIN/claude/rules/.env" ] && ok "dotenv files are never copied" || no ".env was copied"
+
+# A refused run must leave the last good mirror exactly as it was.
+before="$(cat "$BRAIN/claude/rules/writing.md")"
+echo "changed" > "$CL/rules/writing.md"
+echo 'x ghp_abcdefghijklmnopqrstuvwxyz0123' > "$CL/rules/gh.md"
+CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN" 2>/dev/null; rc=$?
+[ "$rc" = 1 ] && [ ! -e "$BRAIN/claude/rules/gh.md" ] && [ "$(cat "$BRAIN/claude/rules/writing.md")" = "$before" ] \
+  && ok "a refused run writes nothing into the repo" || no "refused run touched the repo (rc $rc)"
+
 echo "$pass passed, $fail failed"
 [ "$fail" = 0 ]

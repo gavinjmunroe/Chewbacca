@@ -6,6 +6,8 @@ argument-hint: "<task description> [due:today|tomorrow|monday] [sprint:1-5] [p1|
 
 # Todo
 
+> Todoist's REST v2 answers 410 Gone since 2026; these calls use API v1, where list endpoints return `{"results": [...], "next_cursor": ...}`, so read `.results`.
+
 Add a task to Todoist from natural language. Parse $ARGUMENTS to extract task details.
 
 ## Step 1: Parse the request
@@ -27,7 +29,7 @@ Priority mapping (Todoist API):
 ## Step 2: Get label IDs for sprint
 
 ```bash
-curl -sf "https://api.todoist.com/rest/v2/labels" \
+curl -sf "https://api.todoist.com/api/v1/labels" \
   -H "Authorization: Bearer $TODOIST_API_TOKEN"
 ```
 
@@ -36,7 +38,7 @@ Find the label ID for "Sprint {n}".
 ## Step 3: Create the task
 
 ```bash
-curl -sf -X POST "https://api.todoist.com/rest/v2/tasks" \
+curl -sf -X POST "https://api.todoist.com/api/v1/tasks" \
   -H "Authorization: Bearer $TODOIST_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

@@ -5,19 +5,21 @@ allowed-tools: Bash(curl:*), Bash(date:*), Read
 
 # Sprint
 
+> Todoist's REST v2 answers 410 Gone since 2026; these calls use API v1, where list endpoints return `{"results": [...], "next_cursor": ...}`, so read `.results`.
+
 Pull today's Todoist tasks and show a clean sprint-by-sprint breakdown.
 
 ## Step 1: Pull today's tasks
 
 ```bash
-curl -sf "https://api.todoist.com/rest/v2/tasks?filter=today" \
+curl -sf "https://api.todoist.com/api/v1/tasks/filter?query=today" \
   -H "Authorization: Bearer $TODOIST_API_TOKEN"
 ```
 
 Also pull overdue:
 
 ```bash
-curl -sf "https://api.todoist.com/rest/v2/tasks?filter=overdue" \
+curl -sf "https://api.todoist.com/api/v1/tasks/filter?query=overdue" \
   -H "Authorization: Bearer $TODOIST_API_TOKEN"
 ```
 

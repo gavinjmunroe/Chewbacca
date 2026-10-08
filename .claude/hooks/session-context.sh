@@ -159,11 +159,13 @@ tasks = ""
 if token:
     try:
         req = urllib.request.Request(
-            "https://api.todoist.com/rest/v2/tasks?filter=today",
+            "https://api.todoist.com/api/v1/tasks/filter?query=today",
             headers={"Authorization": f"Bearer {token}"},
         )
         with urllib.request.urlopen(req, timeout=4) as r:
             data = json.load(r)
+        if isinstance(data, dict):
+            data = data.get("results", [])
         top = [t["content"] for t in sorted(data, key=lambda x: -x.get("priority", 1))[:3]]
         tasks = ", ".join(top)
     except Exception:

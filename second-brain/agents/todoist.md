@@ -33,7 +33,7 @@ Under `hooks.SessionStart`:
   "hooks": [
     {
       "type": "command",
-      "command": "TASKS=$(curl -sf 'https://api.todoist.com/rest/v2/tasks?filter=today' -H 'Authorization: Bearer YOUR_TOKEN' 2>/dev/null | python3 -c \"import json,sys; tasks=json.load(sys.stdin); top=[t['content'] for t in sorted(tasks, key=lambda x: -x.get('priority',1))[:3]]; print(', '.join(top))\" 2>/dev/null || echo 'unavailable'); printf '%s' \"{\\\"hookSpecificOutput\\\": {\\\"hookEventName\\\": \\\"SessionStart\\\", \\\"additionalContext\\\": \\\"Today top Todoist priorities: $TASKS\\\"}}\"",
+      "command": "TASKS=$(curl -sf 'https://api.todoist.com/api/v1/tasks/filter?query=today' -H 'Authorization: Bearer YOUR_TOKEN' 2>/dev/null | python3 -c \"import json,sys; d=json.load(sys.stdin); tasks=d.get('results',d) if isinstance(d,dict) else d; top=[t['content'] for t in sorted(tasks, key=lambda x: -x.get('priority',1))[:3]]; print(', '.join(top))\" 2>/dev/null || echo 'unavailable'); printf '%s' \"{\\\"hookSpecificOutput\\\": {\\\"hookEventName\\\": \\\"SessionStart\\\", \\\"additionalContext\\\": \\\"Today top Todoist priorities: $TASKS\\\"}}\"",
       "statusMessage": "Loading Todoist priorities..."
     }
   ]
@@ -59,7 +59,7 @@ If you use labels in Todoist, Claude can filter by them:
 
 ```bash
 # Get only tasks labeled @work
-curl -sf 'https://api.todoist.com/rest/v2/tasks?filter=today+%26+@work' \
+curl -sf 'https://api.todoist.com/api/v1/tasks/filter?query=today+%26+@work' \
   -H "Authorization: Bearer $TODOIST_API_TOKEN"
 ```
 

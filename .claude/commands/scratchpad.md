@@ -6,6 +6,8 @@ argument-hint: "<idea or note>"
 
 # Scratchpad
 
+> Todoist's REST v2 answers 410 Gone since 2026; these calls use API v1, where list endpoints return `{"results": [...], "next_cursor": ...}`, so read `.results`.
+
 Capture $ARGUMENTS as a quick idea. Fast, no friction.
 
 ## Step 1: Categorize
@@ -20,7 +22,7 @@ Determine if this is:
 ## Step 2: Add to Todoist
 
 ```bash
-curl -sf -X POST "https://api.todoist.com/rest/v2/tasks" \
+curl -sf -X POST "https://api.todoist.com/api/v1/tasks" \
   -H "Authorization: Bearer $TODOIST_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"content": "[IDEA] {content}", "priority": 1}'

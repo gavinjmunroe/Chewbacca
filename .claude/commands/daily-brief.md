@@ -5,6 +5,8 @@ allowed-tools: Bash(gh:*), Bash(curl:*), Bash(date:*), Bash(cat:*), Bash(ls:*), 
 
 # Daily Brief
 
+> Todoist's REST v2 answers 410 Gone since 2026; these calls use API v1, where list endpoints return `{"results": [...], "next_cursor": ...}`, so read `.results`.
+
 Assemble the morning briefing. Pull live data, synthesize a focused daily plan. Signal over noise.
 
 ## Step 1: Today's date
@@ -17,11 +19,11 @@ date '+%A, %B %-d, %Y'
 
 ```bash
 # Today's tasks
-curl -sf "https://api.todoist.com/rest/v2/tasks?filter=today" \
+curl -sf "https://api.todoist.com/api/v1/tasks/filter?query=today" \
   -H "Authorization: Bearer $TODOIST_API_TOKEN"
 
 # Overdue tasks
-curl -sf "https://api.todoist.com/rest/v2/tasks?filter=overdue" \
+curl -sf "https://api.todoist.com/api/v1/tasks/filter?query=overdue" \
   -H "Authorization: Bearer $TODOIST_API_TOKEN"
 ```
 

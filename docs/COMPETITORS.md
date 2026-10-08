@@ -51,6 +51,20 @@ Its thesis line is "The most capable personal AI will be the one with the most a
 
 **Real limitations.** The 24 GB GPU caps it at mid-sized open models, which trail cloud models (TechCrunch and others, [summarized in search](https://aiweekly.co/alerts/ghost-raises-11m-to-sell-3499-core-pc-running-local-ai-agents) [snippet]). "Fully local" has the gateway and relay exceptions above. Dedicated AI hardware has a bad recent record: the Humane AI Pin went to HP for $116M ([TechCrunch](https://techcrunch.com/2025/02/18/humanes-ai-pin-is-dead-as-hp-buys-startups-assets-for-116m), read in the AFTER-PANES research, not re-read today). Javaid's answer to "why not a Mac mini" is that running models on existing hardware is "a terrible experience" (TechCrunch [read]). No review exists yet because nothing has shipped.
 
+### How Ghost runs its launch
+
+From a pre-launch behind-the-scenes video filmed in their SF office and factory ([YouTube, GqSXkWbYVZo](https://youtu.be/GqSXkWbYVZo) [read, transcript]). Added 2026-10-07 so the growth push has a worked example to copy from. Everything here is what the video shows or what Zain says on camera; none of it is independently checked.
+
+1. **The founder story is the hook.** The video opens on his rap sheet before the product: coded at 9, a $20K fund from family and neighbors at 12, quant at a hedge fund at 14, quit because the work felt empty. The product is not shown until about 11 minutes in.
+2. **Show the build, not just the thing.** Weekly factory tours and showcases before launch, so early buyers have "seen the people who built this and the factory." The laser cutter, the CNC router, a room stacked with $360K of GPUs and a $3.4M GPU wire are all on camera. Scarcity and cost are the story.
+3. **A sequenced channel plan, drawn on a whiteboard by their growth lead:** in-person events first, then the founder's X account, then external PR and YouTube.
+4. **Plan for the dip after launch.** They expect attention to fall off and plan a steady stream of content after launch: how the launch happened, the economics, behind the scenes of what's next.
+5. **One belief carries the brand.** "I don't want to rent it back from someone else. I want to own it." Privacy is argued as a moral position: tech is hated because it ignores what people care about. The brand doesn't treat it as a checklist feature.
+6. **Demos are concrete, physical and checkable.** "Where did I put my AirPods" gets answered from a ceiling camera, then someone walks over and finds them in the couch. A reaction read from a face. One customer story, where a kitchen camera plus Whoop caught a midnight pie binge, stands in for a use-case slide.
+7. **Demand ahead of supply.** A pre-order backlog they "don't have the capacity to fill" is said out loud, with a goal of thousands of units in four weeks.
+
+What carries over to Chewbacca: Caleb's own story leads, building in public plays the part of the factory tour, the channels follow the same order (in-person USC and builder events, then Caleb's X, then PR and YouTube), the content plan after launch is written before launch, and every demo ends with a check a stranger can watch. The privacy line only carries over once the reasoning stops leaving the Mac (see below).
+
 ### The bar for Chewbacca
 
 - Do Ghost's demo 3 on a laptop someone already owns: answer "what am I missing this week" from their own calendar, mail and tasks, name the missing thing, and find options. Chewbacca has the calendar and task walks; it lacks the cross-source "missing prerequisite" answer (see job 2 below).

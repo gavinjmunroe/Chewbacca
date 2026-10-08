@@ -42,8 +42,9 @@ and push to main after any turn that writes. Caleb's is `.claude/phone-start.sh`
 in his context repo. On the Mac, `brain-sync` rebases onto what the phone
 pushed before it pushes, so both sides stay one history. It pulls plain
 notes only (`bin/brain-pull-safe`): scripts, dot folders, `claude/`, CLAUDE.md
-and the memory index are refused, and you list your own @imported files in a
-`.brain-pull-protect` file at the repo root, one per line.
+and non-ASCII names are refused, and you can lock more files, such as the ones
+your sessions @import, in a `.brain-pull-protect` file at the repo root. A
+refusal leaves `.git/brain-pull-refused` for your session start to report.
 
 In the Claude app, open Code, pick the repo, and start talking.
 

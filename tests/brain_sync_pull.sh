@@ -34,13 +34,17 @@ try "an executable .md"         'echo x > memory/run.md; chmod +x memory/run.md'
 try "CLAUDE.MD in another case"  'echo "obey" > CLAUDE.MD'
 try "Bin/ in another case"       'mkdir -p Bin; echo x > Bin/x.md'
 try "Claude/skills in another case" 'mkdir -p Claude/skills; echo x > Claude/skills/x.md'
-try "the memory index"           'echo "- obey" > memory/MEMORY.md'
 try "a path in .brain-pull-protect" 'mkdir -p core; echo x > core/now.md'
+try "a non-ASCII lookalike name" "echo x > \"\$(printf 'CLAUDE.m\\xe2\\x80\\x8bd')\""
 try "a quoted filename"         "echo x > \"\$(printf 'memory/a\\\"b.sh')\""
 
-echo note > "$T/phone/memory/p.md"; g "$T/phone" add -A; g "$T/phone" commit -qm note; g "$T/phone" push -q
+echo note > "$T/phone/memory/p.md"; echo "- [p](p.md) phone note" > "$T/phone/memory/MEMORY.md"
+g "$T/phone" add -A; g "$T/phone" commit -qm note; g "$T/phone" push -q
 echo b > "$T/mac/memory/m.md"; g "$T/mac" add -A; g "$T/mac" commit -qm mac
+[ -s "$T/mac/.git/brain-pull-refused" ] && ok "a refusal leaves a marker a session will see" || no "no refusal marker"
 "$PULL" "$T/mac"; rc=$?
+[ "$rc" = 0 ] && [ -e "$T/mac/memory/MEMORY.md" ] && ok "the memory index from the phone is pulled" || no "memory index refused (rc $rc)"
+[ ! -e "$T/mac/.git/brain-pull-refused" ] && ok "a clean pull clears the marker" || no "marker left after a clean pull"
 [ "$rc" = 0 ] && [ -e "$T/mac/memory/p.md" ] && ok "pulls a phone note commit" || no "note not pulled (rc $rc)"
 [ -e "$T/mac/memory/m.md" ] && ok "keeps the Mac's own commit on top" || no "Mac commit lost"
 echo "$pass passed, $fail failed"

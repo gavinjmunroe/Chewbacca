@@ -22,10 +22,12 @@ import subprocess
 import sys
 
 NOTE_EXT = {".md", ".yml", ".yaml", ".json", ".txt", ".csv", ".tsv"}
-# Instruction files are loaded as orders, not read as notes. MEMORY.md is the
-# auto-memory index Claude Code loads into every session.
+# Instruction files are loaded as orders, not read as notes. The memory index
+# (MEMORY.md) is NOT here: a phone that can't index its own memory files isn't
+# usable with the Mac off, which Caleb asked for on 2026-10-07. A repo that
+# wants it locked lists it in .brain-pull-protect.
 INSTRUCTION_NAMES = {"claude.md", "agents.md", "gemini.md", "claude.local.md",
-                     "memory.md", "copilot-instructions.md"}
+                     "copilot-instructions.md"}
 # claude/ holds skills the brain's .claude/skills links to; bin/ holds tools.
 BLOCKED_TOP = {"claude", "bin"}
 # Every comparison is lowercased: macOS checks out "Claude/x" and "claude/x"
@@ -52,6 +54,12 @@ def protected(repo):
 
 
 def refusal(old_mode, new_mode, path, protect):
+    # Printable ASCII only. Python's lower() and macOS's filename matching
+    # disagree outside ASCII (Unicode normalization, the Kelvin sign folding to
+    # "k"), so a non-ASCII name could pass here as one file and land on disk as
+    # another. Note titles are plain English, so nothing real is lost.
+    if not path or any(not (32 <= ord(c) < 127) or c == "\\" for c in path):
+        return "non-ASCII or control character in name"
     low = path.lower()
     parts = low.split("/")
     if any(p.startswith(".") for p in parts):
@@ -97,12 +105,25 @@ def main():
     i = 0
     while i + 1 < len(fields) and fields[i].startswith(":"):
         meta, path = fields[i][1:].split(" "), fields[i + 1]
-        why = refusal(meta[0], meta[1], path, protect)
-        if why:
-            bad.append(f"{path!r} ({why})")
+        if len(meta) != 5:
+            bad.append(f"{path!r} (unparsed diff entry)")
+        else:
+            why = refusal(meta[0], meta[1], path, protect)
+            if why:
+                bad.append(f"{path!r} ({why})")
         i += 2
+    # Every byte of the diff must have been read as an entry. Stopping early on
+    # anything unexpected used to leave the rest of the entries unchecked.
+    if fields[i:] not in ([], [""]):
+        bad.append("unparsed remainder of the diff")
+    marker = os.path.join(repo, ".git", "brain-pull-refused")
     if bad:
-        print(f"brain-pull-safe: not pulling {up[:10]}, it changes: " + ", ".join(bad[:10]), file=sys.stderr)
+        msg = f"not pulling {up[:10]}, it changes: " + ", ".join(bad[:10])
+        print(f"brain-pull-safe: {msg}", file=sys.stderr)
+        # A refused remote blocks every later pull until someone looks, so say
+        # so where a session will see it (brain-check reads this at start).
+        with open(marker, "w", encoding="utf-8") as f:
+            f.write(msg + "\n")
         return 3
     # Also refuse if HEAD moved since the check, so the rebase applies exactly
     # the diff that was read.
@@ -112,6 +133,8 @@ def main():
         git(repo, "rebase", "--abort")
         print(f"brain-pull-safe: rebase onto {up[:10]} conflicted, aborted", file=sys.stderr)
         return 4
+    if os.path.exists(marker):
+        os.remove(marker)
     return 0
 
 

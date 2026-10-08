@@ -629,6 +629,9 @@ if group "installer"; then
   check  "brain-sync commits one turn's writes once, and only this session's" \
     bash "$ROOT/tests/brain_sync.sh"
 
+  check  "phone-mirror redacts settings env, follows skill links, refuses a leak" \
+    bash "$ROOT/tests/phone_mirror.sh"
+
   # Six hooks were on disk and registered nowhere on 2026-09-22, including the
   # two built after Caleb had to ask for the same thing four times. A hook the
   # installer never registers is a feature that has never run.

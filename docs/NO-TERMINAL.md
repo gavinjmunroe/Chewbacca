@@ -85,3 +85,6 @@ This is one step, not the destination. Still true:
 The unit of distribution is still a git clone. Until that changes, "my grandma
 could click one button" is not true, and this document exists so nobody claims
 otherwise from the presence of an MCP server.
+
+For the phone, where none of this runs, see [PHONE.md](PHONE.md): the
+context repo on GitHub is the server.

@@ -1,0 +1,78 @@
+#!/bin/bash
+# phone-mirror: copy the Claude Code setup into the personal context repo, so a
+# phone reaches it through GitHub with the Mac off.
+#
+# The Claude app on a phone has no filesystem and no shell, and a cloud session
+# starts from a GitHub repo with none of ~/.claude. Caleb wanted the data to stay
+# a bunch of folders on GitHub rather than behind a server (2026-10-07), so the
+# whole route is: mirror ~/.claude into <brain>/claude/, push, and point the
+# Code tab or the GitHub connector at that repo. See docs/PHONE.md.
+#
+#   phone-mirror              mirror into $PERSONAL_CONTEXT_DIR from d1-config.sh
+#   phone-mirror <brain-dir>  mirror into that repo instead
+#   phone-mirror --push       also commit claude/ by path and push
+#
+# Exits 1 without committing if any credential reaches the mirror.
+set -uo pipefail
+
+PUSH=0; BRAIN=""
+for a in "$@"; do
+  case "$a" in
+    --push) PUSH=1 ;;
+    -h|--help) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) BRAIN="$a" ;;
+  esac
+done
+
+CL="${CLAUDE_HOME:-$HOME/.claude}"
+if [ -z "$BRAIN" ] && [ -f "$CL/d1-config.sh" ]; then
+  BRAIN="$(. "$CL/d1-config.sh" >/dev/null 2>&1; printf '%s' "${PERSONAL_CONTEXT_DIR:-}")"
+fi
+[ -n "$BRAIN" ] && [ -d "$BRAIN" ] || { echo "phone-mirror: no personal context repo. Pass its path." >&2; exit 2; }
+command -v jq >/dev/null || { echo "phone-mirror: needs jq" >&2; exit 2; }
+
+OUT="$BRAIN/claude"
+mkdir -p "$OUT/bin"
+
+# Skills are dereferenced (-L) because most entries in ~/.claude/skills are
+# symlinks into repos a cloud sandbox won't have. Caleb's measured 16M that way.
+for d in rules hooks commands agents output-styles skills; do
+  [ -d "$CL/$d" ] && rsync -aL --delete \
+    --exclude='.git/' --exclude='node_modules' --exclude='.venv' \
+    --exclude='__pycache__' --exclude='.DS_Store' \
+    --exclude='*token*' --exclude='*secret*' --exclude='*.key' \
+    "$CL/$d/" "$OUT/$d/" 2>/dev/null
+done
+[ -f "$CL/CLAUDE.md" ] && cp "$CL/CLAUDE.md" "$OUT/CLAUDE.md"
+
+# settings.json carries real keys in its env block. Caleb's held a 40-hex
+# Todoist token that none of the patterns below match, so every env value is
+# blanked here rather than trusted to a regex.
+if [ -f "$CL/settings.json" ]; then
+  jq '(.env // {}) |= with_entries(.value = "REDACTED")' "$CL/settings.json" > "$OUT/settings.json"
+fi
+
+COURSEWORK_BIN="$(cd "$(dirname "$0")" && pwd)/coursework"
+[ -f "$COURSEWORK_BIN" ] && cp "$COURSEWORK_BIN" "$OUT/bin/coursework"
+
+# Refuse on a known credential shape, or on any real env value from settings.
+# Each shape needs its full length: a bare "sk-ant-" matched the regex that
+# Caleb's sync-to-d1.sh hook uses to refuse secrets, and blocked his sync.
+# The values are read from a pipe so they never sit in a process list.
+leak=0
+grep -rlqE "clay_scoped_[A-Za-z0-9]{10}|sk-ant-[A-Za-z0-9_-]{20}|sk-[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|github_pat_[A-Za-z0-9_]{20}|AKIA[0-9A-Z]{16}|xox[bp]-[A-Za-z0-9-]{10}" "$OUT" 2>/dev/null && leak=1
+if [ -f "$CL/settings.json" ]; then
+  vals="$(jq -r '.env // {} | .[] | select(length >= 8)' "$CL/settings.json")"
+  [ -n "$vals" ] && grep -rqF -f <(printf '%s\n' "$vals") "$OUT" 2>/dev/null && leak=1
+fi
+if [ "$leak" = 1 ]; then
+  echo "phone-mirror: credential found in $OUT, nothing committed" >&2
+  exit 1
+fi
+
+if [ "$PUSH" = 1 ] && [ -n "$(git -C "$BRAIN" status --porcelain -- claude 2>/dev/null)" ]; then
+  git -C "$BRAIN" add -- claude
+  git -C "$BRAIN" commit -q -m "chore: mirror Claude setup for the phone" -- claude
+  git -C "$BRAIN" push -q origin HEAD || { echo "phone-mirror: push failed" >&2; exit 1; }
+fi
+exit 0

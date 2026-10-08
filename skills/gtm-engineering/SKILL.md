@@ -1,9 +1,25 @@
 ---
 name: gtm-engineering
-description: "Build and evaluate GTM workflows in Clay: ICP, signals, list building, qualification, enrichment, sequencing, CRM routing, and outcome measurement. Use for operating or learning Clay and testing GTM automation reliability."
+description: "Chewbacca's growth engineer: run outbound campaigns that turn an offer into booked meetings, the way top agencies do. Demand generation, cold email, lead lists, ICP and signals, Clay enrichment, sequences, deliverability, reply rates and reply handling. Use when asked to set up or fix an outbound campaign, book meetings, get money in the door, build a list, write cold email copy, run GTM for a client like Jonah or Zeutara, learn how agencies run demand gen, or make Chewbacca better at GTM. Also fires on: pipeline, prospecting, lead gen, outreach, Clay, ICP, growth engineering, GTME."
 ---
 
 # GTM engineering
+
+## This is Chewbacca's first product
+
+Sagar set it on 2026-10-07: a growth engineer that takes an offer, an objective
+(booked meetings), a timeframe and a monthly credit budget, and books meetings.
+Email first, Clay as the backbone, BMA's service sold as software. The consumer
+OS comes after money is in the door. Judge every GTM session by meetings booked
+per offer, never by tables built or hours saved.
+
+Before designing a campaign, read [demand-gen-playbooks.md](references/demand-gen-playbooks.md):
+how ColdIQ, Growth Engine X, Leadbird, Blueprint GTM, Clay and the send platforms
+actually run outbound, every rule with its source, plus where they disagree.
+Where they disagree, the team's own process wins: Sagar's six variables (persona,
+pricing, packaging, accounts, signal, channel, with signals leading messaging)
+and Maggie's texted process. Add a practitioner to that file only with a source
+per rule, and mark anything unverified.
 
 ## Read these first, every time (2026-10-06: skipping them cost a day)
 
@@ -47,8 +63,7 @@ Use `clay-fixture-check` to compare an exported CSV with a frozen synthetic fixt
 
 Training note, 2026-09-23: user required mathematical, creative and proprietary standards throughout the workflow after recorded lessons failed to establish reliable transfer. Measure changed behavior and preserve private evidence, rather than equating added instructions with expertise.
 
-
-## Clay correction retained — 2026-09-23
+## Clay correction retained, 2026-09-23
 
 The user requires native Clay enrichment and dynamic, per-row personalized copy
 through the built-in UX engine. Never use Sculptor. Do not replace configured

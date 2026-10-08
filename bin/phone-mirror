@@ -85,12 +85,19 @@ grep -rqE "$SHAPES" "$STAGE"; rc=$?
 # says key, token, secret or password (ANTHROPIC_API_KEY was set on Caleb's).
 # Checking every settings string blocked his real sync: plugin names like
 # "blader/humanizer" appear in skill changelogs.
-vals="$( { [ -f "$CL/settings.json" ] && jq -r 'del(.hooks, .permissions) | [paths(strings) as $p | {k: ($p | map(tostring) | join(".")), v: getpath($p)}
+# Each source is read on its own and a failed read stops the run. Grouping them
+# in one $( { ...; ...; } ) took only the last command's status, so a jq error
+# left the settings values unchecked while the run still passed.
+settings_vals=""
+if [ -f "$CL/settings.json" ]; then
+  settings_vals="$(jq -r 'del(.hooks, .permissions) | [paths(strings) as $p | {k: ($p | map(tostring) | join(".")), v: getpath($p)}
             | select((.k | test("(^|\\.)(env|headers)\\.|token|secret|passw|api[_-]?key|auth"; "i")) and (.v | length >= 8)
                      or (.v | test("^[A-Za-z0-9_+=.-]{16,}$") and test("[0-9]") and test("[A-Za-z]")))
-            | .v] | .[]' "$CL/settings.json"
-          env | grep -iE '^[A-Za-z0-9_]*(KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTH)[A-Za-z0-9_]*=' | cut -d= -f2- | awk 'length >= 12'
-        } )"
+            | .v] | .[]' "$CL/settings.json")" \
+    || { echo "phone-mirror: could not read settings.json values" >&2; exit 1; }
+fi
+env_vals="$(env | grep -iE '^[A-Za-z0-9_]*(KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTH)[A-Za-z0-9_]*=' | cut -d= -f2- | awk 'length >= 8')"
+vals="$(printf '%s\n%s\n' "$settings_vals" "$env_vals" | grep -v '^$')"
 if [ -n "$vals" ]; then
   grep -rqF -f <(printf '%s\n' "$vals") "$STAGE"; rc=$?
   [ "$rc" = 1 ] || { echo "phone-mirror: a secret value reached the copy, nothing written" >&2; exit 1; }

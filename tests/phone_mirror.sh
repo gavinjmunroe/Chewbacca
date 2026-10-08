@@ -63,6 +63,12 @@ MY_SERVICE_API_KEY=Zq8xV2mN7pL4Yt9w CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN" 2>/de
 [ "$rc" = 1 ] && ok "refuses a shell secret pasted into a hook" || no "inlined shell secret exited $rc"
 rm "$CL/rules/inline.sh"
 
+# A settings.json jq can't parse must stop the run, never skip the check.
+cp "$CL/settings.json" "$T/good.json"; printf '{"env":{"K":"Zq8xV2mN7pL4Yt9w"}' > "$CL/settings.json"
+CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN" 2>/dev/null; rc=$?
+[ "$rc" = 1 ] && ok "unreadable settings.json fails closed" || no "broken settings exited $rc"
+mv "$T/good.json" "$CL/settings.json"
+
 # A refused run must leave the last good mirror exactly as it was.
 before="$(cat "$BRAIN/claude/rules/writing.md")"
 echo "changed" > "$CL/rules/writing.md"

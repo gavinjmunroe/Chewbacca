@@ -254,6 +254,16 @@ What has to be true before the pitch can say "books you meetings":
 2. The warm side in use. `bin/intro` (warm-intro paths) is built but has no recorded use.
 3. A cold install on a stranger's Mac, which is the packaging gap above.
 
+### Funding, as found on 2026-10-07
+
+Totals raised, from search results unless a round announcement was read; "~" means sources disagree or only a snippet was seen. Together the list is about $2.4B, and Instinct (~$1.35B) and Clay (~$416.5M) are most of it.
+
+- Mac assistants: Highlight $50M, Cluely $20.3M, Shadow ~$1M, VoiceOS $500K (YC; a same-named company may be conflated), Gemini (Google), Fazm open source, Jarvis none (solo founder), Alter bootstrapped, mrmr and Dottie not disclosed.
+- Claude Code add-ons: noisy-studio, claude-voice-multiplexer, CallClaude, call-me and groundtruth are open source; No Excuses, none found.
+- People and network: Mesh $8M, Boomerang $3.7M, Dex ~$3.4M (YC), Happenstance $500K (YC).
+- GTM and outbound: Clay ~$416.5M ($7.1B valuation), 11x $70M+, Actively $68M, Unify ~$59M, Lindy ~$53M, Artisan ~$46M, Origami $2M (YC).
+- Personal AI: Instinct ~$1.35B ($10B valuation), Granola $192M ($1.5B valuation), Automat $19.25M (YC), Ghost $11M, Screenpipe ~$2.8M to $3.4M (YC), Meta Muse (Meta), OPAL EF-backed with no amount found.
+
 ### A platform risk
 
 On 2026-10-02 Apple said it will add "very explicit user action" before any AI agent gets Full Disk Access, after complaints that Meta's Muse read a columnist's Messages ([capital.com](https://capital.com/en-gb/news/apple-says-it-will-flag-ai-requests-for-mac-data) [read]). Chewbacca's chat.db read depends on Full Disk Access. Onboarding has to make that grant a deliberate, explained step before Apple makes it one.
@@ -275,6 +285,7 @@ On 2026-10-02 Apple said it will add "very explicit user action" before any AI a
 - Desktop assistants: [highlightai.com](https://highlightai.com), [SiliconANGLE on Highlight's Series A](https://siliconangle.com/2026/03/24/ai-productivity-startup-highlight-ai-raises-40m-appoints-new-ceo/), [shadow.do](https://shadow.do), [voiceos.com](https://voiceos.com), [Gemini for Mac](https://workspaceupdates.googleblog.com/2026/04/now-available-gemini-app-for-mac.html), [Gemini Spark pricing](https://ppc.land/google-restricts-new-mac-ai-agent-to-99-99-ultra-subscribers/), [cluely.com](https://cluely.com), [getmrmr.com](https://getmrmr.com/blog/ai-assistants-that-act-on-your-mac), [getjarvis.eu](https://getjarvis.eu), [fazm.ai](https://fazm.ai/cc), [dottie.ai list](https://dottie.ai/blog/best-ai-assistants-mac/)
 - Claude Code add-ons: [noisy-coding](https://github.com/noisy/noisy-coding), [claude-voice-multiplexer](https://github.com/n33kos/claude-voice-multiplexer), [callclaude](https://github.com/incidentfox/callclaude), [groundtruth](https://github.com/vnmoorthy/groundtruth), [No Excuses](https://hunted.space/product/no-excuses)
 - People and GTM: [Dex pricing](https://getdex.com/pricing), [me.sh](https://me.sh), [Clay Sculptor](https://www.clay.com/sculptor), [Clay roadmap](https://www.clay.com/blog/build-on-clay-clays-product-roadmap-with-ceo-kareem-amin), [unifygtm.com](https://www.unifygtm.com/), [11x.ai](https://www.11x.ai/), [TechCrunch on 11x](https://techcrunch.com/2025/03/24/a16z-and-benchmark-backed-11x-has-been-claiming-customers-it-doesnt-have), [Boomerang on warm-intro agents](https://www.getboomerang.ai/glossaries/ai-agent-for-warm-introductions)
+- Funding: [Granola](https://pulse2.com/granola-125-million-at-1-5-billion-valuation-raised-for-ai-meeting-context-platform/amp/), [Clay Series D](https://raising.fi/news/clay-series-d-september-2026), [Instinct rounds](https://pulse2.com/instinct-raises-250-million-at-2-5-billion-valuation-as-ai-assistant-goes-viral-in-silicon-valley/), [Automat](https://www.thesaasnews.com/news/automat-raises-15-5-million-series-a/), [Happenstance](https://www.ycombinator.com/companies/happenstance), [Boomerang](https://f4.fund/startups/getboomerang), [Dex](https://crunchbase.com/organization/dex-0c0e), [Screenpipe](https://screenpi.pe/blog/screenpipe-009), [VoiceOS](https://www.vcbacked.co/company/voiceos), [Shadow](https://www.crunchbase.com/organization/taper-labs) (snippets)
 - Platforms: [OpenClaw macOS docs](https://docs.openclaw.ai/platforms/macos), [Cowork plugins](https://claude.com/docs/cowork/guide/plugins), [Apple on agent data access](https://capital.com/en-gb/news/apple-says-it-will-flag-ai-requests-for-mac-data)
 
 ### Snippet only, or blocked

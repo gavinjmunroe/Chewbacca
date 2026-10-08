@@ -40,7 +40,10 @@ For the cloud session to act like the Mac one, give the repo a
 loads (your CLAUDE.md copy, core files, the memory index) and tell it to commit
 and push to main after any turn that writes. Caleb's is `.claude/phone-start.sh`
 in his context repo. On the Mac, `brain-sync` rebases onto what the phone
-pushed before it pushes, so both sides stay one history.
+pushed before it pushes, so both sides stay one history. It pulls plain
+notes only (`bin/brain-pull-safe`): scripts, dot folders, `claude/`, CLAUDE.md
+and the memory index are refused, and you list your own @imported files in a
+`.brain-pull-protect` file at the repo root, one per line.
 
 In the Claude app, open Code, pick the repo, and start talking.
 

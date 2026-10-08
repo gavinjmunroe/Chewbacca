@@ -5,6 +5,12 @@ description: "The Chewbacca team's task board, stored in this repo and shared wi
 
 # Team board
 
+This board is the team todo. Caleb's personal todo is the work ledger, and the
+split is by owner: anything Gavin, Jake or Semyon owns, or any build of the
+product, lands here even when he says "chewb todo"; only things in his own hands
+(a text, an access request) go in the ledger. He flagged mixing them on
+2026-10-07. Split a mixed request and say which went where.
+
 Run `team`. It reads the fetched `origin/main`, so it shows what the web board shows.
 
 | Ask | Run |

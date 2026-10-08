@@ -41,36 +41,31 @@ mkdir -p "$STAGE/bin"
 
 # Skills are dereferenced (-L) because most entries in ~/.claude/skills are
 # symlinks into repos a cloud sandbox won't have. Caleb's measured 16M that way.
-# Dotenv files, keys and credential files are never copied, whatever folder
-# they sit in.
+# Files are copied by ALLOWLIST: instruction and script text only. Two review
+# rounds on 2026-10-07 each found a credential file shape a denylist missed
+# (.env, then names with no telltale word), so nothing outside these
+# extensions goes up, whatever it is called.
+ALLOW_EXT="md mdc sh bash zsh py js mjs cjs ts swift rb json yaml yml toml txt html css svg csv xml xsd"
+INCLUDES=(--include='*/')
+for e in $ALLOW_EXT; do INCLUDES+=(--include="*.$e"); done
 for d in rules hooks commands agents output-styles skills; do
   [ -d "$CL/$d" ] || continue
-  rsync -aL \
-    --exclude='.git/' --exclude='node_modules' --exclude='.venv' \
-    --exclude='__pycache__' --exclude='.DS_Store' \
-    --exclude='.env' --exclude='.env.*' --exclude='*.env' \
-    --exclude='*.pem' --exclude='*.p12' --exclude='*.key' --exclude='id_rsa*' --exclude='id_ed25519*' \
-    --exclude='*token*' --exclude='*secret*' --exclude='*credential*' --exclude='.netrc' \
+  rsync -aLm \
+    --exclude='.git/' --exclude='node_modules/' --exclude='.venv/' --exclude='__pycache__/' \
+    --exclude='.env*' --exclude='*.env' --exclude='*token*' --exclude='*secret*' \
+    --exclude='*credential*' --exclude='*.key' --exclude='*.pem' \
+    "${INCLUDES[@]}" --exclude='*' \
     "$CL/$d/" "$STAGE/$d/" || { echo "phone-mirror: copying $d failed" >&2; exit 1; }
 done
 [ -f "$CL/CLAUDE.md" ] && cp "$CL/CLAUDE.md" "$STAGE/CLAUDE.md"
 
-# settings.json carries real keys in its env block. Caleb's held a 40-hex
-# Todoist token that no pattern below matches, so values are blanked rather
-# than trusted to a regex: every env block at any depth (mcpServers.*.env
-# included), every headers block, and any field whose name says key, token,
-# secret, password or auth. apiKeyHelper and statusLine commands stay, since
-# they name a script rather than hold a value.
+# settings.json is copied by ALLOWLIST too: hooks and permissions are the only
+# parts a phone session uses. env, mcpServers, apiKeyHelper and anything added
+# later stay on the Mac. Redacting named fields missed secrets stored under
+# names that don't say "token", which is the bug this replaced.
 if [ -f "$CL/settings.json" ]; then
-  jq 'walk(if type == "object" then
-         with_entries(
-           if (.key == "env" or .key == "headers") and (.value | type) == "object"
-             then .value |= with_entries(.value = "REDACTED")
-           elif (.key | test("token|secret|password|passwd|api[_-]?key|auth"; "i")) and (.value | type) == "string"
-             then .value = "REDACTED"
-           else . end)
-       else . end)' "$CL/settings.json" > "$STAGE/settings.json" \
-    || { echo "phone-mirror: could not redact settings.json" >&2; exit 1; }
+  jq '{hooks, permissions} | with_entries(select(.value != null))' "$CL/settings.json" > "$STAGE/settings.json" \
+    || { echo "phone-mirror: could not read settings.json" >&2; exit 1; }
 fi
 
 COURSEWORK_BIN="$(cd "$(dirname "$0")" && pwd)/coursework"
@@ -84,15 +79,21 @@ COURSEWORK_BIN="$(cd "$(dirname "$0")" && pwd)/coursework"
 SHAPES='clay_scoped_[A-Za-z0-9]{10}|sk-ant-[A-Za-z0-9_-]{20}|sk-[A-Za-z0-9]{20}|ghp_[A-Za-z0-9]{20}|gho_[A-Za-z0-9]{20}|github_pat_[A-Za-z0-9_]{20}|AKIA[0-9A-Z]{16}|xox[bp]-[A-Za-z0-9-]{10}|-----BEGIN [A-Z ]*PRIVATE KEY-----'
 grep -rqE "$SHAPES" "$STAGE"; rc=$?
 [ "$rc" = 1 ] || { echo "phone-mirror: credential shape found (or check failed), nothing written" >&2; exit 1; }
-if [ -f "$CL/settings.json" ]; then
-  vals="$(jq -r '[paths(scalars) as $p | {p: $p, v: getpath($p)}
-                  | select(($p | map(tostring) | join(".")) | test("(^|\\.)(env|headers)\\.|token|secret|password|passwd|api[_-]?key|auth"; "i"))
-                  | .v | tostring | select(length >= 8)] | .[]' "$CL/settings.json")" \
-    || { echo "phone-mirror: could not read settings.json" >&2; exit 1; }
-  if [ -n "$vals" ]; then
-    grep -rqF -f <(printf '%s\n' "$vals") "$STAGE"; rc=$?
-    [ "$rc" = 1 ] || { echo "phone-mirror: a settings secret reached the copy, nothing written" >&2; exit 1; }
-  fi
+# Then every value that must never leave the Mac: each settings.json string
+# outside hooks and permissions that sits under a secret-looking name or looks
+# like a key (16+ mixed letters and digits, no spaces), and each variable in this shell whose name
+# says key, token, secret or password (ANTHROPIC_API_KEY was set on Caleb's).
+# Checking every settings string blocked his real sync: plugin names like
+# "blader/humanizer" appear in skill changelogs.
+vals="$( { [ -f "$CL/settings.json" ] && jq -r 'del(.hooks, .permissions) | [paths(strings) as $p | {k: ($p | map(tostring) | join(".")), v: getpath($p)}
+            | select((.k | test("(^|\\.)(env|headers)\\.|token|secret|passw|api[_-]?key|auth"; "i")) and (.v | length >= 8)
+                     or (.v | test("^[A-Za-z0-9_+=.-]{16,}$") and test("[0-9]") and test("[A-Za-z]")))
+            | .v] | .[]' "$CL/settings.json"
+          env | grep -iE '^[A-Za-z0-9_]*(KEY|TOKEN|SECRET|PASSWORD|PASSWD|AUTH)[A-Za-z0-9_]*=' | cut -d= -f2- | awk 'length >= 12'
+        } )"
+if [ -n "$vals" ]; then
+  grep -rqF -f <(printf '%s\n' "$vals") "$STAGE"; rc=$?
+  [ "$rc" = 1 ] || { echo "phone-mirror: a secret value reached the copy, nothing written" >&2; exit 1; }
 fi
 
 mkdir -p "$OUT"

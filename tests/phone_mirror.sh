@@ -14,16 +14,17 @@ echo "pray first" > "$CL/CLAUDE.md"
 echo "no em dashes" > "$CL/rules/writing.md"
 echo "skill body" > "$EXT/SKILL.md"
 ln -s "$EXT" "$CL/skills/linked"
-printf '{"env":{"TODOIST_API_TOKEN":"f0126e193b7fb233c00d57d8480de4741106209e"},"model":"x"}' > "$CL/settings.json"
+printf '{"env":{"TODOIST_API_TOKEN":"f0126e193b7fb233c00d57d8480de4741106209e"},"model":"x","enabledPlugins":{"blader/humanizer":true},"hooks":{"Stop":[]}}' > "$CL/settings.json"
+echo "credit: blader/humanizer" > "$CL/rules/credits.md"
 
 CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN"; rc=$?
 [ "$rc" = 0 ] && ok "clean mirror exits 0" || no "clean mirror exited $rc"
 [ -f "$BRAIN/claude/skills/linked/SKILL.md" ] && [ ! -L "$BRAIN/claude/skills/linked" ] \
   && ok "skill symlink copied as a real folder" || no "skill symlink not dereferenced"
-[ "$(jq -r .env.TODOIST_API_TOKEN "$BRAIN/claude/settings.json")" = REDACTED ] \
-  && ok "settings env value redacted" || no "env value survived"
+[ "$(jq -r '.env // "gone"' "$BRAIN/claude/settings.json")" = gone ] \
+  && ok "settings env block not copied" || no "env block survived"
 grep -rq f0126e193b7f "$BRAIN/claude" && no "raw token in mirror" || ok "raw token absent everywhere"
-[ "$(jq -r .model "$BRAIN/claude/settings.json")" = x ] && ok "other settings kept" || no "settings mangled"
+[ "$(jq -c .hooks "$BRAIN/claude/settings.json")" = '{"Stop":[]}' ] && ok "hooks kept, and a plugin name in a skill is not a leak" || no "settings mangled"
 
 # A hook that hard-codes the same token must stop the run.
 echo 'curl -H "Bearer f0126e193b7fb233c00d57d8480de4741106209e"' > "$CL/rules/leaky.md"
@@ -45,9 +46,22 @@ printf '{"env":{"TODOIST_API_TOKEN":"f0126e193b7fb233c00d57d8480de4741106209e"},
 echo "DB=postgres://u:hunter22pass@h/db" > "$CL/rules/.env"
 CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN"; rc=$?
 [ "$rc" = 0 ] && ok "nested settings run is clean" || no "nested run exited $rc"
-[ "$(jq -r '.mcpServers.x.env.DB, .mcpServers.x.headers.Authorization, .apiToken' "$BRAIN/claude/settings.json" | sort -u)" = REDACTED ] \
-  && ok "mcpServers env, headers and token-named fields redacted" || no "a nested secret survived"
+[ "$(jq -c 'keys' "$BRAIN/claude/settings.json")" = '[]' ] \
+  && ok "settings keeps only hooks and permissions; env, mcpServers, apiToken dropped" || no "settings kept: $(jq -c keys "$BRAIN/claude/settings.json")"
+grep -rq "hunter22pass\|abcdefgh12345678\|zzzzzzzz9999" "$BRAIN/claude" && no "a settings secret reached the mirror" || ok "no settings secret anywhere in the mirror"
 [ ! -e "$BRAIN/claude/rules/.env" ] && ok "dotenv files are never copied" || no ".env was copied"
+
+echo "pw=Zq8xV2mN7pL4" > "$CL/rules/deploy.ini"
+echo "pw=Zq8xV2mN7pL4" > "$CL/rules/notes.cfg"
+CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN"
+[ ! -e "$BRAIN/claude/rules/deploy.ini" ] && [ ! -e "$BRAIN/claude/rules/notes.cfg" ] \
+  && ok "files outside the text allowlist are never copied" || no "an unlisted file type was copied"
+rm "$CL/rules/deploy.ini" "$CL/rules/notes.cfg"
+
+echo 'curl -H "x: Zq8xV2mN7pL4Yt9w"' > "$CL/rules/inline.sh"
+MY_SERVICE_API_KEY=Zq8xV2mN7pL4Yt9w CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN" 2>/dev/null; rc=$?
+[ "$rc" = 1 ] && ok "refuses a shell secret pasted into a hook" || no "inlined shell secret exited $rc"
+rm "$CL/rules/inline.sh"
 
 # A refused run must leave the last good mirror exactly as it was.
 before="$(cat "$BRAIN/claude/rules/writing.md")"

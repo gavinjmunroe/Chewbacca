@@ -135,21 +135,12 @@ fi
 mkdir "$lock" 2>/dev/null || exit 0
 echo $$ > "$lock/pid"
 # A phone session commits to the same repo through GitHub (docs/PHONE.md), so
-# the remote can be ahead. A rejected push used to fail silently here and every
-# later push failed the same way. Rebase onto it and push again; a conflict is
-# aborted and left for a person rather than resolved by guessing. Remote commits
-# that touch code are never pulled: this Mac runs the repo's scripts and hooks
-# unprompted, and a phone session can be steered by what it reads.
-if ! git -C "$0" push -q origin HEAD >/dev/null 2>&1 && git -C "$0" fetch -q origin >/dev/null 2>&1; then
-  up="origin/$(git -C "$0" branch --show-current)"
-  if ! git -C "$0" diff --name-only "HEAD...$up" | grep -v "^claude/" \
-       | grep -qE "(^|/)[^/]*[.](sh|py|js|mjs|cjs|ts|rb|command)$|^[.]githooks/|^[.]claude/|^bin/|^[.]git(attributes|ignore)$"; then
-    if git -C "$0" rebase -q --autostash "$up" >/dev/null 2>&1; then
-      git -C "$0" push -q origin HEAD >/dev/null 2>&1
-    else
-      git -C "$0" rebase --abort >/dev/null 2>&1
-    fi
-  fi
+# the remote can be ahead, and a rejected push used to fail silently forever.
+# brain-pull-safe rebases onto note-only remote commits and refuses anything
+# that touches code or instruction files; if it is missing, nothing is pulled.
+if ! git -C "$0" push -q origin HEAD >/dev/null 2>&1; then
+  pull="$HOME/.local/bin/brain-pull-safe"
+  [ -x "$pull" ] && "$pull" "$0" >/dev/null 2>&1 && git -C "$0" push -q origin HEAD >/dev/null 2>&1
 fi
 rm -rf "$lock"''', repo],
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

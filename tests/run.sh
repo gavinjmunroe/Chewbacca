@@ -629,7 +629,7 @@ if group "installer"; then
   check  "brain-sync commits one turn's writes once, and only this session's" \
     bash "$ROOT/tests/brain_sync.sh"
 
-  check  "brain-sync pulls phone notes and refuses remote code" \
+  check  "brain-pull-safe pulls phone notes and refuses code, instructions and symlinks" \
     bash "$ROOT/tests/brain_sync_pull.sh"
 
   check  "phone-mirror redacts settings env, follows skill links, refuses a leak" \

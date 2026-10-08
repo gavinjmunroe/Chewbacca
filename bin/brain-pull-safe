@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""brain-pull-safe: bring a phone session's note commits into the Mac's brain
+repo, and nothing else.
+
+This Mac runs code from the brain repo without asking (sync scripts from
+launchd, brain-check at SessionStart, .githooks on commit, .claude hooks and
+skills when a session opens there), and it loads CLAUDE.md files as
+instructions. Once a phone session can push (docs/PHONE.md), anything that
+steers that session could plant either. So a pull is an ALLOWLIST: every path
+the remote changed must be a plain note file. Two review rounds on 2026-10-07
+broke a denylist of code extensions (extensionless scripts, the claude/ skills
+the brain links in, quoted filenames), which is why this is a whitelist read
+from `git diff --raw -z`, never from the quoted text output.
+
+    brain-pull-safe <repo>     exit 0 pulled or nothing to pull
+                               exit 3 refused, remote changes non-note paths
+                               exit 4 rebase conflict, aborted
+                               exit 2 not a repo / fetch failed
+"""
+import os
+import subprocess
+import sys
+
+NOTE_EXT = {".md", ".yml", ".yaml", ".json", ".txt", ".csv", ".tsv"}
+# Instruction files are loaded as orders, not read as notes.
+INSTRUCTION_NAMES = {"CLAUDE.md", "AGENTS.md", "GEMINI.md", "CLAUDE.local.md"}
+# claude/ holds skills the brain's .claude/skills links to; bin/ holds tools.
+BLOCKED_TOP = {"claude", "bin"}
+PLAIN_FILE, DELETED = "100644", "000000"
+
+
+def git(repo, *args):
+    return subprocess.run(["git", "-C", repo, *args], capture_output=True)
+
+
+def refusal(old_mode, new_mode, path):
+    parts = path.split("/")
+    if any(p.startswith(".") for p in parts):
+        return "dot path"
+    if parts[0] in BLOCKED_TOP:
+        return f"{parts[0]}/ is code"
+    if parts[-1] in INSTRUCTION_NAMES:
+        return "instruction file"
+    if os.path.splitext(parts[-1])[1].lower() not in NOTE_EXT:
+        return "not a note type"
+    if new_mode not in (PLAIN_FILE, DELETED) or old_mode not in (PLAIN_FILE, DELETED):
+        return f"mode {old_mode}->{new_mode}"
+    return None
+
+
+def main():
+    if len(sys.argv) != 2:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    repo = sys.argv[1]
+    branch = git(repo, "branch", "--show-current").stdout.decode().strip()
+    if not branch or git(repo, "fetch", "-q", "origin").returncode != 0:
+        return 2
+    up = f"origin/{branch}"
+    if git(repo, "merge-base", "--is-ancestor", up, "HEAD").returncode == 0:
+        return 0
+    raw = git(repo, "diff", "--raw", "-z", "--no-renames", "--no-ext-diff", f"HEAD...{up}")
+    if raw.returncode != 0:
+        return 2
+    fields = raw.stdout.decode("utf-8", "surrogateescape").split("\0")
+    bad = []
+    i = 0
+    while i + 1 < len(fields) and fields[i].startswith(":"):
+        meta, path = fields[i][1:].split(" "), fields[i + 1]
+        why = refusal(meta[0], meta[1], path)
+        if why:
+            bad.append(f"{path!r} ({why})")
+        i += 2
+    if bad:
+        print(f"brain-pull-safe: not pulling {up}, it changes: " + ", ".join(bad[:10]), file=sys.stderr)
+        return 3
+    if git(repo, "rebase", "-q", "--autostash", up).returncode != 0:
+        git(repo, "rebase", "--abort")
+        print(f"brain-pull-safe: rebase onto {up} conflicted, aborted", file=sys.stderr)
+        return 4
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

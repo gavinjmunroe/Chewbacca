@@ -110,7 +110,12 @@ struct FieldTests {
     @Test("a live state that has settled runs at its own pace")
     func settledPaces() {
         #expect(PresenceFieldRenderer.rate(
-            for: Presence.thinking.field, closing: false, settled: true, parting: false) == 30)
+            for: Presence.done.field, closing: false, settled: true, parting: false) == 30)
+        // A comet lapping in 2.6 s moves about sixty points a frame at
+        // thirty; at sixty it reads as one light travelling, not a dotted
+        // line (2026-10-09, "fluid between all actions").
+        #expect(PresenceFieldRenderer.rate(
+            for: Presence.thinking.field, closing: false, settled: true, parting: false) == 60)
         #expect(PresenceFieldRenderer.rate(
             for: Presence.hearing.field, closing: false, settled: true, parting: false) == 60)
     }

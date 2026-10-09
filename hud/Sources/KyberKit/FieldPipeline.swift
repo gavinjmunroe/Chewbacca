@@ -6,6 +6,10 @@ import Metal
 struct FieldUniforms {
     var tint: SIMD4<Float>
     var pill: SIMD4<Float>
+    /// Where the rim's three lights are, in laps from the top-left corner,
+    /// and how fast each is going, laps a second. See `LightRig`.
+    var lights: SIMD4<Float> = .zero
+    var motion: SIMD4<Float> = .zero
     var size: SIMD2<Float>
     var pointer: SIMD2<Float>
     var agent: SIMD2<Float>
@@ -23,9 +27,10 @@ struct FieldUniforms {
     var reach: Float
     var sweep: Float
     var sweepOrigin: Float
-    var embers: Float
+    var glow: Float
     var pillOn: Float
-    /// How fast the light travels, eased. Sets the scanning streak's strength.
+    /// The eased drift. The shader no longer reads it: `LightRig` turns it
+    /// into the orbit's speed.
     var drift: Float = 0
     /// The inner edge's corner radius, in screen heights. See `corner` in
     /// the shader.

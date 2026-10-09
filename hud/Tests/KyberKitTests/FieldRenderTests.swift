@@ -13,11 +13,15 @@ import UniformTypeIdentifiers
 struct FieldRenderTests {
     /// The resting uniforms every picture starts from.
     static func base(width: Int, height: Int, rest: Float) -> FieldUniforms {
-        FieldUniforms(
-            tint: SIMD4(1, 1, 1, 0), pill: SIMD4(0, 0, 0, 0), size: SIMD2(Float(width), Float(height)),
+        // Listening's light, at rest in the two top corners.
+        let corners = LightRig.anchors(for: .corners, aspect: Double(width) / Double(height)) ?? [0, 0, 0]
+        return FieldUniforms(
+            tint: SIMD4(1, 1, 1, 0), pill: SIMD4(0, 0, 0, 0),
+            lights: SIMD4(Float(corners[0]), Float(corners[1]), Float(corners[2]), 0),
+            size: SIMD2(Float(width), Float(height)),
             pointer: SIMD2(-10, -10), agent: SIMD2(-10, -10), parallax: SIMD2(0, 0),
             time: 7.3, act: 5, rest: rest, travel: 12, pulse: 0, beat: 0, alpha: 1, part: 0,
-            partRadius: 0.02, partFeather: 0.01, reach: 0, sweep: 99, sweepOrigin: 0, embers: 0, pillOn: 0,
+            partRadius: 0.02, partFeather: 0.01, reach: 0, sweep: 99, sweepOrigin: 0, glow: 0.45, pillOn: 0,
             corner: Float(PresenceFieldRenderer.innerCorner) / 800)
     }
 
@@ -104,7 +108,10 @@ struct FieldRenderTests {
         _ = try Self.render(suffix: "-acting") {
             $0.tint = SIMD4(0.28, 1.45, 0.55, 0.60)
             $0.rest = 12 / 800
-            $0.embers = 1
+            // Three lights a third apart, circling at acting's speed.
+            $0.lights = SIMD4(0.30, 0.30 + 1.0 / 3, 0.30 - 1.0 / 3 + 1, 0)
+            $0.motion = SIMD4(repeating: 0.13)
+            $0.glow = 1
             $0.agent = SIMD2(0.72, 0.62)
             $0.reach = 1
         }
@@ -141,25 +148,29 @@ struct FieldRenderTests {
         }
     }
 
-    @Test("thinking: a scanning streak on the cut edge")
+    @Test("thinking: one light circling, with a tail as long as its speed")
     func thinking() throws {
         _ = try Self.render(suffix: "-thinking") {
             $0.rest = 8 / 800
-            $0.drift = 3.2
+            $0.glow = 1
+            $0.lights = SIMD4(repeating: 0.08)
+            // Thinking's 0.384 laps a second (`LightRig.lapsPerDrift` x 3.2).
+            $0.motion = SIMD4(repeating: 0.384)
         }
     }
 
     /// Six frames of thinking a fifth of a second apart, for judging the
-    /// motion before an install. Drift 3.2 advances `travel` 3.2 a second.
+    /// motion before an install. The light laps at 0.384 a second.
     @Test("thinking, as a strip of frames")
     func thinkingStrip() throws {
         for frame in 0..<6 {
             let seconds = Float(frame) * 0.2
             _ = try Self.render(suffix: "-strip\(frame)") {
                 $0.rest = 8 / 800
-                $0.drift = 3.2
+                $0.glow = 1
                 $0.time += seconds
-                $0.travel += 3.2 * seconds
+                $0.lights = SIMD4(repeating: 0.08 + 0.384 * seconds)
+                $0.motion = SIMD4(repeating: 0.384)
             }
         }
     }
@@ -171,8 +182,12 @@ struct FieldRenderTests {
     @Test("nothing is drawn inside the screen past the band")
     func noDust() throws {
         let width = 1280, height = 800
-        for (rest, embers) in [(Float(9), Float(0)), (Float(12), Float(1)), (Float(20), Float(1))] {
-            guard let pixels = try Self.draw(suffix: "-nodust", background: -1, { $0.rest = rest / 800; $0.embers = embers })
+        for (rest, glow) in [(Float(9), Float(0.45)), (Float(12), Float(1)), (Float(20), Float(1))] {
+            guard let pixels = try Self.draw(suffix: "-nodust", background: -1, {
+                $0.rest = rest / 800
+                $0.glow = glow
+                $0.motion = SIMD4(repeating: 0.4)
+            })
             else { return }
             // Band, its 10% swell from a voice that is not there, the 2.4 px
             // shadow, and a pixel of antialiasing.

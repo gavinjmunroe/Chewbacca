@@ -40,10 +40,11 @@ struct PresenceFieldStyle: Equatable {
     /// False means one frame and then stop. A layer that redraws forever is a
     /// battery bug, which is the objection `PresenceRing` raises about itself.
     var animating: Bool
-    /// 0 to 1, and only `acting` has any: it is the one state where something
-    /// is being done to the machine. Since 2026-10-04 it brings in the second
-    /// and third scanning streaks; it used to lift sparks off the band.
-    var embers: Double = 0
+    /// Where the rim's light goes in this state. See `LightRig`, which
+    /// carries the whole vocabulary.
+    var light: LightPath = .corners
+    /// How bright that light is, 0 to 1.
+    var glow: Double = 0
 }
 
 /// The three readings colour is spent on, and there are only three.
@@ -116,7 +117,8 @@ extension Presence {
             // Nothing. Not a thin band: the assistant is not there, and a
             // depth of zero is the one value the shader draws no pixels for.
             return .init(
-                rest: 0, drift: 0, tint: FieldTint.steel, pulse: 0, fps: 1, animating: false)
+                rest: 0, drift: 0, tint: FieldTint.steel, pulse: 0, fps: 1, animating: false,
+                light: .corners, glow: 0)
         case .attentive:
             // Still: eased in, one frame, then parked, like `dormant`.
             //
@@ -130,7 +132,7 @@ extension Presence {
             // and it parks again once settled.
             return .init(
                 rest: 9, drift: 0.5, tint: FieldTint.steel, pulse: 0, fps: 1,
-                animating: false)
+                animating: false, light: .corners, glow: 0.6)
         case .hearing, .speaking:
             // The two states driven from outside. `rest` here is a floor and
             // the voice adds to it, so 60fps is not decoration: it is the rate
@@ -145,22 +147,22 @@ extension Presence {
             // and moving with the sound, thinking is thin and sprinting.
             return .init(
                 rest: 6, drift: 2.4, tint: FieldTint.steel, pulse: 0, fps: 60,
-                animating: true)
+                animating: true, light: .bar, glow: 0.75)
         case .thinking:
             // Thin and fast. Work reads as travel round the edge rather than
             // as weight on it, and it is still white: nothing has been done to
             // the machine yet.
             return .init(
-                rest: 8, drift: 3.2, tint: FieldTint.steel, pulse: 0, fps: 30,
-                animating: true)
+                rest: 8, drift: 3.2, tint: FieldTint.steel, pulse: 0, fps: 60,
+                animating: true, light: .orbit(spread: 0), glow: 1)
         case .acting:
             // Green and breathing, and the only state that breathes on its own
             // clock. Something is being done to the person's machine right now
             // and that is the one thing in this vocabulary worth a colour they
             // cannot miss.
             return .init(
-                rest: 12, drift: 1.1, tint: FieldTint.green, pulse: 0.8, fps: 30,
-                animating: true, embers: 1)
+                rest: 12, drift: 1.1, tint: FieldTint.green, pulse: 0.8, fps: 60,
+                animating: true, light: .orbit(spread: 1.0 / 3), glow: 1)
         case .done:
             // Darker green, calm, and still alive. The same hue as `acting`
             // on purpose, because it is the end of that same errand, darker
@@ -180,19 +182,19 @@ extension Presence {
             // living instrument. Slower than `attentive`'s 0.5 so it reads
             // as settled rather than waiting, at its rate.
             return .init(
-                rest: 9, drift: 0.35, tint: FieldTint.deepGreen, pulse: 0, fps: 20,
-                animating: true)
+                rest: 9, drift: 0.35, tint: FieldTint.deepGreen, pulse: 0, fps: 30,
+                animating: true, light: .orbit(spread: 0), glow: 0.8)
         case .attention:
             // The thickest, because this is the one that has to be noticed. It
             // stays white: green and red are spoken for, and a third hue here
             // would make the palette decoration again.
             return .init(
                 rest: 16, drift: 0.9, tint: FieldTint.steel, pulse: 0, fps: 30,
-                animating: true)
+                animating: false, light: .corners, glow: 1)
         case .failed:
             return .init(
                 rest: 14, drift: 0.3, tint: FieldTint.red, pulse: 0, fps: 20,
-                animating: true)
+                animating: false, light: .hold, glow: 1)
         }
     }
 }
@@ -528,7 +530,11 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
     private var reach = Chase(shown: 0, tau: 0.5)
     private var agentX = Chase(shown: -10, tau: 0.25)
     private var agentY = Chase(shown: -10, tau: 0.25)
-    private var embers = Chase(shown: 0, tau: 0.6)
+    /// The rim's light. See `LightRig`.
+    private var lights = LightRig()
+    /// The arrival the lights were last placed for, so they are put in
+    /// place once per arrival and otherwise carry on from where they are.
+    private var lightsWoke: Date?
     /// The far layer slides with the pointer, slowly, so it reads as depth
     /// rather than as the smoke being dragged.
     private var parallaxX = Chase(shown: 0, tau: 0.8)
@@ -536,9 +542,6 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
     /// Loudness samples, (seconds, level), newest last, kept for as long as a
     /// ripple takes to cross the buffer.
     private var voiceLog: [(Double, Float)] = []
-    /// Where the agent was last seen, in unit coordinates, and when, so the
-    /// done sweep can start from it after its cursor has gone.
-    private var lastAgent: (CGPoint, Date)?
     private var sweepOrigin: Float = 0
     /// The bar condenses in over about a fifth of a second and keeps its last
     /// rectangle while it evaporates, so going away does not jump to a corner.
@@ -768,11 +771,21 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
             if agentX.shown < -1 { agentX.shown = Float(agentUnit.x); agentY.shown = Float(agentUnit.y) }
             agentX.step(toward: Float(agentUnit.x), dt: dt)
             agentY.step(toward: Float(agentUnit.y), dt: dt)
-            lastAgent = (agentUnit, now)
         }
         let reachTarget: Float = agentUnit == nil ? 0 : 1
         reach.step(toward: reachTarget, dt: dt)
-        embers.step(toward: Float(style.embers), dt: dt)
+        // Frozen while going away, like the depth and the tint: the light
+        // stops where it is and leaves with the rim.
+        let lightPath = closing ? LightPath.hold : style.light
+        let lightGlow = closing ? lights.glow : style.glow
+        if let awoke = frame.awokeAt, awoke != lightsWoke, !closing {
+            lightsWoke = awoke
+            // Up from nothing: in place already, and as dark as the rim, so
+            // it brightens as the rim grows in.
+            lights.place(style.light, glow: 0, aspect: Double(W))
+        }
+        lights.step(
+            lightPath, glow: lightGlow, drift: Double(drift.shown), aspect: Double(W), dt: dt)
         let parallaxTarget = pointer.map {
             SIMD2<Float>(Float($0.x - 0.5), Float($0.y - 0.5)) * 0.35
         } ?? SIMD2<Float>(parallaxX.shown, parallaxY.shown)
@@ -793,16 +806,13 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
         }
         let rippling = voice.contains { $0 > 0.002 }
 
-        // The sweep starts where the agent last was if it was seen in the
-        // last ten seconds, and from the hyper bar otherwise.
+        // The ring leaves from where the light is as the work finishes,
+        // which is where acting's three close back into one. It used to
+        // leave from where the agent's cursor last was, a spot no light on
+        // the rim had anything to do with.
         if let doneAt = frame.doneAt, doneAt != sweepFrom {
             sweepFrom = doneAt
-            let W = Double(size.width / max(size.height, 1))
-            if let (spot, seen) = lastAgent, now.timeIntervalSince(seen) < 10 {
-                sweepOrigin = Float(Self.perimeter(at: spot, aspect: W))
-            } else {
-                sweepOrigin = Float((W + 1 + 0.5 * W) / (2 * W + 2))
-            }
+            sweepOrigin = lights.positions.x
         }
         let sweep = sweepFrom.map { Float(now.timeIntervalSince($0)) } ?? 99
         let sweeping = sweep < 1.7
@@ -828,7 +838,7 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
             && simd_length(shownTint - tintTarget) < 0.002
             && frame.closingAt == nil
             && reach.settled(at: reachTarget)
-            && embers.settled(at: Float(style.embers))
+            && lights.settled(glow: lightGlow)
             && parallaxX.settled(at: parallaxTarget.x) && parallaxY.settled(at: parallaxTarget.y)
             && !rippling && !sweeping
             && pillOn.settled(at: pillTarget)
@@ -846,6 +856,8 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
         var uniforms = FieldUniforms(
             tint: shownTint,
             pill: pillRect,
+            lights: lights.positions,
+            motion: lights.velocities,
             size: SIMD2(Float(size.width), Float(size.height)),
             pointer: SIMD2(pointerX.shown, pointerY.shown),
             agent: reach.shown > 0.001 ? SIMD2(agentX.shown, agentY.shown) : SIMD2(-10, -10),
@@ -863,7 +875,7 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
             reach: reach.shown,
             sweep: sweep,
             sweepOrigin: sweepOrigin,
-            embers: embers.shown,
+            glow: Float(lights.glow),
             pillOn: pillOn.shown,
             drift: drift.shown,
             corner: Float(frame.corner) / Float(max(view.bounds.height, 1)),

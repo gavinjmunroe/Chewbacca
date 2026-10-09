@@ -25,8 +25,11 @@ using namespace metal;
 // thickness the whole way round: a thin white wash, lit from above, over the
 // frosted blur `RimGlass` puts underneath it, and a hard bright line where
 // the glass is cut on its inner edge. The glass never moves. What moves is
-// the light: a studio light circling the rim at the state's drift, and,
-// while the assistant works, a scanning streak racing along the cut edge.
+// one light, and every state is that light doing something: resting in the
+// top corners while listening, pouring down to the hyper bar for a voice,
+// circling while it thinks, splitting into three while it acts, closing back
+// into one and sending a ring round the rim when it is done. `LightRig` in
+// RimLight.swift moves it; this only draws it.
 //
 // That is the fourth look, 2026-10-09. The third was machined black
 // titanium, opaque, 20 points deep, and wrapped round the menu bar and the
@@ -92,6 +95,11 @@ struct Uniforms {
     /// not clean, looks like shit"), so `PillView` draws it now. Kept so the
     /// layout matches `FieldUniforms` without a second change there.
     float4 pill;
+    /// Where the rim's three lights are, 0 to 1 round the lap clockwise from
+    /// the top-left corner, and how fast each is going, laps a second, which
+    /// sets its tail. xyz; w unused. See `LightRig`.
+    float4 lights;
+    float4 motion;
     float2 size;
     /// Unit coordinates, top-left origin. Off screen when there is no pointer.
     float2 pointer;
@@ -104,8 +112,9 @@ struct Uniforms {
     float act;
     float rest;
     /// How far the contour field has travelled, already integrated on the
-    /// Swift side from an eased drift. Multiplying `time` by a drift that had
-    /// just changed moved the whole pattern in one frame.
+    /// Swift side from an eased drift. Unread since 2026-10-09: the light
+    /// moves on `lights` now, integrated the same way in `LightRig`. Kept so
+    /// the layout matches `FieldUniforms` without a second change there.
     float travel;
     /// How much of the breath to take, 0 to 1, eased in and out.
     float pulse;
@@ -122,15 +131,16 @@ struct Uniforms {
     float reach;
     /// Seconds since the run finished, for the sweep. Large when there is none.
     float sweep;
-    /// Where on the perimeter the sweep starts: the agent's last spot, or the
-    /// hyper bar.
+    /// Where on the perimeter the ring starts: where the light was as the
+    /// work finished.
     float sweepOrigin;
-    /// Acting only, 0 to 1: brings in the second and third scanning streaks.
-    float embers;
+    /// How bright the light is, 0 to 1, eased.
+    float glow;
     /// How much of the bar is there, 0 to 1, eased, so it condenses in and
     /// evaporates out rather than cutting.
     float pillOn;
-    /// How fast the light travels, eased: the scanning streak's strength.
+    /// The eased drift. Unread here since 2026-10-09, for the same reason
+    /// as `travel`: `LightRig` turns it into the orbit's speed.
     float drift;
     /// The radius the inner edge turns its corners on, in screen heights.
     /// `PresenceFieldRenderer.innerCorner`, which `RimGlass` cuts the blur to
@@ -239,31 +249,35 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // 0 at the screen's edge, 1 at the glass's inner edge.
     float u = e / max(depth, 1e-4);
 
-    // The studio light: one light circling the rim at the state's drift.
-    // At rest (drift 0.5) a lap takes about 13 s; thinking takes about 2.
-    float lightAt = fract(U.travel * 0.15);
-    float fromLight = along(here, lightAt, W) / P;
-    float broad = exp(-pow(fromLight / 0.12, 2.0));
-    float hard = exp(-pow(fromLight / 0.035, 2.0));
-
-    // The scanning streak: a sharp front and a tail behind it, on the cut
-    // edge, so it reads as something going somewhere. Its strength follows
-    // the drift: faint at rest, full while thinking. Acting carries three,
-    // evenly spaced, so it reads as a machine running.
-    float streakOn = max(max(0.30, smoothstep(0.8, 2.6, U.drift)), U.embers);
+    // The light: three points of it (`LightRig`), drawn as one wherever
+    // they meet. Each takes the brighter of itself and what is already
+    // there, never the sum, so three on one spot are one light rather than
+    // one three times as bright, and three parting from one is one light
+    // dividing. A light at rest is a glint and the glow the glass catches
+    // round it; a moving one grows a tail behind it as long as its speed,
+    // so the same light reads as a glint resting and a comet travelling,
+    // with nothing switched between the two.
+    float broad = 0.0;
+    float hard = 0.0;
     float streak = 0.0;
-    if (streakOn > 0.001) {
-        float head = fract(U.travel * 0.12);
-        int count = U.embers > 0.5 ? 3 : 1;
-        for (int k = 0; k < 3; k++) {
-            if (k >= count) break;
-            float d = fract(here - head - float(k) / 3.0 + 0.5) - 0.5;
-            float front = exp(-pow(d / 0.004, 2.0));
-            float tail = d < 0.0 ? exp(d / 0.05) : 0.0;
-            streak += max(front, 0.55 * tail);
-        }
-        streak *= streakOn;
+    for (int k = 0; k < 3; k++) {
+        // Laps ahead of the light, clockwise, -0.5 to 0.5.
+        float d = fract(here - U.lights[k] + 0.5) - 0.5;
+        float v = U.motion[k];
+        float behind = v >= 0.0 ? -d : d;
+        // Thinking (0.38 laps a second) trails about 0.046 of a lap, which
+        // is the old streak's 0.05; the pour to the bar peaks faster and is
+        // held to 0.06 so it never reads as a line drawn round the screen.
+        float len = clamp(abs(v) * 0.12, 0.0, 0.06);
+        float tail = (behind > 0.0 && len > 1e-4) ? exp(-behind / len) : 0.0;
+        float head = exp(-pow(d / 0.004, 2.0));
+        broad = max(broad, exp(-pow(d / 0.05, 2.0)));
+        hard = max(hard, exp(-pow(d / 0.016, 2.0)));
+        streak = max(streak, max(head, 0.55 * tail));
     }
+    broad *= U.glow;
+    hard *= U.glow;
+    streak *= U.glow;
 
     float crest = 0.0;
     if (U.sweep < 2.0) {
@@ -281,8 +295,12 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // blur in `RimGlass`, not anything drawn here. 0.10 to 0.18 was the
     // first cut, and on screen with the blur under it the rim read milky
     // (see `RimTuning.frost`), so it is about half that. The editor's Tint
-    // slider multiplies it.
-    float wash = (0.06 + 0.05 * sky + 0.10 * broad + 0.25 * ripple + 0.40 * crest) * U.washGain;
+    // and Edge light sliders scale the glass and its line, never the light:
+    // at Edge 3, the setting Gavin chose on 2026-10-09, the line is already
+    // white, and a light drawn only on it had nothing brighter to be. So the
+    // light fills the glass round it too, and reads as a lit length of rim.
+    float wash = (0.06 + 0.05 * sky) * U.washGain
+               + 0.10 * broad + 0.30 * hard + 0.25 * ripple + 0.40 * crest;
 
     // The cut edge: a line about a point and a half wide on the inner edge,
     // brightest under the light, where the rim reads as having a thickness.
@@ -290,7 +308,7 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     float aa = max(fwidth(u), 1e-4);
     float body = 1.0 - smoothstep(1.0 - aa, 1.0, u);
     float cut = smoothstep(1.0 - 3.0 * px, 1.0 - 1.0 * px, u) * body;
-    float cutLum = (0.30 + 0.30 * sky + 0.9 * hard + 1.2 * ripple + 1.5 * crest) * U.edgeGain;
+    float cutLum = (0.30 + 0.30 * sky) * U.edgeGain + 0.9 * hard + 1.2 * ripple + 1.5 * crest;
 
     // The state's colour washes the glass a little and carries the streaks.
     // A rim lit green all the way round reads as a neon outline, a status
@@ -307,9 +325,9 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
 
     // Premultiplied throughout: white at `wash` is `wash` in every channel.
     float3 c = glass * wash * body + edge * cut * cutLum
-             + hot * streak * (cut + 0.35 * body) * 1.8;
+             + hot * streak * (cut + 0.6 * body) * 1.8;
     float a = max(wash * body, min(cut * cutLum, 1.0) * 0.85);
-    a = max(a, min(streak * (cut + 0.35 * body) * 1.8, 1.0));
+    a = max(a, min(streak * (cut + 0.6 * body) * 1.8, 1.0));
 
     // The contact shadow just inside the cut: alpha only, so it darkens the
     // screen under it rather than drawing a colour, which is what lifts the

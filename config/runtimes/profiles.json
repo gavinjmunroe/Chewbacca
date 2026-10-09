@@ -8,6 +8,7 @@
       "skills_dir": ".claude/skills",
       "config": ".claude/settings.json",
       "adapter": "claude",
+      "detect_paths": ["~/.claude"],
       "apps": ["cli", "vscode", "desktop"],
       "model_flag": "--model",
       "model_discovery": "Use the runtime's model picker; availability depends on account and provider.",
@@ -30,6 +31,7 @@
       "skills_dir": ".agents/skills",
       "config": ".codex/config.toml",
       "adapter": "codex",
+      "app_binaries": ["/Applications/ChatGPT.app/Contents/Resources/codex", "/Applications/Codex.app/Contents/Resources/codex", "~/.vscode/extensions/openai.chatgpt-*/bin/*/codex"],
       "apps": ["cli", "vscode", "desktop"],
       "model_flag": "--model",
       "model_discovery": "Use the runtime's model picker; keep model_provider and reasoning settings in native configuration.",
@@ -43,6 +45,47 @@
         "https://learn.chatgpt.com/docs/hooks",
         "https://learn.chatgpt.com/docs/build-skills",
         "https://learn.chatgpt.com/docs/config-file/config-reference"
+      ]
+    },
+    "cursor": {
+      "label": "Cursor",
+      "binary": "cursor-agent",
+      "detect_paths": ["/Applications/Cursor.app", "~/.cursor"],
+      "instruction_file": null,
+      "skills_dir": ".agents/skills",
+      "config": ".cursor/hooks.json",
+      "adapter": "cursor",
+      "apps": ["desktop", "cli"],
+      "model_flag": "--model",
+      "model_discovery": "Use Cursor's model picker; Chewbacca does not pick one.",
+      "notes": [
+        "Instructions, brain and Claude Code hooks arrive through the shared hook bridge; user rules stay in Cursor's UI.",
+        "Skills load from ~/.agents/skills and ~/.claude/skills.",
+        "Per-prompt routing context cannot be injected: beforeSubmitPrompt can only allow or block."
+      ],
+      "sources": [
+        "https://cursor.com/docs/agent/hooks",
+        "https://cursor.com/docs/context/skills",
+        "https://cursor.com/docs/context/mcp"
+      ]
+    },
+    "gemini": {
+      "label": "Gemini CLI",
+      "binary": "gemini",
+      "instruction_file": null,
+      "skills_dir": ".agents/skills",
+      "config": ".gemini/settings.json",
+      "adapter": "gemini",
+      "apps": ["cli"],
+      "model_flag": "--model",
+      "model_discovery": "Use Gemini CLI's model setting; Chewbacca does not pick one.",
+      "notes": [
+        "Instructions, brain and Claude Code hooks arrive through the shared hook bridge.",
+        "Skills load from ~/.agents/skills."
+      ],
+      "sources": [
+        "https://geminicli.com/docs/hooks/reference/",
+        "https://geminicli.com/docs/cli/skills/"
       ]
     },
     "generic": {

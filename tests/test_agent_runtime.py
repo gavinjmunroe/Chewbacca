@@ -120,7 +120,10 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(config.read_bytes(), edited)
 
     def test_capacity_does_not_select_codex_for_claude_only_auto(self):
-        with patch.object(runtime.shutil, 'which', side_effect=lambda name: '/bin/claude' if name == 'claude' else None):
+        # Detection also looks inside app bundles under /Applications, which a
+        # PATH stub cannot hide, so the machine is stubbed at that level too.
+        with patch.object(runtime.shutil, 'which', side_effect=lambda name: '/bin/claude' if name == 'claude' else None), \
+                patch.object(runtime, 'detected', side_effect=lambda spec: spec.get('binary') == 'claude'):
             result = runtime.setup('auto')
         self.assertEqual([item['id'] for item in result['runtimes']], ['claude-code'])
         self.assertFalse(context.codex_home().exists())

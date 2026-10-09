@@ -221,6 +221,53 @@ permission to access credentials, publish or bypass safeguards.
     return merge_block(home / 'CLAUDE.md', block, CLAUDE_BEGIN, CLAUDE_END)
 
 
+def standing_instructions(root=None):
+    """The user's Claude Code instructions, compiled for hosts that cannot read them.
+
+    Claude Code loads ~/.claude/CLAUDE.md, resolves its @imports and adds every
+    rule file without a `paths:` scope. Codex, Cursor and Gemini load none of
+    that, so before 2026-10-08 a Codex session got the brain but not one of the
+    user's standing rules: no voice, no git identity, no never-ask-permission.
+    This returns the same text Claude reads, once. Imports of the personal
+    context sources are skipped because read_sources() prints them already.
+    """
+    home = claude_home()
+    main_file = home / 'CLAUDE.md'
+    if not main_file.is_file():
+        return ''
+    loaded = set()
+    if root is not None:
+        loaded = {(root / name).resolve() for name in source_names(root)}
+    loaded.add((REPO / 'config/instructions/agent-neutral.md').resolve())
+
+    def resolve(text):
+        out = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped.startswith('@') and ' ' not in stripped and len(stripped) > 1:
+                target = Path(os.path.expanduser(stripped[1:]))
+                if not target.is_absolute():
+                    target = main_file.parent / target
+                if target.is_file():
+                    target = target.resolve()
+                    if target not in loaded:
+                        loaded.add(target)
+                        out.append(f'<!-- {target} -->\n' + target.read_text(encoding='utf-8').strip())
+                    continue
+            out.append(line)
+        return '\n'.join(out)
+
+    parts = [resolve(main_file.read_text(encoding='utf-8'))]
+    for rule in sorted((home / 'rules').glob('*.md')):
+        body = rule.read_text(encoding='utf-8')
+        scoped = body.startswith('---') and 'paths:' in body.split('\n---', 1)[0]
+        if rule.resolve() in loaded or scoped or rule.name == 'agent-neutral.md':
+            continue
+        loaded.add(rule.resolve())
+        parts.append(f'<!-- {rule} -->\n' + body.strip())
+    return '\n\n'.join(parts)
+
+
 def read_sources(root, manifest=False):
     missing = []
     entries = []
@@ -246,6 +293,8 @@ def main():
     parser.add_argument('command', choices=('install', 'read', 'status', 'path'))
     parser.add_argument('--brain-dir', type=Path, help='private second-brain directory')
     parser.add_argument('--both', action='store_true', help='install startup instructions for Claude and Codex')
+    parser.add_argument('--with-instructions', action='store_true',
+                        help='also print the compiled Claude Code instructions, for hosts that cannot load them')
     args = parser.parse_args()
     home = codex_home()
     root = args.brain_dir.expanduser().resolve() if args.brain_dir else brain_root(home)
@@ -262,6 +311,10 @@ def main():
         pending = context_for(os.getcwd())
         if pending:
             print('\n' + pending)
+        if args.with_instructions:
+            standing = standing_instructions(root)
+            if standing:
+                print('\n## Standing instructions (the same text Claude Code loads)\n\n' + standing)
     return read_sources(root, manifest=args.command == 'status')
 
 

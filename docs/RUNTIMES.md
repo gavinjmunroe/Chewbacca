@@ -5,6 +5,42 @@ app. `tools/agent_context.py` owns live context discovery; `tools/shared_checks.
 runs shared checks. Native adapters handle their host's configuration and events.
 The original `codex_context.py` entry point remains compatible with existing hooks.
 
+## One command for every app
+
+```sh
+chewbacca connect
+```
+
+`connect` finds every installed host (Claude Code, Codex inside ChatGPT.app or
+VS Code, Cursor, Gemini CLI), wires each one from the same sources, and records
+them in `~/.chewbacca/connected.json`. A session-start hook runs
+`connect --new-only --quiet` afterward, so an app installed later connects
+itself the first time any connected host opens a session.
+
+- **Instructions.** `~/.claude/CLAUDE.md` stays the single source. Hosts that
+  cannot read it get it compiled, imports resolved and unscoped rules added,
+  in their startup briefing (`agent_context.py read --with-instructions`).
+- **Hooks.** `~/.claude/settings.json` stays the single registry. Cursor and
+  Gemini call `tools/host_hooks.py`, which translates their events into Claude's
+  payload, runs every matching Claude hook, and translates the verdict back.
+  Claude-only hooks (`skill-gate.sh`, desktop notifiers) are skipped. Codex keeps
+  its own curated adapter.
+- **Skills.** `~/.agents/skills` reaches Codex, Cursor and Gemini;
+  `~/.claude/skills` reaches Claude Code and Cursor.
+- **MCP.** Claude Code's servers in `~/.claude.json` are copied into each host's
+  own config by name; an existing entry is never overwritten (`tools/host_mcp.py`).
+- **Terminal.** A CLI that only ships inside an app bundle gets a shim in
+  `~/.local/bin` that resolves the newest bundled copy on every run.
+- **Chat apps.** ChatGPT and claude.ai run no local hooks, so `connect` writes
+  `~/.chewbacca/exports/`: `CHEWBACCA.md` (the full briefing, owner-only) for a
+  project file, `custom-instructions.txt` for the account setting, and one
+  claude.ai skill zip per skill. Uploading them is a signed-in browser step.
+
+Known gaps, by host: Cursor's `beforeSubmitPrompt` can only allow or block, so
+per-prompt routing context reaches Cursor only at session start. Codex needs its
+hooks re-trusted in `/hooks` after any change. Live hook execution in each host
+stays unverified until a real refusal is observed there.
+
 Choose the host already installed on the machine:
 
 Chewbacca has no preferred runtime, model or provider. The user chooses them.

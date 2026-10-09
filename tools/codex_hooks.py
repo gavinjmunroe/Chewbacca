@@ -457,6 +457,9 @@ def dispatch_event_body(payload):
                   'Use this briefing without running the fallback reader again.\n')
             print((ROOT / 'config/instructions/agent-neutral.md').read_text())
             context.read_sources(root)
+            standing = context.standing_instructions(root)
+            if standing:
+                print('\n## Standing instructions (the same text Claude Code loads)\n\n' + standing)
         parts.append(output.getvalue())
         checker = root / 'brain-check.sh'
         if checker.is_file():

@@ -117,6 +117,12 @@ agent)
   shift
   exec python3 "$ROOT/tools/agent_runtime.py" "$@"
   ;;
+connect)
+  # One verb wires every installed app (Claude Code, Codex, Cursor, Gemini)
+  # and rebuilds the ChatGPT and claude.ai exports from the same sources.
+  shift
+  exec python3 "$ROOT/tools/agent_runtime.py" connect "$@"
+  ;;
 open)
   shift
   # A dashboard nobody can find is a file. This is the one verb that is worth

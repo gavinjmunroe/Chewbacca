@@ -72,19 +72,53 @@ def registry():
     return data
 
 
+def locate_binary(spec):
+    """The runtime's executable: PATH first, then the copies apps bundle.
+
+    On 2026-10-08 `plan --runtime auto` reported Codex as not installed on a Mac
+    running it daily: the only codex binary lived inside ChatGPT.app, and the
+    VS Code extension carries another, neither on PATH. The newest match wins,
+    because both bundles keep superseded versions next to the current one.
+    """
+    if not spec.get('binary'):
+        return None
+    found = shutil.which(spec['binary'])
+    if found:
+        return found
+    import glob
+    for pattern in spec.get('app_binaries', []):
+        matches = [m for m in glob.glob(os.path.expanduser(pattern)) if os.access(m, os.X_OK)]
+        if matches:
+            return max(matches, key=os.path.getmtime)
+    return None
+
+
+def detected(spec):
+    """Installed means a runnable CLI, or the app the profile names is present.
+
+    Cursor's editor ships no CLI on PATH unless the person adds one, so the
+    app bundle and its config directory count as installed too.
+    """
+    if locate_binary(spec):
+        return True
+    return any(Path(os.path.expanduser(path)).exists() for path in spec.get('detect_paths', []))
+
+
 def selected(name):
     profiles = registry()['runtimes']
     if name == 'both':
         return ['claude-code', 'codex']
-    if name == 'auto':
+    if name in ('auto', 'all'):
         found = [key for key, spec in profiles.items()
-                 if spec['binary'] and shutil.which(spec['binary'])]
+                 if spec['adapter'] != 'export' and detected(spec)]
         if not found:
             raise ValueError('No local agent detected. Select a runtime explicitly or export shared instructions.')
         return found
-    if name not in profiles:
-        raise ValueError('unknown runtime: ' + name)
-    return [name]
+    names = name.split(',')
+    unknown = [n for n in names if n not in profiles]
+    if unknown:
+        raise ValueError('unknown runtime: ' + ', '.join(unknown))
+    return names
 
 
 def plan(name, platform=None):
@@ -94,7 +128,7 @@ def plan(name, platform=None):
     return {'platform': platform, 'platform_notes': host['notes'], 'runtimes': [
         dict(catalog['runtimes'][key], id=key,
              install_mode=('native' if host['hooks'] and catalog['runtimes'][key]['adapter'] != 'export' else 'export'),
-             binary_installed=bool(catalog['runtimes'][key]['binary'] and shutil.which(catalog['runtimes'][key]['binary'])))
+             binary_installed=detected(catalog['runtimes'][key]))
         for key in selected(name)]}
 
 
@@ -160,6 +194,10 @@ def codex_capacity_config(original):
 
 
 def native_paths(key):
+    if key == 'cursor':
+        return [Path.home() / '.cursor/hooks.json', Path.home() / '.cursor/mcp.json']
+    if key == 'gemini':
+        return [Path.home() / '.gemini/settings.json']
     if key == 'codex':
         home = context.codex_home()
         override = home / 'AGENTS.override.md'
@@ -278,6 +316,15 @@ def claude_hooks():
     if not hooks.get('SessionStart'):
         hooks['SessionStart'] = [{'hooks': [{'type': 'command', 'command': shlex.join(
             [sys.executable, str(ROOT / 'tools/agent_context.py'), 'read']), 'timeout': 60}]}]
+    # A host installed after setup connects itself the next time any connected
+    # host starts a session. Cursor and Gemini run Claude's SessionStart hooks
+    # through the bridge, so this one entry covers them as well.
+    import host_install
+    connect_command = shlex.join([str(host_install.launcher()), 'connect'])
+    hooks['SessionStart'] = [group for group in hooks['SessionStart']
+                             if not ('connect' in str(group) and ('agent_runtime.py' in str(group)
+                                                                  or host_install.LAUNCHER in str(group)))]
+    hooks['SessionStart'].append({'hooks': [{'type': 'command', 'command': connect_command, 'timeout': 120}]})
     context.atomic_write(path, json.dumps(data, indent=2) + '\n')
     return path
 
@@ -321,13 +368,23 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None):
             hook_path = codex_hooks.install(context.codex_home())
             skill_path = Path.home() / spec['skills_dir']
             activation = 'Review hook trust in Codex, then verify a real event. Configuration alone is not execution.'
+        elif key in ('cursor', 'gemini'):
+            import host_install
+            target = None
+            hook_path = getattr(host_install, key)()
+            skill_path = Path.home() / spec['skills_dir']
+            activation = ('Start a new ' + spec['label'] + ' session; the bridge loads instructions, '
+                          'the brain and the Claude Code hooks on its first event.')
         else:
             home = claude_home()
             target = context.install_claude(brain)
             hook_path = claude_hooks()
             skill_path = home / 'skills'
             activation = 'Reload the Claude session and verify a real event. Existing native hooks were preserved.'
-        context.merge_block(target, instruction_block(spec), BEGIN, END)
+        if target is not None:
+            context.merge_block(target, instruction_block(spec), BEGIN, END)
+        import host_mcp
+        mcp_added = host_mcp.sync([key]).get(key, [])
         existing_links = {p.name for p in skill_path.iterdir()} if skill_path.is_dir() else set()
         projection = skills.install(library, skill_path)
         old_files = {entry['path']: entry for entry in previous['files']}
@@ -341,16 +398,147 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None):
         links = previous['links'] + [{'path': str(skill_path / name), 'target': str((skill_path / name).resolve())}
                                       for name in projection['linked'] if name not in existing_links]
         context.atomic_write(receipt, json.dumps({'files': list(old_files.values()), 'links': links}) + '\n')
-        result['runtimes'].append({'id': key, 'instructions': str(target), 'hooks': str(hook_path),
-                                   'skills': projection, 'activation': activation})
+        result['runtimes'].append({'id': key, 'instructions': str(target) if target else 'session hook',
+                                   'hooks': str(hook_path), 'skills': projection,
+                                   'mcp_added': mcp_added, 'activation': activation})
     result['missing_dependencies'] = [binary for binary in ('bash', 'jq') if not shutil.which(binary)]
     result['missing_context_sources'] = [name for name in context.source_names(brain) if not (brain / name).is_file()]
+    return result
+
+
+def export_chat(destination):
+    """Everything a hosted chat app can hold, rebuilt from the same sources.
+
+    ChatGPT and claude.ai run no local hooks and read no local files, so the
+    closest they get is a project file carrying the full briefing plus a short
+    custom-instructions line pointing at it. The briefing holds private
+    context, so it is written owner-only and never into the repository.
+    """
+    import zipfile
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import frontmatter
+    destination.mkdir(parents=True, exist_ok=True)
+    os.chmod(destination, 0o700)
+    briefing = subprocess.run([sys.executable, str(ROOT / 'tools/agent_context.py'), 'read',
+                               '--with-instructions'], capture_output=True, text=True).stdout
+    brief_path = destination / 'CHEWBACCA.md'
+    context.atomic_write(brief_path, briefing)
+    brief_path.chmod(0o600)
+    prefs_path = shared_home() / 'preferences.json'
+    prefs = json.loads(prefs_path.read_text()) if prefs_path.is_file() else {}
+    pointer = ('Follow CHEWBACCA.md in this project in every reply. It holds my standing '
+               'instructions, voice and current context, and it wins over your defaults.')
+    opener = prefs.get('prompt_context', '').strip()
+    # 1,500 characters is ChatGPT's Free-plan custom-instructions ceiling, the
+    # smallest of the hosts this targets (paid plans allow 5,000).
+    short = (opener + '\n\n' + pointer).strip() if opener else pointer
+    if len(short) > 1500:
+        short = pointer
+    context.atomic_write(destination / 'custom-instructions.txt', short + '\n')
+    skills_dir = destination / 'claude-skills'
+    skills_dir.mkdir(exist_ok=True)
+    packaged, long_descriptions, skipped = 0, [], {}
+    for skill_md in sorted((ROOT / 'skills').glob('*/SKILL.md')):
+        folder = skill_md.parent
+        issues = frontmatter.problems(skill_md)
+        if issues:
+            skipped[folder.name] = issues
+            continue
+        description = ''
+        for line in skill_md.read_text().split('\n---', 1)[0].splitlines():
+            if line.startswith('description:'):
+                description = line.split(':', 1)[1].strip().strip('"')
+        if len(description) > 200:
+            long_descriptions.append(folder.name)
+        # claude.ai wants the skill folder as the zip's single root entry.
+        with zipfile.ZipFile(skills_dir / f'{folder.name}.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+            for path in sorted(folder.rglob('*')):
+                if path.is_file() and '__pycache__' not in path.parts and path.name != '.DS_Store':
+                    archive.write(path, Path(folder.name) / path.relative_to(folder))
+        packaged += 1
+    return {'briefing': str(brief_path), 'briefing_chars': len(briefing),
+            'custom_instructions': str(destination / 'custom-instructions.txt'),
+            'claude_skills': packaged, 'skills_over_200_char_description': long_descriptions,
+            'skipped': skipped}
+
+
+def login_which(binary):
+    """Where the user's own terminal finds a command.
+
+    A hook inherits its host's PATH, and a Dock-launched app gets roughly
+    /usr/bin:/bin, so shutil.which alone would call claude missing and shadow
+    the real one with a shim. The login shell's PATH is the terminal's PATH.
+    """
+    shell = os.environ.get('SHELL') or '/bin/zsh'
+    try:
+        done = subprocess.run([shell, '-lc', 'command -v ' + shlex.quote(binary)],
+                              capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired):
+        return shutil.which(binary)
+    return done.stdout.strip() or None
+
+
+def terminal_shims(bin_dir=None):
+    """Put every bundled CLI on the terminal's PATH.
+
+    Codex was usable in ChatGPT.app and VS Code but `codex` in a terminal said
+    command not found, because its only binaries lived inside app bundles. The
+    shim resolves the bundle at run time, so an app update that moves the
+    versioned path does not break it. A real binary already on PATH wins and
+    no shim is written.
+    """
+    bin_dir = bin_dir or Path.home() / '.local/bin'
+    written = []
+    for key, spec in registry()['runtimes'].items():
+        binary = spec.get('binary')
+        if not binary or not spec.get('app_binaries'):
+            continue
+        shim = bin_dir / binary
+        is_ours = shim.is_file() and not shim.is_symlink() and b'chewbacca shim' in shim.read_bytes()[:200]
+        if (shim.exists() or shim.is_symlink()) and not is_ours:
+            continue  # never replace a real binary or the user's own link
+        if not is_ours and login_which(binary):
+            continue
+        if not locate_binary(spec):
+            continue
+        bin_dir.mkdir(parents=True, exist_ok=True)
+        context.atomic_write(shim, '#!/bin/sh\n# chewbacca shim: runs the newest bundled copy\n'
+                             f'exec "$({shlex.quote(sys.executable)} {shlex.quote(str(ROOT / "tools/agent_runtime.py"))} '
+                             f'which --runtime {key})" "$@"\n')
+        shim.chmod(0o755)
+        written.append(str(shim))
+    return written
+
+
+def connect(new_only=False):
+    """Wire every installed host from the same sources, then remember which.
+
+    With new_only, hosts already connected are left alone, so a session-start
+    hook can run this on every launch and only ever act when a new app appears.
+    """
+    ledger = shared_home() / 'connected.json'
+    known = set(json.loads(ledger.read_text()).get('hosts', [])) if ledger.is_file() else set()
+    hosts = selected('all')
+    todo = [h for h in hosts if h not in known] if new_only else hosts
+    result = {'hosts': hosts, 'connected_now': todo, 'setup': None, 'exports': None}
+    if todo:
+        result['setup'] = setup(','.join(todo))
+    result['shims'] = terminal_shims()
+    exports = shared_home() / 'exports'
+    if not new_only or not (exports / 'CHEWBACCA.md').is_file():
+        result['exports'] = export_chat(exports)
+    context.atomic_write(ledger, json.dumps({'hosts': sorted(known | set(hosts))}) + '\n')
     return result
 
 
 def status(name):
     result = plan(name)
     for spec in result['runtimes']:
+        if spec['adapter'] in ('cursor', 'gemini'):
+            import host_install
+            spec['hook_configuration_present'] = host_install.registered(spec['adapter'])
+            spec['hook_execution'] = 'unverified: requires a native event and refusal test'
+            continue
         if spec['adapter'] == 'codex':
             hook = context.codex_home() / 'hooks.json'
         elif spec['adapter'] == 'claude':
@@ -364,7 +552,9 @@ def status(name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('list', 'plan', 'setup', 'status', 'export', 'launch', 'remove'))
+    parser.add_argument('command', choices=('list', 'plan', 'setup', 'status', 'export', 'launch', 'remove', 'connect', 'which'))
+    parser.add_argument('--new-only', action='store_true', help='connect: only hosts not connected before')
+    parser.add_argument('--quiet', action='store_true', help='connect: print nothing unless a host was connected')
     parser.add_argument('--runtime', default='auto')
     parser.add_argument('--brain-dir', type=Path)
     parser.add_argument('--name', help='optional name supplied by the person; used only for a new identity file')
@@ -383,6 +573,29 @@ def main():
         output = status(args.runtime)
     elif args.command == 'remove':
         output = remove(args.runtime)
+    elif args.command == 'which':
+        names = selected(args.runtime)
+        spec = registry()['runtimes'][names[0]]
+        found = None
+        if len(names) == 1:
+            # Skip our own shim on PATH, or it would exec itself forever.
+            import glob
+            for pattern in spec.get('app_binaries', []):
+                matches = [m for m in glob.glob(os.path.expanduser(pattern)) if os.access(m, os.X_OK)]
+                if matches:
+                    found = max(matches, key=os.path.getmtime)
+                    break
+        if not found:
+            raise ValueError('no bundled copy of ' + args.runtime + ' found')
+        print(found)
+        return 0
+    elif args.command == 'connect':
+        output = connect(args.new_only)
+        if args.quiet:
+            # Lands in a session's context, so one line, not the full report.
+            if output['connected_now']:
+                print('Chewbacca connected new apps: ' + ', '.join(output['connected_now']))
+            return 0
     elif args.command == 'export':
         names = selected(args.runtime)
         if len(names) != 1 or args.destination is None:
@@ -393,7 +606,7 @@ def main():
         if len(names) != 1:
             parser.error('launch needs one explicit runtime')
         spec = registry()['runtimes'][names[0]]
-        binary = shutil.which(spec['binary']) if spec['binary'] else None
+        binary = locate_binary(spec)
         if not binary:
             parser.error('selected runtime has no installed CLI')
         command = [binary]
@@ -427,7 +640,7 @@ def describe(command, output):
     elif command in ('plan', 'status'):
         print('Platform: ' + output['platform'])
         for runtime in output['runtimes']:
-            available = 'CLI found' if runtime['binary_installed'] else 'CLI not detected'
+            available = 'installed' if runtime['binary_installed'] else 'not detected'
             print(f'{runtime["label"]}: {runtime["install_mode"]}; {available}')
             for note in runtime['notes']:
                 print('  ' + note)
@@ -438,6 +651,21 @@ def describe(command, output):
         if command == 'plan':
             print('Setup writes shared context and native instruction, skill and hook configuration.')
             print('No package installs, data imports, account changes, model calls or permission changes.')
+    elif command == 'connect':
+        print('Hosts: ' + ', '.join(output['hosts']))
+        if output['setup']:
+            describe('setup', output['setup'])
+            for runtime in output['setup']['runtimes']:
+                if runtime.get('mcp_added'):
+                    print(f'{runtime["id"]}: added MCP servers ' + ', '.join(runtime['mcp_added']))
+        else:
+            print('Every installed host was already connected.')
+        for shim in output.get('shims', []):
+            print('Terminal command: ' + shim)
+        if output['exports']:
+            e = output['exports']
+            print(f'Chat apps: {e["briefing"]} ({e["briefing_chars"]:,} characters), '
+                  f'{e["claude_skills"]} claude.ai skill zips, short instructions in {e["custom_instructions"]}')
     elif command == 'list':
         for key, runtime in output['runtimes'].items():
             print(key + ': ' + runtime['label'])

@@ -1432,6 +1432,7 @@ if group "reasoning backends"; then
   check "newcomer setup preserves identity and privacy choices" python3 "$ROOT/tests/test_onboarding.py"
   check "a sandboxed HOME never reaches the real Claude config" python3 "$ROOT/tests/test_sandbox_config.py"
   check "runtime adapters work independently in fresh homes" python3 "$ROOT/tests/test_agent_runtime.py"
+  check "Cursor and Gemini run the same Claude hooks and keep their own" python3 "$ROOT/tests/test_host_bridge.py"
   check "Codex shares skills without replacing personal entries" python3 "$ROOT/tests/test_codex_skills.py"
   check "Codex imports only selected integrations" python3 "$ROOT/tests/test_codex_integrations.py"
   if [ -n "${MACOS_USE_HOME:-}" ]; then

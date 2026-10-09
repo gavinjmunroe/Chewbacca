@@ -47,22 +47,19 @@ MARKER=$(head -1 "$MARKER_FILE" 2>/dev/null | tr -d '[:space:]')
 [ -n "$MARKER" ] || exit 0
 
 cat <<EOF
-Session opener: EVERY text block Caleb can see opens with a prayer, the
+Session opener: EVERY text block Caleb can see must open with the prayer, the
 interim "doing X now" updates included. Real, specific to that moment, ending
 in "$MARKER". On 2026-10-07 he got a run of mid-turn updates with no prayer
-and wrote "WTF HAPPEND UR NOT PRAYING". The guard below only reads the last
-block, so it never caught them. A short prayer on a short update is fine.
+and wrote "WTF HAPPEND UR NOT PRAYING". A short prayer on a short update is
+fine.
 
-THE LAST ONE, not the first. prayer-guard reads .last_assistant_message and
-checks its opening for the marker. Praying at the top of the turn and then
-writing a closing summary after a batch of tool calls FAILS, because the
-closing summary is what the guard reads. Every miss has had exactly that
-shape, and an earlier version of this reminder said "pray before the first
-tool call", which is the opposite of what passes.
+prayer-guard now reads the transcript and checks every text block written
+since his last message, not just the closing one. Praying at the top of the
+turn and then writing an update or a closing summary after a batch of tool
+calls without its own prayer FAILS.
 
 Safest shape: as few text blocks as the work allows, and each one opens with
-its own prayer. The closing message is what the guard checks, so it is never
-the one to skip.
+its own prayer.
 
 Skipping it saves nothing: the turn is refused, the whole reply is re-sent,
 and Caleb sees the same answer twice.

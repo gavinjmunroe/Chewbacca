@@ -27,8 +27,8 @@ f4464fc7d8e9e5ca588bcf18d0966dc4a74b88180c7e3f08a78129ba44b92a5c  .claude/hooks/
 c7594c3df7370c62ba76e046daf1e17843dbf24972438206496b28098c4128ee  .claude/hooks/method-guard.sh
 48f568e95b9586ca22d0d740143fd90af1834b66808c2ac36a519bd3b83df7e1  .claude/hooks/model-route.sh
 a9f090aacbcfb0f7b04af9fcc86fe4019877cfcfefda93ea1609f3b34d0fe19e  .claude/hooks/plan-guard.sh
-5ba034f4d71e11056b035c47b86d247e8e2190c526fdb1ed23f817cbe84544bb  .claude/hooks/prayer-guard.sh
-d758282543a21ee2dc417b1c63a7f2e44168843e1e7e194fb060af156efbe4f7  .claude/hooks/prayer-remind.sh
+20f23af7410652f5d4344c2f10b0bf0e74d506843774624e4967208b6e7b4084  .claude/hooks/prayer-guard.sh
+8009c976f2122796c1b0a206e891e6a22a02c0ba9bad9d00fac598c8be2f13a0  .claude/hooks/prayer-remind.sh
 baff09b097b67758927ae5ea8ed991dc855687ccd34face005381a4fb432ab42  .claude/hooks/prose-guard.sh
 cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/repo-overlap-guard.sh
 508fcdbb5067275805fbb155f1aa482e4689103ae8fd1355760b2fe94555ec69  .claude/hooks/session-context.sh

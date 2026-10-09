@@ -23,6 +23,8 @@ s "<text>" [step=true]                                     say one line on the p
 w "<text>" [done=true]                                     the written answer, for the conversation panel
 q <n>                                                      how many requests are waiting
 t "<text>" state=running|waiting|done                      the terminal strip under the pill; `t off` hides it
+rim [thickness=<pt>] [frost=<0-1>] [tint=<x>] [edge=<x>] [corner=<pt>]
+                                                           bare: open the rim editor; with values: set them
 ```
 
 Nothing appears until `r`. Send `c` and `>` in any order: a child may arrive

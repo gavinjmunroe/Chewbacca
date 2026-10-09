@@ -136,6 +136,11 @@ struct Uniforms {
     /// `PresenceFieldRenderer.innerCorner`, which `RimGlass` cuts the blur to
     /// as well, so the frosting and the light share one outline.
     float corner;
+    /// The rim editor's two gains (`RimTuning.tint` and `.edge`): the white
+    /// wash over the blur and the lit cut edge, each as a multiple of the
+    /// look below. 1 and 1 is that look unchanged.
+    float washGain;
+    float edgeGain;
 };
 
 /// How loud the voice was, one sample every RIPPLE_STEP seconds, newest first.
@@ -275,8 +280,9 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     // behind still reads through it. The frosting is the window server's
     // blur in `RimGlass`, not anything drawn here. 0.10 to 0.18 was the
     // first cut, and on screen with the blur under it the rim read milky
-    // (see `RimGlassView.frost`), so it is about half that.
-    float wash = 0.06 + 0.05 * sky + 0.10 * broad + 0.25 * ripple + 0.40 * crest;
+    // (see `RimTuning.frost`), so it is about half that. The editor's Tint
+    // slider multiplies it.
+    float wash = (0.06 + 0.05 * sky + 0.10 * broad + 0.25 * ripple + 0.40 * crest) * U.washGain;
 
     // The cut edge: a line about a point and a half wide on the inner edge,
     // brightest under the light, where the rim reads as having a thickness.
@@ -284,7 +290,7 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     float aa = max(fwidth(u), 1e-4);
     float body = 1.0 - smoothstep(1.0 - aa, 1.0, u);
     float cut = smoothstep(1.0 - 3.0 * px, 1.0 - 1.0 * px, u) * body;
-    float cutLum = 0.30 + 0.30 * sky + 0.9 * hard + 1.2 * ripple + 1.5 * crest;
+    float cutLum = (0.30 + 0.30 * sky + 0.9 * hard + 1.2 * ripple + 1.5 * crest) * U.edgeGain;
 
     // The state's colour washes the glass a little and carries the streaks.
     // A rim lit green all the way round reads as a neon outline, a status

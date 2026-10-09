@@ -18,6 +18,7 @@ hud draw            read Kyber Lines on stdin and draw them
 hud close <name>    take one surface off the screen
 hud press <n> [h]   press what they clicked as mark n, in hold h
 hud clear           take everything off
+hud rim [k=v ...]   open the rim editor, or set thickness|frost|tint|edge|corner
 hud listen          hear what is said to it and draw the answer
 hud demo            put one of everything on screen
 hud screen          the display size in points, for marker coordinates
@@ -259,6 +260,12 @@ hud_doctor() {
 
 case "${1:-}" in
   draw)   send ;;
+  rim)    # The rim editor: sliders for the rim's thickness, frost, tint,
+          # edge light and corners, live on the screen. Saved to ~/.bob/rim.json.
+          # With key=value pairs it sets those instead: hud rim thickness=12.
+          running || { echo "The display is not running. Start it with: hud open" >&2; exit 1; }
+          shift
+          printf 'rim%s\n' "${*:+ $*}" | send ;;
   close)  [ $# -ge 2 ] || { echo "hud close <name>" >&2; exit 2; }
           printf -- '- %s\n' "$2" | send ;;
   press)  # Backlog 117. Subscribe, send `press n`, and wait for the `pr n`

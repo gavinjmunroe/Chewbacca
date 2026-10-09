@@ -15,11 +15,17 @@ public struct RimView: View {
     public init(model: OverlayModel) { self.model = model }
 
     public var body: some View {
+        let tuner = RimTuner.shared
+        let tuning = tuner.tuning
+        // While the editor is open it chooses the state, for the rim only.
+        let shown = tuner.preview ?? model.presence
         ZStack {
-            RimGlass(depth: CGFloat(model.presence.field.rest))
+            RimGlass(
+                depth: CGFloat(tuning.depth(of: shown.field)),
+                corner: CGFloat(tuning.corner), frost: CGFloat(tuning.frost))
             PresenceField(
-                presence: model.presence, amplitude: model.amplitude,
-                agent: model.agentCursor?.point)
+                presence: shown, amplitude: model.amplitude,
+                agent: model.agentCursor?.point, tuning: tuning)
         }
         .ignoresSafeArea()
     }

@@ -251,6 +251,12 @@ public enum Op: Sendable, Equatable {
     /// input, and what the person types goes to that surface's owner
     /// instead of the assistant. `to off` (surface nil) takes it back.
     case chatTarget(surface: String?, label: String)
+    /// `rim`: open the rim editor, the person's sliders for the rim's size
+    /// and look. See `RimEditor`.
+    case editRim
+    /// `rim thickness=12 frost=0.4`: set those values without opening it.
+    /// Keys are `RimTuning.keys`.
+    case tuneRim([String: Double])
 }
 
 /// The three things a terminal strip can say. Colours follow the ring:

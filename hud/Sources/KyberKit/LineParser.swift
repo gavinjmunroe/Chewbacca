@@ -269,6 +269,24 @@ public enum LineParser {
         case "u":
             return .unmark(id: tokens.count >= 2 ? tokens[1] : "")
 
+        case "rim":
+            // `rim`: open the rim editor. A word, like `press`, so a socket
+            // log reads without a key. `rim thickness=12 frost=0.4` sets
+            // those values instead, for whoever is not holding a mouse.
+            guard tokens.count > 1 else { return .editRim }
+            var values: [String: Double] = [:]
+            for token in tokens.dropFirst() {
+                guard let (key, raw) = splitPair(token), RimTuning.keys.contains(key),
+                      let value = Double(raw), value.isFinite
+                else {
+                    throw LineParseError.malformed(
+                        "`rim` takes \(RimTuning.keys.joined(separator: "|"))=<number>",
+                        line: trimmed)
+                }
+                values[key] = value
+            }
+            return .tuneRim(values)
+
         case "press":
             // `press <n> [hold=<h>]`: AXPress on the element pointed at as
             // number n, in hold h when given. A word, not a letter, because

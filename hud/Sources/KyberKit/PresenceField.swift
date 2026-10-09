@@ -221,6 +221,12 @@ struct PresenceFrame: Equatable {
     /// The hyper bar, in points with a top-left origin, while it is up. The
     /// field draws its body.
     var pill: CGRect? = nil
+    /// The rim editor's corner radius in points, and its gains on the wash
+    /// and the cut edge. In the frame so that a slider moving wakes a
+    /// parked view for one frame.
+    var corner: Double = Double(PresenceFieldRenderer.innerCorner)
+    var washGain: Double = 1
+    var edgeGain: Double = 1
 }
 
 /// One number that follows another instead of jumping to it.
@@ -268,6 +274,8 @@ struct PresenceField: View {
     var agent: CGPoint? = nil
     /// The hyper bar, in points, while it is up.
     var pill: CGRect? = nil
+    /// The person's own size and look for the rim, from the editor.
+    var tuning = RimTuning()
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.hudOffscreen) private var offscreen
@@ -317,7 +325,8 @@ struct PresenceField: View {
     }
 
     private var frame: PresenceFrame {
-        let style = presence.field
+        var style = presence.field
+        style.rest = tuning.depth(of: style)
         // The pulse rides on alpha rather than on thickness. A band that
         // changes thickness is a shape change and this has to stay readable as
         // the same shape between the two beats.
@@ -330,7 +339,10 @@ struct PresenceField: View {
             alpha: pulsing && pulses < 2 ? 0.55 : 1.0,
             agent: agent,
             doneAt: doneAt,
-            pill: pill)
+            pill: pill,
+            corner: tuning.corner,
+            washGain: tuning.tint,
+            edgeGain: tuning.edge)
     }
 
     /// Arrival and departure, the only two transitions this layer treats as
@@ -550,9 +562,10 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
     /// How much more transparent the band goes while the pointer is in it.
     /// Asked for as "10% more transparent" on 2026-09-19.
     static let partFade: Float = 0.10
-    /// The radius the rim's inner edge turns its corners on, in points. The
-    /// shader draws the light to it and `RimGlass` cuts the blur to it, so
-    /// the two cannot disagree. Ten because the shader's old comment put the
+    /// The radius the rim's inner edge turns its corners on, in points, until
+    /// the rim editor says otherwise (`RimTuning.corner`). The shader draws
+    /// the light to it and `RimGlass` cuts the blur to it, so the two cannot
+    /// disagree. Ten because the shader's old comment put the
     /// display's own corners at about that, so the inner edge follows them
     /// rather than cutting across. Was 0.012 screen heights, 9.6 points on
     /// an 800 point display and 11.8 on Gavin's 982.
@@ -853,7 +866,9 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
             embers: embers.shown,
             pillOn: pillOn.shown,
             drift: drift.shown,
-            corner: Float(Self.innerCorner) / Float(max(view.bounds.height, 1)))
+            corner: Float(frame.corner) / Float(max(view.bounds.height, 1)),
+            washGain: Float(frame.washGain),
+            edgeGain: Float(frame.edgeGain))
         pipeline.encode(
             buffer, into: pass, width: Int(size.width), height: Int(size.height),
             uniforms: &uniforms, voice: voice)

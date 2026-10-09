@@ -18,13 +18,18 @@ import SwiftUI
 struct RimGlass: NSViewRepresentable {
     /// Points from the screen's edge inward. Zero takes the glass away.
     let depth: CGFloat
+    /// The inner edge's corner radius, in points.
+    var corner: CGFloat = PresenceFieldRenderer.innerCorner
+    /// How much of the blur to take, 0 to 1. See `RimTuning.frost`, which
+    /// carries the measurement behind the default.
+    var frost: CGFloat = RimTuning().frost
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeNSView(context: Context) -> RimGlassView { RimGlassView() }
 
     func updateNSView(_ view: RimGlassView, context: Context) {
-        view.set(depth: depth, animated: !reduceMotion)
+        view.set(depth: depth, corner: corner, frost: frost, animated: !reduceMotion)
     }
 }
 
@@ -32,6 +37,7 @@ final class RimGlassView: NSView {
     private let blur = NSVisualEffectView()
     private let cut = CAShapeLayer()
     private var depth: CGFloat = 0
+    private var corner = PresenceFieldRenderer.innerCorner
 
     /// How long the glass takes to come in and to go, matching the field's
     /// own ramps (`PresenceFieldRenderer.arrival` going away, the shader's
@@ -40,12 +46,6 @@ final class RimGlassView: NSView {
     /// 0.35 s chase, which is about 86% of the way there at the same 0.45.
     private static let arrival: CFTimeInterval = 0.45
 
-    /// How much of the frosting to take. At full strength, measured on
-    /// screen on 2026-10-09 over the forest wallpaper, the rim came out
-    /// about (146, 158, 137) over leaves at (43, 57, 31): three times
-    /// brighter than what was behind it, a milky line rather than glass.
-    private static let frost: CGFloat = 0.55
-
     init() {
         super.init(frame: .zero)
         wantsLayer = true
@@ -53,7 +53,6 @@ final class RimGlassView: NSView {
         blur.appearance = NSAppearance(named: .aqua)
         blur.blendingMode = .behindWindow
         blur.state = .active
-        blur.alphaValue = Self.frost
         addSubview(blur)
         // On this view's layer rather than on the effect view's: AppKit owns
         // the effect view's own mask for `maskImage`.
@@ -72,20 +71,26 @@ final class RimGlassView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         cut.frame = bounds
-        cut.path = Self.band(in: bounds, depth: depth)
+        cut.path = Self.band(in: bounds, depth: depth, corner: corner)
         CATransaction.commit()
     }
 
-    func set(depth next: CGFloat, animated: Bool) {
-        guard next != depth else { return }
+    func set(depth next: CGFloat, corner round: CGFloat, frost: CGFloat, animated: Bool) {
+        if blur.alphaValue != frost { blur.alphaValue = frost }
+        guard next != depth || round != corner else { return }
         let from = cut.presentation()?.path ?? cut.path
+        // A corner change is the editor's slider, under the person's hand: it
+        // follows the hand rather than easing after it. And a path animation
+        // between two different corner radii does not interpolate cleanly.
+        let easing = animated && round == corner
         depth = next
-        let to = Self.band(in: bounds, depth: next)
+        corner = round
+        let to = Self.band(in: bounds, depth: next, corner: round)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         cut.path = to
         CATransaction.commit()
-        guard animated, let from, !bounds.isEmpty else { return }
+        guard easing, let from, !bounds.isEmpty else { return }
         let move = CABasicAnimation(keyPath: "path")
         move.fromValue = from
         move.toValue = to
@@ -96,14 +101,13 @@ final class RimGlassView: NSView {
 
     /// The band, as the region between the screen's edge and a rounded
     /// rectangle `depth` in, filled even-odd. The same outline the shader
-    /// draws to: its inner edge turns on `PresenceFieldRenderer.innerCorner`.
+    /// draws to: its inner edge turns on the same `corner` the shader is given.
     ///
     /// No glass is the inner rectangle pushed out past the edge rather than
     /// an empty path, so going away and coming back are one animation of the
     /// same shape: a path animation between two paths built differently
     /// does not interpolate, it jumps.
-    static func band(in rect: CGRect, depth: CGFloat) -> CGPath {
-        let corner = PresenceFieldRenderer.innerCorner
+    static func band(in rect: CGRect, depth: CGFloat, corner: CGFloat) -> CGPath {
         let inset = depth > 0 ? depth : -corner
         let path = CGMutablePath()
         path.addRect(rect)

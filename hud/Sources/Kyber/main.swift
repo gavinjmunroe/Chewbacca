@@ -1100,6 +1100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionsItem.target = self
         menu.addItem(sessionsItem)
 
+        let rimItem = NSMenuItem(
+            title: "Edit the rim…", action: #selector(rimFromMenu), keyEquivalent: "")
+        rimItem.target = self
+        menu.addItem(rimItem)
+
         let clearItem = NSMenuItem(
             title: "Clear everything", action: #selector(clearFromMenu), keyEquivalent: "\u{1b}")
         clearItem.target = self
@@ -1219,6 +1224,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Start `kyber-sessions serve`, which draws the sessions surface and
     /// answers its presses. It holds its own lock, so a second start while
     /// one is running exits at once instead of drawing twice.
+    @objc private func rimFromMenu() {
+        RimEditor.shared.open(showing: model.presence)
+    }
+
     @objc private func sessionsFromMenu() {
         let candidates = [
             FileManager.default.homeDirectoryForCurrentUser

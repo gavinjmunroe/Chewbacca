@@ -296,6 +296,12 @@ public final class OverlayModel {
                 revision += 1
             }
 
+        case .editRim:
+            RimEditor.shared.open(showing: presence)
+
+        case .tuneRim(let values):
+            RimTuner.shared.tuning = RimTuner.shared.tuning.setting(values)
+
         case .press(let number, let hold):
             let (outcome, center) = PointedStore.shared.press(number, hold: hold)
             // The agent's pointer goes to what it pressed, so the person sees

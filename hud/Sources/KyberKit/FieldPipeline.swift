@@ -30,6 +30,9 @@ struct FieldUniforms {
     /// The inner edge's corner radius, in screen heights. See `corner` in
     /// the shader.
     var corner: Float = 0
+    /// The rim editor's gains on the wash and the cut edge. See the shader.
+    var washGain: Float = 1
+    var edgeGain: Float = 1
 }
 
 /// The field and its glow, as five passes: the field at full size, its bright

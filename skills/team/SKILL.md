@@ -13,6 +13,15 @@ product, lands here even when he says "chewb todo"; only things in his own hands
 
 Run `team`. It reads the fetched `origin/main`, so it shows what the web board shows.
 
+The board also lives in the team's group chat, inside the Amber iMessage app
+(calebnewtonusc/amber-circles, `team.js`): Mine / Everyone / Done, a one-tap
+status dot, quick add, and a bubble that tells the chat what moved. Marking a
+task done there runs a Claude check of its commits and GitHub proof and notes
+"Amber check: shipped / partly / not in the code yet / can't tell" in the
+task's activity. Those `Amber check` lines and `(Name, from Amber)` commits are
+that surface, not noise. A gc sees the board only after it is linked with the
+team code (Railway var `TEAM_LINK_CODE` on amber-circles/web).
+
 | Ask | Run |
 | --- | --- |
 | What's everyone on? | `team` |

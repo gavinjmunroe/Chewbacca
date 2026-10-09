@@ -1,0 +1,61 @@
+{
+  "schema": 1,
+  "recorded": "2026-10-05",
+  "source": "library/maps/app.clay.com/MAP.md, Find People to emailable table, driven live 2026-10-05",
+  "steps": [
+    {"id": "check", "title": "CHECK", "surface": "read", "cost": "free",
+     "note": "Reading your Clay balance.", "holds": "Nothing is touched yet.", "actions": []},
+    {"id": "find", "title": "FIND PEOPLE", "surface": "ui", "cost": "free",
+     "note": "Asking Clay's people search for {sentence}.", "holds": "Nothing is saved yet.",
+     "actions": [
+       {"find": [{"css": "button", "text": "Find leads"}], "do": "click",
+        "expect": {"text": "Search directly"}, "timeout_s": 10},
+       {"find": [{"css": "button", "text": "People"}], "do": "click",
+        "expect": {"url": "/chats/"}, "timeout_s": 15},
+       {"find": [{"css": "[role=tab]", "text": "Chat"}, {"css": "button", "text": "Chat"}], "do": "click",
+        "expect": {"css": "textarea"}, "timeout_s": 10},
+       {"find": [{"css": "textarea", "placeholder": "I'm looking for"}, {"css": "textarea"}],
+        "do": "type", "value": "{sentence}", "enter": true,
+        "expect": {"text_re": "~([\\d,]+) found"}, "timeout_s": 90}
+     ]},
+    {"id": "count", "title": "COUNT", "surface": "ui", "cost": "free",
+     "note": "Keeping {count} people and saving them to a new table.", "holds": "No credits yet.",
+     "actions": [
+       {"find": [{"css": "button", "text": "Continue"}], "do": "click",
+        "expect": {"css": "input[value=custom]"}, "timeout_s": 15},
+       {"find": [{"css": "input[value=custom]"}], "do": "check",
+        "expect": {"css": "input[type=number]"}, "timeout_s": 5},
+       {"find": [{"css": "input[type=number]"}], "do": "type", "value": "{count}",
+        "expect": {"css": "input[value=table]"}, "timeout_s": 5},
+       {"find": [{"css": "input[value=table]"}], "do": "check",
+        "expect": {"css": "input[value=table]"}, "timeout_s": 5},
+       {"find": [{"css": "button", "text": "Save"}], "do": "click",
+        "expect": {"text": "Work email"}, "timeout_s": 20}
+     ]},
+    {"id": "test", "title": "TEST RUN", "surface": "approve", "cost": "spends",
+     "note": "Finding work emails for the first rows only.", "holds": "Waits for you before any credit is spent.",
+     "actions": [
+       {"find": [{"css": "label", "text": "Work email", "match": "contains"},
+                 {"css": "[role=checkbox]", "text": "Work email", "match": "contains"}],
+        "do": "check", "unverified": true,
+        "expect": {"text_re": "(Save and run \\d+ rows)"}, "timeout_s": 5},
+       {"find": [{"css": "button", "text_re": "^Save and run \\d+ rows$"}], "do": "click",
+        "approve": "test", "expect": {"url": "/tables/"}, "timeout_s": 30}
+     ]},
+    {"id": "read", "title": "READ THE TEST", "surface": "read", "cost": "free",
+     "note": "Reading what the test found and what it cost.", "holds": "Nothing runs while this reads.",
+     "actions": []},
+    {"id": "rest", "title": "THE REST", "surface": "approve", "cost": "spends",
+     "note": "Opening the run menu on the work email column.", "holds": "Waits for you before any credit is spent.",
+     "actions": [
+       {"find": [{"css": "button", "text": "Find work email", "match": "contains"}], "do": "click",
+        "expect": {"css": "[role=menuitem]"}, "timeout_s": 10},
+       {"find": [{"css": "[role=menuitem]", "text": "Run column", "match": "prefix"}], "do": "open-submenu",
+        "expect": {"text_re": "(Run \\d+ empty or out-of-date rows[^\\n]{0,40})"}, "timeout_s": 10},
+       {"find": [{"css": "[role=menuitem]", "text_re": "^Run \\d+ empty or out-of-date rows"}], "do": "click",
+        "approve": "rest", "expect": {"text": "Find work email"}, "timeout_s": 15}
+     ]},
+    {"id": "done", "title": "DONE", "surface": "read", "cost": "free",
+     "note": "Counting what you got.", "holds": "Nothing else will run.", "actions": []}
+  ]
+}

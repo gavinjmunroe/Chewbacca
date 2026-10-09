@@ -64,10 +64,17 @@ def connect():
 def _open():
     path = database_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    fresh = not path.exists()
-    db = sqlite3.connect(path, timeout=3)
-    if fresh:
-        os.chmod(path, 0o600)
+    # The WAL and shm sidecars hold the same prompt text and are created by
+    # sqlite with the process umask (644 here), so chmod on the main file alone
+    # left them readable to every account in group staff.
+    previous = os.umask(0o077)
+    try:
+        db = sqlite3.connect(path, timeout=3)
+    finally:
+        os.umask(previous)
+    for sidecar in (path, Path(str(path) + '-wal'), Path(str(path) + '-shm')):
+        if sidecar.exists() and sidecar.stat().st_mode & 0o077:
+            os.chmod(sidecar, 0o600)
     try:
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA journal_mode=WAL')

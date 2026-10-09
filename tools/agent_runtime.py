@@ -419,8 +419,10 @@ def export_chat(destination):
     import frontmatter
     destination.mkdir(parents=True, exist_ok=True)
     os.chmod(destination, 0o700)
+    # --no-tabs: this file is uploaded to a browser app, and the live tab board
+    # carries other tabs' prompts (push security review, 2026-10-09).
     briefing = subprocess.run([sys.executable, str(ROOT / 'tools/agent_context.py'), 'read',
-                               '--with-instructions'], capture_output=True, text=True).stdout
+                               '--with-instructions', '--no-tabs'], capture_output=True, text=True).stdout
     brief_path = destination / 'CHEWBACCA.md'
     context.atomic_write(brief_path, briefing)
     brief_path.chmod(0o600)

@@ -139,9 +139,21 @@ class TabsTests(unittest.TestCase):
         seen = tabs.context('a', str(self.repo))
         self.assertNotIn('<', seen.split('latest ask:')[1])
 
+    def test_exported_briefing_leaves_the_board_out(self):
+        import subprocess
+        tabs.upsert('b', 'codex', str(self.repo), task='PROBE-ASK')
+        read = [sys.executable, str(ROOT / 'tools/agent_context.py'), 'read', '--brain-dir', str(self.root)]
+        live = subprocess.run(read, capture_output=True, text=True, cwd=self.repo).stdout
+        export = subprocess.run(read + ['--no-tabs'], capture_output=True, text=True, cwd=self.repo).stdout
+        self.assertIn('PROBE-ASK', live)
+        self.assertNotIn('PROBE-ASK', export)
+
     def test_board_file_is_private(self):
         self.hook({'hook_event_name': 'SessionStart', 'session_id': 'a'})
-        self.assertEqual(os.stat(os.environ['CHEWBACCA_TABS_DB']).st_mode & 0o777, 0o600)
+        for suffix in ('', '-wal', '-shm'):
+            path = os.environ['CHEWBACCA_TABS_DB'] + suffix
+            if os.path.exists(path):
+                self.assertEqual(os.stat(path).st_mode & 0o777, 0o600, path)
 
     def test_broken_database_never_raises(self):
         Path(os.environ['CHEWBACCA_TABS_DB']).write_text('not sqlite')

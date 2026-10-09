@@ -293,6 +293,8 @@ def main():
     parser.add_argument('command', choices=('install', 'read', 'status', 'path'))
     parser.add_argument('--brain-dir', type=Path, help='private second-brain directory')
     parser.add_argument('--both', action='store_true', help='install startup instructions for Claude and Codex')
+    parser.add_argument('--no-tabs', action='store_true',
+                        help='leave out the live tab board, for anything written to a file or sent off this Mac')
     parser.add_argument('--with-instructions', action='store_true',
                         help='also print the compiled Claude Code instructions, for hosts that cannot load them')
     args = parser.parse_args()
@@ -314,10 +316,12 @@ def main():
         # Runtimes without hooks (Cursor, Gemini, a browser app) learn about the
         # other live tabs here, and join the board with `tabs register`.
         import tabs
-        try:
-            others = tabs.context(os.environ.get('CHEWBACCA_SESSION_ID', ''), os.getcwd())
-        except Exception:  # noqa: BLE001 the board must never stop the startup read
-            others = ''
+        others = ''
+        if not args.no_tabs:
+            try:
+                others = tabs.context(os.environ.get('CHEWBACCA_SESSION_ID', ''), os.getcwd())
+            except Exception:  # noqa: BLE001 the board must never stop the startup read
+                others = ''
         if others:
             print('\n' + others)
         if args.with_instructions:

@@ -39,9 +39,27 @@ CMD="$cmd" python3 -I -c '
 import os, re, shlex, sys
 READERS = {"grep", "egrep", "fgrep", "rg", "sed", "awk", "cat", "head", "tail", "less",
            "more", "wc", "diff", "cp", "mv", "ls", "git", "echo", "printf", "stat",
-           "file", "shellcheck", "shfmt", "open", "code", "vim", "nano", "bat", "touch", "chmod"}
+           "file", "shellcheck", "shfmt", "open", "code", "vim", "nano", "bat", "touch", "chmod",
+           "pgrep", "pkill", "ps"}
 SEP = r"&&|\|\||;|\n|\|(?!\|)|(?<![>&])&(?![>&])|[()`]"
-for seg in re.split(SEP, os.environ["CMD"]):
+# Split on operators OUTSIDE quotes. On 2026-10-09 `awk "NR<=636 && /if
+# group/ {...}" run.sh` was refused as a suite run: the regex split inside the
+# quoted awk program, and the half after && looked like an execution.
+def segments(cmd):
+    try:
+        lx = shlex.shlex(cmd.replace("`", " ; "), posix=True, punctuation_chars=";&|()")
+        lx.whitespace_split = True
+        out, cur = [], []
+        for t in lx:
+            if t and set(t) <= set(";&|()"):
+                out.append(" ".join(shlex.quote(x) for x in cur)); cur = []
+            else:
+                cur.append(t)
+        out.append(" ".join(shlex.quote(x) for x in cur))
+        return [seg for line in out for seg in line.split("\n")]
+    except ValueError:
+        return re.split(SEP, cmd)
+for seg in segments(os.environ["CMD"]):
     if "tests/run.sh" not in seg:
         continue
     try:

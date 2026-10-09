@@ -49,6 +49,12 @@ expect "a syntax check of run.sh" 0 "bash -n tests/run.sh && echo ok"
 expect "the first real run after those reads" 0 "cd $repo && bash tests/run.sh"
 expect "and a repeat of that real run" 2 "nohup bash tests/run.sh > /tmp/x.log 2>&1"
 expect "a direct ./ run counts too" 2 "./tests/run.sh"
+# 2026-10-09: reading run.sh with && inside a quoted awk program, and a pgrep
+# for the running suite, were both refused as repeat runs.
+expect "an awk program with && inside its quotes" 0 "cd tests && awk 'NR<=636 && /if group \"/ {l=NR} END{print l}' run.sh"
+expect "awk on the full path with && quoted" 0 "awk 'NR<=636 && /x/ {print}' tests/run.sh"
+expect "a pgrep for the running suite" 0 "pgrep -f tests/run.sh >/dev/null && echo running"
+expect "a real run chained after a quoted &&" 2 "echo 'a && b' && bash tests/run.sh"
 echo "wrappers a review found the first fix missed:"
 for c in "timeout 900 bash tests/run.sh" "caffeinate -i bash tests/run.sh" "bash \"tests/run.sh\" 2>&1 | tail" \
          "exec bash tests/run.sh" "bash -o pipefail tests/run.sh" "FOO=\"a b\" bash tests/run.sh"; do

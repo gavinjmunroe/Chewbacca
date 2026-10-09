@@ -235,24 +235,41 @@ login_from_profile() {
   [ "$1" = brightspace ] && python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
   dir="$(mktemp -d)" || return 1
   chmod 700 "$dir"
-  if ! python3 - "$host" "$prefix" "$dir/cookies.json" "${CHEWIE_CHROME_PROFILE:-Profile 1}" <<'PY'
+  if ! python3 - "$host" "$prefix" "$dir/cookies.json" "${CHEWIE_CHROME_PROFILE:-}" <<'PY'
 import hashlib, json, os, shutil, sqlite3, subprocess, sys, tempfile, time
 from pathlib import Path
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 host, prefix, out, profile = sys.argv[1:5]
-db = Path.home() / "Library/Application Support/Google/Chrome" / profile / "Cookies"
-with tempfile.TemporaryDirectory() as tmp:
-    copy = Path(tmp) / "Cookies"
-    shutil.copy(db, copy)
-    rows = sqlite3.connect(copy).execute(
-        "select host_key, name, encrypted_value, path, is_secure, is_httponly from cookies"
-        " where host_key = ? or host_key = ? or host_key like ?",
-        (host, "." + host, "%." + host)).fetchall()
+chrome = Path.home() / "Library/Application Support/Google/Chrome"
+query = ("select host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc"
+         " from cookies where host_key = ? or host_key = ? or host_key like ?")
+
+def read(db):
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp) / "Cookies"
+        shutil.copy(db, copy)
+        return sqlite3.connect(copy).execute(query, (host, "." + host, "%." + host)).fetchall()
+
+# Any student, any Mac: with no profile named, use whichever Chrome profile
+# touched this site's cookies most recently. Caleb's USC login lives in
+# "Profile 1" and a classmate's will be somewhere else.
+if profile:
+    rows = read(chrome / profile / "Cookies")
+else:
+    best, rows = -1, []
+    for db in sorted(chrome.glob("*/Cookies")):
+        try:
+            found = read(db)
+        except Exception:
+            continue
+        seen = max((r[6] for r in found), default=-1)
+        if found and seen > best:
+            best, rows, profile = seen, found, db.parent.name
 secret = subprocess.check_output(["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]).strip()
 key = hashlib.pbkdf2_hmac("sha1", secret, b"saltysalt", 1003, 16)
 expires = int(time.time()) + 12 * 3600
 jar = []
-for hk, name, blob, path, secure, httponly in rows:
+for hk, name, blob, path, secure, httponly, _ in rows:
     if prefix != "-" and not name.lower().startswith(prefix):
         continue
     dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
@@ -265,7 +282,7 @@ for hk, name, blob, path, secure, httponly in rows:
     jar.append({"name": name, "value": value, "domain": hk, "path": path or "/", "expires": expires,
                 "httpOnly": bool(httponly), "secure": bool(secure), "sameSite": "Lax"})
 if not jar:
-    sys.exit(f"no session for {host} in the Work Chrome profile; sign in there once")
+    sys.exit(f"no {host} session in any Chrome profile; sign in there once in Chrome")
 fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, "w") as f:
     json.dump(jar, f)

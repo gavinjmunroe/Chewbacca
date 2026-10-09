@@ -654,6 +654,12 @@ if group "installer"; then
   check  "chewbacca api syncs taught sites without clobbering a healed spec" \
     bash "$ROOT/tests/chewbacca_api.sh" "$ROOT"
 
+  # 2026-10-10: Caleb, "Chewb needs to change the life of EVERY USC STUDENT".
+  # The day view has to work from a classmate's Mac with no edits, and one
+  # signed-out site must not take the other sections down.
+  check  "chewbacca usc shows this term's due items, dining and events, and survives a signed-out site" \
+    bash "$ROOT/tests/chewbacca_usc.sh" "$ROOT"
+
   # Every kit on the machine matched one 17,000-character message about a club
   # website on 2026-09-22, because hit count was never divided by what was
   # typed and two kits make every stem look distinctive.

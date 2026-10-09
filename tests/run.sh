@@ -396,6 +396,7 @@ if group "gtme"; then
   check "research library preserves source and reading status" python3 "$ROOT/tests/test_gtme_library.py"
   check "learning promotion requires paired holdouts and preserved regressions" python3 "$ROOT/tests/test_gtme_learning.py"
   check "Clay exports match the frozen fixture by stable identity" python3 "$ROOT/tests/test_clay_fixture_check.py"
+  check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
 fi
 
 # ── team board ────────────────────────────────────────────────────────────────

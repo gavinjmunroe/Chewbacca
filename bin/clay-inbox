@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""Every reply in a Clay workspace's sequencer inbox, with full threads, as JSON.
+
+Clay's own web app reads its inbox through two POST endpoints on
+api.clay.com. This calls them from inside the signed-in Clay tab, so the
+session cookie rides along and no key is needed. Measured 2026-10-09 on
+Jonah's workspace: 65 replies and all 65 threads in about 3 seconds. The page
+route it replaces (goto, wait, click Replies, wait, read) took ~10 seconds a
+campaign across 30 campaigns and still only returned the selected thread.
+
+Read-only. Nothing is clicked, nothing is marked read.
+
+    clay-inbox                         # every reply, JSON array on stdout
+    clay-inbox --campaign Qube         # only campaigns whose name contains it
+    clay-inbox --workspace 1372623 --profile caleb@bluemodernadvisory.com
+"""
+import argparse
+import json
+import os
+import subprocess
+import sys
+
+DEFAULT_WORKSPACE = os.environ.get("CLAY_WORKSPACE_ID", "1372623")
+DEFAULT_PROFILE = os.environ.get("CHEWIE_CHROME_PROFILE", "caleb@bluemodernadvisory.com")
+
+# Clay pages the list 20 at a time whatever limit is asked for.
+FETCH_JS = """(async()=>{
+const b='https://api.clay.com/v3/workspaces/%s/clay-sequencer/master-inbox/';
+const post=(p,body)=>fetch(b+p,{method:'POST',credentials:'include',
+  headers:{'content-type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
+let all=[];
+for(let o=0;o<5000;o+=20){const r=await post('replies',{offset:o,limit:20});
+  if(!r.paginated_replies) return JSON.stringify({error:r});
+  all=all.concat(r.paginated_replies);if(r.paginated_replies.length<20)break;}
+const out=await Promise.all(all.map(async x=>({...x,history:await post('message-history',
+  {campaign_id:x.email_campaign_id,lead_id:Number(x.email_lead_id)})})));
+return JSON.stringify(out);})()"""
+
+
+def chewie(args, profile):
+    env = dict(os.environ, CHEWIE_CHROME_PROFILE=profile)
+    out = subprocess.run(["chewie", "web", *args], capture_output=True, text=True, env=env, timeout=180)
+    if out.returncode != 0:
+        sys.exit(f"clay-inbox: chewie web {args[0]} failed: {out.stderr.strip()[:300]}")
+    return out.stdout.strip()
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--workspace", default=DEFAULT_WORKSPACE)
+    ap.add_argument("--profile", default=DEFAULT_PROFILE, help="Chrome profile signed in to Clay")
+    ap.add_argument("--campaign", help="keep campaigns whose name contains this")
+    a = ap.parse_args(argv)
+
+    # The fetch has to run on an app.clay.com page to carry the session.
+    chewie(["goto", f"https://app.clay.com/workspaces/{a.workspace}/campaigns"], a.profile)
+    raw = chewie(["eval", FETCH_JS % a.workspace], a.profile)
+    data = json.loads(raw)
+    if isinstance(data, str):
+        data = json.loads(data)
+    if isinstance(data, dict) and "error" in data:
+        sys.exit(f"clay-inbox: Clay refused the inbox read: {json.dumps(data['error'])[:300]}")
+    if a.campaign:
+        data = [r for r in data if a.campaign.lower() in r.get("email_campaign_name", "").lower()]
+    json.dump(data, sys.stdout)
+    print()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

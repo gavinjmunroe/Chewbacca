@@ -19,6 +19,32 @@ If the engine cannot reach a control, report that specific limitation and keep
 any unfinished action explicit. Do not silently switch to a different control
 engine or replace the requested platform work with offline work.
 
+## Pick the fastest surface: API, CLI or UI
+
+Caleb, 2026-10-09: "use the clay api for things that are faster through the
+clay api. And vice versa for the clay UX." Look the job up here before
+touching the page. Driving the UI for a read the API already answers is the
+slow path, and so is fighting the API for something one UI click does.
+
+| Job                                               | Route                                                                                                                                       | Measured                                                                              |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Every reply with its full thread                  | `bin/clay-inbox [--campaign X]`: POST `clay-sequencer/master-inbox/replies`, then `message-history` per lead, from inside the signed-in tab | 65 replies and threads in ~3s; the page route took ~10s a campaign and saw one thread |
+| Campaign list with reply and bounce counts        | `clay campaigns list --with-analytics`                                                                                                      | one call                                                                              |
+| Campaign settings, sequence, variants             | `clay campaigns get`, `update`, `sequence`                                                                                                  | one call                                                                              |
+| Starting a campaign or adding leads to one        | UI only, the CLI can't                                                                                                                      |                                                                                       |
+| Find People into a table, bulk "Run N empty rows" | UI                                                                                                                                          | minutes, against a night of per-row CLI loops on 10-05                                |
+| Writing cells or records                          | workflow node (`audiences records` upsert), then read back                                                                                  |                                                                                       |
+
+For a read that isn't listed, learn the route once rather than reading the
+page every time. On the Clay tab run
+`performance.setResourceTimingBufferSize(10000); performance.clearResourceTimings()`,
+do the action once, then list the `performance.getEntriesByType('resource')`
+names on `api.clay.com`. The default buffer holds 250 entries and the page
+fills it before the data calls land, which is why the first capture on 10-09
+came back empty. Probe the endpoint with `fetch(url, {credentials:'include'})`
+from the same tab (Clay's 400s name the missing body fields), then add a row
+here, and a `bin/` tool if it will be reused.
+
 ## Standing user corrections, 2026-09-23
 
 - Never use Sculptor. Configure columns directly in Clay's native UI.
@@ -48,8 +74,8 @@ same turn it happens, never only a new line of prose.
 - A personalized line naming an investment from purchased-file data. Guard: the
   gate refuses a line with no public `line_source` URL.
 - Reporting Clay's reply category as interest (2026-10-05: "Interested" was
-  Hustle Fund's apply-form redirect). Rule: read the text with zeutara-gtme
-  `scripts/replies.py` before saying anyone replied with interest.
+  Hustle Fund's apply-form redirect). Rule: read the text with `bin/clay-inbox`
+  before saying anyone replied with interest.
 - Reading an async search as empty (2026-09-22: an hour lost). A fresh
   `query-mode run` returns an empty page until it populates. Guard:
   `scripts/clay_run.py` polls and reports a timeout as a timeout.

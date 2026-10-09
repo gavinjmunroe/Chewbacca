@@ -23,6 +23,6 @@ out="$(printf '%s' "$payload" | jq -r '.tool_response.stdout // .tool_response /
 # Any nonzero reply count anywhere in the output.
 printf '%s' "$out" | grep -qE '"(replies|repliedCount|repliesExcludingOoo)": *[1-9]' || exit 0
 
-msg='clay-reply-guard: these analytics show replies, but only their CATEGORY. Do not tell anyone a lead is interested until you have read the reply text: run `python3 scripts/replies.py` in ~/code/work/zeutara-gtme (or open the Replies tab). On 2026-10-05 an "Interested" tag was a canned apply-on-our-site redirect.'
+msg='clay-reply-guard: these analytics show replies, but only their CATEGORY. Do not tell anyone a lead is interested until you have read the reply text: run `clay-inbox --campaign <name>` (every reply with its full thread in seconds, via the API the Clay page itself uses). On 2026-10-05 an "Interested" tag was a canned apply-on-our-site redirect.'
 jq -n --arg m "$msg" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $m}}'
 exit 0

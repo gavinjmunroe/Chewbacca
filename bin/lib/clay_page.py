@@ -19,7 +19,6 @@ import time
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse
 
 from clay_geometry import Rect, Window
 
@@ -81,15 +80,18 @@ def cdp_port(env=None) -> int:
     return DEFAULT_PORT
 
 
-def clay_targets(port: int, fetch=urllib.request.urlopen) -> list[dict]:
-    """Clay tabs open in Chewie's Chrome. No Chrome on the port means none."""
+def clay_targets(port: int, fetch=urllib.request.urlopen, frame: str = CLAY_HOST) -> list[dict]:
+    """Every target the eval could land in, by chewie's own rule (web.js:223-227:
+    the first page or iframe whose url contains `frame`). Counting by a stricter
+    rule than the one that picks would let a look-alike url or a Clay iframe
+    pass as the one tab. No Chrome on the port means none."""
     try:
         with fetch(f"http://127.0.0.1:{port}/json/list", timeout=2) as resp:
             targets = json.load(resp)
     except OSError:
         return []
     return [t for t in targets
-            if t.get("type") == "page" and urlparse(t.get("url", "")).hostname == CLAY_HOST]
+            if t.get("type") in ("page", "iframe") and frame in (t.get("url") or "")]
 
 
 def _never() -> bool:
@@ -137,7 +139,13 @@ class Page:
         self.port = port or cdp_port()
 
     def _eval(self, body: str, timeout_s: float, should_stop) -> dict:
-        expr = f"(async () => {{\n{FIND_JS}\nreturn JSON.stringify(await (async () => {{ {body} }})());\n}})()"
+        # The guard runs in the page before anything else: whatever target
+        # chewie picked, nothing is read or pressed unless it is Clay's own
+        # top-level document.
+        expr = (f"(async () => {{\n{FIND_JS}\n"
+                f"if (location.hostname !== {json.dumps(CLAY_HOST)} || window.top !== window) "
+                "return JSON.stringify({ok: false, reason: \"not clay\"});\n"
+                f"return JSON.stringify(await (async () => {{ {body} }})());\n}})()")
         env = {**os.environ, "CHEWIE_WEB_FRAME": self.frame, "CHEWIE_CDP_PORT": str(self.port)}
         # Answers are a few hundred bytes, so polling before reading never
         # fills the pipe and stalls the child.
@@ -161,6 +169,8 @@ class Page:
             data = None
         if not isinstance(data, dict):
             raise PageError("Chrome answered with something that was not a result.")
+        if data.get("reason") == "not clay":
+            raise PageError("The tab Chewie's Chrome picked is not Clay, so nothing was pressed.")
         return data
 
     @staticmethod

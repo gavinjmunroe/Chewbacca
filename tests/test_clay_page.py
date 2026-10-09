@@ -193,8 +193,25 @@ class PageTests(unittest.TestCase):
         def fetch(url, timeout):
             seen.append(url)
             return io.BytesIO(body)
-        self.assertEqual(len(clay_page.clay_targets(9333, fetch=fetch)), 1)
+        # Counted by chewie's own rule (web.js:223-227): any page or iframe
+        # whose url contains the frame string, because that is what the eval
+        # can land in. A look-alike counts, so it can never be the one tab.
+        got = clay_page.clay_targets(9333, fetch=fetch)
+        self.assertEqual([t["url"] for t in got], ["https://app.clay.com/a", "https://app.clay.com/b",
+                                                   "https://example.com/?app.clay.com"])
         self.assertEqual(seen, ["http://127.0.0.1:9333/json/list"])
+
+    def test_no_chrome_means_no_tabs(self):
+        def fetch(url, timeout):
+            raise ConnectionRefusedError()
+        self.assertEqual(clay_page.clay_targets(9333, fetch=fetch), [])
+
+    def test_every_eval_refuses_outside_clays_own_page(self):
+        seen = []
+        with self.assertRaises(clay_page.PageError) as caught:
+            self.page(FakeProc(answer(ok=False, reason="not clay")), seen).locate([{"css": "button"}])
+        self.assertIn("not Clay", str(caught.exception))
+        self.assertIn('location.hostname !== "app.clay.com" || window.top !== window', seen[0][0][3])
 
 
 if __name__ == "__main__":

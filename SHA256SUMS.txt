@@ -17,7 +17,7 @@ a1a2beb7ed61ba73bcd5680b3355930066a2e6887b5520bb3c374e6acd204fc0  .claude/hooks/
 9ba6e28846760e0c3180812ab242d0d8e9cf87effe4175ac28665885126e5c9d  .claude/hooks/fusion-guard.sh
 edc9cc9d67d8a05fce30fd49e56aded7be67efab08cba2ad5d83172bf275dbeb  .claude/hooks/handoff-guard.sh
 5e94f9c35daeadde407a1a523c3a5532cfc0163e446d7f2f1865c2f15843e16e  .claude/hooks/kit-autopull.sh
-88d626233e8194b1ba705d52ca6fb27506a14b24d058f65933ff4ff77a76f7ce  .claude/hooks/kit-autopush.sh
+277f1d9c90922fb0ff44847648cfbbca1ab4d485e55f1fca4bb3cf253d9c1215  .claude/hooks/kit-autopush.sh
 d893050092dc083e7a5f5b8b09733466ffdf4040755a5870fa6ade197a2fb208  .claude/hooks/kit-debt.sh
 cb245d357dd1d602d0804d24fdcc57c90d174a1b03253ddccf062672f97d3ad6  .claude/hooks/kit-route.sh
 bfc771e19d2b298f5ad1f5a5041b4b80ce5fa27cf560da96aa15a6a41f9632a6  .claude/hooks/launch-guard.sh

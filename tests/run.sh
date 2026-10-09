@@ -428,6 +428,9 @@ if group "gtme"; then
   check "gtm keeps one person per email, suppresses from sends, answers every query under 100 ms" \
     python3 "$ROOT/tests/test_gtm.py"
   check "gtm dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtm --help
+  # Synthetic graph, Clay answers and people.db; nothing reads a real store.
+  check "gtm-memory keeps clients apart, never merges on a name, keeps job and fact history, answers under 100 ms" \
+    python3 "$ROOT/tests/test_gtm_memory.py"
   expect "gtm appears in help" "chewbacca gtm" bash "$ROOT/bin/chewbacca" --help
   # Recorded, synthetic surface answers; nothing reads Clay, the clay CLI or Chrome.
   if command -v node >/dev/null 2>&1; then

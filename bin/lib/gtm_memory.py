@@ -446,6 +446,7 @@ def open_db(path: Path | str | None = None, readonly: bool = False) -> sqlite3.C
     db.execute("PRAGMA foreign_keys = ON")
     db.execute("PRAGMA journal_mode = WAL")
     db.execute("PRAGMA busy_timeout = 15000")
+    db.execute("PRAGMA synchronous = NORMAL")
     db.executescript(SCHEMA)
     migrate(db)
     seed(db)

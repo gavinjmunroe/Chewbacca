@@ -31,7 +31,7 @@ Read from `bin/lib/people/*.js` and the live `people.db` schema (structure only)
    score as of a date using only observations observed by then, so a curve
    never shows every relationship improving. `score_history` also keeps frozen
    snapshots.
-5. **A timeline.** `interactions` plus `messages`, one definition of last
+5. **Timeline.** `interactions` and `messages` share one definition of last
    contact, and a rule that a broadcast is not a conversation: an outbound day
    to more than thirty people only counts for a person who replied.
 6. **Commitments.** `tasks` (what you promised, due when), `loans`,

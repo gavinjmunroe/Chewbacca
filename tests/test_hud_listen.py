@@ -1430,7 +1430,10 @@ def test_end_to_end() -> None:
 
 
 def test_route_end_to_end() -> None:
-    """A lookup opens the browser and never starts the model."""
+    """A lookup that names the browser opens it and never starts the model.
+
+    "in chrome": a bare "look up X" is answered on the glass since CHW-188
+    (tests/test_glass_search.py), so the app request is what still opens Chrome."""
     import tempfile
     directory = tempfile.mkdtemp()
     path = os.path.join(directory, "hud.sock")
@@ -1443,7 +1446,7 @@ def test_route_end_to_end() -> None:
     def serve() -> None:
         conn, _ = server.accept()
         ready.set()
-        conn.sendall(b'h "look up rust traits"\n')
+        conn.sendall(b'h "in chrome look up rust traits"\n')
         conn.settimeout(30)
         buffer = b""
         try:

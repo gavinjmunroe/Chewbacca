@@ -1286,6 +1286,7 @@ if group "hud"; then
   # real app, no microphone, no tokens. It is the only test that covers what
   # happens between hearing something and drawing it.
   check  "the listen loop works end to end" python3 "$ROOT/tests/test_hud_listen.py"
+  check  "a search is answered on the glass, never in Chrome" python3 "$ROOT/tests/test_glass_search.py"
   check  "the terminal tab chooser never picks a plain shell" python3 "$ROOT/tests/test_terminal.py"
   check  "voice memory rotates and reads back" python3 "$ROOT/tests/test_memory.py"
   check  "the router's table holds" python3 "$ROOT/tests/test_route.py"

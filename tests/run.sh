@@ -1473,6 +1473,7 @@ if group "reasoning backends"; then
   check "task DAG preserves dependencies, capacity and independent verification" python3 "$ROOT/tests/test_task_graph.py"
   check "work ledger reaches shared startup and Codex prompt context" python3 "$ROOT/tests/test_work_ledger_context.py"
   check "tab board shows every other live tab across runtimes" python3 "$ROOT/tests/test_tabs.py"
+  check "pre-commit refuses a file staged empty that HEAD has content for" python3 "$ROOT/tests/test_precommit_emptied.py"
   check "shared work ledger preserves commitments across requests and runtimes" python3 "$ROOT/tests/test_work_ledger.py"
   check "newcomer setup preserves identity and privacy choices" python3 "$ROOT/tests/test_onboarding.py"
   check "a sandboxed HOME never reaches the real Claude config" python3 "$ROOT/tests/test_sandbox_config.py"

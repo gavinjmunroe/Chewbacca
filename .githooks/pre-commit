@@ -32,6 +32,33 @@
 # Enable:  git config core.hooksPath .githooks
 # Bypass:  ALLOW_STALE_STAGED=1 git commit ...   (say why in the message)
 set -uo pipefail
+
+# A tracked file staged as 0 bytes that HEAD has content for. 2026-10-09:
+# setup.sh (3,035 lines) sat in the index emptied by some tab's failed rewrite,
+# with the empty file's hash staged into SHA256SUMS.txt beside it. Any tab's
+# next commit would have shipped it, and every fresh install runs setup.sh.
+# This runs before the ALLOW_STALE_STAGED exit on purpose: that bypass is the
+# one tabs reach for when authorship attribution misfires, which is exactly
+# when nobody is reading the staged list.
+# Bypass:  ALLOW_EMPTIED=1 git commit ...   (say why in the message)
+if [ -z "${ALLOW_EMPTIED:-}" ]; then
+  emptied=""
+  while IFS= read -r path; do
+    [ -n "$path" ] || continue
+    [ "$(git cat-file -s ":$path" 2>/dev/null || echo 1)" = "0" ] || continue
+    [ "$(git cat-file -s "HEAD:$path" 2>/dev/null || echo 0)" != "0" ] || continue
+    emptied="$emptied
+  $path"
+  done <<EOF
+$(git diff --cached --name-only --diff-filter=M)
+EOF
+  if [ -n "$emptied" ]; then
+    echo "pre-commit: refusing, these files would be committed EMPTY but have content in HEAD:$emptied" >&2
+    echo "Restore with: git show HEAD:<path> > <path>   or bypass with ALLOW_EMPTIED=1 if you meant it." >&2
+    exit 1
+  fi
+fi
+
 [ -n "${ALLOW_STALE_STAGED:-}" ] && exit 0
 
 STAGED=$(git diff --cached --name-only --diff-filter=ACM)

@@ -857,6 +857,9 @@ function cmdTexts(argv) {
     list.forEach((x, i) => {
       if (!Number.isInteger(x.n)) x.n = numbered.length ? ++top : i + 1;
     });
+    // Pin them the first time they are seen, so the list he reads is the
+    // list every later drop and send resolves against.
+    if (numbered.length < list.length) save(list);
     top = Math.max(top, list.length ? Math.max(...list.map((x) => x.n)) : 0);
     // The highest number ever handed out, so a dropped last draft's number
     // is never reused for a new one a stale tab could then hit.

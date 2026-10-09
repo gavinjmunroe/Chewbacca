@@ -38,6 +38,114 @@ the edge is driving Sculptor well, not replacing it.
   found none. So "better than anything on the market" can't be measured
   today. The task suite below is how we'd measure it.
 
+## What Clay's terms say about automated access
+
+Read 2026-10-09, before the first client pays for the Clay operator (CHW-150).
+Not legal advice: this is a reading of public pages, and a lawyer or Clay
+itself decides what they mean.
+
+### What was fetched
+
+| Page                                                                                                                  | Result                                     |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| [clay.com/terms-of-service](https://www.clay.com/terms-of-service)                                                    | Loaded. "LAST UPDATED MAY 23, 2024"        |
+| [clay.com/dpa](https://www.clay.com/dpa)                                                                              | Loaded. Data processing only, no use rules |
+| [Public API rate limits](https://developers.clay.com/public-api/rate-limits)                                          | Loaded                                     |
+| [Public API quickstart](https://developers.clay.com/public-api/quickstart)                                            | Loaded                                     |
+| clay.com `/terms`, `/legal`, `/acceptable-use`, `/acceptable-use-policy`, `/api-terms`, `/msa`, `/security`, `/trust` | 404. No acceptable use policy found        |
+| developers.clay.com/terms                                                                                             | 404. No separate API terms found           |
+
+The Terms of Service contain **no clause on bots, scripts, scraping,
+crawling, robots, reverse engineering, or automated access of any kind**. The
+whole text was downloaded and searched for those words, not only summarized.
+A web-search summary claimed the terms require "each user" to have "their own
+account"; that sentence is not in the terms text, so it is not relied on here.
+
+### The clauses that touch it
+
+All from the Terms of Service unless marked, fetched 2026-10-09.
+
+- **Acting for a company** (preamble): "If you're accessing our services on
+  behalf of a legal entity (like your employer), you agree that you have the
+  authority to bind that entity to these terms"
+- **Credentials** (4. User Responsibilities): "You are solely responsible for
+  maintaining the confidentiality of your account information, including
+  username and password, and for all activities that occur under your
+  account."
+- **Who did it** (4): "We may assume that any communications we've received
+  from your account or the associated contact information have been made by
+  you"
+- **Account transfer** (4): "You agree not to license, sell, or transfer your
+  account without our prior written approval."
+- **Credits and data** (4): "you agree not to sell or transfer your Clay
+  Credits to any other user without our prior written approval. You also agree
+  not to re-sell any data you obtain from Clay."
+- **Security, community-scoped** (4): the list opens "while participating in
+  any Clay community do not do, try to do, or encourage others to:" and
+  includes "Do not engage in activities that could damage or compromise the
+  security of an account, network, or system." As written, that list governs
+  the Slack community.
+- **Capacity limits** (5. Investigations): "Clay has the right to create
+  reasonable limits on Clay's use and storage of content, including reasonable
+  limits on file size, storage space, or processing capacity."
+- **Monitoring** (17.3 Process Integrity): "Clay Labs has the right to review
+  and monitor all use of the Services to ensure compliance with this
+  Agreement."
+- **Unauthorized use** (Settling disputes): "claims of piracy or unauthorized
+  use of our services will not be subject to arbitration."
+- **Sensitive data** (17.3.1): "You shall not include personal health
+  information (PHI) or cardholder data in your data unless explicitly
+  permitted in a separate agreement"
+- **API rate limit** ([rate limits](https://developers.clay.com/public-api/rate-limits)):
+  "The Clay Public API enforces a per-workspace request rate limit. When you
+  exceed it, Clay returns HTTP `429` and you should back off before retrying."
+- **API purpose** ([quickstart](https://developers.clay.com/public-api/quickstart)):
+  "Use the Public API to call Clay from your own applications and services"
+  and "Requests authenticate with a Clay API key in the `clay-api-key` header."
+
+Paid plans run on a contract ("your subscription will continue for the
+duration laid out in your contract"). An order form or MSA can add terms that
+are not public, so each client's own contract has to be read too.
+
+### What that means for each thing Chewbacca does
+
+| Activity                                                                    | Reading               | Why                                                                                                                                                                                    |
+| --------------------------------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `clay` CLI and Public API in the client's workspace, with a key it made     | Allowed               | Documented and sold for agents. Honor the per-workspace limit: back off on `429` and CLI exit code `4`.                                                                                |
+| Driving the web UI as our own user, invited into the client's workspace     | Ambiguous, leans fine | Nothing bans automation. The client answers "for all activities that occur under" its account, so it should know and agree in writing. Keep the pace human, given the capacity clause. |
+| Driving the web UI logged in as the client, with the client's password      | Avoid                 | Not banned in words, but it breaks the confidentiality duty on "username and password" and makes every action look like the client's own.                                              |
+| Reading `api.clay.com/v3`, the app's private API, from the page             | Ambiguous             | No clause covers it and no doc offers it. It can change without notice. Use the Public API where one exists.                                                                           |
+| Running several clients out of one agency workspace and billing its credits | Prohibited as written | Transferring credits to another user, or re-selling data obtained from Clay, needs Clay's "prior written approval."                                                                    |
+| Taking over or handing off a client's account                               | Prohibited as written | No license, sale or transfer of an account without written approval.                                                                                                                   |
+| Health or card data in any table                                            | Prohibited            | Section 17.3.1, unless a separate agreement and BAA exist.                                                                                                                             |
+
+The safe shape follows from that: each client pays for its own Clay plan,
+invites a Chewbacca operator account as a workspace member, and gets a short
+written authorization naming the automation. Credits and data stay in the
+client's workspace.
+
+### What to ask
+
+**Clay** (support@clay.run, or the
+[Solutions Partner](https://www.clay.com/partners/solutions) team):
+
+1. Is there an acceptable use policy or MSA for paid plans beyond the public
+   Terms of Service?
+2. May an invited workspace member drive the web app with browser automation,
+   and is there a request pace you want kept?
+3. Is calling `api.clay.com/v3` from a signed-in session acceptable, or should
+   automation stay on the Public API and CLI?
+4. What does the Solutions Partner agreement say about an agency operating
+   client workspaces?
+
+**Karthik:**
+
+1. Has Amber or Togari already agreed anything with Clay, including a partner
+   agreement?
+2. Does Zeutara's Clay order form add terms beyond the public ones?
+3. Does the server-side Clay automation in Togari use the client's login or an
+   invited operator account?
+
 ## The design, in order of what pays most
 
 ### 1. Route every task to the cheapest surface that can do it
@@ -171,7 +279,11 @@ gets opened for editing, run, or deleted.
 - [Table columns](https://university.clay.com/docs/table-columns-overview)
 - [Product roundup, week of 2026-06-01](https://www.clay.com/changelog/product-roundup-week-of-jun-1-2026)
 - [CUFinder's tested Clay review, with G2 and Reddit complaints](https://cufinder.io/blog/clay-data-enrichment-review/)
-- [Clay terms of service](https://www.clay.com/terms-of-service) (read 2026-09-23: no clause on automated access)
+- [Clay terms of service](https://www.clay.com/terms-of-service) (last updated 2024-05-23; read 2026-09-23 and in full 2026-10-09: no clause on automated access)
+- [Clay data processing agreement](https://www.clay.com/dpa) (read 2026-10-09)
+- [Public API rate limits](https://developers.clay.com/public-api/rate-limits) (read 2026-10-09)
+- [Public API quickstart](https://developers.clay.com/public-api/quickstart) (read 2026-10-09)
+- [Clay Solutions Partner program](https://www.clay.com/partners/solutions)
 - [UI-KOBE, graph-guided GUI agents](https://arxiv.org/abs/2605.29534)
 - [JAMEL, joint memory and exploration](https://arxiv.org/abs/2606.01528)
 

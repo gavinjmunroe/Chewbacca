@@ -127,6 +127,28 @@ the artifact.
 An unrecorded policy is treated as a ban. "The syllabus does not say" has never
 been a defense.
 
+## Brightspace
+
+`brightspace-sync` reads your own Brightspace courses and does the paperwork
+around them. It reuses the browser session that `api-anything` imports, so you
+sign in to Brightspace in Chrome once and run `api-anything login
+<your-brightspace-host> --profile "Chrome/<profile>"`. Set `BRIGHTSPACE_HOST`
+if your school is not USC.
+
+```bash
+brightspace-sync due --days 30                        # everything on your course calendars
+brightspace-sync reminders --exams --apply            # into an Apple Reminders list
+brightspace-sync files BUAD-280 --from-chapter 4      # preview, then add --apply
+brightspace-sync transcripts BUAD-280 --from-chapter 4 --apply
+```
+
+It never writes to Brightspace, waits 4 to 8 seconds between requests, and stops
+on the first 401, 403 or 429. Scans show what they would do and change nothing
+until you pass `--apply`. Lecture transcripts come from Panopto captions and
+exist only where the instructor published them. Before you hand course files or
+transcripts to an AI tool, run `coursework policy <course> ai`: some courses ban
+it outright.
+
 ## Privacy
 
 The machinery is public and the ledger is not. This repo contains the CLI, the

@@ -607,6 +607,11 @@ if group "installer"; then
   check  "brightspace flags dropboxes missing from the ledger" \
     bash "$ROOT/tests/brightspace.sh" "$ROOT"
 
+  # A calendar that repeats a title months later must not become a second
+  # reminder, and a scan must not download anything without --apply.
+  check  "brightspace-sync lists each item once and scans without writing" \
+    bash "$ROOT/tests/brightspace_sync.sh" "$ROOT"
+
   # On 2026-09-30 a discussion sheet quoted bell hooks from model memory because
   # the reading was never on disk. It must flag that, and not count his own post.
   check  "reading-check flags readings with no text on disk" \

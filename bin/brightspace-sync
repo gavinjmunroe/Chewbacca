@@ -1,0 +1,352 @@
+#!/usr/bin/env python3
+"""
+brightspace-sync: read your own Brightspace courses, list what is due, push due
+dates to Apple Reminders, and download course files.
+
+  brightspace-sync courses
+  brightspace-sync due [--days 30] [--json]
+  brightspace-sync reminders [--days 30] [--list Brightspace] [--exams] [--apply]
+  brightspace-sync files <course> [--since YYYY-MM-DD] [--from-chapter N] [--also REGEX] [--out DIR] [--apply]
+  brightspace-sync transcripts <course> [--from-chapter N] [--out DIR] [--apply]
+  brightspace-sync links <course>          Panopto recording links in a course
+
+Auth is the session api-anything imported from your browser:
+  api-anything login <your-brightspace-host> --profile "Chrome/<profile>"
+Nothing here ever writes to Brightspace. Reads only, your own enrolments only.
+
+Every request waits 4 to 8 seconds first (BRIGHTSPACE_DELAY=min,max overrides),
+because a university LMS that sees one account pull 200 files in 90 seconds
+files a security ticket. A 401, 403 or 429 stops the run immediately.
+
+Scans never write. reminders and files only act with --apply.
+
+BRIGHTSPACE_FIXTURE=<file.json> replaces the network with {"path prefix": response}
+for tests.
+"""
+import argparse
+import datetime as dt
+import json
+import os
+import random
+import re
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+HOST = os.environ.get("BRIGHTSPACE_HOST", "brightspace.usc.edu")
+SESSION = Path(os.environ.get(
+    "BRIGHTSPACE_SESSION", Path.home() / ".api-anything/sessions" / f"{HOST}.json"))
+STATE = Path(os.environ.get("BRIGHTSPACE_STATE", Path.home() / ".chewbacca/brightspace"))
+TZ = ZoneInfo(os.environ.get("BRIGHTSPACE_TZ", "America/Los_Angeles"))
+DELAY = tuple(float(x) for x in os.environ.get("BRIGHTSPACE_DELAY", "4,8").split(","))
+
+
+class Stop(Exception):
+    pass
+
+
+def cookie_header(host=HOST):
+    session = SESSION if host == HOST else SESSION.parent / f"{host}.json"
+    if not session.exists():
+        raise Stop(f"no session at {session}. Run: api-anything login {host} --profile \"Chrome/<profile>\"")
+    jar = json.load(open(session))["cookies"]
+    return "; ".join(
+        f"{c['name']}={c['value']}" for c in jar
+        if host.endswith(c.get("domain", "").lstrip(".") or "\0")
+    )
+
+
+class Client:
+    def __init__(self, host=HOST):
+        fixture = os.environ.get("BRIGHTSPACE_FIXTURE")
+        self.fixture = json.load(open(fixture)) if fixture else None
+        self.cookie = "" if self.fixture is not None else cookie_header(host)
+        self.last = 0.0
+
+    def _wait(self):
+        gap = random.uniform(*DELAY)
+        left = self.last + gap - time.time()
+        if left > 0:
+            time.sleep(left)
+
+    def open(self, url):
+        self._wait()
+        req = urllib.request.Request(url, headers={"Cookie": self.cookie, "User-Agent": "Mozilla/5.0"})
+        try:
+            resp = urllib.request.urlopen(req, timeout=60)
+        except urllib.error.HTTPError as e:
+            if e.code in (401, 403, 429):
+                raise Stop(f"HTTP {e.code} from {urllib.parse.urlparse(url).path}. Stopping. "
+                           f"If 401/403, sign in to {HOST} in Chrome and run: api-anything login {HOST}")
+            raise
+        finally:
+            self.last = time.time()
+        if "/d2l/login" in resp.geturl() or "shibboleth" in resp.geturl():
+            raise Stop(f"session expired (redirected to sign-in). Sign in to {HOST} in Chrome, then run: api-anything login {HOST}")
+        return resp
+
+    def json(self, path):
+        if self.fixture is not None:
+            return next(v for k, v in self.fixture.items() if path.startswith(k))
+        return json.load(self.open(f"https://{HOST}/d2l/api{path}"))
+
+
+def courses(client):
+    items, mark = [], ""
+    while True:
+        d = client.json("/lp/1.63/enrollments/myenrollments/?orgUnitTypeId=3" + (f"&bookmark={mark}" if mark else ""))
+        items += d["Items"]
+        if not d["PagingInfo"].get("HasMoreItems"):
+            break
+        mark = d["PagingInfo"]["Bookmark"]
+    out = []
+    for it in items:
+        if not it["Access"].get("IsActive"):
+            continue
+        name = it["OrgUnit"]["Name"]
+        m = re.search(r"([A-Z]{2,5})[- ](\d{3}[A-Za-z]?)", name)
+        out.append({"id": it["OrgUnit"]["Id"], "name": name, "code": f"{m[1]}-{m[2]}" if m else name})
+    return out
+
+
+def pick(client, key):
+    all_courses = courses(client)
+    key = key.lower()
+    hits = [c for c in all_courses if key in c["code"].lower() or key in c["name"].lower() or key == str(c["id"])]
+    if len(hits) != 1:
+        raise Stop(f"'{key}' matched {len(hits)} courses: " + ", ".join(c["code"] for c in all_courses))
+    return hits[0]
+
+
+def local(iso):
+    return dt.datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone(TZ)
+
+
+def due_items(client, days):
+    now = dt.datetime.now(dt.timezone.utc)
+    start = now.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    end = (now + dt.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    rows = []
+    for c in courses(client):
+        d = client.json(f"/le/1.99/{c['id']}/calendar/events/myEvents/?associatedEventsOnly=false"
+                        f"&startDateTime={start}&endDateTime={end}")
+        seen = set()
+        for e in sorted(d.get("Objects", []), key=lambda e: e["StartDateTime"]):
+            if e["Title"] in seen:
+                continue
+            seen.add(e["Title"])
+            rows.append({"course": c["code"], "courseId": c["id"], "title": e["Title"],
+                         "due": local(e["StartDateTime"]).isoformat(timespec="minutes")})
+    return sorted(rows, key=lambda r: r["due"])
+
+
+def cmd_due(client, a):
+    rows = due_items(client, a.days)
+    if a.json:
+        print(json.dumps(rows, indent=2))
+        return
+    for r in rows:
+        print(f"{r['due'][:16].replace('T', ' ')}  {r['course']:<9} {r['title']}")
+    print(f"{len(rows)} items in the next {a.days} days", file=sys.stderr)
+
+
+ADD_REMINDER = """
+on run argv
+  set due to current date
+  set day of due to 1
+  set year of due to (item 3 of argv as integer)
+  set month of due to (item 4 of argv as integer)
+  set day of due to (item 5 of argv as integer)
+  set time of due to ((item 6 of argv as integer) * 3600 + (item 7 of argv as integer) * 60)
+  set alert to due
+  set time of alert to 9 * 3600
+  tell application "Reminders"
+    if not (exists list (item 1 of argv)) then make new list with properties {name:(item 1 of argv)}
+    tell list (item 1 of argv) to make new reminder with properties {name:(item 2 of argv), body:"From Brightspace", due date:due, remind me date:alert}
+  end tell
+end run
+"""
+
+
+def add_reminder(list_name, title, when):
+    subprocess.run(["osascript", "-e", ADD_REMINDER, list_name, title, str(when.year), str(when.month),
+                    str(when.day), str(when.hour), str(when.minute)], check=True)
+
+
+def cmd_reminders(client, a):
+    rows = due_items(client, a.days)
+    if a.exams:
+        out = subprocess.run(["coursework", "due", "--days", str(a.days), "--json"],
+                             capture_output=True, text=True, check=True).stdout
+        for it in json.loads(out)["upcoming"]:
+            if it["type"] in ("exam", "quiz"):
+                rows.append({"course": it["course"].replace(" ", "-"), "courseId": "ledger", "title": it["name"],
+                             "due": f"{it['date']}T{it.get('at') or '08:00'}"})
+        rows.sort(key=lambda r: r["due"])
+    STATE.mkdir(parents=True, exist_ok=True)
+    pushed_file = STATE / "reminders-pushed.json"
+    pushed = set(json.load(open(pushed_file))) if pushed_file.exists() else set()
+    todo = [r for r in rows if f"{r['courseId']}|{r['title']}|{r['due']}" not in pushed]
+    for r in todo:
+        when = dt.datetime.fromisoformat(r["due"])
+        title = f"{r['course']}: {r['title']}"
+        if not a.apply:
+            print(f"would add  {when:%a %b %d %I:%M%p}  {title}")
+            continue
+        add_reminder(a.list, title, when)
+        pushed.add(f"{r['courseId']}|{r['title']}|{r['due']}")
+        json.dump(sorted(pushed), open(pushed_file, "w"))
+        print(f"added      {when:%a %b %d %I:%M%p}  {title}")
+    print(f"{len(todo)} new, {len(rows) - len(todo)} already pushed" + ("" if a.apply else " (dry run, pass --apply)"),
+          file=sys.stderr)
+
+
+def walk(modules, trail=()):
+    for m in modules:
+        here = trail + (m["Title"],)
+        for t in m.get("Topics", []):
+            yield here, t
+        yield from walk(m.get("Modules", []), here)
+
+
+def safe(s):
+    return re.sub(r'[\\/:*?"<>|]+', "-", s).strip(" .")[:120] or "untitled"
+
+
+def cmd_links(client, a):
+    c = pick(client, a.course)
+    for trail, t in walk(client.json(f"/le/1.99/{c['id']}/content/toc")["Modules"]):
+        if "panopto" in (t.get("Url") or "").lower():
+            print(f"{t['TopicId']}\t{t['Title']}\t{t['Url']}")
+
+
+def cmd_files(client, a):
+    c = pick(client, a.course)
+    since = dt.datetime.fromisoformat(a.since).replace(tzinfo=TZ) if a.since else None
+    out = Path(a.out).expanduser() / safe(c["code"])
+    manifest_file = out / ".manifest.json"
+    manifest = json.load(open(manifest_file)) if manifest_file.exists() else {}
+    picks = []
+    for trail, t in walk(client.json(f"/le/1.99/{c['id']}/content/toc")["Modules"]):
+        if t.get("TypeIdentifier") != "File" or t.get("IsHidden"):
+            continue
+        if since and t.get("LastModifiedDate") and local(t["LastModifiedDate"]) < since:
+            continue
+        if a.from_chapter:
+            ch = re.search(r"\b(?:Chapter|Ch)\.?\s*(\d+)", t["Title"], re.I)
+            keep = ch and int(ch[1]) >= a.from_chapter
+            keep = keep or any(re.search(p, " / ".join(trail), re.I) for p in a.also)
+            if not keep:
+                continue
+        if str(t["TopicId"]) in manifest and manifest[str(t["TopicId"])] == t.get("LastModifiedDate"):
+            continue
+        picks.append((trail, t))
+    for trail, t in picks:
+        ext = Path(urllib.parse.unquote(t["Url"])).suffix
+        dest = out.joinpath(*[safe(x) for x in trail]) / (safe(t["Title"]) + ext)
+        if not a.apply:
+            print(f"would save  {dest.relative_to(out)}")
+            continue
+        resp = client.open(f"https://{HOST}/d2l/api/le/1.99/{c['id']}/content/topics/{t['TopicId']}/file")
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(resp.read())
+        manifest[str(t["TopicId"])] = t.get("LastModifiedDate")
+        json.dump(manifest, open(manifest_file, "w"))
+        print(f"saved       {dest.relative_to(out)}")
+    print(f"{len(picks)} files" + ("" if a.apply else " (dry run, pass --apply)"), file=sys.stderr)
+
+
+def srt_to_text(srt):
+    out = []
+    for block in re.split(r"\n\s*\n", srt.strip()):
+        text = " ".join(l for l in block.splitlines()[2:] if not l.startswith("[Auto-generated"))
+        if text:
+            out.append(text)
+    return "\n".join(out)
+
+
+def cmd_transcripts(client, a):
+    c = pick(client, a.course)
+    recs = []
+    for trail, t in walk(client.json(f"/le/1.99/{c['id']}/content/toc")["Modules"]):
+        m = re.search(r"https://([^/]*panopto[^/]*)/.*[?&]id=([0-9a-f-]{36})", t.get("Url") or "", re.I)
+        if not m:
+            continue
+        chapters = [int(x) for x in re.findall(r"\b(?:Chapter|Ch)\.?\s*(\d+)", t["Title"], re.I)]
+        if a.from_chapter and not (chapters and max(chapters) >= a.from_chapter):
+            continue
+        recs.append((t, m[1], m[2]))
+    out = Path(a.out).expanduser() / safe(c["code"]) / "Lecture transcripts"
+    panopto, missing = {}, []
+    for t, host, vid in recs:
+        dest = out / (safe(t["Title"]) + ".txt")
+        if dest.exists():
+            continue
+        if not a.apply:
+            print(f"would save  {dest.name}")
+            continue
+        panopto.setdefault(host, Client(host))
+        try:
+            srt = panopto[host].open(
+                f"https://{host}/Panopto/Pages/Transcription/GenerateSRT.ashx?id={vid}&language=0"
+            ).read().decode("utf8", "replace")
+        except urllib.error.HTTPError as e:
+            srt = ""
+        if not re.match(r"\s*1\s*\n\d\d:", srt):
+            missing.append(t["Title"])
+            continue
+        out.mkdir(parents=True, exist_ok=True)
+        dest.write_text(f"{t['Title']}\n\n{srt_to_text(srt)}\n")
+        print(f"saved       {dest.name}")
+    if missing:
+        print("no captions published for: " + "; ".join(missing), file=sys.stderr)
+    print(f"{len(recs)} recordings" + ("" if a.apply else " (dry run, pass --apply)"), file=sys.stderr)
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="brightspace-sync")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("courses")
+    d = sub.add_parser("due")
+    d.add_argument("--days", type=int, default=30)
+    d.add_argument("--json", action="store_true")
+    r = sub.add_parser("reminders")
+    r.add_argument("--days", type=int, default=30)
+    r.add_argument("--list", default="Brightspace")
+    r.add_argument("--exams", action="store_true", help="also add exams and quizzes from the coursework ledger")
+    r.add_argument("--apply", action="store_true")
+    f = sub.add_parser("files")
+    f.add_argument("course")
+    f.add_argument("--since")
+    f.add_argument("--from-chapter", type=int, help="keep files whose title names this chapter or later")
+    f.add_argument("--also", action="append", default=[], help="regex on the module path to keep regardless of chapter")
+    f.add_argument("--out", default="~/coursework/downloads")
+    f.add_argument("--apply", action="store_true")
+    l = sub.add_parser("links")
+    l.add_argument("course")
+    t = sub.add_parser("transcripts")
+    t.add_argument("course")
+    t.add_argument("--from-chapter", type=int)
+    t.add_argument("--out", default="~/coursework/downloads")
+    t.add_argument("--apply", action="store_true")
+    a = ap.parse_args()
+    try:
+        client = Client()
+        if a.cmd == "courses":
+            for c in courses(client):
+                print(f"{c['id']}\t{c['code']}\t{c['name']}")
+        else:
+            {"due": cmd_due, "reminders": cmd_reminders, "files": cmd_files, "links": cmd_links,
+             "transcripts": cmd_transcripts}[a.cmd](client, a)
+    except Stop as e:
+        print(f"stopped: {e}", file=sys.stderr)
+        sys.exit(2)
+
+
+if __name__ == "__main__":
+    main()

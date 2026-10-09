@@ -1,0 +1,1011 @@
+{
+  "skill": "gtme-interview",
+  "about": "GTM engineer interview and take-home cases. Each case cites W- procedures in library/learning/clay-navigation/WALKTHROUGHS.md, carries a model answer and the key points a grader looks for, and names the exact chewbacca command, formula or offline computation that builds it. bin/gtme-interview drills, times and grades them.",
+  "cases": [
+    {
+      "id": "work-email-waterfall",
+      "prompt": "Build a waterfall that finds verified work emails for 5,000 contacts without wasting credits.",
+      "paraphrase": "We need deliverable work emails for a 5k contact list on a tight credit budget. How would you set up the enrichment?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "cite the Work Email waterfall procedure, put the free inferred email first, validate before stopping, test on 10 rows",
+      "procedures": ["W-020", "W-121", "W-122", "W-005"],
+      "model_answer": "Use the Work Email waterfall with LinkedIn URL plus company domain as inputs. Turn on Infer Email so a free first.last@domain guess is tried first and stops the waterfall when it validates. Pick the Conservative validation strategy (or Safe to Send on ZeroBounce) because catch-alls count as valid by default and a wrong email hurts more than a blank. Order providers by cost per verified hit, and remember misses are refunded, so the real per-attempt cost is actions plus validation. Add a run condition so the column skips rows that already have an email, set Threshold for duplicate results so repeated failing addresses stop the run, and test on 10 rows before the other 4,990.",
+      "key_points": [
+        {
+          "point": "free inferred email first",
+          "match": ["infer email", "first.last", "inferred"]
+        },
+        {
+          "point": "validate before accepting, catch-alls are valid by default",
+          "match": ["safe to send", "conservative", "catch-all"]
+        },
+        {
+          "point": "order providers by cost per verified hit",
+          "match": ["cost per verified hit", "cost per hit", "cost per success"]
+        },
+        {
+          "point": "skip rows that already have an email",
+          "match": ["run condition", "only run if", "skips rows"]
+        },
+        {
+          "point": "test a small sample first",
+          "match": ["10 rows", "ten rows"]
+        }
+      ],
+      "build": [
+        "Add enrichment > Work Email > Full configuration",
+        "Inputs: LinkedIn URL, company domain; fallbacks full name + company",
+        "Toggle Include infer-email enrichment as first step",
+        "Validation: Conservative, Require validation success, Threshold for duplicate results 2",
+        "Run settings > Only run if Email is empty",
+        "Save and run 10 rows, then read coverage"
+      ],
+      "commands": [
+        "chewbacca clay columns table=t_...",
+        "chewbacca clay table-status ws=... table=t_..."
+      ],
+      "compute": {
+        "tool": "gtme-math",
+        "op": "order",
+        "input": {
+          "mode": "or",
+          "assumption": "fixed_cost_independent",
+          "cost_unit": "actions plus validation credits per attempt",
+          "steps": [
+            {
+              "id": "provider_c",
+              "cost": 3,
+              "valid_success_probability": 0.45
+            },
+            { "id": "provider_b", "cost": 2, "valid_success_probability": 0.5 },
+            { "id": "provider_a", "cost": 1, "valid_success_probability": 0.3 }
+          ]
+        },
+        "expect": { "chosen_order": ["provider_a", "provider_b", "provider_c"] }
+      }
+    },
+    {
+      "id": "hiring-signal-list",
+      "prompt": "Find companies that are hiring SDRs right now and get the head of sales at each.",
+      "paraphrase": "Build me a list of accounts with open SDR roles plus their sales leader.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "use Find Jobs with every title permutation, roll jobs up to companies, then find people only for qualified companies",
+      "procedures": ["W-012", "W-111", "W-158"],
+      "model_answer": "Start from Find Jobs as a source and list every title permutation (SDR, BDR, sales development representative) because job search is not semantic; it returns up to 1,000 jobs per query. Write the jobs to a company table and count openings per company so hiring volume becomes a score. Make a filtered view of only the companies that qualify, then run Find People from that view for VP or head of sales, since search sources take no run condition. Stack it with a second signal such as a new sales leader in the last 3 months, and schedule the source weekly so the list stays current.",
+      "key_points": [
+        {
+          "point": "Find Jobs with every title permutation",
+          "match": ["title permutation", "every title", "bdr"]
+        },
+        {
+          "point": "roll jobs up to companies and count",
+          "match": ["count openings", "hiring volume", "per company"]
+        },
+        {
+          "point": "people search only from a filtered view",
+          "match": ["filtered view", "from that view"]
+        },
+        {
+          "point": "stack a second signal",
+          "match": ["stack", "second signal"]
+        },
+        { "point": "refresh on a schedule", "match": ["schedule", "weekly"] }
+      ],
+      "build": [
+        "Workbook > Find Jobs source: titles SDR, BDR, Sales Development Representative; location; up to 1,000 per query",
+        "Send jobs to a company table; Lookup Multiple Rows count per domain",
+        "View: openings >= 2 and ICP fit",
+        "Run Find People at These Companies from that view: VP Sales, Head of Sales",
+        "Schedule the source weekly"
+      ],
+      "commands": [
+        "chewbacca clay signals ws=...",
+        "chewbacca clay tables ws=..."
+      ]
+    },
+    {
+      "id": "icp-score-formula",
+      "prompt": "Write an ICP fit score formula in Clay and explain how you would tier and route on it.",
+      "paraphrase": "How would you score accounts 0-100 for ICP fit with a formula and decide who gets worked?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "write a weighted formula that sums to 100, give tiers, note formulas cost no credits, recalibrate on outcomes",
+      "procedures": ["W-052", "W-051", "W-210"],
+      "model_answer": "Use a formula column, which costs no data credits, with weights that sum to 100: employee band 25, industry 25, tech fit 20, recent funding 15, country 15. Tiers: 80 and up goes to a senior rep with custom research, 60 to 79 to the standard sequence, under 60 to nurture. Log the score, the signals that fired and the outcome for every account so the weights get recalibrated against closed deals instead of staying a guess. Use an AI score only for messy text that a formula cannot read.",
+      "key_points": [
+        {
+          "point": "weights sum to 100",
+          "match": ["sum to 100", "weights that sum"]
+        },
+        {
+          "point": "tiers with routing",
+          "match": ["80 and up", "60 to 79", "under 60"]
+        },
+        {
+          "point": "formula costs no credits",
+          "match": ["no data credits", "free"]
+        },
+        {
+          "point": "recalibrate against outcomes",
+          "match": ["recalibrate", "closed deals", "outcome"]
+        }
+      ],
+      "build": [
+        "Add column > Formula > ICP Score",
+        "Add column > Formula > Tier from the score",
+        "Views per tier; conditional runs on paid columns: Tier is not Nurture"
+      ],
+      "formula": "(({{Employees}} >= 50 && {{Employees}} <= 1000) ? 25 : 0) + ([\"Software\", \"Internet\"].includes({{Industry}}) ? 25 : 0) + ((({{Tech Stack}} || \"\") + \"\").includes(\"Salesforce\") ? 20 : 0) + ({{Months Since Funding}} != null && {{Months Since Funding}} <= 12 ? 15 : 0) + ({{Country}} == \"US\" ? 15 : 0)",
+      "commands": ["chewbacca clay columns table=t_..."]
+    },
+    {
+      "id": "dedupe-merged-list",
+      "prompt": "Here is a merged list from three sources with duplicates. Dedupe it before anything gets sent.",
+      "paraphrase": "Three lead lists were combined and people appear more than once. How do you clean that up?",
+      "expect_tools": ["gtme-interview", "gtme-dedupe"],
+      "expect_behavior": "normalize keys first, match on email or LinkedIn URL never name alone, preview before deleting",
+      "procedures": ["W-202", "W-208", "W-031"],
+      "model_answer": "Normalize first: a formula column that lowercases and trims the email and strips protocol and www from LinkedIn URLs, because Clay's column dedupe is exact, case-sensitive and whitespace-sensitive, and its deletes cannot be undone. Match people on email or LinkedIn URL, never on name alone. Offline, gtme-dedupe clusters the CSVs and writes a review file for borderline pairs. In Clay, a self Lookup Multiple Rows on the normalized key counts repeats, so downstream paid columns can run only where the count is 1, and table auto-dedupe keeps the oldest or newest row going forward.",
+      "key_points": [
+        {
+          "point": "normalize the key first",
+          "match": ["normalize", "lowercase"]
+        },
+        {
+          "point": "column dedupe is exact and irreversible",
+          "match": ["cannot be undone", "case-sensitive", "exact"]
+        },
+        {
+          "point": "match on email or LinkedIn, not name",
+          "match": ["never on name", "not name", "name alone"]
+        },
+        {
+          "point": "self lookup counts repeats",
+          "match": ["self lookup", "lookup multiple rows"]
+        },
+        { "point": "review borderline pairs", "match": ["review"] }
+      ],
+      "build": [
+        "Formula: Email Key = lowercase trimmed email",
+        "Lookup Multiple Rows on this table by Email Key; count",
+        "Paid columns only run if count == 1",
+        "Table settings > Auto-dedupe rows on Email Key, keep oldest"
+      ],
+      "formula": "(({{Email}} || \"\") + \"\").trim().toLowerCase()",
+      "commands": ["gtme-dedupe a.csv b.csv c.csv --out /tmp/dedupe --json"]
+    },
+    {
+      "id": "sequence-ab-test",
+      "prompt": "Design a three-step cold email sequence and an A/B test, and tell me how you would call the winner.",
+      "paraphrase": "Set up a cold sequence with a subject line test. When do you know which variant won?",
+      "expect_tools": ["gtme-interview", "gtme-math"],
+      "expect_behavior": "four-message cap, test one variable, read reply rate on mature sends, compute an interval because Clay has no significance test",
+      "procedures": ["W-074", "W-075", "W-174", "W-073"],
+      "model_answer": "Three messages: an opener, a threaded bump two to three days later, and a breakup on a new thread; Sequencer caps at four. Test one variable at a time, the subject on message one, since threaded replies can only test the body. Keep the CTA hard-coded and use spintax only on greetings. Read reply rate over delivered and wait until most sends are mature, three or more days old. Clay has no significance test, so compute a Wilson interval per variant with gtme-math funnel and only call a winner when the intervals separate; End test then promotes it for future enrollments.",
+      "key_points": [
+        {
+          "point": "four-message cap and threading",
+          "match": ["four", "threaded"]
+        },
+        { "point": "test one variable", "match": ["one variable"] },
+        {
+          "point": "reply rate over delivered on mature sends",
+          "match": ["mature", "three or more days"]
+        },
+        {
+          "point": "compute significance yourself",
+          "match": ["wilson", "interval", "no significance test"]
+        },
+        {
+          "point": "winner applies to future enrollments",
+          "match": ["future enrollments", "end test"]
+        }
+      ],
+      "build": [
+        "Campaign > Sequence: 3 messages, delays 3 and 4 days, message 3 not threaded",
+        "A/B test on message 1: Test subject",
+        "After sends mature: read campaign-variants, compute each variant's interval"
+      ],
+      "commands": [
+        "chewbacca clay campaign-variants ws=... campaign=...",
+        "chewbacca clay campaign ws=... campaign=..."
+      ],
+      "compute": {
+        "tool": "gtme-math",
+        "op": "funnel",
+        "input": {
+          "successes": 12,
+          "trials": 400,
+          "pending": 60,
+          "outcome": "reply",
+          "cohort": "variant A, mature sends",
+          "maturity_window": "3 days"
+        },
+        "expect": { "rate": 0.03 }
+      }
+    },
+    {
+      "id": "credit-burn-debug",
+      "prompt": "A Clay table is burning through credits and nobody knows why. Debug it.",
+      "paraphrase": "Our credits are draining fast from one table. Walk me through finding the cause.",
+      "expect_tools": ["gtme-interview", "chewbacca clay credit-usage"],
+      "expect_behavior": "read spend by table and column first, then auto-run and run conditions, then loops",
+      "procedures": ["W-102", "W-209", "W-201", "W-002"],
+      "model_answer": "Read before touching anything: credit-usage by table and column for the last 7 days names the column that spent. Then read the table's auto-run settings: if auto-run is on without Keep existing results, every edit or import re-runs paid cells. Read that column's config for a missing run condition, an AI column re-running, or a provider that charges on empty rows. Check table-status for running counts that never settle, the sign of a loop such as a webhook or Send Table Data writing back into the same table. Fix with a run condition, a status column, auto-run off while building, then re-check spend the next day.",
+      "key_points": [
+        {
+          "point": "spend by table and column first",
+          "match": ["credit-usage", "by table and column"]
+        },
+        {
+          "point": "auto-run and keep existing results",
+          "match": ["auto-run", "keep existing results"]
+        },
+        { "point": "missing run condition", "match": ["run condition"] },
+        { "point": "loop via write-back", "match": ["loop", "writing back"] },
+        { "point": "verify after the fix", "match": ["re-check", "next day"] }
+      ],
+      "build": [
+        "Read spend by column",
+        "Read table auto-run mode",
+        "Read the top column's run condition and inputs",
+        "Read status counts for stuck running cells",
+        "Fix: run condition, status column, auto-run off; re-read spend"
+      ],
+      "commands": [
+        "chewbacca clay credit-usage ws=... days=7",
+        "chewbacca clay table table=t_...",
+        "chewbacca clay columns table=t_...",
+        "chewbacca clay table-status ws=... table=t_..."
+      ]
+    },
+    {
+      "id": "claygent-vs-ai-column",
+      "prompt": "When do you use Claygent versus a Use AI column versus a formula?",
+      "paraphrase": "Explain the difference between Claygent, AI columns and formulas in Clay and when each is right.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "cheapest tool that can answer: formula for row data, Use AI for reasoning without the web, Claygent only when the answer is on the web",
+      "procedures": ["W-001", "W-104", "W-023"],
+      "model_answer": "Pick the cheapest tool that can answer. A formula (or AI formula) is free and deterministic and handles anything already in the row: parsing, math, joins. Use AI has no internet; it reasons over row data and costs fractions of a credit in content mode. Claygent is for answers that live on the web, such as reading a site for a yes or no, and is mostly variable-priced, so write explicit yes/no criteria, a fallback and a length cap, and price it on 10 to 50 rows first. Your own model key can cut AI cost sharply.",
+      "key_points": [
+        {
+          "point": "formula for data already in the row, free",
+          "match": ["formula", "free"]
+        },
+        {
+          "point": "Use AI has no internet",
+          "match": ["no internet", "without the web"]
+        },
+        {
+          "point": "Claygent only for the web",
+          "match": ["live on the web", "on the web"]
+        },
+        {
+          "point": "price on a small sample",
+          "match": ["10 to 50 rows", "10 rows"]
+        }
+      ],
+      "build": [
+        "Formula column for parsing",
+        "Use AI (content) for classification",
+        "Claygent with explicit criteria for web research, run 10 rows"
+      ],
+      "commands": ["chewbacca clay credit-usage ws=... days=7"]
+    },
+    {
+      "id": "domain-from-email-formula",
+      "prompt": "Write a Clay formula that gets a clean company domain from a website URL, or from the email when the website is blank.",
+      "paraphrase": "Formula to normalize a domain: strip https and www, fall back to the email's domain.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "a JavaScript formula with a fallback, lowercase, protocol and www stripped, personal domains blanked",
+      "procedures": ["W-210", "W-031"],
+      "model_answer": "Clay formulas are JavaScript with column tokens, so: take the website, or the part of the email after the @ when the website is blank; lowercase; strip the protocol, www and any path; and blank personal domains like gmail.com so they never reach a company enrichment. It runs free and before any AI step.",
+      "key_points": [
+        {
+          "point": "JavaScript with a fallback to the email",
+          "match": ["javascript", "after the @"]
+        },
+        { "point": "lowercase", "match": ["lowercase"] },
+        {
+          "point": "strip protocol, www and path",
+          "match": ["protocol", "www"]
+        },
+        {
+          "point": "blank personal domains",
+          "match": ["gmail", "personal domains"]
+        }
+      ],
+      "build": [
+        "Add column > Formula > Company Domain",
+        "Use it as the input to Enrich Company and the email waterfall"
+      ],
+      "formula": "((d) => [\"gmail.com\", \"yahoo.com\", \"outlook.com\", \"hotmail.com\"].includes(d) ? \"\" : d)((({{Website}} || (({{Email}} || \"\") + \"\").split(\"@\")[1] || \"\") + \"\").toLowerCase().replace(/^https?:\\/\\//, \"\").replace(/^www\\./, \"\").split(\"/\")[0].trim())"
+    },
+    {
+      "id": "inbound-routing",
+      "prompt": "Design inbound lead routing for demo requests so the right rep follows up fast.",
+      "paraphrase": "How would you build enrichment, scoring and assignment for website demo form fills?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "webhook into Clay before the CRM, enrich, score, existing owner first then round robin, alert and measure speed",
+      "procedures": ["W-064", "W-128", "W-164", "W-060", "W-233"],
+      "model_answer": "Send the form by webhook into a Clay table before the CRM, so enrichment does not wait on sync lag. Flag personal versus work email, enrich person and company, then score fit with a cheap AI or formula column into tiers. Look the email and domain up in the CRM: an existing account owner gets it first; otherwise weighted round robin across active reps. High fit gets an instant booking link and a Slack alert to the owner; low fit goes to nurture. Track speed-to-lead and meetings by score band and tune weekly.",
+      "key_points": [
+        { "point": "webhook into Clay before the CRM", "match": ["webhook"] },
+        {
+          "point": "personal vs work email",
+          "match": ["personal versus work", "personal email"]
+        },
+        {
+          "point": "existing owner first",
+          "match": ["existing account owner", "existing owner"]
+        },
+        { "point": "round robin", "match": ["round robin"] },
+        {
+          "point": "measure speed-to-lead",
+          "match": ["speed-to-lead", "speed to lead"]
+        }
+      ],
+      "build": [
+        "Webhook source table",
+        "Formula: is personal email",
+        "Enrich Person, Enrich Company, AI fit tier",
+        "CRM Lookup by email and domain",
+        "Distribute Leads Weighted Round Robin when no owner",
+        "Slack message to owner; CRM create or update"
+      ],
+      "commands": ["chewbacca clay rows ws=... table=t_... limit=10"]
+    },
+    {
+      "id": "champion-job-changes",
+      "prompt": "How would you track when our customer champions change jobs and turn that into pipeline?",
+      "paraphrase": "Set up a job change play for champions who leave our customers.",
+      "expect_tools": ["gtme-interview", "chewbacca clay signals"],
+      "expect_behavior": "import champions from the CRM, monitor job changes on a schedule, act on both the old and the new account",
+      "procedures": ["W-157", "W-054", "W-044"],
+      "model_answer": "Import champions from the CRM with LinkedIn URLs (a waterfall finds missing ones from email) and add the Job Change signal or Monitor for Job Changes with a 3, 6 or 12 month window on a schedule. Each move yields the new company, old company and start date. Act twice: route a warm intro at the new company to the AE while the champion has fresh budget, and flag risk at the old account to its owner. Update the CRM record with the new title and company.",
+      "key_points": [
+        {
+          "point": "import from CRM with LinkedIn URLs",
+          "match": ["linkedin url"]
+        },
+        {
+          "point": "monitor on a schedule",
+          "match": ["schedule", "monitor for job changes", "job change signal"]
+        },
+        { "point": "act on the new company", "match": ["new company"] },
+        {
+          "point": "flag risk at the old account",
+          "match": ["old account", "risk"]
+        }
+      ],
+      "build": [
+        "CRM import of customer contacts",
+        "LinkedIn URL waterfall from email",
+        "Signals > Job changes, monthly",
+        "CRM update + Slack to AE"
+      ],
+      "commands": ["chewbacca clay signals ws=..."]
+    },
+    {
+      "id": "crm-push-no-duplicates",
+      "prompt": "Push enriched contacts into HubSpot without creating duplicates or overwriting good data.",
+      "paraphrase": "How do you sync Clay results to the CRM safely?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "lookup before create, update only empty or newer fields, ignore blanks, small batches",
+      "procedures": ["W-060", "W-162"],
+      "model_answer": "Lookup before create every time: look the contact up by email, then a Create column runs only if the lookup returned no ID and an Update column only if it did. Update only fields that are empty, older or lower confidence, never manually kept ones, with Ignore blank values on so an empty result never wipes data. Turn auto-update off while building and push 10 rows by hand first. Sequence enrollment from Clay needs HubSpot's optional scopes ticked on reconnect.",
+      "key_points": [
+        {
+          "point": "lookup before create",
+          "match": ["lookup before create", "look the contact up"]
+        },
+        { "point": "conditional create vs update", "match": ["runs only if"] },
+        { "point": "ignore blank values", "match": ["ignore blank values"] },
+        { "point": "small manual batch first", "match": ["10 rows"] }
+      ],
+      "build": [
+        "HubSpot Lookup object by email",
+        "Create object, only run if no ID",
+        "Update object, only run if ID, Ignore blank values on",
+        "Run 10 rows"
+      ]
+    },
+    {
+      "id": "salesforce-picklist-fail",
+      "prompt": "Clay's Salesforce update keeps failing on a multi-select picklist and a number field we need to clear. Why?",
+      "paraphrase": "Salesforce writes from Clay error on picklists. What is wrong?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "exact API values, semicolons without spaces, null formula to clear numbers",
+      "procedures": ["W-161", "W-210"],
+      "model_answer": "Picklists need the exact API value, case-sensitive, not the label, and a multi-select takes values separated by semicolons with no spaces. Ignore blank values only skips text fields, so to clear a number send null from a formula such as {{Employees}} ?? null. Remember creates cannot be undone, and connect with a restricted least-privilege user.",
+      "key_points": [
+        { "point": "exact API value", "match": ["api value"] },
+        { "point": "semicolons without spaces", "match": ["semicolon"] },
+        { "point": "clear numbers with null", "match": ["null"] },
+        { "point": "creates cannot be undone", "match": ["cannot be undone"] }
+      ],
+      "build": [
+        "Formula: semicolon-joined API values",
+        "Formula: number or null",
+        "Update record mapping both"
+      ],
+      "formula": "{{Employees}} ?? null"
+    },
+    {
+      "id": "fifty-k-row-limit",
+      "prompt": "We need to process 300,000 contacts a month through Clay. What breaks and how do you design for it?",
+      "paraphrase": "Our volume is way above one Clay table. How do you scale past the row limit?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "name the silent 50,000-row stop and the real options: split, Audiences, passthrough, bulk enrichment",
+      "procedures": ["W-205", "W-040", "W-146", "W-144"],
+      "model_answer": "Every table and source stops at 50,000 rows without an error, and a webhook counts 50,000 submissions even after deletes. Options: put the records in Audiences, which holds millions, and enrich with a bulk enrichment or a workflow; on Enterprise use auto-delete passthrough tables that enrich, send onward and delete; or split by filter or date across tables. Keep tables as the lab for proving columns on samples, and Audiences as production.",
+      "key_points": [
+        { "point": "50,000-row silent stop", "match": ["50,000"] },
+        { "point": "Audiences for volume", "match": ["audiences"] },
+        {
+          "point": "passthrough or bulk enrichment",
+          "match": ["passthrough", "bulk enrichment", "auto-delete"]
+        },
+        { "point": "split across tables", "match": ["split"] }
+      ],
+      "build": [
+        "Audience import keyed on email",
+        "Bulk enrichment or workflow on the segment",
+        "Table as lab for 10-row tests"
+      ],
+      "commands": [
+        "chewbacca clay audiences ws=...",
+        "chewbacca clay table table=t_..."
+      ]
+    },
+    {
+      "id": "bounce-rate-spike",
+      "prompt": "Bounce rate on a live campaign jumped to 6%. What do you do?",
+      "paraphrase": "Our Sequencer bounces went over 5 percent. Walk me through it.",
+      "expect_tools": ["gtme-interview", "chewbacca clay campaign-analytics"],
+      "expect_behavior": "pause, split recipient from sender bounces, fix verification, replace worn domains",
+      "procedures": ["W-173", "W-076", "W-122", "W-131"],
+      "model_answer": "Pause the campaign; Clay itself flags 5% after 20+ sends and the target is under 1%. Split recipient bounces from sender bounces. Recipient bounces mean the list: re-verify with Safe to Send on, drop catch-alls or run them through a second validation flow, and add a domain red-flag check (no MX, new domains). Sender bounces clustered on one domain mean authentication, warmup or a worn domain: buy and warm replacements for three weeks before retiring it.",
+      "key_points": [
+        { "point": "pause first", "match": ["pause"] },
+        {
+          "point": "recipient vs sender bounces",
+          "match": ["recipient bounces", "sender bounces"]
+        },
+        {
+          "point": "re-verify, catch-alls",
+          "match": ["safe to send", "catch-all"]
+        },
+        {
+          "point": "replace worn domains with warmup",
+          "match": ["warm", "replacements"]
+        },
+        { "point": "target under 1%", "match": ["under 1%"] }
+      ],
+      "build": [
+        "Read campaign analytics by sender domain",
+        "Re-verify list",
+        "MX check column",
+        "Buy replacement domains"
+      ],
+      "commands": [
+        "chewbacca clay campaign-analytics campaign=...",
+        "chewbacca clay campaign-stats ws=..."
+      ]
+    },
+    {
+      "id": "reply-rate-drop",
+      "prompt": "Walk me through how you would diagnose why our email reply rates dropped 30% last month.",
+      "paraphrase": "Replies fell off a cliff this month. Diagnose it.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "deliverability first, then list, then copy and timing, compared by cohort with numbers",
+      "procedures": ["W-236", "W-076", "W-174"],
+      "model_answer": "Deliverability first, because it moves every number: bounce rate, sender bounces by domain, authentication errors, and whether first touches fell while follow-ups rose. Then the list: did the segment drift or the data age. Then copy and timing, comparing variants and steps by cohort. Compare last month against the prior one at the same maturity, compute intervals rather than eyeballing, and change one thing at a time.",
+      "key_points": [
+        { "point": "deliverability first", "match": ["deliverability first"] },
+        {
+          "point": "list drift or data age",
+          "match": ["segment drift", "data age", "the list"]
+        },
+        {
+          "point": "copy and timing by cohort",
+          "match": ["by cohort", "cohort"]
+        },
+        { "point": "intervals not eyeballing", "match": ["intervals"] }
+      ],
+      "build": [
+        "Read campaign stats for both months",
+        "Read variants and per-step conversion",
+        "Compute intervals"
+      ],
+      "commands": [
+        "chewbacca clay campaign-stats ws=...",
+        "chewbacca clay campaign-variants ws=... campaign=...",
+        "chewbacca clay campaign-analytics campaign=..."
+      ]
+    },
+    {
+      "id": "tam-sourcing-cheap",
+      "prompt": "Build a TAM list for a new vertical in Clay without wasting credits.",
+      "paraphrase": "How do you source the total addressable market efficiently?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "filter in the search with AI filters and exclusions, one hypothesis per list, count before sourcing",
+      "procedures": ["W-106", "W-010", "W-112", "W-113"],
+      "model_answer": "Filter before rows exist: Find Companies AI filters (sub-industries, revenue streams, business types), quoted exact keyword phrases, negative keywords, and exclusions of current customers, instead of pulling everything and qualifying it with paid enrichments. One hypothesis per list of 1,000 to 3,000. Count what the workspace already holds first, which is free. Skip the default enrichments offered at import, save the search with a name, then enrich and score a sample before the rest.",
+      "key_points": [
+        {
+          "point": "AI filters before rows exist",
+          "match": ["ai filters", "before rows"]
+        },
+        { "point": "exclusions of customers", "match": ["exclusions"] },
+        { "point": "one hypothesis per list", "match": ["one hypothesis"] },
+        { "point": "count first", "match": ["count"] }
+      ],
+      "build": [
+        "Find Companies with AI filters and exclusions",
+        "Save search",
+        "Import without default enrichments",
+        "Score a sample"
+      ],
+      "commands": ["chewbacca clay audiences ws=..."]
+    },
+    {
+      "id": "http-api-call",
+      "prompt": "Call an external API from Clay that has no native integration, and page through its results.",
+      "paraphrase": "How do you hit a custom REST endpoint from a Clay table?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "HTTP API column with a saved headers account, quoted string tokens, field paths, a rate limit, one-row test, pagination modes for the source",
+      "procedures": ["W-211", "W-212", "W-213"],
+      "model_answer": "Use an HTTP API column: method, endpoint, query parameters and a JSON body where string tokens sit inside quotes and numbers do not. Save the auth as an HTTP API (Headers) account so the key is not plain text in the table. Return only the field paths you need, set a rate limit to avoid 429s, and test one row. For many records use HTTP API as a source with a results path pointing at an array and a pagination mode (page or offset parameter, a cursor path, or a next URL). A 400 is almost always quoting.",
+      "key_points": [
+        {
+          "point": "quoted string tokens",
+          "match": ["inside quotes", "quoting"]
+        },
+        { "point": "headers account for the key", "match": ["headers"] },
+        { "point": "field paths", "match": ["field paths"] },
+        { "point": "rate limit", "match": ["rate limit"] },
+        { "point": "pagination", "match": ["pagination", "cursor"] }
+      ],
+      "build": [
+        "HTTP API column",
+        "Account: HTTP API (Headers)",
+        "Field paths",
+        "Rate limit 10 per 1000 ms",
+        "Test one row"
+      ]
+    },
+    {
+      "id": "workflow-empty-output",
+      "prompt": "A Clay Workflow step returns an empty value even though the enrichment before it succeeded. What's wrong?",
+      "paraphrase": "Debug a Clay workflow where data does not pass between nodes.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "name the toolResult.result wrapping, read the real output, pin values",
+      "procedures": ["W-142", "W-143"],
+      "model_answer": "Tool step outputs are wrapped, so the reference must read $.toolResult.result.field, not $.field; the missing prefix passes an empty value with no error. Run the workflow once on one record with Run manually and read the actual output shape, then pin exact values like scores and IDs to that node and field instead of letting a Claygent fill the placeholder. A fix only reaches the next run, since each run keeps its version.",
+      "key_points": [
+        { "point": "toolResult.result prefix", "match": ["toolresult"] },
+        {
+          "point": "read the real output on one record",
+          "match": ["one record", "actual output"]
+        },
+        { "point": "pin values", "match": ["pin"] },
+        { "point": "fix applies to the next run", "match": ["next run"] }
+      ],
+      "build": [
+        "Run manually with one record",
+        "Open the run trace",
+        "Fix the reference path",
+        "Publish and re-run"
+      ],
+      "commands": ["chewbacca clay workflows ws=..."]
+    },
+    {
+      "id": "waterfall-in-workflow",
+      "prompt": "How do you run a waterfall inside a Clay Workflow?",
+      "paraphrase": "Workflows only run one enrichment per step. How do you get provider fallback?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "wrap the waterfall in a function and call it with Run function",
+      "procedures": ["W-141", "W-145", "W-042"],
+      "model_answer": "A Run enrichment step runs one action, so a waterfall cannot be drawn on the canvas. Build the waterfall as a function (save the proven columns as a function), then call it with a Run function step, which adds no cost beyond the steps inside it, and branch on what it returns with a free rules conditional. The same function stays usable from tables.",
+      "key_points": [
+        { "point": "Run enrichment is one action", "match": ["one action"] },
+        { "point": "wrap in a function", "match": ["function"] },
+        {
+          "point": "Run function adds no cost",
+          "match": ["no cost", "adds no cost"]
+        },
+        { "point": "branch on the result", "match": ["branch", "conditional"] }
+      ],
+      "build": [
+        "Table: prove the waterfall on 10 rows",
+        "Save as function",
+        "Workflow: Run function node",
+        "Conditional on found or not"
+      ],
+      "commands": ["chewbacca clay workflows ws=..."]
+    },
+    {
+      "id": "signal-stack-design",
+      "prompt": "Which signals would you combine to find accounts that are in market right now, and how would you score them?",
+      "paraphrase": "Design a signal-based account prioritization in Clay.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "stack several signals, weight recency, use intent tiers with fit, flag rows meeting all, schedule",
+      "procedures": ["W-158", "W-051", "W-155", "W-156", "W-050"],
+      "model_answer": "Single signals are commodity, so stack them: a custom website signal from Claygent, recent GTM hires, open roles in the problem area, topic intent at the high tier, and web intent visits. Date-stamp each and weight recency; signals clustering in a short window mean urgency. Combine with fit, since intent is a priority cue and not a deal probability. A formula flags accounts meeting all criteria, and the table reruns weekly.",
+      "key_points": [
+        { "point": "stack several signals", "match": ["stack"] },
+        { "point": "recency weighting", "match": ["recency", "short window"] },
+        { "point": "intent combined with fit", "match": ["with fit"] },
+        {
+          "point": "formula flag and schedule",
+          "match": ["formula flags", "weekly"]
+        }
+      ],
+      "build": [
+        "Claygent website signal",
+        "Find Contacts recent hires",
+        "Find Active Job Openings",
+        "Topic intent High",
+        "Formula: all signals true",
+        "Schedule weekly"
+      ],
+      "commands": ["chewbacca clay signals ws=..."]
+    },
+    {
+      "id": "speed-to-lead-design",
+      "prompt": "System design: get every qualified inbound demo request onto a rep's calendar within five minutes of the form fill.",
+      "paraphrase": "System design: five-minute speed to lead for inbound demos.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "scope, ingest with idempotency, enrich with cache, match and score, route, act, assure, learn",
+      "procedures": ["W-233", "W-064", "W-164"],
+      "model_answer": "Scope volume, the definition of qualified, the SLA and the metric. Ingest by webhook into a queue with an idempotency key. Enrich by waterfall with a per-domain cache. Match to existing accounts, compute fit and intent scores and a short rep summary. Route to the existing owner first, then territory and capacity-weighted round robin. Act: high fit gets an instant booking link and a Slack alert, low fit goes to nurture. Assure with retries, a dead-letter queue, an alert when any lead waits three minutes, and a rollback flag. Learn: meeting rate and speed by score band, tuned weekly. Close on trade-offs: enrichment cost per lead and scoring false negatives.",
+      "key_points": [
+        { "point": "idempotency", "match": ["idempotency"] },
+        { "point": "cache enrichment per domain", "match": ["cache"] },
+        {
+          "point": "owner first then round robin",
+          "match": ["existing owner", "round robin"]
+        },
+        {
+          "point": "dead-letter and alerting",
+          "match": ["dead-letter", "alert"]
+        },
+        { "point": "trade-offs", "match": ["trade-offs"] }
+      ],
+      "build": [
+        "Webhook table",
+        "Enrichment with cache lookup",
+        "Score columns",
+        "Owner lookup + round robin",
+        "Slack + booking link",
+        "Monitoring"
+      ]
+    },
+    {
+      "id": "enrichment-api-client",
+      "prompt": "Write a function that calls an enrichment API for 10,000 domains at 10 requests per second, retries 429 and 5xx with backoff, and never enriches the same domain twice.",
+      "paraphrase": "Coding round: rate-limited, retrying, deduplicating enrichment client.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "a rate limiter, exponential backoff with jitter, a seen set or persistent cache, resumability, structured logs",
+      "procedures": ["W-234", "W-211"],
+      "model_answer": "Normalize and dedupe the domains into a seen set backed by a persistent cache so a restart resumes instead of re-paying. A token bucket allows 10 requests a second. On 429 or 5xx, retry with exponential backoff plus jitter, honoring Retry-After, up to a cap, then send the domain to a dead-letter list. Never retry 4xx other than 429. Log one structured line per call with domain, status, attempt and latency.",
+      "key_points": [
+        { "point": "seen set or cache", "match": ["seen set", "cache"] },
+        { "point": "rate limiter", "match": ["token bucket", "rate limiter"] },
+        { "point": "backoff with jitter", "match": ["jitter"] },
+        {
+          "point": "resume or dead-letter",
+          "match": ["resume", "dead-letter"]
+        },
+        { "point": "structured logs", "match": ["structured"] }
+      ],
+      "build": [
+        "normalize + dedupe",
+        "token bucket 10/s",
+        "retry loop with jitter",
+        "cache write after success",
+        "dead-letter list"
+      ]
+    },
+    {
+      "id": "sql-usage-growth",
+      "prompt": "SQL round: list the accounts where usage jumped over 50% versus the prior month and no opportunity is open.",
+      "paraphrase": "Write the query for expanding accounts with no open opp.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "a monthly CTE, LAG over the account, a left join to open opportunities filtered to null",
+      "procedures": ["W-234"],
+      "model_answer": "with monthly as (select account_id, date_trunc('month', event_at) as month, count(*) as usage from usage_events group by 1, 2), growth as (select account_id, month, usage, lag(usage) over (partition by account_id order by month) as prior from monthly) select g.account_id, g.month, g.usage, g.prior from growth g left join opportunities o on o.account_id = g.account_id and o.is_closed = false where g.prior > 0 and g.usage > 1.5 * g.prior and o.id is null. The shape: a CTE rolls usage up by month, LAG puts last month beside this month, and the left join keeps only accounts with no open opportunity row (o.id is null).",
+      "key_points": [
+        { "point": "monthly CTE", "match": ["with monthly", "cte"] },
+        { "point": "LAG window", "match": ["lag("] },
+        {
+          "point": "left join filtered to null",
+          "match": ["left join", "is null"]
+        },
+        { "point": "50% threshold", "match": ["1.5 *"] }
+      ],
+      "build": [
+        "CTE monthly usage",
+        "LAG window",
+        "left join open opps where null"
+      ]
+    },
+    {
+      "id": "agent-safety-gate",
+      "prompt": "How would you know that an outbound personalization agent is safe to run unsupervised?",
+      "paraphrase": "When can an AI email writer send without a human approving each message?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "golden set, groundedness rubric, sampled review, budgets, kill switch, staged rollout",
+      "procedures": ["W-235", "W-073"],
+      "model_answer": "Only with evidence: a golden set of real prospects with expected outputs, a groundedness rubric where every claim must trace to a source field, sampled human review of live drafts, spend and response-time ceilings per lead, a kill switch that stops sending at once, and a staged rollout from 5% to 25% to 100% with the gate rerun at each step. Keep the CTA and the middle of the email hard-coded so the model only writes the opener.",
+      "key_points": [
+        { "point": "golden set", "match": ["golden set"] },
+        {
+          "point": "groundedness rubric",
+          "match": ["groundedness", "trace to a source"]
+        },
+        {
+          "point": "sampled human review",
+          "match": ["sampled human review", "human review"]
+        },
+        { "point": "kill switch", "match": ["kill switch"] },
+        { "point": "staged rollout", "match": ["5% to 25%", "staged rollout"] }
+      ],
+      "build": [
+        "Golden set file",
+        "Rubric checks per field",
+        "Review sample",
+        "Rollout plan"
+      ],
+      "commands": [
+        "gtme-math evaluate --labels labels.json --predictions predictions.json --manifest manifest.json"
+      ]
+    },
+    {
+      "id": "describe-clay",
+      "prompt": "How would you describe Clay to a potential customer who is not technical?",
+      "paraphrase": "Explain Clay to a non-technical buyer in a discovery call.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "plain language, outcome first, ask discovery questions before features",
+      "procedures": ["W-231", "W-232"],
+      "model_answer": "Ask first: who they sell to, how they find those people today, and where the research time goes. Then in plain words: Clay is one place to find the companies and people you should talk to, fill in the facts about them from many data providers at once, and have AI do the research a rep would do, then send the result to the CRM or the email tool. Tie it to their number: more right-fit conversations from the same team, not more spreadsheets.",
+      "key_points": [
+        {
+          "point": "discovery questions first",
+          "match": ["ask first", "discovery"]
+        },
+        {
+          "point": "plain language",
+          "match": ["plain words", "plain language"]
+        },
+        {
+          "point": "many providers in one place",
+          "match": ["many data providers", "one place"]
+        },
+        {
+          "point": "tie to their outcome",
+          "match": ["their number", "outcome"]
+        }
+      ],
+      "build": [
+        "Three discovery questions",
+        "One-sentence pitch",
+        "One example from their market"
+      ]
+    },
+    {
+      "id": "take-home-approach",
+      "prompt": "You get an open-ended Clay take-home: build an outbound campaign from a dataset. How do you approach it?",
+      "paraphrase": "How would you tackle Clay's GTM engineer take-home?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "scope early, hypothesis first, show current features with numbers, state assumptions and fallbacks, present simply",
+      "procedures": ["W-232", "W-231", "W-004"],
+      "model_answer": "Clarify scope and the time box early, because candidates report 40+ hours when it is open-ended. Write one hypothesis about who to target and why, build the smallest table that tests it, and show the numbers: coverage, cost per record, and the qualified count. Use current Clay features where they fit, state assumptions and fallbacks, name external levers (new data) and internal ones (routing delays), cover deliverability and data quality, and present it with personality in a short video.",
+      "key_points": [
+        { "point": "scope and time box", "match": ["scope", "time box"] },
+        { "point": "one hypothesis", "match": ["hypothesis"] },
+        {
+          "point": "numbers: coverage and cost",
+          "match": ["coverage", "cost per record"]
+        },
+        { "point": "assumptions and fallbacks", "match": ["assumptions"] },
+        {
+          "point": "deliverability and data quality",
+          "match": ["deliverability"]
+        }
+      ],
+      "build": [
+        "Hypothesis doc",
+        "Table built on a sample",
+        "Metrics",
+        "Short video"
+      ]
+    },
+    {
+      "id": "linkedin-account-audience",
+      "prompt": "Sync our target account list to LinkedIn ads from Clay and keep customers out.",
+      "paraphrase": "How do you build ad audiences and exclusions with Clay Ads?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "account audience only on LinkedIn, minimums, matching identifiers, recurring sync, exclusion list",
+      "procedures": ["W-085", "W-186", "W-086"],
+      "model_answer": "LinkedIn is the only destination that takes account audiences; it needs 300 matchable records and caps at 300,000. Sync the segment on a recurring schedule, not a one-time snapshot. For people audiences, work email alone matches about 60-70% on LinkedIn, so map LinkedIn URLs and use enhanced matching. Build a separate exclusion audience of customers, open deals and employees, sync it recurring and apply it in the campaign. Match rate shows up in about 48 hours.",
+      "key_points": [
+        {
+          "point": "LinkedIn only for account audiences",
+          "match": ["only destination", "account audiences"]
+        },
+        { "point": "minimum size", "match": ["300"] },
+        { "point": "recurring sync", "match": ["recurring"] },
+        { "point": "exclusion audience", "match": ["exclusion"] },
+        { "point": "match rate timing", "match": ["48 hours"] }
+      ],
+      "build": [
+        "Account segment",
+        "Ad sync to LinkedIn, recurring",
+        "Exclusion segment synced",
+        "Check match rate after 48 h"
+      ]
+    },
+    {
+      "id": "mobile-phone-coverage",
+      "prompt": "We need mobile numbers for 500 executives. What coverage should we expect and how do you get them?",
+      "paraphrase": "How do you find and verify phone numbers in Clay, and how good is the data?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "set expectations from Clay's own test, waterfall then verify, DNC",
+      "procedures": ["W-123"],
+      "model_answer": "Set expectations from Clay's own test: 6,000 contacts returned about 9,800 numbers and only 23% scored good, so plan for low coverage. Run a phone waterfall, then verify with Trestle for line activity and SureConnect for likely-to-answer, which takes hours. Screen against do-not-call lists with Meer or the DNC flag a provider returns before anyone dials.",
+      "key_points": [
+        { "point": "only about 23% good", "match": ["23%"] },
+        { "point": "phone waterfall", "match": ["waterfall"] },
+        {
+          "point": "verify numbers",
+          "match": ["trestle", "sureconnect", "verify"]
+        },
+        { "point": "DNC screening", "match": ["do-not-call", "dnc"] }
+      ],
+      "build": [
+        "Mobile phone waterfall",
+        "Trestle verification",
+        "DNC check",
+        "Filter to good numbers"
+      ]
+    },
+    {
+      "id": "lookalike-from-customers",
+      "prompt": "Find more companies like our best 20 customers.",
+      "paraphrase": "Lookalike account sourcing from closed-won.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "seeded lookalikes with customer exclusions, then enrich and score before outreach",
+      "procedures": ["W-014", "W-115"],
+      "model_answer": "Seed a lookalike source with the 20 customer domains (Lusha takes 5 to 100 seeds; Clay's native lookalikes return about 10 per seed), and exclude existing customers and anyone already contacted. Enrich and score each result against the ICP before anything reaches a sequencer, then find contacts only at the top scorers. Re-run each quarter as the win list grows.",
+      "key_points": [
+        { "point": "seed with customer domains", "match": ["seed"] },
+        { "point": "exclude existing customers", "match": ["exclude"] },
+        { "point": "score before outreach", "match": ["score"] },
+        { "point": "contacts only at top scorers", "match": ["top scorers"] }
+      ],
+      "build": [
+        "Lookalike source with seeds and exclusions",
+        "Enrich company",
+        "ICP score",
+        "Find People at top tier"
+      ]
+    },
+    {
+      "id": "mcp-rep-rollout",
+      "prompt": "Roll Clay out to 20 SDRs inside Claude and ChatGPT without blowing the budget.",
+      "paraphrase": "How do you give reps Clay in their AI tools safely?",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "per-user limits, functions exposed by name, the Viewer caveat, start small and watch",
+      "procedures": ["W-045", "W-196", "W-197"],
+      "model_answer": "Set a default monthly credit limit for MCP users, about 500 per rep to start and more for heavy SDRs, and watch usage for two weeks. A limit of 0 is the real stop, because even a Viewer can run through MCP. Expose a few functions for reps with clear routine names and descriptions that do not collide with built-ins, and keep expensive ones off. RevOps uses the agent plugin instead.",
+      "key_points": [
+        { "point": "per-user credit limit", "match": ["credit limit"] },
+        {
+          "point": "about 500 to start, watch two weeks",
+          "match": ["500", "two weeks"]
+        },
+        {
+          "point": "limit 0 is the stop, Viewer still runs",
+          "match": ["limit of 0", "viewer"]
+        },
+        { "point": "expose named functions", "match": ["functions"] }
+      ],
+      "build": [
+        "Settings > MCP users default limit",
+        "Enable functions for MCP with names",
+        "Invite reps",
+        "Review usage weekly"
+      ]
+    },
+    {
+      "id": "reply-automation-events",
+      "prompt": "How would you automate handling replies from Clay Sequencer?",
+      "paraphrase": "Build reply handling on top of campaign events.",
+      "expect_tools": ["gtme-interview", "chewbacca clay inbox"],
+      "expect_behavior": "events table with run conditions on event type, blocklist opt-outs the same day, human approves drafts",
+      "procedures": ["W-078", "W-176", "W-077"],
+      "model_answer": "Use the campaign Events table and give every automation a run condition on event type, such as EMAIL_REPLY, or it fires on every send. Do-not-contact categories go to the blocklist the same day. Let Clay draft replies but have a person approve them (in Slack, say) until the reply patterns are known. If events stop arriving, check sender authentication.",
+      "key_points": [
+        { "point": "events table", "match": ["events table"] },
+        {
+          "point": "run condition on event type",
+          "match": ["email_reply", "run condition"]
+        },
+        { "point": "blocklist opt-outs same day", "match": ["blocklist"] },
+        { "point": "human approves drafts", "match": ["approve"] }
+      ],
+      "build": [
+        "Campaigns > Events table",
+        "Run condition: event type is EMAIL_REPLY",
+        "Blocklist action for do-not-contact",
+        "Draft + Slack approval"
+      ],
+      "commands": [
+        "chewbacca clay inbox ws=...",
+        "chewbacca clay thread ws=... campaign_id=... lead_id=...",
+        "chewbacca clay blocklist ws=..."
+      ]
+    },
+    {
+      "id": "leads-not-sending",
+      "prompt": "Leads were added to a Clay Sequencer campaign but nothing is going out. Find out why.",
+      "paraphrase": "Campaign is live but no emails are sending to new leads.",
+      "expect_tools": ["gtme-interview", "chewbacca clay campaign-leads"],
+      "expect_behavior": "walk the eligibility checklist with reads before changing anything",
+      "procedures": ["W-172", "W-171", "W-175"],
+      "model_answer": "Read before changing anything, then walk the checklist: the blocklist; missing variable data, since Require variable data is on by default and every variable narrows who is eligible; exclusions or a cooldown; duplicates; a sender disconnected or at its daily limit; the budget or schedule; a deselected sender. The Activity tab shows Enrollment failed with the reason. Copy is frozen at enrollment, so fixing data means pause and a new campaign.",
+      "key_points": [
+        { "point": "blocklist", "match": ["blocklist"] },
+        {
+          "point": "required variable data",
+          "match": ["require variable data", "variable data"]
+        },
+        {
+          "point": "exclusions or cooldown",
+          "match": ["cooldown", "exclusions"]
+        },
+        {
+          "point": "sender limit or disconnect",
+          "match": ["sender disconnected", "daily limit"]
+        },
+        { "point": "copy frozen at enrollment", "match": ["frozen"] }
+      ],
+      "build": [
+        "Read campaign settings",
+        "Read leads",
+        "Read blocklist",
+        "Check sender accounts"
+      ],
+      "commands": [
+        "chewbacca clay campaign ws=... campaign=...",
+        "chewbacca clay campaign-leads ws=... campaign=...",
+        "chewbacca clay blocklist ws=..."
+      ]
+    },
+    {
+      "id": "parent-child-hierarchy",
+      "prompt": "We sell to one Microsoft subsidiary. How would you find and work the rest of the corporate family?",
+      "paraphrase": "Map parent and subsidiary companies for enterprise expansion.",
+      "expect_tools": ["gtme-interview"],
+      "expect_behavior": "hierarchy enrichment, write children to rows, use references and consolidation plays",
+      "procedures": ["W-129", "W-130"],
+      "model_answer": "Run a hierarchy enrichment (Clay's account hierarchies, or HG Insights corporate structure) on the parent, then write each subsidiary to its own row so it can be filtered and enriched. Know the terms: the group HQ is the ultimate parent, the domestic parent is the same-country parent, subsidiaries are where users sit. Then use the existing customer as a reference to sister subsidiaries, avoid pitching connected companies as if they were separate, and offer contract consolidation as more of the family signs.",
+      "key_points": [
+        {
+          "point": "hierarchy enrichment",
+          "match": ["hierarchy", "corporate structure"]
+        },
+        { "point": "each subsidiary to its own row", "match": ["own row"] },
+        { "point": "reference selling to sisters", "match": ["reference"] },
+        { "point": "consolidation", "match": ["consolidation"] }
+      ],
+      "build": [
+        "Enrich account hierarchies on the parent",
+        "Write children to a table",
+        "Enrich and score subsidiaries",
+        "Reference messaging"
+      ]
+    }
+  ]
+}

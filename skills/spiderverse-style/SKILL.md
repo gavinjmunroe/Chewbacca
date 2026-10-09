@@ -507,6 +507,30 @@ strip. `[ACR-Q]`
 - A dozen comic SFX words on one page.
 - Every section the same palette and the same treatment.
 
+## Tools worth reaching for
+
+The full ranked list, with licenses and the file each one plugs into, is
+[docs/ANIMATION-ART-REPOS.md](../../docs/ANIMATION-ART-REPOS.md) (319 repos,
+checked 2026-10-09). The ones that map straight onto rules in this file:
+
+- Halftone in the light: paper-design/shaders `halftone-cmyk` (raw WebGL2,
+  Apache-2.0) and spite/sketch `post-cmyk-halftone-i`. Add the per-plate UV
+  shift for misregistration yourself; neither has it.
+- Lines only where an illustrator would draw them: OmarShehata/webgl-outlines
+  (surface-ID outlines), vpalos/Krbn and gkjohnson/three-edge-projection (exact
+  silhouettes to vectors), Malt's line pass in Blender.
+- Painterly shading: GarrettGunnell/Post-Processing anisotropic Kuwahara to
+  port, Blender's own Kuwahara node offline, ebsynth to carry one painted
+  keyframe across a shot.
+- Motion without blur: MoStyle/SMEAR bakes smear frames and motion lines in
+  Blender.
+- Shots that morph: oframe/ogl GPGPU for point morphs, ToonCrafter (RunPod) to
+  prototype a two-keyframe morph.
+- Scrubbing: Vanilagy/mediabunny or plutotcool/fsv for exact frames over
+  WebCodecs, lenis for the one smooth scroll value.
+
+lygia is noncommercial without its Patron license; check before shipping it.
+
 ## Accessibility
 
 - Inverted burst frames and color flashes: stay under three flashes per

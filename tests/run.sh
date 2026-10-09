@@ -420,6 +420,10 @@ if group "gtme"; then
   check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
   check "gtme-dedupe merges one person across lists, never two on name alone" python3 "$ROOT/tests/test_gtme_dedupe.py"
   check "gtme-dedupe dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-dedupe --help
+  check "interview cases cite sourced procedures, real clay ops, and answer inside 2 s" \
+    python3 "$ROOT/tests/test_gtme_interview.py"
+  check "gtme-interview dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-interview list
+  expect "gtme-interview appears in help" "chewbacca gtme-interview" bash "$ROOT/bin/chewbacca" --help
   # Synthetic clients, leads, inbox and calendar; nothing reads Clay or Chrome.
   check "gtm keeps one person per email, suppresses from sends, answers every query under 100 ms" \
     python3 "$ROOT/tests/test_gtm.py"

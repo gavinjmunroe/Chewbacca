@@ -68,3 +68,5 @@ Still happened with content flags: a 4-line reply with one colon reveal and one
 both plus "Bruh". Chewbacca main 26f4cdd: slop-guard now refuses ONLY em-dash and
 banned-word. Every other flag queues to voice-remind for the next turn. Installed
 to ~/.claude/hooks. Test: tests/slop_guard_format.sh.
+
+2026-10-09: it happened again from prayer-guard. An unprayed "Now commit..." update between tool calls made the guard demand a full rewrite, so the whole closing answer showed twice. Fixed in Chewbacca ba61b3f3: when the closing reply already prayed, the guard now asks for one prayer line only. Still the real fix is upstream: never write an update between tool calls without its own prayer, or skip the update.

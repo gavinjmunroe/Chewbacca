@@ -98,6 +98,18 @@ export BOB_DECISIONS="$TMP/decisions.jsonl"
 # brain-recall and skill-route log every prompt they see; without this, every
 # suite run would write its test prompts into the real private shadow log.
 export ROUTE_SHADOW_LOG="$TMP/route-shadow.jsonl"
+# Backlog 515: a group run once rewrote setup.sh and toolkit.json with this
+# machine's inventory and nobody could say which. tools/inventory.py refuses
+# under this flag, and the fingerprint below fails the group that changed a
+# generated file anyway, by name.
+export CHEWBACCA_SUITE=1
+generated_fingerprint() {
+  { cat "$ROOT/config/settings/toolkit.json" 2>/dev/null
+    for f in README.md setup.sh docs/REFERENCE.md; do
+      sed -n '/BEGIN GENERATED/,/END GENERATED/p' "$ROOT/$f" 2>/dev/null
+    done; } | shasum | cut -c1-16
+}
+GENERATED_BEFORE="$(generated_fingerprint)"
 
 group() { CURRENT="$1"; [ -n "$ONLY" ] && [ "$ONLY" != "$1" ] && return 1
           echo -e "\n${BLD}$1${NC}"; return 0; }
@@ -708,6 +720,11 @@ if group "installer"; then
   # An automatic pull is only acceptable if it cannot eat uncommitted work.
   check  "kit-autopull refuses dirty, branched and diverged checkouts" \
     bash "$ROOT/tests/kit_autopull.sh" "$ROOT"
+
+  # Eight skills sat uninstalled on 2026-10-09 because no tab ran setup after
+  # adding them. Git hooks now link them; this proves the linker is safe.
+  check  "link-skills adds and repairs links, never touches a foreign skill" \
+    bash "$ROOT/tests/link_skills.sh" "$ROOT"
 
   # The two checksum tools drifted and the verifier reported main as broken
   # while every hash matched, which blocked auto-push for everyone.
@@ -1525,6 +1542,10 @@ if group "reasoning backends"; then
 fi
 
 # ── verdict ───────────────────────────────────────────────────────────────────
+if [ "$(generated_fingerprint)" != "$GENERATED_BEFORE" ]; then
+  FAIL=$((FAIL + 1))
+  FAILURES+=("${ONLY:-suite}: a generated region or toolkit.json changed during the run (backlog 515); git diff it")
+fi
 echo ""
 if [ "$FAIL" -eq 0 ]; then
   echo -e "${GRN}${BLD}$PASS passed${NC}${GRN}, $SKIP skipped.${NC}"

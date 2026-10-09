@@ -1298,9 +1298,58 @@ def splice(path, begin, end, body, pad=False):
     return True
 
 
+def write_refusal():
+    """Why this run must not write the repo, or None when it may.
+
+    Backlog 515, 2026-10-06 19:14: during group runs in a worktree, setup.sh
+    and toolkit.json were rewritten with this machine's inventory, packs zeroed
+    and a plugin list added. Nothing that was rerun reproduced it. REPO is the
+    checkout this file sits in, so any process that ran a worktree's copy wrote
+    that worktree. The only legitimate writer is sync-to-d1 on the main
+    checkout, so a linked worktree and a test-suite process are refused.
+    """
+    if os.environ.get("CHEWBACCA_SUITE"):
+        return "running inside tests/run.sh, which must never write generated files"
+    if os.environ.get("CHEWBACCA_INVENTORY_WORKTREE"):
+        return None
+    try:
+        git_dir, common = subprocess.run(
+            ["git", "-C", str(REPO), "rev-parse", "--git-dir", "--git-common-dir"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.split()[:2]
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    if Path(REPO, git_dir).resolve() != Path(REPO, common).resolve():
+        return f"{REPO} is a linked worktree; set CHEWBACCA_INVENTORY_WORKTREE=1 to write it anyway"
+    return None
+
+
+def log_writer(changed):
+    """Record which process wrote, so the next unexplained rewrite has a name."""
+    try:
+        parent = subprocess.run(
+            ["ps", "-o", "command=", "-p", str(os.getppid())],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        log = Path(os.environ.get("CHEWBACCA_LOG_DIR") or HOME / ".chewbacca/logs")
+        log.mkdir(parents=True, exist_ok=True)
+        with (log / "inventory-writes.log").open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps({
+                "at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
+                "repo": str(REPO), "cwd": os.getcwd(), "parent": parent[:300],
+                "changed": changed,
+            }) + "\n")
+    except OSError:
+        pass
+
+
 def main():
     if not REPO.is_dir():
         print(f"repo not found: {REPO}", file=sys.stderr)
+        return 2
+    refusal = write_refusal()
+    if refusal:
+        print(f"inventory: refusing to write: {refusal}", file=sys.stderr)
         return 2
 
     upstream, vendored, packs = collect_skills()
@@ -1441,6 +1490,7 @@ def main():
         except Exception as exc:
             print(f"checksums not regenerated: {exc}", file=sys.stderr)
 
+    log_writer(changed)
     print("\n".join(changed))
     return 0
 

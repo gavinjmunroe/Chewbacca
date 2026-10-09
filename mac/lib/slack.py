@@ -255,7 +255,6 @@ def call(method, token, **params):
 
 
 SLACKCLI = os.environ.get("CHEWBACCA_SLACKCLI_BIN", "slackcli")
-SLACK_APP = os.environ.get("CHEWBACCA_SLACK_APP", "/Applications/Slack.app")
 
 
 def slackcli_signed_in(workspace=None):
@@ -268,94 +267,6 @@ def slackcli_signed_in(workspace=None):
     if p.returncode != 0 or "No authenticated" in out:
         return False
     return not workspace or workspace in out
-
-
-def osa(script):
-    p = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=20)
-    return p.returncode, p.stdout.strip(), p.stderr.strip()
-
-
-def send_desktop(found, text, con):
-    """Send through the Slack desktop app the user is already signed into.
-
-    The fallback until `chewbacca slack link` has a session for that
-    workspace. Signing in takes a password, which only the user can type;
-    the desktop app is already signed in. Caleb, 2026-10-08: "never make me
-    do anything that is manual".
-
-    A slack:// deep link opens the exact conversation, and the window title
-    must name that conversation before anything is pasted. A title that
-    doesn't match means the link landed somewhere else, and pasting there is
-    the failure this exists to prevent, so nothing is typed. After Return the
-    line is read back off Slack's accessibility tree; on 2026-10-08 the first
-    test was confirmed exactly that way ("Caleb Newton: Chewbacca test ...
-    11:57 PM.").
-    """
-    if not found.get("workspace") or not (found.get("channel") or found.get("user")):
-        return {"ok": False, "error": "need a workspace and a conversation from the Slack cache"}
-    team, target = found["workspace"], found["channel"] or found["user"]
-    kind = "user" if target[:1] in "UW" else "channel"
-    expect = expected_title(found, con)
-    if not expect:
-        return {"ok": False, "error": "don't know what that conversation is called, so nothing was typed"}
-    subprocess.run(["open", f"slack://{kind}?team={team}&id={target}"], timeout=10)
-    title = ""
-    for _ in range(12):
-        time.sleep(0.5)
-        code, title, _err = osa('tell application "System Events" to tell process "Slack" to get name of front window')
-        if code == 0 and title.lower().startswith(expect.lower()):
-            break
-    else:
-        return {"ok": False, "error": f"Slack opened {title[:60]!r}, not {expect!r}. Nothing was typed."}
-    old_clip = subprocess.run(["pbpaste"], capture_output=True, text=True).stdout
-    subprocess.run(["pbcopy"], input=text, text=True)
-    code, _out, err = osa('tell application "Slack" to activate\n'
-                          'delay 0.3\n'
-                          'tell application "System Events" to tell process "Slack"\n'
-                          '  keystroke "v" using command down\n'
-                          '  delay 0.3\n'
-                          '  key code 36\n'
-                          'end tell')
-    subprocess.run(["pbcopy"], input=old_clip, text=True)
-    if code != 0:
-        return {"ok": False, "error": "could not type into Slack: " + err[:120]}
-    seen = False
-    for _ in range(6):
-        time.sleep(0.5)
-        try:
-            p = subprocess.run(["chewie", "see", "--app", "Slack"], capture_output=True, text=True, timeout=20)
-        except (OSError, subprocess.TimeoutExpired):
-            break
-        if text.strip()[:80] in p.stdout:
-            seen = True
-            break
-    return {"ok": True, "id": None, "channel": target, "via": "desktop app",
-            "confirmed": "on screen" if seen else "typed, not yet seen on screen"}
-
-
-def expected_title(found, con):
-    """What Slack's window title starts with for this conversation."""
-    if not con:
-        return None
-    uid, cid = found.get("user"), found.get("channel")
-    if cid and not uid:
-        row = con.execute("SELECT name, kind, raw_json FROM channels WHERE id = ?", (cid,)).fetchone()
-        if not row:
-            return None
-        if row["kind"].endswith("mpim"):
-            return None  # group DM titles list members in an order not worth guessing
-        if not row["kind"].endswith("_im"):
-            return row["name"]
-        try:
-            uid = json.loads(row["raw_json"]).get("user")
-        except ValueError:
-            uid = None
-        if not uid:
-            return None
-    row = con.execute("SELECT real_name, display_name, name FROM users WHERE id = ?", (uid,)).fetchone()
-    if not row:
-        return None
-    return row["real_name"] or row["display_name"] or row["name"]
 
 
 def send_slackcli(found, text):
@@ -403,8 +314,6 @@ def send(target, text, dry_run=False, path=None):
     token = token_for(found["workspace"])
     if not token and shutil.which(SLACKCLI) and slackcli_signed_in(found.get("workspace")):
         return send_slackcli(found, text)
-    if not token and os.path.isdir(SLACK_APP):
-        return send_desktop(found, text, con)
     if not token:
         return {"ok": False, "error": "Slack isn't signed in: run chewbacca slack link"}
     if found["lookup"] == "users.lookupByEmail":

@@ -107,6 +107,11 @@ public struct SurfaceView: View {
             return data(p, type: element.type, id: element.id)
         case "Sparkline", "Bars", "Ring", "Events":
             return chart(p, type: element.type, id: element.id)
+        case "Mark":
+            return AnyView(AgentMarkView(
+                kind: Wireframe.Kind(rawValue: p["kind"]?.stringValue ?? "ico") ?? .ico,
+                spin: p["spin"] == .bool(true),
+                size: CGFloat(min(max(p["size"]?.doubleValue ?? 18, 8), 64))))
         case "File":
             let path = p["path"]?.stringValue ?? ""
             return AnyView(

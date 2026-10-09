@@ -959,7 +959,7 @@ _installed_scanners=""
 # judgement calls.
 # demo-shoot is a wrapper, not a scanner, but it installs the same way: a
 # small executable in bin/ that needs to reach ~/.local/bin.
-for _tool in ai-scan skill-scan prose-check code-slop demo-shoot craft-gate site-gate claude-tab gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning phone-mirror brain-pull-safe; do
+for _tool in ai-scan skill-scan prose-check voice-check code-slop demo-shoot craft-gate site-gate claude-tab gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning phone-mirror brain-pull-safe; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_scanners="$_installed_scanners $_tool"
@@ -1049,7 +1049,7 @@ fi
 # gate refuses to ship a generated one, and the Stop hook calls the gate by name.
 # gtme-dedupe is the exception: it builds a splink venv with uv on first run, like
 # scrape, and still runs exact passes on plain python3 when that build fails.
-for _tool in list-audit list-gate gtme-dedupe kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-signals gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team; do
+for _tool in orphan-reap list-audit list-gate gtme-dedupe kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-signals gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review clay-build fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     log "$_tool installed to ~/.local/bin/"
@@ -1455,6 +1455,15 @@ h["Stop"] = [{"hooks": [{
     "timeout": 5,
     "statusMessage": "Checking the reply opens the way you asked...",
 }]}, {"hooks": [{
+    # 2026-10-09: texts drafted for Jonah and Ryan went into chat reading
+    # nothing like him, and he said "i should never send a text that doesn't
+    # sound like me". Quoted drafts in a reply go through bin/voice-check,
+    # measured against his own sent texts.
+    "type": "command",
+    "command": hooks_dir + "/voice-guard.sh",
+    "timeout": 30,
+    "statusMessage": "Checking drafted texts sound like you...",
+}]}, {"hooks": [{
     # 39 hooks were registered on 2026-09-27 and not one of them looked at a
     # rendered image. slop-guard blocked a reply that night over a single em
     # dash while a page shipped across four commits with a collapsed figure,
@@ -1757,6 +1766,18 @@ _register("Stop", hooks_dir + "/kit-debt.sh", timeout=15,
 # it had not fired once by 2026-10-03, when hooks_registered.sh caught it.
 _register("Stop", hooks_dir + "/stale-read-guard.sh", timeout=5,
           status="Checking no unfinished job was called silent...")
+
+# Jobs a closed tab left running get stopped when the next tab opens.
+# 2026-10-10: a Clay crawler, a Nalana render and a transcription run outlived
+# a force-quit and kept the Mac swapping.
+_register("SessionStart", hooks_dir + "/orphan-reap.sh", timeout=10,
+          status="Stopping jobs a closed tab left running...")
+
+# A reply may not shrink scope he set as "all" unless each cut is a named
+# BLOCKED: line. 2026-10-09: a creator ingest he asked for in full went out as
+# 36 of 238 with three platforms on hold, and he said "You didn't listen to me."
+_register("Stop", hooks_dir + "/scope-guard.sh", timeout=10,
+          status="Checking the scope he asked for...")
 
 # One brain commit per turn, named after the turn, in place of format-and-sync's
 # one commit per write. See the hook's header for the 2026-10-05 history count.
@@ -2561,6 +2582,32 @@ PLIST
   launchctl bootout "gui/$(id -u)/com.chewbacca.messages-refresh" &>/dev/null || true
   launchctl bootstrap "gui/$(id -u)" "$_mr_plist" &>/dev/null &&
     log "message refresh scheduled every 10 min" || warn "could not schedule the message refresh"
+
+  # The machine queue's heartbeat: every 30 s `chewbacca jobs tick` admits queued work
+  # when there's room, pauses heavy work when the Mac is busy, and resumes it
+  # after. 2026-10-10: every tab ran its own long jobs with no shared budget,
+  # the Mac swapped at load 80+, and Caleb had to force-quit Claude.
+  _jq_plist="$HOME/Library/LaunchAgents/com.chewbacca.jobs.plist"
+  cat >"$_jq_plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.chewbacca.jobs</string>
+  <key>ProgramArguments</key><array>
+    <string>/usr/bin/python3</string><string>$SCRIPT_DIR/bin/chewbacca-jobs</string><string>tick</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StartInterval</key><integer>30</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>$HOME/Library/Logs/chewbacca-jobs.log</string>
+  <key>StandardErrorPath</key><string>$HOME/Library/Logs/chewbacca-jobs.log</string>
+</dict></plist>
+PLIST
+  launchctl bootout "gui/$(id -u)/com.chewbacca.jobs" &>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$_jq_plist" &>/dev/null &&
+    log "machine job queue ticking every 30 s" || warn "could not schedule the job queue"
 else
   warn "Homebrew not found. macOS tools skipped: see docs/MACOS-TOOLS.md"
 fi

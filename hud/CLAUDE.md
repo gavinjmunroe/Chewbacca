@@ -54,12 +54,22 @@ a meeting starting in one minute. A system that cries wolf gets switched off.
 
 ## How much of a window to be
 
-`chrome=` is `card` (the default), `bare`, or `bracket`.
+`chrome=` is `card` (the default), `bare`, `bracket`, or `window`.
 
 `bare` draws no panel at all. The content sits directly on the screen with a
 halo behind it, which is what a heads-up display is actually for and what a
 window can never do. Use it for a diagram, a figure, a single line of status.
 `bracket` puts four corner marks around a region without covering it.
+
+`window` is a working tool rather than a glance: TypeSafe's desktop-window
+language on Kyber's glass. Square corners, a black title strip with the title
+in pixel caps (Departure Mono, shipped in `Fonts/`), a hard offset drop and a
+halftone wash. It is drawn in black and white. Untoned parts are ink, never
+cyan; `good`, `warn` and `bad` turn into full-strength green, yellow and red,
+and they are the only colour on the panel, so spend them on what changed.
+Headings and captions become inverted chips, Diagram nodes become square
+tiles with a tone pip in the corner, and `fill:true` inverts the one node that
+matters. Sentences are set in the system mono.
 
 ## Saying it again
 
@@ -203,6 +213,15 @@ c a Avatar name="Sam Lee" size=24
 
 **Avatar** is initials in a circle, or `image="<path>"`. Two letters at most,
 the same colour for the same name, 16 to 48 points.
+
+```
+c mk Mark kind=ico spin=true size=18
+```
+
+**Mark** is the agent's sign: a wireframe icosahedron (`kind=ico`) that turns
+while `spin=true`, or a stipple globe (`kind=globe`) that turns once and
+rests, 8 to 64 points. It says a run is working or done, nothing else.
+The turn is a layer animation, still under Reduce Motion.
 
 ```
 @ rail at=right w=52 chrome=bare
@@ -698,7 +717,7 @@ spaces inside them: `points=[31,28,44]`, not `points=[31, 28, 44]`.
   c s Screen title="RELATIONSHIPS"
   ```
 
-- **Stack** Groups components. Vertical by default; use grid with cols for several small numbers, because four metrics in a column waste the height of a panel that is already capped. Gap is in units of 4 points.
+- **Stack** Groups components. Vertical by default; use grid with cols for several small numbers, because four metrics in a column waste the height of a panel that is already capped. Gap is in units of 4 points. A horizontal Stack is top aligned; give it `align=center` when a row mixes words with a Button, whose 44-point target otherwise sits it below them.
 
   ```
   c row Stack direction=grid cols=2 gap=3

@@ -271,6 +271,11 @@ def identity_spoofing(tmp: Path) -> None:
     ctx.run = lambda argv: calls.append(argv) or (0, "", "")
     check("a Message-ID with a quote never reaches AppleScript",
           osgraph_ingest.auth_headers(ctx, 'x" & do shell script "id') == "" and calls == [])
+    calls.clear()
+    ctx.run = lambda argv: calls.append(argv) or ((1, "", "") if argv[0] == "pgrep" else (0, "[]", ""))
+    check("with Mail quit, the ingest never touches Mail (a script would relaunch it)",
+          osgraph_ingest.mail(g, ctx, ctx.ids, days=7) == {"skipped": "Mail is not open"}
+          and calls == [["pgrep", "-xq", "Mail"]], calls)
 
 
 def keys_and_claims(tmp: Path) -> None:

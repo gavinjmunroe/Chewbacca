@@ -108,7 +108,7 @@ lower="$(printf '%s' "$subject" | tr '[:upper:]' '[:lower:]')"
 heavy=0
 case "$lower" in
   *whisper*|*mlx_whisper*|*mlx-whisper*|*yt-transcript*|*ffmpeg*|*ollama\ run*\
-  |*llama-cli*|*llama-server*|*stable-diffusion*|*comfyui*|*"blender -b"*\
+  |*llama-cli*|*llama-server*|*stable-diffusion*|*comfyui*|*"blender -b"*|*"nalana -b"*|*nalana.app*\
   |*"torch.compile"*|*upscayl*|*handbrakecli*) heavy=1 ;;
 esac
 # `python3 -c "import mlx_whisper"` names the model only inside quotes, which
@@ -189,7 +189,7 @@ if [ "$block" = "load" ]; then
 import os, re, shlex
 heavy = {"whisper", "mlx_whisper", "mlx-whisper", "yt-transcript", "ffmpeg",
          "llama-cli", "llama-server", "stable-diffusion", "comfyui", "upscayl",
-         "handbrakecli", "blender", "ollama"}
+         "handbrakecli", "blender", "nalana", "ollama"}
 skip = {"nice", "time", "env", "nohup", "caffeinate", "exec", "sudo"}
 text = os.environ.get("LG_CMD", "")
 for seg in re.split(r"[;|&\n]|\b(?:do|then|else)\b", text):
@@ -232,7 +232,12 @@ cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
   echo "On 2026-09-22 six parallel Whisper jobs took his load average to 50 and he"
   echo "asked why his computer was laggy. The work was fine. Six wide was not."
   echo
-  echo "Do one of these instead:"
+  echo "Hand it to the machine queue, which runs it when there's room, pauses it"
+  echo "when the Mac gets busy, and outlives this tab:"
+  echo
+  echo "  chewbacca jobs submit --heavy --title \"what it is\" -- <command>"
+  echo
+  echo "Or one of these:"
   echo
   echo "  1. Serial and polite, which is what ended up working:"
   echo "       for x in ...; do nice -n 19 <command> \"\$x\"; done"

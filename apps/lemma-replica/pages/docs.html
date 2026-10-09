@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Docs, Sift</title>
+    <meta
+      name="description"
+      content="Install the Sift SDK, send your first run, and read what Sift found."
+    />
+    <link rel="stylesheet" href="../src/styles.css" />
+    <link rel="stylesheet" href="../src/sections/lower.css" />
+    <link rel="stylesheet" href="../src/sections/chrome.css" />
+    <link rel="stylesheet" href="../src/sections/states.css" />
+    <link rel="stylesheet" href="../src/pages/pages.css" />
+  </head>
+  <body data-nav="docs">
+    <div id="site-chrome"></div>
+
+    <main id="top">
+      <div class="pg-frame pg-docs">
+        <nav class="pg-side" aria-label="Docs" data-toc>
+          <p class="pg-eyebrow">Getting started</p>
+          <ul>
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#quickstart">Quickstart</a></li>
+            <li><a href="#concepts">Runs, steps and claims</a></li>
+          </ul>
+          <p class="pg-eyebrow">Using Sift</p>
+          <ul>
+            <li><a href="#issues">Issues</a></li>
+            <li><a href="#alerts">Alerts</a></li>
+            <li><a href="#redaction">Redaction</a></li>
+          </ul>
+          <p class="pg-eyebrow">Reference</p>
+          <ul>
+            <li><a href="#sdk">SDK options</a></li>
+            <li><a href="changelog.html">Changelog</a></li>
+          </ul>
+        </nav>
+
+        <div class="pg-docs-main">
+          <div class="pg-prose">
+            <p class="pg-eyebrow" id="overview">Getting started</p>
+            <h1 class="pg-h1">Sift documentation</h1>
+            <p>
+              Sift reads every run your agent makes in production, checks the
+              final answer against what the run actually did, and groups the
+              failures it finds by cause. This page covers setup and the handful
+              of ideas you need to read what Sift reports.
+            </p>
+
+            <div class="pg-cards">
+              <a class="pg-cardlink" href="#quickstart"
+                ><strong>Quickstart</strong
+                ><span
+                  >Two environment variables and one wrapper. About five
+                  minutes.</span
+                ></a
+              >
+              <a class="pg-cardlink" href="#concepts"
+                ><strong>Runs, steps and claims</strong
+                ><span>The three words every Sift screen uses.</span></a
+              >
+              <a class="pg-cardlink" href="#issues"
+                ><strong>Issues</strong
+                ><span
+                  >How flagged runs are grouped, closed and reopened.</span
+                ></a
+              >
+              <a class="pg-cardlink" href="changelog.html"
+                ><strong>Changelog</strong
+                ><span>What shipped this week.</span></a
+              >
+            </div>
+
+            <h2 id="quickstart">Quickstart</h2>
+            <ol class="pg-steps">
+              <li>
+                <p>
+                  <strong>Create a project key.</strong> In Sift, open Settings,
+                  then Keys, and create a key for this agent. Put both values in
+                  your environment:
+                </p>
+                <pre><code>SIFT_API_KEY=paste_key_here
+SIFT_PROJECT_ID=your_project_id</code></pre>
+              </li>
+              <li>
+                <p><strong>Install the SDK.</strong></p>
+                <pre><code>npm install @sift/sdk        # or: pip install sift-sdk</code></pre>
+              </li>
+              <li>
+                <p>
+                  <strong>Wrap the entry point.</strong> Everything your agent
+                  does inside the wrapper is recorded as one run.
+                </p>
+                <pre><code>import { traced } from "@sift/sdk";
+
+export const handleTicket = traced("support-agent", async (ticket) =&gt; {
+  return agent.run(ticket);
+});</code></pre>
+              </li>
+              <li>
+                <p>
+                  <strong>Send a real request.</strong> The run appears in Sift
+                  within a few seconds, graded within a minute.
+                </p>
+              </li>
+            </ol>
+
+            <h2 id="concepts">Runs, steps and claims</h2>
+            <p>
+              A <strong>run</strong> is one end-to-end task: a ticket answered,
+              a meeting booked. A <strong>step</strong> is anything inside it: a
+              model call, a tool call, a message. A <strong>claim</strong> is a
+              statement in the run's final answer that Sift links back to the
+              step supporting it.
+            </p>
+            <p>
+              A run is flagged when a claim has no support, when it uses a value
+              a later step replaced, when an action it reports never completed,
+              or when it loops on a tool.
+            </p>
+
+            <h2 id="issues">Issues</h2>
+            <p>
+              Flagged runs that fail the same way, on the same tool or
+              instruction, are grouped into one issue. An issue shows how many
+              runs it covers, when it was first seen, and every run inside it.
+              Close it when you ship a fix; if the failure returns, the same
+              issue reopens with its history.
+            </p>
+
+            <h2 id="alerts">Alerts</h2>
+            <p>
+              Connect a team channel under Settings, then Alerts. Sift posts
+              when a new issue appears and when a closed one reopens, never once
+              per run.
+            </p>
+
+            <h2 id="redaction">Redaction</h2>
+            <p>
+              Pass field names to <code>redact</code> and they are removed
+              before anything leaves your process. Redacted fields still count
+              toward grading; their values are simply never stored.
+            </p>
+
+            <h2 id="sdk">SDK options</h2>
+            <table class="pg-table">
+              <thead>
+                <tr>
+                  <th>Option</th>
+                  <th>Default</th>
+                  <th>What it does</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>redact</code></td>
+                  <td>none</td>
+                  <td>Field names removed before sending.</td>
+                </tr>
+                <tr>
+                  <td><code>sampleRate</code></td>
+                  <td>1.0</td>
+                  <td>
+                    Share of runs recorded. Keep at 1.0 unless volume forces it
+                    lower.
+                  </td>
+                </tr>
+                <tr>
+                  <td><code>queueMinutes</code></td>
+                  <td>5</td>
+                  <td>How long events wait if Sift is unreachable.</td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="pg-fine">
+              Stuck? Write to
+              <a href="mailto:hello@sift.example">hello@sift.example</a> or
+              <a href="demo.html">book a call</a>.
+            </p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div id="lower-footer"></div>
+    <script type="module" src="../src/pages/chrome.js"></script>
+  </body>
+</html>

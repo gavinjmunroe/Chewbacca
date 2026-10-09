@@ -83,6 +83,9 @@ EDGE_TYPES: dict[str, tuple[frozenset, frozenset]] = {
     "MEETING_WITH": (frozenset({"Meeting"}), frozenset({"Person"})),
     "BOOKED_FROM": (frozenset({"Meeting"}), frozenset({"Campaign"})),
     "SIGNAL_ON": (frozenset({"Signal"}), frozenset({"Person", "Client"})),
+    # A booking signal read out of an inbox thread points at the reply that
+    # carries it, so the evidence is one hop from the number it feeds.
+    "EVIDENCE_IN": (frozenset({"Signal"}), frozenset({"Reply"})),
 }
 ME = "person:me"
 

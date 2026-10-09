@@ -36,6 +36,7 @@ STATE="$HOME/.chewbacca"
 # error all read this, so they cannot disagree with each other.
 COMMANDS=(
   "open|the whole kit on one screen"
+  "apps|list, run or test anything the team built (apps/)"
   "doctor|check the install and say what is broken"
   "status|what is installed, what is on, what is stale"
   "version|version installed here and in the repo"
@@ -68,6 +69,7 @@ COMMANDS=(
   "gtme-dedupe|cluster duplicate people across contact CSVs"
   "gtme-signals|list recent SEC Form D raises as buying signals"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
+  "jobs|one queue for long and heavy work: runs it when the Mac has room"
   "api|any website as an API: call taught sites, teach new ones (not Clay)"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
   "clay-fixture-check|compare a CSV export with an expected fixture"
@@ -158,6 +160,16 @@ permissions|permission|perms)
   shift
   [ $# -eq 0 ] && set -- guide
   exec python3 "$ROOT/bin/chewbacca-permissions" "$@"
+  ;;
+jobs)
+  # The machine queue. See bin/chewbacca-jobs.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-jobs" "$@"
+  ;;
+apps)
+  # Everything the team builds lives in apps/, runnable by name.
+  shift
+  exec bash "$ROOT/bin/chewbacca-apps" "$@"
   ;;
 api)
   # Websites with no API, called over plain HTTP from operations learned off

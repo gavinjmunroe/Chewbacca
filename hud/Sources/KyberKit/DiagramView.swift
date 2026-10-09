@@ -28,6 +28,8 @@ struct DiagramView: View {
     /// so a diagram keeps its proportions at any surface size.
     let aspect: Double
     let tone: Color
+    /// Square nodes in mono type, for a diagram inside a `window` surface.
+    var square: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -48,7 +50,8 @@ struct DiagramView: View {
         DiagramCanvas(
             channels: AnimatableVector(shapes.flatMap(\.channels)),
             shapes: shapes,
-            tone: tone)
+            tone: tone,
+            square: square)
             .aspectRatio(aspect > 0 ? aspect : 2, contentMode: .fit)
             .frame(maxWidth: .infinity)
             // Fast enough to feel like a response, slow enough to be followed.
@@ -132,6 +135,7 @@ nonisolated struct DiagramCanvas: View, Animatable {
     var channels: AnimatableVector
     let shapes: [Primitive]
     let tone: Color
+    var square: Bool = false
 
     var animatableData: AnimatableVector {
         get { channels }
@@ -153,7 +157,11 @@ nonisolated struct DiagramCanvas: View, Animatable {
                 edges(in: proxy.size)
                 ForEach(Array(shapes.enumerated()), id: \.offset) { index, shape in
                     if shape.kind == .node || shape.kind == .box {
-                        chip(shape, index: index, in: proxy.size)
+                        if square {
+                            windowChip(shape, index: index, in: proxy.size)
+                        } else {
+                            chip(shape, index: index, in: proxy.size)
+                        }
                     }
                 }
             }
@@ -171,10 +179,13 @@ nonisolated struct DiagramCanvas: View, Animatable {
             // and text and fills all smear together into the grey cloud that
             // made the first version look dirty. Inside the canvas the glow can
             // be strokes only, and the fills stay hard-edged.
-            context.drawLayer { layer in
-                layer.addFilter(.blur(radius: 7))
-                layer.opacity = 0.75
-                paint(&layer, size: size, glowing: true)
+            // A window's lines are printed, not lit: no bloom.
+            if !square {
+                context.drawLayer { layer in
+                    layer.addFilter(.blur(radius: 7))
+                    layer.opacity = 0.75
+                    paint(&layer, size: size, glowing: true)
+                }
             }
             paint(&context, size: size, glowing: false)
         }
@@ -241,6 +252,48 @@ nonisolated struct DiagramCanvas: View, Animatable {
         RoundedRectangle(cornerRadius: 11, style: .continuous)
     }
 
+    /// One node as a tiny window: square, mono, a one-point rule in its tone
+    /// and the same hard drop the surface has. `fill: true` inverts it, light
+    /// ground and dark type, which is how TypeSafe marks the one that matters
+    /// ("Jev (TypeSafe)" in their benchmark table). Set it on one node.
+    private func windowChip(_ shape: Primitive, index: Int, in size: CGSize) -> some View {
+        let start = index * Primitive.width
+        let values = start + Primitive.width <= channels.values.count
+            ? Array(channels.values[start..<(start + Primitive.width)])
+            : shape.channels
+        let pop = shape.toneName.map { HUD.tone($0, in: .window) }
+        let box = Rectangle()
+        let inverted = shape.filled
+
+        return Text(shape.label.uppercased())
+            .pixelFont(11)
+            .foregroundStyle(inverted ? Color.black : HUD.ink)
+            .lineLimit(2)
+            .minimumScaleFactor(0.75)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 3)
+            .frame(width: values[5] * size.width, height: values[6] * size.height)
+            .background(inverted ? AnyShapeStyle(HUD.ink.opacity(0.96)) : AnyShapeStyle(.ultraThinMaterial), in: box)
+            .background(Color.black.opacity(inverted ? 0 : 0.5), in: box)
+            .overlay(alignment: .topLeading) {
+                // The tone as one square pip in the corner: the only colour
+                // on a node, so nine green strips never drown the one yellow.
+                // Outlined in black on the inverted node, where yellow on
+                // white alone is under 2:1.
+                if let pop {
+                    box.fill(pop)
+                        .overlay { box.strokeBorder(Color.black.opacity(inverted ? 0.85 : 0), lineWidth: 1) }
+                        .frame(width: 6, height: 6)
+                        .padding(4)
+                }
+            }
+            .overlay {
+                box.strokeBorder(inverted ? Color.white : Color.white.opacity(0.34), lineWidth: 1)
+            }
+            .background { box.fill(Color.black.opacity(0.6)).offset(x: 2, y: 2) }
+            .position(x: values[0] * size.width, y: values[1] * size.height)
+    }
+
     /// Draw every shape once.
     private func paint(_ context: inout GraphicsContext, size: CGSize, glowing: Bool) {
         for (index, shape) in shapes.enumerated() {
@@ -258,7 +311,11 @@ nonisolated struct DiagramCanvas: View, Animatable {
         _ shape: Primitive, values: [Double],
         in context: inout GraphicsContext, size: CGSize, glowing: Bool
     ) {
-        let colour = shape.toneName == nil ? tone : HUD.tone(shape.toneName)
+        // In a window an untoned edge is ink at half strength, so the nodes
+        // stay the loudest thing and the pops of colour stay pops.
+        let colour = shape.toneName == nil
+            ? (square ? tone.opacity(0.5) : tone)
+            : HUD.tone(shape.toneName, in: square ? .window : .card)
         let stroke = values[7]
 
         // Unit square in, points out. The model never sees a pixel, which is

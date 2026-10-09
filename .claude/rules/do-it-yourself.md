@@ -21,7 +21,10 @@ A command in your final message is a confession that you stopped early. The
 user asked for a working thing, not instructions for producing one.
 
 **A long command is not an exception.** A twenty minute build goes in the
-background and you report when it lands. Slowness is a reason to start it
+background and you report when it lands. Anything long or heavy goes through
+`chewbacca jobs submit` (`--heavy` for inference, transcription, renders; `--net` for
+crawls), never a bare `&` or `nohup`: the queue runs it when the Mac has room,
+pauses it when he's using the Mac, and keeps it alive after the tab closes. Slowness is a reason to start it
 sooner, not a reason to delegate it.
 
 **A destructive command is not an exception either.** If the user asked for the
@@ -68,6 +71,19 @@ yours to solve.
   can be denied while `git push +branch:branch` is not.
 - Only after those, tell the user, and tell them which of the three blockers
   above it actually is.
+
+---
+
+## HIS SCOPE WORDS ARE THE SPEC
+
+"All", "every", "everything", "entire", "a ton" set the scope. Cutting it to a
+top N, capping per item, or putting a platform "on hold" is a decision that
+belongs to him, and announcing the cut doesn't make it agreed. Slow, big or
+expensive is a reason to start sooner and run in the background, the same as
+a twenty minute build. A real limit (no access, a rate limit that won't
+clear, a credential only he has) is a `BLOCKED:` line, and the rest keeps
+going. `scope-guard` refuses a reply that cuts without one (2026-10-09: 36 of
+238 creators and three platforms on hold, "You didn't listen to me").
 
 ---
 

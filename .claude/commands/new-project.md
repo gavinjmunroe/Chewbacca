@@ -1,12 +1,14 @@
 ---
-description: Scaffold a new project under projects/ with standard structure, full design system wired from day one
+description: Scaffold a new project under Chewbacca apps/ with standard structure, full design system wired from day one
 allowed-tools: Bash(mkdir:*), Bash(git:*), Bash(npm:*), Bash(npx:*), Bash(ls:*), Bash(cat:*), Bash(echo:*), Bash(printf:*), Read, Write, Edit, Glob
 argument-hint: "<project-name> [description]"
 ---
 
 # New Project
 
-Scaffold `$ARGUMENTS` as a new project under `projects/`. Every project starts polished, never barebones.
+Scaffold `$ARGUMENTS` as a new project under Chewbacca's `apps/`. Every project starts polished, never barebones.
+
+Everything the team builds lives inside Chewbacca (Caleb, 2026-10-09: "everything we make should be in chewbs"), so a teammate with the kit can run it with `chewbacca apps run {name}`. No separate repo unless the user names one, for example a client site with its own Vercel project.
 
 ## Step 1: Parse arguments
 
@@ -21,14 +23,14 @@ Ask the user what type of project:
 2. **Node.js API**: Fastify/Express backend, no frontend
 3. **Python service**: FastAPI or script
 4. **Library/package**: reusable TS/JS module
-5. **Bare**: just README + git init
+5. **Bare**: just a README
 
 ## Step 2: Create the directory and init git
 
 ```bash
-mkdir -p "$HOME/dev/projects/{name}"
-cd "$HOME/dev/projects/{name}"
-git init
+APP="$(chewbacca where)/apps/{name}"
+mkdir -p "$APP"
+cd "$APP"
 ```
 
 ## Step 3: Scaffold by type
@@ -36,7 +38,7 @@ git init
 ### Next.js app: full design system from day one
 
 ```bash
-cd "$HOME/dev/projects/{name}"
+cd "$(chewbacca where)/apps/{name}"
 npx create-next-app@latest . --typescript --tailwind --app --src-dir --import-alias "@/*" --no-git
 npm install lucide-react framer-motion @tanstack/react-query zod react-hook-form @hookform/resolvers
 npm install -D prettier prettier-plugin-tailwindcss
@@ -197,17 +199,15 @@ Stage by filename, never `git add .` or `git add -A`:
 
 ```bash
 git add src/ .prettierrc package.json tsconfig.json .gitignore 2>/dev/null
-git commit -m "init: {name}, {description or 'initial scaffold'}"
+git commit -m "feat: {name}, {description or 'initial scaffold'}" -- src/ .prettierrc package.json tsconfig.json .gitignore
 ```
 
-## Step 5: Create GitHub repo and push (always: never wait to be asked)
+## Step 5: Push Chewbacca (always: never wait to be asked)
 
-```bash
-GITHUB_USER=$(gh api user --jq .login 2>/dev/null)
-gh repo create "$GITHUB_USER/{name}" --private --source=. --push
-```
-
-Report the GitHub URL and remind the user to connect it to Vercel.
+The app ships with the kit, so pushing Chewbacca's main is the push. Confirm
+`chewbacca apps` lists it and `chewbacca apps run {name}` starts it, then push.
+Only when the user named a standalone repo (a client deploy, its own Vercel
+project) run `gh repo create` for it as well.
 
 ## Quality Check Before Finishing
 

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Changelog, Sift</title>
+    <meta
+      name="description"
+      content="Every Sift release: new checks, improvements to the run viewer, SDK versions and fixes."
+    />
+    <link rel="stylesheet" href="../src/styles.css" />
+    <link rel="stylesheet" href="../src/sections/lower.css" />
+    <link rel="stylesheet" href="../src/sections/chrome.css" />
+    <link rel="stylesheet" href="../src/sections/states.css" />
+    <link rel="stylesheet" href="../src/pages/pages.css" />
+  </head>
+  <body data-nav="changelog">
+    <div id="site-chrome"></div>
+
+    <main id="top">
+      <div class="pg-frame">
+        <header class="pg-cl-head">
+          <p class="pg-eyebrow">
+            Changelog
+          </p>
+          <h1 class="pg-h1">What changed in Sift</h1>
+          <p class="pg-lead">
+            New checks, changes to the run viewer and the issue queue, SDK
+            releases and fixes. Newest first.
+          </p>
+          <div class="pg-cl-filters" role="group" aria-label="Filter releases">
+            <button
+              class="pg-chip"
+              type="button"
+              data-filter="all"
+              aria-pressed="true"
+            >
+              All
+            </button>
+            <button
+              class="pg-chip"
+              type="button"
+              data-filter="new"
+              aria-pressed="false"
+            >
+              New
+            </button>
+            <button
+              class="pg-chip"
+              type="button"
+              data-filter="improved"
+              aria-pressed="false"
+            >
+              Improvements
+            </button>
+            <button
+              class="pg-chip"
+              type="button"
+              data-filter="fix"
+              aria-pressed="false"
+            >
+              Fixes
+            </button>
+            <button
+              class="pg-chip"
+              type="button"
+              data-filter="sdk"
+              aria-pressed="false"
+            >
+              SDK
+            </button>
+          </div>
+        </header>
+
+        <div data-filter-list>
+          <section class="pg-entry" id="v0-14" data-cat="new improved">
+            <div class="pg-entry-date">
+              <time class="pg-date" datetime="2026-09-30"
+                >September 30, 2026<span class="pg-ver">v0.14</span></time
+              >
+            </div>
+            <div class="pg-entry-body">
+              <div class="pg-tags">
+                <span class="pg-tag pg-tag-new">New</span
+                ><span class="pg-tag">Run viewer</span>
+              </div>
+              <h2>Claim links in the run viewer</h2>
+              <p>
+                Open any graded run and the final answer now shows each claim
+                underlined. Click one to jump to the step that supports it, or
+                to a note saying nothing does.
+              </p>
+              <ul>
+                <li>
+                  Unsupported claims are marked in red; stale ones show both the
+                  old and the new value.
+                </li>
+                <li>
+                  Keyboard: <code>j</code> and <code>k</code> move between
+                  claims, <code>enter</code> opens the step.
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section class="pg-entry" id="v0-13-2" data-cat="fix">
+            <div class="pg-entry-date">
+              <time class="pg-date" datetime="2026-09-22"
+                >September 22, 2026<span class="pg-ver">v0.13.2</span></time
+              >
+            </div>
+            <div class="pg-entry-body">
+              <div class="pg-tags">
+                <span class="pg-tag pg-tag-fix">Fix</span
+                ><span class="pg-tag">Alerts</span>
+              </div>
+              <h2>Reopened issues alerted twice</h2>
+              <p>
+                When a closed issue came back, teams with both a channel alert
+                and an email digest got the channel message twice. It now sends
+                once, with the issue's history attached.
+              </p>
+            </div>
+          </section>
+
+          <section class="pg-entry" id="v0-13" data-cat="new">
+            <div class="pg-entry-date">
+              <time class="pg-date" datetime="2026-09-15"
+                >September 15, 2026<span class="pg-ver">v0.13</span></time
+              >
+            </div>
+            <div class="pg-entry-body">
+              <div class="pg-tags">
+                <span class="pg-tag pg-tag-new">New</span
+                ><span class="pg-tag">Checks</span>
+              </div>
+              <h2>Repeated-call detection</h2>
+              <p>
+                Sift now flags a run that calls the same tool with the same
+                arguments and gets the same result three times, with no new
+                input between the calls. The flag lists the step numbers.
+              </p>
+              <p>
+                Runs that loop this way rarely fail outright, which is why
+                error-rate alerts never caught them.
+              </p>
+            </div>
+          </section>
+
+          <section class="pg-entry" id="v0-12" data-cat="sdk improved">
+            <div class="pg-entry-date">
+              <time class="pg-date" datetime="2026-09-03"
+                >September 3, 2026<span class="pg-ver">v0.12</span></time
+              >
+            </div>
+            <div class="pg-entry-body">
+              <div class="pg-tags">
+                <span class="pg-tag">SDK</span
+                ><span class="pg-tag">Python 0.6</span
+                ><span class="pg-tag">TypeScript 0.6</span>
+              </div>
+              <h2>SDK 0.6 for Python and TypeScript</h2>
+              <ul>
+                <li>
+                  Tool calls made inside a thread pool are now attached to the
+                  right run.
+                </li>
+                <li>
+                  A new <code>redact</code> option drops named fields before
+                  anything leaves your process.
+                </li>
+                <li>
+                  The SDK no longer blocks your agent if Sift is unreachable;
+                  events queue for up to five minutes.
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section class="pg-entry" id="v0-11" data-cat="improved">
+            <div class="pg-entry-date">
+              <time class="pg-date" datetime="2026-08-20"
+                >August 20, 2026<span class="pg-ver">v0.11</span></time
+              >
+            </div>
+            <div class="pg-entry-body">
+              <div class="pg-tags">
+                <span class="pg-tag">Improvement</span
+                ><span class="pg-tag">Issues</span>
+              </div>
+              <h2>Issue history and reopen</h2>
+              <p>
+                An issue you close and that later recurs now reopens with its
+                full history instead of arriving as a new issue. The timeline
+                shows when it was closed, by whom, and the first run after.
+              </p>
+            </div>
+          </section>
+
+          <section class="pg-entry" id="v0-10" data-cat="new">
+            <div class="pg-entry-date">
+              <time class="pg-date" datetime="2026-08-12"
+                >August 12, 2026<span class="pg-ver">v0.10</span></time
+              >
+            </div>
+            <div class="pg-entry-body">
+              <div class="pg-tags">
+                <span class="pg-tag pg-tag-new">New</span
+                ><span class="pg-tag">Beta</span>
+              </div>
+              <h2>Public beta</h2>
+              <p>
+                Sift is open to any team running an agent in production. Read
+                <a class="pg-arrow-link" href="blog/introducing-sift.html"
+                  >why we built it</a
+                >.
+              </p>
+            </div>
+          </section>
+
+          <p class="pg-cl-empty" data-empty hidden>
+            No release in that category yet.
+          </p>
+        </div>
+      </div>
+    </main>
+
+    <div id="lower-footer"></div>
+    <script type="module" src="../src/pages/chrome.js"></script>
+  </body>
+</html>

@@ -48,6 +48,7 @@ import agent_board  # noqa: E402
 import decision_log  # noqa: E402
 import quick  # noqa: E402
 import opener  # noqa: E402
+import clay_route  # noqa: E402
 import agenda  # noqa: E402
 import surface_intent  # noqa: E402
 import hud_events  # noqa: E402
@@ -68,6 +69,9 @@ KYBER_SURFACES = Path(__file__).resolve().parent / "kyber-surfaces"
 # HUD_GENUI=off: a request shaped like a panel ("compare my three classes'
 # grades") goes to the model in words instead of to kyber-genui (docs/GENUI.md).
 GENUI = os.environ.get("HUD_GENUI", "on") != "off"
+# HUD_CLAY=off: "find me 50 fintech VC partners in Clay" goes to the model
+# instead of starting clay-build (bin/lib/clay_route.py, docs/CLAY-HUD.md).
+CLAY = os.environ.get("HUD_CLAY", "on") != "off"
 KYBER_GENUI = Path(__file__).resolve().parent / "kyber-genui"
 # kyber-genui paints its skeleton in under a millisecond and finished in 3.2
 # to 16.9 s on its 20-request bench (2026-10-04, one outlier at 99 s). Past
@@ -1276,6 +1280,7 @@ FAST_PATHS = {
     "music_request": "music",
     "open_request": "open",
     "agenda_request": "agenda",
+    "clay_request": "clay",
     "genui_request": "genui",
     "handle_agents_word": "agents",
 }
@@ -1337,6 +1342,12 @@ def fast_path(said: str) -> str | None:
             pass
     if ROUTE and route.agent_status_word(said):
         return "agents"
+    if CLAY:
+        try:
+            if clay_route.parse(said) is not None:
+                return "clay"
+        except Exception:  # noqa: BLE001
+            pass
     if GENUI and wants_genui(said):
         return "genui"
     return None
@@ -1840,6 +1851,10 @@ class Listener:
                 # A surface's own control (bin/kyber-surfaces owns every
                 # `ks-` action and acts on it). Asked here as well, a press of
                 # Send would also become a model turn about pressing Send.
+                pass
+            elif action.startswith("clay-"):
+                # clay-build draws the Clay cards and owns every `clay-` press.
+                # Asked here as well, an approval would also become a model turn.
                 pass
             elif action.startswith("call-"):
                 # `e call-start` and `e call-dismiss` are the call offer's
@@ -2408,6 +2423,8 @@ class Listener:
             return
         if not typed and not relayed and dest is None and self.handle_agents_word(said):
             return
+        if CLAY and not relayed and not pointing and dest is None and self.clay_request(said, typed):
+            return
         # A request shaped like a panel that no fixed surface took: draw one
         # with kyber-genui, and only if that falls back does it reach the model.
         if GENUI and not relayed and not pointing and dest is None and self.genui_request(said, typed):
@@ -2669,6 +2686,44 @@ class Listener:
                 outcome = opener.Outcome(False, "That didn't open.")
             answer = outcome.line
             self.log(f"open: {command.kind} in {(time.monotonic() - started) * 1000:.0f}ms:", answer)
+            self.remember(req, answer, outcome.ok, "done" if outcome.ok else "failed")
+            self.send("s " + json.dumps(answer))
+            self.send("w " + json.dumps(answer) + " done=true")
+            if not typed:
+                self.speak(answer)
+            self.settle_unless_running("done", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def clay_request(self, said: str, typed: bool) -> bool:
+        """Start clay-build for "find me 50 fintech VC partners in Clay", with
+        no model turn. See bin/lib/clay_route.py for which sentences count.
+
+        Only when nothing is running, as `open_request`. The run draws its own
+        cards and asks before every spend, so the voice only says it started;
+        a sentence with no number gets the one question back instead."""
+        if self.in_flight():
+            return False
+        try:
+            command = clay_route.parse(said)
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("clay failed:", err)
+            return False
+        if command is None:
+            return False
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+
+        def work() -> None:
+            started = time.monotonic()
+            try:
+                outcome = clay_route.perform(command)
+            except Exception as err:  # noqa: BLE001
+                self.log("clay failed:", err)
+                outcome = clay_route.Outcome(False, "clay-build didn't start.")
+            answer = outcome.line
+            self.log(f"clay: {command.count} x {len(command.who)} chars in "
+                     f"{(time.monotonic() - started) * 1000:.0f}ms:", answer)
             self.remember(req, answer, outcome.ok, "done" if outcome.ok else "failed")
             self.send("s " + json.dumps(answer))
             self.send("w " + json.dumps(answer) + " done=true")

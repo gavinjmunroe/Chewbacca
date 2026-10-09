@@ -431,7 +431,20 @@ if group "gtme"; then
       python3 "$ROOT/tests/test_chewbacca_clay.py"
     check "clay dispatches through chewbacca" bash "$ROOT/bin/chewbacca" clay --help
     expect "clay appears in help" "chewbacca clay" bash "$ROOT/bin/chewbacca" --help
+    check "the clay finder picks one visible control or stops" node --test "$ROOT/tests/test_clay_find.mjs"
   fi
+  # clay-build (docs/CLAY-HUD.md): fakes for the page, Clay and Kyber; nothing
+  # opens Chrome, reads Clay or draws on the glass.
+  check "clay geometry maps page rects to screen points and stops on a bad window" python3 "$ROOT/tests/test_clay_geometry.py"
+  check "the clay recipe validates, and paid steps end on their approval" python3 "$ROOT/tests/test_clay_recipe.py"
+  check "the clay page driver never opens a tab and stops fast" python3 "$ROOT/tests/test_clay_page.py"
+  check "clay reads parse credits, progress and found emails" python3 "$ROOT/tests/test_clay_reads.py"
+  check "the clay hud draws every state and goes quiet on x" python3 "$ROOT/tests/test_clay_hud.py"
+  check "clay-build asks before every spend and stops at once" python3 "$ROOT/tests/test_clay_run.py"
+  check "clay-build holds one lock and refuses without Kyber" python3 "$ROOT/tests/test_clay_build.py"
+  check "the clay voice route parses only clay requests" python3 "$ROOT/tests/test_clay_route.py"
+  ln -s "$ROOT/bin/clay-build" "$TMP/clay-build"
+  check "clay-build runs from an installed symlink" "$TMP/clay-build" --help
 fi
 
 # ── team board ────────────────────────────────────────────────────────────────
@@ -676,6 +689,14 @@ if group "installer"; then
 
   check  "stale-read-guard refuses a silence claim while jobs are outstanding" \
     bash "$ROOT/tests/stale_read_guard.sh"
+  check  "orphan-reap stops what a dead tab left running and spares the rest" \
+    bash "$ROOT/tests/orphan_reap.sh"
+  check  "jobs queue admits, pauses and resumes heavy work against the machine" \
+    bash "$ROOT/tests/jobs.sh"
+  check  "people texts sync runs one at a time" \
+    bash "$ROOT/tests/texts_sync_lock.sh"
+  check  "scope-guard refuses a self-chosen cut of scope he set as all" \
+    bash "$ROOT/tests/scope_guard.sh"
 
   check  "suite-rerun-guard refuses a repeat full run on an unchanged tree" \
     bash "$ROOT/tests/suite_rerun_guard.sh"
@@ -904,6 +925,10 @@ if group "installer"; then
   check  "the backlog keeps dead items and their reason" bash "$ROOT/tests/backlog.sh" "$ROOT" dead
 
   check  "a public install without a private backlog stays usable" bash "$ROOT/tests/backlog.sh" "$ROOT" absent
+  check  "chewbacca apps lists builds by name" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" list
+  check  "chewbacca apps runs an app's own tests" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" test
+  check  "chewbacca apps refuses an app it cannot start" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" missing
+  check  "lemma-replica ships inside the kit" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" real
 
   # A store nobody reads is the failure this whole file keeps finding.
   check  "SessionStart injects the backlog" \
@@ -1069,6 +1094,7 @@ if group "hooks"; then
   check "route_tune follows its written rule and refuses under 50 rows" bash "$ROOT/tests/route_tune.sh"
   check "formatter handles a broken Node runtime" python3 "$ROOT/tests/test_formatter_runtime.py"
   check "hooks run python3 isolated from the session cwd" bash "$ROOT/tests/hook_python_isolated.sh"
+  check "voice-check, drafts and voice-guard refuse a text that is not his" bash "$ROOT/tests/voice_check.sh"
   check "prayer-guard checks every visible block this turn" bash "$ROOT/tests/prayer_guard.sh"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   # A hook must never fail the session, whatever it is handed.

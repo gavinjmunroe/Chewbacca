@@ -49,6 +49,12 @@ public struct Marker: Identifiable, Equatable, Sendable {
     public static let guideReach: CGFloat = 8
 
     public var isGuide: Bool { tone == Marker.guideTone }
+
+    /// The tone clay-build uses where a control it expected was not found.
+    public static let missTone = "miss"
+
+    /// Whether a mark of this tone draws as a dashed box rather than corners.
+    public static func isDashed(tone: String?) -> Bool { tone == missTone }
 }
 
 /// One drawn mark: corner brackets and, if it has one, a label above it.
@@ -132,7 +138,7 @@ struct MarkerView: View {
         // sat below the thing it was pointing at, by half the height of its own
         // caption. An annotation layer whose marks are near the right place is
         // worse than one with no marks, because it is confidently wrong.
-        Brackets(lit: arrived, tint: tint)
+        Brackets(lit: arrived, tint: tint, dashed: Marker.isDashed(tone: marker.tone))
             .frame(width: marker.rect.width, height: marker.rect.height)
             .overlay(alignment: .topLeading) {
                 if !marker.label.isEmpty {

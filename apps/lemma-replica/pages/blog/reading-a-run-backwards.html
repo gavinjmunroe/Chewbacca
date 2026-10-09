@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Read the run backwards, Sift</title>
+    <meta
+      name="description"
+      content="Why the fastest way to debug an agent run is to start from the answer it gave and walk back to the step that made it wrong."
+    />
+    <link rel="stylesheet" href="../../src/styles.css" />
+    <link rel="stylesheet" href="../../src/sections/lower.css" />
+    <link rel="stylesheet" href="../../src/sections/chrome.css" />
+    <link rel="stylesheet" href="../../src/sections/states.css" />
+    <link rel="stylesheet" href="../../src/pages/pages.css" />
+  </head>
+  <body data-nav="blog">
+    <div id="site-chrome"></div>
+
+    <main id="top">
+      <div class="pg-band">
+        <div class="pg-frame">
+          <header class="pg-doc-head">
+            <a class="pg-back" href="../blog.html"
+              ><svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                aria-hidden="true"
+              >
+                <path
+                  d="M9 5H1.5M4.5 2 1.5 5l3 3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                /></svg
+              >All posts</a
+            >
+            <p class="pg-eyebrow">Engineering</p>
+            <h1>Read the run backwards</h1>
+            <time datetime="2026-09-29">September 29, 2026</time>
+          </header>
+          <div class="pg-byline">
+            <div class="pg-byline-l">
+              <span class="pg-author"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="7"
+                    cy="7"
+                    r="5.5"
+                    fill="none"
+                    stroke="currentColor"
+                  />
+                  <path d="M4.5 9.5 9.5 4.5" stroke="currentColor" /></svg
+                >Mara Lindqvist</span
+              >
+              <span>Founding engineer, Sift</span>
+            </div>
+            <div class="pg-byline-r">
+              <span class="pg-read"
+                ><svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 14 14"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="7"
+                    cy="7"
+                    r="5.5"
+                    fill="none"
+                    stroke="currentColor"
+                  />
+                  <path
+                    d="M7 4v3.2l2 1.3"
+                    fill="none"
+                    stroke="currentColor"
+                  /></svg
+                >9 min read</span
+              >
+              <button class="pg-copy" type="button" data-copy-link>
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 12 12"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M5 7 7 5M4.2 5.4 2.6 7a2 2 0 0 0 2.8 2.8l1.6-1.6M7.8 6.6 9.4 5a2 2 0 0 0-2.8-2.8L5 3.8"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.1"
+                  /></svg
+                ><span data-label>Copy link</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pg-band">
+        <div class="pg-frame pg-post">
+          <nav class="pg-toc" aria-label="On this page" data-toc>
+            <ol>
+              <li><a href="#start">Start at the answer</a></li>
+              <li><a href="#claims">List what the answer claims</a></li>
+              <li class="pg-sub-item">
+                <a href="#claims-facts">Facts it states</a>
+              </li>
+              <li class="pg-sub-item">
+                <a href="#claims-actions">Actions it reports</a>
+              </li>
+              <li><a href="#walk">Walk each claim to its source</a></li>
+              <li><a href="#example">One run, end to start</a></li>
+              <li><a href="#why">Why forwards reading misses it</a></li>
+              <li><a href="#sift">What Sift does with this</a></li>
+            </ol>
+          </nav>
+
+          <article class="pg-prose">
+            <p class="pg-first" id="start">
+              The last message an agent sends is the only part of the run your
+              customer ever reads.
+            </p>
+            <p>
+              So that is where we start every investigation now. Not at the
+              system prompt, not at the first tool call, and not at the span
+              with the highest latency. At the answer.
+            </p>
+            <p>
+              Most teams read a trace the way it was recorded, top to bottom. It
+              feels natural because that is the order things happened in. It is
+              also the slowest way to find a wrong answer, because a long run
+              spends most of its steps doing things that went fine.
+            </p>
+            <p>
+              A support agent that handled a refund request in forty steps might
+              have one step that went wrong. Reading forwards, you wade through
+              thirty-nine good steps hoping to recognise the bad one when you
+              reach it. Reading backwards, you begin with the thing the customer
+              saw and ask one question at a time until it leads you there.
+            </p>
+
+            <h2 id="claims">List what the answer claims</h2>
+            <p>
+              Before opening a single span, write down every claim the final
+              answer makes. Not a summary of it. The claims, one per line, as
+              plainly as you can put them.
+            </p>
+            <p>
+              An answer like "Your refund of $48 has been issued and should
+              reach your card in three to five days" makes three claims: an
+              amount, an action that already happened, and a timeline. Each one
+              has to have come from somewhere in the run.
+            </p>
+
+            <h3 id="claims-facts">Facts it states</h3>
+            <p>
+              Amounts, names, dates, order numbers, policy details. Any of these
+              could have come from a tool result, from the conversation, from
+              the system prompt, or from nowhere at all. The last case is the
+              one you are hunting for.
+            </p>
+
+            <h3 id="claims-actions">Actions it reports</h3>
+            <p>
+              "Issued", "cancelled", "updated", "sent". An action claim is only
+              true if a tool call that performs that action ran, succeeded, and
+              returned something that says so. A tool that timed out and then
+              got no retry is the classic way to produce a confident sentence
+              about something that never happened.
+            </p>
+
+            <figure class="pg-figure">
+              <div class="pg-plate-w">
+                <svg
+                  viewBox="0 0 700 220"
+                  width="100%"
+                  role="img"
+                  aria-labelledby="fig1-t"
+                >
+                  <title id="fig1-t">
+                    Three claims in a final answer, each traced back to a step
+                    in the run. Two link to a tool result; one links to nothing.
+                  </title>
+                  <g
+                    font-family="IBM Plex Mono, monospace"
+                    font-size="10"
+                    fill="#6c6991"
+                    letter-spacing=".8"
+                  >
+                    <text x="20" y="22">FINAL ANSWER</text>
+                    <text x="430" y="22">WHERE IT CAME FROM</text>
+                  </g>
+                  <g
+                    font-family="Figtree, sans-serif"
+                    font-size="14"
+                    fill="#1d1956"
+                  >
+                    <rect
+                      x="20"
+                      y="40"
+                      width="250"
+                      height="40"
+                      fill="#f2f0ff"
+                      stroke="#755cfe"
+                      stroke-width=".8"
+                    />
+                    <text x="34" y="65">amount: $48</text>
+                    <rect
+                      x="20"
+                      y="92"
+                      width="250"
+                      height="40"
+                      fill="#f2f0ff"
+                      stroke="#755cfe"
+                      stroke-width=".8"
+                    />
+                    <text x="34" y="117">action: refund issued</text>
+                    <rect
+                      x="20"
+                      y="144"
+                      width="250"
+                      height="40"
+                      fill="#f2f0ff"
+                      stroke="#755cfe"
+                      stroke-width=".8"
+                    />
+                    <text x="34" y="169">timeline: 3 to 5 days</text>
+                    <rect
+                      x="430"
+                      y="40"
+                      width="250"
+                      height="40"
+                      fill="#fff"
+                      stroke="#d4d4dd"
+                    />
+                    <text x="444" y="65">step 12, get_order</text>
+                    <rect
+                      x="430"
+                      y="92"
+                      width="250"
+                      height="40"
+                      fill="#fff"
+                      stroke="#c2334d"
+                      stroke-dasharray="4 3"
+                    />
+                    <text x="444" y="117" fill="#c2334d">
+                      no successful call
+                    </text>
+                    <rect
+                      x="430"
+                      y="144"
+                      width="250"
+                      height="40"
+                      fill="#fff"
+                      stroke="#d4d4dd"
+                    />
+                    <text x="444" y="169">system prompt, policy</text>
+                  </g>
+                  <g stroke="#755cfe" stroke-width="1" fill="none">
+                    <path d="M270 60H430" />
+                    <path d="M270 164H430" />
+                    <path
+                      d="M270 112H430"
+                      stroke="#c2334d"
+                      stroke-dasharray="4 3"
+                    />
+                  </g>
+                </svg>
+              </div>
+              <figcaption>
+                Each claim gets a line back to its source. The one with no
+                source is the failure.
+              </figcaption>
+            </figure>
+
+            <h2 id="walk">Walk each claim to its source</h2>
+            <p>
+              Now open the trace, and for each claim find the latest step that
+              could have produced it. Work from the end of the run towards the
+              start, and stop at the first step that supports the claim.
+            </p>
+            <p>Three outcomes are possible for each claim:</p>
+            <ul>
+              <li>
+                <strong>Supported.</strong> A tool result or a user message says
+                exactly this. Move on.
+              </li>
+              <li>
+                <strong>Stale.</strong> Something said this earlier, but a later
+                step changed it, and the answer used the old value.
+              </li>
+              <li>
+                <strong>Unsupported.</strong> Nothing in the run says this. The
+                model filled the gap.
+              </li>
+            </ul>
+            <p>
+              In practice the walk is short. Most answers make three to six
+              claims, and you are only ever comparing a sentence against a
+              handful of tool outputs, not reading the whole run.
+            </p>
+
+            <h2 id="example">One run, end to start</h2>
+            <p>
+              Here is the run that made us change how we work. A billing agent
+              told a customer their plan had been downgraded and the difference
+              credited. The customer wrote back two weeks later asking where the
+              credit was.
+            </p>
+            <p>
+              Forwards, the trace looked healthy: forty-one spans, no
+              exceptions, every tool returned a 200, total latency under nine
+              seconds. Two people had looked at it and marked it fine.
+            </p>
+            <p>
+              Backwards, it took four minutes. The answer claimed a credit. We
+              looked for a <code>create_credit</code> call and found one at step
+              33, which returned a 200 with a body of
+              <code>{"status": "queued"}</code>. Nothing after it ever checked
+              the queue. The agent read "queued" as "done", and the credit job
+              failed silently overnight on a currency mismatch.
+            </p>
+            <blockquote>
+              The run never lied about what the tool returned. It lied about
+              what the return meant, and only the answer showed that.
+            </blockquote>
+
+            <h2 id="why">Why forwards reading misses it</h2>
+            <p>
+              Reading forwards, step 33 looks like a success, because by its own
+              standard it was one. The tool did what it said. The problem only
+              exists in relation to a sentence written eight steps later, and
+              you have not read that sentence yet when you pass step 33.
+            </p>
+            <p>
+              This is the general shape of a quiet failure. The bad step is
+              never bad on its own. It is bad relative to something the agent
+              says or does afterwards, so the only reliable way to see it is to
+              already know what came afterwards.
+            </p>
+
+            <h2 id="sift">What Sift does with this</h2>
+            <p>
+              Sift runs this walk on every production run. It extracts the
+              claims from the final answer, links each one to the step that
+              supports it, and flags any claim with no support or with stale
+              support. When the same unsupported claim shows up across many
+              runs, those runs are grouped into one issue so you fix a cause
+              once.
+            </p>
+            <p>
+              You can still read a run by hand whenever you want, and you
+              should. But you will start from the claim that broke, not from
+              step one.
+            </p>
+            <p>
+              <a class="pg-arrow-link" href="../demo.html"
+                >See it on your own runs<svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M1 6h9M7 3l3 3-3 3"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.2"
+                  /></svg
+              ></a>
+            </p>
+          </article>
+        </div>
+      </div>
+
+      <div class="pg-band">
+        <div class="pg-frame pg-related">
+          <p class="pg-eyebrow">Keep reading</p>
+          <div class="pg-related-grid">
+            <a href="group-failures-by-cause.html"
+              ><span class="pg-fig" data-fig="cluster" data-seed="23"></span>
+              <p class="pg-eyebrow">Engineering</p>
+              <h3>Group failures by cause, not by trace</h3>
+              <time class="pg-date" datetime="2026-07-21"
+                >July 21, 2026</time
+              ></a
+            >
+            <a href="introducing-sift.html"
+              ><span class="pg-fig pg-fig-navy" data-fig="mark"></span>
+              <p class="pg-eyebrow">Company</p>
+              <h3>Introducing Sift</h3>
+              <time class="pg-date" datetime="2026-08-12"
+                >August 12, 2026</time
+              ></a
+            >
+            <a href="the-retry-that-looked-healthy.html"
+              ><span class="pg-fig" data-fig="loop" data-seed="5"></span>
+              <p class="pg-eyebrow">Engineering</p>
+              <h3>A retry loop that passed every health check</h3>
+              <time class="pg-date" datetime="2026-06-03">June 3, 2026</time></a
+            >
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div id="lower-footer"></div>
+    <script type="module" src="../../src/pages/chrome.js"></script>
+  </body>
+</html>

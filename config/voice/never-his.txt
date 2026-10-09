@@ -1,0 +1,20 @@
+# Phrases drafts used that Caleb has never texted. A phrase only refuses a
+# draft while his own count of it (sent before 2026-09-20) is 0 or 1, so a
+# line here can never block something he actually says. Add one every time
+# he says a draft doesn't sound like him, with the date.
+# 2026-10-07, the Sagar reimbursement text
+squared away
+fronted
+# 2026-10-09, the Jonah and Ryan one-pager texts
+attached is
+only you can answer
+the fastest way
+separate from the
+build to whatever
+in under
+please find
+i wanted to reach out
+i hope this finds you
+just wanted to follow up
+happy to help
+let me know if you have any questions

@@ -405,7 +405,7 @@ struct UrgencyTests {
     @Test("a surface carries an urgency when one is given")
     func parsesUrgency() throws {
         let op = try #require(try LineParser.parse("@ alarm at=center urgency=critical"))
-        guard case .surface(let id, let region, _, let urgency, _, _) = op else {
+        guard case .surface(let id, let region, _, let urgency, _, _, _) = op else {
             Issue.record("expected a surface op")
             return
         }
@@ -417,7 +417,7 @@ struct UrgencyTests {
     @Test("an unknown urgency is dropped rather than guessed")
     func rejectsUnknownUrgency() throws {
         let op = try #require(try LineParser.parse("@ p urgency=extremely"))
-        guard case .surface(_, _, _, let urgency, _, _) = op else {
+        guard case .surface(_, _, _, let urgency, _, _, _) = op else {
             Issue.record("expected a surface op")
             return
         }
@@ -438,7 +438,7 @@ struct ChromeTests {
     @Test("a surface can ask for no window around it")
     func parsesChrome() throws {
         let op = try #require(try LineParser.parse("@ figure chrome=bare"))
-        guard case .surface(_, _, _, _, let chrome, _) = op else {
+        guard case .surface(_, _, _, _, let chrome, _, _) = op else {
             Issue.record("expected a surface op")
             return
         }
@@ -448,7 +448,7 @@ struct ChromeTests {
     @Test("an omitted chrome is nil, so re-addressing keeps what the surface had")
     func omittedChromeIsNil() throws {
         let op = try #require(try LineParser.parse("@ figure"))
-        guard case .surface(_, let region, _, let urgency, let chrome, _) = op else {
+        guard case .surface(_, let region, _, let urgency, let chrome, _, _) = op else {
             Issue.record("expected a surface op")
             return
         }
@@ -459,11 +459,36 @@ struct ChromeTests {
         #expect(chrome == nil)
     }
 
-    @Test("only a card paints a background")
-    func onlyCardIsFilled() {
+    @Test("only a card and a window paint a background")
+    func onlyCardAndWindowAreFilled() {
         #expect(Chrome.card.isFilled)
+        #expect(Chrome.window.isFilled)
         #expect(!Chrome.bare.isFilled)
         #expect(!Chrome.bracket.isFilled)
+    }
+
+    @Test("chrome=window parses")
+    func windowChromeParses() throws {
+        let op = try #require(try LineParser.parse("@ outbound at=top w=620 chrome=window"))
+        guard case .surface(_, _, _, _, let chrome, _, _) = op else {
+            Issue.record("expected a surface op")
+            return
+        }
+        #expect(chrome == .window)
+    }
+
+    @Test("a window is ink with pops: no cyan, and the tones at full strength")
+    func windowTonesArePops() {
+        #expect(HUD.tone(nil, in: .window) == HUD.ink)
+        #expect(HUD.tone("accent", in: .window) == HUD.ink)
+        #expect(HUD.tone("good", in: .window) == HUD.popGood)
+        #expect(HUD.tone("warn", in: .window) == HUD.popWarn)
+        #expect(HUD.tone("bad", in: .window) == HUD.popBad)
+        // Every other chrome keeps the house palette.
+        for chrome in [Chrome.card, .bare, .bracket] {
+            #expect(HUD.tone(nil, in: chrome) == HUD.accent)
+            #expect(HUD.tone("bad", in: chrome) == HUD.bad)
+        }
     }
 }
 
@@ -541,7 +566,7 @@ struct MarkerTests {
     @Test("a surface can be given a lifetime")
     func surfaceLife() throws {
         let op = try #require(try LineParser.parse("@ toast at=top life=6"))
-        guard case .surface(_, _, _, _, _, let life) = op else {
+        guard case .surface(_, _, _, _, _, let life, _) = op else {
             Issue.record("expected a surface op")
             return
         }

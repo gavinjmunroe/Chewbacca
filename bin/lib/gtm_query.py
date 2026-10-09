@@ -92,7 +92,8 @@ def sync_state(db, workspaces: list[str] | None = None) -> list[dict]:
         d["report"] = json.loads(d["report"] or "{}")
         out.append(d)
     seen = {d["source"] for d in out}
-    expected = [f"gtm-{k}:{w}" for w in workspaces for k in ("clay", "inbox")] + ["gtm-calendar"]
+    expected = [f"gtm-{k}:{w}" for w in workspaces for k in ("clay", "inbox")] + \
+        ["gtm-calendar", "gtm-calendar:google", "gtm-calendar:mac"]
     for source in expected:
         if source not in seen:
             out.append({"source": source, "ok": None, "ran_at": None, "note": "never synced", "report": {}})
@@ -250,7 +251,7 @@ def clients(db) -> dict:
     for c in client_rows(db):
         cams = campaigns_of(db, c["id"])
         ids = [x["id"] for x in cams]
-        f = funnel_numbers(db, cams) if ids else {}
+        f = funnel_numbers(db, cams, c["id"]) if ids else {}
         out.append({"name": c["name"], "id": c["id"], "principal": c.get("principal", ""),
                     "workspaces": workspaces_of(db, c["id"]), "offers": offers_of(db, c["id"]),
                     "campaigns": len(cams), "active": sum(1 for x in cams if x.get("status") == "active"),
@@ -264,10 +265,37 @@ def client(db, name: str) -> dict:
     ws = workspaces_of(db, c["id"])
     return {"name": c["name"], "id": c["id"], "principal": c.get("principal", ""), "workspaces": ws,
             "offers": offers_of(db, c["id"]), "campaigns": per_campaign(db, cams),
-            "funnel": funnel_numbers(db, cams), "sync": sync_state(db, ws)}
+            "funnel": funnel_numbers(db, cams, c["id"]), "sync": sync_state(db, ws)}
 
 
-def funnel_numbers(db, cams: list[dict]) -> dict:
+def booking_signals(db, client_id: str) -> dict:
+    """Booking evidence from the client's inbox threads, by distinct lead:
+    confirmed (an invite, an accept, a scheduler confirmation or a confirmed
+    time) and proposed with nothing confirmed yet. Only signals credited to
+    this client count. Never added to calendar meetings: a Zeutara meeting
+    on Jonah's calendar shows here and nowhere else, and one also on Caleb's
+    calendar would otherwise count twice."""
+    confirmed: dict[str, str] = {}
+    proposed: set[str] = set()
+    evidence: dict[str, int] = {}
+    for r in db.execute("SELECT props FROM nodes WHERE type = 'Signal' "
+                        "AND json_extract(props, '$.kind') = 'booking_signal' "
+                        "AND json_extract(props, '$.client_id') = ?", (client_id,)):
+        p = _props(r)
+        if not p.get("credited") or not p.get("email"):
+            continue
+        if p.get("status") == "confirmed":
+            confirmed.setdefault(p["email"], p.get("evidence") or "")
+        elif p.get("status") == "proposed":
+            proposed.add(p["email"])
+    for ev in confirmed.values():
+        evidence[ev] = evidence.get(ev, 0) + 1
+    return {"confirmed": len(confirmed), "proposed_only": len(proposed - set(confirmed)),
+            "confirmed_by": evidence,
+            "source": "clay inbox threads: calendar invite or accept, scheduler confirmation, or a stated time"}
+
+
+def funnel_numbers(db, cams: list[dict], client_id: str | None = None) -> dict:
     ids = [c["id"] for c in cams]
     if not ids:
         return {}
@@ -299,7 +327,9 @@ def funnel_numbers(db, cams: list[dict]) -> dict:
         "people_positive": {"n": len(pos_by), "of": len(replied),
                             "by": {b: sum(1 for x in pos_by.values() if x == b) for b in set(pos_by.values())},
                             "source": "strongest reply verdict: person > model > clay category"},
-        "meetings": {"n": len(meets), "of": emailed, "source": "calendar events with a lead's address"},
+        "meetings": {"n": len(meets), "of": emailed,
+                     "source": "calendar events (Google and Mac, deduped) with a lead's address"},
+        "booking_signals": booking_signals(db, client_id) if client_id else {},
     }
 
 
@@ -549,5 +579,5 @@ def suppress(db, client_name: str) -> dict:
 def funnel(db, client_name: str) -> dict:
     c = find_client(db, client_name)
     cams = campaigns_of(db, c["id"])
-    return {"client": c["name"], "funnel": funnel_numbers(db, cams),
+    return {"client": c["name"], "funnel": funnel_numbers(db, cams, c["id"]),
             "sync": sync_state(db, workspaces_of(db, c["id"]))}

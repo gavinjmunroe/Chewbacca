@@ -57,6 +57,11 @@ else
   cp "$BIN/Kyber" "$APP/Contents/MacOS/Kyber"
 fi
 
+# The window chrome's display face and its licence, which the OFL requires to
+# travel with it. See `Typeface`.
+mkdir -p "$APP/Contents/Resources/Fonts"
+cp Fonts/DepartureMono-Regular.otf Fonts/DepartureMono-OFL.txt "$APP/Contents/Resources/Fonts/"
+
 # The commit count, so two builds of different code never share a version
 # and a bundle can be matched back to the commit it came from.
 BUILD="$(git rev-list --count HEAD 2>/dev/null || echo 1)"
@@ -80,6 +85,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <!-- Accessory: no Dock icon, no app switcher entry, never steals focus. -->
   <key>LSUIElement</key>             <true/>
   <key>NSHighResolutionCapable</key> <true/>
+  <!-- Registers Contents/Resources/Fonts for this process only: the window
+       chrome's pixel face, never installed into the person's font list. -->
+  <key>ATSApplicationFontsPath</key> <string>Fonts</string>
   <!-- Both are required before the frameworks will even prompt. Without them
        the app is killed on the first call rather than being denied. -->
   <!-- Without this key macOS terminates the app the instant it opens a video

@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A retry loop that passed every health check, Sift</title>
+    <meta
+      name="description"
+      content="An agent called the same search tool nineteen times per conversation for a week, and every dashboard stayed green."
+    />
+    <link rel="stylesheet" href="../../src/styles.css" />
+    <link rel="stylesheet" href="../../src/sections/lower.css" />
+    <link rel="stylesheet" href="../../src/sections/chrome.css" />
+    <link rel="stylesheet" href="../../src/sections/states.css" />
+    <link rel="stylesheet" href="../../src/pages/pages.css" />
+  </head>
+  <body data-nav="blog">
+    <div id="site-chrome"></div>
+
+    <main id="top">
+      <div class="pg-band">
+        <div class="pg-frame">
+          <header class="pg-doc-head">
+            <a class="pg-back" href="../blog.html"
+              ><svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                aria-hidden="true"
+              >
+                <path
+                  d="M9 5H1.5M4.5 2 1.5 5l3 3"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                /></svg
+              >All posts</a
+            >
+            <p class="pg-eyebrow">Engineering</p>
+            <h1>A retry loop that passed every health check</h1>
+            <time datetime="2026-06-03">June 3, 2026</time>
+          </header>
+          <div class="pg-byline">
+            <div class="pg-byline-l">
+              <span class="pg-author"
+                ><svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 14 14"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="7"
+                    cy="7"
+                    r="5.5"
+                    fill="none"
+                    stroke="currentColor"
+                  />
+                  <path d="M4.5 9.5 9.5 4.5" stroke="currentColor" /></svg
+                >Mara Lindqvist</span
+              >
+              <span>Founding engineer, Sift</span>
+            </div>
+            <div class="pg-byline-r">
+              <span class="pg-read"
+                ><svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 14 14"
+                  aria-hidden="true"
+                >
+                  <circle
+                    cx="7"
+                    cy="7"
+                    r="5.5"
+                    fill="none"
+                    stroke="currentColor"
+                  />
+                  <path
+                    d="M7 4v3.2l2 1.3"
+                    fill="none"
+                    stroke="currentColor"
+                  /></svg
+                >5 min read</span
+              >
+              <button class="pg-copy" type="button" data-copy-link>
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 12 12"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M5 7 7 5M4.2 5.4 2.6 7a2 2 0 0 0 2.8 2.8l1.6-1.6M7.8 6.6 9.4 5a2 2 0 0 0-2.8-2.8L5 3.8"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.1"
+                  /></svg
+                ><span data-label>Copy link</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="pg-band">
+        <div class="pg-frame pg-post">
+          <nav class="pg-toc" aria-label="On this page" data-toc>
+            <ol>
+              <li><a href="#green">Everything was green</a></li>
+              <li><a href="#loop">What the loop looked like</a></li>
+              <li><a href="#why">Why nothing caught it</a></li>
+              <li><a href="#check">The check we added</a></li>
+            </ol>
+          </nav>
+          <article class="pg-prose">
+            <p class="pg-first" id="green">
+              For a week, a scheduling agent searched the same calendar nineteen
+              times in an average conversation, and every dashboard said it was
+              healthy.
+            </p>
+            <p>
+              Error rate was flat because each search succeeded. Latency rose,
+              but slowly, and inside the alert threshold. Cost went up by a
+              third, which someone noticed on the invoice at the end of the
+              month.
+            </p>
+
+            <h2 id="loop">What the loop looked like</h2>
+            <p>
+              A prompt change had told the agent to "confirm availability before
+              booking". It did. It searched, found a free slot, and then, before
+              booking, searched again to confirm. The second search returned the
+              same slot, which it took as a reason to confirm once more.
+            </p>
+            <p>
+              Most conversations eventually ended because the context filled and
+              an older instruction to book took over. The customer got a
+              booking. Nothing looked wrong from the outside.
+            </p>
+
+            <h2 id="why">Why nothing caught it</h2>
+            <p>
+              Every metric we had was about single steps: did this call fail,
+              was this call slow. A loop is not visible in any single step. It
+              is only visible as a pattern across steps in one run: the same
+              tool, the same arguments, the same result, again.
+            </p>
+
+            <h2 id="check">The check we added</h2>
+            <p>
+              Sift now looks for repeated calls inside a run. Two calls with
+              identical arguments and identical results, with no change to the
+              conversation between them, count as one repeat. Three repeats in
+              one run raise a flag with the step numbers attached.
+            </p>
+            <p>
+              It is a deliberately plain rule. It fires rarely, and when it
+              does, it is almost always right.
+            </p>
+            <p>
+              <a class="pg-arrow-link" href="../changelog.html"
+                >See the release that shipped it<svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M1 6h9M7 3l3 3-3 3"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.2"
+                  /></svg
+              ></a>
+            </p>
+          </article>
+        </div>
+      </div>
+
+      <div class="pg-band">
+        <div class="pg-frame pg-related">
+          <p class="pg-eyebrow">Keep reading</p>
+          <div class="pg-related-grid">
+            <a href="reading-a-run-backwards.html"
+              ><span class="pg-fig" data-fig="backwards" data-seed="11"></span>
+              <p class="pg-eyebrow">Engineering</p>
+              <h3>Read the run backwards</h3>
+              <time class="pg-date" datetime="2026-09-29"
+                >September 29, 2026</time
+              ></a
+            >
+            <a href="introducing-sift.html"
+              ><span class="pg-fig pg-fig-navy" data-fig="mark"></span>
+              <p class="pg-eyebrow">Company</p>
+              <h3>Introducing Sift</h3>
+              <time class="pg-date" datetime="2026-08-12"
+                >August 12, 2026</time
+              ></a
+            >
+            <a href="group-failures-by-cause.html"
+              ><span class="pg-fig" data-fig="cluster" data-seed="23"></span>
+              <p class="pg-eyebrow">Engineering</p>
+              <h3>Group failures by cause, not by trace</h3>
+              <time class="pg-date" datetime="2026-07-21"
+                >July 21, 2026</time
+              ></a
+            >
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div id="lower-footer"></div>
+    <script type="module" src="../../src/pages/chrome.js"></script>
+  </body>
+</html>

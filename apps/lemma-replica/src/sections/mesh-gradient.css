@@ -1,0 +1,17 @@
+/* Canvas and host for mesh-gradient.js. Theirs positions the shader canvas
+   absolute, inset 0, 100% by 100%, pointer-events none, at every call site
+   (chunk 768 `28317` and the hero foreignObject). */
+.mg-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+/* The XHTML box inside an SVG foreignObject, which fills it. */
+.mg-host {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}

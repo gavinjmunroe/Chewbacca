@@ -221,6 +221,16 @@ struct SnapshotTests {
         #expect(drawn > 0.05, "a bare diagram covered only \(drawn) of the frame")
     }
 
+    @Test("a window draws, on both grounds", arguments: Ground.allCases)
+    func windowDraws(ground: Ground) {
+        let drawn = coverage(
+            "surface-window", size: CGSize(width: 480, height: 430), ground: ground
+        ) {
+            card(dashboard, .window, 400)
+        }
+        #expect(drawn > 0.25, "a window covered only \(drawn) of the frame")
+    }
+
     @Test("a bracketed surface draws", arguments: Ground.allCases)
     func bracketDraws(ground: Ground) {
         let drawn = coverage(

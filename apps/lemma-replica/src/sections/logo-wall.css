@@ -1,0 +1,160 @@
+/* Section A: the logo wall.
+ *
+ * Every rule in this block comes from a 1px gap over a hairline-coloured
+ * container, never from a border on a cell. That is the whole reason the
+ * label cell reads as part of the grid instead of as a caption sitting in
+ * it: it has no edge of its own to give it away.
+ *
+ * Scoped under .lw-* so nothing here can reach another section module. */
+
+.lw-wrap {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 72px var(--gutter);
+}
+
+.lw-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  /* The hairline is the container's own background, showing through a 1px
+     gap and a 1px padding ring. One colour, one pixel, every rule including
+     the outer frame, with no double-width seam where two cells meet. */
+  gap: 1px;
+  padding: 1px;
+  background: var(--line);
+}
+
+.lw-cell {
+  position: relative;
+  min-height: 116px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 14px 10px;
+  background: var(--bg);
+  transition: background 220ms ease-out;
+}
+
+.lw-cell:hover {
+  background: var(--panel);
+}
+
+/* Two stacked layers per cell. Both are absolutely positioned so the cell
+   height never moves during a swap: an empty incoming layer must not be able
+   to collapse the row and shift every rule on the page. */
+.lw-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 10px;
+  opacity: 0;
+  transition: opacity 300ms ease-out;
+}
+
+.lw-layer.is-on {
+  opacity: 1;
+}
+
+.lw-mark {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.lw-svg {
+  /* Declared width and height on the element keep one user unit at one CSS
+     pixel, so the wordmarks do not rescale by name length. overflow is
+     visible because the computed box is an estimate of text advance, and a
+     clipped final letter is worse than a pixel of slack. */
+  overflow: visible;
+  max-width: 100%;
+  height: 22px;
+}
+
+.lw-glyph {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.9;
+}
+
+.lw-word {
+  font-family: var(--sans);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  fill: var(--ink);
+}
+
+/* 8px mono uppercase, the one label style on the page. The descriptor sits a
+   tier below the wordmark on colour and opacity only, never on weight. */
+.lw-desc {
+  font-family: var(--mono);
+  font-size: var(--t-8);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.75;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* The centre cell. Same background, same metric, no border, no accent fill:
+   it is a cell that happens to hold the label, not a panel dropped into the
+   grid. */
+.lw-cell-label {
+  gap: 8px;
+  text-align: center;
+}
+
+.lw-label {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: var(--t-8);
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.lw-label-sub {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: var(--t-13);
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--muted);
+  max-width: 22ch;
+}
+
+/* 3 columns keeps the label on the exact centre cell of 15, the same way 5
+   does. No column count that breaks that is offered here. */
+@media (max-width: 900px) {
+  .lw-grid { grid-template-columns: repeat(3, 1fr); }
+  .lw-wrap { padding: 56px var(--gutter); }
+}
+
+@media (max-width: 560px) {
+  .lw-cell { min-height: 92px; padding: 10px 6px; }
+  .lw-layer { padding: 10px 6px; }
+  .lw-svg { height: 18px; }
+  .lw-word { font-size: 13px; }
+  /* The descriptor is the first thing to go: at a 100px cell it wraps to
+     three lines and turns the mark into a paragraph. */
+  .lw-desc { display: none; }
+  .lw-label-sub { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lw-layer { transition: none; }
+  .lw-cell { transition: none; }
+}

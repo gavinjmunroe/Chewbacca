@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""voice-check: does a drafted text read like something Caleb sent?
+
+Measured against his own sent texts in the people store, never against a
+style guide. On 2026-10-09 two texts drafted for Jonah and Ryan opened with
+"Attached is one more page" and ran a colon list through 60 words. He said
+"That doesn't sound like me bruv. fix chewbs i should never send a text that
+doesn't sound like me." Word choice was not the tell: every word in them he
+has typed before. The shape was: one long message where he sends three short
+ones, colons and comma chains he almost never uses, and openers he never
+types.
+
+    voice-check "draft text"              exit 0 sounds like him, 1 does not
+    voice-check --to jonah "draft text"   also prints his own texts to Jonah
+    echo "draft" | voice-check -          read the draft from stdin
+    voice-check --json "draft"
+
+The limits are his own percentiles, recomputed from the store and cached for
+a week at ~/.chewbacca/state/voice-profile.json. Only texts sent before
+2026-09-20 count: after that, agents drafted some of what went out under his
+name, and a profile learned from those would bless their style.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import sqlite3
+import sys
+import time
+from pathlib import Path
+
+DB = Path(os.environ.get("PEOPLE_DB") or Path(os.environ.get("PEOPLE_DIR", Path.home() / ".chewbacca/people")) / "people.db")
+CACHE = Path(os.environ.get("VOICE_PROFILE", Path.home() / ".chewbacca/state/voice-profile.json"))
+KIT = Path(__file__).resolve().parent.parent
+NEVER = KIT / "config/voice/never-his.txt"
+# The first agent-drafted text that went out under his name was 2026-09-21
+# (Zeutara kickoff). Everything before is his own hand.
+CUTOFF = "2026-09-20"
+# Limits come from his substantive texts (8+ words), because a draft is never
+# a "lol". Measured 2026-10-09 on 2,000 of those: refuses 3.9% of his own
+# texts (mostly long announcements and a formal email he pasted), and caught
+# 8 of 12 agent drafts, both rejected ones among them. 95th percentile
+# refused about twice as many of his. Raise PCT and the share of his texts
+# refused falls, along with the drafts caught: re-measure before changing it.
+PCT = 0.97
+MIN_WORDS = 8
+WORD = re.compile(r"[a-z0-9']+")
+
+
+def toks(s: str) -> list[str]:
+    return WORD.findall(s.lower().replace("\u2019", "'"))
+
+
+def sentences(t: str) -> list[str]:
+    return [s for s in re.split(r"(?<=[.!?])\s+|\n+", t) if toks(s)]
+
+
+def feats(t: str) -> dict:
+    w = toks(t)
+    ss = sentences(t) or [t]
+    return {
+        "words": len(w),
+        "longest_sentence": max(len(toks(s)) for s in ss),
+        "commas": t.count(","),
+        "colon": len(re.findall(r"\w:\s+\S", t)),
+        "semicolon": t.count(";"),
+    }
+
+
+def connect():
+    return sqlite3.connect(f"file:{DB}?immutable=1", uri=True)
+
+
+def his_texts(con, who: str | None = None) -> list[str]:
+    q = ("select body from messages where from_me=1 and sent_at < ? and source in ('imessage','whatsapp','slack')")
+    args: list = [CUTOFF]
+    if who:
+        q += " and lower(who) like ?"
+        args.append(f"%{who.lower()}%")
+    return [b for (b,) in con.execute(q, args) if len(toks(b)) >= 3 and "http" not in b]
+
+
+def profile(con) -> dict:
+    try:
+        p = json.loads(CACHE.read_text())
+        if time.time() - p.get("built", 0) < 7 * 86400 and p.get("db") == str(DB):
+            return p
+    except (OSError, ValueError):
+        pass
+    texts = [t for t in his_texts(con) if len(toks(t)) >= MIN_WORDS]
+    F = [feats(t) for t in texts]
+    lim = {k: sorted(f[k] for f in F)[int(PCT * (len(F) - 1))] for k in F[0]} if F else {}
+    p = {"built": time.time(), "db": str(DB), "n": len(F), "limits": lim}
+    try:
+        CACHE.parent.mkdir(parents=True, exist_ok=True)
+        CACHE.write_text(json.dumps(p))
+    except OSError:
+        pass
+    return p
+
+
+def phrase_count(con, phrase: str) -> int:
+    n = 0
+    needle = " " + " ".join(toks(phrase)) + " "
+    for (b,) in con.execute("select messages.body from messages_fts join messages on messages.msg_id = messages_fts.rowid "
+                            "where messages_fts match ? and from_me=1 and sent_at < ?",
+                            ['"' + phrase.replace('"', "") + '"', CUTOFF]):
+        if needle in " " + " ".join(toks(b)) + " ":
+            n += 1
+    return n
+
+
+def never_phrases() -> list[str]:
+    try:
+        return [l.strip() for l in NEVER.read_text().splitlines() if l.strip() and not l.startswith("#")]
+    except OSError:
+        return []
+
+
+REASONS = {
+    "words": "longer than {pct} of your texts ({v} words, you top out near {lim}); send it as two or three short ones",
+    "longest_sentence": "one sentence runs {v} words; yours top out near {lim}",
+    "commas": "{v} commas; you rarely use more than {lim}",
+    "colon": "a colon lead-in; you almost never write \"x: a, b and c\" in a text",
+    "semicolon": "a semicolon; you basically never use them in texts",
+}
+
+
+def check(text: str, con, prof: dict) -> list[str]:
+    out = []
+    f = feats(text)
+    for k, v in f.items():
+        lim = prof["limits"].get(k)
+        if lim is not None and v > lim:
+            out.append(REASONS[k].format(v=v, lim=lim, pct=f"{int(PCT * 100)}%"))
+    body = " " + " ".join(toks(text)) + " "
+    for ph in never_phrases():
+        if " " + " ".join(toks(ph)) + " " in body and phrase_count(con, ph) <= 1:
+            out.append(f'"{ph}": you\'ve never texted that')
+    return out
+
+
+def main(argv: list[str]) -> int:
+    as_json = "--json" in argv
+    argv = [a for a in argv if a != "--json"]
+    who = None
+    if "--to" in argv:
+        i = argv.index("--to")
+        who = argv[i + 1] if i + 1 < len(argv) else None
+        del argv[i:i + 2]
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0 if argv else 2
+    text = sys.stdin.read() if argv[0] == "-" else " ".join(argv)
+    if not DB.exists():
+        print("voice-check: no people store yet, so nothing to measure against. Run: people texts sync", file=sys.stderr)
+        return 0
+    con = connect()
+    prof = profile(con)
+    reasons = check(text, con, prof)
+    examples = []
+    if who:
+        mine = his_texts(con, who)
+        n = len(toks(text))
+        examples = sorted(mine[-60:], key=lambda t: abs(len(toks(t)) - min(n, 25)))[:5]
+    # One reason alone is a nudge: 1 in 10 of his own texts trips one. Two
+    # or more, or any phrase he has never typed, refuses.
+    hard = [r for r in reasons if "never texted" in r or "colon lead-in" in r]
+    ok = not hard and len(reasons) < 2
+    if as_json:
+        print(json.dumps({"ok": ok, "reasons": reasons, "examples": examples}))
+        return 0 if ok else 1
+    if ok and not reasons:
+        print("sounds like you")
+    elif ok:
+        print("close: " + reasons[0])
+    else:
+        print("doesn't sound like you:")
+        for r in reasons:
+            print(f"  - {r}")
+    if examples and not ok:
+        print(f"\nwhat you actually send {who}:")
+        for e in examples:
+            print(f"  > {e[:200]}")
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

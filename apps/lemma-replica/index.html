@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sift, agent run monitoring</title>
+<meta name="description" content="Sift is a fictional product used as the content for a layout and motion study. The mechanisms are measured from a real page; the brand, words and artwork here are our own.">
+<link rel="stylesheet" href="src/styles.css">
+<link rel="stylesheet" href="src/sections/logo-wall.css">
+<link rel="stylesheet" href="src/sections/waterfall.css">
+<link rel="stylesheet" href="src/sections/chat-mock.css">
+<link rel="stylesheet" href="src/sections/integrations.css">
+<link rel="stylesheet" href="src/sections/metrics.css">
+<link rel="stylesheet" href="src/sections/testimonials.css">
+<link rel="stylesheet" href="src/sections/hero-scene.css">
+<link rel="stylesheet" href="src/sections/lower.css">
+<link rel="stylesheet" href="src/sections/chrome.css">
+<link rel="stylesheet" href="src/sections/states.css">
+</head>
+<body data-chrome="none">
+
+<header class="header">
+  <div class="inner">
+    <a class="brand" href="#top">
+      <svg viewBox="0 0 22 20" width="19" height="17" aria-hidden="true">
+        <path d="M11 1 1 6l10 5 10-5z" fill="#1d1956"/>
+        <path d="M1 10.5 11 15.5 21 10.5" fill="none" stroke="#755cfe" stroke-width="1.6"/>
+        <path d="M1 14.5 11 19.5 21 14.5" fill="none" stroke="#755cfe" stroke-width="1.6" opacity=".55"/>
+      </svg><span>Sift</span></a>
+    <nav class="nav" aria-label="Primary">
+      <a href="pages/docs.html" class="ul-grow">Docs</a><a href="pages/blog.html" class="ul-grow">Blog</a><a href="pages/weekly.html" class="ul-grow">Weekly</a>
+      <a href="pages/changelog.html" class="ul-grow">Changelog</a><a href="pages/careers.html" class="ul-grow">Careers</a>
+    </nav>
+    <div class="right">
+      <a class="btn btn-ghost" href="pages/login.html">Login</a>
+      <a class="btn btn-primary" href="pages/demo.html">Book a demo</a>
+    </div>
+  </div>
+</header>
+
+<div class="banner">
+  <span class="bmark" aria-hidden="true"></span>
+  We're&nbsp;<a href="pages/careers.html">hiring</a>!
+  <button class="bclose" type="button" aria-label="Dismiss">&times;</button>
+</div>
+
+<main id="top">
+
+  <!-- HERO: one pinned block, 12 viewports, holding the hero, the logo wall
+       and the trace scene. See src/sections/hero-scene.js. -->
+  <section class="hs-run" id="hero" style="height:1200vh">
+    <div class="hs-pin">
+      <section class="hero">
+    <div class="wrap">
+      <div class="backed"><span class="dot" aria-hidden="true"></span><span class="ycw">Now in public beta</span></div>
+      <h1><span class="ln">Your agent failed</span><br><span class="ln"><b>and nothing threw an error</b></span></h1>
+      <p>Sift replays every run, marks the steps that went wrong, and groups the
+         repeats so you fix a cause instead of a ticket.</p>
+      <div class="hero-cta">
+        <a class="btn btn-primary btn-lg" href="pages/demo.html">Book a demo</a>
+        <a class="btn btn-ghost btn-lg" href="pages/docs.html">Read the docs</a>
+      </div>
+    </div>
+    <div id="plates"></div>
+  </section>
+      <div class="hs-logos"></div>
+      <div class="hs-stage"><div class="hs-rise"></div></div>
+      <div class="hs-cap"><div class="hs-cap-in">
+        <p class="hs-cap-h">Your agents fail without telling you.</p>
+        <p class="hs-cap-l">Loops, wrong tools, context that goes stale mid-run. Nothing raises an exception, but the customer notices&hellip; then&nbsp;they&nbsp;leave.</p>
+      </div></div>
+      <div class="hs-cap"><div class="hs-cap-in">
+        <p class="hs-cap-h">Catching one quiet failure by hand means reading through <span class="hs-reels"></span> runs.</p>
+      </div></div>
+      <div class="hs-cap"><div class="hs-cap-in">
+        <p class="hs-cap-h">With Sift, you see it first.</p>
+        <p class="hs-cap-l">Sift connects what your agent did in production to what you fix next.</p>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- SCENE 2: four text columns scrolling past ONE pinned panel.
+       NOT a pinned block whose copy swaps, which is what this was.
+
+       measure2 samples each heading's page position at two scroll offsets to
+       find out whether it is pinned. On ours it flagged two headings. On
+       theirs it flags one, the hero. So their four feature titles are four
+       real text blocks that scroll; only the media column is sticky. Same
+       apparent result, different mechanism, and it is why theirs has no
+       text-swap animation: the text does not swap, it scrolls past.
+
+       Structure recovered from their DOM:
+
+         DIV  max-width 1040, centred, padding 0 24      content 992
+           DIV  grid, columns 384 + 544, gap 64          384+64+544 = 992
+             DIV  text, four blocks each one viewport tall, centred
+             DIV  media, 4 viewports tall, ONE sticky panel at top 0
+
+       The section is ordinary flow now. The old `.run`/`.pin` wrapper was
+       doing by hand what `position: sticky` does, and doing it to the wrong
+       column. -->
+  <section class="feat" id="run2">
+    <div class="feat-wrap">
+      <div class="feat-grid">
+        <div class="feat-text" id="demoText"></div>
+        <div class="feat-media">
+          <div class="feat-pin"><div class="demo-stage" id="demoStage"></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INTEGRATIONS -->
+
+
+
+
+
+  <div id="lower"></div>
+
+</main>
+
+<div id="lower-footer"></div>
+
+<!-- The cookie consent card. Theirs carries one in the bottom right on every
+     view, which is why their `controls` count sits at a constant 15 against
+     our 12 in every single section: three buttons present the whole way down
+     the page. Ours says what ours actually does. -->
+<aside class="cc" id="cookie-card" role="dialog" aria-labelledby="cc-h" aria-describedby="cc-b">
+  <div class="cc-head" id="cc-h">Cookies</div>
+  <p class="cc-body" id="cc-b">One analytics cookie, to see which parts get read.</p>
+  <div class="cc-actions">
+    <button class="cc-btn" type="button" data-cc="reject">Reject</button>
+    <button class="cc-btn" type="button" data-cc="choose">Choose</button>
+    <button class="cc-btn cc-btn-primary" type="button" data-cc="accept">Accept</button>
+  </div>
+</aside>
+
+
+
+<script type="module" src="src/app.js"></script>
+<script type="module" src="src/pages/home.js"></script>
+</body>
+</html>

@@ -11,7 +11,9 @@ import Foundation
 ///     r <id>                             declare the root
 ///
 ///     @ <surface> [at=region] [w=380] [urgency=alert] [chrome=bare] [life=60]
-///                                        open a surface, or re-address one
+///       [near=x,y,w,h] [side=right|left]
+///                                        open a surface, or re-address one;
+///                                        near= puts it beside a screen rectangle
 ///     - [<surface>]                      close one, or clear the glass
 ///     p <state> [amp=0.4]                presence: what it is doing
 ///     s "<text>"                         say one line on the pill (subtitle)
@@ -208,9 +210,13 @@ public enum LineParser {
             var urgency: Urgency?
             var chrome: Chrome?
             var life: Double?
+            var target: CGRect?
+            var side = Near.Side.right
             for token in tokens.dropFirst(2) {
                 guard let (key, raw) = splitPair(token) else { continue }
                 let value = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+                if key == "near" { target = Near.parse(value) }
+                if key == "side" { side = Near.Side(rawValue: value) ?? .right }
                 if key == "at" { region = Region(rawValue: value) }
                 if key == "w" || key == "width" { width = Double(value) }
                 if key == "urgency" { urgency = Urgency(rawValue: value) }
@@ -219,7 +225,8 @@ public enum LineParser {
             }
             return .surface(
                 id: tokens[1], region: region, width: width,
-                urgency: urgency, chrome: chrome, life: life)
+                urgency: urgency, chrome: chrome, life: life,
+                near: target.map { Near(target: $0, side: side) })
 
         case "-":
             // `- name` closes one. `-` on its own clears the glass.

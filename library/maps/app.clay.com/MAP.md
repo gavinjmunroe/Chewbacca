@@ -154,6 +154,22 @@ Each of these cost a turn once. Each is a check now.
   plan for the person to do the import, or get a permission rule added,
   before promising an end-to-end build.
 
+- 2026-10-09: the Find leads flyout grew a "Create a workflow (Beta)"
+  section with its own "People" and "Companies" buttons, so a press by text
+  alone matched two. **Check:** scope the press by the label above it
+  ("Search directly"); clay-build's finder takes `section` for this.
+- 2026-10-09: Find People shows "~301,069,942 found", the whole database, as
+  soon as the chat opens and before a typed search applies. The finished
+  search read "8 of 8 (8 found)", with no tilde, and a wait for "~N found"
+  passed on the unfiltered total. **Check:** wait for the count to change
+  after Enter, and read the "N of N (N found)" form as well.
+- 2026-10-09: "fintech VC partners" returned 8 people where "fintech-infra VC
+  partners" returned 551 on 10-05, and "Continue" then did not open the count
+  and destination screen within 15 s. The chat page also carries a
+  `filters`/`query` radio pair not recorded on 10-05. **Check:** unexplained
+  so far; read the page after Continue before trusting step 3 of the Find
+  People path below.
+
 ## Fastest path for a list build
 
 1. Filter and score for free against local data first.

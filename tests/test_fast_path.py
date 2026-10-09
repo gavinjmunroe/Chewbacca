@@ -98,6 +98,13 @@ TABLE = [
     ("What's up, bro?", "pleasantry"),
     ("How are you doing?", "pleasantry"),
     ("what's up with my agents", None),
+    # clay-build (docs/CLAY-HUD.md, Voice), 2026-10-09: who, how many, and Clay.
+    ("find me 50 fintech VC partners in Clay", "clay"),
+    ("Clay, find 20 seed investors in Austin", "clay"),
+    ("build a list of fifty fintech VC partners with work emails", "clay"),
+    ("okay so find me fintech VC partners in clay", "clay"),
+    ("open clay", None),
+    ("build me a list of 5 restaurants in Dallas", None),
 ]
 
 

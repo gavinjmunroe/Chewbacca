@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Log in, Sift</title>
+    <meta name="description" content="Log in to Sift with a one-time link." />
+    <link rel="stylesheet" href="../src/styles.css" />
+    <link rel="stylesheet" href="../src/sections/lower.css" />
+    <link rel="stylesheet" href="../src/sections/chrome.css" />
+    <link rel="stylesheet" href="../src/sections/states.css" />
+    <link rel="stylesheet" href="../src/pages/pages.css" />
+  </head>
+  <body data-nav="login">
+    <div id="site-chrome"></div>
+
+    <main id="top">
+      <div class="pg-frame pg-frame-narrow pg-login">
+        <div class="pg-login-card">
+          <p class="pg-eyebrow">Sift</p>
+          <h1 class="pg-h2">Log in</h1>
+          <p>
+            We send a one-time link to your work email. No password to forget.
+          </p>
+
+          <form
+            class="pg-form"
+            data-done="login-done"
+            data-pending="Sending link"
+          >
+            <div class="pg-field">
+              <label for="l-email">Work email</label>
+              <input
+                id="l-email"
+                name="email"
+                type="email"
+                autocomplete="email"
+                required
+                data-label="work email"
+              />
+              <p class="pg-err" id="l-email-err"></p>
+            </div>
+            <button class="btn btn-primary" type="submit">
+              Email me a link
+            </button>
+          </form>
+
+          <div
+            class="pg-done"
+            id="login-done"
+            tabindex="-1"
+            role="status"
+            hidden
+          >
+            <div class="pg-done-mark">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 12 12"
+                aria-hidden="true"
+              >
+                <path
+                  d="M2 6.5 5 9l5-6"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                />
+              </svg>
+            </div>
+            <h2>Check your inbox</h2>
+            <p>
+              If <span data-echo="email"></span> has a Sift account, a link is
+              on its way. This replica sends nothing, so nothing will arrive.
+            </p>
+            <button class="btn btn-ghost" type="button" data-reset>
+              Use a different email
+            </button>
+          </div>
+
+          <div class="pg-or">or</div>
+          <a class="pg-sso" href="demo.html">No account yet? Book a demo</a>
+        </div>
+      </div>
+    </main>
+
+    <div id="lower-footer"></div>
+    <script type="module" src="../src/pages/chrome.js"></script>
+  </body>
+</html>

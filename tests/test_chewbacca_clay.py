@@ -202,6 +202,29 @@ def test_write_gate():
     ok(code == 3 and out["class"] == "refused", "measure never runs a write")
 
 
+def test_a_relabelled_write_is_still_gated():
+    # Review of b68d5645: a registry that calls blocklist-add a read, or an env var
+    # pointing at such a registry, must not get past the person-at-a-terminal gate.
+    reg = json.loads((LIB / "registry.json").read_text())
+    for op in reg["ops"]:
+        if op["name"] == "blocklist-add":
+            op["kind"], op["gate"] = "read", "read"
+    with tempfile.TemporaryDirectory() as d:
+        lib = Path(d) / "lib"
+        lib.mkdir()
+        (lib / "registry.json").write_text(json.dumps(reg))
+        (lib / "clay.json").write_text((LIB / "clay.json").read_text())
+        code, out, _ = run({}, {}, "blocklist-add", "emailOrDomain=blocked.example", env_extra={"CHEWBACCA_CLAY_LIB": str(lib)})
+        ok(code == 3 and out["class"] == "refused", "a POST relabelled as a read still needs --allow-writes and a person")
+        env = dict(os.environ, CHEWBACCA_CLAY_LIB=str(lib), API_ANYTHING_HOME=str(Path(d) / "home"),
+                   CHEWBACCA_CLAY_MEASURED=str(Path(d) / "m.json"))
+        env.pop("CHEWBACCA_CLAY_FIXTURES", None)
+        (Path(d) / "m.json").write_text("{}")
+        p = subprocess.run(["node", str(TOOL), "ops"], capture_output=True, text=True, env=env, timeout=60)
+        ops = {o["op"]: o for o in json.loads(p.stdout)["ops"]}
+        ok(ops["blocklist-add"]["kind"] == "write", "live, CHEWBACCA_CLAY_LIB is ignored and the repo registry is read")
+
+
 def test_refuses_an_unpinned_engine():
     # Not fixture mode: the front door finds this fake engine, hashes it, and must refuse it
     # before importing it. Importing would write the marker file.
@@ -216,7 +239,7 @@ def test_refuses_an_unpinned_engine():
         env = dict(os.environ, API_ANYTHING_DIST=str(dist), API_ANYTHING_HOME=str(Path(d) / "home"),
                    CHEWBACCA_CLAY_MEASURED=str(Path(d) / "m.json"))
         env.pop("CHEWBACCA_CLAY_FIXTURES", None)
-        env.pop("CHEWBACCA_CLAY_TRUST_ENGINE", None)
+        env["CHEWBACCA_CLAY_TRUST_ENGINE"] = "1"  # no longer an escape hatch (review of b68d5645)
         p = subprocess.run(["node", str(TOOL), "credits", "--surface", "api"], capture_output=True, text=True,
                            env=env, timeout=60)
         out = json.loads(p.stdout)
@@ -269,7 +292,7 @@ def test_fixtures_are_scrubbed():
 def main():
     for fn in (test_registry_matches_spec, test_ops_json_shape, test_routes_to_fastest_measured,
                test_falls_through_on_failure_and_truncation, test_args_pick_the_surface, test_write_gate,
-               test_ui_only_prints_route, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
+               test_ui_only_prints_route, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")
 

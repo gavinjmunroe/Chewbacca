@@ -26,9 +26,14 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const ROOT = process.env.CHEWBACCA_ROOT || path.resolve(__dirname, "..");
-const LIB = process.env.CHEWBACCA_CLAY_LIB || path.join(ROOT, "library", "clay-api");
+// Path overrides are honored only in fixture mode, which never reaches Clay.
+// Live, an env var pointing LIB at a doctored registry could relabel a write
+// as a read, and CHEWBACCA_ROOT could swap the binaries a surface runs
+// (security review of b68d5645, 2026-10-09).
 const FIXTURES = process.env.CHEWBACCA_CLAY_FIXTURES || "";
+const testEnv = (name) => (FIXTURES ? process.env[name] : undefined);
+const ROOT = testEnv("CHEWBACCA_ROOT") || path.resolve(__dirname, "..");
+const LIB = testEnv("CHEWBACCA_CLAY_LIB") || path.join(ROOT, "library", "clay-api");
 const MEASURED = process.env.CHEWBACCA_CLAY_MEASURED || path.join(LIB, "measured.json");
 const ENGINE_HOME = process.env.API_ANYTHING_HOME || path.join(os.homedir(), ".chewbacca", "api-anything");
 
@@ -195,7 +200,7 @@ async function callEngine(opName, bound, flags, write) {
   const dist = engineDist();
   if (!dist) return { ok: false, class: "error", reason: "api-anything is not installed", next: "chewbacca api install" };
   const want = registry.engine.dist_sha256;
-  if (want && process.env.CHEWBACCA_CLAY_TRUST_ENGINE !== "1" && distHash(dist) !== want) {
+  if (!want || distHash(dist) !== want) {
     return {
       ok: false,
       class: "error",
@@ -232,11 +237,24 @@ function where(data, cond) {
   return data.filter((row) => Object.entries(cond).every(([k, v]) => row && row[k] === v));
 }
 
+// The only POSTs that read. Any other non-GET request in the spec is a write,
+// whatever the registry's `kind` says, so relabeling one in the registry can't
+// slip it past the person-at-a-terminal gate.
+const READ_POSTS = new Set(["listResources", "inboxReplies", "threadHistory"]);
+function specWrites(specName) {
+  const so = specOps.get(specName);
+  if (!so) return true;
+  return String(so.request?.method || "").toUpperCase() !== "GET" && !READ_POSTS.has(specName);
+}
+function isWrite(op) {
+  return op.kind === "write" || op.surfaces.some((s) => s.type === "api-anything" && specWrites(s.op));
+}
+
 async function attempt(op, cand, flags) {
   const { s, bound } = cand;
   const t0 = Date.now();
   if (s.type === "api-anything") {
-    const r = await callEngine(s.op, bound, flags, op.kind === "write");
+    const r = await callEngine(s.op, bound, flags, isWrite(op));
     const res = {
       ok: !!r.ok,
       surface: "api-anything",
@@ -249,7 +267,7 @@ async function attempt(op, cand, flags) {
     if (!r.ok) return { ...res, class: r.class, reason: r.reason, next: r.next };
     return { ...res, data: where(r.data, s.where), truncated: r.truncated, healed: r.healed };
   }
-  const file = s.type === "cli" ? process.env.CLAY_BIN || "clay" : path.join(ROOT, "bin", bound[0]);
+  const file = s.type === "cli" ? "clay" : path.join(ROOT, "bin", bound[0]);
   const argv = s.type === "cli" ? bound : bound.slice(1);
   const r = runProcess(s.type, op.name, file, argv);
   const res = { surface: s.type, call: `${s.type === "cli" ? "clay" : bound[0]} ${argv.join(" ")}`.trim(), ms: Date.now() - t0 };
@@ -372,7 +390,7 @@ async function runOp(name, kv, flags) {
   }
   const bad = badArg(args);
   if (bad) out({ ok: false, op: name, class: "input", reason: bad }, EXIT.usage);
-  if (op.kind === "write") {
+  if (isWrite(op)) {
     const refuse = (reason) => out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args } }, EXIT.refused);
     if (process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
     if (!flags.allowWrites) refuse("a write needs --allow-writes");
@@ -391,7 +409,7 @@ async function runOp(name, kv, flags) {
     last = r;
     tried.push({ surface: r.surface, call: r.call, ok: r.ok, ms: r.ms, ...(r.ok ? {} : { class: r.class, reason: r.reason }), ...(r.truncated ? { truncated: r.truncated } : {}) });
     // A write is sent once, through one surface: never fall through to another.
-    if (op.kind === "write") break;
+    if (isWrite(op)) break;
     if (r.ok && !r.truncated) break;
     // An input error means the args are wrong, and every surface would say so.
     if (!r.ok && r.class === "input") break;
@@ -407,7 +425,7 @@ async function runOp(name, kv, flags) {
 async function measure(name, kv) {
   const op = opByName.get(name);
   if (!op) out({ ok: false, class: "usage", reason: `unknown op ${name}` }, EXIT.usage);
-  if (op.kind !== "read") out({ ok: false, op: name, class: "refused", reason: "measure runs reads only" }, EXIT.refused);
+  if (op.kind !== "read" || isWrite(op)) out({ ok: false, op: name, class: "refused", reason: "measure runs reads only" }, EXIT.refused);
   const args = withDefaults(op, kv);
   const rows = [];
   const at = new Date().toISOString().slice(0, 10);

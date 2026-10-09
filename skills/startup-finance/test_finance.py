@@ -231,3 +231,9 @@ def test_cli_categorize_csv_and_franchise(tmp_path):
     assert out[0]["vendor"] == "Figma" and "duplicate" in out[1]["flags"] and "missing_receipt" in out[1]["flags"]
     ft = json.loads(subprocess.run([sys.executable, "-I", script, "franchise-tax", "--authorized", "10000000", "--issued", "8000000", "--gross-assets", "1579472"], capture_output=True, text=True, check=True).stdout)
     assert ft["authorized_shares_total"] == 85215 and ft["assumed_par_value_total"] == 850
+
+
+def test_csv_cell_quotes_formula_descriptors():
+    assert f.csv_cell('=HYPERLINK("http://x","y")').startswith("'=")
+    assert f.csv_cell("@SUM(A1)") == "'@SUM(A1)"
+    assert f.csv_cell("AWS EMEA") == "AWS EMEA"

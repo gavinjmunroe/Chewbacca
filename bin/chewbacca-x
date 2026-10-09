@@ -44,6 +44,8 @@ def die(msg):
 
 
 def headers():
+    if SESSION.exists() and SESSION.stat().st_mode & 0o077:
+        os.chmod(SESSION, 0o600)
     if not SESSION.exists():
         die("no X session. Import it once: chewbacca x login")
     jar = {c["name"]: c["value"] for c in json.loads(SESSION.read_text())["cookies"]}
@@ -87,9 +89,15 @@ def login(argv):
     r = subprocess.run(["api-anything", "login", "x", "--profile", profile], capture_output=True, text=True, timeout=120)
     if not shared.exists() or '"loggedIn":true' not in r.stdout.replace(" ", ""):
         die("import didn't sign in: " + (r.stdout + r.stderr).strip()[-200:])
-    SESSION.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    SESSION.write_text(shared.read_text())
-    SESSION.chmod(0o600)
+    # The session holds his auth_token. Create the file 0600 from the first
+    # byte (write-then-chmod leaves it world-readable for a moment) and tighten
+    # a directory that already existed, since mkdir's mode skips those.
+    SESSION.parent.mkdir(parents=True, exist_ok=True)
+    SESSION.parent.chmod(0o700)
+    fd = os.open(SESSION, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(shared.read_text())
+    os.chmod(SESSION, 0o600)
     shared.unlink()  # keep the shared engine logged out, so getUser keeps working
     print(f"X session saved from {profile}")
 

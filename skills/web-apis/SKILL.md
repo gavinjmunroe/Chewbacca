@@ -45,6 +45,9 @@ Read them before the first call: most failures are a param format they spell out
 | usc-jobs | searchJobs, getJob | USC's public staff job board, pay included |
 | usc-events | upcoming, searchEvents | calendar.usc.edu |
 | sc-engage | searchOrgs, getOrg, orgEvents | USC clubs, officers, club events |
+| usc-dining | menuBreakfast, menuBrunch, menuLunch, menuDinner | dining hall menus, a few days ahead |
+| usc-libraries | studyRooms | open study-room slots (read only, never books) |
+| usc-directory | searchPeople | profs and staff: title, department, email |
 | bundled | google-flights, airbnb, amazon, goodreads, youtube, x, instagram, hacker-news | upstream's own |
 
 Formats that bit during teaching: LinkedIn job locations in full

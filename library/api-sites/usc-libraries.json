@@ -1,0 +1,100 @@
+{
+  "name": "usc-libraries",
+  "baseUrl": "https://libcal.usc.edu",
+  "operations": [
+    {
+      "name": "studyRooms",
+      "description": "LibCal study room slots for one library (lid) from start to end (YYYY-MM-DD, end exclusive). booked is s-lc-eq-checkout when taken, absent when open. Read only.",
+      "request": {
+        "method": "POST",
+        "url": "https://libcal.usc.edu/spaces/availability/grid",
+        "headers": {
+          "accept": "application/json, text/javascript, */*; q=0.01",
+          "accept-language": "en-US,en;q=0.9",
+          "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "origin": "https://libcal.usc.edu",
+          "priority": "u=1, i",
+          "referer": "https://libcal.usc.edu/spaces?lid={lid}",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "x-requested-with": "XMLHttpRequest"
+        },
+        "body": "lid=%7Blid%7D&gid=0&eid=-1&seat=0&seatId=0&zone=0&start=%7Bstart%7D&end=%7Bend%7D&pageIndex=0&pageSize=18"
+      },
+      "slots": [
+        {
+          "param": "lid",
+          "at": [
+            "form:lid"
+          ]
+        },
+        {
+          "param": "start",
+          "at": [
+            "form:start"
+          ]
+        },
+        {
+          "param": "end",
+          "at": [
+            "form:end"
+          ]
+        },
+        {
+          "param": "lid",
+          "at": [
+            "header:referer"
+          ],
+          "template": "https://libcal.usc.edu/spaces?lid={lid}"
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://libcal.usc.edu/spaces?lid={lid}"
+      },
+      "match": {
+        "path": "/spaces/availability/grid"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json",
+        "extract": "slots",
+        "pick": [
+          "roomId=itemId",
+          "start",
+          "end",
+          "booked=className"
+        ]
+      },
+      "params": [
+        {
+          "name": "lid",
+          "type": "string",
+          "required": true,
+          "example": "2893"
+        },
+        {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "example": "2026-10-09"
+        },
+        {
+          "name": "end",
+          "type": "string",
+          "required": true,
+          "example": "2026-10-12"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T18:05:18.854Z"
+    }
+  ]
+}

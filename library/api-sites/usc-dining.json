@@ -1,0 +1,390 @@
+{
+  "name": "usc-dining",
+  "baseUrl": "https://hospitality.usc.edu",
+  "operations": [
+    {
+      "name": "menuBreakfast",
+      "description": "Breakfast stations and items at one residential hall (evk, parkside, university-village) on one date",
+      "request": {
+        "method": "GET",
+        "url": "https://hospitality.usc.edu/wp-json/hsp-api/v1/get-res-dining-menus/%7Bhall%7D?y=%7Byear%7D&m=%7Bmonth%7D&d=%7Bday%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        }
+      },
+      "slots": [
+        {
+          "param": "hall",
+          "at": [
+            "path:4"
+          ]
+        },
+        {
+          "param": "year",
+          "at": [
+            "query:y"
+          ]
+        },
+        {
+          "param": "month",
+          "at": [
+            "query:m"
+          ]
+        },
+        {
+          "param": "day",
+          "at": [
+            "query:d"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://hospitality.usc.edu/wp-json/hsp-api/v1/get-res-dining-menus/{hall}?y={year}&m={month}&d={day}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "hospitality.usc.edu",
+        "path": "/wp-json/hsp-api/v1/get-res-dining-menus/*"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "meals[0].stations",
+        "pick": [
+          "station",
+          "subtitle",
+          "menu"
+        ]
+      },
+      "params": [
+        {
+          "name": "hall",
+          "type": "string",
+          "required": true,
+          "example": "parkside"
+        },
+        {
+          "name": "year",
+          "type": "string",
+          "required": true,
+          "example": "2026"
+        },
+        {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "example": "010"
+        },
+        {
+          "name": "day",
+          "type": "string",
+          "required": true,
+          "example": "009"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:36:28.777Z"
+    },
+    {
+      "name": "menuBrunch",
+      "description": "Brunch stations and items at one residential hall (evk, parkside, university-village) on one date",
+      "request": {
+        "method": "GET",
+        "url": "https://hospitality.usc.edu/wp-json/hsp-api/v1/get-res-dining-menus/%7Bhall%7D?y=%7Byear%7D&m=%7Bmonth%7D&d=%7Bday%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        }
+      },
+      "slots": [
+        {
+          "param": "hall",
+          "at": [
+            "path:4"
+          ]
+        },
+        {
+          "param": "year",
+          "at": [
+            "query:y"
+          ]
+        },
+        {
+          "param": "month",
+          "at": [
+            "query:m"
+          ]
+        },
+        {
+          "param": "day",
+          "at": [
+            "query:d"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://hospitality.usc.edu/wp-json/hsp-api/v1/get-res-dining-menus/{hall}?y={year}&m={month}&d={day}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "hospitality.usc.edu",
+        "path": "/wp-json/hsp-api/v1/get-res-dining-menus/*"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "meals[1].stations",
+        "pick": [
+          "station",
+          "subtitle",
+          "menu"
+        ]
+      },
+      "params": [
+        {
+          "name": "hall",
+          "type": "string",
+          "required": true,
+          "example": "university-village"
+        },
+        {
+          "name": "year",
+          "type": "string",
+          "required": true,
+          "example": "2026"
+        },
+        {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "example": "010"
+        },
+        {
+          "name": "day",
+          "type": "string",
+          "required": true,
+          "example": "011"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:36:29.500Z"
+    },
+    {
+      "name": "menuLunch",
+      "description": "Lunch stations and items at one residential hall (evk, parkside, university-village) on one date",
+      "request": {
+        "method": "GET",
+        "url": "https://hospitality.usc.edu/wp-json/hsp-api/v1/get-res-dining-menus/%7Bhall%7D?y=%7Byear%7D&m=%7Bmonth%7D&d=%7Bday%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        }
+      },
+      "slots": [
+        {
+          "param": "hall",
+          "at": [
+            "path:4"
+          ]
+        },
+        {
+          "param": "year",
+          "at": [
+            "query:y"
+          ]
+        },
+        {
+          "param": "month",
+          "at": [
+            "query:m"
+          ]
+        },
+        {
+          "param": "day",
+          "at": [
+            "query:d"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://hospitality.usc.edu/wp-json/hsp-api/v1/get-res-dining-menus/{hall}?y={year}&m={month}&d={day}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "hospitality.usc.edu",
+        "path": "/wp-json/hsp-api/v1/get-res-dining-menus/*"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "meals[2].stations",
+        "pick": [
+          "station",
+          "subtitle",
+          "menu"
+        ]
+      },
+      "params": [
+        {
+          "name": "hall",
+          "type": "string",
+          "required": true,
+          "example": "parkside"
+        },
+        {
+          "name": "year",
+          "type": "string",
+          "required": true,
+          "example": "2026"
+        },
+        {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "example": "010"
+        },
+        {
+          "name": "day",
+          "type": "string",
+          "required": true,
+          "example": "009"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:36:30.716Z"
+    },
+    {
+      "name": "menuDinner",
+      "description": "Dinner stations and items at one residential hall (evk, parkside, university-village) on one date",
+      "request": {
+        "method": "GET",
+        "url": "https://hospitality.usc.edu/wp-json/hsp-api/v1/get-res-dining-menus/%7Bhall%7D?y=%7Byear%7D&m=%7Bmonth%7D&d=%7Bday%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        }
+      },
+      "slots": [
+        {
+          "param": "hall",
+          "at": [
+            "path:4"
+          ]
+        },
+        {
+          "param": "year",
+          "at": [
+            "query:y"
+          ]
+        },
+        {
+          "param": "month",
+          "at": [
+            "query:m"
+          ]
+        },
+        {
+          "param": "day",
+          "at": [
+            "query:d"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://hospitality.usc.edu/wp-json/hsp-api/v1/get-res-dining-menus/{hall}?y={year}&m={month}&d={day}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "hospitality.usc.edu",
+        "path": "/wp-json/hsp-api/v1/get-res-dining-menus/*"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "meals[3].stations",
+        "pick": [
+          "station",
+          "subtitle",
+          "menu"
+        ]
+      },
+      "params": [
+        {
+          "name": "hall",
+          "type": "string",
+          "required": true,
+          "example": "parkside"
+        },
+        {
+          "name": "year",
+          "type": "string",
+          "required": true,
+          "example": "2026"
+        },
+        {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "example": "010"
+        },
+        {
+          "name": "day",
+          "type": "string",
+          "required": true,
+          "example": "009"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:36:31.790Z"
+    }
+  ]
+}

@@ -98,6 +98,11 @@ TABLE = [
     ("What's up, bro?", "pleasantry"),
     ("How are you doing?", "pleasantry"),
     ("what's up with my agents", None),
+    # CHW-195: one note by title, before the surface words.
+    ("add milk to my groceries note", "notes"),
+    ("new note Trip ideas", "notes"),
+    ("close the notes", "notes"),
+    ("show my notes", "surface"),
 ]
 
 

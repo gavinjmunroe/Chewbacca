@@ -282,7 +282,7 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
 
 
 KINDS = ("needs-you", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
-         "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps")
+         "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps", "dash-notes")
 # Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
 # `oss` is not one: it opens empty, and "what replaces Notion" seeds its query
 # with the preset {"/oss/q": "Notion"} instead.
@@ -298,6 +298,10 @@ def make(kind: str, arg: str = "") -> Provider:
         return engine.EngineSurface(arg)
     if kind == "oss":
         return oss.Oss(arg)
+    if kind == "dash-notes":
+        import notes_surface  # noqa: PLC0415  bin/lib: one note by title, its dash lines, one appended
+
+        return notes_surface.DashNotes()
     table = {
         "needs-you": walks.NeedsYou, "today": walks.Today, "tasks": walks.Tasks,
         "conversations": walks.Conversations, "people": walks.People,

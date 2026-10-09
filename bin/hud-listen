@@ -50,6 +50,7 @@ import quick  # noqa: E402
 import opener  # noqa: E402
 import agenda  # noqa: E402
 import surface_intent  # noqa: E402
+import notes_surface  # noqa: E402
 import hud_events  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import hud_runtime  # noqa: E402
@@ -1272,6 +1273,7 @@ FAST_PATHS = {
     "connection_check": "connection",
     "pleasantry": "pleasantry",
     "quick_answer": "quick",
+    "notes_request": "notes",
     "surface_request": "surface",
     "music_request": "music",
     "open_request": "open",
@@ -1312,6 +1314,11 @@ def fast_path(said: str) -> str | None:
         except Exception:  # noqa: BLE001  the bridge falls through on the same error
             pass
     if SURFACES:
+        try:
+            if notes_surface.parse(said) is not None:
+                return "notes"
+        except Exception:  # noqa: BLE001
+            pass
         try:
             if surface_intent.parse(said) is not None:
                 return "surface"
@@ -2390,6 +2397,10 @@ class Listener:
             return
         # A surface before music: "what's playing" opens the player panel and
         # says the song, where the music path only said it.
+        # "Add milk to my groceries note", "new note Trip": before the surface
+        # words, since "close the notes" closes both note panels.
+        if SURFACES and not relayed and not pointing and self.notes_request(said, typed):
+            return
         if SURFACES and not relayed and not pointing and self.surface_request(said, typed):
             return
         if not relayed and not pointing and self.music_request(said, typed):
@@ -2713,6 +2724,40 @@ class Listener:
             self.send("w " + json.dumps(answer) + " done=true")
             if not typed:
                 self.speak(answer)
+            self.settle_unless_running("done", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def notes_request(self, said: str, typed: bool) -> bool:
+        """"Add X to my <title> note", "new note <title>", "open my <title>
+        note", "close the note": one Apple Note, no model turn. The append
+        refuses any note it could damage and reads the last line back; see
+        bin/lib/notes_surface.py."""
+        if self.in_flight():
+            return False
+        try:
+            command = notes_surface.parse(said)
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("notes failed:", err)
+            return False
+        if command is None:
+            return False
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+
+        def work() -> None:
+            started = time.monotonic()
+            try:
+                outcome = notes_surface.perform(command)
+            except Exception as err:  # noqa: BLE001
+                self.log("notes failed:", err)
+                outcome = notes_surface.Outcome(False, "Notes didn't answer.")
+            self.log(f"notes: {command.verb} in {(time.monotonic() - started) * 1000:.0f}ms:", outcome.line)
+            self.remember(req, outcome.line, outcome.ok, "done" if outcome.ok else "failed")
+            self.send("s " + json.dumps(outcome.line))
+            self.send("w " + json.dumps(outcome.line) + " done=true")
+            if not typed:
+                self.speak(outcome.line)
             self.settle_unless_running("done", self.LEAVE_AFTER)
 
         threading.Thread(target=work, daemon=True).start()

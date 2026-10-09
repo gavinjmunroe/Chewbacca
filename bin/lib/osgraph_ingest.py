@@ -359,6 +359,12 @@ def mail(graph: Graph, ctx, ids: Identities, days: int = 7, mapping: dict = SPAC
     name is never trusted (push review, 2026-10-04: "Karthik Devarakonda"
     <attacker@evil> rendered as Karthik). Everyone else is their raw address,
     flagged unverified."""
+    # Any AppleScript to Mail launches it. This ran every 60 s from
+    # kyber-surfaces, so on 2026-10-09 Mail kept reopening after Caleb force
+    # quit it. Read mail only while he has Mail open, and leave the last
+    # ingest's nodes alone until then.
+    if ctx.run(["pgrep", "-xq", "Mail"])[0] != 0:
+        return {"skipped": "Mail is not open"}
     rows = ctx.json(["mac", "mail", "unread", "--limit", "40", "--scan", "60", "--json"], "Mail")
     now = ctx.now()
     snap = Snapshot()

@@ -29,6 +29,9 @@ slow path, and so is fighting the API for something one UI click does.
 | Job                                               | Route                                                                                                                                       | Measured                                                                              |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | Every reply with its full thread                  | `bin/clay-inbox [--campaign X]`: POST `clay-sequencer/master-inbox/replies`, then `message-history` per lead, from inside the signed-in tab | 65 replies and threads in ~3s; the page route took ~10s a campaign and saw one thread |
+| Resend to a new address or referral | POST `master-inbox/forward` `{campaign_id, forward_data:{message_id, stats_id, to_emails, forward_email_body?}}` with the REPLY's ids (our SENT message 500s) | verified 10-09: FORWARD shows in the thread |
+| Reply in a thread (follow-up) | POST `master-inbox/reply` `{campaign_id, reply_data:{email_stats_id, email_body, reply_message_id, reply_email_time, reply_email_body}}` | verified 10-09 |
+| Never email someone again | POST `global-blocklist/add` `{emailOrDomain}` | verified 10-09, shows source API |
 | Campaign list with reply and bounce counts        | `clay campaigns list --with-analytics`                                                                                                      | one call                                                                              |
 | Campaign settings, sequence, variants             | `clay campaigns get`, `update`, `sequence`                                                                                                  | one call                                                                              |
 | Starting a campaign or adding leads to one        | UI only, the CLI can't                                                                                                                      |                                                                                       |
@@ -41,7 +44,7 @@ page every time. On the Clay tab run
 do the action once, then list the `performance.getEntriesByType('resource')`
 names on `api.clay.com`. The default buffer holds 250 entries and the page
 fills it before the data calls land, which is why the first capture on 10-09
-came back empty. Probe the endpoint with `fetch(url, {credentials:'include'})`
+came back empty. Schemas: POST an empty body and Clay's 400 names the required fields; the optional ones are in the UI bundle (search the loaded `app-*.js` for the field name, as with `forward_email_body`). Probe the endpoint with `fetch(url, {credentials:'include'})`
 from the same tab (Clay's 400s name the missing body fields), then add a row
 here, and a `bin/` tool if it will be reused.
 

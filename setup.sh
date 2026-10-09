@@ -959,7 +959,7 @@ _installed_scanners=""
 # judgement calls.
 # demo-shoot is a wrapper, not a scanner, but it installs the same way: a
 # small executable in bin/ that needs to reach ~/.local/bin.
-for _tool in ai-scan skill-scan prose-check code-slop demo-shoot craft-gate site-gate claude-tab gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning phone-mirror brain-pull-safe; do
+for _tool in ai-scan skill-scan prose-check voice-check code-slop demo-shoot craft-gate site-gate claude-tab gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning phone-mirror brain-pull-safe; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_scanners="$_installed_scanners $_tool"
@@ -1454,6 +1454,15 @@ h["Stop"] = [{"hooks": [{
     "command": hooks_dir + "/prayer-guard.sh",
     "timeout": 5,
     "statusMessage": "Checking the reply opens the way you asked...",
+}]}, {"hooks": [{
+    # 2026-10-09: texts drafted for Jonah and Ryan went into chat reading
+    # nothing like him, and he said "i should never send a text that doesn't
+    # sound like me". Quoted drafts in a reply go through bin/voice-check,
+    # measured against his own sent texts.
+    "type": "command",
+    "command": hooks_dir + "/voice-guard.sh",
+    "timeout": 30,
+    "statusMessage": "Checking drafted texts sound like you...",
 }]}, {"hooks": [{
     # 39 hooks were registered on 2026-09-27 and not one of them looked at a
     # rendered image. slop-guard blocked a reply that night over a single em

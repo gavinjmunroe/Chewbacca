@@ -299,7 +299,7 @@ function cmdTexts(argv) {
     say(`
   people texts owed [--via app] [--json]     who is waiting on a reply, every app
   people texts drafts                         replies waiting for your ok
-  people texts drafts add <who> "text" [--group] [--via app] [--why "..."]
+  people texts drafts add <who> "text" [--group] [--via app] [--why "..."] [--voice-ok]
   people texts drafts send <n> [--dry-run]   the number is the approval
   people texts <name>                         one person's thread, newest, whole
   people texts search "<query>"               full text, all history
@@ -652,6 +652,18 @@ function cmdTexts(argv) {
       const [, who, ...words] = rest;
       const text = words.join(" ");
       if (!who || !text) die('Try: people texts drafts add maggie "following up w Jonah tmr"');
+      // A draft that doesn't read like him never reaches the queue. On
+      // 2026-10-09 two texts for Jonah and Ryan opened "Attached is one more
+      // page" and he said "i should never send a text that doesn't sound like
+      // me". voice-check measures against his own sent texts.
+      if (!flags["voice-ok"]) {
+        const vc = path.join(__dirname, "..", "..", "voice-check");
+        try {
+          execFileSync("python3", ["-I", vc, "--to", who, text], { stdio: ["ignore", "pipe", "pipe"] });
+        } catch (e) {
+          if (e.status === 1) die(`${String(e.stdout || "").trim()}\n\nNothing drafted. Rewrite it like the texts above, or add --voice-ok if Caleb wrote it himself.`);
+        }
+      }
       let to = flags.to ? String(flags.to) : "";
       // A group draft pins the room's id now, while the name still means the
       // room its author was looking at; send refuses a room without it.

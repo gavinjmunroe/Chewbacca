@@ -54,6 +54,8 @@ const HELP = `${c.b("people")} ${c.dim("- everything you know about the people i
   ${c.b("people texts sync")}                    pull new iMessage and WhatsApp in (local only)
   ${c.b("people send")} maggie "text" [--via whatsapp] [--dry-run]   reply in the app the thread is in
   ${c.b("people texts")} [--days 3] [--who maggie]   the running log
+  ${c.b("people texts owed")} [--days 7]           who is waiting on a reply, with context
+  ${c.b("people texts drafts")} [add who "text" | send n | drop n]   replies waiting for your ok
   ${c.b("people texts search")} "the trip"
   ${c.b("people texts stats")} | ${c.b("people texts link")} "Thread Name" <person>
   ${c.b("people update")} maggie --company Anthropic --cadence 30

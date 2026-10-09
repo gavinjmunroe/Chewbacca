@@ -4,10 +4,34 @@
     {
       "prompt": "Who have I not replied to?",
       "expect_tools": [
-        "sqlite3"
+        "people texts owed"
       ],
       "reject": [
-        "opening the Messages app"
+        "opening the Messages app",
+        "querying chat.db directly",
+        "a foreground people texts sync"
+      ],
+      "why": "one call answers it; 2026-10-09 took eleven via chat.db and a timed-out sync"
+    },
+    {
+      "prompt": "help me clear out my texts",
+      "expect_tools": [
+        "people texts owed",
+        "people texts drafts add"
+      ],
+      "expect_behavior": "treat clear out as respond to, draft every reply into the queue, show them, send only the numbers named",
+      "reject": [
+        "deleting messages",
+        "sending a draft not shown"
+      ]
+    },
+    {
+      "prompt": "save these replies for tomorrow, I'll pick it up in another tab",
+      "expect_tools": [
+        "people texts drafts add"
+      ],
+      "reject": [
+        "leaving the drafts only in chat"
       ]
     },
     {

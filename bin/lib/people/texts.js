@@ -10,7 +10,7 @@ const path = require("node:path");
 const os = require("node:os");
 const { execFileSync } = require("node:child_process");
 const { c, die, say, parseArgs } = require("./output");
-const { db, nowISO, syncState } = require("./db");
+const { db, nowISO, syncState, DIR } = require("./db");
 const { findPerson, nameTokens, normHandle } = require("./lookup");
 const { recomputeScores } = require("./scoring");
 const { cmdIdentities } = require("./identities");
@@ -292,7 +292,7 @@ function ingestRows(d, rows, source, seen) {
 }
 
 function cmdTexts(argv) {
-  const sub = ["sync", "refresh", "log", "stats", "link", "search"].includes(argv[0]) ? argv.shift() : "log";
+  const sub = ["sync", "refresh", "log", "stats", "link", "search", "owed", "drafts"].includes(argv[0]) ? argv.shift() : "log";
   const { flags, rest } = parseArgs(argv);
 
   // Bring every app's own local copy up to date and stop there. This is what
@@ -493,6 +493,125 @@ function cmdTexts(argv) {
     for (const r of d.prepare("SELECT source, count(*) n FROM messages GROUP BY source ORDER BY n DESC").all())
       say(c.dim(`  ${String(r.source).padEnd(10)} ${r.n}`));
     say("");
+    return;
+  }
+
+  // Who is waiting on a reply. "Clear out my texts" on 2026-10-09 took eleven
+  // tool calls and most of an hour: a foreground sync that hit the 120s
+  // timeout, two chat.db queries that returned nothing (a number compared to
+  // strftime's TEXT is always smaller in SQLite, and attributedBody hides 90%
+  // of bodies there anyway), a `-readonly` open that fails on this WAL
+  // database, then hand-reading 25 threads one query at a time. This is that
+  // whole read in one call, from the store the session-start sync keeps fresh.
+  //
+  // A thread is (room for a group, else the person) per app. It is owed when
+  // its newest message is not from the user. Unsaved numbers, short codes and
+  // email handles are almost all campaigns, pharmacies and 2FA, so they are
+  // counted on one line instead of printed; --all prints them too.
+  if (sub === "owed") {
+    const days = Number(flags.days || 7);
+    const ctx = Number(flags.context || 4);
+    // One indexed range read of the window, then grouping in JS. The first
+    // version joined on coalesce(room, who) with a correlated subquery per
+    // thread, which no index covers: 94s wall on the real 640k-row store.
+    const win = d
+      .prepare(
+        `SELECT who, room, from_me, person_id, body, sent_at, source FROM messages
+          WHERE sent_at >= datetime('now', ?) AND source IN ('imessage', 'whatsapp')
+          ORDER BY sent_at DESC`,
+      )
+      .all(`-${days} days`);
+    const threads = new Map();
+    for (const m of win) {
+      const key = `${m.source}\u0000${m.room || m.who}`;
+      if (!threads.has(key)) threads.set(key, { thread: m.room || m.who, room: m.room, source: m.source, last_at: m.sent_at, from_me: m.from_me, person_id: m.person_id, msgs: [] });
+      const t = threads.get(key);
+      if (t.msgs.length < ctx) t.msgs.push(m);
+    }
+    const rows = [...threads.values()].filter((t) => !t.from_me);
+    const noise = (r) => !r.room && !r.person_id && /^[+\d]|@/.test(r.thread);
+    const shown = flags.all ? rows : rows.filter((r) => !noise(r));
+    const hidden = rows.length - shown.length;
+    if (!rows.length) return say(c.dim(`  nobody is waiting on you from the last ${days} days`));
+    say("");
+    for (const r of shown) {
+      say(`${c.cyn(printable(r.thread))} ${c.dim(`${r.room ? "group " : ""}${r.source !== "imessage" ? r.source + " " : ""}${r.last_at.slice(5, 16)}`)}`);
+      for (const m of r.msgs.slice().reverse()) {
+        const name = r.room && !m.from_me ? c.dim(printable(m.who).split(" ")[0] + ": ") : "";
+        say(`  ${m.from_me ? c.cyn("->") : "  "} ${name}${printable(m.body).replace(/\s+/g, " ").slice(0, 220)}`);
+      }
+      say("");
+    }
+    say(c.dim(`  ${shown.length} threads waiting on you${hidden ? `, ${hidden} unsaved numbers and short codes hidden (--all)` : ""}; last sync ${syncState("messages_last_sync") || "never"}`));
+    say("");
+    return;
+  }
+
+  // Replies drafted in one sitting and sent in another. On 2026-10-09 twelve
+  // drafts were written at 1am, then Caleb said "save this for tmr, I'll pick
+  // it up in a diff tab", and the only place they lived was a chat transcript
+  // the next tab can't see. Drafts sit in a file beside the store; nothing is
+  // sent until a person names one by number, which is the approval.
+  if (sub === "drafts") {
+    const file = path.join(DIR, "drafts.json");
+    const load = () => {
+      try {
+        return JSON.parse(fs.readFileSync(file, "utf8"));
+      } catch {
+        return [];
+      }
+    };
+    const save = (list) => {
+      fs.writeFileSync(file + ".tmp", JSON.stringify(list, null, 2));
+      fs.renameSync(file + ".tmp", file);
+    };
+    const list = load();
+    const pick = (n) => {
+      const i = Number(n) - 1;
+      if (!Number.isInteger(i) || !list[i]) die(`no draft ${n}; run: people texts drafts`);
+      return i;
+    };
+    const verb = rest[0];
+    if (verb === "add") {
+      const [, who, ...words] = rest;
+      const text = words.join(" ");
+      if (!who || !text) die('Try: people texts drafts add maggie "following up w Jonah tmr"');
+      list.push({ who, text, why: flags.why || "", group: Boolean(flags.group), to: flags.to ? String(flags.to) : "", at: nowISO() });
+      save(list);
+      return say(`${c.grn("drafted")} #${list.length} to ${c.b(who)}`);
+    }
+    if (verb === "drop") {
+      const i = pick(rest[1]);
+      const [gone] = list.splice(i, 1);
+      save(list);
+      return say(`${c.dim("dropped")} #${i + 1} to ${gone.who}`);
+    }
+    if (verb === "send") {
+      const i = pick(rest[1]);
+      const dr = list[i];
+      if (dr.group) die(`#${i + 1} is to the group "${dr.who}"; people send only reaches one person. Send it from Messages.`);
+      const { cmdSend } = require("./send");
+      const argv = [dr.who, dr.text];
+      // An unsaved thread sends only when --to repeats the exact address;
+      // a draft carries the one its author checked with a dry run.
+      if (dr.to) argv.push("--to", dr.to);
+      if (flags["dry-run"]) argv.push("--dry-run");
+      cmdSend(argv);
+      if (!flags["dry-run"]) {
+        const now = load();
+        now.splice(now.findIndex((x) => x.at === dr.at && x.who === dr.who), 1);
+        save(now);
+      }
+      return;
+    }
+    if (!list.length) return say(c.dim("  no drafts waiting. Add one: people texts drafts add <who> \"text\""));
+    say("");
+    list.forEach((dr, i) => {
+      say(`  ${c.b(`#${i + 1}`)} ${c.cyn(printable(dr.who))}${dr.group ? c.dim(" group") : ""} ${c.dim(dr.at.slice(5, 16))}`);
+      if (dr.why) say(c.dim(`     re: ${printable(dr.why)}`));
+      say(`     ${printable(dr.text)}`);
+    });
+    say(c.dim(`\n  people texts drafts send <n>  |  drop <n>\n`));
     return;
   }
 

@@ -224,6 +224,8 @@ if group "people"; then
 
     check "send resolves strictly and replies in the thread's own app" \
       bash "$ROOT/tests/people_send.sh" "${P[@]}"
+    check "texts owed lists who is waiting and drafts wait for a number" \
+      bash "$ROOT/tests/texts_owed.sh" "${P[@]}"
     check "WhatsApp rows come out in the texts reader's shape" \
       python3 "$ROOT/tests/test_whatsapp_reader.py"
     check "Slack rows come out in the texts reader's shape" \
@@ -1463,6 +1465,7 @@ if group "reasoning backends"; then
   check "task receipts cannot clear repository-wide review duties" python3 "$ROOT/tests/test_review_integration.py"
   check "task DAG preserves dependencies, capacity and independent verification" python3 "$ROOT/tests/test_task_graph.py"
   check "work ledger reaches shared startup and Codex prompt context" python3 "$ROOT/tests/test_work_ledger_context.py"
+  check "tab board shows every other live tab across runtimes" python3 "$ROOT/tests/test_tabs.py"
   check "shared work ledger preserves commitments across requests and runtimes" python3 "$ROOT/tests/test_work_ledger.py"
   check "newcomer setup preserves identity and privacy choices" python3 "$ROOT/tests/test_onboarding.py"
   check "a sandboxed HOME never reaches the real Claude config" python3 "$ROOT/tests/test_sandbox_config.py"

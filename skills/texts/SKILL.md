@@ -1,6 +1,6 @@
 ---
 name: texts
-description: "Read, search, remember and reply to the user's iMessage and WhatsApp history, and send a message to someone through whichever app their thread is in. Use when they ask what someone said, what they talked about, when they last spoke to someone, what they missed, or to catch up on a thread. Also use when they mention the transcript of a call, which is usually texted to the other person. Also use after any conversation that mentions a text, so what mattered in it gets written down before it scrolls away. Also fires on: my texts, read my texts, text messages, iMessage, imessages, texted, texting, chat history, message thread, DMs, what did they text me, WhatsApp, whatsapp messages, send a text, message him, reply to her, send this to."
+description: "Read, search, remember and reply to the user's iMessage and WhatsApp history, and send a message to someone through whichever app their thread is in. Use when they ask what someone said, what they talked about, when they last spoke to someone, what they missed, or to catch up on a thread. Also use when they want to answer, clear out, respond to or catch up on their texts, ask who they owe a reply or who they left on read, or want replies drafted now and sent later. Also use when they mention the transcript of a call, which is usually texted to the other person. Also use after any conversation that mentions a text, so what mattered in it gets written down before it scrolls away. Also fires on: my texts, read my texts, text messages, iMessage, imessages, texted, texting, chat history, message thread, DMs, what did they text me, WhatsApp, whatsapp messages, send a text, message him, reply to her, send this to, clear out my texts, respond to my texts, left on read, who do I owe, unanswered texts, drafts."
 license: MIT
 requires: [people, sqlite3]
 ---
@@ -47,6 +47,35 @@ hand when the user says something just came in.
 The first sync takes a 90-day window and later ones take 30. Neither is the
 whole history: `--days 3650` on a sync pulls years, and on a real library that
 is hundreds of thousands of rows, so only do it if they ask.
+
+## Who is waiting on a reply
+
+"Clear out my texts" means respond to them, not delete them. It is two
+commands, and nothing else:
+
+```bash
+people texts owed                     # every thread whose last message is theirs, 7 days, with context
+people texts drafts add "mom" "Thank u Mom, got the address" --why "Zyprexa + CVS"
+people texts drafts add "Den Group" "No allergies here" --group
+people texts drafts                   # the queue, numbered, survives across tabs
+people texts drafts send 3            # sends #3 through people send; the number is the approval
+people texts drafts drop 3
+```
+
+On 2026-10-09 this took eleven tool calls and most of an hour, every one a
+known trap: a foreground `people texts sync` past the 120s timeout (the
+session-start sync already ran, `owed` prints when), chat.db queries that
+returned nothing (an integer compared to `strftime` TEXT is always smaller in
+SQLite, and 90% of chat.db bodies sit in attributedBody anyway), `sqlite3
+-readonly` failing on the WAL store, and 25 threads read one query at a time.
+Do none of that. Run `owed`, draft every reply into the queue, show the drafts,
+and send only the numbers he names. A group draft is listed but never sent by
+`people send`, which only reaches one person.
+
+`owed` hides unsaved numbers, short codes and email handles behind a count,
+because they were campaigns, pharmacies and 2FA. `--all` shows them. One of them
+that night was a check-scam asking for a bank name, so scan the hidden ones
+before saying nobody else is waiting.
 
 ## Images and QR codes someone sent
 

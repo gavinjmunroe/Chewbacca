@@ -64,8 +64,14 @@ note there, acts, then waits for the page state the step expects. `--dry-run`
 stops at the first approval card and spends nothing.
 
 It drives the page with `chewie web eval` and `CHEWIE_WEB_FRAME` set to the
-Clay tab. It never passes a URL, because that opens a new tab
-(`library/maps/app.clay.com/MAP.md`, 2026-10-05).
+Clay tab. `chewie web` talks to its own Chrome over the debug port
+(`mac/bridge/web.js`), a separate window on a copy of the profile, so the Clay
+tab the run drives lives in that window. Step 0 counts Clay tabs there through
+the port's `/json/list`. It opens one only when none exists, and that is the
+only time a URL is passed, because a URL opens a new tab
+(`library/maps/app.clay.com/MAP.md`, 2026-10-05). `chrome-js` was ruled out:
+it does not await promises, it swallows page errors, and its Apple Events
+switch turned itself off on 2026-09-23.
 
 It registers on the tab board (`tabs register`, then `tabs note` each step), so
 other sessions see "clay-build driving Clay, step 3 of 6". The board is for
@@ -74,28 +80,35 @@ the pid. A second run refuses to start while a live pid holds it.
 
 ### The recipe
 
-A data file next to the Clay map. Each step carries:
+A data file next to the Clay map. Each of the seven steps in the run table
+carries:
 
-- `id`, `title` (the note's title strip), `note` (the note's sentence)
+- `id`, `title` (the note's title strip), `note` (the note's sentence) and
+  `holds` (what it will not do yet, the muted line under the note)
 - `surface`: `read`, `ui` or `approve`
-- `find`: selectors, tried in order, plus the visible text expected on the element
-- `do`: click, type, select, or nothing
-- `expect`: the page or API state that means the step worked
-- `timeout_s`
 - `cost`: `free` or `spends`
+- `actions`, in order. Each has `find` (selectors tried in order, with the
+  visible text expected on the element), `do` (`click`, `type`, `check` or
+  `open-submenu`), `expect` (one of a URL fragment, page text, a page-text
+  pattern, or a visible selector) and `timeout_s`. The one paid click in a
+  `spends` step is marked `approve` and is always that step's last action.
 
-When Clay moves a button, the recipe changes and the code does not.
-`tools/clay_fixture_check.py` already checks selectors against saved pages, so
-each step gets a fixture.
+When Clay moves a button, the recipe changes and the code does not. The recipe
+is checked by a schema test, and the finder by a `node --test` run on element
+descriptions. Saved Clay pages would carry lead data into a public repository,
+and `tools/clay_fixture_check.py` compares CSV exports rather than selectors.
+The live dry run is what checks the recipe against the real page.
 
 ### Geometry
 
 `bin/lib/clay_geometry.py` turns a `getBoundingClientRect` result into screen
 points with a top-left origin, the coordinate space every HUD line already uses.
 The inputs are `window.screenX` and `screenY`, the toolbar height
-(`outerHeight - innerHeight`), and page zoom. Chrome's window frame from the
-window list is a cross-check: if the two disagree by more than a few points,
-the step stops instead of drawing in the wrong place.
+(`outerHeight` less the zoomed `innerHeight`), and page zoom, which is
+`devicePixelRatio` over the display's backing scale (read once through JXA).
+The run stops instead of drawing in the wrong place when the toolbar height is
+out of range, which means DevTools or a panel is docked, or when the window is
+off the main display. The dry run's screenshots are the real check.
 
 ### Reads
 
@@ -103,7 +116,8 @@ Every number on the glass comes from Clay:
 
 - `chewbacca clay credits`: the balance before the run, after the test, and at the end
 - `chewbacca clay table`: whether table auto-run is on
-- `chewbacca clay table-status`: per-column success, running, queued and error counts, for progress and for the found rate
+- `chewbacca clay table-status`: per-column success, running, queued and error counts, for progress
+- `chewbacca clay rows`: which rows have an email in the work email column, for the found count and the misses
 - Clay's own "Run N empty or out-of-date rows" line: the estimate on the second approval card
 
 Nothing on a card is computed by us except subtraction.
@@ -114,14 +128,20 @@ Nothing on a card is computed by us except subtraction.
   `near=<x>,<y>,<w>,<h> side=right` instead of `at=`. It sits in the gutter
   beside the target, never over a cell and never over the element being
   pressed. One note exists at a time: the next step re-addresses it.
-- The target bracket: The existing `bracket` chrome on the element's rect.
+- The target bracket: An `m` marker on the element's rect. A step that failed
+  draws it with a new `tone=miss`, red and dashed.
 - The agent cursor: The existing `a <x> <y> act=true` line.
-- The strip: One fixed spot above the hyper bar holding the mark, `CLAY-BUILD`, six step
-  ticks, the current verb, the elapsed time, and Stop.
+- The strip: An ordinary `chrome=window` surface at `at=bottom`, holding the
+  mark, `CLAY-BUILD`, six step ticks, the current verb, the elapsed time, and
+  Stop. Bottom-centre surfaces now sit above the hyper bar's lane, so the
+  strip needs no new verb.
 - The approval and done cards: `chrome=window` surfaces whose buttons come
-  back as `e <verb> <surface>` events, which clay-build waits on.
-- Two marks: A wireframe icosahedron, which turns only while acting, and a
-  stipple globe, used only on the done card and the done strip.
+  back as `e <action> <component> surface="<name>"` events. Every action is
+  named `clay-*`, `hud-listen` passes them by, and clay-build waits on them.
+  `e stop run` and `x` stop the run, and nothing is drawn after `x`.
+- Two marks: A new `Mark` component. A wireframe icosahedron turns only while
+  acting, and a stipple globe appears only on the done card. Both are layer
+  keyframes, so they cost the app no CPU.
 - Window chrome: This depends on `feat/window-chrome` (Departure Mono,
   black title strips, hard offset drop, halftone), which is not on main yet and
   lands as part of this work.
@@ -137,7 +157,7 @@ sentence and a count asks one question on the pill instead of guessing.
 | Step | What happens | Surface | Cost | Stops when |
 | --- | --- | --- | --- | --- |
 | 0 Check | One Clay tab, signed in. Balance read. No other run holds the lock | read | free | two Clay tabs, signed out, lock held |
-| 1 Find People | Home, Find leads, People, Chat. Types the sentence and waits for "~N found". The note names the filters Clay built | ui | free | no count after `timeout_s`; N below the asked count asks first |
+| 1 Find People | Home, Find leads, People, Chat. Types the sentence and waits for "~N found" | ui | free | no count after `timeout_s`; N below the asked count asks first |
 | 2 Count | Continue, custom N, destination table, Save | ui | free | the table URL never appears |
 | 3 Test run | First approval card on Clay's "Save and run 10 rows" for Work email | approve, ui | spends | Not now, or no answer |
 | 4 Read the test | Real spend from the balance; found rate from table-status | read | free | status still running after `timeout_s` |
@@ -157,7 +177,7 @@ becomes five selected rows from the new table.
 | Approve | on Clay's own run control | bracket on that control | approval card: rows, cost (Clay's estimate), balance before and after. The first card offers Run the test and Not now; the second offers Run the rest and Not now | yellow pip, "waiting on you" |
 | You took over | hidden | nothing | "Paused, you have the page", nothing spent, Resume re-reads the page first, End here | "paused", Resume |
 | A step failed | hidden | red dashed bracket where the thing should be | what it expected, nothing spent, Try again (free steps only), Show me where, End here | red pip, "stopped at n/6" |
-| Done | hidden | nothing | stipple globe, counts, spend, Show the misses, Next: pick a campaign (sends nothing) | green pip, rows and credits, Close |
+| Done | hidden | nothing | stipple globe, counts, spend, Show the misses (names of the rows with no email, from our own rows read), Close | green pip, rows and credits, Close |
 
 Each approval verb has a muted line under it naming what it touches and whether
 it can be undone, as in the mockup.
@@ -208,17 +228,19 @@ All are guessed until the dry run:
 
 - every `timeout_s`
 - the 300 ms cursor glide
-- the geometry disagreement threshold
+- the toolbar height range that geometry accepts
+- the gap between a note and its target, and the height kept for the hyper bar
 - how long Clay takes to show "~N found"
 
 Each gets the observation that set it, in a comment, once measured.
 
 ## Tests
 
-- Recipe fixtures: saved Clay pages for every step, checked by `clay_fixture_check`.
-- Geometry: unit test on recorded window and rect values, including zoom.
-- Kyber: snapshot renders of the five states, through the existing `HUD_SNAPSHOT_DIR` path.
-- Parser tests for `near=` and the strip line.
+- Recipe: a schema test (paid steps end on their one approval, known verbs, one expect each) and `node --test` on the finder.
+- Geometry: unit test on recorded window and rect values, including zoom, a docked DevTools and a second display.
+- Kyber: snapshot renders of the five states from the lines clay-build actually sends, through the existing `HUD_SNAPSHOT_DIR` path.
+- Parser tests for `near=` and `tone=miss`; placement tests for the note and the bar lane.
+- Runner: fakes for the page, Clay and Kyber drive every state, including stop, takeover, a short count and auto-run.
 - Lock: a second `clay-build` refuses while the first is live and starts once it exits.
 - Live: one `--dry-run` against the real tab, stopping at the first approval
   card. It spends nothing. Its timings replace the guesses above.
@@ -235,6 +257,8 @@ Each gets the observation that set it, in a comment, once measured.
 ## Later
 
 - Explain mode: hover a column, a button or a cost, and the same note explains it.
+- "Next: pick a campaign" on the done card, which belongs to explain mode.
+- Naming the filters Clay built on the Find People note, once a selector for them is recorded.
 - An approval card on every Clay credit spend, whoever starts it (CHW-163).
 - Reply handling, once something writes reply text into the graph.
 

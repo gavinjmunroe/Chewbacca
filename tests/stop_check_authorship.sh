@@ -55,5 +55,25 @@ rm -f u.txt
 out="$(run me)"
 [ -z "$out" ] && ok "clean tree: stays silent" || no "spoke about a clean tree"
 
+# Two shell-inferred rows can't tell authors apart. On 2026-10-09 a tab was
+# credited with another tab's usc-dining.json because its shell row came last,
+# and was told to commit it every turn.
+echo three > w.txt
+now=$(date +%s)
+printf '%s\tapi-tab\t%s/w.txt\tbash\n%s\tme\t%s/w.txt\tbash\n' "$now" "$R" "$((now+1))" "$R" > "$LOG"
+out="$(run me)"
+[ -z "$out" ] && ok "a weak shell claim loses to another session's shell row" || no "credited this session with a file another tab also touched"
+
+# The repeat fingerprint is per session: another tab's Stop hook running in
+# the same repo must not re-arm this tab's warning about unchanged state.
+echo four > v.txt
+printf '%s\tme\t%s/w.txt\n%s\tother\t%s/v.txt\n' "$now" "$R" "$now" "$R" > "$LOG"
+rm -rf "$T/home/.chewbacca"
+first="$(printf '{"session_id":"me"}' | HOME="$T/home" CHEWBACCA_WRITE_LOG="$LOG" bash "$HOOK" 2>/dev/null)"
+printf '{"session_id":"other"}' | HOME="$T/home" CHEWBACCA_WRITE_LOG="$LOG" bash "$HOOK" >/dev/null 2>&1
+again="$(printf '{"session_id":"me"}' | HOME="$T/home" CHEWBACCA_WRITE_LOG="$LOG" bash "$HOOK" 2>/dev/null)"
+[ -n "$first" ] && [ -z "$again" ] && ok "another tab's Stop doesn't re-fire this tab's unchanged warning" || no "warning re-fired after another tab's Stop"
+rm -f w.txt v.txt
+
 echo "  ${pass} passed, ${fail} failed"
 [ "$fail" -eq 0 ]

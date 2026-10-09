@@ -133,6 +133,14 @@ if [ -n "$_SID" ] && [ -s "$_WLOG" ]; then
         if (weak[p, last]) {
           for (i = 1; i < last; i++)
             if (!weak[p, i] && sid[p, i] != who && ts[p, i] >= ts[p, last] - window) owner = sid[p, i]
+          # Two inferred rows cannot tell authors apart either: on 2026-10-09 an
+          # api tab and a todo tab both ran shell in this repo, the todo tab
+          # was credited with library/api-sites/usc-dining.json, and its Stop
+          # hook told it to commit a file it never wrote, every turn. A weak
+          # claim loses to a row from any other session in the window.
+          if (owner == "")
+            for (i = 1; i < last; i++)
+              if (sid[p, i] != who && ts[p, i] >= ts[p, last] - window) owner = sid[p, i]
           if (owner != "") who = owner
           owner = ""
         }
@@ -161,7 +169,10 @@ fi
 STATE_DIR="$HOME/.chewbacca/stop-check"
 STATE_FILE=""
 if mkdir -p "$STATE_DIR" 2>/dev/null; then
-  STATE_KEY="$(printf '%s' "$REPO_ROOT" | shasum 2>/dev/null | cut -d' ' -f1)"
+  # Per repo AND per session. Keyed by repo alone, every tab in the shared
+  # checkout overwrote the one fingerprint, so each tab's next turn saw a
+  # "change" and the same warning re-fired: 10+ times in one tab, 2026-10-09.
+  STATE_KEY="$(printf '%s|%s' "$REPO_ROOT" "$_SID" | shasum 2>/dev/null | cut -d' ' -f1)"
   [ -n "$STATE_KEY" ] && STATE_FILE="$STATE_DIR/$STATE_KEY"
 fi
 

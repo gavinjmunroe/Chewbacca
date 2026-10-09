@@ -71,6 +71,7 @@ suggests the AI Mode answer invented them.
 
 Checked against the `oss-apps` registry on 2026-10-09 (`tools/oss_apps.py search --offline`). **used** here means it has a registry entry, not that it is installed.
 
+- [genspark-ai/genoffice](https://github.com/genspark-ai/genoffice): **queued** (sent 2026-10-09, "THIS IS SO TUFF"). Apache-2.0, 9.1k stars: Docs, Sheets, Slides and PDF editors plus a `genoffice` CLI and agent skill that edit real .docx/.xlsx/.pptx locally. The engine for the glass Doc surface, CHW-194.
 - [calcom/cal.com](https://github.com/calcom/cal.com): **used** (registry). The repo now redirects to calcom/cal.diy.
 - [chatwoot/chatwoot](https://github.com/chatwoot/chatwoot): **used** (registry).
 - [AFFiNE](https://github.com/toeverything/AFFiNE): **used** (registry).

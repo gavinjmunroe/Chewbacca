@@ -39,6 +39,9 @@ MUST_FIRE = [
     "Don't forget to set ANTHROPIC_API_KEY.",
     "Now run the tests and tell me what happens.",
     "You'll have to grant Accessibility yourself.",
+    # 2026-10-09: a guessed price handed over as a lookup, and it was wrong.
+    "Text's queued. Check the $500 edu price on apple.com before u send it.",
+    "Check the current price before quoting it to him.",
 ]
 
 MUST_NOT_FIRE = [
@@ -60,6 +63,9 @@ MUST_NOT_FIRE = [
     # Ordinary prose with the word run in it.
     "The loop has never run once.",
     "That test run took sixteen seconds.",
+    # The agent checking before a send is the right shape.
+    "I checked the price on apple.com before queueing the draft.",
+    "The send gate checks the thread before you send anything.",
 ]
 
 

@@ -1,0 +1,194 @@
+#!/usr/bin/env python3
+"""
+chewbacca usc: a USC student's day in one screen, for any student on any Mac.
+
+  chewbacca usc                 what's due this week, the dining hall, events today
+  chewbacca usc setup           sign in from whichever Chrome profile has USC
+  chewbacca usc --hall evk      pick the dining hall (parkside, evk, university-village)
+  chewbacca usc --json          the same, as data
+
+Every section is one plain-HTTP call through `chewbacca api` (no browser), run
+side by side, and a section that fails prints one line saying why while the
+rest still show. Nothing here writes to any USC system.
+
+The hall you pick is remembered in ~/.chewbacca/usc.json.
+"""
+import argparse
+import concurrent.futures as cf
+import datetime as dt
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(os.environ.get("CHEWBACCA_ROOT") or Path(__file__).resolve().parent.parent)
+API = ["bash", str(ROOT / "bin" / "chewbacca-api")]
+CONFIG = Path(os.environ.get("CHEWBACCA_USC_CONFIG", Path.home() / ".chewbacca" / "usc.json"))
+HALLS = ("parkside", "evk", "university-village")
+SIGNIN = {
+    "brightspace": "brightspace.usc.edu",
+    "handshake": "usc.joinhandshake.com",
+}
+
+
+def call(site, op, **args):
+    cmd = API + ["call", site, op] + [f"{k}={v}" for k, v in args.items()]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=60).stdout
+        return json.loads(out.strip().splitlines()[-1])
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, IndexError) as e:
+        return {"ok": False, "class": "error", "reason": f"no answer ({e.__class__.__name__})"}
+
+
+def why(res, site):
+    if res.get("class") == "auth":
+        return f"not signed in: open {SIGNIN.get(site, site)} in Chrome once, then `chewbacca usc setup`"
+    return res.get("reason") or res.get("class") or "failed"
+
+
+def due(today):
+    courses = call("brightspace", "myCourses")
+    if not courses.get("ok"):
+        return {"error": why(courses, "brightspace")}
+    rows = [c for c in courses.get("data") or [] if c.get("active") is not False]
+    # Brightspace keeps last term's courses enrolled; codes start with the
+    # term ("20263_10248"), so keep only the newest term's.
+    terms = [str(c.get("code") or "").split("_")[0] for c in rows]
+    newest = max((t for t in terms if t.isdigit()), default="")
+    rows = [c for c, t in zip(rows, terms) if not newest or t == newest]
+    ids = [str(c["orgUnitId"]) for c in rows]
+    label = {}
+    for c in rows:
+        m = re.search(r"\b([A-Z]{2,5}-\d{3}[A-Za-z]?)\b", str(c.get("name") or ""))
+        label[str(c.get("code"))] = m.group(1) if m else str(c.get("code"))
+    if not ids:
+        return {"items": []}
+    start = f"{today.isoformat()}T00:00:00.000Z"
+    end = f"{(today + dt.timedelta(days=7)).isoformat()}T23:59:59.000Z"
+    res = call("brightspace", "upcoming", orgUnitIds=",".join(ids), start=start, end=end)
+    if not res.get("ok"):
+        return {"error": why(res, "brightspace")}
+    items = sorted(res.get("data") or [], key=lambda i: i.get("due") or "")
+    return {"items": [{"due": i.get("due"), "course": label.get(str(i.get("courseCode")), i.get("courseCode") or i.get("course")),
+                       "title": i.get("title")} for i in items]}
+
+
+def food(today, hall, now):
+    # Weekends serve Brunch then Dinner; weekdays Breakfast, Lunch, Dinner.
+    if today.weekday() >= 5:
+        meal = "Brunch" if now.hour < 15 else "Dinner"
+    else:
+        meal = "Breakfast" if now.hour < 10 else "Lunch" if now.hour < 15 else "Dinner"
+    res = call("usc-dining", f"menu{meal}", hall=hall, year=today.year,
+               month=f"{today.month:03d}", day=f"{today.day:03d}")
+    if not res.get("ok"):
+        return {"meal": meal, "hall": hall, "error": why(res, "usc-dining")}
+    stations = [{"station": s.get("station"), "items": [m.get("item") for m in s.get("menu") or []][:4]}
+                for s in res.get("data") or []]
+    return {"meal": meal, "hall": hall, "stations": stations}
+
+
+def events(today):
+    res = call("usc-events", "upcoming", start=today.isoformat(),
+               end=(today + dt.timedelta(days=1)).isoformat())
+    if not res.get("ok"):
+        return {"error": why(res, "usc-events")}
+    return {"items": [{"title": e.get("title"), "start": e.get("start"), "location": e.get("location")}
+                      for e in (res.get("data") or [])[:8]]}
+
+
+def load_config():
+    try:
+        return json.loads(CONFIG.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def save_config(cfg):
+    CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG.write_text(json.dumps(cfg, indent=2))
+
+
+def setup():
+    ok = True
+    for site, host in SIGNIN.items():
+        r = subprocess.run(API + ["login", site], capture_output=True, text=True)
+        line = (r.stdout.strip().splitlines() or [""])[-1]
+        if r.returncode == 0:
+            print(f"{site}: {line or 'signed in'}")
+        else:
+            ok = False
+            print(f"{site}: no session yet. Sign in at https://{host} in Chrome once, then run this again.")
+    return 0 if ok else 1
+
+
+def short_time(value):
+    if not value:
+        return ""
+    try:
+        t = dt.datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
+        if (t.hour, t.minute) == (0, 0):
+            return t.strftime("%a") + " all day"
+        return t.strftime("%a %-I:%M%p").replace(":00", "").lower().capitalize()
+    except ValueError:
+        return value
+
+
+def render(report):
+    out = []
+    d = report["due"]
+    out.append("Due this week")
+    if "error" in d:
+        out.append(f"  {d['error']}")
+    elif not d["items"]:
+        out.append("  nothing in Brightspace")
+    for i in d.get("items", []):
+        out.append(f"  {short_time(i['due']):<12} {i['course'] or '':<11} {i['title']}")
+    f = report["food"]
+    out.append("")
+    out.append(f"{f['meal']} at {f['hall']}")
+    if "error" in f:
+        out.append(f"  {f['error']}")
+    for s in f.get("stations", []):
+        out.append(f"  {s['station']}: {', '.join(x for x in s['items'] if x)}")
+    e = report["events"]
+    out.append("")
+    out.append("On campus today")
+    if "error" in e:
+        out.append(f"  {e['error']}")
+    elif not e["items"]:
+        out.append("  nothing listed")
+    for i in e.get("items", []):
+        out.append(f"  {short_time(i['start']):<12} {i['title']}" + (f" ({i['location']})" if i.get("location") else ""))
+    return "\n".join(out)
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="chewbacca usc", add_help=True)
+    ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup"])
+    ap.add_argument("--hall", choices=HALLS)
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args()
+    if a.cmd == "setup":
+        return setup()
+    cfg = load_config()
+    if a.hall:
+        cfg["hall"] = a.hall
+        save_config(cfg)
+    hall = cfg.get("hall", "university-village")
+    now = dt.datetime.now()
+    today = now.date()
+    # One sync up front, so the three sections don't each re-check every spec.
+    subprocess.run(API + ["sync"], capture_output=True)
+    with cf.ThreadPoolExecutor(max_workers=3) as pool:
+        jobs = {"due": pool.submit(due, today), "food": pool.submit(food, today, hall, now),
+                "events": pool.submit(events, today)}
+        report = {k: v.result() for k, v in jobs.items()}
+    print(json.dumps(report, indent=2) if a.json else render(report))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

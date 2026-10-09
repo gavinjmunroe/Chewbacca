@@ -20,12 +20,16 @@ work here, and this runner decides when the Mac has room.
 
 THE BUDGET.
   heavy  local inference, transcription, renders: one at a time, admitted only
-         while the 1-minute load is under 60% of cores and at least 20% of
+         while the 1-minute load is under 130% of cores and at least 20% of
          memory is free, run at nice 19. A running heavy job is PAUSED
-         (SIGSTOP) when load passes 90% of cores or free memory drops under
-         10%, and resumed when there's room again. Thresholds are guessed,
-         never measured; the 2026-10-10 lag was load 80+ on 14 cores with
-         about 74 MB free.
+         (SIGSTOP) when load passes 250% of cores or free memory drops under
+         10%, and resumed when there's room again. Measured on this Mac
+         (14 cores): the 2026-10-10 lag was load 80+ with about 74 MB free,
+         and 177 while every tab restarted; with a dozen idle agent tabs the
+         Mac was usable at load 14 to 17 with 48% free. The first thresholds
+         (60% and 90%, so 8.4 and 12.6) sat under that idle floor, so nothing
+         heavy was ever admitted: a 2-minute Swift build waited 50 minutes
+         behind a transcription job paused at load 14.7.
   net    downloads, API crawls: up to 4 at once, nice 10.
   light  everything else: no limit.
 
@@ -45,7 +49,7 @@ import time
 import uuid
 
 DIR = pathlib.Path(os.environ.get("JOBS_DIR", pathlib.Path.home() / ".chewbacca" / "jobs"))
-CORES = os.cpu_count() or 8
+CORES = int(os.environ.get("JOBS_CORES") or os.cpu_count() or 8)
 MAX_NET = 4
 NICE = {"heavy": 19, "net": 10, "light": 0}
 
@@ -70,11 +74,11 @@ def mem_free_pct():
 
 
 def room_for_heavy():
-    return load1() < 0.6 * CORES and mem_free_pct() >= 20
+    return load1() < 1.3 * CORES and mem_free_pct() >= 20
 
 
 def must_pause():
-    return load1() > 0.9 * CORES or mem_free_pct() < 10
+    return load1() > 2.5 * CORES or mem_free_pct() < 10
 
 
 # ------------------------------------------------------------------ store

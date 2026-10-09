@@ -87,9 +87,15 @@ def _open():
 SECRET = re.compile(r'\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|xox[abpr]-[A-Za-z0-9-]{10,}'
                     r'|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|[A-Za-z0-9+/_=-]{40,})')
 
+TAG = re.compile(r'</?[A-Za-z][\w:-]*(?:\s[^<>]*)?>')
+
 
 def one_line(text, limit=TASK_CHARS):
     text = SECRET.sub('[redacted]', ' '.join(str(text or '').split()))
+    # Another tab's text lands in this tab's context. Markup tags there (a
+    # pasted_content or system-reminder block) would read as this tab's own
+    # framing, and a bare quote would end the fence the board puts around it.
+    text = TAG.sub('', text).replace('"', "'")
     return text if len(text) <= limit else text[:limit - 3] + '...'
 
 

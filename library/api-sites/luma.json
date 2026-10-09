@@ -1,0 +1,168 @@
+{
+  "name": "luma",
+  "baseUrl": "https://luma.com",
+  "operations": [
+    {
+      "name": "cityEvents",
+      "request": {
+        "method": "GET",
+        "url": "https://luma.com/%7Bcity%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "city",
+          "at": [
+            "path:0"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://luma.com/{city}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "luma.com",
+        "path": "/*"
+      },
+      "response": {
+        "format": "embedded",
+        "contentType": "text/html; charset=utf-8",
+        "extract": "props.pageProps.initialData.data.events",
+        "pick": [
+          "name=event.name",
+          "slug=event.url",
+          "eventId=event.api_id",
+          "startAt=event.start_at",
+          "endAt=event.end_at",
+          "timezone=event.timezone",
+          "venue=event.geo_address_info.address",
+          "address=event.geo_address_info.full_address",
+          "city=event.geo_address_info.city_state",
+          "locationType=event.location_type",
+          "hosts=hosts[*].name",
+          "guestCount=guest_count",
+          "requireApproval=ticket_info.require_approval",
+          "isFree=ticket_info.is_free"
+        ],
+        "embedded": {
+          "regex": "<script id=\"__NEXT_DATA__\" type=\"application/json\">(\\{.*?\\})</script>"
+        }
+      },
+      "params": [
+        {
+          "name": "city",
+          "type": "string",
+          "required": true,
+          "example": "nyc"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:14:33.402Z"
+    },
+    {
+      "name": "getEvent",
+      "request": {
+        "method": "GET",
+        "url": "https://luma.com/%7Bslug%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "slug",
+          "at": [
+            "path:0"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://luma.com/{slug}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "luma.com",
+        "path": "/*"
+      },
+      "response": {
+        "format": "embedded",
+        "contentType": "text/html; charset=utf-8",
+        "extract": "props.pageProps.initialData.data",
+        "pick": [
+          "name=event.name",
+          "slug=event.url",
+          "eventId=event.api_id",
+          "startAt=event.start_at",
+          "endAt=event.end_at",
+          "timezone=event.timezone",
+          "locationType=event.location_type",
+          "venue=event.geo_address_info.address",
+          "address=event.geo_address_info.full_address",
+          "city=event.geo_address_info.city_state",
+          "addressVisibility=event.geo_address_visibility",
+          "description=description_mirror.content[*].content[*].text",
+          "hostNames=hosts[*].name",
+          "hostUsernames=hosts[*].username",
+          "hostTwitter=hosts[*].twitter_handle",
+          "hostLinkedin=hosts[*].linkedin_handle",
+          "hostInstagram=hosts[*].instagram_handle",
+          "hostWebsite=hosts[*].website",
+          "calendar=calendar.name",
+          "registration=registration_availability",
+          "requireApproval=ticket_info.require_approval",
+          "isFree=ticket_info.is_free",
+          "priceCents=ticket_info.price.cents",
+          "currency=ticket_info.price.currency",
+          "soldOut=ticket_info.is_sold_out",
+          "spotsRemaining=ticket_info.spots_remaining",
+          "waitlist=event.waitlist_status",
+          "guestCount=guest_count"
+        ],
+        "embedded": {
+          "regex": "<script id=\"__NEXT_DATA__\" type=\"application/json\">(\\{.*?\\})</script>"
+        }
+      },
+      "params": [
+        {
+          "name": "slug",
+          "type": "string",
+          "required": true,
+          "example": "vastnyc"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:19:35.123Z"
+    }
+  ]
+}

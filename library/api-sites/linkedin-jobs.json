@@ -1,0 +1,180 @@
+{
+  "name": "linkedin-jobs",
+  "baseUrl": "https://www.linkedin.com",
+  "operations": [
+    {
+      "name": "searchJobs",
+      "description": "Public logged-out LinkedIn job search: first page of results for keywords + location",
+      "request": {
+        "method": "GET",
+        "url": "https://www.linkedin.com/jobs/search?keywords=%7Bkeywords%7D&location=%7Blocation%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "keywords",
+          "at": [
+            "query:keywords"
+          ]
+        },
+        {
+          "param": "location",
+          "at": [
+            "query:location"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://www.linkedin.com/jobs/search?keywords={keywords}&location={location}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "www.linkedin.com",
+        "path": "/jobs/search"
+      },
+      "response": {
+        "format": "html",
+        "contentType": "text/html; charset=utf-8",
+        "pick": [
+          "jobId=urn~jobPosting:(\\d+)",
+          "title",
+          "company",
+          "companyUrl=companyUrl~^([^?]+)",
+          "location",
+          "postedDate",
+          "posted",
+          "url=url~^([^?]+)"
+        ],
+        "html": {
+          "items": "ul.jobs-search__results-list li",
+          "fields": {
+            "urn": "div.base-card@data-entity-urn",
+            "title": "h3.base-search-card__title",
+            "company": "h4.base-search-card__subtitle a",
+            "companyUrl": "h4.base-search-card__subtitle a@href",
+            "location": "span.job-search-card__location",
+            "postedDate": "time@datetime",
+            "posted": "time",
+            "url": "a.base-card__full-link@href"
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "keywords",
+          "type": "string",
+          "required": true,
+          "example": "data engineer"
+        },
+        {
+          "name": "location",
+          "type": "string",
+          "required": true,
+          "example": "Austin"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:15:37.368Z"
+    },
+    {
+      "name": "getJob",
+      "description": "Public guest job posting: data[0] is the top card (title, company, location, posted, applicants), data[1] the details (criteria, seniority, employmentType, description)",
+      "request": {
+        "method": "GET",
+        "url": "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/%7BjobId%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "jobId",
+          "at": [
+            "path:4"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/{jobId}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "www.linkedin.com",
+        "path": "/jobs-guest/jobs/api/jobPosting/*"
+      },
+      "response": {
+        "format": "html",
+        "contentType": "text/html; charset=utf-8",
+        "pick": [
+          "title",
+          "company",
+          "companyUrl=companyUrl~^([^?]+)",
+          "location",
+          "posted",
+          "applicants",
+          "criteriaLabels",
+          "criteriaValues",
+          "seniority",
+          "employmentType",
+          "description"
+        ],
+        "html": {
+          "items": "section.top-card-layout, div.decorated-job-posting__details",
+          "fields": {
+            "title": "h2.top-card-layout__title",
+            "company": "a.topcard__org-name-link",
+            "companyUrl": "a.topcard__org-name-link@href",
+            "location": "span.topcard__flavor--bullet",
+            "posted": "span.posted-time-ago__text",
+            "applicants": ".num-applicants__caption",
+            "criteriaLabels": "all:h3.description__job-criteria-subheader",
+            "criteriaValues": "all:span.description__job-criteria-text",
+            "seniority": "ul.description__job-criteria-list li:nth-of-type(1) span",
+            "employmentType": "ul.description__job-criteria-list li:nth-of-type(2) span",
+            "description": "div.show-more-less-html__markup"
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "jobId",
+          "type": "string",
+          "required": true,
+          "example": "4475081967"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:34:14.036Z"
+    }
+  ]
+}

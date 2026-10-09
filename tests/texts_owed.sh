@@ -97,6 +97,18 @@ out="$("$P" texts drafts add "Nope Room" "x" --group 2>&1)" && fail "a group dra
 out="$("$P" texts drafts send 2 2>&1)" && fail "CHEWBACCA_NO_SEND did not stop a group send"
 out="$("$P" texts drafts 2>&1)"
 grep -q "No allergies" <<<"$out" || fail "a refused group send still removed the draft"
+# Numbers stick to their draft. 2026-10-09: a drop in one tab renumbered the
+# queue and another tab's "drop 42" deleted a Maggie reply it never saw.
+"$P" texts drafts add "owed olive" "Third one" >/dev/null || fail "third draft add failed"
+"$P" texts drafts add "owed olive" "Fourth one" >/dev/null || fail "fourth draft add failed"
+"$P" texts drafts drop 3 >/dev/null || fail "drop 3 failed"
+out="$("$P" texts drafts 2>&1)"
+grep -q "#4" <<<"$out" && grep -q "Fourth one" <<<"$out" || fail "a drop renumbered the drafts after it"
+out="$("$P" texts drafts drop 3 2>&1)" && fail "a dropped number still matched a draft"
+"$P" texts drafts drop 4 >/dev/null || fail "drop 4 failed"
+out="$("$P" texts drafts add "owed olive" "Fifth one" 2>&1)"
+grep -q "#5" <<<"$out" || fail "a new draft reused a dropped number"
+"$P" texts drafts drop 5 >/dev/null
 
 sqlite3 "$DB" "INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, source, room) VALUES (770010, NULL, 'Two Chat', 'chatTWO', 1, 'x', datetime('now','-5 hour'), 'imessage', 'Two Chat');"
 out="$(CHEWBACCA_CHAT_DB="$PEOPLE_DIR/chat2.db" "$P" send --room "Two Chat" "hi" --dry-run 2>&1)"

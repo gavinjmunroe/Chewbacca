@@ -4,10 +4,11 @@
 #   chewbacca slack          status: which workspaces can send
 #   chewbacca slack link     sign in once; every workspace in that browser session is saved
 #
-# Reading needs nothing: slacrawl copies the Slack desktop app's cache. Sending
-# goes through slackcli (shaharia-lab/slackcli, MIT), which keeps a browser
-# session per workspace in the keychain. The sign-in is the one step a person
-# does once, the same as installing Slack itself: it's their password.
+# Nobody signs in to Chewbacca for Slack. Reading copies the Slack desktop
+# app's cache (slacrawl) and sending goes through that same signed-in app.
+# Caleb, 2026-10-09, on Slack's sign-in page: "no one ever likes doing this
+# they wish it could be automated". `link` is optional: a slackcli session
+# (shaharia-lab/slackcli, MIT) sends without touching the app window.
 set -uo pipefail
 PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 say() { printf '%s\n' "$*"; }
@@ -22,7 +23,11 @@ ensure() {
 status() {
   ensure || return 1
   if slackcli auth list 2>&1 | grep -q "No authenticated"; then
-    say "Slack: reading works, sending isn't signed in. Run: chewbacca slack link"
+    if [ -d /Applications/Slack.app ]; then
+      say "Slack: reading and sending both work through the Slack app you're signed into. Nothing to set up."
+    else
+      say "Slack: install the Slack app and sign in there once; Chewbacca reads and sends through it."
+    fi
   else
     slackcli auth list 2>&1
   fi

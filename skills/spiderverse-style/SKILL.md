@@ -19,6 +19,18 @@ the best results always combined procedural with handmade. `[GNO]` The
 failure this skill exists to prevent is the opposite: one uniform post filter
 over everything, which reads as a Snapchat lens rather than a comic.
 
+## The film is the bar, not the reference
+
+Caleb, 2026-10-09: "It doesn't hv to be mimicing the spiderverse! Just
+equally creative as it within the 2d 3d space." When someone asks for
+"Spider-Verse level", they mean that level of invention, in their own
+visual language. Take the method (per-element decisions, 2D drawn over 3D,
+frame rate and camera as storytelling, one unforgettable shot) and leave
+the film's surface alone: no comic covers, no named universes, no
+lettering or misregistration just because the film had them. Write three
+genuinely different directions before building. Use the film's look only
+when they literally ask for the Spider-Verse look.
+
 ## A style pass is not the movie
 
 Caleb, 2026-10-09, on a T Combinator build that had halftone, misregistration

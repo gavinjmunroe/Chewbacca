@@ -9,7 +9,17 @@ on:
   pull_request:
     branches: [main]
     paths-ignore: ["team/**"]
+  workflow_dispatch:
 
+# Pushes to main land in bursts (275 runs in the week to 2026-10-09). Only the
+# newest commit's result matters, so an older run still going is cancelled.
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+# The macOS test suite moved to macos-tests.yml and no longer runs on every
+# push. Everything left here runs on Ubuntu, which bills at about a tenth of
+# the macOS rate.
 jobs:
   # The installer is the thing most likely to break and was the only thing not
   # checked. 1411 lines of bash with five embedded Python heredocs, and CI
@@ -133,18 +143,6 @@ jobs:
           # our house style is not the job. This catches a regression in the
           # kit's own prose without failing on inherited content.
           python3 bin/slop-check docs/ skills/ --max 60
-
-  # The kit is macOS-only and had no macOS runner. Every behavioral test ran
-  # on Ubuntu or not at all.
-  tests:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-      - name: Test suite
-        run: bash tests/run.sh
 
   markdown-lint:
     runs-on: ubuntu-latest

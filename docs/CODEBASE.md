@@ -368,7 +368,7 @@ looks tiny, read the module it runs.
 | Voice and HUD | `hud`, `hud-listen`, `hud-speak`, `hud-guide`, `hud-music`, `hud-context`, `hud-autostart`, `kyber-surfaces`, `kyber-genui`, `kyber-sessions`, `text-command`, `superassistant` | See [Kyber](#kyber-the-hud-app). |
 | Calls | `call-listen`, `call-watch`, `call-practice`, `room-listen` | Live call coaching. |
 | Jev and routing | `jev`, `decisions`, `decision-lab`, `model-route`, `list-sift`, `fanout`, `route-label` | |
-| GTM and lists | `gtme-*`, `clay-*`, `list-audit` | Offline except `clay-balance`. |
+| GTM and lists | `gtme-*`, `clay-*`, `list-audit` | Offline except `clay-balance` and the first `gtme-dedupe` run, which installs splink. |
 | Work state | `work-ledger`, `task-graph`, `backlog`, `team`, `kits` | |
 | Agent sandbox | `weft-build`, `weft-mcp`, `weft-box`, `weft-view` | Builds agents with weft inside a Lima VM that sees only `~/weft-projects`. |
 | Video | `reel-check`, `reel-assemble`, `edit-cut`, `edit-dna`, `page-render`, `demo-shoot`, `higgsfield-shot`, `brief-audio` | ffmpeg based. |

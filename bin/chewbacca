@@ -64,6 +64,7 @@ COMMANDS=(
   "gtme-graph|track GTM dependencies, budgets, and evidence"
   "gtme-learning|compare paired workflow experiments offline"
   "gtme-library|index and search a local source corpus"
+  "gtme-dedupe|cluster duplicate people across contact CSVs"
   "clay-fixture-check|compare a CSV export with an expected fixture"
   "oss-apps|open source apps that replace a Mac app, and which can be remixed"
   "task-graph|track local jobs, ownership, and dependencies"
@@ -112,6 +113,11 @@ task-graph|graph-fuse|review-gate|work-ledger|ux-learning|jev|decision-lab|ux-de
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"
+  ;;
+gtme-dedupe)
+  # Bash, not python: it picks the venv that has splink.
+  shift
+  exec bash "$ROOT/bin/gtme-dedupe" "$@"
   ;;
 agent)
   shift

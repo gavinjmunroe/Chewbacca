@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Find the same person across contact CSVs: exact email, LinkedIn and
+# name+domain passes, then splink on DuckDB. tools/gtme_dedupe.py does the work;
+# this picks the python that has splink.
+#
+#   gtme-dedupe a.csv b.csv                 scan, writes nothing
+#   gtme-dedupe a.csv b.csv --out deduped/  write clusters, golden, review, summary
+#
+# splink lives in its own venv, built with uv on first run like scrape and
+# brief-audio. If that fails the tool still runs on system python3 with exact
+# passes only, and says so in capitals. GTME_DEDUPE_NO_INSTALL=1 skips the build.
+set -euo pipefail
+
+# NOT under ~/.chewbacca, which is mirrored into the second-brain repo.
+VENV="${GTME_DEDUPE_VENV:-$HOME/Library/Caches/chewbacca/splink-venv}"
+# Pinned: 5.0.0 is the version this was written and tested against on 2026-10-09.
+SPLINK_SPEC="splink==5.0.0"
+# Follow the ~/.local/bin link back to the repo. No realpath: macOS 12 lacks it.
+SRC="$0"
+while [ -L "$SRC" ]; do
+  LINK="$(readlink "$SRC")"
+  case "$LINK" in /*) SRC="$LINK" ;; *) SRC="$(dirname "$SRC")/$LINK" ;; esac
+done
+TOOL="$(cd "$(dirname "$SRC")/.." && pwd)/tools/gtme_dedupe.py"
+
+has_splink() { [ -x "$VENV/bin/python" ] && "$VENV/bin/python" -c "import splink, duckdb" 2>/dev/null; }
+
+wants_splink=1
+for a in "$@"; do
+  case "$a" in -h|--help|--no-splink) wants_splink=0 ;; esac
+done
+
+if [ "$wants_splink" = 1 ] && [ -z "${GTME_DEDUPE_NO_INSTALL:-}" ] && ! has_splink \
+   && command -v uv >/dev/null 2>&1; then
+  echo "first run: building the splink venv at $VENV ..." >&2
+  mkdir -p "$(dirname "$VENV")"
+  { [ -x "$VENV/bin/python" ] || uv venv -q --python 3.12 "$VENV"; } >&2 \
+    && uv pip install --python "$VENV" -q "$SPLINK_SPEC" >&2 \
+    || echo "splink install failed; continuing with exact passes only" >&2
+fi
+
+if has_splink; then
+  exec "$VENV/bin/python" "$TOOL" "$@"
+fi
+exec python3 "$TOOL" "$@"

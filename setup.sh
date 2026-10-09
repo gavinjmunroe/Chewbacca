@@ -1047,7 +1047,9 @@ fi
 # list-audit is pure stdlib python, no venv and no network, so it installs with
 # no dependency check at all. list-gate ships with it: audit reads a bought file,
 # gate refuses to ship a generated one, and the Stop hook calls the gate by name.
-for _tool in list-audit list-gate kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team; do
+# gtme-dedupe is the exception: it builds a splink venv with uv on first run, like
+# scrape, and still runs exact passes on plain python3 when that build fails.
+for _tool in list-audit list-gate gtme-dedupe kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     log "$_tool installed to ~/.local/bin/"

@@ -660,6 +660,9 @@ if group "installer"; then
   check  "chewbacca usc shows this term's due items, dining and events, and survives a signed-out site" \
     bash "$ROOT/tests/chewbacca_usc.sh" "$ROOT"
 
+  check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \
+    bash "$ROOT/tests/chewbacca_google.sh" "$ROOT"
+
   # Every kit on the machine matched one 17,000-character message about a club
   # website on 2026-09-22, because hit count was never divided by what was
   # typed and two kits make every stem look distinctive.

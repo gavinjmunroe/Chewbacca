@@ -123,7 +123,7 @@ def strip(state: str, n: int, total: int, verb: str, elapsed_s: float) -> list[s
     return [
         f"@ {STRIP} at=bottom chrome=window w={STRIP_W}",
         'c s Screen title="CLAY-BUILD"',
-        "c row Stack direction=horizontal gap=10",
+        "c row Stack direction=horizontal gap=10 align=center",
         f"c mk Mark kind={kind} spin={spin} size=14",
         f"c ticks Text value={q(_ticks(n, total))}",
         status,

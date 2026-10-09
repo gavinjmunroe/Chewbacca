@@ -708,7 +708,7 @@ spaces inside them: `points=[31,28,44]`, not `points=[31, 28, 44]`.
   c s Screen title="RELATIONSHIPS"
   ```
 
-- **Stack** Groups components. Vertical by default; use grid with cols for several small numbers, because four metrics in a column waste the height of a panel that is already capped. Gap is in units of 4 points.
+- **Stack** Groups components. Vertical by default; use grid with cols for several small numbers, because four metrics in a column waste the height of a panel that is already capped. Gap is in units of 4 points. A horizontal Stack is top aligned; give it `align=center` when a row mixes words with a Button, whose 44-point target otherwise sits it below them.
 
   ```
   c row Stack direction=grid cols=2 gap=3

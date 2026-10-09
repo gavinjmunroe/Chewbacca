@@ -8,7 +8,7 @@ c hold Text value="Nothing is saved yet." tone=muted
 r s
 @ clay-strip at=bottom chrome=window w=560
 c s Screen title="CLAY-BUILD"
-c row Stack direction=horizontal gap=10
+c row Stack direction=horizontal gap=10 align=center
 c mk Mark kind=ico spin=true size=14
 c ticks Text value="■■□□□□"
 c verb Text value="Find people · 2/6"

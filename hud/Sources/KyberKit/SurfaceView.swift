@@ -201,8 +201,12 @@ public struct SurfaceView: View {
         }
 
         if p["direction"]?.stringValue == "horizontal" {
+            // `align=center` for a row that mixes words and a Button: top
+            // aligned, the button's 44-point target sat its capsule 15
+            // points below the words (the Clay strip, 2026-10-09).
+            let align: VerticalAlignment = p["align"]?.stringValue == "center" ? .center : .top
             return AnyView(
-                HStack(alignment: .top, spacing: gap) {
+                HStack(alignment: align, spacing: gap) {
                     children(of: element, ancestors: ancestors)
                 })
         }

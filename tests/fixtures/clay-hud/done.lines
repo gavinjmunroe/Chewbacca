@@ -16,7 +16,7 @@ c close Button label="Close" action=clay-close
 r s
 @ clay-strip at=bottom chrome=window w=560
 c s Screen title="CLAY-BUILD"
-c row Stack direction=horizontal gap=10
+c row Stack direction=horizontal gap=10 align=center
 c mk Mark kind=globe spin=false size=14
 c ticks Text value="■■■■■■"
 c verb Status level=success message="41/50 emails · 31.2 cr"

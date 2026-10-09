@@ -306,7 +306,9 @@ def main(argv=None, fetcher=None, today=None):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     commands = parser.add_subparsers(dest="command", required=True)
-    command = commands.add_parser("formd", help="Recent SEC Form D private raises, one row per issuer")
+    # No prefix matching: `--cache` must not quietly mean --cache-dir.
+    command = commands.add_parser("formd", help="Recent SEC Form D private raises, one row per issuer",
+                                  allow_abbrev=False)
     command.add_argument("--since", type=parse_day, help="First filing date (default: 7 days ago)")
     command.add_argument("--until", type=parse_day, help="Last filing date (default: today)")
     command.add_argument("--industry", help='Substring of the industry group, e.g. "Technology"')

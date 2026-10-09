@@ -89,6 +89,31 @@ class BridgeTests(unittest.TestCase):
         self.assertNotIn("op", self.b.TOOLS)
         self.assertNotIn("gemini", self.b.TOOLS)
 
+    def test_gtme_signals_takes_only_its_flag_list(self):
+        build = self.b.TOOLS["gtme-signals"]
+        argv, timeout = build(["formd", "--industry", "Health Care", "--min-amount", "1000000",
+                               "--state", "CA", "--limit", "5", "--since", "2026-10-01", "--csv"])
+        self.assertEqual(argv[1:], ["formd", "--industry=Health Care", "--min-amount=1000000",
+                                    "--state=CA", "--limit=5", "--since=2026-10-01", "--csv"])
+        self.assertEqual(timeout, 900)
+        for args in (
+            ["formd", "--cache-dir", "../../x"], ["formd", "--cache-dir=/tmp/x"],
+            ["formd", "--cache", "../x"], ["formd", "--cache-dir", "~/Library/LaunchAgents"],
+            ["formd", "--industry", "--cache-dir"], ["formd", "--industry"],
+            ["formd", "--since", "../x"], ["formd", "--limit", "0"], ["formd", "--state", "../"],
+            ["formd", "--csv", "/tmp/out.csv"], ["formd", "extra"], ["other"], [],
+            ["formd", "--allow-commit"],
+        ):
+            with self.subTest(args=args), self.assertRaises(self.b.Refused):
+                build(args)
+
+    def test_gtme_signals_refuses_abbreviated_cache_dir_itself(self):
+        out = subprocess.run([sys.executable, str(ROOT / "bin/gtme-signals"), "formd", "--cache", "/tmp/x",
+                              "--since", "2026-10-09", "--until", "2026-10-01"],
+                             capture_output=True, text=True)
+        self.assertEqual(out.returncode, 2)
+        self.assertIn("unrecognized arguments", out.stderr)
+
     def test_sends_are_out(self):
         with self.assertRaises(self.b.Refused):
             self.b.REGISTRY["imsg"](["send", "--to", "+15555550123", "--text", "hi"])

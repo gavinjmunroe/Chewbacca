@@ -185,6 +185,22 @@ def is_bulk(msg):
     return False
 
 
+# A From line is whatever the sender typed. Before an incoming address is
+# allowed to file a message under a person (and so become an address people
+# send would trust), the receiving server's verdict has to say the domain
+# really sent it: DKIM or SPF passed and DMARC did not fail. Anything else
+# keeps its text but gets a handle no person can own.
+AUTH_PASS = re.compile(r"\b(dkim|spf)\s*=\s*pass\b", re.I)
+AUTH_FAIL = re.compile(r"\bdmarc\s*=\s*fail\b", re.I)
+
+
+def sender_verified(msg):
+    if msg is None:
+        return False
+    verdicts = " ".join(str(v) for v in (msg.get_all("Authentication-Results") or []))
+    return bool(AUTH_PASS.search(verdicts)) and not AUTH_FAIL.search(verdicts)
+
+
 def html_to_text(s):
     s = re.sub(r"(?is)<(script|style|head).*?</\1>", " ", s)
     s = re.sub(r"(?is)<blockquote.*?</blockquote>", "\n", s)
@@ -349,6 +365,9 @@ def read(days, limit, root=MAIL_ROOT, all_history=False):
             handle, who = other["addr"], (other["name"] or "").strip() or other["addr"]
         else:
             handle, who = sender, (e["sender_name"] or "").strip() or sender
+            if not sender_verified(msg):
+                stats["unverified"] = stats.get("unverified", 0) + 1
+                handle = "unverified:" + sender
 
         mid = (msg.get("Message-ID") or "").strip().strip("<>") if msg is not None else ""
         key = mid or f"{sender}|{e['date_sent']}|{e['subject']}"

@@ -57,6 +57,12 @@ grep -q "unconfirmed" <<<"$out"             || fail "a foreign handle on a saved
 
 out="$("$P" send "sendy solo" "x" --via fax 2>&1)" && fail "an unknown app was accepted"
 
+# A foreign number that merely ENDS in a contact's ten digits is not them.
+sqlite3 "$DB" "INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, source) VALUES
+   (2000000000098, '$SAGAR', 'Sagar Real', '+9116305550101', 0, 'tail', datetime('now'), 'whatsapp');"
+out="$("$P" send "sagar real" "x" --via whatsapp 2>&1)" && fail "a number sharing only the last ten digits was trusted"
+grep -q "unconfirmed" <<<"$out"             || fail "a tail-matching foreign number was not refused"
+
 out="$(node -e '
   const { waJid } = require(process.argv[1]);
   console.log([waJid("3106946088"), waJid("+44 7700 900123"), waJid("111@lid")].join(" "));

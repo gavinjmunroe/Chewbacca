@@ -2507,7 +2507,9 @@ if command -v brew &>/dev/null; then
   # Keep those copies fresh between sessions. Every ten minutes, because a
   # message that arrived an hour ago and is not in the store reads as "they
   # never wrote back". launchd hands children a PATH without Homebrew, which
-  # silently broke the HUD once, so the plist carries its own.
+  # silently broke the HUD once, so the plist carries its own. The log lives in
+  # the user's own Library: a fixed name in shared /tmp can be pre-created as
+  # a symlink by another account and redirect these writes.
   _mr_plist="$HOME/Library/LaunchAgents/com.chewbacca.messages-refresh.plist"
   cat >"$_mr_plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -2522,8 +2524,8 @@ if command -v brew &>/dev/null; then
   </dict>
   <key>StartInterval</key><integer>600</integer>
   <key>RunAtLoad</key><true/>
-  <key>StandardOutPath</key><string>/tmp/chewbacca-messages-refresh.log</string>
-  <key>StandardErrorPath</key><string>/tmp/chewbacca-messages-refresh.log</string>
+  <key>StandardOutPath</key><string>$HOME/Library/Logs/chewbacca-messages-refresh.log</string>
+  <key>StandardErrorPath</key><string>$HOME/Library/Logs/chewbacca-messages-refresh.log</string>
 </dict></plist>
 PLIST
   launchctl bootout "gui/$(id -u)/com.chewbacca.messages-refresh" &>/dev/null || true

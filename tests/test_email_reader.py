@@ -75,6 +75,11 @@ MESSAGES = [
     # here, so only CHEWBACCA_EMAIL_ME can say it is me.
     (12, "INBOX", ("caleb@work.test", "Caleb"), [(0, SAGAR, "Sagar Tiwari")], "From work", 1000,
      {"Message-ID": "<w1@work.test>"}, "Sent from the work account", False),
+    # Anyone can type Sagar's address into From. The receiving server says the
+    # domain did not send it, so it must not be filed as Sagar.
+    (13, "INBOX", (SAGAR, "Sagar Tiwari"), [(0, ME, "Me")], "New bank details", 900,
+     {"Message-ID": "<f1@forged.test>", "Authentication-Results": "mx.test; dkim=none; spf=fail; dmarc=fail"},
+     "Wire the deposit here instead", False),
 ]
 
 
@@ -116,7 +121,8 @@ def build_store(root):
         for pos, (kind, raddr, rname) in enumerate(recips):
             con.execute("INSERT INTO recipients (message,address,type,position) VALUES (?,?,?,?)",
                         (rid, addr(raddr, rname), kind, pos))
-        hdr = {"From": f"{sname} <{saddr}>", "To": ", ".join(r[1] for r in recips), "Subject": subject, **headers}
+        hdr = {"From": f"{sname} <{saddr}>", "To": ", ".join(r[1] for r in recips), "Subject": subject,
+               "Authentication-Results": "mx.test; dkim=pass; spf=pass; dmarc=pass", **headers}
         raw = eml(hdr, body, attach)
         d = acct / f"{box}.mbox" / "STORE-UUID" / "Data" / "Messages"
         d.mkdir(parents=True, exist_ok=True)
@@ -210,6 +216,9 @@ with tempfile.TemporaryDirectory() as tmp:
 
     p = run(["send", "--to", "not an address", "--text", "body"], root, env)
     res = json.loads(p.stdout or "{}")
+    forged = [r for r in rows if "bank details" in r["text"]]
+    check("a forged From never gets the real address as its handle",
+          len(forged) == 1 and forged[0]["handle"] == "unverified:" + SAGAR.lower(), forged)
     check("send to a bad address is ok:false with nonzero exit", p.returncode != 0 and res.get("ok") is False and res.get("error"), p.stdout)
     check("a refused send never reaches mac", not log.exists())
 

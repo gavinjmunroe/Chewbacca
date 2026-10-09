@@ -142,13 +142,37 @@ function syncChannel(d, ch, flags) {
 
 // Match a thread to someone already in the store. Handle first because a phone
 // number is exact; the display name is a fallback and is allowed to miss.
-function resolvePerson(who, handle) {
+// Full international digits, with a bare 10-digit number read as US.
+const e164 = (v) => {
+  const d = String(v || "").replace(/\D/g, "");
+  return d.length === 10 ? "1" + d : d;
+};
+
+// strict: the whole number must match, not its last ten digits. iMessage
+// handles come from the user's own Contacts, so the suffix match is fine
+// there. A WhatsApp or Slack sender chooses their number, and +44 7911 123456
+// shares its last ten digits with nobody it should, but +91 63055 50101 does
+// end in a US contact's 6305550101. Matching on the tail would file that
+// sender under the contact and make `people send` trust their number.
+function resolvePerson(who, handle, { strict = false } = {}) {
   const d = db();
   if (handle) {
     const alias = d
       .prepare("SELECT person_id FROM identities WHERE value = ?")
       .get(normHandle(handle) || "");
-    if (alias) return alias.person_id;
+    // identities store a US number as its last ten digits, so a strict match
+    // also needs the full number to be that US number.
+    if (alias && (!strict || String(handle).includes("@") || e164(handle) === "1" + normHandle(handle)))
+      return alias.person_id;
+    if (strict && !String(handle).includes("@")) {
+      const want = e164(handle);
+      if (want.length < 8) return null;
+      const hit = d
+        .prepare("SELECT id, phone FROM people WHERE deleted_at IS NULL AND phone IS NOT NULL AND phone <> ''")
+        .all()
+        .find((p) => e164(p.phone) === want);
+      return hit ? hit.id : null;
+    }
     const digits = String(handle).replace(/\D/g, "").slice(-10);
     if (digits.length === 10) {
       const hit = d
@@ -202,10 +226,10 @@ function ingestRows(d, rows, source, seen) {
     // asks the same question 600k times for a few thousand distinct threads.
     // Cache by thread so each one is resolved once.
     const pidCache = new Map();
-    const resolveCached = (who, handle) => {
-      const key = (handle || "") + "\u0000" + (who || "");
+    const resolveCached = (who, handle, strict = false) => {
+      const key = (handle || "") + "\u0000" + (who || "") + (strict ? "\u0000s" : "");
       if (pidCache.has(key)) return pidCache.get(key);
-      const pid = resolvePerson(who, handle);
+      const pid = resolvePerson(who, handle, { strict });
       pidCache.set(key, pid);
       return pid;
     };
@@ -235,7 +259,7 @@ function ingestRows(d, rows, source, seen) {
       // chose, so a stranger calling himself "Sagar Tiwari" would be filed
       // under Sagar, his number recorded as Sagar's, and `people send sagar`
       // would reach him. Other apps link by address only.
-      const pid = resolveCached(source === "imessage" ? r.with : null, r.handle);
+      const pid = source === "imessage" ? resolveCached(r.with, r.handle) : resolveCached(null, r.handle, true);
       const res = ins.run(
         r.id,
         pid,
@@ -366,7 +390,10 @@ function cmdTexts(argv) {
     for (const row of d
       .prepare("SELECT DISTINCT who, handle, source FROM messages WHERE person_id IS NULL")
       .all()) {
-      const pid = resolvePerson(row.source === "imessage" ? row.who : null, row.handle);
+      const pid =
+        row.source === "imessage"
+          ? resolvePerson(row.who, row.handle)
+          : resolvePerson(null, row.handle, { strict: true });
       if (!pid) continue;
       // Match on the handle when there is one. Matching on the thread name
       // instead credited every sender in a group chat to whichever member
@@ -386,11 +413,11 @@ function cmdTexts(argv) {
     let recredited = 0;
     for (const row of d
       .prepare(
-        `SELECT DISTINCT m.handle, m.person_id FROM messages m
+        `SELECT DISTINCT m.handle, m.person_id, m.source FROM messages m
           WHERE m.from_me = 0 AND m.handle IS NOT NULL AND m.handle <> '' AND m.person_id IS NOT NULL`,
       )
       .all()) {
-      const truth = resolvePerson(null, row.handle);
+      const truth = resolvePerson(null, row.handle, { strict: row.source !== "imessage" });
       if (!truth || truth === row.person_id) continue;
       recredited += d
         .prepare("UPDATE messages SET person_id=? WHERE handle=? AND person_id=? AND from_me=0")

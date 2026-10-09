@@ -158,7 +158,9 @@ function cmdSend(argv) {
   // Anything else was reached through a name, and on WhatsApp or Slack the
   // sender picks their own name. That sends only when --to repeats the exact
   // address the dry run printed, so a person chose the number, not the name.
-  const owned = Boolean(person) && (resolvePerson(null, handle) === person.id || handle === fromCard(person, app));
+  const owned =
+    Boolean(person) &&
+    (resolvePerson(null, handle, { strict: true }) === person.id || handle === fromCard(person, app));
   const where = `${c.b(P(name))} ${c.dim(`via ${app}, ${P(to)}${owned ? "" : ", not a saved contact"}`)}`;
   if (flags["dry-run"]) {
     say(`  would send to ${where}`);

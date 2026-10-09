@@ -103,7 +103,7 @@ struct FieldRenderTests {
     func acting() throws {
         _ = try Self.render(suffix: "-acting") {
             $0.tint = SIMD4(0.28, 1.45, 0.55, 0.60)
-            $0.rest = 8 / 800
+            $0.rest = 12 / 800
             $0.embers = 1
             $0.agent = SIMD2(0.72, 0.62)
             $0.reach = 1
@@ -117,14 +117,14 @@ struct FieldRenderTests {
             let t = Float(i)
             return max(0, sin(t * 0.55)) * (i < 20 ? 0.9 : 0.4)
         }
-        _ = try Self.render(suffix: "-voice", voice: voice) { $0.rest = 4 / 800 }
+        _ = try Self.render(suffix: "-voice", voice: voice) { $0.rest = 6 / 800 }
     }
 
     @Test("done sends one crest round the band")
     func sweep() throws {
         _ = try Self.render(suffix: "-done") {
             $0.tint = SIMD4(0.14, 0.62, 0.30, 0.75)
-            $0.rest = 6 / 800
+            $0.rest = 9 / 800
             $0.sweep = 0.45
             $0.sweepOrigin = 0.62
         }
@@ -144,7 +144,7 @@ struct FieldRenderTests {
     @Test("thinking: a scanning streak on the cut edge")
     func thinking() throws {
         _ = try Self.render(suffix: "-thinking") {
-            $0.rest = 5 / 800
+            $0.rest = 8 / 800
             $0.drift = 3.2
         }
     }
@@ -156,7 +156,7 @@ struct FieldRenderTests {
         for frame in 0..<6 {
             let seconds = Float(frame) * 0.2
             _ = try Self.render(suffix: "-strip\(frame)") {
-                $0.rest = 5 / 800
+                $0.rest = 8 / 800
                 $0.drift = 3.2
                 $0.time += seconds
                 $0.travel += 3.2 * seconds
@@ -171,7 +171,7 @@ struct FieldRenderTests {
     @Test("nothing is drawn inside the screen past the band")
     func noDust() throws {
         let width = 1280, height = 800
-        for (rest, embers) in [(Float(6), Float(0)), (Float(8), Float(1)), (Float(20), Float(1))] {
+        for (rest, embers) in [(Float(9), Float(0)), (Float(12), Float(1)), (Float(20), Float(1))] {
             guard let pixels = try Self.draw(suffix: "-nodust", background: -1, { $0.rest = rest / 800; $0.embers = embers })
             else { return }
             // Band, its 10% swell from a voice that is not there, the 2.4 px

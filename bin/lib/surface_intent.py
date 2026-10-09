@@ -91,8 +91,10 @@ SHOW_SHAPES = [(name, re.compile(rf"^{SHOW} {MY}{noun}(?: (?:on|up on) (?:the )?
 EXTRA = [
     ("music", re.compile(r"^what(?:'s|s| is) (?:playing|on|this song)(?: right now)?$")),
     ("today", re.compile(r"^show(?: me)? what(?:'s|s| is) (?:on )?(?:today|my day)$")),
+    # A bare "what's up" is a greeting, answered by hud-listen's pleasantry
+    # before this is asked (CHW-184); only "what's up today" means the panel.
     ("needs-you", re.compile(
-        r"^(?:what(?:'s|s| is) up|what do i (?:need|have) to do|what needs (?:me|my attention|doing)"
+        r"^(?:what(?:'s|s| is) up today|what do i (?:need|have) to do|what needs (?:me|my attention|doing)"
         r"|what should i (?:look at|do next|work on)|what(?:'s|s| is) waiting on me|anything (?:need|needs) me)"
         r"(?: today| right now| now)?$")),
     # "What did we decide", "what came out of my call": the meetings panel,

@@ -113,10 +113,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // worst failure a front door can have, because it is indistinguishable
         // from the request having been understood and ignored.
         model.onEvent = { [weak self, weak server] event in
-            let delivered = server?.send(event.line) ?? false
-            guard !delivered else { return }
+            _ = server?.send(event.line)
             switch event {
             case .heard, .typed:
+                // Delivered is not answered: kyber-surfaces subscribes too and
+                // ignores speech, so only the voice bridge counts (CHW-184).
+                guard !(server?.hasVoiceListener ?? false) else { return }
                 Task { @MainActor in self?.reportNobodyListening() }
             default:
                 // A click on a panel nobody is listening to is not worth a
@@ -151,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Two seconds of grace first: a listener left from a previous run may
         // still be reconnecting, and two of them on one socket both answer.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak server] in
-            guard let self, let server, !server.hasSubscribers else { return }
+            guard let self, let server, !server.hasVoiceListener else { return }
             _ = self.startListener()
         }
         // A text to yourself starting with "Kyber" is answered as a text.
@@ -166,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkListener() {
-        let connected = server?.hasSubscribers ?? false
+        let connected = server?.hasVoiceListener ?? false
         guard watchdog.shouldStart(connected: connected) else { return }
         if startListener() {
             watchdog.started()

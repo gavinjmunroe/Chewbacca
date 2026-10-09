@@ -79,6 +79,14 @@ public final class SocketServer: @unchecked Sendable {
     /// or never listened, still broadcasts, which is how a panel drawn by a
     /// one-shot `hud draw` keeps reaching the voice.
     private var owners: [String: Int32] = [:]
+    /// The subscribers that said `listen token=<hex> role=voice`: the bridge
+    /// that answers what is said, as opposed to a daemon that only wants its
+    /// own presses. Until 2026-10-09 any subscriber counted as the voice, and
+    /// from 2026-10-06 19:00 the only one was kyber-surfaces: the watchdog saw
+    /// "connected" and never restarted hud-listen, every `h` was delivered to
+    /// a process that ignores it, and "whats up" sat on "Working on it" until
+    /// the person gave up (CHW-184).
+    private var voices: Set<Int32> = []
     private var running = false
 
     /// One queue per connection, so a slow reader cannot stall the others or
@@ -345,6 +353,7 @@ public final class SocketServer: @unchecked Sendable {
         // let a late reader close a descriptor reused by a successor server.
         for fd in clients { shutdown(fd, SHUT_RDWR) }
         subscribers.removeAll()
+        voices.removeAll()
         lock.unlock()
         if listenFD >= 0 {
             shutdown(listenFD, SHUT_RDWR)
@@ -415,6 +424,7 @@ public final class SocketServer: @unchecked Sendable {
                 self.lock.lock()
                 self.clients.remove(fd)
                 self.subscribers.remove(fd)
+                self.voices.remove(fd)
                 // A closed descriptor number is reused by the next accept;
                 // a stale entry would route the next client's presses wrong.
                 self.owners = self.owners.filter { $0.value != fd }
@@ -430,6 +440,18 @@ public final class SocketServer: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return !subscribers.isEmpty
+    }
+
+    /// Whether the voice bridge is listening: something will answer an `h`.
+    public var hasVoiceListener: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return !voices.isEmpty
+    }
+
+    /// Whether a `listen` line names the voice role.
+    static func claimsVoice(_ line: String) -> Bool {
+        line.split(separator: " ").dropFirst().contains("role=voice")
     }
 
     private func read(_ fd: Int32) {
@@ -468,6 +490,7 @@ public final class SocketServer: @unchecked Sendable {
                     }
                     lock.lock()
                     subscribers.insert(fd)
+                    if Self.claimsVoice(trimmed) { voices.insert(fd) }
                     lock.unlock()
                     onEvent(Event(kind: .subscribed))
                     continue

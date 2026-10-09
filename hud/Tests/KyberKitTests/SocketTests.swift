@@ -280,6 +280,50 @@ struct SocketTests {
         #expect(text.contains("show me my week"))
     }
 
+    @Test("only a listener that says role=voice counts as the voice bridge")
+    func voiceListenerIsNamed() async throws {
+        // 2026-10-06 to 10-09: kyber-surfaces held the only subscription, the
+        // watchdog read that as the bridge being up, and every sentence went
+        // to a daemon that ignores speech (CHW-184).
+        let path = temporaryPath()
+        let server = SocketServer(path: path) { _ in }
+        try server.start()
+        defer { server.stop() }
+
+        let surfaces = connect(to: path)
+        #expect(surfaces >= 0)
+        defer { close(surfaces) }
+        _ = try await exchange(surfaces, "listen token=\(server.token)\n")
+        #expect(server.hasSubscribers)
+        #expect(!server.hasVoiceListener)
+
+        let voice = connect(to: path)
+        #expect(voice >= 0)
+        _ = try await exchange(voice, "listen token=\(server.token) role=voice\n")
+        #expect(server.hasVoiceListener)
+
+        close(voice)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(!server.hasVoiceListener)
+        #expect(server.hasSubscribers)
+    }
+
+    @Test("role=voice without the token is not a voice")
+    func voiceNeedsToken() async throws {
+        let path = temporaryPath()
+        let server = SocketServer(path: path) { _ in }
+        try server.start()
+        defer { server.stop() }
+        let fd = connect(to: path)
+        #expect(fd >= 0)
+        defer { close(fd) }
+        _ = try await exchange(fd, "listen token=nope role=voice\n")
+        #expect(!server.hasVoiceListener)
+        #expect(SocketServer.claimsVoice("listen token=abc role=voice"))
+        #expect(!SocketServer.claimsVoice("listen token=abc"))
+        #expect(!SocketServer.claimsVoice("role=voice"))
+    }
+
     /// Everything a client hears in `wait` after sending `lines`.
     private func exchange(_ fd: Int32, _ lines: String, wait: Duration = .milliseconds(250)) async throws -> String {
         _ = lines.withCString { send(fd, $0, strlen($0), 0) }

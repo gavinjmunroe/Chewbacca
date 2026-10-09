@@ -31,7 +31,7 @@ def main() -> int:
         ("show me my calendar", "open", "today", ""),
         ("Pull up my schedule on the screen", "open", "today", ""),
         ("What do I need to do?", "open", "needs-you", ""),
-        ("What's up", "open", "needs-you", ""),
+        ("What's up today", "open", "needs-you", ""),
         ("what should I look at", "open", "needs-you", ""),
         ("Open my texts", "open", "conversations", ""),
         ("open messages", "open", "conversations", ""),
@@ -90,6 +90,8 @@ def main() -> int:
         "show my sessions",
         "Show me Claude",
         "show my agents and tell the lemma one to run the tests",
+        # A greeting, answered by hud-listen's pleasantry (CHW-184).
+        "What's up",
         "",
     ]
     for said in refuses:

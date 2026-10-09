@@ -17,6 +17,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 
@@ -164,6 +165,12 @@ def cursor(native):
                 tool_input['file_path'] = tool_input[alias]
         if event == 'beforeShellExecution':
             tool_input = {'command': native.get('command', '')}
+        if name == 'Delete':
+            # Claude deletes through Bash, so every delete guard is a Bash
+            # matcher. Present the delete as the rm Claude would have run, or
+            # a Cursor delete walks past all of them.
+            name = 'Bash'
+            tool_input = {'command': 'rm -- ' + shlex.quote(str(tool_input.get('file_path', '')))}
         if name.startswith('MCP:'):
             name = 'mcp__' + name[4:]
         blocked, parts = run_hooks('PreToolUse', claude_payload(

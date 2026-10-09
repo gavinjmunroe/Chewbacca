@@ -89,6 +89,11 @@ class BridgeTests(unittest.TestCase):
                                          'tool_input': {'command': 'ls'}, 'cwd': cwd})
         self.assertEqual(allowed['permission'], 'allow')
 
+    def test_cursor_delete_reaches_shell_guards(self):
+        denied = self.bridge('cursor', {'hook_event_name': 'preToolUse', 'tool_name': 'Delete',
+                                        'tool_input': {'path': 'FORBIDDEN.txt'}, 'cwd': str(self.home)})
+        self.assertEqual(denied['permission'], 'deny')
+
     def test_gemini_refusals_and_prompt_context(self):
         cwd = str(self.home)
         tool = self.bridge('gemini', {'hook_event_name': 'BeforeTool', 'tool_name': 'run_shell_command',

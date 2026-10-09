@@ -99,3 +99,25 @@ struct BarLaneTests {
             == PillView.pillLift + 60 + OverlayModel.stackGap)
     }
 }
+
+/// Where clay-build expected a control and did not find it: red and dashed,
+/// so it never reads as "this is it".
+@Suite("Miss tone")
+struct MissToneTests {
+    @Test("tone=miss parses, reads as bad, and dashes")
+    func miss() throws {
+        let op = try LineParser.parse("m clay-target 10 20 80 30 tone=miss life=300")
+        guard case let .mark(_, rect, _, tone, life) = op else {
+            Issue.record("not a mark: \(op)")
+            return
+        }
+        #expect(rect == CGRect(x: 10, y: 20, width: 80, height: 30))
+        #expect(tone == "miss")
+        #expect(life == 300)
+        #expect(HUD.tone("miss") == HUD.bad)
+        #expect(HUD.spoken("miss") == "expected here, not found")
+        #expect(Marker.isDashed(tone: "miss"))
+        #expect(!Marker.isDashed(tone: "bad"))
+        #expect(!Marker.isDashed(tone: nil))
+    }
+}

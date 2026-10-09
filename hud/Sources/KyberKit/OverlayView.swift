@@ -782,12 +782,20 @@ struct Brackets: View {
     /// marker passes its own, so an outline that means "this is broken" is not
     /// drawn in the same colour as everything that means nothing in particular.
     var tint: Color?
+    /// A whole dashed outline instead of four corners: where something was
+    /// expected and not found (`tone=miss`). Corners say "this is it"; a
+    /// dashed box says "it should be here".
+    var dashed = false
 
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
             let arm: CGFloat = 14
             Path { path in
+                if dashed {
+                    path.addRect(CGRect(origin: .zero, size: size))
+                    return
+                }
                 for corner in [
                     (CGPoint(x: 0, y: 0), CGSize(width: 1, height: 1)),
                     (CGPoint(x: size.width, y: 0), CGSize(width: -1, height: 1)),
@@ -807,7 +815,9 @@ struct Brackets: View {
             // an appearance that depends on a side effect having fired. The
             // strike is now a flourish on top of something already readable
             // rather than the thing that makes it readable.
-            .stroke((tint ?? HUD.accent).opacity(lit ? 1 : 0.75), lineWidth: 1.6)
+            .stroke(
+                (tint ?? HUD.accent).opacity(lit ? 1 : 0.75),
+                style: StrokeStyle(lineWidth: 1.6, dash: dashed ? [4, 3] : []))
             .shadow(color: (tint ?? HUD.accent).opacity(0.65), radius: 5)
         }
         .padding(-6)
@@ -900,6 +910,7 @@ public enum HUD {
         case "good", "positive", "success": return "good"
         case "warn", "warning": return "warning"
         case "bad", "negative", "danger", "critical": return "critical"
+        case "miss": return "expected here, not found"
         default: return nil
         }
     }
@@ -908,7 +919,7 @@ public enum HUD {
         switch name {
         case "good", "positive", "success": return good
         case "warn", "warning": return warn
-        case "bad", "negative", "danger", "critical": return bad
+        case "bad", "negative", "danger", "critical", "miss": return bad
         default: return accent
         }
     }

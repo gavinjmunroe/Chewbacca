@@ -1,0 +1,44 @@
+#!/bin/bash
+# chewbacca-node: one node binary at a path that never changes, for launchd jobs.
+#
+#   chewbacca-node            refresh the copy if node changed, print its path
+#   chewbacca-node --path     print the path only
+#
+# A job launchd starts has no .app above it, so macOS charges its privacy
+# requests to the node binary itself and asks "node would like to access data
+# from other apps". On 2026-10-09 that box came up many times in one day,
+# because the people jobs ran nvm's node, whose path moves with every version.
+# Granting Full Disk Access once to this copy covers every job pointed here.
+# It is a copy, not a symlink: TCC resolves links to the real file, so a link
+# would put the grant back on the versioned path. The copy keeps Node's
+# signature (identifier node, team HX7739G8FX), which is what the grant
+# matches, so refreshing it after a node upgrade keeps the grant.
+set -euo pipefail
+
+DEST="${CHEWBACCA_NODE:-$HOME/.chewbacca/runtime/node}"
+
+if [[ "${1:-}" == "--path" ]]; then
+  echo "$DEST"
+  exit 0
+fi
+
+src=""
+if [[ -d "$HOME/.nvm/versions/node" ]]; then
+  newest=$(ls "$HOME/.nvm/versions/node" | sort -V | tail -1)
+  [[ -n "$newest" && -x "$HOME/.nvm/versions/node/$newest/bin/node" ]] && src="$HOME/.nvm/versions/node/$newest/bin/node"
+fi
+if [[ -z "$src" ]]; then
+  for candidate in /opt/homebrew/bin/node /usr/local/bin/node; do
+    [[ -x "$candidate" ]] && { src=$(cd "$(dirname "$candidate")" && pwd -P)/$(basename "$candidate"); break; }
+  done
+fi
+[[ -z "$src" ]] && { echo "chewbacca-node: no node found under ~/.nvm or Homebrew" >&2; exit 1; }
+
+mkdir -p "$(dirname "$DEST")"
+if ! cmp -s "$src" "$DEST" 2>/dev/null; then
+  # Copy beside it, then rename, so a job starting mid-refresh never runs half a binary.
+  cp -p "$src" "$DEST.new"
+  mv -f "$DEST.new" "$DEST"
+fi
+codesign -v "$DEST" 2>/dev/null || echo "chewbacca-node: warning, $DEST is unsigned, the grant will not survive an upgrade" >&2
+echo "$DEST"

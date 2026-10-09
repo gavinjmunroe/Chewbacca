@@ -43,6 +43,17 @@ printf '%s\tme\t%s/a.txt\n%s\tgavin-tab\t%s/b.txt\n' "$(date +%s)" "$R" "$(date 
 out="$(run me)"
 says "$out" "never -A" && ok "mixed: says stage your own paths by name" || no "no warning on a mixed tree"
 
+# Another tab's edits must not re-arm the warning about this session's file.
+# Hashing the whole status did: 4 repeats in one tab on 2026-10-09.
+keep(){ printf '{"session_id":"%s"}' "$1" | HOME="$T/home" CHEWBACCA_WRITE_LOG="$LOG" bash "$HOOK" 2>/dev/null; }
+rm -rf "$T/home/.chewbacca"; keep me >/dev/null
+echo three > b.txt
+out="$(keep me)"
+[ -z "$out" ] && ok "another tab's edit: no repeat of the same warning" || no "re-fired because another session's file changed"
+echo more >> a.txt
+out="$(keep me)"
+says "$out" "never -A" && ok "own file changed: warns again" || no "went quiet after this session's own file changed"
+
 # An untracked file belongs to whoever created it. DIRTY_COUNT counts it and
 # `git add -A` stages it, so attribution has to see it too. The first version of
 # this hook filtered to tracked paths only and called a mixed tree clean-handed.

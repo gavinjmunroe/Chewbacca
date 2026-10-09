@@ -89,6 +89,7 @@ fi
 
 MINE_COUNT=0
 OTHERS_COUNT=0
+MINE_PATHS=""
 _SID=""
 if command -v jq >/dev/null 2>&1; then
   _SID="$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null || true)"
@@ -145,13 +146,15 @@ if [ -n "$_SID" ] && [ -s "$_WLOG" ]; then
           if (owner != "") who = owner
           owner = ""
         }
-        print who
+        print who "\t" p
       }
     }' - "$_WLOG" 2>/dev/null)"
-  while IFS= read -r _author; do
+  while IFS=$'\t' read -r _author _path; do
     [ -n "$_author" ] || continue
     if [ "$_author" = "$_SID" ]; then
       MINE_COUNT=$((MINE_COUNT + 1))
+      MINE_PATHS="$MINE_PATHS${_path#"$REPO_ROOT"/}
+"
     else
       OTHERS_COUNT=$((OTHERS_COUNT + 1))
     fi
@@ -196,7 +199,12 @@ if [ "$OTHERS_COUNT" -gt 0 ] && [ "$MINE_COUNT" -eq 0 ]; then
 fi
 
 if [ -n "$STATE_FILE" ]; then
-  FINGERPRINT="$(git status --porcelain 2>/dev/null | shasum 2>/dev/null | cut -d' ' -f1)|$AHEAD_COUNT|$NO_UPSTREAM|$MINE_COUNT|$OTHERS_COUNT"
+  # Only this session's files go in the fingerprint. Hashing the whole status,
+  # every other tab's edit moved it and the same warning re-fired: 4 times in a
+  # row on 2026-10-09 against one file that was already committed and pushed,
+  # while 15 other tabs kept the checkout changing.
+  _MINE_STATUS="$(printf '%s' "$MINE_PATHS" | while IFS= read -r _mp; do [ -n "$_mp" ] || continue; git status --porcelain -- "$REPO_ROOT/$_mp" 2>/dev/null; [ -f "$REPO_ROOT/$_mp" ] && git hash-object -- "$REPO_ROOT/$_mp" 2>/dev/null; done)"
+  FINGERPRINT="$(printf '%s' "$_MINE_STATUS" | shasum 2>/dev/null | cut -d' ' -f1)|$NO_UPSTREAM|$MINE_COUNT"
   [ "$(cat "$STATE_FILE" 2>/dev/null)" = "$FINGERPRINT" ] && exit 0
   printf '%s' "$FINGERPRINT" > "$STATE_FILE" 2>/dev/null || true
 fi

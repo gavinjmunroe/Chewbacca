@@ -99,6 +99,14 @@ extension Presence {
     /// want it to be a bit thicker", so attentive went to 20 and the rest
     /// moved by the same ratio again: hearing 9, thinking 11, acting 26, done
     /// 16, attention 38, failed 30.
+    ///
+    /// Then glass, on 2026-10-09, seen on Gavin's 14-inch MacBook Pro: "much
+    /// more hugged to the edge, its way too big". Attentive went from 20 to
+    /// 6 and the rest by about the same three tenths, with a floor of 4,
+    /// guessed, not measured: the lit cut edge is about 2 points, and under 4
+    /// it would be most of the rim: hearing 4, thinking 5, acting 8, done 6,
+    /// attention 11, failed 9. Hearing and thinking now share a depth and
+    /// stay apart on drift, which is the channel the table leads on anyway.
     var field: PresenceFieldStyle {
         switch self {
         case .dormant:
@@ -118,7 +126,7 @@ extension Presence {
             // full screen thirty times a second. The pointer still parts it
             // and it parks again once settled.
             return .init(
-                rest: 20, drift: 0.5, tint: FieldTint.steel, pulse: 0, fps: 1,
+                rest: 6, drift: 0.5, tint: FieldTint.steel, pulse: 0, fps: 1,
                 animating: false)
         case .hearing, .speaking:
             // The two states driven from outside. `rest` here is a floor and
@@ -133,14 +141,14 @@ extension Presence {
             // flow reads as fast while the two stay apart: a voice is thick
             // and moving with the sound, thinking is thin and sprinting.
             return .init(
-                rest: 9, drift: 2.4, tint: FieldTint.steel, pulse: 0, fps: 60,
+                rest: 4, drift: 2.4, tint: FieldTint.steel, pulse: 0, fps: 60,
                 animating: true)
         case .thinking:
             // Thin and fast. Work reads as travel round the edge rather than
             // as weight on it, and it is still white: nothing has been done to
             // the machine yet.
             return .init(
-                rest: 11, drift: 3.2, tint: FieldTint.steel, pulse: 0, fps: 30,
+                rest: 5, drift: 3.2, tint: FieldTint.steel, pulse: 0, fps: 30,
                 animating: true)
         case .acting:
             // Green and breathing, and the only state that breathes on its own
@@ -148,7 +156,7 @@ extension Presence {
             // and that is the one thing in this vocabulary worth a colour they
             // cannot miss.
             return .init(
-                rest: 26, drift: 1.1, tint: FieldTint.green, pulse: 0.8, fps: 30,
+                rest: 8, drift: 1.1, tint: FieldTint.green, pulse: 0.8, fps: 30,
                 animating: true, embers: 1)
         case .done:
             // Darker green, calm, and still alive. The same hue as `acting`
@@ -169,18 +177,18 @@ extension Presence {
             // living instrument. Slower than `attentive`'s 0.5 so it reads
             // as settled rather than waiting, at its rate.
             return .init(
-                rest: 16, drift: 0.35, tint: FieldTint.deepGreen, pulse: 0, fps: 20,
+                rest: 6, drift: 0.35, tint: FieldTint.deepGreen, pulse: 0, fps: 20,
                 animating: true)
         case .attention:
             // The thickest, because this is the one that has to be noticed. It
             // stays white: green and red are spoken for, and a third hue here
             // would make the palette decoration again.
             return .init(
-                rest: 38, drift: 0.9, tint: FieldTint.steel, pulse: 0, fps: 30,
+                rest: 11, drift: 0.9, tint: FieldTint.steel, pulse: 0, fps: 30,
                 animating: true)
         case .failed:
             return .init(
-                rest: 30, drift: 0.3, tint: FieldTint.red, pulse: 0, fps: 20,
+                rest: 9, drift: 0.3, tint: FieldTint.red, pulse: 0, fps: 20,
                 animating: true)
         }
     }
@@ -210,9 +218,6 @@ struct PresenceFrame: Equatable {
     /// The hyper bar, in points with a top-left origin, while it is up. The
     /// field draws its body.
     var pill: CGRect? = nil
-    /// Draw only the strip under the menu bar, as a tint, for the window that
-    /// sits above the menu bar. See `MenuBarStripWindow`.
-    var menuBarOnly = false
 }
 
 /// One number that follows another instead of jumping to it.
@@ -260,8 +265,6 @@ struct PresenceField: View {
     var agent: CGPoint? = nil
     /// The hyper bar, in points, while it is up.
     var pill: CGRect? = nil
-    /// True for the copy in the window above the menu bar.
-    var menuBarOnly = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.hudOffscreen) private var offscreen
@@ -324,8 +327,7 @@ struct PresenceField: View {
             alpha: pulsing && pulses < 2 ? 0.55 : 1.0,
             agent: agent,
             doneAt: doneAt,
-            pill: pill,
-            menuBarOnly: menuBarOnly)
+            pill: pill)
     }
 
     /// Arrival and departure, the only two transitions this layer treats as
@@ -414,7 +416,7 @@ private struct PresenceFieldSurface: NSViewRepresentable {
         view.framebufferOnly = true
         view.enableSetNeedsDisplay = false
         view.delegate = context.coordinator
-        context.coordinator.attach(to: view, wakesOnPointer: !frame.menuBarOnly)
+        context.coordinator.attach(to: view)
         return view
     }
 
@@ -545,6 +547,13 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
     /// How much more transparent the band goes while the pointer is in it.
     /// Asked for as "10% more transparent" on 2026-09-19.
     static let partFade: Float = 0.10
+    /// The radius the rim's inner edge turns its corners on, in points. The
+    /// shader draws the light to it and `RimGlass` cuts the blur to it, so
+    /// the two cannot disagree. Ten because the shader's old comment put the
+    /// display's own corners at about that, so the inner edge follows them
+    /// rather than cutting across. Was 0.012 screen heights, 9.6 points on
+    /// an 800 point display and 11.8 on Gavin's 982.
+    static let innerCorner: CGFloat = 10
 
     var frame = PresenceFrame(
         style: Presence.dormant.field, awokeAt: nil, closingAt: nil, heard: 0, alpha: 1)
@@ -643,11 +652,8 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
     }
 
     @MainActor
-    func attach(to view: MTKView, wakesOnPointer: Bool = true) {
-        // One view wakes on the pointer: the main frame. The menu bar strip
-        // has no parting to show, and taking this slot would leave the main
-        // frame parked through a pointer move.
-        if wakesOnPointer { Self.live = view }
+    func attach(to view: MTKView) {
+        Self.live = view
         guard let device, !broken, pipeline == nil else { return }
         do {
             pipeline = try FieldPipeline(device: device, format: view.colorPixelFormat)
@@ -712,25 +718,6 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
         let pixelsPerPoint = Float(size.height) / Float(max(view.bounds.height, 1))
         let radius = Self.partRadius * pixelsPerPoint / Float(max(size.height, 1))
         let feather = Self.partFeather * pixelsPerPoint / Float(max(size.height, 1))
-        // The menu bar sits above this window's level, so a band drawn at the
-        // true top edge of the screen is behind it: reported 2026-10-04 as "it
-        // cuts off at the top behind the nav bar". The band's top edge moves
-        // down to the menu bar's bottom instead. Not the other way round, over
-        // the menu bar: a dark bezel there would sit across the clock and
-        // every status icon.
-        let menuBar: Float = view.window?.screen.map { screen in
-            Float(max(screen.frame.maxY - screen.visibleFrame.maxY, 0))
-                / Float(max(view.bounds.height, 1))
-        } ?? 0
-        // The Dock, the same way: visibleFrame leaves it out on whichever
-        // side it is pinned, and is the whole side when it hides itself.
-        let dock: (bottom: Float, left: Float, right: Float) = view.window?.screen.map { screen in
-            let h = Float(max(view.bounds.height, 1))
-            let full = screen.frame, usable = screen.visibleFrame
-            return (Float(max(usable.minY - full.minY, 0)) / h,
-                    Float(max(usable.minX - full.minX, 0)) / h,
-                    Float(max(full.maxX - usable.maxX, 0)) / h)
-        } ?? (0, 0, 0)
         // `rest` is points in the table and screen heights in the shader.
         let restTarget = Float(style.rest) / Float(max(view.bounds.height, 1))
         let pointer = Self.pointer
@@ -862,12 +849,8 @@ final class PresenceFieldRenderer: NSObject, MTKViewDelegate {
             sweepOrigin: sweepOrigin,
             embers: embers.shown,
             pillOn: pillOn.shown,
-            top: menuBar,
             drift: drift.shown,
-            menuOnly: frame.menuBarOnly ? 1 : 0,
-            dockBottom: dock.bottom,
-            dockLeft: dock.left,
-            dockRight: dock.right)
+            corner: Float(Self.innerCorner) / Float(max(view.bounds.height, 1)))
         pipeline.encode(
             buffer, into: pass, width: Int(size.width), height: Int(size.height),
             uniforms: &uniforms, voice: voice)

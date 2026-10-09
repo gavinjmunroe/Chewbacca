@@ -83,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let overlay = OverlayWindow(content: OverlayView(model: model))
-        overlay.strip = MenuBarStripWindow(content: MenuBarStripView(model: model))
+        overlay.rim = RimWindow(content: RimView(model: model))
         self.overlay = overlay
         overlay.show()
 

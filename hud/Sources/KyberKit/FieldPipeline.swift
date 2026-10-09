@@ -25,18 +25,11 @@ struct FieldUniforms {
     var sweepOrigin: Float
     var embers: Float
     var pillOn: Float
-    /// Where the band's top edge sits, in screen heights from the top: the
-    /// menu bar's height, or 0 when it hides. See `top` in the shader.
-    var top: Float = 0
     /// How fast the light travels, eased. Sets the scanning streak's strength.
     var drift: Float = 0
-    /// 1 in the window above the menu bar: draw only the strip, as a tint.
-    var menuOnly: Float = 0
-    /// The Dock's side, in screen heights: how far in from the bottom, left
-    /// and right the band's outer edge sits. See `dockBottom` in the shader.
-    var dockBottom: Float = 0
-    var dockLeft: Float = 0
-    var dockRight: Float = 0
+    /// The inner edge's corner radius, in screen heights. See `corner` in
+    /// the shader.
+    var corner: Float = 0
 }
 
 /// The field and its glow, as five passes: the field at full size, its bright

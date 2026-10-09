@@ -21,14 +21,22 @@ using namespace metal;
 // distinct motion signature identifiable without looking at it. Six states
 // that all breathe are one state.
 //
-// What it draws is a machined frame of black titanium against every edge of
-// the screen, one thickness the whole way round: a brushed face whose streaks
-// run with the edge, and a polished bevel on the inner edge that catches a
-// hard line of light. The surface never moves. What moves is the light: a
-// studio light circling the frame at the state's drift, and, while the
-// assistant works, a scanning streak racing along the bevel.
+// What it draws is a rim of glass against every edge of the screen, one
+// thickness the whole way round: a thin white wash, lit from above, over the
+// frosted blur `RimGlass` puts underneath it, and a hard bright line where
+// the glass is cut on its inner edge. The glass never moves. What moves is
+// the light: a studio light circling the rim at the state's drift, and,
+// while the assistant works, a scanning streak racing along the cut edge.
 //
-// That is the third look of 2026-10-04. The second was the iPhone 15 Pro
+// That is the fourth look, 2026-10-09. The third was machined black
+// titanium, opaque, 20 points deep, and wrapped round the menu bar and the
+// Dock, so on a notched MacBook the top read as 58 points and the bottom as
+// 80 against 20 on the sides. Seen on screen: "make it equal size on all
+// sides and much more hugged to the edge, its way too big, not transparent
+// enough, needs to be more glassmorphic". The rim now sits in a window above
+// the menu bar and the Dock, at the real edge of the screen.
+//
+// Before that, on 2026-10-04: the second look was the iPhone 15 Pro
 // wallpaper's silver grain, glittering and thinning into specks, and it read
 // as "fairy dust". The first replaced a liquid pool with contour filaments and an
 // iridescent shimmer, ported from skills/hud/presence/refined.html. The ask
@@ -53,36 +61,6 @@ static inline float perimeterAt(float2 uv, float W) {
     else if (m == db) s = W + 1.0 + (W - x);
     else s = 2.0 * W + 1.0 + (1.0 - y);
     return s / (2.0 * W + 2.0);
-}
-
-/// `perimeterAt`, but continuous through the corners. The plain one switches
-/// edge on the corner's diagonal, which drew the flowing brushed streaks with
-/// a hard mitre seam in each corner. Inside a corner square of side `R` this
-/// blends the two edges' positions by the angle round the corner instead.
-///
-/// Measured on the band's own rectangle, which starts `top` down, under the
-/// menu bar, so its corners are the band's corners and not the screen's.
-static inline float bandPerimeter(float x, float y, float W, float H) {
-    float m = min(min(x, W - x), min(y, H - y));
-    float s;
-    if (m == y) s = x;
-    else if (m == W - x) s = W + y;
-    else if (m == H - y) s = W + H + (W - x);
-    else s = 2.0 * W + H + (H - y);
-    return s / (2.0 * W + 2.0 * H);
-}
-
-static inline float perimeterRound(float2 uv, float W, float R, float4 inset) {
-    float x = uv.x * W - inset.y, y = uv.y - inset.x, H = 1.0 - inset.x - inset.z;
-    W = W - inset.y - inset.w;
-    float2 c = float2(clamp(x, R, W - R), clamp(y, R, H - R));
-    float2 d = float2(x, y) - c;
-    if (d.x == 0.0 || d.y == 0.0) return bandPerimeter(x, y, W, H);
-    float onFlat = bandPerimeter(c.x, y, W, H);
-    float onSide = bandPerimeter(x, c.y, W, H);
-    float w = atan2(abs(d.y), abs(d.x)) / 1.5707963;
-    float gap = fract(onFlat - onSide + 0.5) - 0.5;
-    return fract(onSide + gap * w);
 }
 
 /// How far apart two perimeter positions are, the short way round, in screen
@@ -152,22 +130,12 @@ struct Uniforms {
     /// How much of the bar is there, 0 to 1, eased, so it condenses in and
     /// evaporates out rather than cutting.
     float pillOn;
-    /// Where the top edge is, in screen heights: the bottom of the menu bar,
-    /// which sits above this window and hid the top of the band behind it.
-    float top;
     /// How fast the light travels, eased: the scanning streak's strength.
     float drift;
-    /// 1 for the copy in the window above the menu bar, which draws only the
-    /// strip, and only as a tint.
-    float menuOnly;
-    /// The Dock's side, in screen heights, the way `top` is the menu bar's.
-    /// The Dock sits above this window, so on a screen where it is pinned to
-    /// the bottom, left or right the band on that side was drawn behind it:
-    /// "make it so you can see all 4 sides of the hud" (2026-10-04, with a
-    /// screenshot of the bottom edge under the Finder icon). 0 when hidden.
-    float dockBottom;
-    float dockLeft;
-    float dockRight;
+    /// The radius the inner edge turns its corners on, in screen heights.
+    /// `PresenceFieldRenderer.innerCorner`, which `RimGlass` cuts the blur to
+    /// as well, so the frosting and the light share one outline.
+    float corner;
 };
 
 /// How loud the voice was, one sample every RIPPLE_STEP seconds, newest first.
@@ -192,33 +160,17 @@ vertex float4 presenceVertex(uint vid [[vertex_id]]) {
     return float4(p * 2.0 - 1.0, 0.0, 1.0);
 }
 
-/// A hash per device pixel, from integers rather than `sin`. The `sin` hash
-/// above is fine for noise lattices a few cells wide, but fed pixel
-/// coordinates in the thousands it loses precision and draws diagonal streaks
-/// through what should be grain.
-static inline float pixelHash(float2 p, uint salt) {
-    uint2 q = uint2(max(p, float2(0.0)));
-    uint h = (q.x * 1597334677u) ^ (q.y * 3812015801u) ^ (salt * 2654435761u);
-    h = (h ^ (h >> 16)) * 0x7feb352du;
-    h = (h ^ (h >> 15)) * 0x846ca68bu;
-    h ^= h >> 16;
-    return float(h) * (1.0 / 4294967296.0);
-}
-
 /// How far a point is from the edge of the screen, in screen heights, along
 /// lines that stay the same distance apart all the way round.
 ///
 /// Inside a corner the distance is measured to a circle of radius `R` instead
 /// of to the two straight edges, so the band's inner edge rounds the corner at
 /// the same thickness instead of meeting in a square. The wedge between that
-/// circle and the square screen corner comes back negative, as does the strip
-/// under the menu bar; the caller reads negative as face at the glass, and the
-/// brushing keeps counting rows through it, so the texture never stops.
-/// `inset` is top, left, bottom, right, in screen heights: the menu bar and
-/// the Dock, which both sit above this window.
-static inline float edgeDistance(float2 uv, float W, float R, float4 inset) {
-    float dx = min(uv.x * W - inset.y, (1.0 - uv.x) * W - inset.w);
-    float dy = min(uv.y - inset.x, 1.0 - inset.z - uv.y);
+/// circle and the square screen corner comes back negative; the caller reads
+/// negative as glass at the screen's edge.
+static inline float edgeDistance(float2 uv, float W, float R) {
+    float dx = min(uv.x * W, (1.0 - uv.x) * W);
+    float dy = min(uv.y, 1.0 - uv.y);
     float2 k = float2(R - dx, R - dy);
     if (k.x > 0.0 && k.y > 0.0) return R - length(k);
     return min(dx, dy);
@@ -230,7 +182,6 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     float2 size = U.size;
     float2 uv = float2(fragPos.x / size.x, fragPos.y / size.y);
     float W = size.x / max(size.y, 1.0);
-    if (U.menuOnly > 0.5 && uv.y >= U.top) return half4(0.0);
 
     // The breath, for the states that have one. Driven off `beat`, which the
     // Swift side integrates from an eased rate, so it never starts mid-swing.
@@ -262,100 +213,38 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
     }
     depth *= 1.0 + 0.6 * ripple;
 
-    // Corner radius of the inner edge, in screen heights. The display's own
-    // corners are about 10 pt; 0.012 of an 800 pt screen is close to that, so
-    // the inner edge follows the glass rather than cutting across it.
-    // 0 at the glass, 1 at the band's inner edge.
-    // Under the menu bar the frame's face carries on to the top of the
-    // screen, so the bar sits on titanium: "its not filling the top 100%"
-    // (2026-10-04), and the ask was to make the menu bar part of the frame.
-    // The bar is above this window and translucent, so its own text and
-    // icons stay on top. The band's cut and bevel stay under the bar, where
-    // they can be seen. There, the distance comes back negative; the surface
-    // reads it as face at the glass, the brushing keeps counting rows.
-    float4 inset = float4(U.top, U.dockLeft, U.dockBottom, U.dockRight);
-    float eRaw = edgeDistance(uv, W, depth + 0.012, inset);
+    // The inner edge turns its corners on `corner`, so the circle the
+    // distance is measured to sits `depth` further out than that.
+    float eRaw = edgeDistance(uv, W, depth + U.corner);
     float e = max(eRaw, 0.0);
-    // How far in the seating shadow reaches past the inner edge, in screen
-    // heights: about 2.5 pt on an 800 pt display.
-    const float SHADOW = 0.003;
+    // How far in the contact shadow reaches past the inner edge, in screen
+    // heights: about 3 pt on an 800 pt display.
+    const float SHADOW = 0.004;
     if (e > depth + SHADOW) {
         return half4(0.0);
     }
 
-    float born = smoothstep(0.0, 0.004, depth);
+    float born = smoothstep(0.0, 0.003, depth);
 
     float2 toPointer = (uv - U.pointer) * float2(W, 1.0);
     float hole = U.part * (1.0 - smoothstep(U.partRadius, U.partRadius + U.partFeather,
                                              length(toPointer)));
     depth *= 1.0 - hole;
 
+    // 0 at the screen's edge, 1 at the glass's inner edge.
     float u = e / max(depth, 1e-4);
 
-    // A machined frame, not sand. Pass two drew the wallpaper's grain with
-    // every grain glittering, specks drifting off the band and single pixels
-    // flashing, and on screen it read as "fairy dust and not titanium ...
-    // it shouldnt feel like magical" (2026-10-04). Titanium does none of
-    // that: its texture is fine and still, light crosses it in broad bands,
-    // and the polished bevel catches one hard line. So nothing below that
-    // shapes the surface reads the clock. Only the lights move.
-    //
-    // The face runs from the glass to BEVEL_AT, the bevel from there to the
-    // inner edge, and the inner edge is cut, not faded.
-    const float BEVEL_AT = 0.86;
-
-    // Brushed: a hash per row of pixels across the band, interpolated slowly
-    // along it, so the streaks run with the edge and bend round the corners.
-    //
-    // And it flows. "It has to be moving somehow within it" (2026-10-04): a
-    // still surface under a moving light read as a picture of metal. So the
-    // streaks travel round the frame like a part turning on a lathe, pushed
-    // by the same `travel` the light is, so they crawl at rest and run while
-    // the assistant works. A second, coarser layer runs the other way at a
-    // third of the speed, and where the two cross the brushing shifts the
-    // way a turning surface does. Motion of the whole texture, never of a
-    // single grain: grains moving on their own was the fairy dust.
-    float rowPx = eRaw * size.y;
-    // Offset so rows above the cut, under the menu bar, stay positive for
-    // the hash, which clamps negatives to one row.
-    float row = floor(rowPx) + 4096.0;
-    float runPx = U.travel * 70.0 * size.y / 800.0;
-    // Cells counted in whole numbers round the frame and wrapped, so the
-    // texture meets itself at the top-left corner, where the perimeter goes
-    // from 1 back to 0. Unwrapped, that corner drew a hard diagonal seam.
-    float round = perimeterRound(uv, W, depth + 0.012, inset);
-    float cells = max(floor(P * size.y / 60.0), 1.0);
-    float alongPx = round * cells + runPx / 60.0;
-    float cell = fmod(floor(alongPx), cells);
-    float t01 = smoothstep(0.0, 1.0, fract(alongPx));
-    float brush = mix(pixelHash(float2(cell, row), 11u),
-                      pixelHash(float2(fmod(cell + 1.0, cells), row), 11u), t01);
-    float cells2 = max(floor(P * size.y / 140.0), 1.0);
-    float backPx = round * cells2 - runPx * 0.33 / 140.0;
-    float band = floor(row / 3.0);
-    float cell2 = fmod(floor(backPx), cells2);
-    cell2 += cell2 < 0.0 ? cells2 : 0.0;
-    float t02 = smoothstep(0.0, 1.0, fract(backPx));
-    float brush2 = mix(pixelHash(float2(cell2, band), 13u),
-                       pixelHash(float2(fmod(cell2 + 1.0, cells2), band), 13u), t02);
-    float bead = pixelHash(floor(fragPos.xy), 12u);
-    float texture = 0.80 + 0.26 * brush + 0.18 * brush2 + 0.05 * (bead - 0.5);
-
-    // The studio light: one light circling the frame at the state's drift.
-    // At rest (drift 0.5) a lap takes about 33 s; thinking takes about 5.
-    // Faster than the first cut (0.06, about 33 s a lap at rest), which on
-    // screen was too slow to read as moving at all: now about 13 s.
+    // The studio light: one light circling the rim at the state's drift.
+    // At rest (drift 0.5) a lap takes about 13 s; thinking takes about 2.
     float lightAt = fract(U.travel * 0.15);
     float fromLight = along(here, lightAt, W) / P;
     float broad = exp(-pow(fromLight / 0.12, 2.0));
     float hard = exp(-pow(fromLight / 0.035, 2.0));
 
-    // The scanning streak: a sharp front and a tail behind it, on the bevel,
-    // so it reads as something going somewhere. Its strength follows the
-    // drift: nothing at rest, clear while listening, full while thinking.
-    // Acting carries three, evenly spaced, so it reads as a machine running.
-    // A faint streak even at rest, so there is always something going
-    // somewhere round the frame while the assistant is up.
+    // The scanning streak: a sharp front and a tail behind it, on the cut
+    // edge, so it reads as something going somewhere. Its strength follows
+    // the drift: faint at rest, full while thinking. Acting carries three,
+    // evenly spaced, so it reads as a machine running.
     float streakOn = max(max(0.30, smoothstep(0.8, 2.6, U.drift)), U.embers);
     float streak = 0.0;
     if (streakOn > 0.001) {
@@ -378,68 +267,58 @@ fragment half4 presenceFragment(float4 fragPos [[position]],
                 (1.0 - smoothstep(1.1, 1.6, U.sweep));
     }
 
-    // A sheen rolling across the face, glass side to bevel and back, at a
-    // different place at every point round the frame: the reflection a
-    // curved face throws as it turns. Driven by `travel`, like everything
-    // else that moves here, so it slows and quickens with the state.
-    float sheenAt = 0.42 + 0.30 * sin(U.travel * 0.9 + round * 6.2831853 * 2.0);
-    float sheen = exp(-pow((u - sheenAt) / 0.16, 2.0));
+    // Lit from above, like the pill and the cards (`GlassSlab`): the top of
+    // the rim catches more of the light than the bottom.
+    float sky = 1.0 - uv.y;
 
-    // Brighter than the first cut (0.18 at the floor), which read as a
-    // shadow round the screen rather than as a solid frame: "more opaque".
-    float faceLum = (0.30 + 0.50 * broad + 0.28 * sheen + 0.30 * ripple + 0.5 * crest) * texture *
-                    mix(1.0, 0.82, clamp(u / BEVEL_AT, 0.0, 1.0));
-    float bevelLum = 0.55 + 1.6 * hard + 1.5 * ripple + 1.8 * crest;
-    float streakLum = 2.4 * streak;
+    // The body: a white wash over the blur, thin enough that the screen
+    // behind still reads through it. The frosting is the window server's
+    // blur in `RimGlass`, not anything drawn here. 0.10 to 0.18 was the
+    // first cut, and on screen with the blur under it the rim read milky
+    // (see `RimGlassView.frost`), so it is about half that.
+    float wash = 0.06 + 0.05 * sky + 0.10 * broad + 0.25 * ripple + 0.40 * crest;
 
-    // Black titanium on the face, near white where the bevel catches light.
-    const float3 FACE = float3(0.60, 0.61, 0.60);
-    const float3 EDGE = float3(0.96, 0.96, 0.94);
-    // The state's colour is carried by the streaks. The bevel line and the
-    // face only take a little of it: a frame lit green all the way round
-    // read as a neon outline, a status light rather than an instrument.
-    float3 face = FACE;
-    float3 edge = EDGE;
-    float3 hot = EDGE;
-    if (U.tint.a > 0.001) {
-        float amt = min(U.tint.a * mix(0.55, 1.0, wave) * 1.25, 1.0);
-        hot = mix(EDGE, U.tint.rgb * 0.80, amt);
-        edge = mix(EDGE, U.tint.rgb * 0.80, amt * 0.40);
-        face = mix(FACE, U.tint.rgb * 0.45, amt * 0.25);
-    }
-
-    // One pixel of antialiasing on the cut, and none of the fade into dust.
+    // The cut edge: a line about a point and a half wide on the inner edge,
+    // brightest under the light, where the rim reads as having a thickness.
+    float px = 1.0 / max(depth * size.y, 1.0);
     float aa = max(fwidth(u), 1e-4);
     float body = 1.0 - smoothstep(1.0 - aa, 1.0, u);
-    float bevel = smoothstep(BEVEL_AT - aa, BEVEL_AT + aa, u);
-    float3 c = mix(face * faceLum, edge * bevelLum + hot * streakLum, bevel) * body;
-    // Fully opaque: a frame, not a tint over the screen.
-    float a = body;
+    float cut = smoothstep(1.0 - 3.0 * px, 1.0 - 1.0 * px, u) * body;
+    float cutLum = 0.30 + 0.30 * sky + 0.9 * hard + 1.2 * ripple + 1.5 * crest;
 
-    // The seating shadow just inside the cut: alpha only, so it darkens the
-    // screen under it rather than drawing a colour.
-    float past = (e - depth) / SHADOW;
-    if (past > 0.0) a = max(a, 0.35 * exp(-past * 2.5) * (1.0 - body));
-
-    c *= mix(0.70, 1.0, wave) * born;
-    a *= born * U.alpha;
-    // Over the menu bar it is a tint, not a frame: the menu bar only ever
-    // shows the desktop picture through itself, never a window, so the face
-    // drawn under it on 2026-10-04 did not show at all, and this copy sits
-    // above it instead. At half strength the menu names and icons still read
-    // through it. Guessed, then judged on screen.
-    const float MENU_TINT = 0.5;
-    if (U.menuOnly > 0.5) {
-        a *= MENU_TINT;
-        c *= MENU_TINT;
+    // The state's colour washes the glass a little and carries the streaks.
+    // A rim lit green all the way round reads as a neon outline, a status
+    // light rather than an instrument, so the body only takes a fraction.
+    float3 glass = float3(1.0);
+    float3 edge = float3(1.0);
+    float3 hot = float3(1.0);
+    if (U.tint.a > 0.001) {
+        float amt = min(U.tint.a * mix(0.55, 1.0, wave) * 1.25, 1.0);
+        hot = mix(hot, U.tint.rgb, amt);
+        edge = mix(edge, U.tint.rgb, amt * 0.45);
+        glass = mix(glass, U.tint.rgb, amt * 0.35);
     }
-    c *= U.alpha;
+
+    // Premultiplied throughout: white at `wash` is `wash` in every channel.
+    float3 c = glass * wash * body + edge * cut * cutLum
+             + hot * streak * (cut + 0.35 * body) * 1.8;
+    float a = max(wash * body, min(cut * cutLum, 1.0) * 0.85);
+    a = max(a, min(streak * (cut + 0.35 * body) * 1.8, 1.0));
+
+    // The contact shadow just inside the cut: alpha only, so it darkens the
+    // screen under it rather than drawing a colour, which is what lifts the
+    // glass off the screen instead of painting a line on it.
+    float past = (e - depth) / SHADOW;
+    if (past > 0.0) a = max(a, 0.16 * exp(-past * 3.0) * (1.0 - body));
+
+    c *= mix(0.70, 1.0, wave) * born * U.alpha;
+    a *= born * U.alpha;
     return half4(half3(min(c, float3(a))), half(a));
 }
 
 // The glow. These run on a quarter-size copy: the field is drawn, its bright
 // parts are shrunk into `bloomDown`, blurred across and then down, and
-// `bloomComposite` lays the glow back under the field. Since the titanium band
+// `bloomComposite` lays the glow back under the field. On the glass rim
 // only the glints, the sweep crest and the sparks get past the threshold.
 
 constexpr sampler bilinear(filter::linear, address::clamp_to_edge);

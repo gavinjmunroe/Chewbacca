@@ -99,17 +99,18 @@ public final class OverlayWindow: NSPanel {
     /// bounds.
     public func fitToScreen() {
         guard let screen = Self.active else { return }
-        if let strip, strip.frame != screen.frame { strip.setFrame(screen.frame, display: true) }
+        if let rim, rim.frame != screen.frame { rim.setFrame(screen.frame, display: true) }
         guard frame != screen.frame else { return }
         setFrame(screen.frame, display: true)
     }
 
-    /// The frame's tint over the menu bar, in its own window above it. Shown,
-    /// hidden and fitted with this one, so hiding the HUD hides it too.
-    public var strip: NSWindow?
+    /// The rim round the edge of the screen, in its own window above the
+    /// menu bar and the Dock. Shown, hidden and fitted with this one, so
+    /// hiding the HUD hides it too.
+    public var rim: NSWindow?
 
     public override func orderOut(_ sender: Any?) {
-        strip?.orderOut(sender)
+        rim?.orderOut(sender)
         super.orderOut(sender)
     }
 
@@ -128,7 +129,7 @@ public final class OverlayWindow: NSPanel {
     public func show() {
         fitToScreen()
         orderFrontRegardless()
-        strip?.orderFrontRegardless()
+        rim?.orderFrontRegardless()
     }
 
     /// Accept mouse events only while the pointer is over a surface.
@@ -189,17 +190,19 @@ final class PassThroughHostingView: NSHostingView<AnyView> {
 }
 
 
-/// The one piece of the frame that has to sit above the menu bar.
+/// The rim's window: the size of the screen, above the menu bar and the Dock.
 ///
-/// The frame's window is at `.floating`, under the menu bar, and the menu bar
-/// shows only the desktop picture through itself, never a window. So the
-/// strip of frame under it, drawn on 2026-10-04 after "its not filling the
-/// top 100%", never showed. This window is above the menu bar, the size of
-/// the screen so the field's coordinates match the main one exactly, draws
-/// nothing but that strip at half strength, and never takes a click: the
-/// menu bar under it works as if it were not there.
+/// The rim used to be drawn on the main glass, which is at `.floating`, under
+/// both. So it could not reach the real edge of the screen: it started under
+/// the menu bar and stopped above the Dock, and a strip copy in this window
+/// filled the menu bar with frame. On a notched MacBook that made the top 58
+/// points and the bottom 80 against 20 on the sides, and on 2026-10-09 the ask
+/// was "equal size on all sides and much more hugged to the edge". Up here the
+/// rim sits on the screen's own edge on all four sides, the top few points of
+/// the menu bar and the bottom few under the Dock read through the glass, and
+/// it never takes a click: everything under it works as if it were not there.
 @MainActor
-public final class MenuBarStripWindow: NSPanel {
+public final class RimWindow: NSPanel {
     public init(content: some View) {
         let frame = OverlayWindow.active?.frame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
         super.init(

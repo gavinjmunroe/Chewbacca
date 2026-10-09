@@ -1,16 +1,27 @@
 import AppKit
 import SwiftUI
 
-/// The frame's strip over the menu bar, for `MenuBarStripWindow`: the same
-/// field as the main glass, drawing only the strip.
+/// The rim round the edge of the screen, for `RimWindow`: the frosted glass
+/// the window server blurs, and the presence field's light drawn over it.
+///
+/// It draws nothing across the middle of the display, which is not a nicety:
+/// `OverlayView` notes that any background on this glass, at any opacity,
+/// tints the whole screen. The blur is cut to the band and the shader returns
+/// an empty alpha everywhere else.
 @MainActor
-public struct MenuBarStripView: View {
+public struct RimView: View {
     let model: OverlayModel
 
     public init(model: OverlayModel) { self.model = model }
 
     public var body: some View {
-        PresenceField(presence: model.presence, amplitude: model.amplitude, menuBarOnly: true)
+        ZStack {
+            RimGlass(depth: CGFloat(model.presence.field.rest))
+            PresenceField(
+                presence: model.presence, amplitude: model.amplitude,
+                agent: model.agentCursor?.point)
+        }
+        .ignoresSafeArea()
     }
 }
 
@@ -34,37 +45,16 @@ public struct OverlayView: View {
         return screen.visibleFrame.minY - screen.frame.minY
     }
 
-    /// Where the pill is drawn, for the field to draw its body: centred, and
-    /// `pillLift` above the Dock, the same placement the pill's own frame
-    /// uses below. Nil while it is down or has not been measured yet.
-    private var pillFrame: CGRect? {
-        guard model.pill.phase != .hidden, !model.chatOpen,
-              model.pillSize.width > 0, let screen = OverlayWindow.active
-        else { return nil }
-        let size = model.pillSize
-        return CGRect(
-            x: (screen.frame.width - size.width) / 2,
-            y: screen.frame.height - Self.bottomInset - PillView.pillLift - size.height,
-            width: size.width, height: size.height)
-    }
-
     public var body: some View {
         ZStack {
             // The glass itself is deliberately nothing. Any background here,
             // even at low opacity, tints the entire display.
             Color.clear
 
-            // The other half of the presence surface, at the size peripheral
-            // vision can actually see. It obeys the line above: the shader
-            // returns an empty alpha everywhere except the edge, so the middle
-            // of the display comes back genuinely untouched.
-            //
-            // Under everything. This is the state of the assistant rather than
-            // content, and content wins any pixel they both want.
-            PresenceField(
-                presence: model.presence, amplitude: model.amplitude,
-                agent: model.agentCursor?.point, pill: pillFrame)
-                .zIndex(0)
+            // The other half of the presence surface, the rim round the edge
+            // of the screen, is not drawn here: this window is under the menu
+            // bar and the Dock, and the rim has to reach past both. See
+            // `RimWindow`.
 
             // Marks sit under the panels: a panel is something the person
             // asked for, a mark is something the assistant added, and when they

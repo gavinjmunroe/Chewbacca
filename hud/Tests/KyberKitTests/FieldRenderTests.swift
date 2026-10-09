@@ -17,7 +17,8 @@ struct FieldRenderTests {
             tint: SIMD4(1, 1, 1, 0), pill: SIMD4(0, 0, 0, 0), size: SIMD2(Float(width), Float(height)),
             pointer: SIMD2(-10, -10), agent: SIMD2(-10, -10), parallax: SIMD2(0, 0),
             time: 7.3, act: 5, rest: rest, travel: 12, pulse: 0, beat: 0, alpha: 1, part: 0,
-            partRadius: 0.02, partFeather: 0.01, reach: 0, sweep: 99, sweepOrigin: 0, embers: 0, pillOn: 0)
+            partRadius: 0.02, partFeather: 0.01, reach: 0, sweep: 99, sweepOrigin: 0, embers: 0, pillOn: 0,
+            corner: Float(PresenceFieldRenderer.innerCorner) / 800)
     }
 
     /// One frame through the whole pipeline, glow and all, over mid grey,
@@ -58,8 +59,9 @@ struct FieldRenderTests {
             ? MTLClearColorMake(0, 0, 0, 0)
             : MTLClearColorMake(background, background, background, 1)
 
-        // 20 points on an 800 point screen: attentive.
-        var uniforms = base(width: width, height: height, rest: 20 / 800)
+        // Attentive's depth on an 800 point screen.
+        var uniforms = base(
+            width: width, height: height, rest: Float(Presence.attentive.field.rest) / 800)
         adjust(&uniforms)
         guard let buffer = queue.makeCommandBuffer() else { return nil }
         pipeline.encode(
@@ -101,7 +103,7 @@ struct FieldRenderTests {
     func acting() throws {
         _ = try Self.render(suffix: "-acting") {
             $0.tint = SIMD4(0.28, 1.45, 0.55, 0.60)
-            $0.rest = 26 / 800
+            $0.rest = 8 / 800
             $0.embers = 1
             $0.agent = SIMD2(0.72, 0.62)
             $0.reach = 1
@@ -115,14 +117,14 @@ struct FieldRenderTests {
             let t = Float(i)
             return max(0, sin(t * 0.55)) * (i < 20 ? 0.9 : 0.4)
         }
-        _ = try Self.render(suffix: "-voice", voice: voice) { $0.rest = 9 / 800 }
+        _ = try Self.render(suffix: "-voice", voice: voice) { $0.rest = 4 / 800 }
     }
 
     @Test("done sends one crest round the band")
     func sweep() throws {
         _ = try Self.render(suffix: "-done") {
             $0.tint = SIMD4(0.14, 0.62, 0.30, 0.75)
-            $0.rest = 16 / 800
+            $0.rest = 6 / 800
             $0.sweep = 0.45
             $0.sweepOrigin = 0.62
         }
@@ -139,10 +141,10 @@ struct FieldRenderTests {
         }
     }
 
-    @Test("thinking: a scanning streak on the bevel")
+    @Test("thinking: a scanning streak on the cut edge")
     func thinking() throws {
         _ = try Self.render(suffix: "-thinking") {
-            $0.rest = 11 / 800
+            $0.rest = 5 / 800
             $0.drift = 3.2
         }
     }
@@ -154,7 +156,7 @@ struct FieldRenderTests {
         for frame in 0..<6 {
             let seconds = Float(frame) * 0.2
             _ = try Self.render(suffix: "-strip\(frame)") {
-                $0.rest = 11 / 800
+                $0.rest = 5 / 800
                 $0.drift = 3.2
                 $0.time += seconds
                 $0.travel += 3.2 * seconds
@@ -169,7 +171,7 @@ struct FieldRenderTests {
     @Test("nothing is drawn inside the screen past the band")
     func noDust() throws {
         let width = 1280, height = 800
-        for (rest, embers) in [(Float(20), Float(0)), (Float(26), Float(1))] {
+        for (rest, embers) in [(Float(6), Float(0)), (Float(8), Float(1)), (Float(20), Float(1))] {
             guard let pixels = try Self.draw(suffix: "-nodust", background: -1, { $0.rest = rest / 800; $0.embers = embers })
             else { return }
             // Band, its 10% swell from a voice that is not there, the 2.4 px
@@ -185,51 +187,53 @@ struct FieldRenderTests {
         }
     }
 
-    @Test("the cut sits under the menu bar, and the face fills the strip above it")
-    func underMenuBar() throws {
-        // A 37 point menu bar, the height on a notched MacBook.
-        _ = try Self.render(suffix: "-menubar") { $0.top = 37 / 800 }
-    }
-
     @Test("the bezel still reads over a white page")
     func overLight() throws {
         _ = try Self.render(suffix: "-light", background: 0.97)
     }
 
-    /// Asked for on 2026-10-04 as "linear all the way around". The liquid band
-    /// it replaced pooled in the corners and bulged along the sides, so this
-    /// measures the band's opacity at one inset from the glass: middle of the
-    /// left edge, middle of the top, and the same inset along a corner's
-    /// diagonal. Opacity and not colour, because wherever the travelling light
-    /// is the grain is bright enough to match a white page. Grain varies pixel
-    /// to pixel, so each reading is the mean of a small patch.
-    @Test("the band is one thickness on the sides and round the corners")
+    /// Asked for on 2026-10-04 as "linear all the way around", and on
+    /// 2026-10-09 as "equal size on all sides": the titanium frame it replaced
+    /// was 58 points at the top and 80 at the bottom on a notched MacBook
+    /// against 20 on the sides, because it wrapped the menu bar and the Dock.
+    /// This counts how many pixels in from each edge's midpoint the glass
+    /// reaches. Colour rather than alpha, because the contact shadow past the
+    /// inner edge has alpha and no colour, and white glass has both.
+    @Test("the rim is one depth on all four sides")
     func straight() throws {
         let width = 1280, height = 800
-        guard let pixels = try Self.draw(suffix: "-alpha", background: -1) else { return }
-        func coverage(x: Int, y: Int) -> Double {
-            var sum = 0.0, count = 0.0
-            for dy in -3...3 {
-                for dx in -3...3 {
-                    let i = ((y + dy) * width + (x + dx)) * 4
-                    sum += Double(pixels[i + 3]) / 255
-                    count += 1
-                }
-            }
-            return sum / count
+        guard let pixels = try Self.draw(suffix: "-alpha", background: -1, { $0.travel = 0 })
+        else { return }
+        func lit(x: Int, y: Int) -> Bool { pixels[(y * width + x) * 4 + 2] > 8 }
+        func reach(from start: (Int, Int), step: (Int, Int)) -> Int {
+            var (x, y) = start, n = 0
+            while lit(x: x, y: y) && n < 100 { x += step.0; y += step.1; n += 1 }
+            return n
         }
-        // 5 pixels in, inside a 20 pixel band: all three should be bezel.
-        let left = coverage(x: 5, y: height / 2)
-        let top = coverage(x: width / 2, y: 5)
-        // Round the corner the distance is to a circle of radius depth plus
-        // 0.012 heights, 29.6 px here, centred 29.6 px in on both axes, so
-        // (12, 12) sits about 4.7 px inside the glass.
-        let corner = coverage(x: 12, y: 12)
-        // Past the inner edge and the dust, the screen is untouched.
-        let inside = coverage(x: 60, y: height / 2)
-        #expect(left > 0.5)
-        #expect(abs(left - top) < 0.12)
-        #expect(abs(left - corner) < 0.12)
-        #expect(inside < 0.02)
+        let left = reach(from: (0, height / 2), step: (1, 0))
+        let right = reach(from: (width - 1, height / 2), step: (-1, 0))
+        let top = reach(from: (width / 2, 0), step: (0, 1))
+        let bottom = reach(from: (width / 2, height - 1), step: (0, -1))
+        let rest = Int(Presence.attentive.field.rest)
+        for side in [left, right, top, bottom] {
+            #expect(abs(side - rest) <= 1, "a side reached \(side) px, attentive is \(rest)")
+        }
+        // Past the inner edge and its shadow, the screen is untouched.
+        #expect(pixels[((height / 2) * width + 40) * 4 + 3] == 0)
+    }
+
+    /// "Not transparent enough", 2026-10-09: the titanium face was opaque.
+    /// The glass between the edge and the cut line has to let the screen
+    /// read through it, so its coverage stays well under half.
+    @Test("the glass is see-through")
+    func seeThrough() throws {
+        let width = 1280, height = 800
+        guard let pixels = try Self.draw(background: -1, { $0.travel = 0 }) else { return }
+        // Two pixels in from the left edge, clear of the cut line, at three
+        // heights so the light from above is in the reading.
+        for y in [height / 4, height / 2, 3 * height / 4] {
+            let alpha = Double(pixels[(y * width + 2) * 4 + 3]) / 255
+            #expect(alpha > 0.05 && alpha < 0.35, "coverage \(alpha) at y \(y)")
+        }
     }
 }

@@ -50,13 +50,14 @@ def fake_app(root: Path, name: str, bundle_id: str) -> Path:
     return app
 
 
-def tcc_db(path: Path, rows: list[tuple[str, str, int]]) -> Path:
+def tcc_db(path: Path, rows: list[tuple]) -> Path:
     """A database with the columns the CLI, the helper and axgrant all read."""
     con = sqlite3.connect(path)
     con.execute("create table access (service text, client text, client_type int, auth_value int, "
                 "csreq blob, indirect_object_identifier text)")
-    for service, client, auth in rows:
-        con.execute("insert into access values (?, ?, 0, ?, null, 'UNUSED')", (service, client, auth))
+    for service, client, auth, *target in rows:
+        con.execute("insert into access values (?, ?, 0, ?, null, ?)",
+                    (service, client, auth, target[0] if target else "UNUSED"))
     con.commit()
     con.close()
     return path
@@ -77,7 +78,8 @@ def main() -> int:
             ("kTCCServiceSystemPolicyAllFiles", "com.microsoft.VSCode", 2),
         ]
         system = tcc_db(work / "system.db", everything)
-        user = tcc_db(work / "user.db", [("kTCCServiceMicrophone", "dev.bobthebuilder.hud", 2)])
+        messages = ("kTCCServiceAppleEvents", "com.microsoft.VSCode", 2, "com.apple.MobileSMS")
+        user = tcc_db(work / "user.db", [("kTCCServiceMicrophone", "dev.bobthebuilder.hud", 2), messages])
         env = {"CHEWBACCA_KYBER_APP": str(kyber), "CHEWBACCA_HOST_APP": str(host),
                "CHEWBACCA_TCC_SYSTEM_DB": str(system), "CHEWBACCA_TCC_USER_DB": str(user)}
 
@@ -89,7 +91,8 @@ def main() -> int:
         ids = [need["id"] for need in report["needs"]]
         check("plan names exactly what Chewbacca needs, Full Disk Access first",
               ids == ["host.full-disk-access", "kyber.accessibility",
-                      "kyber.screen-recording-and-system-audio", "kyber.microphone"], str(ids))
+                      "kyber.screen-recording-and-system-audio", "kyber.microphone",
+                      "host.automation.messages"], str(ids))
         check("plan reads every grant as granted from the fixture databases",
               report["missing"] == [], str(report["missing"]))
         check("plan names the host from the env override", report["host"]["detected_by"] == "env")
@@ -97,7 +100,7 @@ def main() -> int:
               report["needs"][0]["app_name"] == "Visual Studio Code")
 
         # Switched off in the list: the row exists with auth_value 0.
-        off = tcc_db(work / "user-off.db", [("kTCCServiceMicrophone", "dev.bobthebuilder.hud", 0)])
+        off = tcc_db(work / "user-off.db", [("kTCCServiceMicrophone", "dev.bobthebuilder.hud", 0), messages])
         report = plan({"CHEWBACCA_TCC_USER_DB": str(off)})
         check("a switched-off microphone is missing and nothing else is",
               report["missing"] == ["kyber.microphone"], str(report["missing"]))
@@ -109,7 +112,23 @@ def main() -> int:
         statuses = {need["status"] for need in report["needs"]}
         check("unreadable databases read as unknown, not granted or denied",
               statuses == {"unknown"}, str(statuses))
-        check("and unknown grants are listed as missing", len(report["missing"]) == 4)
+        check("and unknown grants are listed as missing", len(report["missing"]) == 5)
+
+        # Messages automation, 2026-10-09: denied blocked every iMessage send.
+        # Never asked is one click on macOS's prompt, denied is a Settings
+        # switch, and a grant for some other app automating Messages is neither.
+        def messages_status(rows: list[tuple]) -> str:
+            report = plan({"CHEWBACCA_TCC_USER_DB": str(tcc_db(work / f"m{len(rows)}{rows[0][2] if rows else ''}.db",
+                                                              [("kTCCServiceMicrophone", "dev.bobthebuilder.hud", 2), *rows]))})
+            return next(n["status"] for n in report["needs"] if n["id"] == "host.automation.messages")
+        check("Messages automation never asked reads as not-asked", messages_status([]) == "not-asked")
+        check("Messages automation switched off reads as denied",
+              messages_status([("kTCCServiceAppleEvents", "com.microsoft.VSCode", 0, "com.apple.MobileSMS")]) == "denied")
+        check("a grant to automate a different app does not count for Messages",
+              messages_status([("kTCCServiceAppleEvents", "com.microsoft.VSCode", 2, "com.apple.mail")]) == "not-asked")
+        check("check --automation-target answers for that target",
+              run([sys.executable, str(CLI), "check", "--app", str(host), "--permission", "automation",
+                   "--automation-target", "com.apple.MobileSMS"], env).returncode == 0)
 
         report = plan({"CHEWBACCA_KYBER_APP": str(work / "Nowhere.app")})
         kyber_states = {n["status"] for n in report["needs"] if n["target"] == "kyber"}

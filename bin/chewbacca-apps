@@ -79,7 +79,7 @@ cmd_run() {
     if command -v open >/dev/null 2>&1; then
       (sleep 1 && open "$url") &
     fi
-    cd "$d" && exec python3 -m http.server "$port"
+    cd "$d" && exec python3 -m http.server --bind 127.0.0.1 "$port"
   elif [ -x "$d/build.sh" ]; then
     cd "$d" && exec ./build.sh
   else

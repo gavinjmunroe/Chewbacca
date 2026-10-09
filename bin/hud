@@ -19,6 +19,7 @@ hud close <name>    take one surface off the screen
 hud press <n> [h]   press what they clicked as mark n, in hold h
 hud clear           take everything off
 hud rim [k=v ...]   open the rim editor, or set thickness|frost|tint|edge|corner
+hud files [path]    the two-pane file manager, at path; `hud files off` closes it
 hud listen          hear what is said to it and draw the answer
 hud demo            put one of everything on screen
 hud screen          the display size in points, for marker coordinates
@@ -266,6 +267,16 @@ case "${1:-}" in
           running || { echo "The display is not running. Start it with: hud open" >&2; exit 1; }
           shift
           printf 'rim%s\n' "${*:+ $*}" | send ;;
+  files)  # The two-pane file manager, a native panel that takes the keyboard.
+          # A path points the active pane there; `off` puts it away.
+          running || { echo "The display is not running. Start it with: hud open" >&2; exit 1; }
+          if [ "${2:-}" = off ]; then
+            printf 'files off\n' | send
+          elif [ $# -ge 2 ]; then
+            printf 'files %s\n' "$(python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$2")" | send
+          else
+            printf 'files\n' | send
+          fi ;;
   close)  [ $# -ge 2 ] || { echo "hud close <name>" >&2; exit 2; }
           printf -- '- %s\n' "$2" | send ;;
   press)  # Backlog 117. Subscribe, send `press n`, and wait for the `pr n`

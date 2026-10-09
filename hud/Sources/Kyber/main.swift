@@ -1100,6 +1100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionsItem.target = self
         menu.addItem(sessionsItem)
 
+        let filesItem = NSMenuItem(
+            title: "Files", action: #selector(filesFromMenu), keyEquivalent: "")
+        filesItem.target = self
+        menu.addItem(filesItem)
+
         let rimItem = NSMenuItem(
             title: "Edit the rim…", action: #selector(rimFromMenu), keyEquivalent: "")
         rimItem.target = self
@@ -1224,6 +1229,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Start `kyber-sessions serve`, which draws the sessions surface and
     /// answers its presses. It holds its own lock, so a second start while
     /// one is running exits at once instead of drawing twice.
+    /// The two-pane file manager. See `FilesPanel`.
+    @objc private func filesFromMenu() {
+        FilesPanel.shared.open()
+    }
+
     @objc private func rimFromMenu() {
         RimEditor.shared.open(showing: model.presence)
     }

@@ -24,6 +24,10 @@ Kinds: `needs-you`, `today`, `tasks`, `conversations`, `people`,
 `person <name>`, `space <name>`, `music`, `files`, `meetings`. `kyber-surfaces list` shows
 what is open and where; `activity` shows what the panels did.
 
+`files` here is recent downloads. Browsing the disk is the two-pane file
+manager, a native keyboard panel: `hud files [path]`, or "show me files" /
+"open Finder" to hud-listen. Keys and safety rules are in hud/CLAUDE.md, "Files".
+
 ## What a surface that replaces an app contains
 
 Researched 2026-10-04 before the first one was built: Raycast's store

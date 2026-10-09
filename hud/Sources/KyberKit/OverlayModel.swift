@@ -302,6 +302,12 @@ public final class OverlayModel {
         case .tuneRim(let values):
             RimTuner.shared.tuning = RimTuner.shared.tuning.setting(values)
 
+        case .openFiles(let path):
+            FilesPanel.shared.open(at: path)
+
+        case .closeFiles:
+            FilesPanel.shared.dismiss()
+
         case .press(let number, let hold):
             let (outcome, center) = PointedStore.shared.press(number, hold: hold)
             // The agent's pointer goes to what it pressed, so the person sees

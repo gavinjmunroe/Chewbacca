@@ -257,6 +257,11 @@ public enum Op: Sendable, Equatable {
     /// `rim thickness=12 frost=0.4`: set those values without opening it.
     /// Keys are `RimTuning.keys`.
     case tuneRim([String: Double])
+    /// `files [path]`: open the file manager, the active pane at `path`
+    /// when one is given. See `FilesPanel`.
+    case openFiles(path: String?)
+    /// `files off`: put the file manager away.
+    case closeFiles
 }
 
 /// The three things a terminal strip can say. Colours follow the ring:

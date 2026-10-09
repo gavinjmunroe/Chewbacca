@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+"""GTM memory: accounts, contacts, timeline, commitments, Clay assets and credits, from a checkout or an install."""
+from pathlib import Path
+import runpy
+
+runpy.run_path(str(Path(__file__).resolve().parent.parent / "tools" / "gtm_memory.py"), run_name="__main__")

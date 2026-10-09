@@ -404,6 +404,11 @@ if group "gtme"; then
   check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
   check "gtme-dedupe merges one person across lists, never two on name alone" python3 "$ROOT/tests/test_gtme_dedupe.py"
   check "gtme-dedupe dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-dedupe --help
+  # Synthetic clients, leads, inbox and calendar; nothing reads Clay or Chrome.
+  check "gtm keeps one person per email, suppresses from sends, answers every query under 100 ms" \
+    python3 "$ROOT/tests/test_gtm.py"
+  check "gtm dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtm --help
+  expect "gtm appears in help" "chewbacca gtm" bash "$ROOT/bin/chewbacca" --help
 fi
 
 # ── team board ────────────────────────────────────────────────────────────────

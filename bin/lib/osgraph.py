@@ -43,8 +43,13 @@ from pathlib import Path
 NODE_TYPES = frozenset({
     "Person", "Thread", "Message", "MailItem", "Event", "Assignment", "Task",
     "Project", "Space", "Track", "File", "Day",
+    # GTM lifecycle (bin/lib/gtm_ingest.py). A lead is a Person: the same
+    # email in two clients' campaigns is one node, fused only by address.
+    "Client", "Offer", "Workspace", "ClayTable", "Audience", "Campaign",
+    "Reply", "ReplyClass", "Meeting", "Signal",
 })
 ANY = NODE_TYPES
+GTM_HOSTED = frozenset({"Campaign", "ClayTable", "Audience"})
 # verb -> (domain, range)
 EDGE_TYPES: dict[str, tuple[frozenset, frozenset]] = {
     "SENT_BY": (frozenset({"Message", "MailItem"}), frozenset({"Person"})),
@@ -59,6 +64,25 @@ EDGE_TYPES: dict[str, tuple[frozenset, frozenset]] = {
     "ATTENDS": (frozenset({"Person"}), frozenset({"Event"})),
     "MENTIONS": (ANY, ANY),
     "EXTRACTED_FROM": (frozenset({"Task"}), frozenset({"Message", "MailItem", "Event", "Thread"})),
+    # GTM. Direction reads as a sentence: "Client OWNS Workspace".
+    "OWNS": (frozenset({"Client"}), frozenset({"Workspace"})),
+    "OFFERS": (frozenset({"Client"}), frozenset({"Offer"})),
+    "FOR_CLIENT": (frozenset({"Campaign"}), frozenset({"Client"})),
+    "IN_WORKSPACE": (GTM_HOSTED, frozenset({"Workspace"})),
+    "SELLS": (frozenset({"Campaign"}), frozenset({"Offer"})),
+    "TARGETS": (frozenset({"Campaign"}), frozenset({"Audience"})),
+    "FEEDS": (frozenset({"ClayTable"}), frozenset({"Campaign", "Audience"})),
+    # props: email, name, last_sent_at, sent_dates, steps_sent, status. A
+    # person is in a campaign once; whether they were EMAILED is last_sent_at,
+    # never the edge itself (suppression from sends, not enrollment).
+    "ENROLLED": (frozenset({"Campaign"}), frozenset({"Person"})),
+    "REPLIED": (frozenset({"Person"}), frozenset({"Reply"})),
+    "IN_CAMPAIGN": (frozenset({"Reply"}), frozenset({"Campaign"})),
+    # props: by (clay | model:<name> | <human>), raw label, observed time.
+    "CLASSIFIED_AS": (frozenset({"Reply"}), frozenset({"ReplyClass"})),
+    "MEETING_WITH": (frozenset({"Meeting"}), frozenset({"Person"})),
+    "BOOKED_FROM": (frozenset({"Meeting"}), frozenset({"Campaign"})),
+    "SIGNAL_ON": (frozenset({"Signal"}), frozenset({"Person", "Client"})),
 }
 ME = "person:me"
 
@@ -132,6 +156,7 @@ CREATE TABLE IF NOT EXISTS edges (
 CREATE INDEX IF NOT EXISTS edges_dst ON edges (dst, verb);
 CREATE INDEX IF NOT EXISTS edges_src ON edges (src, verb);
 CREATE INDEX IF NOT EXISTS nodes_source ON nodes (source);
+CREATE INDEX IF NOT EXISTS nodes_type ON nodes (type);
 """
 
 

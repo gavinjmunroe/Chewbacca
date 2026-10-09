@@ -31,6 +31,19 @@ recipient personalization; first sends are measurement), and the
 whatever state a panel is in), fall back to `chewie web eval` only when jev blocks.
 Then build it their way and stop.
 
+## Client state comes from the graph, never from memory files
+
+Before answering anything about a client (who was emailed, who replied, what is
+unanswered, the funnel, who to suppress on a refill), run `chewbacca gtm sync`
+(add `--background` when the answer can wait a minute), then query:
+`gtm clients`, `gtm client NAME`, `gtm lead EMAIL|NAME`,
+`gtm replies --unanswered --client NAME`, `gtm suppress --client NAME --csv`,
+`gtm funnel --client NAME`. Queries read the local OS graph in milliseconds and
+print each number's source and when every source last synced. A source marked
+FAILED or NEVER SYNCED means its numbers are missing, not zero; say so instead
+of filling the gap from notes. Memory files and START-HERE went stale within a
+day on Zeutara. Clients, offers and label files live in `~/.chewbacca/gtm/clients.json`.
+
 Start with the business outcome, its denominator, maturity window, and budget. Read existing client instructions and approved ICP before designing a workflow. Keep customer data and research corpora private.
 
 ## Grading a campaign before it goes out

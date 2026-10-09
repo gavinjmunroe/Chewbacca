@@ -1,3 +1,4 @@
+- clay-card
 @ clay-note near=420,312,128,32 side=right chrome=window w=300
 c s Screen title="FIND PEOPLE"
 c mk Mark kind=ico spin=true size=18

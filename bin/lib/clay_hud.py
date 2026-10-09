@@ -140,15 +140,18 @@ def tick(elapsed_s: float) -> list[str]:
     return [f"@ {STRIP} at=bottom chrome=window w={STRIP_W}", f"c time Text value={q(_clock(elapsed_s))}"]
 
 
-def acting(step_title: str, n: int, total: int, note: str, holds: str, target: Rect,
+def acting(step_title: str, n: int, total: int, note: str, holds: str, target: Rect | None,
            elapsed_s: float) -> list[str]:
+    """A step at work. With no target (reading Clay, not pressing), the note
+    sits at the right and the pointer and bracket let go of the page."""
+    pointer = [_mark(target), _point(target, act=True)] if target else ["a off", f"u {TARGET}"]
     return [
+        f"- {CARD}",
         *_window(NOTE, _near(target), NOTE_W, step_title, "Mark kind=ico spin=true size=18",
                  [f"c body Text value={q(note)}", f"c hold Text value={q(holds)} tone=muted"],
                  ["body", "hold"]),
         *strip("acting", n, total, step_title.capitalize(), elapsed_s),
-        _mark(target),
-        _point(target, act=True),
+        *pointer,
     ]
 
 

@@ -58,6 +58,14 @@ class Builders(unittest.TestCase):
         self.assertIn('c time Text value="0:42"', lines)
         self.assertIn('c stop Button label="Stop" action=clay-stop', lines)
 
+    def test_a_step_with_nothing_to_press_lets_go_of_the_page(self):
+        lines = clay_hud.acting("READ THE TEST", 4, 6, "Reading.", "Nothing runs.", None, 9)
+        self.assertIn("@ clay-note at=right chrome=window w=300", lines)
+        self.assertIn("a off", lines)
+        self.assertIn("u clay-target", lines)
+        self.assertIn("- clay-card", lines)
+        self.assertFalse(any(line.startswith("m ") for line in lines))
+
     def test_approve_replaces_the_note_with_one_card(self):
         lines = every_state()["approve"]
         self.assertIn("- clay-note", lines)

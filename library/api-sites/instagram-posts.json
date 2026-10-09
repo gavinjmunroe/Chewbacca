@@ -1,0 +1,25 @@
+{
+ "note": "Captured from instagram.com's own frontend 2026-10-10 (PolarisProfilePostsTabContentQuery_connection, signed in). Instagram rotates doc_id; when calls start failing, re-capture a profile page with `api-anything capture https://www.instagram.com/<handle>/ --steps '[{\"action\":\"press\",\"value\":\"End\"}]'` and replace doc_id and variables.",
+ "posts": {
+  "url": "https://www.instagram.com/graphql/query",
+  "doc_id": "28142289515441884",
+  "variables": {
+   "after": null,
+   "before": null,
+   "data": {
+    "count": 12,
+    "include_reel_media_seen_timestamp": true,
+    "include_relationship_info": true,
+    "latest_besties_reel_media": true,
+    "latest_reel_media": true
+   },
+   "first": 12,
+   "include_multi_captions": false,
+   "last": null,
+   "username": "{username}",
+   "__relay_internal__pv__PolarisMultiCaptionCarouselEnabledrelayprovider": false,
+   "__relay_internal__pv__PolarisShortDramaEnabledrelayprovider": true,
+   "__relay_internal__pv__PolarisReelsRecoDebugOverlayEnabledrelayprovider": false
+  }
+ }
+}

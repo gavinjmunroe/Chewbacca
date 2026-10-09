@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""chewbacca ig: read every post of an Instagram account with his signed-in session.
+
+  chewbacca ig posts <username> [--limit N] [--json]   newest first; --limit 0 means every page
+  chewbacca ig login [--profile "Chrome/Profile 1"]     import his signed-in Instagram session
+
+Read-only. Logged out, Instagram serves an account's newest 12 posts and no
+more, so the api-anything getPosts op stops there. This replays the posts
+query instagram.com's own profile page sends while scrolling (template in
+library/api-sites/instagram-posts.json), following its cursor. Taught
+2026-10-10 for the dev-creator ingest.
+
+The session lives in ~/.chewbacca/sessions/instagram.json, not in the shared
+api-anything store, so the logged-out getProfile/getPosts ops keep working the
+way they do for every other tab (a signed-in session in the shared store broke
+X's logged-out op the same day).
+
+One page every 3 s. Instagram returned 429 to his account on 2026-10-09 after
+a burst of API calls, and a flagged account is his to recover, not ours.
+Guessed, never measured.
+"""
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SESSION = pathlib.Path(os.environ.get("CHEWBACCA_IG_SESSION", pathlib.Path.home() / ".chewbacca" / "sessions" / "instagram.json"))
+TEMPLATE = json.loads((ROOT / "library/api-sites/instagram-posts.json").read_text())["posts"]
+# Instagram web's public app id, the same for every visitor's browser.
+APP_ID = "936619743392459"
+PAUSE = 3.0
+
+
+def die(msg):
+    sys.exit(f"chewbacca ig: {msg}")
+
+
+def headers():
+    if SESSION.exists() and SESSION.stat().st_mode & 0o077:
+        os.chmod(SESSION, 0o600)
+    if not SESSION.exists():
+        die("no Instagram session. Import it once: chewbacca ig login")
+    jar = {c["name"]: c["value"] for c in json.loads(SESSION.read_text())["cookies"]}
+    if "sessionid" not in jar or "csrftoken" not in jar:
+        die("the Instagram session isn't signed in. Re-import: chewbacca ig login")
+    return {"x-ig-app-id": APP_ID, "x-csrftoken": jar["csrftoken"],
+            "content-type": "application/x-www-form-urlencoded",
+            "cookie": "; ".join(f"{k}={v}" for k, v in jar.items()),
+            "referer": "https://www.instagram.com/", "origin": "https://www.instagram.com",
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"}
+
+
+def page(username, after, h):
+    v = dict(TEMPLATE["variables"], username=username, after=after)
+    body = urllib.parse.urlencode({"doc_id": TEMPLATE["doc_id"], "variables": json.dumps(v)}).encode()
+    try:
+        with urllib.request.urlopen(urllib.request.Request(TEMPLATE["url"], data=body, headers=h), timeout=30) as r:
+            raw = r.read()
+    except urllib.error.HTTPError as e:
+        if e.code == 429:
+            die("Instagram rate-limited this account (429). Stop and try again later.")
+        if e.code in (401, 403):
+            die(f"Instagram answered {e.code}: the session expired. Re-import: chewbacca ig login")
+        die(f"Instagram answered {e.code}")
+    try:
+        return json.loads(raw)["data"]["xdt_api__v1__feed__user_timeline_graphql_connection"]
+    except (ValueError, KeyError, TypeError):
+        die("Instagram sent something other than posts: the doc_id rotated or the account is private. "
+            "Re-capture per library/api-sites/instagram-posts.json")
+
+
+def shape(n):
+    video = n.get("media_type") == 2 or n.get("product_type") == "clips"
+    return {"code": n.get("code"), "url": f"https://www.instagram.com/p/{n.get('code')}/",
+            "taken_at": n.get("taken_at"), "caption": (n.get("caption") or {}).get("text"),
+            "likes": n.get("like_count"), "comments": n.get("comment_count"),
+            "views": n.get("play_count") or n.get("view_count"), "is_video": video,
+            "product_type": n.get("product_type"), "alt": n.get("accessibility_caption")}
+
+
+def posts(username, limit):
+    h = headers()
+    out, after, seen = [], None, set()
+    while True:
+        conn = page(username, after, h)
+        for e in conn.get("edges") or []:
+            p = shape(e.get("node") or {})
+            if p["code"] and p["code"] not in seen:
+                seen.add(p["code"])
+                out.append(p)
+        info = conn.get("page_info") or {}
+        after = info.get("end_cursor")
+        if not info.get("has_next_page") or not after or (limit and len(out) >= limit):
+            break
+        time.sleep(PAUSE)
+    out.sort(key=lambda p: p["taken_at"] or 0, reverse=True)
+    return out[:limit] if limit else out
+
+
+def login(argv):
+    profile = argv[argv.index("--profile") + 1] if "--profile" in argv else "Chrome/Profile 1"
+    home = pathlib.Path(os.environ.get("API_ANYTHING_HOME", pathlib.Path.home() / ".api-anything"))
+    shared = home / "sessions" / "instagram.json"
+    before = shared.read_bytes() if shared.exists() else None
+    r = subprocess.run(["api-anything", "login", "instagram", "--profile", profile],
+                       capture_output=True, text=True, timeout=120)
+    if '"loggedIn":true' not in r.stdout.replace(" ", ""):
+        die("import didn't sign in: " + (r.stdout + r.stderr).strip()[-200:])
+    SESSION.parent.mkdir(parents=True, exist_ok=True)
+    SESSION.parent.chmod(0o700)
+    fd = os.open(SESSION, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(shared.read_text())
+    os.chmod(SESSION, 0o600)
+    # Put the shared engine back the way it was, so its logged-out ops keep working.
+    if before is None:
+        shared.unlink(missing_ok=True)
+    else:
+        shared.write_bytes(before)
+    print(f"Instagram session saved from {profile}")
+
+
+def main():
+    a = sys.argv[1:]
+    if a[:1] == ["login"]:
+        return login(a)
+    if len(a) < 2 or a[0] != "posts":
+        sys.exit(__doc__)
+    limit = int(a[a.index("--limit") + 1]) if "--limit" in a else 24
+    rows = posts(a[1].lstrip("@"), limit)
+    if "--json" in a:
+        print(json.dumps(rows, ensure_ascii=False))
+    else:
+        for p in rows:
+            day = time.strftime("%Y-%m-%d", time.localtime(p["taken_at"])) if p["taken_at"] else ""
+            print(f"{day}  {p['likes'] or 0:>6} likes  {'reel ' if p['is_video'] else 'post '} {(p['caption'] or '')[:90]!r}")
+        print(f"{len(rows)} posts from @{a[1].lstrip('@')}")
+
+
+if __name__ == "__main__":
+    main()

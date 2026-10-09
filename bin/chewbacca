@@ -70,6 +70,7 @@ COMMANDS=(
   "gtme-signals|list recent SEC Form D raises as buying signals"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
   "jobs|one queue for long and heavy work: runs it when the Mac has room"
+  "ig|read every Instagram post of an account with his signed-in session"
   "x|read an X account's own posts with his signed-in session"
   "api|any website as an API: call taught sites, teach new ones (not Clay)"
   "usc|a USC student's day: due this week, the dining hall, events (setup signs in)"
@@ -172,6 +173,11 @@ apps)
   # Everything the team builds lives in apps/, runnable by name.
   shift
   exec bash "$ROOT/bin/chewbacca-apps" "$@"
+  ;;
+ig)
+  # Instagram posts past the logged-out 12. See bin/chewbacca-ig.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-ig" "$@"
   ;;
 x)
   # X posts, signed in. See bin/chewbacca-x.

@@ -195,9 +195,14 @@ public enum Chrome: String, Sendable, CaseIterable {
     /// Four corner brackets and no fill. Reads as a reticle around a region
     /// rather than as a window over it.
     case bracket
+    /// A small desktop window on the glass: square corners, a title strip in
+    /// mono caps, a hairline and a halftone wash. TypeSafe's window language
+    /// (typesafe.ai, read 2026-10-08) on Kyber's frosted material, for a panel
+    /// that is a working tool rather than a glance.
+    case window
 
     /// Whether this chrome paints a background the person can grab anywhere.
-    public var isFilled: Bool { self == .card }
+    public var isFilled: Bool { self == .card || self == .window }
 }
 
 /// What a stream can say.

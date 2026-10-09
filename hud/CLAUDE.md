@@ -54,12 +54,22 @@ a meeting starting in one minute. A system that cries wolf gets switched off.
 
 ## How much of a window to be
 
-`chrome=` is `card` (the default), `bare`, or `bracket`.
+`chrome=` is `card` (the default), `bare`, `bracket`, or `window`.
 
 `bare` draws no panel at all. The content sits directly on the screen with a
 halo behind it, which is what a heads-up display is actually for and what a
 window can never do. Use it for a diagram, a figure, a single line of status.
 `bracket` puts four corner marks around a region without covering it.
+
+`window` is a working tool rather than a glance: TypeSafe's desktop-window
+language on Kyber's glass. Square corners, a black title strip with the title
+in pixel caps (Departure Mono, shipped in `Fonts/`), a hard offset drop and a
+halftone wash. It is drawn in black and white. Untoned parts are ink, never
+cyan; `good`, `warn` and `bad` turn into full-strength green, yellow and red,
+and they are the only colour on the panel, so spend them on what changed.
+Headings and captions become inverted chips, Diagram nodes become square
+tiles with a tone pip in the corner, and `fill:true` inverts the one node that
+matters. Sentences are set in the system mono.
 
 ## Saying it again
 

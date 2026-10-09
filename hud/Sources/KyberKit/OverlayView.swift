@@ -424,6 +424,7 @@ struct SurfaceCard: View {
             .frame(height: surface.compact ? Self.titleLine : nil, alignment: .top)
             .clipped()
             .environment(\.hudFolded, surface.compact)
+            .environment(\.hudChrome, surface.chrome)
             // A rail brings its own capsule and sits flush in its lane.
             .padding(.horizontal, isRail ? 0 : 16)
             .padding(.vertical, isRail ? 0 : 14)
@@ -578,7 +579,84 @@ struct SurfaceChrome: ViewModifier {
         case .card: return AnyView(card(content))
         case .bare: return AnyView(bare(content))
         case .bracket: return AnyView(bracket(content))
+        case .window: return AnyView(window(content))
         }
+    }
+
+    /// A window's corner. TypeSafe's windows are square; 3 keeps the corner
+    /// from aliasing against the blur behind it.
+    static let windowRadius: CGFloat = 3
+    /// The title strip's height: the card's 14 of top padding, the 16-point
+    /// title line (`SurfaceCard.titleLine`), and 7 under it, so the strip's
+    /// rule lands halfway into the 14 of gap before the body.
+    static let windowBar: CGFloat = 37
+
+    /// A desktop window made of the same glass as a card.
+    ///
+    /// TypeSafe's part: square corners, a dark title strip with a rule under
+    /// it, a one-point border, a hard offset drop instead of a soft pool, and
+    /// the halftone their pages sit on. Kyber's part: real material behind it
+    /// and the frost wash that holds 4.5:1 over a white page, so it stays
+    /// glass and never becomes a grey box. The Screen sets its title in mono
+    /// caps inside the strip.
+    private func window(_ content: Content) -> some View {
+        let square = RoundedRectangle(cornerRadius: Self.windowRadius, style: .continuous)
+        return content
+            // Sentences in the system mono; titles, labels and numbers set
+            // their own pixel face (`Typeface`). Applies to every Text that
+            // names a size and no design.
+            .fontDesign(.monospaced)
+            .background {
+                ZStack(alignment: .top) {
+                    VisualEffect(material: .hudWindow, blending: .behindWindow)
+                    // Black, not the card's navy frost: a window is drawn in
+                    // black and white and keeps colour for the tones. 0.08
+                    // over the card's wash because at the card's own a green
+                    // diff behind the glass tinted half the panel green on
+                    // 2026-10-08, and the pips stopped reading as the colour.
+                    Color.black.opacity(min(0.75, urgency.wash(over: ground) + 0.08))
+                        .animation(Motion.fade(0.3, reduced: false), value: ground)
+                    // A little white over the black is what makes it frosted
+                    // rather than tinted. Guessed, never measured.
+                    Color.white.opacity(0.035)
+                    // The sheen across the upper left, where the light is.
+                    LinearGradient(
+                        colors: [.white.opacity(0.14), .white.opacity(0)],
+                        startPoint: .topLeading, endPoint: UnitPoint(x: 0.55, y: 0.65))
+                    Halftone()
+                    VStack(spacing: 0) {
+                        Color.black.opacity(0.84)
+                            .frame(height: Self.windowBar - 1)
+                        Color.white.opacity(lit ? 0.42 : 0.30)
+                            .frame(height: 1)
+                    }
+                }
+                .clipShape(square)
+            }
+            // The rim: bright along the top, dimmer down the sides, and back
+            // along the bottom, so the edge reads as glass with a thickness
+            // (the card's recipe, `card(_:)`) and not as a printed line.
+            .overlay {
+                square.strokeBorder(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(lit ? 0.62 : 0.50),
+                            .white.opacity(0.16),
+                            .white.opacity(0.30),
+                        ],
+                        startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1)
+            }
+            // A black hairline just outside the rim, so the edge stays sharp
+            // over a white page where the white rim alone disappears.
+            .overlay {
+                square.stroke(Color.black.opacity(0.6), lineWidth: 1).padding(-1)
+            }
+            // Short, hard and down-right: the drop a window had on a 1984
+            // desktop. No blur, so it reads as an edge and not a smudge.
+            .background {
+                square.fill(Color.black.opacity(0.5)).offset(x: 3, y: 3)
+            }
     }
 
     /// Glass, a lit rim, and its own pool of shadow.
@@ -834,6 +912,24 @@ public enum HUD {
         default: return accent
         }
     }
+
+    /// The same three meanings for a `window`, which is drawn in black and
+    /// white and spends colour only where something is good, waiting or
+    /// broken. Full strength, because the card's pastels next to pure white
+    /// type read as grey. No cyan: an untoned part is ink.
+    public static let popGood = Color(red: 0.22, green: 0.94, blue: 0.47)
+    public static let popWarn = Color(red: 1.00, green: 0.85, blue: 0.12)
+    public static let popBad = Color(red: 1.00, green: 0.27, blue: 0.23)
+
+    public static func tone(_ name: String?, in chrome: Chrome) -> Color {
+        guard chrome == .window else { return tone(name) }
+        switch name {
+        case "good", "positive", "success": return popGood
+        case "warn", "warning": return popWarn
+        case "bad", "negative", "danger", "critical": return popBad
+        default: return ink
+        }
+    }
 }
 
 struct CloseButton: View {
@@ -895,6 +991,94 @@ extension EnvironmentValues {
 
 struct HUDFoldedKey: EnvironmentKey {
     static let defaultValue = false
+}
+
+/// Which chrome the surface wears, so the Screen can set a window's title in
+/// its strip and a diagram can square its nodes to match.
+struct HUDChromeKey: EnvironmentKey {
+    static let defaultValue: Chrome = .card
+}
+
+extension EnvironmentValues {
+    var hudChrome: Chrome {
+        get { self[HUDChromeKey.self] }
+        set { self[HUDChromeKey.self] = newValue }
+    }
+}
+
+/// A section label. In a window it is TypeSafe's inverted chip, light ground
+/// and dark mono caps ("Jev (TypeSafe)" in their benchmark table); in every
+/// other chrome it is the quiet caption it always was.
+struct CaptionLabel: View {
+    let text: String
+    var size: CGFloat = 10
+    var weight: Font.Weight = .medium
+    var colour: Color = HUD.faint
+    var kerning: CGFloat = 0.3
+
+    @Environment(\.hudChrome) private var chrome
+
+    var body: some View {
+        if chrome == .window {
+            Text(text.uppercased())
+                .pixelFont(11)
+                .kerning(0.4)
+                .foregroundStyle(Color.black)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(HUD.ink.opacity(0.96), in: Rectangle())
+        } else {
+            Text(text)
+                .font(.system(size: size, weight: weight))
+                .kerning(kerning)
+                .foregroundStyle(colour)
+        }
+    }
+}
+
+/// The dot field a window's glass is printed with.
+///
+/// TypeSafe's pages sit on halftone: an even dot screen, and dots that swell
+/// into a sphere where the light pools. The swell sits low on the right, so
+/// it is never behind a title. One Path, filled once, so a data refresh does
+/// not redraw ten thousand ellipses one by one.
+struct Halftone: View {
+    /// Grid pitch in points. Guessed, never measured: 5 is TypeSafe's dot
+    /// screen at 1x on typesafe.ai's hero, read off a 1440-wide capture.
+    static let pitch: CGFloat = 5
+    /// White at this opacity over the frost. Guessed, never measured; the
+    /// snapshot over a white ground is what says text still holds.
+    static let ink: Double = 0.12
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            let pitch = Self.pitch
+            let centre = CGPoint(x: size.width * 0.86, y: size.height * 1.02)
+            let reach = max(size.width, size.height) * 0.62
+            var dots = Path()
+            var y = pitch / 2
+            var row = 0
+            while y < size.height {
+                // Alternate rows shift half a pitch: a halftone screen, not
+                // graph paper.
+                var x = row.isMultiple(of: 2) ? pitch / 2 : pitch
+                while x < size.width {
+                    let swell = max(0, 1 - hypot(x - centre.x, y - centre.y) / reach)
+                    // 1.05 at the centre read as no swell at all on the
+                    // first capture, 2026-10-08; 1.6 is a visible sphere.
+                    let radius = 0.32 + 1.6 * swell * swell
+                    dots.addEllipse(in: CGRect(
+                        x: x - radius, y: y - radius, width: radius * 2, height: radius * 2))
+                    x += pitch
+                }
+                y += pitch
+                row += 1
+            }
+            context.fill(dots, with: .color(.white.opacity(Self.ink)))
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
 }
 
 struct VisualEffect: View {

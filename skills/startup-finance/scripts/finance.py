@@ -85,6 +85,17 @@ HEADERS = {
 }
 
 
+# Bank descriptors are written by whoever charged the card, and this CSV gets
+# opened in Sheets. Same guard as tools/gtm.py csv_cell (security review, 10-09).
+FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_cell(value):
+    """Quote a text cell a spreadsheet would run as a formula (OWASP CSV injection)."""
+    value = "" if value is None else str(value)
+    return "'" + value if value.startswith(FORMULA_STARTS) else value
+
+
 def read_csv(path):
     with open(path, newline="") as f:
         reader = csv.DictReader(f)
@@ -394,7 +405,8 @@ def main(argv=None):
                 w = csv.writer(sys.stdout)
                 w.writerow(["id", "date", "amount", "description", "vendor", "category", "flags"])
                 for t in txns:
-                    w.writerow([t["id"], t["date"], t["amount"], t["description"], t["vendor"], t["category"], " ".join(t["flags"])])
+                    w.writerow([csv_cell(t["id"]), csv_cell(t["date"]), t["amount"], csv_cell(t["description"]),
+                                csv_cell(t["vendor"]), csv_cell(t["category"]), csv_cell(" ".join(t["flags"]))])
             else:
                 emit(txns)
         elif a.cmd == "leaks":

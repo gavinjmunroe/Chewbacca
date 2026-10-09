@@ -62,6 +62,16 @@ Blender with Grease Pencil lines and painterly shading) scrubbed by scroll,
 with live WebGL only where the viewer's own data has to appear. A real-time
 dot field and a caption box can't reach it.
 
+## Every shot proves a claim
+
+Caleb, 2026-10-10, on a T Combinator cut of six well-composed shots: it
+"reads as a bunch of random short clips of poorly put together scenes that
+don't rlly have a purpose." Pretty frames aren't a story. Write the spine
+first: each beat gets the one claim it proves to the viewer, the real fact
+behind it, the line on screen, and the visual that shows exactly that
+claim. Cut any shot without a claim, and join the beats as one continuous
+take.
+
 ## Shots morph, they don't cut
 
 Caleb, 2026-10-10, on T Combinator: shots can "morph into each other

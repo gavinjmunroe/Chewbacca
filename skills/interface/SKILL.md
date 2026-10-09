@@ -207,6 +207,11 @@ Read them before drafting any club or startup landing page.
 - "DO NOT USE THE AI GENERATED TEAM": never put an AI-generated group or
   team photo on a real org's site, even when it's sitting in the repo. Real
   headshots only.
+- "Nothing on either the sites should be unintentional": write an intent
+  list of every visible element (what it's for, who it serves) before
+  calling a page done. Anything on screen that isn't on the list is a bug,
+  so cut it: leftover classes, inherited styles, stray borders, accidental
+  gradients, defaults.
 - Bring the best of earlier versions forward. Before a rebuild, inventory
   what past commits built and what he praised (`git log --diff-filter=D`,
   plus the verdicts in docs/). A rebuild that drops the parts he loved

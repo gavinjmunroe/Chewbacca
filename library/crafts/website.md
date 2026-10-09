@@ -295,6 +295,40 @@ keyframe every 4 frames for scroll scrubbing, key the poster the same way,
 and zoom by scaling the map, never the camera: Cairo scales stroke width
 with the camera frame and a 20x zoom turned hairlines into ribbons.
 
+## Scroll-scrubbed film
+
+Learned on tcombinator.org, 2026-10-09, from four messages Caleb sent about a
+rendered film scrubbed by scroll that had passed every gate: "so ass and so
+blurry", "And so choppy", "It just looks 2d bruh", and a leftover student
+page. Each rule names the measurement that would have caught it.
+
+1. **Sharp at the screen's own pixels.** The film was 1280x720, about 6MB,
+   stretched across a 1440 to 2880px retina viewport. Render every shot at
+   2560x1440 at least (1440x2560 for the phone cut) and ship it at that size:
+   an image sequence drawn to a canvas sized to `devicePixelRatio`, with a
+   lower set for phones and loading by shot. Text and any live layer must be
+   pixel-sharp at dpr 2. Check: a dpr 2 screenshot of every shot at 1440,
+   zoomed to 100%, shows no upscale softness.
+2. **Smooth: never seek a video per scroll tick.** Setting `currentTime` on
+   an H.264 file stalls on every seek, and even an all-keyframe file decodes
+   late. Draw frames to a canvas on rAF from one smoothed scroll value (the
+   0.2 lerp), blending the two nearest frames so every rAF paints something
+   new, and render enough frames that consecutive scroll positions never
+   jump. Check: an rAF trace while scrolling at 1440 and 375 holds 60fps and
+   no image is held longer than two frames.
+3. **Depth: the camera moves through the scene.** Locked-off shots with a
+   small push read as flat cards. Every shot needs a real move through
+   layered geometry (dolly, crane, orbit, a fly-up between towers) so the
+   foreground, midground and background slide against each other, with
+   perspective on the architecture, light shafts and haze between planes,
+   and rim light on silhouettes. Flat 2D only at the one graphic peak, on
+   purpose. Check: overlay the first and last frame of each shot; the near
+   plane must move several times farther than the far one.
+4. **Every page is in the film's world.** A plain page after a cinematic one
+   reads as a leftover even when its copy is right. Give it the same sky,
+   type and sharpness, one clear action and a deliberate layout; a missing
+   link stays a visible, finished-looking state, never a gap.
+
 ## Done means
 
 `site-gate check <url>` and `site-gate story <url>` exit 0 at 1440 and 390: no console errors, no

@@ -29,6 +29,7 @@ sys.path.insert(0, str(SCRIPT.parent))
 # send let through by the suite-wide CHEWBACCA_NO_SEND being honoured. So
 # slackcli points at nothing, and the no-send switch is checked on its own.
 os.environ["CHEWBACCA_SLACKCLI_BIN"] = "/nonexistent/slackcli"
+os.environ["CHEWBACCA_SLACK_APP"] = "/nonexistent/Slack.app"  # never drive the real app
 SUITE_NO_SEND = os.environ.pop("CHEWBACCA_NO_SEND", None)
 import slack  # noqa: E402
 

@@ -24,9 +24,11 @@ Kinds: `needs-you`, `today`, `tasks`, `conversations`, `people`,
 `person <name>`, `space <name>`, `music`, `files`, `meetings`. `kyber-surfaces list` shows
 what is open and where; `activity` shows what the panels did.
 
-`files` here is recent downloads. Browsing the disk is the two-pane file
-manager, a native keyboard panel: `hud files [path]`, or "show me files" /
-"open Finder" to hud-listen. Keys and safety rules are in hud/CLAUDE.md, "Files".
+`files` here is recent downloads. Any other folder goes on the glass the same
+way: `hud files [path]`, or "show me files" / "open Finder" to hud-listen,
+draws its newest seven things as a surface (id `disk`) whose rows Look in
+place, and Escape, a click off it, "close files" or `hud files off` take it
+down. There is no file manager and no Finder window: see hud/CLAUDE.md, "Files".
 
 ## What a surface that replaces an app contains
 

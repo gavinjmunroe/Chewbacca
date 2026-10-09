@@ -303,10 +303,12 @@ public final class OverlayModel {
             RimTuner.shared.tuning = RimTuner.shared.tuning.setting(values)
 
         case .openFiles(let path):
-            FilesPanel.shared.open(at: path)
+            files = FilesGlass(path: path)
+            drawFiles()
 
         case .closeFiles:
-            FilesPanel.shared.dismiss()
+            if surfaces.contains(where: { $0.id == FilesGlass.id }) { dismiss(FilesGlass.id) }
+            files = nil
 
         case .press(let number, let hold):
             let (outcome, center) = PointedStore.shared.press(number, hold: hold)
@@ -531,6 +533,7 @@ public final class OverlayModel {
         pillHideTask?.cancel()
         pillHideTask = nil
         surfaces = []
+        files = nil
         heights = [:]
         fullHeights = [:]
         current = "main"
@@ -645,6 +648,56 @@ public final class OverlayModel {
         }
         onEvent?(.sendTo(surface: target.surface, text: text))
         return true
+    }
+
+    // MARK: Files on the glass
+
+    /// The folder on the glass, while it is up. See `FilesGlass`.
+    public private(set) var files: FilesGlass?
+    /// What a press on it does to the machine. A test swaps this out so it can
+    /// press every row without Finder or Preview opening.
+    public var filesEffect: (FilesGlass.Effect) -> Void = { FilesGlass.perform($0) }
+
+    /// Draw the folder with the same lines any sender writes, then hand
+    /// `current` back, so a sender still streaming into its own surface is not
+    /// redirected into this one by a press.
+    private func drawFiles() {
+        guard let files else { return }
+        let previous = current
+        for line in files.lines() {
+            if let op = try? LineParser.parse(line) { apply(op) }
+        }
+        current = previous
+    }
+
+    /// A press on the folder's surface, answered here: nobody else drew it.
+    /// True when it was one of its controls.
+    private func filesPressed(_ event: OutboundEvent) -> Bool {
+        guard var state = files else { return false }
+        let effect: FilesGlass.Effect
+        switch event {
+        case .rowAction(let name, let row, _) where name == FilesGlass.lookAction:
+            effect = state.look(row)
+        case .action(let name, _, _) where name == FilesGlass.goAction:
+            effect = state.go()
+        default:
+            return false
+        }
+        files = state
+        drawFiles()
+        filesEffect(effect)
+        return true
+    }
+
+    /// A click somewhere on the screen, in the glass's own points. Outside the
+    /// folder's card, the folder goes: it is a glance, and clicking on with
+    /// what you were doing is the person saying they are done with it.
+    public func clickedAway(at point: CGPoint) {
+        guard files != nil, let surface = surfaces.first(where: { $0.id == FilesGlass.id }) else { return }
+        // The same few points of slack the window uses to decide a click is
+        // on a card (`OverlayWindow.updateInteractive`).
+        guard !frame(of: surface).insetBy(dx: -3, dy: -3).contains(point) else { return }
+        dismiss(FilesGlass.id)
     }
 
     /// The X on a card: take it down and tell whoever drew it.
@@ -850,6 +903,7 @@ public final class OverlayModel {
     }
 
     public func close(_ id: String) {
+        if id == FilesGlass.id { files = nil }
         surfaces.removeAll { $0.id == id }
         heights.removeValue(forKey: id)
         fullHeights.removeValue(forKey: id)
@@ -933,7 +987,10 @@ public final class OverlayModel {
         }
 
         let store = SurfaceStore()
-        store.onEvent = { [weak self] event in self?.onEvent?(event) }
+        store.onEvent = { [weak self] event in
+            if id == FilesGlass.id, self?.filesPressed(event) == true { return }
+            self?.onEvent?(event)
+        }
 
         nextDepth += 1
         nextTouch += 1
@@ -1044,17 +1101,20 @@ public final class OverlayModel {
     /// Needed because the window has to know whether the pointer is over
     /// something before it decides to accept a mouse event at all.
     public var frames: [CGRect] {
-        var all = surfaces.map { surface in
-            let centre = origin(for: surface)
-            let height = drawnHeight(surface)
-            return CGRect(
-                x: centre.x - surface.width / 2,
-                y: centre.y - height / 2,
-                width: surface.width,
-                height: height)
-        }
+        var all = surfaces.map(frame(of:))
         if let pillFrame { all.append(pillFrame) }
         return all
+    }
+
+    /// One surface's rectangle, in the overlay's own coordinate space.
+    public func frame(of surface: OverlaySurface) -> CGRect {
+        let centre = origin(for: surface)
+        let height = drawnHeight(surface)
+        return CGRect(
+            x: centre.x - surface.width / 2,
+            y: centre.y - height / 2,
+            width: surface.width,
+            height: height)
     }
 
     /// Top-left origin for a surface, in the overlay's coordinate space.

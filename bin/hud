@@ -19,7 +19,7 @@ hud close <name>    take one surface off the screen
 hud press <n> [h]   press what they clicked as mark n, in hold h
 hud clear           take everything off
 hud rim [k=v ...]   open the rim editor, or set thickness|frost|tint|edge|corner
-hud files [path]    the two-pane file manager, at path; `hud files off` closes it
+hud files [path]    a folder's newest files on the glass (Downloads by default); `hud files off` closes it
 hud listen          hear what is said to it and draw the answer
 hud demo            put one of everything on screen
 hud screen          the display size in points, for marker coordinates
@@ -267,7 +267,7 @@ case "${1:-}" in
           running || { echo "The display is not running. Start it with: hud open" >&2; exit 1; }
           shift
           printf 'rim%s\n' "${*:+ $*}" | send ;;
-  files)  # The two-pane file manager, a native panel that takes the keyboard.
+  files)  # A folder on the glass, the `disk` surface (hud/Sources/KyberKit/FilesGlass.swift).
           # A path points the active pane there; `off` puts it away.
           running || { echo "The display is not running. Start it with: hud open" >&2; exit 1; }
           if [ "${2:-}" = off ]; then

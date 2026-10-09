@@ -257,10 +257,10 @@ public enum Op: Sendable, Equatable {
     /// `rim thickness=12 frost=0.4`: set those values without opening it.
     /// Keys are `RimTuning.keys`.
     case tuneRim([String: Double])
-    /// `files [path]`: open the file manager, the active pane at `path`
-    /// when one is given. See `FilesPanel`.
+    /// `files [path]`: the newest few things in a folder, on the glass
+    /// (Downloads when no path is given). See `FilesGlass`.
     case openFiles(path: String?)
-    /// `files off`: put the file manager away.
+    /// `files off`: take that surface down.
     case closeFiles
 }
 

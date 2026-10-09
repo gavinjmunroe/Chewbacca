@@ -2,7 +2,7 @@
 
 "Show my day", "what do I need to do", "open my texts", "check my inbox",
 "show my tasks", "show me Karthik", "open my school space", "what's playing",
-"show downloads", "show me files" (the file manager), "close the tasks", "what replaces Notion", "show the engine
+"show downloads", "show me files" (a folder on the glass), "close the tasks", "what replaces Notion", "show the engine
 ollama-models": each names a surface in bin/lib/surfaces/
 and the action is `kyber-surfaces open` or `close`. Working that out with a
 model costs seconds the sentence already paid for.
@@ -68,7 +68,7 @@ NOUNS = {
     "tasks": r"(?:tasks|to ?dos?|to do list|lanes)",
     "people": r"(?:people|contacts|friends)",
     "music": r"(?:music|player|spotify|song)",
-    # Bare "files" is the file manager now (FILES below); downloads keep
+    # Bare "files" is Kyber's folder surface (FILES below); downloads keep
     # their own words.
     "files": r"(?:downloads|download folder|downloads folder|recent files)",
     "needs-you": r"(?:needs you|what needs me|inbox zero)",
@@ -131,10 +131,11 @@ OSS_QUERY = re.compile(r"^what (?:replaces|can replace|is an open source alterna
 # "Show the engine ollama-models": read off the raw sentence, because _norm
 # drops the digits and hyphens an engine id is made of.
 ENGINE = re.compile(r"^(?:(?:ok|okay|hey|kyber),? )?show (?:me )?(?:the )?engine (?P<id>[a-z0-9-]+)[.!?]?$")
-# "Show me files", "open finder", "file manager": the two-pane file manager,
-# a native HUD panel (hud/Sources/KyberKit/FilesPanel.swift) that takes the
-# keyboard, so it opens through `hud files` and not kyber-surfaces. Built
-# 2026-10-09 for "the reason no app is ever opened, not even Finder".
+# "Show me files", "open finder", "file manager": a folder on the glass, the
+# `disk` surface Kyber draws and answers itself (hud/Sources/KyberKit/
+# FilesGlass.swift), so it opens through `hud files` and not kyber-surfaces.
+# It replaced a two-pane file manager on 2026-10-09 (CHW-198); "open Finder"
+# still lands here because no app is ever opened, not even Finder.
 FILES = re.compile(
     rf"^(?:{SHOW} {MY})?(?:files|file manager|file browser|finder)"
     r"(?: (?:on|up on) (?:the )?(?:screen|glass|hud))?(?: (?:right )?now)?$")
@@ -241,7 +242,7 @@ def perform(command: Command, run=subprocess.run, ask=None) -> Outcome:
         except (OSError, subprocess.TimeoutExpired):
             return Outcome(False, "The display didn't answer.")
         if done.returncode != 0:
-            return Outcome(False, "The file manager didn't open.")
+            return Outcome(False, "Your files didn't come up.")
         return Outcome(True, "Closed." if command.arg == "off" else "Your files are up.")
     if command.verb == "open" and command.name == "oss" and command.arg:
         if open_with_preset("oss", {"/oss/q": command.arg}, run=run, ask=ask):

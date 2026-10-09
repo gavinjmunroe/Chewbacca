@@ -288,9 +288,10 @@ public enum LineParser {
             return .tuneRim(values)
 
         case "files":
-            // `files`: open the file manager where it was left. `files
-            // ~/Downloads` or `files "/Volumes/My Disk"` points the active
-            // pane there; `files off` puts it away. A word, like `rim`.
+            // `files`: Downloads on the glass, newest first. `files
+            // ~/Documents` or `files "/Volumes/My Disk"` shows that folder
+            // (a file: its folder, with it previewed); `files off` takes it
+            // down. A word, like `rim`. See `FilesGlass`.
             guard tokens.count > 1 else { return .openFiles(path: nil) }
             guard tokens.count == 2 else {
                 throw LineParseError.malformed(

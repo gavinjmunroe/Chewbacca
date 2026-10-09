@@ -1,0 +1,35 @@
+name: macOS tests
+
+# The kit is macOS-only, so the behavioral suite needs a macOS runner. It ran on
+# every push until 2026-10-09: about 10 billed minutes a run at $0.062 a minute,
+# 39 pushes a day measured over the prior week, roughly $700 a month, and the
+# account hit its spending limit on 2026-10-03 with every job left unstarted.
+# Nightly plus pull requests is about $19 a month. Run it by hand from the
+# Actions tab (workflow_dispatch) before anything risky lands on main.
+on:
+  schedule:
+    # 09:17 UTC is 02:17 Pacific, after the night's pushes and off the top of
+    # the hour when scheduled jobs queue longest.
+    - cron: "17 9 * * *"
+  pull_request:
+    branches: [main]
+    paths-ignore: ["team/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: macos-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: macos-latest
+    # The last green run took 9m37s. A hung test would otherwise bill until the
+    # six-hour default.
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test suite
+        run: bash tests/run.sh

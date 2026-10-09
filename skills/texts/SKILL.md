@@ -78,8 +78,16 @@ never a member, and only on an exact room name: "Paul" is a group of four, and
 a fuzzy match is a text in the wrong chat. A name two apps share is refused
 until `--via` picks one.
 
-`owed` hides unsaved numbers, short codes and email handles behind a count,
-because they were campaigns, pharmacies and 2FA. `--all` shows them. One of them
+`owed` covers iMessage, WhatsApp, Slack and email in one list; `--via slack`
+narrows it. Drafts take `--via` too and keep it, and `send --room` reaches a
+Slack channel by the channel id on his own messages there. An email group is
+answered from Gmail, since a subject line is not an address.
+
+`owed` hides unsaved numbers, short codes, bare Slack user ids, and any group
+he has never written in (the Clay Slack community alone was 1,444 rows), behind
+a count, because they were campaigns, pharmacies, 2FA and broadcasts. `--all`
+shows them. Mail from his own addresses is never owed: an address of his that
+isn't a connected inbox goes on its own line in `~/.chewbacca/email/me`. One of them
 that night was a check-scam asking for a bank name, so scan the hidden ones
 before saying nobody else is waiting.
 

@@ -201,7 +201,20 @@ def me_addresses():
     for a in os.environ.get("CHEWBACCA_EMAIL_ME", "").split(","):
         if a.strip():
             me.add(a.strip().lower())
+    me |= me_file()
     return me
+
+
+def me_file():
+    """Addresses that are the user's but aren't a connected inbox, one per line
+    in EMAIL_HOME/me. On 2026-10-09 the Blue Modern address sent test mail into
+    the connected inbox, and every one came back as someone waiting on a reply,
+    because the Workspace account can't be signed in until it's a tester."""
+    try:
+        with open(os.path.join(EMAIL_HOME, "me")) as f:
+            return {l.strip().lower() for l in f if "@" in l and not l.lstrip().startswith("#")}
+    except OSError:
+        return set()
 
 
 def list_ids(days):

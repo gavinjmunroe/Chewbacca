@@ -170,7 +170,11 @@ function sendRoom(d, name, text, via, flags, P) {
   if (rooms.length > 1)
     die(`"${P(name)}" is ${rooms.length} groups:\n` + rooms.map((r) => `  ${r.source} ${P(r.handle)}`).join("\n") + "\nPick one with --via.");
   const r = rooms[0];
-  if (r.source !== "imessage" && r.source !== "whatsapp") die(`Group sends work on iMessage and WhatsApp, not ${r.source}.`);
+  // Slack's own outgoing rows in a channel carry the channel id, the same
+  // convention as iMessage and WhatsApp. An email "room" is a subject line
+  // with three or more people on it, which is no address at all.
+  if (!["imessage", "whatsapp", "slack"].includes(r.source))
+    die(`Group sends work on iMessage, WhatsApp and Slack, not ${r.source}. Reply to that thread from Gmail.`);
   const to = r.source === "imessage" ? chatGuid(r.handle) : r.handle;
   if (!to) die(`Couldn't read the chat id for "${P(r.room)}" from chat.db. Nothing was sent.`);
   const where = `${c.b(P(r.room))} ${c.dim(`group via ${r.source}, ${P(to)}`)}`;

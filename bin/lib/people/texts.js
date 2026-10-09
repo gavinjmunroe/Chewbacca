@@ -514,22 +514,57 @@ function cmdTexts(argv) {
     // One indexed range read of the window, then grouping in JS. The first
     // version joined on coalesce(room, who) with a correlated subquery per
     // thread, which no index covers: 94s wall on the real 640k-row store.
+    // Every app people send can reply through. LinkedIn is a one-time export
+    // with no sender, so it can never be owed anything.
+    const APPS = ["imessage", "whatsapp", "slack", "email"];
+    const via = flags.via ? String(flags.via).toLowerCase() : null;
+    if (via && !APPS.includes(via)) die(`--via is one of: ${APPS.join(", ")}`);
+    const apps = via ? [via] : APPS;
     const win = d
       .prepare(
-        `SELECT who, room, from_me, person_id, body, sent_at, source FROM messages
-          WHERE sent_at >= datetime('now', ?) AND source IN ('imessage', 'whatsapp')
+        `SELECT who, handle, room, from_me, person_id, body, sent_at, source FROM messages
+          WHERE sent_at >= datetime('now', ?) AND source IN (${apps.map(() => "?").join(",")})
           ORDER BY sent_at DESC`,
       )
-      .all(`-${days} days`);
+      .all(`-${days} days`, ...apps);
+    // A group is only owed a reply if the user has ever written in it. Slack
+    // communities and big group chats talk all night without asking him
+    // anything: on 2026-10-09 the Clay community alone was 1,444 room rows.
+    const spoke = new Set(
+      d
+        .prepare(`SELECT DISTINCT source || char(31) || room AS k FROM messages WHERE from_me = 1 AND room IS NOT NULL`)
+        .all()
+        .map((r) => r.k),
+    );
+    const myMail = new Set(
+      (process.env.CHEWBACCA_EMAIL_ME || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean),
+    );
+    try {
+      const home = process.env.CHEWBACCA_EMAIL_HOME || path.join(os.homedir(), ".chewbacca", "email");
+      for (const l of fs.readFileSync(path.join(home, "me"), "utf8").split("\n"))
+        if (l.includes("@") && !l.trim().startsWith("#")) myMail.add(l.trim().toLowerCase());
+    } catch {
+      /* no list yet: only the connected inboxes count as the user */
+    }
     const threads = new Map();
     for (const m of win) {
       const key = `${m.source}\u0000${m.room || m.who}`;
-      if (!threads.has(key)) threads.set(key, { thread: m.room || m.who, room: m.room, source: m.source, last_at: m.sent_at, from_me: m.from_me, person_id: m.person_id, msgs: [] });
+      // Mail from one of the user's own addresses is a note to self, not a
+      // person waiting; rows ingested before an address was listed in
+      // EMAIL_HOME/me still carry from_me 0, so the check is made here too.
+      const fromMe = m.from_me || (m.source === "email" && myMail.has(String(m.handle || "").toLowerCase()));
+      if (!threads.has(key)) threads.set(key, { thread: m.room || m.who, room: m.room, source: m.source, last_at: m.sent_at, from_me: fromMe, person_id: m.person_id, msgs: [] });
       const t = threads.get(key);
       if (t.msgs.length < ctx) t.msgs.push(m);
     }
     const rows = [...threads.values()].filter((t) => !t.from_me);
-    const noise = (r) => !r.room && !r.person_id && /^[+\d]|@/.test(r.thread);
+    // Unsaved numbers, short codes and email handles were campaigns, pharmacies
+    // and 2FA; a bare Slack user id is someone the store can't name yet; a
+    // group he never wrote in is a broadcast.
+    const noise = (r) =>
+      r.room
+        ? !spoke.has(`${r.source}\u001f${r.room}`)
+        : !r.person_id && (/^[+\d]|@/.test(r.thread) || (r.source === "slack" && /^[UW][A-Z0-9]{6,}$/.test(r.thread)));
     const shown = flags.all ? rows : rows.filter((r) => !noise(r));
     const hidden = rows.length - shown.length;
     // --json is for an agent drafting replies: thread, kind, and the context
@@ -555,7 +590,7 @@ function cmdTexts(argv) {
       }
       say("");
     }
-    say(c.dim(`  ${shown.length} threads waiting on you${hidden ? `, ${hidden} unsaved numbers and short codes hidden (--all)` : ""}; last sync ${syncState("messages_last_sync") || "never"}`));
+    say(c.dim(`  ${shown.length} threads waiting on you${hidden ? `, ${hidden} hidden: unsaved numbers, short codes and groups you never wrote in (--all)` : ""}; last sync ${syncState("messages_last_sync") || "never"}`));
     say("");
     return;
   }
@@ -599,7 +634,7 @@ function cmdTexts(argv) {
         to = rooms[0].source === "imessage" ? chatGuid(rooms[0].handle) : rooms[0].handle;
         if (!to) die(`Couldn't read the chat id for "${who}". Nothing drafted.`);
       }
-      list.push({ who, text, why: flags.why || "", group: Boolean(flags.group), to, at: nowISO() });
+      list.push({ who, text, why: flags.why || "", group: Boolean(flags.group), to, via: flags.via ? String(flags.via) : "", at: nowISO() });
       save(list);
       return say(`${c.grn("drafted")} #${list.length} to ${c.b(who)}`);
     }
@@ -618,6 +653,7 @@ function cmdTexts(argv) {
       // An unsaved thread sends only when --to repeats the exact address;
       // a draft carries the one its author checked with a dry run.
       if (dr.to) argv.push("--to", dr.to);
+      if (dr.via) argv.push("--via", dr.via);
       if (flags["dry-run"]) argv.push("--dry-run");
       cmdSend(argv);
       if (!flags["dry-run"]) {
@@ -630,7 +666,7 @@ function cmdTexts(argv) {
     if (!list.length) return say(c.dim("  no drafts waiting. Add one: people texts drafts add <who> \"text\""));
     say("");
     list.forEach((dr, i) => {
-      say(`  ${c.b(`#${i + 1}`)} ${c.cyn(printable(dr.who))}${dr.group ? c.dim(" group") : ""} ${c.dim(dr.at.slice(5, 16))}`);
+      say(`  ${c.b(`#${i + 1}`)} ${c.cyn(printable(dr.who))}${dr.group ? c.dim(" group") : ""}${dr.via ? c.dim(` ${printable(dr.via)}`) : ""} ${c.dim(dr.at.slice(5, 16))}`);
       if (dr.why) say(c.dim(`     re: ${printable(dr.why)}`));
       say(`     ${printable(dr.text)}`);
     });

@@ -173,5 +173,14 @@ else:
     code, res = send()
     check("a real send reports gmail's id", code == 0 and res.get("id") == "sent1", res)
 
+# An address of his that isn't a connected inbox is still him. Test mail from
+# the Blue Modern address on 2026-10-09 otherwise reads as a stranger waiting.
+with tempfile.TemporaryDirectory() as home:
+    Path(home, "me").write_text("# mine\nSecond@Example.test\nnot-an-address\n")
+    p = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); import gmail; print(sorted(gmail.me_file()))",
+                        str(READER.parent)], env={**os.environ, "CHEWBACCA_EMAIL_HOME": home}, capture_output=True, text=True)
+    check("EMAIL_HOME/me lists the user's other addresses, lowercased, comments skipped",
+          p.stdout.strip() == "['second@example.test']", p.stdout + p.stderr)
+
 print("all passed" if not failed else f"{failed} failed")
 sys.exit(1 if failed else 0)

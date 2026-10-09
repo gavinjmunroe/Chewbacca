@@ -27,6 +27,21 @@ sqlite3 "$DB" "
    (20000000101, NULL, 'Wa Crew', '1203630000@g.us', 1, 'yo', datetime('now','-5 hour'), 'whatsapp', 'Wa Crew'),
    (770009, NULL, 'Paul', 'chatPAUL1', 1, 'a', datetime('now','-5 hour'), 'imessage', 'Paul'),
    (20000000102, NULL, 'Paul', '1203639999@g.us', 1, 'b', datetime('now','-5 hour'), 'whatsapp', 'Paul');"
+# Every app, not just phones: a Slack DM, a Slack channel he posts in, a
+# community channel he never wrote in, and mail from his own second address.
+"$P" add "Slack Sam" >/dev/null 2>&1
+SAM="$(id 'Slack Sam')"
+sqlite3 "$DB" "
+  INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, source, room) VALUES
+   (30000000001, '$SAM', 'Slack Sam', 'U0SAM0001', 0, 'SLACKDM can u review', datetime('now','-1 hour'), 'slack', NULL),
+   (30000000002, NULL, 'gtm-team', 'C0TEAM001', 1, 'shipped', datetime('now','-3 hour'), 'slack', 'gtm-team'),
+   (30000000003, '$SAM', 'Slack Sam', 'U0SAM0001', 0, 'TEAMASK who owns this', datetime('now','-1 hour'), 'slack', 'gtm-team'),
+   (30000000004, NULL, 'U0STRANGER', 'U0STRANGER', 0, 'COMMUNITYNOISE hi all', datetime('now','-1 hour'), 'slack', 'introduce-yourself'),
+   (30000000005, NULL, 'Me Again', 'me@second.example', 0, 'SELFMAIL test send', datetime('now','-1 hour'), 'email', NULL),
+   (30000000006, NULL, 'Linked Lisa', 'lisa', 0, 'LINKEDINOLD', datetime('now','-1 hour'), 'linkedin', NULL);"
+export CHEWBACCA_EMAIL_HOME="$PEOPLE_DIR/email"
+mkdir -p "$CHEWBACCA_EMAIL_HOME"; printf '# mine\nme@second.example\n' > "$CHEWBACCA_EMAIL_HOME/me"
+
 # A stand-in chat.db: the GUID has to be read from it, never built.
 export CHEWBACCA_CHAT_DB="$PEOPLE_DIR/chat.db"
 sqlite3 "$CHEWBACCA_CHAT_DB" "CREATE TABLE chat (guid TEXT, chat_identifier TEXT); INSERT INTO chat VALUES ('any;+;chatDEN42', 'chatDEN42');"
@@ -40,8 +55,23 @@ grep -q "ANDYQ" <<<"$out"       && fail "a thread already answered was listed as
 grep -q "Den Group" <<<"$out"   || fail "a group waiting on a reply was not listed under the group name"
 grep -q "Group:" <<<"$out"      || fail "group lines did not name who said them"
 grep -q "SPAMVOTE" <<<"$out"    && fail "an unsaved number was printed without --all"
-grep -q "1 unsaved" <<<"$out"   || fail "hidden unsaved numbers were not counted"
+grep -q "2 hidden" <<<"$out"    || fail "hidden threads (unsaved number, silent channel) were not counted"
 grep -q "ANCIENTASK" <<<"$out"  && fail "a message outside the window leaked in"
+out="$("$P" texts owed 2>&1)"
+grep -q "SLACKDM" <<<"$out"        || fail "a Slack DM waiting on a reply was not listed"
+grep -q "TEAMASK" <<<"$out"        || fail "a Slack channel he posts in was not listed"
+grep -q "COMMUNITYNOISE" <<<"$out" && fail "a channel he never wrote in was listed without --all"
+grep -q "SELFMAIL" <<<"$out"       && fail "mail from his own address was listed as someone waiting"
+grep -q "LINKEDINOLD" <<<"$out"    && fail "a LinkedIn export row was listed; nothing can reply there"
+out="$("$P" texts owed --via slack 2>&1)"
+grep -q "SLACKDM" <<<"$out" && ! grep -q "OLIVEASKS" <<<"$out" || fail "--via slack did not keep to Slack"
+out="$("$P" texts owed --via fax 2>&1)" && fail "an unknown --via was accepted"
+out="$("$P" send --room "gtm-team" "on it" --dry-run 2>&1)" || fail "Slack room send failed"
+grep -q "group via slack, C0TEAM001" <<<"$out" || fail "Slack room did not address the channel id"
+"$P" texts drafts add "slack sam" "on it" --via slack >/dev/null || fail "draft with --via failed"
+out="$("$P" texts drafts send 1 --dry-run 2>&1)" || fail "dry run of a --via draft failed"
+grep -q "via slack, U0SAM0001" <<<"$out" || fail "a draft lost its app"
+"$P" texts drafts drop 1 >/dev/null
 out="$("$P" texts owed --json 2>&1)"
 python3 -c 'import json,sys; d=json.load(sys.stdin); t={x["thread"]:x for x in d["threads"]}; assert t["Den Group"]["group"] and t["Owed Olive"]["messages"][-1]["body"].startswith("OLIVEASKS")' <<<"$out" || fail "--json is not the owed list as data"
 out="$("$P" texts owed --all 2>&1)"

@@ -60,6 +60,12 @@ echo '{"name":"linkedin","baseUrl":"https://z7.com","operations":[]}' > "$T/kit/
 echo '{"name":"z8","baseUrl":"https://z8.com","operations":[{"name":"o","request":{"url":"https://z8.com/"},"slots":[{"param":"h","at":["header:host"]}]}]}' > "$T/kit/z8.json"
 echo 'notes' > "$T/kit/z1.md"
 bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+echo '{"name":"z10","baseUrl":"https://z10.com","operations":[{"name":"o","request":{"url":"https://z10.com/"},"slots":[{"param":"h","at":["header:x-forwarded-host"]}]}]}' > "$T/kit/z10.json"
+echo '{"name":"z11","baseUrl":"https://z11.com","operations":[{"name":"o","request":{"url":"https://z11.com/"},"slots":[{"param":"r","at":["header:referer"]},{"ref":"session:o/csrf","at":["header:x-csrf"]}]}]}' > "$T/kit/z11.json"
+bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+[ -f "$T/engine/sites/z10.json" ] && no "an argument was allowed to write a forwarding header"
+[ -f "$T/engine/sites/z11.json" ] || no "a referer argument or a same-site session header was refused"
+rm -f "$T/kit/z10.json" "$T/kit/z11.json"
 for z in z7 z8; do
   [ -f "$T/engine/sites/$z.json" ] && no "sync accepted $z"
 done

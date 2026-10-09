@@ -119,8 +119,12 @@ for (const op of Array.isArray(spec.operations) ? spec.operations : die(`${name}
   const third = [op?.request?.url, op?.trigger?.url].some((u) => u !== undefined && !(hostOf(u) === home || hostOf(u).endsWith("." + home)));
   if (third && /"cookie:/.test(JSON.stringify(op))) die(`${name}.${op.name}: sends a cookie to a third-party host`);
   if (op?.match?.host !== undefined && !okHost(String(op.match.host).toLowerCase())) die(`${name}.${op.name}: matches host ${op.match.host}`);
+  // A caller's argument may fill a header only where it can't redirect or
+  // authenticate a request: the referer. Session refs fill headers with
+  // values this same site issued, sent back to it.
   for (const sl of op.slots || []) for (const at of sl.at || [])
-    if (/^header:(host|:authority|origin)$/i.test(String(at))) die(`${name}.${op.name}: a slot writes ${at}`);
+    if (/^header:/i.test(String(at)) && sl.ref === undefined && !/^header:referer$/i.test(String(at)))
+      die(`${name}.${op.name}: an argument writes ${at}`);
 }
 for (const s of walk(spec, [])) {
   for (const m of s.matchAll(/(?:[a-z][a-z0-9+.-]*:)?\/\/[^\s"'<>]*/gi)) {

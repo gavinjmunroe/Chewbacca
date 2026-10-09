@@ -221,10 +221,13 @@ sync_sites() {
 # answered not_logged_in). For those, this reads the site's cookies straight
 # from the Work Chrome profile's cookie store (the decryption bin/brightspace
 # uses), gives them a 12 hour expiry, imports them from a private temp file,
-# and deletes the file. One line per site: name, cookie host suffix, and a
-# cookie-name prefix ("-" for all of that host's cookies).
+# and deletes the file. One line per site: name, cookie host suffixes (comma
+# separated), and a cookie-name prefix ("-" for all of those hosts' cookies).
+# usc-reg needs the Microsoft sign-in cookies because webreg signs in through
+# Entra; Caleb approved importing that session on 2026-10-10.
 PROFILE_LOGIN_SITES="brightspace brightspace.usc.edu d2l
-handshake joinhandshake.com -"
+handshake joinhandshake.com -
+usc-reg webreg.usc.edu,my.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com -"
 
 profile_login_row() { printf '%s\n' "$PROFILE_LOGIN_SITES" | awk -v s="$1" '$1 == s'; }
 
@@ -243,7 +246,8 @@ login_from_profile() {
 import hashlib, json, os, shutil, sqlite3, subprocess, sys, tempfile, time
 from pathlib import Path
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-host, prefix, out, profile = sys.argv[1:5]
+hosts, prefix, out, profile = sys.argv[1:5]
+hosts = [h for h in hosts.split(",") if h]
 chrome = Path.home() / "Library/Application Support/Google/Chrome"
 query = ("select host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc"
          " from cookies where host_key = ? or host_key = ? or host_key like ?")
@@ -252,10 +256,11 @@ def read(db):
     with tempfile.TemporaryDirectory() as tmp:
         copy = Path(tmp) / "Cookies"
         shutil.copy(db, copy)
-        return sqlite3.connect(copy).execute(query, (host, "." + host, "%." + host)).fetchall()
+        con = sqlite3.connect(copy)
+        return [r for h in hosts for r in con.execute(query, (h, "." + h, "%." + h)).fetchall()]
 
 # Any student, any Mac: with no profile named, use whichever Chrome profile
-# touched this site's cookies most recently. Caleb's USC login lives in
+# touched these hosts' cookies most recently. Caleb's USC login lives in
 # "Profile 1" and a classmate's will be somewhere else.
 if profile:
     rows = read(chrome / profile / "Cookies")
@@ -286,7 +291,7 @@ for hk, name, blob, path, secure, httponly, _ in rows:
     jar.append({"name": name, "value": value, "domain": hk, "path": path or "/", "expires": expires,
                 "httpOnly": bool(httponly), "secure": bool(secure), "sameSite": "Lax"})
 if not jar:
-    sys.exit(f"no {host} session in any Chrome profile; sign in there once in Chrome")
+    sys.exit(f"no {hosts[0]} session in any Chrome profile; sign in there once in Chrome")
 fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, "w") as f:
     json.dump(jar, f)
@@ -295,6 +300,29 @@ PY
     rm -rf "$dir"
     return 1
   fi
+  # The engine keeps only cookies on the site's own domain, so a sign-in that
+  # crosses domains (webreg through login.microsoftonline.com) loses the
+  # foreign half. Import each other domain's cookies under that domain too,
+  # which puts them in the engine's Chrome profile where the sign-in runs.
+  python3 - "$dir/cookies.json" "$dir" <<'PY'
+import json, sys
+rows = json.load(open(sys.argv[1]))
+root = lambda h: ".".join(h.lstrip(".").split(".")[-2:])
+groups = {}
+for r in rows:
+    groups.setdefault(root(r["domain"]), []).append(r)
+for dom, part in groups.items():
+    with open(f"{sys.argv[2]}/extra-{dom}.json", "w") as f:
+        json.dump(part, f)
+PY
+  local extra dom siteroot
+  siteroot="$(printf '%s' "$host" | cut -d, -f1 | awk -F. '{print $(NF-1)"."$NF}')"
+  for extra in "$dir"/extra-*.json; do
+    [ -f "$extra" ] || continue
+    dom="${extra##*/extra-}"; dom="${dom%.json}"
+    [ "$dom" = "$siteroot" ] && continue
+    api-anything login "$dom" --cookies "$extra" >/dev/null 2>&1
+  done
   api-anything login "$1" --cookies "$dir/cookies.json" >/dev/null; rc=$?
   rm -rf "$dir"
   [ "$rc" -eq 0 ] && say "$1 session imported for 12 hours"

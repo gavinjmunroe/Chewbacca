@@ -10,6 +10,7 @@
                                        (--fork only as the first word after send; an id
                                        prefix must name exactly one session)
     kyber-sessions run <id> <what>     an allowlisted command in its folder: status, diff, tests
+    kyber-sessions tree <id> [--json]  what it touched plus one level, the tree beside its card
     kyber-sessions route "<words>"     which session a sentence is for (the hook for hud-listen)
     kyber-sessions serve [--open <id>] draw the sessions surface and answer its presses
 
@@ -57,6 +58,7 @@ from typing import Callable, Iterable, Iterator
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
 import hud_events  # noqa: E402
+import session_tree  # noqa: E402
 import sessions_inbox  # noqa: E402
 
 HOME = Path.home()
@@ -97,6 +99,11 @@ CARD_TURNS = 40
 # that on 2026-10-05. The first press now shows the command and folder, and
 # only a second press inside this window runs it. Guessed, never measured.
 TESTS_CONFIRM_S = 15.0
+
+# Where a session runs, as the rail names it. A VS Code session is a row like
+# any other (CHW-134): the name only says where Send will type.
+ORIGINS = {"claude-vscode": "VS Code", "cli": "terminal", "claude-desktop": "desktop",
+           "sdk-cli": "script", "sdk-py": "script"}
 
 RANK = {"needs": 0, "working": 1, "failed": 2, "finished": 3}
 WORDS = {"needs": "needs you", "working": "working", "failed": "failed", "finished": "finished"}
@@ -216,6 +223,8 @@ def meta(entries: list[dict]) -> dict:
     """Title, model and folder: the newest of each in the tail."""
     out = {"title": "", "model": "", "cwd": "", "mode": ""}
     points = {str(e.get("entrypoint")) for e in entries if e.get("entrypoint")}
+    newest = next((str(e["entrypoint"]) for e in reversed(entries) if e.get("entrypoint")), "")
+    out["origin"] = ORIGINS.get(newest, "")
     for e in reversed(entries):
         if not out["mode"] and e.get("permissionMode"):
             out["mode"] = str(e["permissionMode"])
@@ -324,7 +333,7 @@ def from_transcript(config: Path, path: Path, now: float) -> dict:
     return {
         "id": path.stem, "agent": "claude", "config": str(config), "transcript": str(path),
         "cwd": cwd, "project": project_of(cwd) if cwd else path.parent.name,
-        "interactive": m["interactive"], "mode": m["mode"],
+        "interactive": m["interactive"], "mode": m["mode"], "origin": m["origin"],
         "title": m["title"], "model": short_model(m["model"]), "last": mtime,
         "state": state, "detail": detail, "ask": "",
     }
@@ -351,7 +360,7 @@ def codex_sessions(now: float) -> Iterator[dict]:
                     title = " ".join(text.split())[:80]
         yield {
             "id": path.stem, "agent": "codex", "config": "", "transcript": str(path), "cwd": cwd,
-            "interactive": True,
+            "interactive": True, "origin": "Codex",
             "project": Path(cwd).name if cwd else "codex", "title": title, "model": model,
             "last": mtime, "state": "working" if now - mtime <= WORKING_S else "finished",
             "detail": "", "ask": "",
@@ -778,7 +787,8 @@ def surface_name(sid: str) -> str:
 def session_rows(sessions: list[dict], now: float) -> list[dict]:
     rows = []
     for s in sessions[:MAX_ROWS]:
-        bits = [WORDS.get(s["state"], s["state"]), s["model"], age_words(now - s["last"])]
+        bits = [WORDS.get(s["state"], s["state"]), s.get("origin") or "", s["model"],
+                age_words(now - s["last"])]
         rows.append({
             "id": s["id"], "accent": s["state"] == "needs",
             "text": sessions_inbox.clean(f"{s['project']}: {s['title'] or 'untitled'}")[:90],
@@ -871,6 +881,29 @@ def git_changes(cwd: str) -> list[dict]:
     return rows
 
 
+def change_codes(changes: list[dict]) -> dict[str, str]:
+    """git_changes' rows as repo path -> git's status letters, for the tree."""
+    return {c["id"]: c["text"].split("  ", 1)[0] for c in changes}
+
+
+def tree_name(card: str) -> str:
+    return card + "-tree"
+
+
+def tree_surface(name: str, project: str, rows: list[dict]) -> list[str]:
+    """The tree beside a card: what the session touched plus one level
+    (bin/lib/session_tree.py). A file row's press opens its Diff when git
+    says it changed, else the file itself, editable."""
+    return [
+        f"@ {name} at=right w=320",
+        f"c s Screen title={q('FILES · ' + sessions_inbox.clean(project))}",
+        "r s",
+        "c tr Tree items=@/rows action=open",
+        "> s tr",
+        f"d /rows {json.dumps(rows)}",
+    ]
+
+
 def parse_event(line: str) -> dict | None:
     """`e <name> <component> key=value ...` into a dict, through the one
     shared reader (bin/lib/hud_events.py). None for anything else, and for
@@ -894,6 +927,12 @@ class Serve:
         self.drafts: dict[str, str] = {}
         # Surface name -> when Run tests was first pressed on that card.
         self.tests_armed: dict[str, float] = {}
+        # Tree surface name -> (card surface, row id -> absolute path, repo root).
+        # A press on a tree row can only name a row this daemon drew.
+        self.trees: dict[str, tuple[str, dict[str, str], str]] = {}
+        self.trees_drawn: dict[str, str] = {}
+        # Trees the person took down; not redrawn while their card is open.
+        self.trees_closed: set[str] = set()
         self.closed = False
         # False once the person closes the list: redrawing it would bring
         # back a surface they just took down.
@@ -922,8 +961,44 @@ class Serve:
         name = surface_name(s["id"])
         self.cards[name] = s
         entries = tail_entries(Path(s["transcript"]))
-        self.send(card_surface(s, card_items(entries), git_changes(s["cwd"]), self.blocked(s)))
+        changes = git_changes(s["cwd"])
+        self.send(card_surface(s, card_items(entries), changes, self.blocked(s)))
         self.seen[name] = (Path(s["transcript"]).stat().st_mtime, s["state"])
+        self.trees_closed.discard(tree_name(name))
+        self.draw_tree(name, s, entries, changes)
+
+    def draw_tree(self, card: str, s: dict, entries: list[dict], changes: list[dict]) -> None:
+        """Draw or update the card's tree. Only the rows go on a redraw."""
+        name = tree_name(card)
+        if name in self.trees_closed or not s.get("cwd"):
+            return
+        try:
+            rows, ids, root = session_tree.build(s["cwd"], entries, change_codes(changes))
+        except Exception as err:  # the tree is beside the card; the card stands without it
+            print(f"kyber-sessions: tree: {err}", file=sys.stderr)
+            return
+        if not rows:
+            return
+        drawn = json.dumps(rows)
+        if name not in self.trees:
+            self.send(tree_surface(name, s["project"], rows))
+        elif drawn != self.trees_drawn.get(name):
+            self.send([f"@ {name}", f"d /rows {drawn}"])
+        self.trees[name] = (card, ids, root)
+        self.trees_drawn[name] = drawn
+
+    def open_path(self, s: dict, path: str, root: str) -> None:
+        """A tree row: its Diff when git lists it as changed, else the file,
+        editable when it is a regular file inside the repo."""
+        rel = Path(path).relative_to(root).as_posix() if root and Path(path).is_relative_to(root) else ""
+        if rel and rel in {c["id"] for c in git_changes(s["cwd"])}:
+            self.open_change(s, rel)
+            return
+        if not session_tree.editable(path, root):
+            return
+        name = surface_name(s["id"]) + "-file"
+        self.send([f"@ {name} at=right w=560", f"c s Screen title={q(sessions_inbox.clean(Path(path).name))}",
+                   "r s", f"c f File path={q(path)} editable=true", "> s f"])
 
     def refresh_cards(self) -> None:
         for name, old in list(self.cards.items()):
@@ -941,17 +1016,21 @@ class Serve:
             message, level = status_line(s, self.blocked(s))
             message = sessions_inbox.clean(message)
             entries = tail_entries(Path(s["transcript"]))
+            changes = git_changes(s["cwd"])
             self.send([f"@ {name}",
                        f"d /status {json.dumps({'message': message, 'level': level})}",
                        f"d /t {json.dumps(card_items(entries))}",
-                       f"d /changes {json.dumps(git_changes(s['cwd']))}"])
+                       f"d /changes {json.dumps(changes)}"])
+            self.draw_tree(name, s, entries, changes)
 
-    def show_text(self, name: str, title: str, text: str, beside: str) -> None:
-        """A Diff surface beside the card: read-only text, coloured as a diff."""
+    def show_text(self, name: str, title: str, text: str, beside: str, path: str = "") -> None:
+        """A Diff surface beside the card: read-only text, coloured as a diff,
+        and syntax coloured by the language its `+++` header (or `path`) names."""
         lines = sessions_inbox.clean(text).splitlines()[-600:]
         title = sessions_inbox.clean(title)
+        lang = f" path={q(sessions_inbox.clean(Path(path).name))}" if path else ""
         self.send([f"@ {name} at=right w=520", f"c s Screen title={q(title)}", "r s",
-                   "c d Diff text=@/text", "> s d", f"d /text {json.dumps(chr(10).join(lines))}"])
+                   f"c d Diff text=@/text{lang}", "> s d", f"d /text {json.dumps(chr(10).join(lines))}"])
 
     def run_into(self, s: dict, what: str, path: str | None = None) -> None:
         argv = allowlisted(what, Path(s["cwd"]), path)
@@ -989,12 +1068,28 @@ class Serve:
         if ev["name"] == "open" and surface == "sessions":
             self.open_card(str(ev.get("row") or ""))
             return
+        if surface in self.trees:
+            card, ids, root = self.trees[surface]
+            if ev["name"] == "closed":
+                self.trees.pop(surface, None)
+                self.trees_drawn.pop(surface, None)
+                self.trees_closed.add(surface)
+            elif ev["name"] == "open" and card in self.cards and str(ev.get("row") or "") in ids:
+                self.open_path(self.cards[card], ids[str(ev["row"])], root)
+            return
         s = self.cards.get(surface)
         if not s:
             return
         if ev["name"] == "closed":
             self.cards.pop(surface, None)
             self.drafts.pop(surface, None)
+            tree = tree_name(surface)
+            if tree in self.trees:
+                # The tree belongs to the card: it goes when the card goes.
+                self.trees.pop(tree, None)
+                self.trees_drawn.pop(tree, None)
+                self.send([f"- {tree}"])
+            self.trees_closed.discard(tree)
             return
         if ev["name"] == "reply":
             why = can_send(find(s["id"]) or s)
@@ -1057,7 +1152,7 @@ class Serve:
         out = subprocess.run(["git", "diff", "--no-color", "--", rel], cwd=s["cwd"],
                              capture_output=True, text=True, timeout=20).stdout
         if out.strip():
-            self.show_text(surface_name(s["id"]) + "-diff", "DIFF · " + Path(rel).name, out, "")
+            self.show_text(surface_name(s["id"]) + "-diff", "DIFF · " + Path(rel).name, out, "", rel)
             return
         path = under_home(str(Path(s["cwd"]) / rel))
         if path:
@@ -1190,7 +1285,8 @@ def short_id(sid: str) -> str:
 
 
 def line_for(s: dict, now: float) -> str:
-    bits = [WORDS.get(s["state"], s["state"]), s["project"], s["model"], age_words(now - s["last"])]
+    bits = [WORDS.get(s["state"], s["state"]), s["project"], s.get("origin") or "", s["model"],
+            age_words(now - s["last"])]
     head = "  ".join(b for b in bits if b)
     extra = s.get("ask") or s.get("detail") or ""
     return f"{short_id(s['id'])}  {head}  {s['title'][:60]}" + (f"\n          {extra[:120]}" if extra else "")
@@ -1252,6 +1348,21 @@ def main(argv: list[str]) -> int:
             print("not allowlisted here: status, diff, tests (when the folder declares one)", file=sys.stderr)
             return 2
         return run_streaming(argv2, s["cwd"], print)
+    if cmd == "tree" and rest:
+        s = find(rest[0])
+        if not s:
+            print("no such session", file=sys.stderr)
+            return 1
+        rows, _, root = session_tree.build(s["cwd"], tail_entries(Path(s["transcript"])),
+                                           change_codes(git_changes(s["cwd"])))
+        if "--json" in rest:
+            print(json.dumps({"root": root, "rows": rows}, indent=2))
+        elif rows:
+            print(root)
+            print(session_tree.text_lines(rows))
+        else:
+            print("Nothing touched in a git repo yet.")
+        return 0
     if cmd == "route" and rest:
         print(json.dumps(route(" ".join(rest))))
         return 0

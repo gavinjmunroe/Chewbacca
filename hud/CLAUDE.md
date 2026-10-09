@@ -256,7 +256,8 @@ realm (a design reference; none of its code is used, it carries no license).
 `bin/kyber-sessions serve` (the menu's "Agent sessions") draws `sessions` at
 the left: every Claude Code session from the last three days, what needs you
 first (needs permission, then working, failed, finished), each with project,
-model and age. State comes from the terminal hook's live board where it has
+where it runs (VS Code, terminal, desktop, Codex), model and age. A VS Code
+session is a row like any other; Codex rollouts are listed read only. State comes from the terminal hook's live board where it has
 the session (that is also where the exact permission text comes from) and
 from the transcript's tail otherwise. Scripted `claude -p` runs are left out.
 
@@ -267,6 +268,15 @@ read in the transcript, a changed file, or Open diff opens a `Diff` or `File`
 surface beside the card. Run tests runs only the one test command the folder
 declares (`swift test`, `npm test`, `pytest`) and streams it into a `Diff`
 surface; anything else is asked of the agent.
+
+The card also draws `<card>-tree` at the right: the session's repo collapsed
+to what it touched (its Read and Edit calls, and the files git lists as changed) plus
+one level of context, never the whole repo (bin/lib/session_tree.py, and
+`kyber-sessions tree <id>` for the same rows as text). A changed file's row
+opens its `Diff`; any other file opens in `File` with `editable`, so a hand
+edit saves to that path. A row id is an index the daemon drew, never a path.
+The tree goes when its card goes. There are no tabs, no settings and no file
+menu: Escape, a click away or the voice takes any of these down.
 
 Reply addresses the conversation panel to the card: the daemon sends
 
@@ -305,13 +315,22 @@ refusal.
 ```
 c t Transcript items=@/t action=open
 d /t [{"id":"u1:0","role":"user","text":"make the rail glass"},{"id":"a2:1","role":"tool","tool":"Edit","text":"Edit: /x/Glass.swift","open":true}]
-c d Diff text=@/text
+c d Diff text=@/text path="Glass.swift"
+c tr Tree items=@/rows action=open
+d /rows [{"id":"t0","name":"hud","depth":0,"dir":true},{"id":"t1","name":"Glass.swift","depth":1,"dir":false,"mark":"M"}]
 ```
 
 **Transcript** rows are `user`, `assistant`, `tool` or `error`; a tool row
 with `open` gets a button that sends `e action <action> row=<id>`. **Diff**
-draws text monospaced, `+` green, `-` red, `@@` in the accent, the last 600
-lines.
+draws text monospaced, `+` lines on a green wash, `-` on a red one, `@@` in
+the accent, the last 600 lines. Code inside a diff line is syntax colored by
+the language its `+++` header names, or `path` when there is no header (an
+Edit call's diff); text in no known language (test output, a status) stays
+plain. `File` colors text the same way, and its `editable` editor keeps the
+color while typing (`Sources/KyberKit/Syntax.swift`, a line scanner, not a
+parser). **Tree** rows are `{"id","name","depth","dir"}` with optional
+`mark` (git's letters, `edited`, `read`), `collapsed` and `note`; a file row
+sends `e action <action> row=<id>`, folders are not pressable.
 
 **For hud-listen (the hook to route speech and the hyper bar to a session).**
 "Tell the lemma session to run the tests" resolves with

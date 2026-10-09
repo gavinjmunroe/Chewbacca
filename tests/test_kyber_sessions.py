@@ -424,6 +424,7 @@ def test_serve_draft() -> None:
     srv.lock = threading.Lock()
     srv.cards = {"s-6d901cd1": dict(card)}
     srv.drafts = {}
+    srv.trees, srv.trees_drawn, srv.trees_closed = {}, {}, set()
     sent_lines: list[list[str]] = []
     srv.send = sent_lines.append
     calls: list[tuple] = []
@@ -648,6 +649,7 @@ def test_tests_need_two_presses() -> None:
     srv.lock = threading.Lock()
     srv.cards = {"s-6d901cd1": dict(card)}
     srv.drafts = {}
+    srv.trees, srv.trees_drawn, srv.trees_closed = {}, {}, set()
     srv.tests_armed = {}
     shown: list[tuple] = []
     srv.show_text = lambda name, title, text, beside: shown.append((name, text))
@@ -669,6 +671,82 @@ def test_tests_need_two_presses() -> None:
     check("a folder with no test command needs no confirm", srv.confirm_tests("s-empty", empty))
 
 
+def test_tree() -> None:
+    print("the tree is what the session touched plus one level, and a press names only a drawn row")
+    import subprocess
+    tmp = Path(tempfile.mkdtemp()).resolve()
+    run = lambda *a: subprocess.run(["git", "-C", str(tmp), *a], capture_output=True, check=True)
+    run("init", "-q")
+    for rel in ["src/a.py", "src/b.py", "src/deep/c.py", "docs/x.md", "README.md"]:
+        (tmp / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp / rel).write_text("x = 1\n")
+    run("add", ".")
+    run("-c", "user.name=t", "-c", "user.email=t@example.com", "commit", "-qm", "init")
+    outside = Path(tempfile.mkdtemp()) / "secret.txt"
+    outside.write_text("no")
+    entries = [assistant([
+        {"type": "tool_use", "id": "t1", "name": "Edit", "input": {"file_path": str(tmp / "src/a.py")}},
+        {"type": "tool_use", "id": "t2", "name": "Read", "input": {"file_path": str(tmp / "src/b.py")}},
+        {"type": "tool_use", "id": "t3", "name": "Read", "input": {"file_path": str(outside)}},
+        {"type": "tool_use", "id": "t4", "name": "Read", "input": {"file_path": str(tmp / ".git/config")}},
+        {"type": "tool_use", "id": "t5", "name": "Read", "input": {"file_path": str(tmp / "src/../../etc/passwd")}},
+    ])]
+    rows, ids, root = ks.session_tree.build(str(tmp / "src"), entries, {"README.md": "M"})
+    names = [(r["name"], r["depth"], r.get("mark", "")) for r in rows]
+    check("the root is the repo, found from a sub-folder", root == str(tmp), root)
+    check("edited and read files are marked", ("a.py", 1, "edited") in names and ("b.py", 1, "read") in names, names)
+    check("git's own change is marked", ("README.md", 0, "M") in names, names)
+    check("a sibling folder is one collapsed row, never opened",
+          any(r["name"] == "deep" and r.get("collapsed") for r in rows) and "c.py" not in [n for n, _, _ in names], rows)
+    check("a root-level change shows the root's folders collapsed, not their files",
+          any(r["name"] == "docs" and r.get("collapsed") for r in rows) and "x.md" not in [n for n, _, _ in names], names)
+    check("nothing outside the repo or inside .git", not any(n in ("secret.txt", "config", "passwd") for n, _, _ in names), names)
+    check("ids are indexes, never paths", all(k.startswith("t") and "/" not in k for k in ids), ids)
+    check("ids map only to files in the repo", all(Path(v).resolve().is_relative_to(tmp) for v in ids.values()), ids)
+    check("the text form indents by depth", "  a.py  [edited]" in ks.session_tree.text_lines(rows))
+    check("a folder that is not a repo draws no tree", ks.session_tree.build(str(outside.parent), entries)[0] == [])
+
+    # The daemon: a tree row press opens a File, editable, for an unchanged file;
+    # a row id it never drew does nothing.
+    card = {"id": "6d901cd1-cccc", "project": "demo", "agent": "claude", "state": "finished", "cwd": str(tmp)}
+    srv = object.__new__(ks.Serve)
+    srv.lock = threading.Lock()
+    srv.cards = {"s-6d901cd1": dict(card)}
+    srv.drafts = {}
+    srv.trees, srv.trees_drawn, srv.trees_closed = {}, {}, set()
+    sent: list[list[str]] = []
+    srv.send = sent.append
+    srv.draw_tree("s-6d901cd1", card, entries, [])
+    check("the tree opens beside the card with the Tree component",
+          sent and sent[0][0].startswith("@ s-6d901cd1-tree at=right") and any("Tree items=@/rows" in l for l in sent[0]), sent)
+    srv.draw_tree("s-6d901cd1", card, entries, [])
+    check("an unchanged tree is not redrawn", len(sent) == 1, sent)
+    b_id = next(k for k, v in srv.trees["s-6d901cd1-tree"][1].items() if v.endswith("src/b.py"))
+    srv.handle({"name": "open", "surface": "s-6d901cd1-tree", "row": b_id})
+    check("a file row opens that file, editable",
+          any("File path=" in l and "src/b.py" in l and "editable=true" in l for l in sent[-1]), sent[-1])
+    count = len(sent)
+    srv.handle({"name": "open", "surface": "s-6d901cd1-tree", "row": "../../etc/passwd"})
+    check("a row id it never drew opens nothing", len(sent) == count)
+    srv.handle({"name": "closed", "surface": "s-6d901cd1-tree"})
+    srv.draw_tree("s-6d901cd1", card, entries, [])
+    check("a tree the person closed stays closed", len(sent) == count and "s-6d901cd1-tree" in srv.trees_closed)
+    srv.trees_closed.clear()
+    srv.draw_tree("s-6d901cd1", card, entries, [])
+    srv.handle({"name": "closed", "surface": "s-6d901cd1"})
+    check("closing the card takes its tree down", sent[-1] == ["- s-6d901cd1-tree"] and not srv.trees, sent[-1])
+
+
+def test_origin() -> None:
+    print("a VS Code session is a row like any other, and says where it runs")
+    entries = [user("hi", entrypoint="claude-vscode", cwd="/x/lemma"), assistant([{"type": "text", "text": "ok"}], stop="end_turn")]
+    m = ks.meta(entries)
+    check("VS Code is named as the origin", m["origin"] == "VS Code" and m["interactive"], m)
+    rows = ks.session_rows([{"id": "a", "state": "needs", "origin": "VS Code", "model": "opus", "last": 0,
+                             "project": "lemma", "title": "t"}], 30)
+    check("the rail row carries it", "VS Code" in rows[0]["time"], rows)
+
+
 def main() -> int:
     test_classify()
     test_meta_and_rows()
@@ -686,6 +764,8 @@ def main() -> int:
     test_review_fixes()
     test_card_text_is_cleaned()
     test_tests_need_two_presses()
+    test_tree()
+    test_origin()
     print("all passed" if not FAILED else f"{FAILED} failed")
     return 1 if FAILED else 0
 

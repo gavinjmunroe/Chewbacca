@@ -27,7 +27,7 @@ INPUT="$(cat 2>/dev/null || true)"
 # PreToolUse gives the content BEFORE the write. Write has `content`; Edit has
 # `new_string`. Lint whichever is present against the target path's extension.
 read -r FILE TMP <<EOF
-$(printf '%s' "$INPUT" | python3 -c '
+$(printf '%s' "$INPUT" | python3 -I -c '
 import json, sys, os, tempfile
 try:
     d = json.load(sys.stdin)

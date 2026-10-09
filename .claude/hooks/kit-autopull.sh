@@ -54,7 +54,7 @@ if [ -z "$REPO" ]; then
   REPO="${CHEWBACCA_REPO_DIR:-}"
 fi
 if [ -z "$REPO" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
-  REPO="$(python3 -c '
+  REPO="$(python3 -I -c '
 import json, sys
 try:
     print(json.load(open(sys.argv[1])).get("repo", ""))

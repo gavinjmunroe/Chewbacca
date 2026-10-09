@@ -226,7 +226,7 @@ if [ -n "${VIBE_GUARD_JEV_STUB+set}" ]; then
   ANSWER="$VIBE_GUARD_JEV_STUB"
 else
   [ -n "$JEV_LIB" ] && [ -f "$JEV_LIB/jev.py" ] || exit 0
-  ANSWER=$(printf '%s' "$MSG" | head -c 4000 | python3 -c '
+  ANSWER=$(printf '%s' "$MSG" | head -c 4000 | python3 -I -c '
 import sys
 sys.path.insert(0, sys.argv[1])
 import jev
@@ -249,7 +249,7 @@ fi
 # this public repo, because TypeSafe's customer agreement (2.3(f)) bars
 # publishing Jev performance results. Seven is not a calibration; refit once
 # real turns are labelled.
-python3 -c 'import sys; c, o = map(float, sys.argv[1].split(",")); sys.exit(0 if c >= 0.85 and o < 0.5 else 1)' "$ANSWER" || exit 0
+python3 -I -c 'import sys; c, o = map(float, sys.argv[1].split(",")); sys.exit(0 if c >= 0.85 and o < 0.5 else 1)' "$ANSWER" || exit 0
 
 touch "$GUARD"
 cat >&2 <<'MSG'

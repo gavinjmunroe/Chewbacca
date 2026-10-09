@@ -142,7 +142,7 @@ print(len(missing))
 sys.exit(3)
 PY
 
-N=$(python3 -c "$CHECK" "$MARKER")
+N=$(python3 -I -c "$CHECK" "$MARKER")
 [ $? -eq 3 ] || exit 0
 
 if [ "${N:-1}" -gt 1 ] 2>/dev/null; then

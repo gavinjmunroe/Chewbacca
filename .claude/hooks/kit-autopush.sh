@@ -49,7 +49,7 @@ note() { echo "$(date -u +%FT%TZ) $*" >> "$LOG" 2>/dev/null || true; }
 # per (HEAD, reasons) pair. A new commit or a different failure speaks again.
 HOOK_INPUT=""
 [ -t 0 ] || IFS= read -r -t 1 -d '' HOOK_INPUT || true
-eval "$(printf '%s' "$HOOK_INPUT" | python3 -c '
+eval "$(printf '%s' "$HOOK_INPUT" | python3 -I -c '
 import json, shlex, sys
 try:
     d = json.loads(sys.stdin.read() or "{}")
@@ -92,7 +92,7 @@ if [ -z "$REPO" ]; then
   REPO="${CHEWBACCA_REPO_DIR:-}"
 fi
 if [ -z "$REPO" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
-  REPO="$(python3 -c '
+  REPO="$(python3 -I -c '
 import json, sys
 try:
     print(json.load(open(sys.argv[1])).get("repo", ""))

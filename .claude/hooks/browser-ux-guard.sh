@@ -34,7 +34,7 @@ STATE_DIR="${CHEWIE_STATE_DIR:-$HOME/.chewbacca}"
 # A hook that dies on an unexpected field is a hook that silently allows
 # everything, which is the exact failure feedback_advisory_hooks_do_nothing
 # records. Every read below is defensive and the fallback is "no opinion".
-PARSED="$(printf '%s' "$INPUT" | python3 -c '
+PARSED="$(printf '%s' "$INPUT" | python3 -I -c '
 import json, sys
 try:
     d = json.load(sys.stdin)

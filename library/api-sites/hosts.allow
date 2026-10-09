@@ -1,0 +1,7 @@
+# site host: a third-party host a taught site's own frontend calls, read and
+# approved by a person. chewbacca api sync refuses any other off-domain host.
+
+# 2026-10-09: ycombinator.com/companies searches an Algolia index with the
+# public search-only key the page itself serves. No cookie rides along.
+yc 45bwzj1sgc-dsn.algolia.net
+yc 45bwzj1sgc-3.algolianet.com

@@ -68,54 +68,72 @@ install_engine() {
 # could carry a session somewhere else. Kit specs are logged-out reads; refuse
 # anything that is not.
 spec_is_safe() {
-  python3 - "$1" "$ENGINE_HOME/sessions" <<'PY'
-import json, os, re, sys
-from urllib.parse import urlparse
-path, sessions = sys.argv[1], sys.argv[2]
-try:
-    spec = json.load(open(path))
-except Exception as e:
-    print(f"{os.path.basename(path)}: not JSON ({e})", file=sys.stderr); sys.exit(1)
-name = str(spec.get("name") or os.path.basename(path)[:-5])
-# The engine also keeps cookies a logged-out site sets on a plain call; only a
-# session imported by `login` carries a "source", and only that one is yours.
-sess = os.path.join(sessions, name + ".json")
-try:
-    signed_in = bool(json.load(open(sess)).get("source"))
-except Exception:
-    signed_in = False
-if signed_in:
-    print(f"{name}: you have a signed-in session for this site; a repo spec will not replace it", file=sys.stderr)
-    sys.exit(1)
-def root(host):
-    return ".".join(host.lower().split(".")[-2:])
-home = root(urlparse(str(spec.get("baseUrl", ""))).hostname or "")
-if not home:
-    print(f"{name}: no baseUrl", file=sys.stderr); sys.exit(1)
-for url in re.findall(r"https?://[^\s\"'{}]+", json.dumps(spec)):
-    host = urlparse(url).hostname or ""
-    if host and root(host) != home:
-        print(f"{name}: requests {host}, outside {home}", file=sys.stderr); sys.exit(1)
-PY
+  # Node's WHATWG URL, the parser the engine itself uses, so a URL this check
+  # reads as on-site cannot resolve somewhere else when the engine sends it
+  # (Python's urlparse and WHATWG disagree on "https://evil.com\\@site.com").
+  node - "$1" "$ENGINE_HOME/sessions" "${2:-$(basename "$1")}" "$KIT_SITES/hosts.allow" <<'JS'
+const fs = require("fs"), path = require("path");
+const [file, sessions, shown, allowFile] = process.argv.slice(2);
+const die = (m) => { console.error(m); process.exit(1); };
+let spec;
+try { spec = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { die(`${shown}: not JSON`); }
+const name = String(spec.name || path.basename(shown, ".json"));
+// The engine also keeps cookies a logged-out site sets on a plain call; only a
+// session imported by `login` carries a "source", and only that one is yours.
+try {
+  if (JSON.parse(fs.readFileSync(path.join(sessions, name + ".json"), "utf8")).source)
+    die(`${name}: you have a signed-in session for this site; a repo spec will not replace it`);
+} catch (e) { if (e.code !== "ENOENT" && !(e instanceof SyntaxError)) throw e; }
+// Registrable domain, with the two-letter-country second levels (co.uk, com.au).
+const root = (h) => { const l = h.split("."); const n = /^(co|com|net|org|ac|gov|edu)$/.test(l[l.length - 2] || "") && l[l.length - 1].length === 2 ? 3 : 2; return l.slice(-n).join("."); };
+const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch { return ""; } };
+const base = hostOf(String(spec.baseUrl || ""));
+if (!base || /[{}%]/.test(base)) die(`${name}: baseUrl is missing or templated`);
+const home = root(base);
+// A site whose own frontend calls a third-party API (YC's directory is an
+// Algolia index) lists that exact host in hosts.allow, one "site host" per
+// line, after someone read the request. Nothing else leaves the domain.
+let allowed = new Set();
+try {
+  allowed = new Set(fs.readFileSync(allowFile, "utf8").split("\n").map((l) => l.replace(/#.*/, "").trim().split(/\s+/)).filter((p) => p[0] === name && p[1]).map((p) => p[1].toLowerCase()));
+} catch {}
+// Every string in the spec, keys included: a host can hide in a header value,
+// a redirect, or a template whose host is a parameter.
+const walk = (v, out) => { if (typeof v === "string") out.push(v); else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { out.push(k); walk(x, out); } return out; };
+for (const s of walk(spec, [])) {
+  for (const m of s.matchAll(/(?:[a-z][a-z0-9+.-]*:)?\/\/[^\s"'<>]*/gi)) {
+    const u = m[0].startsWith("//") ? "https:" + m[0] : m[0];
+    if (!/^https?:/i.test(u)) continue;
+    const auth = u.replace(/^https?:\/\//i, "").split(/[/?#]/)[0];
+    if (/[{}%\\@]/.test(auth)) die(`${name}: a request host is templated or obfuscated (${auth})`);
+    const h = hostOf(u);
+    if (!h || (h !== home && !h.endsWith("." + home) && !allowed.has(h))) die(`${name}: requests ${h || u}, outside ${home}`);
+  }
+}
+JS
 }
 
 sync_sites() {
   [ -d "$KIT_SITES" ] || return 0
   mkdir -p "$ENGINE_HOME/sites"
-  local f base dest copied=0
+  local f base dest tmp copied=0
   for f in "$KIT_SITES"/*.json; do
     [ -f "$f" ] || continue
     base="$(basename "$f")"
     dest="$ENGINE_HOME/sites/$base"
-    if ! spec_is_safe "$f"; then
+    # Notes ride along; the engine reads <site>.md as the site's caveats.
+    [ -f "${f%.json}.md" ] && cp "${f%.json}.md" "$ENGINE_HOME/sites/"
+    [ ! -f "$dest" ] || [ "$f" -nt "$dest" ] || continue
+    # Check the copy that gets installed, not the repo file, so nothing can
+    # change between the check and the move.
+    tmp="$(mktemp "$ENGINE_HOME/sites/.$base.XXXXXX")" || continue
+    cp "$f" "$tmp"
+    if ! spec_is_safe "$tmp" "$base"; then
+      rm -f "$tmp"
       say "refused $base: see above" >&2
       continue
     fi
-    if [ ! -f "$dest" ] || [ "$f" -nt "$dest" ]; then
-      cp "$f" "$dest" && copied=$((copied + 1))
-    fi
-    # Notes ride along; the engine reads <site>.md as the site's caveats.
-    [ -f "${f%.json}.md" ] && cp "${f%.json}.md" "$ENGINE_HOME/sites/"
+    mv -f "$tmp" "$dest" && copied=$((copied + 1))
   done
   [ "${1:-}" = "--quiet" ] || say "synced $copied site(s) from the kit"
 }

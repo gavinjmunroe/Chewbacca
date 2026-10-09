@@ -36,6 +36,11 @@ direction and camera, so plan those first:
   twos, a sudden split into simultaneous panels.
 - Type as a character: caption boxes that pop in one frame, onomatopoeia
   only on the big beats.
+- A concept that makes the viewer the subject. Caleb, same night: the
+  takeaway was "cool effects" and not "holy shit that is the coolest site
+  I've ever seen". Effects don't produce that reaction. A site that's about
+  the person looking at it does, so they put themselves in the comic and
+  send it to their group chat. Test it with "would they screenshot this?"
 - Every page in the same world. The apply form after a cinematic home page
   was "ass lmao" (same night). The last page is the last panel of the comic.
 

@@ -230,6 +230,7 @@ PACKS = {
     # CRM was left out of "only". The rest stay in the clone, unlinked.
     "coldoutboundskills": {
         "root": HOME / "Projects/coldoutboundskills",
+        "rev": "25c5d85fbb5dd3efec97b0ca457cbbc286547476",
         "url": "https://github.com/growthenginenowoslawski/coldoutboundskills",
         "description": "Growth Engine X (Eric Nowoslawski) cold outbound skills: copy, deliverability, list quality, Clay playbooks",
         # Skills live under skills/ and skills/playbooks/, so the loop walks
@@ -256,6 +257,7 @@ PACKS = {
     },
     "explorium-gtm-skills": {
         "root": HOME / "Projects/explorium-gtm-skills",
+        "rev": "f0efa6beb697a5b17a3cb7851a7e9cccac57de99",
         "url": "https://github.com/explorium-ai/gtm-skills",
         "description": "Explorium's account research, lead scoring, decision-maker mapping and email personalization skills",
         "only": [
@@ -270,6 +272,7 @@ PACKS = {
     },
     "unify-agent-plugins": {
         "root": HOME / "Projects/unify-agent-plugins",
+        "rev": "2ec253a6e67bcf6346d1949432dd68bde46e7cb2",
         "url": "https://github.com/unifygtm/agent-plugins",
         "description": "Unify GTM's official agent skills: discovery, enrichment, data tables, agent runs",
         "subdir": "unify/skills",
@@ -282,6 +285,7 @@ PACKS = {
     },
     "goose-skills": {
         "root": HOME / "Projects/goose-skills",
+        "rev": "c650c6d4156af77ef2ef6bb3fffcea104c653df8",
         "url": "https://github.com/gooseworks-ai/goose-skills",
         "description": "GooseWorks growth skills: email drafting, sequence analysis, A/B messaging, lead qualification",
         # skills/<category>/<kind>/<name>/SKILL.md
@@ -298,6 +302,7 @@ PACKS = {
     },
     "typesafe-skills": {
         "root": HOME / "Projects/typesafe-skills",
+        "rev": "65a39f393687675ce170e6094757de20370365b9",
         "url": "https://github.com/typesafe-ai/skills",
         "description": "TypeSafe's own skill for System One, the API behind Jev",
         "only": ["typesafe-ai"],
@@ -722,6 +727,7 @@ def collect_skills():
             "only": PACKS[n].get("only", []),
             "subdir": PACKS[n].get("subdir", "skills"),
             "depth": PACKS[n].get("depth", 0),
+            "rev": PACKS[n].get("rev", ""),
             "note": PACKS[n].get("note", []),
         }
         for n, skills in sorted(packs.items())
@@ -985,14 +991,36 @@ def cli_block(cli, packs):
         ]
         if k.get("only"):
             lines += [f'PACK_ONLY="{" ".join(k["only"])}"']
+        if k.get("rev"):
+            # Pinned to the commit whose scripts were read. Cloning a moving
+            # HEAD runs whatever the upstream pushed after the review.
+            rev = k["rev"]
+            lines += [
+                'if [ -d "$PACK_DIR/.git" ]; then',
+                f'  if [ "$(git -C "$PACK_DIR" rev-parse HEAD 2>/dev/null)" = "{rev}" ]; then',
+                f'    log "{k["name"]} already at the vetted commit"',
+                "  else",
+                f'    warn "{k["name"]} is not at the vetted commit {rev[:12]}, left alone"',
+                "  fi",
+                'elif git init -q "$PACK_DIR" \\',
+                '  && git -C "$PACK_DIR" fetch -q --depth 1 "%s.git" %s 2>/dev/null \\' % (k["url"], rev),
+                '  && git -C "$PACK_DIR" checkout -q FETCH_HEAD 2>/dev/null; then',
+                f'  log "{k["name"]} fetched at {rev[:12]}"',
+                "else",
+                f'  warn "could not fetch {k["name"]} at {rev[:12]}"',
+                "fi",
+            ]
+        else:
+            lines += [
+                'if [ -d "$PACK_DIR/.git" ]; then',
+                f'  log "{k["name"]} already cloned, left alone"',
+                'elif git clone -q --depth 1 "%s.git" "$PACK_DIR" 2>/dev/null; then' % k["url"],
+                f'  log "{k["name"]} cloned"',
+                "else",
+                f'  warn "could not clone {k["name"]}"',
+                "fi",
+            ]
         lines += [
-            'if [ -d "$PACK_DIR/.git" ]; then',
-            f'  log "{k["name"]} already cloned, left alone"',
-            'elif git clone -q --depth 1 "%s.git" "$PACK_DIR" 2>/dev/null; then' % k["url"],
-            f'  log "{k["name"]} cloned"',
-            "else",
-            f'  warn "could not clone {k["name"]}"',
-            "fi",
             f'if [ -d "$PACK_DIR/{k["subdir"]}" ]; then',
             '  PACK_N=0',
         ]

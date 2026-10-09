@@ -2761,11 +2761,17 @@ PACK_DIR="$HOME/Projects/coldoutboundskills"
 PACK_SKIP=""
 PACK_ONLY="campaign-copywriting experiment-design spam-word-checker smartlead-spintax deliverability-incident-response cold-email-weekly-rhythm list-quality-scorecard icp-prompt-builder lead-magnet-brainstorm campaign-strategy personalization-subagent-pattern positive-reply-scoring deliverability-test-public smartlead-campaign-upload-public clay-playbooks playbook-first-name-cleaning playbook-company-name-cleaning playbook-ai-specificity playbook-creative-ideas playbook-case-study-page playbook-hiring-surge playbook-new-in-role playbook-fundraising playbook-warm-intros playbook-lookalikes perfect-company-list"
 if [ -d "$PACK_DIR/.git" ]; then
-  log "coldoutboundskills already cloned, left alone"
-elif git clone -q --depth 1 "https://github.com/growthenginenowoslawski/coldoutboundskills.git" "$PACK_DIR" 2>/dev/null; then
-  log "coldoutboundskills cloned"
+  if [ "$(git -C "$PACK_DIR" rev-parse HEAD 2>/dev/null)" = "25c5d85fbb5dd3efec97b0ca457cbbc286547476" ]; then
+    log "coldoutboundskills already at the vetted commit"
+  else
+    warn "coldoutboundskills is not at the vetted commit 25c5d85fbb5d, left alone"
+  fi
+elif git init -q "$PACK_DIR" \
+  && git -C "$PACK_DIR" fetch -q --depth 1 "https://github.com/growthenginenowoslawski/coldoutboundskills.git" 25c5d85fbb5dd3efec97b0ca457cbbc286547476 2>/dev/null \
+  && git -C "$PACK_DIR" checkout -q FETCH_HEAD 2>/dev/null; then
+  log "coldoutboundskills fetched at 25c5d85fbb5d"
 else
-  warn "could not clone coldoutboundskills"
+  warn "could not fetch coldoutboundskills at 25c5d85fbb5d"
 fi
 if [ -d "$PACK_DIR/skills" ]; then
   PACK_N=0
@@ -2792,11 +2798,17 @@ PACK_DIR="$HOME/Projects/explorium-gtm-skills"
 PACK_SKIP=""
 PACK_ONLY="account-research meeting-prep decision-makers-map account-fit-rank score-leads clean-data market-sizing personalize-email"
 if [ -d "$PACK_DIR/.git" ]; then
-  log "explorium-gtm-skills already cloned, left alone"
-elif git clone -q --depth 1 "https://github.com/explorium-ai/gtm-skills.git" "$PACK_DIR" 2>/dev/null; then
-  log "explorium-gtm-skills cloned"
+  if [ "$(git -C "$PACK_DIR" rev-parse HEAD 2>/dev/null)" = "f0efa6beb697a5b17a3cb7851a7e9cccac57de99" ]; then
+    log "explorium-gtm-skills already at the vetted commit"
+  else
+    warn "explorium-gtm-skills is not at the vetted commit f0efa6beb697, left alone"
+  fi
+elif git init -q "$PACK_DIR" \
+  && git -C "$PACK_DIR" fetch -q --depth 1 "https://github.com/explorium-ai/gtm-skills.git" f0efa6beb697a5b17a3cb7851a7e9cccac57de99 2>/dev/null \
+  && git -C "$PACK_DIR" checkout -q FETCH_HEAD 2>/dev/null; then
+  log "explorium-gtm-skills fetched at f0efa6beb697"
 else
-  warn "could not clone explorium-gtm-skills"
+  warn "could not fetch explorium-gtm-skills at f0efa6beb697"
 fi
 if [ -d "$PACK_DIR/skills" ]; then
   PACK_N=0
@@ -2822,11 +2834,17 @@ PACK_DIR="$HOME/Projects/unify-agent-plugins"
 PACK_SKIP=""
 PACK_ONLY="unify agent-runs discovery enrichment data-tables"
 if [ -d "$PACK_DIR/.git" ]; then
-  log "unify-agent-plugins already cloned, left alone"
-elif git clone -q --depth 1 "https://github.com/unifygtm/agent-plugins.git" "$PACK_DIR" 2>/dev/null; then
-  log "unify-agent-plugins cloned"
+  if [ "$(git -C "$PACK_DIR" rev-parse HEAD 2>/dev/null)" = "2ec253a6e67bcf6346d1949432dd68bde46e7cb2" ]; then
+    log "unify-agent-plugins already at the vetted commit"
+  else
+    warn "unify-agent-plugins is not at the vetted commit 2ec253a6e67b, left alone"
+  fi
+elif git init -q "$PACK_DIR" \
+  && git -C "$PACK_DIR" fetch -q --depth 1 "https://github.com/unifygtm/agent-plugins.git" 2ec253a6e67bcf6346d1949432dd68bde46e7cb2 2>/dev/null \
+  && git -C "$PACK_DIR" checkout -q FETCH_HEAD 2>/dev/null; then
+  log "unify-agent-plugins fetched at 2ec253a6e67b"
 else
-  warn "could not clone unify-agent-plugins"
+  warn "could not fetch unify-agent-plugins at 2ec253a6e67b"
 fi
 if [ -d "$PACK_DIR/unify/skills" ]; then
   PACK_N=0
@@ -2852,11 +2870,17 @@ PACK_DIR="$HOME/Projects/goose-skills"
 PACK_SKIP=""
 PACK_ONLY="email-drafting sequence-performance disqualification-handling battlecard-generator messaging-ab-tester inbound-lead-qualification"
 if [ -d "$PACK_DIR/.git" ]; then
-  log "goose-skills already cloned, left alone"
-elif git clone -q --depth 1 "https://github.com/gooseworks-ai/goose-skills.git" "$PACK_DIR" 2>/dev/null; then
-  log "goose-skills cloned"
+  if [ "$(git -C "$PACK_DIR" rev-parse HEAD 2>/dev/null)" = "c650c6d4156af77ef2ef6bb3fffcea104c653df8" ]; then
+    log "goose-skills already at the vetted commit"
+  else
+    warn "goose-skills is not at the vetted commit c650c6d4156a, left alone"
+  fi
+elif git init -q "$PACK_DIR" \
+  && git -C "$PACK_DIR" fetch -q --depth 1 "https://github.com/gooseworks-ai/goose-skills.git" c650c6d4156af77ef2ef6bb3fffcea104c653df8 2>/dev/null \
+  && git -C "$PACK_DIR" checkout -q FETCH_HEAD 2>/dev/null; then
+  log "goose-skills fetched at c650c6d4156a"
 else
-  warn "could not clone goose-skills"
+  warn "could not fetch goose-skills at c650c6d4156a"
 fi
 if [ -d "$PACK_DIR/skills" ]; then
   PACK_N=0
@@ -2881,11 +2905,17 @@ PACK_DIR="$HOME/Projects/typesafe-skills"
 PACK_SKIP=""
 PACK_ONLY="typesafe-ai"
 if [ -d "$PACK_DIR/.git" ]; then
-  log "typesafe-skills already cloned, left alone"
-elif git clone -q --depth 1 "https://github.com/typesafe-ai/skills.git" "$PACK_DIR" 2>/dev/null; then
-  log "typesafe-skills cloned"
+  if [ "$(git -C "$PACK_DIR" rev-parse HEAD 2>/dev/null)" = "65a39f393687675ce170e6094757de20370365b9" ]; then
+    log "typesafe-skills already at the vetted commit"
+  else
+    warn "typesafe-skills is not at the vetted commit 65a39f393687, left alone"
+  fi
+elif git init -q "$PACK_DIR" \
+  && git -C "$PACK_DIR" fetch -q --depth 1 "https://github.com/typesafe-ai/skills.git" 65a39f393687675ce170e6094757de20370365b9 2>/dev/null \
+  && git -C "$PACK_DIR" checkout -q FETCH_HEAD 2>/dev/null; then
+  log "typesafe-skills fetched at 65a39f393687"
 else
-  warn "could not clone typesafe-skills"
+  warn "could not fetch typesafe-skills at 65a39f393687"
 fi
 if [ -d "$PACK_DIR/skills" ]; then
   PACK_N=0

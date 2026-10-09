@@ -1,0 +1,362 @@
+{
+  "name": "usc-classes",
+  "baseUrl": "https://classes.usc.edu",
+  "operations": [
+    {
+      "name": "listPrograms",
+      "description": "All departments (program prefixes) offered in a term, with the school code each one lives under. Pass that school code to listCourses.",
+      "request": {
+        "method": "GET",
+        "url": "https://classes.usc.edu/api/Programs/TermCode?termCode=%7BtermCode%7D",
+        "headers": {
+          "accept": "application/json",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=1, i",
+          "referer": "https://classes.usc.edu/term/{termCode}/catalogue/program",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "x-csrf": ""
+        }
+      },
+      "slots": [
+        {
+          "param": "termCode",
+          "at": [
+            "query:termCode"
+          ]
+        },
+        {
+          "param": "termCode",
+          "at": [
+            "header:referer"
+          ],
+          "template": "https://classes.usc.edu/term/{termCode}/catalogue/program"
+        },
+        {
+          "ref": "session:listPrograms/x-csrf",
+          "at": [
+            "header:x-csrf"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://classes.usc.edu/term/{termCode}/catalogue/program"
+      },
+      "match": {
+        "path": "/api/Programs/TermCode"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "pick": [
+          "program=prefix",
+          "name",
+          "school=schools[0].prefix",
+          "schoolName=schools[0].name"
+        ]
+      },
+      "params": [
+        {
+          "name": "termCode",
+          "type": "string",
+          "required": true,
+          "example": "20271"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:41:46.354Z"
+    },
+    {
+      "name": "listCourses",
+      "description": "Every course a department offers in a term. Needs the school code from listPrograms (CSCI is under ENGV, ACAD under ACAD, WRIT under DRNS).",
+      "request": {
+        "method": "GET",
+        "url": "https://classes.usc.edu/api/Courses/CoursesByTermSchoolProgram?termCode=%7BtermCode%7D&school=%7Bschool%7D&program=%7Bprogram%7D",
+        "headers": {
+          "accept": "application/json",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=1, i",
+          "referer": "https://classes.usc.edu/term/{termCode}/catalogue/program/{program}/school/{school}",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "x-csrf": ""
+        }
+      },
+      "slots": [
+        {
+          "param": "termCode",
+          "at": [
+            "query:termCode"
+          ]
+        },
+        {
+          "param": "program",
+          "at": [
+            "query:program"
+          ]
+        },
+        {
+          "param": "school",
+          "at": [
+            "query:school"
+          ]
+        },
+        {
+          "param": "termCode",
+          "at": [
+            "header:referer"
+          ],
+          "template": "https://classes.usc.edu/term/{termCode}/catalogue/program/{program}/school/{school}"
+        },
+        {
+          "ref": "session:listCourses/x-csrf",
+          "at": [
+            "header:x-csrf"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://classes.usc.edu/term/{termCode}/catalogue/program/{program}/school/{school}"
+      },
+      "match": {
+        "path": "/api/Courses/CoursesByTermSchoolProgram"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "courses",
+        "pick": [
+          "code=scheduledCourseCode.courseHyphen",
+          "title=name",
+          "units=courseUnits",
+          "maxUnits",
+          "description",
+          "seatsTotal=sectionSeatCount",
+          "seatsRemaining=remainingSectionSeats",
+          "sectionCount=sections.length"
+        ]
+      },
+      "params": [
+        {
+          "name": "termCode",
+          "type": "string",
+          "required": true,
+          "example": "20271"
+        },
+        {
+          "name": "program",
+          "type": "string",
+          "required": true,
+          "example": "CSCI"
+        },
+        {
+          "name": "school",
+          "type": "string",
+          "required": true,
+          "example": "ENGV"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:42:52.414Z"
+    },
+    {
+      "name": "searchCourses",
+      "description": "Keyword search over course titles and codes in a term, the same search as the site's search box.",
+      "request": {
+        "method": "GET",
+        "url": "https://classes.usc.edu/api/Search/Basic?termCode=%7BtermCode%7D&searchTerm=%7Bquery%7D",
+        "headers": {
+          "accept": "application/json",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=1, i",
+          "referer": "https://classes.usc.edu/term/{termCode}/catalogue/search?searchphrase={query}",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "x-csrf": ""
+        }
+      },
+      "slots": [
+        {
+          "param": "termCode",
+          "at": [
+            "query:termCode"
+          ]
+        },
+        {
+          "param": "query",
+          "at": [
+            "query:searchTerm"
+          ]
+        },
+        {
+          "param": "termCode",
+          "at": [
+            "header:referer"
+          ],
+          "template": "https://classes.usc.edu/term/{termCode}/catalogue/search?searchphrase={query}"
+        },
+        {
+          "ref": "session:searchCourses/x-csrf",
+          "at": [
+            "header:x-csrf"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://classes.usc.edu/term/{termCode}/catalogue/search?searchphrase={query}"
+      },
+      "match": {
+        "path": "/api/Search/Basic"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "courses",
+        "pick": [
+          "code=scheduledCourseCode.courseHyphen",
+          "title=name",
+          "units=courseUnits",
+          "description",
+          "seatsTotal=sectionSeatCount",
+          "seatsRemaining=remainingSectionSeats"
+        ]
+      },
+      "params": [
+        {
+          "name": "termCode",
+          "type": "string",
+          "required": true,
+          "example": "20271"
+        },
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "example": "entrepreneurship"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:44:22.008Z"
+    },
+    {
+      "name": "getSections",
+      "description": "Sections of one course in a term. course is the code with no space or hyphen (ACAD185, CSCI102, BAEP450). Location is not returned: the site shows it only to signed-in users.",
+      "request": {
+        "method": "GET",
+        "url": "https://classes.usc.edu/api/Courses/Course?termCode=%7BtermCode%7D&courseCode=%7Bcourse%7D",
+        "headers": {
+          "accept": "application/json",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=1, i",
+          "referer": "https://classes.usc.edu/term/{termCode}/catalogue/course/{course}",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "x-csrf": ""
+        }
+      },
+      "slots": [
+        {
+          "param": "termCode",
+          "at": [
+            "query:termCode"
+          ]
+        },
+        {
+          "param": "course",
+          "at": [
+            "query:courseCode"
+          ]
+        },
+        {
+          "param": "termCode",
+          "at": [
+            "header:referer"
+          ],
+          "template": "https://classes.usc.edu/term/{termCode}/catalogue/course/{course}"
+        },
+        {
+          "ref": "session:getSections/x-csrf",
+          "at": [
+            "header:x-csrf"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://classes.usc.edu/term/{termCode}/catalogue/course/{course}"
+      },
+      "match": {
+        "path": "/api/Courses/Course"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "sections",
+        "pick": [
+          "sectionId=sisSectionId",
+          "type=rnrMode",
+          "topic=name",
+          "notes=notes",
+          "schedule=schedule",
+          "instructors=instructors",
+          "registered=registeredSeats",
+          "total=totalSeats",
+          "waitlisted=waitlistedSeats",
+          "units=units",
+          "linkCode=linkCode",
+          "isFull=isFull",
+          "isCancelled=isCancelled",
+          "dClearance=hasDClearance",
+          "syllabus=syllabus"
+        ]
+      },
+      "params": [
+        {
+          "name": "termCode",
+          "type": "string",
+          "required": true,
+          "example": "20271"
+        },
+        {
+          "name": "course",
+          "type": "string",
+          "required": true,
+          "example": "CSCI102"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:47:06.150Z"
+    }
+  ]
+}

@@ -228,6 +228,8 @@ if group "people"; then
       python3 "$ROOT/tests/test_whatsapp_reader.py"
     check "Slack rows come out in the texts reader's shape" \
       python3 "$ROOT/tests/test_slack_reader.py"
+    check "Slack ids link to people by exact name or email, scan first, undo by origin" \
+      python3 "$ROOT/tests/test_slack_link.py"
     check "email rows are human mail only, in the texts reader's shape" \
       python3 "$ROOT/tests/test_email_reader.py"
     check "Gmail trusts only Google's own verdict and the SENT label" \

@@ -19,6 +19,26 @@ the best results always combined procedural with handmade. `[GNO]` The
 failure this skill exists to prevent is the opposite: one uniform post filter
 over everything, which reads as a Snapchat lens rather than a comic.
 
+## A style pass is not the movie
+
+Caleb, 2026-10-09, on a T Combinator build that had halftone, misregistration
+and ink lines over its existing scenes: "ok so far but wouldn't blow ppls
+minds in the way the spiderverse movie did." The shader rules below are
+necessary and nowhere near enough. What blew minds in the theater was art
+direction and camera, so plan those first:
+
+- Universes colliding, each in its own art style (Miles' halftone Brooklyn,
+  Gwen's watercolor, 2099's clean neon marker, Spider-Punk's collage), with
+  a glitch tear between them. One style everywhere reads as a theme.
+- One unforgettable shot, like the Leap of Faith's inverted fall up into
+  the city.
+- Camera language: whip pans with blocky streaks, dutch angles, holds on
+  twos, a sudden split into simultaneous panels.
+- Type as a character: caption boxes that pop in one frame, onomatopoeia
+  only on the big beats.
+- Every page in the same world. The apply form after a cinematic home page
+  was "ass lmao" (same night). The last page is the last panel of the comic.
+
 ## What makes it read as comic and not as a filter
 
 A filter applies one treatment everywhere at one strength. The films decide

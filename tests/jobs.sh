@@ -42,5 +42,21 @@ settle "$id3" running
 check "the next heavy job takes the slot" "$(status "$id3")" running
 "$J" kill "$id3" >/dev/null
 
+# A build takes the machine from a long heavy job and gives it back after.
+idh=$("$J" submit --heavy -- sleep 60 | cut -d' ' -f1)
+settle "$idh" running
+idb=$("$J" submit --build -- sleep 1 | cut -d' ' -f1)
+settle "$idb" running
+check "a build starts with a heavy job in the slot" "$(status "$idb")" running
+"$J" tick >/dev/null
+check "the heavy job yields to the build" "$(status "$idh")" paused
+settle "$idb" done
+"$J" tick >/dev/null
+settle "$idh" running
+check "the heavy job resumes after the build" "$(status "$idh")" running
+idb2=$(JOBS_LOAD=25 "$J" submit --build -- true | cut -d' ' -f1)
+check "a build waits on a busy Mac" "$(JOBS_LOAD=25 status "$idb2")" queued
+"$J" kill "$idh" >/dev/null
+
 [ "$fail" = 0 ] && echo "jobs ok"
 exit "$fail"

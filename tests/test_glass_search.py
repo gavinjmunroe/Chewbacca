@@ -92,7 +92,10 @@ class Fake(http.server.BaseHTTPRequestHandler):
         self.send_header("content-type", ctype)
         self.send_header("content-length", str(len(payload)))
         self.end_headers()
-        self.wfile.write(payload)
+        try:
+            self.wfile.write(payload)
+        except BrokenPipeError:
+            pass  # the timeout test hangs up on purpose
 
 
 def serve() -> tuple[http.server.ThreadingHTTPServer, str]:

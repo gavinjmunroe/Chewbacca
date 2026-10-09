@@ -41,6 +41,14 @@ PATCH_PREFIXES = ('*** Add File: ', '*** Update File: ', '*** Delete File: ', '*
 # filesystem timestamp granularity. Guessed, never measured: 2s covers HFS+
 # one-second mtimes with room to spare.
 MTIME_SLACK = 2.0
+# A context repo is watched on every shell call even when the call never names
+# it, so a long call collects every brain write any other tab made meanwhile.
+# On 2026-10-09 one tab's 10-minute cache cleanup (`cd ~ && uv cache prune`)
+# was credited with 494 transcripts an ingest tab wrote, and stop-check then
+# re-woke that tab four times over files it never touched. A call that runs
+# longer than this claims nothing in a repo it did not name. Guessed, never
+# measured: a script that writes a note finishes well inside a minute.
+IMPLICIT_MAX_CALL = float(os.environ.get('CHEWBACCA_IMPLICIT_MAX_CALL') or 60)
 
 
 def exact_targets(payload):
@@ -294,6 +302,7 @@ def record(payload):
                 changed.update(committed)
                 started = float(prior.get('started') or 0)
                 claimed = others_exact(log, sid, started - MTIME_SLACK) if started else set()
+                unnamed_long = repo in IMPLICIT and started and now - started > IMPLICIT_MAX_CALL
                 for path in sorted(changed):
                     if path in exact:
                         rows.append(f'{now:.6f}\t{sid}\t{path}\tedit\n')
@@ -303,7 +312,7 @@ def record(payload):
                     # commit made inside the call is its own evidence, whatever
                     # the file's mtime.
                     stale = started and path not in committed and not touched_in_window(path, started, now)
-                    if path in claimed or stale:
+                    if path in claimed or stale or unnamed_long:
                         continue
                     rows.append(f'{now:.6f}\t{sid}\t{path}\tbash\n')
             remaining = 1 if is_pre else max(0, pending - 1)

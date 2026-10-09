@@ -163,5 +163,6 @@ the misspelled Amber Intellegence one. A guessed cause sent as fact costs a roun
 Say what you checked and what you're inferring.
 
 Texts to teammates like Maggie go as short pieces sent one after another, each
-under ~60 words, never one numbered block (2026-10-09: a 126-word answer to her
-three questions had to be split into five texts).
+under ~60 words. If she asked numbered questions, answer with matching numbers,
+one short text per number (2026-10-09: a 126-word block got split, then Caleb:
+"She asked in numbered format").

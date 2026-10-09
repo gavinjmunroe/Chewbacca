@@ -159,6 +159,13 @@ rm -f "$T/kit/z16jobs.json" "$T/engine/sessions/z16.json"
 bash "$ROOT/bin/chewbacca-api" mcp >/dev/null 2>&1
 tail -1 "$T/calls" | grep -qx mcp || no "chewbacca api mcp did not start the engine's server"
 
+# A non-spec JSON file kept beside the specs is skipped quietly.
+echo '{"note":"x","timeline":{},"user":{}}' > "$T/kit/notaspec.json"
+err="$(bash "$ROOT/bin/chewbacca-api" sync 2>&1 >/dev/null)"
+[ -f "$T/engine/sites/notaspec.json" ] && no "a non-spec JSON file was installed"
+printf '%s' "$err" | grep -q notaspec && no "a non-spec JSON file printed a refusal"
+rm -f "$T/kit/notaspec.json"
+
 # Calls pass through with their args intact; teach maps to add.
 bash "$ROOT/bin/chewbacca-api" call alpha getThing 'q=two words' >/dev/null
 grep -qx 'call alpha getThing q=two words' "$T/calls" || no "call args changed on the way through"

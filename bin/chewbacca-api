@@ -182,6 +182,10 @@ sync_sites() {
   local f base dest tmp copied=0
   for f in "$KIT_SITES"/*.json; do
     [ -f "$f" ] || continue
+    # Other tools keep config beside the specs (x-timeline.json is a note, a
+    # timeline and a user, no operations). Skipping it installs nothing, the
+    # safe side; refusing it printed a warning on every call.
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,dict) and ("operations" in d or "baseUrl" in d) else 1)' "$f" 2>/dev/null || continue
     base="$(basename "$f")"
     dest="$ENGINE_HOME/sites/$base"
     if [ -f "$dest" ] && ! [ "$f" -nt "$dest" ]; then

@@ -1,0 +1,41 @@
+{
+  "_source": "Detector thresholds. startup_* values are from countinghouse (server/src/rules.ts, derive.ts, advisor.ts). personal_* values are from dime by Charles Zheng, https://github.com/goodnight000/dime (server/cfo.ts, server/money.ts). Dime has no license file in its repository as of 2026-10-09, so only the numbers and formulas are carried, as reimplemented logic, not its code.",
+  "startup": {
+    "duplicate_window_days": 3,
+    "duplicate_rule": "same normalized vendor and identical amount on a card account within 3 days",
+    "unusual_first_time_vendor_min": 5000,
+    "unusual_multiple_of_median": 4,
+    "unusual_multiple_min_history": 4,
+    "unusual_multiple_min_amount": 2000,
+    "unusual_note": "Source: a first-ever payment to a vendor of $5,000 or more, or a charge over 4x the vendor's median with at least 4 charges on record and over $2,000. Transfers, Payroll and Payroll Taxes are exempt.",
+    "payroll_load_multiplier": 1.25,
+    "payroll_load_note": "Source adds 25% to salary for taxes and benefits when modeling a hire. Default salary in the source scenario was 160000.",
+    "contractor_1099_threshold": 600,
+    "contractor_1099_verify": "The source uses $600. Check the current IRS threshold for the payment year; a law change may have raised it for payments made after 2025.",
+    "backup_withholding_rate": 0.24,
+    "runway_fundraise_lead_months": 9,
+    "runway_fundraise_note": "Source tells the founder to start Series A prep when runway falls to 9 months.",
+    "runway_warn_below_months": 12,
+    "spike_pct": 30,
+    "spike_min_dollars": 500,
+    "spike_note": "Chosen here, never measured. The source flags AWS +38% since June by eye; it has no coded spike threshold. The 30 percent borrows dime's category trend threshold."
+  },
+  "personal": {
+    "daily_number": "pool = income - bills - invest - discretionary spend this month - sweeps to goals this month; today = max(0, floor(pool at start of day / days left including today) - spent today)",
+    "sweep": "Leftover from today moves to the active goal at midnight and leaves the pool, so under-spending does not inflate tomorrow. Overspending lowers the pool, so tomorrow shrinks by itself.",
+    "girl_math_pace": "average sweep over the last 7 days, else a quarter of today's number, never below $1 a day",
+    "girl_math_eta_days": "ceil((goal price - saved) / pace)",
+    "girl_math_delay_days": "ceil(price / pace); under one day of pace say hours",
+    "bill_hike_dollars": 5,
+    "bill_hike_pct": 0.1,
+    "unused_subscription_days": 30,
+    "trial_warning_days": 7,
+    "idle_cash_window_days": 60,
+    "idle_cash_cushion_months_of_bills": 1.5,
+    "idle_cash_step": 500,
+    "trend_pct": 0.3,
+    "trend_min_dollars": 50,
+    "parking_rule": "Money for a goal under 2 years out sits in cash; over 2 years, an index fund. (Dime's literacy moment. Education, not advice.)",
+    "impulse_rule": "24-hour wait on purchases above today's number (the Reddit-sourced waiting period Dime built a feature around)."
+  }
+}

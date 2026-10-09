@@ -1,0 +1,304 @@
+{
+  "_source": "Adapted from countinghouse by Charles Zheng (MIT), https://github.com/goodnight000/countinghouse, server/src/derive.ts taxes()",
+  "_scope": "Dates fit a calendar-year Delaware C-corporation. An LLC, an S-corp, a student organization or an unincorporated club has a different calendar. The source built these for a fictional company (Lumen Labs) and hard-coded 2026 to 2027 dates; they are generalized here to annual recurrences. Nothing here is legal or tax advice.",
+  "_weekends": "The source lists nominal dates. The IRS generally moves a due date that falls on a weekend or legal holiday to the next business day; the script rolls weekends only and does not know holidays. Verify.",
+  "events": [
+    {
+      "id": "941",
+      "title": "Quarterly federal payroll tax return",
+      "authority": "IRS",
+      "form": "Form 941",
+      "dates": [
+        [
+          4,
+          30
+        ],
+        [
+          7,
+          31
+        ],
+        [
+          10,
+          31
+        ],
+        [
+          1,
+          31
+        ]
+      ],
+      "applies_to": [
+        "payroll"
+      ],
+      "note": "Covers the quarter that just ended (Q1 due Apr 30, Q2 Jul 31, Q3 Oct 31, Q4 Jan 31). A payroll provider such as Gusto usually files it; confirm deposits match.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "de9",
+      "title": "California quarterly payroll report",
+      "authority": "California",
+      "form": "DE 9",
+      "dates": [
+        [
+          4,
+          30
+        ],
+        [
+          7,
+          31
+        ],
+        [
+          10,
+          31
+        ],
+        [
+          1,
+          31
+        ]
+      ],
+      "applies_to": [
+        "payroll",
+        "california"
+      ],
+      "note": "EDD quarterly wage report. Payroll provider usually files it.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "est-tax",
+      "title": "Federal estimated corporate income tax installment",
+      "authority": "IRS",
+      "form": "Form 1120-W",
+      "dates": [
+        [
+          4,
+          15
+        ],
+        [
+          6,
+          15
+        ],
+        [
+          9,
+          15
+        ],
+        [
+          12,
+          15
+        ]
+      ],
+      "applies_to": [
+        "c_corp"
+      ],
+      "note": "No payment needed with a net operating loss. Skip unless the company turns a profit. Dates fit a calendar-year corporation.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "1099-nec",
+      "title": "1099-NEC to contractors",
+      "authority": "IRS",
+      "form": "1099-NEC",
+      "dates": [
+        [
+          1,
+          31
+        ]
+      ],
+      "applies_to": [
+        "contractors"
+      ],
+      "note": "Send to everyone paid over the threshold for the year, lawyers included. Collect a W-9 before the first payment; without one, backup withholding may apply (24 percent in the source).",
+      "verify": "The source uses a $600 threshold. A law change may have raised it for payments after 2025: check the current IRS General Instructions for 1099-NEC."
+    },
+    {
+      "id": "w2",
+      "title": "W-2 and W-3 to employees and SSA",
+      "authority": "Payroll",
+      "form": "W-2 / W-3",
+      "dates": [
+        [
+          1,
+          31
+        ]
+      ],
+      "applies_to": [
+        "payroll"
+      ],
+      "note": "Payroll provider generates and files them.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "940",
+      "title": "Annual federal unemployment tax return",
+      "authority": "IRS",
+      "form": "Form 940",
+      "dates": [
+        [
+          1,
+          31
+        ]
+      ],
+      "applies_to": [
+        "payroll"
+      ],
+      "note": "FUTA. The source estimates about $42 per employee; the payroll provider files it.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "3921",
+      "title": "ISO exercise reporting",
+      "authority": "IRS",
+      "form": "Form 3921",
+      "dates": [
+        [
+          1,
+          31
+        ]
+      ],
+      "applies_to": [
+        "options"
+      ],
+      "note": "Only if an employee exercised incentive stock options that year. Carta can generate it. The IRS filing date differs from the employee copy date, so verify both.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "ca-soi",
+      "title": "California Statement of Information",
+      "authority": "California",
+      "form": "Form SI-550",
+      "dates": [
+        [
+          2,
+          28
+        ]
+      ],
+      "applies_to": [
+        "california"
+      ],
+      "note": "Source: every two years, $25, update officers and address; foreign corps registered in California file too. The real due month is the incorporation anniversary month, so the Feb 28 date was specific to the demo company (incorporated Feb 14).",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it.",
+      "date_depends_on": "incorporation anniversary month"
+    },
+    {
+      "id": "de-franchise",
+      "title": "Delaware franchise tax and annual report",
+      "authority": "Delaware",
+      "form": "Annual Franchise Tax Report",
+      "dates": [
+        [
+          3,
+          1
+        ]
+      ],
+      "applies_to": [
+        "delaware",
+        "c_corp"
+      ],
+      "note": "The default notice uses the authorized-shares method. Recompute with the assumed par value method (run: finance.py franchise-tax) and file with the lower result.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "1120",
+      "title": "Federal corporate income tax return",
+      "authority": "IRS",
+      "form": "Form 1120",
+      "dates": [
+        [
+          4,
+          15
+        ]
+      ],
+      "applies_to": [
+        "c_corp"
+      ],
+      "note": "Annual C-corp return. A loss means $0 tax but the return is still required, or extend with Form 7004.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "6765",
+      "title": "R&D tax credit",
+      "authority": "IRS",
+      "form": "Form 6765",
+      "dates": [
+        [
+          4,
+          15
+        ]
+      ],
+      "applies_to": [
+        "c_corp",
+        "rd"
+      ],
+      "note": "Attached to the Form 1120. A qualified small business may elect to apply up to $500,000 a year against payroll taxes. The source's rough estimate was 6.6 percent of qualified engineering wages, a modeling shortcut; have a CPA size it.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "ca-100",
+      "title": "California corporate tax return",
+      "authority": "California",
+      "form": "Form 100",
+      "dates": [
+        [
+          4,
+          15
+        ]
+      ],
+      "applies_to": [
+        "california",
+        "c_corp"
+      ],
+      "note": "The source says California charges an $800 minimum franchise tax even with no profit. First-year exemptions may exist, so verify.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "ca-100es",
+      "title": "California estimated tax",
+      "authority": "California",
+      "form": "Form 100-ES",
+      "dates": [
+        [
+          4,
+          15
+        ]
+      ],
+      "applies_to": [
+        "california",
+        "c_corp"
+      ],
+      "note": "First installment of next year's $800 minimum, per the source.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "sf-abt",
+      "title": "San Francisco annual business tax return",
+      "authority": "Other",
+      "form": "SF ABT",
+      "dates": [
+        [
+          2,
+          28
+        ]
+      ],
+      "applies_to": [
+        "sf"
+      ],
+      "note": "Local example from the demo company. Likely exempt under the small business threshold but still filed. Only relevant in San Francisco.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    },
+    {
+      "id": "sf-reg",
+      "title": "San Francisco business registration renewal",
+      "authority": "Other",
+      "form": "SF Business Registration",
+      "dates": [
+        [
+          5,
+          31
+        ]
+      ],
+      "applies_to": [
+        "sf"
+      ],
+      "note": "Local example from the demo company. Annual fee based on payroll or gross receipts.",
+      "verify": "Source claim from countinghouse's snapshot dated 2026-09-27. Verify against the current IRS or state page before relying on it."
+    }
+  ]
+}

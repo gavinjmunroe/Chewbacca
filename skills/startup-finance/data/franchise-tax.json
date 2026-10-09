@@ -1,0 +1,30 @@
+{
+  "_source": "Adapted from countinghouse by Charles Zheng (MIT), https://github.com/goodnight000/countinghouse, server/src/derive.ts franchiseTax() and server/smoke.ts",
+  "_verify": "Every number here is the source's claim as of its 2026-09-27 snapshot. Check the current schedule, minimums, caps, the annual report fee and late penalties against the Delaware Division of Corporations franchise tax page (corp.delaware.gov/paytaxes) before filing. This skill computes; it does not file.",
+  "due": "March 1 each year, for the prior calendar year, for a Delaware C-corporation.",
+  "annual_report_fee": 50,
+  "authorized_shares_method": {
+    "up_to_5000": 175,
+    "5001_to_10000": 250,
+    "per_additional_10000_or_part": 85,
+    "cap": 200000,
+    "note": "Delaware's default notice uses this method, which is why a company with 10,000,000 authorized shares is told $85,215."
+  },
+  "assumed_par_value_capital_method": {
+    "steps": [
+      "assumed par = total gross assets / issued shares, floored at the stated par value",
+      "assumed par value capital (APVC) = assumed par x authorized shares",
+      "tax = $400 per $1,000,000 of APVC or portion thereof, minimum $400, capped at $200,000",
+      "add the annual report fee"
+    ],
+    "rate_per_million": 400,
+    "minimum": 400,
+    "cap": 200000,
+    "note": "The company files with whichever method gives the lower tax. Gross assets come from the company's own balance sheet as of the fiscal year end; the source projects them from cash plus hardware, which is a modeling shortcut."
+  },
+  "worked_examples": [
+    {"name": "countinghouse README and smoke test", "authorized": 10000000, "issued": 8000000, "par": 0.00001, "gross_assets": 1579472, "authorized_shares_total": 85215, "assumed_par_value_total": 850},
+    {"name": "zero assets floors at the minimum", "authorized": 10000000, "issued": 8000000, "par": 0.00001, "gross_assets": 0, "assumed_par_value_total": 450},
+    {"name": "2.4M assets", "authorized": 10000000, "issued": 8000000, "par": 0.00001, "gross_assets": 2400000, "assumed_par_value_total": 1250}
+  ]
+}

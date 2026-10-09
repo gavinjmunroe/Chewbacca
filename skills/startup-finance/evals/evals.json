@@ -1,0 +1,45 @@
+{
+  "skill": "startup-finance",
+  "cases": [
+    {
+      "prompt": "Delaware says we owe $85,215 in franchise tax, we have 10M authorized shares and 8M issued, about $1.58M in assets. Is that right?",
+      "expect_tools": ["startup-finance", "finance.py franchise-tax"],
+      "why": "the headline case: the default notice is the authorized-shares method; the assumed par value method gives $850. Must compute, not recall, and flag verification.",
+      "reject": ["telling them to pay $85,215", "asserting the rate as current without a verify note"]
+    },
+    {
+      "prompt": "We have $2.1M in the bank and burn $180k a month. What if we hire two engineers?",
+      "expect_tools": ["startup-finance", "finance.py runway"],
+      "why": "runway scenarios use the 1.25 payroll load and must come from the script, not mental math",
+      "reject": ["estimating runway without running it"]
+    },
+    {
+      "prompt": "Here's our Mercury export, can you categorize it and find anything weird?",
+      "expect_tools": ["startup-finance", "finance.py categorize", "finance.py leaks"],
+      "why": "bank CSV in, vendor and category plus duplicate and unusual flags out",
+      "reject": ["guessing categories row by row without the rulebook"]
+    },
+    {
+      "prompt": "Do I need to send 1099s to our contractors this year and what if one never gave us a W-9?",
+      "expect_tools": ["startup-finance", "finance.py contractors"],
+      "why": "threshold and withholding rate are source claims that must be surfaced as needing verification",
+      "reject": ["stating the $600 threshold as settled current law"]
+    },
+    {
+      "prompt": "What tax deadlines do we have coming up for our Delaware C-corp?",
+      "expect_tools": ["startup-finance", "finance.py calendar"],
+      "why": "the calendar is data with a verify field; it assumes a calendar-year C-corp and must ask or state that assumption"
+    },
+    {
+      "prompt": "How much can I spend today if I make $3,200 a month and my bills are $1,700, and would a $280 pair of sneakers push back my iPhone fund?",
+      "expect_tools": ["startup-finance", "finance.py daily-number", "finance.py girl-math"],
+      "why": "personal budget math from dime: daily number and goal delay are computed, then worded"
+    },
+    {
+      "prompt": "How do I get a student org like TTS its own bank account and EIN?",
+      "expect_tools": [],
+      "why": "negative case: entity setup is not what this skill computes; it must not run the script or assert tax rules for an RSO",
+      "reject": ["running franchise-tax for an unincorporated club"]
+    }
+  ]
+}

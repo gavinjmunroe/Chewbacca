@@ -1,0 +1,261 @@
+{
+  "_source": "Adapted from countinghouse by Charles Zheng (MIT), https://github.com/goodnight000/countinghouse, server/src/rules.ts and server/src/mcp.ts",
+  "_notes": [
+    "First match wins, so order matters: GUSTO TAX must stay above GUSTO.",
+    "Patterns are case-insensitive regexes matched against the raw bank descriptor.",
+    "Three demo-company contractor rules (JKL Design, Priya Raman, Marco Diaz) from the source were dropped as fixture data.",
+    "Learned rules (a founder correcting a vendor) override this file; pass them with --learned."
+  ],
+  "non_spend_categories": [
+    "Transfers",
+    "Revenue",
+    "Interest"
+  ],
+  "unusual_exempt_categories": [
+    "Transfers",
+    "Payroll",
+    "Payroll Taxes"
+  ],
+  "categories": [
+    "Revenue",
+    "Interest",
+    "Payroll",
+    "Payroll Taxes",
+    "Contractors",
+    "Cloud & Infra",
+    "AI & APIs",
+    "Software",
+    "Rent & Office",
+    "Legal & Accounting",
+    "Marketing",
+    "Travel & Meals",
+    "Hardware",
+    "Insurance",
+    "Taxes & Fees",
+    "Bank Fees",
+    "Transfers",
+    "Other"
+  ],
+  "rules": [
+    {
+      "pattern": "AMAZON WEB SERVICES|AWS\\.AMAZON|^AWS ",
+      "vendor": "AWS",
+      "category": "Cloud & Infra"
+    },
+    {
+      "pattern": "GOOGLE \\*CLOUD|GOOGLE CLOUD",
+      "vendor": "Google Cloud",
+      "category": "Cloud & Infra"
+    },
+    {
+      "pattern": "GOOGLE \\*ADS|GOOGLE ADS",
+      "vendor": "Google Ads",
+      "category": "Marketing"
+    },
+    {
+      "pattern": "GSUITE|GOOGLE \\*WORKSPACE",
+      "vendor": "Google Workspace",
+      "category": "Software"
+    },
+    {
+      "pattern": "VERCEL",
+      "vendor": "Vercel",
+      "category": "Cloud & Infra"
+    },
+    {
+      "pattern": "DATADOG",
+      "vendor": "Datadog",
+      "category": "Cloud & Infra"
+    },
+    {
+      "pattern": "SENTRY",
+      "vendor": "Sentry",
+      "category": "Software"
+    },
+    {
+      "pattern": "OPENAI",
+      "vendor": "OpenAI",
+      "category": "AI & APIs"
+    },
+    {
+      "pattern": "ANTHROPIC",
+      "vendor": "Anthropic",
+      "category": "AI & APIs"
+    },
+    {
+      "pattern": "FIGMA",
+      "vendor": "Figma",
+      "category": "Software"
+    },
+    {
+      "pattern": "LINEAR",
+      "vendor": "Linear",
+      "category": "Software"
+    },
+    {
+      "pattern": "NOTION",
+      "vendor": "Notion",
+      "category": "Software"
+    },
+    {
+      "pattern": "SLACK",
+      "vendor": "Slack",
+      "category": "Software"
+    },
+    {
+      "pattern": "GITHUB",
+      "vendor": "GitHub",
+      "category": "Software"
+    },
+    {
+      "pattern": "ZOOM\\.US|ZOOM VIDEO",
+      "vendor": "Zoom",
+      "category": "Software"
+    },
+    {
+      "pattern": "1PASSWORD|AGILEBITS",
+      "vendor": "1Password",
+      "category": "Software"
+    },
+    {
+      "pattern": "SALESFORCE",
+      "vendor": "Salesforce",
+      "category": "Software"
+    },
+    {
+      "pattern": "CARTA|ESHARES",
+      "vendor": "Carta",
+      "category": "Software"
+    },
+    {
+      "pattern": "CLERKY",
+      "vendor": "Clerky",
+      "category": "Legal & Accounting"
+    },
+    {
+      "pattern": "COOLEY",
+      "vendor": "Cooley",
+      "category": "Legal & Accounting"
+    },
+    {
+      "pattern": "PILOT\\.COM",
+      "vendor": "Pilot",
+      "category": "Legal & Accounting"
+    },
+    {
+      "pattern": "WEWORK",
+      "vendor": "WeWork",
+      "category": "Rent & Office"
+    },
+    {
+      "pattern": "EMBROKER",
+      "vendor": "Embroker",
+      "category": "Insurance"
+    },
+    {
+      "pattern": "GUSTO TAX",
+      "vendor": "Gusto",
+      "category": "Payroll Taxes"
+    },
+    {
+      "pattern": "GUSTO",
+      "vendor": "Gusto",
+      "category": "Payroll"
+    },
+    {
+      "pattern": "LINKEDIN",
+      "vendor": "LinkedIn Ads",
+      "category": "Marketing"
+    },
+    {
+      "pattern": "UBER",
+      "vendor": "Uber",
+      "category": "Travel & Meals"
+    },
+    {
+      "pattern": "LYFT",
+      "vendor": "Lyft",
+      "category": "Travel & Meals"
+    },
+    {
+      "pattern": "DOORDASH",
+      "vendor": "DoorDash",
+      "category": "Travel & Meals"
+    },
+    {
+      "pattern": "BLUE BOTTLE",
+      "vendor": "Blue Bottle Coffee",
+      "category": "Travel & Meals"
+    },
+    {
+      "pattern": "DELTA AIR",
+      "vendor": "Delta",
+      "category": "Travel & Meals"
+    },
+    {
+      "pattern": "^UNITED \\d",
+      "vendor": "United Airlines",
+      "category": "Travel & Meals"
+    },
+    {
+      "pattern": "AIRBNB",
+      "vendor": "Airbnb",
+      "category": "Travel & Meals"
+    },
+    {
+      "pattern": "APPLE\\.COM|APPLE STORE",
+      "vendor": "Apple",
+      "category": "Hardware"
+    },
+    {
+      "pattern": "DE DIV OF CORP|DELAWARE",
+      "vendor": "Delaware Division of Corporations",
+      "category": "Taxes & Fees"
+    },
+    {
+      "pattern": "FRANCHISE TAX BD|FTB",
+      "vendor": "California FTB",
+      "category": "Taxes & Fees"
+    },
+    {
+      "pattern": "STRIPE (PROCESSING )?FEES",
+      "vendor": "Stripe",
+      "category": "Bank Fees"
+    },
+    {
+      "pattern": "STRIPE TRANSFER|STRIPE PAYOUT",
+      "vendor": "Stripe",
+      "category": "Transfers"
+    },
+    {
+      "pattern": "STRIPE CHARGE",
+      "vendor": "Stripe",
+      "category": "Revenue"
+    },
+    {
+      "pattern": "TREASURY INTEREST|INTEREST PAYMENT",
+      "vendor": "Mercury",
+      "category": "Interest"
+    },
+    {
+      "pattern": "MERCURY TREASURY|MERCURY CHECKING",
+      "vendor": "Mercury",
+      "category": "Transfers"
+    },
+    {
+      "pattern": "BREX INC PAYMENT|BREX PAYMENT",
+      "vendor": "Brex",
+      "category": "Transfers"
+    },
+    {
+      "pattern": "RAMP PAYMENT",
+      "vendor": "Ramp",
+      "category": "Transfers"
+    },
+    {
+      "pattern": "INCOMING WIRE",
+      "vendor": "Seed investors",
+      "category": "Transfers"
+    }
+  ]
+}

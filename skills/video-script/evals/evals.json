@@ -1,0 +1,33 @@
+{
+  "skill": "video-script",
+  "cases": [
+    {
+      "prompt": "What should I post next? I make reels about AI tools",
+      "expect_tools": [
+        "video-script"
+      ],
+      "why": "at least ten candidates across three formats, ranked by reach, proof and hook, top three developed with a hook that finishes in 3 seconds"
+    },
+    {
+      "prompt": "Write a script for a 45 second reel about the thing I built last week",
+      "expect_tools": [
+        "video-script"
+      ],
+      "why": "one idea, payoff and proof first, hook written last, a time/line/picture table, two alternate hooks and claims to verify"
+    },
+    {
+      "prompt": "Here's a screenshot of my reel insights, what went wrong?",
+      "expect_tools": [
+        "video-script"
+      ],
+      "why": "read the curve with scripts/retention_curve.py, tie every cliff to the passage before it, compare against the library, never guess an uncaptured number"
+    },
+    {
+      "prompt": "Edit my reel so the hook hits harder",
+      "expect_tools": [
+        "video-edit"
+      ],
+      "why": "cutting footage is video-edit, not script writing"
+    }
+  ]
+}

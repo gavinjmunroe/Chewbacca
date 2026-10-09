@@ -1,0 +1,55 @@
+{
+  "skill": "animated-video",
+  "cases": [
+    {
+      "prompt": "Here's my 70-second script about starting my company. Create an animation for it with a voiceover.",
+      "expect_tools": [
+        "animated-video"
+      ],
+      "why": "names candidate formats and the production route, asks for reference photos of the real person, and shows one style frame before any full build",
+      "reject": [
+        "builds the full timeline before the format is confirmed"
+      ]
+    },
+    {
+      "prompt": "Make a 45-second animated explainer about how our API rate limits work, for LinkedIn in 1:1.",
+      "expect_tools": [
+        "animated-video"
+      ],
+      "why": "style comes from the new brief and LinkedIn 1:1 framing, never from an earlier film's rig, palette or Instagram safe zones",
+      "reject": [
+        "reuses the earlier film's colour script"
+      ]
+    },
+    {
+      "prompt": "Make a 30-second hand-drawn stop-motion animation about a cat who learns to code, for X. Here's a screenshot of the cat.",
+      "expect_tools": [
+        "animated-video"
+      ],
+      "why": "named format is confirmed in one line, one agent with a storyboard, designed from the screenshot, content-grown transitions and seeded randomness",
+      "reject": [
+        "parallel animators and a judge panel for a 30 second piece"
+      ]
+    },
+    {
+      "prompt": "Use the animated-video skill to make a short animated video about a story you come up with.",
+      "expect_tools": [
+        "animated-video"
+      ],
+      "why": "story is directed first: intake questions in one message, three concepts, a timed beat sheet, then wait for approval",
+      "reject": [
+        "writes the storyboard before the user approves the beat sheet"
+      ]
+    },
+    {
+      "prompt": "Animate this equation derivation with graphs, 3blue1brown style",
+      "expect_tools": [
+        "manim"
+      ],
+      "why": "equations and proofs route to manim, not Remotion",
+      "reject": [
+        "animated-video"
+      ]
+    }
+  ]
+}

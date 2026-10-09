@@ -1,0 +1,43 @@
+{
+  "skill": "video-edit",
+  "cases": [
+    {
+      "prompt": "Cut this talking head reel, I did like five takes and said 'cut that' a couple times",
+      "expect_tools": [
+        "video-edit"
+      ],
+      "why": "transcribe once, mark spoken rejections, pick the longest fluent take, run restart_scan before the first render"
+    },
+    {
+      "prompt": "My audio is really quiet in this recording, fix it and add captions",
+      "expect_tools": [
+        "video-edit"
+      ],
+      "why": "quiet-audio recovery and caption path (make_captions.py) are in the technical reference"
+    },
+    {
+      "prompt": "Recreate this reel with my footage, here is the link",
+      "expect_tools": [
+        "video-edit"
+      ],
+      "why": "download and measure the reference (cuts, camera motion, text position) and name its styles before touching footage"
+    },
+    {
+      "prompt": "Make b-roll for every sentence so there's always something on screen",
+      "expect_tools": [
+        "video-edit"
+      ],
+      "why": "visuals must match the spoken claim with provenance; list uncovered beats instead of filling with unrelated stock",
+      "reject": [
+        "generic server stock footage"
+      ]
+    },
+    {
+      "prompt": "Edit the footage from my product demo recording",
+      "expect_tools": [
+        "video-edit"
+      ],
+      "why": "editing existing screen capture belongs here; recording the demo is the demo skill"
+    }
+  ]
+}

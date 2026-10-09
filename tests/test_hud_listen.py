@@ -1928,11 +1928,31 @@ def test_routing(m) -> None:
     m.OPEN_CMD = shlex.split(f"sh -c 'echo \"$0\" >> {opened}'")
 
     listener.open_browser = lambda said: ("chrome: test", False)  # type: ignore[method-assign]
-    run_req = m.Request(said="look up rust traits", spoken_at=time.monotonic(), pointed=None)
+    # "in chrome": a bare "look up X" reaching `_run` is answered on the glass
+    # since CHW-188, checked just below.
+    run_req = m.Request(said="in chrome look up rust traits", spoken_at=time.monotonic(), pointed=None)
     outcome = listener._run(run_req)
     check("_run reports a failed open as failed", outcome == "failed", f"got {outcome!r}")
     check("a failed open is recorded as failed, not done",
           m.voice_memory.last()["outcome"] == "failed" and m.voice_memory.last()["dest"] == "browser")
+
+    # A search that reaches the router mid-run goes to the glass, never to
+    # Chrome. The backend is stubbed: no test touches the network.
+    browser_calls: list[str] = []
+    listener.open_browser = lambda said: browser_calls.append(said) or ("chrome: x", True)  # type: ignore[method-assign]
+    real_search = m.glass_search.search
+    m.glass_search.search = lambda q, timeout=0: m.glass_search.Result(
+        query=q, answer="Traits define shared behavior.", answer_host="doc.rust-lang.org",
+        sources=[m.glass_search.Source("Traits", "https://doc.rust-lang.org/book/ch10-02-traits.html",
+                                       "doc.rust-lang.org")], backend="stub")
+    try:
+        outcome = listener._run(m.Request(said="look up rust traits", spoken_at=time.monotonic(), pointed=None))
+    finally:
+        m.glass_search.search = real_search
+    check("a search in _run is answered on the glass", outcome == "done", f"got {outcome!r}")
+    check("and never opens the browser", browser_calls == [], browser_calls)
+    check("the drawn row is the only one a press can open",
+          listener.search_rows == {"src-0": "https://doc.rust-lang.org/book/ch10-02-traits.html"}, listener.search_rows)
 
     req = m.Request(said="text caleb hi", spoken_at=time.monotonic(), pointed=None)
     check("a text is the assistant's", listener.decide(req, "Google Chrome · Docs").dest == "assistant")

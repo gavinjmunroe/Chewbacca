@@ -608,6 +608,38 @@ def test_reply_text_cannot_drive_the_terminal():
     ok("\x9b" not in blob, blob)
 
 
+# Security review 2026-10-09: TAG, BREAK and QUOTE_HTML were quadratic on a
+# body of "<" characters and never finished on 100k of them. Every pattern
+# now finishes each shape in under 17 ms on this Mac; 50 ms is the bar.
+PATTERN_BUDGET_MS = 50.0
+ADVERSARIAL = 100_000
+
+
+def test_booking_patterns_are_linear():
+    """ReDoS: every pattern that reads reply text, and the whole detector,
+    finishes a 100k-character adversarial body in under 50 ms."""
+    n = ADVERSARIAL
+    shapes = {"lt": "<" * n, "ltbr": "<br" * (n // 3), "div": "<div class=" * (n // 11), "on": "On " * (n // 3),
+              "on_nl": ("On " + "x" * 150 + "\n") * (n // 155), "dash": "-" * n, "digits": "1 " * (n // 2),
+              "jan": "jan " * (n // 4), "at": "at " * (n // 3), "would": "would " * (n // 6),
+              "from": "From: x\n" * (n // 8), "spaces": "1" + " " * n, "q": "?" * n, "a": "a" * n, "wrote": "wrote: " * (n // 7)}
+    names = ("QUOTE_HTML", "WROTE", "QUOTE_TEXT", "TAG", "BREAK", "ICS", "INVITE_SUBJECT", "ACCEPT_SUBJECT",
+             "ACCEPT_BODY", "DECLINE_SUBJECT", "SCHEDULER", "SCHEDULER_DONE", "OOO", "DAY", "CLOCK", "PROPOSE",
+             "CONFIRM", "SENTENCE", "CONTROL")
+    for name in names:
+        rx = getattr(gi, name)
+        for shape, text in shapes.items():
+            best = min(_cpu(lambda: list(rx.finditer(text))) for _ in range(3))
+            ok(best < PATTERN_BUDGET_MS, f"{name} took {best:.1f} ms on {shape}")
+    for shape, text in shapes.items():
+        best = min(_cpu(lambda: gi.detect_booking({"type": "REPLY", "email_body": text, "subject": text}))
+                   for _ in range(3))
+        ok(best < PATTERN_BUDGET_MS, f"detect_booking took {best:.1f} ms on {shape}")
+    # The linear rewrite still cuts quoted history at the attribution line.
+    body = "Sounds good.<br><br>On Tue, Oct 6, 2026 at 3:00 PM Jonah &lt;j@z.example&gt;\nwrote:<br>Tuesday 2pm?"
+    ok(gi.message_text({"email_body": body}).strip() == "Sounds good.", gi.message_text({"email_body": body}))
+
+
 def big_world(n_leads=5000, n_cams=20):
     """~5,000 leads over 20 campaigns, a tenth of them in two campaigns."""
     cams, analytics, ids, records = [], {}, {}, {}
@@ -673,6 +705,14 @@ def test_speed(tmp: Path) -> dict:
     return {"leads": leads, "ms": timings}
 
 
+def _cpu(fn) -> float:
+    """CPU milliseconds, so a busy machine (load 26 to 39 on 2026-10-09 while
+    other sessions ran suites) cannot fail a cost check with wall-clock waits."""
+    start = time.process_time()
+    fn()
+    return (time.process_time() - start) * 1000
+
+
 def _timed(fn) -> float:
     start = time.perf_counter()
     fn()
@@ -692,6 +732,7 @@ def main():
         test_suppression_covers_every_never_again(Path(d))
         test_clay_flags_and_ids_are_refused(Path(d))
         test_reply_text_cannot_drive_the_terminal()
+        test_booking_patterns_are_linear()
         speed = test_speed(Path(d))
     print(f"gtm: {CHECKS} checks passed; {speed['leads']} leads, ms: "
           + ", ".join(f"{k} {v:.1f}" for k, v in speed["ms"].items()))

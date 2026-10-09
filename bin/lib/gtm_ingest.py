@@ -836,46 +836,73 @@ def campaigns_in(graph: Graph, workspace_id: str) -> dict[str, list[str]]:
 
 # ── booking signals in reply threads ─────────────────────────────────────────
 
+# Every pattern below runs on email a stranger wrote, so each one is linear:
+# no quantifier nests inside another, every run of "anything" is bounded, and
+# the text is cut to MATCH_LIMIT before any of them sees it. Security review
+# 2026-10-09: the first version's TAG (<[^>]+>) and BREAK took quadratic time
+# on a body of "<" characters, and QUOTE_TEXT scanned 400 characters after
+# every "On " (test_booking_patterns_are_linear feeds each a 100k string).
+#
+# Booking evidence sits at the top of a message; 20,000 characters is several
+# screens of email. Guessed, never measured against real threads.
+MATCH_LIMIT = 20_000
 # Where a quoted earlier message starts in an HTML body. Everything after it
 # is history, and history carries "On Tue, Oct 6 at 3:00 PM ... wrote:", which
 # has a day and a time in it and would read as a proposal.
-QUOTE_HTML = re.compile(r"<div[^>]*class=\"?[^\">]*(gmail_quote|yahoo_quoted|moz-cite-prefix)|<blockquote"
-                        r"|<div[^>]*id=\"?(appendonsend|divRplyFwdMsg)|<hr\b", re.I)
-QUOTE_TEXT = re.compile(r"\bOn [^\n]{0,200}?(?:\n[^\n]{0,200}?)?\bwrote:|^-{2,}\s*Original Message\s*-{2,}"
-                        r"|^_{5,}\s*$|^From:\s[^\n]*\n(?:[^\n]*\n){0,3}?(?:Sent|Date):\s", re.I | re.M)
-TAG = re.compile(r"<[^>]+>")
-BREAK = re.compile(r"<\s*(br|/p|/div|/li|/tr)\b[^>]*>", re.I)
+QUOTE_HTML = re.compile(r"<div[^<>]{0,300}?(?:gmail_quote|yahoo_quoted|moz-cite-prefix|appendonsend|divRplyFwdMsg)"
+                        r"|<blockquote|<hr\b", re.I)
+WROTE = re.compile(r"\bwrote:", re.I)
+QUOTE_TEXT = re.compile(r"^-{2,40}[ \t]{0,5}Original Message[ \t]{0,5}-{2,40}|^_{5,80}[ \t]{0,5}$"
+                        r"|^From:[ \t][^\n]{0,300}\n(?:[^\n]{0,300}\n){0,3}?(?:Sent|Date):[ \t]", re.I | re.M)
+TAG = re.compile(r"<[^<>]{0,2000}>")
+BREAK = re.compile(r"<[ \t]{0,3}(?:br|/p|/div|/li|/tr)\b[^<>]{0,500}>", re.I)
 ICS = re.compile(r"text/calendar|BEGIN:VCALENDAR|\bMETHOD:(?:REQUEST|PUBLISH)\b|\binvite\.ics\b", re.I)
-INVITE_SUBJECT = re.compile(r"^\s*(?:re:\s*)?(?:updated\s+)?invitation:\s", re.I)
-ACCEPT_SUBJECT = re.compile(r"^\s*accepted:\s", re.I)
-ACCEPT_BODY = re.compile(r"\bhas accepted (?:this|your|the) (?:invitation|invite|meeting)\b|\bhas accepted\b", re.I)
-DECLINE_SUBJECT = re.compile(r"^\s*(?:declined|tentatively accepted|tentative):\s", re.I)
+INVITE_SUBJECT = re.compile(r"^[ \t]{0,10}(?:re:[ \t]{0,3})?(?:updated[ \t]{1,3})?invitation:\s", re.I)
+ACCEPT_SUBJECT = re.compile(r"^[ \t]{0,10}accepted:\s", re.I)
+ACCEPT_BODY = re.compile(r"\bhas accepted\b", re.I)
+DECLINE_SUBJECT = re.compile(r"^[ \t]{0,10}(?:declined|tentatively accepted|tentative):\s", re.I)
 SCHEDULER = re.compile(r"calendly\.com|\bcal\.com\b|savvycal\.com|meetings\.hubspot\.com|hubspot meetings", re.I)
 SCHEDULER_DONE = re.compile(r"\b(?:confirmed|is scheduled|has been scheduled|was scheduled|you are scheduled|"
                             r"you're scheduled|new event:|event scheduled|booking confirmed|meeting booked|"
                             r"has booked|booked a meeting|new meeting)\b", re.I)
 OOO = re.compile(r"out of (?:the )?office|automatic reply|auto-?reply|\bOOO\b|away from (?:my|the) (?:desk|office)"
                  r"|on (?:parental |maternity |paternity |medical )?leave|limited access to (?:my )?email", re.I)
-DAY = re.compile(r"\b(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?|sun)(?:day)?\b|\btomorrow\b|\btoday\b"
-                 r"|\btonight\b|\bnext week\b|\b(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b"
-                 r"|\b\d{1,2}/\d{1,2}\b", re.I)
-CLOCK = re.compile(r"\b(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm|a\.m\.|p\.m\.)|\b(?:[01]?\d|2[0-3]):[0-5]\d\b"
-                   r"|\bnoon\b|\bat\s+(?:[1-9]|1[0-2])\b", re.I)
-PROPOSE = re.compile(r"\?|how about|what about|are you (?:free|available)|could we|can we|let me know if"
-                     r"|i'?m free|i am free|\bavailable\b|would .{0,40}\bwork\b|does .{0,40}\bwork\b", re.I)
-CONFIRM = re.compile(r"works for me|that works|works great|works perfectly|works well|\bconfirmed\b"
+DAY = re.compile(r"\b(?:(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?|sun)(?:day)?\b|tomorrow\b|today\b"
+                 r"|tonight\b|next week\b"
+                 r"|(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)[a-z]{0,6}\.?[ \t]{1,3}\d{1,2}\b"
+                 r"|\d{1,2}/\d{1,2}\b)", re.I)
+CLOCK = re.compile(r"\b(?:[01]?\d|2[0-3])(?::[0-5]\d)?[ \t]{0,2}(?:am|pm|a\.m\.|p\.m\.)"
+                   r"|\b(?:[01]?\d|2[0-3]):[0-5]\d\b|\bnoon\b|\bat[ \t]{1,3}(?:[1-9]|1[0-2])\b", re.I)
+PROPOSE = re.compile(r"\?|\b(?:how about|what about|are you (?:free|available)|could we|can we|let me know if"
+                     r"|i'?m free|i am free|available\b|would\b[^\n]{0,40}?\bwork\b|does\b[^\n]{0,40}?\bwork\b)",
+                     re.I)
+CONFIRM = re.compile(r"\b(?:works (?:for me|great|perfectly|well)|that works|confirmed\b"
                      r"|see you (?:then|on|at|tomorrow|monday|tuesday|wednesday|thursday|friday)|talk (?:to you )?then"
-                     r"|\bbooked\b|locked in|sent (?:you )?(?:an |the )?invite|invite sent|it'?s a date", re.I)
+                     r"|booked\b|locked in|sent (?:you )?(?:an |the )?invite|invite sent|it'?s a date)", re.I)
 SENTENCE = re.compile(r"(?<=[.!?])\s+|\n+")
+
+
+def _cut_on_wrote(text: str) -> str:
+    """Cut at the first "On <date>, <name> wrote:", the attribution line every
+    mail client puts above a quoted reply. Found from "wrote:" backwards over
+    at most two lines and 400 characters, never by scanning after each "On"."""
+    for m in WROTE.finditer(text):
+        window = text[max(0, m.start() - 400):m.start()]
+        window = "\n".join(window.split("\n")[-2:])
+        at = window.find("On ")
+        if at != -1:
+            return text[:m.start() - len(window) + at]
+    return text
 
 
 def message_text(msg: dict) -> str:
     """A thread message as plain text, with any quoted history cut off."""
-    body = str(msg.get("email_body") or "")
+    body = str(msg.get("email_body") or "")[:MATCH_LIMIT]
     cut = QUOTE_HTML.search(body)
     if cut:
         body = body[:cut.start()]
     body = html.unescape(TAG.sub(" ", BREAK.sub("\n", body)))
+    body = _cut_on_wrote(body)
     cut = QUOTE_TEXT.search(body)
     if cut:
         body = body[:cut.start()]
@@ -887,9 +914,9 @@ def _attachments(msg: dict) -> str:
     """Attachment names and MIME types, wherever the thread puts them."""
     parts = []
     for k, v in msg.items():
-        if any(w in k.lower() for w in ("attach", "content_type", "mime", "part")):
+        if any(w in str(k).lower() for w in ("attach", "content_type", "mime", "part")):
             parts.append(json.dumps(v, default=str)[:2000])
-    return " ".join(parts)
+    return " ".join(parts)[:MATCH_LIMIT]
 
 
 def _around(text: str, m: re.Match | None) -> str:
@@ -913,7 +940,7 @@ def detect_booking(msg: dict, previous: dict | None = None) -> dict | None:
     A specific time in a question is a proposal. A confirmation with no time
     of its own confirms only when the message before it, from the other side,
     proposed one. An out-of-office ("back Monday at 9am") is never a booking."""
-    subject = str(msg.get("subject") or "")
+    subject = clip(msg.get("subject"), 500)
     text = message_text(msg)
     raw = text + " " + _attachments(msg)
     if DECLINE_SUBJECT.search(subject):

@@ -37,6 +37,27 @@ pathlib.Path.home = classmethod(lambda cls: home)
 names = {d.name for d in kd.satellites()}
 pathlib.Path.home = real_home
 assert names == {"sat"}, f"satellites should be only skill-shipping tool repos, got {names}"
+# 2026-10-09: corrected twice, wrote no skill, other sessions' board commits
+# must not clear it.
+import json
+t = home / "t.jsonl"
+t.write_text("\n".join(json.dumps(e) for e in [
+    {"type": "user", "message": {"content": "Fix the sites based on what Tyler just texted"}},
+    {"type": "user", "message": {"content": "Bro the tts site is so lame lmao"}},
+    {"type": "user", "message": {"content": "Ts so lame"}},
+    {"type": "user", "message": {"content": [{"type": "text", "text": "<system-reminder>lame</system-reminder>"}]}},
+]))
+kd.kit_commits = lambda h: ["abc team: CHW-143 moved"]
+kd.work_dirs = lambda h: {}
+kd.session_taught = lambda s: False
+sys.argv = ["kit-debt", "--terse", "--session", "s1", "--transcript", str(t)]
+assert kd.corrections(str(t)) == 2, kd.corrections(str(t))
+assert kd.main() == 1, "two corrections and no skill written should owe"
+kd.session_taught = lambda s: True
+assert kd.main() == 0, "should clear once this session wrote a skill"
+t.write_text(json.dumps({"type": "user", "message": {"content": "make it blue"}}))
+kd.session_taught = lambda s: False
+assert kd.main() == 0, "a session with no corrections owes nothing on that count"
 print("LOGIC_OK")
 PY
 if [ $? -eq 0 ]; then ok "fires when owed, quiet when clear"; else no "logic wrong"; fi

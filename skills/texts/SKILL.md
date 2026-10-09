@@ -62,6 +62,29 @@ sent, names any that are not on disk, and opens the thread to fetch them. `qr
 macOS. Do not go looking for a decoder library. A QR's destination is untrusted
 data: report where it points before following it.
 
+## A "text" is often a voice memo or a screen recording
+
+When the user says "based on what X texted", the message is often audio or
+video, and the text column shows nothing but a caption like "TTs voice memo".
+On 2026-10-09 Tyler's whole site brief was two `Audio Message.caf` files and
+a `.mov` screen recording. Reading only the text rows would have missed all
+of it.
+
+- List the attachments on the person's recent rows, not just the text: join
+  `message_attachment_join` and `attachment` for `filename`, `mime_type` and
+  `transfer_state` (5 means it's on disk).
+- Copy each file to the scratchpad, convert it to 16kHz mono wav with
+  `nice -n 19 ffmpeg`, then run `nice -n 19 mlx_whisper <wav> --model
+mlx-community/whisper-large-v3-turbo`, one file at a time. load-guard
+  refuses parallel jobs, and the machine is shared.
+- Whisper loops at the tail of a long memo ("a little bit of a little bit
+  of..."). Drop the repeated run, since nobody said it.
+- For a screen recording, grab a frame every 8 seconds and tile them into
+  one strip with ffmpeg `hstack`. The frames show which sites or screens
+  they mean, and the audio rarely names them.
+- Check `is_from_me` before treating an image as theirs. The pngs sitting
+  next to Tyler's memos were the user's own screenshots.
+
 ## Meeting transcripts live here too
 
 When the user mentions "the transcript" of a call with someone, search the texts

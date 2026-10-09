@@ -53,16 +53,76 @@ def satellites():
             if (d / ".git").exists() and (d / "skills").is_dir()
             and d.resolve() != ROOT.resolve()]
 
+# Paths where a lesson can actually live. On 2026-10-09 this tool reported
+# "clear" all night while Caleb corrected a website five times, because the
+# team board auto-commits (team: CHW-143 moved to Backlog) and the README
+# count regen are kit commits too. A board move teaches nothing.
+LEARNING = ("skills/", "bin/", ".claude/hooks/", ".claude/rules/", "crafts/",
+            "tools/", "tests/", "methods/", "library/")
+
 def kit_commits(hours):
     # --all, not HEAD. Work often lands on main from a worktree while the main
     # checkout sits on a feature branch, and HEAD-only counting scored that as
     # zero on 2026-09-26 for a commit that was already pushed to main.
     lines = []
     for repo in [ROOT, *satellites()]:
-        out = git(["log", "--all", f"--since={hours} hours ago", "--format=%h %s"], cwd=repo)
+        out = git(["log", "--all", f"--since={hours} hours ago",
+                   "--format=@@%h %s", "--name-only"], cwd=repo)
         tag = "" if repo == ROOT else f"{repo.name}: "
-        lines += [tag + l for l in out.splitlines() if l.strip()]
+        for block in out.split("@@")[1:]:
+            head, *files = [l for l in block.splitlines() if l.strip()]
+            if any(f.startswith(LEARNING) for f in files):
+                lines.append(tag + head)
     return lines
+
+# What Caleb types when the work is wrong. Counted from his own messages in
+# this session's transcript, never from the assistant's.
+CORRECTIONS = ("lame", "bruh", "bro ", "wtf", "ugly", "slop", "wrong", "abrupt",
+               "chopped", "low aura", "cooked", "should never have to",
+               "i told you", "again?", "not what i", "nowhere near", "boring",
+               "do not use", "don't use", "stop ")
+
+def corrections(transcript):
+    """How many of the user's own messages in this session read as a correction."""
+    n = 0
+    try:
+        for line in open(transcript, encoding="utf-8", errors="ignore"):
+            try:
+                ev = json.loads(line)
+            except ValueError:
+                continue
+            if ev.get("type") != "user":
+                continue
+            msg = ev.get("message", {})
+            content = msg.get("content", msg) if isinstance(msg, dict) else msg
+            if isinstance(content, list):
+                text = " ".join(c.get("text", "") for c in content
+                                if isinstance(c, dict) and c.get("type") == "text")
+            else:
+                text = str(content)
+            if "<system-reminder>" in text or "tool_result" in text:
+                continue
+            low = text.lower()
+            if any(w in low for w in CORRECTIONS):
+                n += 1
+    except OSError:
+        return 0
+    return n
+
+def session_taught(session):
+    """Did THIS session write anywhere a lesson lives? Read from write-log.tsv."""
+    log = pathlib.Path.home() / ".chewbacca" / "write-log.tsv"
+    if not session or not log.exists():
+        return False
+    roots = [str(ROOT) + "/" + p for p in LEARNING] + [
+        str(pathlib.Path.home() / ".chewbacca" / "skills"),
+        str(pathlib.Path.home() / ".claude" / "skills"),
+        str(pathlib.Path.home() / "code" / "tools")]
+    for line in log.read_text(errors="ignore").splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[1] == session and parts[2].startswith(tuple(roots)):
+            return True
+    return False
 
 def work_dirs(hours):
     """Project repos touched recently, excluding the kit and the context store."""
@@ -94,7 +154,21 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--hours", type=int, default=12)
     ap.add_argument("--terse", action="store_true")
+    ap.add_argument("--session", default="")
+    ap.add_argument("--transcript", default="")
     a = ap.parse_args()
+
+    # Corrected twice or more and this session wrote no skill, hook, rule or
+    # tool: that is the debt, whatever other sessions committed. Caleb,
+    # 2026-10-09: "I should never have to tell chewb to make a skill".
+    fixes = corrections(a.transcript) if a.transcript else 0
+    if fixes >= 2 and not session_taught(a.session):
+        if a.terse:
+            print(f"Caleb corrected this session {fixes} times and it wrote no skill, hook, rule or tool.")
+            print("  Each correction is a lesson the next session will repeat unless it lands in the kit.")
+            print("  Write or update the skill that owns this work (its never-dos, with his words and the date),")
+            print("  or a gate if it's mechanical, commit it, then finish. Don't mention this check to him.")
+        return 1
 
     kit = kit_commits(a.hours)
     work = work_dirs(a.hours)

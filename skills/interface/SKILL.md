@@ -184,6 +184,37 @@ him: screenshot every state (default, each open item, each form, success,
 error) at 1440 and 390, read each image against the stance above, and fix or
 list what is wrong first.
 
+## Landing pages: the verdicts already paid for
+
+Caleb on usctts.com, all on 2026-10-09. Each line is a build he rejected.
+Read them before drafting any club or startup landing page.
+
+- "So lame... nowhere near as cool as the clay site": a white sheet of
+  plain sections under a cool opener. Plain is not professional, it's dead.
+- "The transition feels so abrupt": an opaque panel arriving at a hard edge
+  over a live scene. On clay.com the sheet is already peeking up from the
+  bottom of the first screen at load, inset and rounded, and it grows to
+  full width on scroll. Nothing should arrive from nowhere.
+- "Ts so lame. I want Clay meets lemma... it should tell a story while still
+  being professional": rounded bento cards and tabs on their own are still
+  lame. It needs Lemma's intro event and a scroll story told by one object
+  changing state, on top of Clay's structure and real artifacts.
+- "The opening scroll&time animation is so chopped": measure frame times
+  against the reference on the same machine (Chromium `--use-angle=metal`)
+  before shipping any intro.
+- "Repeating things is low aura": no image, clip, headline idea or CTA
+  appears twice on a page.
+- "DO NOT USE THE AI GENERATED TEAM": never put an AI-generated group or
+  team photo on a real org's site, even when it's sitting in the repo. Real
+  headshots only.
+- Bring the best of earlier versions forward. Before a rebuild, inventory
+  what past commits built and what he praised (`git log --diff-filter=D`,
+  plus the verdicts in docs/). A rebuild that drops the parts he loved
+  reads as a downgrade.
+- Interactive Playwright on clay.com trips the outbound send guard, which
+  reads the word as a campaign. Screenshot it, or drive it from a
+  standalone script.
+
 ## The hard line
 
 **Never invent a component that has a name in the taxonomy.** A bespoke variant

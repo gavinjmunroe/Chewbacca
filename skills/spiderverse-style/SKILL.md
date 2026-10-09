@@ -62,6 +62,18 @@ Blender with Grease Pencil lines and painterly shading) scrubbed by scroll,
 with live WebGL only where the viewer's own data has to appear. A real-time
 dot field and a caption box can't reach it.
 
+## Shots morph, they don't cut
+
+Caleb, 2026-10-10, on T Combinator: shots can "morph into each other
+paralleling what we originally had with the diff la things, it just has to
+be tasteful and not feel gimicky." Let one shot's dominant object become
+the next one's (city lights lift into map dots, a tower edge becomes the
+climbing stroke), built from geometry that's already in both shots and
+moved on one smooth curve as the camera travels. The tasteful test is that
+the link reads on a second look and never stops the story. Spins, particle
+bursts, color sweeps and morphs longer than half a screen of scroll all
+read as gimmicks.
+
 ## A style pass is not the movie
 
 Caleb, 2026-10-09, on a T Combinator build that had halftone, misregistration

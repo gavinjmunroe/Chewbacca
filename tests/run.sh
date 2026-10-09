@@ -693,6 +693,8 @@ if group "installer"; then
     bash "$ROOT/tests/orphan_reap.sh"
   check  "jobs queue admits, pauses and resumes heavy work against the machine" \
     bash "$ROOT/tests/jobs.sh"
+  check  "chewbacca x reads posts and the paging cursor from a timeline page" \
+    bash "$ROOT/tests/chewbacca_x.sh"
   check  "people texts sync runs one at a time" \
     bash "$ROOT/tests/texts_sync_lock.sh"
   check  "scope-guard refuses a self-chosen cut of scope he set as all" \

@@ -70,6 +70,7 @@ COMMANDS=(
   "gtme-signals|list recent SEC Form D raises as buying signals"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
   "jobs|one queue for long and heavy work: runs it when the Mac has room"
+  "x|read an X account's own posts with his signed-in session"
   "api|any website as an API: call taught sites, teach new ones (not Clay)"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
   "clay-fixture-check|compare a CSV export with an expected fixture"
@@ -170,6 +171,11 @@ apps)
   # Everything the team builds lives in apps/, runnable by name.
   shift
   exec bash "$ROOT/bin/chewbacca-apps" "$@"
+  ;;
+x)
+  # X posts, signed in. See bin/chewbacca-x.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-x" "$@"
   ;;
 api)
   # Websites with no API, called over plain HTTP from operations learned off

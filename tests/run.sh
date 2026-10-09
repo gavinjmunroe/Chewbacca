@@ -664,6 +664,8 @@ if group "installer"; then
 
   check  "stale-read-guard refuses a silence claim while jobs are outstanding" \
     bash "$ROOT/tests/stale_read_guard.sh"
+  check  "scope-guard refuses a self-chosen cut of scope he set as all" \
+    bash "$ROOT/tests/scope_guard.sh"
 
   check  "suite-rerun-guard refuses a repeat full run on an unchanged tree" \
     bash "$ROOT/tests/suite_rerun_guard.sh"

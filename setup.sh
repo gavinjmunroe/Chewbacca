@@ -1758,6 +1758,12 @@ _register("Stop", hooks_dir + "/kit-debt.sh", timeout=15,
 _register("Stop", hooks_dir + "/stale-read-guard.sh", timeout=5,
           status="Checking no unfinished job was called silent...")
 
+# A reply may not shrink scope he set as "all" unless each cut is a named
+# BLOCKED: line. 2026-10-09: a creator ingest he asked for in full went out as
+# 36 of 238 with three platforms on hold, and he said "You didn't listen to me."
+_register("Stop", hooks_dir + "/scope-guard.sh", timeout=10,
+          status="Checking the scope he asked for...")
+
 # One brain commit per turn, named after the turn, in place of format-and-sync's
 # one commit per write. See the hook's header for the 2026-10-05 history count.
 _register("Stop", hooks_dir + "/brain-sync.sh", timeout=15,

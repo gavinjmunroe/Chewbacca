@@ -1,0 +1,23 @@
+a off
+- clay-card
+m clay-target 420 312 128 32 tone=miss life=300
+@ clay-note near=420,312,128,32 side=right chrome=window w=300
+c s Screen title="STOPPED AT 3/6"
+c mk Mark kind=ico spin=false size=18
+c body Text value="Couldn't find Continue on the page."
+c hold Text value="Nothing spent." tone=muted
+c retry Button label="Try again" action=clay-retry variant=primary
+c show Button label="Show me where" action=clay-show
+c end Button label="End here" action=clay-end
+> s mk body hold retry show end
+r s
+@ clay-strip at=bottom chrome=window w=560
+c s Screen title="CLAY-BUILD"
+c row Stack direction=horizontal gap=10
+c mk Mark kind=ico spin=false size=14
+c ticks Text value="■■■□□□"
+c verb Status level=error message="Stopped at 3/6"
+c time Text value="1:20"
+> row mk ticks verb time
+> s row
+r s

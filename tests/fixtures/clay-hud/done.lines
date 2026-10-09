@@ -1,0 +1,27 @@
+a off
+u clay-target
+- clay-note
+- clay-card
+@ clay-card at=right chrome=window w=320
+c s Screen title="DONE"
+c mk Mark kind=globe spin=true size=40
+c people Text value="50 people in the table"
+c found Text value="41 have a work email"
+c miss Text value="9 without one"
+c spent Text value="Spent 31.2 credits"
+c auto Text value="Table auto-run is off" tone=muted
+c misses Button label="Show the misses" action=clay-misses variant=primary
+c close Button label="Close" action=clay-close
+> s mk people found miss spent auto misses close
+r s
+@ clay-strip at=bottom chrome=window w=560
+c s Screen title="CLAY-BUILD"
+c row Stack direction=horizontal gap=10
+c mk Mark kind=globe spin=false size=14
+c ticks Text value="■■■■■■"
+c verb Status level=success message="41/50 emails · 31.2 cr"
+c time Text value="5:00"
+c stop Button label="Close" action=clay-close
+> row mk ticks verb time stop
+> s row
+r s

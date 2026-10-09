@@ -1,0 +1,23 @@
+a off
+u clay-target
+- clay-card
+@ clay-note near=420,312,128,32 side=right chrome=window w=300
+c s Screen title="PAUSED"
+c mk Mark kind=ico spin=false size=18
+c body Text value="You have the page."
+c hold Text value="Nothing spent." tone=muted
+c resume Button label="Resume" action=clay-resume variant=primary
+c end Button label="End here" action=clay-end
+> s mk body hold resume end
+r s
+@ clay-strip at=bottom chrome=window w=560
+c s Screen title="CLAY-BUILD"
+c row Stack direction=horizontal gap=10
+c mk Mark kind=ico spin=false size=14
+c ticks Text value="■■■□□□"
+c verb Status level=warning message="Paused"
+c time Text value="1:10"
+c stop Button label="Resume" action=clay-resume
+> row mk ticks verb time stop
+> s row
+r s

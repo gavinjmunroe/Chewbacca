@@ -1,0 +1,20 @@
+@ clay-note near=420,312,128,32 side=right chrome=window w=300
+c s Screen title="FIND PEOPLE"
+c mk Mark kind=ico spin=true size=18
+c body Text value="Asking Clay's people search for fintech VC partners."
+c hold Text value="Nothing is saved yet." tone=muted
+> s mk body hold
+r s
+@ clay-strip at=bottom chrome=window w=560
+c s Screen title="CLAY-BUILD"
+c row Stack direction=horizontal gap=10
+c mk Mark kind=ico spin=true size=14
+c ticks Text value="■■□□□□"
+c verb Text value="Find people · 2/6"
+c time Text value="0:42"
+c stop Button label="Stop" action=clay-stop
+> row mk ticks verb time stop
+> s row
+r s
+m clay-target 420 312 128 32 life=300
+a 484 328 act=true

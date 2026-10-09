@@ -1,0 +1,25 @@
+- clay-note
+@ clay-card near=420,312,128,32 side=right urgency=alert chrome=window w=300
+c s Screen title="TEST RUN"
+c mk Mark kind=ico spin=false size=18
+c r0 Text value="Save and run 10 rows"
+c r1 Text value="Balance now 1234.5 cr"
+c go Button label="Run the test" action=clay-approve variant=primary
+c gohint Text value="Spends credits on 10 rows. It cannot be undone." tone=muted
+c no Button label="Not now" action=clay-decline
+c nohint Text value="Nothing is spent, and the table stays." tone=muted
+> s mk r0 r1 go gohint no nohint
+r s
+@ clay-strip at=bottom chrome=window w=560
+c s Screen title="CLAY-BUILD"
+c row Stack direction=horizontal gap=10
+c mk Mark kind=ico spin=false size=14
+c ticks Text value="■■■■□□"
+c verb Status level=warning message="Waiting on you"
+c time Text value="1:01"
+c stop Button label="Stop" action=clay-stop
+> row mk ticks verb time stop
+> s row
+r s
+m clay-target 420 312 128 32 life=300
+a 484 328

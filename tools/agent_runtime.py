@@ -244,7 +244,9 @@ def instruction_block(spec):
     notes = '\n'.join('- ' + note for note in spec['notes'])
     return (f'{BEGIN}\n## Chewbacca runtime: {spec["label"]}\n\n'
             f'Read `{ROOT / "config/instructions/agent-neutral.md"}` for shared guidance.\n'
-            f'Shared skills: `{shared_home() / "skills"}`.\n\n{notes}\n\n'
+            f'Shared skills: `{shared_home() / "skills"}`.\n'
+            f'Team memory (Amber, Chewbacca, Firm Foundation), loaded every session:\n'
+            f'@{ROOT / "team/memory/MEMORY.md"}\n\n{notes}\n\n'
             f'{spec["model_discovery"]}\n{END}')
 
 

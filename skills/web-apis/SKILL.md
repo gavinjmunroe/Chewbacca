@@ -48,6 +48,7 @@ Read them before the first call: most failures are a param format they spell out
 | usc-dining | menuBreakfast, menuBrunch, menuLunch, menuDinner | dining hall menus, a few days ahead |
 | usc-libraries | studyRooms | open study-room slots (read only, never books) |
 | usc-directory | searchPeople | profs and staff: title, department, email |
+| handshake | searchJobs, getJob, events, careerFairs | his connectSC session; .json endpoints only, the pages write on load |
 | bundled | google-flights, airbnb, amazon, goodreads, youtube, x, instagram, hacker-news | upstream's own |
 
 Formats that bit during teaching: LinkedIn job locations in full
@@ -55,9 +56,8 @@ Formats that bit during teaching: LinkedIn job locations in full
 queries need the city or they bias to LA; RMP ids are base64 (`Teacher-123`);
 USC course codes have no space (`CSCI102`).
 
-Not covered yet, each waiting on a sign-in only he can do: webreg and myUSC
-(USC SSO with Duo in the Work Chrome profile) and Handshake (never signed in
-there). Both are on his todo list.
+Not covered yet: webreg and myUSC (USC SSO with Duo in the Work Chrome
+profile).
 
 LinkedIn warning: signed-in LinkedIn calls got both of his Chrome sessions
 revoked on 2026-10-10, minutes after use. Use linkedin-jobs (logged out) for

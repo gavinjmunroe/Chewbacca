@@ -16,3 +16,9 @@ linkedin-jobs signed-in-ok
 # USC session, all GET JSON on brightspace.usc.edu. Spec reviewed: 7 ops, all
 # read-only, no off-domain host, no example values.
 brightspace signed-in-ok
+
+# 2026-10-10: handshake reads job, event and career-fair search plus a job
+# by id with his USC Handshake session. Every op hits a .json endpoint on
+# usc.joinhandshake.com: the HTML pages write recent searches and viewed
+# marks on load. Reviewed: 4 ops, read-only, no off-domain host.
+handshake signed-in-ok

@@ -1,0 +1,285 @@
+{
+  "name": "handshake",
+  "baseUrl": "https://usc.joinhandshake.com",
+  "operations": [
+    {
+      "name": "searchJobs",
+      "description": "Search USC Handshake job and internship postings by keyword, newest first, 25 per call. id is the Handshake job id: getJob(id) takes it, and the page is https://app.joinhandshake.com/jobs/{id}.",
+      "request": {
+        "method": "GET",
+        "url": "https://usc.joinhandshake.com/stu/postings.json?page=1&per_page=25&sort_direction=desc&sort_column=default&query=%7Bquery%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "query",
+          "at": [
+            "query:query"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://usc.joinhandshake.com/stu/postings.json?page=1&per_page=25&sort_direction=desc&sort_column=default&query={query}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "usc.joinhandshake.com",
+        "path": "/stu/postings.json"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "results",
+        "pick": [
+          "id=job_id",
+          "title=job.title",
+          "employer=job.employer_name",
+          "location=job.location_names",
+          "type=job.job_type_name",
+          "employment=job.employment_type_name",
+          "deadline=expiration_date",
+          "posted=created_at"
+        ]
+      },
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "example": "accountant"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T22:20:51.248Z"
+    },
+    {
+      "name": "getJob",
+      "description": "One Handshake job by its job id (from searchJobs). Text only: description is plain text. Pay is in cents (2100 = 21.00) per payPeriod, null when not shown. applyType external means apply on the employer site at applyUrl; otherwise apply inside Handshake on https://app.joinhandshake.com/jobs/{id}.",
+      "request": {
+        "method": "GET",
+        "url": "https://usc.joinhandshake.com/stu/jobs/%7Bid%7D.json",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "id",
+          "at": [
+            "path:2"
+          ],
+          "template": "{id}.json"
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://usc.joinhandshake.com/stu/jobs/{id}.json"
+      },
+      "match": {
+        "method": "GET",
+        "host": "usc.joinhandshake.com",
+        "path": "/stu/jobs/*"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "job",
+        "pick": [
+          "id",
+          "title",
+          "employer=employer_name",
+          "type=nice_job_type",
+          "location=location_names",
+          "workplace=presentable_location_type",
+          "deadline=default_expiration_date",
+          "applyStart=apply_start",
+          "payType=salary_type_name",
+          "payMinCents=salary_range.min",
+          "payMaxCents=salary_range.max",
+          "payPeriod=salary_range.pay_schedule.friendly_name",
+          "currency=salary_range.currency",
+          "applyType=job_apply_setting.apply_type",
+          "applyUrl=job_apply_setting.external_url",
+          "applyInstructions=job_apply_setting.additional_instructions",
+          "workAuthorization=student_screen.work_authorization_requirements",
+          "description=text_description"
+        ]
+      },
+      "params": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "example": "11575507"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T22:22:44.179Z"
+    },
+    {
+      "name": "events",
+      "description": "Search upcoming Handshake events at USC (employer info sessions, recruiting talks, workshops) by keyword. employer is the host. The page is https://app.joinhandshake.com + path. Career fairs live in careerFairs.",
+      "request": {
+        "method": "GET",
+        "url": "https://usc.joinhandshake.com/stu/events/search.json?page=1&per_page=25&query=%7Bquery%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "query",
+          "at": [
+            "query:query"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://usc.joinhandshake.com/stu/events/search.json?page=1&per_page=25&query={query}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "usc.joinhandshake.com",
+        "path": "/stu/events/search.json"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "results",
+        "pick": [
+          "id",
+          "name",
+          "employer=host_name",
+          "type=event_type_name",
+          "start=start_date",
+          "end=end_date",
+          "timeZone=time_zone",
+          "location=location_name",
+          "medium=event_medium.name",
+          "virtual=is_virtual_event",
+          "path=entity_path"
+        ]
+      },
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "example": "amazon"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T22:23:37.010Z"
+    },
+    {
+      "name": "careerFairs",
+      "description": "Search Handshake career fairs open to USC by keyword. host is the school running the fair (not always USC). The page is https://app.joinhandshake.com/career_fairs/{id}.",
+      "request": {
+        "method": "GET",
+        "url": "https://usc.joinhandshake.com/stu/career_fairs.json?page=1&per_page=25&query=%7Bquery%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "query",
+          "at": [
+            "query:query"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://usc.joinhandshake.com/stu/career_fairs.json?page=1&per_page=25&query={query}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "usc.joinhandshake.com",
+        "path": "/stu/career_fairs.json"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "results",
+        "pick": [
+          "id",
+          "name",
+          "host=institution_name",
+          "start=start_date",
+          "end=end_date",
+          "timeZone=time_zone",
+          "location=location_name",
+          "medium=career_fair_medium",
+          "registrationEnd=student_registration_end"
+        ]
+      },
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "example": "engineering"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T22:28:17.409Z"
+    }
+  ]
+}

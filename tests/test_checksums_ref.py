@@ -35,13 +35,22 @@ class ChecksumRefTests(unittest.TestCase):
 
     def test_dirty_working_tree_does_not_fail_ref_check(self):
         (self.repo / "bin/thing").write_text("another tab, mid edit\n")
-        self.assertEqual(self.run_tool("--check"), 1)
+        self.assertEqual(self.run_tool("--check"), 0)  # unstaged: not this commit's
         self.assertEqual(self.run_tool("--check", "--ref", "HEAD"), 0)
 
     def test_stale_committed_manifest_still_fails_ref_check(self):
         (self.repo / "bin/thing").write_text("changed and committed\n")
         git(self.repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qam", "change")
         self.assertEqual(self.run_tool("--check", "--ref", "HEAD"), 1)
+
+    def test_regenerate_hashes_staged_not_unstaged(self):
+        before = (self.repo / "SHA256SUMS.txt").read_text()
+        (self.repo / "bin/thing").write_text("another tab, unstaged\n")
+        self.run_tool()
+        self.assertEqual((self.repo / "SHA256SUMS.txt").read_text(), before)
+        git(self.repo, "add", "bin/thing")
+        self.run_tool()
+        self.assertNotEqual((self.repo / "SHA256SUMS.txt").read_text(), before)
 
 
 if __name__ == "__main__":

@@ -48,7 +48,27 @@ echo '{"name":"delta","baseUrl":"https://delta.com"}' > "$T/kit/delta.json"
 echo '{"cookies":[],"source":"chrome:Default"}' > "$T/engine/sessions/delta.json"
 echo '{"name":"eps","baseUrl":"https://eps.com"}' > "$T/kit/eps.json"
 echo '{"cookies":[]}' > "$T/engine/sessions/eps.json"
+# The same escape in shapes a naive check reads as on-site: a host that is a
+# parameter, a backslash WHATWG reads as a path break, a protocol-relative URL.
+echo '{"name":"z1","baseUrl":"https://z1.com","operations":[{"url":"https://{host}/x"}]}' > "$T/kit/z1.json"
+printf '%s\n' '{"name":"z2","baseUrl":"https://z2.com","operations":[{"url":"https://evil.example\\@z2.com/x"}]}' > "$T/kit/z2.json"
+echo '{"name":"z3","baseUrl":"https://z3.com","operations":[{"headers":{"referer":"//evil.example/"}}]}' > "$T/kit/z3.json"
+echo '{"name":"z4","baseUrl":"https://www.z4.com","operations":[{"url":"https://api.z4.com/v1?q={q}"}]}' > "$T/kit/z4.json"
 bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+for z in z1 z2 z3; do
+  [ -f "$T/engine/sites/$z.json" ] && no "sync accepted $z, whose request can leave its domain"
+done
+[ -f "$T/engine/sites/z4.json" ] || no "sync refused z4, a subdomain with a query template"
+ls "$T/engine/sites"/.*.json.* >/dev/null 2>&1 && no "a refused spec left a temp file in the engine store"
+# An exact host listed for that site in hosts.allow is let through; the same
+# host listed for a different site is not.
+echo '{"name":"z5","baseUrl":"https://z5.com","operations":[{"url":"https://idx.search.net/q"}]}' > "$T/kit/z5.json"
+echo '{"name":"z6","baseUrl":"https://z6.com","operations":[{"url":"https://idx.search.net/q"}]}' > "$T/kit/z6.json"
+printf 'z5 idx.search.net  # its frontend queries this index\n' > "$T/kit/hosts.allow"
+bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+[ -f "$T/engine/sites/z5.json" ] || no "an allowlisted host was refused"
+[ -f "$T/engine/sites/z6.json" ] && no "a host allowed for one site was let through for another"
+rm -f "$T/kit"/z?.json "$T/kit/hosts.allow"
 [ -f "$T/engine/sites/gamma.json" ] && no "sync accepted a spec that requests another domain"
 [ -f "$T/engine/sites/delta.json" ] && no "sync replaced a signed-in site from the repo"
 [ -f "$T/engine/sites/eps.json" ] || no "a logged-out cookie jar blocked a repo spec"

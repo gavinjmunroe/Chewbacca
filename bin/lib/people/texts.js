@@ -701,7 +701,7 @@ function cmdTexts(argv) {
     // Say it before he picks numbers, not after the first send fails.
     if (!process.env.CHEWBACCA_NO_SEND && list.some((dr) => !dr.via || dr.via === "imessage")) {
       const blocked = require("./send").messagesBlocked();
-      if (blocked) say(c.yel ? c.yel(`\n  ${blocked.split("\n").slice(0, 2).join("\n  ")}`) : `\n  ${blocked}`);
+      if (blocked) say(c.yel(`\n  ${blocked.split("\n").filter((l) => !/Nothing was sent/.test(l)).map((l) => l.trim()).join("\n  ")}`));
     }
     say(c.dim(`\n  people texts drafts send <n>  |  drop <n>\n`));
     return;

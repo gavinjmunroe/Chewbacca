@@ -31,8 +31,14 @@ The cache holds private mail in plaintext, so it is 0600 in a 0700 folder.
 
   gmail.py --json --days N     rows (0 = everything)
   gmail.py send --to A --subject S --text T [--dry-run]
+  gmail.py draft --gmail-id ID --inbox NAME --to A --text T
+
+Each row also carries `gmail_id` and `inbox` (which signed-in account it came
+from, "" for gws's default), so a reply can be drafted into the same thread.
+An account that is not signed in prints "gmail: not signed in: <inbox>" on
+stderr: a caller shows that, never an empty inbox.
 """
-import argparse, base64, email, email.policy, hashlib, json, os, re, subprocess, sys
+import argparse, base64, email, email.message, email.policy, hashlib, json, os, re, subprocess, sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from email.utils import getaddresses, parseaddr, parsedate_to_datetime
@@ -324,7 +330,28 @@ def cache_path():
     return os.path.join(os.path.dirname(CACHE), os.path.basename(ACCOUNT["cfg"]) + ".jsonl")
 
 
+_CURRENT = object()
+
+
+def inbox_name(cfg=_CURRENT):
+    """The name a row carries for its account: "" for gws's default config,
+    else the folder name under EMAIL_HOME. Never a path."""
+    cfg = ACCOUNT["cfg"] if cfg is _CURRENT else cfg
+    return "" if not cfg or cfg == DEFAULT_CFG else os.path.basename(cfg)
+
+
+def inbox_dir(name):
+    """The config dir for an inbox name from a row, or None. Only a name that
+    is one of accounts() maps back, so a row cannot point gws anywhere else."""
+    for cfg in accounts():
+        if inbox_name(cfg) == (name or ""):
+            return cfg
+    return False
+
+
 def read(days, limit):
+    if not accounts():
+        print("gmail: not signed in: no gws account (run `chewbacca email add`)", file=sys.stderr)
     # me is every connected inbox, so mail between two of my own accounts is
     # never filed as someone else.
     me = set()
@@ -345,6 +372,7 @@ def read(days, limit):
 def read_one(days, me):
     try:
         if not me:
+            print(f"gmail: not signed in: {inbox_name() or 'default'}", file=sys.stderr)
             return []
         ids = list_ids(days)
     except Exception as err:
@@ -373,7 +401,7 @@ def read_one(days, me):
         if not isinstance(r, dict) or r["id"] in seen:
             continue
         seen.add(r["id"])
-        out.append({k: v for k, v in r.items() if not k.startswith("_")})
+        out.append({**{k: v for k, v in r.items() if not k.startswith("_")}, "gmail_id": g, "inbox": inbox_name()})
     return out
 
 
@@ -437,8 +465,74 @@ def send(to, subject, text, dry_run=False):
         return {"ok": False, "error": str(err)[:200]}
 
 
+GMAIL_ID = re.compile(r"^[0-9A-Za-z]{1,40}$")
+MOST_DRAFT_CHARS = 20000
+
+
+def draft(gmail_id, inbox, to, text):
+    """A reply to one Gmail message, saved as a draft in its own thread.
+
+    Only `users messages get` (to read the thread and the headers a reply
+    needs) and `users drafts create` are ever called. Nothing here can send:
+    no +send, no +reply (which sends unless told not to), no drafts.send.
+    The draft goes to `to`, which must be the message's own From address;
+    an unverified sender gets no draft at all."""
+    if (to or "").lower().startswith("unverified:"):
+        return {"ok": False, "error": "Gmail couldn't verify that sender, so no draft was made"}
+    if not ADDRESS.match(to or ""):
+        return {"ok": False, "error": f"not an email address: {to!r}"}
+    if not GMAIL_ID.match(gmail_id or ""):
+        return {"ok": False, "error": "not a Gmail message id"}
+    if not (text or "").strip():
+        return {"ok": False, "error": "empty draft"}
+    if len(text) > MOST_DRAFT_CHARS:
+        return {"ok": False, "error": "too long for a draft from here"}
+    cfg = inbox_dir(inbox)
+    if cfg is False:
+        return {"ok": False, "error": f"Gmail: not signed in: {inbox or 'default'}"}
+    ACCOUNT["cfg"] = cfg
+    try:
+        meta = api("get", {"userId": "me", "id": gmail_id, "format": "metadata",
+                           "metadataHeaders": ["From", "Subject", "Message-ID", "References"]})
+    except Exception as err:
+        return {"ok": False, "error": str(err)[:200]}
+    head = {h.get("name", "").lower(): h.get("value", "") for h in (meta.get("payload") or {}).get("headers", [])}
+    if parseaddr(head.get("from", ""))[1].lower() != to.lower():
+        return {"ok": False, "error": "that address isn't the message's sender any more"}
+    subject = head.get("subject", "").strip()
+    if not subject.lower().startswith("re:"):
+        subject = "Re: " + (subject or "(no subject)")
+    msg = email.message.EmailMessage()
+    msg["To"] = to
+    msg["Subject"] = subject
+    mid = head.get("message-id", "").strip()
+    if mid:
+        msg["In-Reply-To"] = mid
+        msg["References"] = (head.get("references", "").strip() + " " + mid).strip()
+    msg.set_content(text)
+    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    body = {"message": {"raw": raw, "threadId": meta.get("threadId")}} if meta.get("threadId") else {"message": {"raw": raw}}
+    try:
+        out = gws(["gmail", "users", "drafts", "create", "--params", json.dumps({"userId": "me"}),
+                   "--json", json.dumps(body)])
+        j = json.loads(out[out.index("{"):])
+    except Exception as err:
+        return {"ok": False, "error": str(err)[:200]}
+    return {"ok": True, "draft_id": j.get("id"), "thread": meta.get("threadId")}
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "draft":
+        ap = argparse.ArgumentParser(prog="gmail.py draft")
+        ap.add_argument("--gmail-id", required=True)
+        ap.add_argument("--inbox", default="")
+        ap.add_argument("--to", required=True)
+        ap.add_argument("--text", required=True)
+        a = ap.parse_args(argv[1:])
+        res = draft(a.gmail_id, a.inbox, a.to, a.text)
+        print(json.dumps(res))
+        return 0 if res.get("ok") else 1
     if argv and argv[0] == "send":
         ap = argparse.ArgumentParser(prog="gmail.py send")
         ap.add_argument("--to", required=True)

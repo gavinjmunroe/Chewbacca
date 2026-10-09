@@ -9,7 +9,7 @@ One primary action per surface, Go, on the row picked in "Act on". What Go
 does depends on what the row IS, read from the graph, never from its text:
 
     Thread     send the typed reply (1:1 only), then read the thread back
-    MailItem   make a Mail draft of the typed reply; never sends
+    MailItem   make a Gmail draft of the typed reply; never sends
     Task       hand it to an agent run in plan mode (bin/lib/osgraph_runs.py);
                an agent's own session row brings its Terminal tab forward
     Person     open their walk
@@ -380,17 +380,34 @@ def handle_is(ctx: Context, handle: str, person: str) -> bool:
     return person == osgraph.person_node(ids, handle).id
 
 
+GMAIL_READER = Path(__file__).resolve().parents[3] / "mac" / "lib" / "gmail.py"
+
+
 def draft_mail(ctx: Context, r: dict, text: str, draft_ptr: str) -> Result:
-    address = r["props"].get("address") or ""
+    """Save the typed reply as a Gmail draft in the mail's own thread. The
+    only command this runs is `gmail.py draft`, which calls gws's
+    messages.get and drafts.create and nothing else, so no press here can
+    send (CHW-192). The address is the graph's verified sender, never words
+    from the mail."""
+    props = r["props"]
+    address = props.get("address") or ""
     if not address:
         return Result(False, "That mail has no reply address.")
+    if not props.get("verified"):
+        return Result(False, "Gmail couldn't verify that sender, so no draft. Reply from Gmail if it's real.")
+    if not props.get("gmail_id"):
+        return Result(False, "That mail isn't from Gmail. Pull mail again first.")
     if not text:
         return Result(False, "Type the reply first; it becomes a draft.")
-    subject = r["label"] if r["label"].lower().startswith("re:") else f"Re: {r['label']}"
-    code, out, err = ctx.run(["mac", "mail", "draft", "--to", address, "--subject", subject, "--body", text, "--json"])
-    if code != 0:
-        return Result(False, f"No draft: {clip(err or out or 'Mail did not answer', 90)}")
-    return Result(True, f"Draft to {r['props'].get('from') or address} is in Mail. Nothing was sent.",
+    code, out, err = ctx.run(["python3", str(GMAIL_READER), "draft", "--gmail-id", props["gmail_id"],
+                              "--inbox", props.get("inbox") or "", "--to", address, "--text", text])
+    try:
+        body = json.loads(out or "{}")
+    except json.JSONDecodeError:
+        body = {}
+    if code != 0 or not body.get("ok"):
+        return Result(False, f"No draft: {clip(body.get('error') or err or out or 'Gmail did not answer', 90)}")
+    return Result(True, f"Draft to {props.get('from') or address} is in Gmail. Nothing was sent.",
                   updates={draft_ptr: ""})
 
 
@@ -541,7 +558,7 @@ class Person(WalkSurface):
         via = values.get(self.p("via")) or data.get("last_network", "")
         if not values.get(self.p("via")) and data.get("last_network"):
             out[self.p("via")] = data["last_network"]
-        out[self.p("go")] = {"iMessage": "Send on iMessage", "Mail": "Draft in Mail"}.get(via, "Reply")
+        out[self.p("go")] = {"iMessage": "Send on iMessage", "Gmail": "Draft in Gmail"}.get(via, "Reply")
         return out
 
     def reply(self, ctx: Context, data, values: dict) -> Result:
@@ -556,7 +573,7 @@ class Person(WalkSurface):
         text = str(values.get(self.p("draft")) or "").strip()
         if via == "iMessage":
             return send_reply(ctx, target, text, self.p("draft"), person=data.get("id", ""))
-        if via == "Mail":
+        if via == "Gmail":
             return draft_mail(ctx, target, text, self.p("draft"))
         return Result(False, f"Replying on {via} isn't built yet.")
 

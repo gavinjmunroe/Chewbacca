@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import sys
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,9 +62,13 @@ class Progress:
     queued: int
     errors: int
 
-    @property
-    def settled(self) -> bool:
-        return self.running + self.queued == 0
+    def settled(self, target: int | None = None) -> bool:
+        """Nothing running or queued, and at least `target` rows (every row
+        when None) carry a finished status. Read in the second after a press,
+        before Clay has marked a cell, nothing is running yet either, so idle
+        alone is not finished."""
+        want = self.rows if target is None else min(target, self.rows)
+        return self.running + self.queued == 0 and self.done + self.errors >= want
 
 
 @dataclass(frozen=True)
@@ -131,15 +136,20 @@ class Reads:
             proc = self.run(argv, capture_output=True, text=True, timeout=TIMEOUT_S)
         except subprocess.TimeoutExpired:
             raise ReadError(f"Clay took longer than {TIMEOUT_S} seconds to answer.") from None
+        except OSError:
+            raise ReadError("node did not start, so Clay could not be read.") from None
         lines = [line for line in (proc.stdout or "").splitlines() if line.strip()]
         try:
             answer = json.loads(lines[-1]) if lines else None
         except ValueError:
             answer = None
         if not isinstance(answer, dict):
-            raise ReadError((proc.stderr or "").strip()[:200] or "Clay did not answer.")
+            # A crash in the reader prints a stack with paths: log, never a card.
+            if (proc.stderr or "").strip():
+                print(f"clay-build: chewbacca-clay {op}: {proc.stderr.strip()[:500]}", file=sys.stderr)
+            raise ReadError("Clay did not answer.")
         if not answer.get("ok"):
-            raise ReadError(str(answer.get("reason") or "Clay refused the read.")[:200])
+            raise ReadError(_clean(str(answer.get("reason") or "")) or "Clay refused the read.")
         return answer
 
     def credits(self, ws: str) -> float:

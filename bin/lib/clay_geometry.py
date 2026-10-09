@@ -18,6 +18,13 @@ from dataclasses import dataclass
 # every y would be off by its height.
 TOOLBAR_RANGE = (40.0, 160.0)
 
+# How far the page may be narrower than the window, in points. Chrome on macOS
+# draws no side frame, so the page fills the window's width unless DevTools or
+# a side panel is docked left or right, which shifts every x. Guessed, never
+# measured: rounding at 125% zoom is at most 1.25 pt, and the dry run reads
+# the real gap.
+SIDE_SLACK = 8.0
+
 
 @dataclass(frozen=True)
 class Rect:
@@ -75,7 +82,8 @@ def problem(win: Window, display: Display) -> str | None:
             or win.screen_y + win.outer_h > display.height + 1):
         return "Move the Clay window onto the main display, then press Try again."
     low, high = TOOLBAR_RANGE
-    if not low <= _toolbar(win, display) <= high:
+    if (not low <= _toolbar(win, display) <= high
+            or abs(win.outer_w - win.inner_w * _zoom(win, display)) > SIDE_SLACK):
         return "Close DevTools or any panel docked in the Clay window, then press Try again."
     return None
 

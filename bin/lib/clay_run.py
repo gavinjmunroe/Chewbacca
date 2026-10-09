@@ -11,6 +11,9 @@ it cost, and Kyber shows all of it. What this file guarantees:
   at once. After `x` nothing is drawn.
 - Nothing runs while table auto-run is on, and an unknown reading is never
   taken as off.
+- Once the test has made a table, nothing is pressed on any other table, and
+  a paid press goes out only while its control still says what the card
+  showed.
 """
 from __future__ import annotations
 
@@ -24,7 +27,7 @@ from urllib.parse import urlparse
 
 import clay_hud
 from clay_geometry import problem, to_screen
-from clay_page import PageError, Paused, Stopped
+from clay_page import Changed, PageError, Paused, Stopped, WrongTable
 from clay_reads import AutoRunUnknown, ReadError, ids_from_href
 from clay_recipe import fill
 
@@ -44,6 +47,8 @@ TEST_SETTLE_S = 120.0
 REST_SETTLE_S = 600.0
 
 DRY_CLOSE_S = 60.0
+WRONG_TABLE = "Go back to the table this run made, then press Resume."
+TOOK_BEFORE_TABLE = "You took over before Clay opened the new table, so the rest will not run."
 SIGNED_OUT = ("/login", "/signin", "/sign-in", "/signup", "/sign-up")
 STOPS = {"stop", "dismissed", "clay-stop", "clay-end"}
 
@@ -74,8 +79,10 @@ def _credits(amount: float) -> str:
 
 
 def _number(text) -> int | None:
-    digits = re.sub(r"\D", "", text or "")
-    return int(digits) if digits else None
+    """The first number in Clay's text: 10 from "Save and run 10 rows (4.8
+    credits)", where stripping every non-digit would read 1048."""
+    found = re.search(r"\d[\d,]*", text or "")
+    return int(found.group().replace(",", "")) if found else None
 
 
 class Run:
@@ -93,6 +100,7 @@ class Run:
         self.ws = self.table = self.field = None
         self.before = self.after_test = None
         self.tally_test = None
+        self.test_rows = None
         self.last_target = None
         self.paid = False
         self.stopping = False
@@ -203,23 +211,39 @@ class Run:
             raise PageError(trouble)
         return to_screen(found.rect, found.window, self.display)
 
+    def _ours(self, found) -> None:
+        """Once the test has made a table, nothing is pressed on any other."""
+        if self.table and ids_from_href(found.href)[1] != self.table:
+            raise WrongTable()
+
     def _do(self, n: int, step, action) -> str | None:
-        """A free action: find it, point at it, press it, wait for what follows."""
+        """A free action: find it, point at it, press it, wait for what follows.
+        A pause after the press resumes the wait: the search already went out,
+        and typing it again would send a second one."""
         action = dataclasses.replace(action, value=self._fill(action.value))
         target = None
+        acted = False
         while True:
             try:
                 self._drain()
-                found = self.page.locate(action.find, self._should_stop)
-                target = self.last_target = self._screen(found)
-                self._acting(n, step, target)
-                self._rest(GLIDE_S)
-                self.page.act(action, self._should_stop)
+                if not acted:
+                    found = self.page.locate(action.find, self._should_stop)
+                    self._ours(found)
+                    target = self.last_target = self._screen(found)
+                    self._acting(n, step, target)
+                    self._rest(GLIDE_S)
+                    self.page.act(action, self._should_stop, table=self.table)
+                    acted = True
                 return self.page.wait(action.expect, action.timeout_s, self._should_stop)
             except Paused:
                 self._pause(n, target)
+                if acted:
+                    self._acting(n, step, target)
+            except WrongTable:
+                self._pause(n, target, body=WRONG_TABLE)
             except (PageError, ReadError) as err:
                 self._fail(n, str(err), target, can_retry=step.cost == "free")
+                acted = False
 
     def _approve(self, n: int, step, action, captured: str | None) -> Outcome | None:
         """The paid action: a card with Clay's own numbers, then one press."""
@@ -229,11 +253,17 @@ class Run:
             try:
                 self._drain()
                 found = self.page.locate(action.find, self._should_stop)
+                self._ours(found)
                 target = self._screen(found)
                 rows = [captured or found.text, f"Balance now {_credits(self.reads.credits(self.ws))} cr"]
+            except WrongTable:
+                self._pause(n, target, body=WRONG_TABLE)
+                continue
             except (PageError, ReadError) as err:
                 self._fail(n, str(err), target, can_retry=False)
                 continue
+            if action.approve == "test":
+                self.test_rows = _number(rows[0])
             if action.approve == "rest" and self.tally_test:
                 rows.append(f"Test found {self.tally_test.found} of {self.tally_test.ran} for "
                             f"{_credits(self.before - self.after_test)} cr")
@@ -256,17 +286,29 @@ class Run:
             # not a takeover.
             self.page.resume(self._should_stop)
             was_paid, self.paid = self.paid, True
+            # act() refuses each of these in the page before pressing, so
+            # nothing went out and the card is asked again.
             try:
-                self.page.act(action, self._should_stop)
+                self.page.act(action, self._should_stop, table=self.table, expect_text=found.text)
             except Paused:
-                # act() refuses before pressing, so nothing went out. Ask again.
                 self.paid = was_paid
                 self._pause(n, target)
+                continue
+            except WrongTable:
+                self.paid = was_paid
+                self._pause(n, target, body=WRONG_TABLE)
+                continue
+            except Changed:
+                # The control no longer says what was approved: show what it says now.
+                self.paid = was_paid
+                captured = None
                 continue
             except PageError as err:
                 self._fail(n, str(err), target, can_retry=False)
             self._acting(n, step, target)
             self._after_paid(n, action, target)
+            if action.approve == "test":
+                self._pin_table(n, target)
             return None
 
     def _after_paid(self, n: int, action, target) -> None:
@@ -276,17 +318,33 @@ class Run:
                 self.page.wait(action.expect, action.timeout_s, self._should_stop)
                 return
             except Paused:
+                if action.approve == "test":
+                    # Which table the test made can no longer be told from
+                    # the page, so nothing more may run on any of them.
+                    self._fail(n, TOOK_BEFORE_TABLE, target, can_retry=False)
                 self._pause(n, target)
             except PageError as err:
                 self._fail(n, str(err), target, can_retry=False)
 
-    def _settle(self, n: int, step, limit_s: float):
+    def _pin_table(self, n: int, target) -> None:
+        """The table the test made, read once, straight after it opened. Every
+        later press and read is held to it."""
+        try:
+            _, href = self.page.window(self._should_stop)
+        except PageError as err:
+            self._fail(n, str(err), target, can_retry=False)
+        self.table = ids_from_href(href)[1]
+        if not self.table:
+            self._fail(n, "Clay did not open the new table.", target, can_retry=False)
+
+    def _settle(self, n: int, step, limit_s: float, target: int | None):
+        """Polls until Clay has finished `target` rows, or every row when None."""
         deadline = self.clock() + limit_s
         while True:
             progress = self.reads.progress(self.ws, self.table, self.field)
             self._send(clay_hud.strip("acting", n, self.total, f"{progress.done}/{progress.rows} rows",
                                       self._elapsed()))
-            if progress.settled:
+            if progress.settled(target):
                 return progress
             if self.clock() > deadline:
                 raise ReadError(f"Rows were still running after {limit_s:g} seconds.")
@@ -297,6 +355,9 @@ class Run:
         while True:
             try:
                 self._acting(n, step, None)
+                # A takeover flag left in the tab by an earlier run is not this
+                # person's hand.
+                self.page.resume(self._should_stop)
                 win, href = self.page.window(self._should_stop)
                 trouble = problem(win, self.display)
                 if trouble:
@@ -364,13 +425,9 @@ class Run:
         while True:
             try:
                 self._acting(n, step, None)
-                _, href = self.page.window(self._should_stop)
-                self.table = ids_from_href(href)[1]
-                if not self.table:
-                    raise PageError("Clay did not open the new table.")
                 self._auto_run_off(n)
                 self.field = self.reads.email_field(self.table)
-                self._settle(n, step, TEST_SETTLE_S)
+                self._settle(n, step, TEST_SETTLE_S, self.test_rows or 1)
                 self.tally_test = self.reads.emails(self.ws, self.table, self.field)
                 self.after_test = self.reads.credits(self.ws)
                 return
@@ -383,7 +440,7 @@ class Run:
             return outcome
         while True:
             try:
-                self._settle(n, step, REST_SETTLE_S)
+                self._settle(n, step, REST_SETTLE_S, None)
                 return None
             except ReadError as err:
                 self._fail(n, str(err), None, can_retry=True)

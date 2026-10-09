@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { pick, matches } = require("../bin/lib/clay_find.js");
+const { pick, matches, refuse } = require("../bin/lib/clay_find.js");
 
 const candidate = (text, extra = {}) => ({ index: extra.index ?? 0, text, placeholder: "", visible: true, ...extra });
 
@@ -42,4 +42,18 @@ test("placeholder narrows", () => {
 
 test("no text constraint matches any visible candidate", () => {
   assert.deepEqual(pick([candidate("", { index: 7 })], { css: "input[value=custom]" }), { ok: true, index: 7 });
+});
+
+test("a press is refused off this run's own table, by whole path segment", () => {
+  const want = { table: "t_new1", text: null };
+  assert.equal(refuse("/workspaces/1/workbooks/wb_1/tables/t_new1", "Run 8", want), null);
+  assert.equal(refuse("/workspaces/1/workbooks/wb_9/tables/t_theirs", "Run 8", want), "wrong table");
+  assert.equal(refuse("/workspaces/1/workbooks/wb_1/tables/t_new12", "Run 8", want), "wrong table");
+  assert.equal(refuse("/workspaces/1/home", "Run 8", want), "wrong table");
+  assert.equal(refuse("/workspaces/1/home", "Save", { table: null, text: null }), null);
+});
+test("a press is refused when the control no longer says what the card showed", () => {
+  const want = { table: null, text: "Run 8 empty or out-of-date rows" };
+  assert.equal(refuse("/x", "Run 8 empty or out-of-date rows", want), null);
+  assert.equal(refuse("/x", "Run 312 empty or out-of-date rows", want), "changed");
 });

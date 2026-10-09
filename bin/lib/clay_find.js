@@ -56,6 +56,20 @@ function locate(alts) {
   return { ok: false, tried };
 }
 
+// Why a press must not happen here, or null. Once the test has made a table,
+// nothing is pressed on any other, matched by whole path segment so t_new1
+// never passes for t_new12. A paid press also needs the control to still say
+// what the card showed when it was approved.
+function refuse(pathname, text, want) {
+  if (want.table) {
+    const parts = String(pathname).split("/");
+    const at = parts.indexOf("tables");
+    if (at < 0 || parts[at + 1] !== want.table) return "wrong table";
+  }
+  if (want.text !== null && want.text !== undefined && text !== want.text) return "changed";
+  return null;
+}
+
 function frame() {
   return {
     screen_x: window.screenX, screen_y: window.screenY, outer_w: window.outerWidth,
@@ -139,4 +153,4 @@ function waitFor(expect, timeoutMs) {
   });
 }
 
-if (typeof module !== "undefined") module.exports = { normalise, matches, pick };
+if (typeof module !== "undefined") module.exports = { normalise, matches, pick, refuse };

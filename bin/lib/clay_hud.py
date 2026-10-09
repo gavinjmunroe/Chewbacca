@@ -290,7 +290,14 @@ class Hud:
             self.sock = self.connect(self.path)
         except OSError as err:
             raise HudMissing("Kyber isn't running, and this run is meant to be watched.") from err
-        self._write([hud_events.listen_line(self.path)])
+        listen = hud_events.listen_line(self.path)
+        if listen == "listen":
+            # Without the token Kyber sends no events, so Stop, Approve and x
+            # would never arrive while Clay spends.
+            self.sock.close()
+            self.sock = None
+            raise HudMissing("Kyber would not pass Stop to this run (no hud.token), so it did not start.")
+        self._write([listen])
         threading.Thread(target=self._read, daemon=True).start()
 
     def _write(self, lines: list[str]) -> None:

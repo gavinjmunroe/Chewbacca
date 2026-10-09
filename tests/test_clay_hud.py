@@ -141,13 +141,19 @@ class Builders(unittest.TestCase):
                              state)
 
 
+TOKEN = "ab" * 32
+
+
 class Socket(unittest.TestCase):
     def hud(self):
         ours, theirs = socket.socketpair()
         self.addCleanup(ours.close)
         self.addCleanup(theirs.close)
         theirs.settimeout(2)
-        hud = clay_hud.Hud(path="/nowhere/hud.sock", connect=lambda path: ours)
+        home = tempfile.TemporaryDirectory()
+        self.addCleanup(home.cleanup)
+        (Path(home.name) / "hud.token").write_text(TOKEN + "\n")
+        hud = clay_hud.Hud(path=str(Path(home.name) / "hud.sock"), connect=lambda path: ours)
         hud.open()
         return hud, theirs
 
@@ -159,7 +165,18 @@ class Socket(unittest.TestCase):
 
     def test_opens_subscribed(self):
         _, kyber = self.hud()
-        self.assertEqual(self.read(kyber, b"\n"), "listen\n")
+        self.assertEqual(self.read(kyber, b"\n"), f"listen token={TOKEN}\n")
+
+    def test_a_kyber_that_would_not_pass_stop_refuses(self):
+        # Without the token Kyber answers `listen` with no events: Stop,
+        # Approve and x would never arrive while Clay is being driven.
+        ours, theirs = socket.socketpair()
+        self.addCleanup(theirs.close)
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(clay_hud.HudMissing) as caught:
+                clay_hud.Hud(path=str(Path(d) / "hud.sock"), connect=lambda path: ours).open()
+        self.assertIn("Stop", str(caught.exception))
+        self.assertEqual(ours.fileno(), -1)
 
     def test_events(self):
         hud, kyber = self.hud()

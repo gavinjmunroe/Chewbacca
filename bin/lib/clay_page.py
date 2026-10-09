@@ -6,7 +6,10 @@ the person's everyday window, and never with a URL argument, which opens a new
 tab instead of using the one they are watching.
 
 Each eval is a subprocess this module polls rather than waits on, so a Stop
-kills it within one poll instead of after Clay's 90 second search.
+kills it within one poll instead of after Clay's 90 second search. It runs in
+its own process group and the whole group is killed: chewie runs node as a
+child of its bash wrapper (mac/bin/chewie cmd_web), and killing the wrapper
+alone left node to finish a press after Stop.
 """
 from __future__ import annotations
 
@@ -14,7 +17,9 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
+import sys
 import time
 import urllib.request
 from dataclasses import dataclass
@@ -55,6 +60,14 @@ class Paused(Exception):
 
 class Stopped(Exception):
     """Stop was pressed while an eval was running."""
+
+
+class WrongTable(Exception):
+    """The page is on a table this run did not make, so nothing was pressed."""
+
+
+class Changed(Exception):
+    """The control no longer says what the card showed, so it was not pressed."""
 
 
 @dataclass(frozen=True)
@@ -121,6 +134,29 @@ _DID_NOT_TAKE = {
 }
 
 
+# What chewie's web bridge says when it fails (mac/bridge/web.js fail()), as
+# sentences. Anything else is bridge or page text: an exception thrown by
+# Clay's own click handler arrives here with its stack, so it goes to the log
+# and never onto a card.
+_CHEWIE_SAYS = (
+    ("no frame url contains",
+     "The Clay tab in Chewie's Chrome is gone. Open app.clay.com there, then press Try again."),
+    ("debug port never came up", "Chewie's Chrome did not start."),
+)
+_CHEWIE_FAILED = "Chrome could not run that step on the Clay page."
+
+# act() refusals that mean nothing was pressed.
+_REFUSED = {"wrong table": WrongTable, "changed": Changed}
+
+
+def _kill_group(proc) -> None:
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass  # finished between the poll and the kill
+    proc.wait(timeout=2)
+
+
 def _expect_label(expect: dict) -> str:
     if "url" in expect:
         return "the next page"
@@ -131,8 +167,9 @@ def _expect_label(expect: dict) -> str:
 
 class Page:
     def __init__(self, spawn=subprocess.Popen, chewie: str = CHEWIE, frame: str = CLAY_HOST,
-                 poll_s: float = 0.1, port: int | None = None):
+                 poll_s: float = 0.1, port: int | None = None, kill=_kill_group):
         self.spawn = spawn
+        self.kill = kill
         self.chewie = chewie
         self.frame = frame
         self.poll_s = poll_s
@@ -149,20 +186,22 @@ class Page:
         env = {**os.environ, "CHEWIE_WEB_FRAME": self.frame, "CHEWIE_CDP_PORT": str(self.port)}
         # Answers are a few hundred bytes, so polling before reading never
         # fills the pipe and stalls the child.
-        proc = self.spawn([self.chewie, "web", "eval", expr], env=env,
+        proc = self.spawn([self.chewie, "web", "eval", expr], env=env, start_new_session=True,
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         deadline = time.monotonic() + timeout_s + GRACE_S
         while proc.poll() is None:
             if should_stop():
-                self._kill(proc)
+                self.kill(proc)
                 raise Stopped()
             if time.monotonic() > deadline:
-                self._kill(proc)
+                self.kill(proc)
                 raise PageError("Chrome stopped answering.")
             time.sleep(self.poll_s)
         out, err = proc.communicate()
         if proc.poll():
-            raise PageError(err.strip().removeprefix("chewie web: ") or "chewie web eval failed.")
+            raw = (err or "").strip().removeprefix("chewie web: ")
+            print(f"clay-build: chewie web eval failed: {raw[:500]}", file=sys.stderr)
+            raise PageError(next((said for clue, said in _CHEWIE_SAYS if clue in raw), _CHEWIE_FAILED))
         try:
             data = json.loads(out)
         except ValueError:
@@ -172,11 +211,6 @@ class Page:
         if data.get("reason") == "not clay":
             raise PageError("The tab Chewie's Chrome picked is not Clay, so nothing was pressed.")
         return data
-
-    @staticmethod
-    def _kill(proc) -> None:
-        proc.kill()
-        proc.wait(timeout=2)
 
     @staticmethod
     def _found(data: dict) -> Found:
@@ -202,14 +236,19 @@ class Page:
             raise _not_found(data.get("tried") or [])
         return self._found(data)
 
-    def act(self, action, should_stop=_never) -> Found:
+    def act(self, action, should_stop=_never, table: str | None = None, expect_text: str | None = None) -> Found:
         """Locate again and press, in one eval, so nothing moves in between.
-        A hand already on the page stops the press before it happens."""
+        A hand already on the page stops the press before it happens, and so
+        does a page on any table but `table`, or a control that no longer
+        says `expect_text`."""
         payload = json.dumps({"do": action.do, "value": action.value, "enter": action.enter})
+        want = json.dumps({"table": table, "text": expect_text})
         body = ("const s = armTakeover(); "
                 "if (s.took || document.visibilityState === \"hidden\") return {ok: false, reason: \"takeover\"}; "
                 f"const f = locate({json.dumps(list(action.find))}); "
                 "if (!f.ok) return {ok: false, tried: f.tried}; "
+                f"const no = refuse(location.pathname, f.text, {want}); "
+                "if (no) return {ok: false, reason: no}; "
                 f"const r = act(f, {payload}); "
                 "return Object.assign(r, {rect: f.rect, text: f.text, frame: frame()});")
         data = self._eval(body, QUICK_S, should_stop)
@@ -217,6 +256,8 @@ class Page:
             return self._found(data)
         if data.get("reason") == "takeover":
             raise Paused()
+        if data.get("reason") in _REFUSED:
+            raise _REFUSED[data["reason"]]()
         if "tried" in data:
             raise _not_found(data["tried"] or [])
         raise PageError(_DID_NOT_TAKE.get(data.get("reason"), f"The page did not take the {action.do}."))

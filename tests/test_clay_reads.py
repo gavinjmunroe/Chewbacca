@@ -11,7 +11,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 sys.dont_write_bytecode = True
 ROOT = Path(__file__).resolve().parent.parent
@@ -106,9 +108,45 @@ class ReadsTests(unittest.TestCase):
         reads, _ = self.reads(rows=ok([row(i, c) for i, c in enumerate(cells)]))
         got = reads.progress("1", "t_1", EMAIL)
         self.assertEqual(got, clay_reads.Progress(rows=9, done=2, running=4, queued=1, errors=1))
-        self.assertFalse(got.settled)
+        self.assertFalse(got.settled(1))
         reads, _ = self.reads(rows=ok([row(0, {"status": "success"}), row(1, {"status": "empty"})]))
-        self.assertTrue(reads.progress("1", "t_1", EMAIL).settled)
+        self.assertTrue(reads.progress("1", "t_1", EMAIL).settled(1))
+
+    def test_rows_clay_has_not_reached_are_not_finished(self):
+        # Read within a second of the press, before Clay marks a cell.
+        untouched = clay_reads.Progress(rows=10, done=0, running=0, queued=0, errors=0)
+        self.assertFalse(untouched.settled(10))
+        self.assertFalse(clay_reads.Progress(rows=10, done=2, running=0, queued=0, errors=0).settled(10))
+        self.assertTrue(clay_reads.Progress(rows=10, done=8, running=0, queued=0, errors=2).settled(10))
+        self.assertTrue(clay_reads.Progress(rows=10, done=2, running=0, queued=0, errors=0).settled(2))
+        self.assertTrue(clay_reads.Progress(rows=3, done=3, running=0, queued=0, errors=0).settled(10))
+        # A status this file does not know is not a finished cell.
+        reads, _ = self.reads(rows=ok([row(0, {"status": "awaiting_dependency"}), row(1, {"status": "success"})]))
+        self.assertFalse(reads.progress("1", "t_1", EMAIL).settled(2))
+
+    def test_what_clay_says_reaches_a_card_capped(self):
+        long = "Upstream provider said: " + "x" * 300
+        reads, _ = self.reads(credits={"ok": False, "reason": long})
+        with self.assertRaises(clay_reads.ReadError) as caught:
+            reads.credits("1")
+        self.assertLessEqual(len(str(caught.exception)), 80)
+        self.assertTrue(str(caught.exception).startswith("Upstream provider said"))
+
+    def test_a_crash_in_the_reader_is_not_shown_raw(self):
+        def crashed(argv, **kw):
+            return subprocess.CompletedProcess(argv, 1, "", "TypeError: x is undefined\n    at main (/kit/bin/chewbacca-clay:9:1)\n")
+        log = StringIO()
+        with mock.patch.object(clay_reads.sys, "stderr", log), self.assertRaises(clay_reads.ReadError) as caught:
+            clay_reads.Reads(run=crashed, root=Path("/kit")).credits("1")
+        self.assertEqual(str(caught.exception), "Clay did not answer.")
+        self.assertIn("TypeError: x is undefined", log.getvalue())
+
+    def test_no_node_is_a_read_error_not_a_crash(self):
+        def missing(argv, **kw):
+            raise FileNotFoundError(2, "No such file or directory", "node")
+        with self.assertRaises(clay_reads.ReadError) as caught:
+            clay_reads.Reads(run=missing, root=Path("/kit")).credits("1")
+        self.assertIn("node", str(caught.exception))
 
     def test_emails_across_pages_with_the_misses_named(self):
         first = [row(i, {"status": "success", "value": f"p{i}@example.com"}) for i in range(3)]

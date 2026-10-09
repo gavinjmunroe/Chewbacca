@@ -8,6 +8,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from unittest import mock
 from importlib.machinery import SourceFileLoader
 from importlib.util import module_from_spec, spec_from_loader
 from pathlib import Path
@@ -159,6 +161,52 @@ class Board(unittest.TestCase):
             ["end", "--session", "clay-build-7"],
         ])
         self.assertTrue(all(timeout == 5 for _, timeout in calls))
+
+
+class FakeHud:
+    def __init__(self):
+        self.sent = []
+
+    def open(self):
+        pass
+
+    def send(self, lines):
+        self.sent.extend(lines)
+
+    def next_event(self, timeout_s):
+        return None
+
+    def close(self):
+        pass
+
+
+class Crashes(unittest.TestCase):
+    def run_main(self, **patches):
+        cli = load_cli()
+        out = io.StringIO()
+        with tempfile.TemporaryDirectory() as home, mock.patch.dict(os.environ, {"CHEWBACCA_HOME": home}), \
+                mock.patch.object(cli.clay_hud, "Hud", FakeHud), mock.patch.object(cli.signal, "signal"), \
+                mock.patch.object(cli, "Board", lambda session: mock.Mock()), redirect_stdout(out):
+            with mock.patch.multiple(cli, **patches):
+                code = cli.main(["fintech VC partners", "--count", "5"])
+        return code, json.loads(out.getvalue().strip().splitlines()[-1])
+
+    def test_a_chrome_that_hangs_before_the_run_still_ends_on_its_outcome(self):
+        # open_clay_tab waits up to 60 s for a first Chrome launch.
+        code, outcome = self.run_main(clay_tab=mock.Mock(side_effect=subprocess.TimeoutExpired(["chewie"], 60)))
+        self.assertEqual((code, outcome["state"]), (1, "failed"))
+
+    def test_anything_unexpected_still_ends_on_its_outcome(self):
+        class Boom:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def go(self):
+                raise KeyError("rows")
+        with mock.patch("sys.stderr", io.StringIO()):
+            code, outcome = self.run_main(clay_tab=mock.Mock(return_value=None),
+                                          read_display=mock.Mock(return_value=None), Run=Boom)
+        self.assertEqual((code, outcome["state"]), (1, "failed"))
 
 
 class Exits(unittest.TestCase):

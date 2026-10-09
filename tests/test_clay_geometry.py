@@ -40,6 +40,13 @@ class Geometry(unittest.TestCase):
     def test_devtools_docked_stops(self):
         self.assertIn("DevTools", problem(win(inner_h=500), RETINA))
 
+    def test_a_panel_docked_beside_the_page_stops(self):
+        # DevTools or Chrome's side panel on the left moves every x by its
+        # width, and the toolbar height cannot see it.
+        self.assertIn("DevTools", problem(win(inner_w=1112), RETINA))
+        # Rounding at 125% zoom is not a panel: innerWidth 1209 * 1.25 = 1511.25.
+        self.assertIsNone(problem(win(dpr=2.5, inner_w=1209, inner_h=686), RETINA))
+
     def test_second_display_stops(self):
         self.assertIn("main display", problem(win(screen_x=1600), RETINA))
         self.assertIn("main display", problem(win(screen_x=-900), RETINA))

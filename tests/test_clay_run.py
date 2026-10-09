@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "bin" / "lib"))
 import clay_recipe  # noqa: E402
 import clay_run  # noqa: E402
 from clay_geometry import Display, Rect, Window  # noqa: E402
-from clay_page import Found, PageError, Paused, Stopped  # noqa: E402
+from clay_page import Changed, Found, PageError, Paused, Stopped, WrongTable  # noqa: E402
 from clay_reads import AutoRunUnknown, Progress, Tally  # noqa: E402
 
 RETINA = Display(1512, 982, 2.0)
@@ -19,16 +19,20 @@ WIN = Window(0, 38, 1512, 944, 1512, 857, 2.0)
 DOCKED = Window(0, 38, 1512, 944, 1512, 500, 2.0)
 HOME = "https://app.clay.com/workspaces/1372623/home"
 TABLE = "https://app.clay.com/workspaces/1372623/workbooks/wb_1/tables/t_new1"
+# One of the person's own tables, which no run may touch.
+THEIRS = "https://app.clay.com/workspaces/1372623/workbooks/wb_9/tables/t_theirs"
 TEST_BUTTON = "^Save and run \\d+ rows$"
 REST_ITEM = "^Run \\d+ empty or out-of-date rows"
 TEXTS = {TEST_BUTTON: "Save and run 10 rows", REST_ITEM: "Run 8 empty or out-of-date rows"}
 
 
 class World:
-    def __init__(self, auto=(False,)):
+    def __init__(self, auto=(False,), progress=()):
         self.balance = 1000.0
         self.auto = list(auto)
         self.rest_ran = False
+        self.progress = list(progress)
+        self.log = []
 
 
 class FakeClock:
@@ -48,16 +52,19 @@ def label(alts):
 
 
 class FakePage:
-    def __init__(self, world, found=551, win=WIN, href=HOME, missing=None, pause_act=None, pause_wait=None):
+    def __init__(self, world, found=551, win=WIN, href=HOME, missing=None, pause_act=None, pause_wait=None,
+                 took=False):
         self.world, self.found, self.win, self.href = world, found, win, href
         self.missing = dict(missing or {})
         self.pause_act = dict(pause_act or {})
         self.pause_wait = dict(pause_wait or {})
-        self.acted, self.located, self.waited = [], [], []
+        self.texts = dict(TEXTS)
+        self.took = took
+        self.acted, self.located, self.waited, self.acted_on = [], [], [], []
         self.resumed = 0
 
     def _found(self, name):
-        return Found(Rect(100, 200, 80, 30), self.win, self.href, TEXTS.get(name, name))
+        return Found(Rect(100, 200, 80, 30), self.win, self.href, self.texts.get(name, name))
 
     def window(self, should_stop=None):
         return self.win, self.href
@@ -70,12 +77,21 @@ class FakePage:
             raise PageError(f"Couldn't find {name} on the page.")
         return self._found(name)
 
-    def act(self, action, should_stop=None):
+    def act(self, action, should_stop=None, table=None, expect_text=None):
         name = label(action.find)
+        if self.took:
+            raise Paused()
         if self.pause_act.get(name):
             self.pause_act[name] -= 1
             raise Paused()
+        # What the act eval checks in the page before it presses (clay_find.js refuse).
+        if table and f"/tables/{table}" not in self.href:
+            raise WrongTable()
+        if expect_text is not None and self.texts.get(name, name) != expect_text:
+            raise Changed()
         self.acted.append((name, action.do, action.value, action.approve))
+        self.acted_on.append((action.approve, self.href))
+        self.world.log.append(f"act:{action.approve or name}")
         if action.approve == "test":
             self.world.balance -= 6.0
             self.href = TABLE
@@ -89,16 +105,19 @@ class FakePage:
             raise Stopped()
         key = next(iter(expect.values()))
         self.waited.append(key)
+        if self.took:
+            raise Paused()
         if self.pause_wait.get(key):
             self.pause_wait[key] -= 1
             raise Paused()
         return {"~([\\d,]+) found": f"{self.found:,}",
-                "(Save and run \\d+ rows)": "Save and run 10 rows",
-                "(Run \\d+ empty or out-of-date rows[^\\n]{0,40})": "Run 8 empty or out-of-date rows (4.8 credits)",
+                "(Save and run \\d+ rows)": self.texts[TEST_BUTTON],
+                "(Run \\d+ empty or out-of-date rows[^\\n]{0,40})": self.texts[REST_ITEM] + " (4.8 credits)",
                 }.get(key)
 
     def resume(self, should_stop=None):
         self.resumed += 1
+        self.took = False
 
 
 class FakeReads:
@@ -120,9 +139,14 @@ class FakeReads:
         return "f_email"
 
     def progress(self, ws, table, field):
+        self.world.log.append("progress")
+        script = self.world.progress
+        if script:
+            return script.pop(0) if len(script) > 1 else script[0]
         return Progress(rows=10, done=10, running=0, queued=0, errors=0)
 
     def emails(self, ws, table, field):
+        self.world.log.append("emails")
         if self.world.rest_ran:
             return Tally(rows=10, ran=10, found=9, missing_names=("Person 9",))
         return Tally(rows=10, ran=2, found=2, missing_names=())
@@ -176,9 +200,9 @@ def press(name):
 
 
 class RunTests(unittest.TestCase):
-    def run_build(self, script=(), count=10, dry_run=False, world=None, **page_kw):
-        world = world or World()
-        page = FakePage(world, **page_kw)
+    def run_build(self, script=(), count=10, dry_run=False, world=None, page=None, **page_kw):
+        world = page.world if page else world or World()
+        page = page or FakePage(world, **page_kw)
         hud = FakeHud(script)
         board = FakeBoard()
         clock = FakeClock()
@@ -287,7 +311,8 @@ class RunTests(unittest.TestCase):
             (note("PAUSED"), press("clay-resume")),
             (card("TEST RUN"), press("clay-decline")),
         ], pause_act={"textarea": 1})
-        self.assertEqual(page.resumed, 1)
+        # Once at check, for a flag an earlier run left, and once on Resume.
+        self.assertEqual(page.resumed, 2)
         self.assertEqual(page.located.count("textarea"), 2)
         self.assertEqual(len([a for a in page.acted if a[0] == "textarea"]), 1)
         self.assertIn('c body Text value="You have the page."', hud.sent)
@@ -399,6 +424,109 @@ class RunTests(unittest.TestCase):
         outcome, _, _, _, _ = self.run_build([(note("STOPPED AT 0/6"), press("clay-end"))],
                                              href="https://app.clay.com/login")
         self.assertEqual(outcome.line, "Sign in to Clay in this window, then press Try again.")
+
+    # ── review fixes, 2026-10-09 ──────────────────────────────────────────────
+    def test_the_rest_is_never_pressed_on_a_table_this_run_did_not_make(self):
+        # The person opens one of their own tables while the test is read,
+        # and would approve whatever card came up.
+        page = FakePage(World())
+
+        def wander(sent):
+            if note("READ THE TEST")(sent) and page.href == TABLE:
+                page.href = THEIRS
+            return card("THE REST")(sent)
+        outcome, page, hud, _, _ = self.run_build([
+            (card("TEST RUN"), press("clay-approve")),
+            (wander, press("clay-approve")),
+        ], page=page)
+        self.assertEqual([a for a in page.acted_on if a[1] == THEIRS], [])
+        self.assertTrue(any("Go back to the table this run made" in line for line in hud.sent))
+        self.assertEqual(outcome, clay_run.Outcome("stopped", "Ended. Spent 6 credits.", 6.0))
+
+    def test_back_on_its_own_table_resume_finishes_the_run(self):
+        page = FakePage(World())
+        moved = []
+
+        def wander_then_return(sent):
+            if note("READ THE TEST")(sent) and not moved:
+                page.href = THEIRS
+                moved.append(True)
+            if any("Go back to the table this run made" in line for line in sent):
+                page.href = TABLE
+                return True
+            return False
+        outcome, page, _, _, _ = self.run_build([
+            (card("TEST RUN"), press("clay-approve")),
+            (wander_then_return, press("clay-resume")),
+            (card("THE REST"), press("clay-approve")),
+            (card("DONE"), press("clay-close")),
+        ], page=page)
+        self.assertEqual([a for a in page.acted_on if a[0]], [("test", HOME), ("rest", TABLE)])
+        self.assertEqual(outcome.state, "done")
+
+    def test_a_rest_control_that_changed_after_the_card_is_asked_again(self):
+        page = FakePage(World())
+
+        def changed(sent):
+            if card("THE REST")(sent):
+                page.texts[REST_ITEM] = "Run 312 empty or out-of-date rows"
+                return True
+            return False
+        outcome, page, hud, _, _ = self.run_build([
+            (card("TEST RUN"), press("clay-approve")),
+            (changed, press("clay-approve")),
+            (lambda sent: sum(line == 'c s Screen title="THE REST"' for line in sent) >= 2, press("clay-decline")),
+        ], page=page)
+        self.assertEqual([a[3] for a in self.paid(page)], ["test"])
+        self.assertIn('c r0 Text value="Run 312 empty or out-of-date rows"', hud.sent)
+        self.assertEqual(outcome.state, "declined")
+
+    def test_the_test_is_read_only_after_clay_finishes_its_rows(self):
+        # The first rows read lands before Clay has marked a single cell.
+        world = World(progress=[Progress(rows=10, done=0, running=0, queued=0, errors=0),
+                                Progress(rows=10, done=10, running=0, queued=0, errors=0)])
+        self.run_build([(card("TEST RUN"), press("clay-approve")), (card("THE REST"), press("clay-decline"))],
+                       world=world)
+        self.assertEqual(world.log[:world.log.index("emails")].count("progress"), 2)
+
+    def test_the_rest_is_counted_only_when_every_row_has_run(self):
+        world = World(progress=[Progress(rows=10, done=2, running=0, queued=0, errors=0),
+                                Progress(rows=10, done=2, running=0, queued=0, errors=0),
+                                Progress(rows=10, done=10, running=0, queued=0, errors=0)])
+        page = FakePage(world)
+        page.texts[TEST_BUTTON] = "Save and run 2 rows"
+        outcome, _, _, _, _ = self.run_build([
+            (card("TEST RUN"), press("clay-approve")),
+            (card("THE REST"), press("clay-approve")),
+            (card("DONE"), press("clay-close")),
+        ], page=page)
+        after = world.log[world.log.index("act:rest"):]
+        self.assertEqual(after[:after.index("emails")].count("progress"), 2)
+        self.assertEqual(outcome.state, "done")
+
+    def test_resume_after_the_search_went_out_waits_instead_of_typing_it_again(self):
+        outcome, page, _, _, _ = self.run_build([
+            (note("PAUSED"), press("clay-resume")),
+            (card("TEST RUN"), press("clay-decline")),
+        ], pause_wait={"~([\\d,]+) found": 1})
+        self.assertEqual(len([a for a in page.acted if a[0] == "textarea"]), 1)
+        self.assertEqual(page.waited.count("~([\\d,]+) found"), 2)
+        self.assertEqual(outcome.state, "declined")
+
+    def test_a_flag_left_by_an_earlier_run_does_not_pause_this_one(self):
+        outcome, _, hud, _, _ = self.run_build([(card("TEST RUN"), press("clay-decline"))], took=True)
+        self.assertNotIn('c s Screen title="PAUSED"', hud.sent)
+        self.assertEqual(outcome.state, "declined")
+
+    def test_a_hand_on_the_page_before_the_new_table_opens_ends_after_the_test(self):
+        # Which table opened can no longer be told from the page, so nothing
+        # more runs on it.
+        outcome, page, _, _, _ = self.run_build([(card("TEST RUN"), press("clay-approve"))],
+                                                pause_wait={"/tables/": 1})
+        self.assertEqual([a[3] for a in self.paid(page)], ["test"])
+        self.assertEqual(outcome.state, "failed")
+        self.assertIn("new table", outcome.line)
+        self.assertEqual(outcome.spent, 6.0)
 
 
 if __name__ == "__main__":

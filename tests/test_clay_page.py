@@ -6,6 +6,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -55,7 +56,7 @@ class PageTests(unittest.TestCase):
             if seen is not None:
                 seen.append((argv, kw["env"]))
             return proc
-        return clay_page.Page(spawn=spawn, chewie="chewie", poll_s=0.01)
+        return clay_page.Page(spawn=spawn, chewie="chewie", poll_s=0.01, kill=lambda proc: proc.kill())
 
     def test_locate_maps_the_answer(self):
         seen = []
@@ -153,10 +154,58 @@ class PageTests(unittest.TestCase):
         self.page(FakeProc(answer(ok=True)), seen).resume()
         self.assertIn("armTakeover().took = false", seen[0][0][3])
 
-    def test_chewie_failure_surfaces_its_reason(self):
+    def test_a_closed_clay_tab_says_so(self):
+        err = 'chewie web: no frame url contains "app.clay.com". run: chewie web frames'
         with self.assertRaises(clay_page.PageError) as caught:
-            self.page(FakeProc("", code=1)).locate([{"css": "button"}])
-        self.assertEqual(str(caught.exception), "no tab matching app.clay.com")
+            self.page(FakeProc("", code=1, err=err)).locate([{"css": "button"}])
+        self.assertEqual(str(caught.exception),
+                         "The Clay tab in Chewie's Chrome is gone. Open app.clay.com there, then press Try again.")
+
+    def test_page_errors_never_reach_the_card_raw(self):
+        # web.js reports the page exception's description: Clay's own error
+        # text and stack, if its click handler throws inside our eval.
+        stack = ("chewie web: TypeError: Cannot read properties of undefined (reading 'rows')\n"
+                 "    at HTMLButtonElement.onClick (https://app.clay.com/assets/index-abc.js:1:2345)\n") * 4
+        log = io.StringIO()
+        with mock.patch("sys.stderr", log), self.assertRaises(clay_page.PageError) as caught:
+            self.page(FakeProc("", code=1, err=stack)).locate([{"css": "button"}])
+        self.assertEqual(str(caught.exception), "Chrome could not run that step on the Clay page.")
+        self.assertIn("TypeError", log.getvalue())
+
+    def test_a_press_carries_the_table_and_the_words_the_card_showed(self):
+        seen = []
+        action = Action(find=({"css": "[role=menuitem]", "text_re": "^Run"},), do="click", value="", enter=False,
+                        expect={"text": "x"}, timeout_s=5, approve="rest")
+        self.page(FakeProc(answer(ok=True, rect={"x": 1, "y": 2, "w": 3, "h": 4}, text="Run 8", frame=FRAME)),
+                  seen).act(action, table="t_new1", expect_text="Run 8 empty or out-of-date rows")
+        expr = seen[0][0][3]
+        self.assertIn('refuse(location.pathname, f.text, {"table": "t_new1", '
+                      '"text": "Run 8 empty or out-of-date rows"})', expr)
+
+    def test_a_press_on_another_table_is_refused(self):
+        action = Action(find=({"css": "button"},), do="click", value="", enter=False,
+                        expect={"text": "x"}, timeout_s=5, approve="rest")
+        with self.assertRaises(clay_page.WrongTable):
+            self.page(FakeProc(answer(ok=False, reason="wrong table"))).act(action, table="t_new1")
+        with self.assertRaises(clay_page.Changed):
+            self.page(FakeProc(answer(ok=False, reason="changed"))).act(action, expect_text="Run 8")
+
+    def test_stop_kills_everything_the_eval_started(self):
+        # chewie runs node as a child of its bash wrapper (mac/bin/chewie
+        # cmd_web), so killing the wrapper alone left node to finish the
+        # press after Stop. This wrapper's child presses after one second.
+        with tempfile.TemporaryDirectory() as d:
+            mark = Path(d) / "pressed"
+            fake = Path(d) / "chewie"
+            fake.write_text(f'#!/bin/bash\n/bin/sh -c "sleep 1; echo pressed > {mark}"\ntrue\n')
+            fake.chmod(0o755)
+            page = clay_page.Page(chewie=str(fake), poll_s=0.01)
+            started = time.monotonic()
+            with self.assertRaises(clay_page.Stopped):
+                page.wait({"text": "x"}, 90, lambda: time.monotonic() - started > 0.1)
+            self.assertLess(time.monotonic() - started, 0.5)
+            time.sleep(1.5)
+            self.assertFalse(mark.exists())
 
     def test_garbage_out_is_an_error_not_a_crash(self):
         with self.assertRaises(clay_page.PageError):

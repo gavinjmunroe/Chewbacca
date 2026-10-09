@@ -22,6 +22,7 @@ import signal
 import subprocess
 import sys
 import time
+import traceback
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -134,15 +135,16 @@ def _refuse(line: str) -> int:
     return _finish(Outcome("refused", line, 0.0))
 
 
-def _show_failure(hud, line: str) -> Outcome:
-    """A failure before step 0, on the glass, for a run started by voice."""
+def _show_failure(hud, line: str, spent: float | None = 0.0) -> Outcome:
+    """A failure outside the runner's own steps, on the glass, for a run
+    started by voice."""
     hud.send(clay_hud.failed(0, 6, line, None, False, 0))
     deadline = time.monotonic() + REFUSAL_S
     while (left := deadline - time.monotonic()) > 0:
         event = hud.next_event(left)
         if event is None or event["name"] in ("clay-end", "stop", "dismissed", "clay-stop"):
             break
-    return Outcome("failed", line, 0.0)
+    return Outcome("failed", line, spent)
 
 
 def _interrupt(signum, frame):
@@ -178,14 +180,26 @@ def main(argv=None) -> int:
                 return _finish(_show_failure(hud, trouble))
             display = read_display()
             steps = clay_recipe.load(args.recipe)
+        except subprocess.SubprocessError:
+            return _finish(_show_failure(hud, "Chewie's Chrome did not answer in time, so nothing was pressed."))
         except (PageError, RuntimeError, clay_recipe.RecipeError, OSError, ValueError) as err:
             return _finish(_show_failure(hud, str(err)[:200]))
         run = Run(args.who, args.count, args.dry_run, steps, Page(port=port), Reads(), hud, board, display)
         return _finish(run.go())
     except KeyboardInterrupt:
+        paid = getattr(run, "paid", False)
         line = ("Stopped from the terminal after a paid press. Check Clay's usage page for what was spent."
-                if run and run.paid else "Stopped from the terminal. Nothing spent.")
-        return _finish(Outcome("stopped", line, None if run and run.paid else 0.0))
+                if paid else "Stopped from the terminal. Nothing spent.")
+        return _finish(Outcome("stopped", line, None if paid else 0.0))
+    except Exception:
+        # Whatever broke, the run still ends on its outcome and its card, so a
+        # voice-started run never just vanishes from the glass.
+        traceback.print_exc()
+        if getattr(run, "paid", False):
+            line, spent = "clay-build hit an error it did not expect after a paid press. Check Clay's usage page.", None
+        else:
+            line, spent = "clay-build hit an error it did not expect. Nothing spent.", 0.0
+        return _finish(_show_failure(hud, line, spent))
     finally:
         hud.close()
         board.end()

@@ -1,0 +1,271 @@
+{
+  "name": "producthunt",
+  "baseUrl": "https://www.producthunt.com",
+  "operations": [
+    {
+      "name": "launchesOnDate",
+      "description": "Products launched on a given day. year=YYYY, month and day as numbers (10 or 010 both work). First page of the daily leaderboard, about 10 posts plus ad slots marked type=Ad. redirectUrl is relative to producthunt.com and redirects to the product website.",
+      "request": {
+        "method": "GET",
+        "url": "https://www.producthunt.com/leaderboard/daily/%7Byear%7D/%7Bmonth%7D/%7Bday%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-arch": "\"x86\"",
+          "sec-ch-ua-bitness": "\"64\"",
+          "sec-ch-ua-full-version": "\"154.0.8037.98\"",
+          "sec-ch-ua-full-version-list": "\"Chromium\";v=\"154.0.8037.98\", \"Google Chrome\";v=\"154.0.8037.98\", \"Not A(Brand\";v=\"99.0.0.0\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-model": "\"\"",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-ch-ua-platform-version": "\"10_15_7\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "year",
+          "at": [
+            "path:2"
+          ]
+        },
+        {
+          "param": "month",
+          "at": [
+            "path:3"
+          ]
+        },
+        {
+          "param": "day",
+          "at": [
+            "path:4"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://www.producthunt.com/leaderboard/daily/{year}/{month}/{day}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "www.producthunt.com",
+        "path": "/leaderboard/daily/*/*/*"
+      },
+      "response": {
+        "format": "embedded",
+        "contentType": "text/html; charset=UTF-8",
+        "extract": "data.homefeedItems.edges[*].node",
+        "pick": [
+          "type=__typename",
+          "id",
+          "name",
+          "slug",
+          "tagline",
+          "votes=latestScore",
+          "comments=commentsCount",
+          "rank=dailyRank",
+          "productSlug=product.slug",
+          "launchedAt=featuredAt",
+          "redirectUrl=shortenedUrl"
+        ],
+        "embedded": {
+          "regex": "\"_R_[A-Za-z0-9]+_\":(\\{\"data\":\\{\"homefeedItems\")"
+        }
+      },
+      "params": [
+        {
+          "name": "year",
+          "type": "string",
+          "required": true,
+          "example": "2026"
+        },
+        {
+          "name": "month",
+          "type": "string",
+          "required": true,
+          "example": "010"
+        },
+        {
+          "name": "day",
+          "type": "string",
+          "required": true,
+          "example": "001"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:19:53.752Z"
+    },
+    {
+      "name": "searchProducts",
+      "description": "Product search (first page, about 10 products). Product page is https://www.producthunt.com/products/{slug}; pass slug to getProduct.",
+      "request": {
+        "method": "GET",
+        "url": "https://www.producthunt.com/search?q=%7Bquery%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-arch": "\"x86\"",
+          "sec-ch-ua-bitness": "\"64\"",
+          "sec-ch-ua-full-version": "\"154.0.8037.98\"",
+          "sec-ch-ua-full-version-list": "\"Chromium\";v=\"154.0.8037.98\", \"Google Chrome\";v=\"154.0.8037.98\", \"Not A(Brand\";v=\"99.0.0.0\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-model": "\"\"",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-ch-ua-platform-version": "\"10_15_7\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "query",
+          "at": [
+            "query:q"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://www.producthunt.com/search?q={query}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "www.producthunt.com",
+        "path": "/search"
+      },
+      "response": {
+        "format": "embedded",
+        "contentType": "text/html; charset=UTF-8",
+        "extract": "data.productSearch.edges[*].node",
+        "pick": [
+          "id",
+          "name",
+          "slug",
+          "tagline",
+          "rating=reviewsRating",
+          "reviews=reviewsCount",
+          "offline=isNoLongerOnline"
+        ],
+        "embedded": {
+          "regex": "\"_R_[A-Za-z0-9]+_\":(\\{\"data\":\\{\"productSearch\")"
+        }
+      },
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "example": "notion"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:24:45.264Z"
+    },
+    {
+      "name": "getProduct",
+      "description": "Product page. makers come from the page's schema.org author list (makerUrls are https://www.producthunt.com/@username). latestLaunchAt is the featured date of the most recent launch; firstListed is when the product page was created.",
+      "request": {
+        "method": "GET",
+        "url": "https://www.producthunt.com/products/%7Bslug%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-arch": "\"x86\"",
+          "sec-ch-ua-bitness": "\"64\"",
+          "sec-ch-ua-full-version": "\"154.0.8037.98\"",
+          "sec-ch-ua-full-version-list": "\"Chromium\";v=\"154.0.8037.98\", \"Google Chrome\";v=\"154.0.8037.98\", \"Not A(Brand\";v=\"99.0.0.0\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-model": "\"\"",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-ch-ua-platform-version": "\"10_15_7\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "slug",
+          "at": [
+            "path:1"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://www.producthunt.com/products/{slug}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "www.producthunt.com",
+        "path": "/products/*"
+      },
+      "response": {
+        "format": "embedded",
+        "contentType": "text/html; charset=UTF-8",
+        "extract": "data.product",
+        "pick": [
+          "id",
+          "name",
+          "slug",
+          "tagline",
+          "description",
+          "website=websiteUrl",
+          "url",
+          "rating=reviewsRating",
+          "reviews=reviewsCount",
+          "followers=followersCount",
+          "launches=posts.totalCount",
+          "firstListed=structuredData.datePublished",
+          "latestLaunchAt=latestLaunch.featuredAt",
+          "latestLaunchSlug=latestLaunch.slug",
+          "latestLaunchName=latestLaunch.name",
+          "latestLaunchLink=latestLaunch.primaryLink.url",
+          "makerNames=structuredData.author[*].name",
+          "makerUrls=structuredData.author[*].url",
+          "linkedin=linkedinUrl",
+          "twitter=twitterUrl",
+          "github=githubUrl",
+          "ycombinator=wasInYCombinator"
+        ],
+        "embedded": {
+          "regex": "\"_R_[A-Za-z0-9]+_\":(\\{\"data\":\\{\"product\":\\{\"__typename\":\"Product\",\"id\":\"\\d+\",\"canEdit\")"
+        }
+      },
+      "params": [
+        {
+          "name": "slug",
+          "type": "string",
+          "required": true,
+          "example": "directus"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:32:50.965Z"
+    }
+  ]
+}

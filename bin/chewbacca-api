@@ -1,0 +1,145 @@
+#!/usr/bin/env bash
+# chewbacca api: any website as an API the agent calls over plain HTTP.
+#
+#   chewbacca api                      every site and how many operations each has
+#   chewbacca api ops <site>           a site's operations, params and caveats
+#   chewbacca api call <site> <op> k=v one call, one line of JSON back
+#   chewbacca api teach <site> <op> --trigger <url> --example k=v ...
+#                                      learn a new operation (api-anything add)
+#   chewbacca api login <site>         import a session from a signed-in browser
+#   chewbacca api sync                 load the kit's taught sites into the engine
+#   chewbacca api install              build the engine, wire MCP into Claude and Codex
+#
+# The engine is goodnight000/api-anything (MIT). It watches a site's own page
+# make a request once, then replays that request with new inputs, falling back
+# to Chrome only when plain HTTP is refused. It stays an upstream binary because
+# its repair logic tracks sites that change underneath it.
+#
+# Sites this kit taught live in library/api-sites/<site>.json with a <site>.md
+# of caveats. `sync` copies them into the engine's own store, and only over a
+# copy that is older than the repo's, so an operation the engine healed in
+# place since the last sync is kept. Clay is not here: it has its own engine.
+set -uo pipefail
+
+ROOT="${CHEWBACCA_ROOT:-$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)}"
+KIT_SITES="${CHEWBACCA_API_SITES:-$ROOT/library/api-sites}"
+ENGINE_HOME="${API_ANYTHING_HOME:-$HOME/.api-anything}"
+UPSTREAM="https://github.com/goodnight000/api-anything.git"
+# Pinned to the commit built and tested on 2026-10-09. A moving HEAD would
+# install whatever upstream pushes next, with this kit's MCP and your sessions.
+UPSTREAM_SHA="ba26db14a122a684e2de672a24c6480c9b274e53"
+
+say() { printf '%s\n' "$*"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+install_engine() {
+  have node || { say "chewbacca api needs Node 22.13 or newer."; return 1; }
+  if ! have api-anything; then
+    say "Building the api engine (one time, about a minute)..."
+    (
+      dir="$(mktemp -d)" || exit 1
+      trap 'rm -rf "$dir"' 0
+      git clone -q "$UPSTREAM" "$dir" &&
+        cd "$dir" &&
+        git -c advice.detachedHead=false checkout -q "$UPSTREAM_SHA" &&
+        npm ci --no-audit --no-fund >/dev/null 2>&1 &&
+        archive="$(npm pack --silent)" &&
+        npm install -g "$archive" >/dev/null 2>&1
+    ) || { say "Could not build the api engine."; return 1; }
+  fi
+  # MCP: four tools (list_sites, list_operations, call_operation, login).
+  if have claude && ! claude mcp get api-anything >/dev/null 2>&1; then
+    claude mcp add --scope user api-anything -- api-anything mcp >/dev/null 2>&1
+  fi
+  if have codex && ! codex mcp get api-anything >/dev/null 2>&1; then
+    codex mcp add api-anything -- api-anything mcp >/dev/null 2>&1
+  fi
+  local skill
+  skill="$(npm root -g 2>/dev/null)/api-anything/skills/api-anything/SKILL.md"
+  if [ -f "$skill" ]; then
+    mkdir -p "$HOME/.claude/skills/api-anything" && cp "$skill" "$HOME/.claude/skills/api-anything/"
+  fi
+  sync_sites
+  say "api engine ready: $(api-anything sites 2>/dev/null | grep -o '"name"' | wc -l | tr -d ' ') sites"
+}
+
+# A spec from the repo is replayed with your cookies for its site. So one that
+# names a site you are signed in to, or sends a request off its own domain,
+# could carry a session somewhere else. Kit specs are logged-out reads; refuse
+# anything that is not.
+spec_is_safe() {
+  python3 - "$1" "$ENGINE_HOME/sessions" <<'PY'
+import json, os, re, sys
+from urllib.parse import urlparse
+path, sessions = sys.argv[1], sys.argv[2]
+try:
+    spec = json.load(open(path))
+except Exception as e:
+    print(f"{os.path.basename(path)}: not JSON ({e})", file=sys.stderr); sys.exit(1)
+name = str(spec.get("name") or os.path.basename(path)[:-5])
+# The engine also keeps cookies a logged-out site sets on a plain call; only a
+# session imported by `login` carries a "source", and only that one is yours.
+sess = os.path.join(sessions, name + ".json")
+try:
+    signed_in = bool(json.load(open(sess)).get("source"))
+except Exception:
+    signed_in = False
+if signed_in:
+    print(f"{name}: you have a signed-in session for this site; a repo spec will not replace it", file=sys.stderr)
+    sys.exit(1)
+def root(host):
+    return ".".join(host.lower().split(".")[-2:])
+home = root(urlparse(str(spec.get("baseUrl", ""))).hostname or "")
+if not home:
+    print(f"{name}: no baseUrl", file=sys.stderr); sys.exit(1)
+for url in re.findall(r"https?://[^\s\"'{}]+", json.dumps(spec)):
+    host = urlparse(url).hostname or ""
+    if host and root(host) != home:
+        print(f"{name}: requests {host}, outside {home}", file=sys.stderr); sys.exit(1)
+PY
+}
+
+sync_sites() {
+  [ -d "$KIT_SITES" ] || return 0
+  mkdir -p "$ENGINE_HOME/sites"
+  local f base dest copied=0
+  for f in "$KIT_SITES"/*.json; do
+    [ -f "$f" ] || continue
+    base="$(basename "$f")"
+    dest="$ENGINE_HOME/sites/$base"
+    if ! spec_is_safe "$f"; then
+      say "refused $base: see above" >&2
+      continue
+    fi
+    if [ ! -f "$dest" ] || [ "$f" -nt "$dest" ]; then
+      cp "$f" "$dest" && copied=$((copied + 1))
+    fi
+    # Notes ride along; the engine reads <site>.md as the site's caveats.
+    [ -f "${f%.json}.md" ] && cp "${f%.json}.md" "$ENGINE_HOME/sites/"
+  done
+  [ "${1:-}" = "--quiet" ] || say "synced $copied site(s) from the kit"
+}
+
+need_engine() {
+  have api-anything && return 0
+  install_engine
+}
+
+cmd="${1:-sites}"
+[ $# -gt 0 ] && shift
+
+case "$cmd" in
+  install|setup) install_engine ;;
+  sync) need_engine && sync_sites ;;
+  teach) need_engine && exec api-anything add "$@" ;;
+  sites|ops|call|login|logout|capture|inspect|verify|heal|export|add)
+    need_engine || exit 1
+    sync_sites --quiet
+    exec api-anything "$cmd" "$@"
+    ;;
+  -h|--help|help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *)
+    say "chewbacca api: unknown command '$cmd'. Try: chewbacca api help"
+    exit 2
+    ;;
+esac

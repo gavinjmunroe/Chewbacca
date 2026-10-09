@@ -23,11 +23,12 @@ class WorkLedgerContextTests(unittest.TestCase):
         self.workspace = self.root / 'selected workspace'
         self.other = self.root / 'other workspace'
         self.brain = self.root / 'fixture brain'
-        for path in (self.workspace, self.other, self.brain):
+        for path in (self.workspace, self.other, self.brain, self.root / 'personal'):
             path.mkdir()
         self.enterContext(patch.dict(os.environ, {
             'CHEWBACCA_HOME': str(self.root / 'shared'),
             'CODEX_HOME': str(self.root / 'codex'),
+            'CHEWBACCA_PERSONAL_SCOPE': str(self.root / 'personal'),
         }))
         self.enterContext(patch.object(agent_context, 'read_sources', return_value=0))
         self.enterContext(patch.object(codex_hooks.context, 'read_sources', return_value=0))
@@ -79,6 +80,14 @@ class WorkLedgerContextTests(unittest.TestCase):
         output = self.hook_context('UserPromptSubmit')
         self.assertNotIn('OPEN_SELECTED_CANARY', output)
         self.assertNotIn('OTHER_WORKSPACE_CANARY', output)
+
+    def test_personal_todo_shows_in_every_workspace(self):
+        self.seed()
+        work_ledger.add(self.root / 'personal', 'PERSONAL_TODO_CANARY', 'personal')
+        for output in (self.shared_read(), self.hook_context('SessionStart'),
+                       work_ledger.context_for(self.other)):
+            self.assertEqual(output.count('PERSONAL_TODO_CANARY'), 1)
+        self.assertNotIn('OPEN_SELECTED_CANARY', work_ledger.context_for(self.other))
 
     def test_context_reads_do_not_create_missing_ledger(self):
         self.shared_read()

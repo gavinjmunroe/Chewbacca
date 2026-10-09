@@ -1413,6 +1413,11 @@ h["SessionStart"] = [{"hooks": [{
     "type": "command",
     "command": hooks_dir + "/session-context.sh",
     "statusMessage": "Loading your context...",
+}, {
+    # Open todos for this workspace plus the person's own (scope ~). Separate
+    # from session-context.sh because that output is cached across workspaces.
+    "type": "command",
+    "command": hooks_dir + "/work-ledger-context.sh",
 }]}]
 
 h["Stop"] = [{"hooks": [{

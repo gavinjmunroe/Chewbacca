@@ -157,17 +157,28 @@ def list_tasks(scope, include_terminal=False):
         return [dict(row) for row in db.execute(query + ' ORDER BY ' + ORDER, (scope_path(scope),))]
 
 
+def personal_scope():
+    """The person's own todos live here and follow them into every workspace.
+
+    Caleb, 2026-10-09: "Nothing should ever be brute force word commanded." A
+    todo saved from a Chewbacca tab was invisible to a tab opened anywhere
+    else, so the only way back to it was remembering a phrase to type.
+    """
+    return os.environ.get('CHEWBACCA_PERSONAL_SCOPE') or str(Path.home())
+
+
 def context_for(cwd):
     """Bounded open-task context; never creates a database or writes on read."""
     if not database_path().exists():
         return ''
     try:
         with connection() as db:
-            where = " FROM tasks WHERE scope=? AND status NOT IN ('done','cancelled')"
-            scope = scope_path(cwd)
-            count = db.execute('SELECT COUNT(*)' + where, (scope,)).fetchone()[0]
+            scopes = sorted({scope_path(cwd), scope_path(personal_scope())})
+            where = (" FROM tasks WHERE scope IN (" + ','.join('?' * len(scopes)) + ")"
+                     " AND status NOT IN ('done','cancelled')")
+            count = db.execute('SELECT COUNT(*)' + where, scopes).fetchone()[0]
             rows = db.execute('SELECT id,title,status,next_action' + where + ' ORDER BY ' + ORDER + ' LIMIT 12',
-                              (scope,)).fetchall()
+                              scopes).fetchall()
     except (OSError, sqlite3.Error, ValueError):
         return 'Shared work ledger is unavailable; earlier commitments may be missing. Do not infer they are complete.'
     if not rows:
@@ -188,7 +199,7 @@ def main(argv=None):
     commands = parser.add_subparsers(dest='command', required=True)
     for name in ('add', 'list', 'update', 'context'):
         command = commands.add_parser(name)
-        command.add_argument('--scope', default=os.getcwd(), help='exact workspace path; canonicalized, no parent-scope lookup')
+        command.add_argument('--scope', default=os.getcwd(), help='exact workspace path; canonicalized, no parent-scope lookup. Use ~ for a personal todo that shows in every workspace')
         if name == 'add':
             command.add_argument('--title', required=True)
             command.add_argument('--source-key', required=True, help='idempotency key unique within this workspace')

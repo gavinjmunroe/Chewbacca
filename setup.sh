@@ -2490,15 +2490,45 @@ if command -v brew &>/dev/null; then
   else
     brew install steipete/tap/summarize &>/dev/null && log "summarize installed" || warn "could not install summarize"
   fi
-  # WhatsApp: wacrawl reads the WhatsApp Desktop archive with no login;
-  # wacli is the linked device the whatsapp surface reads and sends through.
-  for _wa in wacrawl wacli; do
+  # Messages from other apps land in the same people store as iMessage.
+  # wacrawl copies WhatsApp Desktop's database, wacli is a linked WhatsApp
+  # device (linked with `chewbacca whatsapp link`), slacrawl copies the Slack
+  # desktop app's cache. Nobody types these: `people texts sync` drives them.
+  for _wa in wacrawl wacli slacrawl; do
     if command -v "$_wa" &>/dev/null; then
       log "$_wa already installed"
     else
       brew install "openclaw/tap/$_wa" &>/dev/null && log "$_wa installed" || warn "could not install $_wa"
     fi
   done
+  if command -v slacrawl &>/dev/null && [ ! -f "$HOME/.slacrawl/config.toml" ]; then
+    slacrawl init &>/dev/null && log "slacrawl initialised" || warn "could not initialise slacrawl"
+  fi
+  # Keep those copies fresh between sessions. Every ten minutes, because a
+  # message that arrived an hour ago and is not in the store reads as "they
+  # never wrote back". launchd hands children a PATH without Homebrew, which
+  # silently broke the HUD once, so the plist carries its own.
+  _mr_plist="$HOME/Library/LaunchAgents/com.chewbacca.messages-refresh.plist"
+  cat >"$_mr_plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.chewbacca.messages-refresh</string>
+  <key>ProgramArguments</key><array>
+    <string>$SCRIPT_DIR/bin/people</string><string>texts</string><string>refresh</string>
+  </array>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+  </dict>
+  <key>StartInterval</key><integer>600</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/tmp/chewbacca-messages-refresh.log</string>
+  <key>StandardErrorPath</key><string>/tmp/chewbacca-messages-refresh.log</string>
+</dict></plist>
+PLIST
+  launchctl bootout "gui/$(id -u)/com.chewbacca.messages-refresh" &>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$_mr_plist" &>/dev/null &&
+    log "message refresh scheduled every 10 min" || warn "could not schedule the message refresh"
 else
   warn "Homebrew not found. macOS tools skipped: see docs/MACOS-TOOLS.md"
 fi

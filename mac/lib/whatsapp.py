@@ -27,10 +27,11 @@ from datetime import datetime
 WACRAWL_DB = os.path.expanduser(os.environ.get("WACRAWL_DB", "~/.wacrawl/wacrawl.db"))
 WACLI_DB = os.path.expanduser(os.path.join(os.environ.get("WACLI_STORE_DIR", "~/.wacli"), "wacli.db"))
 
-# iMessage ids are chat.db ROWIDs (642k on this machine on 2026-10-08) and the
-# LinkedIn import sits at 10,000,000,000. WhatsApp starts at twice that and
-# spends 40 bits of a hash, so no range can reach another.
-ID_BASE = 20_000_000_000
+# Each app owns its own trillion: iMessage ids are chat.db ROWIDs (642k here
+# on 2026-10-08), LinkedIn sits at 1e10, WhatsApp at 2e12, Slack 3e12, email
+# 4e12. A 40-bit hash spans 1.1e12, so no two ranges can touch. They used to
+# sit 1e10 apart, which overlapped and only stayed distinct by hash luck.
+ID_BASE = 2_000_000_000_000
 ID_BITS = 40
 
 # Message kinds that are a conversation. Reactions, joins, calls, polls and

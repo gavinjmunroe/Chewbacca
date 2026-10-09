@@ -16,7 +16,7 @@
 const { execFileSync } = require("node:child_process");
 const { c, die, say, parseArgs } = require("./output");
 const { db, nowISO } = require("./db");
-const { textsReader } = require("./texts");
+const { textsReader, resolvePerson, printable } = require("./texts");
 const { findPerson } = require("./lookup");
 
 const APPS = ["imessage", "whatsapp", "slack", "email"];
@@ -83,31 +83,24 @@ function run(cmd, args) {
   }
 }
 
-function dispatch(via, handle, text, flags) {
-  if (via === "imessage")
-    return run("mac", ["messages", "send", handle, text, "--json"]);
-  if (via === "whatsapp") {
-    const jid = waJid(handle);
-    if (!jid) return { code: 2, err: `no WhatsApp address for ${handle}` };
-    return run("wacli", [
-      "--json",
-      "--lock-wait=15s",
-      "send",
-      "text",
-      "--to",
-      jid,
-      "--message",
-      text,
-    ]);
-  }
+// The exact address each app is handed. Computed once, then both printed and
+// used, so what a dry run shows is what a send does.
+function target(via, handle) {
+  return via === "whatsapp" ? waJid(handle) : handle;
+}
+
+function dispatch(via, to, text, flags) {
+  // Tests set this so a mistake in a test can never reach a real phone. On
+  // 2026-10-08 a check meant to refuse a send had not applied, and the test
+  // call delivered "hi" to a client.
+  if (process.env.CHEWBACCA_NO_SEND) return { code: 3, err: "sending is disabled (CHEWBACCA_NO_SEND)" };
+  if (via === "imessage") return run("mac", ["messages", "send", to, text, "--json"]);
+  if (via === "whatsapp")
+    return run("wacli", ["--json", "--lock-wait=15s", "send", "text", "--to", to, "--message", text]);
   const reader = textsReader(via === "slack" ? "slack.py" : "email_reader.py");
   if (!reader) return { code: 2, err: `${via} is not set up in this kit yet` };
-  const args = [reader, "send", "--to", handle, "--text", text];
-  if (via === "email")
-    args.push(
-      "--subject",
-      String(flags.subject || text.split("\n")[0].slice(0, 60)),
-    );
+  const args = [reader, "send", "--to", to, "--text", text];
+  if (via === "email") args.push("--subject", String(flags.subject || text.split("\n")[0].slice(0, 60)));
   return run("python3", args);
 }
 
@@ -127,12 +120,10 @@ function cmdSend(argv) {
   const { flags, rest } = parseArgs(argv);
   const who = rest.shift();
   const text = rest.join(" ").trim();
-  if (!who || !text)
-    die(
-      'Try: people send maggie "running 10 late" [--via whatsapp] [--dry-run]',
-    );
+  if (!who || !text) die('Try: people send maggie "running 10 late" [--via whatsapp] [--dry-run]');
   const via = flags.via ? String(flags.via).toLowerCase() : null;
   if (via && !APPS.includes(via)) die(`--via is one of: ${APPS.join(", ")}`);
+  const P = (v) => printable(v == null ? "" : v);
 
   const d = db();
   // STRICT, UNLIKE READING. `people texts dad` may guess the most recently
@@ -141,13 +132,14 @@ function cmdSend(argv) {
   // `people send dad` resolved to "prestons dad". findPerson refuses ambiguity.
   const person = findPerson(who, { required: false });
   if (!person) {
-    // A thread nobody's card owns yet (an unsaved WhatsApp number) is still
-    // sendable, but only when exactly one such thread matches.
+    // A thread nobody's card owns yet (an unsaved WhatsApp number) may still
+    // be addressed, but only when exactly one such thread matches.
     const names = d
       .prepare("SELECT DISTINCT who FROM messages WHERE person_id IS NULL AND room IS NULL AND lower(who) LIKE ? LIMIT 6")
       .all("%" + String(who).toLowerCase() + "%")
       .map((r) => r.who);
-    if (names.length > 1) die(`"${who}" matches ${names.length} threads:\n` + names.map((n) => `  ${n}`).join("\n") + "\nBe more specific.");
+    if (names.length > 1)
+      die(`"${P(who)}" matches ${names.length} threads:\n` + names.map((n) => `  ${P(n)}`).join("\n") + "\nBe more specific.");
   }
   const thread = lastThread(d, person, who, via);
   const app = via || (thread && thread.source);
@@ -155,23 +147,33 @@ function cmdSend(argv) {
   const name = (person && person.name) || (thread && thread.who) || who;
   if (!app || !handle)
     die(
-      `No ${via || "message"} history with ${name} and no address on their card.\n` +
-        `  Add one: people set ${who} phone <number>   or pick an app with --via`,
+      `No ${via || "message"} history with ${P(name)} and no address on their card.\n` +
+        `  Add one: people set "${P(who)}" phone <number>   or pick an app with --via`,
     );
+  const to = target(app, handle);
+  if (!to) die(`No ${app} address for ${P(name)} (${P(handle)}).`);
 
-  const where = `${c.b(name)} ${c.dim(`via ${app}, ${handle}`)}`;
+  // AN ADDRESS ONLY COUNTS IF IT PROVABLY BELONGS TO THEM: the card's own
+  // phone or email, or a handle the store resolves back to this same person.
+  // Anything else was reached through a name, and on WhatsApp or Slack the
+  // sender picks their own name. That sends only when --to repeats the exact
+  // address the dry run printed, so a person chose the number, not the name.
+  const owned = Boolean(person) && (resolvePerson(null, handle) === person.id || handle === fromCard(person, app));
+  const where = `${c.b(P(name))} ${c.dim(`via ${app}, ${P(to)}${owned ? "" : ", not a saved contact"}`)}`;
   if (flags["dry-run"]) {
     say(`  would send to ${where}`);
-    say(`  ${text}`);
+    say(`  ${P(text)}`);
+    if (!owned) say(c.dim(`  to send: add --to ${P(to)}`));
     return;
   }
-
-  const r = dispatch(app, handle, text, flags);
-  if (!succeeded(r)) {
+  if (!owned && String(flags.to || "") !== to)
     die(
-      `Not sent to ${name} via ${app}: ${(r.err || r.out || "no output").trim().split("\n")[0]}`,
+      `${P(name)} isn't a saved contact, so ${P(to)} is unconfirmed. Nothing was sent.\n` +
+        `  If that address is right, add --to ${P(to)}   or save them: people add "${P(name)}"`,
     );
-  }
+
+  const r = dispatch(app, to, text, flags);
+  if (!succeeded(r)) die(`Not sent to ${P(name)} via ${app}: ${P((r.err || r.out || "no output").trim().split("\n")[0])}`);
   if (person)
     d.prepare(
       "INSERT INTO interactions (id, person_id, channel, note, happened_at) VALUES (lower(hex(randomblob(16))),?,?,NULL,?)",
@@ -179,4 +181,4 @@ function cmdSend(argv) {
   say(`${c.grn("sent")} to ${where}`);
 }
 
-module.exports = { cmdSend, lastThread, waJid };
+module.exports = { cmdSend, lastThread, waJid, target };

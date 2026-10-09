@@ -515,13 +515,19 @@ else
     ok "summarize present" ||
     warn "summarize missing (brew install steipete/tap/summarize)"
 
+  command -v slacrawl >/dev/null 2>&1 &&
+    ok "slacrawl present (Slack desktop cache)" ||
+    warn "slacrawl missing, Slack never reaches the people store (brew install openclaw/tap/slacrawl)"
+  launchctl list 2>/dev/null | grep -q com.chewbacca.messages-refresh &&
+    ok "message refresh scheduled" ||
+    warn "message refresh not scheduled, WhatsApp and Slack go stale between sessions (./setup.sh)"
   command -v wacrawl >/dev/null 2>&1 &&
     ok "wacrawl present (WhatsApp Desktop archive)" ||
     warn "wacrawl missing (brew install openclaw/tap/wacrawl)"
   if command -v wacli >/dev/null 2>&1; then
     wacli auth status --read-only --json 2>/dev/null | grep -q '"authenticated":true' &&
       ok "wacli linked to WhatsApp" ||
-      warn "wacli not linked, the WhatsApp surface sees nothing (wacli auth --phone <number>)"
+      warn "WhatsApp not linked, so new WhatsApp messages never arrive (chewbacca whatsapp link)"
   else
     warn "wacli missing (brew install openclaw/tap/wacli)"
   fi

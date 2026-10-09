@@ -104,7 +104,7 @@ with tempfile.TemporaryDirectory() as tmp:
     check("wacli's '(message)' placeholder is not text", not any(r["text"] == "(message)" for r in rows))
     check("a reaction is marked a reaction", any(r["reaction"] for r in rows))
     check("ids sit in the WhatsApp range, past iMessage and LinkedIn",
-          all(20_000_000_000 <= r["id"] < 20_000_000_000 + 2**40 for r in rows))
+          all(2_000_000_000_000 <= r["id"] < 2_000_000_000_000 + 2**40 for r in rows))
     check("every row says it came from WhatsApp", all(r["source"] == "whatsapp" for r in rows))
 
     empty = run({"WACRAWL_DB": str(t / "none.db"), "WACLI_STORE_DIR": str(t / "nothing")})

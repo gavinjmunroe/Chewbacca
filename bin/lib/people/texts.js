@@ -88,19 +88,36 @@ const CHANNELS = [
       ["wacli", ["sync", "--once", "--idle-exit", "10s"]],
     ],
   },
+  {
+    source: "slack",
+    reader: "slack.py",
+    label: "Slack",
+    // slacrawl copies the signed-in Slack desktop app's local cache, no token.
+    refresh: [["slacrawl", ["sync", "--source", "desktop"]]],
+  },
+  {
+    source: "email",
+    reader: "email_reader.py",
+    label: "email",
+    // Mail.app keeps its own store current. The reader keeps human mail only.
+    refresh: [],
+  },
 ];
+
+function refreshChannel(ch) {
+  for (const [cmd, args] of ch.refresh || []) {
+    try {
+      execFileSync(cmd, args, { stdio: "ignore", timeout: 60000 });
+    } catch {
+      /* missing, not linked, or busy: read whatever the store already has */
+    }
+  }
+}
 
 function syncChannel(d, ch, flags) {
   const py = textsReader(ch.reader);
   if (!py) return 0;
-  if (!flags["no-refresh"])
-    for (const [cmd, args] of ch.refresh || []) {
-      try {
-        execFileSync(cmd, args, { stdio: "ignore", timeout: 60000 });
-      } catch {
-        /* missing, not linked, or busy: read whatever the store already has */
-      }
-    }
+  if (!flags["no-refresh"]) refreshChannel(ch);
   const key = `${ch.source}_last_sync`;
   // Same rule as iMessage: everything the first time, a 30-day window after.
   const days = Number(flags.days ?? (syncState(key) ? 30 : 0));
@@ -213,7 +230,12 @@ function ingestRows(d, rows, source, seen) {
       if (r.reaction || r.attachment_only) continue; // "Loved an image" is not a conversation
       const body = String(r.text || "").trim();
       if (!body) continue;
-      const pid = resolveCached(r.with, r.handle);
+      // A NAME IS ONLY EVIDENCE ON iMESSAGE. There `with` comes from the
+      // user's own Contacts. On WhatsApp and Slack it can be a name the sender
+      // chose, so a stranger calling himself "Sagar Tiwari" would be filed
+      // under Sagar, his number recorded as Sagar's, and `people send sagar`
+      // would reach him. Other apps link by address only.
+      const pid = resolveCached(source === "imessage" ? r.with : null, r.handle);
       const res = ins.run(
         r.id,
         pid,
@@ -245,8 +267,16 @@ function ingestRows(d, rows, source, seen) {
 }
 
 function cmdTexts(argv) {
-  const sub = ["sync", "log", "stats", "link", "search"].includes(argv[0]) ? argv.shift() : "log";
+  const sub = ["sync", "refresh", "log", "stats", "link", "search"].includes(argv[0]) ? argv.shift() : "log";
   const { flags, rest } = parseArgs(argv);
+
+  // Bring every app's own local copy up to date and stop there. This is what
+  // the background job runs every few minutes: it needs no Full Disk Access
+  // and opens no people database, so it can't collide with a session's sync.
+  if (sub === "refresh") {
+    for (const ch of CHANNELS) refreshChannel(ch);
+    return;
+  }
   const d = db();
 
   if (sub === "sync") {
@@ -334,9 +364,9 @@ function cmdTexts(argv) {
     // normal case: the session hook syncs texts before anyone runs an import.
     let relinked = 0;
     for (const row of d
-      .prepare("SELECT DISTINCT who, handle FROM messages WHERE person_id IS NULL")
+      .prepare("SELECT DISTINCT who, handle, source FROM messages WHERE person_id IS NULL")
       .all()) {
-      const pid = resolvePerson(row.who, row.handle);
+      const pid = resolvePerson(row.source === "imessage" ? row.who : null, row.handle);
       if (!pid) continue;
       // Match on the handle when there is one. Matching on the thread name
       // instead credited every sender in a group chat to whichever member
@@ -514,5 +544,5 @@ function cmdTexts(argv) {
 }
 
 module.exports = {
-  cmdTexts, textPartner, textsReader, CHANNELS,
+  cmdTexts, textPartner, textsReader, resolvePerson, printable, CHANNELS,
 };

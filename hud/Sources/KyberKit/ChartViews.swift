@@ -171,10 +171,7 @@ struct BarsView: View {
         let peak = max(parsed.map(\.value).max() ?? 1, 0.0001)
         VStack(alignment: .leading, spacing: 7) {
             if !caption.isEmpty {
-                Text(caption)
-                    .font(.system(size: 10, weight: .medium))
-                    .kerning(0.3)
-                    .foregroundStyle(HUD.faint)
+                CaptionLabel(text: caption)
             }
             ForEach(parsed) { row in
                 VStack(alignment: .leading, spacing: 3) {
@@ -318,10 +315,7 @@ struct EventsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             if !caption.isEmpty {
-                Text(caption)
-                    .font(.system(size: 10, weight: .medium))
-                    .kerning(0.3)
-                    .foregroundStyle(HUD.faint)
+                CaptionLabel(text: caption)
                     .padding(.bottom, 7)
             }
             ForEach(Array(parsed.enumerated()), id: \.element.id) { index, event in

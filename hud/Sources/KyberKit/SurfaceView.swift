@@ -21,6 +21,9 @@ public struct SurfaceView: View {
     private let store: SurfaceStore
     /// What to call the surface until its own Screen title arrives.
     private let pendingTitle: String
+    /// A window sets its title in mono caps inside its strip and squares its
+    /// diagram nodes; every other chrome keeps the rounded house type.
+    @Environment(\.hudChrome) private var chrome
 
     public init(store: SurfaceStore, pendingTitle: String = "") {
         self.store = store
@@ -121,7 +124,8 @@ public struct SurfaceView: View {
                 DiagramView(
                     parts: parts,
                     aspect: p["aspect"]?.doubleValue ?? 2,
-                    tone: HUD.tone(p["tone"]?.stringValue))
+                    tone: HUD.tone(p["tone"]?.stringValue, in: chrome),
+                    square: chrome == .window)
                     // A drawing with no description is the least accessible
                     // thing here, and it was shipped with a role and no
                     // content. Reading the labels out in order is not a
@@ -148,9 +152,14 @@ public struct SurfaceView: View {
                     // No title, no line: a launcher rail has nothing to
                     // name, and an empty Text still takes 14 of gap.
                     if let title = p["title"]?.display, !title.isEmpty {
-                        Text(title)
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .kerning(0.4)
+                        Text(chrome == .window ? title.uppercased() : title)
+                            .font(chrome == .window
+                                ? Typeface.pixel(11)
+                                : .system(size: 13, weight: .semibold, design: .rounded))
+                            // Nothing outside a window sets a design, so this
+                            // only undoes the window's mono (`pixelFont`).
+                            .fontDesign(nil)
+                            .kerning(chrome == .window ? 0.6 : 0.4)
                             .foregroundStyle(HUD.ink)
                             .modifier(Stagger(part: .title))
                     }
@@ -225,9 +234,9 @@ public struct SurfaceView: View {
         case "Heading":
             let level = Int(p["level"]?.doubleValue ?? 2)
             return AnyView(
-                Text(p["text"]?.display ?? "")
-                    .font(.system(size: level == 1 ? 14 : 11.5, weight: .semibold))
-                    .foregroundStyle(HUD.dim)
+                CaptionLabel(
+                    text: p["text"]?.display ?? "", size: level == 1 ? 14 : 11.5,
+                    weight: .semibold, colour: HUD.dim, kerning: 0)
                     .padding(.top, 2))
 
         case "Text":
@@ -259,7 +268,7 @@ public struct SurfaceView: View {
         switch type {
         case "Metric":
             let value = p["value"]?.display ?? ""
-            let tone = Self.threshold(p, value: p["value"]?.doubleValue)
+            let tone = Self.threshold(p, value: p["value"]?.doubleValue, in: chrome)
             return AnyView(
                 MetricView(
                     label: p["label"]?.display ?? "",
@@ -317,7 +326,7 @@ public struct SurfaceView: View {
     /// model has to ask for a different one deliberately and gets the house cyan
     /// when it does not.
     private func chart(_ p: [String: JSON], type: String, id: ComponentID) -> AnyView {
-        let tone = HUD.tone(p["tone"]?.stringValue)
+        let tone = HUD.tone(p["tone"]?.stringValue, in: chrome)
         switch type {
         case "Sparkline":
             let points = (p["points"]?.arrayValue ?? []).compactMap(\.doubleValue)
@@ -342,7 +351,7 @@ public struct SurfaceView: View {
                     label: p["label"]?.display ?? "",
                     fraction: fraction,
                     caption: p["caption"]?.display ?? "",
-                    tone: Self.threshold(p, value: fraction) ?? tone))
+                    tone: Self.threshold(p, value: fraction, in: chrome) ?? tone))
 
         default:
             return AnyView(
@@ -362,8 +371,10 @@ public struct SurfaceView: View {
     /// This is the one dashboard feature worth taking from the tools that do
     /// nothing else: a number that turns amber on its own is read correctly at a
     /// glance, and a number that is only ever cyan has to be read.
-    static func threshold(_ p: [String: JSON], value: Double?) -> Color? {
-        thresholdName(p, value: value).map { HUD.tone($0) }
+    static func threshold(
+        _ p: [String: JSON], value: Double?, in chrome: Chrome = .card
+    ) -> Color? {
+        thresholdName(p, value: value).map { HUD.tone($0, in: chrome) }
     }
 
     /// The tone a value crossed into, by name, so it can also be spoken and
@@ -704,6 +715,7 @@ struct ListView: View {
     var rowAction: RowAction?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hudChrome) private var chrome
 
     private struct Row: Identifiable {
         let id: String
@@ -726,9 +738,19 @@ struct ListView: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(rows) { row in
                 HStack(alignment: rowAction == nil ? .top : .center, spacing: 7) {
-                    Text(ordered ? "\(row.index + 1)." : "▸")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundStyle(HUD.accent.opacity(0.8))
+                    if chrome == .window && !ordered {
+                        // A square bullet in ink, the window's one shape.
+                        // 6 of top pad centres it on a 12.5-point first line.
+                        Rectangle()
+                            .fill(HUD.ink.opacity(0.9))
+                            .frame(width: 4, height: 4)
+                            .padding(.top, rowAction == nil ? 6 : 0)
+                    } else {
+                        Text(ordered ? "\(row.index + 1)." : "▸")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(
+                                chrome == .window ? HUD.ink.opacity(0.9) : HUD.accent.opacity(0.8))
+                    }
                     Text(row.text)
                         .font(.system(size: 12.5))
                         .foregroundStyle(HUD.ink.opacity(0.9))
@@ -750,6 +772,8 @@ struct MetricView: View {
     let label: String
     let value: String
     let unit: String?
+    /// In a window the number and its label are set in mono, like the strip.
+    @Environment(\.hudChrome) private var chrome
     /// Set by a crossed threshold. Nil means the number has not earned a colour
     /// and stays in the house ink, which most numbers should.
     var tone: Color?
@@ -789,12 +813,18 @@ struct MetricView: View {
                 Text(value)
                     // Monospaced digits so a number changing in place does not
                     // shove everything beside it sideways.
-                    .font(.system(size: 26, weight: .semibold, design: .rounded))
+                    .font(chrome == .window
+                        ? Typeface.pixel(22)
+                        : .system(size: 26, weight: .semibold, design: .rounded))
+                    .fontDesign(nil)
                     .monospacedDigit()
                     .foregroundStyle(tone ?? HUD.ink)
                     // The glow follows the tone too, so a number that has gone
-                    // red is red in its light as well as its ink.
-                    .shadow(color: (tone ?? HUD.accent).opacity(0.5), radius: 9)
+                    // red is red in its light as well as its ink. A window's
+                    // untoned numbers stay sharp: white with no light round it.
+                    .shadow(
+                        color: (tone ?? (chrome == .window ? .clear : HUD.accent)).opacity(0.5),
+                        radius: 9)
                     .contentTransition(number.map { .numericText(value: $0) } ?? .opacity)
                 if let unit {
                     Text(unit)
@@ -803,7 +833,8 @@ struct MetricView: View {
                 }
             }
             Text(label.uppercased())
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(
+                    size: 9, weight: .semibold, design: chrome == .window ? .monospaced : .default))
                 .kerning(0.9)
                 .foregroundStyle(HUD.faint)
         }
@@ -820,13 +851,13 @@ struct TableView: View {
     var rowAction: RowAction?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hudChrome) private var chrome
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if !caption.isEmpty {
-                Text(caption)
-                    .font(.system(size: 10.5, weight: .medium))
-                    .foregroundStyle(HUD.dim)
+                CaptionLabel(
+                    text: caption, size: 10.5, weight: .medium, colour: HUD.dim, kerning: 0)
             }
 
             if rows.isEmpty {
@@ -840,7 +871,8 @@ struct TableView: View {
                             Text(column.label.uppercased())
                                 .font(.system(size: 8.5, weight: .semibold))
                                 .kerning(0.9)
-                                .foregroundStyle(HUD.accent.opacity(0.75))
+                                .foregroundStyle(
+                                    chrome == .window ? HUD.faint : HUD.accent.opacity(0.75))
                         }
                         if rowAction != nil { Color.clear.gridCellUnsizedAxes([.horizontal, .vertical]) }
                     }

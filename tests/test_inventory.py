@@ -104,6 +104,33 @@ check("a root-level pack loops over the clone root", '"$PACK_DIR"/./*/' in block
 check("a nested pack still loops over skills/", '"$PACK_DIR"/skills/*/' in block, block)
 check("a pack's note becomes a comment", "# hello" in block, block)
 
+# coldoutboundskills keeps skills under skills/ and skills/playbooks/, and
+# goose-skills under skills/<category>/<kind>/ (2026-10-09). A one-level glob
+# links none of the playbooks and none of goose's skills.
+deep_pack = {"name": "d", "url": "https://x/d", "skip": [], "subdir": "skills",
+             "depth": 4, "only": ["a"], "note": []}
+block = inv.cli_block({}, [deep_pack])
+check("a deep pack walks with find to its depth",
+      'find "$PACK_DIR/skills" -mindepth 2 -maxdepth 4 -name SKILL.md' in block, block)
+check("a deep pack feeds the loop by process substitution, so PACK_N survives",
+      "done < <(find" in block and "| while" not in block, block)
+
+import subprocess, tempfile, os
+with tempfile.TemporaryDirectory() as tmp:
+    for rel in ("skills/a", "skills/cat/kind/a2", "skills/playbooks/a"):
+        os.makedirs(f"{tmp}/pack/{rel}")
+        open(f"{tmp}/pack/{rel}/SKILL.md", "w").close()
+    os.makedirs(f"{tmp}/home/.claude/skills")
+    os.makedirs(f"{tmp}/pack/.git")
+    deep_pack["only"] = ["a2", "a"]
+    body = inv.cli_block({}, [deep_pack])
+    body = body[body.index("# Skill pack:"):].replace('"$HOME/Projects/d"', f'"{tmp}/pack"')
+    script = 'GLOBAL_CLAUDE="$HOME/.claude"; log(){ echo "$*"; }; warn(){ echo "$*"; }\n' + body
+    out = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
+                         env={**os.environ, "HOME": f"{tmp}/home"}).stdout
+    linked = sorted(os.listdir(f"{tmp}/home/.claude/skills"))
+    check("a deep pack links nested skills and counts them", linked == ["a", "a2"] and "d: 2 skills linked" in out, (linked, out))
+
 
 # ── the generated files themselves ───────────────────────────────────────────
 

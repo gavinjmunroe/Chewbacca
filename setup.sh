@@ -2749,6 +2749,157 @@ if [ -d "$PACK_DIR/skills" ]; then
   done
   log "marketingskills: $PACK_N skills linked"
 fi
+
+# Skill pack: coldoutboundskills. Linked per skill, not copied, so `git pull` in
+# the clone updates every skill at once.
+#
+# MIT. 26 of 52 linked. Left out: cold-email-starter-kit, auto-research-public,
+# zapmail-domain-setup-public and inbox-lifecycle-manager, which buy domains
+# or inboxes or can start sending, and list-builder, which clashes by name.
+# The shallow clone is about 1 GB (measured 2026-10-09), so it takes minutes.
+PACK_DIR="$HOME/Projects/coldoutboundskills"
+PACK_SKIP=""
+PACK_ONLY="campaign-copywriting experiment-design spam-word-checker smartlead-spintax deliverability-incident-response cold-email-weekly-rhythm list-quality-scorecard icp-prompt-builder lead-magnet-brainstorm campaign-strategy personalization-subagent-pattern positive-reply-scoring deliverability-test-public smartlead-campaign-upload-public clay-playbooks playbook-first-name-cleaning playbook-company-name-cleaning playbook-ai-specificity playbook-creative-ideas playbook-case-study-page playbook-hiring-surge playbook-new-in-role playbook-fundraising playbook-warm-intros playbook-lookalikes perfect-company-list"
+if [ -d "$PACK_DIR/.git" ]; then
+  log "coldoutboundskills already cloned, left alone"
+elif git clone -q --depth 1 "https://github.com/growthenginenowoslawski/coldoutboundskills.git" "$PACK_DIR" 2>/dev/null; then
+  log "coldoutboundskills cloned"
+else
+  warn "could not clone coldoutboundskills"
+fi
+if [ -d "$PACK_DIR/skills" ]; then
+  PACK_N=0
+  while IFS= read -r SKF; do
+    SK="$(dirname "$SKF")/"
+    SK_NAME="$(basename "$SK")"
+    [ -f "$SK/SKILL.md" ] || continue
+    case " $PACK_SKIP " in *" $SK_NAME "*) continue;; esac
+    case " $PACK_ONLY " in *" $SK_NAME "*) ;; *) continue;; esac
+    [ -e "$GLOBAL_CLAUDE/skills/$SK_NAME" ] && continue
+    ln -s "$SK" "$GLOBAL_CLAUDE/skills/$SK_NAME"
+    PACK_N=$((PACK_N+1))
+  done < <(find "$PACK_DIR/skills" -mindepth 2 -maxdepth 3 -name SKILL.md | sort)
+  log "coldoutboundskills: $PACK_N skills linked"
+fi
+
+# Skill pack: explorium-gtm-skills. Linked per skill, not copied, so `git pull` in
+# the clone updates every skill at once.
+#
+# MIT. 8 of 17 linked, the ones that preview before spending credits.
+# Left out: abm-diy-campaign (starts LinkedIn Ads spend) and the two app
+# scaffolds that write to HubSpot and Salesforce.
+PACK_DIR="$HOME/Projects/explorium-gtm-skills"
+PACK_SKIP=""
+PACK_ONLY="account-research meeting-prep decision-makers-map account-fit-rank score-leads clean-data market-sizing personalize-email"
+if [ -d "$PACK_DIR/.git" ]; then
+  log "explorium-gtm-skills already cloned, left alone"
+elif git clone -q --depth 1 "https://github.com/explorium-ai/gtm-skills.git" "$PACK_DIR" 2>/dev/null; then
+  log "explorium-gtm-skills cloned"
+else
+  warn "could not clone explorium-gtm-skills"
+fi
+if [ -d "$PACK_DIR/skills" ]; then
+  PACK_N=0
+  for SK in "$PACK_DIR"/skills/*/; do
+    SK_NAME="$(basename "$SK")"
+    [ -f "$SK/SKILL.md" ] || continue
+    case " $PACK_SKIP " in *" $SK_NAME "*) continue;; esac
+    case " $PACK_ONLY " in *" $SK_NAME "*) ;; *) continue;; esac
+    [ -e "$GLOBAL_CLAUDE/skills/$SK_NAME" ] && continue
+    ln -s "$SK" "$GLOBAL_CLAUDE/skills/$SK_NAME"
+    PACK_N=$((PACK_N+1))
+  done
+  log "explorium-gtm-skills: $PACK_N skills linked"
+fi
+
+# Skill pack: unify-agent-plugins. Linked per skill, not copied, so `git pull` in
+# the clone updates every skill at once.
+#
+# MIT. Needs a Unify account to do anything. Left out: outreach, which
+# adds prospects to sequences that send, and crm, which writes to
+# Salesforce and HubSpot.
+PACK_DIR="$HOME/Projects/unify-agent-plugins"
+PACK_SKIP=""
+PACK_ONLY="unify agent-runs discovery enrichment data-tables"
+if [ -d "$PACK_DIR/.git" ]; then
+  log "unify-agent-plugins already cloned, left alone"
+elif git clone -q --depth 1 "https://github.com/unifygtm/agent-plugins.git" "$PACK_DIR" 2>/dev/null; then
+  log "unify-agent-plugins cloned"
+else
+  warn "could not clone unify-agent-plugins"
+fi
+if [ -d "$PACK_DIR/unify/skills" ]; then
+  PACK_N=0
+  for SK in "$PACK_DIR"/unify/skills/*/; do
+    SK_NAME="$(basename "$SK")"
+    [ -f "$SK/SKILL.md" ] || continue
+    case " $PACK_SKIP " in *" $SK_NAME "*) continue;; esac
+    case " $PACK_ONLY " in *" $SK_NAME "*) ;; *) continue;; esac
+    [ -e "$GLOBAL_CLAUDE/skills/$SK_NAME" ] && continue
+    ln -s "$SK" "$GLOBAL_CLAUDE/skills/$SK_NAME"
+    PACK_N=$((PACK_N+1))
+  done
+  log "unify-agent-plugins: $PACK_N skills linked"
+fi
+
+# Skill pack: goose-skills. Linked per skill, not copied, so `git pull` in
+# the clone updates every skill at once.
+#
+# MIT. 6 of 295 linked. 116 of the rest spend GooseWorks credits, about 30
+# spend Apify credits, one sends SMS, and watch and skill-creator collide
+# with skills already here.
+PACK_DIR="$HOME/Projects/goose-skills"
+PACK_SKIP=""
+PACK_ONLY="email-drafting sequence-performance disqualification-handling battlecard-generator messaging-ab-tester inbound-lead-qualification"
+if [ -d "$PACK_DIR/.git" ]; then
+  log "goose-skills already cloned, left alone"
+elif git clone -q --depth 1 "https://github.com/gooseworks-ai/goose-skills.git" "$PACK_DIR" 2>/dev/null; then
+  log "goose-skills cloned"
+else
+  warn "could not clone goose-skills"
+fi
+if [ -d "$PACK_DIR/skills" ]; then
+  PACK_N=0
+  while IFS= read -r SKF; do
+    SK="$(dirname "$SKF")/"
+    SK_NAME="$(basename "$SK")"
+    [ -f "$SK/SKILL.md" ] || continue
+    case " $PACK_SKIP " in *" $SK_NAME "*) continue;; esac
+    case " $PACK_ONLY " in *" $SK_NAME "*) ;; *) continue;; esac
+    [ -e "$GLOBAL_CLAUDE/skills/$SK_NAME" ] && continue
+    ln -s "$SK" "$GLOBAL_CLAUDE/skills/$SK_NAME"
+    PACK_N=$((PACK_N+1))
+  done < <(find "$PACK_DIR/skills" -mindepth 2 -maxdepth 4 -name SKILL.md | sort)
+  log "goose-skills: $PACK_N skills linked"
+fi
+
+# Skill pack: typesafe-skills. Linked per skill, not copied, so `git pull` in
+# the clone updates every skill at once.
+#
+# MIT. Upstream guide to the API that chewbacca jev calls.
+PACK_DIR="$HOME/Projects/typesafe-skills"
+PACK_SKIP=""
+PACK_ONLY="typesafe-ai"
+if [ -d "$PACK_DIR/.git" ]; then
+  log "typesafe-skills already cloned, left alone"
+elif git clone -q --depth 1 "https://github.com/typesafe-ai/skills.git" "$PACK_DIR" 2>/dev/null; then
+  log "typesafe-skills cloned"
+else
+  warn "could not clone typesafe-skills"
+fi
+if [ -d "$PACK_DIR/skills" ]; then
+  PACK_N=0
+  for SK in "$PACK_DIR"/skills/*/; do
+    SK_NAME="$(basename "$SK")"
+    [ -f "$SK/SKILL.md" ] || continue
+    case " $PACK_SKIP " in *" $SK_NAME "*) continue;; esac
+    case " $PACK_ONLY " in *" $SK_NAME "*) ;; *) continue;; esac
+    [ -e "$GLOBAL_CLAUDE/skills/$SK_NAME" ] && continue
+    ln -s "$SK" "$GLOBAL_CLAUDE/skills/$SK_NAME"
+    PACK_N=$((PACK_N+1))
+  done
+  log "typesafe-skills: $PACK_N skills linked"
+fi
 # END GENERATED: cli
 fi
 

@@ -191,6 +191,87 @@
         "pricing",
         "social"
       ]
+    },
+    {
+      "name": "coldoutboundskills",
+      "url": "https://github.com/growthenginenowoslawski/coldoutboundskills",
+      "count": 26,
+      "skills": [
+        "campaign-copywriting",
+        "campaign-strategy",
+        "clay-playbooks",
+        "cold-email-weekly-rhythm",
+        "deliverability-incident-response",
+        "deliverability-test-public",
+        "experiment-design",
+        "icp-prompt-builder",
+        "lead-magnet-brainstorm",
+        "list-quality-scorecard",
+        "perfect-company-list",
+        "personalization-subagent-pattern",
+        "playbook-ai-specificity",
+        "playbook-case-study-page",
+        "playbook-company-name-cleaning",
+        "playbook-creative-ideas",
+        "playbook-first-name-cleaning",
+        "playbook-fundraising",
+        "playbook-hiring-surge",
+        "playbook-lookalikes",
+        "playbook-new-in-role",
+        "playbook-warm-intros",
+        "positive-reply-scoring",
+        "smartlead-campaign-upload-public",
+        "smartlead-spintax",
+        "spam-word-checker"
+      ]
+    },
+    {
+      "name": "explorium-gtm-skills",
+      "url": "https://github.com/explorium-ai/gtm-skills",
+      "count": 8,
+      "skills": [
+        "account-fit-rank",
+        "account-research",
+        "clean-data",
+        "decision-makers-map",
+        "market-sizing",
+        "meeting-prep",
+        "personalize-email",
+        "score-leads"
+      ]
+    },
+    {
+      "name": "unify-agent-plugins",
+      "url": "https://github.com/unifygtm/agent-plugins",
+      "count": 5,
+      "skills": [
+        "agent-runs",
+        "data-tables",
+        "discovery",
+        "enrichment",
+        "unify"
+      ]
+    },
+    {
+      "name": "goose-skills",
+      "url": "https://github.com/gooseworks-ai/goose-skills",
+      "count": 6,
+      "skills": [
+        "battlecard-generator",
+        "disqualification-handling",
+        "email-drafting",
+        "inbound-lead-qualification",
+        "messaging-ab-tester",
+        "sequence-performance"
+      ]
+    },
+    {
+      "name": "typesafe-skills",
+      "url": "https://github.com/typesafe-ai/skills",
+      "count": 1,
+      "skills": [
+        "typesafe-ai"
+      ]
     }
   ],
   "marketplaces": [

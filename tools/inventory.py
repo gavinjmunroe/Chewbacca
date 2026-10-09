@@ -223,6 +223,86 @@ PACKS = {
             "catalogue (nexu-io/open-design), which points at it rather than copying it.",
         ],
     },
+    # The six below were vetted 2026-10-09 from the GTM repo atlas
+    # (skills/gtm-engineering/references/REPO-ATLAS.md): license read, every
+    # script read for network calls, and any skill that buys domains or
+    # inboxes, starts a sequence, spends third-party credits or writes to a
+    # CRM was left out of "only". The rest stay in the clone, unlinked.
+    "coldoutboundskills": {
+        "root": HOME / "Projects/coldoutboundskills",
+        "url": "https://github.com/growthenginenowoslawski/coldoutboundskills",
+        "description": "Growth Engine X (Eric Nowoslawski) cold outbound skills: copy, deliverability, list quality, Clay playbooks",
+        # Skills live under skills/ and skills/playbooks/, so the loop walks
+        # two levels instead of one.
+        "depth": 3,
+        "only": [
+            "campaign-copywriting", "experiment-design", "spam-word-checker",
+            "smartlead-spintax", "deliverability-incident-response",
+            "cold-email-weekly-rhythm", "list-quality-scorecard", "icp-prompt-builder",
+            "lead-magnet-brainstorm", "campaign-strategy", "personalization-subagent-pattern",
+            "positive-reply-scoring", "deliverability-test-public",
+            "smartlead-campaign-upload-public", "clay-playbooks",
+            "playbook-first-name-cleaning", "playbook-company-name-cleaning",
+            "playbook-ai-specificity", "playbook-creative-ideas", "playbook-case-study-page",
+            "playbook-hiring-surge", "playbook-new-in-role", "playbook-fundraising",
+            "playbook-warm-intros", "playbook-lookalikes", "perfect-company-list",
+        ],
+        "note": [
+            "MIT. 26 of 52 linked. Left out: cold-email-starter-kit, auto-research-public,",
+            "zapmail-domain-setup-public and inbox-lifecycle-manager, which buy domains",
+            "or inboxes or can start sending, and list-builder, which clashes by name.",
+            "The shallow clone is about 1 GB (measured 2026-10-09), so it takes minutes.",
+        ],
+    },
+    "explorium-gtm-skills": {
+        "root": HOME / "Projects/explorium-gtm-skills",
+        "url": "https://github.com/explorium-ai/gtm-skills",
+        "description": "Explorium's account research, lead scoring, decision-maker mapping and email personalization skills",
+        "only": [
+            "account-research", "meeting-prep", "decision-makers-map", "account-fit-rank",
+            "score-leads", "clean-data", "market-sizing", "personalize-email",
+        ],
+        "note": [
+            "MIT. 8 of 17 linked, the ones that preview before spending credits.",
+            "Left out: abm-diy-campaign (starts LinkedIn Ads spend) and the two app",
+            "scaffolds that write to HubSpot and Salesforce.",
+        ],
+    },
+    "unify-agent-plugins": {
+        "root": HOME / "Projects/unify-agent-plugins",
+        "url": "https://github.com/unifygtm/agent-plugins",
+        "description": "Unify GTM's official agent skills: discovery, enrichment, data tables, agent runs",
+        "subdir": "unify/skills",
+        "only": ["unify", "agent-runs", "discovery", "enrichment", "data-tables"],
+        "note": [
+            "MIT. Needs a Unify account to do anything. Left out: outreach, which",
+            "adds prospects to sequences that send, and crm, which writes to",
+            "Salesforce and HubSpot.",
+        ],
+    },
+    "goose-skills": {
+        "root": HOME / "Projects/goose-skills",
+        "url": "https://github.com/gooseworks-ai/goose-skills",
+        "description": "GooseWorks growth skills: email drafting, sequence analysis, A/B messaging, lead qualification",
+        # skills/<category>/<kind>/<name>/SKILL.md
+        "depth": 4,
+        "only": [
+            "email-drafting", "sequence-performance", "disqualification-handling",
+            "battlecard-generator", "messaging-ab-tester", "inbound-lead-qualification",
+        ],
+        "note": [
+            "MIT. 6 of 295 linked. 116 of the rest spend GooseWorks credits, about 30",
+            "spend Apify credits, one sends SMS, and watch and skill-creator collide",
+            "with skills already here.",
+        ],
+    },
+    "typesafe-skills": {
+        "root": HOME / "Projects/typesafe-skills",
+        "url": "https://github.com/typesafe-ai/skills",
+        "description": "TypeSafe's own skill for System One, the API behind Jev",
+        "only": ["typesafe-ai"],
+        "note": ["MIT. Upstream guide to the API that chewbacca jev calls."],
+    },
 }
 
 # Command-line tools and macOS apps. Homebrew where a formula or cask exists, a
@@ -641,6 +721,7 @@ def collect_skills():
             "skip": PACKS[n].get("skip", []),
             "only": PACKS[n].get("only", []),
             "subdir": PACKS[n].get("subdir", "skills"),
+            "depth": PACKS[n].get("depth", 0),
             "note": PACKS[n].get("note", []),
         }
         for n, skills in sorted(packs.items())
@@ -914,7 +995,17 @@ def cli_block(cli, packs):
             "fi",
             f'if [ -d "$PACK_DIR/{k["subdir"]}" ]; then',
             '  PACK_N=0',
-            f'  for SK in "$PACK_DIR"/{k["subdir"]}/*/; do',
+        ]
+        if k.get("depth"):
+            # Nested layouts (skills/playbooks/x, skills/cat/kind/x). Process
+            # substitution, not a pipe, so PACK_N survives the loop.
+            lines += [
+                '  while IFS= read -r SKF; do',
+                '    SK="$(dirname "$SKF")/"',
+            ]
+        else:
+            lines += [f'  for SK in "$PACK_DIR"/{k["subdir"]}/*/; do']
+        lines += [
             '    SK_NAME="$(basename "$SK")"',
             '    [ -f "$SK/SKILL.md" ] || continue',
             '    case " $PACK_SKIP " in *" $SK_NAME "*) continue;; esac',
@@ -925,7 +1016,12 @@ def cli_block(cli, packs):
             '    [ -e "$GLOBAL_CLAUDE/skills/$SK_NAME" ] && continue',
             '    ln -s "$SK" "$GLOBAL_CLAUDE/skills/$SK_NAME"',
             "    PACK_N=$((PACK_N+1))",
-            "  done",
+        ]
+        if k.get("depth"):
+            lines += [f'  done < <(find "$PACK_DIR/{k["subdir"]}" -mindepth 2 -maxdepth {k["depth"]} -name SKILL.md | sort)']
+        else:
+            lines += ["  done"]
+        lines += [
             f'  log "{k["name"]}: $PACK_N skills linked"',
             "fi",
         ]

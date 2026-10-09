@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const { pick, matches, refuse } = require("../bin/lib/clay_find.js");
+const { pick, matches, refuse, sectionOf } = require("../bin/lib/clay_find.js");
 
 const candidate = (text, extra = {}) => ({ index: extra.index ?? 0, text, placeholder: "", visible: true, ...extra });
 
@@ -56,4 +56,37 @@ test("a press is refused when the control no longer says what the card showed", 
   const want = { table: null, text: "Run 8 empty or out-of-date rows" };
   assert.equal(refuse("/x", "Run 8 empty or out-of-date rows", want), null);
   assert.equal(refuse("/x", "Run 312 empty or out-of-date rows", want), "changed");
+});
+
+// The 2026-10-09 dry run stopped on "Found 2 matches for People": Clay's Find
+// leads flyout had grown a "Create a workflow (Beta)" section with its own
+// People button below the "Search directly" one.
+test("section narrows to the control under its label", () => {
+  const people = [
+    candidate("People", { index: 1, section: "Search directly" }),
+    candidate("People", { index: 6, section: "Create a workflow Beta" }),
+  ];
+  assert.deepEqual(pick(people, { text: "People", section: "Search directly" }), { ok: true, index: 1 });
+  assert.deepEqual(pick(people, { text: "People", section: "Create a workflow" }), { ok: true, index: 6 });
+  assert.deepEqual(pick([candidate("People", { section: "" })], { text: "People", section: "Search directly" }),
+    { ok: false, reason: "missing" });
+});
+
+// Plain objects stand in for the flyout: one flat list of a label, buttons,
+// an empty separator, a second label, more buttons.
+function flatList(items) {
+  const nodes = items.map(([tagName, innerText]) => ({ tagName, innerText }));
+  nodes.forEach((n, i) => { n.previousElementSibling = nodes[i - 1] || null; });
+  return nodes;
+}
+
+test("a control's section is the nearest earlier labelled sibling of another kind", () => {
+  const nodes = flatList([
+    ["DIV", "Search directly"], ["BUTTON", "People"], ["BUTTON", "Companies"],
+    ["DIV", ""], ["DIV", "Create a workflow\nBeta"], ["BUTTON", "People"],
+  ]);
+  assert.equal(sectionOf(nodes[1]), "Search directly");
+  assert.equal(sectionOf(nodes[2]), "Search directly");
+  assert.equal(sectionOf(nodes[5]), "Create a workflow Beta");
+  assert.equal(sectionOf(flatList([["BUTTON", "Save"]])[0]), "");
 });

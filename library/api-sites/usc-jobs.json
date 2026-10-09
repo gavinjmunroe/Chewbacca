@@ -1,0 +1,191 @@
+{
+  "name": "usc-jobs",
+  "baseUrl": "https://usc.wd5.myworkdayjobs.com",
+  "operations": [
+    {
+      "name": "searchJobs",
+      "description": "Search USC staff job postings on the public ExternalUSCCareers Workday site (logged out). jobSlug feeds getJob; the page url is https://usc.wd5.myworkdayjobs.com/en-US/ExternalUSCCareers + jobPath.",
+      "request": {
+        "method": "POST",
+        "url": "https://usc.wd5.myworkdayjobs.com/wday/cxs/usc/ExternalUSCCareers/jobs",
+        "headers": {
+          "accept": "application/json",
+          "accept-language": "en-US",
+          "content-type": "application/json",
+          "origin": "https://usc.wd5.myworkdayjobs.com",
+          "priority": "u=1, i",
+          "referer": "https://usc.wd5.myworkdayjobs.com/en-US/ExternalUSCCareers?q={query}",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "x-calypso-csrf-token": ""
+        },
+        "body": "{\"appliedFacets\":{},\"limit\":20,\"offset\":0,\"searchText\":\"{query}\"}"
+      },
+      "slots": [
+        {
+          "param": "query",
+          "at": [
+            "body",
+            "json:/searchText"
+          ]
+        },
+        {
+          "param": "query",
+          "at": [
+            "header:referer"
+          ],
+          "template": "https://usc.wd5.myworkdayjobs.com/en-US/ExternalUSCCareers?q={query}"
+        },
+        {
+          "ref": "cookie:CALYPSO_CSRF_TOKEN",
+          "at": [
+            "header:x-calypso-csrf-token"
+          ]
+        }
+      ],
+      "volatile": [
+        {
+          "at": [
+            "path:3"
+          ],
+          "shape": {
+            "charset": "base64url",
+            "length": 18
+          },
+          "anchor": "jobs"
+        }
+      ],
+      "trigger": {
+        "url": "https://usc.wd5.myworkdayjobs.com/en-US/ExternalUSCCareers?q={query}"
+      },
+      "match": {
+        "method": "POST",
+        "host": "usc.wd5.myworkdayjobs.com",
+        "path": "/wday/cxs/usc/*/jobs"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json",
+        "extract": "jobPostings",
+        "pick": [
+          "title",
+          "location=locationsText",
+          "posted=postedOn",
+          "timeType",
+          "jobId=bulletFields[0]",
+          "jobSlug=externalPath~([^/]+)$",
+          "jobPath=externalPath"
+        ]
+      },
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "example": "accountant"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-09T17:34:48.985Z"
+    },
+    {
+      "name": "getJob",
+      "description": "One USC Workday job posting by jobSlug (last segment of searchJobs jobPath). description is HTML; the pay range, when USC lists one, is inside it.",
+      "request": {
+        "method": "GET",
+        "url": "https://usc.wd5.myworkdayjobs.com/wday/cxs/usc/ExternalUSCCareers/job/%7BjobSlug%7D",
+        "headers": {
+          "accept": "application/json",
+          "accept-language": "en-US",
+          "content-type": "application/x-www-form-urlencoded",
+          "priority": "u=1, i",
+          "referer": "https://usc.wd5.myworkdayjobs.com/en-US/ExternalUSCCareers/job/{jobSlug}",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "x-calypso-csrf-token": ""
+        }
+      },
+      "slots": [
+        {
+          "param": "jobSlug",
+          "at": [
+            "path:5"
+          ]
+        },
+        {
+          "param": "jobSlug",
+          "at": [
+            "header:referer"
+          ],
+          "template": "https://usc.wd5.myworkdayjobs.com/en-US/ExternalUSCCareers/job/{jobSlug}"
+        },
+        {
+          "ref": "cookie:CALYPSO_CSRF_TOKEN",
+          "at": [
+            "header:x-calypso-csrf-token"
+          ]
+        }
+      ],
+      "volatile": [
+        {
+          "at": [
+            "path:3"
+          ],
+          "shape": {
+            "charset": "base64url",
+            "length": 18
+          },
+          "anchor": "job"
+        }
+      ],
+      "trigger": {
+        "url": "https://usc.wd5.myworkdayjobs.com/en-US/ExternalUSCCareers/job/{jobSlug}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "usc.wd5.myworkdayjobs.com",
+        "path": "/wday/cxs/usc/*/job/*"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json",
+        "extract": "jobPostingInfo",
+        "pick": [
+          "title",
+          "jobId=jobReqId",
+          "location",
+          "campusLocation=jobRequisitionLocation.descriptor",
+          "posted=postedOn",
+          "startDate",
+          "timeType",
+          "description=jobDescription",
+          "url=externalUrl"
+        ]
+      },
+      "params": [
+        {
+          "name": "jobSlug",
+          "type": "string",
+          "required": true,
+          "example": "Accountant---USC-Care-MSO-Finance---Full-Time-8-Hour-Days--Non-Exempt---Non-Union-_REQ20180546-1"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": true,
+      "learnedAt": "2026-10-09T17:34:56.226Z"
+    }
+  ]
+}

@@ -411,6 +411,13 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_gtm.py"
   check "gtm dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtm --help
   expect "gtm appears in help" "chewbacca gtm" bash "$ROOT/bin/chewbacca" --help
+  # Recorded, synthetic surface answers; nothing reads Clay, the clay CLI or Chrome.
+  if command -v node >/dev/null 2>&1; then
+    check "chewbacca clay routes to the fastest surface, falls through, and gates writes" \
+      python3 "$ROOT/tests/test_chewbacca_clay.py"
+    check "clay dispatches through chewbacca" bash "$ROOT/bin/chewbacca" clay --help
+    expect "clay appears in help" "chewbacca clay" bash "$ROOT/bin/chewbacca" --help
+  fi
 fi
 
 # ── team board ────────────────────────────────────────────────────────────────

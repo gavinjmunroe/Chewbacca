@@ -69,6 +69,7 @@ COMMANDS=(
   "gtme-signals|list recent SEC Form D raises as buying signals"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
   "api|any website as an API: call taught sites, teach new ones (not Clay)"
+  "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
   "clay-fixture-check|compare a CSV export with an expected fixture"
   "oss-apps|open source apps that replace a Mac app, and which can be remixed"
   "task-graph|track local jobs, ownership, and dependencies"
@@ -126,6 +127,12 @@ gtme-dedupe)
 agent)
   shift
   exec python3 "$ROOT/tools/agent_runtime.py" "$@"
+  ;;
+clay)
+  # Clay through the CLI, its own frontend API (api-anything), or the UI
+  # route, whichever answers fastest. Writes need --allow-writes and --confirm.
+  shift
+  CHEWBACCA_ROOT="$ROOT" exec node "$ROOT/bin/chewbacca-clay" "$@"
   ;;
 slack)
   # Slack sending through slackcli; reading needs nothing.

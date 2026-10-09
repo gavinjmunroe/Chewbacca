@@ -1,0 +1,272 @@
+{
+ "audience-record-ids": {
+  "cli:audiences records search-ids --entity-type people --audience-id {audience}": {
+   "ms": 2044,
+   "at": "2026-10-09"
+  }
+ },
+ "audience-records": {
+  "cli:audiences records get --entity-type people --ids {ids}": {
+   "ms": 1912,
+   "at": "2026-10-09"
+  }
+ },
+ "audiences": {
+  "api-anything:listAudiences": {
+   "ms": 885,
+   "at": "2026-10-09",
+   "engine_ms": 748,
+   "tier": 1
+  },
+  "cli:audiences list --entity-type people": {
+   "ms": 1917,
+   "at": "2026-10-09"
+  }
+ },
+ "blocklist": {
+  "api-anything:blocklist": {
+   "ms": 1033,
+   "at": "2026-10-09",
+   "engine_ms": 750,
+   "tier": 1
+  }
+ },
+ "campaign": {
+  "api-anything:getCampaign": {
+   "ms": 1010,
+   "at": "2026-10-09",
+   "engine_ms": 574,
+   "tier": 1
+  },
+  "cli:campaigns get {campaign}": {
+   "ms": 1412,
+   "at": "2026-10-09"
+  }
+ },
+ "campaign-analytics": {
+  "cli:campaigns analytics {campaign}": {
+   "ms": 1928,
+   "at": "2026-10-09"
+  }
+ },
+ "campaign-leads": {
+  "api-anything:campaignLeads": {
+   "ms": 1059,
+   "at": "2026-10-09",
+   "engine_ms": 723,
+   "tier": 1
+  },
+  "api-anything:campaignLeadsNext": {
+   "ms": 1507,
+   "at": "2026-10-09",
+   "engine_ms": 654,
+   "tier": 1
+  }
+ },
+ "campaign-stats": {
+  "api-anything:campaignAnalyticsSummaries": {
+   "ms": 1025,
+   "at": "2026-10-09",
+   "engine_ms": 550,
+   "tier": 1
+  }
+ },
+ "campaign-variants": {
+  "api-anything:campaignVariantAnalytics": {
+   "ms": 1183,
+   "at": "2026-10-09",
+   "engine_ms": 689,
+   "tier": 1
+  }
+ },
+ "campaigns": {
+  "cli:campaigns list --with-analytics --limit 100": {
+   "ms": 2553,
+   "at": "2026-10-09"
+  },
+  "api-anything:listCampaigns": {
+   "ms": 1077,
+   "at": "2026-10-09",
+   "engine_ms": 895,
+   "tier": 1
+  }
+ },
+ "columns": {
+  "cli:tables columns get {table}": {
+   "ms": 2236,
+   "at": "2026-10-09"
+  },
+  "api-anything:getTableColumns": {
+   "ms": 982,
+   "at": "2026-10-09",
+   "engine_ms": 650,
+   "tier": 1
+  }
+ },
+ "credit-usage": {
+  "api-anything:creditUsage": {
+   "ms": 1183,
+   "at": "2026-10-09",
+   "engine_ms": 733,
+   "tier": 1
+  }
+ },
+ "credits": {
+  "api-anything:creditBalance": {
+   "ms": 1285,
+   "at": "2026-10-09",
+   "engine_ms": 585,
+   "tier": 1
+  },
+  "cli:credits balance": {
+   "ms": 2267,
+   "at": "2026-10-09"
+  },
+  "bin:clay-balance": {
+   "ms": 623,
+   "at": "2026-10-09"
+  }
+ },
+ "folders": {
+  "api-anything:listResources": {
+   "ms": 949,
+   "at": "2026-10-09",
+   "engine_ms": 786,
+   "tier": 1
+  },
+  "cli:folders list --filter resourceType=FOLDER": {
+   "ms": 1578,
+   "at": "2026-10-09"
+  }
+ },
+ "inbox": {
+  "api-anything:inboxReplies": {
+   "ms": 1234,
+   "at": "2026-10-09",
+   "engine_ms": 988,
+   "tier": 1
+  }
+ },
+ "resources": {
+  "api-anything:listResources": {
+   "ms": 1445,
+   "at": "2026-10-09",
+   "engine_ms": 1043,
+   "tier": 1
+  }
+ },
+ "row": {
+  "api-anything:getRow": {
+   "ms": 1020,
+   "at": "2026-10-09",
+   "engine_ms": 707,
+   "tier": 1
+  },
+  "cli:tables rows get {table} {row}": {
+   "ms": 1851,
+   "at": "2026-10-09"
+  }
+ },
+ "rows": {
+  "cli:tables rows list {table}": {
+   "ms": 1678,
+   "at": "2026-10-09"
+  },
+  "api-anything:listRows": {
+   "ms": 856,
+   "at": "2026-10-09",
+   "engine_ms": 768,
+   "tier": 1
+  },
+  "api-anything:listRowsAfter": {
+   "ms": 921,
+   "at": "2026-10-09",
+   "engine_ms": 611,
+   "tier": 1
+  }
+ },
+ "signals": {
+  "api-anything:listSignals": {
+   "ms": 1534,
+   "at": "2026-10-09",
+   "engine_ms": 853,
+   "tier": 1
+  },
+  "cli:signals list": {
+   "ms": 1558,
+   "at": "2026-10-09"
+  }
+ },
+ "table": {
+  "api-anything:getTable": {
+   "ms": 999,
+   "at": "2026-10-09",
+   "engine_ms": 787,
+   "tier": 1
+  },
+  "cli:tables get {table}": {
+   "ms": 734,
+   "at": "2026-10-09"
+  }
+ },
+ "table-status": {
+  "api-anything:tableRunStatus": {
+   "ms": 1148,
+   "at": "2026-10-09",
+   "engine_ms": 717,
+   "tier": 1
+  }
+ },
+ "tables": {
+  "api-anything:listResources": {
+   "ms": 1326,
+   "at": "2026-10-09",
+   "engine_ms": 697,
+   "tier": 1
+  },
+  "cli:tables list --limit 100": {
+   "ms": 1310,
+   "at": "2026-10-09"
+  }
+ },
+ "thread": {
+  "api-anything:threadHistory": {
+   "ms": 1085,
+   "at": "2026-10-09",
+   "engine_ms": 1025,
+   "tier": 1
+  }
+ },
+ "workbooks": {
+  "api-anything:listResources": {
+   "ms": 949,
+   "at": "2026-10-09",
+   "engine_ms": 843,
+   "tier": 1
+  },
+  "cli:workbooks list --limit 100": {
+   "ms": 968,
+   "at": "2026-10-09"
+  }
+ },
+ "workflows": {
+  "api-anything:listWorkflows": {
+   "ms": 945,
+   "at": "2026-10-09",
+   "engine_ms": 846,
+   "tier": 1
+  },
+  "cli:workflows list --limit 200": {
+   "ms": 1747,
+   "at": "2026-10-09"
+  }
+ },
+ "workspaces": {
+  "api-anything:listWorkspaces": {
+   "ms": 1100,
+   "at": "2026-10-09",
+   "engine_ms": 609,
+   "tier": 1
+  }
+ }
+}

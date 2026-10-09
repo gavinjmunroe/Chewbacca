@@ -89,11 +89,56 @@ function target(via, handle) {
   return via === "whatsapp" ? waJid(handle) : handle;
 }
 
+// A group chat is addressed by the room's own id, never by a member. The
+// store's own outgoing rows in a room carry that id as their handle (the chat
+// identifier for iMessage, the @g.us JID for WhatsApp), so the room the user
+// already wrote in is the room that gets the message. Exact name match only:
+// "Paul" is a group of four people, and a fuzzy match is a text in the wrong
+// group chat.
+function roomThread(d, name, via) {
+  let sql = `SELECT source, handle, room, max(sent_at) AS last FROM messages
+              WHERE room IS NOT NULL AND lower(room) = lower(?) AND from_me = 1 AND handle IS NOT NULL AND handle <> ''`;
+  const args = [name];
+  if (via) {
+    sql += " AND source = ?";
+    args.push(via);
+  }
+  return d.prepare(sql + " GROUP BY source, handle ORDER BY last DESC").all(...args);
+}
+
+// Messages wants the chat's GUID, which chat.db holds. Read it rather than
+// build it: the prefix is "iMessage;+;" on this Mac and "any;+;" on newer
+// macOS, and a guessed GUID is a send that fails or lands somewhere else.
+function chatGuid(identifier) {
+  const file =
+    process.env.CHEWBACCA_CHAT_DB ||
+    require("node:path").join(require("node:os").homedir(), "Library", "Messages", "chat.db");
+  try {
+    const { DatabaseSync } = require("node:sqlite");
+    const cdb = new DatabaseSync(file, { readOnly: true });
+    const row = cdb.prepare("SELECT guid FROM chat WHERE chat_identifier = ? LIMIT 1").get(identifier);
+    cdb.close();
+    return row ? row.guid : null;
+  } catch {
+    return null;
+  }
+}
+
+// The text and the chat id go in as argv, never spliced into the script, so a
+// quote or a backslash in a message can't become AppleScript.
+const GROUP_SCRIPT = [
+  "on run argv",
+  'tell application "Messages" to send (item 2 of argv) to chat id (item 1 of argv)',
+  "end run",
+];
+
 function dispatch(via, to, text, flags) {
   // Tests set this so a mistake in a test can never reach a real phone. On
   // 2026-10-08 a check meant to refuse a send had not applied, and the test
   // call delivered "hi" to a client.
   if (process.env.CHEWBACCA_NO_SEND) return { code: 3, err: "sending is disabled (CHEWBACCA_NO_SEND)" };
+  if (via === "imessage" && flags.room)
+    return run("osascript", [...GROUP_SCRIPT.flatMap((l) => ["-e", l]), to, text]);
   if (via === "imessage") return run("mac", ["messages", "send", to, text, "--json"]);
   if (via === "whatsapp")
     return run("wacli", ["--json", "--lock-wait=15s", "send", "text", "--to", to, "--message", text]);
@@ -116,16 +161,45 @@ function succeeded(r) {
   return true;
 }
 
+// people send --room "Sophomore DT" "text": the group-chat path. It names the
+// room and its id on a dry run, and refuses a name that two rooms share.
+function sendRoom(d, name, text, via, flags, P) {
+  const rooms = roomThread(d, name, via);
+  if (!rooms.length)
+    die(`No group called "${P(name)}" that you've written in${via ? ` on ${via}` : ""}. The name must match exactly; people texts owed prints it.`);
+  if (rooms.length > 1)
+    die(`"${P(name)}" is ${rooms.length} groups:\n` + rooms.map((r) => `  ${r.source} ${P(r.handle)}`).join("\n") + "\nPick one with --via.");
+  const r = rooms[0];
+  if (r.source !== "imessage" && r.source !== "whatsapp") die(`Group sends work on iMessage and WhatsApp, not ${r.source}.`);
+  const to = r.source === "imessage" ? chatGuid(r.handle) : r.handle;
+  if (!to) die(`Couldn't read the chat id for "${P(r.room)}" from chat.db. Nothing was sent.`);
+  const where = `${c.b(P(r.room))} ${c.dim(`group via ${r.source}, ${P(to)}`)}`;
+  if (flags["dry-run"]) {
+    say(`  would send to ${where}`);
+    say(`  ${P(text)}`);
+    return;
+  }
+  const res = dispatch(r.source, to, text, { ...flags, room: true });
+  if (!succeeded(res)) die(`Not sent to ${P(r.room)}: ${P((res.err || res.out || "no output").trim().split("\n")[0])}`);
+  say(`${c.grn("sent")} to ${where}`);
+}
+
 function cmdSend(argv) {
   const { flags, rest } = parseArgs(argv);
+  // `--room "Den Group" "text"`: the parser hands the room name to the flag.
+  if (typeof flags.room === "string") {
+    rest.unshift(flags.room);
+    flags.room = true;
+  }
   const who = rest.shift();
   const text = rest.join(" ").trim();
-  if (!who || !text) die('Try: people send maggie "running 10 late" [--via whatsapp] [--dry-run]');
+  if (!who || !text) die('Try: people send maggie "running 10 late" [--via whatsapp] [--dry-run]   or   people send --room "Group Name" "text"');
   const via = flags.via ? String(flags.via).toLowerCase() : null;
   if (via && !APPS.includes(via)) die(`--via is one of: ${APPS.join(", ")}`);
   const P = (v) => printable(v == null ? "" : v);
 
   const d = db();
+  if (flags.room) return sendRoom(d, who, text, via, flags, P);
   // STRICT, UNLIKE READING. `people texts dad` may guess the most recently
   // texted match because a wrong pick there costs one visible line. Here it
   // costs a message in the wrong person's phone: on 2026-10-08 a dry run of
@@ -183,4 +257,4 @@ function cmdSend(argv) {
   say(`${c.grn("sent")} to ${where}`);
 }
 
-module.exports = { cmdSend, lastThread, waJid, target };
+module.exports = { cmdSend, lastThread, waJid, target, roomThread, chatGuid };

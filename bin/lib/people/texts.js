@@ -532,6 +532,19 @@ function cmdTexts(argv) {
     const noise = (r) => !r.room && !r.person_id && /^[+\d]|@/.test(r.thread);
     const shown = flags.all ? rows : rows.filter((r) => !noise(r));
     const hidden = rows.length - shown.length;
+    // --json is for an agent drafting replies: thread, kind, and the context
+    // oldest first, so it can write every draft from one read.
+    if (flags.json) {
+      const out = shown.map((r) => ({
+        thread: r.thread,
+        group: Boolean(r.room),
+        source: r.source,
+        last_at: r.last_at,
+        messages: r.msgs.slice().reverse().map((m) => ({ from_me: Boolean(m.from_me), who: m.who, body: m.body, sent_at: m.sent_at })),
+      }));
+      process.stdout.write(JSON.stringify({ days, threads: out, hidden, last_sync: syncState("messages_last_sync") || null }, null, 2) + "\n");
+      return;
+    }
     if (!rows.length) return say(c.dim(`  nobody is waiting on you from the last ${days} days`));
     say("");
     for (const r of shown) {
@@ -589,9 +602,9 @@ function cmdTexts(argv) {
     if (verb === "send") {
       const i = pick(rest[1]);
       const dr = list[i];
-      if (dr.group) die(`#${i + 1} is to the group "${dr.who}"; people send only reaches one person. Send it from Messages.`);
       const { cmdSend } = require("./send");
       const argv = [dr.who, dr.text];
+      if (dr.group) argv.push("--room");
       // An unsaved thread sends only when --to repeats the exact address;
       // a draft carries the one its author checked with a dry run.
       if (dr.to) argv.push("--to", dr.to);

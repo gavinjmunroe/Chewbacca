@@ -68,9 +68,15 @@ session-start sync already ran, `owed` prints when), chat.db queries that
 returned nothing (an integer compared to `strftime` TEXT is always smaller in
 SQLite, and 90% of chat.db bodies sit in attributedBody anyway), `sqlite3
 -readonly` failing on the WAL store, and 25 threads read one query at a time.
-Do none of that. Run `owed`, draft every reply into the queue, show the drafts,
-and send only the numbers he names. A group draft is listed but never sent by
-`people send`, which only reaches one person.
+Do none of that. Run `owed --json`, write every reply in his chat register
+(core/voice.md) from that one read, add each to the queue, show the drafts, and
+send only the numbers he names.
+
+Group drafts send too. `people send --room "Sophomore DT" "text"` addresses the
+room by the chat GUID read from chat.db (iMessage) or the @g.us JID (WhatsApp),
+never a member, and only on an exact room name: "Paul" is a group of four, and
+a fuzzy match is a text in the wrong chat. A name two apps share is refused
+until `--via` picks one.
 
 `owed` hides unsaved numbers, short codes and email handles behind a count,
 because they were campaigns, pharmacies and 2FA. `--all` shows them. One of them

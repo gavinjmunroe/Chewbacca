@@ -608,6 +608,206 @@ def test_reply_text_cannot_drive_the_terminal():
     ok("\x9b" not in blob, blob)
 
 
+# ── calendar union and inbox booking signals ─────────────────────────────────
+
+
+def fake_gws(calendars: list, events: dict, log: list, fail: str | None = None):
+    """A gws runner: calendarList answers `calendars`, events list answers
+    events[calendarId]. `fail` makes events list exit 1 with Google's error."""
+    def runner(argv):
+        args = argv[1:]
+        log.append(args)
+        params = json.loads(args[args.index("--params") + 1]) if "--params" in args else {}
+        if args[:3] == ["calendar", "calendarList", "list"]:
+            return 0, json.dumps({"items": calendars}), "Using keyring backend: keyring"
+        if args[:3] == ["calendar", "events", "list"]:
+            if fail:
+                return 1, json.dumps({"error": {"code": 401, "message": fail}}), "error[api]: " + fail
+            return 0, json.dumps({"items": events.get(params["calendarId"], [])}), ""
+        return 2, "", "unknown"
+    return runner
+
+
+def gevent(uid, start, emails, status="confirmed", response="accepted", title="Intro"):
+    return {"id": f"{uid}_{start}", "iCalUID": uid, "status": status, "summary": title,
+            "start": {"dateTime": start}, "end": {"dateTime": start},
+            "attendees": [{"email": e, "responseStatus": response} for e in emails]
+            + [{"email": "caleb@example.test", "self": True, "responseStatus": "accepted"}]}
+
+
+def test_google_calendar_union(tmp: Path):
+    """Google through gws, unioned with mac and deduped by iCalUID + start;
+    a reader failing alone is recorded, and a failure that would drop stored
+    meetings keeps the previous snapshot."""
+    from datetime import date
+    graph = osgraph.Graph(tmp / "cal.sqlite")
+    (tmp / "cp").mkdir(exist_ok=True)
+    ids = osgraph.Identities(people_store(tmp / "cp"))
+    gi.sync(graph, ["clay"], CFG, ids, cli(world_a()))
+    cals = [{"id": "main@example.test", "accessRole": "owner", "summary": "Main"},
+            {"id": "school@example.test", "accessRole": "writer", "summary": "School"},
+            {"id": "busy@example.test", "accessRole": "freeBusyReader", "summary": "Busy only"}]
+    intro = gevent("u1@google.com", "2026-10-09T10:00:00-07:00", ["A@fund.example"])
+    events = {
+        # One event on two calendars is one meeting.
+        "main@example.test": [intro,
+                              gevent("u2@google.com", "2026-10-12T09:00:00-07:00", ["sam1@one.example"]),
+                              gevent("u2@google.com", "2026-10-19T09:00:00-07:00", ["sam1@one.example"]),
+                              gevent("u3@google.com", "2026-10-13T09:00:00-07:00", ["shared@vc.example"],
+                                     response="declined"),
+                              gevent("u4@google.com", "2026-10-14T09:00:00-07:00", ["a@fund.example"],
+                                     status="cancelled", title="Cancelled")],
+        "school@example.test": [intro],
+        "busy@example.test": [gevent("u9@google.com", "2026-10-15T09:00:00-07:00", ["a@fund.example"])],
+    }
+    log: list = []
+    google = lambda: gi.fetch_google_calendar(gi.GwsCLI(runner=fake_gws(cals, events, log)), today=date(2026, 10, 9))  # noqa: E731
+    # The same intro as mac sees it: EventKit's external id is the iCalUID.
+    mac_events = [{"id": "EK1", "externalId": "u1@google.com", "title": "Intro", "start": "2026-10-09T17:00:00Z",
+                   "attendees": [{"email": "a@fund.example"}]}]
+
+    def mac_denied():
+        raise gi.SourceUnavailable("calendar (mac): Calendar access not granted")
+
+    res = gi.sync(graph, ["calendar"], CFG, ids, calendar_readers={"google": google, "mac": mac_denied})
+    ok(res[0]["ok"] and res[0]["meetings"] == 3, res)
+    ok(res[0]["readers"] == {"google": "ok", "mac": "FAILED"}, res)
+    ok(all(gi.gws_allowed(a) for a in log) and len(log) == 3, log)
+    window = json.loads(log[1][log[1].index("--params") + 1])
+    ok(window["timeMin"] == "2026-07-11T00:00:00Z" and window["timeMax"] == "2026-12-08T00:00:00Z"
+       and window["singleEvents"] is True, window)
+    ok(not any("busy@example.test" in " ".join(a) for a in log), "a free/busy calendar has no attendees to read")
+    rows = sync_rows(graph)
+    ok(rows["gtm-calendar:google"]["ok"] == 1 and rows["gtm-calendar:mac"]["ok"] == 0
+       and "not granted" in rows["gtm-calendar:mac"]["note"], rows)
+
+    res = gi.sync(graph, ["calendar"], CFG, ids, calendar_readers={"google": google, "mac": lambda: mac_events})
+    ok(res[0]["ok"] and res[0]["meetings"] == 3, "mac's copy of the intro merged into Google's")
+    readers = sorted(tuple(n["props"]["readers"]) for n in graph.nodes("Meeting"))
+    ok(readers == [("google",), ("google",), ("google", "mac")], readers)
+    ok(len(graph.edges(verb="BOOKED_FROM")) == 3, "the intro and both recurring instances follow a send")
+
+    # gws failing keeps the snapshot: alone, and with mac still readable.
+    meets = len(graph.nodes("Meeting"))
+    broken = lambda: gi.fetch_google_calendar(  # noqa: E731
+        gi.GwsCLI(runner=fake_gws(cals, events, [], fail="Request had invalid authentication credentials")),
+        today=date(2026, 10, 9))
+    res = gi.sync(graph, ["calendar"], CFG, ids, calendar_readers={"google": broken, "mac": mac_denied})
+    ok(not res[0]["ok"] and "every reader failed" in res[0]["note"] and len(graph.nodes("Meeting")) == meets, res)
+    res = gi.sync(graph, ["calendar"], CFG, ids, calendar_readers={"google": broken, "mac": lambda: mac_events})
+    ok(not res[0]["ok"] and "google could not be read" in res[0]["note"], res)
+    ok(len(graph.nodes("Meeting")) == meets, "mac alone did not replace Google's meetings")
+    rows = sync_rows(graph)
+    ok(rows["gtm-calendar"]["ok"] == 0 and "invalid authentication" in rows["gtm-calendar:google"]["note"], rows)
+    graph.db.close()
+
+
+def test_gws_is_read_only():
+    """Every gws create, edit, RSVP, file write or non-JSON read is refused
+    before a process starts."""
+    calls: list = []
+    gws = gi.GwsCLI(runner=lambda argv: calls.append(argv) or (0, "{}", ""))
+    for args in (["calendar", "events", "insert", "--params", "{}"], ["calendar", "+insert", "--summary", "x"],
+                 ["calendar", "events", "patch", "--params", '{"eventId": "e"}'],
+                 ["calendar", "events", "delete", "--params", "{}"], ["calendar", "acl", "insert"],
+                 ["gmail", "users", "messages", "send"],
+                 ["calendar", "events", "list", "--output", "/tmp/x"],
+                 ["calendar", "events", "list", "--params"],
+                 ["calendar", "events", "list", "--format", "table"]):
+        try:
+            gws.run(args)
+            ok(False, f"gws {args} ran")
+        except gi.ReadOnlyViolation:
+            ok(True)
+    ok(calls == [], calls)
+    ok(gws.run(["calendar", "events", "list", "--params", "{}", "--format", "json"]) == {} and len(calls) == 1)
+
+
+def thread(email, campaign, msgs, map_id):
+    return {"lead_email": email, "email_campaign_name": campaign, "email_campaign_id": 9, "email_lead_map_id": map_id,
+            "lead_category_id": None, "lead_status": "COMPLETED",
+            "history": {"history": [dict(m, message_id=f"{map_id}-{i}") for i, m in enumerate(msgs)]}}
+
+
+def test_booking_signals_from_threads(tmp: Path):
+    """Inbox booking evidence: confirmed and proposed stay apart, a quoted
+    old message and an out-of-office never count, and an invite from a lead
+    only another client emailed is credited to nobody."""
+    graph = osgraph.Graph(tmp / "book.sqlite")
+    (tmp / "bp").mkdir(exist_ok=True)
+    ids = osgraph.Identities(people_store(tmp / "bp"))
+    gi.sync(graph, ["clay"], CFG, ids, cli(world_a()))
+    gi.sync(graph, ["clay"], CFG, ids, cli(world_b()))
+    seed = "Acme | Widget | Seed"
+    inbox = [
+        thread("a@fund.example", seed, [
+            {"type": "SENT", "time": "2026-10-05T15:00:00Z", "email_body": "Would Tuesday at 2pm PT work?"},
+            {"type": "REPLY", "time": "2026-10-06T09:00:00Z", "email_body": "Tuesday at 2pm works for me."}], "t1"),
+        thread("shared@vc.example", seed, [
+            {"type": "SENT", "time": "2026-10-05T15:01:00Z", "email_body": "hi"},
+            {"type": "REPLY", "time": "2026-10-07T11:00:00Z",
+             "email_body": "Could we do Thursday at 10am?<br><div class=\"gmail_quote\">On Tue, Oct 6 Jonah wrote:"
+                           " Tuesday at 2pm works for me. Accepted: Intro</div>"}], "t2"),
+        thread("sam1@one.example", seed, [
+            {"type": "REPLY", "time": "2026-10-08T10:00:00Z", "subject": "Accepted: Intro @ Wed Oct 14, 2026 1pm",
+             "email_body": "Sam Lee has accepted this invitation."}], "t3"),
+        thread("sam2@two.example", "Borealis | Gadget | Pilot", [
+            {"type": "REPLY", "time": "2026-10-08T11:00:00Z", "subject": "Invitation: Chat @ Fri Oct 16",
+             "email_body": "BEGIN:VCALENDAR METHOD:REQUEST"}], "t4"),
+        thread("dee@fund.example", "Acme | Widget | Wave 2", [
+            {"type": "REPLY", "time": "2026-10-08T12:00:00Z",
+             "email_body": "Booked through calendly.com/jonah, it says confirmed for Friday."}], "t5"),
+        thread("ghost@gone.example", seed, [
+            {"type": "REPLY", "time": "2026-10-08T13:00:00Z", "subject": "Automatic reply",
+             "email_body": "I am out of office until Monday at 9am."}], "t6"),
+    ]
+    res = gi.sync(graph, ["inbox"], CFG, ids, cli(world_a()), inbox_fn=lambda ws: inbox if ws == "111" else [])
+    r = next(x for x in res if x["source"] == "gtm-inbox:111")
+    ok(r["ok"] and r["booking_confirmed"] == 3 and r["booking_proposed"] == 2 and r["booking_not_credited"] == 1, r)
+    sigs = {n["props"]["email"]: n["props"] for n in graph.nodes("Signal")
+            if n["props"].get("kind") == "booking_signal" and n["props"]["status"] == "confirmed"}
+    ok(sigs["sam1@one.example"]["evidence"] == "calendar_accept", sigs)
+    ok(sigs["dee@fund.example"]["evidence"] == "scheduler_confirmation", sigs)
+    ok(sigs["a@fund.example"]["evidence"] == "time_confirmed" and "works for me" in sigs["a@fund.example"]["snippet"])
+    ok(not sigs["sam2@two.example"]["credited"] and "not credited" in sigs["sam2@two.example"]["attribution"], sigs)
+    ok("shared@vc.example" not in sigs, "the quoted accept in shared@'s thread is history, not a confirmation")
+    ok(all("screen_flag" in p for p in sigs.values()), "every snippet went through the screen")
+    ok(len(graph.edges(verb="EVIDENCE_IN")) == 6 and graph.validate() == [], graph.validate())
+    graph.db.close()
+
+    db = gq.connect(tmp / "book.sqlite")
+    f = gq.funnel(db, "Acme Capital")["funnel"]
+    bs = f["booking_signals"]
+    ok(bs["confirmed"] == 3 and bs["proposed_only"] == 1, bs)
+    ok(f["meetings"]["n"] == 0, "booking signals are never added to calendar meetings")
+    ok(gq.funnel(db, "Borealis")["funnel"]["booking_signals"]["confirmed"] == 0,
+       "the invite in Acme's inbox is not Borealis's either")
+    db.close()
+    out = run_cli(tmp / "book.sqlite", "funnel", "--client", "Acme Capital")
+    ok(out.returncode == 0, out.stderr)
+    for want in ("meetings (calendar)", "booking signals (inbox)", "proposed only", "never added to meetings",
+                 "gtm-calendar:google", "gtm-inbox:111"):
+        ok(want in out.stdout, (want, out.stdout))
+
+    # Each detector rule on its own.
+    d = gi.detect_booking
+    ok(d({"type": "REPLY", "email_body": "Does Tuesday at 2pm work for you?"})["status"] == "proposed")
+    ok(d({"type": "REPLY", "email_body": "Here is my link: calendly.com/x"}) is None, "a link is not a booking")
+    ok(d({"type": "REPLY", "subject": "Declined: Intro", "email_body": "has accepted"}) is None)
+    ok(d({"type": "REPLY", "email_body": "Works for me!"},
+         {"type": "SENT", "email_body": "Could we talk Monday at 11am?"})["evidence"] == "time_confirmed_in_reply")
+    ok(d({"type": "REPLY", "email_body": "Works for me!"}, None) is None, "a bare yes confirms nothing on its own")
+    # The three false positives from Zeutara's real inbox, 2026-10-09: an
+    # Outlook header quoted under the reply, bold or after a dashed rule.
+    outlook = ('<div>No thanks</div>\r\n<div dir="ltr"><b>From:</b> Pat Sender &lt;pat@sender.example&gt;<br />\r\n'
+               '<b>Sent:</b> Friday, 09 October 2026 09:05:05<br />\r\n<b>To:</b> Lee</div>')
+    dashed = ("<p>UNSUBSCRIBE</p><p>-----Original Message-----<br />From: Pat Sender<br />"
+              "Sent: Tuesday, October 6, 2026 2:03 PM<br />To: Lee</p>")
+    for body in (outlook, dashed):
+        ok(d({"type": "REPLY", "email_body": body}) is None, gi.message_text({"email_body": body}))
+    ok(gi.message_text({"email_body": outlook}).strip() == "No thanks", gi.message_text({"email_body": outlook}))
+
+
 # Security review 2026-10-09: TAG, BREAK and QUOTE_HTML were quadratic on a
 # body of "<" characters and never finished on 100k of them. Every pattern
 # now finishes each shape in under 17 ms on this Mac; 50 ms is the bar.
@@ -733,6 +933,9 @@ def main():
         test_clay_flags_and_ids_are_refused(Path(d))
         test_reply_text_cannot_drive_the_terminal()
         test_booking_patterns_are_linear()
+        test_google_calendar_union(Path(d))
+        test_gws_is_read_only()
+        test_booking_signals_from_threads(Path(d))
         speed = test_speed(Path(d))
     print(f"gtm: {CHECKS} checks passed; {speed['leads']} leads, ms: "
           + ", ".join(f"{k} {v:.1f}" for k, v in speed["ms"].items()))

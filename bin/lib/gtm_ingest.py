@@ -852,8 +852,14 @@ MATCH_LIMIT = 20_000
 QUOTE_HTML = re.compile(r"<div[^<>]{0,300}?(?:gmail_quote|yahoo_quoted|moz-cite-prefix|appendonsend|divRplyFwdMsg)"
                         r"|<blockquote|<hr\b", re.I)
 WROTE = re.compile(r"\bwrote:", re.I)
-QUOTE_TEXT = re.compile(r"^-{2,40}[ \t]{0,5}Original Message[ \t]{0,5}-{2,40}|^_{5,80}[ \t]{0,5}$"
-                        r"|^From:[ \t][^\n]{0,300}\n(?:[^\n]{0,300}\n){0,3}?(?:Sent|Date):[ \t]", re.I | re.M)
+# Leading space is allowed because "<b>From:</b>" and "<p>-----Original" leave
+# one once the tags are stripped: on 2026-10-09 all 3 booking signals in
+# Zeutara's 79 real replies were Outlook headers ("Sent: Friday, 09 October
+# 2026 09:05:05") that slipped past an anchor with no room for it.
+QUOTE_TEXT = re.compile(r"^[ \t\xa0]{0,10}-{2,40}[ \t]{0,5}Original Message[ \t]{0,5}-{2,40}"
+                        r"|^[ \t\xa0]{0,10}_{5,80}[ \t]{0,5}$"
+                        r"|^[ \t\xa0]{0,10}From:[ \t\xa0][^\n]{0,300}\n(?:[^\n]{0,300}\n){0,3}?"
+                        r"[ \t\xa0]{0,10}(?:Sent|Date):[ \t\xa0]", re.I | re.M)
 TAG = re.compile(r"<[^<>]{0,2000}>")
 BREAK = re.compile(r"<[ \t]{0,3}(?:br|/p|/div|/li|/tr)\b[^<>]{0,500}>", re.I)
 ICS = re.compile(r"text/calendar|BEGIN:VCALENDAR|\bMETHOD:(?:REQUEST|PUBLISH)\b|\binvite\.ics\b", re.I)
@@ -1135,11 +1141,49 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
     return list(nodes.values()), list(edges.values()), report
 
 
-def calendar_window(today: date, back: int = 120, ahead: int = 60) -> tuple[str, str]:
+def calendar_window(today: date, back: int = CALENDAR_BACK_DAYS, ahead: int = CALENDAR_AHEAD_DAYS) -> tuple[str, str]:
     return (today - timedelta(days=back)).isoformat(), (today + timedelta(days=ahead)).isoformat()
 
 
+def _attendees(raw) -> list[dict]:
+    out = []
+    for a in raw or []:
+        if isinstance(a, dict):
+            email = a.get("email") or a.get("address") or a.get("url") or ""
+            response = a.get("responseStatus") or a.get("status") or a.get("participantStatus") or ""
+        else:
+            email, response = a, ""
+        email = str(email or "").strip()
+        if email.lower().startswith("mailto:"):
+            email = email[7:]
+        out.append({"email": email, "response": clip(str(response).lower(), 30)})
+    return out
+
+
+def normalize_mac(ev: dict) -> dict:
+    """A `mac calendar list` event in the shape both readers share. EventKit's
+    external identifier is the iCalendar UID for a synced Google event, which
+    is what lets the union drop the copy Google already gave."""
+    uid = (ev.get("externalId") or ev.get("externalIdentifier") or ev.get("calendarItemExternalIdentifier")
+           or ev.get("iCalUID") or ev.get("uid") or "")
+    return {"reader": "mac", "id": str(ev.get("id") or ev.get("eventIdentifier") or ""), "uid": str(uid),
+            "title": clip(ev.get("title"), 160), "start": str(ev.get("start") or ev.get("startDate") or ""),
+            "end": str(ev.get("end") or ev.get("endDate") or ""), "calendar": clip(ev.get("calendar"), 80),
+            "status": str(ev.get("status") or "").lower(), "attendees": _attendees(ev.get("attendees"))}
+
+
+def normalize_google(ev: dict, calendar: str) -> dict:
+    start, end = ev.get("start") or {}, ev.get("end") or {}
+    return {"reader": "google", "id": str(ev.get("id") or ""), "uid": str(ev.get("iCalUID") or ""),
+            "title": clip(ev.get("summary"), 160),
+            "start": str(start.get("dateTime") or start.get("date") or ""),
+            "end": str(end.get("dateTime") or end.get("date") or ""), "calendar": clip(calendar, 80),
+            "status": str(ev.get("status") or "").lower(), "attendees": _attendees(ev.get("attendees"))}
+
+
 def fetch_calendar(runner=None, today: date | None = None) -> list[dict]:
+    """`mac calendar list`, which needs the Calendars privacy grant for the
+    process that runs it. Without it mac answers permissionDenied."""
     runner = runner or _subprocess_runner
     start, end = calendar_window(today or date.today())
     code, out, err = runner(["mac", "calendar", "list", "--from", start, "--to", end, "--json"])
@@ -1148,10 +1192,94 @@ def fetch_calendar(runner=None, today: date | None = None) -> list[dict]:
     except ValueError:
         body = None
     if isinstance(body, dict) and body.get("error"):
-        raise SourceUnavailable(f"calendar: {clip(body['error'].get('message'), 200)}")
+        raise SourceUnavailable(f"calendar (mac): {clip(body['error'].get('message'), 200)}")
     if code != 0 or not isinstance(body, list):
-        raise SourceUnavailable(f"calendar: mac exited {code}: {clip(err or out, 200)}")
-    return [e for e in body if isinstance(e, dict)]
+        raise SourceUnavailable(f"calendar (mac): mac exited {code}: {clip(err or out, 200)}")
+    return [normalize_mac(e) for e in body if isinstance(e, dict)]
+
+
+def fetch_google_calendar(gws: GwsCLI | None = None, today: date | None = None) -> list[dict]:
+    """Every event in the window on every calendar the signed-in Google account
+    can read, through gws. One calendar failing fails the read: a union missing
+    a calendar would drop its meetings from the snapshot."""
+    gws = gws or GwsCLI()
+    start, end = calendar_window(today or date.today())
+    calendars = gws.paged(["calendar", "calendarList", "list"], {"maxResults": 250})
+    out = []
+    for cal in calendars:
+        if not isinstance(cal, dict) or cal.get("accessRole") not in GOOGLE_ROLES:
+            continue
+        cal_id = cal.get("id")
+        if not isinstance(cal_id, str) or not cal_id or len(cal_id) > 512:
+            continue
+        events = gws.paged(["calendar", "events", "list"], {
+            "calendarId": cal_id, "timeMin": f"{start}T00:00:00Z", "timeMax": f"{end}T00:00:00Z",
+            "singleEvents": True, "showDeleted": False, "maxResults": GOOGLE_PAGE})
+        out.extend(normalize_google(e, cal.get("summary") or cal_id) for e in events if isinstance(e, dict))
+    return out
+
+
+def start_instant(stamp: str) -> str:
+    """A start time as a UTC minute, or the bare date of an all-day event, so
+    the two readers' spellings of one moment compare equal."""
+    stamp = str(stamp or "").strip()
+    try:
+        when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return stamp[:16]
+    if len(stamp) <= 10:
+        return stamp
+    if when.tzinfo is not None:
+        when = when.astimezone(timezone.utc)
+    return when.strftime("%Y-%m-%dT%H:%M")
+
+
+def merge_events(*lists: list[dict]) -> list[dict]:
+    """The union of every reader's events, one per real event. Two copies are
+    one event when they share an iCalUID and start (a recurring series shares
+    its UID across instances, so the start is part of the key), or, when a
+    copy carries no UID, the same title at the same start."""
+    merged: list[dict] = []
+    index: dict[tuple, dict] = {}
+    for events in lists:
+        for ev in events:
+            instant = start_instant(ev.get("start"))
+            keys = [("title", (ev.get("title") or "").strip().lower(), instant)]
+            if ev.get("uid"):
+                keys.insert(0, ("uid", ev["uid"], instant))
+            same = next((index[k] for k in keys if k in index), None)
+            if same is None:
+                same = dict(ev, readers=[], calendars=[], ids=[])
+                same["attendees"] = list(ev.get("attendees") or [])
+                merged.append(same)
+            else:
+                seen = {a["email"].lower() for a in same["attendees"]}
+                same["attendees"] += [a for a in ev.get("attendees") or [] if a["email"].lower() not in seen]
+                same["uid"] = same.get("uid") or ev.get("uid") or ""
+            for field, value in (("readers", ev.get("reader")), ("calendars", ev.get("calendar")), ("ids", ev.get("id"))):
+                if value and value not in same[field]:
+                    same[field].append(value)
+            for k in keys + ([("uid", same["uid"], instant)] if same.get("uid") else []):
+                index.setdefault(k, same)
+    return merged
+
+
+def read_calendars(readers: dict) -> tuple[list[dict], dict]:
+    """Run every calendar reader. Returns (events, {reader: None | failure})."""
+    got, status = {}, {}
+    for name, fn in readers.items():
+        try:
+            events = fn()
+            if not isinstance(events, list):
+                raise SourceUnavailable(f"calendar ({name}): the reader did not return a list of events")
+            # A reader that hands back raw events (a test, or a future
+            # reader) is shaped like mac's; normalized ones keep their shape.
+            got[name] = [dict(e if "reader" in e else normalize_mac(e), reader=e.get("reader") or name)
+                         for e in events if isinstance(e, dict)]
+            status[name] = None
+        except Exception as err:  # noqa: BLE001  recorded per reader, never swallowed
+            status[name] = _failed(err)
+    return merge_events(*got.values()), status
 
 
 def lead_index(graph: Graph) -> dict[str, list[tuple[str, str, str | None, str]]]:
@@ -1170,24 +1298,32 @@ def build_calendar(events: list[dict], graph: Graph) -> tuple[list[Node], list[E
     leads = lead_index(graph)
     nodes: dict[str, Node] = {}
     edges: dict[tuple, Edge] = {}
-    report = {"events": len(events), "meetings": 0, "ambiguous_client": 0}
+    report = {"events": len(events), "meetings": 0, "ambiguous_client": 0, "declined_or_cancelled": 0}
     for ev in events:
+        if "reader" in ev and "readers" not in ev:
+            ev = merge_events([ev])[0]
+        elif "readers" not in ev:  # a raw event handed straight in
+            ev = merge_events([normalize_mac(ev)])[0]
         attendees = []
         for a in ev.get("attendees") or []:
-            raw = str((a.get("email") if isinstance(a, dict) else a) or "").strip()
-            if raw.lower().startswith("mailto:"):
-                raw = raw[7:]
+            raw = a["email"]
             if raw.isprintable():
                 key = osgraph.email_key(raw)
-                if key in leads:
+                # A lead who declined did not book a meeting.
+                if key in leads and a.get("response") != "declined":
                     attendees.append(key)
         if not attendees:
             continue
-        start = str(ev.get("start") or ev.get("startDate") or "")
-        mid = node_key("meeting", "calendar", ev.get("id") or ev.get("eventIdentifier") or "", ev.get("title") or "", start)
-        nodes[mid] = Node(mid, "Meeting", clip(ev.get("title"), 160) or "Meeting", {
-            "start": start, "end": str(ev.get("end") or ev.get("endDate") or ""),
-            "calendar": clip(ev.get("calendar"), 80), "attendee_emails": sorted(set(attendees))})
+        if ev.get("status") == "cancelled":
+            report["declined_or_cancelled"] += 1
+            continue
+        start = ev.get("start") or ""
+        mid = node_key("meeting", "calendar", ev.get("uid") or (ev.get("ids") or [""])[0] or ev.get("title") or "",
+                       start_instant(start))
+        nodes[mid] = Node(mid, "Meeting", ev.get("title") or "Meeting", {
+            "start": start, "end": ev.get("end") or "", "calendar": ", ".join(ev.get("calendars") or []),
+            "readers": sorted(ev.get("readers") or []), "uid": clip(ev.get("uid"), 200),
+            "attendee_emails": sorted(set(attendees))})
         report["meetings"] += 1
         # Attributed to a campaign only when that campaign emailed this person
         # on or before the meeting's day, and only when every such campaign
@@ -1209,6 +1345,39 @@ def build_calendar(events: list[dict], graph: Graph) -> tuple[list[Node], list[E
                                                     {"attribution": "emailed on or before the meeting day",
                                                      "last_sent_at": last})
     return list(nodes.values()), list(edges.values()), report
+
+
+def readers_in_snapshot(graph: Graph) -> dict[str, int]:
+    """reader -> how many stored meetings it supplied last time."""
+    out: dict[str, int] = {}
+    for row in graph.query("SELECT props FROM nodes WHERE source = 'gtm-calendar' AND type = 'Meeting'"):
+        for r in json.loads(row["props"] or "{}").get("readers") or ["mac"]:
+            out[r] = out.get(r, 0) + 1
+    return out
+
+
+def sync_calendar(graph: Graph, readers: dict) -> dict:
+    """Read every calendar, record each reader on its own row, and apply the
+    union. Refused, keeping the previous snapshot, when every reader failed
+    or when a reader that supplied stored meetings failed now: applying the
+    others alone would delete that reader's meetings."""
+    events, status = read_calendars(readers)
+    for name, failure in status.items():
+        n = sum(1 for e in events if name in (e.get("readers") or []))
+        record_sync(graph, f"gtm-calendar:{name}", "calendar", failure is None, failure or "", {"events": n})
+    failed = {n: f for n, f in status.items() if f}
+    if len(failed) == len(status):
+        raise SourceUnavailable("calendar: every reader failed: " + "; ".join(failed.values()))
+    before = readers_in_snapshot(graph)
+    lost = [n for n in failed if before.get(n)]
+    if lost:
+        raise SourceUnavailable(f"calendar: {', '.join(lost)} could not be read and the last snapshot has "
+                                f"{sum(before[n] for n in lost)} meetings from it; keeping the previous snapshot")
+    refuse_empty(graph, "gtm-calendar", "Meeting", len(events), "the calendar")
+    nodes, edges, report = build_calendar(events, graph)
+    graph.apply("gtm-calendar", nodes, edges)
+    report["readers"] = {n: ("ok" if f is None else "FAILED") for n, f in status.items()}
+    return report
 
 
 # ── sync bookkeeping ─────────────────────────────────────────────────────────
@@ -1303,12 +1472,21 @@ def _failed(err: BaseException) -> str:
     return clip(f"FAILED with {type(err).__name__}: {err}", 400)
 
 
+def default_calendar_readers() -> dict:
+    return {"google": fetch_google_calendar, "mac": fetch_calendar}
+
+
 def sync(graph: Graph, sources: list[str], cfg: dict | None = None, ids: Identities | None = None,
-         cli: ClayCLI | None = None, inbox_fn=None, calendar_fn=None, log=print) -> list[dict]:
+         cli: ClayCLI | None = None, inbox_fn=None, calendar_fn=None, log=print,
+         calendar_readers: dict | None = None) -> list[dict]:
     """Run the named ingesters. Each one that cannot read its source, or that
     fails for ANY reason, records FAILED with the reason and leaves its
     previous snapshot in place. The first version caught only the expected
-    errors, so a KeyError aborted the run with the last row still saying ok."""
+    errors, so a KeyError aborted the run with the last row still saying ok.
+
+    The calendar reads every reader in `calendar_readers` (default: Google
+    through gws, then mac). `calendar_fn` alone is the mac reader by itself,
+    which is how the hermetic tests hand in a list of events."""
     ensure_schema(graph)
     results = []
     try:
@@ -1356,12 +1534,8 @@ def sync(graph: Graph, sources: list[str], cfg: dict | None = None, ids: Identit
     if "calendar" in sources:
         source = "gtm-calendar"
         try:
-            events = (calendar_fn or fetch_calendar)()
-            if not isinstance(events, list):
-                raise SourceUnavailable("calendar: the reader did not return a list of events")
-            refuse_empty(graph, source, "Meeting", len(events), "the calendar")
-            nodes, edges, report = build_calendar(events, graph)
-            graph.apply(source, nodes, edges)
+            readers = calendar_readers or ({"mac": calendar_fn} if calendar_fn else default_calendar_readers())
+            report = sync_calendar(graph, readers)
             record_sync(graph, source, "calendar", True, "", report)
             results.append({"source": source, "ok": True, **report})
         except Exception as err:  # noqa: BLE001  recorded, never swallowed

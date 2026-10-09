@@ -7,12 +7,15 @@
     gtm replies --client NAME [--unanswered] [--all]   (or --all-clients)
     gtm suppress --client NAME [--csv]   never email again: emailed, replied, unsubscribed,
                                          bounced, not a fit, do-not-contact, with the reason
-    gtm funnel --client NAME             sent, replied, positive, meetings, with denominators
+    gtm funnel --client NAME             sent, replied, positive, meetings, booking signals, with denominators
     gtm sync [--source clay|inbox|calendar] [--background]
 
 Queries read ~/.chewbacca/os-graph.sqlite only and answer in milliseconds.
 `sync` is the one command that reads Clay, the Clay inbox tab and the
-calendar; it is read only against all three. Every answer says when each
+calendars (Google through gws, unioned with Mac Calendar); it is read only
+against all of them. Booking signals found in inbox threads (invites, accepts,
+scheduler confirmations, a stated time) are counted on their own line and
+never added to calendar meetings. Every answer says when each
 source last synced. Add --json to any command.
 """
 from __future__ import annotations
@@ -66,17 +69,23 @@ def funnel_lines(f: dict) -> list[str]:
     rep = f["people_replied"]["n"]
     pos = f["people_positive"]
     by = ", ".join(f"{k} {v}" for k, v in sorted(pos["by"].items())) or "none"
+    bs = f.get("booking_signals") or {}
+    how = ", ".join(f"{k} {v}" for k, v in sorted((bs.get("confirmed_by") or {}).items())) or "none"
     return [
-        f"  emails sent        {c['sent']:>6}   clay analytics, {f['campaigns']} campaigns, as of {c['as_of']}",
-        f"  in campaigns       {c['leads']:>6}   clay analytics (leads); {f['people_in_campaigns']['n']} resolvable "
-        "in Audiences",
-        f"  people emailed     {em:>6}   clay activities, distinct addresses with an 'Email sent'",
-        f"  replied            {rep:>6}   {rep}/{em} emailed = {pct(rep, em)}, clay inbox threads "
+        f"  emails sent              {c['sent']:>6}   clay analytics, {f['campaigns']} campaigns, as of {c['as_of']}",
+        f"  in campaigns             {c['leads']:>6}   clay analytics (leads); {f['people_in_campaigns']['n']} "
+        "resolvable in Audiences",
+        f"  people emailed           {em:>6}   clay activities, distinct addresses with an 'Email sent'",
+        f"  replied                  {rep:>6}   {rep}/{em} emailed = {pct(rep, em)}, clay inbox threads "
         f"(clay analytics counts {c['replies']} replies, {c['repliesExcludingOoo']} excluding OOO)",
-        f"  positive           {pos['n']:>6}   {pos['n']}/{rep} replied = {pct(pos['n'], rep)}, decided by: {by}",
-        f"  meetings           {f['meetings']['n']:>6}   {f['meetings']['n']}/{em} emailed = "
-        f"{pct(f['meetings']['n'], em)}, calendar events with a lead's address",
-        f"  bounces            {c['bounces']:>6}   clay analytics",
+        f"  positive                 {pos['n']:>6}   {pos['n']}/{rep} replied = {pct(pos['n'], rep)}, decided by: {by}",
+        f"  meetings (calendar)      {f['meetings']['n']:>6}   {f['meetings']['n']}/{em} emailed = "
+        f"{pct(f['meetings']['n'], em)}, Google + Mac calendar events with a lead's address",
+        f"  booking signals (inbox)  {bs.get('confirmed', 0):>6}   confirmed, by distinct lead ({how}); "
+        "clay inbox threads, never added to meetings",
+        f"    proposed only          {bs.get('proposed_only', 0):>6}   a time was proposed and nothing confirmed it; "
+        "not a booking",
+        f"  bounces                  {c['bounces']:>6}   clay analytics",
     ]
 
 
@@ -90,7 +99,9 @@ def show_clients(d: dict) -> list[str]:
         if f:
             out.append(f"  emails sent {sent} (clay analytics), people emailed {f['people_emailed']['n']}, "
                        f"replied {f['people_replied']['n']}, positive {f['people_positive']['n']}, "
-                       f"meetings {f['meetings']['n']} (clay inbox, calendar)")
+                       f"meetings {f['meetings']['n']} (calendar), booking signals "
+                       f"{(f.get('booking_signals') or {}).get('confirmed', 0)} confirmed / "
+                       f"{(f.get('booking_signals') or {}).get('proposed_only', 0)} proposed (inbox)")
     if not d["clients"]:
         out.append("No clients in the graph yet.")
     return out + ["Synced:"] + sync_lines(d["sync"])

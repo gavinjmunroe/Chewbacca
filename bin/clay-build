@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""Build a Clay table of people with work emails, on the real Clay page, with
+Kyber showing every step and asking before every credit is spent.
+
+Usage:
+    clay-build "fintech VC partners" --count 50 [--dry-run] [--recipe PATH]
+
+It drives the Clay tab in Chewie's Chrome (`chewie web eval`), reads Clay
+through `chewbacca clay`, and draws on Kyber over ~/.bob/hud.sock. Without
+Kyber it refuses to start: the run is meant to be watched. --dry-run stops at
+the first approval card and spends nothing.
+
+Exits: 0 done or dry run, 1 failed, 2 usage, 3 refused, 4 stopped or
+declined. The last line on stdout is the outcome as JSON.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parent
+sys.path.insert(0, str(HERE / "lib"))
+import clay_hud  # noqa: E402
+import clay_lock  # noqa: E402
+import clay_recipe  # noqa: E402
+from clay_geometry import read_display  # noqa: E402
+from clay_page import CHEWIE, Page, PageError, cdp_port, clay_targets  # noqa: E402
+from clay_reads import Reads  # noqa: E402
+from clay_run import Outcome, Run  # noqa: E402
+
+# The 2026-10-05 live pull saved 500 people in about two minutes. Nothing
+# larger has been driven, and clay_reads pages through at most 1000 rows.
+MAX_COUNT = 500
+WHO_MAX = 200
+CLAY_HOME = "https://app.clay.com/"
+# How long a newly opened Clay tab gets to appear on the debug port.
+# Guessed, never measured.
+OPEN_WAIT_S = 20.0
+# A refusal shown on the glass stays this long unless dismissed. Guessed.
+REFUSAL_S = 120.0
+BOARD_TIMEOUT_S = 5
+EXITS = {"done": 0, "dry-run": 0, "failed": 1, "refused": 3, "stopped": 4, "declined": 4}
+TWO_TABS = "Two Clay tabs are open in Chewie's Chrome. Close one, then run it again."
+
+
+class Board:
+    """The tab board (bin/tabs), so other sessions see a run in progress.
+    Visibility, not the guard: trouble here is reported and ignored."""
+
+    def __init__(self, session: str, run=subprocess.run, err=sys.stderr):
+        self.session, self.run, self.err = session, run, err
+
+    def _call(self, *args: str) -> None:
+        try:
+            proc = self.run([str(ROOT / "bin" / "tabs"), *args], capture_output=True, text=True,
+                            timeout=BOARD_TIMEOUT_S)
+            if proc.returncode != 0:
+                print(f"clay-build: tab board said {proc.stderr.strip()[:200]}", file=self.err)
+        except (OSError, subprocess.SubprocessError) as err:
+            print(f"clay-build: tab board unavailable ({err})", file=self.err)
+
+    def register(self, who: str, count: int) -> None:
+        self._call("register", "--session", self.session, "--runtime", "clay-build", "--cwd", str(ROOT),
+                   f"clay-build: {who} x{count}")
+
+    def note(self, text: str) -> None:
+        self._call("note", "--session", self.session, text)
+
+    def end(self) -> None:
+        self._call("end", "--session", self.session)
+
+
+def open_clay_tab(port: int, run=subprocess.run) -> None:
+    """The only place clay-build passes chewie a URL, and only Clay's home."""
+    env = {k: v for k, v in os.environ.items() if k != "CHEWIE_WEB_FRAME"}
+    env["CHEWIE_CDP_PORT"] = str(port)
+    run([CHEWIE, "web", "eval", "1", CLAY_HOME], capture_output=True, text=True, timeout=60, env=env)
+
+
+def clay_tab(port: int, targets=clay_targets, open_tab=open_clay_tab, sleep=time.sleep) -> str | None:
+    """Exactly one Clay tab, opening it when there is none. A sentence when
+    that cannot be had."""
+    count = len(targets(port))
+    if count > 1:
+        return TWO_TABS
+    if count == 1:
+        return None
+    open_tab(port)
+    waited = 0.0
+    while waited < OPEN_WAIT_S:
+        count = len(targets(port))
+        if count == 1:
+            return None
+        if count > 1:
+            return TWO_TABS
+        sleep(0.5)
+        waited += 0.5
+    return "Clay did not open in Chewie's Chrome. Open app.clay.com there, then run it again."
+
+
+def _who(raw: str) -> str:
+    who = " ".join(raw.split())
+    if not who:
+        raise argparse.ArgumentTypeError("say who to find")
+    if len(who) > WHO_MAX:
+        raise argparse.ArgumentTypeError(f"keep it under {WHO_MAX} characters")
+    return who
+
+
+def _count(raw: str) -> int:
+    try:
+        count = int(raw)
+    except ValueError:
+        raise argparse.ArgumentTypeError("a whole number") from None
+    if not 1 <= count <= MAX_COUNT:
+        raise argparse.ArgumentTypeError(f"between 1 and {MAX_COUNT}")
+    return count
+
+
+def _finish(outcome: Outcome) -> int:
+    print(json.dumps({"state": outcome.state, "line": outcome.line, "spent": outcome.spent}))
+    return EXITS[outcome.state]
+
+
+def _refuse(line: str) -> int:
+    print(f"clay-build: {line}", file=sys.stderr)
+    return _finish(Outcome("refused", line, 0.0))
+
+
+def _show_failure(hud, line: str) -> Outcome:
+    """A failure before step 0, on the glass, for a run started by voice."""
+    hud.send(clay_hud.failed(0, 6, line, None, False, 0))
+    deadline = time.monotonic() + REFUSAL_S
+    while (left := deadline - time.monotonic()) > 0:
+        event = hud.next_event(left)
+        if event is None or event["name"] in ("clay-end", "stop", "dismissed", "clay-stop"):
+            break
+    return Outcome("failed", line, 0.0)
+
+
+def _interrupt(signum, frame):
+    raise KeyboardInterrupt
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(prog="clay-build", description=__doc__.split("\n\n")[0])
+    parser.add_argument("who", type=_who, help='who to find, as you would say it: "fintech VC partners"')
+    parser.add_argument("--count", type=_count, required=True, help=f"how many people, 1 to {MAX_COUNT}")
+    parser.add_argument("--dry-run", action="store_true", help="stop at the first approval card")
+    parser.add_argument("--recipe", type=Path, default=clay_recipe.DEFAULT, help=argparse.SUPPRESS)
+    args = parser.parse_args(argv)
+
+    fd, holder = clay_lock.acquire(clay_lock.lock_path())
+    if fd is None:
+        return _refuse(f"Another clay-build (pid {holder or 'unknown'}) is driving Clay.")
+    hud = clay_hud.Hud()
+    try:
+        hud.open()
+    except clay_hud.HudMissing as err:
+        return _refuse(str(err))
+
+    signal.signal(signal.SIGTERM, _interrupt)
+    board = Board(f"clay-build-{os.getpid()}")
+    board.register(args.who, args.count)
+    run = None
+    try:
+        try:
+            port = cdp_port()
+            trouble = clay_tab(port)
+            if trouble:
+                return _finish(_show_failure(hud, trouble))
+            display = read_display()
+            steps = clay_recipe.load(args.recipe)
+        except (PageError, RuntimeError, clay_recipe.RecipeError, OSError, ValueError) as err:
+            return _finish(_show_failure(hud, str(err)[:200]))
+        run = Run(args.who, args.count, args.dry_run, steps, Page(port=port), Reads(), hud, board, display)
+        return _finish(run.go())
+    except KeyboardInterrupt:
+        line = ("Stopped from the terminal after a paid press. Check Clay's usage page for what was spent."
+                if run and run.paid else "Stopped from the terminal. Nothing spent.")
+        return _finish(Outcome("stopped", line, None if run and run.paid else 0.0))
+    finally:
+        hud.close()
+        board.end()
+        os.close(fd)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -66,6 +66,25 @@ class TeamError(Exception):
 
 # ---------- task file format (apps/team-web/lib/task.js mirrors this) ----------
 
+# A push hung for 21 minutes on 2026-10-09 with no error and no output, and
+# the 22-task cleanup waiting behind it looked like a slow tool. Network calls
+# get a ceiling; a normal push or fetch here takes 1 to 3 seconds.
+NET_TIMEOUT = 60
+
+
+class _Timeout:
+    returncode, stderr = 1, f"push timed out after {NET_TIMEOUT}s"
+
+
+def push(path, remote, commit, branch):
+    try:
+        return subprocess.run(["git", "-C", str(path), "push", "-q", "--no-verify", remote,
+                               f"{commit}:refs/heads/{branch}"], capture_output=True, text=True,
+                              timeout=NET_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return _Timeout()
+
+
 def parse(text):
     """Frontmatter of `key: value` lines between --- fences, then a markdown body."""
     lines = text.replace("\r\n", "\n").split("\n")
@@ -174,8 +193,12 @@ class Repo:
         if self.offline:
             return
         spec = f"{self.branch}:{FETCHED_REF}" if self.ref == FETCHED_REF else self.branch
-        p = subprocess.run(["git", "-C", str(self.path), "fetch", "-q", self.remote, spec],
-                           capture_output=True, text=True)
+        try:
+            p = subprocess.run(["git", "-C", str(self.path), "fetch", "-q", self.remote, spec],
+                               capture_output=True, text=True, timeout=NET_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            print(f"team: fetch timed out after {NET_TIMEOUT}s, showing the last fetched board", file=sys.stderr)
+            return
         if p.returncode != 0:
             print(f"team: fetch failed, showing the last fetched board ({p.stderr.strip()[:120]})",
                   file=sys.stderr)
@@ -187,11 +210,40 @@ class Repo:
     def read(self, path):
         return self.git("show", f"{self.ref}:{path}")
 
+    def read_all(self, paths):
+        """Every file in one `git cat-file --batch` call.
+
+        One `git show` per task cost about 20ms of process start each; at 190
+        tasks that was most of a 7.7s `team show`, and every write read the
+        board two or three times (measured 2026-10-09, a 22-task cleanup took
+        over 20 minutes).
+        """
+        if not paths:
+            return {}
+        p = subprocess.run(["git", "-C", str(self.path), "cat-file", "--batch"],
+                           input="".join(f"{self.ref}:{f}\n" for f in paths).encode(),
+                           capture_output=True)
+        out, data, i = {}, p.stdout, 0
+        for f in paths:
+            nl = data.index(b"\n", i)
+            header = data[i:nl].decode().split()
+            i = nl + 1
+            if len(header) < 3 or header[1] != "blob":
+                continue  # "missing": the file vanished between ls-tree and here
+            size = int(header[2])
+            out[f] = data[i:i + size].decode("utf-8", "replace")
+            i += size + 1
+        return out
+
     def tasks(self):
         out = []
-        for f in self.files():
+        files = self.files()
+        texts = self.read_all(files)
+        for f in files:
+            if f not in texts:
+                continue
             try:
-                task = parse(self.read(f))
+                task = parse(texts[f])
             except TeamError as e:
                 print(f"team: skipping {f}: {e}", file=sys.stderr)
                 continue
@@ -231,8 +283,7 @@ class Repo:
             # built from the remote tree without touching it. On 2026-10-06
             # another session's uncommitted bin/slop-check failed the manifest
             # check and refused three task writes in a row as "losing the race".
-            p = subprocess.run(["git", "-C", str(self.path), "push", "-q", "--no-verify", self.remote,
-                                f"{commit}:refs/heads/{self.branch}"], capture_output=True, text=True)
+            p = push(self.path, self.remote, commit, self.branch)
             if p.returncode == 0:
                 self.git("update-ref", self.ref if self.ref.startswith("refs/") else f"refs/remotes/{self.ref}", commit)
                 return commit
@@ -265,8 +316,7 @@ class Repo:
             # built from the remote tree without touching it. On 2026-10-06
             # another session's uncommitted bin/slop-check failed the manifest
             # check and refused three task writes in a row as "losing the race".
-            p = subprocess.run(["git", "-C", str(self.path), "push", "-q", "--no-verify", self.remote,
-                                f"{commit}:refs/heads/{self.branch}"], capture_output=True, text=True)
+            p = push(self.path, self.remote, commit, self.branch)
             if p.returncode == 0:
                 self.git("update-ref", self.ref if self.ref.startswith("refs/") else f"refs/remotes/{self.ref}", commit)
                 return commit

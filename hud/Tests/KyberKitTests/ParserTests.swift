@@ -405,7 +405,7 @@ struct UrgencyTests {
     @Test("a surface carries an urgency when one is given")
     func parsesUrgency() throws {
         let op = try #require(try LineParser.parse("@ alarm at=center urgency=critical"))
-        guard case .surface(let id, let region, _, let urgency, _, _) = op else {
+        guard case .surface(let id, let region, _, let urgency, _, _, _) = op else {
             Issue.record("expected a surface op")
             return
         }
@@ -417,7 +417,7 @@ struct UrgencyTests {
     @Test("an unknown urgency is dropped rather than guessed")
     func rejectsUnknownUrgency() throws {
         let op = try #require(try LineParser.parse("@ p urgency=extremely"))
-        guard case .surface(_, _, _, let urgency, _, _) = op else {
+        guard case .surface(_, _, _, let urgency, _, _, _) = op else {
             Issue.record("expected a surface op")
             return
         }
@@ -438,7 +438,7 @@ struct ChromeTests {
     @Test("a surface can ask for no window around it")
     func parsesChrome() throws {
         let op = try #require(try LineParser.parse("@ figure chrome=bare"))
-        guard case .surface(_, _, _, _, let chrome, _) = op else {
+        guard case .surface(_, _, _, _, let chrome, _, _) = op else {
             Issue.record("expected a surface op")
             return
         }
@@ -448,7 +448,7 @@ struct ChromeTests {
     @Test("an omitted chrome is nil, so re-addressing keeps what the surface had")
     func omittedChromeIsNil() throws {
         let op = try #require(try LineParser.parse("@ figure"))
-        guard case .surface(_, let region, _, let urgency, let chrome, _) = op else {
+        guard case .surface(_, let region, _, let urgency, let chrome, _, _) = op else {
             Issue.record("expected a surface op")
             return
         }
@@ -470,7 +470,7 @@ struct ChromeTests {
     @Test("chrome=window parses")
     func windowChromeParses() throws {
         let op = try #require(try LineParser.parse("@ outbound at=top w=620 chrome=window"))
-        guard case .surface(_, _, _, _, let chrome, _) = op else {
+        guard case .surface(_, _, _, _, let chrome, _, _) = op else {
             Issue.record("expected a surface op")
             return
         }
@@ -566,7 +566,7 @@ struct MarkerTests {
     @Test("a surface can be given a lifetime")
     func surfaceLife() throws {
         let op = try #require(try LineParser.parse("@ toast at=top life=6"))
-        guard case .surface(_, _, _, _, _, let life) = op else {
+        guard case .surface(_, _, _, _, _, let life, _) = op else {
             Issue.record("expected a surface op")
             return
         }

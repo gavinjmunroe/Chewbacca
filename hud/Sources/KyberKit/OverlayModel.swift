@@ -37,6 +37,9 @@ public struct OverlaySurface: Identifiable, Equatable {
     /// Folded to its title because its region ran out of room. See
     /// `OverlayModel.plan`.
     public var compact = false
+    /// Beside this rectangle instead of in its region's column. Set by
+    /// `near=`, cleared by a later `at=`. See `Near`.
+    public var near: Near?
     /// When it was last opened, re-addressed or touched by the person, as a
     /// sequence number. The least recent is the one that folds.
     public var touched = 0
@@ -73,6 +76,7 @@ public struct OverlaySurface: Identifiable, Equatable {
         a.id == b.id && a.region == b.region && a.slot == b.slot
             && a.width == b.width && a.drag == b.drag && a.urgency == b.urgency && a.chrome == b.chrome && a.expires == b.expires
             && a.compact == b.compact && a.summonedFrom == b.summonedFrom && a.instance == b.instance
+            && a.near == b.near
     }
 }
 
@@ -213,11 +217,11 @@ public final class OverlayModel {
 
     public func apply(_ op: Op) {
         switch op {
-        case .surface(let id, let region, let width, let urgency, let chrome, let life):
+        case .surface(let id, let region, let width, let urgency, let chrome, let life, let near):
             current = id
             open(
                 id, region: region, width: width.map { CGFloat($0) },
-                urgency: urgency, chrome: chrome, life: life)
+                urgency: urgency, chrome: chrome, life: life, near: near)
 
         case .presence(let state, let amplitude):
             setPresence(state, amplitude: amplitude)
@@ -913,12 +917,15 @@ public final class OverlayModel {
     @discardableResult
     private func open(
         _ id: String, region: Region?, width: CGFloat?,
-        urgency: Urgency?, chrome: Chrome?, life: Double? = nil
+        urgency: Urgency?, chrome: Chrome?, life: Double? = nil, near: Near? = nil
     ) -> OverlaySurface {
         if let index = surfaces.firstIndex(where: { $0.id == id }) {
             // Moving or resizing an open surface mid-stream is a normal ask.
             var existing = surfaces[index]
             if let region { existing.region = region }
+            // A new rectangle moves it; a region puts it back in a column;
+            // neither keeps it where it is, like every other omitted field.
+            if let near { existing.near = near } else if region != nil { existing.near = nil }
             if let urgency { existing.urgency = urgency }
             if let chrome { existing.chrome = chrome }
             if let life { existing.expires = life == 0 ? nil : Date().addingTimeInterval(life) }
@@ -945,6 +952,7 @@ public final class OverlayModel {
             urgency: urgency ?? .normal, chrome: chrome ?? .card,
             maxHeight: OverlaySurface.ceiling,
             expires: life.map { $0 == 0 ? .distantFuture : Date().addingTimeInterval($0) })
+        surface.near = near
         surface.touched = nextTouch
         nextInstance += 1
         surface.instance = nextInstance
@@ -973,6 +981,35 @@ public final class OverlayModel {
 
     /// Between stacked surfaces, and from a surface to the screen's edge.
     static let stackGap: CGFloat = 12
+
+    /// Gap between a beside-note and its target. Guessed, never measured:
+    /// the approved mockup (look-v2.html) used 12 to 16 px at 1x.
+    nonisolated static let nearGap: CGFloat = 12
+
+    /// Top-left corner for a surface of `size` beside `target`, inside
+    /// `bounds`: on the asked side if it fits, the other side if not, below
+    /// and then above if neither does. It never overlaps the target, because
+    /// the target is what the person needs to see being pressed.
+    nonisolated static func besideOrigin(
+        target: CGRect, side: Near.Side, size: CGSize, bounds: CGRect, gap: CGFloat
+    ) -> CGPoint {
+        let right = target.maxX + gap
+        let left = target.minX - gap - size.width
+        let fitsRight = right + size.width <= bounds.maxX
+        let fitsLeft = left >= bounds.minX
+        let clampY = { (y: CGFloat) in min(max(y, bounds.minY), bounds.maxY - size.height) }
+        let clampX = { (x: CGFloat) in min(max(x, bounds.minX), bounds.maxX - size.width) }
+        switch (side, fitsRight, fitsLeft) {
+        case (.right, true, _), (.left, true, false):
+            return CGPoint(x: right, y: clampY(target.minY))
+        case (.left, _, true), (.right, false, true):
+            return CGPoint(x: left, y: clampY(target.minY))
+        default:
+            let below = target.maxY + gap
+            let y = below + size.height <= bounds.maxY ? below : target.minY - gap - size.height
+            return CGPoint(x: clampX(target.minX), y: clampY(y))
+        }
+    }
     static let screenMargin: CGFloat = 18
     /// What a folded surface is planned at: its 16pt title line and the
     /// card's 14 above and below (`SurfaceCard.titleLine`), which is also the
@@ -1009,7 +1046,9 @@ public final class OverlayModel {
 
     private func relayout() {
         var used: [Region: Int] = [:]
-        for index in surfaces.indices {
+        // A surface beside a rectangle is in no column: it neither takes a
+        // slot nor folds, because it is placed by what it describes.
+        for index in surfaces.indices where surfaces[index].near == nil {
             let region = surfaces[index].region
             surfaces[index].slot = used[region, default: 0]
             used[region] = surfaces[index].slot + 1
@@ -1019,12 +1058,13 @@ public final class OverlayModel {
         // over them, which is what the clamp in `origin` used to do.
         let capacity = regionCapacity
         for region in Set(surfaces.map(\.region)) {
-            let column = surfaces.filter { $0.region == region && !$0.isRail }.map {
+            let column = surfaces.filter { $0.region == region && !$0.isRail && $0.near == nil }.map {
                 (id: $0.id, height: fullHeights[$0.id] ?? heights[$0.id] ?? 120,
                  touched: $0.touched)
             }
             let fold = Self.plan(column, capacity: capacity)
-            for index in surfaces.indices where surfaces[index].region == region {
+            for index in surfaces.indices
+            where surfaces[index].region == region && surfaces[index].near == nil {
                 surfaces[index].compact = fold.contains(surfaces[index].id)
             }
         }
@@ -1076,6 +1116,22 @@ public final class OverlayModel {
         let rightInset = full.maxX - usable.maxX
 
         let margin = Self.screenMargin
+        if let near = surface.near {
+            let height = drawnHeight(surface)
+            let bounds = CGRect(
+                x: leftInset + margin, y: topInset + margin,
+                width: full.width - leftInset - rightInset - 2 * margin,
+                height: full.height - topInset - bottomInset - 2 * margin)
+            let topLeft = Self.besideOrigin(
+                target: near.target, side: near.side,
+                size: CGSize(width: surface.width, height: height),
+                bounds: bounds, gap: Self.nearGap)
+            let centre = CGPoint(x: topLeft.x + surface.width / 2, y: topLeft.y + height / 2)
+            let drag = dragBounds(centre: centre, width: surface.width, height: height, screen: screen)
+            return CGPoint(
+                x: centre.x + Self.resist(surface.drag.width, within: drag.x),
+                y: centre.y + Self.resist(surface.drag.height, within: drag.y))
+        }
         let anchor = surface.region.anchor
         let width = surface.width
         let height = drawnHeight(surface)

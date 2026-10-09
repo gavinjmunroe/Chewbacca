@@ -205,6 +205,35 @@ public enum Chrome: String, Sendable, CaseIterable {
     public var isFilled: Bool { self == .card || self == .window }
 }
 
+/// A surface placed beside a rectangle on the screen rather than in a region.
+///
+/// The Clay HUD's note sits in the gutter next to the control being pressed,
+/// never over it, so the person can see the note and the control at once.
+/// Coordinates are screen points with a top-left origin, the same space as
+/// `m` and `a`.
+public struct Near: Sendable, Equatable {
+    public enum Side: String, Sendable { case right, left }
+    public var target: CGRect
+    public var side: Side
+
+    public init(target: CGRect, side: Side) {
+        self.target = target
+        self.side = side
+    }
+
+    /// `x,y,w,h`. Nil unless all four are finite numbers and the size is
+    /// positive, so a malformed rectangle places nothing rather than a note
+    /// at the origin.
+    public static func parse(_ raw: String) -> CGRect? {
+        let fields = raw.split(separator: ",", omittingEmptySubsequences: false)
+        let parts = fields.compactMap { Double($0) }
+        guard fields.count == 4, parts.count == 4, parts.allSatisfy(\.isFinite),
+              parts[2] > 0, parts[3] > 0
+        else { return nil }
+        return CGRect(x: parts[0], y: parts[1], width: parts[2], height: parts[3])
+    }
+}
+
 /// What a stream can say.
 ///
 /// The first four build a surface. The last two say *which* surface, which is
@@ -218,7 +247,7 @@ public enum Op: Sendable, Equatable {
     /// Open or switch to a named surface. Everything after this targets it.
     case surface(
         id: String, region: Region?, width: Double?,
-        urgency: Urgency?, chrome: Chrome?, life: Double?)
+        urgency: Urgency?, chrome: Chrome?, life: Double?, near: Near?)
     /// Close a surface and take it off the screen.
     case close(id: String)
     /// Say what the assistant is doing. Draws the presence ring.

@@ -7,6 +7,8 @@ pass=0; fail=0
 ok(){ printf '  \033[0;32mpass\033[0m  %s\n' "$1"; pass=$((pass+1)); }
 no(){ printf '  \033[0;31mfail\033[0m  %s\n' "$1"; fail=$((fail+1)); }
 
+# Synthetic token: the test only needs a value the mirror must never copy.
+TOK="fake0token0for0phone0mirror0test0abcdef"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
 CL="$T/claude-home"; BRAIN="$T/brain"; EXT="$T/ext-skill"
 mkdir -p "$CL/rules" "$CL/skills" "$BRAIN" "$EXT"
@@ -14,7 +16,7 @@ echo "pray first" > "$CL/CLAUDE.md"
 echo "no em dashes" > "$CL/rules/writing.md"
 echo "skill body" > "$EXT/SKILL.md"
 ln -s "$EXT" "$CL/skills/linked"
-printf '{"env":{"TODOIST_API_TOKEN":"f0126e193b7fb233c00d57d8480de4741106209e"},"model":"x","enabledPlugins":{"blader/humanizer":true},"hooks":{"Stop":[]}}' > "$CL/settings.json"
+printf '{"env":{"TODOIST_API_TOKEN":"'"$TOK"'"},"model":"x","enabledPlugins":{"blader/humanizer":true},"hooks":{"Stop":[]}}' > "$CL/settings.json"
 echo "credit: blader/humanizer" > "$CL/rules/credits.md"
 
 CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN"; rc=$?
@@ -23,11 +25,11 @@ CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN"; rc=$?
   && ok "skill symlink copied as a real folder" || no "skill symlink not dereferenced"
 [ "$(jq -r '.env // "gone"' "$BRAIN/claude/settings.json")" = gone ] \
   && ok "settings env block not copied" || no "env block survived"
-grep -rq f0126e193b7f "$BRAIN/claude" && no "raw token in mirror" || ok "raw token absent everywhere"
+grep -rq "$TOK" "$BRAIN/claude" && no "raw token in mirror" || ok "raw token absent everywhere"
 [ "$(jq -c .hooks "$BRAIN/claude/settings.json")" = '{"Stop":[]}' ] && ok "hooks kept, and a plugin name in a skill is not a leak" || no "settings mangled"
 
 # A hook that hard-codes the same token must stop the run.
-echo 'curl -H "Bearer f0126e193b7fb233c00d57d8480de4741106209e"' > "$CL/rules/leaky.md"
+echo "curl -H \"Bearer $TOK\"" > "$CL/rules/leaky.md"
 CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN" 2>/dev/null; rc=$?
 [ "$rc" = 1 ] && ok "refuses when an env value leaks into a mirrored file" || no "leak exited $rc"
 rm "$CL/rules/leaky.md"
@@ -42,7 +44,7 @@ CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN" 2>/dev/null; rc=$?
 [ "$rc" = 0 ] && ok "a hook's own secret regex is not a leak" || no "regex text exited $rc"
 
 rm "$CL/rules/guard.sh"
-printf '{"env":{"TODOIST_API_TOKEN":"f0126e193b7fb233c00d57d8480de4741106209e"},"mcpServers":{"x":{"env":{"DB":"postgres://u:hunter22pass@h/db"},"headers":{"Authorization":"Bearer abcdefgh12345678"}}},"apiToken":"zzzzzzzz9999"}' > "$CL/settings.json"
+printf '{"env":{"TODOIST_API_TOKEN":"'"$TOK"'"},"mcpServers":{"x":{"env":{"DB":"postgres://u:hunter22pass@h/db"},"headers":{"Authorization":"Bearer abcdefgh12345678"}}},"apiToken":"zzzzzzzz9999"}' > "$CL/settings.json"
 echo "DB=postgres://u:hunter22pass@h/db" > "$CL/rules/.env"
 CLAUDE_HOME="$CL" bash "$BIN" "$BRAIN"; rc=$?
 [ "$rc" = 0 ] && ok "nested settings run is clean" || no "nested run exited $rc"

@@ -120,6 +120,26 @@ rm -f "$T/kit"/z?.json "$T/kit/hosts.allow"
 [ -f "$T/engine/sites/eps.json" ] || no "a logged-out cookie jar blocked a repo spec"
 rm -f "$T/kit/gamma.json" "$T/kit/delta.json" "$T/kit/eps.json"
 
+# A login re-checks the kit's specs after it runs: a spec installed while
+# signed out is gone once the login it now shares a domain with lands.
+cat > "$T/bin/api-anything" <<'SH'
+#!/bin/bash
+printf '%s\n' "$*" >> "$FAKE_LOG"
+if [ "$1" = login ]; then
+  echo '{"cookies":[{"name":"s","domain":".z16.com"}],"source":"chrome:Default"}' > "$API_ANYTHING_HOME/sessions/z16.json"
+fi
+echo '{"ok":true}'
+SH
+echo '{"name":"z16jobs","baseUrl":"https://jobs.z16.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://jobs.z16.com/"}}]}' > "$T/kit/z16jobs.json"
+bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+[ -f "$T/engine/sites/z16jobs.json" ] || no "z16jobs did not install while signed out"
+bash "$ROOT/bin/chewbacca-api" login z16 >/dev/null 2>&1
+[ -f "$T/engine/sites/z16jobs.json" ] && no "a login left an unsafe kit spec installed until the next call"
+rm -f "$T/kit/z16jobs.json" "$T/engine/sessions/z16.json"
+# The MCP entry point syncs before it hands over to the engine.
+bash "$ROOT/bin/chewbacca-api" mcp >/dev/null 2>&1
+tail -1 "$T/calls" | grep -qx mcp || no "chewbacca api mcp did not start the engine's server"
+
 # Calls pass through with their args intact; teach maps to add.
 bash "$ROOT/bin/chewbacca-api" call alpha getThing 'q=two words' >/dev/null
 grep -qx 'call alpha getThing q=two words' "$T/calls" || no "call args changed on the way through"

@@ -48,11 +48,15 @@ install_engine() {
     ) || { say "Could not build the api engine."; return 1; }
   fi
   # MCP: four tools (list_sites, list_operations, call_operation, login).
-  if have claude && ! claude mcp get api-anything >/dev/null 2>&1; then
-    claude mcp add --scope user api-anything -- api-anything mcp >/dev/null 2>&1
+  # Wired through this script so the kit's specs are re-checked on start.
+  local self="$ROOT/bin/chewbacca-api"
+  if have claude; then
+    claude mcp remove --scope user api-anything >/dev/null 2>&1
+    claude mcp add --scope user api-anything -- bash "$self" mcp >/dev/null 2>&1
   fi
-  if have codex && ! codex mcp get api-anything >/dev/null 2>&1; then
-    codex mcp add api-anything -- api-anything mcp >/dev/null 2>&1
+  if have codex; then
+    codex mcp remove api-anything >/dev/null 2>&1
+    codex mcp add api-anything -- bash "$self" mcp >/dev/null 2>&1
   fi
   local skill
   skill="$(npm root -g 2>/dev/null)/api-anything/skills/api-anything/SKILL.md"
@@ -206,7 +210,22 @@ case "$cmd" in
   install|setup) install_engine ;;
   sync) need_engine && sync_sites ;;
   teach) need_engine && exec api-anything add "$@" ;;
-  sites|ops|call|login|logout|capture|inspect|verify|heal|export|add)
+  login)
+    # A login changes which kit specs are safe, so re-check them after it,
+    # not only before the next call.
+    need_engine || exit 1
+    api-anything login "$@"; rc=$?
+    sync_sites --quiet
+    exit "$rc"
+    ;;
+  mcp)
+    # Agents reach the engine through this, never `api-anything mcp` directly,
+    # so the kit's specs are re-checked each time a server starts.
+    need_engine || exit 1
+    sync_sites --quiet
+    exec api-anything mcp "$@"
+    ;;
+  sites|ops|call|logout|capture|inspect|verify|heal|export|add)
     need_engine || exit 1
     sync_sites --quiet
     exec api-anything "$cmd" "$@"

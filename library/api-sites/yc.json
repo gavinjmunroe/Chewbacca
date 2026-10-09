@@ -1,0 +1,242 @@
+{
+  "name": "yc",
+  "baseUrl": "https://www.ycombinator.com",
+  "operations": [
+    {
+      "name": "searchCompanies",
+      "description": "Search the YC startup directory by keyword (Algolia, up to 1000 hits)",
+      "request": {
+        "method": "POST",
+        "url": "https://45bwzj1sgc-dsn.algolia.net/1/indexes/*/queries?x-algolia-agent=Algolia%20for%20JavaScript%20(3.35.1)%3B%20Browser%3B%20JS%20Helper%20(3.16.1)&x-algolia-application-id=45BWZJ1SGC&x-algolia-api-key=NzJmMWExZWYxYzY5OGYwN2VkYWM5YzRiM2VlNDFlM2I0ODU2YjQ2Yjg0MTFiNWE5NzY0NTMyZGI1OWEwMzVjY2FuYWx5dGljc1RhZ3M9eWNkYyZyZXN0cmljdEluZGljZXM9WUNDb21wYW55X3Byb2R1Y3Rpb24lMkNZQ0NvbXBhbnlfQnlfTGF1bmNoX0RhdGVfcHJvZHVjdGlvbiZ0YWdGaWx0ZXJzPSU1QiUyMnljZGNfcHVibGljJTIyJTVE",
+        "headers": {
+          "accept-language": "en-US,en;q=0.9",
+          "origin": "https://www.ycombinator.com",
+          "referer": "https://www.ycombinator.com/",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "cross-site",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "accept": "application/json",
+          "content-type": "application/x-www-form-urlencoded",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        },
+        "body": "{\"requests\":[{\"indexName\":\"YCCompany_production\",\"params\":\"facets=%5B%22app_answers%22%2C%22app_video_public%22%2C%22batch%22%2C%22demo_day_video_public%22%2C%22industries%22%2C%22isHiring%22%2C%22nonprofit%22%2C%22question_answers%22%2C%22regions%22%2C%22subindustry%22%2C%22top_company%22%5D&hitsPerPage=1000&maxValuesPerFacet=1000&page=0&query={query}&tagFilters=\"}]}"
+      },
+      "slots": [
+        {
+          "param": "query",
+          "at": [
+            "body",
+            "json:/requests/0/params"
+          ],
+          "template": "facets=%5B%22app_answers%22%2C%22app_video_public%22%2C%22batch%22%2C%22demo_day_video_public%22%2C%22industries%22%2C%22isHiring%22%2C%22nonprofit%22%2C%22question_answers%22%2C%22regions%22%2C%22subindustry%22%2C%22top_company%22%5D&hitsPerPage=1000&maxValuesPerFacet=1000&page=0&query={query}&tagFilters="
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://www.ycombinator.com/companies?query={query}"
+      },
+      "match": {
+        "method": "POST",
+        "host": "45bwzj1sgc-dsn.algolia.net",
+        "path": "/1/indexes/*/queries"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "results[0].hits",
+        "pick": [
+          "name",
+          "slug",
+          "one_liner",
+          "batch",
+          "industry",
+          "team_size",
+          "website",
+          "location=all_locations",
+          "status",
+          "isHiring"
+        ]
+      },
+      "params": [
+        {
+          "name": "query",
+          "type": "string",
+          "required": true,
+          "example": "stripe"
+        }
+      ],
+      "readOnly": true,
+      "public": [
+        "x-algolia-api-key"
+      ],
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:07:55.535Z"
+    },
+    {
+      "name": "companiesByBatch",
+      "description": "All companies in one YC batch, e.g. 'Summer 2024' or 'Fall 2025' (first 1000)",
+      "request": {
+        "method": "POST",
+        "url": "https://45bwzj1sgc-3.algolianet.com/1/indexes/*/queries?x-algolia-agent=Algolia%20for%20JavaScript%20(3.35.1)%3B%20Browser%3B%20JS%20Helper%20(3.16.1)&x-algolia-application-id=45BWZJ1SGC&x-algolia-api-key=NzJmMWExZWYxYzY5OGYwN2VkYWM5YzRiM2VlNDFlM2I0ODU2YjQ2Yjg0MTFiNWE5NzY0NTMyZGI1OWEwMzVjY2FuYWx5dGljc1RhZ3M9eWNkYyZyZXN0cmljdEluZGljZXM9WUNDb21wYW55X3Byb2R1Y3Rpb24lMkNZQ0NvbXBhbnlfQnlfTGF1bmNoX0RhdGVfcHJvZHVjdGlvbiZ0YWdGaWx0ZXJzPSU1QiUyMnljZGNfcHVibGljJTIyJTVE",
+        "headers": {
+          "accept-language": "en-US,en;q=0.9",
+          "origin": "https://www.ycombinator.com",
+          "referer": "https://www.ycombinator.com/",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "cross-site",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "accept": "application/json",
+          "content-type": "application/x-www-form-urlencoded",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        },
+        "body": "{\"requests\":[{\"indexName\":\"YCCompany_production\",\"params\":\"facetFilters=%5B%5B%22batch%3A{batch}%22%5D%5D&facets=%5B%22app_answers%22%2C%22app_video_public%22%2C%22batch%22%2C%22demo_day_video_public%22%2C%22industries%22%2C%22isHiring%22%2C%22nonprofit%22%2C%22question_answers%22%2C%22regions%22%2C%22subindustry%22%2C%22top_company%22%5D&hitsPerPage=1000&maxValuesPerFacet=1000&page=0&query=&tagFilters=\"},{\"indexName\":\"YCCompany_production\",\"params\":\"analytics=false&clickAnalytics=false&facets=batch&hitsPerPage=0&maxValuesPerFacet=1000&page=0&query=\"}]}"
+      },
+      "slots": [
+        {
+          "param": "batch",
+          "at": [
+            "body",
+            "json:/requests/0/params"
+          ],
+          "template": "facetFilters=%5B%5B%22batch%3A{batch}%22%5D%5D&facets=%5B%22app_answers%22%2C%22app_video_public%22%2C%22batch%22%2C%22demo_day_video_public%22%2C%22industries%22%2C%22isHiring%22%2C%22nonprofit%22%2C%22question_answers%22%2C%22regions%22%2C%22subindustry%22%2C%22top_company%22%5D&hitsPerPage=1000&maxValuesPerFacet=1000&page=0&query=&tagFilters=",
+          "escape": "url"
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://www.ycombinator.com/companies?batch={batch}"
+      },
+      "match": {
+        "method": "POST",
+        "host": "45bwzj1sgc-3.algolianet.com",
+        "path": "/1/indexes/*/queries"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "results[0].hits",
+        "pick": [
+          "name",
+          "slug",
+          "one_liner",
+          "batch",
+          "industry",
+          "team_size",
+          "website",
+          "location=all_locations",
+          "status",
+          "isHiring"
+        ]
+      },
+      "params": [
+        {
+          "name": "batch",
+          "type": "string",
+          "required": true,
+          "example": "Summer 2024"
+        }
+      ],
+      "readOnly": true,
+      "public": [
+        "x-algolia-api-key"
+      ],
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:13:59.226Z"
+    },
+    {
+      "name": "getCompany",
+      "description": "One YC company page by slug: founders, website, founded year, team size, jobs",
+      "request": {
+        "method": "GET",
+        "url": "https://www.ycombinator.com/companies/%7Bslug%7D",
+        "headers": {
+          "accept": "text/html, application/xhtml+xml",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=1, i",
+          "referer": "https://www.ycombinator.com/companies/{slug}",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "x-inertia": "true",
+          "x-inertia-version": "00005b19f15593c53829d8d77ceaf78af6b910e1",
+          "x-requested-with": "XMLHttpRequest"
+        }
+      },
+      "slots": [
+        {
+          "param": "slug",
+          "at": [
+            "path:1"
+          ]
+        },
+        {
+          "param": "slug",
+          "at": [
+            "header:referer"
+          ],
+          "template": "https://www.ycombinator.com/companies/{slug}"
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://www.ycombinator.com/companies/{slug}",
+        "softFrom": "https://www.ycombinator.com/companies/stripe"
+      },
+      "match": {
+        "method": "GET",
+        "host": "www.ycombinator.com",
+        "path": "/companies/*"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "props",
+        "pick": [
+          "name=company.name",
+          "slug=company.slug",
+          "website=company.website",
+          "founded=company.year_founded",
+          "team_size=company.team_size",
+          "location=company.location",
+          "batch=company.batch_name",
+          "status=company.ycdc_status",
+          "one_liner=company.one_liner",
+          "long_description=company.long_description",
+          "company_linkedin=company.linkedin_url",
+          "founder_names=company.founders[*].full_name",
+          "founder_titles=company.founders[*].title",
+          "founder_linkedins=company.founders[*].linkedin_url",
+          "job_titles=jobPostings[*].title",
+          "jobs_url=jobsUrl"
+        ]
+      },
+      "params": [
+        {
+          "name": "slug",
+          "type": "string",
+          "required": true,
+          "example": "airbnb"
+        }
+      ],
+      "readOnly": true,
+      "public": [
+        "x-inertia-version"
+      ],
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T10:42:56.176Z"
+    }
+  ]
+}

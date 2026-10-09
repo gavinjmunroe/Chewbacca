@@ -72,15 +72,18 @@ def main() -> int:
     try:
         kyber = fake_app(work, "Kyber", "dev.bobthebuilder.hud")
         host = fake_app(work, "Visual Studio Code", "com.microsoft.VSCode")
+        runtime = fake_app(work, "Chewbacca", "com.chewbacca.runtime")
         everything = [
             ("kTCCServiceAccessibility", "dev.bobthebuilder.hud", 2),
             ("kTCCServiceScreenCapture", "dev.bobthebuilder.hud", 2),
             ("kTCCServiceSystemPolicyAllFiles", "com.microsoft.VSCode", 2),
+            ("kTCCServiceSystemPolicyAllFiles", "com.chewbacca.runtime", 2),
         ]
         system = tcc_db(work / "system.db", everything)
         messages = ("kTCCServiceAppleEvents", "com.microsoft.VSCode", 2, "com.apple.MobileSMS")
         user = tcc_db(work / "user.db", [("kTCCServiceMicrophone", "dev.bobthebuilder.hud", 2), messages])
         env = {"CHEWBACCA_KYBER_APP": str(kyber), "CHEWBACCA_HOST_APP": str(host),
+               "CHEWBACCA_RUNTIME_APP": str(runtime),
                "CHEWBACCA_TCC_SYSTEM_DB": str(system), "CHEWBACCA_TCC_USER_DB": str(user)}
 
         def plan(extra: dict[str, str] | None = None) -> dict:
@@ -92,7 +95,7 @@ def main() -> int:
         check("plan names exactly what Chewbacca needs, Full Disk Access first",
               ids == ["host.full-disk-access", "kyber.accessibility",
                       "kyber.screen-recording-and-system-audio", "kyber.microphone",
-                      "host.automation.messages"], str(ids))
+                      "host.automation.messages", "runtime.full-disk-access"], str(ids))
         check("plan reads every grant as granted from the fixture databases",
               report["missing"] == [], str(report["missing"]))
         check("plan names the host from the env override", report["host"]["detected_by"] == "env")
@@ -112,7 +115,10 @@ def main() -> int:
         statuses = {need["status"] for need in report["needs"]}
         check("unreadable databases read as unknown, not granted or denied",
               statuses == {"unknown"}, str(statuses))
-        check("and unknown grants are listed as missing", len(report["missing"]) == 5)
+        check("and unknown grants are listed as missing", len(report["missing"]) == 6)
+        report = plan({"CHEWBACCA_TCC_SYSTEM_DB": str(tcc_db(work / "no-runtime.db", everything[:3]))})
+        check("the Chewbacca runtime without Full Disk Access is missing on its own",
+              report["missing"] == ["runtime.full-disk-access"], str(report["missing"]))
 
         # Messages automation, 2026-10-09: denied blocked every iMessage send.
         # Never asked is one click on macOS's prompt, denied is a Settings

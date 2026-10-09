@@ -1,29 +1,42 @@
 #!/bin/bash
-# chewbacca-node: one node binary at a path that never changes, for launchd jobs.
+# chewbacca-node: one node for launchd jobs, at a path that never changes,
+# that macOS shows in System Settings as "Chewbacca" with its own icon.
 #
-#   chewbacca-node            refresh the copy if node changed, print its path
+#   chewbacca-node            build or refresh the runtime, print the node path
 #   chewbacca-node --path     print the path only
+#   chewbacca-node --app      print the Chewbacca.app path (what a grant goes to)
 #
 # A job launchd starts has no .app above it, so macOS charges its privacy
-# requests to the node binary itself and asks "node would like to access data
-# from other apps". On 2026-10-09 that box came up many times in one day,
-# because the people jobs ran nvm's node, whose path moves with every version.
-# Granting Full Disk Access once to this copy covers every job pointed here.
-# It is a copy, not a symlink: TCC resolves links to the real file, so a link
-# would put the grant back on the versioned path. The copy keeps Node's
-# signature (identifier node, team HX7739G8FX), which is what the grant
-# matches, so refreshing it after a node upgrade keeps the grant.
+# requests to the binary itself. On 2026-10-09 that was nvm's node, whose path
+# moves with every version, so "node would like to access data from other apps"
+# came up many times in one day. Then a stable copy fixed the repeats, but
+# System Settings still listed it as "node" with a black exec icon, and Caleb,
+# 2026-10-10: "non devs will think its malware".
+#
+# So node now lives inside ~/.chewbacca/runtime/Chewbacca.app, signed ad hoc as
+# com.chewbacca.runtime, and ~/.chewbacca/runtime/node is a symlink to it.
+# Jobs keep pointing at the same node path; TCC resolves the link, finds the
+# bundle, and every prompt and list row says Chewbacca.
+#
+# An ad hoc signature is pinned to the binary's hash, so a re-sign is a new
+# identity and needs the grant again. The bundle is therefore rebuilt only when
+# it is missing or node's MAJOR version moved, never on every patch release.
 set -euo pipefail
 
-DEST="${CHEWBACCA_NODE:-$HOME/.chewbacca/runtime/node}"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RUNTIME="${CHEWBACCA_RUNTIME:-$HOME/.chewbacca/runtime}"
+APP="$RUNTIME/Chewbacca.app"
+BIN="$APP/Contents/MacOS/Chewbacca"
+LINK="${CHEWBACCA_NODE:-$RUNTIME/node}"
+ICON="$ROOT/mac/runtime/Chewbacca.icns"
 
-if [[ "${1:-}" == "--path" ]]; then
-  echo "$DEST"
-  exit 0
-fi
+case "${1:-}" in
+  --path) echo "$LINK"; exit 0 ;;
+  --app) echo "$APP"; exit 0 ;;
+esac
 
-src=""
-if [[ -d "$HOME/.nvm/versions/node" ]]; then
+src="${CHEWBACCA_NODE_SOURCE:-}"
+if [[ -z "$src" && -d "$HOME/.nvm/versions/node" ]]; then
   newest=$(ls "$HOME/.nvm/versions/node" | sort -V | tail -1)
   [[ -n "$newest" && -x "$HOME/.nvm/versions/node/$newest/bin/node" ]] && src="$HOME/.nvm/versions/node/$newest/bin/node"
 fi
@@ -34,11 +47,45 @@ if [[ -z "$src" ]]; then
 fi
 [[ -z "$src" ]] && { echo "chewbacca-node: no node found under ~/.nvm or Homebrew" >&2; exit 1; }
 
-mkdir -p "$(dirname "$DEST")"
-if ! cmp -s "$src" "$DEST" 2>/dev/null; then
-  # Copy beside it, then rename, so a job starting mid-refresh never runs half a binary.
-  cp -p "$src" "$DEST.new"
-  mv -f "$DEST.new" "$DEST"
+major() { "$1" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo none; }
+want=$(major "$src")
+have=$( [[ -x "$BIN" ]] && /usr/libexec/PlistBuddy -c "Print :ChewbaccaNodeMajor" "$APP/Contents/Info.plist" 2>/dev/null || echo none)
+
+if [[ "$want" != "$have" ]] || ! codesign -v "$APP" 2>/dev/null; then
+  # Build beside it and swap whole, so a job starting mid-refresh never runs
+  # half a bundle.
+  stage="$RUNTIME/.Chewbacca.app.new"
+  rm -rf "$stage"
+  mkdir -p "$stage/Contents/MacOS" "$stage/Contents/Resources"
+  cp -p "$src" "$stage/Contents/MacOS/Chewbacca"
+  [[ -f "$ICON" ]] && cp "$ICON" "$stage/Contents/Resources/Chewbacca.icns"
+  cat > "$stage/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>Chewbacca</string>
+  <key>CFBundleDisplayName</key><string>Chewbacca</string>
+  <key>CFBundleIdentifier</key><string>com.chewbacca.runtime</string>
+  <key>CFBundleExecutable</key><string>Chewbacca</string>
+  <key>CFBundleIconFile</key><string>Chewbacca</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>LSUIElement</key><true/>
+  <key>ChewbaccaNodeMajor</key><string>$want</string>
+</dict></plist>
+PLIST
+  codesign --force --sign - --identifier com.chewbacca.runtime "$stage" >/dev/null 2>&1 \
+    || { echo "chewbacca-node: could not sign $stage" >&2; exit 1; }
+  rm -rf "$APP.old"
+  [[ -d "$APP" ]] && mv "$APP" "$APP.old"
+  mv "$stage" "$APP"
+  rm -rf "$APP.old"
+  echo "chewbacca-node: built $APP (node $want). Grants go to Chewbacca now." >&2
 fi
-codesign -v "$DEST" 2>/dev/null || echo "chewbacca-node: warning, $DEST is unsigned, the grant will not survive an upgrade" >&2
-echo "$DEST"
+
+# The old runtime was a plain copy at this path; replace it with the link.
+if [[ ! -L "$LINK" || "$(readlink "$LINK")" != "$BIN" ]]; then
+  mkdir -p "$(dirname "$LINK")"
+  ln -sfn "$BIN" "$LINK.new" && mv -f "$LINK.new" "$LINK"
+fi
+echo "$LINK"

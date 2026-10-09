@@ -196,6 +196,22 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(len(lines), 2)
         self.assertIn("Peter Castleman (Executive Officer, Director)", lines[1])
 
+    def test_csv_neutralizes_formula_cells_and_json_is_unchanged(self):
+        import csv as csv_module
+        rows = [signals.parse_primary_doc(doc(FILINGS[0][0])), signals.parse_primary_doc(doc(FILINGS[1][0]))]
+        rows[0]["issuer"] = '=HYPERLINK("http://x","y")'
+        rows[1]["issuer"] = "@SUM(A1)"
+        rows[1]["people"] = [{"name": "-2+3", "titles": [], "state": "FL"}]
+        parsed = list(csv_module.DictReader(io.StringIO(signals.render_csv(rows))))
+        self.assertEqual(parsed[0]["issuer"], '\'=HYPERLINK("http://x","y")')
+        self.assertEqual(parsed[1]["issuer"], "'@SUM(A1)")
+        self.assertEqual(parsed[1]["people"], "'-2+3")
+        self.assertEqual(parsed[0]["state"], "NV", "ordinary cells are untouched")
+        for start in ("+", "\t", "\r"):
+            self.assertEqual(signals.csv_cell(start + "x"), "'" + start + "x")
+        self.assertEqual(signals.csv_cell(0), 0)
+        self.assertEqual(json.loads(json.dumps(rows))[0]["issuer"], '=HYPERLINK("http://x","y")')
+
     def test_text_output_says_signal_not_proof(self):
         code, out, _ = self.run_main([], FakeFetcher())
         self.assertIn("not proof of intent to buy", out)

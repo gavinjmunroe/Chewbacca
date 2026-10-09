@@ -257,12 +257,26 @@ def money(value):
     return "" if value is None else f"${value:,}"
 
 
+FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_cell(value):
+    """Quote a cell a spreadsheet would run as a formula (OWASP CSV injection).
+
+    Issuer and person names are typed by filers, so a filing can name itself
+    =HYPERLINK(...) and have Excel or Sheets act on it when the CSV is opened.
+    """
+    if isinstance(value, str) and value.startswith(FORMULA_STARTS):
+        return "'" + value
+    return value
+
+
 def render_csv(rows):
     out = io.StringIO()
     writer = csv.DictWriter(out, fieldnames=FIELDS, extrasaction="ignore")
     writer.writeheader()
     for row in rows:
-        writer.writerow(dict(row, people=people_text(row)))
+        writer.writerow({key: csv_cell(value) for key, value in dict(row, people=people_text(row)).items()})
     return out.getvalue()
 
 

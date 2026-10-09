@@ -1,0 +1,236 @@
+#!/usr/bin/env python3
+"""jobs: one queue for every long or heavy job on this Mac, owned by the Mac, not a tab.
+
+  jobs submit [--heavy|--net] [--title T] -- <command...>   queue it (starts now if there's room)
+  jobs list [--all]                                          what's queued, running, paused, done
+  jobs log <id> [-n N]                                       tail a job's output
+  jobs kill <id>                                             stop it
+  jobs tick                                                  admit, pause, resume, reap (launchd runs this every 30 s)
+
+WHY. 2026-10-10: Caleb force-quit Claude because the Mac was unusable. Every
+tab had started its own long work (a Clay crawler, a Nalana render, a
+transcription run, overlapping syncs) with no shared budget and no owner that
+outlived the tab, so the jobs fought each other, swapped the Mac, and kept
+running after their tabs died. Guards that refuse heavy commands and a reaper
+that kills orphans clean up after that design. This replaces it: tabs submit
+work here, and this runner decides when the Mac has room.
+
+THE BUDGET.
+  heavy  local inference, transcription, renders: one at a time, admitted only
+         while the 1-minute load is under 60% of cores and at least 20% of
+         memory is free, run at nice 19. A running heavy job is PAUSED
+         (SIGSTOP) when load passes 90% of cores or free memory drops under
+         10%, and resumed when there's room again. Thresholds are guessed,
+         never measured; the 2026-10-10 lag was load 80+ on 14 cores with
+         about 74 MB free.
+  net    downloads, API crawls: up to 4 at once, nice 10.
+  light  everything else: no limit.
+
+State lives in ~/.chewbacca/jobs/<id>/ (job.json, out.log). A job's supervisor
+is `jobs _run <id>`, so a tab closing never orphans it, and orphan-reap leaves
+it alone.
+"""
+import fcntl
+import json
+import os
+import pathlib
+import re
+import signal
+import subprocess
+import sys
+import time
+import uuid
+
+DIR = pathlib.Path(os.environ.get("JOBS_DIR", pathlib.Path.home() / ".chewbacca" / "jobs"))
+CORES = os.cpu_count() or 8
+MAX_NET = 4
+NICE = {"heavy": 19, "net": 10, "light": 0}
+
+
+# ------------------------------------------------------------ machine state
+
+def load1():
+    if os.environ.get("JOBS_LOAD"):
+        return float(os.environ["JOBS_LOAD"])
+    return os.getloadavg()[0]
+
+
+def mem_free_pct():
+    if os.environ.get("JOBS_MEMFREE"):
+        return float(os.environ["JOBS_MEMFREE"])
+    try:
+        out = subprocess.run(["memory_pressure"], capture_output=True, text=True, timeout=10).stdout
+        m = re.search(r"free percentage:\s*(\d+)%", out)
+        return float(m.group(1)) if m else 50.0
+    except (OSError, subprocess.TimeoutExpired):
+        return 50.0
+
+
+def room_for_heavy():
+    return load1() < 0.6 * CORES and mem_free_pct() >= 20
+
+
+def must_pause():
+    return load1() > 0.9 * CORES or mem_free_pct() < 10
+
+
+# ------------------------------------------------------------------ store
+
+def jobs():
+    out = []
+    for f in sorted(DIR.glob("*/job.json")):
+        try:
+            out.append(json.loads(f.read_text()))
+        except ValueError:
+            pass
+    return out
+
+
+def save(j):
+    p = DIR / j["id"] / "job.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(j, indent=1))
+    tmp.replace(p)
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+        return True
+    except (ProcessLookupError, TypeError):
+        return False
+    except PermissionError:
+        return True
+
+
+def signal_group(j, sig):
+    try:
+        os.killpg(j["pid"], sig)
+    except (ProcessLookupError, PermissionError, TypeError):
+        pass
+
+
+# --------------------------------------------------------------- commands
+
+def submit(argv):
+    cls, title = "light", None
+    while argv and argv[0] != "--":
+        a = argv.pop(0)
+        if a == "--heavy":
+            cls = "heavy"
+        elif a == "--net":
+            cls = "net"
+        elif a == "--title":
+            title = argv.pop(0)
+    if not argv or argv[0] != "--" or len(argv) < 2:
+        sys.exit("usage: jobs submit [--heavy|--net] [--title T] -- <command...>")
+    cmd = argv[1:]
+    j = {"id": time.strftime("%m%d-%H%M%S-") + uuid.uuid4().hex[:4], "cmd": cmd, "cwd": os.getcwd(),
+         "class": cls, "title": title or " ".join(cmd)[:80], "status": "queued",
+         "owner": os.environ.get("CLAUDE_SESSION_ID") or os.environ.get("TERM_SESSION_ID") or "",
+         "created": time.time(), "pid": None, "exit": None}
+    save(j)
+    tick(quiet=True)
+    j = json.loads((DIR / j["id"] / "job.json").read_text())
+    print(f"{j['id']}  {j['status']}  {j['class']}  {j['title']}")
+
+
+def start(j):
+    # The supervisor runs in its own session, so closing the tab that
+    # submitted the job doesn't take it down, and the whole job can be
+    # paused, resumed or killed as one process group.
+    p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "_run", j["id"]],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True, cwd=j["cwd"] if os.path.isdir(j["cwd"]) else None)
+    j.update(status="running", pid=p.pid, started=time.time())
+    save(j)
+
+
+def _run(job_id):
+    j = json.loads((DIR / job_id / "job.json").read_text())
+    with open(DIR / job_id / "out.log", "ab") as log:
+        code = subprocess.call(["nice", "-n", str(NICE[j["class"]])] + j["cmd"],
+                               stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
+    j = json.loads((DIR / job_id / "job.json").read_text())
+    if j["status"] != "killed":
+        j.update(status="done" if code == 0 else "failed", exit=code, ended=time.time())
+        save(j)
+    tick(quiet=True)  # a slot just opened
+
+
+def tick(quiet=False):
+    # One tick at a time: launchd, a submit and a finishing job can all tick
+    # together, and two of them must never start the same queued job.
+    with open(DIR / ".tick.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        _tick()
+    if not quiet:
+        list_jobs([])
+
+
+def _tick():
+    all_jobs = jobs()
+    # Reap: a running job whose supervisor is gone without writing a result.
+    for j in all_jobs:
+        if j["status"] in ("running", "paused") and not alive(j["pid"]):
+            j.update(status="failed", exit=j.get("exit"), ended=time.time(), note="supervisor gone")
+            save(j)
+    heavy = [j for j in all_jobs if j["class"] == "heavy" and j["status"] in ("running", "paused")]
+    # Pause or resume the heavy job against the machine, before admitting more.
+    for j in heavy:
+        if j["status"] == "running" and must_pause():
+            signal_group(j, signal.SIGSTOP)
+            j["status"] = "paused"
+            save(j)
+        elif j["status"] == "paused" and room_for_heavy():
+            signal_group(j, signal.SIGCONT)
+            j["status"] = "running"
+            save(j)
+    running_net = sum(1 for j in all_jobs if j["class"] == "net" and j["status"] == "running")
+    for j in sorted((j for j in all_jobs if j["status"] == "queued"), key=lambda j: j["created"]):
+        if j["class"] == "heavy":
+            if heavy or not room_for_heavy():
+                continue
+            start(j)
+            heavy = [j]
+        elif j["class"] == "net":
+            if running_net >= MAX_NET:
+                continue
+            start(j)
+            running_net += 1
+        else:
+            start(j)
+
+
+def list_jobs(argv):
+    rows = jobs()
+    if "--all" not in argv:
+        cutoff = time.time() - 6 * 3600
+        rows = [j for j in rows if j["status"] in ("queued", "running", "paused") or (j.get("ended") or 0) > cutoff]
+    for j in rows:
+        print(f"{j['id']}  {j['status']:<8} {j['class']:<5}  {j['title']}")
+    print(f"{len(rows)} job(s). load {load1():.1f} on {CORES} cores, {mem_free_pct():.0f}% memory free")
+
+
+def log(argv):
+    n = int(argv[argv.index("-n") + 1]) if "-n" in argv else 40
+    p = DIR / argv[0] / "out.log"
+    print("".join(p.read_text(errors="replace").splitlines(True)[-n:]).rstrip("\n") if p.exists() else "(no output yet)")
+
+
+def kill(argv):
+    j = json.loads((DIR / argv[0] / "job.json").read_text())
+    if j["status"] == "paused":
+        signal_group(j, signal.SIGCONT)
+    j.update(status="killed", ended=time.time())
+    save(j)
+    signal_group(j, signal.SIGTERM)
+    print(f"{j['id']} killed")
+
+
+if __name__ == "__main__":
+    DIR.mkdir(parents=True, exist_ok=True)
+    cmd, rest = (sys.argv[1], sys.argv[2:]) if len(sys.argv) > 1 else ("list", [])
+    {"submit": submit, "list": list_jobs, "log": log, "kill": kill,
+     "tick": lambda a: tick(), "_run": lambda a: _run(a[0])}.get(cmd, lambda a: sys.exit(__doc__))(rest)

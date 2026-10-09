@@ -232,7 +232,12 @@ cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
   echo "On 2026-09-22 six parallel Whisper jobs took his load average to 50 and he"
   echo "asked why his computer was laggy. The work was fine. Six wide was not."
   echo
-  echo "Do one of these instead:"
+  echo "Hand it to the machine queue, which runs it when there's room, pauses it"
+  echo "when the Mac gets busy, and outlives this tab:"
+  echo
+  echo "  jobs submit --heavy --title \"what it is\" -- <command>"
+  echo
+  echo "Or one of these:"
   echo
   echo "  1. Serial and polite, which is what ended up working:"
   echo "       for x in ...; do nice -n 19 <command> \"\$x\"; done"

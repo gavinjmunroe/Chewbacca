@@ -16,6 +16,8 @@ cat > "$T/ps.txt" <<'PS'
  4684     1 /Applications/Ollama.app/Contents/MacOS/Ollama hidden
  7000     1 /Users/x/.chewbacca/runtime/node /Users/x/code/chewbacca/bin/people texts refresh
  7100     1 /Applications/Blender.app/Contents/MacOS/Blender
+ 8000     1 /usr/bin/python3 /Users/x/code/chewbacca/bin/jobs _run 1010-1200-ab12
+ 8001  8000 nice -n 19 yt-bulk https://youtube.com/@queued
 PS
 out="$(ORPHAN_REAP_PS="$T/ps.txt" python3 "$ROOT/bin/orphan-reap" --json)"
 fail=0
@@ -23,7 +25,7 @@ has() { printf '%s' "$out" | python3 -c "import json,sys; sys.exit(0 if $1 in [r
 for pid in 85055 77251 77254 33558; do
   has "$pid" && echo "  ok    reaps $pid" || { echo "  FAIL  missed $pid"; fail=$((fail+1)); }
 done
-for pid in 1 500 510 511 4684 7000 7100; do
+for pid in 1 500 510 511 4684 7000 7100 8000 8001; do
   has "$pid" && { echo "  FAIL  would kill $pid"; fail=$((fail+1)); } || echo "  ok    spares $pid"
 done
 [ "$fail" = 0 ] && echo "orphan-reap ok"

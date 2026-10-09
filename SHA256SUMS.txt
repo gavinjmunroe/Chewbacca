@@ -28,7 +28,7 @@ c7594c3df7370c62ba76e046daf1e17843dbf24972438206496b28098c4128ee  .claude/hooks/
 48f568e95b9586ca22d0d740143fd90af1834b66808c2ac36a519bd3b83df7e1  .claude/hooks/model-route.sh
 947c12be640049719a5767cf42c11f532aa77eb0456bb787eaa0487c5e910ce3  .claude/hooks/orphan-reap.sh
 a9f090aacbcfb0f7b04af9fcc86fe4019877cfcfefda93ea1609f3b34d0fe19e  .claude/hooks/plan-guard.sh
-05a66e547b5f08853fa5a3aac55870e164cd352c97ee8819e3d825565b678511  .claude/hooks/prayer-guard.sh
+5ffab523cb13e4ccca3935701fa669f592caea20c25c0af8badc02502aba4c9e  .claude/hooks/prayer-guard.sh
 8009c976f2122796c1b0a206e891e6a22a02c0ba9bad9d00fac598c8be2f13a0  .claude/hooks/prayer-remind.sh
 baff09b097b67758927ae5ea8ed991dc855687ccd34face005381a4fb432ab42  .claude/hooks/prose-guard.sh
 cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/repo-overlap-guard.sh

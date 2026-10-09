@@ -56,6 +56,8 @@ grep -q "#1" <<<"$out" && grep -q "Doing good! hbu" <<<"$out" || fail "drafts di
 grep -q "re: how are you" <<<"$out" || fail "the reason a draft exists was lost"
 out="$("$P" texts drafts send 2 --dry-run 2>&1)" || fail "a group draft did not dry-run"
 grep -q "any;+;chatDEN42" <<<"$out" || fail "group draft did not resolve to the chat GUID read from chat.db"
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); assert d[1]["to"]=="any;+;chatDEN42"' "$PEOPLE_DIR/drafts.json" || fail "a group draft did not pin the room id when written"
+out="$("$P" texts drafts add "Nope Room" "x" --group 2>&1)" && fail "a group draft to an unknown room was saved"
 out="$("$P" texts drafts send 2 2>&1)" && fail "CHEWBACCA_NO_SEND did not stop a group send"
 out="$("$P" texts drafts 2>&1)"
 grep -q "No allergies" <<<"$out" || fail "a refused group send still removed the draft"
@@ -63,6 +65,11 @@ grep -q "No allergies" <<<"$out" || fail "a refused group send still removed the
 # Group sends: exact room name, room id never a member, ambiguity refused.
 out="$("$P" send --room "den group" "hi" --dry-run 2>&1)" || fail "room send by name failed"
 grep -q "group via imessage, any;+;chatDEN42" <<<"$out" || fail "room send did not name the GUID"
+# Parity with the unsaved 1:1 gate: a room found by name must not send until
+# --to repeats its id. NO_SEND stays on: without the gate this call reaches
+# dispatch and dies with NO_SEND's message instead of the gate's.
+out="$("$P" send --room "Den Group" "hi" 2>&1)" && fail "a room found by name sent without --to"
+grep -q "unconfirmed. Nothing was sent" <<<"$out" || fail "room send without --to did not stop at the gate"
 out="$("$P" send --room "Den" "hi" --dry-run 2>&1)" && fail "a partial room name was allowed"
 out="$("$P" send --room "Wa Crew" "hi" --dry-run 2>&1)" || fail "WhatsApp room failed"
 grep -q "1203630000@g.us" <<<"$out" || fail "WhatsApp room did not use the group JID"

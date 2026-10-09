@@ -177,8 +177,18 @@ function sendRoom(d, name, text, via, flags, P) {
   if (flags["dry-run"]) {
     say(`  would send to ${where}`);
     say(`  ${P(text)}`);
+    say(c.dim(`  to send: add --to ${P(to)}`));
     return;
   }
+  // SAME GATE AS AN UNSAVED 1:1. A room is found by its display name, and any
+  // member can rename a group, so the name alone never authorizes a send:
+  // --to has to repeat the exact id the dry run printed. A draft records that
+  // id when it is written and carries it here.
+  if (String(flags.to || "") !== to)
+    die(
+      `"${P(r.room)}" was found by name, so ${P(to)} is unconfirmed. Nothing was sent.\n` +
+        `  If that is the right group, add --to ${P(to)}`,
+    );
   const res = dispatch(r.source, to, text, { ...flags, room: true });
   if (!succeeded(res)) die(`Not sent to ${P(r.room)}: ${P((res.err || res.out || "no output").trim().split("\n")[0])}`);
   say(`${c.grn("sent")} to ${where}`);

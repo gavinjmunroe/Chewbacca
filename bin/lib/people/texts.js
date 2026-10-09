@@ -589,7 +589,17 @@ function cmdTexts(argv) {
       const [, who, ...words] = rest;
       const text = words.join(" ");
       if (!who || !text) die('Try: people texts drafts add maggie "following up w Jonah tmr"');
-      list.push({ who, text, why: flags.why || "", group: Boolean(flags.group), to: flags.to ? String(flags.to) : "", at: nowISO() });
+      let to = flags.to ? String(flags.to) : "";
+      // A group draft pins the room's id now, while the name still means the
+      // room its author was looking at; send refuses a room without it.
+      if (flags.group && !to) {
+        const { roomThread, chatGuid } = require("./send");
+        const rooms = roomThread(d, who, flags.via ? String(flags.via) : null);
+        if (rooms.length !== 1) die(`"${who}" is ${rooms.length ? `${rooms.length} groups; add --via` : "no group you've written in"}. Nothing drafted.`);
+        to = rooms[0].source === "imessage" ? chatGuid(rooms[0].handle) : rooms[0].handle;
+        if (!to) die(`Couldn't read the chat id for "${who}". Nothing drafted.`);
+      }
+      list.push({ who, text, why: flags.why || "", group: Boolean(flags.group), to, at: nowISO() });
       save(list);
       return say(`${c.grn("drafted")} #${list.length} to ${c.b(who)}`);
     }

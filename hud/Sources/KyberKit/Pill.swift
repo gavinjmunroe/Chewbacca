@@ -130,7 +130,7 @@ struct PillView: View {
     /// Distance above the Dock inset. The same 14 the ring already uses, and
     /// `OverlayModel.pillFrame` reads it from here so the hit rectangle and
     /// the drawn one cannot drift apart.
-    static let pillLift: CGFloat = 14
+    nonisolated static let pillLift: CGFloat = 14
     /// 440 fits about 70 characters of 13pt rounded, and the longest demo
     /// answer ("Texted Sam, put Friday 3pm on the calendar, and Ava is who
     /// to call") is 66. The card it replaces was 460 with a title row.

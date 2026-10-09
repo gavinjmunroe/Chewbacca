@@ -86,3 +86,16 @@ struct NearTests {
         #expect(point.y + size.height <= screen.maxY)
     }
 }
+
+/// A bottom-centre surface (the Clay strip) sits above the hyper bar, never
+/// under it.
+@Suite("Bar lane")
+struct BarLaneTests {
+    @Test("reserves the pill's lift, its height and a gap; a hidden pill still reserves")
+    func lane() {
+        #expect(OverlayModel.barLane(pillHeight: 0)
+            == PillView.pillLift + OverlayModel.pillReserve + OverlayModel.stackGap)
+        #expect(OverlayModel.barLane(pillHeight: 60)
+            == PillView.pillLift + 60 + OverlayModel.stackGap)
+    }
+}

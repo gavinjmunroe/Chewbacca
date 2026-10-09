@@ -980,11 +980,24 @@ public final class OverlayModel {
     }
 
     /// Between stacked surfaces, and from a surface to the screen's edge.
-    static let stackGap: CGFloat = 12
+    nonisolated static let stackGap: CGFloat = 12
 
     /// Gap between a beside-note and its target. Guessed, never measured:
     /// the approved mockup (look-v2.html) used 12 to 16 px at 1x.
     nonisolated static let nearGap: CGFloat = 12
+
+    /// Height kept for the hyper bar even while it is hidden, so a bottom
+    /// surface does not jump when the bar appears. 40 is the "about 40pt
+    /// tall" OverlayView records for the pill where it places the terminal
+    /// strip; the dry run's screenshot replaces it with a measurement.
+    nonisolated static let pillReserve: CGFloat = 40
+
+    /// How far a bottom-centre surface stands off the bottom edge so it sits
+    /// above the hyper bar rather than under it: the bar's lift, its height
+    /// or the reserve, whichever is taller, and the usual gap.
+    nonisolated static func barLane(pillHeight: CGFloat) -> CGFloat {
+        PillView.pillLift + max(pillHeight, pillReserve) + stackGap
+    }
 
     /// Top-left corner for a surface of `size` beside `target`, inside
     /// `bounds`: on the asked side if it fits, the other side if not, below
@@ -1145,7 +1158,10 @@ public final class OverlayModel {
         let minX = leftInset + margin + lane(0)
         let maxX = full.width - rightInset - margin - width - lane(1)
         let minY = topInset + margin
-        let bottomY = full.height - bottomInset - margin
+        // Bottom centre is where the hyper bar lives; a surface there sits
+        // above it (the Clay strip) instead of being drawn under it.
+        let barLane = surface.region == .bottom ? Self.barLane(pillHeight: pillSize.height) : 0
+        let bottomY = full.height - bottomInset - margin - barLane
         let maxY = bottomY - height
 
         let x = minX + max(0, maxX - minX) * anchor.x

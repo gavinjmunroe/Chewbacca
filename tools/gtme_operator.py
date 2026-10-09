@@ -109,8 +109,8 @@ GLOSSARY = {
               "before any press release.",
     "signal": "A signal is a public event, like a fundraise or a job post, that suggests a company "
               "needs what you sell right now.",
-    "inbox": "Here an inbox means one sending email address; you spread sends across several so "
-             "none of them looks like spam.",
+    "sending inbox": "A sending inbox is one email address your campaigns send from; you spread sends "
+                     "across several so none of them looks like spam.",
 }
 # How each term is found in a line. Clay and Form D are proper nouns, so they
 # match case-sensitively; the rest match any case, whole words only.
@@ -127,7 +127,7 @@ TERM_RES = {t: _term_re(t) for t in GLOSSARY}
 # Reply classes the graph uses (gtm_ingest REPLY_CLASSES) -> the next step a
 # GTME takes, from the playbook's reply-handling rules (lines 126-132).
 REPLY_NEXT = {
-    "positive": f"answer within {POSITIVE_ANSWER_MINUTES} minutes and offer two specific times",
+    "positive": f"answer within {POSITIVE_ANSWER_MINUTES} minutes: answer what they asked, then suggest two specific times",
     "neutral": "answer the question in two lines, then ask one low-effort yes/no question",
     None: "read it and classify it; until then treat it as a question to answer",
 }
@@ -203,6 +203,38 @@ def age(text) -> str:
     return f"{secs // 86400}d ago"
 
 
+# ESC sequences first, whole: CSI (ESC [ ... final byte), OSC (ESC ] ... BEL or
+# ST, which is how OSC 8 plants a link and OSC 0/2 retitle the window), and
+# any other two-byte ESC form. Then the lone control characters gtm_ingest
+# already strips at ingest (C0 but tab and newline, DEL, C1 incl. U+009B,
+# zero-width and bidi overrides), reused from there so the two never drift.
+ESC_SEQ = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?|\x1b[@-_]?")
+try:
+    from gtm_ingest import CONTROL  # noqa: E402
+except Exception:  # noqa: BLE001  the ingester failing to import must not stop a brief
+    CONTROL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b-\u200f\u2028\u2029\u202a-\u202e"
+                         "\u2066-\u2069\ufeff]")
+SAFE_MAX = 2000
+
+
+def safe(text, limit: int = SAFE_MAX) -> str:
+    """Any string bound for the terminal, the markdown or the PDF. Values from
+    Clay and reply emails are written by strangers; an escape sequence in one
+    could clear the screen, hide a line or plant a clickable link."""
+    text = ESC_SEQ.sub("", str(text if text is not None else ""))
+    text = CONTROL.sub(" ", text)
+    return text if len(text) <= limit else text[:limit - 1] + "…"
+
+
+MD_SPECIAL = re.compile(r"([\\`*_\[\]()<>|#!])")
+
+
+def md(text, limit: int = 200) -> str:
+    """safe(), then every markdown control character escaped, so a company
+    or campaign name can't become a link, an image, HTML or a table cell."""
+    return MD_SPECIAL.sub(r"\\\1", safe(text, limit).replace("\n", " "))
+
+
 def pct(n, d) -> str:
     return f"{100.0 * n / d:.1f}%" if d else "n/a"
 
@@ -233,11 +265,17 @@ class Teacher:
         return GLOSSARY[term]
 
     def say(self, line: str = "") -> None:
+        # Every line passes through safe(): it carries campaign names, lead
+        # addresses and reply text that strangers wrote.
+        line = safe(line)
         print(line, file=self.out)
         if self.quiet:
             return
+        # Quoted text is data (a campaign name, a reply), not our words, so a
+        # term inside it is not one we used.
+        ours = re.sub(r'"[^"]*"', " ", line)
         for term, rx in TERM_RES.items():
-            if not self.known(term) and rx.search(line):
+            if not self.known(term) and rx.search(ours):
                 print(f"    ({self.teach(term)})", file=self.out)
 
     def lesson_seen(self, key: str) -> bool:
@@ -795,8 +833,19 @@ def burn_from_balances(snaps: list[dict]) -> tuple[float, float]:
 
 
 def strip_html(text: str) -> str:
-    text = re.sub(r"<[^>]+>", " ", text or "")
-    return " ".join(html.unescape(text).split())
+    # A clipped snippet can end inside a tag, so an unclosed one is cut too.
+    text = re.sub(r"<[^>]*(>|$)", " ", text or "")
+    return safe(" ".join(html.unescape(text).split()))
+
+
+# Mailer-daemon notices arrive in the reply inbox looking like replies. These
+# phrases are the ones Gmail and Outlook put in the first lines of one.
+BOUNCE_NOTICE = re.compile(r"delivery status notification|error icon|undeliverable|address not found|"
+                           r"mailer-daemon|message not delivered|delivery has failed", re.IGNORECASE)
+
+
+def is_bounce_notice(r: dict) -> bool:
+    return bool(BOUNCE_NOTICE.search(r.get("snippet") or ""))
 
 
 def graph():
@@ -857,9 +906,13 @@ def client_state(q, db, c: dict) -> dict:
     clay = f.get("clay") or {}
     sent, replies, bounces = clay.get("sent", 0), clay.get("repliesExcludingOoo", 0), clay.get("bounces", 0)
     try:
-        unanswered = q.replies(db, c["name"], unanswered=True)["replies"]
+        waiting = q.replies(db, c["name"], unanswered=True)["replies"]
     except LookupError:
-        unanswered = []
+        waiting = []
+    bounced = [r for r in waiting if is_bounce_notice(r)]
+    unanswered = sorted((r for r in waiting if not is_bounce_notice(r)),
+                        key=lambda r: (r.get("class") != "positive",
+                                       -(parse_time(r.get("time")) or utc_now()).timestamp()))
     ws = detail["workspaces"]
     sync = detail["sync"]
     return {
@@ -867,7 +920,7 @@ def client_state(q, db, c: dict) -> dict:
         "sent": sent, "replies": replies, "bounces": bounces, "as_of": clay.get("as_of"),
         "positive": (f.get("people_positive") or {}).get("n", 0),
         "meetings": (f.get("meetings") or {}).get("n", 0),
-        "unanswered": unanswered, "credits": credit_view(ws), "sync": sync,
+        "unanswered": unanswered, "bounce_notices": len(bounced), "credits": credit_view(ws), "sync": sync,
         "drop": history_alarm(c["name"], sent, replies, clay.get("as_of")),
     }
 
@@ -1007,8 +1060,8 @@ def pick_lesson(t: Teacher, actions: list[dict], states: list[dict]) -> tuple[st
     not yet taught wins over one already seen."""
     keys = []
     for a in actions:
-        if a["kind"] == "reply":
-            keys.append(("speed", a["why"].split(".")[0]))
+        if a["kind"] == "reply" and "positive" in a["do"]:
+            keys.append(("speed", a["do"].split(":")[0]))
         if a.get("lesson"):
             keys.append((a["lesson"], a["do"]))
     for s in states:
@@ -1091,7 +1144,8 @@ def cmd_brief(a, t: Teacher) -> int:
         else:
             t.say("  Credits: not read yet (`chewbacca gtme sync` records them)")
         need = [r for r in s["unanswered"]]
-        t.say(f"  Replies waiting on you: {len(need)} (Clay inbox, negative/unsubscribe/out-of-office left out)")
+        t.say(f"  Replies waiting on you: {len(need)} (Clay inbox; left out: negative, unsubscribe, out-of-office, "
+              f"and {s['bounce_notices']} bounce notices)")
         for r in need[:5]:
             t.say(f"    {r.get('email')}  {r.get('class') or 'unclassified'}  {age(r.get('time'))}: "
                   f"\"{strip_html(r.get('snippet') or '')[:110]}\"")
@@ -1194,7 +1248,7 @@ def render_report(s: dict, this: dict, last: dict, start: date, end: date, actio
         d = this.get(k, 0) - last.get(k, 0)
         return f" ({'+' if d >= 0 else ''}{d} vs last week)"
 
-    lines = [f"# {s['name']}: outbound week of {start:%b %d} to {end:%b %d, %Y}", "",
+    lines = [f"# {md(s['name'])}: outbound week of {start:%b %d} to {end:%b %d, %Y}", "",
              f"Prepared {utc_now():%Y-%m-%d}. Campaign numbers from Clay analytics as of {s['as_of'] or 'never'}; "
              "weekly counts from per-lead send dates, reply times and calendar events in the local graph.", "",
              "## This week", "",
@@ -1209,10 +1263,10 @@ def render_report(s: dict, this: dict, last: dict, start: date, end: date, actio
              "## What changed", ""]
     changed = []
     if this.get("launched"):
-        changed.append(f"New campaigns started: {', '.join(this['launched'])}.")
+        changed.append(f"New campaigns started: {', '.join(md(x) for x in this['launched'])}.")
     for a in actions:
         if a["kind"] in ("bounce", "floor", "drop", "dry"):
-            changed.append(a["do"] + ".")
+            changed.append(md(a["do"], 400) + ".")
     if not any(r.get("ok") for r in s["sync"] if "calendar" in r["source"]):
         changed.append("Meetings come from the calendar, which has not synced, so the meeting count may be low.")
     lines += [f"- {x}" for x in changed] or ["- No alarms this week."]
@@ -1220,13 +1274,13 @@ def render_report(s: dict, this: dict, last: dict, start: date, end: date, actio
               "|---|---:|---:|---:|---:|"]
     for c in s["campaigns"]:
         if c["status"] == "active":
-            lines.append(f"| {c['name'].replace('|', '/')} | {c['sent']} | {c['replies']} | "
+            lines.append(f"| {md(c['name'])} | {c['sent']} | {c['replies']} | "
                          f"{pct(c['replies'], c['sent'])} | {c['leads_left'] if c['leads_left'] is not None else '?'} |")
     lines += ["", "## Next week", ""]
-    plan_items = [a["do"] for a in actions if a["kind"] != "sync"][:5]
+    plan_items = [md(a["do"], 400) for a in actions if a["kind"] != "sync"][:5]
     if plan and not all(x.get("done") for x in plan.get("steps") or []):
         nxt = next(x for x in plan["steps"] if not x.get("done"))
-        plan_items.append(f"Plan step: {nxt['do']}.")
+        plan_items.append(f"Plan step: {md(nxt['do'])}.")
     if s["unanswered"]:
         plan_items.insert(0, f"Answer the {len(s['unanswered'])} replies still waiting.")
     lines += [f"{n}. {x}" for n, x in enumerate(plan_items, 1)] or ["1. Keep the running campaigns going."]
@@ -1321,16 +1375,17 @@ def cmd_report(a, t: Teacher) -> int:
     start = end - timedelta(days=6) if a.week else date(2000, 1, 1)
     this = week_numbers(s["name"], start, end)
     last = week_numbers(s["name"], start - timedelta(days=7), start - timedelta(days=1)) if a.week else {}
-    md = render_report(s, this, last, start, end, actions_for(s), read_json(client_dir(s["name"]) / "plan.json", None))
+    report = render_report(s, this, last, start, end, actions_for(s),
+                           read_json(client_dir(s["name"]) / "plan.json", None))
     out_dir = Path(a.out or Path.home() / "Downloads")
     out_dir.mkdir(parents=True, exist_ok=True)
     base = f"{slug(s['name'])}-outbound-{end.isoformat()}"
     md_path = client_dir(s["name"]) / f"{base}.md"
     md_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    md_path.write_text(md)
+    md_path.write_text(report)
     pdf = out_dir / f"{base}.pdf"
-    how = "" if a.no_pdf else to_pdf(md, f"{s['name']} outbound report", pdf)
-    print(md)
+    how = "" if a.no_pdf else to_pdf(report, f"{safe(s['name'], 120)} outbound report", pdf)
+    print(safe(report, 100000))
     t.say(f"Markdown: {md_path}")
     t.say(f"PDF: {pdf} (made with {how})" if how else "PDF: not made (no Chrome and no cupsfilter)")
     return 0

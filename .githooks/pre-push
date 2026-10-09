@@ -47,7 +47,7 @@ touched() { printf '%s\n' "$CHANGED" | grep -qE "$1"; }
 
 echo "pre-push: $(printf '%s\n' "$CHANGED" | wc -l | tr -d ' ') changed file(s)"
 run "README counts" python3 tools/counts.py --check
-run "checksums" python3 tools/checksums.py --check
+run "checksums" python3 tools/checksums.py --check --ref HEAD
 
 while IFS= read -r f; do
   [ -f "$f" ] || continue

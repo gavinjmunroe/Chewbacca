@@ -49,18 +49,35 @@ def files():
     return sorted(set(out))
 
 
-def render():
+def blob(ref, rel):
+    return subprocess.run(["git", "-C", str(REPO), "show", f"{ref}:{rel}"],
+                          capture_output=True, check=True).stdout
+
+
+def render(ref=None):
+    # ref hashes the committed tree instead of the working tree. On 2026-10-09
+    # pre-push refused a push whose commits were correct because another tab
+    # had an uncommitted edit to tools/team.py; the only way through was
+    # pushing from a clean worktree. A push ships commits, so check commits.
+    if ref:
+        tracked = set(subprocess.run(["git", "-C", str(REPO), "ls-tree", "-r", "--name-only", ref],
+                                     capture_output=True, text=True).stdout.split())
+        names = [rel for rel in files() if rel in tracked]
+    else:
+        names = files()
     lines = []
-    for rel in files():
-        h = hashlib.sha256((REPO / rel).read_bytes()).hexdigest()
-        lines.append(f"{h}  {rel}")
+    for rel in names:
+        data = blob(ref, rel) if ref else (REPO / rel).read_bytes()
+        lines.append(f"{hashlib.sha256(data).hexdigest()}  {rel}")
     return "\n".join(lines) + "\n"
 
 
 def main():
-    text = render()
+    ref = sys.argv[sys.argv.index("--ref") + 1] if "--ref" in sys.argv else None
+    text = render(ref)
     if "--check" in sys.argv:
-        if OUT.is_file() and OUT.read_text() == text:
+        current = blob(ref, OUT.name).decode() if ref else (OUT.read_text() if OUT.is_file() else None)
+        if current == text:
             print(f"ok  {len(text.splitlines())} checksums current")
             return 0
         print("SHA256SUMS.txt is stale. Run: python3 tools/checksums.py", file=sys.stderr)

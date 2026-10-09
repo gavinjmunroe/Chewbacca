@@ -44,15 +44,15 @@ Consequences that confuse people:
 
 ## 4. The buckets are separate
 
-| Grant | Buys | Needed for |
-|-------|------|-----------|
-| Accessibility | Read the UI tree, post clicks and keys | Layers 3 and 4 |
-| Screen Recording | Screenshots, ScreenCaptureKit | Layer 5 |
-| Automation | Apple Events, **per caller-target pair** | Layer 2 |
-| Full Disk Access | `~/Library`, other apps' data | Layer 1 |
-| Input Monitoring | Observing input (distinct from posting) | Rarely |
+| Grant            | Buys                                     | Needed for     |
+| ---------------- | ---------------------------------------- | -------------- |
+| Accessibility    | Read the UI tree, post clicks and keys   | Layers 3 and 4 |
+| Screen Recording | Screenshots, ScreenCaptureKit            | Layer 5        |
+| Automation       | Apple Events, **per caller-target pair** | Layer 2        |
+| Full Disk Access | `~/Library`, other apps' data            | Layer 1        |
+| Input Monitoring | Observing input (distinct from posting)  | Rarely         |
 
-Having one gives you none of the others. Automation is per *pair*: controlling Mail and
+Having one gives you none of the others. Automation is per _pair_: controlling Mail and
 controlling Safari are two separate grants.
 
 ## 5. The prompt only appears once, ever
@@ -70,17 +70,44 @@ tccutil reset All com.example.app
 **Warn the user before running any reset.** You are deleting grants they clicked
 through by hand and they will have to redo every one.
 
+## 6. A prompt that names a bare binary ("node", "python3")
+
+"node would like to access data from other apps" means a process with **no .app
+above it**, almost always a launchd job, so TCC charges the binary itself. Two
+things make it repeat all day: a job on a short interval or KeepAlive, and a binary
+whose path moves on every upgrade (nvm versions, Homebrew `Cellar/<version>`), which
+drops the old grant without a word.
+
+Read the evidence before guessing. TCC records which binary asked and when:
+
+```bash
+sqlite3 ~/Library/Application\ Support/com.apple.TCC/TCC.db \
+  "select service, client, datetime(last_modified,'unixepoch','localtime')
+   from access where client like '%node%' order by last_modified desc limit 10"
+grep -l node ~/Library/LaunchAgents/*.plist     # then match interval to prompt rate
+```
+
+On 2026-10-09 the first fix went to the two jobs a `ps` scan showed and missed the
+real one: `messages-refresh` ran `bin/people` every 10 minutes through `env node`,
+which resolved to Homebrew's node, newly moved to `Cellar/node/26.9.0`. The TCC row
+named that exact path, so one query would have found it first.
+
+The fix that holds: `bin/chewbacca-node` copies node to `~/.chewbacca/runtime/node`
+(a copy, since TCC resolves symlinks; Node's signature comes along, so a refreshed copy
+keeps the grant). Every launchd job runs that path as `ProgramArguments[0]`, never
+`env node`, and the person grants Full Disk Access to that one file once.
+
 ## Error signatures
 
-| Symptom | Meaning |
-|---------|---------|
-| -1743 "Not authorized to send Apple events" | Automation denied or never asked |
-| -600 "Application isn't running" | Not a permission problem. Launch the app |
-| -1728 "Can't get..." | Not a permission problem. Wrong object |
-| -1712 timeout | Default ~2min Apple Event timeout, often a modal blocking the target |
-| errOSASystemError (-1750) | Usually TCC, reported uselessly |
-| Keystrokes silently do nothing | Secure Input, or App Sandbox. Not TCC |
-| Empty accessibility tree | Missing grant, **or** lazy Electron tree. Check both |
+| Symptom                                     | Meaning                                                              |
+| ------------------------------------------- | -------------------------------------------------------------------- |
+| -1743 "Not authorized to send Apple events" | Automation denied or never asked                                     |
+| -600 "Application isn't running"            | Not a permission problem. Launch the app                             |
+| -1728 "Can't get..."                        | Not a permission problem. Wrong object                               |
+| -1712 timeout                               | Default ~2min Apple Event timeout, often a modal blocking the target |
+| errOSASystemError (-1750)                   | Usually TCC, reported uselessly                                      |
+| Keystrokes silently do nothing              | Secure Input, or App Sandbox. Not TCC                                |
+| Empty accessibility tree                    | Missing grant, **or** lazy Electron tree. Check both                 |
 
 ## Walking a human through it
 

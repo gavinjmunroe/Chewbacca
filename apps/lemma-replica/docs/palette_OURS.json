@@ -1,0 +1,469 @@
+[
+ {
+  "key": "MAIN>SECTION,DIV n=14",
+  "n": 14,
+  "widths": [
+   880,
+   1440
+  ],
+  "n_widths": 2,
+  "heights": [
+   218,
+   345,
+   353,
+   481,
+   486,
+   496,
+   517,
+   575
+  ],
+  "n_heights": 14,
+  "gaps": [],
+  "rows": 14
+ },
+ {
+  "key": "DIV>DIV n=6",
+  "n": 6,
+  "widths": [
+   158,
+   176,
+   202,
+   229,
+   282
+  ],
+  "n_widths": 5,
+  "heights": [
+   202,
+   211,
+   220
+  ],
+  "n_heights": 3,
+  "gaps": [],
+  "rows": 6
+ },
+ {
+  "key": "svg>polyline n=48",
+  "n": 48,
+  "widths": [
+   195
+  ],
+  "n_widths": 1,
+  "heights": [
+   2,
+   5,
+   8,
+   12,
+   15,
+   18,
+   22,
+   25
+  ],
+  "n_heights": 24,
+  "gaps": [
+   -195
+  ],
+  "rows": 25
+ },
+ {
+  "key": "g>line n=8",
+  "n": 8,
+  "widths": [
+   23,
+   47
+  ],
+  "n_widths": 2,
+  "heights": [
+   9,
+   18
+  ],
+  "n_heights": 2,
+  "gaps": [
+   0
+  ],
+  "rows": 6
+ },
+ {
+  "key": "g>polygon n=60",
+  "n": 60,
+  "widths": [
+   138,
+   141,
+   145,
+   148,
+   152,
+   154,
+   155,
+   158,
+   160,
+   161,
+   164,
+   166,
+   169,
+   171
+  ],
+  "n_widths": 30,
+  "heights": [
+   134,
+   141,
+   144,
+   145,
+   148,
+   151,
+   155,
+   157
+  ],
+  "n_heights": 28,
+  "gaps": [
+   -193,
+   -192,
+   -190,
+   -185,
+   -184,
+   -183,
+   -181,
+   -180
+  ],
+  "rows": 23
+ },
+ {
+  "key": "g>polyline n=378",
+  "n": 378,
+  "widths": [
+   11
+  ],
+  "n_widths": 1,
+  "heights": [
+   6
+  ],
+  "n_heights": 1,
+  "gaps": [
+   0,
+   1
+  ],
+  "rows": 36
+ },
+ {
+  "key": "svg>circle,polyline n=43",
+  "n": 43,
+  "widths": [
+   7,
+   13,
+   20,
+   23,
+   26,
+   31,
+   37,
+   42,
+   45,
+   46,
+   50,
+   53,
+   56,
+   58
+  ],
+  "n_widths": 22,
+  "heights": [
+   8,
+   15,
+   22,
+   28,
+   33,
+   37,
+   39,
+   40
+  ],
+  "n_heights": 10,
+  "gaps": [
+   -85,
+   -59,
+   -58,
+   -57,
+   -56,
+   -53,
+   -50,
+   -46
+  ],
+  "rows": 15
+ },
+ {
+  "key": "g>circle,g n=842",
+  "n": 842,
+  "widths": [
+   4
+  ],
+  "n_widths": 1,
+  "heights": [
+   4
+  ],
+  "n_heights": 1,
+  "gaps": [
+   0,
+   1,
+   5,
+   6,
+   10,
+   11,
+   15,
+   16
+  ],
+  "rows": 50
+ },
+ {
+  "key": "DIV>DIV n=15",
+  "n": 15,
+  "widths": [
+   232
+  ],
+  "n_widths": 1,
+  "heights": [
+   116
+  ],
+  "n_heights": 1,
+  "gaps": [
+   1,
+   2
+  ],
+  "rows": 3
+ },
+ {
+  "key": "g>polygon n=2657",
+  "n": 2657,
+  "widths": [
+   62
+  ],
+  "n_widths": 1,
+  "heights": [
+   31
+  ],
+  "n_heights": 1,
+  "gaps": [
+   -62,
+   0,
+   1
+  ],
+  "rows": 93
+ },
+ {
+  "key": "g>g n=42",
+  "n": 42,
+  "widths": [
+   154,
+   182,
+   197,
+   221
+  ],
+  "n_widths": 4,
+  "heights": [
+   62
+  ],
+  "n_heights": 1,
+  "gaps": [
+   7,
+   8
+  ],
+  "rows": 7
+ },
+ {
+  "key": "g>g n=9",
+  "n": 9,
+  "widths": [
+   62
+  ],
+  "n_widths": 1,
+  "heights": [
+   53
+  ],
+  "n_heights": 1,
+  "gaps": [],
+  "rows": 9
+ },
+ {
+  "key": "DIV>DIV n=8",
+  "n": 8,
+  "widths": [
+   394
+  ],
+  "n_widths": 1,
+  "heights": [
+   29,
+   36
+  ],
+  "n_heights": 2,
+  "gaps": [],
+  "rows": 8
+ },
+ {
+  "key": "DIV>DIV n=7",
+  "n": 7,
+  "widths": [
+   1250,
+   1296,
+   1332,
+   1413,
+   1437,
+   1460,
+   1624
+  ],
+  "n_widths": 7,
+  "heights": [
+   46
+  ],
+  "n_heights": 1,
+  "gaps": [],
+  "rows": 7
+ },
+ {
+  "key": "DIV>DIV n=9",
+  "n": 9,
+  "widths": [
+   93,
+   117,
+   222,
+   269,
+   327
+  ],
+  "n_widths": 5,
+  "heights": [
+   46
+  ],
+  "n_heights": 1,
+  "gaps": [
+   -1,
+   0,
+   1
+  ],
+  "rows": 1
+ },
+ {
+  "key": "SPAN>SPAN n=7",
+  "n": 7,
+  "widths": [
+   8,
+   20
+  ],
+  "n_widths": 2,
+  "heights": [
+   32,
+   38
+  ],
+  "n_heights": 2,
+  "gaps": [
+   0,
+   1,
+   8
+  ],
+  "rows": 2
+ },
+ {
+  "key": "SPAN>SPAN n=11",
+  "n": 11,
+  "widths": [
+   20
+  ],
+  "n_widths": 1,
+  "heights": [
+   32
+  ],
+  "n_heights": 1,
+  "gaps": [],
+  "rows": 11
+ },
+ {
+  "key": "OL>LI n=14",
+  "n": 14,
+  "widths": [
+   577
+  ],
+  "n_widths": 1,
+  "heights": [
+   21
+  ],
+  "n_heights": 1,
+  "gaps": [],
+  "rows": 14
+ },
+ {
+  "key": "DIV>DIV n=13",
+  "n": 13,
+  "widths": [
+   150
+  ],
+  "n_widths": 1,
+  "heights": [
+   76
+  ],
+  "n_heights": 1,
+  "gaps": [
+   0
+  ],
+  "rows": 1
+ },
+ {
+  "key": "DIV>FIGURE n=12",
+  "n": 12,
+  "widths": [
+   352
+  ],
+  "n_widths": 1,
+  "heights": [
+   180
+  ],
+  "n_heights": 1,
+  "gaps": [
+   16
+  ],
+  "rows": 1
+ },
+ {
+  "key": "DIV>BUTTON n=12",
+  "n": 12,
+  "widths": [
+   20
+  ],
+  "n_widths": 1,
+  "heights": [
+   20
+  ],
+  "n_heights": 1,
+  "gaps": [
+   2
+  ],
+  "rows": 1
+ },
+ {
+  "key": "DIV>DIV,A n=7",
+  "n": 7,
+  "widths": [
+   192
+  ],
+  "n_widths": 1,
+  "heights": [
+   15,
+   27
+  ],
+  "n_heights": 2,
+  "gaps": [],
+  "rows": 7
+ },
+ {
+  "key": "svg>line,rect n=22",
+  "n": 22,
+  "widths": [
+   12
+  ],
+  "n_widths": 1,
+  "heights": [
+   4,
+   7,
+   11,
+   15,
+   19,
+   22,
+   26,
+   30
+  ],
+  "n_heights": 22,
+  "gaps": [],
+  "rows": 22
+ }
+]

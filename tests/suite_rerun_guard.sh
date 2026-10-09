@@ -55,6 +55,11 @@ expect "an awk program with && inside its quotes" 0 "cd tests && awk 'NR<=636 &&
 expect "awk on the full path with && quoted" 0 "awk 'NR<=636 && /x/ {print}' tests/run.sh"
 expect "a pgrep for the running suite" 0 "pgrep -f tests/run.sh >/dev/null && echo running"
 expect "a real run chained after a quoted &&" 2 "echo 'a && b' && bash tests/run.sh"
+# Later that night a Python patch script given run.sh as its argument, and a
+# heredoc whose body named run.sh, were both refused as repeat runs.
+expect "an interpreter given run.sh as data" 0 "python3 patch.py tests/run.sh && grep -c x tests/run.sh"
+expect "a heredoc body naming run.sh" 0 "$(printf "python3 - <<'EOF'\np='tests/run.sh'\nEOF\necho done")"
+expect "a real run after a heredoc still counts" 2 "$(printf "cat > /tmp/x <<'EOF'\nhi\nEOF\nbash tests/run.sh")"
 echo "wrappers a review found the first fix missed:"
 for c in "timeout 900 bash tests/run.sh" "caffeinate -i bash tests/run.sh" "bash \"tests/run.sh\" 2>&1 | tail" \
          "exec bash tests/run.sh" "bash -o pipefail tests/run.sh" "FOO=\"a b\" bash tests/run.sh"; do

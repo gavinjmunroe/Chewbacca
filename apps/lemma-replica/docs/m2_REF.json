@@ -1,0 +1,439 @@
+{
+ "height": 17852,
+ "sections": [
+  {
+   "h_size": "40px",
+   "h_lh": "44px",
+   "h_ls": "-0.4px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 0,
+   "h_w": 0,
+   "h_lines": 1,
+   "lead": {
+    "size": "15px",
+    "lh": "22.5px",
+    "color": "oklab(0.262919 0.0168294 -0.104771 / 0.65)",
+    "w": 0,
+    "gap": 0
+   },
+   "painted": 2206,
+   "shapes": 2017,
+   "svg": 4,
+   "canvas": 2,
+   "img": 0,
+   "mockup": {
+    "w": 318,
+    "h": 220,
+    "tag": "DIV",
+    "kids": 9
+   },
+   "controls": 13,
+   "control_h": [
+    14,
+    20,
+    26,
+    28,
+    33
+   ],
+   "i": 0,
+   "y": 342,
+   "height": 10834,
+   "heading": "Stop guessing why your agents fail"
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 2,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "oklab(0.262919 0.0168294 -0.104771 / 0.65)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 523,
+   "shapes": 29,
+   "svg": 24,
+   "canvas": 1,
+   "img": 6,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 544
+   },
+   "controls": 15,
+   "control_h": [
+    14,
+    20,
+    26,
+    27,
+    28
+   ],
+   "i": 1,
+   "y": 11176,
+   "height": 928,
+   "heading": "Surface failures you didn't know to look for."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 2,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "oklab(0.262919 0.0168294 -0.104771 / 0.65)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 531,
+   "shapes": 29,
+   "svg": 24,
+   "canvas": 1,
+   "img": 7,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 552
+   },
+   "controls": 15,
+   "control_h": [
+    14,
+    20,
+    26,
+    27,
+    28
+   ],
+   "i": 2,
+   "y": 12104,
+   "height": 908,
+   "heading": "Get notified on what matters."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 1,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "oklab(0.262919 0.0168294 -0.104771 / 0.65)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 469,
+   "shapes": 29,
+   "svg": 24,
+   "canvas": 1,
+   "img": 6,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 487
+   },
+   "controls": 15,
+   "control_h": [
+    14,
+    20,
+    26,
+    27,
+    28
+   ],
+   "i": 3,
+   "y": 13012,
+   "height": 886,
+   "heading": "Fix it where you work."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 1,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "oklab(0.262919 0.0168294 -0.104771 / 0.65)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 502,
+   "shapes": 29,
+   "svg": 24,
+   "canvas": 1,
+   "img": 5,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 544
+   },
+   "controls": 15,
+   "control_h": [
+    14,
+    20,
+    26,
+    27,
+    28
+   ],
+   "i": 4,
+   "y": 13898,
+   "height": 662,
+   "heading": "Ship with confidence."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 344,
+   "h_w": 752,
+   "h_lines": 1,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "oklab(0.262919 0.0168294 -0.104771 / 0.65)",
+    "w": 672,
+    "gap": 8
+   },
+   "painted": 135,
+   "shapes": 7,
+   "svg": 5,
+   "canvas": 1,
+   "img": 14,
+   "mockup": {
+    "w": 880,
+    "h": 696,
+    "tag": "DIV",
+    "kids": 73
+   },
+   "controls": 26,
+   "control_h": [
+    14,
+    20,
+    26,
+    28,
+    33
+   ],
+   "i": 5,
+   "y": 14560,
+   "height": 697,
+   "heading": "Fits into your existing stack."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 344,
+   "h_w": 752,
+   "h_lines": 1,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "oklab(0.262919 0.0168294 -0.104771 / 0.65)",
+    "w": 672,
+    "gap": 8
+   },
+   "painted": 189,
+   "shapes": 16,
+   "svg": 14,
+   "canvas": 1,
+   "img": 16,
+   "mockup": {
+    "w": 1280,
+    "h": 705,
+    "tag": "DIV",
+    "kids": 187
+   },
+   "controls": 25,
+   "control_h": [
+    14,
+    20,
+    26,
+    28,
+    33
+   ],
+   "i": 6,
+   "y": 15257,
+   "height": 588,
+   "heading": "Trust is non-negotiable."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 336,
+   "h_w": 768,
+   "h_lines": 1,
+   "lead": {
+    "size": "14px",
+    "lh": "20px",
+    "color": "rgb(29, 25, 86)",
+    "w": 161,
+    "gap": 69
+   },
+   "painted": 254,
+   "shapes": 18,
+   "svg": 16,
+   "canvas": 1,
+   "img": 16,
+   "mockup": {
+    "w": 1280,
+    "h": 705,
+    "tag": "DIV",
+    "kids": 187
+   },
+   "controls": 39,
+   "control_h": [
+    6,
+    14,
+    20,
+    26,
+    28
+   ],
+   "i": 7,
+   "y": 15845,
+   "height": 643,
+   "heading": "What people are saying."
+  },
+  {
+   "h_size": "18px",
+   "h_lh": "28px",
+   "h_ls": "-0.18px",
+   "h_weight": "400",
+   "h_align": "start",
+   "h_x": 837,
+   "h_w": 490,
+   "h_lines": 1,
+   "lead": {
+    "size": "14px",
+    "lh": "20px",
+    "color": "rgb(108, 105, 145)",
+    "w": 490,
+    "gap": 12
+   },
+   "painted": 174,
+   "shapes": 7,
+   "svg": 5,
+   "canvas": 1,
+   "img": 0,
+   "mockup": {
+    "w": 1280,
+    "h": 705,
+    "tag": "DIV",
+    "kids": 187
+   },
+   "controls": 42,
+   "control_h": [
+    6,
+    14,
+    20,
+    26,
+    28
+   ],
+   "i": 8,
+   "y": 16488,
+   "height": 31,
+   "heading": "Subscribe"
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "45px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "start",
+   "h_x": 113,
+   "h_w": 576,
+   "h_lines": 2,
+   "lead": {
+    "size": "10px",
+    "lh": "15px",
+    "color": "rgb(108, 105, 145)",
+    "w": 627,
+    "gap": 57
+   },
+   "painted": 88,
+   "shapes": 5,
+   "svg": 3,
+   "canvas": 2,
+   "img": 0,
+   "mockup": {
+    "w": 1280,
+    "h": 705,
+    "tag": "DIV",
+    "kids": 187
+   },
+   "controls": 19,
+   "control_h": [
+    14,
+    20,
+    26,
+    28,
+    33
+   ],
+   "i": 9,
+   "y": 16519,
+   "height": 639,
+   "heading": "The Friday briefing on AI agent observability and re"
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "40px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 466,
+   "h_w": 509,
+   "h_lines": 1,
+   "lead": null,
+   "painted": 116,
+   "shapes": 7,
+   "svg": 4,
+   "canvas": 2,
+   "img": 0,
+   "mockup": {
+    "w": 1280,
+    "h": 384,
+    "tag": "DIV",
+    "kids": 57
+   },
+   "controls": 25,
+   "control_h": [
+    14,
+    16,
+    20,
+    26,
+    28
+   ],
+   "i": 10,
+   "y": 17158,
+   "height": 694,
+   "heading": "Start improving your agents today"
+  }
+ ]
+}

@@ -1,0 +1,74 @@
+{
+  "brief": "a landing page for a SaaS product that schedules social media posts",
+  "intent": {
+    "purpose": "a tool that lets you schedule social media posts in advance",
+    "primary_action": "sign up or start a free trial",
+    "first_look": "the headline",
+    "audience": "people who manage social media accounts and want to save time"
+  },
+  "results": {
+    "one-voltage": {
+      "gaps": [
+        {
+          "kind": "friction",
+          "where": "The 'SOCIAL MEDIA SCHEDULING' eyebrow label above the headline is redundant with the subheadline copy \u2014 reads like a category tag that was never removed",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The platform names in the WORKS WITH row appear as plain text with no logos, making it take a beat to register that this is a platform compatibility strip and not a navigation row",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "'No credit card required. 14-day free trial.' \u2014 readable but noticeably small and low-contrast relative to everything around it",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "'WORKS WITH' label \u2014 small caps, low contrast, easy to miss",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "'FEATURES' label at the very bottom \u2014 cut off, low contrast",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "The bold headline 'Post at the right time, every time.'",
+        "look_order": [
+          "'Start for free' blue button",
+          "The three-line subheadline body copy beneath the headline",
+          "'See how it works' outlined button",
+          "The 'WORKS WITH' platform row: Instagram, X/Twitter, LinkedIn, TikTok, Facebook, Pinterest, Threads, YouTube"
+        ],
+        "purpose": "A social media scheduling tool called Queue that auto-posts content at optimal times across platforms.",
+        "primary_action": "Start for free",
+        "primary_action_confidence": "high",
+        "clickable": [
+          "Queue (logo/wordmark, top left)",
+          "Features (nav)",
+          "How it works (nav)",
+          "Pricing (nav)",
+          "Blog (nav)",
+          "Sign in (top right)",
+          "Start for free (primary CTA button)",
+          "See how it works (secondary CTA button)",
+          "Instagram, X / Twitter, LinkedIn, TikTok, Facebook, Pinterest, Threads, YouTube (platform links in the WORKS WITH bar)"
+        ],
+        "friction": [
+          "The 'SOCIAL MEDIA SCHEDULING' eyebrow label above the headline is redundant with the subheadline copy \u2014 reads like a category tag that was never removed",
+          "The platform names in the WORKS WITH row appear as plain text with no logos, making it take a beat to register that this is a platform compatibility strip and not a navigation row"
+        ],
+        "unreadable": [
+          "'No credit card required. 14-day free trial.' \u2014 readable but noticeably small and low-contrast relative to everything around it",
+          "'WORKS WITH' label \u2014 small caps, low contrast, easy to miss",
+          "'FEATURES' label at the very bottom \u2014 cut off, low contrast"
+        ],
+        "guess_at_audience": "Individual creators or small teams who manage social media accounts and want to automate posting schedules without manual timing decisions."
+      },
+      "blocking": 0
+    }
+  }
+}

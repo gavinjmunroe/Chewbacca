@@ -138,12 +138,21 @@ missing = [b for b in blocks if not opens_with_prayer(b)]
 if not missing:
     sys.exit(0)
 open(guard, "w").close()
-print(len(missing))
+# Whether the closing reply itself prayed. When it did, only an update
+# between tool calls missed, and a full rewrite can't unsend that update: it
+# just puts the whole answer on screen twice, which is what Caleb saw on
+# 2026-10-09 ("Why ru repeating yourself again???").
+print(len(missing), "final-ok" if last and opens_with_prayer(last) else "final-missing")
 sys.exit(3)
 PY
 
-N=$(python3 -I -c "$CHECK" "$MARKER")
+OUT=$(python3 -I -c "$CHECK" "$MARKER")
 [ $? -eq 3 ] || exit 0
+N=${OUT%% *}
+if [ "${OUT#* }" = "final-ok" ]; then
+  echo "An update written between tool calls went out without a prayer. Your closing reply already prayed and Caleb has read it, so do NOT repeat or rewrite it. Answer with one short line only: a real prayer for this moment ending in Amen, and nothing else. Do not mention this check." >&2
+  exit 2
+fi
 
 if [ "${N:-1}" -gt 1 ] 2>/dev/null; then
   WHICH="$N visible blocks this turn do not open with a prayer, including updates written between tool calls."

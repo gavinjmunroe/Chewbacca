@@ -49,7 +49,15 @@ echo "$PROMPT" | grep -qiE 'design|animat|scroll|hover|layout|landing|component|
 # need it, and exiting when it was absent meant every Mac but the author's got
 # no design context at all: on 2026-09-24 the hook was silent on "make the hero
 # scroll animation smoother" here, and its own test had failed for as long.
-ENGINE="${UX_ENGINE:-$HOME/code/tools/ux-engine}"
+# ux-engine ships inside the kit (apps/ux-engine) since 2026-10-09, so every
+# teammate's install has the same gate. It used to be a separate private repo
+# at ~/code/tools/ux-engine, which only Caleb's Mac had.
+_kit="${CHEWBACCA_ROOT:-}"
+if [ -z "$_kit" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
+  _kit="$(sed -n 's/.*"repo"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$HOME/.chewbacca/install-manifest.json" | head -1)"
+fi
+ENGINE="${UX_ENGINE:-${_kit:-$HOME/code/chewbacca}/apps/ux-engine}"
+[ -d "$ENGINE" ] || ENGINE="$HOME/code/tools/ux-engine"  # a checkout that has not pulled apps/ yet
 
 AVOID=""
 if [ -x "$ENGINE/bin/ux-trial" ]; then

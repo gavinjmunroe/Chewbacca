@@ -1,0 +1,96 @@
+/* Styles for ambient.js: the banner orbit and the hero scroll cue. Loaded by
+   an @import at the top of chrome.css, so index.html needs no new link. */
+
+/* ---- banner orbit -------------------------------------------------------- */
+/* Theirs is `size-4 shrink-0`: 16px, against our old 14px chat bubble. The
+   selector carries `body` and the class to beat styles.css
+   (`.banner .bmark`, a bordered rounded square) and chrome.css
+   (`body .banner .bmark`, which keeps the 10px gap, their gap-2.5). */
+body .banner .bmark.amb-orbit {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 0;
+  opacity: 1;
+  /* 16px icon in a 20px line. At -3 a 2x crop put ours ~1px above theirs. */
+  vertical-align: -4px;
+  /* Their gap-2.5 is 10px with no text node between. Ours has the source
+     whitespace before "We're", one ~4px space at 14px, so 6 + 4 = their 10.
+     Measured at -3/10: ours sat 4.5px further from the text. */
+  margin-right: 6px;
+}
+.amb-orbit svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+/* 0 to -100 on a pathLength of 100: one lap of the 32-unit stroke per cycle. */
+.amb-orbit-run {
+  animation: amb-orbit var(--amb-orbit-s, 2.4s) linear infinite;
+}
+.amb-orbit.amb-paused .amb-orbit-run {
+  animation-play-state: paused;
+}
+@keyframes amb-orbit {
+  to {
+    stroke-dashoffset: -100;
+  }
+}
+
+/* ---- hero scroll cue ----------------------------------------------------- */
+/* 96px, z 40 over every layer of the pin (the highest there is 30), the
+   opacity driven by ambient.js and eased over their 500ms ease-out. */
+.amb-cue {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  height: 96px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 500ms ease-out;
+}
+/* Their fill, written in our --bg (#f2f2f2, their background too). */
+.amb-cue-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    rgba(242, 242, 242, 0) 0%,
+    rgba(242, 242, 242, 0.6) 55%,
+    #f2f2f2 100%
+  );
+  animation: amb-pulse 2.4s ease-in-out infinite;
+}
+.amb-cue.amb-paused .amb-cue-fill {
+  animation-play-state: paused;
+}
+@keyframes amb-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Reduced motion: the finished, static state. The orbit holds one still
+   stroke on its track (theirs swaps to an opacity pulse instead; the rule
+   here is no loop at all), the cue holds full strength and keeps its scroll
+   fade, which is information and not motion. */
+@media (prefers-reduced-motion: reduce) {
+  .amb-orbit-run,
+  .amb-cue-fill {
+    animation: none;
+  }
+  .amb-cue {
+    transition: none;
+  }
+}
+.amb-reduced .amb-orbit-run,
+.amb-reduced .amb-cue-fill {
+  animation: none;
+}

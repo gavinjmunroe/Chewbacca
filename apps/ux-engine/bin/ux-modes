@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+"""Differentiate the film. Find the page's motion modes, not its elements.
+
+Caleb, 2026-09-23: "in calculus 3, it should be able to know relative
+derivatives and the surrounding regions based on diff factors. Maybe we lowk
+gotta include some math here?" Then: "there's also gotta be the factors of
+each component's position, size and opacity right???"
+
+Both are right, and together they fix a real gap. ux-crawl stores 1,885
+samples along the scroll axis and never once differentiates them, so it can
+tell you an element's opacity at frame 900 and not that the page JUMPS there.
+
+A page is a function from state to image. Nobody can enumerate that surface,
+and nobody needs to: everything taste cares about is in the DERIVATIVES.
+
+  d/ds        how much changes per pixel of scroll. A DISCONTINUITY in this
+              is exactly what a pop-in is, and it is invisible in values.
+  d2/ds2      whether motion accelerates smoothly or jitters.
+  SECANTS     Observed adjacent slopes on visible support, with local affine
+              nulls removed. Missing intervals never establish smoothness.
+
+THE MATRIX, WHICH IS THE BETTER HALF. Stack every element's every channel
+against frame: M[i, j]. Its singular values are the page's MOTION MODES, the
+patterns everything actually moves along.
+
+  A page whose elements move in a few coordinated groups has low effective
+  rank. A page where thirty elements each do their own thing has high rank,
+  and that is chaos measured rather than argued. Miller's limit puts a human
+  at about four tracked objects, so effective rank is a real ceiling.
+
+  Gestalt COMMON FATE falls out of the same matrix for free: elements whose
+  motion correlates are perceived as ONE object whether or not you meant them
+  to be. Correlation clusters that disagree with the DOM's own grouping are
+  the eye binding things you never related.
+
+UNITS ARE THE TRAP. Position runs to hundreds of pixels, opacity runs 0 to 1.
+Stack them raw and position swamps the decomposition, and you would conclude
+opacity never matters because its numbers are small. So every channel is
+divided by its just-noticeable-difference first, per Weber. Only then are the
+modes comparable across channels, and only then can one mode mean "these six
+fade while rising together."
+"""
+
+import argparse, json, math, os, sys
+import numpy as np
+
+# Just-noticeable-difference per channel, in that channel's own units. These
+# set what "one perceptible step" means, and every one of them is a real
+# threshold rather than a convenience.
+#
+#   pos 1.0px    below ~1px of travel nothing reads as motion at normal
+#                viewing distance, and subpixel jitter is not an effect.
+#   opacity .01  the standard alpha JND on a mid-grey ground; the reference
+#                page's own fades step in roughly .012 increments.
+#   size 0.02    Weber fraction for length is 2 to 3%, so size is scaled
+#                RELATIVE to the element rather than absolutely: a 4px shift
+#                on a 20px chip is obvious and invisible on a 900px panel.
+#   dash 1.0px   dashoffset is a length in user units, same as position.
+JND = {"o": 0.01, "top": 1.0, "bx": 1.0, "by": 1.0,
+       "bw": None, "bh": None,        # None: relative, Weber-scaled
+       "dashOff": 1.0, "sw": 0.2}
+WEBER_SIZE = 0.02
+
+
+def load(path):
+    D = json.load(open(os.path.join(path, "film.json")))
+    fr = D["frames"] if isinstance(D, dict) and "frames" in D else D
+    tr = D.get("tracked", []) if isinstance(D, dict) else []
+    return fr, tr
+
+
+def build(fr):
+    """elements x channels x frames, perceptually normalised -> 2-D matrix.
+
+    COORDINATE FRAME, which the first version got wrong and which inverted
+    every number it produced. `top` comes from getBoundingClientRect and is
+    VIEWPORT-relative, so a completely static element appears to travel
+    upward at exactly scroll rate. Decomposing that gave effective rank 1.34
+    with one mode holding 93% of the variance, and the mode was scrolling.
+    The page's actual design contributed the 7% left over.
+
+    Document coordinates make a static element CONSTANT, which is the right
+    null: whatever still moves is then an effect and nothing else. A pinned
+    element travels in document space precisely because it is holding still
+    on screen, and a parallax plate shows up as a rate that is neither 0 nor
+    1. getBBox values are already in SVG user space and are untouched.
+    """
+    ids = sorted({e["id"] for f in fr for e in f["el"]})
+    idx = {v: i for i, v in enumerate(ids)}
+    rows, labels = [], []
+    for ch, jnd in JND.items():
+        M = np.full((len(ids), len(fr)), np.nan, dtype=np.float64)
+        for j, f in enumerate(fr):
+            for e in f["el"]:
+                if e.get("gone") or ch not in e:
+                    continue
+                v = e[ch]
+                if isinstance(v, (int, float)):
+                    # Viewport -> document. Only `top` needs it; getBBox is
+                    # already in the SVG's own user space.
+                    M[idx[e["id"]], j] = v + f["y"] if ch == "top" else v
+        for i in range(len(ids)):
+            row = M[i]
+            if np.all(np.isnan(row)):
+                continue
+            # Carry the last seen value across unmounted gaps, so a scene
+            # leaving does not register as a fall to zero.
+            good = ~np.isnan(row)
+            if good.sum() < len(fr) * 0.10:
+                continue
+            row = np.interp(np.arange(len(fr)), np.flatnonzero(good), row[good])
+            scale = jnd if jnd is not None else max(abs(np.nanmedian(row)), 1.0) * WEBER_SIZE
+            r = (row - row.mean()) / scale
+            if np.ptp(r) < 1.0:       # never moves a perceptible step
+                continue
+            rows.append(r)
+            labels.append((ids[i], ch))
+    return np.array(rows), labels
+
+
+
+def residual_slopes(y, values):
+    """Adjacent observed secants after removing each supported run's affine fit.
+
+    Missing samples split the fit. Repeated/reversed scroll intervals have no
+    forward scroll derivative; they are retained as observations, never given
+    an invented epsilon displacement. This is not a continuous Lipschitz bound.
+    """
+    y = np.asarray(y, dtype=float)
+    values = np.asarray(values, dtype=float)
+    support = np.isfinite(y) & np.isfinite(values)
+    residual = np.full(values.shape, np.nan)
+    edges = np.flatnonzero(np.diff(np.r_[False, support, False]))
+    for start, end in zip(edges[::2], edges[1::2]):
+        yy = y[start:end]
+        vv = values[start:end]
+        X = np.column_stack([np.ones(len(yy)), yy - yy.mean()])
+        residual[start:end] = vv - X @ np.linalg.lstsq(X, vv, rcond=None)[0]
+    dy = np.diff(y)
+    valid = support[:-1] & support[1:] & (dy > 0)
+    slopes = np.full(dy.shape, np.nan)
+    slopes[valid] = np.abs(np.diff(residual)[valid]) / dy[valid]
+    return slopes
+
+
+def derivative_metrics(fr):
+    """Support-aware derivatives, independent of the legacy SVD interpolation.
+
+    Values are normalised with the same heuristic channel scales as build().
+    Both the sum and per-supported-channel mean are retained: coverage can
+    change, so the sum alone is not a comparable motion-intensity measure.
+    """
+    y = np.array([f["y"] for f in fr], dtype=float)
+    n = max(len(fr) - 1, 0)
+    sums = np.zeros(n)
+    counts = np.zeros(n, dtype=int)
+    stationary_changes = np.zeros(n, dtype=int)
+    observations = {}
+    for j, frame in enumerate(fr):
+        for el in frame["el"]:
+            if el.get("gone") or not el.get("vis", False) or el.get("o", 1) <= 0:
+                continue
+            for channel in JND:
+                value = el.get(channel)
+                if not isinstance(value, (int, float)) or not np.isfinite(value):
+                    continue
+                row = observations.setdefault((el["id"], channel),
+                                              np.full(len(fr), np.nan))
+                row[j] = value + y[j] if channel == "top" else value
+    for (_, channel), row in observations.items():
+        scale = JND[channel]
+        if scale is None:
+            scale = max(abs(float(np.nanmedian(row))), 1.0) * WEBER_SIZE
+        values = row / scale
+        slopes = residual_slopes(y, values)
+        valid = np.isfinite(slopes)
+        sums[valid] += slopes[valid]
+        counts[valid] += 1
+        adjacent = np.isfinite(values[:-1]) & np.isfinite(values[1:])
+        stationary_changes += (adjacent & (np.diff(y) == 0) &
+                               (np.abs(np.diff(values)) >= 1.0))
+    defined = counts > 0
+    sums[~defined] = np.nan
+    means = np.full(n, np.nan)
+    means[defined] = sums[defined] / counts[defined]
+    return {"y": y[1:], "sum": sums, "mean": means, "counts": counts,
+            "stationary_intervals": int((np.diff(y) == 0).sum()),
+            "reverse_intervals": int((np.diff(y) < 0).sum()),
+            "stationary_changed_channels": stationary_changes}
+
+
+def report_derivatives(fr):
+    d = derivative_metrics(fr)
+    valid = d["counts"] > 0
+    print(f"\n  d/ds   {int(valid.sum())}/{len(valid)} adjacent intervals defined "
+          "on visible observed support (run-local affine residuals)")
+    print(f"         {d['stationary_intervals']} stationary scroll intervals; "
+          f"{d['reverse_intervals']} reverse intervals excluded")
+    changed = d["stationary_changed_channels"]
+    if changed.any():
+        print(f"         {int((changed > 0).sum())} stationary intervals contain "
+              f"{int(changed.sum())} perceptible channel changes; "
+              "time derivative unmeasured")
+    if not valid.any():
+        print("         no supported forward-scroll slopes; smoothness unmeasured")
+        return
+    peak = int(np.nanargmax(d["sum"]))
+    print(f"         median sum {np.nanmedian(d['sum']):.2f} JND/px; "
+          f"maximum observed slope (sum) {d['sum'][peak]:.2f} JND/px "
+          f"at y={d['y'][peak]:g}, {d['counts'][peak]} supported channels")
+    print(f"         maximum supported-channel mean {np.nanmax(d['mean']):.2f} "
+          "JND/px/channel; unsampled smoothness is not established")
+
+
+def effective_rank(sv):
+    """Participation ratio: how many modes actually carry the variance.
+
+    A hard count of singular values over a cutoff depends entirely on the
+    cutoff. The participation ratio does not: it is the number of modes you
+    would need if they all carried equally, so one dominant mode gives ~1 and
+    thirty equal ones give ~30.
+    """
+    p = sv ** 2
+    t = p.sum()
+    if t <= 0:
+        return 0.0
+    p = p / t
+    return float(np.exp(-(p * np.log(p + 1e-12)).sum()))
+
+
+def report(name, path, window):
+    fr, tr = load(path)
+    M, labels = build(fr)
+    ys = np.array([f["y"] for f in fr], dtype=float)
+    print(f"\n=== {name} ===")
+    print(f"frames {len(fr)}   travel {int(ys[-1])}px   "
+          f"moving channels {M.shape[0]} on {len({l[0] for l in labels})} elements")
+    report_derivatives(fr)
+    if M.shape[0] < 2:
+        print("   too little motion to decompose")
+        return
+
+    # ---- SPLIT OFF THE LINEAR RESPONSE ----------------------------------
+    # There are TWO trivial behaviours, not one, and the first two versions of
+    # this each removed only one of them and reported the other as design.
+    # In document coordinates a normal-flow element has rate 0, and a pinned
+    # one has rate 1 because holding still on screen IS travelling with the
+    # document. This page is 81% sticky, so after fixing the frame the
+    # dominant mode was still 99% and still meant nothing.
+    #
+    # Fit a + b*y per channel and the two separate cleanly. The b's are the
+    # RATE FIELD: 0 is static, 1 is pinned, and anything between is parallax,
+    # which is the one people actually tune. The residual is everything that
+    # is not a linear response to scroll, which is where easing, fades,
+    # scale, stagger and pin-then-release all live. That residual is what
+    # deserves a decomposition.
+    yn = (ys - ys.mean()) / max(np.ptp(ys), 1.0)
+    denom = float((yn ** 2).sum()) or 1.0
+    b = (M * yn).sum(axis=1) / denom
+    R = M - np.outer(b, yn)               # residual: the non-linear content
+
+    posr = np.array([b[i] for i, l in enumerate(labels) if l[1] == "top"])
+    if posr.size:
+        span = np.ptp(ys)
+        rate = posr / max(span / JND["top"], 1.0)   # back to px travelled / px scrolled
+        static = int((np.abs(rate) < 0.05).sum())
+        pinned = int((np.abs(rate - 1.0) < 0.05).sum())
+        para = int(((np.abs(rate) >= 0.05) & (np.abs(rate - 1.0) >= 0.05)).sum())
+        print(f"\n  rates  {static} static, {pinned} pinned, {para} parallax "
+              f"(non-trivial rate)")
+        if para:
+            mid = np.sort(rate[(np.abs(rate) >= 0.05) & (np.abs(rate - 1.0) >= 0.05)])
+            print(f"         parallax rates {mid[0]:.3f} to {mid[-1]:.3f}, "
+                  f"{len(set(np.round(mid, 2)))} distinct")
+
+    # ---- MODES -----------------------------------------------------------
+    keepR = np.ptp(R, axis=1) > 1.0     # residual must itself be perceptible
+    Rk = R[keepR]
+    labR = [l for l, k in zip(labels, keepR) if k]
+    if Rk.shape[0] < 2:
+        print("\n  modes  residual is below one JND everywhere: the page is "
+              "pure linear response to scroll, no non-linear effects")
+        return 0.0
+    U, sv, Vt = np.linalg.svd(Rk - Rk.mean(axis=1, keepdims=True),
+                              full_matrices=False)
+    er = effective_rank(sv)
+    share = sv ** 2 / (sv ** 2).sum()
+    print(f"\n  modes  (of the RESIDUAL, {Rk.shape[0]} channels) "
+           f"effective rank {er:.2f}   "
+          f"top mode {share[0]*100:.0f}% of motion, "
+          f"top 3 {share[:3].sum()*100:.0f}%")
+    for k in range(min(3, len(sv))):
+        w = np.abs(U[:, k])
+        top = np.argsort(-w)[:4]
+        chans = {}
+        for t in top:
+            chans.setdefault(labR[t][1], 0)
+            chans[labR[t][1]] += 1
+        desc = ", ".join(f"{c}x{n}" for c, n in chans.items())
+        print(f"           mode {k+1}: {share[k]*100:>4.0f}%  led by {desc}")
+
+    # ---- LOCAL RANK: how many independent things at once ------------------
+    loc = []
+    for s in range(0, Rk.shape[1] - window, window // 2):
+        W = Rk[:, s:s + window]
+        W = W - W.mean(axis=1, keepdims=True)
+        keep = np.ptp(W, axis=1) > 1.0
+        if keep.sum() < 2:
+            loc.append((ys[s], 0.0)); continue
+        sw = np.linalg.svd(W[keep], compute_uv=False)
+        loc.append((ys[s], effective_rank(sw)))
+    peak = max(loc, key=lambda x: x[1]) if loc else (0, 0)
+    busy = [l for l in loc if l[1] > 7]
+    print(f"\n  local  busiest y={int(peak[0])} at rank {peak[1]:.1f}; "
+          f"{len(busy)} of {len(loc)} windows over Miller's 7")
+
+    # ---- COMMON FATE -----------------------------------------------------
+    pos = [i for i, l in enumerate(labR) if l[1] in ("top", "by", "bx")]
+    if len(pos) > 3:
+        P = Rk[pos]
+        C = np.corrcoef(P)
+        C = np.nan_to_num(C)
+        n = len(pos)
+        iu = np.triu_indices(n, 1)
+        bound = (C[iu] > 0.98).sum()
+        print(f"  fate   {bound} of {len(iu[0])} moving pairs correlate >0.98, "
+              f"so the eye binds them as one object")
+    return er
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("lens", nargs="+", help="film lens directories")
+    ap.add_argument("--window", type=int, default=120,
+                    help="frames per local-rank window (120 = ~1080px)")
+    a = ap.parse_args()
+    for p in a.lens:
+        report(os.path.basename(p.rstrip("/")), p, a.window)
+    print()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

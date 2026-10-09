@@ -165,6 +165,18 @@ recheck stale UI observations and test transfer on heldout tasks. Use the offlin
 See `docs/MATH-GRAPH-CAPABILITIES.md` for their assumptions and platform limits.
 These methods grant no sending, publication, spending, or hook permissions.
 
+## Team memory
+
+Memory about Amber, Chewbacca and Firm Foundation is shared by everyone building
+them. It lives in `team/memory/` in this repo, one fact per file with the same
+frontmatter as private memory, indexed one line per file in
+`team/memory/MEMORY.md`. Write a lesson, decision or project fact about those three
+there, not in a private memory directory, and add its index line in the same edit.
+Everything else (health, family, school, voice, personal plans, private opinions
+of teammates) stays private. Before saving, ask whether every teammate with repo
+access should read it; when unsure, keep it private. No secrets, phone numbers or
+personal emails in team memory.
+
 ## Private context and second brain
 
 `second-brain/README.md` describes the public operational context and private

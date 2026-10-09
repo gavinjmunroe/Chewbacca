@@ -1,6 +1,6 @@
 ---
 name: animated-video
-description: Make animated videos in code with Remotion (React/SVG): character animation, cartoon stories, motion graphics, kinetic typography, animated infographics, explainers and animated Reels, from a script or voiceover, in any aspect ratio. Use when asked to animate a script, make an animated video, or build a Remotion project. Not for math with equations (manim), editing camera footage (video-edit), writing the script (video-script), or generated clips and Blender renders (creative-video).
+description: "Make animated videos in code with Remotion (React/SVG): character animation, cartoon stories, motion graphics, kinetic typography, animated infographics, explainers and animated Reels, from a script or voiceover, in any aspect ratio. Use when asked to animate a script, make an animated video, or build a Remotion project. Not for math with equations (manim), editing camera footage (video-edit), writing the script (video-script), or generated clips and Blender renders (creative-video)."
 ---
 
 # Animated video

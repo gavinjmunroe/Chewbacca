@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""Score a page against what real design systems do, not against my opinions.
+
+    ux-slop page.html                 score plus the choices driving it
+    ux-slop a.html b.html c.html      rank several
+    ux-slop page.html --why           every contributing token
+
+Reads data/prior.json, built by tools/build_prior.py from 74 real design
+systems and N unguided generations. Each design token carries a learned weight:
+positive means real systems make that choice and generators do not, negative
+means the reverse.
+
+The score is the MEAN weight over the tokens a file uses, so a long page is not
+penalised for having more of them.
+
+READ THE SCORE AS A RANKING, NOT A GRADE. The two training corpora are
+different file types, so part of the separation is format rather than taste.
+Comparing two HTML pages holds format constant and is the only comparison this
+supports. tools/validate_prior.py reports how well it does at exactly that.
+"""
+import argparse
+import json
+import pathlib
+import statistics
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tools"))
+import tokens as tk  # noqa: E402
+
+
+def load_prior():
+    p = ROOT / "data" / "prior.json"
+    if not p.exists():
+        print("no data/prior.json. Build it:  python3 tools/build_prior.py",
+              file=sys.stderr)
+        sys.exit(2)
+    return json.loads(p.read_text())
+
+
+def score(path, prior):
+    kind = "design" if path.suffix == ".md" else "html"
+    feats = tk.features(path.read_text(errors="ignore"), kind)
+    w = prior["weights"]
+    hits = [(f, w[f]["w"]) for f in feats if f in w]
+    if not hits:
+        return None, [], feats
+    return statistics.mean(v for _, v in hits), sorted(hits, key=lambda x: x[1]), feats
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("files", nargs="+")
+    ap.add_argument("--why", action="store_true", help="every token, not just the ends")
+    a = ap.parse_args()
+
+    prior = load_prior()
+    rows = []
+    for f in a.files:
+        p = pathlib.Path(f)
+        if not p.exists():
+            print(f"missing: {f}", file=sys.stderr)
+            continue
+        s, hits, feats = score(p, prior)
+        if s is None:
+            print(f"{p.name}: no recognised design tokens", file=sys.stderr)
+            continue
+        rows.append((s, p, hits, feats))
+
+    if not rows:
+        return 1
+    rows.sort(key=lambda r: -r[0])
+
+    if len(rows) > 1:
+        print(f"{'SCORE':>8}  {'TOKENS':>6}  FILE")
+        for s, p, hits, feats in rows:
+            print(f"{s:>8.3f}  {len(hits):>6}  {p}")
+        print("\nHigher is more like a real design system. Ranking only.")
+        print()
+
+    s, p, hits, feats = rows[0]
+    print(f"{p.name}   score {s:+.3f}   {len(hits)} known tokens "
+          f"of {len(feats)} found")
+    show = hits if a.why else hits[:6]
+    print("\nPULLING IT TOWARD THE GENERATED LOOK")
+    for f, v in show:
+        if v < 0:
+            d = prior["weights"][f]
+            print(f"  {v:+7.2f}  {f:<18} real systems {d['craft']:>3}/"
+                  f"{prior['n_craft']}   generators {d['slop']:>3}/{prior['n_slop']}")
+    print("\nCHOICES REAL SYSTEMS ALSO MAKE")
+    tail = hits if a.why else hits[-6:]
+    for f, v in tail[::-1]:
+        if v > 0:
+            d = prior["weights"][f]
+            print(f"  {v:+7.2f}  {f:<18} real systems {d['craft']:>3}/"
+                  f"{prior['n_craft']}   generators {d['slop']:>3}/{prior['n_slop']}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

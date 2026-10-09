@@ -90,6 +90,18 @@ class WriteLogTests(unittest.TestCase):
         self.hook('PostToolUse', self.outside, data, tool='Bash')
         self.assertEqual(len(self.records()), 1)
 
+    def test_long_call_claims_nothing_in_an_unnamed_context_repository(self):
+        # 2026-10-09: a 10-minute `cd ~ && uv cache prune` was credited with
+        # 494 brain files another tab's ingest wrote during it.
+        self.env['PERSONAL_CONTEXT_DIR'] = str(self.repo)
+        self.env['CHEWBACCA_IMPLICIT_MAX_CALL'] = '0.5'
+        data = {'command': 'uv cache prune'}
+        self.hook('PreToolUse', self.outside, data, tool='Bash')
+        time.sleep(1)
+        self.policy.write_text('written by another tab during the call')
+        self.hook('PostToolUse', self.outside, data, tool='Bash')
+        self.assertEqual(self.records(), [])
+
     def test_context_repository_does_not_claim_files_already_dirty(self):
         self.env['PERSONAL_CONTEXT_DIR'] = str(self.repo)
         self.policy.write_text('another session wrote this earlier')

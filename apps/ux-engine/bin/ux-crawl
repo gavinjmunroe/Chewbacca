@@ -1,0 +1,625 @@
+#!/usr/bin/env python3
+"""Drive the interface and record what it does, not what it looks like.
+
+    ux-crawl https://example.com
+    ux-crawl https://example.com --out lenses/example --states film,hover,focus,narrow
+
+WHY THIS IS DIFFERENT FROM EVERY EXTRACTOR I COULD FIND. HTTP Archive parses
+CSS statically across 17.2M sites. slicer.dev extracts one page at load.
+Chrome's animation panel is manual. Every one of them reads the ENTRANCE.
+
+Most of an interface's motion and nearly all of its state handling lives past
+the entrance: on hover, on focus, on an empty form submit, at 375px wide.
+A tool that only loads the page cannot see any of it, which is why presets/
+in this repo had to be written by hand from papers instead of extracted.
+
+WHAT IT RECORDS AT EACH STATE. document.getAnimations() as the browser
+resolved it, the computed styles that actually applied, and a screenshot.
+Computed, not authored: a stylesheet says what was written, a computed style
+says what won.
+
+WHAT IT DELIBERATELY DOES NOT DO. It does not emit a style guide. See
+SCRAPE-PLAN.md: prose is the worst-measured format for procedural knowledge
+(SOPBench: compiled structure gained up to 16.0 points over official prose;
+FlowBench: flowcharts reduce planning hallucination most). This writes raw
+observations, and tools/lens.py turns them into contrastive pairs and
+executable assertions.
+"""
+import argparse
+import json
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+ANIMS_JS = """() => {
+  const out = [];
+  for (const a of document.getAnimations()) {
+    let t = {};
+    try { t = a.effect ? a.effect.getTiming() : {}; } catch (e) {}
+    let sel = "";
+    try {
+      const el = a.effect && a.effect.target;
+      if (el && el.tagName) {
+        sel = el.tagName.toLowerCase();
+        if (typeof el.className === "string" && el.className)
+          sel += "." + el.className.trim().split(/\\s+/).slice(0, 2).join(".");
+      }
+    } catch (e) {}
+    out.push({sel, dur: typeof t.duration === "number" ? t.duration : null,
+              delay: t.delay || 0, easing: t.easing || "",
+              iter: t.iterations === Infinity ? "infinite" : t.iterations});
+  }
+  return out;
+}"""
+
+# Computed styles of what is actually VISIBLE, capped so one page cannot
+# produce a hundred megabytes of JSON.
+STYLES_JS = """(cap) => {
+  const props = ["color","background-color","border-radius","font-family",
+    "font-size","font-weight","letter-spacing","line-height","box-shadow",
+    "border-color","border-width","outline","outline-offset","transition",
+    "transition-duration","transition-timing-function","gap","padding",
+    "text-transform","backdrop-filter","opacity","cursor"];
+  const out = [];
+  const els = document.querySelectorAll("body *");
+  for (let i = 0; i < els.length && out.length < cap; i++) {
+    const el = els[i];
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === "hidden" || cs.display === "none") continue;
+    const rec = {tag: el.tagName.toLowerCase(),
+                 w: Math.round(r.width), h: Math.round(r.height)};
+    for (const p of props) {
+      const v = cs.getPropertyValue(p);
+      if (v && v !== "none" && v !== "normal" && v !== "auto" && v !== "0px")
+        rec[p] = v.slice(0, 90);
+    }
+    out.push(rec);
+  }
+  return out;
+}"""
+
+
+# What the page IS at a scroll position, as opposed to what is animating.
+# Needed because the strongest scroll choreography does not animate at all:
+# uselemma.ai holds 42 rects constant through its pinned scene while the text
+# count goes 33 to 51 and the filled count goes 0 to 9. Scroll drives state
+# and the state decides what renders. An animation-only capture sees none of
+# that and reports the scene as static.
+SHAPE_JS = """() => {
+  const vh = window.innerHeight;
+  const onScreen = [...document.querySelectorAll("body *")].filter(el => {
+    const r = el.getBoundingClientRect();
+    return r.bottom > 0 && r.top < vh && r.width > 2 && r.height > 2;
+  });
+  const sticky = [...document.querySelectorAll("body *")].filter(
+    el => getComputedStyle(el).position === "sticky");
+  const tally = {};
+  for (const el of onScreen) {
+    const t = el.tagName.toLowerCase();
+    tally[t] = (tally[t] || 0) + 1;
+  }
+  return {
+    scrollY: Math.round(window.scrollY),
+    docHeight: document.documentElement.scrollHeight,
+    onScreen: onScreen.length,
+    text: onScreen.filter(e => e.children.length === 0
+                           && e.textContent.trim().length).length,
+    svgNodes: document.querySelectorAll("svg *").length,
+    tagTally: tally,
+    stickyPinned: sticky.filter(el => Math.abs(el.getBoundingClientRect().top) < 2).length,
+    stickyTotal: sticky.length,
+  };
+}"""
+
+
+# A continuous scroll, sampled every frame, run entirely inside the page.
+#
+# Caleb, 2026-09-23: "Could we make it do a constant scroll so you can extract
+# the exact animations?" He is right and it is the better instrument. Discrete
+# jumps sample N points and miss everything between them, so a scroll-linked
+# transform reads as N unrelated values rather than as a curve. Stepping the
+# scroll a few pixels per animation frame and recording each one gives the
+# actual interpolation, which is what you need to tell a scroll-LINKED
+# animation from one that merely fired somewhere during the scroll.
+#
+# It runs as a single evaluate rather than a round trip per sample, because
+# 600 round trips would take minutes and the driving would dominate the
+# measurement. Smooth-scroll libraries interpolate toward a target, so the
+# recorded scrollY is what the page actually reached, never what was asked for.
+FILM_JS = """(opts) => new Promise((resolve) => {
+  const { perFrame, maxFrames, trackN, maxTrack, RESURVEY } = opts;
+  const frames = [];
+
+  // ---- WHAT ANIMATES, not how many things animate ----------------------
+  // The first version recorded document.getAnimations().length: a count.
+  // A count cannot tell you that 48 paths are running a stroke-dashoffset
+  // draw at 800ms linear with an 18ms stagger, which is the entire mechanism
+  // behind a site resolving 214 animations at load. Caleb, 2026-09-23: "your
+  // scraper is completely missing the svg animations."
+  const animDigest = () => {
+    const byName = {};
+    let dash = 0, transform = 0, opacity = 0, infinite = 0;
+    for (const a of document.getAnimations()) {
+      const t = a.effect && a.effect.getComputedTiming ? a.effect.getComputedTiming() : {};
+      const name = a.animationName || a.transitionProperty || a.constructor.name;
+      const el = a.effect && a.effect.target;
+      const rec = byName[name] || (byName[name] = {
+        n: 0, dur: t.duration, iter: t.iterations, ease: t.easing,
+        delays: [], tags: {}, props: {},
+      });
+      rec.n += 1;
+      if (rec.delays.length < 6) rec.delays.push(Math.round(t.delay || 0));
+      if (t.iterations === null || t.iterations === Infinity) infinite += 1;
+      if (el && el.tagName) {
+        const tag = el.tagName.toLowerCase();
+        rec.tags[tag] = (rec.tags[tag] || 0) + 1;
+      }
+      // Which properties the keyframes actually touch. This is the part that
+      // names a draw-on as a draw-on.
+      try {
+        for (const kf of a.effect.getKeyframes()) {
+          for (const k in kf) {
+            if (k === "offset" || k === "computedOffset" || k === "easing") continue;
+            rec.props[k] = 1;
+            if (k === "strokeDashoffset" || k === "strokeDasharray") dash += 1;
+            if (k === "transform") transform += 1;
+            if (k === "opacity") opacity += 1;
+          }
+        }
+      } catch (e) { /* CSS animations can refuse getKeyframes */ }
+    }
+    for (const k in byName) byName[k].props = Object.keys(byName[k].props);
+    return { total: document.getAnimations().length, infinite, dash, transform, opacity, byName };
+  };
+
+  // ---- WHICH ELEMENTS TO FOLLOW ----------------------------------------
+  // Two versions of this were wrong, and the second failure is the
+  // interesting one.
+  //
+  // V1 took the first N elements over 80x40px, which selects headers, nav
+  // bars and section wrappers: exactly the things that do not move. SVG
+  // primitives are almost always under that threshold, so not one was ever
+  // sampled.
+  //
+  // V2 fixed the filter and still saw almost nothing, because it surveyed
+  // ONCE, at scroll zero, before any scrolling. On a page that is 81% pinned
+  // scenes, the only SVG children that exist at that instant are the hero's.
+  // Every drawing that mounts further down was never selectable, which is why
+  // a page running stroke-dashoffset across 48 and 101 paths reported
+  // dashoffset changing on exactly ONE element.
+  //
+  // So the survey now runs again as the page scrolls, adding whatever has
+  // mounted since. An element's first-seen frame is recorded, because on a
+  // page that mounts scenes, WHEN something appears is itself the effect.
+  const tracked = [];
+  const seen = new Set();
+  let svgKey = 0;
+
+  const survey = (frame) => {
+    const animatingEls = new Set();
+    for (const a of document.getAnimations()) {
+      const el = a.effect && a.effect.target;
+      if (el && el.nodeType === 1 && el.isConnected) animatingEls.add(el);
+    }
+    const svgPrims = [...document.querySelectorAll(
+      "svg path, svg circle, svg line, svg rect, svg polyline, svg polygon, svg ellipse, svg text")];
+    const boxes = [...document.querySelectorAll("body *")].filter(el => {
+      const r = el.getBoundingClientRect();
+      return r.width > 80 && r.height > 40;
+    });
+
+    const take = (list, cap) => {
+      // Stride rather than slice, so a 2,800-primitive drawing contributes a
+      // spread across the whole figure instead of its first few paths.
+      const fresh = list.filter(el => !seen.has(el));
+      const stride = Math.max(1, Math.floor(fresh.length / Math.max(cap, 1)));
+      let added = 0;
+      for (let i = 0; i < fresh.length && added < cap && tracked.length < maxTrack; i += stride) {
+        const el = fresh[i];
+        seen.add(el);
+        tracked.push({
+          el, id: tracked.length, born: frame,
+          tag: el.tagName.toLowerCase(),
+          cls: (el.getAttribute && el.getAttribute("class") || "").toString().slice(0, 28),
+          svg: !!el.ownerSVGElement,
+        });
+        added += 1;
+      }
+    };
+    take([...animatingEls], Math.round(trackN * 0.5));
+    take(svgPrims, Math.round(trackN * 0.4));
+    take(boxes, Math.round(trackN * 0.2));
+
+    // Stamp every svg with a stable key so the child census can be compared
+    // across frames. Sorting the census by size each frame would reorder it
+    // whenever a scene mounts, making every row look like it changed.
+    for (const sv of document.querySelectorAll("svg")) {
+      if (!sv.dataset.uxKey) sv.dataset.uxKey = "s" + (svgKey++);
+    }
+  };
+
+  survey(0);
+
+  let n = 0;
+  const step = () => {
+    // Re-survey as the page scrolls. A scene 9,000px down does not exist in
+    // the DOM at scroll zero, so without this it can never be followed.
+    if (n > 0 && n % RESURVEY === 0) survey(n);
+
+    const cs = tracked.map(t => {
+      // An element from a scene that has since unmounted. Recording it as
+      // zeroes would read as an animation to 0; `gone` says it left.
+      if (!t.el.isConnected) return { id: t.id, gone: 1 };
+      const st = getComputedStyle(t.el);
+      const r = t.el.getBoundingClientRect();
+      const rec = {
+        id: t.id,
+        o: +(+st.opacity).toFixed(3),
+        t: st.transform === "none" ? null : st.transform.slice(0, 44),
+        top: Math.round(r.top),
+        vis: r.bottom > 0 && r.top < window.innerHeight ? 1 : 0,
+      };
+      // SVG-only channels. Without these a draw-on is invisible to the
+      // capture, because nothing about opacity or transform changes while a
+      // path draws itself in.
+      if (t.svg) {
+        const off = parseFloat(st.strokeDashoffset);
+        if (!Number.isNaN(off)) rec.dashOff = +off.toFixed(4);
+        const w = parseFloat(st.strokeWidth);
+        if (!Number.isNaN(w)) rec.sw = +w.toFixed(3);
+        if (st.fill && st.fill !== "none") rec.fill = st.fill.slice(0, 24);
+        if (st.stroke && st.stroke !== "none") rec.stroke = st.stroke.slice(0, 24);
+
+        // GEOMETRY. The channel that was missing entirely, and the reason a
+        // six-stage transformation read as nothing: a grid of rects that
+        // SPREAD APART, then SHRINK AND ROTATE INTO DIAMONDS, changes none of
+        // opacity, transform or dashoffset. It changes its own width, height,
+        // radius and position, and those live on the element's own geometry
+        // rather than in its computed style. A capture blind to them reports
+        // a shape morph as a static element.
+        try {
+          const b = t.el.getBBox ? t.el.getBBox() : null;
+          if (b) {
+            rec.bw = +b.width.toFixed(2);
+            rec.bh = +b.height.toFixed(2);
+            rec.bx = +b.x.toFixed(2);
+            rec.by = +b.y.toFixed(2);
+          }
+        } catch (e) { /* getBBox throws on an unrendered element */ }
+        // The authored attributes too, because an animated `width` attribute
+        // and an animated transform produce the same bbox and are different
+        // techniques to copy.
+        for (const a of ["width", "height", "rx", "ry", "r", "x", "y", "d", "points"]) {
+          const v = t.el.getAttribute && t.el.getAttribute(a);
+          if (v != null) rec["a_" + a] = a === "d" || a === "points"
+            ? v.length                 // path data: track its LENGTH, since a
+                                       // morph changes it and storing every
+                                       // frame's full path blows the file up
+            : (isNaN(+v) ? v.slice(0, 16) : +(+v).toFixed(2));
+        }
+      }
+
+      // Colour, for any element. The reference's grid goes solid-fill, then
+      // outline, then a red bloom, then a wash: four states that are pure
+      // fill and border changes with no motion at all.
+      if (st.backgroundColor && st.backgroundColor !== "rgba(0, 0, 0, 0)")
+        rec.bg = st.backgroundColor.slice(0, 24);
+      if (st.borderTopColor && st.borderTopWidth !== "0px")
+        rec.bc = st.borderTopColor.slice(0, 24);
+      return rec;
+    });
+
+    frames.push({
+      f: n,
+      y: Math.round(window.scrollY),
+      a: animDigest(),
+      textOn: [...document.querySelectorAll("body *")].filter(e => {
+        if (e.children.length) return false;
+        const r = e.getBoundingClientRect();
+        return r.top < window.innerHeight && r.bottom > 0 && e.textContent.trim();
+      }).length,
+      svg: document.querySelectorAll("svg *").length,
+      // Per-SVG child census. The reference holds 42 rects constant while its
+      // text count goes 33 to 51: one number per svg is what makes that
+      // legible, and the page-wide total hides it.
+      // Per-SVG child census. The reference holds 42 rects constant while its
+      // text count goes 33 to 51: one number per svg is what makes that
+      // legible, and the page-wide total hides it.
+      //
+      // This took the FIRST 8 svgs in document order, which on a real page
+      // are the logo and the nav icons: one to three paths each, zero rects.
+      // The 42-rect grid sits far down the document and never made the cut,
+      // so the census ran on every frame and reported nothing but chrome.
+      // Now: every svg carrying real structure, keyed by its stamp so a row
+      // means the same drawing on every frame.
+      svgs: [...document.querySelectorAll("svg")]
+        .map(sv => ({
+          k: sv.dataset.uxKey || "?",
+          r: sv.querySelectorAll("rect").length,
+          p: sv.querySelectorAll("path").length,
+          c: sv.querySelectorAll("circle").length,
+          t: sv.querySelectorAll("text").length,
+          g: sv.querySelectorAll("g").length,
+          vb: sv.getAttribute("viewBox"),
+        }))
+        .filter(x => x.r + x.p + x.c + x.t >= 6)
+        .slice(0, 24),
+      // A scene that unmounts is a scroll effect, and counting live nodes is
+      // the only way to see it.
+      nodes: document.querySelectorAll("body *").length,
+      el: cs,
+    });
+
+    n += 1;
+    const atEnd = window.scrollY + window.innerHeight >=
+                  document.documentElement.scrollHeight - 2;
+    if (n >= maxFrames || atEnd) {
+      resolve({ frames, tracked: tracked.map(t => ({ id: t.id, tag: t.tag, cls: t.cls, svg: t.svg, born: t.born })) });
+      return;
+    }
+    window.scrollBy(0, perFrame);
+    requestAnimationFrame(step);
+  };
+
+  window.scrollTo(0, 0);
+  requestAnimationFrame(() => requestAnimationFrame(step));
+})"""
+
+FILM_PX_PER_FRAME = 9      # ~540px/sec at 60fps: slow enough that a 300ms
+                           # transition spans ~18 frames and reads as a curve.
+FILM_MAX_FRAMES = 2600     # ~23kpx of travel, past the tallest page measured.
+FILM_RESURVEY = 60         # Re-survey every 60 frames, so ~540px of travel.
+                           # Measured: the reference mounts a new scene roughly
+                           # every 1,350px, so this catches each one about
+                           # twice while it is on screen. Every 10 frames cost
+                           # 4x the survey time and found the same elements.
+FILM_MAX_TRACK = 260       # Ceiling on the growing tracked set. At 60fps the
+                           # per-frame read is the budget: 260 elements x ~14
+                           # channels held frame time under 16ms on the
+                           # reference. Past ~400 the rig drops frames, and a
+                           # dropped frame silently becomes a jump in the data.
+FILM_TRACK_N = 60          # Per survey, not total. Half animating elements,
+                           # large boxes. 26 was too few once SVG children were
+                           # eligible, and the drawing is where the effect lives.
+
+SCROLL_STEPS = 12          # 13 samples end to end, enough to see a pinned
+                           # scene build without a screenshot per pixel.
+
+FOCUSABLE = ("a[href]", "button", "input", "select", "textarea", "[tabindex]",
+             "[role=button]", "summary")
+
+
+def capture(page, name, out_dir, cap=900):
+    """One state: what animates, what computed, what it looks like."""
+    shot = out_dir / f"{name}.png"
+    try:
+        page.screenshot(path=str(shot))
+    except Exception:
+        shot = None
+    try:
+        anims = page.evaluate(ANIMS_JS)
+    except Exception:
+        anims = []
+    try:
+        styles = page.evaluate(STYLES_JS, cap)
+    except Exception:
+        styles = []
+    try:
+        shape = page.evaluate(SHAPE_JS)
+    except Exception:
+        shape = {}
+    return {"state": name, "animations": anims, "styles": styles,
+            "shape": shape, "shot": shot.name if shot else None}
+
+
+def drive(page, out_dir, states, settle, skipped):
+    """The part nobody else does: put the interface into each state.
+
+    Every failure appends to `skipped` and is printed. A capture tool that
+    swallows errors reports a clean run over missing data, which is worse than
+    crashing. The first version of this silently dropped EVERY focus state,
+    because ElementHandle.focus() takes no timeout kwarg, and the run still
+    looked successful.
+    """
+    obs = [capture(page, "load", out_dir)]
+
+    if "film" in states:
+        # The continuous version. Produces one row per animation frame rather
+        # than one per stop, so a scroll-linked curve is visible as a curve.
+        try:
+            film = page.evaluate(
+                FILM_JS,
+                {"perFrame": FILM_PX_PER_FRAME, "maxFrames": FILM_MAX_FRAMES,
+                 "trackN": FILM_TRACK_N, "maxTrack": FILM_MAX_TRACK,
+                 "RESURVEY": FILM_RESURVEY},
+            )
+            (out_dir / "film.json").write_text(json.dumps(film))
+            f = film.get("frames", [])
+            print(f"  film            {len(f):>4} frames   "
+                  f"{f[-1]['y'] if f else 0}px travelled")
+        except Exception as e:                            # noqa: BLE001
+            skipped.append(f"film: {type(e).__name__} {str(e)[:60]}")
+        try:
+            page.evaluate("window.scrollTo(0, 0)")
+            page.wait_for_timeout(300)
+        except Exception:
+            pass
+
+    if "scroll" in states:
+        # The hole this tool documented about itself and then kept.
+        # motion/measured-motion.md: "ux-viewer motion currently has exactly
+        # this hole: it watches the entrance and nothing else." Everything
+        # interesting about a modern landing page happens past the entrance,
+        # and on 2026-09-23 the whole of uselemma.ai's scroll choreography had
+        # to be reverse-engineered by hand because this could not reach it.
+        #
+        # Walks the document in even steps and captures at each. Settle is
+        # longer than the other states because smooth-scroll libraries like
+        # Lenis interpolate, so sampling immediately reads the previous frame.
+        try:
+            doc_h = page.evaluate("document.documentElement.scrollHeight")
+            vh = page.evaluate("window.innerHeight")
+            span = max(0, doc_h - vh)
+        except Exception as e:                            # noqa: BLE001
+            span = 0
+            skipped.append(f"scroll: measure {type(e).__name__}")
+        if span > 0:
+            for i in range(SCROLL_STEPS + 1):
+                y = round(span * i / SCROLL_STEPS)
+                try:
+                    page.evaluate(f"window.scrollTo(0, {y})")
+                    page.wait_for_timeout(max(settle, 500))
+                    obs.append(capture(page, f"scroll-{i:02d}", out_dir, cap=220))
+                except Exception as e:                    # noqa: BLE001
+                    skipped.append(f"scroll {y}: {type(e).__name__} {str(e)[:50]}")
+            try:
+                page.evaluate("window.scrollTo(0, 0)")
+                page.wait_for_timeout(300)
+            except Exception:
+                pass
+        else:
+            skipped.append("scroll: page does not scroll")
+
+    if "hover" in states:
+        # Most motion in a real system lives on hover, and a load-only crawl
+        # never sees a frame of it.
+        try:
+            els = page.query_selector_all("button, a[href], [role=button]")[:6]
+        except Exception as e:                            # noqa: BLE001
+            els = []
+            skipped.append(f"hover: query {type(e).__name__}")
+        for i, el in enumerate(els):
+            try:
+                el.hover(timeout=2500)
+                page.wait_for_timeout(450)
+                obs.append(capture(page, f"hover-{i}", out_dir, cap=250))
+            except Exception as e:                        # noqa: BLE001
+                skipped.append(f"hover {i}: {type(e).__name__} {str(e)[:50]}")
+
+    if "focus" in states:
+        # Focus rings are the most common accessibility defect and are
+        # invisible to every static extractor.
+        for sel in FOCUSABLE:
+            try:
+                el = page.query_selector(sel)
+            except Exception as e:                        # noqa: BLE001
+                skipped.append(f"focus {sel}: query {type(e).__name__}")
+                continue
+            if not el:
+                continue
+            try:
+                el.focus()          # no timeout kwarg on ElementHandle.focus
+                page.wait_for_timeout(250)
+                safe = re.sub(r"[^a-z0-9]+", "-", sel.lower()).strip("-")
+                obs.append(capture(page, f"focus-{safe}", out_dir, cap=250))
+            except Exception as e:                        # noqa: BLE001
+                skipped.append(f"focus {sel}: {type(e).__name__} {str(e)[:50]}")
+
+    if "submit" in states:
+        # An empty submit is the cheapest way to see the error design, which
+        # is the part of a system that never appears in a style guide.
+        try:
+            form = page.query_selector("form")
+            if form:
+                btn = form.query_selector("button, input[type=submit]")
+                if btn:
+                    btn.click(timeout=2500)
+                    page.wait_for_timeout(900)
+                    obs.append(capture(page, "submit-empty", out_dir))
+                else:
+                    skipped.append("submit: form has no submit control")
+            else:
+                skipped.append("submit: no form on page")
+        except Exception as e:                            # noqa: BLE001
+            skipped.append(f"submit: {type(e).__name__} {str(e)[:50]}")
+
+    if "narrow" in states:
+        try:
+            page.set_viewport_size({"width": 375, "height": 812})
+            page.wait_for_timeout(settle)
+            obs.append(capture(page, "narrow-375", out_dir))
+        except Exception as e:                            # noqa: BLE001
+            skipped.append(f"narrow: {type(e).__name__} {str(e)[:50]}")
+
+    if "reduced" in states:
+        try:
+            page.emulate_media(reduced_motion="reduce")
+            page.reload(wait_until="load", timeout=30000)
+            page.wait_for_timeout(settle)
+            obs.append(capture(page, "reduced-motion", out_dir, cap=120))
+        except Exception as e:                            # noqa: BLE001
+            skipped.append(f"reduced: {type(e).__name__} {str(e)[:50]}")
+    return obs
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("url")
+    ap.add_argument("--out", default=None)
+    ap.add_argument("--states", default="film,hover,focus,submit,narrow,reduced")
+    ap.add_argument("--settle", type=int, default=3000)
+    ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--height", type=int, default=900)
+    a = ap.parse_args()
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("BLOCKED: pip3 install playwright", file=sys.stderr)
+        return 1
+
+    slug = a.url.replace("https://", "").replace("http://", "")
+    slug = "".join(c if c.isalnum() else "-" for c in slug).strip("-")[:40]
+    out_dir = pathlib.Path(a.out) if a.out else ROOT / "lenses" / slug
+    out_dir.mkdir(parents=True, exist_ok=True)
+    states = {s.strip() for s in a.states.split(",") if s.strip()}
+
+    with sync_playwright() as pw:
+        try:
+            b = pw.chromium.launch(channel="chrome", args=["--hide-scrollbars"])
+        except Exception:
+            b = pw.chromium.launch(args=["--hide-scrollbars"])
+        page = b.new_page(viewport={"width": a.width, "height": a.height})
+        try:
+            page.goto(a.url, wait_until="networkidle", timeout=45000)
+        except Exception:
+            try:
+                page.goto(a.url, wait_until="load", timeout=45000)
+            except Exception as e:                        # noqa: BLE001
+                print(f"navigation failed: {e}", file=sys.stderr)
+                b.close()
+                return 1
+        page.wait_for_timeout(a.settle)
+        skipped = []
+        obs = drive(page, out_dir, states, a.settle, skipped)
+        b.close()
+
+    raw = {"url": a.url, "states": sorted(states),
+           "skipped": skipped, "observations": obs}
+    (out_dir / "raw.json").write_text(json.dumps(raw, indent=1))
+
+    n_anim = sum(len(o["animations"]) for o in obs)
+    n_style = sum(len(o["styles"]) for o in obs)
+    print(f"{len(obs)} STATE(S) CAPTURED")
+    for o in obs:
+        print(f"  {o['state']:<16} {len(o['animations']):>4} animation(s)  "
+              f"{len(o['styles']):>4} element(s)")
+    if skipped:
+        print(f"\n{len(skipped)} STATE(S) SKIPPED, printed rather than swallowed")
+        for x in skipped[:8]:
+            print(f"  {x}")
+    print(f"\n{n_anim} animation observations, {n_style} element observations")
+    print(f"raw -> {out_dir / 'raw.json'}")
+    print("\nNo style guide was written. See SCRAPE-PLAN.md: prose is the "
+          "worst-measured\nformat for this. Next: tools/lens.py for "
+          "contrastive pairs and assertions.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

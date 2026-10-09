@@ -7,7 +7,7 @@
 #   chewbacca api teach <site> <op> --trigger <url> --example k=v ...
 #                                      learn a new operation (api-anything add)
 #   chewbacca api login <site>         import a session from a signed-in browser
-#                                      (brightspace: from the Work Chrome profile)
+#                                      (brightspace, handshake: from the Work Chrome profile)
 #   chewbacca api sync                 load the kit's taught sites into the engine
 #   chewbacca api install              build the engine, wire MCP into Claude and Codex
 #
@@ -182,6 +182,10 @@ sync_sites() {
   local f base dest tmp copied=0
   for f in "$KIT_SITES"/*.json; do
     [ -f "$f" ] || continue
+    # Other tools keep config beside the specs (x-timeline.json is a note, a
+    # timeline and a user, no operations). Skipping it installs nothing, the
+    # safe side; refusing it printed a warning on every call.
+    python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d,dict) and ("operations" in d or "baseUrl" in d) else 1)' "$f" 2>/dev/null || continue
     base="$(basename "$f")"
     dest="$ENGINE_HOME/sites/$base"
     if [ -f "$dest" ] && ! [ "$f" -nt "$dest" ]; then
@@ -211,37 +215,117 @@ sync_sites() {
   [ "${1:-}" = "--quiet" ] || say "synced $copied site(s) from the kit"
 }
 
-# Brightspace's d2l login cookies have no expiry, and the engine's own Chrome
-# drops cookies like that on every restart, so a plain profile import never
-# held (2026-10-10: every capture bounced to USC SSO). Instead this reads the
-# four d2l cookies the way bin/brightspace does, gives them a 12 hour expiry,
-# imports them from a private temp file, and deletes the file.
-login_brightspace() {
-  local dir rc
+# Some sites' login cookies have no expiry, and the engine's own Chrome drops
+# cookies like that on every restart, so a plain profile import never holds
+# (2026-10-10: Brightspace bounced to USC SSO on every capture, Handshake
+# answered not_logged_in). For those, this reads the site's cookies straight
+# from the Work Chrome profile's cookie store (the decryption bin/brightspace
+# uses), gives them a 12 hour expiry, imports them from a private temp file,
+# and deletes the file. One line per site: name, cookie host suffixes (comma
+# separated), and a cookie-name prefix ("-" for all of those hosts' cookies).
+# usc-reg needs the Microsoft sign-in cookies because webreg signs in through
+# Entra; Caleb approved importing that session on 2026-10-10.
+PROFILE_LOGIN_SITES="brightspace brightspace.usc.edu d2l
+handshake joinhandshake.com -
+usc-reg webreg.usc.edu,my.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com -"
+
+profile_login_row() { printf '%s\n' "$PROFILE_LOGIN_SITES" | awk -v s="$1" '$1 == s'; }
+
+login_from_profile() {
+  local row host prefix dir rc
+  row="$(profile_login_row "$1")"
+  host="$(printf '%s' "$row" | awk '{print $2}')"
+  prefix="$(printf '%s' "$row" | awk '{print $3}')"
+  # Chrome's own Brightspace session lapses too (2026-10-10: a 403 hours
+  # after a good import). bin/brightspace renews it by reopening the site in
+  # the Work profile, so check it first and import what that leaves.
+  [ "$1" = brightspace ] && python3 "$ROOT/bin/brightspace" whoami >/dev/null 2>&1
   dir="$(mktemp -d)" || return 1
   chmod 700 "$dir"
-  if ! python3 - "$ROOT/bin/brightspace" "$dir/cookies.json" <<'PY'
-import importlib.machinery, importlib.util, json, os, sys, time
-loader = importlib.machinery.SourceFileLoader("brightspace", sys.argv[1])
-spec = importlib.util.spec_from_loader("brightspace", loader)
-mod = importlib.util.module_from_spec(spec); loader.exec_module(mod)
-jar = {k: v for k, v in mod.chrome_cookies().items() if k.lower().startswith("d2l")}
-if not jar:
-    sys.exit("no Brightspace session in the Work Chrome profile; open brightspace.usc.edu there once")
+  if ! python3 - "$host" "$prefix" "$dir/cookies.json" "${CHEWIE_CHROME_PROFILE:-}" <<'PY'
+import hashlib, json, os, shutil, sqlite3, subprocess, sys, tempfile, time
+from pathlib import Path
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+hosts, prefix, out, profile = sys.argv[1:5]
+hosts = [h for h in hosts.split(",") if h]
+chrome = Path.home() / "Library/Application Support/Google/Chrome"
+query = ("select host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc"
+         " from cookies where host_key = ? or host_key = ? or host_key like ?")
+
+def read(db):
+    with tempfile.TemporaryDirectory() as tmp:
+        copy = Path(tmp) / "Cookies"
+        shutil.copy(db, copy)
+        con = sqlite3.connect(copy)
+        return [r for h in hosts for r in con.execute(query, (h, "." + h, "%." + h)).fetchall()]
+
+# Any student, any Mac: with no profile named, use whichever Chrome profile
+# touched these hosts' cookies most recently. Caleb's USC login lives in
+# "Profile 1" and a classmate's will be somewhere else.
+if profile:
+    rows = read(chrome / profile / "Cookies")
+else:
+    best, rows = -1, []
+    for db in sorted(chrome.glob("*/Cookies")):
+        try:
+            found = read(db)
+        except Exception:
+            continue
+        seen = max((r[6] for r in found), default=-1)
+        if found and seen > best:
+            best, rows, profile = seen, found, db.parent.name
+secret = subprocess.check_output(["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]).strip()
+key = hashlib.pbkdf2_hmac("sha1", secret, b"saltysalt", 1003, 16)
 expires = int(time.time()) + 12 * 3600
-rows = [{"name": k, "value": v, "domain": "brightspace.usc.edu", "path": "/", "expires": expires,
-         "httpOnly": True, "secure": True, "sameSite": "Lax"} for k, v in jar.items()]
-fd = os.open(sys.argv[2], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+jar = []
+for hk, name, blob, path, secure, httponly, _ in rows:
+    if prefix != "-" and not name.lower().startswith(prefix):
+        continue
+    dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
+    raw = dec.update(blob[3:]) + dec.finalize()
+    raw = raw[: -raw[-1]]
+    try:
+        raw[:32].decode(); value = raw.decode()
+    except UnicodeDecodeError:
+        value = raw[32:].decode()
+    jar.append({"name": name, "value": value, "domain": hk, "path": path or "/", "expires": expires,
+                "httpOnly": bool(httponly), "secure": bool(secure), "sameSite": "Lax"})
+if not jar:
+    sys.exit(f"no {hosts[0]} session in any Chrome profile; sign in there once in Chrome")
+fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, "w") as f:
-    json.dump(rows, f)
+    json.dump(jar, f)
 PY
   then
     rm -rf "$dir"
     return 1
   fi
-  api-anything login brightspace --cookies "$dir/cookies.json" >/dev/null; rc=$?
+  # The engine keeps only cookies on the site's own domain, so a sign-in that
+  # crosses domains (webreg through login.microsoftonline.com) loses the
+  # foreign half. Import each other domain's cookies under that domain too,
+  # which puts them in the engine's Chrome profile where the sign-in runs.
+  python3 - "$dir/cookies.json" "$dir" <<'PY'
+import json, sys
+rows = json.load(open(sys.argv[1]))
+root = lambda h: ".".join(h.lstrip(".").split(".")[-2:])
+groups = {}
+for r in rows:
+    groups.setdefault(root(r["domain"]), []).append(r)
+for dom, part in groups.items():
+    with open(f"{sys.argv[2]}/extra-{dom}.json", "w") as f:
+        json.dump(part, f)
+PY
+  local extra dom siteroot
+  siteroot="$(printf '%s' "$host" | cut -d, -f1 | awk -F. '{print $(NF-1)"."$NF}')"
+  for extra in "$dir"/extra-*.json; do
+    [ -f "$extra" ] || continue
+    dom="${extra##*/extra-}"; dom="${dom%.json}"
+    [ "$dom" = "$siteroot" ] && continue
+    api-anything login "$dom" --cookies "$extra" >/dev/null 2>&1
+  done
+  api-anything login "$1" --cookies "$dir/cookies.json" >/dev/null; rc=$?
   rm -rf "$dir"
-  [ "$rc" -eq 0 ] && say "Brightspace session imported for 12 hours"
+  [ "$rc" -eq 0 ] && say "$1 session imported for 12 hours"
   return "$rc"
 }
 
@@ -261,9 +345,9 @@ case "$cmd" in
     # A login changes which kit specs are safe, so re-check them after it,
     # not only before the next call.
     need_engine || exit 1
-    if [ "${1:-}" = brightspace ]; then
+    if [ -n "${1:-}" ] && [ -n "$(profile_login_row "$1")" ]; then
       sync_sites --quiet
-      login_brightspace; rc=$?
+      login_from_profile "$1"; rc=$?
     else
       api-anything login "$@"; rc=$?
     fi

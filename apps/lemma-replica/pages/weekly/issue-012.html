@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Context that went stale at step nine, Sift Weekly 012</title>
+    <meta
+      name="description"
+      content="A travel agent quoted a fare it had fetched eight steps earlier, after a later search showed the price change."
+    />
+    <link rel="stylesheet" href="../../src/styles.css" />
+    <link rel="stylesheet" href="../../src/sections/lower.css" />
+    <link rel="stylesheet" href="../../src/sections/chrome.css" />
+    <link rel="stylesheet" href="../../src/sections/states.css" />
+    <link rel="stylesheet" href="../../src/pages/pages.css" />
+  </head>
+  <body data-nav="weekly">
+    <div id="site-chrome"></div>
+
+    <main id="top">
+      <div class="pg-frame pg-frame-narrow">
+        <header class="pg-doc-head">
+          <a class="pg-back" href="../weekly.html"
+            ><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true">
+              <path
+                d="M9 5H1.5M4.5 2 1.5 5l3 3"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.2"
+              /></svg
+            >All issues</a
+          >
+          <p class="pg-eyebrow">
+            Sift Weekly<span class="pg-dot" aria-hidden="true">&middot;</span
+            >Issue 012
+          </p>
+          <h1>Context that went stale at step nine</h1>
+          <p class="pg-lead">
+            A travel agent quoted a fare it had fetched eight steps earlier,
+            after a later search had already shown the price change.
+          </p>
+          <time datetime="2026-09-11">September 11, 2026</time>
+        </header>
+        <div class="pg-byline">
+          <div class="pg-byline-l">
+            <span class="pg-author"
+              ><svg
+                width="14"
+                height="14"
+                viewBox="0 0 14 14"
+                aria-hidden="true"
+              >
+                <path
+                  d="M7 1.5 12.5 12h-11z"
+                  fill="none"
+                  stroke="currentColor"
+                /></svg
+              >Theo Banerjee</span
+            >
+            <span>Co-founder</span>
+          </div>
+          <div class="pg-byline-r">
+            <span class="pg-read"
+              ><svg
+                width="13"
+                height="13"
+                viewBox="0 0 14 14"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="7"
+                  cy="7"
+                  r="5.5"
+                  fill="none"
+                  stroke="currentColor"
+                />
+                <path
+                  d="M7 4v3.2l2 1.3"
+                  fill="none"
+                  stroke="currentColor"
+                /></svg
+              >4 min read</span
+            >
+            <button class="pg-copy" type="button" data-copy-link>
+              <svg
+                width="11"
+                height="11"
+                viewBox="0 0 12 12"
+                aria-hidden="true"
+              >
+                <path
+                  d="M5 7 7 5M4.2 5.4 2.6 7a2 2 0 0 0 2.8 2.8l1.6-1.6M7.8 6.6 9.4 5a2 2 0 0 0-2.8-2.8L5 3.8"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.1"
+                /></svg
+              ><span data-label>Copy link</span>
+            </button>
+          </div>
+        </div>
+
+        <article class="pg-issue-body pg-prose pg-band">
+          <p>
+            A booking agent searched for a fare at step one, explored three
+            alternatives, came back to the first option at step nine, and quoted
+            the customer the price from step one. A search at step six had
+            already returned the same flight at a higher price.
+          </p>
+          <p>
+            The customer booked, the card was charged the new price, and the
+            complaint arrived within the hour.
+          </p>
+
+          <p class="pg-eyebrow">The failure</p>
+          <h2>Two values for one fact</h2>
+          <p>
+            The run held two prices for one flight. The model picked the earlier
+            one, probably because it sat next to the flight details in the
+            context, while the later price arrived in a long list of other
+            results.
+          </p>
+          <p>
+            Neither value was invented. The answer was still wrong, because it
+            used a fact the run itself had already replaced.
+          </p>
+
+          <aside class="pg-note">
+            <h3>For your team</h3>
+            <p>
+              When a tool can return a value that changes over time, prices,
+              stock, availability, put the fetch time in the result. It costs a
+              few tokens and gives the model, and you, a way to tell which value
+              is current.
+            </p>
+          </aside>
+
+          <p class="pg-eyebrow">The check</p>
+          <h2>Latest value wins</h2>
+          <p>
+            Sift links each fact in the final answer to every step that mentions
+            it. If a later step gives a different value, the answer is flagged
+            as using stale support, with both steps shown side by side.
+          </p>
+        </article>
+
+        <section class="pg-sub pg-band" aria-labelledby="sub-h">
+          <h2 id="sub-h">Get the next one</h2>
+          <p>
+            Every past issue stays on this site. The next one goes to your inbox
+            on Friday morning.
+          </p>
+          <form class="lw-form" data-newsletter>
+            <label class="pg-sr" for="is-email">Email address</label>
+            <input
+              class="lw-input"
+              id="is-email"
+              type="email"
+              name="email"
+              placeholder="you@work.com"
+              autocomplete="email"
+            />
+            <button class="lw-submit" type="submit">Get Sift Weekly</button>
+          </form>
+          <p class="pg-status" data-status>
+            One email a week. Unsubscribe from any issue.
+          </p>
+        </section>
+
+        <a class="pg-prev" href="../weekly.html">
+          <p class="pg-eyebrow">First issue on this site</p>
+          <h3>Back to every issue</h3>
+        </a>
+      </div>
+    </main>
+
+    <div id="lower-footer"></div>
+    <script type="module" src="../../src/pages/chrome.js"></script>
+  </body>
+</html>

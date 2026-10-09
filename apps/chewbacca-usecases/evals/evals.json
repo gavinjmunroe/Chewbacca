@@ -1,0 +1,258 @@
+{
+  "name": "chewbacca-use-cases",
+  "description": "Every use case whose command can be checked without a human reading the output.",
+  "cases": [
+    {
+      "id": 1,
+      "ask": "What is my friend into, musically?",
+      "command": "people show \"Jeremy Karkafi\"",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 7,
+      "ask": "What did they ask me for that I never did?",
+      "command": "people tasks",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 23,
+      "ask": "Do I owe them money, or they me?",
+      "command": "people loans",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 26,
+      "ask": "Who am I losing touch with?",
+      "command": "people reconnect",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 27,
+      "ask": "Who was I close to two years ago and never talk to now?",
+      "command": "people trend --days 730",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 28,
+      "ask": "Who is warming up?",
+      "command": "people trend",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 30,
+      "ask": "Who have I been meaning to call?",
+      "command": "people tasks",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 33,
+      "ask": "Give me five people to text today.",
+      "command": "people today",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 35,
+      "ask": "Which of my closest people am I overdue with?",
+      "command": "people reconnect",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 37,
+      "ask": "Who could introduce me to someone at Anthropic?",
+      "command": "people intro Anthropic",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 38,
+      "ask": "Who in my network works in health tech in LA?",
+      "command": "people search \"health\"",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 41,
+      "ask": "Which YC founders do I know?",
+      "command": "people search \"YC\"",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 43,
+      "ask": "Who should I ask about design?",
+      "command": "people search design",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 46,
+      "ask": "What is this group chat and who is in it?",
+      "command": "people classify",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 47,
+      "ask": "Which group chats am I actually active in?",
+      "command": "people circles",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 48,
+      "ask": "Who is in my church community versus my startup community?",
+      "command": "people classify",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 52,
+      "ask": "Whose birthday is coming up?",
+      "command": "people birthdays",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 54,
+      "ask": "What happened on this day in previous years?",
+      "command": "people today",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 56,
+      "ask": "What anniversaries or hard dates should I remember for someone?",
+      "command": "people dates",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 58,
+      "ask": "What did I do last Saturday and who with?",
+      "command": "people events scan --days 7",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 60,
+      "ask": "Is anyone in here duplicated?",
+      "command": "people dedupe",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 61,
+      "ask": "Are all my messages attributed to the right person?",
+      "command": "people check",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 62,
+      "ask": "Which senders does the store not recognise?",
+      "command": "people alias",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 63,
+      "ask": "Work out who an unknown number is from context.",
+      "command": "people identify",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 64,
+      "ask": "Is my data self-consistent?",
+      "command": "people check --fix",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 66,
+      "ask": "Delete everything about one person.",
+      "command": "people purge \"Name\" --yes",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 68,
+      "ask": "What do I actually know about myself in here?",
+      "command": "people me",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 70,
+      "ask": "What are my own verified numbers?",
+      "command": "people me --search caution",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 71,
+      "ask": "What have I said I want to do with my life?",
+      "command": "people me --search mission",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 72,
+      "ask": "What did I try that failed?",
+      "command": "people me --search failed",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 74,
+      "ask": "Which of my claims cannot be sourced?",
+      "command": "people me --search caution",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 84,
+      "ask": "Export what I know as markdown I can read.",
+      "command": "people export",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 85,
+      "ask": "Show me a dashboard of my whole network.",
+      "command": "people dashboard",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 87,
+      "ask": "Turn this week's new messages into facts automatically.",
+      "command": "people distill",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 88,
+      "ask": "Notice a life event in the messages without me logging it.",
+      "command": "people events scan",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 89,
+      "ask": "Keep scores current as conversations happen.",
+      "command": "people score",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 90,
+      "ask": "Back up the store somewhere private.",
+      "command": "people sync push",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 91,
+      "ask": "Tell me when the store has drifted from reality.",
+      "command": "people check",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 92,
+      "ask": "Import a new contact source without creating duplicates.",
+      "command": "people import --mac",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 94,
+      "ask": "Never re-read a message I have already extracted from.",
+      "command": "people distill",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 95,
+      "ask": "Run the whole maintenance pass unattended.",
+      "command": "launchctl kickstart gui/$UID/com.calebnewton.people-sync",
+      "expect": "exit 0 and non-empty output"
+    },
+    {
+      "id": 99,
+      "ask": "Who is new in my life and worth investing in?",
+      "command": "people list --recent",
+      "expect": "exit 0 and non-empty output"
+    }
+  ]
+}

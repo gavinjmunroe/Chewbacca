@@ -10,7 +10,7 @@
      "actions": [
        {"find": [{"css": "button", "text": "Find leads"}], "do": "click",
         "expect": {"text": "Search directly"}, "timeout_s": 10},
-       {"find": [{"css": "button", "text": "People"}], "do": "click",
+       {"find": [{"css": "button", "text": "People", "section": "Search directly"}], "do": "click",
         "expect": {"url": "/chats/"}, "timeout_s": 15},
        {"find": [{"css": "[role=tab]", "text": "Chat"}, {"css": "button", "text": "Chat"}], "do": "click",
         "expect": {"css": "textarea"}, "timeout_s": 10},

@@ -64,6 +64,14 @@ HANDOFF = [
      "'you'll have to ...'"),
     (r"\bmake sure (?:you|to)\s+(?:run|install|set|add)\b", "'make sure you run ...'"),
     (r"\bdon'?t forget to\s+(?:run|install|set|add)\b", "'don't forget to run ...'"),
+    # A lookup is work too. On 2026-10-09 a reply ended "Check the $500 edu
+    # price on apple.com before u send it", Caleb said "never tell me to do
+    # smth you can do", and the price the agent had guessed was wrong: Apple
+    # had raised it to $799. A sentence that opens on a check verb and points
+    # at a send is a lookup handed over.
+    (r"(?:^|(?<=[.!?]\s)|(?<=\n))\s*(?:double[- ]?check|check|verify|confirm|look up)\b"
+     r"[^\n]{0,100}?\bbefore (?:(?:you|u) )?(?:send|sending|quot|post|submit|buy|text)",
+     "'check X before you send'"),
 ]
 
 # A command block introduced as an instruction rather than a report.

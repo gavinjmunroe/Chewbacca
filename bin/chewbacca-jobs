@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """chewbacca jobs: one queue for every long or heavy job on this Mac, owned by the Mac, not a tab.
 
-  chewbacca jobs submit [--heavy|--net] [--title T] -- <command...>   queue it (starts now if there's room)
+  chewbacca jobs submit [--heavy|--build|--net] [--title T] -- <command...>   queue it (starts now if there's room)
   chewbacca jobs list [--all]                                          what's queued, running, paused, done
   chewbacca jobs log <id> [-n N]                                       tail a job's output
   chewbacca jobs kill <id>                                             stop it
@@ -20,12 +20,20 @@ work here, and this runner decides when the Mac has room.
 
 THE BUDGET.
   heavy  local inference, transcription, renders: one at a time, admitted only
-         while the 1-minute load is under 60% of cores and at least 20% of
+         while the 1-minute load is under 130% of cores and at least 20% of
          memory is free, run at nice 19. A running heavy job is PAUSED
-         (SIGSTOP) when load passes 90% of cores or free memory drops under
-         10%, and resumed when there's room again. Thresholds are guessed,
-         never measured; the 2026-10-10 lag was load 80+ on 14 cores with
-         about 74 MB free.
+         (SIGSTOP) when load passes 250% of cores or free memory drops under
+         10%, and resumed when there's room again. Measured on this Mac
+         (14 cores): the 2026-10-10 lag was load 80+ with about 74 MB free,
+         and 177 while every tab restarted; with a dozen idle agent tabs the
+         Mac was usable at load 14 to 17 with 48% free. The first thresholds
+         (60% and 90%, so 8.4 and 12.6) sat under that idle floor, so nothing
+         heavy was ever admitted: a 2-minute Swift build waited 50 minutes
+         behind a transcription job paused at load 14.7.
+  build  compiles and test runs that finish in minutes: one at a time, same
+         room check as heavy, nice 10, and a running heavy job is held
+         paused until the build ends, so a build never waits hours behind a
+         long transcription and the Mac still runs one heavy thing at a time.
   net    downloads, API crawls: up to 4 at once, nice 10.
   light  everything else: no limit.
 
@@ -45,9 +53,9 @@ import time
 import uuid
 
 DIR = pathlib.Path(os.environ.get("JOBS_DIR", pathlib.Path.home() / ".chewbacca" / "jobs"))
-CORES = os.cpu_count() or 8
+CORES = int(os.environ.get("JOBS_CORES") or os.cpu_count() or 8)
 MAX_NET = 4
-NICE = {"heavy": 19, "net": 10, "light": 0}
+NICE = {"heavy": 19, "build": 10, "net": 10, "light": 0}
 
 
 # ------------------------------------------------------------ machine state
@@ -70,11 +78,11 @@ def mem_free_pct():
 
 
 def room_for_heavy():
-    return load1() < 0.6 * CORES and mem_free_pct() >= 20
+    return load1() < 1.3 * CORES and mem_free_pct() >= 20
 
 
 def must_pause():
-    return load1() > 0.9 * CORES or mem_free_pct() < 10
+    return load1() > 2.5 * CORES or mem_free_pct() < 10
 
 
 # ------------------------------------------------------------------ store
@@ -124,10 +132,12 @@ def submit(argv):
             cls = "heavy"
         elif a == "--net":
             cls = "net"
+        elif a == "--build":
+            cls = "build"
         elif a == "--title":
             title = argv.pop(0)
     if not argv or argv[0] != "--" or len(argv) < 2:
-        sys.exit("usage: chewbacca jobs submit [--heavy|--net] [--title T] -- <command...>")
+        sys.exit("usage: chewbacca jobs submit [--heavy|--build|--net] [--title T] -- <command...>")
     cmd = argv[1:]
     j = {"id": time.strftime("%m%d-%H%M%S-") + uuid.uuid4().hex[:4], "cmd": cmd, "cwd": os.getcwd(),
          "class": cls, "title": title or " ".join(cmd)[:80], "status": "queued",
@@ -179,21 +189,38 @@ def _tick():
         if j["status"] in ("running", "paused") and not alive(j["pid"]):
             j.update(status="failed", exit=j.get("exit"), ended=time.time(), note="supervisor gone")
             save(j)
+    # Builds go first and take the machine from a long heavy job while they
+    # run. 2026-10-09: a 2-minute Swift build sat behind a 230-video
+    # transcription that had the one heavy slot for hours. A build is short,
+    # so the long job is held paused (SIGSTOP) until the build ends, which
+    # keeps one CPU-heavy thing running at a time.
+    building = [j for j in all_jobs if j["class"] == "build" and j["status"] == "running"]
+    for j in sorted((j for j in all_jobs if j["status"] == "queued" and j["class"] == "build"),
+                    key=lambda j: j["created"]):
+        if building or not room_for_heavy():
+            break
+        start(j)
+        building = [j]
     heavy = [j for j in all_jobs if j["class"] == "heavy" and j["status"] in ("running", "paused")]
-    # Pause or resume the heavy job against the machine, before admitting more.
+    # Pause or resume the heavy job against the machine and any running
+    # build, before admitting more.
     for j in heavy:
-        if j["status"] == "running" and must_pause():
+        if j["status"] == "running" and (building or must_pause()):
             signal_group(j, signal.SIGSTOP)
             j["status"] = "paused"
+            j["note"] = "yielded to a build" if building else None
             save(j)
-        elif j["status"] == "paused" and room_for_heavy():
+        elif j["status"] == "paused" and not building and room_for_heavy():
             signal_group(j, signal.SIGCONT)
             j["status"] = "running"
+            j["note"] = None
             save(j)
     running_net = sum(1 for j in all_jobs if j["class"] == "net" and j["status"] == "running")
     for j in sorted((j for j in all_jobs if j["status"] == "queued"), key=lambda j: j["created"]):
+        if j["class"] == "build":
+            continue
         if j["class"] == "heavy":
-            if heavy or not room_for_heavy():
+            if heavy or building or not room_for_heavy():
                 continue
             start(j)
             heavy = [j]

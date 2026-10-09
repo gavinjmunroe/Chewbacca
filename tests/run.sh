@@ -98,6 +98,18 @@ export BOB_DECISIONS="$TMP/decisions.jsonl"
 # brain-recall and skill-route log every prompt they see; without this, every
 # suite run would write its test prompts into the real private shadow log.
 export ROUTE_SHADOW_LOG="$TMP/route-shadow.jsonl"
+# Backlog 515: a group run once rewrote setup.sh and toolkit.json with this
+# machine's inventory and nobody could say which. tools/inventory.py refuses
+# under this flag, and the fingerprint below fails the group that changed a
+# generated file anyway, by name.
+export CHEWBACCA_SUITE=1
+generated_fingerprint() {
+  { cat "$ROOT/config/settings/toolkit.json" 2>/dev/null
+    for f in README.md setup.sh docs/REFERENCE.md; do
+      sed -n '/BEGIN GENERATED/,/END GENERATED/p' "$ROOT/$f" 2>/dev/null
+    done; } | shasum | cut -c1-16
+}
+GENERATED_BEFORE="$(generated_fingerprint)"
 
 group() { CURRENT="$1"; [ -n "$ONLY" ] && [ "$ONLY" != "$1" ] && return 1
           echo -e "\n${BLD}$1${NC}"; return 0; }
@@ -647,6 +659,15 @@ if group "installer"; then
   check  "chewbacca api syncs taught sites without clobbering a healed spec" \
     bash "$ROOT/tests/chewbacca_api.sh" "$ROOT"
 
+  # 2026-10-10: Caleb, "Chewb needs to change the life of EVERY USC STUDENT".
+  # The day view has to work from a classmate's Mac with no edits, and one
+  # signed-out site must not take the other sections down.
+  check  "chewbacca usc shows this term's due items, dining and events, and survives a signed-out site" \
+    bash "$ROOT/tests/chewbacca_usc.sh" "$ROOT"
+
+  check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \
+    bash "$ROOT/tests/chewbacca_google.sh" "$ROOT"
+
   # Every kit on the machine matched one 17,000-character message about a club
   # website on 2026-09-22, because hit count was never divided by what was
   # typed and two kits make every stem look distinctive.
@@ -686,6 +707,10 @@ if group "installer"; then
     bash "$ROOT/tests/orphan_reap.sh"
   check  "jobs queue admits, pauses and resumes heavy work against the machine" \
     bash "$ROOT/tests/jobs.sh"
+  check  "chewbacca ig shapes posts from Instagram's posts query" \
+    bash "$ROOT/tests/chewbacca_ig.sh"
+  check  "chewbacca x reads posts and the paging cursor from a timeline page" \
+    bash "$ROOT/tests/chewbacca_x.sh"
   check  "people texts sync runs one at a time" \
     bash "$ROOT/tests/texts_sync_lock.sh"
   check  "scope-guard refuses a self-chosen cut of scope he set as all" \
@@ -734,6 +759,11 @@ if group "installer"; then
   # An automatic pull is only acceptable if it cannot eat uncommitted work.
   check  "kit-autopull refuses dirty, branched and diverged checkouts" \
     bash "$ROOT/tests/kit_autopull.sh" "$ROOT"
+
+  # Eight skills sat uninstalled on 2026-10-09 because no tab ran setup after
+  # adding them. Git hooks now link them; this proves the linker is safe.
+  check  "link-skills adds and repairs links, never touches a foreign skill" \
+    bash "$ROOT/tests/link_skills.sh" "$ROOT"
 
   # The two checksum tools drifted and the verifier reported main as broken
   # while every hash matched, which blocked auto-push for everyone.
@@ -913,6 +943,12 @@ if group "installer"; then
   check  "the backlog keeps dead items and their reason" bash "$ROOT/tests/backlog.sh" "$ROOT" dead
 
   check  "a public install without a private backlog stays usable" bash "$ROOT/tests/backlog.sh" "$ROOT" absent
+  check  "chewbacca apps lists builds by name" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" list
+  check  "chewbacca apps runs an app's own tests" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" test
+  check  "chewbacca apps refuses an app it cannot start" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" missing
+  check  "lemma-replica ships inside the kit" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" real
+  check  "no hook or setup path depends on a folder only one Mac has" bash "$ROOT/tests/same_experience.sh" "$ROOT"
+  check  "team memory index matches its files and carries no secrets" bash "$ROOT/tests/team_memory.sh" "$ROOT"
 
   # A store nobody reads is the failure this whole file keeps finding.
   check  "SessionStart injects the backlog" \
@@ -1552,6 +1588,10 @@ if group "reasoning backends"; then
 fi
 
 # ── verdict ───────────────────────────────────────────────────────────────────
+if [ "$(generated_fingerprint)" != "$GENERATED_BEFORE" ]; then
+  FAIL=$((FAIL + 1))
+  FAILURES+=("${ONLY:-suite}: a generated region or toolkit.json changed during the run (backlog 515); git diff it")
+fi
 echo ""
 if [ "$FAIL" -eq 0 ]; then
   echo -e "${GRN}${BLD}$PASS passed${NC}${GRN}, $SKIP skipped.${NC}"

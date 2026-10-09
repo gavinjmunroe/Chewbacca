@@ -1,0 +1,433 @@
+{
+ "height": 17853,
+ "sections": [
+  {
+   "h_size": "40px",
+   "h_lh": "44px",
+   "h_ls": "-0.4px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 487,
+   "h_w": 465,
+   "h_lines": 2,
+   "lead": {
+    "size": "15px",
+    "lh": "22.5px",
+    "color": "rgb(108, 105, 145)",
+    "w": 512,
+    "gap": 8
+   },
+   "painted": 5167,
+   "shapes": 4136,
+   "svg": 6,
+   "canvas": 1,
+   "img": 0,
+   "mockup": {
+    "w": 880,
+    "h": 230,
+    "tag": "DIV",
+    "kids": 12
+   },
+   "controls": 15,
+   "control_h": [
+    17,
+    20,
+    22,
+    26,
+    33
+   ],
+   "i": 0,
+   "y": 339,
+   "height": 10837,
+   "heading": "Your agent failed and nothing threw an error"
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 2,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgb(108, 105, 145)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 375,
+   "shapes": 38,
+   "svg": 25,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 451
+   },
+   "controls": 13,
+   "control_h": [
+    17,
+    20,
+    22,
+    26,
+    33
+   ],
+   "i": 1,
+   "y": 11176,
+   "height": 928,
+   "heading": "Find the runs that failed quietly."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 2,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgb(108, 105, 145)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 426,
+   "shapes": 50,
+   "svg": 33,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 511
+   },
+   "controls": 13,
+   "control_h": [
+    17,
+    20,
+    22,
+    26,
+    33
+   ],
+   "i": 2,
+   "y": 12104,
+   "height": 908,
+   "heading": "Hear about it where your team already talks."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 1,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgb(108, 105, 145)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 359,
+   "shapes": 49,
+   "svg": 32,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 512
+   },
+   "controls": 13,
+   "control_h": [
+    17,
+    20,
+    22,
+    26,
+    33
+   ],
+   "i": 3,
+   "y": 13012,
+   "height": 886,
+   "heading": "Fix it in your editor."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "left",
+   "h_x": 224,
+   "h_w": 384,
+   "h_lines": 1,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgb(108, 105, 145)",
+    "w": 384,
+    "gap": 8
+   },
+   "painted": 382,
+   "shapes": 40,
+   "svg": 27,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1040,
+    "h": 3600,
+    "tag": "DIV",
+    "kids": 512
+   },
+   "controls": 13,
+   "control_h": [
+    17,
+    20,
+    22,
+    26,
+    33
+   ],
+   "i": 4,
+   "y": 13898,
+   "height": 662,
+   "heading": "Know if it comes back."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 344,
+   "h_w": 752,
+   "h_lines": 1,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgba(29, 25, 86, 0.65)",
+    "w": 672,
+    "gap": 8
+   },
+   "painted": 93,
+   "shapes": 20,
+   "svg": 9,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 880,
+    "h": 697,
+    "tag": "DIV",
+    "kids": 55
+   },
+   "controls": 14,
+   "control_h": [
+    17,
+    20,
+    22,
+    26,
+    33
+   ],
+   "i": 5,
+   "y": 14560,
+   "height": 698,
+   "heading": "Drops into the stack you already run."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 344,
+   "h_w": 752,
+   "h_lines": 1,
+   "lead": {
+    "size": "18px",
+    "lh": "28px",
+    "color": "rgba(29, 25, 86, 0.65)",
+    "w": 672,
+    "gap": 8
+   },
+   "painted": 140,
+   "shapes": 3,
+   "svg": 1,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1280,
+    "h": 705,
+    "tag": "DIV",
+    "kids": 121
+   },
+   "controls": 14,
+   "control_h": [
+    17,
+    20,
+    22,
+    26,
+    33
+   ],
+   "i": 6,
+   "y": 15258,
+   "height": 605,
+   "heading": "Your traces stay yours."
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "43.2px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 336,
+   "h_w": 768,
+   "h_lines": 1,
+   "lead": null,
+   "painted": 166,
+   "shapes": 5,
+   "svg": 3,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1280,
+    "h": 705,
+    "tag": "DIV",
+    "kids": 121
+   },
+   "controls": 29,
+   "control_h": [
+    10,
+    17,
+    20,
+    22,
+    26
+   ],
+   "i": 7,
+   "y": 15863,
+   "height": 626,
+   "heading": "What teams tell us."
+  },
+  {
+   "h_size": "18px",
+   "h_lh": "28px",
+   "h_ls": "-0.18px",
+   "h_weight": "400",
+   "h_align": "start",
+   "h_x": 837,
+   "h_w": 490,
+   "h_lines": 1,
+   "lead": {
+    "size": "14px",
+    "lh": "20px",
+    "color": "rgb(108, 105, 145)",
+    "w": 490,
+    "gap": 12
+   },
+   "painted": 113,
+   "shapes": 5,
+   "svg": 3,
+   "canvas": 0,
+   "img": 0,
+   "mockup": {
+    "w": 1280,
+    "h": 705,
+    "tag": "DIV",
+    "kids": 121
+   },
+   "controls": 32,
+   "control_h": [
+    10,
+    17,
+    20,
+    22,
+    26
+   ],
+   "i": 8,
+   "y": 16489,
+   "height": 31,
+   "heading": "Subscribe"
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "45px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "start",
+   "h_x": 113,
+   "h_w": 576,
+   "h_lines": 2,
+   "lead": {
+    "size": "10px",
+    "lh": "15px",
+    "color": "rgb(108, 105, 145)",
+    "w": 627,
+    "gap": 57
+   },
+   "painted": 61,
+   "shapes": 3,
+   "svg": 1,
+   "canvas": 1,
+   "img": 0,
+   "mockup": {
+    "w": 1280,
+    "h": 705,
+    "tag": "DIV",
+    "kids": 121
+   },
+   "controls": 19,
+   "control_h": [
+    17,
+    20,
+    22,
+    26,
+    28
+   ],
+   "i": 9,
+   "y": 16520,
+   "height": 638,
+   "heading": "A Friday read on why agents break, and what caught i"
+  },
+  {
+   "h_size": "36px",
+   "h_lh": "40px",
+   "h_ls": "-0.36px",
+   "h_weight": "400",
+   "h_align": "center",
+   "h_x": 470,
+   "h_w": 500,
+   "h_lines": 1,
+   "lead": null,
+   "painted": 88,
+   "shapes": 6,
+   "svg": 2,
+   "canvas": 1,
+   "img": 0,
+   "mockup": {
+    "w": 1280,
+    "h": 384,
+    "tag": "DIV",
+    "kids": 42
+   },
+   "controls": 25,
+   "control_h": [
+    16,
+    17,
+    20,
+    22,
+    26
+   ],
+   "i": 10,
+   "y": 17158,
+   "height": 695,
+   "heading": "See what your agents did today"
+  }
+ ]
+}

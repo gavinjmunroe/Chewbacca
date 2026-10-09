@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+bench/chunks.json
+bench/emb.npy
+bench/graph0.json
+bench/*.npy
+bench/results.json

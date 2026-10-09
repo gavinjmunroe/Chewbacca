@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pricing</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface-2: #1c1c26;
+    --border: #2a2a38;
+    --border-highlight: #3d3d52;
+    --text: #f0f0f8;
+    --muted: #8888a8;
+    --accent: #7c6fff;
+    --accent-light: #a89fff;
+    --accent-dim: rgba(124, 111, 255, 0.12);
+    --green: #34d399;
+    --radius: 16px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 80px 24px 120px;
+    background-image:
+      radial-gradient(ellipse 80% 40% at 50% -10%, rgba(124,111,255,0.15) 0%, transparent 70%);
+  }
+
+  .eyebrow {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-light);
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    font-size: clamp(32px, 5vw, 52px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    text-align: center;
+    max-width: 520px;
+    margin-bottom: 16px;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 17px;
+    text-align: center;
+    max-width: 420px;
+    line-height: 1.6;
+    margin-bottom: 40px;
+  }
+
+  .toggle-wrap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 56px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 100px;
+    padding: 6px 8px;
+  }
+
+  .toggle-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--muted);
+    padding: 6px 14px;
+    border-radius: 100px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+
+  .toggle-label.active {
+    color: var(--text);
+    background: var(--surface-2);
+  }
+
+  .badge-save {
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--green);
+    border-radius: 100px;
+    padding: 3px 8px;
+    margin-left: 4px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    width: 100%;
+    max-width: 1020px;
+    align-items: start;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px 28px;
+    position: relative;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+
+  .card:hover {
+    border-color: var(--border-highlight);
+    transform: translateY(-2px);
+  }
+
+  .card.featured {
+    background: var(--surface-2);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px var(--accent), 0 24px 48px rgba(124,111,255,0.12);
+    transform: scale(1.02);
+  }
+
+  .card.featured:hover {
+    transform: scale(1.02) translateY(-2px);
+  }
+
+  .featured-badge {
+    position: absolute;
+    top: -13px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 14px;
+    border-radius: 100px;
+    white-space: nowrap;
+  }
+
+  .plan-name {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .card.featured .plan-name { color: var(--accent-light); }
+
+  .price-wrap {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    margin-bottom: 6px;
+  }
+
+  .currency {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--muted);
+    line-height: 1;
+    padding-bottom: 8px;
+  }
+
+  .price {
+    font-size: 52px;
+    font-weight: 800;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    transition: all 0.2s;
+  }
+
+  .period {
+    font-size: 14px;
+    color: var(--muted);
+    padding-bottom: 10px;
+  }
+
+  .price-desc {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 24px;
+    min-height: 20px;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin-bottom: 24px;
+  }
+
+  .features {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    margin-bottom: 32px;
+  }
+
+  .features li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 14px;
+    line-height: 1.4;
+    color: #c8c8e0;
+  }
+
+  .features li .check {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: rgba(52, 211, 153, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+  }
+
+  .card.featured .features li .check {
+    background: var(--accent-dim);
+  }
+
+  .check svg { display: block; }
+
+  .btn {
+    width: 100%;
+    padding: 13px 20px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: all 0.18s;
+    letter-spacing: -0.01em;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border-highlight);
+    color: var(--text);
+  }
+
+  .btn-ghost:hover {
+    background: var(--surface-2);
+    border-color: var(--accent);
+    color: var(--accent-light);
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(124,111,255,0.3);
+  }
+
+  .btn-primary:hover {
+    background: #6b5fee;
+    box-shadow: 0 6px 24px rgba(124,111,255,0.4);
+    transform: translateY(-1px);
+  }
+
+  .footer-note {
+    margin-top: 40px;
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  .footer-note a {
+    color: var(--accent-light);
+    text-decoration: none;
+  }
+
+  @media (max-width: 900px) {
+    .cards {
+      grid-template-columns: 1fr;
+      max-width: 420px;
+    }
+    .card.featured { transform: none; }
+    .card.featured:hover { transform: translateY(-2px); }
+  }
+</style>
+</head>
+<body>
+
+<p class="eyebrow">Simple Pricing</p>
+<h1>The right plan for<br>where you are now</h1>
+<p class="subtitle">Start free, scale when ready. No surprise bills, no feature gates that matter.</p>
+
+<div class="toggle-wrap">
+  <span class="toggle-label active" id="lbl-monthly" onclick="setAnnual(false)">Monthly</span>
+  <span class="toggle-label" id="lbl-annual" onclick="setAnnual(true)">
+    Annual <span class="badge-save">Save 20%</span>
+  </span>
+</div>
+
+<div class="cards">
+
+  <!-- Starter -->
+  <div class="card">
+    <p class="plan-name">Starter</p>
+    <div class="price-wrap">
+      <span class="currency">$</span>
+      <span class="price" id="price-starter">0</span>
+      <span class="period">/mo</span>
+    </div>
+    <p class="price-desc" id="desc-starter">Free forever, no card required.</p>
+    <div class="divider"></div>
+    <ul class="features">
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Up to 3 projects</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>1 GB storage</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Community support</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Basic analytics</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Public API access</li>
+    </ul>
+    <button class="btn btn-ghost">Get started free</button>
+  </div>
+
+  <!-- Pro (featured) -->
+  <div class="card featured">
+    <div class="featured-badge">Most Popular</div>
+    <p class="plan-name">Pro</p>
+    <div class="price-wrap">
+      <span class="currency">$</span>
+      <span class="price" id="price-pro">49</span>
+      <span class="period">/mo</span>
+    </div>
+    <p class="price-desc" id="desc-pro">Billed monthly. Cancel anytime.</p>
+    <div class="divider"></div>
+    <ul class="features">
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#a89fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Unlimited projects</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#a89fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>50 GB storage</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#a89fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Priority email support</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#a89fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Advanced analytics + exports</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#a89fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Custom domains</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#a89fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Team collaboration (5 seats)</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#a89fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Audit logs</li>
+    </ul>
+    <button class="btn btn-primary">Start 14-day trial</button>
+  </div>
+
+  <!-- Enterprise -->
+  <div class="card">
+    <p class="plan-name">Enterprise</p>
+    <div class="price-wrap">
+      <span class="currency" style="visibility:hidden">$</span>
+      <span class="price" style="font-size:36px; padding-bottom:8px;" id="price-ent">Custom</span>
+    </div>
+    <p class="price-desc" id="desc-ent">Tailored to your team's needs.</p>
+    <div class="divider"></div>
+    <ul class="features">
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Everything in Pro</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Unlimited storage</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Dedicated Slack channel</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>SSO / SAML</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>SLA uptime guarantee</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Unlimited seats</li>
+      <li><span class="check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4l3 3 5-6" stroke="#34d399" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>On-prem deployment option</li>
+    </ul>
+    <button class="btn btn-ghost">Talk to sales</button>
+  </div>
+
+</div>
+
+<p class="footer-note">All plans include a 14-day free trial. No credit card required to start. <a href="#">See full feature comparison.</a></p>
+
+<script>
+  let annual = false;
+
+  function setAnnual(val) {
+    annual = val;
+    document.getElementById('lbl-monthly').classList.toggle('active', !val);
+    document.getElementById('lbl-annual').classList.toggle('active', val);
+
+    const starterPrice = document.getElementById('price-starter');
+    const proPrice = document.getElementById('price-pro');
+    const descStarter = document.getElementById('desc-starter');
+    const descPro = document.getElementById('desc-pro');
+
+    if (val) {
+      starterPrice.textContent = '0';
+      proPrice.textContent = '39';
+      descStarter.textContent = 'Free forever, no card required.';
+      descPro.textContent = 'Billed $468/yr. Save $120 annually.';
+    } else {
+      starterPrice.textContent = '0';
+      proPrice.textContent = '49';
+      descStarter.textContent = 'Free forever, no card required.';
+      descPro.textContent = 'Billed monthly. Cancel anytime.';
+    }
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+#!/usr/bin/env python3
+"""Search the video corpus and get back a quote with a link that jumps to it.
+
+    ux-video "spacing"              every place anyone talks about spacing
+    ux-video "taste" --limit 3      three hits per video instead of two
+    ux-video --list                 what is in the corpus
+    ux-video --show HE4rLEQpiXY     one full transcript
+
+THE FAILURE THIS EXISTS FOR. Ninety-five transcripts is a pile, not a source.
+Nobody reads a pile, including a model with a large context window, because
+reading it costs more than inventing an answer. So the corpus only counts if
+looking something up in it is cheaper than guessing, which means one command
+that returns the quote and the timestamp rather than the file.
+
+Every hit prints a youtu.be link with ?t=, so the claim can be checked against
+the person who made it in one click. A rule nobody can trace back is a rule
+this repo should not be shipping.
+"""
+import argparse
+import json
+import pathlib
+import re
+import sys
+
+REPO = pathlib.Path(__file__).resolve().parent.parent
+CORPUS = REPO / "corpus" / "video" / "transcripts"
+META = json.loads((REPO / "data" / "videos.json").read_text())
+BY_ID = {r["id"]: r for r in META}
+
+CUE = re.compile(r"\[(\d+):(\d\d)\]")
+
+
+def cues(text):
+    """Split a transcript into (seconds, text) pairs on its [m:ss] markers."""
+    parts = CUE.split(text)
+    # parts is [preamble, m, ss, body, m, ss, body, ...]
+    out = []
+    for i in range(1, len(parts) - 2, 3):
+        secs = int(parts[i]) * 60 + int(parts[i + 1])
+        out.append((secs, parts[i + 2].strip()))
+    return out
+
+
+def search(term, limit, tier):
+    pat = re.compile(term, re.I)
+    hits = 0
+    for path in sorted(CORPUS.glob("*.txt")):
+        vid = path.stem
+        meta = BY_ID.get(vid, {})
+        if tier and meta.get("tier") != tier:
+            continue
+        found = [(s, t) for s, t in cues(path.read_text(errors="ignore")) if pat.search(t)]
+        if not found:
+            continue
+        hits += 1
+        title = meta.get("title", vid)
+        channel = meta.get("channel", "?")
+        print(f"\n{title}  [{channel}]")
+        for secs, body in found[:limit]:
+            body = " ".join(body.split())
+            if len(body) > 300:
+                body = body[:300] + "..."
+            print(f"  {secs // 60}:{secs % 60:02d}  https://youtu.be/{vid}?t={secs}")
+            print(f"       {body}")
+        if len(found) > limit:
+            print(f"       ... {len(found) - limit} more in this video")
+    if not hits:
+        print(f"no hits for {term!r} in {len(list(CORPUS.glob('*.txt')))} transcripts")
+        return 1
+    print(f"\n{hits} videos matched {term!r}")
+    return 0
+
+
+def listing(tier):
+    rows = [r for r in META if not tier or r.get("tier") == tier]
+    rows.sort(key=lambda r: -r.get("views", 0))
+    for r in rows:
+        mins = r.get("dur", 0) // 60
+        print(
+            f'{r.get("tier","-"):>6} {r.get("views",0):>9,} {mins:>3}m '
+            f'{r["id"]}  {r.get("title","?")[:64]}'
+        )
+    print(f"\n{len(rows)} videos, {sum(r.get('words',0) for r in rows):,} words")
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("term", nargs="?", help="regex to search for")
+    ap.add_argument("--limit", type=int, default=2, help="hits per video (default 2)")
+    ap.add_argument("--tier", help="taste, think, craft or ai")
+    ap.add_argument("--list", action="store_true", help="list the corpus")
+    ap.add_argument("--show", help="print one transcript by video id")
+    args = ap.parse_args()
+
+    if args.show:
+        path = CORPUS / f"{args.show}.txt"
+        if not path.exists():
+            print(f"no transcript for {args.show}", file=sys.stderr)
+            return 1
+        print(path.read_text(errors="ignore"))
+        return 0
+    if args.list or not args.term:
+        return listing(args.tier)
+    return search(args.term, args.limit, args.tier)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

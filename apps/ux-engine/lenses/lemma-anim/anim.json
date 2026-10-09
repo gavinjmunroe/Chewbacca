@@ -1,0 +1,7151 @@
+{
+ "url": "https://uselemma.ai",
+ "declared": [
+  {
+   "kind": "CSSAnimation",
+   "name": "loader-orbit",
+   "sel": "path",
+   "props": [
+    "strokeDashoffset"
+   ],
+   "dur": 2400,
+   "delay": 0,
+   "easing": "linear",
+   "iter": "infinite",
+   "fill": "none",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "linear",
+     "strokeDashoffset": "0px"
+    },
+    {
+     "offset": 1,
+     "easing": "linear",
+     "strokeDashoffset": "-100px"
+    }
+   ]
+  },
+  {
+   "kind": "CSSAnimation",
+   "name": "spin",
+   "sel": "svg.h-3.w-3.animate-spin",
+   "props": [
+    "transform"
+   ],
+   "dur": 1000,
+   "delay": 0,
+   "easing": "linear",
+   "iter": "infinite",
+   "fill": "none",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "linear",
+     "transform": "none"
+    },
+    {
+     "offset": 1,
+     "easing": "linear",
+     "transform": "rotate(360deg)"
+    }
+   ]
+  },
+  {
+   "kind": "CSSAnimation",
+   "name": "fillProgress",
+   "sel": "div.bg-primary.h-full",
+   "props": [
+    "width"
+   ],
+   "dur": 1800,
+   "delay": 0,
+   "easing": "linear",
+   "iter": 1,
+   "fill": "forwards",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "linear",
+     "width": "0px"
+    },
+    {
+     "offset": 1,
+     "easing": "linear",
+     "width": "100%"
+    }
+   ]
+  },
+  {
+   "kind": "CSSTransition",
+   "name": "transform",
+   "sel": "span.jsx-5d67bfcc21a3fd85.glyph.glyph-copy",
+   "props": [
+    "transform"
+   ],
+   "dur": 450,
+   "delay": 0,
+   "easing": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+   "iter": 1,
+   "fill": "backwards",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "linear",
+     "transform": "none"
+    },
+    {
+     "offset": 1,
+     "easing": "linear",
+     "transform": "scale(1) rotate(0deg)"
+    }
+   ]
+  },
+  {
+   "kind": "CSSTransition",
+   "name": "opacity",
+   "sel": "span.jsx-5d67bfcc21a3fd85.glyph.glyph-check",
+   "props": [
+    "opacity"
+   ],
+   "dur": 250,
+   "delay": 0,
+   "easing": "ease",
+   "iter": 1,
+   "fill": "backwards",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "linear",
+     "opacity": "1"
+    },
+    {
+     "offset": 1,
+     "easing": "linear",
+     "opacity": "0"
+    }
+   ]
+  },
+  {
+   "kind": "CSSTransition",
+   "name": "transform",
+   "sel": "span.jsx-5d67bfcc21a3fd85.glyph.glyph-check",
+   "props": [
+    "transform"
+   ],
+   "dur": 450,
+   "delay": 0,
+   "easing": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+   "iter": 1,
+   "fill": "backwards",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "linear",
+     "transform": "none"
+    },
+    {
+     "offset": 1,
+     "easing": "linear",
+     "transform": "scale(0.3) rotate(70deg)"
+    }
+   ]
+  },
+  {
+   "kind": "CSSTransition",
+   "name": "opacity",
+   "sel": "div.c15t-ui-root-hE9Kz.c15t-ui-bottomLeft-CbyqH.lemma-consent-banner",
+   "props": [
+    "opacity"
+   ],
+   "dur": 80,
+   "delay": 0,
+   "easing": "cubic-bezier(0.4, 0, 0.2, 1)",
+   "iter": 1,
+   "fill": "backwards",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "linear",
+     "opacity": "0"
+    },
+    {
+     "offset": 1,
+     "easing": "linear",
+     "opacity": "1"
+    }
+   ]
+  },
+  {
+   "kind": "CSSTransition",
+   "name": "transform",
+   "sel": "div.c15t-ui-root-hE9Kz.c15t-ui-bottomLeft-CbyqH.lemma-consent-banner",
+   "props": [
+    "transform"
+   ],
+   "dur": 80,
+   "delay": 0,
+   "easing": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+   "iter": 1,
+   "fill": "backwards",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "linear",
+     "transform": "translateY(50px)"
+    },
+    {
+     "offset": 1,
+     "easing": "linear",
+     "transform": "translateY(0px)"
+    }
+   ]
+  },
+  {
+   "kind": "CSSAnimation",
+   "name": "loader-orbit",
+   "sel": "path",
+   "props": [
+    "strokeDashoffset"
+   ],
+   "dur": 2400,
+   "delay": -116,
+   "easing": "linear",
+   "iter": "infinite",
+   "fill": "none",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "linear",
+     "strokeDashoffset": "0px"
+    },
+    {
+     "offset": 1,
+     "easing": "linear",
+     "strokeDashoffset": "-100px"
+    }
+   ]
+  },
+  {
+   "kind": "CSSAnimation",
+   "name": "lemma-scroll-pulse",
+   "sel": "div.jsx-e78158c3f36e4cd6.absolute.inset-0",
+   "props": [
+    "opacity"
+   ],
+   "dur": 2400,
+   "delay": 0,
+   "easing": "linear",
+   "iter": "infinite",
+   "fill": "none",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "ease-in-out",
+     "opacity": "0.5"
+    },
+    {
+     "offset": 0.5,
+     "easing": "ease-in-out",
+     "opacity": "1"
+    },
+    {
+     "offset": 1,
+     "easing": "ease-in-out",
+     "opacity": "0.5"
+    }
+   ]
+  },
+  {
+   "kind": "CSSAnimation",
+   "name": "loader-orbit",
+   "sel": "path",
+   "props": [
+    "strokeDashoffset"
+   ],
+   "dur": 2400,
+   "delay": -136,
+   "easing": "linear",
+   "iter": "infinite",
+   "fill": "none",
+   "dir": "normal",
+   "frames": [
+    {
+     "offset": 0,
+     "easing": "linear",
+     "strokeDashoffset": "0px"
+    },
+    {
+     "offset": 1,
+     "easing": "linear",
+     "strokeDashoffset": "-100px"
+    }
+   ]
+  }
+ ],
+ "undeclared": [
+  {
+   "r2": 0.9904855750768466,
+   "span": 99.10516357421875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 19.227,
+    "amplitude": 99.157
+   },
+   "el": "path##629"
+  },
+  {
+   "r2": 0.9904855415385314,
+   "span": 99.105224609375,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 19.227,
+    "amplitude": 99.158
+   },
+   "el": "path##658"
+  },
+  {
+   "r2": 0.9904755614988358,
+   "span": 99.18719482421875,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 656.573,
+    "amplitude": -99.217
+   },
+   "el": "path##658"
+  },
+  {
+   "r2": 0.9901990200116948,
+   "span": 97.7440185546875,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 576.502,
+    "amplitude": 98.115
+   },
+   "el": "path##628"
+  },
+  {
+   "r2": 0.9901080773029265,
+   "span": 97.0880126953125,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 99.204,
+    "amplitude": -97.725
+   },
+   "el": "path##659"
+  },
+  {
+   "r2": 0.9901080737261414,
+   "span": 97.0880126953125,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 99.204,
+    "amplitude": -97.725
+   },
+   "el": "path##628"
+  },
+  {
+   "r2": 0.9894846644443307,
+   "span": 20.417999267578125,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 224.172,
+    "amplitude": 20.963
+   },
+   "el": "path##660"
+  },
+  {
+   "r2": 0.9894846644443307,
+   "span": 20.417999267578125,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 62.422,
+    "amplitude": -20.963
+   },
+   "el": "path##660"
+  },
+  {
+   "r2": 0.9894846090768636,
+   "span": 20.417999267578125,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 62.422,
+    "amplitude": -20.963
+   },
+   "el": "path##631"
+  },
+  {
+   "r2": 0.9877336631398141,
+   "span": 1.803955078125,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 120.999,
+    "amplitude": 1.749
+   },
+   "el": "path##668"
+  },
+  {
+   "r2": 0.9877336631398136,
+   "span": 1.803955078125,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 554.748,
+    "amplitude": -1.749
+   },
+   "el": "path##668"
+  },
+  {
+   "r2": 0.9877334898241293,
+   "span": 1.803955078125,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 120.999,
+    "amplitude": 1.749
+   },
+   "el": "path##639"
+  },
+  {
+   "r2": 0.9877047765148871,
+   "span": 0.86920166015625,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 0.929,
+    "amplitude": 0.845
+   },
+   "el": "path##638"
+  },
+  {
+   "r2": 0.9877030916564378,
+   "span": 0.86920166015625,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 553.884,
+    "amplitude": -0.845
+   },
+   "el": "path##669"
+  },
+  {
+   "r2": 0.9877030916564349,
+   "span": 0.86920166015625,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 0.929,
+    "amplitude": 0.845
+   },
+   "el": "path##669"
+  },
+  {
+   "r2": 0.9875377214873625,
+   "span": 44.50958251953125,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 9.158,
+    "amplitude": 43.822
+   },
+   "el": "path##621"
+  },
+  {
+   "r2": 0.9875376893595164,
+   "span": 44.50958251953125,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 277.436,
+    "amplitude": -43.822
+   },
+   "el": "path##650"
+  },
+  {
+   "r2": 0.9875376893595164,
+   "span": 44.50958251953125,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 9.158,
+    "amplitude": 43.822
+   },
+   "el": "path##650"
+  },
+  {
+   "r2": 0.9856680307560769,
+   "span": 18.43359375,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 44.291,
+    "amplitude": 17.339
+   },
+   "el": "path##622"
+  },
+  {
+   "r2": 0.9856680287784438,
+   "span": 18.433609008789062,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 242.302,
+    "amplitude": -17.339
+   },
+   "el": "path##653"
+  },
+  {
+   "r2": 0.9856680287784438,
+   "span": 18.433609008789062,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 44.291,
+    "amplitude": 17.339
+   },
+   "el": "path##653"
+  },
+  {
+   "r2": 0.9856595652926751,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.037,
+    "amplitude": 0.769
+   },
+   "el": "path##104"
+  },
+  {
+   "r2": 0.9852883957180884,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.036,
+    "amplitude": 0.772
+   },
+   "el": "path##103"
+  },
+  {
+   "r2": 0.9849078382304083,
+   "span": 0.934814453125,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 553.893,
+    "amplitude": 0.88
+   },
+   "el": "path##623"
+  },
+  {
+   "r2": 0.9846544025213906,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.036,
+    "amplitude": 0.775
+   },
+   "el": "path##102"
+  },
+  {
+   "r2": 0.9843233301472734,
+   "span": 1.016845703125,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 554.809,
+    "amplitude": -1.061
+   },
+   "el": "path##661"
+  },
+  {
+   "r2": 0.9842814118659527,
+   "span": 103.61517333984375,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 554.93,
+    "amplitude": 113.651
+   },
+   "el": "path##624"
+  },
+  {
+   "r2": 0.9842631071074706,
+   "span": 103.50042724609375,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 120.808,
+    "amplitude": -113.568
+   },
+   "el": "path##624"
+  },
+  {
+   "r2": 0.9842631052850623,
+   "span": 103.5003662109375,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 120.808,
+    "amplitude": -113.568
+   },
+   "el": "path##655"
+  },
+  {
+   "r2": 0.9838033844830948,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.035,
+    "amplitude": 0.777
+   },
+   "el": "path##101"
+  },
+  {
+   "r2": 0.9830929412147437,
+   "span": 102.401611328125,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 676.875,
+    "amplitude": -112.07
+   },
+   "el": "path##654"
+  },
+  {
+   "r2": 0.9828277749929253,
+   "span": 26.8468017578125,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 6.178,
+    "amplitude": 27.886
+   },
+   "el": "path##619"
+  },
+  {
+   "r2": 0.9828277682230999,
+   "span": 26.8468017578125,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 280.416,
+    "amplitude": -27.886
+   },
+   "el": "path##648"
+  },
+  {
+   "r2": 0.9828277682230999,
+   "span": 26.8468017578125,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 6.178,
+    "amplitude": 27.886
+   },
+   "el": "path##648"
+  },
+  {
+   "r2": 0.9827745657552249,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.034,
+    "amplitude": 0.78
+   },
+   "el": "path##100"
+  },
+  {
+   "r2": 0.9825550667556591,
+   "span": 101.81121826171875,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": -0.698,
+    "amplitude": 111.466
+   },
+   "el": "path##654"
+  },
+  {
+   "r2": 0.9825550659451661,
+   "span": 101.8111572265625,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": -0.698,
+    "amplitude": 111.466
+   },
+   "el": "path##625"
+  },
+  {
+   "r2": 0.9822480877583206,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.031,
+    "amplitude": 0.663
+   },
+   "el": "path##179"
+  },
+  {
+   "r2": 0.9821472021138907,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.031,
+    "amplitude": 0.666
+   },
+   "el": "path##178"
+  },
+  {
+   "r2": 0.9816995823615292,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.032,
+    "amplitude": 0.66
+   },
+   "el": "path##180"
+  },
+  {
+   "r2": 0.9816060111608358,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.034,
+    "amplitude": 0.782
+   },
+   "el": "path##99"
+  },
+  {
+   "r2": 0.9815213399979894,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.03,
+    "amplitude": 0.668
+   },
+   "el": "path##177"
+  },
+  {
+   "r2": 0.980597645490434,
+   "span": 0.7589,
+   "field": "opacity",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 0.277,
+    "amplitude": 0.729
+   },
+   "el": "span#inline-block font-normal md:fo#207"
+  },
+  {
+   "r2": 0.9805276527434319,
+   "span": 9.1099853515625,
+   "field": "top",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 396.927,
+    "amplitude": -8.75
+   },
+   "el": "span#font-bold md:font-medium#208"
+  },
+  {
+   "r2": 0.9805274062946723,
+   "span": 9.1099853515625,
+   "field": "top",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 394.927,
+    "amplitude": -8.75
+   },
+   "el": "span#inline-block font-normal md:fo#207"
+  },
+  {
+   "r2": 0.9805273971154952,
+   "span": 9.11,
+   "field": "transform",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 8.677,
+    "amplitude": -8.75
+   },
+   "el": "span#inline-block font-normal md:fo#207"
+  },
+  {
+   "r2": 0.9804797565092616,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.029,
+    "amplitude": 0.671
+   },
+   "el": "path##176"
+  },
+  {
+   "r2": 0.9803677613067088,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.033,
+    "amplitude": 0.657
+   },
+   "el": "path##181"
+  },
+  {
+   "r2": 0.9803320529949948,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.033,
+    "amplitude": 0.784
+   },
+   "el": "path##98"
+  },
+  {
+   "r2": 0.9802539789872723,
+   "span": 99.99999614421,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.471,
+    "amplitude": -111.202
+   },
+   "el": "path##652"
+  },
+  {
+   "r2": 0.979849591747349,
+   "span": 99.99875415,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.529,
+    "amplitude": -111.336
+   },
+   "el": "path##651"
+  },
+  {
+   "r2": 0.9797834217678546,
+   "span": 99.9141535,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.475,
+    "amplitude": -109.454
+   },
+   "el": "path##653"
+  },
+  {
+   "r2": 0.9796532771752877,
+   "span": 99.9322153,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.436,
+    "amplitude": -109.279
+   },
+   "el": "path##654"
+  },
+  {
+   "r2": 0.9796430879800675,
+   "span": 42.06597900390625,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 18.686,
+    "amplitude": 40.941
+   },
+   "el": "path##625"
+  },
+  {
+   "r2": 0.9796430809513181,
+   "span": 42.066009521484375,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 267.908,
+    "amplitude": -40.941
+   },
+   "el": "path##654"
+  },
+  {
+   "r2": 0.9796430809513181,
+   "span": 42.066009521484375,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 18.686,
+    "amplitude": 40.941
+   },
+   "el": "path##654"
+  },
+  {
+   "r2": 0.9796093496107878,
+   "span": 99.9524821,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.414,
+    "amplitude": -113.668
+   },
+   "el": "path##104"
+  },
+  {
+   "r2": 0.9792701151974753,
+   "span": 8.46240234375,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 278.053,
+    "amplitude": 8.041
+   },
+   "el": "path##671"
+  },
+  {
+   "r2": 0.9792066849009313,
+   "span": 99.99556634,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.595,
+    "amplitude": -111.464
+   },
+   "el": "path##650"
+  },
+  {
+   "r2": 0.9792031242907421,
+   "span": 99.9473043,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.407,
+    "amplitude": -109.074
+   },
+   "el": "path##655"
+  },
+  {
+   "r2": 0.9791273714288242,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.029,
+    "amplitude": 0.672
+   },
+   "el": "path##175"
+  },
+  {
+   "r2": 0.9790374491035703,
+   "span": 34.83360290527344,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 251.459,
+    "amplitude": 32.97
+   },
+   "el": "path##670"
+  },
+  {
+   "r2": 0.9789869527521988,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.033,
+    "amplitude": 0.785
+   },
+   "el": "path##97"
+  },
+  {
+   "r2": 0.9784028191900584,
+   "span": 99.9612906,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.389,
+    "amplitude": -108.866
+   },
+   "el": "path##656"
+  },
+  {
+   "r2": 0.9783574054832214,
+   "span": 99.9622354,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.507,
+    "amplitude": -113.96
+   },
+   "el": "path##103"
+  },
+  {
+   "r2": 0.9783412775071042,
+   "span": 99.9900514,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.67,
+    "amplitude": -111.562
+   },
+   "el": "path##649"
+  },
+  {
+   "r2": 0.9781135468503058,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.034,
+    "amplitude": 0.653
+   },
+   "el": "path##182"
+  },
+  {
+   "r2": 0.9777535140384813,
+   "span": 0.5904541015625,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 554.259,
+    "amplitude": 0.583
+   },
+   "el": "path##625"
+  },
+  {
+   "r2": 0.9775969259243857,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.032,
+    "amplitude": 0.787
+   },
+   "el": "path##96"
+  },
+  {
+   "r2": 0.9775628409947172,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.028,
+    "amplitude": 0.674
+   },
+   "el": "path##174"
+  },
+  {
+   "r2": 0.9773987927534411,
+   "span": 39.491180419921875,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 46.571,
+    "amplitude": -35.527
+   },
+   "el": "path##632"
+  },
+  {
+   "r2": 0.9773987798637377,
+   "span": 39.49119567871094,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 240.022,
+    "amplitude": 35.527
+   },
+   "el": "path##663"
+  },
+  {
+   "r2": 0.9773987798637376,
+   "span": 39.49119567871094,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 46.571,
+    "amplitude": -35.527
+   },
+   "el": "path##663"
+  },
+  {
+   "r2": 0.9772623125124571,
+   "span": 99.9828737,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.754,
+    "amplitude": -111.654
+   },
+   "el": "path##648"
+  },
+  {
+   "r2": 0.9769715157963129,
+   "span": 99.9703039,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.608,
+    "amplitude": -114.212
+   },
+   "el": "path##102"
+  },
+  {
+   "r2": 0.9769393474578829,
+   "span": 29.07720947265625,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 60.306,
+    "amplitude": -30.111
+   },
+   "el": "path##633"
+  },
+  {
+   "r2": 0.9769393109413128,
+   "span": 29.077194213867188,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 226.288,
+    "amplitude": 30.111
+   },
+   "el": "path##662"
+  },
+  {
+   "r2": 0.9769393109413128,
+   "span": 29.077194213867188,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 60.306,
+    "amplitude": -30.111
+   },
+   "el": "path##662"
+  },
+  {
+   "r2": 0.9764323777413858,
+   "span": 50.151214599609375,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 222.879,
+    "amplitude": 46.379
+   },
+   "el": "path##661"
+  },
+  {
+   "r2": 0.9764323777413857,
+   "span": 50.151214599609375,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 63.715,
+    "amplitude": -46.379
+   },
+   "el": "path##661"
+  },
+  {
+   "r2": 0.9764323761030302,
+   "span": 50.151214599609375,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 63.715,
+    "amplitude": -46.379
+   },
+   "el": "path##630"
+  },
+  {
+   "r2": 0.976277343851262,
+   "span": 99.766424,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.413,
+    "amplitude": -106.927
+   },
+   "el": "path##657"
+  },
+  {
+   "r2": 0.976190454637672,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.032,
+    "amplitude": 0.788
+   },
+   "el": "path##95"
+  },
+  {
+   "r2": 0.9759779626269379,
+   "span": 99.9731527,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.845,
+    "amplitude": -111.716
+   },
+   "el": "path##647"
+  },
+  {
+   "r2": 0.9758867657786762,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.027,
+    "amplitude": 0.676
+   },
+   "el": "path##173"
+  },
+  {
+   "r2": 0.9754583171449692,
+   "span": 99.9779231,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.717,
+    "amplitude": -114.448
+   },
+   "el": "path##101"
+  },
+  {
+   "r2": 0.9747852708859749,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.031,
+    "amplitude": 0.789
+   },
+   "el": "path##94"
+  },
+  {
+   "r2": 0.9747674686961562,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.035,
+    "amplitude": 0.648
+   },
+   "el": "path##183"
+  },
+  {
+   "r2": 0.9745432058747932,
+   "span": 99.9828737,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.4,
+    "amplitude": -108.494
+   },
+   "el": "path##658"
+  },
+  {
+   "r2": 0.9744889883792366,
+   "span": 99.9612906,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.943,
+    "amplitude": -111.762
+   },
+   "el": "path##646"
+  },
+  {
+   "r2": 0.9741786052901935,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.027,
+    "amplitude": 0.677
+   },
+   "el": "path##172"
+  },
+  {
+   "r2": 0.9741031090050861,
+   "span": 99.9767305,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.866,
+    "amplitude": -107.769
+   },
+   "el": "path##180"
+  },
+  {
+   "r2": 0.9738285173921228,
+   "span": 99.9484776,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.795,
+    "amplitude": -106.847
+   },
+   "el": "path##181"
+  },
+  {
+   "r2": 0.9738250388544456,
+   "span": 99.9839989,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.834,
+    "amplitude": -114.645
+   },
+   "el": "path##100"
+  },
+  {
+   "r2": 0.9736517138077158,
+   "span": 99.99397078,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.952,
+    "amplitude": -108.635
+   },
+   "el": "path##179"
+  },
+  {
+   "r2": 0.9734851718446796,
+   "span": 3.96881103515625,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 118.812,
+    "amplitude": 3.819
+   },
+   "el": "path##666"
+  },
+  {
+   "r2": 0.973485171844679,
+   "span": 3.96881103515625,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 556.935,
+    "amplitude": -3.819
+   },
+   "el": "path##666"
+  },
+  {
+   "r2": 0.9734847595277036,
+   "span": 3.96881103515625,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 118.812,
+    "amplitude": 3.819
+   },
+   "el": "path##637"
+  },
+  {
+   "r2": 0.9734136992709543,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.031,
+    "amplitude": 0.79
+   },
+   "el": "path##93"
+  },
+  {
+   "r2": 0.9727072961843165,
+   "span": 99.9080585,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.74,
+    "amplitude": -105.856
+   },
+   "el": "path##182"
+  },
+  {
+   "r2": 0.9725168773861518,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.027,
+    "amplitude": 0.678
+   },
+   "el": "path##171"
+  },
+  {
+   "r2": 0.9724114081575657,
+   "span": 99.9900514,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.404,
+    "amplitude": -108.104
+   },
+   "el": "path##659"
+  },
+  {
+   "r2": 0.9723865399478772,
+   "span": 5.166015625,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 122.741,
+    "amplitude": -4.634
+   },
+   "el": "path##647"
+  },
+  {
+   "r2": 0.9723849270516527,
+   "span": 5.16595458984375,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 553.006,
+    "amplitude": 4.634
+   },
+   "el": "path##616"
+  },
+  {
+   "r2": 0.9723849270516524,
+   "span": 5.16595458984375,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 122.741,
+    "amplitude": -4.634
+   },
+   "el": "path##616"
+  },
+  {
+   "r2": 0.9722321605185907,
+   "span": 10.758392333984375,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 286.508,
+    "amplitude": -10.509
+   },
+   "el": "path##644"
+  },
+  {
+   "r2": 0.9721578355606839,
+   "span": 99.99999475198,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.692,
+    "amplitude": -106.703
+   },
+   "el": "path##183"
+  },
+  {
+   "r2": 0.9721476848811303,
+   "span": 27.224029541015625,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 34.536,
+    "amplitude": 24.41
+   },
+   "el": "path##620"
+  },
+  {
+   "r2": 0.9721476447816447,
+   "span": 27.2239990234375,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 252.057,
+    "amplitude": -24.41
+   },
+   "el": "path##651"
+  },
+  {
+   "r2": 0.9721476447816446,
+   "span": 27.2239990234375,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 34.536,
+    "amplitude": 24.41
+   },
+   "el": "path##651"
+  },
+  {
+   "r2": 0.9721042167908949,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.031,
+    "amplitude": 0.791
+   },
+   "el": "path##92"
+  },
+  {
+   "r2": 0.9720710465276945,
+   "span": 99.9891074,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.957,
+    "amplitude": -114.817
+   },
+   "el": "path##99"
+  },
+  {
+   "r2": 0.9709678764144035,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.026,
+    "amplitude": 0.679
+   },
+   "el": "path##170"
+  },
+  {
+   "r2": 0.9708808674899694,
+   "span": 19.95880126953125,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 282.964,
+    "amplitude": -19.331
+   },
+   "el": "path##646"
+  },
+  {
+   "r2": 0.9708808674899694,
+   "span": 19.95880126953125,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 3.63,
+    "amplitude": 19.331
+   },
+   "el": "path##646"
+  },
+  {
+   "r2": 0.9708808323679744,
+   "span": 19.95880126953125,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 3.63,
+    "amplitude": 19.33
+   },
+   "el": "path##617"
+  },
+  {
+   "r2": 0.9708672740882359,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.03,
+    "amplitude": 0.792
+   },
+   "el": "path##91"
+  },
+  {
+   "r2": 0.9708275823588993,
+   "span": 99.858048,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.088,
+    "amplitude": -107.704
+   },
+   "el": "path##178"
+  },
+  {
+   "r2": 0.9701943279323929,
+   "span": 99.99352082,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.088,
+    "amplitude": -114.982
+   },
+   "el": "path##98"
+  },
+  {
+   "r2": 0.9701673187212643,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.036,
+    "amplitude": 0.644
+   },
+   "el": "path##184"
+  },
+  {
+   "r2": 0.9699929001424293,
+   "span": 24.09161376953125,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 263.3,
+    "amplitude": 25.201
+   },
+   "el": "path##672"
+  },
+  {
+   "r2": 0.9698177342567659,
+   "span": 99.99556634,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.425,
+    "amplitude": -107.737
+   },
+   "el": "path##660"
+  },
+  {
+   "r2": 0.9697288388958439,
+   "span": 24.534393310546875,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 29.545,
+    "amplitude": -22.001
+   },
+   "el": "path##665"
+  },
+  {
+   "r2": 0.9697288388958438,
+   "span": 24.534393310546875,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 257.049,
+    "amplitude": 22.001
+   },
+   "el": "path##665"
+  },
+  {
+   "r2": 0.9697288147168398,
+   "span": 24.534393310546875,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 29.545,
+    "amplitude": -22.001
+   },
+   "el": "path##634"
+  },
+  {
+   "r2": 0.9697231149060327,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.03,
+    "amplitude": 0.792
+   },
+   "el": "path##90"
+  },
+  {
+   "r2": 0.9695584539083728,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.026,
+    "amplitude": 0.679
+   },
+   "el": "path##169"
+  },
+  {
+   "r2": 0.9695219577194092,
+   "span": 0.656005859375,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 554.845,
+    "amplitude": -0.66
+   },
+   "el": "path##659"
+  },
+  {
+   "r2": 0.9694782658821173,
+   "span": 8.54437255859375,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 114.263,
+    "amplitude": 8.112
+   },
+   "el": "path##635"
+  },
+  {
+   "r2": 0.9694781906640452,
+   "span": 8.54437255859375,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 561.484,
+    "amplitude": -8.112
+   },
+   "el": "path##664"
+  },
+  {
+   "r2": 0.9694781906640451,
+   "span": 8.54437255859375,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 114.263,
+    "amplitude": 8.112
+   },
+   "el": "path##664"
+  },
+  {
+   "r2": 0.9691009924002996,
+   "span": 5.85479736328125,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 280.938,
+    "amplitude": 6.125
+   },
+   "el": "path##673"
+  },
+  {
+   "r2": 0.9691002918328988,
+   "span": 99.9080585,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.211,
+    "amplitude": -108.536
+   },
+   "el": "path##177"
+  },
+  {
+   "r2": 0.9690715849505108,
+   "span": 99.99397078,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.682,
+    "amplitude": -105.661
+   },
+   "el": "path##184"
+  },
+  {
+   "r2": 0.9688432643183449,
+   "span": 10.2991943359375,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 553.012,
+    "amplitude": 10.231
+   },
+   "el": "path##618"
+  },
+  {
+   "r2": 0.9688432643183444,
+   "span": 10.2991943359375,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 122.735,
+    "amplitude": -10.231
+   },
+   "el": "path##618"
+  },
+  {
+   "r2": 0.9688427289787886,
+   "span": 10.2991943359375,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 122.735,
+    "amplitude": -10.231
+   },
+   "el": "path##649"
+  },
+  {
+   "r2": 0.9687517484642786,
+   "span": 99.9141535,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.282,
+    "amplitude": -111.851
+   },
+   "el": "path##645"
+  },
+  {
+   "r2": 0.9686952839387736,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.03,
+    "amplitude": 0.793
+   },
+   "el": "path##89"
+  },
+  {
+   "r2": 0.9683134600882102,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.026,
+    "amplitude": 0.68
+   },
+   "el": "path##168"
+  },
+  {
+   "r2": 0.9681931795788111,
+   "span": 99.99660317,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.226,
+    "amplitude": -115.119
+   },
+   "el": "path##97"
+  },
+  {
+   "r2": 0.9680404654198043,
+   "span": 99.99999614421,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.333,
+    "amplitude": -113.29
+   },
+   "el": "path##644"
+  },
+  {
+   "r2": 0.9677772850707468,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.03,
+    "amplitude": 0.793
+   },
+   "el": "path##88"
+  },
+  {
+   "r2": 0.9673457307303808,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.019,
+    "amplitude": 0.785
+   },
+   "el": "path##76"
+  },
+  {
+   "r2": 0.9672375489707161,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.025,
+    "amplitude": 0.68
+   },
+   "el": "path##167"
+  },
+  {
+   "r2": 0.9672210504850086,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.021,
+    "amplitude": 0.787
+   },
+   "el": "path##77"
+  },
+  {
+   "r2": 0.9672084220788048,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.016,
+    "amplitude": 0.783
+   },
+   "el": "path##75"
+  },
+  {
+   "r2": 0.9669790936078203,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.03,
+    "amplitude": 0.794
+   },
+   "el": "path##87"
+  },
+  {
+   "r2": 0.966916406689135,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.013,
+    "amplitude": 0.78
+   },
+   "el": "path##74"
+  },
+  {
+   "r2": 0.966906404641941,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.023,
+    "amplitude": 0.789
+   },
+   "el": "path##78"
+  },
+  {
+   "r2": 0.966879306765407,
+   "span": 99.9484776,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.348,
+    "amplitude": -109.354
+   },
+   "el": "path##176"
+  },
+  {
+   "r2": 0.9667542608189701,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.018,
+    "amplitude": 0.674
+   },
+   "el": "path##150"
+  },
+  {
+   "r2": 0.9667010795457025,
+   "span": 99.99888855,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.464,
+    "amplitude": -107.38
+   },
+   "el": "path##661"
+  },
+  {
+   "r2": 0.9665494854714868,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.015,
+    "amplitude": 0.672
+   },
+   "el": "path##149"
+  },
+  {
+   "r2": 0.9665287194303199,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.02,
+    "amplitude": 0.676
+   },
+   "el": "path##151"
+  },
+  {
+   "r2": 0.966392938953721,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.025,
+    "amplitude": 0.791
+   },
+   "el": "path##79"
+  },
+  {
+   "r2": 0.9663255026215064,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.025,
+    "amplitude": 0.681
+   },
+   "el": "path##166"
+  },
+  {
+   "r2": 0.9662957527798036,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.029,
+    "amplitude": 0.794
+   },
+   "el": "path##86"
+  },
+  {
+   "r2": 0.9662640259559804,
+   "span": 49.57720947265625,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 14.894,
+    "amplitude": 55.441
+   },
+   "el": "path##623"
+  },
+  {
+   "r2": 0.9662640156304371,
+   "span": 49.57720947265625,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 14.894,
+    "amplitude": 55.441
+   },
+   "el": "path##652"
+  },
+  {
+   "r2": 0.966264015630437,
+   "span": 49.57720947265625,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 271.7,
+    "amplitude": -55.441
+   },
+   "el": "path##652"
+  },
+  {
+   "r2": 0.9661937968793295,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.01,
+    "amplitude": 0.777
+   },
+   "el": "path##73"
+  },
+  {
+   "r2": 0.9660586739599335,
+   "span": 99.99870178,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.37,
+    "amplitude": -115.248
+   },
+   "el": "path##96"
+  },
+  {
+   "r2": 0.9659353969815895,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.022,
+    "amplitude": 0.678
+   },
+   "el": "path##152"
+  },
+  {
+   "r2": 0.9658727048217772,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.026,
+    "amplitude": 0.792
+   },
+   "el": "path##80"
+  },
+  {
+   "r2": 0.9657317761195097,
+   "span": 99.99888855,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.468,
+    "amplitude": -113.319
+   },
+   "el": "path##643"
+  },
+  {
+   "r2": 0.965712478230237,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.029,
+    "amplitude": 0.794
+   },
+   "el": "path##85"
+  },
+  {
+   "r2": 0.9656526563724824,
+   "span": 17.66278076171875,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 19.933,
+    "amplitude": -15.526
+   },
+   "el": "path##636"
+  },
+  {
+   "r2": 0.9656526563724824,
+   "span": 17.66278076171875,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 19.933,
+    "amplitude": -15.526
+   },
+   "el": "path##667"
+  },
+  {
+   "r2": 0.9656526563724822,
+   "span": 17.66278076171875,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 266.661,
+    "amplitude": 15.526
+   },
+   "el": "path##667"
+  },
+  {
+   "r2": 0.9656385144339062,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.012,
+    "amplitude": 0.669
+   },
+   "el": "path##148"
+  },
+  {
+   "r2": 0.9655731797949396,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.027,
+    "amplitude": 0.793
+   },
+   "el": "path##81"
+  },
+  {
+   "r2": 0.965562616226679,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.025,
+    "amplitude": 0.681
+   },
+   "el": "path##165"
+  },
+  {
+   "r2": 0.9654668185610902,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.023,
+    "amplitude": 0.679
+   },
+   "el": "path##153"
+  },
+  {
+   "r2": 0.9652305171976107,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.029,
+    "amplitude": 0.794
+   },
+   "el": "path##84"
+  },
+  {
+   "r2": 0.9652068505182356,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.028,
+    "amplitude": 0.794
+   },
+   "el": "path##82"
+  },
+  {
+   "r2": 0.9651936821297085,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.029,
+    "amplitude": 0.794
+   },
+   "el": "path##83"
+  },
+  {
+   "r2": 0.9651303297064363,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.007,
+    "amplitude": 0.774
+   },
+   "el": "path##72"
+  },
+  {
+   "r2": 0.9649688903372631,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.025,
+    "amplitude": 0.681
+   },
+   "el": "path##164"
+  },
+  {
+   "r2": 0.9648820026456372,
+   "span": 37.08039855957031,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 285.849,
+    "amplitude": -40.065
+   },
+   "el": "path##645"
+  },
+  {
+   "r2": 0.9647788365877298,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.024,
+    "amplitude": 0.68
+   },
+   "el": "path##154"
+  },
+  {
+   "r2": 0.9647042688699458,
+   "span": 99.9767305,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.692,
+    "amplitude": -104.561
+   },
+   "el": "path##185"
+  },
+  {
+   "r2": 0.9645317596000327,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.025,
+    "amplitude": 0.681
+   },
+   "el": "path##163"
+  },
+  {
+   "r2": 0.9643620852454242,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.009,
+    "amplitude": 0.666
+   },
+   "el": "path##147"
+  },
+  {
+   "r2": 0.964322516503077,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.025,
+    "amplitude": 0.681
+   },
+   "el": "path##155"
+  },
+  {
+   "r2": 0.9642484108060456,
+   "span": 99.726905,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.502,
+    "amplitude": -107.989
+   },
+   "el": "path##175"
+  },
+  {
+   "r2": 0.9642376979489232,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.025,
+    "amplitude": 0.681
+   },
+   "el": "path##162"
+  },
+  {
+   "r2": 0.9641420605338001,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.037,
+    "amplitude": 0.638
+   },
+   "el": "path##185"
+  },
+  {
+   "r2": 0.9640781576699877,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.025,
+    "amplitude": 0.681
+   },
+   "el": "path##161"
+  },
+  {
+   "r2": 0.9640085540771691,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.025,
+    "amplitude": 0.681
+   },
+   "el": "path##160"
+  },
+  {
+   "r2": 0.9638513129630897,
+   "span": 99.99431917,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.601,
+    "amplitude": -110.221
+   },
+   "el": "path##174"
+  },
+  {
+   "r2": 0.9637827798454155,
+   "span": 99.999855467,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.523,
+    "amplitude": -115.392
+   },
+   "el": "path##95"
+  },
+  {
+   "r2": 0.9635393861956089,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.003,
+    "amplitude": 0.77
+   },
+   "el": "path##71"
+  },
+  {
+   "r2": 0.9632014628757579,
+   "span": 99.850539,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.611,
+    "amplitude": -111.129
+   },
+   "el": "path##642"
+  },
+  {
+   "r2": 0.9630018550347371,
+   "span": 99.99999614421,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.52,
+    "amplitude": -107.02
+   },
+   "el": "path##662"
+  },
+  {
+   "r2": 0.9625407714877792,
+   "span": 99.99043618,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.667,
+    "amplitude": -112.403
+   },
+   "el": "path##641"
+  },
+  {
+   "r2": 0.9623661927624761,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.005,
+    "amplitude": 0.662
+   },
+   "el": "path##146"
+  },
+  {
+   "r2": 0.9615876571718338,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.0,
+    "amplitude": 0.767
+   },
+   "el": "path##70"
+  },
+  {
+   "r2": 0.9615213815967796,
+   "span": 36.621185302734375,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 55.841,
+    "amplitude": -38.056
+   },
+   "el": "path##635"
+  },
+  {
+   "r2": 0.9615213448847153,
+   "span": 36.621185302734375,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 230.753,
+    "amplitude": 38.056
+   },
+   "el": "path##664"
+  },
+  {
+   "r2": 0.9615213448847153,
+   "span": 36.621185302734375,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 55.841,
+    "amplitude": -38.056
+   },
+   "el": "path##664"
+  },
+  {
+   "r2": 0.9613615959517819,
+   "span": 99.9260786,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.685,
+    "amplitude": -113.27
+   },
+   "el": "path##94"
+  },
+  {
+   "r2": 0.9594695823955233,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.001,
+    "amplitude": 0.658
+   },
+   "el": "path##145"
+  },
+  {
+   "r2": 0.9594009651678437,
+   "span": 99.9828737,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.792,
+    "amplitude": -112.127
+   },
+   "el": "path##640"
+  },
+  {
+   "r2": 0.959033315598654,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.004,
+    "amplitude": 0.763
+   },
+   "el": "path##69"
+  },
+  {
+   "r2": 0.9588569357346999,
+   "span": 99.9474516,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.724,
+    "amplitude": -103.395
+   },
+   "el": "path##186"
+  },
+  {
+   "r2": 0.9582212218243482,
+   "span": 99.9374916,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.822,
+    "amplitude": -113.105
+   },
+   "el": "path##93"
+  },
+  {
+   "r2": 0.9575247602463907,
+   "span": 35.06317138671875,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 23.477,
+    "amplitude": 30.372
+   },
+   "el": "path##618"
+  },
+  {
+   "r2": 0.9575247252541783,
+   "span": 35.06318664550781,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 263.117,
+    "amplitude": -30.372
+   },
+   "el": "path##649"
+  },
+  {
+   "r2": 0.9575247252541783,
+   "span": 35.06318664550781,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 23.477,
+    "amplitude": 30.372
+   },
+   "el": "path##649"
+  },
+  {
+   "r2": 0.9573285041826242,
+   "span": 1.2628173828125,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 553.509,
+    "amplitude": 1.097
+   },
+   "el": "path##621"
+  },
+  {
+   "r2": 0.9571290225338747,
+   "span": 99.448609,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.789,
+    "amplitude": -106.692
+   },
+   "el": "path##173"
+  },
+  {
+   "r2": 0.9568302307372298,
+   "span": 99.9141535,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.606,
+    "amplitude": -104.902
+   },
+   "el": "path##663"
+  },
+  {
+   "r2": 0.9566511537328672,
+   "span": 63.7303466796875,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 613.688,
+    "amplitude": -61.058
+   },
+   "el": "path##660"
+  },
+  {
+   "r2": 0.9566511537328671,
+   "span": 63.7303466796875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 62.059,
+    "amplitude": 61.058
+   },
+   "el": "path##660"
+  },
+  {
+   "r2": 0.9566510962744827,
+   "span": 63.73046875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 62.059,
+    "amplitude": 61.058
+   },
+   "el": "path##631"
+  },
+  {
+   "r2": 0.9566356683310423,
+   "span": 99.9080585,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.892,
+    "amplitude": -108.668
+   },
+   "el": "path##172"
+  },
+  {
+   "r2": 0.9564955712315453,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.038,
+    "amplitude": 0.633
+   },
+   "el": "path##186"
+  },
+  {
+   "r2": 0.9560860704889864,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.009,
+    "amplitude": 0.758
+   },
+   "el": "path##68"
+  },
+  {
+   "r2": 0.9557742645392209,
+   "span": 99.766424,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.92,
+    "amplitude": -109.57
+   },
+   "el": "path##639"
+  },
+  {
+   "r2": 0.9555979720478244,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.003,
+    "amplitude": 0.654
+   },
+   "el": "path##144"
+  },
+  {
+   "r2": 0.9554079935466531,
+   "span": 23.2879638671875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 100.522,
+    "amplitude": 21.872
+   },
+   "el": "path##633"
+  },
+  {
+   "r2": 0.9554079715860498,
+   "span": 23.2879638671875,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 575.225,
+    "amplitude": -21.872
+   },
+   "el": "path##662"
+  },
+  {
+   "r2": 0.9554079715860497,
+   "span": 23.2879638671875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 100.522,
+    "amplitude": 21.872
+   },
+   "el": "path##662"
+  },
+  {
+   "r2": 0.955180660495647,
+   "span": 99.9612906,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.975,
+    "amplitude": -110.648
+   },
+   "el": "path##638"
+  },
+  {
+   "r2": 0.9546256754868893,
+   "span": 99.743307,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.962,
+    "amplitude": -110.626
+   },
+   "el": "path##92"
+  },
+  {
+   "r2": 0.9539234006468165,
+   "span": 99.9574963,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.016,
+    "amplitude": -111.676
+   },
+   "el": "path##91"
+  },
+  {
+   "r2": 0.9536657479546039,
+   "span": 1.29559326171875,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 553.095,
+    "amplitude": 1.366
+   },
+   "el": "path##617"
+  },
+  {
+   "r2": 0.9534507049257976,
+   "span": 41.508392333984375,
+   "field": "left",
+   "model": "linear",
+   "params": {
+    "offset": 280.597,
+    "amplitude": -46.684
+   },
+   "el": "path##647"
+  },
+  {
+   "r2": 0.9534507049257976,
+   "span": 41.508392333984375,
+   "field": "width",
+   "model": "linear",
+   "params": {
+    "offset": 5.997,
+    "amplitude": 46.684
+   },
+   "el": "path##647"
+  },
+  {
+   "r2": 0.9534507015692443,
+   "span": 41.508392333984375,
+   "field": "width",
+   "model": "linear",
+   "params": {
+    "offset": 5.997,
+    "amplitude": 46.684
+   },
+   "el": "path##616"
+  },
+  {
+   "r2": 0.9533793551628729,
+   "span": 0.5576171875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 1.303,
+    "amplitude": 0.532
+   },
+   "el": "path##640"
+  },
+  {
+   "r2": 0.9533786858170348,
+   "span": 0.5576171875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 1.303,
+    "amplitude": 0.532
+   },
+   "el": "path##671"
+  },
+  {
+   "r2": 0.9533786858170311,
+   "span": 0.5576171875,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 553.51,
+    "amplitude": -0.532
+   },
+   "el": "path##671"
+  },
+  {
+   "r2": 0.9528318565105001,
+   "span": 1.24639892578125,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 554.258,
+    "amplitude": -1.084
+   },
+   "el": "path##667"
+  },
+  {
+   "r2": 0.9527082415006393,
+   "span": 73.06201171875,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 551.091,
+    "amplitude": 70.72
+   },
+   "el": "path##622"
+  },
+  {
+   "r2": 0.9527082415006393,
+   "span": 73.06201171875,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 124.656,
+    "amplitude": -70.72
+   },
+   "el": "path##622"
+  },
+  {
+   "r2": 0.9527082370916726,
+   "span": 73.06201171875,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 124.656,
+    "amplitude": -70.72
+   },
+   "el": "path##653"
+  },
+  {
+   "r2": 0.9525056674192535,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.013,
+    "amplitude": 0.754
+   },
+   "el": "path##67"
+  },
+  {
+   "r2": 0.9522081283203803,
+   "span": 60.53240966796875,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 619.945,
+    "amplitude": 58.535
+   },
+   "el": "path##630"
+  },
+  {
+   "r2": 0.9518481782794801,
+   "span": 99.9484776,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.014,
+    "amplitude": -108.555
+   },
+   "el": "path##171"
+  },
+  {
+   "r2": 0.9515850578613619,
+   "span": 99.9322153,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.695,
+    "amplitude": -104.555
+   },
+   "el": "path##664"
+  },
+  {
+   "r2": 0.951310540823056,
+   "span": 99.9080585,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.778,
+    "amplitude": -102.188
+   },
+   "el": "path##187"
+  },
+  {
+   "r2": 0.9508892995177147,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.008,
+    "amplitude": 0.65
+   },
+   "el": "path##143"
+  },
+  {
+   "r2": 0.9508134434219272,
+   "span": 1.0,
+   "field": "opacity",
+   "model": "lerp(k=0.220)",
+   "params": {
+    "offset": -0.225,
+    "amplitude": 1.232
+   },
+   "el": "p#text-[15px] 3xl:text-[18px] te#209"
+  },
+  {
+   "r2": 0.9507889584774397,
+   "span": 12.0,
+   "field": "top",
+   "model": "lerp(k=0.220)",
+   "params": {
+    "offset": 452.952,
+    "amplitude": -14.786
+   },
+   "el": "p#text-[15px] 3xl:text-[18px] te#209"
+  },
+  {
+   "r2": 0.9507889584774397,
+   "span": 12.0,
+   "field": "top",
+   "model": "lerp(k=0.220)",
+   "params": {
+    "offset": 452.952,
+    "amplitude": -14.786
+   },
+   "el": "span##210"
+  },
+  {
+   "r2": 0.9507889584774396,
+   "span": 12.0,
+   "field": "top",
+   "model": "lerp(k=0.220)",
+   "params": {
+    "offset": 455.952,
+    "amplitude": -14.786
+   },
+   "el": "span#max-md:hidden#211"
+  },
+  {
+   "r2": 0.9507888016302166,
+   "span": 12.0,
+   "field": "transform",
+   "model": "lerp(k=0.220)",
+   "params": {
+    "offset": 14.702,
+    "amplitude": -14.786
+   },
+   "el": "p#text-[15px] 3xl:text-[18px] te#209"
+  },
+  {
+   "r2": 0.9506365568417553,
+   "span": 99.9481855,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.075,
+    "amplitude": -109.955
+   },
+   "el": "path##637"
+  },
+  {
+   "r2": 0.949998908960913,
+   "span": 59.6468505859375,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 55.742,
+    "amplitude": -57.814
+   },
+   "el": "path##630"
+  },
+  {
+   "r2": 0.9499986828180529,
+   "span": 59.646728515625,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 55.742,
+    "amplitude": -57.814
+   },
+   "el": "path##661"
+  },
+  {
+   "r2": 0.9495114431819999,
+   "span": 1.29559326171875,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 554.676,
+    "amplitude": -1.378
+   },
+   "el": "path##663"
+  },
+  {
+   "r2": 0.9493925794995289,
+   "span": 99.9666985,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.124,
+    "amplitude": -111.045
+   },
+   "el": "path##90"
+  },
+  {
+   "r2": 0.9492139610505949,
+   "span": 43.09919738769531,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 226.275,
+    "amplitude": 47.819
+   },
+   "el": "path##659"
+  },
+  {
+   "r2": 0.9492139610505949,
+   "span": 43.09919738769531,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 60.318,
+    "amplitude": -47.819
+   },
+   "el": "path##659"
+  },
+  {
+   "r2": 0.9492139404917262,
+   "span": 43.099212646484375,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 60.318,
+    "amplitude": -47.819
+   },
+   "el": "path##628"
+  },
+  {
+   "r2": 0.9488714501982803,
+   "span": 31.045166015625,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 123.197,
+    "amplitude": -27.065
+   },
+   "el": "path##651"
+  },
+  {
+   "r2": 0.9488708887740238,
+   "span": 31.045166015625,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 123.197,
+    "amplitude": -27.065
+   },
+   "el": "path##620"
+  },
+  {
+   "r2": 0.9488708887740237,
+   "span": 31.045166015625,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 552.55,
+    "amplitude": 27.065
+   },
+   "el": "path##620"
+  },
+  {
+   "r2": 0.9485186329970567,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.018,
+    "amplitude": 0.749
+   },
+   "el": "path##66"
+  },
+  {
+   "r2": 0.948018181117467,
+   "span": 42.754791259765625,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 237.365,
+    "amplitude": 44.537
+   },
+   "el": "path##666"
+  },
+  {
+   "r2": 0.948018181117467,
+   "span": 42.754791259765625,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 49.229,
+    "amplitude": -44.537
+   },
+   "el": "path##666"
+  },
+  {
+   "r2": 0.9480181332646836,
+   "span": 42.754791259765625,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 49.229,
+    "amplitude": -44.537
+   },
+   "el": "path##637"
+  },
+  {
+   "r2": 0.9479262743068092,
+   "span": 26.58441162109375,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 288.348,
+    "amplitude": -27.777
+   },
+   "el": "path##643"
+  },
+  {
+   "r2": 0.9470468835651945,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.04,
+    "amplitude": 0.627
+   },
+   "el": "path##187"
+  },
+  {
+   "r2": 0.946037998358455,
+   "span": 99.9767305,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.129,
+    "amplitude": -108.249
+   },
+   "el": "path##170"
+  },
+  {
+   "r2": 0.9455840188499404,
+   "span": 0.8035888671875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 122.002,
+    "amplitude": 0.709
+   },
+   "el": "path##641"
+  },
+  {
+   "r2": 0.9455707299372216,
+   "span": 0.80364990234375,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 553.745,
+    "amplitude": -0.709
+   },
+   "el": "path##670"
+  },
+  {
+   "r2": 0.9455707299372198,
+   "span": 0.80364990234375,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 122.002,
+    "amplitude": 0.709
+   },
+   "el": "path##670"
+  },
+  {
+   "r2": 0.945101152101776,
+   "span": 99.9322153,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.169,
+    "amplitude": -109.136
+   },
+   "el": "path##636"
+  },
+  {
+   "r2": 0.9450742593076386,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.013,
+    "amplitude": 0.645
+   },
+   "el": "path##142"
+  },
+  {
+   "r2": 0.9446193182663768,
+   "span": 70.060791015625,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 679.797,
+    "amplitude": -67.548
+   },
+   "el": "path##652"
+  },
+  {
+   "r2": 0.9439701228622482,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.023,
+    "amplitude": 0.744
+   },
+   "el": "path##65"
+  },
+  {
+   "r2": 0.9438858041201196,
+   "span": 99.9742526,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.226,
+    "amplitude": -110.278
+   },
+   "el": "path##89"
+  },
+  {
+   "r2": 0.9430502107057235,
+   "span": 99.702459,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.788,
+    "amplitude": -102.31
+   },
+   "el": "path##665"
+  },
+  {
+   "r2": 0.9426580762671747,
+   "span": 12.8411865234375,
+   "field": "left",
+   "model": "linear",
+   "params": {
+    "offset": 271.674,
+    "amplitude": 14.883
+   },
+   "el": "path##669"
+  },
+  {
+   "r2": 0.9425952470337172,
+   "span": 6.46160888671875,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 287.044,
+    "amplitude": -6.751
+   },
+   "el": "path##642"
+  },
+  {
+   "r2": 0.9421962024116733,
+   "span": 1.3612060546875,
+   "field": "top",
+   "model": "linear",
+   "params": {
+    "offset": 553.016,
+    "amplitude": 1.506
+   },
+   "el": "path##619"
+  },
+  {
+   "r2": 0.9419775708201482,
+   "span": 19.8768310546875,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 657.648,
+    "amplitude": 19.355
+   },
+   "el": "path##632"
+  },
+  {
+   "r2": 0.9417283343920464,
+   "span": 12.824798583984375,
+   "field": "width",
+   "model": "linear",
+   "params": {
+    "offset": 14.876,
+    "amplitude": -14.73
+   },
+   "el": "path##638"
+  },
+  {
+   "r2": 0.9417283343920464,
+   "span": 12.824798583984375,
+   "field": "width",
+   "model": "linear",
+   "params": {
+    "offset": 14.876,
+    "amplitude": -14.73
+   },
+   "el": "path##669"
+  },
+  {
+   "r2": 0.9402633852080412,
+   "span": 1.3612060546875,
+   "field": "top",
+   "model": "linear",
+   "params": {
+    "offset": 554.761,
+    "amplitude": -1.508
+   },
+   "el": "path##665"
+  },
+  {
+   "r2": 0.9400545248541732,
+   "span": 69.17523193359375,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": -3.293,
+    "amplitude": 66.546
+   },
+   "el": "path##652"
+  },
+  {
+   "r2": 0.9400542388909416,
+   "span": 69.1751708984375,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": -3.293,
+    "amplitude": 66.546
+   },
+   "el": "path##623"
+  },
+  {
+   "r2": 0.9388506387593079,
+   "span": 99.99397078,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.235,
+    "amplitude": -107.739
+   },
+   "el": "path##169"
+  },
+  {
+   "r2": 0.9388295570052636,
+   "span": 99.448609,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.813,
+    "amplitude": -98.762
+   },
+   "el": "path##188"
+  },
+  {
+   "r2": 0.9387819303874423,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.028,
+    "amplitude": 0.739
+   },
+   "el": "path##64"
+  },
+  {
+   "r2": 0.938356709990986,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.018,
+    "amplitude": 0.64
+   },
+   "el": "path##141"
+  },
+  {
+   "r2": 0.9382056171889682,
+   "span": 99.9141535,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.254,
+    "amplitude": -108.179
+   },
+   "el": "path##635"
+  },
+  {
+   "r2": 0.9376400882253739,
+   "span": 99.99999614421,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.302,
+    "amplitude": -108.997
+   },
+   "el": "path##634"
+  },
+  {
+   "r2": 0.9372088030344103,
+   "span": 12.0,
+   "field": "top",
+   "model": "lerp(k=0.120)",
+   "params": {
+    "offset": 512.216,
+    "amplitude": -15.364
+   },
+   "el": "div#pointer-events-auto flex flex-#212"
+  },
+  {
+   "r2": 0.9372088030344103,
+   "span": 12.0,
+   "field": "top",
+   "model": "lerp(k=0.120)",
+   "params": {
+    "offset": 512.216,
+    "amplitude": -15.364
+   },
+   "el": "a#group relative inline-flex ite#213"
+  },
+  {
+   "r2": 0.9372088030344103,
+   "span": 12.0,
+   "field": "top",
+   "model": "lerp(k=0.120)",
+   "params": {
+    "offset": 512.216,
+    "amplitude": -15.364
+   },
+   "el": "span#pointer-events-none absolute i#214"
+  },
+  {
+   "r2": 0.9372088030344103,
+   "span": 12.0,
+   "field": "top",
+   "model": "lerp(k=0.120)",
+   "params": {
+    "offset": 512.216,
+    "amplitude": -15.364
+   },
+   "el": "a#relative inline-flex items-cen#216"
+  },
+  {
+   "r2": 0.9372087711094943,
+   "span": 12.0,
+   "field": "transform",
+   "model": "lerp(k=0.120)",
+   "params": {
+    "offset": 14.966,
+    "amplitude": -15.364
+   },
+   "el": "div#pointer-events-auto flex flex-#212"
+  },
+  {
+   "r2": 0.9372087283113475,
+   "span": 12.0,
+   "field": "top",
+   "model": "lerp(k=0.120)",
+   "params": {
+    "offset": 522.216,
+    "amplitude": -15.364
+   },
+   "el": "span#relative z-10 inline-flex item#215"
+  },
+  {
+   "r2": 0.9372009998383432,
+   "span": 1.0,
+   "field": "opacity",
+   "model": "lerp(k=0.120)",
+   "params": {
+    "offset": -0.247,
+    "amplitude": 1.28
+   },
+   "el": "div#pointer-events-auto flex flex-#212"
+  },
+  {
+   "r2": 0.9370469203836818,
+   "span": 30.635208129882812,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 34.259,
+    "amplitude": -26.151
+   },
+   "el": "path##670"
+  },
+  {
+   "r2": 0.9370468932948537,
+   "span": 30.63519287109375,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 34.259,
+    "amplitude": -26.151
+   },
+   "el": "path##641"
+  },
+  {
+   "r2": 0.9370352224829018,
+   "span": 99.9808472,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.319,
+    "amplitude": -109.364
+   },
+   "el": "path##88"
+  },
+  {
+   "r2": 0.936791550976144,
+   "span": 109.53558349609375,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 119.104,
+    "amplitude": -98.724
+   },
+   "el": "path##657"
+  },
+  {
+   "r2": 0.9367914599023263,
+   "span": 109.53564453125,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 119.104,
+    "amplitude": -98.724
+   },
+   "el": "path##626"
+  },
+  {
+   "r2": 0.9365265245712318,
+   "span": 44.1488037109375,
+   "field": "width",
+   "model": "linear",
+   "params": {
+    "offset": 51.448,
+    "amplitude": -48.766
+   },
+   "el": "path##668"
+  },
+  {
+   "r2": 0.9365265007070152,
+   "span": 44.1488037109375,
+   "field": "width",
+   "model": "linear",
+   "params": {
+    "offset": 51.448,
+    "amplitude": -48.766
+   },
+   "el": "path##639"
+  },
+  {
+   "r2": 0.9361408416104897,
+   "span": 109.8800048828125,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 556.623,
+    "amplitude": 98.881
+   },
+   "el": "path##626"
+  },
+  {
+   "r2": 0.9360929451372526,
+   "span": 44.2471923828125,
+   "field": "left",
+   "model": "linear",
+   "params": {
+    "offset": 234.923,
+    "amplitude": 49.547
+   },
+   "el": "path##668"
+  },
+  {
+   "r2": 0.9355947537406172,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.041,
+    "amplitude": 0.62
+   },
+   "el": "path##188"
+  },
+  {
+   "r2": 0.9338319265050181,
+   "span": 7.64239501953125,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 8.328,
+    "amplitude": -6.385
+   },
+   "el": "path##640"
+  },
+  {
+   "r2": 0.9338319265050181,
+   "span": 7.64239501953125,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 8.328,
+    "amplitude": -6.385
+   },
+   "el": "path##671"
+  },
+  {
+   "r2": 0.933095509016231,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.034,
+    "amplitude": 0.733
+   },
+   "el": "path##63"
+  },
+  {
+   "r2": 0.9329008931187022,
+   "span": 99.320429,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.876,
+    "amplitude": -99.95
+   },
+   "el": "path##666"
+  },
+  {
+   "r2": 0.9316068959918997,
+   "span": 18.94195556640625,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 18.112,
+    "amplitude": -18.338
+   },
+   "el": "path##632"
+  },
+  {
+   "r2": 0.9316063433096783,
+   "span": 18.94195556640625,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 18.112,
+    "amplitude": -18.338
+   },
+   "el": "path##663"
+  },
+  {
+   "r2": 0.9315802558378846,
+   "span": 0.63958740234375,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 552.978,
+    "amplitude": 0.594
+   },
+   "el": "path##675"
+  },
+  {
+   "r2": 0.9315802558378689,
+   "span": 0.63958740234375,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 1.836,
+    "amplitude": -0.594
+   },
+   "el": "path##675"
+  },
+  {
+   "r2": 0.9315660647180225,
+   "span": 0.6396484375,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 1.835,
+    "amplitude": -0.594
+   },
+   "el": "path##644"
+  },
+  {
+   "r2": 0.9305941865105178,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.024,
+    "amplitude": 0.634
+   },
+   "el": "path##140"
+  },
+  {
+   "r2": 0.930541708661771,
+   "span": 99.99397078,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.944,
+    "amplitude": -101.234
+   },
+   "el": "path##189"
+  },
+  {
+   "r2": 0.929727485845094,
+   "span": 99.99999475198,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.329,
+    "amplitude": -106.994
+   },
+   "el": "path##168"
+  },
+  {
+   "r2": 0.9294876824484536,
+   "span": 110.027587890625,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 675.458,
+    "amplitude": -98.163
+   },
+   "el": "path##656"
+  },
+  {
+   "r2": 0.9294274216807152,
+   "span": 5.65802001953125,
+   "field": "top",
+   "model": "logistic",
+   "params": {
+    "offset": 670.531,
+    "amplitude": 5.711
+   },
+   "el": "path##634"
+  },
+  {
+   "r2": 0.9289031475845951,
+   "span": 109.748779296875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 0.541,
+    "amplitude": 97.886
+   },
+   "el": "path##627"
+  },
+  {
+   "r2": 0.9289031281153519,
+   "span": 109.748779296875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 0.541,
+    "amplitude": 97.886
+   },
+   "el": "path##656"
+  },
+  {
+   "r2": 0.9288620177564783,
+   "span": 99.99875415,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.375,
+    "amplitude": -107.832
+   },
+   "el": "path##633"
+  },
+  {
+   "r2": 0.9282737200839665,
+   "span": 99.9864772,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.399,
+    "amplitude": -108.271
+   },
+   "el": "path##87"
+  },
+  {
+   "r2": 0.9268837252675926,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.04,
+    "amplitude": 0.727
+   },
+   "el": "path##62"
+  },
+  {
+   "r2": 0.9225073083643556,
+   "span": 32.7672119140625,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 30.945,
+    "amplitude": 31.697
+   },
+   "el": "path##627"
+  },
+  {
+   "r2": 0.922507234188354,
+   "span": 32.7672119140625,
+   "field": "width",
+   "model": "logistic",
+   "params": {
+    "offset": 30.945,
+    "amplitude": 31.697
+   },
+   "el": "path##656"
+  },
+  {
+   "r2": 0.9225072341883539,
+   "span": 32.7672119140625,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 255.648,
+    "amplitude": -31.697
+   },
+   "el": "path##656"
+  },
+  {
+   "r2": 0.9224305813733653,
+   "span": 98.79564,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.942,
+    "amplitude": -97.507
+   },
+   "el": "path##667"
+  },
+  {
+   "r2": 0.9220147800259213,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.03,
+    "amplitude": 0.628
+   },
+   "el": "path##139"
+  },
+  {
+   "r2": 0.9219099820304233,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.042,
+    "amplitude": 0.613
+   },
+   "el": "path##189"
+  },
+  {
+   "r2": 0.9200837447458288,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.047,
+    "amplitude": 0.72
+   },
+   "el": "path##61"
+  },
+  {
+   "r2": 0.9181729960586328,
+   "span": 99.9767305,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.064,
+    "amplitude": -99.853
+   },
+   "el": "path##190"
+  },
+  {
+   "r2": 0.917674606794358,
+   "span": 27.47003173828125,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 677.412,
+    "amplitude": -23.529
+   },
+   "el": "path##650"
+  },
+  {
+   "r2": 0.9172223940666981,
+   "span": 99.99556634,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.432,
+    "amplitude": -106.453
+   },
+   "el": "path##632"
+  },
+  {
+   "r2": 0.9166718537637584,
+   "span": 99.99145552,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.463,
+    "amplitude": -106.958
+   },
+   "el": "path##86"
+  },
+  {
+   "r2": 0.9126762593351525,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.054,
+    "amplitude": 0.713
+   },
+   "el": "path##60"
+  },
+  {
+   "r2": 0.9122240754980899,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.036,
+    "amplitude": 0.622
+   },
+   "el": "path##138"
+  },
+  {
+   "r2": 0.911845397416826,
+   "span": 34.43998718261719,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 8.9,
+    "amplitude": 28.264
+   },
+   "el": "path##645"
+  },
+  {
+   "r2": 0.9118453887096509,
+   "span": 34.439971923828125,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 8.9,
+    "amplitude": 28.264
+   },
+   "el": "path##674"
+  },
+  {
+   "r2": 0.9113763948238384,
+   "span": 98.1366,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.991,
+    "amplitude": -94.981
+   },
+   "el": "path##668"
+  },
+  {
+   "r2": 0.9107713902170022,
+   "span": 12.414794921875,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 275.672,
+    "amplitude": 12.027
+   },
+   "el": "path##674"
+  },
+  {
+   "r2": 0.9089170661703309,
+   "span": 1.0,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.07,
+    "amplitude": 1.041
+   },
+   "el": "header#fixed inset-x-0 z-50 bg-backgr#1"
+  },
+  {
+   "r2": 0.9089170661703309,
+   "span": 1.0,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.07,
+    "amplitude": 1.041
+   },
+   "el": "div#jsx-e78158c3f36e4cd6 absolute #3565"
+  },
+  {
+   "r2": 0.9067301820321093,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.043,
+    "amplitude": 0.605
+   },
+   "el": "path##190"
+  },
+  {
+   "r2": 0.9062198348440427,
+   "span": 99.9484776,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.191,
+    "amplitude": -98.52
+   },
+   "el": "path##191"
+  },
+  {
+   "r2": 0.9046455218440153,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.062,
+    "amplitude": 0.705
+   },
+   "el": "path##59"
+  },
+  {
+   "r2": 0.9018929190154079,
+   "span": 99.9080585,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.376,
+    "amplitude": -103.406
+   },
+   "el": "path##167"
+  },
+  {
+   "r2": 0.9018089720818442,
+   "span": 10.25,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 2.046,
+    "amplitude": 7.669
+   },
+   "el": "path##644"
+  },
+  {
+   "r2": 0.9018089720818442,
+   "span": 10.25,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 2.046,
+    "amplitude": 7.669
+   },
+   "el": "path##675"
+  },
+  {
+   "r2": 0.9010676963855315,
+   "span": 99.9900514,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.464,
+    "amplitude": -104.736
+   },
+   "el": "path##631"
+  },
+  {
+   "r2": 0.9005888214286465,
+   "span": 99.99506534,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.501,
+    "amplitude": -105.306
+   },
+   "el": "path##85"
+  },
+  {
+   "r2": 0.8993361190075632,
+   "span": 97.35096,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.026,
+    "amplitude": -92.372
+   },
+   "el": "path##669"
+  },
+  {
+   "r2": 0.8978153803044024,
+   "span": 26.50244140625,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": -0.537,
+    "amplitude": 22.192
+   },
+   "el": "path##650"
+  },
+  {
+   "r2": 0.8978137561215402,
+   "span": 26.50238037109375,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": -0.537,
+    "amplitude": 22.192
+   },
+   "el": "path##621"
+  },
+  {
+   "r2": 0.8959553893863436,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.07,
+    "amplitude": 0.697
+   },
+   "el": "path##58"
+  },
+  {
+   "r2": 0.8950018089249773,
+   "span": 3.017608642578125,
+   "field": "left",
+   "model": "logistic",
+   "params": {
+    "offset": 283.964,
+    "amplitude": 2.901
+   },
+   "el": "path##675"
+  },
+  {
+   "r2": 0.894417412714191,
+   "span": 99.9080585,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.324,
+    "amplitude": -97.219
+   },
+   "el": "path##192"
+  },
+  {
+   "r2": 0.8909633555742668,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.044,
+    "amplitude": 0.597
+   },
+   "el": "path##191"
+  },
+  {
+   "r2": 0.8872372583005729,
+   "span": 96.44562,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.04,
+    "amplitude": -89.704
+   },
+   "el": "path##670"
+  },
+  {
+   "r2": 0.8865979638370586,
+   "span": 0.7,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": 0.078,
+    "amplitude": 0.688
+   },
+   "el": "path##57"
+  },
+  {
+   "r2": 0.8812946004050682,
+   "span": 99.858048,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.476,
+    "amplitude": -95.925
+   },
+   "el": "path##193"
+  },
+  {
+   "r2": 0.8800328003905455,
+   "span": 99.999422441,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.499,
+    "amplitude": -101.644
+   },
+   "el": "path##83"
+  },
+  {
+   "r2": 0.8778569338549138,
+   "span": 2.329986572265625,
+   "field": "top",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 344.009,
+    "amplitude": -1.791
+   },
+   "el": "span#inline-block font-normal#206"
+  },
+  {
+   "r2": 0.8778559005981519,
+   "span": 2.33,
+   "field": "transform",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 1.759,
+    "amplitude": -1.791
+   },
+   "el": "span#inline-block font-normal#206"
+  },
+  {
+   "r2": 0.8775872300130296,
+   "span": 99.643524,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.387,
+    "amplitude": -99.379
+   },
+   "el": "path##166"
+  },
+  {
+   "r2": 0.8772142161847635,
+   "span": 99.9767305,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.468,
+    "amplitude": -100.508
+   },
+   "el": "path##165"
+  },
+  {
+   "r2": 0.8771594150279696,
+   "span": 99.796466,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.454,
+    "amplitude": -100.321
+   },
+   "el": "path##630"
+  },
+  {
+   "r2": 0.8769119741338509,
+   "span": 99.9731527,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.499,
+    "amplitude": -100.952
+   },
+   "el": "path##629"
+  },
+  {
+   "r2": 0.8768190797750801,
+   "span": 99.891826,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.499,
+    "amplitude": -100.952
+   },
+   "el": "path##84"
+  },
+  {
+   "r2": 0.874618572235278,
+   "span": 5.03485107421875,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 5.452,
+    "amplitude": -4.586
+   },
+   "el": "path##634"
+  },
+  {
+   "r2": 0.8746161795119465,
+   "span": 5.0347900390625,
+   "field": "height",
+   "model": "logistic",
+   "params": {
+    "offset": 5.452,
+    "amplitude": -4.585
+   },
+   "el": "path##665"
+  },
+  {
+   "r2": 0.8745261975650886,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.045,
+    "amplitude": 0.588
+   },
+   "el": "path##192"
+  },
+  {
+   "r2": 0.8734084579062504,
+   "span": 95.42684,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.046,
+    "amplitude": -86.948
+   },
+   "el": "path##671"
+  },
+  {
+   "r2": 0.8697294396802152,
+   "span": 78.8974,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.813,
+    "amplitude": -76.801
+   },
+   "el": "path##57"
+  },
+  {
+   "r2": 0.8683988457977461,
+   "span": 7.3636474609375,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 676.403,
+    "amplitude": -7.016
+   },
+   "el": "path##648"
+  },
+  {
+   "r2": 0.8633436134158909,
+   "span": 99.338012,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.507,
+    "amplitude": -92.255
+   },
+   "el": "path##194"
+  },
+  {
+   "r2": 0.8612385317263747,
+   "span": 1.29559326171875,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 122.728,
+    "amplitude": -0.951
+   },
+   "el": "path##645"
+  },
+  {
+   "r2": 0.8612075742698704,
+   "span": 1.29559326171875,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 122.728,
+    "amplitude": -0.951
+   },
+   "el": "path##674"
+  },
+  {
+   "r2": 0.8612075742698658,
+   "span": 1.29559326171875,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 553.018,
+    "amplitude": 0.951
+   },
+   "el": "path##674"
+  },
+  {
+   "r2": 0.8600389126223713,
+   "span": 94.30028,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.027,
+    "amplitude": -84.16
+   },
+   "el": "path##672"
+  },
+  {
+   "r2": 0.856474705773046,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.046,
+    "amplitude": 0.579
+   },
+   "el": "path##193"
+  },
+  {
+   "r2": 0.8516860327874058,
+   "span": 76.7747,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.969,
+    "amplitude": -73.064
+   },
+   "el": "path##58"
+  },
+  {
+   "r2": 0.851086043103456,
+   "span": 3.657196044921875,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 286.928,
+    "amplitude": -3.363
+   },
+   "el": "path##640"
+  },
+  {
+   "r2": 0.8510554735784652,
+   "span": 15.0880126953125,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 287.969,
+    "amplitude": -13.844
+   },
+   "el": "path##641"
+  },
+  {
+   "r2": 0.8478320706653211,
+   "span": 99.9195459,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.328,
+    "amplitude": -95.998
+   },
+   "el": "path##82"
+  },
+  {
+   "r2": 0.8444090173912879,
+   "span": 93.07112,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.003,
+    "amplitude": -81.284
+   },
+   "el": "path##673"
+  },
+  {
+   "r2": 0.8424076645307144,
+   "span": 98.47139,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.513,
+    "amplitude": -88.371
+   },
+   "el": "path##195"
+  },
+  {
+   "r2": 0.8393119697938942,
+   "span": 99.797604,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.343,
+    "amplitude": -94.819
+   },
+   "el": "path##164"
+  },
+  {
+   "r2": 0.8392036808617043,
+   "span": 99.736338,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.355,
+    "amplitude": -94.971
+   },
+   "el": "path##628"
+  },
+  {
+   "r2": 0.8390643314052648,
+   "span": 99.9481855,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 107.392,
+    "amplitude": -95.468
+   },
+   "el": "path##627"
+  },
+  {
+   "r2": 0.8386107921414674,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.047,
+    "amplitude": 0.57
+   },
+   "el": "path##194"
+  },
+  {
+   "r2": 0.8357819391534169,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 0.019,
+    "amplitude": 0.724
+   },
+   "el": "path##197"
+  },
+  {
+   "r2": 0.8327498939221845,
+   "span": 74.5774,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.055,
+    "amplitude": -69.286
+   },
+   "el": "path##59"
+  },
+  {
+   "r2": 0.829183204239347,
+   "span": 1.410400390625,
+   "field": "top",
+   "model": "lerp(k=0.020)",
+   "params": {
+    "offset": 674.188,
+    "amplitude": 2.528
+   },
+   "el": "path##636"
+  },
+  {
+   "r2": 0.8290994221617547,
+   "span": 91.74411,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.957,
+    "amplitude": -78.387
+   },
+   "el": "path##674"
+  },
+  {
+   "r2": 0.8280319428939269,
+   "span": 35.75201416015625,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 224.658,
+    "amplitude": 32.586
+   },
+   "el": "path##657"
+  },
+  {
+   "r2": 0.8280319428939269,
+   "span": 35.75201416015625,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 61.935,
+    "amplitude": -32.586
+   },
+   "el": "path##657"
+  },
+  {
+   "r2": 0.8280317303834873,
+   "span": 35.75201416015625,
+   "field": "width",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 61.935,
+    "amplitude": -32.586
+   },
+   "el": "path##626"
+  },
+  {
+   "r2": 0.8246645973667175,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 0.025,
+    "amplitude": 0.723
+   },
+   "el": "path##196"
+  },
+  {
+   "r2": 0.8196949522474182,
+   "span": 97.28951,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.483,
+    "amplitude": -84.327
+   },
+   "el": "path##196"
+  },
+  {
+   "r2": 0.8189545137957768,
+   "span": 0.6,
+   "field": "opacity",
+   "model": "logistic",
+   "params": {
+    "offset": -0.048,
+    "amplitude": 0.56
+   },
+   "el": "path##195"
+  },
+  {
+   "r2": 0.8130165938847714,
+   "span": 72.3078,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.076,
+    "amplitude": -65.485
+   },
+   "el": "path##60"
+  },
+  {
+   "r2": 0.8115813900594926,
+   "span": 90.32356,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.905,
+    "amplitude": -75.415
+   },
+   "el": "path##675"
+  },
+  {
+   "r2": 0.8062538106906701,
+   "span": 1.230010986328125,
+   "field": "top",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 303.075,
+    "amplitude": -0.842
+   },
+   "el": "div#border-line bg-background rela#201"
+  },
+  {
+   "r2": 0.8062538106906666,
+   "span": 1.230010986328125,
+   "field": "top",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 310.075,
+    "amplitude": -0.842
+   },
+   "el": "span#font-mono text-[9px] md:text-[#202"
+  },
+  {
+   "r2": 0.8062538106906646,
+   "span": 1.230010986328125,
+   "field": "top",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 308.075,
+    "amplitude": -0.842
+   },
+   "el": "span#inline-flex h-2.5 md:h-3.5 ite#203"
+  },
+  {
+   "r2": 0.8062538106906646,
+   "span": 1.230010986328125,
+   "field": "top",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 308.075,
+    "amplitude": -0.842
+   },
+   "el": "img#h-2.5 md:h-3.5 w-auto object-c#204"
+  },
+  {
+   "r2": 0.8062515292290304,
+   "span": 1.23,
+   "field": "transform",
+   "model": "lerp(k=0.440)",
+   "params": {
+    "offset": 0.825,
+    "amplitude": -0.842
+   },
+   "el": "div#border-line bg-background rela#201"
+  },
+  {
+   "r2": 0.8058368641943986,
+   "span": 99.9432486,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.826,
+    "amplitude": -88.762
+   },
+   "el": "path##80"
+  },
+  {
+   "r2": 0.7957845313085814,
+   "span": 99.710607,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.863,
+    "amplitude": -87.727
+   },
+   "el": "path##81"
+  },
+  {
+   "r2": 0.7948044857039244,
+   "span": 95.81893,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.421,
+    "amplitude": -80.143
+   },
+   "el": "path##197"
+  },
+  {
+   "r2": 0.7934264750984812,
+   "span": 88.8135,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.836,
+    "amplitude": -72.417
+   },
+   "el": "path##676"
+  },
+  {
+   "r2": 0.7926690011981359,
+   "span": 69.96809999999999,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.034,
+    "amplitude": -61.679
+   },
+   "el": "path##61"
+  },
+  {
+   "r2": 0.7785811331141423,
+   "span": 2.4764404296875,
+   "field": "top",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 675.925,
+    "amplitude": -1.721
+   },
+   "el": "path##646"
+  },
+  {
+   "r2": 0.7753426186122638,
+   "span": 87.2175,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.748,
+    "amplitude": -69.415
+   },
+   "el": "path##677"
+  },
+  {
+   "r2": 0.7720149618564149,
+   "span": 67.56020000000001,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.935,
+    "amplitude": -57.887
+   },
+   "el": "path##62"
+  },
+  {
+   "r2": 0.7720092628027067,
+   "span": 99.451811,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.932,
+    "amplitude": -85.874
+   },
+   "el": "path##163"
+  },
+  {
+   "r2": 0.7719413546474644,
+   "span": 99.668788,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.963,
+    "amplitude": -86.256
+   },
+   "el": "path##626"
+  },
+  {
+   "r2": 0.7719226648765067,
+   "span": 99.9094092,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.983,
+    "amplitude": -86.514
+   },
+   "el": "path##162"
+  },
+  {
+   "r2": 0.7718880390906343,
+   "span": 99.9152735,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.991,
+    "amplitude": -86.607
+   },
+   "el": "path##625"
+  },
+  {
+   "r2": 0.7633265544605218,
+   "span": 6.6912841796875,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 0.8,
+    "amplitude": 5.567
+   },
+   "el": "path##648"
+  },
+  {
+   "r2": 0.7633106349458285,
+   "span": 6.69122314453125,
+   "field": "height",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 0.8,
+    "amplitude": 5.567
+   },
+   "el": "path##619"
+  },
+  {
+   "r2": 0.7573973933133586,
+   "span": 85.539,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.642,
+    "amplitude": -66.416
+   },
+   "el": "path##678"
+  },
+  {
+   "r2": 0.7555365573900779,
+   "span": 74.30420000000001,
+   "field": "dashoffset",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": -59.873,
+    "amplitude": 30.981
+   },
+   "el": "path##33"
+  },
+  {
+   "r2": 0.7514289930540758,
+   "span": 65.08619999999999,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.782,
+    "amplitude": -54.129
+   },
+   "el": "path##63"
+  },
+  {
+   "r2": 0.7396234216771453,
+   "span": 83.7811,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.519,
+    "amplitude": -63.425
+   },
+   "el": "path##679"
+  },
+  {
+   "r2": 0.7315411782142898,
+   "span": 62.5475,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.58,
+    "amplitude": -50.425
+   },
+   "el": "path##64"
+  },
+  {
+   "r2": 0.7265507040391296,
+   "span": 99.9622354,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.663,
+    "amplitude": -76.096
+   },
+   "el": "path##78"
+  },
+  {
+   "r2": 0.7259244435197152,
+   "span": 76.9385,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.952,
+    "amplitude": -62.386
+   },
+   "el": "path##138"
+  },
+  {
+   "r2": 0.7220902059252907,
+   "span": 81.9468,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.38,
+    "amplitude": -60.448
+   },
+   "el": "path##680"
+  },
+  {
+   "r2": 0.7132031011990982,
+   "span": 59.9459,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.332,
+    "amplitude": -46.797
+   },
+   "el": "path##65"
+  },
+  {
+   "r2": 0.7058797153048814,
+   "span": 73.66550000000001,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.611,
+    "amplitude": -57.478
+   },
+   "el": "path##139"
+  },
+  {
+   "r2": 0.7048866875671085,
+   "span": 80.0386,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.225,
+    "amplitude": -57.492
+   },
+   "el": "path##681"
+  },
+  {
+   "r2": 0.7012381850087656,
+   "span": 99.75488,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.7,
+    "amplitude": -73.864
+   },
+   "el": "path##79"
+  },
+  {
+   "r2": 0.6916320208603148,
+   "span": 57.2827,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.065,
+    "amplitude": -43.158
+   },
+   "el": "path##66"
+  },
+  {
+   "r2": 0.6881589740594567,
+   "span": 78.0591,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.056,
+    "amplitude": -54.562
+   },
+   "el": "path##682"
+  },
+  {
+   "r2": 0.6801819029652568,
+   "span": 70.2358,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.244,
+    "amplitude": -52.493
+   },
+   "el": "path##140"
+  },
+  {
+   "r2": 0.6725189477408573,
+   "span": 76.01050000000001,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.873,
+    "amplitude": -51.677
+   },
+   "el": "path##683"
+  },
+  {
+   "r2": 0.6691770210696026,
+   "span": 54.5592,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.774,
+    "amplitude": -39.582
+   },
+   "el": "path##67"
+  },
+  {
+   "r2": 0.6577922383609653,
+   "span": 66.65610000000001,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.823,
+    "amplitude": -47.678
+   },
+   "el": "path##141"
+  },
+  {
+   "r2": 0.6535783544151568,
+   "span": 73.895,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.686,
+    "amplitude": -48.731
+   },
+   "el": "path##684"
+  },
+  {
+   "r2": 0.6500845780943962,
+   "span": 51.7766,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.454,
+    "amplitude": -36.147
+   },
+   "el": "path##68"
+  },
+  {
+   "r2": 0.6344143957537314,
+   "span": 71.7146,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.489,
+    "amplitude": -45.815
+   },
+   "el": "path##685"
+  },
+  {
+   "r2": 0.6321218322428107,
+   "span": 62.9324,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.373,
+    "amplitude": -42.866
+   },
+   "el": "path##142"
+  },
+  {
+   "r2": 0.6316897132284289,
+   "span": 99.99556634,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.781,
+    "amplitude": -69.249
+   },
+   "el": "path##622"
+  },
+  {
+   "r2": 0.6253674552966874,
+   "span": 48.9359,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.124,
+    "amplitude": -32.685
+   },
+   "el": "path##69"
+  },
+  {
+   "r2": 0.621739953761349,
+   "span": 99.873183,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.776,
+    "amplitude": -68.627
+   },
+   "el": "path##623"
+  },
+  {
+   "r2": 0.621739953761349,
+   "span": 99.643524,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.763,
+    "amplitude": -68.469
+   },
+   "el": "path##161"
+  },
+  {
+   "r2": 0.6217399537613489,
+   "span": 99.9767305,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.782,
+    "amplitude": -68.698
+   },
+   "el": "path##160"
+  },
+  {
+   "r2": 0.6217399537613489,
+   "span": 99.591543,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 105.76,
+    "amplitude": -68.434
+   },
+   "el": "path##624"
+  },
+  {
+   "r2": 0.6156184619750664,
+   "span": 69.471,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.283,
+    "amplitude": -42.948
+   },
+   "el": "path##686"
+  },
+  {
+   "r2": 0.6145828953642665,
+   "span": 19.4176025390625,
+   "field": "width",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 47.771,
+    "amplitude": 12.146
+   },
+   "el": "path##655"
+  },
+  {
+   "r2": 0.6145828953642662,
+   "span": 19.4176025390625,
+   "field": "left",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 238.822,
+    "amplitude": -12.146
+   },
+   "el": "path##655"
+  },
+  {
+   "r2": 0.6145827246167085,
+   "span": 19.417633056640625,
+   "field": "width",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 47.771,
+    "amplitude": 12.146
+   },
+   "el": "path##624"
+  },
+  {
+   "r2": 0.6073204232532939,
+   "span": 59.0699,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.897,
+    "amplitude": -38.202
+   },
+   "el": "path##143"
+  },
+  {
+   "r2": 0.6039711721971814,
+   "span": 46.038,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 103.778,
+    "amplitude": -29.386
+   },
+   "el": "path##70"
+  },
+  {
+   "r2": 0.5944172122533724,
+   "span": 67.1661,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.071,
+    "amplitude": -40.066
+   },
+   "el": "path##687"
+  },
+  {
+   "r2": 0.5772696352812038,
+   "span": 43.4147,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 103.465,
+    "amplitude": -26.41
+   },
+   "el": "circle##615"
+  },
+  {
+   "r2": 0.5756101881099586,
+   "span": 55.0731,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.405,
+    "amplitude": -33.529
+   },
+   "el": "path##144"
+  },
+  {
+   "r2": 0.5749944569727505,
+   "span": 43.0837,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 103.426,
+    "amplitude": -26.065
+   },
+   "el": "path##71"
+  },
+  {
+   "r2": 0.5707589588436941,
+   "span": 64.8013,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 103.854,
+    "amplitude": -37.186
+   },
+   "el": "path##688"
+  },
+  {
+   "r2": 0.5598351467598395,
+   "span": 14.41558837890625,
+   "field": "left",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 238.908,
+    "amplitude": -11.331
+   },
+   "el": "path##658"
+  },
+  {
+   "r2": 0.5598351467598393,
+   "span": 14.41558837890625,
+   "field": "width",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 47.686,
+    "amplitude": 11.331
+   },
+   "el": "path##658"
+  },
+  {
+   "r2": 0.5598347605888842,
+   "span": 14.415618896484375,
+   "field": "width",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 47.686,
+    "amplitude": 11.331
+   },
+   "el": "path##629"
+  },
+  {
+   "r2": 0.5490646142972886,
+   "span": 40.0735,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 103.069,
+    "amplitude": -22.93
+   },
+   "el": "path##72"
+  },
+  {
+   "r2": 0.547575609111076,
+   "span": 26.502410888671875,
+   "field": "width",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 26.904,
+    "amplitude": -18.761
+   },
+   "el": "path##643"
+  },
+  {
+   "r2": 0.5475752176687316,
+   "span": 26.502410888671875,
+   "field": "width",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 26.904,
+    "amplitude": -18.761
+   },
+   "el": "path##672"
+  },
+  {
+   "r2": 0.5468287176784747,
+   "span": 62.3781,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 103.631,
+    "amplitude": -34.37
+   },
+   "el": "path##689"
+  },
+  {
+   "r2": 0.5452545534724305,
+   "span": 6.445220947265625,
+   "field": "width",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 6.548,
+    "amplitude": -4.631
+   },
+   "el": "path##642"
+  },
+  {
+   "r2": 0.5452545534724305,
+   "span": 6.445220947265625,
+   "field": "width",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 6.548,
+    "amplitude": -4.631
+   },
+   "el": "path##673"
+  },
+  {
+   "r2": 0.5450676438796287,
+   "span": 50.9462,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 103.9,
+    "amplitude": -29.068
+   },
+   "el": "path##145"
+  },
+  {
+   "r2": 0.5394995790147102,
+   "span": 1.04962158203125,
+   "field": "height",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 1.99,
+    "amplitude": -0.668
+   },
+   "el": "path##667"
+  },
+  {
+   "r2": 0.5394658907497492,
+   "span": 1.049560546875,
+   "field": "height",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 1.99,
+    "amplitude": -0.668
+   },
+   "el": "path##636"
+  },
+  {
+   "r2": 0.5225833289414273,
+   "span": 59.8979,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 103.403,
+    "amplitude": -31.624
+   },
+   "el": "path##690"
+  },
+  {
+   "r2": 0.5149673246731357,
+   "span": 37.0081,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.709,
+    "amplitude": -19.818
+   },
+   "el": "path##73"
+  },
+  {
+   "r2": 0.5083577553285326,
+   "span": 46.6923,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 103.391,
+    "amplitude": -24.715
+   },
+   "el": "path##146"
+  },
+  {
+   "r2": 0.49801308078406625,
+   "span": 57.3618,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 103.173,
+    "amplitude": -28.952
+   },
+   "el": "path##691"
+  },
+  {
+   "r2": 0.48103930579477516,
+   "span": 33.887600000000006,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.352,
+    "amplitude": -16.884
+   },
+   "el": "path##74"
+  },
+  {
+   "r2": 0.47329955605814955,
+   "span": 1.525238037109375,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 24.705,
+    "amplitude": -1.618
+   },
+   "el": "path##677"
+  },
+  {
+   "r2": 0.47329955605814955,
+   "span": 1.525238037109375,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 24.705,
+    "amplitude": -1.618
+   },
+   "el": "path##710"
+  },
+  {
+   "r2": 0.4731552884136251,
+   "span": 54.771,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.94,
+    "amplitude": -26.362
+   },
+   "el": "path##692"
+  },
+  {
+   "r2": 0.4636037845972437,
+   "span": 42.3142,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.878,
+    "amplitude": -20.479
+   },
+   "el": "path##147"
+  },
+  {
+   "r2": 0.44873235100872444,
+   "span": 52.1265,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.708,
+    "amplitude": -23.876
+   },
+   "el": "path##693"
+  },
+  {
+   "r2": 0.43803278770914,
+   "span": 30.712100000000007,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.998,
+    "amplitude": -14.038
+   },
+   "el": "path##75"
+  },
+  {
+   "r2": 0.42411920482643595,
+   "span": 49.4292,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.476,
+    "amplitude": -21.484
+   },
+   "el": "path##694"
+  },
+  {
+   "r2": 0.4197466991565598,
+   "span": 99.99875415,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 106.353,
+    "amplitude": -51.155
+   },
+   "el": "path##711"
+  },
+  {
+   "r2": 0.41661557426130036,
+   "span": 37.8138,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.382,
+    "amplitude": -16.566
+   },
+   "el": "path##148"
+  },
+  {
+   "r2": 0.41114327966107445,
+   "span": 1.9188232421875,
+   "field": "height",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 2.032,
+    "amplitude": -0.712
+   },
+   "el": "path##646"
+  },
+  {
+   "r2": 0.41113004940603337,
+   "span": 1.9188232421875,
+   "field": "height",
+   "model": "sin(f=0.50)",
+   "params": {
+    "offset": 2.032,
+    "amplitude": -0.712
+   },
+   "el": "path##617"
+  },
+  {
+   "r2": 0.4038091192644583,
+   "span": 27.481499999999997,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.67,
+    "amplitude": -11.539
+   },
+   "el": "path##76"
+  },
+  {
+   "r2": 0.39929987395835254,
+   "span": 46.6799,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.247,
+    "amplitude": -19.192
+   },
+   "el": "path##695"
+  },
+  {
+   "r2": 0.38389909238585285,
+   "span": 33.192499999999995,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.928,
+    "amplitude": -13.211
+   },
+   "el": "path##149"
+  },
+  {
+   "r2": 0.3743835423704778,
+   "span": 43.8793,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.022,
+    "amplitude": -17.008
+   },
+   "el": "path##696"
+  },
+  {
+   "r2": 0.36606011466331956,
+   "span": 24.195499999999996,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.351,
+    "amplitude": -9.193
+   },
+   "el": "path##77"
+  },
+  {
+   "r2": 0.3641465840728201,
+   "span": 44.5997314453125,
+   "field": "left",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 1139.492,
+    "amplitude": 11.202
+   },
+   "el": "line##124"
+  },
+  {
+   "r2": 0.3641465840728201,
+   "span": 44.5997314453125,
+   "field": "left",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 1139.492,
+    "amplitude": 11.202
+   },
+   "el": "line##125"
+  },
+  {
+   "r2": 0.3641463977542553,
+   "span": 16.707351684570312,
+   "field": "top",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 222.311,
+    "amplitude": 4.196
+   },
+   "el": "line##122"
+  },
+  {
+   "r2": 0.3641460325149911,
+   "span": 16.70733642578125,
+   "field": "top",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 271.266,
+    "amplitude": 4.196
+   },
+   "el": "line##121"
+  },
+  {
+   "r2": 0.35434636588314117,
+   "span": 0.7215576171875,
+   "field": "top",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 615.2,
+    "amplitude": 0.48
+   },
+   "el": "path##694"
+  },
+  {
+   "r2": 0.3493975671462801,
+   "span": 41.028,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.802,
+    "amplitude": -14.935
+   },
+   "el": "path##697"
+  },
+  {
+   "r2": 0.3492406159692315,
+   "span": 0.738037109375,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 15.152,
+    "amplitude": -0.483
+   },
+   "el": "path##693"
+  },
+  {
+   "r2": 0.3491754938112567,
+   "span": 0.73797607421875,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 15.152,
+    "amplitude": -0.483
+   },
+   "el": "path##694"
+  },
+  {
+   "r2": 0.34767920335256997,
+   "span": 0.5411376953125,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 12.687,
+    "amplitude": 0.335
+   },
+   "el": "path##703"
+  },
+  {
+   "r2": 0.3476551007726283,
+   "span": 0.541259765625,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 12.687,
+    "amplitude": 0.335
+   },
+   "el": "path##684"
+  },
+  {
+   "r2": 0.3460718559342807,
+   "span": 3.001220703125,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 286.723,
+    "amplitude": -1.042
+   },
+   "el": "path##639"
+  },
+  {
+   "r2": 0.3448284387424694,
+   "span": 0.59039306640625,
+   "field": "left",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 286.619,
+    "amplitude": -0.205
+   },
+   "el": "path##638"
+  },
+  {
+   "r2": 0.34326236288854517,
+   "span": 1.01678466796875,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 13.263,
+    "amplitude": 0.75
+   },
+   "el": "path##701"
+  },
+  {
+   "r2": 0.3432593887915756,
+   "span": 1.01678466796875,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 13.263,
+    "amplitude": 0.75
+   },
+   "el": "path##686"
+  },
+  {
+   "r2": 0.34325938879157014,
+   "span": 1.01678466796875,
+   "field": "top",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 578.663,
+    "amplitude": -0.75
+   },
+   "el": "path##686"
+  },
+  {
+   "r2": 0.341196681878737,
+   "span": 1.16436767578125,
+   "field": "top",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 596.75,
+    "amplitude": -0.856
+   },
+   "el": "path##690"
+  },
+  {
+   "r2": 0.34094396645820624,
+   "span": 0.5576171875,
+   "field": "top",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 570.5,
+    "amplitude": -0.342
+   },
+   "el": "path##684"
+  },
+  {
+   "r2": 0.3406722949773273,
+   "span": 1.1644287109375,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 14.185,
+    "amplitude": 0.849
+   },
+   "el": "path##697"
+  },
+  {
+   "r2": 0.34066621143738696,
+   "span": 1.16436767578125,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 14.185,
+    "amplitude": 0.849
+   },
+   "el": "path##690"
+  },
+  {
+   "r2": 0.33585224225855814,
+   "span": 28.450500000000005,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.483,
+    "amplitude": -9.97
+   },
+   "el": "path##150"
+  },
+  {
+   "r2": 0.32453604591544616,
+   "span": 38.1263,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.589,
+    "amplitude": -12.982
+   },
+   "el": "path##698"
+  },
+  {
+   "r2": 0.32299309457394065,
+   "span": 99.99530246,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 104.932,
+    "amplitude": -39.303
+   },
+   "el": "path##710"
+  },
+  {
+   "r2": 0.32218556625753636,
+   "span": 23.227800000000002,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.163,
+    "amplitude": -7.781
+   },
+   "el": "path##616"
+  },
+  {
+   "r2": 0.31752377514477914,
+   "span": 0.8363037109375,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 13.353,
+    "amplitude": 0.488
+   },
+   "el": "path##696"
+  },
+  {
+   "r2": 0.31752138546123343,
+   "span": 0.83642578125,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 13.353,
+    "amplitude": 0.488
+   },
+   "el": "path##691"
+  },
+  {
+   "r2": 0.3156534648086965,
+   "span": 0.852783203125,
+   "field": "top",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 626.283,
+    "amplitude": -0.499
+   },
+   "el": "path##696"
+  },
+  {
+   "r2": 0.3001035057932535,
+   "span": 1.1643829345703125,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 99.049,
+    "amplitude": -0.984
+   },
+   "el": "path##702"
+  },
+  {
+   "r2": 0.3001025669649623,
+   "span": 1.164398193359375,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 99.049,
+    "amplitude": -0.984
+   },
+   "el": "path##685"
+  },
+  {
+   "r2": 0.29994473301895574,
+   "span": 35.1746,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.384,
+    "amplitude": -11.155
+   },
+   "el": "path##699"
+  },
+  {
+   "r2": 0.29355383222188725,
+   "span": 1.492401123046875,
+   "field": "left",
+   "model": "easeOutCubic",
+   "params": {
+    "offset": 274.303,
+    "amplitude": 0.727
+   },
+   "el": "path##677"
+  },
+  {
+   "r2": 0.28826677704433756,
+   "span": 0.787200927734375,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 118.095,
+    "amplitude": -0.648
+   },
+   "el": "path##698"
+  },
+  {
+   "r2": 0.28826624090817576,
+   "span": 0.7871856689453125,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 118.095,
+    "amplitude": -0.648
+   },
+   "el": "path##689"
+  },
+  {
+   "r2": 0.28447899986350433,
+   "span": 0.91839599609375,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 10.707,
+    "amplitude": 0.591
+   },
+   "el": "path##700"
+  },
+  {
+   "r2": 0.2844785996058923,
+   "span": 0.91839599609375,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 10.707,
+    "amplitude": 0.591
+   },
+   "el": "path##687"
+  },
+  {
+   "r2": 0.283997823176555,
+   "span": 0.91839599609375,
+   "field": "top",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 645.459,
+    "amplitude": -0.596
+   },
+   "el": "path##700"
+  },
+  {
+   "r2": 0.2828888801128554,
+   "span": 23.5869,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.072,
+    "amplitude": -7.07
+   },
+   "el": "path##151"
+  },
+  {
+   "r2": 0.2790426570872748,
+   "span": 1.492401123046875,
+   "field": "left",
+   "model": "lerp(k=0.100)",
+   "params": {
+    "offset": 274.208,
+    "amplitude": 0.855
+   },
+   "el": "path##710"
+  },
+  {
+   "r2": 0.2759521003533022,
+   "span": 32.173100000000005,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.188,
+    "amplitude": -9.458
+   },
+   "el": "path##700"
+  },
+  {
+   "r2": 0.27563050910222964,
+   "span": 20.03,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.894,
+    "amplitude": -5.886
+   },
+   "el": "path##617"
+  },
+  {
+   "r2": 0.2532047354058665,
+   "span": 29.121700000000004,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 101.004,
+    "amplitude": -7.901
+   },
+   "el": "path##701"
+  },
+  {
+   "r2": 0.23266535967847657,
+   "span": 26.0201,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.833,
+    "amplitude": -6.489
+   },
+   "el": "path##702"
+  },
+  {
+   "r2": 0.22894057329086293,
+   "span": 1.0659942626953125,
+   "field": "left",
+   "model": "lerp(k=0.060)",
+   "params": {
+    "offset": 237.084,
+    "amplitude": 0.483
+   },
+   "el": "path##685"
+  },
+  {
+   "r2": 0.2267316017407951,
+   "span": 16.779600000000002,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.658,
+    "amplitude": -4.257
+   },
+   "el": "path##618"
+  },
+  {
+   "r2": 0.2217119102720223,
+   "span": 20.78753662109375,
+   "field": "top",
+   "model": "sin(f=5.50)",
+   "params": {
+    "offset": 260.161,
+    "amplitude": -3.066
+   },
+   "el": "line##119"
+  },
+  {
+   "r2": 0.2217118908393304,
+   "span": 55.49169921875,
+   "field": "left",
+   "model": "sin(f=5.50)",
+   "params": {
+    "offset": 1109.846,
+    "amplitude": -8.184
+   },
+   "el": "line##123"
+  },
+  {
+   "r2": 0.2217118908393304,
+   "span": 55.49169921875,
+   "field": "left",
+   "model": "sin(f=5.50)",
+   "params": {
+    "offset": 1109.846,
+    "amplitude": -8.184
+   },
+   "el": "line##126"
+  },
+  {
+   "r2": 0.22171183152679885,
+   "span": 20.787521362304688,
+   "field": "top",
+   "model": "sin(f=5.50)",
+   "params": {
+    "offset": 211.206,
+    "amplitude": -3.066
+   },
+   "el": "line##120"
+  },
+  {
+   "r2": 0.21839460229319718,
+   "span": 22.867999999999995,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.679,
+    "amplitude": -5.253
+   },
+   "el": "path##703"
+  },
+  {
+   "r2": 0.2164064539556233,
+   "span": 18.888214111328125,
+   "field": "height",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 14.323,
+    "amplitude": 2.298
+   },
+   "el": "line##126"
+  },
+  {
+   "r2": 0.21640622815038024,
+   "span": 18.888229370117188,
+   "field": "height",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 14.323,
+    "amplitude": 2.298
+   },
+   "el": "line##125"
+  },
+  {
+   "r2": 0.21640619265103567,
+   "span": 18.888214111328125,
+   "field": "height",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 14.323,
+    "amplitude": 2.298
+   },
+   "el": "line##124"
+  },
+  {
+   "r2": 0.21640575135053686,
+   "span": 50.421630859375,
+   "field": "width",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 38.234,
+    "amplitude": 6.135
+   },
+   "el": "line##119"
+  },
+  {
+   "r2": 0.21640575135053686,
+   "span": 50.421630859375,
+   "field": "width",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 38.234,
+    "amplitude": 6.135
+   },
+   "el": "line##120"
+  },
+  {
+   "r2": 0.216405503955437,
+   "span": 50.421630859375,
+   "field": "width",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 38.234,
+    "amplitude": 6.135
+   },
+   "el": "line##121"
+  },
+  {
+   "r2": 0.216405503955437,
+   "span": 50.421630859375,
+   "field": "width",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 38.234,
+    "amplitude": 6.135
+   },
+   "el": "line##122"
+  },
+  {
+   "r2": 0.21640541664181412,
+   "span": 18.88824462890625,
+   "field": "height",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 14.323,
+    "amplitude": 2.298
+   },
+   "el": "line##123"
+  },
+  {
+   "r2": 0.21533012982217914,
+   "span": 18.599199999999996,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.707,
+    "amplitude": -4.554
+   },
+   "el": "path##152"
+  },
+  {
+   "r2": 0.21465321169395757,
+   "span": 0.7379913330078125,
+   "field": "left",
+   "model": "lerp(k=0.060)",
+   "params": {
+    "offset": 227.562,
+    "amplitude": 0.347
+   },
+   "el": "path##698"
+  },
+  {
+   "r2": 0.20592893496029552,
+   "span": 1.508819580078125,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 46.856,
+    "amplitude": 1.098
+   },
+   "el": "path##708"
+  },
+  {
+   "r2": 0.20592782896172335,
+   "span": 1.508819580078125,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 46.856,
+    "amplitude": 1.098
+   },
+   "el": "path##679"
+  },
+  {
+   "r2": 0.20300673076091835,
+   "span": 99.9823615,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.978,
+    "amplitude": -23.668
+   },
+   "el": "path##708"
+  },
+  {
+   "r2": 0.2004445228842232,
+   "span": 14.3594970703125,
+   "field": "height",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 12.889,
+    "amplitude": -1.665
+   },
+   "el": "line##121"
+  },
+  {
+   "r2": 0.20044410170851634,
+   "span": 38.332275390625,
+   "field": "width",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 34.407,
+    "amplitude": -4.444
+   },
+   "el": "line##124"
+  },
+  {
+   "r2": 0.20044410170851634,
+   "span": 38.332275390625,
+   "field": "width",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 34.407,
+    "amplitude": -4.444
+   },
+   "el": "line##125"
+  },
+  {
+   "r2": 0.2004438664487852,
+   "span": 14.3594970703125,
+   "field": "height",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 12.889,
+    "amplitude": -1.665
+   },
+   "el": "line##120"
+  },
+  {
+   "r2": 0.20044377657972634,
+   "span": 38.332275390625,
+   "field": "width",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 34.407,
+    "amplitude": -4.444
+   },
+   "el": "line##123"
+  },
+  {
+   "r2": 0.20044377657972634,
+   "span": 38.332275390625,
+   "field": "width",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 34.407,
+    "amplitude": -4.444
+   },
+   "el": "line##126"
+  },
+  {
+   "r2": 0.2004437119645438,
+   "span": 14.359481811523438,
+   "field": "height",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 12.889,
+    "amplitude": -1.665
+   },
+   "el": "line##122"
+  },
+  {
+   "r2": 0.20044365411853016,
+   "span": 14.359466552734375,
+   "field": "height",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 12.889,
+    "amplitude": -1.665
+   },
+   "el": "line##119"
+  },
+  {
+   "r2": 0.20023318833514314,
+   "span": 0.7379913330078125,
+   "field": "left",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 227.551,
+    "amplitude": 0.299
+   },
+   "el": "path##689"
+  },
+  {
+   "r2": 0.19795878264196898,
+   "span": 1.1151885986328125,
+   "field": "left",
+   "model": "lerp(k=0.100)",
+   "params": {
+    "offset": 237.053,
+    "amplitude": 0.516
+   },
+   "el": "path##702"
+  },
+  {
+   "r2": 0.19407096342139007,
+   "span": 13.474400000000003,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.472,
+    "amplitude": -3.017
+   },
+   "el": "path##619"
+  },
+  {
+   "r2": 0.19373950460183065,
+   "span": 99.822915,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 102.941,
+    "amplitude": -23.058
+   },
+   "el": "path##709"
+  },
+  {
+   "r2": 0.19212911728455795,
+   "span": 19.664299999999997,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.521,
+    "amplitude": -3.993
+   },
+   "el": "path##704"
+  },
+  {
+   "r2": 0.1857281628854991,
+   "span": 23.79217529296875,
+   "field": "top",
+   "model": "sin(f=4.50)",
+   "params": {
+    "offset": 268.786,
+    "amplitude": 2.662
+   },
+   "el": "line##123"
+  },
+  {
+   "r2": 0.1857280871307806,
+   "span": 63.512451171875,
+   "field": "left",
+   "model": "sin(f=4.50)",
+   "params": {
+    "offset": 1132.871,
+    "amplitude": 7.106
+   },
+   "el": "line##121"
+  },
+  {
+   "r2": 0.1857280871307806,
+   "span": 63.512451171875,
+   "field": "left",
+   "model": "sin(f=4.50)",
+   "params": {
+    "offset": 1132.871,
+    "amplitude": 7.106
+   },
+   "el": "line##122"
+  },
+  {
+   "r2": 0.18572753161768218,
+   "span": 23.792160034179688,
+   "field": "top",
+   "model": "sin(f=4.50)",
+   "params": {
+    "offset": 219.831,
+    "amplitude": 2.662
+   },
+   "el": "line##126"
+  },
+  {
+   "r2": 0.18454825285068743,
+   "span": 23.214614868164062,
+   "field": "top",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 211.142,
+    "amplitude": -3.189
+   },
+   "el": "line##125"
+  },
+  {
+   "r2": 0.18454820017839413,
+   "span": 23.214630126953125,
+   "field": "top",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 260.098,
+    "amplitude": -3.189
+   },
+   "el": "line##124"
+  },
+  {
+   "r2": 0.18454809861866128,
+   "span": 61.970703125,
+   "field": "left",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 1109.677,
+    "amplitude": -8.514
+   },
+   "el": "line##119"
+  },
+  {
+   "r2": 0.18454809861866128,
+   "span": 61.970703125,
+   "field": "left",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 1109.677,
+    "amplitude": -8.514
+   },
+   "el": "line##120"
+  },
+  {
+   "r2": 0.18167903525610596,
+   "span": 13.481899999999996,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.444,
+    "amplitude": -2.831
+   },
+   "el": "path##153"
+  },
+  {
+   "r2": 0.17786511321658416,
+   "span": 0.72161865234375,
+   "field": "top",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 653.144,
+    "amplitude": 0.322
+   },
+   "el": "path##702"
+  },
+  {
+   "r2": 0.17729648419124755,
+   "span": 0.73797607421875,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 9.877,
+    "amplitude": -0.328
+   },
+   "el": "path##702"
+  },
+  {
+   "r2": 0.1772832499527658,
+   "span": 0.738037109375,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 9.877,
+    "amplitude": -0.328
+   },
+   "el": "path##685"
+  },
+  {
+   "r2": 0.1709389411216119,
+   "span": 1.4595947265625,
+   "field": "left",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 263.171,
+    "amplitude": -0.596
+   },
+   "el": "path##679"
+  },
+  {
+   "r2": 0.1644624278012713,
+   "span": 10.111599999999996,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.31,
+    "amplitude": -1.967
+   },
+   "el": "path##620"
+  },
+  {
+   "r2": 0.16350668260947876,
+   "span": 16.407799999999995,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.379,
+    "amplitude": -2.874
+   },
+   "el": "path##705"
+  },
+  {
+   "r2": 0.15780594800238557,
+   "span": 1.37762451171875,
+   "field": "left",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 263.161,
+    "amplitude": -0.502
+   },
+   "el": "path##708"
+  },
+  {
+   "r2": 0.14365675813823742,
+   "span": 0.951171875,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 13.005,
+    "amplitude": -0.37
+   },
+   "el": "path##698"
+  },
+  {
+   "r2": 0.14365600483241892,
+   "span": 0.95123291015625,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 13.005,
+    "amplitude": -0.37
+   },
+   "el": "path##689"
+  },
+  {
+   "r2": 0.14141877609288522,
+   "span": 0.934814453125,
+   "field": "top",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 635.306,
+    "amplitude": 0.358
+   },
+   "el": "path##698"
+  },
+  {
+   "r2": 0.13466794862003473,
+   "span": 13.0963,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.257,
+    "amplitude": -1.927
+   },
+   "el": "path##706"
+  },
+  {
+   "r2": 0.12690271286461574,
+   "span": 0.9840087890625,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 108.842,
+    "amplitude": 0.518
+   },
+   "el": "path##700"
+  },
+  {
+   "r2": 0.12690052812017505,
+   "span": 0.9840087890625,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 108.842,
+    "amplitude": 0.518
+   },
+   "el": "path##687"
+  },
+  {
+   "r2": 0.1162950248107284,
+   "span": 2.8011000000000053,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.072,
+    "amplitude": -0.448
+   },
+   "el": "path##155"
+  },
+  {
+   "r2": 0.11629502481072373,
+   "span": 6.6858,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.171,
+    "amplitude": -1.069
+   },
+   "el": "path##621"
+  },
+  {
+   "r2": 0.11629502481072318,
+   "span": 8.224199999999996,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.21,
+    "amplitude": -1.315
+   },
+   "el": "path##154"
+  },
+  {
+   "r2": 0.11126504081071076,
+   "span": 0.91839599609375,
+   "field": "left",
+   "model": "lerp(k=0.100)",
+   "params": {
+    "offset": 232.181,
+    "amplitude": -0.269
+   },
+   "el": "path##700"
+  },
+  {
+   "r2": 0.10544781180995544,
+   "span": 9.726600000000005,
+   "field": "dashoffset",
+   "model": "easeInCubic",
+   "params": {
+    "offset": 100.156,
+    "amplitude": -1.158
+   },
+   "el": "path##707"
+  },
+  {
+   "r2": 0.08898602361212793,
+   "span": 0.91839599609375,
+   "field": "left",
+   "model": "lerp(k=0.040)",
+   "params": {
+    "offset": 232.15,
+    "amplitude": -0.273
+   },
+   "el": "path##687"
+  },
+  {
+   "r2": 0.054661464023790796,
+   "span": 0.75439453125,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 5.439,
+    "amplitude": 0.145
+   },
+   "el": "path##706"
+  },
+  {
+   "r2": 0.054661464023786355,
+   "span": 0.75439453125,
+   "field": "top",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 667.619,
+    "amplitude": -0.145
+   },
+   "el": "path##706"
+  },
+  {
+   "r2": 0.054651022505207925,
+   "span": 0.75445556640625,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 5.439,
+    "amplitude": 0.145
+   },
+   "el": "path##681"
+  },
+  {
+   "r2": 0.05234496891891505,
+   "span": 0.934814453125,
+   "field": "top",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 661.162,
+    "amplitude": -0.176
+   },
+   "el": "path##704"
+  },
+  {
+   "r2": 0.05049545500476649,
+   "span": 0.95123291015625,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 7.533,
+    "amplitude": 0.174
+   },
+   "el": "path##704"
+  },
+  {
+   "r2": 0.050491604311774796,
+   "span": 0.95123291015625,
+   "field": "height",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 7.533,
+    "amplitude": 0.174
+   },
+   "el": "path##683"
+  },
+  {
+   "r2": 0.04945766060928525,
+   "span": 1.2464141845703125,
+   "field": "left",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 244.546,
+    "amplitude": -0.105
+   },
+   "el": "path##683"
+  },
+  {
+   "r2": 0.049262388684313096,
+   "span": 1.3612060546875,
+   "field": "left",
+   "model": "sin(f=2.00)",
+   "params": {
+    "offset": 252.877,
+    "amplitude": -0.114
+   },
+   "el": "path##681"
+  },
+  {
+   "r2": 0.04500910811296499,
+   "span": 1.01678466796875,
+   "field": "height",
+   "model": "sin(f=5.50)",
+   "params": {
+    "offset": 14.624,
+    "amplitude": 0.102
+   },
+   "el": "path##699"
+  },
+  {
+   "r2": 0.045006976763774076,
+   "span": 1.01678466796875,
+   "field": "height",
+   "model": "sin(f=5.50)",
+   "params": {
+    "offset": 14.624,
+    "amplitude": 0.102
+   },
+   "el": "path##688"
+  },
+  {
+   "r2": 0.045006097423582525,
+   "span": 0.5247955322265625,
+   "field": "left",
+   "model": "sin(f=1.50)",
+   "params": {
+    "offset": 225.314,
+    "amplitude": 0.069
+   },
+   "el": "path##691"
+  },
+  {
+   "r2": 0.0447081031764337,
+   "span": 1.0003662109375,
+   "field": "top",
+   "model": "sin(f=5.50)",
+   "params": {
+    "offset": 586.631,
+    "amplitude": -0.101
+   },
+   "el": "path##688"
+  },
+  {
+   "r2": 0.040296993244289814,
+   "span": 1.328399658203125,
+   "field": "left",
+   "model": "sin(f=1.50)",
+   "params": {
+    "offset": 252.815,
+    "amplitude": -0.165
+   },
+   "el": "path##706"
+  },
+  {
+   "r2": 0.0400202071905964,
+   "span": 1.2136077880859375,
+   "field": "left",
+   "model": "sin(f=1.50)",
+   "params": {
+    "offset": 244.489,
+    "amplitude": -0.151
+   },
+   "el": "path##704"
+  },
+  {
+   "r2": 0.03983411203715648,
+   "span": 1.47601318359375,
+   "field": "width",
+   "model": "lerp(k=0.060)",
+   "params": {
+    "offset": 67.732,
+    "amplitude": -0.274
+   },
+   "el": "path##681"
+  },
+  {
+   "r2": 0.039833950299069554,
+   "span": 1.47601318359375,
+   "field": "width",
+   "model": "lerp(k=0.060)",
+   "params": {
+    "offset": 67.732,
+    "amplitude": -0.274
+   },
+   "el": "path##706"
+  },
+  {
+   "r2": 0.037655349737554356,
+   "span": 1.29559326171875,
+   "field": "top",
+   "model": "sin(f=4.00)",
+   "params": {
+    "offset": 605.723,
+    "amplitude": 0.097
+   },
+   "el": "path##692"
+  },
+  {
+   "r2": 0.036960929296987466,
+   "span": 1.31195068359375,
+   "field": "height",
+   "model": "sin(f=4.00)",
+   "params": {
+    "offset": 14.983,
+    "amplitude": -0.098
+   },
+   "el": "path##695"
+  },
+  {
+   "r2": 0.03696006896158788,
+   "span": 1.31195068359375,
+   "field": "height",
+   "model": "sin(f=4.00)",
+   "params": {
+    "offset": 14.983,
+    "amplitude": -0.098
+   },
+   "el": "path##692"
+  },
+  {
+   "r2": 0.03373203837982086,
+   "span": 1.361236572265625,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 84.37,
+    "amplitude": -0.234
+   },
+   "el": "path##704"
+  },
+  {
+   "r2": 0.033731887850354525,
+   "span": 1.361236572265625,
+   "field": "width",
+   "model": "lerp(k=0.080)",
+   "params": {
+    "offset": 84.37,
+    "amplitude": -0.234
+   },
+   "el": "path##683"
+  },
+  {
+   "r2": 0.032358686179282614,
+   "span": 0.5247955322265625,
+   "field": "left",
+   "model": "sin(f=3.50)",
+   "params": {
+    "offset": 225.284,
+    "amplitude": 0.047
+   },
+   "el": "path##696"
+  },
+  {
+   "r2": 0.03198000600187034,
+   "span": 0.541168212890625,
+   "field": "width",
+   "model": "sin(f=1.50)",
+   "params": {
+    "offset": 122.567,
+    "amplitude": -0.068
+   },
+   "el": "path##691"
+  },
+  {
+   "r2": 0.031968475854448286,
+   "span": 0.541168212890625,
+   "field": "width",
+   "model": "sin(f=1.50)",
+   "params": {
+    "offset": 122.567,
+    "amplitude": -0.068
+   },
+   "el": "path##696"
+  }
+ ]
+}

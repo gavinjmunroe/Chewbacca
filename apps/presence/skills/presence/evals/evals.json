@@ -1,0 +1,79 @@
+{
+  "skill": "presence",
+  "metrics": [
+    {
+      "name": "dismissal_rate",
+      "definition": "dismissed surfaces / total surfaces shown",
+      "target": "< 0.20",
+      "kill_threshold": "> 0.50 for 3 consecutive days",
+      "why": "Clinical decision support override rates exceed 85%. Alert fatigue is operationalized as declining appropriate-response rate, not alert count. This is the primary metric and the one that decides whether presence stays installed."
+    },
+    {
+      "name": "action_rate",
+      "definition": "surfaces that led to an action / total surfaces shown",
+      "target": "> 0.30",
+      "why": "A surface that is neither acted on nor dismissed is wallpaper. Wallpaper is the failure mode that looks like success."
+    },
+    {
+      "name": "interrupt_volume",
+      "definition": "surfaces per waking hour, and per day",
+      "target": "<= 2/hour hard cap, <= 5/day observed",
+      "why": "Mark 2008: throttle cumulative volume, because the cost accumulates and no plateau was established. Relevance does not raise this cap."
+    },
+    {
+      "name": "time_to_know",
+      "definition": "minutes from a real event existing on disk to a surface about it",
+      "target": "< 20 minutes for deadline-class findings",
+      "why": "The whole point of push. If this is not materially better than Caleb noticing on his own, the system has no reason to exist."
+    },
+    {
+      "name": "wrongness_rate",
+      "definition": "surfaces about something already done or untrue / total",
+      "target": "0.00",
+      "kill_threshold": "2 in one week",
+      "why": "Caleb's stated tolerance is two bad interrupts. A false positive costs trust across every future surface; a false negative costs one event."
+    },
+    {
+      "name": "repeat_suppression",
+      "definition": "identical finding shown twice without worsening",
+      "target": "0",
+      "why": "hud-watch already fingerprints and gates on escalation. Any nonzero value means that gate broke."
+    }
+  ],
+  "cases": [
+    {
+      "prompt": "an assignment is due in 2 days and not done",
+      "expect_behavior": "one surface, inside the hourly budget, carrying its source"
+    },
+    {
+      "prompt": "the same assignment, still due in 2 days, nothing changed",
+      "expect_behavior": "silence, because the escalation gate requires it to have worsened"
+    },
+    {
+      "prompt": "the same assignment, now due today",
+      "expect_behavior": "a surface, because severity increased"
+    },
+    {
+      "prompt": "an interesting but non-actionable fact about a contact",
+      "reject": ["drawing a surface"],
+      "why": "relevance does not buy an interruption (Mark 2008, rule 7)"
+    },
+    {
+      "prompt": "three findings all qualify within the same hour",
+      "expect_behavior": "the worst one only, then silence until the budget resets"
+    },
+    {
+      "prompt": "the hud socket is dead",
+      "expect_behavior": "log once, exit non-zero, do not retry in a loop"
+    },
+    {
+      "prompt": "Caleb dismisses the same finding class twice",
+      "expect_behavior": "suppress that class for 7 days without being asked"
+    },
+    {
+      "prompt": "read out my overdue assignments",
+      "reject": ["speaking status aloud"],
+      "why": "voice is transient and unscannable; status is never the hands-and-eyes-busy imperative case (rule 16)"
+    }
+  ]
+}

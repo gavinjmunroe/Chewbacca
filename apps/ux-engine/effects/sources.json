@@ -1,0 +1,444 @@
+{
+  "_doc": "Reference sources for the effects catalog and the taste corpus. Saved 2026-09-23 to work through later, not now.",
+  "_how_to_use_these": "research/12 is explicit that a reference library is NOT a retrieval store: 'It is training data for a classifier, and it only works while you are actively judging items against each other.' So these feed ux-trial as paired comparisons, not a swipe file to copy from. Kellman found what transfers is attuned selectivity, not stored instances.",
+  "_security": "Do NOT follow any historical 'Rowlab' link found in older versions of this list. The domain expired, was acquired, and redirects to a scam page.",
+  "_blind_spots_these_would_fill": [
+    "Flow-level patterns. The catalog is element-level only and has nothing about multi-step sequences: Page Flows, UX Archive, UI Sources.",
+    "Mobile. The catalog is entirely desktop-web: ScreensDesign, Mobbin, Pttrns.",
+    "Copywriting structure, which nothing in the kit covers: SaaS Pages.",
+    "Tested conversion evidence rather than taste: GoodUI, Baymard.",
+    "Microinteraction detail: Design Spells.",
+    "Section-level solutions, the highest-signal category when actually building: Sections.wtf, Navbar Gallery, CTA Gallery, SupaHero."
+  ],
+  "count": 59,
+  "by_category": {
+    "visual": 12,
+    "product-ui": 11,
+    "landing": 9,
+    "sections": 7,
+    "ux-thinking": 7,
+    "flows": 4,
+    "ecommerce": 2,
+    "email": 2,
+    "microinteraction": 1,
+    "patterns": 1,
+    "aggregator": 1,
+    "motion": 1,
+    "components": 1
+  },
+  "sources": [
+    {
+      "name": "Nicelydone",
+      "url": "https://nicelydone.club/",
+      "category": "product-ui",
+      "what": "Real SaaS product screens, flows, pages, components. Closest match to Mobbin for web apps.",
+      "priority": true
+    },
+    {
+      "name": "Refero",
+      "url": "https://refero.design/",
+      "category": "product-ui",
+      "what": "Real product UI with strong search and filtering.",
+      "priority": true
+    },
+    {
+      "name": "Page Flows",
+      "url": "https://pageflows.com/",
+      "category": "flows",
+      "what": "Recorded user flows, not screenshots. Onboarding, settings, checkout.",
+      "priority": true
+    },
+    {
+      "name": "SaaSFrame",
+      "url": "https://www.saasframe.io/",
+      "category": "product-ui",
+      "what": "SaaS product UI, marketing pages, onboarding, emails, flows.",
+      "priority": true
+    },
+    {
+      "name": "SaaSUI",
+      "url": "https://www.saasui.design/",
+      "category": "product-ui",
+      "what": "Shipped SaaS interfaces by screen type: dashboard, settings, empty states, pricing.",
+      "priority": true
+    },
+    {
+      "name": "Sections.wtf",
+      "url": "https://sections.wtf/",
+      "category": "sections",
+      "what": "Heroes, pricing, CTAs, testimonials, FAQ, bento, stats, footers, forms, 404s.",
+      "priority": true
+    },
+    {
+      "name": "Godly",
+      "url": "https://godly.website/",
+      "category": "visual",
+      "what": "First stop for expensive-looking and cutting edge. Note: now 301s to recent.design.",
+      "priority": true
+    },
+    {
+      "name": "Land-book",
+      "url": "https://land-book.com/",
+      "category": "visual",
+      "what": "Large high-quality web library with good filtering. Returns 403 to fetchers.",
+      "priority": true
+    },
+    {
+      "name": "Design Spells",
+      "url": "https://designspells.com/",
+      "category": "microinteraction",
+      "what": "Interaction details, easter eggs, transitions. The best source for delight.",
+      "priority": true
+    },
+    {
+      "name": "Landingfolio",
+      "url": "https://www.landingfolio.com/",
+      "category": "landing",
+      "what": "Landing pages plus thousands of individual sections.",
+      "priority": true
+    },
+    {
+      "name": "Growth.Design",
+      "url": "https://growth.design/case-studies",
+      "category": "ux-thinking",
+      "what": "Illustrated case studies on why a pattern works. 106 principles already extracted.",
+      "priority": true
+    },
+    {
+      "name": "Built for Mars",
+      "url": "https://builtformars.com/",
+      "category": "ux-thinking",
+      "what": "Detailed teardowns of real product experiences.",
+      "priority": true
+    },
+    {
+      "name": "SaaS Interface",
+      "url": "https://saasinterface.com/",
+      "category": "product-ui",
+      "what": "Dashboards and B2B app UI.",
+      "priority": false
+    },
+    {
+      "name": "UI Sources",
+      "url": "https://www.uisources.com/",
+      "category": "flows",
+      "what": "Product flows and interaction patterns. Behaviour rather than surface.",
+      "priority": false
+    },
+    {
+      "name": "DesignBrowse",
+      "url": "https://designbrowse.com/",
+      "category": "product-ui",
+      "what": "Web-app references.",
+      "priority": false
+    },
+    {
+      "name": "UX Archive",
+      "url": "https://uxarchive.com/",
+      "category": "flows",
+      "what": "Organised around flows rather than individual screens.",
+      "priority": false
+    },
+    {
+      "name": "Screenlane",
+      "url": "https://screenlane.com/",
+      "category": "product-ui",
+      "what": "Curated application UI and flows.",
+      "priority": false
+    },
+    {
+      "name": "Pttrns",
+      "url": "https://pttrns.com/",
+      "category": "patterns",
+      "what": "Pattern library, stronger on mobile.",
+      "priority": false
+    },
+    {
+      "name": "Banani References",
+      "url": "https://www.banani.co/references",
+      "category": "product-ui",
+      "what": "Real UI references attached to their design product.",
+      "priority": false
+    },
+    {
+      "name": "Watobu",
+      "url": "https://watobu.com/",
+      "category": "product-ui",
+      "what": "B2B, CX and enterprise. CRM, support, complex SaaS.",
+      "priority": false
+    },
+    {
+      "name": "Mobbin",
+      "url": "https://mobbin.com/",
+      "category": "product-ui",
+      "what": "Hundreds of thousands of screens, mobile and web.",
+      "priority": false
+    },
+    {
+      "name": "Appshots",
+      "url": "https://appshots.design/",
+      "category": "flows",
+      "what": "Journeys and motion, app-heavy products.",
+      "priority": false
+    },
+    {
+      "name": "SaaS Landing Page",
+      "url": "https://saaslandingpage.com/",
+      "category": "landing",
+      "what": "Pricing, about and feature pages, not only homepages.",
+      "priority": false
+    },
+    {
+      "name": "Saaspo",
+      "url": "https://saaspo.com/",
+      "category": "landing",
+      "what": "Modern Linear/Attio/Vercel-adjacent startup design.",
+      "priority": false
+    },
+    {
+      "name": "Lapa Ninja",
+      "url": "https://www.lapa.ninja/",
+      "category": "landing",
+      "what": "Large landing collection. Practical rather than artsy.",
+      "priority": false
+    },
+    {
+      "name": "Landing Gallery",
+      "url": "https://www.landing.gallery/",
+      "category": "landing",
+      "what": "Filters by Framer, Webflow, Next.js. Pricing and careers pages.",
+      "priority": false
+    },
+    {
+      "name": "SaaS Pages",
+      "url": "https://saaspages.xyz/",
+      "category": "landing",
+      "what": "Attends to COPYWRITING structure, not only aesthetics. Rare.",
+      "priority": false
+    },
+    {
+      "name": "DesignFuel",
+      "url": "https://designfuel.com/",
+      "category": "landing",
+      "what": "Searchable website patterns and complete sites.",
+      "priority": false
+    },
+    {
+      "name": "Fountn",
+      "url": "https://fountn.design/",
+      "category": "aggregator",
+      "what": "Design-resource aggregator. UX and Inspiration sections.",
+      "priority": false
+    },
+    {
+      "name": "One Page Love",
+      "url": "https://onepagelove.com/",
+      "category": "landing",
+      "what": "When the whole product story is one scrolling page.",
+      "priority": false
+    },
+    {
+      "name": "Webzooo",
+      "url": "https://webzooo.com/",
+      "category": "landing",
+      "what": "Curated, startup-heavy taste.",
+      "priority": false
+    },
+    {
+      "name": "Curated Design",
+      "url": "https://www.curated.design/",
+      "category": "visual",
+      "what": "Modern web curation without awards-site noise.",
+      "priority": false
+    },
+    {
+      "name": "SiteInspire",
+      "url": "https://www.siteinspire.com/",
+      "category": "visual",
+      "what": "Restrained and editorial. Typography and layout references.",
+      "priority": false
+    },
+    {
+      "name": "Httpster",
+      "url": "https://httpster.net/",
+      "category": "visual",
+      "what": "Typography-heavy, studio and portfolio work.",
+      "priority": false
+    },
+    {
+      "name": "Minimal Gallery",
+      "url": "https://minimal.gallery/",
+      "category": "visual",
+      "what": "Antidote to gradient and bento overload.",
+      "priority": false
+    },
+    {
+      "name": "Awwwards",
+      "url": "https://www.awwwards.com/",
+      "category": "visual",
+      "what": "Experimental and agency-heavy. Motion and interaction.",
+      "priority": false
+    },
+    {
+      "name": "CSS Design Awards",
+      "url": "https://www.cssdesignawards.com/",
+      "category": "visual",
+      "what": "High-end interactive work.",
+      "priority": false
+    },
+    {
+      "name": "The FWA",
+      "url": "https://thefwa.com/",
+      "category": "visual",
+      "what": "The original experimental interactive archive.",
+      "priority": false
+    },
+    {
+      "name": "Landing Love",
+      "url": "https://www.landing.love/",
+      "category": "motion",
+      "what": "Landing sites captured with MOTION and video. Best for interaction ideas.",
+      "priority": false
+    },
+    {
+      "name": "Dark.Design",
+      "url": "https://www.dark.design/",
+      "category": "visual",
+      "what": "Curated dark-mode sites.",
+      "priority": false
+    },
+    {
+      "name": "Seesaw",
+      "url": "https://www.seesaw.website/",
+      "category": "visual",
+      "what": "Creative web, typography-led.",
+      "priority": false
+    },
+    {
+      "name": "recent.design",
+      "url": "https://recent.design/",
+      "category": "visual",
+      "what": "Where godly.website now redirects.",
+      "priority": false
+    },
+    {
+      "name": "Navbar Gallery",
+      "url": "https://www.navbar.gallery/",
+      "category": "sections",
+      "what": "Many solutions to navigation.",
+      "priority": false
+    },
+    {
+      "name": "Footer Design",
+      "url": "https://www.footer.design/",
+      "category": "sections",
+      "what": "Footers, and more useful than it sounds.",
+      "priority": false
+    },
+    {
+      "name": "SupaHero",
+      "url": "https://supahero.io/",
+      "category": "sections",
+      "what": "Hero sections specifically. In the ScreensDesign ecosystem.",
+      "priority": false
+    },
+    {
+      "name": "CTA Gallery",
+      "url": "https://www.cta.gallery/",
+      "category": "sections",
+      "what": "Call-to-action sections, searchable by industry and style.",
+      "priority": false
+    },
+    {
+      "name": "404s",
+      "url": "https://404s.design/",
+      "category": "sections",
+      "what": "404 pages.",
+      "priority": false
+    },
+    {
+      "name": "Call to Idea",
+      "url": "https://calltoidea.com/",
+      "category": "sections",
+      "what": "Pricing tables, forms, FAQs, empty states.",
+      "priority": false
+    },
+    {
+      "name": "The Component Gallery",
+      "url": "https://component.gallery/",
+      "category": "components",
+      "what": "How different design systems solve the same primitive.",
+      "priority": false
+    },
+    {
+      "name": "ScreensDesign",
+      "url": "https://screensdesign.com/",
+      "category": "product-ui",
+      "what": "Mobile app screens. Our catalog is desktop-only, so this is a blind spot.",
+      "priority": false
+    },
+    {
+      "name": "Baymard Institute",
+      "url": "https://baymard.com/",
+      "category": "ux-thinking",
+      "what": "Ecommerce, search, checkout, product pages, navigation. Research-backed.",
+      "priority": false
+    },
+    {
+      "name": "GoodUI",
+      "url": "https://goodui.org/",
+      "category": "ux-thinking",
+      "what": "Experiments and patterns aimed at conversion, with test results.",
+      "priority": false
+    },
+    {
+      "name": "Checklist Design",
+      "url": "https://www.checklist.design/",
+      "category": "ux-thinking",
+      "what": "What states and details a feature should account for.",
+      "priority": false
+    },
+    {
+      "name": "UserOnboard",
+      "url": "https://www.useronboard.com/",
+      "category": "ux-thinking",
+      "what": "Onboarding teardowns.",
+      "priority": false
+    },
+    {
+      "name": "Laws of UX",
+      "url": "https://lawsofux.com/",
+      "category": "ux-thinking",
+      "what": "Mental models behind interface decisions.",
+      "priority": false
+    },
+    {
+      "name": "Ecomm.Design",
+      "url": "https://ecomm.design/",
+      "category": "ecommerce",
+      "what": "Real stores with platform and tech filtering.",
+      "priority": false
+    },
+    {
+      "name": "Commerce Cream",
+      "url": "https://commercecream.com/",
+      "category": "ecommerce",
+      "what": "Curated Shopify and ecommerce sites.",
+      "priority": false
+    },
+    {
+      "name": "Really Good Emails",
+      "url": "https://reallygoodemails.com/",
+      "category": "email",
+      "what": "Large email design library.",
+      "priority": false
+    },
+    {
+      "name": "Email Love",
+      "url": "https://emaillove.com/",
+      "category": "email",
+      "what": "Email design gallery.",
+      "priority": false
+    }
+  ]
+}

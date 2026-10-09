@@ -40,7 +40,23 @@ import os, re, shlex, sys
 READERS = {"grep", "egrep", "fgrep", "rg", "sed", "awk", "cat", "head", "tail", "less",
            "more", "wc", "diff", "cp", "mv", "ls", "git", "echo", "printf", "stat",
            "file", "shellcheck", "shfmt", "open", "code", "vim", "nano", "bat", "touch", "chmod",
-           "pgrep", "pkill", "ps"}
+           "pgrep", "pkill", "ps",
+           # An interpreter given run.sh as an argument reads it as data. On
+           # 2026-10-09 `python3 patch.py tests/run.sh` was refused as a repeat
+           # suite run, and so was every edit chained after it.
+           "python", "python3", "node", "perl", "ruby", "jq"}
+# A heredoc body is data for the command that reads it, never a command line.
+# The same night a Python patch carrying the string tests/run.sh in its
+# heredoc recorded a suite run that never happened.
+def strip_heredocs(cmd):
+    out, lines, i = [], cmd.split("\n"), 0
+    while i < len(lines):
+        line = lines[i]; out.append(line); i += 1
+        for tag in re.findall(r"<<-?\s*[\x27\"]?([A-Za-z_][A-Za-z0-9_]*)[\x27\"]?", line):
+            while i < len(lines) and lines[i].strip() != tag:
+                i += 1
+            i += 1
+    return "\n".join(out)
 SEP = r"&&|\|\||;|\n|\|(?!\|)|(?<![>&])&(?![>&])|[()`]"
 # Split on operators OUTSIDE quotes. On 2026-10-09 `awk "NR<=636 && /if
 # group/ {...}" run.sh` was refused as a suite run: the regex split inside the
@@ -59,7 +75,9 @@ def segments(cmd):
         return [seg for line in out for seg in line.split("\n")]
     except ValueError:
         return re.split(SEP, cmd)
-for seg in segments(os.environ["CMD"]):
+# Line by line: shlex reads a newline as plain whitespace, so `cat x` on one
+# line and `bash tests/run.sh` on the next became one segment led by cat.
+for seg in [s for ln in strip_heredocs(os.environ["CMD"]).split("\n") for s in segments(ln)]:
     if "tests/run.sh" not in seg:
         continue
     try:

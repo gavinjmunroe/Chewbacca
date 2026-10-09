@@ -16,3 +16,15 @@ linkedin-jobs signed-in-ok
 # USC session, all GET JSON on brightspace.usc.edu. Spec reviewed: 7 ops, all
 # read-only, no off-domain host, no example values.
 brightspace signed-in-ok
+
+# 2026-10-10: handshake reads job, event and career-fair search plus a job
+# by id with his USC Handshake session. Every op hits a .json endpoint on
+# usc.joinhandshake.com: the HTML pages write recent searches and viewed
+# marks on load. Reviewed: 4 ops, read-only, no off-domain host.
+handshake signed-in-ok
+
+# 2026-10-10: usc-reg reads his WebReg appointment, holds, schedule and
+# course bin, Fall 2026 and Spring 2027, through his USC sign-in (Entra).
+# Reviewed: 8 GET ops on webreg.usc.edu, read-only; the pages fire only GETs
+# and telemetry. Never touch the bin page forms (Schedule, Remove, grade option).
+usc-reg signed-in-ok

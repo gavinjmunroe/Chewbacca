@@ -1,0 +1,944 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Analytics Dashboard</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #0f1117;
+        --surface: #1a1d27;
+        --surface-2: #222536;
+        --border: #2e3247;
+        --text: #e8eaf0;
+        --text-muted: #7b82a0;
+        --accent: #6c63ff;
+        --accent-soft: rgba(108, 99, 255, 0.12);
+        --green: #22c55e;
+        --green-soft: rgba(34, 197, 94, 0.12);
+        --red: #ef4444;
+        --red-soft: rgba(239, 68, 68, 0.12);
+        --amber: #f59e0b;
+        --amber-soft: rgba(245, 158, 11, 0.12);
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+        min-height: 100vh;
+      }
+
+      /* Layout */
+      .shell {
+        display: grid;
+        grid-template-columns: 220px 1fr;
+        grid-template-rows: 56px 1fr;
+        min-height: 100vh;
+      }
+
+      /* Topbar */
+      .topbar {
+        grid-column: 1 / -1;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+      }
+      .topbar-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .logo-mark {
+        width: 28px;
+        height: 28px;
+        background: var(--accent);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .logo-name {
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.3px;
+      }
+      .topbar-right {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--accent), #a78bfa);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .range-select {
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 8px;
+        padding: 5px 10px;
+        font-size: 13px;
+        cursor: pointer;
+      }
+      .range-select:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      @supports not selector(:focus-visible) {
+        .range-select:focus {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+      }
+
+      /* Sidebar */
+      .sidebar {
+        background: var(--surface);
+        border-right: 1px solid var(--border);
+        padding: 20px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .nav-label {
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        padding: 12px 10px 6px;
+      }
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        color: var(--text-muted);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition:
+          background 0.15s,
+          color 0.15s;
+      }
+      .nav-item:hover {
+        background: var(--surface-2);
+        color: var(--text);
+      }
+      .nav-item.active {
+        background: var(--accent-soft);
+        color: var(--accent);
+      }
+      .nav-item:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+      @supports not selector(:focus-visible) {
+        .nav-item:focus {
+          outline: 2px solid var(--accent);
+          outline-offset: -2px;
+        }
+      }
+      .nav-icon {
+        font-size: 16px;
+        width: 18px;
+        text-align: center;
+      }
+
+      /* Main content */
+      .main {
+        padding: 28px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+
+      .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .page-title {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: -0.4px;
+      }
+      .page-sub {
+        color: var(--text-muted);
+        font-size: 13px;
+        margin-top: 2px;
+      }
+      .btn {
+        background: var(--accent);
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: opacity 0.15s;
+      }
+      .btn:hover {
+        opacity: 0.88;
+      }
+      .btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      @supports not selector(:focus-visible) {
+        .btn:focus {
+          outline: 2px solid var(--accent);
+          outline-offset: 2px;
+        }
+      }
+
+      /* Metric cards */
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 16px;
+      }
+      .metric-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        transition: border-color 0.15s;
+      }
+      .metric-card:hover {
+        border-color: var(--accent);
+      }
+      .metric-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .metric-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+      }
+      .metric-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+      }
+      .metric-value {
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: -1px;
+      }
+      .metric-footer {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 7px;
+        border-radius: 20px;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .badge.up {
+        background: var(--green-soft);
+        color: var(--green);
+      }
+      .badge.down {
+        background: var(--red-soft);
+        color: var(--red);
+      }
+      .metric-period {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      /* Chart card */
+      .chart-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 24px;
+      }
+      .chart-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+      .chart-title {
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .chart-sub {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+      .chart-legend {
+        display: flex;
+        gap: 16px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+      .legend-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+      }
+      canvas {
+        display: block;
+        width: 100%;
+      }
+
+      /* Bottom grid */
+      .bottom-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+
+      /* Table card */
+      .table-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px;
+      }
+      .card-title {
+        font-size: 14px;
+        font-weight: 700;
+        margin-bottom: 16px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        text-align: left;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 0 0 10px;
+      }
+      td {
+        padding: 9px 0;
+        font-size: 13px;
+        border-top: 1px solid var(--border);
+      }
+      tr:first-child td {
+        border-top: none;
+      }
+      .source-bar-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .source-bar-bg {
+        flex: 1;
+        height: 4px;
+        background: var(--surface-2);
+        border-radius: 2px;
+      }
+      .source-bar-fill {
+        height: 4px;
+        border-radius: 2px;
+        background: var(--accent);
+      }
+
+      /* Activity feed */
+      .activity-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+      .activity-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 11px 0;
+        border-top: 1px solid var(--border);
+      }
+      .activity-item:first-child {
+        border-top: none;
+      }
+      .activity-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-top: 5px;
+        flex-shrink: 0;
+      }
+      .activity-body {
+        flex: 1;
+      }
+      .activity-text {
+        font-size: 13px;
+      }
+      .activity-time {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="logo-mark">A</div>
+          <span class="logo-name">Analytics</span>
+        </div>
+        <div class="topbar-right">
+          <select class="range-select" id="rangeSelect" aria-label="Date range">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+          </select>
+          <div class="avatar" aria-label="User: CN">CN</div>
+        </div>
+      </header>
+
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="nav-label">Menu</div>
+        <div
+          class="nav-item active"
+          tabindex="0"
+          role="button"
+          aria-current="page"
+        >
+          <span class="nav-icon" aria-hidden="true">◈</span> Overview
+        </div>
+        <div class="nav-item" tabindex="0" role="button">
+          <span class="nav-icon" aria-hidden="true">◎</span> Audience
+        </div>
+        <div class="nav-item" tabindex="0" role="button">
+          <span class="nav-icon" aria-hidden="true">⊞</span> Acquisition
+        </div>
+        <div class="nav-item" tabindex="0" role="button">
+          <span class="nav-icon" aria-hidden="true">↗</span> Behavior
+        </div>
+        <div class="nav-item" tabindex="0" role="button">
+          <span class="nav-icon" aria-hidden="true">◻</span> Conversions
+        </div>
+        <div class="nav-label">Settings</div>
+        <div class="nav-item" tabindex="0" role="button">
+          <span class="nav-icon" aria-hidden="true">⊙</span> Reports
+        </div>
+        <div class="nav-item" tabindex="0" role="button">
+          <span class="nav-icon" aria-hidden="true">⚙</span> Settings
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <main class="main">
+        <!-- Header -->
+        <div class="page-header">
+          <div>
+            <div class="page-title">Overview</div>
+            <div class="page-sub">Sept 20, 2026 — all times in Pacific</div>
+          </div>
+          <button class="btn">⬇ Export</button>
+        </div>
+
+        <!-- Metric cards -->
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Total Users</span>
+              <div
+                class="metric-icon"
+                style="background: var(--accent-soft); color: var(--accent)"
+                aria-hidden="true"
+              >
+                ◎
+              </div>
+            </div>
+            <div class="metric-value" id="m-users">48,291</div>
+            <div class="metric-footer">
+              <span class="badge up">▲ 12.4%</span>
+              <span class="metric-period">vs prior period</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Revenue</span>
+              <div
+                class="metric-icon"
+                style="background: var(--green-soft); color: var(--green)"
+                aria-hidden="true"
+              >
+                $
+              </div>
+            </div>
+            <div class="metric-value" id="m-revenue">$84,610</div>
+            <div class="metric-footer">
+              <span class="badge up">▲ 8.1%</span>
+              <span class="metric-period">vs prior period</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Conversion</span>
+              <div
+                class="metric-icon"
+                style="background: var(--amber-soft); color: var(--amber)"
+                aria-hidden="true"
+              >
+                ⟳
+              </div>
+            </div>
+            <div class="metric-value" id="m-conv">3.82%</div>
+            <div class="metric-footer">
+              <span class="badge down">▼ 0.3%</span>
+              <span class="metric-period">vs prior period</span>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-header">
+              <span class="metric-label">Avg. Session</span>
+              <div
+                class="metric-icon"
+                style="background: var(--red-soft); color: var(--red)"
+                aria-hidden="true"
+              >
+                ◷
+              </div>
+            </div>
+            <div class="metric-value" id="m-session">2m 47s</div>
+            <div class="metric-footer">
+              <span class="badge up">▲ 5.7%</span>
+              <span class="metric-period">vs prior period</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div>
+              <div class="chart-title">Traffic and Revenue</div>
+              <div class="chart-sub">
+                Daily unique visitors and revenue over the period
+              </div>
+            </div>
+            <div class="chart-legend" aria-hidden="true">
+              <div class="legend-item">
+                <div class="legend-dot" style="background: #6c63ff"></div>
+                Sessions
+              </div>
+              <div class="legend-item">
+                <div class="legend-dot" style="background: #22c55e"></div>
+                Revenue
+              </div>
+            </div>
+          </div>
+          <canvas
+            id="mainChart"
+            height="220"
+            role="img"
+            aria-label="Line chart of sessions and revenue over time"
+          ></canvas>
+        </div>
+
+        <!-- Bottom grid -->
+        <div class="bottom-grid">
+          <!-- Traffic sources -->
+          <div class="table-card">
+            <div class="card-title">Traffic Sources</div>
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Source</th>
+                  <th scope="col">Sessions</th>
+                  <th scope="col">Share</th>
+                </tr>
+              </thead>
+              <tbody id="sources-body"></tbody>
+            </table>
+          </div>
+
+          <!-- Activity feed -->
+          <div class="table-card">
+            <div class="card-title">Recent Activity</div>
+            <div
+              class="activity-list"
+              id="activity-list"
+              aria-live="polite"
+            ></div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      // ── Data generation ───────────────────────────────────────────────────────────
+      function seed(s) {
+        let x = s;
+        return () => {
+          x = (x * 1664525 + 1013904223) & 0xffffffff;
+          return (x >>> 0) / 0xffffffff;
+        };
+      }
+
+      function generateSeries(days, baseVal, volatility, trend, rng) {
+        const out = [];
+        let val = baseVal;
+        for (let i = 0; i < days; i++) {
+          val = val * (1 + trend) + (rng() - 0.5) * volatility * baseVal;
+          val = Math.max(baseVal * 0.3, val);
+          out.push(Math.round(val));
+        }
+        return out;
+      }
+
+      function buildData(days) {
+        const rng = seed(42 + days);
+        const sessions = generateSeries(days, 1600, 0.3, 0.004, rng);
+        const revenue = sessions.map((s) =>
+          Math.round(s * (2.8 + (rng() - 0.5) * 0.6)),
+        );
+        const labels = [];
+        const now = new Date(2026, 8, 20);
+        for (let i = days - 1; i >= 0; i--) {
+          const d = new Date(now);
+          d.setDate(d.getDate() - i);
+          labels.push(
+            days <= 10
+              ? d.toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })
+              : i % Math.ceil(days / 8) === 0
+                ? d.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })
+                : "",
+          );
+        }
+        return { sessions, revenue, labels, days };
+      }
+
+      // ── Chart ─────────────────────────────────────────────────────────────────────
+      const canvas = document.getElementById("mainChart");
+      const ctx = canvas.getContext("2d");
+
+      function drawChart(data) {
+        const dpr = window.devicePixelRatio || 1;
+        const W = canvas.parentElement.clientWidth - 48;
+        const H = 220;
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        canvas.style.width = W + "px";
+        canvas.style.height = H + "px";
+        ctx.scale(dpr, dpr);
+
+        const PAD = { top: 16, right: 20, bottom: 36, left: 56 };
+        const cW = W - PAD.left - PAD.right;
+        const cH = H - PAD.top - PAD.bottom;
+
+        const { sessions, revenue, labels } = data;
+        const maxS = Math.max(...sessions) * 1.1;
+        const maxR = Math.max(...revenue) * 1.1;
+        const n = sessions.length;
+
+        ctx.clearRect(0, 0, W, H);
+
+        // Grid lines
+        ctx.strokeStyle = "#2e3247";
+        ctx.lineWidth = 1;
+        const gridLines = 4;
+        for (let i = 0; i <= gridLines; i++) {
+          const y = PAD.top + cH * (i / gridLines);
+          ctx.beginPath();
+          ctx.moveTo(PAD.left, y);
+          ctx.lineTo(PAD.left + cW, y);
+          ctx.stroke();
+          const val = Math.round(maxS * (1 - i / gridLines));
+          ctx.fillStyle = "#7b82a0";
+          ctx.font = "11px -apple-system, sans-serif";
+          ctx.textAlign = "right";
+          ctx.fillText(
+            val >= 1000 ? (val / 1000).toFixed(1) + "k" : val,
+            PAD.left - 8,
+            y + 4,
+          );
+        }
+
+        function xOf(i) {
+          return PAD.left + (i / (n - 1)) * cW;
+        }
+        function yOf(v, max) {
+          return PAD.top + cH * (1 - v / max);
+        }
+
+        // Revenue area
+        ctx.beginPath();
+        ctx.moveTo(xOf(0), yOf(revenue[0], maxR));
+        for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(revenue[i], maxR));
+        ctx.lineTo(xOf(n - 1), PAD.top + cH);
+        ctx.lineTo(xOf(0), PAD.top + cH);
+        ctx.closePath();
+        const grad2 = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH);
+        grad2.addColorStop(0, "rgba(34,197,94,0.18)");
+        grad2.addColorStop(1, "rgba(34,197,94,0)");
+        ctx.fillStyle = grad2;
+        ctx.fill();
+
+        // Revenue line
+        ctx.beginPath();
+        ctx.moveTo(xOf(0), yOf(revenue[0], maxR));
+        for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(revenue[i], maxR));
+        ctx.strokeStyle = "#22c55e";
+        ctx.lineWidth = 2;
+        ctx.lineJoin = "round";
+        ctx.stroke();
+
+        // Sessions area
+        ctx.beginPath();
+        ctx.moveTo(xOf(0), yOf(sessions[0], maxS));
+        for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(sessions[i], maxS));
+        ctx.lineTo(xOf(n - 1), PAD.top + cH);
+        ctx.lineTo(xOf(0), PAD.top + cH);
+        ctx.closePath();
+        const grad1 = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + cH);
+        grad1.addColorStop(0, "rgba(108,99,255,0.22)");
+        grad1.addColorStop(1, "rgba(108,99,255,0)");
+        ctx.fillStyle = grad1;
+        ctx.fill();
+
+        // Sessions line
+        ctx.beginPath();
+        ctx.moveTo(xOf(0), yOf(sessions[0], maxS));
+        for (let i = 1; i < n; i++) ctx.lineTo(xOf(i), yOf(sessions[i], maxS));
+        ctx.strokeStyle = "#6c63ff";
+        ctx.lineWidth = 2.5;
+        ctx.lineJoin = "round";
+        ctx.stroke();
+
+        // X-axis labels
+        ctx.fillStyle = "#7b82a0";
+        ctx.font = "11px -apple-system, sans-serif";
+        ctx.textAlign = "center";
+        labels.forEach((lbl, i) => {
+          if (!lbl) return;
+          ctx.fillText(lbl, xOf(i), H - 8);
+        });
+
+        canvas._chartData = {
+          sessions,
+          revenue,
+          maxS,
+          maxR,
+          xOf,
+          yOf,
+          PAD,
+          cH,
+          n,
+        };
+      }
+
+      // Tooltip
+      const tooltip = (() => {
+        const el = document.createElement("div");
+        el.role = "tooltip";
+        el.style.cssText = `
+    position: fixed; pointer-events: none; display: none;
+    background: #1a1d27; border: 1px solid #2e3247; border-radius: 8px;
+    padding: 10px 14px; font-size: 12px; color: #e8eaf0;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 100;
+    line-height: 1.8;
+  `;
+        document.body.appendChild(el);
+        return el;
+      })();
+
+      canvas.addEventListener("mousemove", (e) => {
+        const d = canvas._chartData;
+        if (!d) return;
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const cW =
+          canvas.width / (window.devicePixelRatio || 1) - d.PAD.left - 20;
+        const i = Math.round(((mx - d.PAD.left) / cW) * (d.n - 1));
+        if (i < 0 || i >= d.n) {
+          tooltip.style.display = "none";
+          return;
+        }
+        tooltip.style.display = "block";
+        tooltip.style.left = e.clientX + 14 + "px";
+        tooltip.style.top = e.clientY - 40 + "px";
+        tooltip.innerHTML = `
+    <div style="color:#7b82a0;margin-bottom:4px">Day ${i + 1}</div>
+    <div><span style="color:#6c63ff">● </span>Sessions: <b>${d.sessions[i].toLocaleString()}</b></div>
+    <div><span style="color:#22c55e">● </span>Revenue: <b>$${d.revenue[i].toLocaleString()}</b></div>
+  `;
+      });
+      canvas.addEventListener("mouseleave", () => {
+        tooltip.style.display = "none";
+      });
+
+      // ── Traffic sources ───────────────────────────────────────────────────────────
+      const sourcesData = [
+        { name: "Organic Search", sessions: 18420, pct: 38 },
+        { name: "Direct", sessions: 12104, pct: 25 },
+        { name: "Referral", sessions: 8834, pct: 18 },
+        { name: "Social", sessions: 5776, pct: 12 },
+        { name: "Email", sessions: 3157, pct: 7 },
+      ];
+
+      const tbody = document.getElementById("sources-body");
+      sourcesData.forEach((s) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+    <td>${s.name}</td>
+    <td>${s.sessions.toLocaleString()}</td>
+    <td>
+      <div class="source-bar-wrap">
+        <div class="source-bar-bg" role="presentation">
+          <div class="source-bar-fill" style="width:${s.pct}%"></div>
+        </div>
+        <span style="font-size:11px;color:#7b82a0;width:28px;text-align:right">${s.pct}%</span>
+      </div>
+    </td>
+  `;
+        tbody.appendChild(tr);
+      });
+
+      // ── Activity feed ─────────────────────────────────────────────────────────────
+      const activities = [
+        {
+          text: "New signup: enterprise plan",
+          time: "3 min ago",
+          color: "#6c63ff",
+        },
+        {
+          text: "Conversion goal hit: 500/day",
+          time: "18 min ago",
+          color: "#22c55e",
+        },
+        {
+          text: "Bounce rate spike on /pricing",
+          time: "41 min ago",
+          color: "#f59e0b",
+        },
+        {
+          text: 'Campaign "Fall Launch" went live',
+          time: "2h ago",
+          color: "#6c63ff",
+        },
+        { text: "Revenue milestone: $80k", time: "5h ago", color: "#22c55e" },
+        {
+          text: "High exit rate on /checkout",
+          time: "9h ago",
+          color: "#ef4444",
+        },
+      ];
+
+      const feed = document.getElementById("activity-list");
+      activities.forEach((a) => {
+        const item = document.createElement("div");
+        item.className = "activity-item";
+        item.innerHTML = `
+    <div class="activity-dot" style="background:${a.color}" aria-hidden="true"></div>
+    <div class="activity-body">
+      <div class="activity-text">${a.text}</div>
+      <div class="activity-time">${a.time}</div>
+    </div>
+  `;
+        feed.appendChild(item);
+      });
+
+      // ── Render + range select ─────────────────────────────────────────────────────
+      let currentDays = 30;
+
+      function render(days) {
+        currentDays = days;
+        const data = buildData(days);
+        drawChart(data);
+        const totalSessions = data.sessions.reduce((a, b) => a + b, 0);
+        const totalRevenue = data.revenue.reduce((a, b) => a + b, 0);
+        document.getElementById("m-users").textContent =
+          totalSessions.toLocaleString();
+        document.getElementById("m-revenue").textContent =
+          "$" + (totalRevenue / 1000).toFixed(1) + "k";
+      }
+
+      document
+        .getElementById("rangeSelect")
+        .addEventListener("change", (e) => render(+e.target.value));
+
+      render(30);
+
+      let resizeTimer;
+      window.addEventListener("resize", () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => render(currentDays), 100);
+      });
+    </script>
+  </body>
+</html>

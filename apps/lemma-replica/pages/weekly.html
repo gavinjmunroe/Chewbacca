@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sift Weekly</title>
+    <meta
+      name="description"
+      content="One agent failure, taken apart every Friday: what happened, how it surfaced, and the check that would have caught it."
+    />
+    <link rel="stylesheet" href="../src/styles.css" />
+    <link rel="stylesheet" href="../src/sections/lower.css" />
+    <link rel="stylesheet" href="../src/sections/chrome.css" />
+    <link rel="stylesheet" href="../src/sections/states.css" />
+    <link rel="stylesheet" href="../src/pages/pages.css" />
+  </head>
+  <body data-nav="weekly">
+    <div id="site-chrome"></div>
+
+    <main id="top">
+      <div class="pg-frame pg-frame-narrow">
+        <section class="pg-wk-hero pg-band">
+          <p class="pg-eyebrow">
+            Sift Weekly<span class="pg-dot" aria-hidden="true">&middot;</span
+            ><a href="weekly/feed.xml">Feed</a>
+          </p>
+          <h1 class="pg-h1">
+            One agent failure, taken apart every&nbsp;Friday.
+          </h1>
+          <p class="pg-lead">
+            Each issue follows a single production failure from the first
+            customer complaint back to the step that caused it, and ends with
+            the check that would have flagged it on day one.
+          </p>
+        </section>
+
+        <section class="pg-wk-latest pg-band" aria-labelledby="latest-h">
+          <p class="pg-eyebrow pg-ruled" id="latest-h">Latest issue</p>
+          <a href="weekly/issue-014.html">
+            <p class="pg-date">
+              <time datetime="2026-09-25">September 25, 2026</time
+              ><span class="pg-dot" aria-hidden="true">&middot;</span>6 min read
+            </p>
+            <h2>The refund that ran twice</h2>
+            <p class="pg-lead">
+              A support agent retried a payment tool after a timeout, got two
+              success responses back, and told the customer all was well. How
+              the duplicate surfaced nine days later, and the check that now
+              catches it on the first run.
+            </p>
+            <div class="pg-wk-meta">
+              <span
+                ><span class="pg-author"
+                  ><svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      cx="7"
+                      cy="7"
+                      r="5.5"
+                      fill="none"
+                      stroke="currentColor"
+                    />
+                    <path d="M4.5 9.5 9.5 4.5" stroke="currentColor" /></svg
+                  >Mara Lindqvist</span
+                ><span class="pg-role">Founding engineer</span></span
+              >
+              <span class="pg-arrow-link"
+                >Read the issue<svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M1 6h9M7 3l3 3-3 3"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.2"
+                  /></svg
+              ></span>
+            </div>
+          </a>
+        </section>
+
+        <section class="pg-wk-archive pg-band" aria-labelledby="archive-h">
+          <p class="pg-eyebrow pg-ruled" id="archive-h">Archive</p>
+          <p class="pg-eyebrow pg-wk-month">September 2026</p>
+          <ol class="pg-issues">
+            <li>
+              <a class="pg-issue" href="weekly/issue-013.html">
+                <span class="pg-eyebrow pg-num">013</span>
+                <div
+                  ><h3>The tool that said yes to everything</h3>
+                  <p>
+                    A permissions check that returned true for any user the
+                    agent named, and the forty-one accounts it quietly opened up
+                    before anyone looked.
+                  </p></div
+                >
+                <time class="pg-date" datetime="2026-09-18"
+                  >Sep 18, 2026<span class="pg-dot" aria-hidden="true"
+                    >&middot;</span
+                  >5 min</time
+                >
+              </a>
+            </li>
+            <li>
+              <a class="pg-issue" href="weekly/issue-012.html">
+                <span class="pg-eyebrow pg-num">012</span>
+                <div
+                  ><h3>Context that went stale at step nine</h3>
+                  <p>
+                    A travel agent quoted a fare it had fetched eight steps
+                    earlier, after a later search had already shown the price
+                    change.
+                  </p></div
+                >
+                <time class="pg-date" datetime="2026-09-11"
+                  >Sep 11, 2026<span class="pg-dot" aria-hidden="true"
+                    >&middot;</span
+                  >4 min</time
+                >
+              </a>
+            </li>
+          </ol>
+        </section>
+
+        <section class="pg-sub" aria-labelledby="sub-h">
+          <h2 id="sub-h">Get the next one</h2>
+          <p>
+            Every past issue stays on this page. The next one goes to your inbox
+            on Friday morning.
+          </p>
+          <form class="lw-form" data-newsletter>
+            <label class="pg-sr" for="wk-email">Email address</label>
+            <input
+              class="lw-input"
+              id="wk-email"
+              type="email"
+              name="email"
+              placeholder="you@work.com"
+              autocomplete="email"
+            />
+            <button class="lw-submit" type="submit">Get Sift Weekly</button>
+          </form>
+          <p class="pg-status" data-status>
+            One email a week. Unsubscribe from any issue.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <div id="lower-footer"></div>
+    <script type="module" src="../src/pages/chrome.js"></script>
+  </body>
+</html>

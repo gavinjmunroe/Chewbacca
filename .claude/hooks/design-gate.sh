@@ -43,7 +43,15 @@ PROMPT_ID=$(printf '%s' "$INPUT" | jq -r '.prompt_id // .session_id // "unknown"
 GUARD="${TMPDIR:-/tmp}/design-gate-$PROMPT_ID"
 [ -f "$GUARD" ] && exit 0
 
-GATE="$HOME/code/tools/ux-engine/bin/design-gate"
+# ux-engine ships inside the kit (apps/ux-engine) since 2026-10-09, so every
+# teammate's install has the same gate. It used to be a separate private repo
+# at ~/code/tools/ux-engine, which only Caleb's Mac had.
+_kit="${CHEWBACCA_ROOT:-}"
+if [ -z "$_kit" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
+  _kit="$(sed -n 's/.*"repo"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$HOME/.chewbacca/install-manifest.json" | head -1)"
+fi
+GATE="${UX_ENGINE_DIR:-${_kit:-$HOME/code/chewbacca}/apps/ux-engine}/bin/design-gate"
+[ -x "$GATE" ] || GATE="$HOME/code/tools/ux-engine/bin/design-gate"  # a checkout that has not pulled apps/ yet
 [ -x "$GATE" ] || exit 0
 
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')

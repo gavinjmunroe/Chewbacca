@@ -24,6 +24,10 @@ t "people.db fixture insert" 0 "sqlite3 \"\$DB\" \"INSERT INTO messages (msg_id,
 t "people.db count by source" 0 "sqlite3 ~/.chewbacca/people/people.db \"SELECT source, count(*) FROM messages GROUP BY source\""
 t "explicit reader debugging" 0 "RAW_MESSAGES_OK=1 sqlite3 chat.db \"select is_from_me from message limit 1\""
 t "people texts owed"    0 'people texts owed --json'
+t "python heredoc writing a chat.db fixture" 0 "cd ~/code/chewbacca && python3 - <<'EOF'
+s='sqlite3 chat2.db \"CREATE TABLE chat_message_join (chat_id INT)\" is_from_me'
+EOF"
+t "a plain sqlite3 thread read still refuses" 2 "sqlite3 ~/Library/Messages/chat.db \"select is_from_me from chat_message_join\""
 t "other db"             0 "sqlite3 notes.db \"select * from notes where text like '%x%'\""
 t "non-Bash tool"        0 'ignored'
 t "context_text column"  0 "sqlite3 chat.db \"select * from message where subject_text like '%x%'\""

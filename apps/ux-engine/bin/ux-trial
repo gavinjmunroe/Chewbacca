@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+"""Run a blind paired comparison between design variants. The classification trial.
+
+    ux-trial run a.html b.html --brief "pricing page for a solo dev tool"
+    ux-trial judge <id> --worse B --feature "gradient headline" --why "..."
+    ux-trial overrule <id> --worse A --feature "..."   a human correcting the critic
+    ux-trial log                                      what has been learned
+    ux-trial avoid                                    features that lost, for the next prompt
+
+WHY THIS EXISTS AND WHY IT IS NOT A SCORER.
+
+research/05 defines taste, defended against Hume, Kant and Bourdieu:
+
+    "trained discrimination: the ability, acquired by high-volume comparison
+     within a domain, to detect which of two near-identical artifacts is
+     WORSE, and to NAME the specific feature responsible."
+
+Comparison. Two. Worse. Name the feature. Every other tool in this category
+scores ONE artifact against a fixed list, which is not that definition.
+
+And research/12 gives the mechanism that actually trains discrimination, from
+Kellman: not hours and not stored examples, but many classification trials
+with immediate feedback, varying the irrelevant features so the relevant one
+separates. Effect sizes 0.84 to 2.69 on previously unseen cases.
+
+Three design decisions here are load-bearing and each has a source:
+
+BLIND. The variants are shuffled and the critic is never told which is which,
+because research/13 found readers mistake their own preference for evidence:
+in the poetry study, participants "mistakenly interpret their own preference
+for a poem as evidence that it is human-written."
+
+THE CRITIC IS NOT THE AUTHOR. Anthropic's own engineering blog: "When asked to
+evaluate work they've produced, agents tend to respond by confidently praising
+the work, even when, to a human observer, the quality is obviously mediocre."
+
+WHICH IS WORSE, NOT WHICH IS BETTER. Hodgson poured identical wine to judges
+three times and only 10% could reproduce a score, but perfect consistency
+"usually occurred for wines that were rejected." Consistency lives in
+rejection.
+
+The log is the memory. It is what makes "do not converge" enforceable instead
+of an instruction to a stateless model.
+"""
+import argparse
+import hashlib
+import json
+import pathlib
+import random
+import shutil
+import subprocess
+import sys
+import time
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+TRIALS = ROOT / "trials"
+LOG = TRIALS / "log.jsonl"
+CHROME = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
+
+def render(html_path, out_png, width=1280, height=900):
+    """Headless screenshot. The step the whole category skips."""
+    chrome = shutil.which("chromium") or shutil.which("google-chrome") or CHROME
+    if not pathlib.Path(chrome).exists():
+        return False, f"no chrome at {chrome}"
+    src = pathlib.Path(html_path).resolve()
+    r = subprocess.run(
+        [chrome, "--headless", "--disable-gpu", "--no-sandbox", "--hide-scrollbars",
+         f"--screenshot={out_png}", f"--window-size={width},{height}", f"file://{src}"],
+        capture_output=True, text=True, timeout=90,
+    )
+    ok = pathlib.Path(out_png).exists() and pathlib.Path(out_png).stat().st_size > 1000
+    return ok, ("" if ok else (r.stderr or "")[-300:])
+
+
+def cmd_run(a):
+    if len(a.variants) < 2:
+        print("a trial needs at least two variants. One artifact is a score, "
+              "not a comparison.", file=sys.stderr)
+        return 1
+    TRIALS.mkdir(exist_ok=True)
+    tid = hashlib.sha1(f"{time.time()}{a.variants}".encode()).hexdigest()[:8]
+    d = TRIALS / tid
+    d.mkdir()
+
+    # Shuffle before labelling, and keep the mapping out of the critic's view.
+    order = list(range(len(a.variants)))
+    random.shuffle(order)
+    labels = [chr(ord("A") + i) for i in range(len(order))]
+
+    shots, mapping = [], {}
+    for label, idx in zip(labels, order):
+        src = a.variants[idx]
+        png = d / f"{label}.png"
+        ok, err = render(src, png)
+        if not ok:
+            print(f"render failed for {src}: {err}", file=sys.stderr)
+            return 1
+        shots.append(str(png))
+        mapping[label] = src
+
+    (d / "mapping.json").write_text(json.dumps(mapping, indent=1))
+    rec = {"id": tid, "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+           "brief": a.brief, "labels": labels, "shots": shots,
+           "status": "awaiting_judgment"}
+    with LOG.open("a") as f:
+        f.write(json.dumps(rec) + "\n")
+
+    print(f"\ntrial {tid}\n")
+    for s in shots:
+        print(f"  {s}")
+    print(f"""
+Now judge it, and the constraints are the point:
+
+  1. READ THE IMAGES. Not the source. The source tells you what was
+     intended; the render tells you what a person sees.
+  2. You are told nothing about which variant is which. Do not go
+     looking in {d}/mapping.json before judging.
+  3. Say which is WORSE, not which is better. Consistency lives in
+     rejection (research/12, Hodgson).
+  4. NAME THE SPECIFIC FEATURE responsible. "B is worse" is a
+     preference. "B is worse: the gradient headline drops contrast
+     below 4.5:1 across its own run" is a judgment. That clause is
+     the whole difference (research/05, Hume's Sancho).
+
+  ux-trial judge {tid} --worse <LABEL> --feature "<the feature>" --why "<the cost>"
+
+If a human disagrees with the critic, that is the most valuable row in
+the log:
+
+  ux-trial overrule {tid} --worse <LABEL> --feature "..." --why "..."
+""")
+    return 0
+
+
+def _append(tid, payload):
+    rows = [json.loads(l) for l in LOG.read_text().splitlines() if l.strip()]
+    if not any(r["id"] == tid for r in rows):
+        print(f"no trial {tid}", file=sys.stderr)
+        return 1
+    with LOG.open("a") as f:
+        f.write(json.dumps({"id": tid, "at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                            **payload}) + "\n")
+    return 0
+
+
+def cmd_judge(a, human=False):
+    if not a.feature:
+        print("--feature is required. An unarticulated preference is a "
+              "preference; an articulated one is a judgment.", file=sys.stderr)
+        return 1
+    d = TRIALS / a.id
+    mapping = json.loads((d / "mapping.json").read_text()) if (d / "mapping.json").exists() else {}
+    rc = _append(a.id, {
+        "status": "overruled_by_human" if human else "judged",
+        "by": "human" if human else "critic",
+        "worse": a.worse, "worse_file": mapping.get(a.worse, "?"),
+        "feature": a.feature, "why": a.why or "",
+    })
+    if rc:
+        return rc
+    print(f"recorded. {a.worse} ({mapping.get(a.worse, '?')}) was worse: {a.feature}")
+    if human:
+        print("human overrule logged. This is the row that teaches the most.")
+    return 0
+
+
+def cmd_log(a):
+    if not LOG.exists():
+        print("no trials yet. ux-trial run <a.html> <b.html> --brief \"...\"")
+        return 0
+    rows = [json.loads(l) for l in LOG.read_text().splitlines() if l.strip()]
+    judged = [r for r in rows if r.get("feature")]
+    print(f"{len({r['id'] for r in rows})} trials, {len(judged)} judgments, "
+          f"{sum(1 for r in judged if r.get('by') == 'human')} human overrules\n")
+    for r in judged[-a.n:]:
+        mark = "H" if r.get("by") == "human" else " "
+        print(f"{mark} {r['at'][:16]}  {r['id']}  worse: {r['worse']}  {r['feature']}")
+        if r.get("why"):
+            print(f"      {r['why'][:100]}")
+    return 0
+
+
+def cmd_avoid(a):
+    """What lost, so the next generation does not reproduce it.
+
+    This is the answer to the instruction Anthropic could not make work:
+    telling a stateless model not to converge. It is followable when the
+    losing features are on disk.
+    """
+    if not LOG.exists():
+        print("no trials yet, so nothing to avoid. Run one.")
+        return 0
+    rows = [json.loads(l) for l in LOG.read_text().splitlines() if l.strip()]
+    feats = {}
+    for r in rows:
+        if r.get("feature"):
+            w = 3 if r.get("by") == "human" else 1
+            feats[r["feature"]] = feats.get(r["feature"], 0) + w
+    if not feats:
+        print("no judgments yet.")
+        return 0
+    print("features that have lost a blind comparison here, worst first.")
+    print("human overrules count triple.\n")
+    for f, n in sorted(feats.items(), key=lambda kv: -kv[1]):
+        print(f"  {n:3d}  {f}")
+    print("\nDo not reproduce these. This is project memory, not a global rule.")
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=True)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    r = sub.add_parser("run", help="render variants and open a blind trial")
+    r.add_argument("variants", nargs="+")
+    r.add_argument("--brief", default="")
+
+    for name in ("judge", "overrule"):
+        j = sub.add_parser(name)
+        j.add_argument("id")
+        j.add_argument("--worse", required=True)
+        j.add_argument("--feature", required=True)
+        j.add_argument("--why", default="")
+
+    lg = sub.add_parser("log")
+    lg.add_argument("-n", type=int, default=15)
+    sub.add_parser("avoid")
+
+    a = ap.parse_args()
+    return {"run": cmd_run, "log": cmd_log, "avoid": cmd_avoid,
+            "judge": lambda x: cmd_judge(x, False),
+            "overrule": lambda x: cmd_judge(x, True)}[a.cmd](a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

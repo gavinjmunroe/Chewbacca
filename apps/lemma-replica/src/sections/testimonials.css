@@ -1,0 +1,320 @@
+/* Section D: testimonial carousel. Geometry and its derivation are in
+   testimonials.js. Selectors carry `section#testimonials` because styles.css
+   still sets `#testimonials { padding: 128px 64px }` and
+   `#testimonials .tst-head-block`, and both have to lose. */
+
+section#testimonials {
+  /* One step is a third of (viewport + gap); the first whole card rests 227px
+     into the 1152 viewport, 227 / 1152 = .197. */
+  --tst-basis: 0.33333;
+  --tst-start: 0.197;
+  /* 289 is their card height at 1440, set by their tallest quote. */
+  --tst-h: 289px;
+  padding: 0;
+  margin: 0;
+  border-top: 1px solid #d4d4dd;
+  letter-spacing: 0.32px;
+}
+
+.tst-col {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 128px 64px;
+}
+
+/* 768 centred, 48 below: eyebrow 15 + 16 + h2 43.2 = 74 tall like theirs. */
+section#testimonials .tst-head-block {
+  max-width: 768px;
+  margin: 0 auto 48px;
+  text-align: center;
+}
+.tst-eyebrow {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 15px;
+  text-transform: uppercase;
+  color: #99a1af;
+}
+section#testimonials .tst-title {
+  margin: 16px 0 0;
+  font-size: 36px;
+  line-height: 43.2px;
+  letter-spacing: -0.36px;
+  font-weight: 400;
+  color: var(--ink);
+}
+
+.tst-stage {
+  position: relative;
+}
+
+/* 12px of room above and below so the card border is not clipped, pulled
+   back by a -12 top margin: their viewport sits at 15924, cards at 15936. */
+.tst-viewport {
+  position: relative;
+  height: calc(var(--tst-h) + 24px);
+  margin-top: -12px;
+  overflow: hidden;
+  /* Both edges fade over 96px; in lo_ref_1 the left sliver's words are gone
+     by about 100px in and the right sliver fades from ~66px before the edge. */
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 96px,
+    #000 calc(100% - 96px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    90deg,
+    transparent 0,
+    #000 96px,
+    #000 calc(100% - 96px),
+    transparent 100%
+  );
+}
+/* The focus ring is drawn by states.css with every other ring on the page. */
+.tst-track {
+  position: relative;
+  height: 100%;
+}
+
+.tst-card {
+  position: absolute;
+  top: 12px;
+  left: 0;
+  width: var(--tst-card, 373px);
+  height: var(--tst-h);
+  /* <figure> carries a UA margin of 1em 40px; left in, every card lands 40px
+     off the slot the transform computed. */
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #d4d4dd;
+  transform: translate3d(0, 0, 0);
+  /* Theirs, read off the card while hovered: translate 0 -> 0 -6px and
+     border rgb(212,212,221) -> primary at 20%, both over 450ms on
+     cubic-bezier(.33,0,.15,1). The slide step uses the same curve, and its
+     duration comes from --tst-move, which the script sets to 0ms for a card
+     that wraps round the ring and 450ms otherwise. `translate` is a separate
+     property from the slide's `transform`, so the lift and the slide compose
+     instead of overwriting each other. */
+  transition:
+    transform var(--tst-move, 0ms) cubic-bezier(0.33, 0, 0.15, 1),
+    translate 450ms cubic-bezier(0.33, 0, 0.15, 1),
+    border-color 450ms cubic-bezier(0.33, 0, 0.15, 1);
+}
+.tst-card:hover {
+  translate: 0 -6px;
+  border-color: rgba(29, 25, 86, 0.2);
+}
+
+.tst-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.tst-avatar {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.32px;
+  color: var(--ink);
+  background: #e6e4f4;
+}
+.tst-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tst-name {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tst-meta {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tst-quote {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22.75px;
+  color: var(--ink);
+  overflow: hidden;
+}
+
+/* 32px circles, 48px outside the viewport (x=96 against a viewport at 144),
+   vertically on the card centre. */
+.tst-arrow {
+  position: absolute;
+  z-index: 2;
+  top: calc(12px + var(--tst-h) / 2);
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  background: #e8e8e8;
+  color: var(--ink);
+  /* Theirs are <button>s on Tailwind v4's preflight, which leaves the
+     cursor at default; measured `default` while hovered. */
+  cursor: default;
+  /* Their button transition: color, background-color, box-shadow, scale,
+     150ms cubic-bezier(0,0,.2,1). */
+  transition:
+    color 150ms cubic-bezier(0, 0, 0.2, 1),
+    background-color 150ms cubic-bezier(0, 0, 0.2, 1),
+    box-shadow 150ms cubic-bezier(0, 0, 0.2, 1),
+    scale 150ms cubic-bezier(0, 0, 0.2, 1);
+}
+/* Hovered, theirs goes #e8e8e8 -> #e0e0e0. Pressed, scale .96. */
+.tst-arrow:hover {
+  background: #e0e0e0;
+}
+.tst-arrow:active {
+  scale: 0.96;
+}
+/* 32px is their drawn size; the hit area grows to 44 without moving it. */
+.tst-arrow::after {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+}
+.tst-prev {
+  left: -48px;
+}
+.tst-next {
+  right: -48px;
+}
+
+/* Twelve 6px dots on 14px centres, 16 under the cards. */
+.tst-dots {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+.tst-dot {
+  width: 14px;
+  height: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  display: grid;
+  place-items: center;
+  position: relative;
+  cursor: default;
+}
+/* Their dots have NO hover state: hovering one changed nothing in the
+   sweep. Inactive is primary at 20%, active is primary, and the swap is
+   150ms cubic-bezier(.4,0,.2,1). */
+.tst-dot i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(29, 25, 86, 0.2);
+  transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tst-dot.on i {
+  background: var(--ink);
+}
+/* The 14px pitch caps the width; the hit area grows to 44 tall. */
+.tst-dot::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -17px;
+  bottom: -17px;
+}
+
+/* Their md:basis-1/2 and basis-[85%] steps, resting at the left edge. */
+@media (max-width: 1023px) {
+  section#testimonials {
+    --tst-basis: 0.5;
+    --tst-start: 0;
+  }
+  .tst-col {
+    padding: 96px 48px;
+  }
+  .tst-prev {
+    left: -40px;
+  }
+  .tst-next {
+    right: -40px;
+  }
+}
+@media (max-width: 767px) {
+  section#testimonials {
+    --tst-basis: 0.85;
+    --tst-start: 0;
+    --tst-h: 260px;
+  }
+  .tst-col {
+    padding: 96px 16px;
+  }
+  section#testimonials .tst-title {
+    font-size: 28px;
+    line-height: 34px;
+  }
+  .tst-viewport {
+    -webkit-mask-image: linear-gradient(
+      90deg,
+      #000 calc(100% - 48px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      90deg,
+      #000 calc(100% - 48px),
+      transparent 100%
+    );
+  }
+  .tst-arrow {
+    top: auto;
+    bottom: -46px;
+    transform: none;
+  }
+  .tst-prev {
+    left: 0;
+  }
+  .tst-next {
+    right: 0;
+  }
+  .tst-dots {
+    margin-top: 27px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tst-card,
+  .tst-arrow,
+  .tst-dot i {
+    transition: none !important;
+  }
+  /* The lift is motion; the border change carries the hover on its own. */
+  .tst-card:hover {
+    translate: none;
+  }
+  .tst-arrow:active {
+    scale: none;
+  }
+}

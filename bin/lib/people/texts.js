@@ -847,11 +847,31 @@ function cmdTexts(argv) {
       fs.writeFileSync(file + ".tmp", JSON.stringify(list, null, 2));
       fs.renameSync(file + ".tmp", file);
     };
+    // A draft keeps the number it was given. They used to be positions, so
+    // a drop in one tab renumbered every later draft under another tab: on
+    // 2026-10-09 a tab dropped "#42", its own stale Mac mini draft, and
+    // deleted a Maggie reply a second tab had added two seconds earlier.
     const list = load();
+    const numbered = list.filter((x) => Number.isInteger(x.n));
+    let top = numbered.length ? Math.max(...numbered.map((x) => x.n)) : 0;
+    list.forEach((x, i) => {
+      if (!Number.isInteger(x.n)) x.n = numbered.length ? ++top : i + 1;
+    });
+    // Pin them the first time they are seen, so the list he reads is the
+    // list every later drop and send resolves against.
+    if (numbered.length < list.length) save(list);
+    top = Math.max(top, list.length ? Math.max(...list.map((x) => x.n)) : 0);
+    // The highest number ever handed out, so a dropped last draft's number
+    // is never reused for a new one a stale tab could then hit.
+    const counter = file.replace(/\.json$/, ".next");
+    // An empty queue starts again at 1, so numbers stay short.
+    try {
+      if (list.length)
+        top = Math.max(top, Number(fs.readFileSync(counter, "utf8")) || 0);
+    } catch {}
     const pick = (n) => {
-      const i = Number(n) - 1;
-      if (!Number.isInteger(i) || !list[i])
-        die(`no draft ${n}; run: people texts drafts`);
+      const i = list.findIndex((x) => x.n === Number(n));
+      if (i < 0) die(`no draft ${n}; run: people texts drafts`);
       return i;
     };
     const verb = rest[0];
@@ -902,15 +922,17 @@ function cmdTexts(argv) {
         to,
         via: flags.via ? String(flags.via) : "",
         at: nowISO(),
+        n: top + 1,
       });
       save(list);
-      return say(`${c.grn("drafted")} #${list.length} to ${c.b(who)}`);
+      fs.writeFileSync(counter, String(top + 1));
+      return say(`${c.grn("drafted")} #${top + 1} to ${c.b(who)}`);
     }
     if (verb === "drop") {
       const i = pick(rest[1]);
       const [gone] = list.splice(i, 1);
       save(list);
-      return say(`${c.dim("dropped")} #${i + 1} to ${gone.who}`);
+      return say(`${c.dim("dropped")} #${gone.n} to ${gone.who}`);
     }
     if (verb === "send") {
       const i = pick(rest[1]);
@@ -941,9 +963,9 @@ function cmdTexts(argv) {
         ),
       );
     say("");
-    list.forEach((dr, i) => {
+    list.forEach((dr) => {
       say(
-        `  ${c.b(`#${i + 1}`)} ${c.cyn(printable(dr.who))}${dr.group ? c.dim(" group") : ""}${dr.via ? c.dim(` ${printable(dr.via)}`) : ""} ${c.dim(dr.at.slice(5, 16))}`,
+        `  ${c.b(`#${dr.n}`)} ${c.cyn(printable(dr.who))}${dr.group ? c.dim(" group") : ""}${dr.via ? c.dim(` ${printable(dr.via)}`) : ""} ${c.dim(dr.at.slice(5, 16))}`,
       );
       if (dr.why) say(c.dim(`     re: ${printable(dr.why)}`));
       say(`     ${printable(dr.text)}`);

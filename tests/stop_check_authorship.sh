@@ -43,6 +43,17 @@ printf '%s\tme\t%s/a.txt\n%s\tgavin-tab\t%s/b.txt\n' "$(date +%s)" "$R" "$(date 
 out="$(run me)"
 says "$out" "never -A" && ok "mixed: says stage your own paths by name" || no "no warning on a mixed tree"
 
+# Another tab's edits must not re-arm the warning about this session's file.
+# Hashing the whole status did: 4 repeats in one tab on 2026-10-09.
+keep(){ printf '{"session_id":"%s"}' "$1" | HOME="$T/home" CHEWBACCA_WRITE_LOG="$LOG" bash "$HOOK" 2>/dev/null; }
+rm -rf "$T/home/.chewbacca"; keep me >/dev/null
+echo three > b.txt
+out="$(keep me)"
+[ -z "$out" ] && ok "another tab's edit: no repeat of the same warning" || no "re-fired because another session's file changed"
+echo more >> a.txt
+out="$(keep me)"
+says "$out" "never -A" && ok "own file changed: warns again" || no "went quiet after this session's own file changed"
+
 # An untracked file belongs to whoever created it. DIRTY_COUNT counts it and
 # `git add -A` stages it, so attribution has to see it too. The first version of
 # this hook filtered to tracked paths only and called a mixed tree clean-handed.
@@ -54,6 +65,26 @@ out="$(run me)"
 rm -f u.txt
 out="$(run me)"
 [ -z "$out" ] && ok "clean tree: stays silent" || no "spoke about a clean tree"
+
+# Two shell-inferred rows can't tell authors apart. On 2026-10-09 a tab was
+# credited with another tab's usc-dining.json because its shell row came last,
+# and was told to commit it every turn.
+echo three > w.txt
+now=$(date +%s)
+printf '%s\tapi-tab\t%s/w.txt\tbash\n%s\tme\t%s/w.txt\tbash\n' "$now" "$R" "$((now+1))" "$R" > "$LOG"
+out="$(run me)"
+[ -z "$out" ] && ok "a weak shell claim loses to another session's shell row" || no "credited this session with a file another tab also touched"
+
+# The repeat fingerprint is per session: another tab's Stop hook running in
+# the same repo must not re-arm this tab's warning about unchanged state.
+echo four > v.txt
+printf '%s\tme\t%s/w.txt\n%s\tother\t%s/v.txt\n' "$now" "$R" "$now" "$R" > "$LOG"
+rm -rf "$T/home/.chewbacca"
+first="$(printf '{"session_id":"me"}' | HOME="$T/home" CHEWBACCA_WRITE_LOG="$LOG" bash "$HOOK" 2>/dev/null)"
+printf '{"session_id":"other"}' | HOME="$T/home" CHEWBACCA_WRITE_LOG="$LOG" bash "$HOOK" >/dev/null 2>&1
+again="$(printf '{"session_id":"me"}' | HOME="$T/home" CHEWBACCA_WRITE_LOG="$LOG" bash "$HOOK" 2>/dev/null)"
+[ -n "$first" ] && [ -z "$again" ] && ok "another tab's Stop doesn't re-fire this tab's unchanged warning" || no "warning re-fired after another tab's Stop"
+rm -f w.txt v.txt
 
 echo "  ${pass} passed, ${fail} failed"
 [ "$fail" -eq 0 ]

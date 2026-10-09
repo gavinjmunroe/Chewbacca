@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""
+chewbacca google: read Google Docs, Sheets and Slides as text, and find them.
+
+  chewbacca google find <words>        Docs, Sheets and Slides whose name or text matches
+  chewbacca google recent [N]          the N most recently edited (default 15)
+  chewbacca google read <id or url>    a Doc or Slides as plain text, a Sheet as CSV per tab
+  add --json to find/recent for data
+
+Read-only. The engine is gws (googleworkspace-cli) with its own sign-in, the
+official Drive, Sheets and Slides APIs, so nothing here drives a browser.
+A Doc exports as text in one call; a Sheet reads every tab's values, since
+Drive's CSV export only returns the first tab; Slides export as text.
+"""
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+import tempfile
+
+GWS = os.environ.get("CHEWBACCA_GWS", "gws")
+KINDS = {
+    "application/vnd.google-apps.document": "doc",
+    "application/vnd.google-apps.spreadsheet": "sheet",
+    "application/vnd.google-apps.presentation": "slides",
+}
+TYPES_Q = " or ".join(f"mimeType='{m}'" for m in KINDS)
+
+
+def gws(*args, params=None, cwd=None):
+    cmd = [GWS, *args]
+    if params is not None:
+        cmd += ["--params", json.dumps(params)]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, cwd=cwd)
+    out = r.stdout.strip()
+    try:
+        data = json.loads(out[out.index("{"):]) if "{" in out else {}
+    except json.JSONDecodeError:
+        data = {}
+    if r.returncode != 0 or "error" in data:
+        msg = (data.get("error") or {}).get("message") if isinstance(data.get("error"), dict) else data.get("error")
+        sys.exit(f"chewbacca google: {msg or r.stderr.strip() or 'gws failed'}")
+    return data
+
+
+def file_id(ref):
+    m = re.search(r"/d/([A-Za-z0-9_-]{20,})", ref)
+    return m.group(1) if m else ref.strip()
+
+
+def listing(q, n):
+    data = gws("drive", "files", "list", params={
+        "q": f"({TYPES_Q}) and trashed=false" + (f" and {q}" if q else ""),
+        "pageSize": n, "orderBy": "modifiedTime desc",
+        "fields": "files(id,name,mimeType,modifiedTime,webViewLink,owners(displayName))",
+        "supportsAllDrives": True, "includeItemsFromAllDrives": True})
+    return [{"id": f["id"], "name": f["name"], "kind": KINDS.get(f["mimeType"], "?"),
+             "modified": f.get("modifiedTime", "")[:10], "url": f.get("webViewLink")}
+            for f in data.get("files", [])]
+
+
+def show(rows, as_json):
+    if as_json:
+        print(json.dumps(rows, indent=2))
+        return
+    if not rows:
+        print("nothing found")
+    for r in rows:
+        print(f"{r['modified']}  {r['kind']:<6}  {r['name']}\n            {r['url']}")
+
+
+def export_text(fid):
+    # gws writes exports only inside its working directory, so run it in a
+    # private temp dir; a bare export dropped download.txt into ~ (2026-10-10).
+    with tempfile.TemporaryDirectory() as tmp:
+        gws("drive", "files", "export", "-o", "out.txt", params={"fileId": fid, "mimeType": "text/plain"}, cwd=tmp)
+        with open(os.path.join(tmp, "out.txt"), encoding="utf-8", errors="replace") as f:
+            return f.read()
+
+
+def read_sheet(fid):
+    meta = gws("sheets", "spreadsheets", "get", params={"spreadsheetId": fid, "fields": "sheets.properties.title"})
+    parts = []
+    for s in meta.get("sheets", []):
+        title = s["properties"]["title"]
+        vals = gws("sheets", "spreadsheets", "values", "get",
+                   params={"spreadsheetId": fid, "range": f"'{title}'"}).get("values", [])
+        lines = []
+        for row in vals:
+            lines.append(",".join('"' + str(c).replace('"', '""') + '"' if any(x in str(c) for x in ',"\n') else str(c) for c in row))
+        parts.append(f"## {title}\n" + "\n".join(lines))
+    return "\n\n".join(parts)
+
+
+def read(ref):
+    fid = file_id(ref)
+    meta = gws("drive", "files", "get", params={"fileId": fid, "fields": "name,mimeType", "supportsAllDrives": True})
+    kind = KINDS.get(meta.get("mimeType"))
+    if kind is None:
+        sys.exit(f"chewbacca google: {meta.get('name', fid)} is not a Doc, Sheet or Slides")
+    body = read_sheet(fid) if kind == "sheet" else export_text(fid)
+    print(f"# {meta['name']}\n\n{body.strip()}")
+
+
+def main(argv):
+    as_json = "--json" in argv
+    args = [a for a in argv if a != "--json"]
+    if not args or args[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    cmd, rest = args[0], args[1:]
+    if cmd == "find" and rest:
+        words = " ".join(rest).replace("\\", "").replace("'", "\\'")
+        show(listing(f"(name contains '{words}' or fullText contains '{words}')", 25), as_json)
+    elif cmd == "recent":
+        show(listing("", int(rest[0]) if rest and rest[0].isdigit() else 15), as_json)
+    elif cmd == "read" and rest:
+        read(rest[0])
+    else:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    sys.exit(main(sys.argv[1:]))

@@ -207,6 +207,7 @@ class RuntimeTests(unittest.TestCase):
         for key in ('claude-code', 'codex'):
             block = runtime.instruction_block(runtime.registry()['runtimes'][key])
             self.assertIn(str(ROOT / 'config/instructions/agent-neutral.md'), block)
+            self.assertIn('@' + str(ROOT / 'team/memory/MEMORY.md'), block)
         source = (ROOT / 'setup.sh').read_text()
         helper = source.split('install_agent_neutral_rule() {', 1)[1].split('\n}', 1)[0]
         self.assertNotIn('paths:', helper)

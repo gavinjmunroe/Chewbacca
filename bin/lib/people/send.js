@@ -116,7 +116,22 @@ function chatGuid(identifier) {
   try {
     const { DatabaseSync } = require("node:sqlite");
     const cdb = new DatabaseSync(file, { readOnly: true });
-    const row = cdb.prepare("SELECT guid FROM chat WHERE chat_identifier = ? LIMIT 1").get(identifier);
+    // One identifier can carry several GUIDs (RCS;+;, SMS;+;, iMessage;+;
+    // for the same group, 2026-10-10). The live one is where the newest
+    // message landed; LIMIT 1 alone picked whichever row came first.
+    let row;
+    try {
+      row = cdb
+        .prepare(
+          `SELECT c.guid FROM chat c LEFT JOIN chat_message_join j ON j.chat_id = c.ROWID
+            LEFT JOIN message m ON m.ROWID = j.message_id
+            WHERE c.chat_identifier = ? GROUP BY c.ROWID ORDER BY max(m.date) DESC LIMIT 1`,
+        )
+        .get(identifier);
+    } catch {
+      // A chat.db without the message tables (a stand-in) still names the chat.
+      row = cdb.prepare("SELECT guid FROM chat WHERE chat_identifier = ? LIMIT 1").get(identifier);
+    }
     cdb.close();
     return row ? row.guid : null;
   } catch {
@@ -214,7 +229,14 @@ function succeeded(r) {
 // people send --room "Sophomore DT" "text": the group-chat path. It names the
 // room and its id on a dry run, and refuses a name that two rooms share.
 function sendRoom(d, name, text, via, flags, P) {
-  const rooms = roomThread(d, name, via);
+  let rooms = roomThread(d, name, via);
+  // Two chats can share a display name (an RCS and an SMS copy of the same
+  // group, 2026-10-10 "premed core"). An exact --to picks the one it names.
+  if (rooms.length > 1 && flags.to) {
+    const idOf = (r) => (r.source === "imessage" ? chatGuid(r.handle) : r.handle);
+    const hit = rooms.filter((r) => idOf(r) === String(flags.to));
+    if (hit.length === 1) rooms = hit;
+  }
   if (!rooms.length)
     die(`No group called "${P(name)}" that you've written in${via ? ` on ${via}` : ""}. The name must match exactly; people texts owed prints it.`);
   if (rooms.length > 1)

@@ -151,3 +151,18 @@ A blocked domain suppresses every address at it and prints as `*@domain`.
 `gtm suppress --client NAME --csv` gives `email,last_sent,reason`, and an
 address stays suppressed after its campaign is deleted in Clay. `--client`
 takes an exact name or id, never a substring.
+
+## Client Slack access, corrected 2026-10-09
+
+When a client can't be added to a client channel ("This user can't be added"),
+check which workspace their Slack account is signed in through before guessing.
+On 2026-10-09 Jonah couldn't be added to #zeutara-cold-replies in the Amber
+workspace. The agent blamed the expiring external-collaboration trial; Caleb
+found the real cause: "it ws bc jonah was signed in through the prev workspace",
+the misspelled Amber Intellegence one. A guessed cause sent as fact costs a round.
+Say what you checked and what you're inferring.
+
+Texts to teammates like Maggie go as short pieces sent one after another, each
+under ~60 words. If she asked numbered questions, answer with matching numbers,
+one short text per number (2026-10-09: a 126-word block got split, then Caleb:
+"She asked in numbered format").

@@ -1,0 +1,34 @@
+{
+  "skill": "spiderverse-style",
+  "cases": [
+    {
+      "prompt": "Make the landing page look like Into the Spider-Verse",
+      "expect_behavior": "pick a universe palette per section, keep the focal CTA with aligned plates and put misregistration only on background layers, step illustration motion on twos while scroll stays smooth, and use no blur anywhere"
+    },
+    {
+      "prompt": "Add a comic shader to the three.js hero",
+      "expect_behavior": "write a post pass with quantized luminance, highlight-only dots sized by light, shadow-only 45 degree hatching and depth-based plate offset, with the camera on ones and animation time stepped at 12fps"
+    },
+    {
+      "prompt": "Put a halftone filter over every image on the site",
+      "reject": [
+        "uniform dots over the whole image at one size",
+        "dots in shadow areas"
+      ],
+      "why": "dots belong to the light and hatching to the shadow; a uniform filter is the tell that it is a filter"
+    },
+    {
+      "prompt": "Add an outline to everything so it looks hand drawn",
+      "reject": ["edge-detected outlines on every edge at one width"],
+      "why": "Imageworks rejected edge-detect lines; lines go only where an illustrator would draw them"
+    },
+    {
+      "prompt": "Blur the background so the headline pops, Spider-Verse style",
+      "expect_behavior": "say in one line that the films replace depth of field with color misregistration, and offset the background plates instead of blurring"
+    },
+    {
+      "prompt": "Make the Gwen section feel like her world",
+      "expect_behavior": "watercolor washes in pink, blue and violet with green and white accents, background dissolving away from the focus, painterly filter (generalized Kuwahara) rather than halftone, stated as a stand-in since no source says Imageworks used Kuwahara"
+    }
+  ]
+}

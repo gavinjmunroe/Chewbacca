@@ -460,6 +460,18 @@ def main():
         stats(a.out)
         return
     lists = [(Path(p).name, Path(p)) for p in a.list] if a.list else DEFAULT_LISTS
+    # A graph written inside the tree gets committed and installed on other
+    # people's machines, so it reads only lists that live in that tree. The
+    # second-brain lists (asks.jsonl is Caleb's own requests, the Amber folder
+    # is private work) went into data/repo-graph.jsonl on 2026-10-09 and the
+    # commit security review flagged it. Write elsewhere to include them.
+    root = Path(a.root).expanduser().resolve()
+    if Path(a.out).expanduser().resolve().is_relative_to(root):
+        private = [i for i, p in lists if not Path(p).expanduser().resolve().is_relative_to(root)]
+        if private:
+            print(f"repo-graph: skipped private lists {', '.join(private)}: the output is inside {root}. "
+                  f"Pass --out ~/.chewbacca/state/repo-graph.jsonl to include them.", file=sys.stderr)
+        lists = [(i, p) for i, p in lists if i not in private]
     cache = None if a.no_cache else Path(a.cache).expanduser()
     m = build(lists, a.root, a.out, cache, a.refresh, network=not a.offline)
     print(f"repo-graph: {m['raw_links']} links, {m['listed_ids']} listed ids, {m['nodes']} repos -> {a.out}")

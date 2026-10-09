@@ -95,6 +95,18 @@ def main() -> int:
     check("status: use beats rejection", nodes["fresh/thing"]["status"] == "used")
     check("status: deferred stays untriaged", nodes["gone/repo"]["status"] == "untriaged")
 
+    # A graph written inside the kit is committed, so a list from outside the
+    # kit (the second brain) must not reach it.
+    inside = kit / "data" / "graph.jsonl"
+    inside.parent.mkdir()
+    q = subprocess.run([sys.executable, str(ROOT / "bin" / "repo-graph"), "--list", str(lst),
+                        "--root", str(kit), "--out", str(inside), "--no-cache"],
+                       capture_output=True, text=True, env=env, timeout=60)
+    irecs = [json.loads(l) for l in inside.read_text().splitlines()] if inside.exists() else []
+    check("a private list never lands in a graph inside the kit",
+          q.returncode == 0 and "skipped private lists" in q.stderr
+          and not any(r.get("kind") == "LISTED_IN" for r in irecs), q.stderr)
+
     s = subprocess.run([sys.executable, str(ROOT / "bin" / "repo-graph"), "stats", "--out", str(out)],
                        capture_output=True, text=True, timeout=30)
     check("stats prints the overlap matrix", s.returncode == 0 and "overlap matrix" in s.stdout, s.stdout + s.stderr)

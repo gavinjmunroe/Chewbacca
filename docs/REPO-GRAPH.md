@@ -150,8 +150,15 @@ ideas only.
 
 ## Regenerate
 
+The committed `data/repo-graph.jsonl` reads only the seven lists inside the
+kit: 2,569 links, 2,378 repos (95 used, 153 rejected, 2,130 untriaged). The
+four second-brain lists stay off it, because the file ships to anyone who
+installs Chewbacca. The counts above cover all eleven; that full graph is
+rebuilt privately with `--out ~/.chewbacca/state/repo-graph.jsonl`.
+
 ```bash
-bin/repo-graph                 # rebuild data/repo-graph.jsonl from every list
+bin/repo-graph                 # rebuild data/repo-graph.jsonl from the kit's lists
+bin/repo-graph --out ~/.chewbacca/state/repo-graph.jsonl   # all eleven, private
 bin/repo-graph stats           # counts, list sizes and the overlap matrix
 bin/repo-graph --refresh       # refetch GitHub metadata instead of the 7-day cache
 bin/repo-graph --offline       # no network: ids stay as written, no renames

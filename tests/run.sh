@@ -230,6 +230,8 @@ if group "people"; then
       python3 "$ROOT/tests/test_slack_reader.py"
     check "email rows are human mail only, in the texts reader's shape" \
       python3 "$ROOT/tests/test_email_reader.py"
+    check "Gmail trusts only Google's own verdict and the SENT label" \
+      python3 "$ROOT/tests/test_gmail_reader.py"
 
     check  "score runs" "${P[@]}" score
     check  "birthdays runs" "${P[@]}" birthdays --days 30

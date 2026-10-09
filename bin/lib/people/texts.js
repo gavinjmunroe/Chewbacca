@@ -97,9 +97,10 @@ const CHANNELS = [
   },
   {
     source: "email",
-    reader: "email_reader.py",
+    reader: "gmail.py",
     label: "email",
-    // Mail.app keeps its own store current. The reader keeps human mail only.
+    // The Gmail API through gws, not Mail.app (Caleb, 2026-10-08: "that thing
+    // sucks"). The reader fetches and caches itself; human mail only.
     refresh: [],
   },
 ];

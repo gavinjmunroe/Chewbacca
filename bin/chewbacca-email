@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# chewbacca email: every inbox you have, in one place, one command each.
+#
+#   chewbacca email                 list connected inboxes
+#   chewbacca email add [address]   connect a Gmail or Google Workspace inbox
+#   chewbacca email remove address  disconnect one
+#
+# Each inbox gets its own sign-in under ~/.chewbacca/email/<address>, through
+# gws (Google Workspace CLI). `people texts sync` reads every one of them and
+# `people send <person> --via email` sends from the inbox that last talked to
+# that person. Nothing is read through Mail.app.
+set -uo pipefail
+
+PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+HOME_DIR="${CHEWBACCA_EMAIL_HOME:-$HOME/.chewbacca/email}"
+DEFAULT_CFG="$HOME/.config/gws"
+SCOPES="openid,email,profile,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send"
+LOG="$HOME/Library/Logs/chewbacca-email-add.log"
+
+say() { printf '%s\n' "$*"; }
+mkdir -p "$HOME_DIR" "$HOME/Library/Logs" 2>/dev/null
+
+ensure_gws() {
+  command -v gws >/dev/null 2>&1 && return 0
+  command -v brew >/dev/null 2>&1 || { say "Email needs Homebrew. Install it, then run this again."; return 1; }
+  say "Installing email support..."
+  # googleworkspace-cli, never `brew install gws`: that name is an unrelated
+  # git-workspace tool (checked 2026-10-08).
+  brew install googleworkspace-cli >/dev/null 2>&1 || { say "Could not install gws."; return 1; }
+}
+
+# Google only lets an app sign people in once it has an OAuth client. A kit
+# that already has one (the first inbox set it up) reuses it for every inbox
+# after; a fresh Mac creates one with `gws auth setup`, which needs gcloud.
+client_secret() {
+  [ -f "$DEFAULT_CFG/client_secret.json" ] && { echo "$DEFAULT_CFG/client_secret.json"; return 0; }
+  for d in "$HOME_DIR"/*/; do [ -f "$d/client_secret.json" ] && { echo "$d/client_secret.json"; return 0; }; done
+  return 1
+}
+
+whoami_in() {
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$1" gws gmail users getProfile --params '{"userId":"me"}' 2>/dev/null |
+    python3 -c 'import json,sys; t=sys.stdin.read(); print(json.loads(t[t.index("{"):])["emailAddress"])' 2>/dev/null
+}
+
+list() {
+  local any=0 a
+  a=$(whoami_in "$DEFAULT_CFG")
+  [ -n "$a" ] && { say "  $a"; any=1; }
+  for d in "$HOME_DIR"/*/; do
+    [ -d "$d" ] || continue
+    a=$(whoami_in "${d%/}")
+    if [ -n "$a" ]; then say "  $a"; any=1; else say "  $(basename "$d")  (not signed in: chewbacca email add $(basename "$d"))"; fi
+  done
+  [ $any -eq 1 ] || say "No inboxes yet. Run: chewbacca email add"
+}
+
+add() {
+  ensure_gws || return 1
+  local addr="${1:-}"
+  if [ -z "$addr" ]; then printf 'Email address to connect: '; read -r addr; fi
+  addr=$(printf '%s' "$addr" | tr '[:upper:]' '[:lower:]' | tr -d ' ')
+  case "$addr" in *@*.*) ;; *) say "That doesn't look like an email address."; return 1 ;; esac
+
+  local secret
+  if ! secret=$(client_secret); then
+    command -v gcloud >/dev/null 2>&1 || brew install --cask google-cloud-sdk >/dev/null 2>&1
+    say "First inbox on this Mac: setting up Google sign-in (a browser opens once for Google Cloud)..."
+    gws auth setup --login || { say "Google sign-in setup didn't finish."; return 1; }
+    secret=$(client_secret) || return 1
+  fi
+
+  local cfg="$HOME_DIR/$addr"
+  mkdir -p "$cfg" && chmod 700 "$cfg"
+  cp "$secret" "$cfg/client_secret.json"
+  say "A browser window is opening. Pick $addr and click Allow."
+  : >"$LOG"
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg" gws auth login --scopes "$SCOPES" >>"$LOG" 2>&1 &
+  local pid=$! url="" waited=0
+  while [ -z "$url" ] && [ $waited -lt 20 ]; do
+    url=$(grep -o 'https://accounts.google.com[^ ]*' "$LOG" | head -1); sleep 1; waited=$((waited + 1))
+  done
+  [ -n "$url" ] && open "$url&login_hint=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$addr")"
+  wait "$pid"
+  local got
+  got=$(whoami_in "$cfg")
+  if [ "$got" = "$addr" ]; then
+    say "Connected $addr. Pulling its mail in..."
+    command -v people >/dev/null 2>&1 && people texts sync --quiet >/dev/null 2>&1
+    say "Done."
+    return 0
+  fi
+  # A Google sign-in app in testing mode admits only listed testers, and the
+  # error page says "Access blocked ... has not completed the Google
+  # verification process" (Caleb hit it on 2026-10-08 with his work inbox).
+  local project owner
+  project=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print((d.get("installed") or d.get("web") or {}).get("project_id",""))' "$cfg/client_secret.json" 2>/dev/null)
+  say "Google didn't let $addr in."
+  say "If it said \"Access blocked\", add $addr as a test user here, signed in as the account that owns the project:"
+  say "  https://console.cloud.google.com/auth/audience?project=${project}"
+  say "then run: chewbacca email add $addr"
+  return 1
+}
+
+remove() {
+  local addr="${1:?chewbacca email remove <address>}"
+  [ -d "$HOME_DIR/$addr" ] || { say "$addr isn't connected."; return 1; }
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$HOME_DIR/$addr" gws auth logout >/dev/null 2>&1
+  rm -rf "${HOME_DIR:?}/$addr"
+  say "Disconnected $addr. Mail already synced stays in your people store."
+}
+
+case "${1:-list}" in
+  list|ls) list ;;
+  add) shift; add "${1:-}" ;;
+  remove|rm) shift; remove "${1:-}" ;;
+  -h|--help|help) sed -n '2,11p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) say "Try: chewbacca email [add|remove|list]"; exit 2 ;;
+esac

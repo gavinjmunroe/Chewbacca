@@ -24,6 +24,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "mac" / "lib" / "slack.py"
 sys.path.insert(0, str(SCRIPT.parent))
+# Sends here go to a fake `call`. Two things must never reach real Slack: the
+# slackcli fallback (installed on the author's Mac, signed in as him), and a
+# send let through by the suite-wide CHEWBACCA_NO_SEND being honoured. So
+# slackcli points at nothing, and the no-send switch is checked on its own.
+os.environ["CHEWBACCA_SLACKCLI_BIN"] = "/nonexistent/slackcli"
+SUITE_NO_SEND = os.environ.pop("CHEWBACCA_NO_SEND", None)
 import slack  # noqa: E402
 
 failed = 0
@@ -218,6 +224,11 @@ def sending(db):
         refused = slack.send(SAGAR, "hello", path=str(db))
         check("real send with no token refuses before any call", refused.get("ok") is False and calls == [], (refused, calls))
         check("empty text refused", slack.send(SAGAR, "  ", dry_run=True, path=str(db)).get("ok") is False)
+
+        os.environ["CHEWBACCA_NO_SEND"] = "1"
+        blocked = slack.send(SAGAR, "hello", path=str(db))
+        check("CHEWBACCA_NO_SEND refuses before any call", blocked.get("ok") is False and "disabled" in blocked.get("error", "") and calls == [], blocked)
+        del os.environ["CHEWBACCA_NO_SEND"]
 
         secret = "xoxp-test-not-a-real-token"
         os.environ["SLACK_USER_TOKEN"] = secret

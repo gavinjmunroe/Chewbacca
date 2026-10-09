@@ -97,7 +97,7 @@ function dispatch(via, to, text, flags) {
   if (via === "imessage") return run("mac", ["messages", "send", to, text, "--json"]);
   if (via === "whatsapp")
     return run("wacli", ["--json", "--lock-wait=15s", "send", "text", "--to", to, "--message", text]);
-  const reader = textsReader(via === "slack" ? "slack.py" : "email_reader.py");
+  const reader = textsReader(via === "slack" ? "slack.py" : "gmail.py");
   if (!reader) return { code: 2, err: `${via} is not set up in this kit yet` };
   const args = [reader, "send", "--to", to, "--text", text];
   if (via === "email") args.push("--subject", String(flags.subject || text.split("\n")[0].slice(0, 60)));

@@ -24,7 +24,7 @@ Message bodies are private. Nothing here sends them anywhere except Slack
 itself, and only on an explicit `send`.
 """
 
-import argparse, hashlib, html, json, os, re, sqlite3, sys, urllib.parse, urllib.request
+import argparse, shutil, subprocess, hashlib, html, json, os, re, sqlite3, sys, urllib.parse, urllib.request
 from datetime import datetime
 
 SLACRAWL_DB = os.path.expanduser(os.environ.get("SLACRAWL_DB", "~/.slacrawl/slacrawl.db"))
@@ -254,6 +254,38 @@ def call(method, token, **params):
     return reply
 
 
+SLACKCLI = os.environ.get("CHEWBACCA_SLACKCLI_BIN", "slackcli")
+
+
+def send_slackcli(found, text):
+    """Send through slackcli's saved session (shaharia-lab/slackcli, MIT).
+
+    `slackcli auth login-auto` signs in once in a browser and keeps the
+    session for every workspace on the account, so no Slack app or token is
+    needed. It opens the DM itself when handed a user id.
+    """
+    to = found["channel"] or found["user"]
+    if not to:
+        return {"ok": False, "error": "no channel or user to send to"}
+    args = [SLACKCLI, "messages", "send", "--recipient-id", to, "--message", text, "--json"]
+    if found.get("workspace"):
+        args += ["--workspace", found["workspace"]]
+    try:
+        p = subprocess.run(args, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as err:
+        return {"ok": False, "error": f"slackcli: {type(err).__name__}"}
+    if p.returncode != 0:
+        tail = (p.stderr or p.stdout).strip().splitlines()
+        return {"ok": False, "error": "slackcli: " + (tail[-1][:200] if tail else f"exit {p.returncode}")}
+    try:
+        j = json.loads(p.stdout[p.stdout.index("{"):])
+    except ValueError:
+        j = {}
+    ts = j.get("ts") or (j.get("message") or {}).get("ts")
+    channel = j.get("channel") or to
+    return {"ok": True, "id": row_id(found.get("workspace") or "", channel, ts) if ts else None, "channel": channel}
+
+
 def send(target, text, dry_run=False, path=None):
     if not text.strip():
         return {"ok": False, "error": "empty text"}
@@ -265,9 +297,13 @@ def send(target, text, dry_run=False, path=None):
         return {"ok": True, "dry_run": True, "workspace": found["workspace"], "channel": found["channel"],
                 "user": found["user"], "needs": found["lookup"], "text": text,
                 "token": "present" if token_for(found["workspace"]) else "missing"}
+    if os.environ.get("CHEWBACCA_NO_SEND"):
+        return {"ok": False, "error": "sending is disabled (CHEWBACCA_NO_SEND)"}
     token = token_for(found["workspace"])
+    if not token and shutil.which(SLACKCLI):
+        return send_slackcli(found, text)
     if not token:
-        return {"ok": False, "error": f"no Slack user token: set {TOKEN_ENV}"}
+        return {"ok": False, "error": "Slack isn't signed in: run slackcli auth login-auto"}
     if found["lookup"] == "users.lookupByEmail":
         reply = call("users.lookupByEmail", token, email=target)
         if not reply["ok"]:

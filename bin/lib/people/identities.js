@@ -293,9 +293,13 @@ function cmdIdentities(argv) {
   }
   for (const r of d
     .prepare(
+      // iMessage handles only. Elsewhere a row can be linked to a person by
+      // hand (`people texts link`) on a thread name the sender chose, and
+      // recording that row's handle here would turn a stranger's number or a
+      // forged From into an address `people send` trusts as theirs.
       `SELECT DISTINCT person_id, handle FROM messages
         WHERE person_id IS NOT NULL AND handle IS NOT NULL AND handle<>''
-          AND handle NOT LIKE 'chat%'`,
+          AND handle NOT LIKE 'chat%' AND coalesce(source, 'imessage') = 'imessage'`,
     )
     .all()) {
     const val = norm(r.handle);

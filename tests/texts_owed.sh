@@ -131,10 +131,15 @@ grep -q "texts owed" <<<"$out" && ! grep -q "nothing in the last" <<<"$out" || f
 STUB="$PEOPLE_DIR/stub"; mkdir -p "$STUB"
 printf '#!/bin/sh\necho "execution error: Not authorized to send Apple events to Messages. (-1743)" >&2\nexit 1\n' > "$STUB/osascript"
 printf '#!/bin/sh\necho STUBSENDER >&2\nexit 1\n' > "$STUB/mac"; cp "$STUB/mac" "$STUB/wacli"
+printf '#!/bin/sh\necho "$@" >> "%s"\n' "$PEOPLE_DIR/opened" > "$STUB/open"
 chmod +x "$STUB"/*
 out="$(env -u CHEWBACCA_NO_SEND PATH="$STUB:$PATH" "$P" send "owed olive" "hi" --to +15550201 2>&1)" && fail "a send with Messages blocked reported success"
 grep -q "Privacy & Security > Automation" <<<"$out" || fail "a blocked send did not name the System Settings fix"
 grep -q "STUBSENDER" <<<"$out" && fail "a send reached the sender with Messages automation denied"
 out="$(env -u CHEWBACCA_NO_SEND PATH="$STUB:$PATH" "$P" texts drafts 2>&1)"
 grep -q "blocking this app from controlling Messages" <<<"$out" || fail "the drafts list did not warn before he picks numbers"
+# "Always take me there": the Automation pane opens itself, once, not per call.
+grep -q "Privacy_Automation" "$PEOPLE_DIR/opened" 2>/dev/null || fail "a Messages block did not open the Automation pane"
+[ "$(wc -l < "$PEOPLE_DIR/opened")" -eq 1 ] || fail "the Automation pane opened more than once in a row"
+grep -q "Opened that page for you" <<<"$out" || fail "the drafts list did not say it opened the page"
 exit 0

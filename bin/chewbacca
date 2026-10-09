@@ -151,6 +151,14 @@ whatsapp)
   shift
   exec bash "$ROOT/bin/chewbacca-whatsapp" "$@"
   ;;
+permissions|permission|perms)
+  # Every macOS grant Chewbacca needs, walked one card at a time over System
+  # Settings, each closing itself once detected. No args = the guide, because
+  # "make it SUPER EZ" (Caleb, 2026-10-10) means one command, not a menu.
+  shift
+  [ $# -eq 0 ] && set -- guide
+  exec python3 "$ROOT/bin/chewbacca-permissions" "$@"
+  ;;
 api)
   # Websites with no API, called over plain HTTP from operations learned off
   # their own frontend. Engine: goodnight000/api-anything.

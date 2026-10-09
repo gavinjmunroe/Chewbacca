@@ -212,6 +212,13 @@ Read them before drafting any club or startup landing page.
   calling a page done. Anything on screen that isn't on the list is a bug,
   so cut it: leftover classes, inherited styles, stray borders, accidental
   gradients, defaults.
+- "So blurry", "so choppy", "it just looks 2d" (tcombinator.org,
+  2026-10-10): a 1280x720 film stretched across a retina screen, scrubbed by
+  seeking a long-GOP H.264 file, made of flat cards with no camera move.
+  Scroll-scrubbed footage needs display-resolution frames at dpr 2 (an image
+  sequence on canvas, or all-intra video), one smoothed scroll value, and
+  real camera motion through depth. Measure fps and held frames live
+  before calling it done.
 - Bring the best of earlier versions forward. Before a rebuild, inventory
   what past commits built and what he praised (`git log --diff-filter=D`,
   plus the verdicts in docs/). A rebuild that drops the parts he loved

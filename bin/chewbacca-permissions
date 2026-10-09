@@ -68,6 +68,10 @@ NEEDS = [
     ("kyber", "accessibility", "read other apps' controls and click and type for you"),
     ("kyber", "screen-recording-and-system-audio", "see what is on the screen"),
     ("kyber", "microphone", "hear you while you hold the globe key"),
+    # 2026-10-09: Automation for Messages was denied for the Claude app, so
+    # every queued iMessage draft would have failed at send, and nothing in
+    # this list knew it existed.
+    ("host", "automation", "send iMessages for you", "com.apple.MobileSMS"),
 ]
 
 # Meeting capture (bin/room-capture) runs as a child of whatever starts it, so
@@ -81,6 +85,14 @@ CAPTURE_NEEDS = [
     ("host", "microphone", "hear your side of a call"),
 ]
 SETS = {"chewbacca": NEEDS, "capture": CAPTURE_NEEDS}
+
+# A read-only Apple event per automation target. Sending one when the grant
+# has never been asked is what makes macOS show its Allow prompt: one click,
+# no Settings window. Once denied, it just fails with -1743.
+AUTOMATION_PROBES = {
+    "com.apple.MobileSMS": 'tell application id "com.apple.MobileSMS" to count chats',
+}
+TARGET_NAMES = {"com.apple.MobileSMS": "Messages"}
 
 # Hosts worth offering when the process chain names none (a launchd job, ssh).
 KNOWN_HOSTS = [
@@ -172,7 +184,7 @@ def resolve_host(flag: str | None) -> tuple[Path | None, str]:
     return (found, "process-chain") if found else (None, "none")
 
 
-def tcc_status(service: str, clients: list[str]) -> str:
+def tcc_status(service: str, clients: list[str], target: str | None = None) -> str:
     """granted, denied, or unknown when neither database can be opened.
 
     Both databases open only for a process whose responsible app holds Full
@@ -180,14 +192,18 @@ def tcc_status(service: str, clients: list[str]) -> str:
     reported as missing: it means nobody can tell from out here.
     """
     readable = False
+    any_row = False
     marks = ",".join("?" for _ in clients)
     for path in tcc_paths():
         try:
             con = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
             try:
-                rows = con.execute(
-                    f"select auth_value from access where service = ? and client in ({marks})",
-                    [service, *clients]).fetchall()
+                sql = f"select auth_value from access where service = ? and client in ({marks})"
+                params = [service, *clients]
+                if target:
+                    sql += " and indirect_object_identifier = ?"
+                    params.append(target)
+                rows = con.execute(sql, params).fetchall()
             finally:
                 con.close()
         except sqlite3.Error:
@@ -196,7 +212,16 @@ def tcc_status(service: str, clients: list[str]) -> str:
         # auth_value 2 is allowed in every TCC schema since Big Sur.
         if any(row[0] == 2 for row in rows):
             return "granted"
-    return "denied" if readable else "unknown"
+        any_row = any_row or bool(rows)
+    if not readable:
+        return "unknown"
+    # Automation with no row in either database has never been asked, and
+    # that is one click on macOS's own Allow prompt, not a trip to Settings.
+    # Automation rows live in the user database, so the system one being
+    # readable and empty must not decide it.
+    if target and not any_row:
+        return "not-asked"
+    return "denied"
 
 
 def readable_with_full_disk_access() -> str | None:
@@ -228,7 +253,7 @@ def axgrant_state() -> str:
                         db=Path(tcc_paths()[0]))
 
 
-def status_for(app: Path, permission: str, is_chain_host: bool) -> tuple[str, str]:
+def status_for(app: Path, permission: str, is_chain_host: bool, target: str | None = None) -> tuple[str, str]:
     if not (app / "Contents" / "Info.plist").exists():
         return "app-missing", "filesystem"
     if permission == "full-disk-access" and is_chain_host:
@@ -236,13 +261,46 @@ def status_for(app: Path, permission: str, is_chain_host: bool) -> tuple[str, st
         if direct is not None:
             return direct, "read-probe"
     clients = [c for c in (bundle_id(app), str(app)) if c]
-    status = tcc_status(PERMISSIONS[permission][1], clients)
+    if permission == "automation" and target and is_chain_host:
+        # The probe answers for this exact process chain, with or without
+        # Full Disk Access to read TCC.db. It never prompts: a never-asked
+        # grant is told apart by the database below, and only when readable.
+        probe = probe_automation(target, prompt=False)
+        if probe == "granted":
+            return "granted", "apple-event"
+    status = tcc_status(PERMISSIONS[permission][1], clients, target)
     # A grant recorded against an older ad-hoc build reads as on in System
     # Settings and authorizes nothing (bin/lib/axgrant.py has the incident).
     if status == "granted" and permission == "accessibility" and app == kyber_app():
         if axgrant_state() == "stale":
             return "stale", "tcc-database"
     return status, "tcc-database"
+
+
+def probe_automation(target: str, prompt: bool) -> str:
+    """granted, or blocked. With prompt=False it is only run when it cannot
+    raise a dialog's worth of surprise: callers pass prompt=True only from
+    guide, where showing macOS's Allow prompt is the point."""
+    script = AUTOMATION_PROBES.get(target)
+    if not script:
+        return "blocked"
+    if not prompt and not _target_running(target):
+        return "blocked"
+    try:
+        done = subprocess.run(["osascript", "-e", script], capture_output=True, text=True,
+                              timeout=60 if prompt else 5)
+    except (OSError, subprocess.TimeoutExpired):
+        return "blocked"
+    return "granted" if done.returncode == 0 else "blocked"
+
+
+def _target_running(target: str) -> bool:
+    try:
+        out = subprocess.run(["osascript", "-e", f'application id "{target}" is running'],
+                             capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return out.strip() == "true"
 
 
 def helper_built() -> bool:
@@ -257,19 +315,22 @@ def plan(host_flag: str | None, which: str = "chewbacca") -> dict:
     host, detected_by = resolve_host(host_flag)
     is_chain_host = detected_by == "process-chain"
     needs = []
-    for target, permission, why in SETS[which]:
+    for target, permission, why, *rest in SETS[which]:
+        automates = rest[0] if rest else None
         app = kyber_app() if target == "kyber" else host
+        suffix = f".{TARGET_NAMES.get(automates, automates).lower()}" if automates else ""
         entry = {
-            "id": f"{target}.{permission}",
+            "id": f"{target}.{permission}{suffix}",
             "target": target,
             "permission": permission,
-            "pane": PERMISSIONS[permission][0],
+            "pane": PERMISSIONS[permission][0] + (f" > {TARGET_NAMES.get(automates, automates)}" if automates else ""),
             "why": why,
+            "automates": automates,
         }
         if app is None:
             entry.update(app=None, app_name=None, status="host-unknown", source="process-chain")
         else:
-            status, source = status_for(app, permission, target == "host" and is_chain_host)
+            status, source = status_for(app, permission, target == "host" and is_chain_host, automates)
             entry.update(app=str(app), app_name=app_name(app), status=status, source=source)
         needs.append(entry)
     return {
@@ -309,7 +370,7 @@ def pick_host() -> Path | None:
 
 
 def guide(args: argparse.Namespace) -> int:
-    known = [permission for _, permission, _ in SETS[args.for_]]
+    known = [need[1] for need in SETS[args.for_]]
     if args.only and args.only not in known:
         print(f"--only takes one of: {', '.join(known)}", file=sys.stderr)
         return 2
@@ -340,6 +401,15 @@ def guide(args: argparse.Namespace) -> int:
             results.append((step, "app-missing"))
             continue
         print(f"{number} of {len(steps)}: {step['pane']} for {step['app_name']}, to {step['why']}.")
+        if step["permission"] == "automation" and step["status"] in ("not-asked", "unknown"):
+            # Never asked: macOS's own prompt is one click, no Settings window.
+            print("  Click OK on the prompt macOS shows now.")
+            sys.stdout.flush()
+            if probe_automation(step["automates"], prompt=True) == "granted":
+                print("  granted")
+                results.append((step, "granted"))
+                continue
+            print("  not allowed from the prompt, opening Settings instead.")
         if step["status"] == "unknown":
             print("  This Mac will not say when it is on, so close the card once it is.")
         if step["permission"] == "microphone" and step["target"] == "kyber":
@@ -350,12 +420,15 @@ def guide(args: argparse.Namespace) -> int:
                   "run `room-capture start` in it, then switch it on here.")
         command = [str(HELPER), "guide", "--app", step["app"], "--permission", step["permission"],
                    "--timeout", str(args.timeout)]
+        if step.get("automates"):
+            command += ["--automation-target", step["automates"]]
         if step["source"] == "read-probe":
             command.append("--self")
         else:
             command += ["--check-command", " ".join(shlex.quote(part) for part in [
                 sys.executable, str(Path(__file__).resolve()), "check",
-                "--app", step["app"], "--permission", step["permission"]])]
+                "--app", step["app"], "--permission", step["permission"],
+                *(["--automation-target", step["automates"]] if step.get("automates") else [])])]
         if args.hold:
             command.append("--hold")
         # The helper writes to the same stdout; without this, a piped run
@@ -385,7 +458,9 @@ def check(args: argparse.Namespace) -> int:
     app = Path(args.app)
     host, detected_by = resolve_host(None)
     is_chain_host = detected_by == "process-chain" and host == app
-    status, _ = status_for(app, args.permission, args.permission == "full-disk-access" and is_chain_host)
+    status, _ = status_for(app, args.permission,
+                           (args.permission in ("full-disk-access", "automation")) and is_chain_host,
+                           args.automation_target)
     return {"granted": 0, "unknown": 2}.get(status, 1)
 
 
@@ -411,6 +486,7 @@ def main(argv: list[str] | None = None) -> int:
     check_parser = sub.add_parser("check", help="exit 0 granted, 1 not, 2 cannot tell")
     check_parser.add_argument("--app", required=True)
     check_parser.add_argument("--permission", required=True)
+    check_parser.add_argument("--automation-target", help="bundle id of the automated app (automation)")
     args = parser.parse_args(argv)
 
     if args.command == "plan":

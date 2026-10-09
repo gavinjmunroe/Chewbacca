@@ -40,6 +40,13 @@ timid:
 2. **A credential only they can produce.** An OAuth device code, a 2FA prompt,
    a password not on disk. Print the code, say exactly what to do with it, and
    have everything else already finished so that is the last step.
+   A permission switch or a web console step counts here too, and you **open
+   the exact pane or page yourself** in the same turn: `open
+   "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation"`
+   (or `_AllFiles`, `_Accessibility`, `_ScreenCapture`, `_Microphone`), or
+   `chewbacca-permissions guide --only <id>`. Naming a settings path and
+   leaving them to find it is the same failure as handing over a command
+   (2026-10-10: "Always take me there").
 3. **A decision only they can make**, where the options differ in a way you
    cannot resolve from the request, the code, or the repo.
 

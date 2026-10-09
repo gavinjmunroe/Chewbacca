@@ -144,7 +144,32 @@ function messagesBlocked() {
   if (process.platform !== "darwin") return null;
   const r = run("osascript", ["-e", 'tell application "Messages" to count chats']);
   if (r.code === 0) return null;
-  return /-1743|not authorized/i.test(r.err || "") ? MESSAGES_FIX : null;
+  if (!/-1743|not authorized/i.test(r.err || "")) return null;
+  return openAutomationPane() ? MESSAGES_FIX + "\n  Opened that page for you." : MESSAGES_FIX;
+}
+
+// "Always take me there" (Caleb, 2026-10-10): naming a settings path makes him
+// hunt for it, so the pane opens itself. Once per 10 minutes, so listing the
+// drafts and then sending doesn't throw System Settings at him twice; the
+// cooldown is a guess, never measured.
+function openAutomationPane() {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const { DIR } = require("./db");
+  const stamp = path.join(DIR, ".opened-automation-pane");
+  try {
+    if (Date.now() - fs.statSync(stamp).mtimeMs < 10 * 60 * 1000) return true;
+  } catch {
+    /* never opened yet */
+  }
+  const r = run("open", ["x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation"]);
+  if (r.code !== 0) return false;
+  try {
+    fs.writeFileSync(stamp, "");
+  } catch {
+    /* the pane opened; a missing stamp only means it may open again */
+  }
+  return true;
 }
 
 function dispatch(via, to, text, flags) {

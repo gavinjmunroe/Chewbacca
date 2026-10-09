@@ -54,6 +54,7 @@ const {
 } = require("./lib/people/keeping-up");
 const { cmdImport } = require("./lib/people/import");
 const { cmdTexts } = require("./lib/people/texts");
+const { cmdSend } = require("./lib/people/send");
 const {
   cmdPurge, cmdDedupe, cmdMerge, cmdOrgs, cmdPruneBroadcasts,
 } = require("./lib/people/cleanup");
@@ -92,6 +93,7 @@ const COMMANDS = {
   ask: cmdAsk,
   fact: cmdFact,
   texts: cmdTexts,
+  send: cmdSend,
   msgs: cmdTexts,
   today: cmdToday,
   mine: cmdMine,

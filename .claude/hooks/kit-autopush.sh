@@ -38,6 +38,43 @@ LOG="$LOG_DIR/autopush.log"
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 note() { echo "$(date -u +%FT%TZ) $*" >> "$LOG" 2>/dev/null || true; }
 
+# ── Say it once ───────────────────────────────────────────────────────────────
+#
+# A Stop hook's additionalContext wakes the session for another turn. On
+# 2026-10-08 a coursework tab that owned none of the kit's commits got the same
+# BLOCKED notice after every reply, answered "Holding." to it nine times, and
+# Claude Code ended the loop with "A hook blocked the turn from ending 9
+# consecutive times". So: nothing is said while stop_hook_active is set (the
+# turn already exists because a Stop hook spoke), and one message per session
+# per (HEAD, reasons) pair. A new commit or a different failure speaks again.
+HOOK_INPUT=""
+[ -t 0 ] || IFS= read -r -t 1 -d '' HOOK_INPUT || true
+eval "$(printf '%s' "$HOOK_INPUT" | python3 -c '
+import json, shlex, sys
+try:
+    d = json.loads(sys.stdin.read() or "{}")
+except Exception:
+    d = {}
+print("STOP_ACTIVE=%s" % ("1" if d.get("stop_hook_active") else "0"))
+print("SESSION_ID=%s" % shlex.quote(str(d.get("session_id") or "")))
+' 2>/dev/null || echo 'STOP_ACTIVE=0; SESSION_ID=""')"
+SEEN="$LOG_DIR/.autopush-seen"
+# Prints the message on stdin unless this session already got this key.
+say_once() {
+  local key="$SESSION_ID|$1"
+  # Quiet paths still drain stdin. Returning without reading it closed the
+  # pipe under the python writing the notice, which then printed a
+  # BrokenPipeError to stderr: the "silent" hook was not silent.
+  [ "$STOP_ACTIVE" = "1" ] && { cat >/dev/null; note "quiet: stop_hook_active ($1)"; return 0; }
+  if [ -n "$SESSION_ID" ] && grep -qxF "$key" "$SEEN" 2>/dev/null; then
+    cat >/dev/null
+    note "quiet: already told this session ($1)"
+    return 0
+  fi
+  [ -n "$SESSION_ID" ] && echo "$key" >> "$SEEN" 2>/dev/null
+  cat
+}
+
 # ── Which repo ────────────────────────────────────────────────────────────────
 #
 # The install manifest records where the kit was installed from, so this works
@@ -131,7 +168,7 @@ done < <(git diff --name-only '@{u}..HEAD' 2>/dev/null)
 
 if [ -n "$FAILED" ]; then
   note "BLOCKED $AHEAD commit(s), failed:$FAILED"
-  REASONS="$FAILED" AHEAD="$AHEAD" python3 <<'PY'
+  REASONS="$FAILED" AHEAD="$AHEAD" python3 <<'PY' | say_once "blocked|$(git rev-parse HEAD 2>/dev/null)|$FAILED"
 import json, os
 reasons = os.environ.get("REASONS", "").split()
 ahead = os.environ.get("AHEAD", "?")
@@ -218,7 +255,7 @@ PY2
     exit 0
     ;;
 esac
-PUSH_ERR="$PUSH_ERR" AHEAD="$AHEAD" python3 <<'PY'
+PUSH_ERR="$PUSH_ERR" AHEAD="$AHEAD" python3 <<'PY' | say_once "failed|$(git rev-parse HEAD 2>/dev/null)"
 import json, os
 err = " ".join(os.environ.get("PUSH_ERR", "").split())[:300]
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": (

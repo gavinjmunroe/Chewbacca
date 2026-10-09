@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# chewbacca whatsapp: WhatsApp as part of the kit, not a tool to learn.
+#
+#   chewbacca whatsapp            status: linked or not, what is stored, last sync
+#   chewbacca whatsapp link       pair this Mac as a linked device, by phone code
+#   chewbacca whatsapp sync       refresh both local copies, then file them into people
+#   chewbacca whatsapp refresh    refresh only (what the background job runs)
+#
+# Two engines do the protocol work underneath and nobody types either one:
+# wacrawl copies WhatsApp Desktop's own database, and wacli is a linked device
+# (both openclaw/tap). They stay upstream binaries rather than vendored source
+# because WhatsApp changes its protocol often and wacli's releases track it;
+# a copy in this repo would stop working the first time it did.
+set -uo pipefail
+
+PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+ROOT="${CHEWBACCA_ROOT:-$(cd "$(dirname "$(readlink -f "$0" 2>/dev/null || echo "$0")")/.." && pwd)}"
+LOG="$HOME/Library/Logs/chewbacca-whatsapp-link.log"
+mkdir -p "$HOME/Library/Logs" 2>/dev/null
+
+say() { printf '%s\n' "$*"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+ensure_engines() {
+  local missing=()
+  have wacrawl || missing+=(wacrawl)
+  have wacli || missing+=(wacli)
+  [ ${#missing[@]} -eq 0 ] && return 0
+  if ! have brew; then
+    say "WhatsApp needs Homebrew to install its engines. Install Homebrew, then run this again."
+    return 1
+  fi
+  say "Installing WhatsApp support..."
+  for m in "${missing[@]}"; do brew install "openclaw/tap/$m" >/dev/null 2>&1 || { say "Could not install $m."; return 1; }; done
+}
+
+linked() { wacli auth status --read-only --json 2>/dev/null | grep -q '"authenticated":true'; }
+
+refresh() {
+  have wacrawl && wacrawl import >/dev/null 2>&1
+  have wacli && linked && wacli sync --once --idle-exit 20s >/dev/null 2>&1
+  return 0
+}
+
+status() {
+  ensure_engines || return 1
+  if linked; then say "WhatsApp: linked"; else say "WhatsApp: not linked. Run: chewbacca whatsapp link"; fi
+  local desk
+  desk=$(wacrawl status 2>/dev/null | awk -F= '/^(messages|chats|newest|last_import)=/{printf "%s %s  ", $1, $2}')
+  [ -n "$desk" ] && say "Desktop copy: $desk"
+  if have people; then
+    local n
+    n=$(people texts stats 2>/dev/null | awk '$1=="whatsapp"{print $2}')
+    say "In your people store: ${n:-0} WhatsApp messages"
+  fi
+}
+
+link() {
+  ensure_engines || return 1
+  if linked; then say "Already linked."; return 0; fi
+  local phone="${1:-${CHEWBACCA_PHONE:-}}"
+  if [ -z "$phone" ]; then
+    printf 'Your WhatsApp phone number, with country code: '
+    read -r phone
+  fi
+  phone=$(printf '%s' "$phone" | tr -cd '0-9')
+  [ ${#phone} -lt 8 ] && { say "That number is too short."; return 1; }
+
+  say "On your phone: WhatsApp > Settings > Linked Devices > Link a Device > Link with phone number."
+  # A pairing code lives about two minutes and wacli gives up after three, so
+  # keep one alive for ten minutes and print each new code as it appears.
+  # Measured 2026-10-08: the first code expired before it was typed.
+  : >"$LOG"
+  local pid="" last="" deadline=$((SECONDS + 600))
+  while [ $SECONDS -lt $deadline ]; do
+    if linked; then
+      [ -n "$pid" ] && wait "$pid" 2>/dev/null
+      say "Linked. Pulling your history in..."
+      refresh
+      have people && people texts sync --quiet >/dev/null 2>&1
+      status
+      return 0
+    fi
+    if [ -z "$pid" ] || ! kill -0 "$pid" 2>/dev/null; then
+      wacli auth --phone "$phone" --idle-exit 120s >>"$LOG" 2>&1 &
+      pid=$!
+    fi
+    local code
+    code=$(grep -oE 'Pairing code for [^:]*: [A-Z0-9-]+' "$LOG" | tail -1 | awk '{print $NF}')
+    if [ -n "$code" ] && [ "$code" != "$last" ]; then
+      say "Enter this code: $code"
+      last="$code"
+    fi
+    sleep 3
+  done
+  [ -n "$pid" ] && kill "$pid" 2>/dev/null
+  say "No link after ten minutes. Run chewbacca whatsapp link again when your phone is handy."
+  return 1
+}
+
+case "${1:-status}" in
+  status) status ;;
+  link) shift; link "${1:-}" ;;
+  refresh) refresh ;;
+  sync) refresh; have people && people texts sync ;;
+  -h|--help|help) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) say "Unknown: $1. Try: chewbacca whatsapp [status|link|sync]"; exit 2 ;;
+esac

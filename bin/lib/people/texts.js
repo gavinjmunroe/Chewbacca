@@ -32,6 +32,10 @@ const { cmdIdentities } = require("./identities");
 // newline and tab before anything from chat.db reaches the terminal.
 const printable = (s) => String(s).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
 
+// iMessage is the default and goes unmarked; any other app says which it was,
+// so a reply goes back through the app the conversation is actually in.
+const tag = (r) => (r.source && r.source !== "imessage" ? c.dim(`[${r.source}] `) : "");
+
 function textPartner(d, needle) {
   const n = String(needle).toLowerCase();
   const exact = d
@@ -54,27 +58,121 @@ function textPartner(d, needle) {
   return ranked[0].p;
 }
 
-function textsReader() {
+function textsReader(file = "texts.py") {
   const here = path.dirname(fs.realpathSync(process.argv[1]));
   for (const cand of [
-    path.join(here, "..", "mac", "lib", "texts.py"),
-    path.join(here, "..", "..", "mac", "lib", "texts.py"),
-    path.join(os.homedir(), ".chewbacca", "mac", "lib", "texts.py"),
-    path.join(os.homedir(), "code/chewbacca/mac/lib/texts.py"),
+    path.join(here, "..", "mac", "lib", file),
+    path.join(here, "..", "..", "mac", "lib", file),
+    path.join(os.homedir(), ".chewbacca", "mac", "lib", file),
+    path.join(os.homedir(), "code/chewbacca/mac/lib", file),
   ])
     if (fs.existsSync(cand)) return cand;
   return null;
 }
 
+// Every app besides iMessage whose history lands in the same messages table.
+// Each reader is a script in mac/lib that prints texts.py's JSON shape and
+// prints [] when its app is not set up on this machine.
+//
+// `refresh` pulls the app's own local copy up to date first. Each step is
+// best-effort and bounded: a tool that is missing or not signed in is skipped.
+const CHANNELS = [
+  {
+    source: "whatsapp",
+    reader: "whatsapp.py",
+    label: "WhatsApp",
+    // wacrawl copies WhatsApp Desktop's database (local, about a second here);
+    // wacli asks the linked device for anything new since its last sync.
+    refresh: [
+      ["wacrawl", ["import"]],
+      ["wacli", ["sync", "--once", "--idle-exit", "10s"]],
+    ],
+  },
+  {
+    source: "slack",
+    reader: "slack.py",
+    label: "Slack",
+    // slacrawl copies the signed-in Slack desktop app's local cache, no token.
+    refresh: [["slacrawl", ["sync", "--source", "desktop"]]],
+  },
+  {
+    source: "email",
+    reader: "email_reader.py",
+    label: "email",
+    // Mail.app keeps its own store current. The reader keeps human mail only.
+    refresh: [],
+  },
+];
+
+function refreshChannel(ch) {
+  for (const [cmd, args] of ch.refresh || []) {
+    try {
+      execFileSync(cmd, args, { stdio: "ignore", timeout: 60000 });
+    } catch {
+      /* missing, not linked, or busy: read whatever the store already has */
+    }
+  }
+}
+
+function syncChannel(d, ch, flags) {
+  const py = textsReader(ch.reader);
+  if (!py) return 0;
+  if (!flags["no-refresh"]) refreshChannel(ch);
+  const key = `${ch.source}_last_sync`;
+  // Same rule as iMessage: everything the first time, a 30-day window after.
+  const days = Number(flags.days ?? (syncState(key) ? 30 : 0));
+  let rows;
+  try {
+    rows = JSON.parse(
+      execFileSync("python3", [py, "--json", "--days", String(days)], {
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "pipe"],
+      }),
+    );
+  } catch (e) {
+    // One app failing must not cost the user their iMessage sync.
+    if (!flags.quiet) say(c.dim(`  ${ch.label} skipped: ${String((e && e.message) || e).split("\n")[0]}`));
+    return 0;
+  }
+  const { added } = ingestRows(d, rows, ch.source, 0);
+  syncState(key, nowISO());
+  return added;
+}
+
 // Match a thread to someone already in the store. Handle first because a phone
 // number is exact; the display name is a fallback and is allowed to miss.
-function resolvePerson(who, handle) {
+// Full international digits, with a bare 10-digit number read as US.
+const e164 = (v) => {
+  const d = String(v || "").replace(/\D/g, "");
+  return d.length === 10 ? "1" + d : d;
+};
+
+// strict: the whole number must match, not its last ten digits. iMessage
+// handles come from the user's own Contacts, so the suffix match is fine
+// there. A WhatsApp or Slack sender chooses their number, and +44 7911 123456
+// shares its last ten digits with nobody it should, but +91 63055 50101 does
+// end in a US contact's 6305550101. Matching on the tail would file that
+// sender under the contact and make `people send` trust their number.
+function resolvePerson(who, handle, { strict = false } = {}) {
   const d = db();
   if (handle) {
     const alias = d
       .prepare("SELECT person_id FROM identities WHERE value = ?")
       .get(normHandle(handle) || "");
-    if (alias) return alias.person_id;
+    // identities store a US number as its last ten digits, so a strict match
+    // also needs the full number to be that US number.
+    if (alias && (!strict || String(handle).includes("@") || e164(handle) === "1" + normHandle(handle)))
+      return alias.person_id;
+    if (strict && !String(handle).includes("@")) {
+      const want = e164(handle);
+      if (want.length < 8) return null;
+      const hit = d
+        .prepare("SELECT id, phone FROM people WHERE deleted_at IS NULL AND phone IS NOT NULL AND phone <> ''")
+        .all()
+        .find((p) => e164(p.phone) === want);
+      return hit ? hit.id : null;
+    }
     const digits = String(handle).replace(/\D/g, "").slice(-10);
     if (digits.length === 10) {
       const hit = d
@@ -101,9 +199,108 @@ function resolvePerson(who, handle) {
   return null;
 }
 
+// Write reader rows into messages. Shared by iMessage and every other channel,
+// so attribution, FTS and batching behave the same whichever app a row came
+// from. Only iMessage advances messages_max_id: other channels' ids are hashes.
+function ingestRows(d, rows, source, seen) {
+    const ins = d.prepare(
+      `INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, room, source)
+       VALUES (?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(msg_id) DO UPDATE SET
+         -- REPAIR, NOT JUST INSERT. Rows written before the reader learned to
+         -- name the speaker have a group's name where a person belongs, and
+         -- DO NOTHING would leave 54,000 of them wrong forever. Only the
+         -- attribution is rewritten; the body and the timestamp are what
+         -- chat.db said then and still says now.
+         who       = excluded.who,
+         person_id = COALESCE(excluded.person_id, messages.person_id),
+         room      = excluded.room
+       WHERE messages.room IS NULL AND excluded.room IS NOT NULL`,
+    );
+    const fts = d.prepare("INSERT INTO messages_fts (rowid, body) VALUES (?,?)");
+    let added = 0,
+      maxId = seen,
+      unlinked = new Map();
+
+    // resolvePerson runs a LIKE scan over every contact, and a full backfill
+    // asks the same question 600k times for a few thousand distinct threads.
+    // Cache by thread so each one is resolved once.
+    const pidCache = new Map();
+    const resolveCached = (who, handle, strict = false) => {
+      const key = (handle || "") + "\u0000" + (who || "") + (strict ? "\u0000s" : "");
+      if (pidCache.has(key)) return pidCache.get(key);
+      const pid = resolvePerson(who, handle, { strict });
+      pidCache.set(key, pid);
+      return pid;
+    };
+
+    // Batched transactions, not one enormous one.
+    //
+    // Committing per row fsyncs half a million times and turns a backfill into
+    // half an hour. Wrapping the whole backfill in a single transaction fixes
+    // that and creates a worse problem: one writer holding the database for
+    // minutes, which starved the SessionStart hooks until they were killed at
+    // their timeout. Five of those failures are in this machine's log, all
+    // during a full re-sync, and they read as a broken kit rather than as a
+    // busy one.
+    //
+    // A commit every few thousand rows keeps the fsync count negligible and
+    // gives readers a gap to run in.
+    const TX_ROWS = 5000;
+    let txCount = 0;
+    d.exec("BEGIN");
+    try {
+    for (const r of rows) {
+      if (r.reaction || r.attachment_only) continue; // "Loved an image" is not a conversation
+      const body = String(r.text || "").trim();
+      if (!body) continue;
+      // A NAME IS ONLY EVIDENCE ON iMESSAGE. There `with` comes from the
+      // user's own Contacts. On WhatsApp and Slack it can be a name the sender
+      // chose, so a stranger calling himself "Sagar Tiwari" would be filed
+      // under Sagar, his number recorded as Sagar's, and `people send sagar`
+      // would reach him. Other apps link by address only.
+      const pid = source === "imessage" ? resolveCached(r.with, r.handle) : resolveCached(null, r.handle, true);
+      const res = ins.run(
+        r.id,
+        pid,
+        r.with || r.handle || "unknown",
+        r.handle || null,
+        r.from_me ? 1 : 0,
+        body,
+        String(r.at).replace("T", " "),
+        r.room || null,
+        source,
+      );
+      if (res.changes) {
+        fts.run(r.id, body);
+        added++;
+        if (!pid) unlinked.set(r.with, (unlinked.get(r.with) || 0) + 1);
+      }
+      if (source === "imessage" && r.id > maxId) maxId = r.id;
+      if (++txCount % TX_ROWS === 0) {
+        d.exec("COMMIT");
+        d.exec("BEGIN");
+      }
+    }
+      d.exec("COMMIT");
+    } catch (e) {
+      d.exec("ROLLBACK");
+      throw e;
+    }
+    return { added, maxId, unlinked };
+}
+
 function cmdTexts(argv) {
-  const sub = ["sync", "log", "stats", "link", "search"].includes(argv[0]) ? argv.shift() : "log";
+  const sub = ["sync", "refresh", "log", "stats", "link", "search"].includes(argv[0]) ? argv.shift() : "log";
   const { flags, rest } = parseArgs(argv);
+
+  // Bring every app's own local copy up to date and stop there. This is what
+  // the background job runs every few minutes: it needs no Full Disk Access
+  // and opens no people database, so it can't collide with a session's sync.
+  if (sub === "refresh") {
+    for (const ch of CHANNELS) refreshChannel(ch);
+    return;
+  }
   const d = db();
 
   if (sub === "sync") {
@@ -172,92 +369,31 @@ function cmdTexts(argv) {
       die("The message reader returned something unreadable.");
     }
 
-    const ins = d.prepare(
-      `INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, room)
-       VALUES (?,?,?,?,?,?,?,?)
-       ON CONFLICT(msg_id) DO UPDATE SET
-         -- REPAIR, NOT JUST INSERT. Rows written before the reader learned to
-         -- name the speaker have a group's name where a person belongs, and
-         -- DO NOTHING would leave 54,000 of them wrong forever. Only the
-         -- attribution is rewritten; the body and the timestamp are what
-         -- chat.db said then and still says now.
-         who       = excluded.who,
-         person_id = COALESCE(excluded.person_id, messages.person_id),
-         room      = excluded.room
-       WHERE messages.room IS NULL AND excluded.room IS NOT NULL`,
-    );
-    const fts = d.prepare("INSERT INTO messages_fts (rowid, body) VALUES (?,?)");
-    let added = 0,
-      maxId = seen,
-      unlinked = new Map();
+    const imsg = ingestRows(d, rows, "imessage", seen);
+    let added = imsg.added;
+    const maxId = imsg.maxId;
+    const unlinked = imsg.unlinked;
 
-    // resolvePerson runs a LIKE scan over every contact, and a full backfill
-    // asks the same question 600k times for a few thousand distinct threads.
-    // Cache by thread so each one is resolved once.
-    const pidCache = new Map();
-    const resolveCached = (who, handle) => {
-      const key = (handle || "") + "\u0000" + (who || "");
-      if (pidCache.has(key)) return pidCache.get(key);
-      const pid = resolvePerson(who, handle);
-      pidCache.set(key, pid);
-      return pid;
-    };
-
-    // Batched transactions, not one enormous one.
-    //
-    // Committing per row fsyncs half a million times and turns a backfill into
-    // half an hour. Wrapping the whole backfill in a single transaction fixes
-    // that and creates a worse problem: one writer holding the database for
-    // minutes, which starved the SessionStart hooks until they were killed at
-    // their timeout. Five of those failures are in this machine's log, all
-    // during a full re-sync, and they read as a broken kit rather than as a
-    // busy one.
-    //
-    // A commit every few thousand rows keeps the fsync count negligible and
-    // gives readers a gap to run in.
-    const TX_ROWS = 5000;
-    let txCount = 0;
-    d.exec("BEGIN");
-    try {
-    for (const r of rows) {
-      if (r.reaction || r.attachment_only) continue; // "Loved an image" is not a conversation
-      const body = String(r.text || "").trim();
-      if (!body) continue;
-      const pid = resolveCached(r.with, r.handle);
-      const res = ins.run(
-        r.id,
-        pid,
-        r.with || r.handle || "unknown",
-        r.handle || null,
-        r.from_me ? 1 : 0,
-        body,
-        String(r.at).replace("T", " "),
-        r.room || null,
-      );
-      if (res.changes) {
-        fts.run(r.id, body);
-        added++;
-        if (!pid) unlinked.set(r.with, (unlinked.get(r.with) || 0) + 1);
-      }
-      if (r.id > maxId) maxId = r.id;
-      if (++txCount % TX_ROWS === 0) {
-        d.exec("COMMIT");
-        d.exec("BEGIN");
-      }
-    }
-      d.exec("COMMIT");
-    } catch (e) {
-      d.exec("ROLLBACK");
-      throw e;
+    // OTHER APPS, SAME STORE. Each reader prints rows in texts.py's shape, so
+    // a person's thread is one log whichever app the conversation was in. A
+    // channel whose app is not set up here prints nothing and costs nothing.
+    const channelAdded = {};
+    for (const ch of CHANNELS) {
+      const n = syncChannel(d, ch, flags);
+      if (n) channelAdded[ch.source] = n;
+      added += n;
     }
     // Link the backlog too. Insert-time linking alone means any message that
     // arrived before its contact existed stays orphaned forever, which is the
     // normal case: the session hook syncs texts before anyone runs an import.
     let relinked = 0;
     for (const row of d
-      .prepare("SELECT DISTINCT who, handle FROM messages WHERE person_id IS NULL")
+      .prepare("SELECT DISTINCT who, handle, source FROM messages WHERE person_id IS NULL")
       .all()) {
-      const pid = resolvePerson(row.who, row.handle);
+      const pid =
+        row.source === "imessage"
+          ? resolvePerson(row.who, row.handle)
+          : resolvePerson(null, row.handle, { strict: true });
       if (!pid) continue;
       // Match on the handle when there is one. Matching on the thread name
       // instead credited every sender in a group chat to whichever member
@@ -277,11 +413,11 @@ function cmdTexts(argv) {
     let recredited = 0;
     for (const row of d
       .prepare(
-        `SELECT DISTINCT m.handle, m.person_id FROM messages m
+        `SELECT DISTINCT m.handle, m.person_id, m.source FROM messages m
           WHERE m.from_me = 0 AND m.handle IS NOT NULL AND m.handle <> '' AND m.person_id IS NOT NULL`,
       )
       .all()) {
-      const truth = resolvePerson(null, row.handle);
+      const truth = resolvePerson(null, row.handle, { strict: row.source !== "imessage" });
       if (!truth || truth === row.person_id) continue;
       recredited += d
         .prepare("UPDATE messages SET person_id=? WHERE handle=? AND person_id=? AND from_me=0")
@@ -296,7 +432,10 @@ function cmdTexts(argv) {
     const logged = d
       .prepare(
         `INSERT INTO interactions (id, person_id, channel, note, happened_at)
-         SELECT lower(hex(randomblob(16))), m.person_id, 'imessage', NULL, max(m.sent_at)
+         SELECT lower(hex(randomblob(16))), m.person_id,
+                (SELECT x.source FROM messages x WHERE x.person_id = m.person_id
+                  ORDER BY x.sent_at DESC LIMIT 1),
+                NULL, max(m.sent_at)
            FROM messages m
           WHERE m.person_id IS NOT NULL
             AND m.sent_at > coalesce((SELECT max(happened_at) FROM interactions i
@@ -307,6 +446,8 @@ function cmdTexts(argv) {
     recomputeScores();
 
     say(`${c.grn("synced")} ${added} new messages${c.dim(`  (${days}d window)`)}`);
+    for (const ch of CHANNELS)
+      if (channelAdded[ch.source]) say(c.dim(`  ${channelAdded[ch.source]} of them from ${ch.label}`));
     // Every handle in those messages is an address somebody demonstrably sent
     // from, and identities is what phone-keyed joins run on. Recording them is
     // part of the sync, not a second command to remember.
@@ -348,6 +489,8 @@ function cmdTexts(argv) {
     say(`  linked     ${linked}${t.n ? c.dim(`  (${Math.round((linked / t.n) * 100)}%)`) : ""}`);
     say(`  range      ${(t.a || "").slice(0, 10)} to ${(t.b || "").slice(0, 10)}`);
     say(`  last sync  ${syncState("messages_last_sync") || "never"}`);
+    for (const r of d.prepare("SELECT source, count(*) n FROM messages GROUP BY source ORDER BY n DESC").all())
+      say(c.dim(`  ${String(r.source).padEnd(10)} ${r.n}`));
     say("");
     return;
   }
@@ -357,7 +500,7 @@ function cmdTexts(argv) {
     if (!q) die('Try: people texts search "the trip"');
     const rows = d
       .prepare(
-        `SELECT m.who, m.from_me, m.body, m.sent_at FROM messages_fts f
+        `SELECT m.who, m.from_me, m.body, m.sent_at, m.source FROM messages_fts f
            JOIN messages m ON m.msg_id = f.rowid
           WHERE messages_fts MATCH ? ORDER BY m.sent_at DESC LIMIT ?`,
       )
@@ -366,7 +509,7 @@ function cmdTexts(argv) {
     say("");
     for (const r of rows)
       say(
-        `  ${c.dim(r.sent_at.slice(0, 16))}  ${c.b(printable(r.who).padEnd(20).slice(0, 20))} ${r.from_me ? c.cyn("->") : "<-"} ${printable(r.body).replace(/\s+/g, " ").slice(0, 90)}`,
+        `  ${c.dim(r.sent_at.slice(0, 16))}  ${c.b(printable(r.who).padEnd(20).slice(0, 20))} ${r.from_me ? c.cyn("->") : "<-"} ${tag(r)}${printable(r.body).replace(/\s+/g, " ").slice(0, 90)}`,
       );
     say(`\n  ${rows.length} results\n`);
     return;
@@ -389,7 +532,7 @@ function cmdTexts(argv) {
   const days = Number(flags.days || (person ? 36500 : 3));
   const limit = Number(flags.limit || 300);
   const full = Boolean(flags.full || person);
-  let sql = `SELECT who, from_me, body, sent_at FROM messages
+  let sql = `SELECT who, from_me, body, sent_at, source FROM messages
               WHERE julianday('now') - julianday(sent_at) <= ?`;
   const args = [days];
   if (person) {
@@ -422,11 +565,11 @@ function cmdTexts(argv) {
     const body = full
       ? printable(r.body).replace(/\n/g, "\n                 ")
       : printable(r.body).replace(/\s+/g, " ").slice(0, 100);
-    say(`  ${c.dim(r.sent_at.slice(5, 16))} ${r.from_me ? c.cyn("->") : "  "} ${body}`);
+    say(`  ${c.dim(r.sent_at.slice(5, 16))} ${r.from_me ? c.cyn("->") : "  "} ${tag(r)}${body}`);
   }
   say("");
 }
 
 module.exports = {
-  cmdTexts,
+  cmdTexts, textPartner, textsReader, resolvePerson, printable, CHANNELS,
 };

@@ -89,6 +89,8 @@ fi
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export PEOPLE_DIR="$TMP/people"
+# No test may reach a real phone or inbox, whatever a broken check lets through.
+export CHEWBACCA_NO_SEND=1
 export COURSEWORK_DIR="$TMP/coursework"
 export CHEWBACCA_LOG_DIR="$TMP/logs"
 export SUPERASSISTANT_DIR="$TMP/superassistant"
@@ -219,6 +221,15 @@ if group "people"; then
 
     check "texts <name> reads one person's newest messages whole" \
       bash "$ROOT/tests/texts_reader.sh" "${P[@]}"
+
+    check "send resolves strictly and replies in the thread's own app" \
+      bash "$ROOT/tests/people_send.sh" "${P[@]}"
+    check "WhatsApp rows come out in the texts reader's shape" \
+      python3 "$ROOT/tests/test_whatsapp_reader.py"
+    check "Slack rows come out in the texts reader's shape" \
+      python3 "$ROOT/tests/test_slack_reader.py"
+    check "email rows are human mail only, in the texts reader's shape" \
+      python3 "$ROOT/tests/test_email_reader.py"
 
     check  "score runs" "${P[@]}" score
     check  "birthdays runs" "${P[@]}" birthdays --days 30
@@ -1136,6 +1147,25 @@ if group "hooks"; then
     CHEWBACCA_REPO_DIR="$d/work" bash "'"$ROOT"'/.claude/hooks/kit-autopush.sh" >/dev/null 2>&1
     after="$(git --git-dir="$d/origin.git" show-ref | sort)"
     [ "$before" = "$after" ] || { echo "origin moved while the branch tracked upstream" >&2; exit 1; }
+    exit 0
+  '
+
+  # 2026-10-08: the same BLOCKED notice woke an unrelated tab after every reply
+  # until Claude Code capped it at nine. Once per session, never while
+  # stop_hook_active, and a different session still hears it.
+  check "a blocked push is reported once per session, never on stop_hook_active" bash -c '
+    d="$('"$(declare -f autopush_fixture)"'; autopush_fixture main)"
+    echo "import sys; sys.exit(1)" > "$d/work/tools/checksums.py"
+    export CHEWBACCA_REPO_DIR="$d/work" CHEWBACCA_LOG_DIR="$d/logs"
+    h="'"$ROOT"'/.claude/hooks/kit-autopush.sh"
+    a="$(echo "{\"session_id\":\"s1\",\"stop_hook_active\":true}" | bash "$h" 2>&1)"
+    [ -z "$a" ] || { echo "spoke under stop_hook_active: $a" >&2; exit 1; }
+    b="$(echo "{\"session_id\":\"s1\",\"stop_hook_active\":false}" | bash "$h" 2>&1)"
+    echo "$b" | grep -q BLOCKED || { echo "first report missing: $b" >&2; exit 1; }
+    c="$(echo "{\"session_id\":\"s1\",\"stop_hook_active\":false}" | bash "$h" 2>&1)"
+    [ -z "$c" ] || { echo "repeated itself: $c" >&2; exit 1; }
+    e="$(echo "{\"session_id\":\"s2\",\"stop_hook_active\":false}" | bash "$h" 2>&1)"
+    echo "$e" | grep -q BLOCKED || { echo "second session never heard: $e" >&2; exit 1; }
     exit 0
   '
 

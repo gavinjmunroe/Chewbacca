@@ -311,6 +311,15 @@ def main():
         pending = context_for(os.getcwd())
         if pending:
             print('\n' + pending)
+        # Runtimes without hooks (Cursor, Gemini, a browser app) learn about the
+        # other live tabs here, and join the board with `tabs register`.
+        import tabs
+        try:
+            others = tabs.context(os.environ.get('CHEWBACCA_SESSION_ID', ''), os.getcwd())
+        except Exception:  # noqa: BLE001 the board must never stop the startup read
+            others = ''
+        if others:
+            print('\n' + others)
         if args.with_instructions:
             standing = standing_instructions(root)
             if standing:

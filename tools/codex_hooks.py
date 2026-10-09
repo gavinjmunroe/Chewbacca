@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import codex_context as context
 from work_ledger import context_for
+import tabs
 from codex_execution_evidence import native_exit_code
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -450,6 +451,8 @@ def dispatch_event_body(payload):
         except OSError:
             parts.append('HUD runtime selection could not be saved. Chewbacca context and guards remain active.')
         parts.append(context_for(cwd))
+        # The same tab board Claude Code writes, so each runtime sees the other.
+        parts.append(tabs.handle(payload, 'codex'))
     if event == 'SessionStart':
         root = context.brain_root(context.codex_home())
         with contextlib.redirect_stdout(io.StringIO()) as output:
@@ -499,6 +502,8 @@ def dispatch_event_body(payload):
                 parts.append(shared_hook('browser-ux-guard.sh', translated, cwd))
         elif payload.get('session_id'):
             parts.append(shared_hook('write-log.sh', payload, cwd))
+        if event == 'PreToolUse' and payload.get('session_id'):
+            parts.append(tabs.overlap(payload['session_id'], changed_paths(payload)))
         writes = proposed_writes(payload) if event == 'PreToolUse' else {}
         for filename in changed_paths(payload):
             translated = dict(payload, tool_input={'file_path': filename})

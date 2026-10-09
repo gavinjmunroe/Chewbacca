@@ -1615,6 +1615,16 @@ _register("PreToolUse", hooks_dir + "/repo-overlap-guard.sh", timeout=5,
           matcher="Edit|Write|MultiEdit|NotebookEdit",
           status="Checking no other session is editing this checkout...")
 
+# 2026-10-09, five tabs open at once: "Fix chewbs so tabs always know what other
+# tabs are doing even across llms". The overlap guard above says SOMEONE edited
+# the checkout; tabs.sh says who, in which runtime, on what ask, and which
+# files, at session start and on every prompt. Codex reads the same board
+# through tools/codex_hooks.py.
+for _event in ("SessionStart", "UserPromptSubmit", "SessionEnd"):
+    _register(_event, hooks_dir + "/tabs.sh", timeout=5)
+_register("PreToolUse", hooks_dir + "/tabs.sh", timeout=5,
+          matcher="Edit|Write|MultiEdit|NotebookEdit")
+
 # 99.6% of iMessages since 2025 keep their words in attributedBody, not
 # `text`. A `text LIKE` search of chat.db on 2026-10-03 found 1 Pasadena
 # message where decoding found 2,213, and that silence reads as an answer.

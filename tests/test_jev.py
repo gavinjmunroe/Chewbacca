@@ -84,6 +84,14 @@ class JevTests(unittest.TestCase):
         response["answers"]["pick"]["probabilities"] = {"a": 0.5, "b": 0.5}
         jev.validate_response(response, REQUEST)
 
+    def test_rounded_wide_distribution_accepted(self):
+        response = copy.deepcopy(RESPONSE)
+        response["answers"]["pick"]["probabilities"] = {"a": 0.52, "b": 0.47000000000000003}
+        jev.validate_response(response, REQUEST)
+        response["answers"]["pick"]["probabilities"] = {"a": 0.5, "b": 0.4}
+        with self.assertRaises(jev.JevError):
+            jev.validate_response(response, REQUEST)
+
     def test_api_transport_and_usage(self):
         with patch.object(jev, "api_key", return_value="test-key"), patch.object(jev.urllib.request, "build_opener") as build:
             build.return_value.open.return_value = io.BytesIO(json.dumps(RESPONSE).encode())
@@ -121,6 +129,14 @@ class JevTests(unittest.TestCase):
                 self.assertNotIn("/local/skill", json.dumps(evaluate.call_args.args[0]))
                 self.assertTrue(result["advisory_only"])
                 self.assertEqual(result["suggestion"], None if choice == "none" else {"name": "example", "path": "/local/skill"})
+
+    def test_route_names_top_five_instead_of_every_id(self):
+        skills = [(f"skill{i}", "d", f"/p/{i}") for i in range(8)]
+        probs = {f"s{i}": 0.0 for i in range(8)} | {"s3": 0.9, "s5": 0.05, "none": 0.05}
+        with patch("skill_match.load_skills", return_value=skills), patch.object(jev, "evaluate", return_value={"answers": {"skill": {"choice": "s3", "probabilities": probs}}}):
+            answer = jev.route("x")["answers"]["skill"]
+        self.assertNotIn("probabilities", answer)
+        self.assertEqual(list(answer["top"]), ["skill3", "skill5", "none"])
 
     def test_pinned_transport_and_local_budgets_preserved(self):
         self.assertEqual(jev.MODEL, "jev-1.13.0")

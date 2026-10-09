@@ -215,6 +215,15 @@ c a Avatar name="Sam Lee" size=24
 the same colour for the same name, 16 to 48 points.
 
 ```
+c mk Mark kind=ico spin=true size=18
+```
+
+**Mark** is the agent's sign: a wireframe icosahedron (`kind=ico`) that turns
+while `spin=true`, or a stipple globe (`kind=globe`) that turns once and
+rests, 8 to 64 points. It says a run is working or done, nothing else.
+The turn is a layer animation, still under Reduce Motion.
+
+```
 @ rail at=right w=52 chrome=bare
 c s Screen
 r s

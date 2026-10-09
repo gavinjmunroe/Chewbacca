@@ -53,6 +53,11 @@ def run(fixtures, measured, *args, env_extra=None):
         env = dict(os.environ, CHEWBACCA_CLAY_FIXTURES=str(base / "fx"), CHEWBACCA_CLAY_MEASURED=str(m),
                    CHEWBACCA_CLAY_LIB=str(LIB), API_ANYTHING_HOME=str(base / "engine-home"))
         env.pop("CLAY_WORKSPACE_ID", None)
+        # tests/run.sh exports CHEWBACCA_NO_SEND=1 for every check, and it refuses
+        # before --allow-writes is read, so the write-gate cases saw the wrong
+        # reason under the suite and passed alone. Fixture mode never reaches a
+        # real surface; the one case about NO_SEND sets it itself.
+        env.pop("CHEWBACCA_NO_SEND", None)
         env.update(env_extra or {})
         p = subprocess.run(["node", str(TOOL), *args], capture_output=True, text=True, env=env, timeout=60)
         try:

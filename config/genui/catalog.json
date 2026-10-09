@@ -85,6 +85,13 @@
           "type": "number",
           "min": 0,
           "max": 8
+        },
+        "align": {
+          "type": "enum",
+          "values": [
+            "top",
+            "center"
+          ]
         }
       }
     },
@@ -450,6 +457,26 @@
         },
         "image": {
           "type": "string"
+        }
+      }
+    },
+    "Mark": {
+      "family": "Data",
+      "props": {
+        "kind": {
+          "type": "enum",
+          "values": [
+            "ico",
+            "globe"
+          ]
+        },
+        "spin": {
+          "type": "bool"
+        },
+        "size": {
+          "type": "number",
+          "min": 8,
+          "max": 64
         }
       }
     },

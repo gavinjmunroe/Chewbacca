@@ -1049,7 +1049,7 @@ fi
 # gate refuses to ship a generated one, and the Stop hook calls the gate by name.
 # gtme-dedupe is the exception: it builds a splink venv with uv on first run, like
 # scrape, and still runs exact passes on plain python3 when that build fails.
-for _tool in list-audit list-gate gtme-dedupe kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-signals gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team; do
+for _tool in list-audit list-gate gtme-dedupe kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-signals gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review clay-build fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     log "$_tool installed to ~/.local/bin/"

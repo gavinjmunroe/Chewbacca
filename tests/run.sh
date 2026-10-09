@@ -417,7 +417,20 @@ if group "gtme"; then
       python3 "$ROOT/tests/test_chewbacca_clay.py"
     check "clay dispatches through chewbacca" bash "$ROOT/bin/chewbacca" clay --help
     expect "clay appears in help" "chewbacca clay" bash "$ROOT/bin/chewbacca" --help
+    check "the clay finder picks one visible control or stops" node --test "$ROOT/tests/test_clay_find.mjs"
   fi
+  # clay-build (docs/CLAY-HUD.md): fakes for the page, Clay and Kyber; nothing
+  # opens Chrome, reads Clay or draws on the glass.
+  check "clay geometry maps page rects to screen points and stops on a bad window" python3 "$ROOT/tests/test_clay_geometry.py"
+  check "the clay recipe validates, and paid steps end on their approval" python3 "$ROOT/tests/test_clay_recipe.py"
+  check "the clay page driver never opens a tab and stops fast" python3 "$ROOT/tests/test_clay_page.py"
+  check "clay reads parse credits, progress and found emails" python3 "$ROOT/tests/test_clay_reads.py"
+  check "the clay hud draws every state and goes quiet on x" python3 "$ROOT/tests/test_clay_hud.py"
+  check "clay-build asks before every spend and stops at once" python3 "$ROOT/tests/test_clay_run.py"
+  check "clay-build holds one lock and refuses without Kyber" python3 "$ROOT/tests/test_clay_build.py"
+  check "the clay voice route parses only clay requests" python3 "$ROOT/tests/test_clay_route.py"
+  ln -s "$ROOT/bin/clay-build" "$TMP/clay-build"
+  check "clay-build runs from an installed symlink" "$TMP/clay-build" --help
 fi
 
 # ── team board ────────────────────────────────────────────────────────────────

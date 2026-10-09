@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# chewbacca slack: Slack as part of the kit.
+#
+#   chewbacca slack          status: which workspaces can send
+#   chewbacca slack link     sign in once; every workspace in that browser session is saved
+#
+# Reading needs nothing: slacrawl copies the Slack desktop app's cache. Sending
+# goes through slackcli (shaharia-lab/slackcli, MIT), which keeps a browser
+# session per workspace in the keychain. The sign-in is the one step a person
+# does once, the same as installing Slack itself: it's their password.
+set -uo pipefail
+PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+say() { printf '%s\n' "$*"; }
+
+ensure() {
+  command -v slackcli >/dev/null 2>&1 && return 0
+  say "Installing Slack support..."
+  brew trust --formula shaharia-lab/tap/slackcli >/dev/null 2>&1
+  brew install shaharia-lab/tap/slackcli >/dev/null 2>&1 || { say "Could not install slackcli."; return 1; }
+}
+
+status() {
+  ensure || return 1
+  if slackcli auth list 2>&1 | grep -q "No authenticated"; then
+    say "Slack: reading works, sending isn't signed in. Run: chewbacca slack link"
+  else
+    slackcli auth list 2>&1
+  fi
+}
+
+link() {
+  ensure || return 1
+  # Open the workspace with the most messages in the local cache, so the
+  # sign-in page is the right one without asking which.
+  local url="${1:-}"
+  if [ -z "$url" ] && [ -f "$HOME/.slacrawl/slacrawl.db" ]; then
+    local dom
+    dom=$(sqlite3 "$HOME/.slacrawl/slacrawl.db" "SELECT w.domain FROM messages m JOIN workspaces w ON w.id = m.workspace_id GROUP BY 1 ORDER BY count(*) DESC LIMIT 1" 2>/dev/null)
+    [ -n "$dom" ] && url="https://$dom.slack.com"
+  fi
+  say "A browser window is opening. Sign into Slack there (every workspace you sign into is saved), then leave it until it closes itself."
+  if [ -n "$url" ]; then
+    slackcli auth login-auto --workspace-url "$url" --timeout 1800 --secret-backend keychain
+  else
+    slackcli auth login-auto --timeout 1800 --secret-backend keychain
+  fi
+  status
+}
+
+case "${1:-status}" in
+  status) status ;;
+  link) shift; link "${1:-}" ;;
+  -h|--help|help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) say "Try: chewbacca slack [status|link]"; exit 2 ;;
+esac

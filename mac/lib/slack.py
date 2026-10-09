@@ -303,7 +303,7 @@ def send(target, text, dry_run=False, path=None):
     if not token and shutil.which(SLACKCLI):
         return send_slackcli(found, text)
     if not token:
-        return {"ok": False, "error": "Slack isn't signed in: run slackcli auth login-auto"}
+        return {"ok": False, "error": "Slack isn't signed in: run chewbacca slack link"}
     if found["lookup"] == "users.lookupByEmail":
         reply = call("users.lookupByEmail", token, email=target)
         if not reply["ok"]:

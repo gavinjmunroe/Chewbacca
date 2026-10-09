@@ -117,6 +117,11 @@ agent)
   shift
   exec python3 "$ROOT/tools/agent_runtime.py" "$@"
   ;;
+slack)
+  # Slack sending through slackcli; reading needs nothing.
+  shift
+  exec bash "$ROOT/bin/chewbacca-slack" "$@"
+  ;;
 email)
   # Every inbox, one `chewbacca email add` each. Read and sent through the
   # Gmail API, never Mail.app.

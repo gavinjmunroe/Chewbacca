@@ -24,38 +24,65 @@ the first thing that is not true. On a full pass it writes a receipt naming
 the exact commits it passed against, so a claim made afterwards can be tied
 to a specific verified state rather than to a memory of having run it.
 
-    closeout            check, print, write a receipt on success
+    closeout            check, print, write a receipt on success; the gates
+                        run only the suite checks that name what changed
+    closeout --all      the same, with every group of the suite as the gates
     closeout --fast     the git half in about a second, gates reused only
-                        from a full run on this exact commit
+                        from a pass on this exact tree
     closeout --quiet    receipt only, for hooks
 
 Every check prints the moment it is decided, with its evidence. The first
 version printed only at the end, so `closeout | tail` sat blank for four
 minutes on 2026-09-26, got killed, and the question never got an answer.
+
+SCOPED GATES (CHW-153). "that thing is so wack and takes forever", Caleb,
+2026-10-07. Every closeout ran all 26 groups, six minutes at best and far more
+under load, and the kit takes about 87 commits a day, so a pass keyed to one
+commit was stale by the next closeout and --fast almost never had anything to
+reuse. Now the gates are the check lines in tests/run.sh that name a file
+changed since the last pass (or a test named after one), each run alone with
+the suite's own hermetic preamble, plus a syntax check of every changed file.
+A check that cannot run alone pulls in its whole group. `--all` is the old
+behaviour.
+
+A static import graph was tried first and rejected: at two hops every group
+reached 1,300 to 1,600 of the 1,641 tracked files through hubs like
+bin/chewbacca and setup.sh, so it selected all 26 groups for 78 of the last 80
+commits, even a one-line team task.
 """
 
 from __future__ import annotations
 
 import concurrent.futures as cf
+import fnmatch
+import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
 KIT = Path(__file__).resolve().parent.parent
 BRAIN = Path.home() / "second-brain"
-RECEIPT = Path.home() / ".chewbacca" / "closeout-receipt.json"
+STATE = Path(os.environ.get("CHEWBACCA_HOME", str(Path.home() / ".chewbacca"))).expanduser()
+RECEIPT = STATE / "closeout-receipt.json"
 
 # How long a receipt is worth anything. Long enough to write a closing
 # message, short enough that it cannot be reused tomorrow.
 RECEIPT_TTL_S = 900
-# What the gates said for one exact kit commit. Gates read only the committed
-# tree, so a pass on this HEAD with a clean tree stays a pass until either
-# changes; --fast reuses it rather than running ten minutes of suite again.
-GATES = Path.home() / ".chewbacca" / "closeout-gates.json"
+# What the gates said for one exact kit tree. Gates read only the committed
+# tree, so a pass on this tree with a clean checkout stays a pass until either
+# changes; --fast reuses it rather than running the suite again.
+GATES = STATE / "closeout-gates.json"
+# Paths no gate reads. Same list as the CI workflow's paths-ignore: team board
+# edits are one-file commits to main, 140 of them the day the board landed,
+# and none of them can break a script. Without this every board edit by any
+# tab threw away the last pass.
+INERT = ("team/",)
 
 
 def run(args: list[str], cwd: Path, timeout: int = 60) -> tuple[int, str]:
@@ -85,8 +112,226 @@ def tree_clean(repo: Path) -> bool:
     return code == 0 and not out.strip()
 
 
+def tree_key(repo: Path) -> str | None:
+    """The committed tree minus INERT paths, or None when the checkout is dirty."""
+    if not tree_clean(repo):
+        return None
+    code, out = run(["git", "ls-tree", "-r", "HEAD"], repo)
+    if code != 0:
+        return None
+    live = [ln for ln in out.splitlines()
+            if not ln.split("\t", 1)[-1].startswith(INERT)]
+    return hashlib.sha256("\n".join(live).encode()).hexdigest()[:16]
+
+
+def load_gates() -> dict:
+    try:
+        d = json.loads(GATES.read_text())
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 # Guessed from the load incident above, never tuned: three leaves headroom.
 GATE_WORKERS = 3
+
+
+def stem(path: str) -> str:
+    """tests/test_vibe_guard.py, .claude/hooks/vibe-guard.sh -> vibe_guard."""
+    s = path.rsplit("/", 1)[-1].lower().replace("-", "_")
+    s = re.sub(r"\.(sh|py|js|mjs|ts|swift)$", "", s)
+    s = re.sub(r"^test_", "", s)
+    return re.sub(r"_test$", "", s)
+
+
+class Scope:
+    """The suite's check lines, as units that can run one at a time.
+
+    A unit is one top-level `check`/`expect`/`exits` line inside a group. It
+    runs in its own bash with the suite's own preamble (the hermetic TMP,
+    PEOPLE_DIR, CHEWBACCA_NO_SEND=1 and the helper functions), cut out of
+    run.sh rather than copied here, so a new export there applies here too.
+    """
+
+    UNIT = re.compile(r"^  (check|expect|exits)\s")
+    GROUP = re.compile(r'^\s*(?:if\s+)?group\s+"([^"]+)"')
+    REF = re.compile(r'\$\{?ROOT\}?"?/([A-Za-z0-9_.\-/]+)')
+    GLOB = re.compile(r'^\s*for\s+\w+\s+in\s+"?\$\{?ROOT\}?"?/([^\s;]+)')
+
+    def __init__(self, suite: Path) -> None:
+        self.suite = suite
+        try:
+            text = suite.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        lines = text.splitlines()
+        start = next((i for i, ln in enumerate(lines)
+                      if re.match(r'^TMP="\$\(mktemp -d\)"', ln)), None)
+        first = next((i for i, ln in enumerate(lines) if self.GROUP.match(ln)), None)
+        self.preamble = ("\n".join(lines[start:first])
+                         if start is not None and first is not None and start < first
+                         and "check()" in "\n".join(lines[start:first]) else None)
+        allowed = {"ROOT", "TMP", "HOME"}
+        if self.preamble:
+            allowed |= set(re.findall(r"^export (\w+)=", self.preamble, re.M))
+        # (group, line, standalone) per check line, and per-group glob loops.
+        self.units: list[tuple[str, str, bool]] = []
+        self.globs: list[tuple[str, str]] = []
+        # Paths named anywhere in a group outside a runnable unit: a check
+        # nested in a loop, the second line of a continued one, the body of a
+        # `bash -c '...'`. Naming a changed file there runs the whole group.
+        self.loose: dict[str, set[str]] = {}
+        self.loose_lines: dict[str, set[str]] = {}
+        group = None
+        body = lines[first or 0:] if first is not None else []
+        i = 0
+        while i < len(body):
+            ln = body[i]
+            i += 1
+            m = self.GROUP.match(ln)
+            if m:
+                group = m.group(1)
+                self.loose.setdefault(group, set())
+                self.loose_lines.setdefault(group, set())
+                continue
+            if group is None:
+                continue
+            g = self.GLOB.match(ln)
+            if g:
+                self.globs.append((group, g.group(1).replace('"', "")))
+            if self.UNIT.match(ln):
+                stmt = [ln]
+                # Backslash continuations are one statement; run alone with
+                # only its first line, `check` would get no command and pass.
+                while stmt[-1].rstrip().endswith("\\") and i < len(body):
+                    stmt.append(body[i])
+                    i += 1
+                text = "\n".join(stmt)
+                used = set(re.findall(r"\$\{?([A-Za-z_]\w*)", text)) - allowed
+                self.units.append((group, text.strip(), not used))
+                if used:
+                    self.loose[group].update(self.refs(text))
+            else:
+                self.loose[group].update(self.refs(ln))
+                self.loose_lines[group].add(ln.strip())
+
+    @classmethod
+    def refs(cls, text: str) -> list[str]:
+        return [r.rstrip(".") for r in cls.REF.findall(text)]
+
+    def select(self, touched: list[str], added: set[str]
+               ) -> tuple[list[tuple[str, str]], list[str], list[str]]:
+        """(units to run alone as (group, line), whole groups to run, and
+        pytest-only test files the suite reaches only through its pytest group)."""
+        tset = set(touched)
+        stems = {stem(t) for t in touched if len(stem(t)) >= 3}
+        root = self.suite.parent.parent
+        mention: dict[str, bool] = {}
+
+        def names_touched(ref: str, deep: bool = True) -> bool:
+            """The check names a changed file, a test named after one, or a
+            script whose own text names one (tools/checksums.py names
+            SHA256SUMS.txt; bin/chewbacca names every subcommand it routes).
+
+            Not deep for a whole group: setup.sh names nearly every file in
+            the kit, so following it put the installer groups, 90 s each, on
+            every closeout. A group follows only its tests' own text."""
+            if ref in tset:
+                return True
+            s = stem(ref)
+            if ref.startswith("tests/") and any(s == t or s.startswith(t + "_") for t in stems):
+                return True
+            if not deep and not ref.startswith("tests/"):
+                return False
+            if ref not in mention:
+                try:
+                    text = (root / ref).read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    text = ""
+                mention[ref] = any(t in text for t in tset)
+            return mention[ref]
+
+        alone: list[tuple[str, str]] = []
+        groups: list[str] = []
+        for group, refs in self.loose.items():
+            if any(names_touched(r, deep=False) for r in refs) or \
+                    (added & self.loose_lines.get(group, set())) - {""}:
+                groups.append(group)
+        for group, line, standalone in self.units:
+            refs = self.refs(line)
+            added_here = any(ln.strip() in added for ln in line.splitlines())
+            if not (added_here or any(names_touched(r) for r in refs)):
+                continue
+            # An opening quote that closes lines later fails to parse alone.
+            if standalone and self.preamble and \
+                    run(["bash", "-n", "-c", line], root)[0] == 0:
+                alone.append((group, line))
+            # Same shallow rule as above for a whole group: a dirty AGENTS.md
+            # pulled in `doctor`, 432 s under load, through a script that
+            # merely mentions it.
+            elif group not in groups and (added_here or any(
+                    names_touched(r, deep=False) for r in refs)):
+                groups.append(group)
+        for group, pattern in self.globs:
+            if group not in groups and any(fnmatch.fnmatch(t, pattern) for t in touched):
+                groups.append(group)
+        # A unit whose whole group runs anyway would only run twice.
+        alone = [(g, ln) for g, ln in alone if g not in groups]
+        # A test_*.py the suite never names runs only inside the pytest group,
+        # about 300 s; run just that file under pytest instead.
+        named = {r for refs in self.loose.values() for r in refs}
+        named |= {r for _, line, _ in self.units for r in self.refs(line)}
+        tests_dir = root / "tests"
+        pytest_only = sorted(
+            f"tests/{p.name}" for p in tests_dir.glob("test_*.py")
+            if f"tests/{p.name}" not in named
+            and (f"tests/{p.name}" in tset or stem(p.name) in stems)
+        ) if tests_dir.is_dir() else []
+        return alone, groups, pytest_only
+
+    def script(self, group: str, line: str) -> str:
+        root = self.suite.parent.parent
+        return "\n".join([
+            "set -uo pipefail",
+            f"ROOT={shlex.quote(str(root))}",
+            "GRN=; RED=; DIM=; BLD=; NC=; PASS=0; FAIL=0; SKIP=0; ONLY=",
+            "declare -a FAILURES=()",
+            self.preamble or "",
+            f"CURRENT={shlex.quote(group)}",
+            line,
+            'exit "$FAIL"',
+        ])
+
+
+def pytest_cmd() -> list[str] | None:
+    """The same pytest the suite's pytest group finds: installed, else via uv."""
+    if run(["python3", "-c", "import pytest"], KIT)[0] == 0:
+        return ["python3", "-m", "pytest"]
+    if run(["uv", "--version"], KIT)[0] == 0:
+        return ["uv", "run", "--no-project", "--with", "pytest", "python", "-m", "pytest"]
+    return None
+
+
+def syntax_cmd(path: Path) -> list[str] | None:
+    """A parse-only check for one changed file, or None when there is none."""
+    name = path.name
+    try:
+        first = path.open("rb").readline(200).decode("utf-8", "replace")
+    except OSError:
+        return None
+    if name.endswith(".py") or ("python" in first and first.startswith("#!")):
+        return ["python3", "-c",
+                "import ast,sys; ast.parse(open(sys.argv[1],encoding='utf-8').read(), sys.argv[1])",
+                str(path)]
+    if name.endswith((".sh", ".bash")) or (first.startswith("#!") and "bash" in first) \
+            or first.startswith("#!/bin/sh"):
+        return ["bash", "-n", str(path)]
+    if name.endswith((".js", ".mjs", ".cjs")) or ("node" in first and first.startswith("#!")):
+        return ["node", "--check", str(path)]
+    if name.endswith(".json"):
+        return ["python3", "-c", "import json,sys; json.load(open(sys.argv[1],encoding='utf-8'))",
+                str(path)]
+    return None
 
 
 class Checks:
@@ -94,16 +339,23 @@ class Checks:
         self.failures: list[str] = []
         self.lines: list[str] = []
         self.quiet = quiet
+        self._lock = threading.Lock()
+
+    def say(self, text: str) -> None:
+        if not self.quiet:
+            with self._lock:
+                print(text, flush=True)
 
     def record(self, ok: bool | None, name: str, evidence: str) -> None:
         """ok None is UNKNOWN: not a pass, and said so rather than guessed."""
         mark = {True: "  PASS  ", False: "  FAIL  ", None: "  ????  "}[ok]
         new = [mark + name] + ["          " + line for line in evidence.splitlines()[:6] if evidence]
-        self.lines += new
-        if not self.quiet:
-            print("\n".join(new), flush=True)
-        if ok is not True:
-            self.failures.append(name)
+        with self._lock:
+            self.lines += new
+            if not self.quiet:
+                print("\n".join(new), flush=True)
+            if ok is not True:
+                self.failures.append(name)
 
     # ── the checks ───────────────────────────────────────────────────────
 
@@ -139,92 +391,175 @@ class Checks:
             f"git rev-list @{{u}}..HEAD: {ahead} commit(s) ahead",
         )
 
-    def gates(self, quiet: bool = False) -> None:
-        """Run the gates, fanned out across the groups.
+    def gates(self, quiet: bool = False, everything: bool = False) -> None:
+        """Run the gates: the checks that name what changed, fanned out.
 
         "Nothing should ever take that long bruh, you have graph engineering
         and the ability to intelligently split things up."
 
-        Correct, and this was the clearest case of it in the repo. The suite is
-        155 checks with no edges between them, run strictly one after another,
-        and the whole of closeout was ten minutes of waiting for that. A set of
-        independent nodes run sequentially is the exact anti-pattern the task
-        graph half of skills/graph-engineering exists to name.
-
-        The groups are the natural partition: run.sh already accepts one as an
-        argument, so no restructuring of the 155 checks is needed to fan them
-        out. Wall clock becomes the slowest group rather than the sum of all
-        of them, which on this machine is `installer` at about 40 seconds
-        against a sequential total over ten minutes.
+        The suite is independent check lines grouped into 26 groups with no
+        edges between them. Fanning the groups out took closeout from ten
+        minutes to six, and six was still the slowest group (pytest, about
+        300 s) plus the queue behind it, on every closeout, for a change to
+        one file. The finer partition is the check line: run only the lines
+        that name a changed file, each in its own process, three at a time.
         """
         suite = KIT / "tests" / "run.sh"
         if not suite.exists():
             self.record(True, "gates: no suite present, skipped", "")
             return
-
-        groups = self.groups(suite)
-        if not groups:
-            code, out = run(["bash", str(suite)], KIT, timeout=900)
-            self.record(code == 0, "gates: tests/run.sh passes",
-                        "\n".join(out.splitlines()[-4:]) or f"exit {code}")
+        key = tree_key(KIT)
+        last = load_gates()
+        if not everything and key and last.get("key") == key:
+            when = time.strftime("%H:%M", time.localtime(last.get("at", 0)))
+            self.record(True, f"gates: passed on this tree at {when}, reused",
+                        f"{last.get('scope', 'all')} pass on {last.get('kit')}, "
+                        f"{last.get('ran')} job(s), {last.get('seconds')}s")
             return
 
+        groups = self.groups(suite)
+        scope = Scope(suite)
         started = time.time()
+        jobs: list[tuple[str, list[str], str | None]] = []   # label, argv, script
+        if everything or not groups or not scope.preamble:
+            if not groups:
+                code, out = run(["bash", str(suite)], KIT, timeout=900)
+                self.record(code == 0, "gates: tests/run.sh passes",
+                            "\n".join(out.splitlines()[-4:]) or f"exit {code}")
+                if code == 0 and key:
+                    self.save_gates(key, "all", 1, time.time() - started)
+                return
+            jobs = [(g, ["bash", str(suite), g], None) for g in groups]
+            label = f"{len(groups)} groups"
+            scope_name = "all"
+        else:
+            touched, base, added = self.touched()
+            alone, whole, pyonly = scope.select(touched, added)
+            for g in whole:
+                jobs.append((g, ["bash", str(suite), g], None))
+            if pyonly:
+                py = pytest_cmd()
+                if not py:
+                    # The suite's pytest group skips the same way.
+                    self.say(f"  skip  pytest: {', '.join(pyonly)} (no pytest and no uv)")
+                if py:
+                    # Exit 5 is "collected nothing": a script-mode file with no
+                    # test functions, which the pytest group also passes.
+                    jobs.append((f"pytest: {', '.join(pyonly)}", ["bash", "-c",
+                                 '"$@"; c=$?; [ "$c" = 5 ] && exit 0; exit "$c"', "pytest",
+                                 *py, *pyonly, "-q"], None))
+            for g, line in alone:
+                name = re.match(r'^\w+\s+"([^"]*)"', line)
+                jobs.append((f"{g}: {name.group(1) if name else line[:50]}",
+                             ["bash", "-c", scope.script(g, line)], None))
+            # Parses take milliseconds; queued behind a 100 s group they held
+            # 62 lines of output back until the end on the first timed run.
+            jobs[:0] = [(f"parses: {t}", cmd, None) for t in touched
+                        for cmd in [syntax_cmd(KIT / t)] if cmd]
+            label = (f"{len(touched)} file(s) changed since "
+                     f"{base or 'midnight'}: {len(alone)} check(s), "
+                     f"{len(whole)} group(s), {sum(1 for j in jobs if j[0].startswith('parses:'))} parse(s)")
+            scope_name = "touched"
+            self.say(f"  ....  gates: {label}")
+            if not jobs:
+                self.record(True, "gates: nothing changed that a check names",
+                            f"{len(touched)} file(s) changed since {base or 'midnight'}")
+                if key:
+                    self.save_gates(key, scope_name, 0, time.time() - started)
+                return
+
         failed: list[str] = []
         detail: list[str] = []
         # Bounded well under the core count. Six local jobs took this Mac's
         # load to 50 on 2026-09-22 (memory feedback_one_job_not_six), and the
         # hud group's tests race real timers, so contention turns into flakes.
-        workers = min(len(groups), GATE_WORKERS)
-        with cf.ThreadPoolExecutor(max_workers=workers) as pool:
-            futures = {
-                pool.submit(run, ["bash", str(suite), g], KIT, 600): g
-                for g in groups
-            }
+        # Whole groups first: they are the long poles.
+        with cf.ThreadPoolExecutor(max_workers=min(len(jobs), GATE_WORKERS)) as pool:
+            futures = {pool.submit(run, argv, KIT, 600): lbl for lbl, argv, _ in jobs}
             done_n = 0
             for fut in cf.as_completed(futures):
-                g = futures[fut]
+                lbl = futures[fut]
                 code, out = fut.result()
                 done_n += 1
                 if code != 0:
-                    failed.append(g)
-                    for line in out.splitlines():
-                        if line.strip().startswith("- "):
-                            detail.append(f"{g}: {line.strip()[2:]}")
+                    failed.append(lbl)
+                    lines = [ln.strip() for ln in out.splitlines() if ln.strip()]
+                    hits = [ln[2:] for ln in lines if ln.startswith("- ")] or \
+                        [ln for ln in lines if ln.startswith("FAIL")] or lines[-2:]
+                    detail += [f"{lbl}: {h}" for h in hits[:3]]
                 # SAY SO AS IT LANDS. "Closeout taking too long bruh, break it
-                # up into more steps." Ten minutes of silence and then one
-                # verdict is the same information delivered in the worst
-                # possible shape: nothing to act on until all of it is done,
-                # and no way to tell a slow run from a hung one.
-                if not quiet:
+                # up into more steps." Silence and then one verdict is the
+                # same information delivered in the worst possible shape.
+                # A passing parse is one line of noise per changed file.
+                if not quiet and not (code == 0 and lbl.startswith("parses: ")):
                     mark = "ok  " if code == 0 else "FAIL"
-                    print(f"  {mark}  [{done_n}/{len(groups)}] {g}"
-                          f"  {time.time() - started:.0f}s", flush=True)
+                    self.say(f"  {mark}  [{done_n}/{len(jobs)}] {lbl}"
+                             f"  {time.time() - started:.0f}s")
         secs = time.time() - started
         self.record(
             not failed,
-            f"gates: {len(groups)} groups in parallel, {secs:.0f}s",
-            "\n".join(detail[:5]) if detail else f"all {len(groups)} groups green",
+            f"gates: {label}, {secs:.0f}s",
+            "\n".join(detail[:5]) if detail else f"all {len(jobs)} green",
         )
-        if not failed and tree_clean(KIT):
-            GATES.parent.mkdir(parents=True, exist_ok=True)
-            GATES.write_text(json.dumps({"kit": head(KIT), "at": time.time(),
-                                         "groups": len(groups), "seconds": round(secs)}))
+        if not failed and key:
+            self.save_gates(key, scope_name, len(jobs), secs)
+
+    @staticmethod
+    def save_gates(key: str, scope: str, ran: int, secs: float) -> None:
+        GATES.parent.mkdir(parents=True, exist_ok=True)
+        GATES.write_text(json.dumps({"kit": head(KIT), "key": key, "at": time.time(),
+                                     "scope": scope, "ran": ran,
+                                     "seconds": round(secs)}))
+
+    def touched(self) -> tuple[list[str], str | None, set[str]]:
+        """Files changed since the last pass, the base it was taken from, and
+        any check lines added to the suite since then.
+
+        The base is the commit the last pass ran on, when it is an ancestor of
+        HEAD; every pass covered what changed before it, so the diff from it
+        is what nothing has checked yet. With no usable pass, today's commits.
+        """
+        base = load_gates().get("kit")
+        names: list[str] = []
+        if base and run(["git", "merge-base", "--is-ancestor", base, "HEAD"], KIT)[0] == 0:
+            _, out = run(["git", "diff", "--name-only", base, "HEAD"], KIT)
+            names = out.splitlines()
+            _, diff = run(["git", "diff", "-U0", base, "HEAD", "--", "tests/run.sh"], KIT)
+        else:
+            base = None
+            _, out = run(["git", "log", "--since=midnight", "--name-only", "--format="], KIT)
+            names = out.splitlines()
+            _, first = run(["git", "log", "--since=midnight", "--reverse", "--format=%H"], KIT)
+            start = first.split("\n", 1)[0].strip()
+            diff = run(["git", "diff", "-U0", start + "^", "HEAD", "--", "tests/run.sh"],
+                       KIT)[1] if start else ""
+        _, dirty = run(["git", "diff", "--name-only", "HEAD"], KIT)
+        names += dirty.splitlines()
+        # Bare keywords match every group: one added `fi` selected all three
+        # groups of the test fixture.
+        filler = {"", "fi", "done", "esac", "then", "do", "else", "}", "{", ";;"}
+        added = {ln[1:].strip() for ln in diff.splitlines()
+                 if ln.startswith("+") and not ln.startswith("+++")
+                 and ln[1:].strip() not in filler and not ln[1:].strip().startswith("#")}
+        seen: list[str] = []
+        for n in names:
+            n = n.strip()
+            if n and n not in seen and not n.startswith(INERT) and (KIT / n).is_file():
+                seen.append(n)
+        return seen, (base[:12] if base else None), added
 
     def gates_cached(self) -> None:
-        """The fast path's gates: a full pass on this exact commit, or unknown."""
-        try:
-            d = json.loads(GATES.read_text())
-        except (OSError, ValueError):
-            d = {}
-        now = head(KIT)
-        if d.get("kit") == now and tree_clean(KIT):
+        """The fast path's gates: a pass on this exact tree, or unknown."""
+        d = load_gates()
+        key = tree_key(KIT)
+        if key and d.get("key") == key:
             when = time.strftime("%H:%M", time.localtime(d.get("at", 0)))
-            self.record(True, f"gates: passed on {now} at {when}, reused",
-                        f"{d.get('groups')} groups, {d.get('seconds')}s, same commit, clean tree")
+            self.record(True, f"gates: passed on {d.get('kit')} at {when}, reused",
+                        f"{d.get('scope', 'all')} pass, {d.get('ran')} job(s), "
+                        f"{d.get('seconds')}s, same tree, clean checkout")
         else:
             self.record(None, "gates: not run on this commit",
-                        f"last full pass was on {d.get('kit') or 'nothing'}; "
+                        f"last pass was on {d.get('kit') or 'nothing'}; "
                         "`closeout` without --fast runs them")
 
     @staticmethod
@@ -328,23 +663,31 @@ class Checks:
 def main() -> int:
     quiet = "--quiet" in sys.argv
     fast = "--fast" in sys.argv
+    everything = "--all" in sys.argv
     c = Checks(quiet)
     if not quiet:
-        print("closeout: is it safe to close this tab" + (" (fast)" if fast else ""), flush=True)
+        print("closeout: is it safe to close this tab"
+              + (" (fast)" if fast else " (all groups)" if everything else ""), flush=True)
 
-    c.clean(KIT, "kit")
-    c.pushed(KIT, "kit")
-    c.clean(BRAIN, "brain")
-    c.pushed(BRAIN, "brain")
-    c.lesson_written()
-    c.board_updated()
-    c.no_scaffolding()
-    # The git half is decided above in about a second. The gates come last so
-    # an early FAIL is on screen before the slow part starts.
-    if fast:
-        c.gates_cached()
-    else:
-        c.gates(quiet)
+    # No edges between any of these: each reads its own repo and decides one
+    # line. They ran one after another, the board check's `git fetch` waiting
+    # on the scaffolding greps, and the gates waited on all of them. Now the
+    # git half and the gates start together and each line prints as it lands.
+    git_half = [
+        lambda: c.clean(KIT, "kit"),
+        lambda: c.pushed(KIT, "kit"),
+        lambda: c.clean(BRAIN, "brain"),
+        lambda: c.pushed(BRAIN, "brain"),
+        c.lesson_written,
+        c.board_updated,
+        c.no_scaffolding,
+    ]
+    with cf.ThreadPoolExecutor(max_workers=len(git_half) + 1) as pool:
+        futs = [pool.submit(f) for f in git_half]
+        futs.append(pool.submit(c.gates_cached) if fast
+                    else pool.submit(c.gates, quiet, everything))
+        for f in futs:
+            f.result()
 
     if not quiet:
         print()

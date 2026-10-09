@@ -13,11 +13,25 @@ wrote last time, so a lead that left a campaign loses its edge):
   gtm-inbox:<workspace>   bin/clay-inbox: every reply with its thread, through the
                           signed-in Chrome tab. Skipped, never faked, when the tab
                           cannot be reached.
-  gtm-calendar            `mac calendar list --json`, matched to leads by
-                          attendee email only
+  gtm-calendar            Google Calendar through `gws` (every calendar he can
+                          see) UNIONED with `mac calendar list --json`, deduped
+                          by iCalUID and start, matched to leads by attendee
+                          email only. One reader failing is recorded on its own
+                          row (gtm-calendar:google, gtm-calendar:mac); the
+                          union is refused whenever a reader that supplied
+                          meetings last time cannot be read now.
+
+BOOKING SIGNALS. Zeutara meetings book on Jonah's calendar, which this machine
+cannot read, so the inbox snapshot also records `booking_signal` Signals from
+the reply threads: a calendar invite or accept, a scheduler confirmation
+(Calendly, cal.com, SavvyCal, HubSpot), or a message that proposes or confirms
+a specific time. They are a separate class from calendar Meetings and are never
+added to them, and a proposed time is never counted as confirmed.
 
 READ ONLY. `ClayCLI` refuses any clay command outside READ_ONLY, so nothing here
-can send, run a column, spend credits, add leads or change a campaign. Reply text
+can send, run a column, spend credits, add leads or change a campaign. `GwsCLI`
+does the same for gws with GWS_READ_ONLY: no event is created, edited or
+answered, and no file is written. Reply text
 is email from strangers: it is stored as a clipped label and screened with the
 untrusted-screen pattern layer, never read for instructions.
 
@@ -32,9 +46,11 @@ Clay's paused campaigns still show 140 leads and 12 sends each (2026-10-09).
 """
 from __future__ import annotations
 
+import html
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -110,6 +126,36 @@ UNSCREENED = "UNSCREENED: the untrusted-screen pattern layer could not run"
 # Reply and label classes that mean "never email this address again", on top
 # of the plain fact of a reply (any reply suppresses).
 DNC_CLASSES = frozenset({"negative", "unsubscribe", "bounce"})
+
+# Every gws command this module may run, as an argv prefix, and the only flags
+# it may carry. Measured surface 2026-10-09 (gws 0.22.5): `+insert`, `events
+# insert|patch|update|delete|move|quickAdd|import`, `acl`, `calendars` and
+# `--output` (writes a file) are all outside it. RSVP is an events patch.
+GWS_READ_ONLY = (
+    ("calendar", "calendarList", "list"),
+    ("calendar", "events", "list"),
+)
+GWS_FLAGS = frozenset({"--params", "--format"})
+# Caleb's window, 2026-10-09: the past 90 days and the next 60.
+CALENDAR_BACK_DAYS = 90
+CALENDAR_AHEAD_DAYS = 60
+# events.list caps maxResults at 2500 a page (Calendar API reference).
+GOOGLE_PAGE = 2500
+# 12 calendars on his account 2026-10-09, one page each; 50 pages is a runaway.
+GOOGLE_MAX_PAGES = 50
+# Calendars whose events carry attendees. freeBusyReader sees only busy blocks.
+GOOGLE_ROLES = frozenset({"owner", "writer", "reader"})
+CALENDAR_READERS = ("google", "mac")
+
+# Booking evidence inside a reply thread. Confidences are guessed, never
+# measured against labelled threads: an accept or a scheduler confirmation is
+# a machine-written fact, an invite means an event exists on someone's
+# calendar, and a human "Tuesday 2pm works" is the weakest of the confirmed.
+BOOKING_CONFIDENCE = {
+    "calendar_accept": 0.95, "scheduler_confirmation": 0.9, "calendar_invite": 0.85,
+    "time_confirmed": 0.65, "time_confirmed_in_reply": 0.55, "time_proposed": 0.5,
+}
+BOOKING_SNIPPET = 200
 
 
 class ReadOnlyViolation(RuntimeError):
@@ -288,6 +334,76 @@ class ClayCLI:
             except (TypeError, ValueError) as e:
                 raise SourceUnavailable(f"clay search-ids returned a non-integer id {clip(i, 40)!r}") from e
         return out
+
+
+def gws_allowed(args: list[str]) -> bool:
+    return any(tuple(args[:len(p)]) == p for p in GWS_READ_ONLY)
+
+
+def _gws_body(out: str):
+    """gws prints JSON on stdout; a keyring note can share the stream when
+    both are captured together, so fall back to the outermost object."""
+    text = (out or "").strip()
+    try:
+        return json.loads(text)
+    except ValueError:
+        start, end = text.find("{"), text.rfind("}")
+        if start == -1 or end <= start:
+            return None
+        try:
+            return json.loads(text[start:end + 1])
+        except ValueError:
+            return None
+
+
+class GwsCLI:
+    """The Google Workspace CLI, read only. Anything outside GWS_READ_ONLY,
+    or carrying a flag outside GWS_FLAGS, is refused before a process starts,
+    the same way ClayCLI guards clay."""
+
+    def __init__(self, binary: str | None = None, runner=None):
+        self.binary = binary or os.environ.get("GWS_BIN") or shutil.which("gws") or "/opt/homebrew/bin/gws"
+        self.runner = runner or _subprocess_runner
+        self.calls = 0
+
+    def run(self, args: list[str]) -> dict:
+        if not gws_allowed(args):
+            raise ReadOnlyViolation(f"gws {' '.join(args[:3])} is not a read this module may run")
+        rest = args[3:]
+        if len(rest) % 2:
+            raise ReadOnlyViolation(f"gws {' '.join(args[:3])} carries a flag with no value")
+        for flag, value in zip(rest[::2], rest[1::2]):
+            if flag not in GWS_FLAGS:
+                raise ReadOnlyViolation(f"gws {' '.join(args[:3])} carries {flag[:40]!r}, not a read flag")
+            if flag == "--format" and value != "json":
+                raise ReadOnlyViolation("gws output must be json")
+        self.calls += 1
+        code, out, err = self.runner([self.binary, *args])
+        body = _gws_body(out)
+        if isinstance(body, dict) and isinstance(body.get("error"), dict):
+            raise SourceUnavailable(f"google calendar: gws {' '.join(args[1:3])} failed: "
+                                    f"{clip(body['error'].get('message') or body['error'], 200)}")
+        if code != 0:
+            raise SourceUnavailable(f"google calendar: gws {' '.join(args[1:3])} exited {code}: {clip(err or out, 200)}")
+        if not isinstance(body, dict):
+            raise SourceUnavailable(f"google calendar: gws {' '.join(args[1:3])} printed no JSON object")
+        return body
+
+    def paged(self, args: list[str], params: dict) -> list:
+        out, token = [], None
+        for _ in range(GOOGLE_MAX_PAGES):
+            page = dict(params, **({"pageToken": token} if token else {}))
+            body = self.run(args + ["--params", json.dumps(page), "--format", "json"])
+            items = body.get("items", [])
+            if not isinstance(items, list):
+                raise SourceUnavailable(f"google calendar: gws {' '.join(args[1:3])} returned no 'items' list")
+            out.extend(items)
+            token = body.get("nextPageToken")
+            if not token:
+                return out
+            if not isinstance(token, str) or len(token) > 4096:
+                raise SourceUnavailable("google calendar: gws returned a page token this module will not pass on")
+        raise SourceUnavailable(f"google calendar: gws {' '.join(args[1:3])} never stopped paging")
 
 
 def _q(text: str) -> str:
@@ -718,6 +834,185 @@ def campaigns_in(graph: Graph, workspace_id: str) -> dict[str, list[str]]:
     return by_name
 
 
+# ── booking signals in reply threads ─────────────────────────────────────────
+
+# Where a quoted earlier message starts in an HTML body. Everything after it
+# is history, and history carries "On Tue, Oct 6 at 3:00 PM ... wrote:", which
+# has a day and a time in it and would read as a proposal.
+QUOTE_HTML = re.compile(r"<div[^>]*class=\"?[^\">]*(gmail_quote|yahoo_quoted|moz-cite-prefix)|<blockquote"
+                        r"|<div[^>]*id=\"?(appendonsend|divRplyFwdMsg)|<hr\b", re.I)
+QUOTE_TEXT = re.compile(r"\bOn [^\n]{0,200}?(?:\n[^\n]{0,200}?)?\bwrote:|^-{2,}\s*Original Message\s*-{2,}"
+                        r"|^_{5,}\s*$|^From:\s[^\n]*\n(?:[^\n]*\n){0,3}?(?:Sent|Date):\s", re.I | re.M)
+TAG = re.compile(r"<[^>]+>")
+BREAK = re.compile(r"<\s*(br|/p|/div|/li|/tr)\b[^>]*>", re.I)
+ICS = re.compile(r"text/calendar|BEGIN:VCALENDAR|\bMETHOD:(?:REQUEST|PUBLISH)\b|\binvite\.ics\b", re.I)
+INVITE_SUBJECT = re.compile(r"^\s*(?:re:\s*)?(?:updated\s+)?invitation:\s", re.I)
+ACCEPT_SUBJECT = re.compile(r"^\s*accepted:\s", re.I)
+ACCEPT_BODY = re.compile(r"\bhas accepted (?:this|your|the) (?:invitation|invite|meeting)\b|\bhas accepted\b", re.I)
+DECLINE_SUBJECT = re.compile(r"^\s*(?:declined|tentatively accepted|tentative):\s", re.I)
+SCHEDULER = re.compile(r"calendly\.com|\bcal\.com\b|savvycal\.com|meetings\.hubspot\.com|hubspot meetings", re.I)
+SCHEDULER_DONE = re.compile(r"\b(?:confirmed|is scheduled|has been scheduled|was scheduled|you are scheduled|"
+                            r"you're scheduled|new event:|event scheduled|booking confirmed|meeting booked|"
+                            r"has booked|booked a meeting|new meeting)\b", re.I)
+OOO = re.compile(r"out of (?:the )?office|automatic reply|auto-?reply|\bOOO\b|away from (?:my|the) (?:desk|office)"
+                 r"|on (?:parental |maternity |paternity |medical )?leave|limited access to (?:my )?email", re.I)
+DAY = re.compile(r"\b(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?|sun)(?:day)?\b|\btomorrow\b|\btoday\b"
+                 r"|\btonight\b|\bnext week\b|\b(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b"
+                 r"|\b\d{1,2}/\d{1,2}\b", re.I)
+CLOCK = re.compile(r"\b(?:[01]?\d|2[0-3])(?::[0-5]\d)?\s*(?:am|pm|a\.m\.|p\.m\.)|\b(?:[01]?\d|2[0-3]):[0-5]\d\b"
+                   r"|\bnoon\b|\bat\s+(?:[1-9]|1[0-2])\b", re.I)
+PROPOSE = re.compile(r"\?|how about|what about|are you (?:free|available)|could we|can we|let me know if"
+                     r"|i'?m free|i am free|\bavailable\b|would .{0,40}\bwork\b|does .{0,40}\bwork\b", re.I)
+CONFIRM = re.compile(r"works for me|that works|works great|works perfectly|works well|\bconfirmed\b"
+                     r"|see you (?:then|on|at|tomorrow|monday|tuesday|wednesday|thursday|friday)|talk (?:to you )?then"
+                     r"|\bbooked\b|locked in|sent (?:you )?(?:an |the )?invite|invite sent|it'?s a date", re.I)
+SENTENCE = re.compile(r"(?<=[.!?])\s+|\n+")
+
+
+def message_text(msg: dict) -> str:
+    """A thread message as plain text, with any quoted history cut off."""
+    body = str(msg.get("email_body") or "")
+    cut = QUOTE_HTML.search(body)
+    if cut:
+        body = body[:cut.start()]
+    body = html.unescape(TAG.sub(" ", BREAK.sub("\n", body)))
+    cut = QUOTE_TEXT.search(body)
+    if cut:
+        body = body[:cut.start()]
+    lines = [ln for ln in body.splitlines() if not ln.lstrip().startswith(">")]
+    return CONTROL.sub(" ", "\n".join(lines))
+
+
+def _attachments(msg: dict) -> str:
+    """Attachment names and MIME types, wherever the thread puts them."""
+    parts = []
+    for k, v in msg.items():
+        if any(w in k.lower() for w in ("attach", "content_type", "mime", "part")):
+            parts.append(json.dumps(v, default=str)[:2000])
+    return " ".join(parts)
+
+
+def _around(text: str, m: re.Match | None) -> str:
+    if m is None:
+        return clip(text, BOOKING_SNIPPET)
+    start = max(0, m.start() - BOOKING_SNIPPET // 2)
+    return clip(text[start:start + BOOKING_SNIPPET], BOOKING_SNIPPET)
+
+
+def _timed_sentences(text: str):
+    """(sentence, proposes, confirms) for each sentence naming a day AND a time."""
+    for s in SENTENCE.split(text):
+        if DAY.search(s) and CLOCK.search(s):
+            yield s, bool(PROPOSE.search(s)), bool(CONFIRM.search(s))
+
+
+def detect_booking(msg: dict, previous: dict | None = None) -> dict | None:
+    """The strongest booking evidence in one thread message, or None.
+
+    {"status": "confirmed"|"proposed", "evidence", "snippet", "confidence"}.
+    A specific time in a question is a proposal. A confirmation with no time
+    of its own confirms only when the message before it, from the other side,
+    proposed one. An out-of-office ("back Monday at 9am") is never a booking."""
+    subject = str(msg.get("subject") or "")
+    text = message_text(msg)
+    raw = text + " " + _attachments(msg)
+    if DECLINE_SUBJECT.search(subject):
+        return None
+
+    def hit(status, evidence, m=None, source=None):
+        return {"status": status, "evidence": evidence, "confidence": BOOKING_CONFIDENCE[evidence],
+                "snippet": _around(source if source is not None else text, m)}
+
+    m = ACCEPT_SUBJECT.search(subject)
+    if m:
+        return hit("confirmed", "calendar_accept", None, subject + " " + text)
+    m = ACCEPT_BODY.search(text)
+    if m:
+        return hit("confirmed", "calendar_accept", m)
+    if INVITE_SUBJECT.search(subject):
+        return hit("confirmed", "calendar_invite", None, subject + " " + text)
+    m = ICS.search(raw)
+    if m:
+        return hit("confirmed", "calendar_invite", None, subject + " " + text)
+    sched = SCHEDULER.search(text) or SCHEDULER.search(subject)
+    if sched:
+        both = subject + " " + text
+        done = SCHEDULER_DONE.search(both)
+        if done:
+            return hit("confirmed", "scheduler_confirmation", done, both)
+    if OOO.search(subject) or OOO.search(text):
+        return None
+    proposal = None
+    for s, proposes, confirms in _timed_sentences(text):
+        if confirms and not proposes:
+            return hit("confirmed", "time_confirmed", None, s)
+        proposal = proposal or s
+    if proposal is not None:
+        return hit("proposed", "time_proposed", None, proposal)
+    m = CONFIRM.search(text)
+    if m and previous is not None and previous.get("type") != msg.get("type"):
+        before = list(_timed_sentences(message_text(previous)))
+        if before and not PROPOSE.search(text[max(0, m.start() - 40):m.end() + 40]):
+            return hit("confirmed", "time_confirmed_in_reply", None, before[0][0] + " / " + text[m.start():m.end() + 80])
+    return None
+
+
+def thread_bookings(history: list[dict]) -> list[tuple[dict, dict]]:
+    """(message, finding) for every lead or our-side message with booking evidence."""
+    out = []
+    prev = None
+    for msg in history:
+        if msg.get("type") not in ("REPLY", "SENT"):
+            continue
+        found = detect_booking(msg, prev)
+        if found:
+            out.append((msg, found))
+        prev = msg
+    return out
+
+
+def client_lead_emails(graph: Graph, client_id_: str) -> set[str]:
+    """Every address enrolled in one of this client's campaigns."""
+    return {r["email"] for r in graph.query(
+        "SELECT json_extract(e.props, '$.email') AS email FROM edges e JOIN edges fc "
+        "ON fc.src = e.src AND fc.verb = 'FOR_CLIENT' WHERE e.verb = 'ENROLLED' AND fc.dst = ?",
+        (client_id_,)) if r["email"]}
+
+
+def add_bookings(history, reply_ids, item, person, key, cam, name, workspace_id, cid, own_leads,
+                 nodes, edges, report, screen_fn) -> None:
+    """Booking signals from one thread, written as Signals of kind
+    booking_signal next to the replies that carry them.
+
+    Credited to this client only when the thread is in one of its campaigns
+    or the lead is in one: a thread whose lead only another client emailed is
+    recorded, marked not credited, and counted nowhere."""
+    credited = cam is not None or key in own_leads
+    for msg, found in thread_bookings(history):
+        when = clip(msg.get("time"), 40)
+        before = [rid for t, rid in reply_ids if t <= when]
+        evidence_reply = before[-1] if before else reply_ids[0][1]
+        flag = screen_fn(found["snippet"])
+        sig = node_key("signal", f"clay-inbox:{workspace_id}", "booking", cid, key,
+                       msg.get("message_id") or when, found["evidence"])
+        nodes[sig] = Node(sig, "Signal", f"Booking {found['status']} with {key} {when[:10]}", {
+            "kind": "booking_signal", "client_id": cid, "workspace_id": str(workspace_id), "email": key,
+            "status": found["status"], "evidence": found["evidence"], "confidence": found["confidence"],
+            "snippet": found["snippet"], "screen_flag": flag, "message_time": when,
+            "direction": "lead" if msg.get("type") == "REPLY" else "us",
+            "campaign_name": clip(name, 200), "credited": credited,
+            "attribution": ("thread in this client's campaign" if cam is not None
+                            else "lead is in this client's campaigns" if credited
+                            else "not credited: the lead is in none of this client's campaigns"),
+            "smartlead_campaign_id": clip(item.get("email_campaign_id"), 40)}, confidence=found["confidence"])
+        edges[(sig, "SIGNAL_ON", person.id)] = Edge(sig, "SIGNAL_ON", person.id, {})
+        edges[(sig, "EVIDENCE_IN", evidence_reply)] = Edge(sig, "EVIDENCE_IN", evidence_reply, {})
+        if not credited:
+            report["booking_not_credited"] += 1
+        else:
+            report["booking_" + found["status"]] += 1
+
+
 def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities, cfg: dict,
                 screen_fn=screened) -> tuple[list[Node], list[Edge], dict]:
     ws_row = graph.node(f"workspace:clay:{workspace_id}") or {}
@@ -732,7 +1027,9 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
     nodes: dict[str, Node] = {}
     edges: dict[tuple, Edge] = {}
     report = {"threads": 0, "replies": 0, "unmatched_campaign": 0, "no_email": 0, "flagged": 0,
-              "unscreened": 0, "dnc_labels": 0}
+              "unscreened": 0, "dnc_labels": 0, "booking_confirmed": 0, "booking_proposed": 0,
+              "booking_not_credited": 0}
+    own_leads = client_lead_emails(graph, cid)
     for cls in REPLY_CLASSES:
         nodes[f"replyclass:{cls}"] = Node(f"replyclass:{cls}", "ReplyClass", cls)
     for item in replies or []:
@@ -752,6 +1049,7 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
         history = ((item.get("history") or {}).get("history")) or []
         history = sorted((m for m in history if isinstance(m, dict)), key=lambda m: str(m.get("time") or ""))
         reply_msgs = [m for m in history if m.get("type") == "REPLY"]
+        reply_ids: list[tuple[str, str]] = []  # (time, reply node id), oldest first
         cat_name = clip(categories.get(str(item.get("lead_category_id")), ""), 80)
         for n, msg in enumerate(reply_msgs):
             when = clip(msg.get("time"), 40)
@@ -762,6 +1060,7 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
             report["unscreened"] += flag == UNSCREENED
             rid = node_key("reply", f"clay:{workspace_id}", item.get("email_lead_map_id") or key,
                            msg.get("message_id") or when)
+            reply_ids.append((when, rid))
             nodes[rid] = Node(rid, "Reply", f"Reply from {key} {when[:10]}", {
                 "lead_email": key, "time": when, "campaign_name": clip(name, 200),
                 # The workspace and client the read was made against, so a
@@ -792,6 +1091,9 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
                     e.props["by"].append(by)
                     e.props["raw"].append(raw_label)
                 edges[k] = e
+        if reply_ids:
+            add_bookings(history, reply_ids, item, person, key, cam, name, workspace_id, cid, own_leads,
+                         nodes, edges, report, screen_fn)
     for email, cls, by, raw_label in dnc:
         person, key = lead_person(ids, email, "gtm-labels")
         if person is None:

@@ -115,9 +115,9 @@ try {
     try {
       const sess = JSON.parse(fs.readFileSync(path.join(sessions, f), "utf8"));
       if (sess.source) for (const c of sess.cookies || []) if (c?.domain) signedInRoots.add(root(String(c.domain).replace(/^\./, "").toLowerCase()));
-    } catch {}
+    } catch { die(`${name}: session ${f} is unreadable, so whether you're signed in can't be checked`); }
   }
-} catch {}
+} catch (e) { if (e.code !== "ENOENT") die(`${name}: sessions unreadable (${e.code})`); }
 if (signedInRoots.has(home) && !allowed.has("signed-in-ok"))
   die(`${name}: you're signed in on ${home}; list "${name} signed-in-ok" in hosts.allow after reading the spec`);
 // Every string in the spec, keys included: a host can hide in a header value,
@@ -167,7 +167,16 @@ sync_sites() {
     [ -f "$f" ] || continue
     base="$(basename "$f")"
     dest="$ENGINE_HOME/sites/$base"
-    [ ! -f "$dest" ] || [ "$f" -nt "$dest" ] || continue
+    if [ -f "$dest" ] && ! [ "$f" -nt "$dest" ]; then
+      # Already installed, but a login since then (or an edited hosts.allow)
+      # can make it unsafe now. Re-check what's installed from the kit on
+      # every run and pull it if it no longer passes.
+      if grep -qxF "$base" "$ENGINE_HOME/sites/.from-kit" 2>/dev/null && ! spec_is_safe "$dest" "$base" 2>/dev/null; then
+        rm -f "$dest" "${dest%.json}.md"
+        say "removed $base: it no longer passes the kit's check (chewbacca api sync says why)" >&2
+      fi
+      continue
+    fi
     # Check the copy that gets installed, not the repo file, so nothing can
     # change between the check and the move.
     tmp="$(mktemp "$ENGINE_HOME/sites/.$base.XXXXXX")" || continue
@@ -178,6 +187,7 @@ sync_sites() {
       continue
     fi
     mv -f "$tmp" "$dest" && copied=$((copied + 1))
+    grep -qxF "$base" "$ENGINE_HOME/sites/.from-kit" 2>/dev/null || echo "$base" >> "$ENGINE_HOME/sites/.from-kit"
     # Notes ride along, and only with a spec that passed.
     [ -f "${f%.json}.md" ] && cp "${f%.json}.md" "$ENGINE_HOME/sites/"
   done

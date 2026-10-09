@@ -79,6 +79,21 @@ bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
 [ -f "$T/engine/sites/z13.json" ] && no "a spec on a signed-in domain synced under another name"
 [ -f "$T/engine/sites/z14.json" ] || no "a reviewed signed-in-ok site was refused"
 rm -f "$T/kit/z12.json" "$T/kit/z13.json" "$T/kit/z14.json" "$T/kit/hosts.allow" "$T/engine/sessions/z13main.json"
+# Drift: a kit spec installed while signed out is pulled once a login on its
+# domain appears; an unreadable session file fails closed.
+echo '{"name":"z15","baseUrl":"https://z15.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://z15.com/"}}]}' > "$T/kit/z15.json"
+bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+[ -f "$T/engine/sites/z15.json" ] || no "z15 did not install while signed out"
+echo '{"cookies":[{"name":"s","domain":"z15.com"}],"source":"chrome:Default"}' > "$T/engine/sessions/z15login.json"
+bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+[ -f "$T/engine/sites/z15.json" ] && no "an installed kit spec survived a new login on its domain"
+rm -f "$T/engine/sessions/z15login.json"
+echo 'not json' > "$T/engine/sessions/broken.json"
+bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+[ -f "$T/engine/sites/z15.json" ] && no "an unreadable session file failed open"
+rm -f "$T/kit/z15.json" "$T/engine/sessions/broken.json"
+# Failing closed pulled every kit spec; with the session fixed they come back.
+bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
 for z in z7 z8; do
   [ -f "$T/engine/sites/$z.json" ] && no "sync accepted $z"
 done

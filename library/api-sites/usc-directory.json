@@ -1,0 +1,67 @@
+{
+  "name": "usc-directory",
+  "baseUrl": "https://uscdirectory.usc.edu",
+  "operations": [
+    {
+      "name": "searchPeople",
+      "description": "USC public faculty and staff directory search by name, department or title (the page's basic search). Returns up to 100 people.",
+      "request": {
+        "method": "GET",
+        "url": "https://uscdirectory.usc.edu/web/directory/faculty-staff/proxy.php?basic=%7Bname%7D",
+        "headers": {
+          "accept": "text/plain, */*; q=0.01",
+          "accept-language": "en-US,en;q=0.9",
+          "referer": "https://uscdirectory.usc.edu/web/directory/faculty-staff/",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "x-requested-with": "XMLHttpRequest",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        }
+      },
+      "slots": [
+        {
+          "param": "name",
+          "at": [
+            "query:basic"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://uscdirectory.usc.edu/web/directory/faculty-staff/#basic={name}"
+      },
+      "match": {
+        "path": "/web/directory/faculty-staff/proxy.php"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "text/html; charset=UTF-8",
+        "pick": [
+          "name=displayname[0]",
+          "fullName=cn[0]",
+          "title=title[0]",
+          "department=departmentnumber[0]",
+          "email=mail[0]",
+          "phone=telephonenumber[0]",
+          "pvid=uscpvid[0]"
+        ]
+      },
+      "params": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "example": "garcia"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T18:13:43.557Z"
+    }
+  ]
+}

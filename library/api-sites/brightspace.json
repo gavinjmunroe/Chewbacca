@@ -1,0 +1,478 @@
+{
+  "name": "brightspace",
+  "baseUrl": "https://brightspace.usc.edu",
+  "operations": [
+    {
+      "name": "myCourses",
+      "description": "Course offerings the signed-in student is enrolled in",
+      "request": {
+        "method": "GET",
+        "url": "https://brightspace.usc.edu/d2l/api/lp/1.63/enrollments/myenrollments/?orgUnitTypeId=3",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [],
+      "volatile": [],
+      "trigger": {
+        "url": "https://brightspace.usc.edu/d2l/api/lp/1.63/enrollments/myenrollments/?orgUnitTypeId=3"
+      },
+      "match": {
+        "path": "/d2l/api/lp/1.63/enrollments/myenrollments/"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "Items",
+        "pick": [
+          "orgUnitId=OrgUnit.Id",
+          "code=OrgUnit.Code",
+          "name=OrgUnit.Name",
+          "start=Access.StartDate",
+          "end=Access.EndDate",
+          "active=Access.IsActive",
+          "canAccess=Access.CanAccess",
+          "homeUrl=OrgUnit.HomeUrl"
+        ]
+      },
+      "params": [],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:37:42.604Z"
+    },
+    {
+      "name": "assignments",
+      "description": "Assignment dropbox folders in one course (id, name, due, points possible). Submission status is the submissions op.",
+      "request": {
+        "method": "GET",
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/%7BorgUnitId%7D/dropbox/folders/",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "orgUnitId",
+          "at": [
+            "path:4"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/{orgUnitId}/dropbox/folders/"
+      },
+      "match": {
+        "method": "GET",
+        "host": "brightspace.usc.edu",
+        "path": "/d2l/api/le/1.99/*/dropbox/folders/"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "[*]",
+        "pick": [
+          "folderId=Id",
+          "name=Name",
+          "due=DueDate",
+          "outOf=Assessment.ScoreDenominator",
+          "gradeItemId=GradeItemId",
+          "hidden=IsHidden",
+          "groupTypeId=GroupTypeId"
+        ]
+      },
+      "params": [
+        {
+          "name": "orgUnitId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:41:22.231Z"
+    },
+    {
+      "name": "submissions",
+      "description": "The signed-in student's submission state for one dropbox folder. status: 0 unsubmitted, 1 submitted, 2 draft, 3 feedback published. score only when graded and released.",
+      "request": {
+        "method": "GET",
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/%7BorgUnitId%7D/dropbox/folders/%7BfolderId%7D/submissions/",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "orgUnitId",
+          "at": [
+            "path:4"
+          ]
+        },
+        {
+          "param": "folderId",
+          "at": [
+            "path:7"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/{orgUnitId}/dropbox/folders/{folderId}/submissions/"
+      },
+      "match": {
+        "method": "GET",
+        "host": "brightspace.usc.edu",
+        "path": "/d2l/api/le/1.99/*/dropbox/folders/*/submissions/"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "[*]",
+        "pick": [
+          "status=Status",
+          "score=Feedback.Score",
+          "isGraded=Feedback.IsGraded",
+          "completedAt=CompletionDate",
+          "firstSubmittedAt=Submissions[0].SubmissionDate"
+        ]
+      },
+      "params": [
+        {
+          "name": "orgUnitId",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "folderId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:43:14.504Z"
+    },
+    {
+      "name": "grades",
+      "description": "The signed-in student's released grade values in one course: points, max, weighted points and weight, last modified.",
+      "request": {
+        "method": "GET",
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/%7BorgUnitId%7D/grades/values/myGradeValues/",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "orgUnitId",
+          "at": [
+            "path:4"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/{orgUnitId}/grades/values/myGradeValues/"
+      },
+      "match": {
+        "method": "GET",
+        "host": "brightspace.usc.edu",
+        "path": "/d2l/api/le/1.99/*/grades/values/myGradeValues/"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "[*]",
+        "pick": [
+          "gradeItemId=GradeObjectIdentifier",
+          "name=GradeObjectName",
+          "type=GradeObjectTypeName",
+          "points=PointsNumerator",
+          "max=PointsDenominator",
+          "weighted=WeightedNumerator",
+          "weight=WeightedDenominator",
+          "displayed=DisplayedGrade",
+          "lastModified=LastModified",
+          "released=ReleasedDate"
+        ]
+      },
+      "params": [
+        {
+          "name": "orgUnitId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:45:08.419Z"
+    },
+    {
+      "name": "announcements",
+      "description": "Announcements (news items) in one course: title, date, plain-text body.",
+      "request": {
+        "method": "GET",
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/%7BorgUnitId%7D/news/",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "orgUnitId",
+          "at": [
+            "path:4"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/{orgUnitId}/news/"
+      },
+      "match": {
+        "method": "GET",
+        "host": "brightspace.usc.edu",
+        "path": "/d2l/api/le/1.99/*/news/"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "[*]",
+        "pick": [
+          "id=Id",
+          "title=Title",
+          "date=StartDate",
+          "created=CreatedDate",
+          "modified=LastModifiedDate",
+          "body=Body.Text",
+          "pinned=IsPinned"
+        ]
+      },
+      "params": [
+        {
+          "name": "orgUnitId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:47:03.374Z"
+    },
+    {
+      "name": "upcoming",
+      "description": "Calendar and due items across the listed courses (comma-separated orgUnitIds from myCourses) between two ISO UTC datetimes. due is EndDateTime. Paged by Next; only the first page is returned.",
+      "request": {
+        "method": "GET",
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/calendar/events/myEvents/?orgUnitIdsCSV=%7BorgUnitIds%7D&startDateTime=%7Bstart%7D&endDateTime=%7Bend%7D",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "orgUnitIds",
+          "at": [
+            "query:orgUnitIdsCSV"
+          ]
+        },
+        {
+          "param": "start",
+          "at": [
+            "query:startDateTime"
+          ]
+        },
+        {
+          "param": "end",
+          "at": [
+            "query:endDateTime"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/calendar/events/myEvents/?orgUnitIdsCSV={orgUnitIds}&startDateTime={start}&endDateTime={end}"
+      },
+      "match": {
+        "method": "GET",
+        "host": "brightspace.usc.edu",
+        "path": "/d2l/api/le/1.99/calendar/events/myEvents/"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "Objects",
+        "pick": [
+          "title=Title",
+          "courseCode=OrgUnitCode",
+          "course=OrgUnitName",
+          "orgUnitId=OrgUnitId",
+          "start=StartDateTime",
+          "due=EndDateTime",
+          "type=AssociatedEntity.AssociatedEntityType",
+          "eventType=EventType",
+          "url=CalendarEventViewUrl"
+        ]
+      },
+      "params": [
+        {
+          "name": "orgUnitIds",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "start",
+          "type": "string",
+          "required": true
+        },
+        {
+          "name": "end",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:56:24.881Z"
+    },
+    {
+      "name": "content",
+      "description": "Every content item in one course as a flat list (Valence content/myItems): title, type, url, start, due, end, completed date. Paged by Next; only the first page is returned.",
+      "request": {
+        "method": "GET",
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/%7BorgUnitId%7D/content/myItems/",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "orgUnitId",
+          "at": [
+            "path:4"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://brightspace.usc.edu/d2l/api/le/1.99/{orgUnitId}/content/myItems/"
+      },
+      "match": {
+        "method": "GET",
+        "host": "brightspace.usc.edu",
+        "path": "/d2l/api/le/1.99/*/content/myItems/"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=UTF-8",
+        "extract": "Objects",
+        "pick": [
+          "itemId=ItemId",
+          "title=ItemName",
+          "type=ItemType",
+          "activityType=ActivityType",
+          "url=ItemUrl",
+          "start=StartDate",
+          "due=DueDate",
+          "end=EndDate",
+          "completed=DateCompleted"
+        ]
+      },
+      "params": [
+        {
+          "name": "orgUnitId",
+          "type": "string",
+          "required": true
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:56:34.585Z"
+    }
+  ]
+}

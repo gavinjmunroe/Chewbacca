@@ -1,0 +1,236 @@
+{
+  "name": "sc-engage",
+  "baseUrl": "https://engage.usc.edu",
+  "operations": [
+    {
+      "name": "searchOrgs",
+      "description": "Search SC Engage (CampusGroups) student organizations by keyword. slug is set only when the org's link is its own Engage site; pass it to getOrg.",
+      "request": {
+        "method": "GET",
+        "url": "https://engage.usc.edu/club_signup?search=%7Bq%7D&view=all",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "q",
+          "at": [
+            "query:search"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://engage.usc.edu/club_signup?search={q}&view=all"
+      },
+      "match": {
+        "method": "GET",
+        "host": "engage.usc.edu",
+        "path": "/club_signup"
+      },
+      "response": {
+        "format": "html",
+        "contentType": "text/html; charset=utf-8",
+        "pick": [
+          "name",
+          "clubId",
+          "slug=link~engage\\.usc\\.edu/([^/\\s]+)",
+          "summary",
+          "categories",
+          "url=link~(https?://[^\\s]+)"
+        ],
+        "html": {
+          "items": "ul.list-group li.list-group-item",
+          "fields": {
+            "name": "h2.media-heading a",
+            "clubId": "input[name=clubs]@value",
+            "link": "h2.media-heading a@href",
+            "categories": "p.h5.grey-element",
+            "summary": "p.noOutlineOnFocus"
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "q",
+          "type": "string",
+          "required": true,
+          "example": "robotics"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:47:51.667Z"
+    },
+    {
+      "name": "getOrg",
+      "description": "Public SC Engage org site by slug (lowercase, from searchOrgs). Many orgs have no public site and return auth.",
+      "request": {
+        "method": "GET",
+        "url": "https://engage.usc.edu/%7Bslug%7D/home/",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "slug",
+          "at": [
+            "path:0"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://engage.usc.edu/{slug}/home/"
+      },
+      "match": {
+        "method": "GET",
+        "host": "engage.usc.edu",
+        "path": "/*/home/"
+      },
+      "response": {
+        "format": "html",
+        "contentType": "text/html; charset=utf-8",
+        "html": {
+          "items": "body",
+          "fields": {
+            "name": "a.section-cont__content-menu_club_website_url@aria-label",
+            "engageUrl": "a.section-cont__content-menu_club_website_url@href",
+            "description": "[data-editable] p.lead",
+            "email": ".section-cont__content-contact a[href^=\"mailto:\"]",
+            "socialLinks": "all:.section-cont__content-contact ul li a@href",
+            "officerNames": "all:[data-ajax-identifier=post_title] span",
+            "officerPositions": "all:.section-cont__content-officers_position",
+            "memberCount": ".section-cont__content-quick_facts_members"
+          }
+        }
+      },
+      "params": [
+        {
+          "name": "slug",
+          "type": "string",
+          "required": true,
+          "example": "auvatusc"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:58:30.408Z"
+    },
+    {
+      "name": "orgEvents",
+      "description": "Upcoming SC Engage events matching a keyword or an org name (search_word). Rows with kind=separator are date headers and kind=holiday are university holidays; keep kind=event.",
+      "request": {
+        "method": "GET",
+        "url": "https://engage.usc.edu/mobile_ws/v17/mobile_events_list?range=0&limit=40&filter4_contains=OR&filter4_notcontains=OR&order=undefined&search_word=%7Bq%7D&&1791569116645",
+        "headers": {
+          "accept": "application/json, text/javascript, */*; q=0.01",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=1, i",
+          "referer": "https://engage.usc.edu/events?search_word={q}",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors",
+          "sec-fetch-site": "same-origin",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "x-requested-with": "XMLHttpRequest"
+        }
+      },
+      "slots": [
+        {
+          "param": "q",
+          "at": [
+            "query:search_word"
+          ]
+        },
+        {
+          "param": "q",
+          "at": [
+            "header:referer"
+          ],
+          "template": "https://engage.usc.edu/events?search_word={q}"
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://engage.usc.edu/events",
+        "steps": [
+          {
+            "action": "fill",
+            "selector": "#search_word",
+            "value": "{q}"
+          },
+          {
+            "action": "press",
+            "selector": "#search_word",
+            "value": "Enter"
+          },
+          {
+            "action": "wait",
+            "ms": 3000
+          }
+        ]
+      },
+      "match": {
+        "path": "/mobile_ws/v17/mobile_events_list"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "text/html; charset=utf-8",
+        "pick": [
+          "kind=p19",
+          "name=p3",
+          "org=p9",
+          "orgSlug=p8",
+          "start=p29~(\\w+day, \\d+ \\w+ \\d{4} At [0-9:]+ [AP]M)",
+          "date=p4~^<p[^>]*>([^<]+)",
+          "time=p4~</p><p[^>]*>([^<]+)",
+          "location=p6",
+          "category=p5",
+          "eventId=p1",
+          "url=p18"
+        ]
+      },
+      "params": [
+        {
+          "name": "q",
+          "type": "string",
+          "required": true,
+          "example": "tutoring"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T18:05:24.463Z"
+    }
+  ]
+}

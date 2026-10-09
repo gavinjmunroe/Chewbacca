@@ -1,0 +1,141 @@
+{
+  "name": "usc-events",
+  "baseUrl": "https://calendar.usc.edu",
+  "operations": [
+    {
+      "name": "searchEvents",
+      "description": "Search upcoming USC calendar events by keyword (Localist API)",
+      "request": {
+        "method": "GET",
+        "url": "https://calendar.usc.edu/api/2/events/search?search=%7Bq%7D&pp=100",
+        "headers": {
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\""
+        }
+      },
+      "slots": [
+        {
+          "param": "q",
+          "at": [
+            "query:search"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://calendar.usc.edu/api/2/events/search?search={q}&pp=100"
+      },
+      "match": {
+        "method": "GET",
+        "host": "calendar.usc.edu",
+        "path": "/api/2/events/search"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "events",
+        "pick": [
+          "title=event.title",
+          "start=event.event_instances[0].event_instance.start",
+          "end=event.event_instances[0].event_instance.end",
+          "location=event.location_name",
+          "room=event.room_number",
+          "organizer=event.departments[0].name",
+          "url=event.localist_url"
+        ]
+      },
+      "params": [
+        {
+          "name": "q",
+          "type": "string",
+          "required": true,
+          "example": "music"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:28:54.179Z"
+    },
+    {
+      "name": "upcoming",
+      "description": "USC calendar events between two dates, YYYY-MM-DD (Localist API, max 100 per call)",
+      "request": {
+        "method": "GET",
+        "url": "https://calendar.usc.edu/api/2/events?start=%7Bstart%7D&end=%7Bend%7D&pp=100",
+        "headers": {
+          "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+          "accept-language": "en-US,en;q=0.9",
+          "priority": "u=0, i",
+          "sec-ch-ua": "\"Chromium\";v=\"154\", \"Google Chrome\";v=\"154\", \"Not A(Brand\";v=\"99\"",
+          "sec-ch-ua-mobile": "?0",
+          "sec-ch-ua-platform": "\"macOS\"",
+          "sec-fetch-dest": "document",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-site": "none",
+          "sec-fetch-user": "?1",
+          "upgrade-insecure-requests": "1",
+          "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+        }
+      },
+      "slots": [
+        {
+          "param": "start",
+          "at": [
+            "query:start"
+          ]
+        },
+        {
+          "param": "end",
+          "at": [
+            "query:end"
+          ]
+        }
+      ],
+      "volatile": [],
+      "trigger": {
+        "url": "https://calendar.usc.edu/api/2/events?start={start}&end={end}&pp=100"
+      },
+      "match": {
+        "method": "GET",
+        "host": "calendar.usc.edu",
+        "path": "/api/2/events"
+      },
+      "response": {
+        "format": "json",
+        "contentType": "application/json; charset=utf-8",
+        "extract": "events",
+        "pick": [
+          "title=event.title",
+          "start=event.event_instances[0].event_instance.start",
+          "end=event.event_instances[0].event_instance.end",
+          "location=event.location_name",
+          "room=event.room_number",
+          "organizer=event.departments[0].name",
+          "url=event.localist_url"
+        ]
+      },
+      "params": [
+        {
+          "name": "start",
+          "type": "string",
+          "required": true,
+          "example": "2026-10-09"
+        },
+        {
+          "name": "end",
+          "type": "string",
+          "required": true,
+          "example": "2026-10-16"
+        }
+      ],
+      "readOnly": true,
+      "minTier": 1,
+      "learnedLoggedIn": false,
+      "learnedAt": "2026-10-09T17:30:57.564Z"
+    }
+  ]
+}

@@ -91,7 +91,11 @@ stripped="$(printf '%s' "$nohd" | sed "s/'[^']*'/''/g; s/\"[^\"]*\"/\"\"/g")"
 #   shape of the original incident.
 #
 #   Without them: test the STRIPPED command, so prose about whisper is prose.
-if printf '%s' "$nohd" | grep -qE 'xargs|parallel|&'; then
+# Redirects are not backgrounding. `2>&1`, `&>file` and `&&` all contain an
+# ampersand, and on 2026-10-09 a `2>&1` sent four plain lookups down the raw
+# path, where a quoted tool name counts, and all four were refused.
+noredir="$(printf '%s' "$nohd" | sed -E 's/[0-9]*>&[0-9-]+//g; s/&>//g; s/&&/;/g')"
+if printf '%s' "$noredir" | grep -qE 'xargs|parallel|&'; then
   subject="$nohd"
 else
   subject="$stripped"
@@ -107,6 +111,11 @@ case "$lower" in
   |*llama-cli*|*llama-server*|*stable-diffusion*|*comfyui*|*"blender -b"*\
   |*"torch.compile"*|*upscayl*|*handbrakecli*) heavy=1 ;;
 esac
+# `python3 -c "import mlx_whisper"` names the model only inside quotes, which
+# the stripped subject drops. A python command importing it is a real job.
+if [ "$heavy" = 0 ] && printf '%s' "$nohd" | grep -qiE 'python[0-9.]*[^|;&]*(import|-m) *(mlx_whisper|whisper|torch)'; then
+  heavy=1
+fi
 [ "$heavy" = 1 ] || exit 0
 
 # Reading about it is not running it. submit-guard learned this the hard way
@@ -170,6 +179,40 @@ elif [ "$load_int" -ge 8 ]; then
   block="load"
 fi
 [ -n "$block" ] || exit 0
+
+# Under load alone (no fan-out), only refuse when the heavy tool is the thing
+# being RUN: the first word of a command, or python importing it. On
+# 2026-10-09 `command -v ffmpeg`, `ls ~/.cache | grep whisper` and similar
+# lookups were refused at load 30, because the word appeared at all.
+if [ "$block" = "load" ]; then
+  running=$(LG_CMD="$nohd" python3 - <<'PY'
+import os, re, shlex
+heavy = {"whisper", "mlx_whisper", "mlx-whisper", "yt-transcript", "ffmpeg",
+         "llama-cli", "llama-server", "stable-diffusion", "comfyui", "upscayl",
+         "handbrakecli", "blender", "ollama"}
+skip = {"nice", "time", "env", "nohup", "caffeinate", "exec", "sudo"}
+text = os.environ.get("LG_CMD", "")
+for seg in re.split(r"[;|&\n]|\b(?:do|then|else)\b", text):
+    try:
+        words = shlex.split(seg)
+    except ValueError:
+        words = seg.split()
+    if words[:2] == ["command", "-v"] or words[:1] in (["which"], ["type"]):
+        continue
+    while words and (words[0] in skip or "=" in words[0]
+                     or words[0].startswith("-") or words[0].isdigit()):
+        words = words[1:]
+    if not words:
+        continue
+    first = os.path.basename(words[0]).lower()
+    if first in heavy:
+        print("yes"); break
+    if first.startswith("python") and re.search(r"whisper|torch", seg, re.I):
+        print("yes"); break
+PY
+)
+  [ "$running" = "yes" ] || exit 0
+fi
 
 cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
 

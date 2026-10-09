@@ -72,6 +72,9 @@ NEEDS = [
     # every queued iMessage draft would have failed at send, and nothing in
     # this list knew it existed.
     ("host", "automation", "send iMessages for you", "com.apple.MobileSMS"),
+    # The launchd jobs that keep texts current run as Chewbacca.app, not as
+    # the app this session runs in, so they need their own Full Disk Access.
+    ("runtime", "full-disk-access", "keep your texts up to date in the background"),
 ]
 
 # Meeting capture (bin/room-capture) runs as a child of whatever starts it, so
@@ -109,6 +112,13 @@ KNOWN_HOSTS = [
 
 def kyber_app() -> Path:
     return Path(os.environ.get("CHEWBACCA_KYBER_APP", "/Applications/Kyber.app"))
+
+
+def runtime_app() -> Path:
+    """The background runtime bin/chewbacca-node builds: node inside a signed
+    Chewbacca.app, so Settings lists the launchd jobs as Chewbacca."""
+    return Path(os.environ.get("CHEWBACCA_RUNTIME_APP",
+                               str(Path.home() / ".chewbacca/runtime/Chewbacca.app")))
 
 
 def tcc_paths() -> list[str]:
@@ -317,7 +327,7 @@ def plan(host_flag: str | None, which: str = "chewbacca") -> dict:
     needs = []
     for target, permission, why, *rest in SETS[which]:
         automates = rest[0] if rest else None
-        app = kyber_app() if target == "kyber" else host
+        app = {"kyber": kyber_app(), "runtime": runtime_app()}.get(target, host)
         suffix = f".{TARGET_NAMES.get(automates, automates).lower()}" if automates else ""
         entry = {
             "id": f"{target}.{permission}{suffix}",

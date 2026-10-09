@@ -348,6 +348,8 @@ if group "doctor"; then
   # built and asked to describe, never to draw, so no grant is read or changed.
   check "permissions plan reads every grant and the guide helper builds" \
     python3 "$ROOT/tests/test_permission_guide.py"
+  check "the launchd runtime is a signed Chewbacca.app, rebuilt only on a node major" \
+    bash "$ROOT/tests/chewbacca_node.sh"
 fi
 
 if group "jev"; then
@@ -675,6 +677,8 @@ if group "installer"; then
 
   check  "stale-read-guard refuses a silence claim while jobs are outstanding" \
     bash "$ROOT/tests/stale_read_guard.sh"
+  check  "scope-guard refuses a self-chosen cut of scope he set as all" \
+    bash "$ROOT/tests/scope_guard.sh"
 
   check  "suite-rerun-guard refuses a repeat full run on an unchanged tree" \
     bash "$ROOT/tests/suite_rerun_guard.sh"

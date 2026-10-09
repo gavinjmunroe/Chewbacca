@@ -71,6 +71,19 @@ yours to solve.
 
 ---
 
+## HIS SCOPE WORDS ARE THE SPEC
+
+"All", "every", "everything", "entire", "a ton" set the scope. Cutting it to a
+top N, capping per item, or putting a platform "on hold" is a decision that
+belongs to him, and announcing the cut doesn't make it agreed. Slow, big or
+expensive is a reason to start sooner and run in the background, the same as
+a twenty minute build. A real limit (no access, a rate limit that won't
+clear, a credential only he has) is a `BLOCKED:` line, and the rest keeps
+going. `scope-guard` refuses a reply that cuts without one (2026-10-09: 36 of
+238 creators and three platforms on hold, "You didn't listen to me").
+
+---
+
 ## THE TEST
 
 Reread your final message and look for an imperative aimed at the user. If it

@@ -7,6 +7,7 @@
 #   chewbacca api teach <site> <op> --trigger <url> --example k=v ...
 #                                      learn a new operation (api-anything add)
 #   chewbacca api login <site>         import a session from a signed-in browser
+#                                      (brightspace: from the Work Chrome profile)
 #   chewbacca api sync                 load the kit's taught sites into the engine
 #   chewbacca api install              build the engine, wire MCP into Claude and Codex
 #
@@ -85,12 +86,6 @@ try { spec = JSON.parse(fs.readFileSync(file, "utf8")); } catch (e) { die(`${sho
 // checked against one site's session and run as another.
 const name = path.basename(shown, ".json");
 if (spec.name !== name) die(`${shown}: its name is "${spec.name}", not "${name}"`);
-// The engine also keeps cookies a logged-out site sets on a plain call; only a
-// session imported by `login` carries a "source", and only that one is yours.
-try {
-  if (JSON.parse(fs.readFileSync(path.join(sessions, name + ".json"), "utf8")).source)
-    die(`${name}: you have a signed-in session for this site; a repo spec will not replace it`);
-} catch (e) { if (e.code !== "ENOENT" && !(e instanceof SyntaxError)) throw e; }
 // Registrable domain, with the two-letter-country second levels (co.uk, com.au).
 const root = (h) => { const l = h.split("."); const n = /^(co|com|net|org|ac|gov|edu)$/.test(l[l.length - 2] || "") && l[l.length - 1].length === 2 ? 3 : 2; return l.slice(-n).join("."); };
 const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch { return ""; } };
@@ -104,6 +99,13 @@ let allowed = new Set();
 try {
   allowed = new Set(fs.readFileSync(allowFile, "utf8").split("\n").map((l) => l.replace(/#.*/, "").trim().split(/\s+/)).filter((p) => p[0] === name && p[1]).map((p) => p[1].toLowerCase()));
 } catch {}
+const reviewed = allowed.has("signed-in-ok");
+// The engine also keeps cookies a logged-out site sets on a plain call; only a
+// session imported by `login` carries a "source", and only that one is yours.
+try {
+  if (JSON.parse(fs.readFileSync(path.join(sessions, name + ".json"), "utf8")).source && !reviewed)
+    die(`${name}: you have a signed-in session for this site; a repo spec will not replace it unless hosts.allow marks it signed-in-ok`);
+} catch (e) { if (e.code !== "ENOENT" && !(e instanceof SyntaxError)) throw e; }
 // Kit specs are reads. A write op from the repo would be one --allow-writes
 // away from acting as the user.
 for (const op of spec.operations || []) if (op?.readOnly !== true) die(`${name}.${op?.name}: not a read-only operation`);
@@ -112,18 +114,25 @@ for (const op of spec.operations || []) if (op?.readOnly !== true) die(`${name}.
 // same domain as any signed-in site (linkedin-jobs beside a linkedin login)
 // would ride that login. Refused, unless a person listed the site as
 // "<site> signed-in-ok" in hosts.allow after reading it.
-const signedInRoots = new Set();
+// Matched the way a browser sends cookies: a cookie for brightspace.usc.edu
+// reaches that host and its subdomains, never classes.usc.edu. Comparing
+// registrable domains instead flagged every usc.edu site the moment
+// Brightspace was signed in (2026-10-10).
+const cookieDomains = new Set();
 try {
   for (const f of fs.readdirSync(sessions)) {
     if (!f.endsWith(".json")) continue;
     try {
       const sess = JSON.parse(fs.readFileSync(path.join(sessions, f), "utf8"));
-      if (sess.source) for (const c of sess.cookies || []) if (c?.domain) signedInRoots.add(root(String(c.domain).replace(/^\./, "").toLowerCase()));
+      if (sess.source) for (const c of sess.cookies || []) if (c?.domain) cookieDomains.add(String(c.domain).replace(/^\./, "").toLowerCase());
     } catch { die(`${name}: session ${f} is unreadable, so whether you're signed in can't be checked`); }
   }
 } catch (e) { if (e.code !== "ENOENT") die(`${name}: sessions unreadable (${e.code})`); }
-if (signedInRoots.has(home) && !allowed.has("signed-in-ok"))
-  die(`${name}: you're signed in on ${home}; list "${name} signed-in-ok" in hosts.allow after reading the spec`);
+const specHosts = new Set([base]);
+for (const op of spec.operations || []) for (const u of [op?.request?.url, op?.trigger?.url]) if (u !== undefined && hostOf(u)) specHosts.add(hostOf(u));
+const rides = [...specHosts].find((h) => [...cookieDomains].some((d) => h === d || h.endsWith("." + d)));
+if (rides && !reviewed)
+  die(`${name}: ${rides} gets cookies from a signed-in session; list "${name} signed-in-ok" in hosts.allow after reading the spec`);
 // Every string in the spec, keys included: a host can hide in a header value,
 // a redirect, or a template whose host is a parameter.
 const walk = (v, out) => { if (typeof v === "string") out.push(v); else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { out.push(k); walk(x, out); } return out; };
@@ -150,7 +159,11 @@ for (const op of Array.isArray(spec.operations) ? spec.operations : die(`${name}
     if (/^header:/i.test(String(at)) && sl.ref === undefined && !/^header:referer$/i.test(String(at)))
       die(`${name}.${op.name}: an argument writes ${at}`);
 }
-for (const s of walk(spec, [])) {
+// An op's `response` block only parses what came back (extract paths, pick
+// patterns like "url=link~(https?://[^\s]+)" in sc-engage); the engine never
+// sends from it, so it is left out of the scan. Everything else is scanned.
+const sendable = { ...spec, operations: (spec.operations || []).map((op) => { const { response, ...rest } = op || {}; return rest; }) };
+for (const s of walk(sendable, [])) {
   for (const m of s.matchAll(/(?:[a-z][a-z0-9+.-]*:)?\/\/[^\s"'<>]*/gi)) {
     const u = m[0].startsWith("//") ? "https:" + m[0] : m[0];
     if (!/^https?:/i.test(u)) continue;
@@ -198,6 +211,40 @@ sync_sites() {
   [ "${1:-}" = "--quiet" ] || say "synced $copied site(s) from the kit"
 }
 
+# Brightspace's d2l login cookies have no expiry, and the engine's own Chrome
+# drops cookies like that on every restart, so a plain profile import never
+# held (2026-10-10: every capture bounced to USC SSO). Instead this reads the
+# four d2l cookies the way bin/brightspace does, gives them a 12 hour expiry,
+# imports them from a private temp file, and deletes the file.
+login_brightspace() {
+  local dir rc
+  dir="$(mktemp -d)" || return 1
+  chmod 700 "$dir"
+  if ! python3 - "$ROOT/bin/brightspace" "$dir/cookies.json" <<'PY'
+import importlib.machinery, importlib.util, json, os, sys, time
+loader = importlib.machinery.SourceFileLoader("brightspace", sys.argv[1])
+spec = importlib.util.spec_from_loader("brightspace", loader)
+mod = importlib.util.module_from_spec(spec); loader.exec_module(mod)
+jar = {k: v for k, v in mod.chrome_cookies().items() if k.lower().startswith("d2l")}
+if not jar:
+    sys.exit("no Brightspace session in the Work Chrome profile; open brightspace.usc.edu there once")
+expires = int(time.time()) + 12 * 3600
+rows = [{"name": k, "value": v, "domain": "brightspace.usc.edu", "path": "/", "expires": expires,
+         "httpOnly": True, "secure": True, "sameSite": "Lax"} for k, v in jar.items()]
+fd = os.open(sys.argv[2], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, "w") as f:
+    json.dump(rows, f)
+PY
+  then
+    rm -rf "$dir"
+    return 1
+  fi
+  api-anything login brightspace --cookies "$dir/cookies.json" >/dev/null; rc=$?
+  rm -rf "$dir"
+  [ "$rc" -eq 0 ] && say "Brightspace session imported for 12 hours"
+  return "$rc"
+}
+
 need_engine() {
   have api-anything && return 0
   install_engine
@@ -214,7 +261,12 @@ case "$cmd" in
     # A login changes which kit specs are safe, so re-check them after it,
     # not only before the next call.
     need_engine || exit 1
-    api-anything login "$@"; rc=$?
+    if [ "${1:-}" = brightspace ]; then
+      sync_sites --quiet
+      login_brightspace; rc=$?
+    else
+      api-anything login "$@"; rc=$?
+    fi
     sync_sites --quiet
     exit "$rc"
     ;;

@@ -11,3 +11,8 @@ yc 45bwzj1sgc-3.algolianet.com
 # login, so its browser fallback would run signed in; reviewed and accepted
 # because every op is a read of a public page.
 linkedin-jobs signed-in-ok
+
+# 2026-10-10: brightspace reads his own courses, grades and dropboxes with his
+# USC session, all GET JSON on brightspace.usc.edu. Spec reviewed: 7 ops, all
+# read-only, no off-domain host, no example values.
+brightspace signed-in-ok

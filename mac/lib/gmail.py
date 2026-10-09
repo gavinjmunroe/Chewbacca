@@ -46,8 +46,27 @@ AUTH_PASS = re.compile(r"\b(dkim|spf)\s*=\s*pass\b", re.I)
 AUTH_FAIL = re.compile(r"\bdmarc\s*=\s*fail\b", re.I)
 
 
+DEFAULT_CFG = os.path.expanduser("~/.config/gws")
+EMAIL_HOME = os.path.expanduser(os.environ.get("CHEWBACCA_EMAIL_HOME", "~/.chewbacca/email"))
+ACCOUNT = {"cfg": None}  # the gws config dir the current call runs against
+
+
+def accounts():
+    """Every signed-in inbox: gws's own default, plus each `chewbacca email add`."""
+    if os.environ.get("CHEWBACCA_GWS_BIN"):  # tests: one fake account
+        return [None]
+    dirs = [DEFAULT_CFG] if os.path.isdir(DEFAULT_CFG) else []
+    if os.path.isdir(EMAIL_HOME):
+        dirs += sorted(os.path.join(EMAIL_HOME, d) for d in os.listdir(EMAIL_HOME)
+                       if os.path.isdir(os.path.join(EMAIL_HOME, d)))
+    return dirs
+
+
 def gws(args, timeout=60):
-    p = subprocess.run([GWS] + args, capture_output=True, text=True, timeout=timeout)
+    env = dict(os.environ)
+    if ACCOUNT["cfg"]:
+        env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = ACCOUNT["cfg"]
+    p = subprocess.run([GWS] + args, capture_output=True, text=True, timeout=timeout, env=env)
     if p.returncode != 0:
         raise RuntimeError((p.stderr or p.stdout).strip().splitlines()[-1] if (p.stderr or p.stdout).strip() else "gws failed")
     return p.stdout
@@ -159,7 +178,7 @@ def to_row(gid, labels, ts, raw, me):
 def load_cache():
     cache = {}
     try:
-        with open(CACHE) as f:
+        with open(cache_path()) as f:
             for line in f:
                 try:
                     r = json.loads(line)
@@ -171,20 +190,43 @@ def load_cache():
     return cache
 
 
+def cache_path():
+    if not ACCOUNT["cfg"] or ACCOUNT["cfg"] == DEFAULT_CFG:
+        return CACHE
+    return os.path.join(os.path.dirname(CACHE), os.path.basename(ACCOUNT["cfg"]) + ".jsonl")
+
+
 def read(days, limit):
+    # me is every connected inbox, so mail between two of my own accounts is
+    # never filed as someone else.
+    me = set()
+    for cfg in accounts():
+        ACCOUNT["cfg"] = cfg
+        me |= me_addresses()
+    out, seen = [], set()
+    for cfg in accounts():
+        ACCOUNT["cfg"] = cfg
+        for r in read_one(days, me):
+            if r["id"] not in seen:
+                seen.add(r["id"])
+                out.append(r)
+    out.sort(key=lambda r: r["at"])
+    return out[-limit:] if limit else out
+
+
+def read_one(days, me):
     try:
-        me = me_addresses()
         if not me:
             return []
         ids = list_ids(days)
     except Exception as err:
-        print(f"gmail: skipped: {err}", file=sys.stderr)
+        print(f"gmail: skipped {ACCOUNT['cfg'] or 'default'}: {err}", file=sys.stderr)
         return []
     cache = load_cache()
     todo = [g for g in ids if g not in cache]
     if todo:
         os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-        with open(CACHE, "a") as f, ThreadPoolExecutor(WORKERS) as pool:
+        with open(cache_path(), "a") as f, ThreadPoolExecutor(WORKERS) as pool:
             for res in pool.map(lambda g: _safe_fetch(g, me), todo):
                 if res is None:
                     continue
@@ -205,8 +247,7 @@ def read(days, limit):
             continue
         seen.add(r["id"])
         out.append({k: v for k, v in r.items() if not k.startswith("_")})
-    out.sort(key=lambda r: r["at"])
-    return out[-limit:] if limit else out
+    return out
 
 
 def _safe_fetch(gid, me):
@@ -231,6 +272,19 @@ def _blind_row(gid, labels, ts, raw, me):
     return r if isinstance(r, dict) else None
 
 
+def sending_account(to):
+    """The inbox whose latest mail with this address is newest. A reply goes
+    out from the account the conversation lives in, not always the default."""
+    best, best_at = None, ""
+    for cfg in accounts():
+        ACCOUNT["cfg"] = cfg
+        for rec in load_cache().values():
+            r = rec.get("row")
+            if isinstance(r, dict) and r.get("handle") == to and r["at"] > best_at:
+                best, best_at = cfg, r["at"]
+    return best if best_at else (accounts() or [None])[0]
+
+
 ADDRESS = re.compile(r"^[^@\s<>,]+@[^@\s<>,]+\.[^@\s<>,]+$")
 
 
@@ -242,6 +296,7 @@ def send(to, subject, text, dry_run=False):
         return {"ok": True, "dry_run": True, "to": to}
     if os.environ.get("CHEWBACCA_NO_SEND"):
         return {"ok": False, "error": "sending is disabled (CHEWBACCA_NO_SEND)"}
+    ACCOUNT["cfg"] = sending_account(to)
     try:
         out = gws(args)
         j = json.loads(out[out.index("{"):])

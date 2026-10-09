@@ -59,6 +59,9 @@ TABLE = [
     ("good night", "pleasantry"),
     ("Thanks", "pleasantry"),
     ("what's 17 times 23", "quick"),
+    # CHW-193: a repo card, not a model turn about a URL.
+    ("show me goodnight000/api-anything", "repo"),
+    ("https://github.com/calebnewtonusc", "repo"),
     ("Play Danielle by Fred again", "music"),
     ("Pause", "music"),
     ("what are my agents doing", "agents"),

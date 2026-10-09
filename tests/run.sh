@@ -1304,6 +1304,10 @@ if group "hud"; then
   check  "agenda reads today or the week aloud and refuses a task" python3 "$ROOT/tests/test_agenda.py"
   check  "a text to yourself starting with Kyber is a command, nothing else is" python3 "$ROOT/tests/test_text_command.py"
   check  "a replayed sentence takes the path the voice would take" python3 "$ROOT/tests/test_fast_path.py"
+  # CHW-193. Fake gh on PATH and a fake display: nothing reaches GitHub,
+  # nothing real is cloned, and the ask, the press and the X run no model.
+  check  "a repo card draws from gh api, clones only on a press, and refuses rows it did not draw" \
+    python3 "$ROOT/tests/test_repo_card.py"
   # The OS graph and the surfaces drawn from it. Fixture chat.db, people
   # store, backlog and mail in a temp dir and a fake display, so nothing real
   # is read and nothing is sent.

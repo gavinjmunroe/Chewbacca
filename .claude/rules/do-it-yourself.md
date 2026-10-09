@@ -22,7 +22,7 @@ user asked for a working thing, not instructions for producing one.
 
 **A long command is not an exception.** A twenty minute build goes in the
 background and you report when it lands. Anything long or heavy goes through
-`jobs submit` (`--heavy` for inference, transcription, renders; `--net` for
+`chewbacca jobs submit` (`--heavy` for inference, transcription, renders; `--net` for
 crawls), never a bare `&` or `nohup`: the queue runs it when the Mac has room,
 pauses it when he's using the Mac, and keeps it alive after the tab closes. Slowness is a reason to start it
 sooner, not a reason to delegate it.

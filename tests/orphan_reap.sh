@@ -16,7 +16,7 @@ cat > "$T/ps.txt" <<'PS'
  4684     1 /Applications/Ollama.app/Contents/MacOS/Ollama hidden
  7000     1 /Users/x/.chewbacca/runtime/node /Users/x/code/chewbacca/bin/people texts refresh
  7100     1 /Applications/Blender.app/Contents/MacOS/Blender
- 8000     1 /usr/bin/python3 /Users/x/code/chewbacca/bin/jobs _run 1010-1200-ab12
+ 8000     1 /usr/bin/python3 /Users/x/code/chewbacca/bin/chewbacca-jobs _run 1010-1200-ab12
  8001  8000 nice -n 19 yt-bulk https://youtube.com/@queued
 PS
 out="$(ORPHAN_REAP_PS="$T/ps.txt" python3 "$ROOT/bin/orphan-reap" --json)"

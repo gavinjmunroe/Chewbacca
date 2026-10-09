@@ -71,7 +71,7 @@ LOAD_GUARD_LOAD=30.0 t "redirected, still a job" 2 'cd /tmp && yt-transcript abc
 LOAD_GUARD_LOAD=30.0 t "python importing it" 2 'python3 -c "import mlx_whisper; mlx_whisper.transcribe(\"a.mp4\")"'
 LOAD_GUARD_LOAD=30.0 t "after a semicolon" 2 'cd /tmp; ffmpeg -i a.mov b.mp4'
 # Heavy work handed to the queue passes even on a busy Mac: the queue decides.
-LOAD_GUARD_LOAD=30.0 t "jobs submit --heavy" 0 'jobs submit --heavy --title tx -- yt-bulk https://youtube.com/@x --out /tmp/x'
+LOAD_GUARD_LOAD=30.0 t "chewbacca jobs submit --heavy" 0 'chewbacca jobs submit --heavy --title tx -- yt-bulk https://youtube.com/@x --out /tmp/x'
 # 2026-10-10: a headless Nalana render sat at 305% CPU while the Mac swapped.
 LOAD_GUARD_LOAD=30.0 t "nalana headless render" 2 '/Applications/Nalana.app/Contents/MacOS/Nalana -b --python shot6.py'
 LOAD_GUARD_LOAD=1.0 t "nalana render, quiet machine" 0 '/Applications/Nalana.app/Contents/MacOS/Nalana -b --python shot6.py'

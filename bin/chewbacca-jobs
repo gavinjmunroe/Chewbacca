@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""jobs: one queue for every long or heavy job on this Mac, owned by the Mac, not a tab.
+"""chewbacca jobs: one queue for every long or heavy job on this Mac, owned by the Mac, not a tab.
 
-  jobs submit [--heavy|--net] [--title T] -- <command...>   queue it (starts now if there's room)
-  jobs list [--all]                                          what's queued, running, paused, done
-  jobs log <id> [-n N]                                       tail a job's output
-  jobs kill <id>                                             stop it
-  jobs tick                                                  admit, pause, resume, reap (launchd runs this every 30 s)
+  chewbacca jobs submit [--heavy|--net] [--title T] -- <command...>   queue it (starts now if there's room)
+  chewbacca jobs list [--all]                                          what's queued, running, paused, done
+  chewbacca jobs log <id> [-n N]                                       tail a job's output
+  chewbacca jobs kill <id>                                             stop it
+  chewbacca jobs tick                                                  admit, pause, resume, reap (launchd runs this every 30 s)
+
+Not `jobs`: that's a zsh and bash builtin, so a bare `jobs submit` never
+reaches this file (found on install, 2026-10-10).
 
 WHY. 2026-10-10: Caleb force-quit Claude because the Mac was unusable. Every
 tab had started its own long work (a Clay crawler, a Nalana render, a
@@ -27,7 +30,7 @@ THE BUDGET.
   light  everything else: no limit.
 
 State lives in ~/.chewbacca/jobs/<id>/ (job.json, out.log). A job's supervisor
-is `jobs _run <id>`, so a tab closing never orphans it, and orphan-reap leaves
+is `chewbacca-jobs _run <id>`, so a tab closing never orphans it, and orphan-reap leaves
 it alone.
 """
 import fcntl
@@ -124,7 +127,7 @@ def submit(argv):
         elif a == "--title":
             title = argv.pop(0)
     if not argv or argv[0] != "--" or len(argv) < 2:
-        sys.exit("usage: jobs submit [--heavy|--net] [--title T] -- <command...>")
+        sys.exit("usage: chewbacca jobs submit [--heavy|--net] [--title T] -- <command...>")
     cmd = argv[1:]
     j = {"id": time.strftime("%m%d-%H%M%S-") + uuid.uuid4().hex[:4], "cmd": cmd, "cwd": os.getcwd(),
          "class": cls, "title": title or " ".join(cmd)[:80], "status": "queued",

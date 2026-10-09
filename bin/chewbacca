@@ -68,6 +68,7 @@ COMMANDS=(
   "gtme-dedupe|cluster duplicate people across contact CSVs"
   "gtme-signals|list recent SEC Form D raises as buying signals"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
+  "jobs|one queue for long and heavy work: runs it when the Mac has room"
   "api|any website as an API: call taught sites, teach new ones (not Clay)"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
   "clay-fixture-check|compare a CSV export with an expected fixture"
@@ -158,6 +159,11 @@ permissions|permission|perms)
   shift
   [ $# -eq 0 ] && set -- guide
   exec python3 "$ROOT/bin/chewbacca-permissions" "$@"
+  ;;
+jobs)
+  # The machine queue. See bin/chewbacca-jobs.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-jobs" "$@"
   ;;
 api)
   # Websites with no API, called over plain HTTP from operations learned off

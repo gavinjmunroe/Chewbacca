@@ -1049,7 +1049,7 @@ fi
 # gate refuses to ship a generated one, and the Stop hook calls the gate by name.
 # gtme-dedupe is the exception: it builds a splink venv with uv on first run, like
 # scrape, and still runs exact passes on plain python3 when that build fails.
-for _tool in jobs orphan-reap list-audit list-gate gtme-dedupe kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-signals gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review clay-build fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team; do
+for _tool in orphan-reap list-audit list-gate gtme-dedupe kit-debt handoff-check learn durable-check corpus preflight gtme-graph gtme-math gtme-library gtme-signals gtme-learning clay-fixture-check review-gate task-graph graph-fuse work-ledger ux-learning jev decision-lab ux-decision ux-policy clay-review clay-build fanout site-fast untrusted-screen model-route intro list-sift ux-do decisions web-record bb brand-grab oss-apps team; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     log "$_tool installed to ~/.local/bin/"
@@ -2583,7 +2583,7 @@ PLIST
   launchctl bootstrap "gui/$(id -u)" "$_mr_plist" &>/dev/null &&
     log "message refresh scheduled every 10 min" || warn "could not schedule the message refresh"
 
-  # The machine queue's heartbeat: every 30 s `jobs tick` admits queued work
+  # The machine queue's heartbeat: every 30 s `chewbacca jobs tick` admits queued work
   # when there's room, pauses heavy work when the Mac is busy, and resumes it
   # after. 2026-10-10: every tab ran its own long jobs with no shared budget,
   # the Mac swapped at load 80+, and Caleb had to force-quit Claude.
@@ -2594,7 +2594,7 @@ PLIST
 <plist version="1.0"><dict>
   <key>Label</key><string>com.chewbacca.jobs</string>
   <key>ProgramArguments</key><array>
-    <string>/usr/bin/python3</string><string>$SCRIPT_DIR/bin/jobs</string><string>tick</string>
+    <string>/usr/bin/python3</string><string>$SCRIPT_DIR/bin/chewbacca-jobs</string><string>tick</string>
   </array>
   <key>EnvironmentVariables</key><dict>
     <key>PATH</key><string>$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>

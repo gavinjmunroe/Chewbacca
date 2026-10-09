@@ -52,10 +52,10 @@ def orphans(rows):
     for pid, ppid, _ in rows:
         children.setdefault(ppid, []).append(pid)
     cmd = {pid: c for pid, _, c in rows}
-    # A `jobs _run` supervisor is the machine queue's, not a tab's: it's meant
+    # A `chewbacca-jobs _run` supervisor is the machine queue's, not a tab's: it's meant
     # to outlive the tab that submitted it.
     roots = [pid for pid, ppid, c in rows if ppid == 1 and TAB_JOB.search(c)
-             and "bin/jobs _run" not in c and pid not in me]
+             and "bin/chewbacca-jobs _run" not in c and pid not in me]
     found, stack = [], list(roots)
     while stack:
         pid = stack.pop()

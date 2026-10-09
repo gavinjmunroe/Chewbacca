@@ -235,7 +235,7 @@ cores=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 8)
   echo "Hand it to the machine queue, which runs it when there's room, pauses it"
   echo "when the Mac gets busy, and outlives this tab:"
   echo
-  echo "  jobs submit --heavy --title \"what it is\" -- <command>"
+  echo "  chewbacca jobs submit --heavy --title \"what it is\" -- <command>"
   echo
   echo "Or one of these:"
   echo

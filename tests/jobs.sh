@@ -5,7 +5,7 @@
 # what the Mac is doing (a test that reports the weather is not a test).
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-J="$ROOT/bin/jobs"
+J="$ROOT/bin/chewbacca-jobs"
 export JOBS_DIR; JOBS_DIR="$(mktemp -d)"
 trap 'for d in "$JOBS_DIR"/*/; do p=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]+\"job.json\")).get(\"pid\") or \"\")" "$d" 2>/dev/null); [ -n "$p" ] && kill -CONT -"$p" 2>/dev/null; [ -n "$p" ] && kill -TERM -"$p" 2>/dev/null; done; rm -rf "$JOBS_DIR"' EXIT
 fail=0

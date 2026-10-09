@@ -16,11 +16,18 @@ so a sync only fetches what is new. Measured 2026-10-08: one fetch is about
 minutes with 8 workers and every later one is seconds.
 
 SENDER TRUST. A From line is whatever the sender typed. An incoming address
-may file a message under a person only when Gmail's own verdict, the topmost
-Authentication-Results header with authserv-id mx.google.com, says DKIM or SPF
-passed and DMARC did not fail. A sender can add their own lower headers, but
-not the one Google writes on top. My own messages are mine only when Gmail
-filed them under SENT, a label nobody outside the account can set.
+may file a message under a person only when Gmail's own verdict vouches for
+that address's domain: DMARC passed for it, or DKIM passed with a signing
+domain aligned to it. SPF alone, `dmarc=none` and `bestguesspass` are not
+enough, and the text Google puts in parentheses is never read, because it
+repeats what the sender wrote. The verdict counts only if Google wrote it on
+an SMTP delivery: it must sit directly under the `by mx.google.com` hop, with
+nothing but SMTP hops above that. Mail Gmail fetched over POP3 or was handed
+over HTTPREST has no such verdict, and any it carries came from the sender.
+My own messages are mine only when Gmail filed them under SENT, a label
+nobody outside the account can set.
+
+The cache holds private mail in plaintext, so it is 0600 in a 0700 folder.
 
   gmail.py --json --days N     rows (0 = everything)
   gmail.py send --to A --subject S --text T [--dry-run]
@@ -42,8 +49,13 @@ ID_BITS = 40
 WORKERS = 8
 SKIP_TABS = "-in:spam -in:trash -category:promotions -category:social -category:updates -category:forums"
 TRUSTED_AUTHSERV = {"mx.google.com"}
-AUTH_PASS = re.compile(r"\b(dkim|spf)\s*=\s*pass\b", re.I)
-AUTH_FAIL = re.compile(r"\bdmarc\s*=\s*fail\b", re.I)
+GOOGLE_HOP = re.compile(r"\bby\s+mx\.google\.com\b", re.I)
+# Gmail's delivery and internal hops both say `with SMTP`/`ESMTPS`. The two
+# ingestion paths that skip Google's verdict say `with POP3` (Check mail from
+# other accounts) and `with HTTPREST` (messages.insert), per the 2026-10-08
+# security review; not measured on a real mailbox here.
+SMTP_HOP = re.compile(r"\bwith\s+(?:E?SMTP|LMTP)[A-Z]*\b", re.I)
+RESULT = re.compile(r'([A-Za-z0-9_.\-/]+)\s*=\s*("[^"]*"|[^\s"]+)')
 
 
 DEFAULT_CFG = os.path.expanduser("~/.config/gws")
@@ -81,13 +93,102 @@ def row_id(key):
     return ID_BASE + int(hashlib.sha1(key.encode()).hexdigest()[: ID_BITS // 4], 16)
 
 
-def sender_verified(msg):
-    """Only the header Google wrote on top counts, and only from Google."""
-    top = (msg.get_all("Authentication-Results") or [None])[0]
-    if not top:
+def parse_auth_results(value):
+    """(authserv-id, [(method, result, {property: value})]), comments dropped.
+
+    Google's comments quote the envelope sender, for example `spf=softfail
+    (google.com: domain of dkim=pass@evil.test ...)`, so a search over the
+    raw header reads the sender's words as Google's verdict.
+    """
+    parts, cur, depth, quoted, escaped = [], [], 0, False, False
+    for ch in str(value):
+        if escaped:
+            if not depth:
+                cur.append(ch)
+            escaped = False
+        elif ch == "\\":
+            escaped = True
+        elif quoted:
+            cur.append(ch)
+            quoted = ch != '"'
+        elif ch == "(":
+            depth += 1
+        elif ch == ")" and depth:
+            depth -= 1
+        elif depth:
+            continue
+        elif ch == '"':
+            quoted = True
+            cur.append(ch)
+        elif ch == ";":
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur))
+    authserv = (parts[0].split() or [""])[0].lower()
+    results = []
+    for part in parts[1:]:
+        pairs = RESULT.findall(part)
+        if not pairs or not part.strip().startswith(pairs[0][0]):
+            continue
+        method = pairs[0][0].split("/")[0].lower()
+        props = {k.lower(): v.strip('"').lower() for k, v in pairs[1:]}
+        results.append((method, pairs[0][1].lower(), props))
+    return authserv, results
+
+
+def google_verdict(msg):
+    """The results Google wrote when this message reached the mailbox, or None.
+
+    Headers are newest first. Google's delivery hop is a Received line `by
+    mx.google.com`, and its Authentication-Results sits right under it. Every
+    Received above that hop must be an SMTP hop: one that says POP3 or
+    HTTPREST means Gmail fetched or was handed the message, and the hop and
+    verdict below it were written by whoever wrote the message.
+    """
+    hop = False
+    for name, value in msg.items():
+        name = name.lower()
+        if name == "received":
+            line = " ".join(str(value).split())
+            if hop or not SMTP_HOP.search(line):
+                return None
+            hop = bool(GOOGLE_HOP.search(line))
+        elif name == "authentication-results" and hop:
+            authserv, results = parse_auth_results(value)
+            return results if authserv in TRUSTED_AUTHSERV else None
+    return None
+
+
+def _aligned(signer, author):
+    """DMARC relaxed alignment, without a public suffix list: equal, or one a
+    subdomain of the other where the parent still has two labels."""
+    signer, author = signer.strip().rstrip(".").lower(), author.strip().rstrip(".").lower()
+    if not signer or not author:
         return False
-    authserv = str(top).split(";", 1)[0].strip().lower()
-    return authserv in TRUSTED_AUTHSERV and bool(AUTH_PASS.search(str(top))) and not AUTH_FAIL.search(str(top))
+    parent, child = sorted((signer, author), key=len)
+    return parent == child or ("." in parent and child.endswith("." + parent))
+
+
+def sender_verified(msg, sender):
+    """Google's own verdict vouches for the From domain, not just for someone."""
+    results = google_verdict(msg)
+    if not results:
+        return False
+    author = sender.rpartition("@")[2]
+    if any(m == "dmarc" and r == "fail" for m, r, _ in results):
+        return False
+    for method, result, props in results:
+        if result != "pass":
+            continue
+        if method == "dmarc" and props.get("header.from", "").rstrip(".") == author:
+            return True
+        if method == "dkim":
+            signer = props.get("header.d") or props.get("header.i", "").rpartition("@")[2]
+            if _aligned(signer, author):
+                return True
+    return False
 
 
 def me_addresses():
@@ -146,7 +247,7 @@ def to_row(gid, labels, ts, raw, me):
         who, handle = (other[0] or other[1]), other[1]
     else:
         who, handle = (sender_name or sender), sender
-        if not sender_verified(msg):
+        if not sender_verified(msg, sender):
             handle = "unverified:" + sender
     body_raw, attached = body_of(msg)
     body = trim_reply(body_raw)
@@ -155,12 +256,18 @@ def to_row(gid, labels, ts, raw, me):
     if len(text) > TEXT_CAP:
         text = text[: TEXT_CAP - 1].rstrip() + "…"
     mid = (msg.get("Message-ID") or "").strip().strip("<>") or gid
+    # The id is the message as written, not its Message-ID alone. The sender
+    # picks that header, so a stranger reusing a real one replaced the real
+    # message (read keeps the first row per id) or overwrote its people row.
+    # The same message held by two of my inboxes still gets one id.
+    key = "\n".join([mid, sender, (msg.get("Date") or "").strip(),
+                     ",".join(sorted(a for _, a in to + cc)), text])
     try:
         at = parsedate_to_datetime(msg.get("Date")).astimezone()
     except Exception:
         at = datetime.fromtimestamp(ts)
     return {
-        "id": row_id(mid),
+        "id": row_id(key),
         "at": at.strftime("%Y-%m-%dT%H:%M:%S"),
         "with": who,
         "room": (clean_subject(subject) or "(no subject)") if len(everyone) >= 3 else None,
@@ -188,6 +295,14 @@ def load_cache():
     except FileNotFoundError:
         pass
     return cache
+
+
+def open_cache(path):
+    """Append handle on a cache only this user can read."""
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    os.fchmod(fd, 0o600)  # caches written before 2026-10-09 are 0644
+    return os.fdopen(fd, "a")
 
 
 def cache_path():
@@ -225,8 +340,7 @@ def read_one(days, me):
     cache = load_cache()
     todo = [g for g in ids if g not in cache]
     if todo:
-        os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-        with open(cache_path(), "a") as f, ThreadPoolExecutor(WORKERS) as pool:
+        with open_cache(cache_path()) as f, ThreadPoolExecutor(WORKERS) as pool:
             for res in pool.map(lambda g: _safe_fetch(g, me), todo):
                 if res is None:
                     continue

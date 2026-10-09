@@ -26,11 +26,24 @@ while read -r _local_ref local_sha _remote_ref remote_sha; do
     base="$remote_sha"
   fi
   [ -n "$base" ] || continue
+  PUSH_SHA="$local_sha"
   CHANGED="$CHANGED
 $(git diff --name-only "$base" "$local_sha" 2>/dev/null)"
 done
 CHANGED="$(printf '%s\n' "$CHANGED" | sed '/^$/d' | sort -u)"
 [ -n "$CHANGED" ] || exit 0
+
+# Check the commits being pushed, never the working tree. In a checkout shared
+# by many tabs, the tree holds other sessions' unfinished files: on 2026-10-09
+# README counts and checksums both refused correct commits because another
+# tab had new skills on disk and an edit to tools/team.py in flight.
+if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+  CLEAN="$(mktemp -d)/tree"
+  if git worktree add -q --detach "$CLEAN" "$PUSH_SHA" 2>/dev/null; then
+    trap 'git -C "$ROOT" worktree remove --force "$CLEAN" >/dev/null 2>&1' EXIT
+    cd "$CLEAN" || exit 1
+  fi
+fi
 
 fail=0
 run() {

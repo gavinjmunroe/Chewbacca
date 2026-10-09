@@ -188,7 +188,7 @@ YouTube's rate limit on 2026-10-09; `LEDGER.tsv` marks each one `BLOCKED` or
 
 ### W-111 Run a people search only for qualified companies
 
-- Search sources take no run condition. Build a filtered view of the company table showing only the rows you want, then run Find People from that view; it processes only visible rows.
+- Search sources take no run condition. Filter a view of the company table down to the qualified accounts and start Find People from that view; only visible rows are processed.
 - In-table Find People can read a per-company location column. Its reduced-data mode returns up to 500 people per row with name and LinkedIn URL only, so enrich afterward.
 - Limits: 50,000 records per source; Find People up to 50,000 total and 100 per company; up to 3 exclusion sets of 300,000 people (needs profile URLs).
 - Kit: `ui-only` (`find-people`).
@@ -973,7 +973,7 @@ YouTube's rate limit on 2026-10-09; `LEDGER.tsv` marks each one `BLOCKED` or
 ### W-235 What interviewers score
 
 - Business impact in numbers; ownership you can show; engineering (tests, retries, idempotency, rollback); AI judgment (an agent for research, rules for routing, a human gate before sending); explaining attribution to an AE and a CEO; prioritization (declining low-value asks with data).
-- Is an outbound agent safe to run alone? A golden set, a groundedness rubric where every claim traces to a field, sampled human review, a cost and latency budget, a kill switch, and a staged rollout of 5%, 25%, then 100%.
+- Is an outbound agent safe to run alone? A golden set, a groundedness rubric where every claim traces to a field, sampled human review, ceilings on spend and response time, a way to stop it instantly, and rollout in stages of 5%, 25%, then 100%.
 - Kit: `practice`.
 - Source: W:aiengineeringinsider.substack.com/p/cracking-the-gtm-engineer-interview.
 

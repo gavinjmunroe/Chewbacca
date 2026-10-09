@@ -68,6 +68,7 @@ COMMANDS=(
   "gtme-library|index and search a local source corpus"
   "gtme-dedupe|cluster duplicate people across contact CSVs"
   "gtme-signals|list recent SEC Form D raises as buying signals"
+  "gtme-interview|drill GTM engineer interview cases from sourced Clay procedures"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
   "jobs|one queue for long and heavy work: runs it when the Mac has room"
   "ig|read every Instagram post of an account with his signed-in session"
@@ -120,7 +121,7 @@ repo_version() { cat "$ROOT/VERSION" 2>/dev/null || echo "unknown"; }
 installed_version() { cat "$STATE/version" 2>/dev/null || echo "unrecorded"; }
 
 case "${1:-}" in
-task-graph|graph-fuse|review-gate|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtm|clay-fixture-check|oss-apps)
+task-graph|graph-fuse|review-gate|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-interview|gtm|clay-fixture-check|oss-apps)
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"

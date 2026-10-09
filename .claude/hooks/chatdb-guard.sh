@@ -38,9 +38,14 @@ printf '%s' "$cmd" | grep -q 'sqlite3' || exit 0
 # command that says RAW_MESSAGES_OK=1 is debugging the reader and passes.
 printf '%s' "$cmd" | grep -q 'RAW_MESSAGES_OK=1' && exit 0
 thread_read=0
-if printf '%s' "$cmd" | grep -q 'chat\.db' \
+# A heredoc fed to python3, cat or tee is writing a file (a test fixture that
+# builds a fake chat.db), not reading anyone's messages. On 2026-10-10 that
+# shape was refused twice while adding the RCS/SMS GUID test.
+writes_file=0
+printf '%s' "$cmd" | grep -qE '^[[:space:]]*(cd [^&;]*(&&|;)[[:space:]]*)?([A-Z_]+=[^ ]* )*(python3|cat|tee)[^|;&]*<<' && writes_file=1
+if [ "$writes_file" = 0 ] && printf '%s' "$cmd" | grep -q 'chat\.db' \
   && printf '%s' "$cmd" | grep -qiE 'is_from_me|chat_message_join'; then thread_read=1; fi
-if printf '%s' "$cmd" | grep -q 'people\.db' \
+if [ "$writes_file" = 0 ] && printf '%s' "$cmd" | grep -q 'people\.db' \
   && printf '%s' "$cmd" | grep -qiE 'from[[:space:]]+messages([^_a-z]|$)' \
   && printf '%s' "$cmd" | grep -qiE 'from_me|body' \
   && ! printf '%s' "$cmd" | grep -qiE '(insert|update|delete)[[:space:]]'; then thread_read=1; fi

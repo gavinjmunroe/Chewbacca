@@ -75,6 +75,14 @@ if roster.exists():
     for first, last in re.findall(r"\*\*([A-Z][a-z]+) ([A-Z][a-z]+)\*\*", text):
         known.setdefault(first, set()).add(last)
 
+# Words that start a capitalised phrase without being anyone's first name.
+# The roster bolds "**The Perceptron**", a newsletter, and on 2026-10-09 that
+# made "The" a known first name, so "The Douglas lecture deck" was refused.
+NOT_NAMES = {"The", "This", "That", "These", "Those", "Our", "Their", "His",
+             "Her", "Its", "And", "But", "For", "With", "From", "Into", "When"}
+for word in NOT_NAMES:
+    known.pop(word, None)
+
 # Names being introduced by this write. Bolded or plain "First Last".
 introduced: set[tuple[str, str]] = set()
 for first, last in re.findall(r"\b([A-Z][a-z]{2,})\s+([A-Z][a-z]{2,})\b", new):

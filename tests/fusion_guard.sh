@@ -42,6 +42,12 @@ probe "outside the notes store" \
   "/tmp/probe_fusion.md" "Met with Joel Keller about the deal." 0
 probe "no names at all" \
   "$BRAIN/memory/probe_fusion.md" "The build passes and the gates are green." 0
+# Regression, 2026-10-09: the roster bolds a newsletter, "**The Perceptron**",
+# so "The" became a first name and "The Douglas lecture deck" was refused as
+# a new person. An article is never a first name.
+printf -- '- **The Perceptron**, a newsletter.\n' >> "$BRAIN/core/people.md"
+probe "an article is not a first name" \
+  "$BRAIN/memory/probe_fusion.md" "The Douglas lecture deck is in the slides folder." 0
 
 echo
 [ "$fail" = 0 ] && echo "stage 8 is enforced, and only where it should be   ok" || echo "$fail failed"

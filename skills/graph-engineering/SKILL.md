@@ -101,6 +101,11 @@ skip stages 3 (ontology) or 8 (fusion), they are where real-world graphs fail.
 - **LLM extraction is stage machinery, not the pipeline.** The LLM slots into stages 4-6;
   the surrounding schema, validation, and fusion are what make the output a knowledge graph.
 
+- **"Found by more sources" measures fame, not fit.** In a 2026-10-09 creator graph built
+  by four platform scouts, 14 of 238 people were found by more than one, and they were the
+  most famous (Matt Pocock, Theo), not the closest to the seed. Before ranking by path
+  count, check the overlap rate; under about 10%, rank on a fit signal instead.
+
 ## Reference Files
 
 - [references/curriculum.md](references/curriculum.md): Full translated curriculum of the

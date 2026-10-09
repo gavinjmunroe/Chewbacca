@@ -14,7 +14,7 @@ a3e18bcd6add576630c0107bfddb91422d278f1af5defa1d403ed005b2d88978  .claude/hooks/
 a5f2a11cce5427579aa9df1b60ec64373494b4699e1056f7c5aa012187c02fc0  .claude/hooks/durable-guard.sh
 3856d3932a4390ab147bc9d9c31db31c931834c902d588b78ee0b3cb8dba56de  .claude/hooks/env-guard.sh
 a1a2beb7ed61ba73bcd5680b3355930066a2e6887b5520bb3c374e6acd204fc0  .claude/hooks/format-and-sync.sh
-9ba6e28846760e0c3180812ab242d0d8e9cf87effe4175ac28665885126e5c9d  .claude/hooks/fusion-guard.sh
+3f9cc11fd0e8d88b4a5a28c2a631cf243fb863c2148b2bb5c02aa8afc2eb6273  .claude/hooks/fusion-guard.sh
 edc9cc9d67d8a05fce30fd49e56aded7be67efab08cba2ad5d83172bf275dbeb  .claude/hooks/handoff-guard.sh
 08e38272d00bc0b461e5cf78065071c465c8139c0be95b7deaf01431e7b07989  .claude/hooks/kit-autopull.sh
 8f347b3697a698750aebbcc53048eddf78872b073c2b3ca6e00482ed058d8ea9  .claude/hooks/kit-autopush.sh
@@ -23,7 +23,7 @@ cb245d357dd1d602d0804d24fdcc57c90d174a1b03253ddccf062672f97d3ad6  .claude/hooks/
 bfc771e19d2b298f5ad1f5a5041b4b80ce5fa27cf560da96aa15a6a41f9632a6  .claude/hooks/launch-guard.sh
 21dac9d861f6f12a142a1dbcbf92d0d41149741aa57398946b80a432c5e1cec1  .claude/hooks/lib.sh
 26bdb22466effb106b8584f2579665ce6cea5aa9978576d9c46759cf4fc41c52  .claude/hooks/list-guard.sh
-f4464fc7d8e9e5ca588bcf18d0966dc4a74b88180c7e3f08a78129ba44b92a5c  .claude/hooks/load-guard.sh
+14d82537f7ee5cce00d07d0da909a2dda28c00319285646fca4a85d037ecfa76  .claude/hooks/load-guard.sh
 c7594c3df7370c62ba76e046daf1e17843dbf24972438206496b28098c4128ee  .claude/hooks/method-guard.sh
 48f568e95b9586ca22d0d740143fd90af1834b66808c2ac36a519bd3b83df7e1  .claude/hooks/model-route.sh
 a9f090aacbcfb0f7b04af9fcc86fe4019877cfcfefda93ea1609f3b34d0fe19e  .claude/hooks/plan-guard.sh

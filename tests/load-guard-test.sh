@@ -55,5 +55,20 @@ feat: a title
 
 the body mentions ffmpeg
 MSG'
+# Regression, 2026-10-09: on a machine at load 30 to 40, every one of these
+# was refused. Each only names a heavy tool as an argument to a lookup, and a
+# `2>&1` redirect was read as a background `&`, which switched the guard to
+# reading the raw text, quotes included. Four lookups in a row were blocked
+# while ingesting a friend's reels, and the work-around was prefixing reads
+# with nice.
+echo "BUSY, BUT ONLY LOOKING (exit 0):"
+LOAD_GUARD_LOAD=30.0 t "command -v a heavy tool" 0 'for t in yt-dlp ffmpeg; do command -v $t; done; uptime'
+LOAD_GUARD_LOAD=30.0 t "grep a cache for it" 0 'ls ~/.cache/huggingface/hub | grep -i whisper'
+LOAD_GUARD_LOAD=30.0 t "git grep for its name" 0 'git ls-tree -r --name-only origin/main | grep -E "load-guard|yt-transcript"'
+LOAD_GUARD_LOAD=30.0 t "2>&1 is a redirect" 0 'grep -rn "mlx_whisper" bin 2>&1 | head -1'
+echo "BUSY AND REALLY RUNNING IT (exit 2):"
+LOAD_GUARD_LOAD=30.0 t "redirected, still a job" 2 'cd /tmp && yt-transcript abc123 2>&1 | tail -1'
+LOAD_GUARD_LOAD=30.0 t "python importing it" 2 'python3 -c "import mlx_whisper; mlx_whisper.transcribe(\"a.mp4\")"'
+LOAD_GUARD_LOAD=30.0 t "after a semicolon" 2 'cd /tmp; ffmpeg -i a.mov b.mp4'
 echo; echo "pass=$pass fail=$fail"
 [ "$fail" = 0 ]

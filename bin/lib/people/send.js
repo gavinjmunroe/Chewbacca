@@ -132,11 +132,36 @@ const GROUP_SCRIPT = [
   "end run",
 ];
 
+// Can this process drive Messages? A read-only Apple event, 0.2s. On
+// 2026-10-09 every iMessage draft queued for the morning would have failed:
+// macOS had Automation for Messages denied for the app the agent runs in
+// (osascript -1743), and nothing said so until a send was attempted.
+const MESSAGES_FIX =
+  "macOS is blocking this app from controlling Messages, so no iMessage can be sent from here.\n" +
+  "  Fix: System Settings > Privacy & Security > Automation > your terminal or Claude app > turn on Messages.\n" +
+  "  Nothing was sent.";
+function messagesBlocked() {
+  if (process.platform !== "darwin") return null;
+  const r = run("osascript", ["-e", 'tell application "Messages" to count chats']);
+  if (r.code === 0) return null;
+  return /-1743|not authorized/i.test(r.err || "") ? MESSAGES_FIX : null;
+}
+
 function dispatch(via, to, text, flags) {
   // Tests set this so a mistake in a test can never reach a real phone. On
   // 2026-10-08 a check meant to refuse a send had not applied, and the test
   // call delivered "hi" to a client.
   if (process.env.CHEWBACCA_NO_SEND) return { code: 3, err: "sending is disabled (CHEWBACCA_NO_SEND)" };
+  if (via === "imessage") {
+    const blocked = messagesBlocked();
+    if (blocked) return { code: 4, err: blocked };
+    // A group's GUID came from chat.db; make sure Messages itself knows that
+    // chat before handing it text, so a stale id fails here and not silently.
+    if (flags.room) {
+      const probe = run("osascript", ["-e", "on run argv", "-e", "tell application \"Messages\" to get id of chat id (item 1 of argv)", "-e", "end run", to]);
+      if (probe.code !== 0) return { code: 5, err: `Messages has no chat ${to}: ${(probe.err || "").trim()}` };
+    }
+  }
   if (via === "imessage" && flags.room)
     return run("osascript", [...GROUP_SCRIPT.flatMap((l) => ["-e", l]), to, text]);
   if (via === "imessage") return run("mac", ["messages", "send", to, text, "--json"]);
@@ -194,7 +219,7 @@ function sendRoom(d, name, text, via, flags, P) {
         `  If that is the right group, add --to ${P(to)}`,
     );
   const res = dispatch(r.source, to, text, { ...flags, room: true });
-  if (!succeeded(res)) die(`Not sent to ${P(r.room)}: ${P((res.err || res.out || "no output").trim().split("\n")[0])}`);
+  if (!succeeded(res)) die(`Not sent to ${P(r.room)}: ${P((res.err || res.out || "no output").trim().split("\n").slice(0, res.code === 4 ? 3 : 1).join("\n"))}`);
   say(`${c.grn("sent")} to ${where}`);
 }
 
@@ -263,7 +288,7 @@ function cmdSend(argv) {
     );
 
   const r = dispatch(app, to, text, flags);
-  if (!succeeded(r)) die(`Not sent to ${P(name)} via ${app}: ${P((r.err || r.out || "no output").trim().split("\n")[0])}`);
+  if (!succeeded(r)) die(`Not sent to ${P(name)} via ${app}: ${P((r.err || r.out || "no output").trim().split("\n").slice(0, r.code === 4 ? 3 : 1).join("\n"))}`);
   if (person)
     d.prepare(
       "INSERT INTO interactions (id, person_id, channel, note, happened_at) VALUES (lower(hex(randomblob(16))),?,?,NULL,?)",
@@ -271,4 +296,4 @@ function cmdSend(argv) {
   say(`${c.grn("sent")} to ${where}`);
 }
 
-module.exports = { cmdSend, lastThread, waJid, target, roomThread, chatGuid };
+module.exports = { cmdSend, lastThread, waJid, target, roomThread, chatGuid, messagesBlocked };

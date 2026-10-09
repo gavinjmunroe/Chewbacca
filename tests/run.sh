@@ -226,6 +226,8 @@ if group "people"; then
       bash "$ROOT/tests/people_send.sh" "${P[@]}"
     check "texts owed lists who is waiting and drafts wait for a number" \
       bash "$ROOT/tests/texts_owed.sh" "${P[@]}"
+    check "people store write transactions wait for a lock instead of failing" \
+      bash "$ROOT/tests/people_write_lock.sh"
     check "WhatsApp rows come out in the texts reader's shape" \
       python3 "$ROOT/tests/test_whatsapp_reader.py"
     check "Slack rows come out in the texts reader's shape" \

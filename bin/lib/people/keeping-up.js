@@ -306,7 +306,7 @@ function cmdMine(argv) {
     "INSERT INTO quick_facts (person_id, key, value, updated_at) VALUES (?,?,?,?)" +
       " ON CONFLICT(person_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
   );
-  d.exec("BEGIN");
+  d.exec("BEGIN IMMEDIATE");
   for (const f of hits.values())
     up.run(f.person_id, f.slot, f.value + '  - them, ' + f.at.slice(0, 10) + ': "' + f.quote + '"', nowISO());
   d.exec("COMMIT");

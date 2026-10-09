@@ -125,4 +125,16 @@ out="$("$P" texts sync 2>&1)" || fail "a fresh sync did not exit cleanly"
 grep -q "nothing to do" <<<"$out" || fail "a sync minutes after the last one ran anyway"
 out="$("$P" texts help 2>&1)"
 grep -q "texts owed" <<<"$out" && ! grep -q "nothing in the last" <<<"$out" || fail "texts help searched for a person named help"
+# Messages automation denied (osascript -1743) must stop an iMessage send with
+# the System Settings fix, before anything is handed to a sender. Every sender
+# here is a stub that fails, so even a regression cannot reach a phone.
+STUB="$PEOPLE_DIR/stub"; mkdir -p "$STUB"
+printf '#!/bin/sh\necho "execution error: Not authorized to send Apple events to Messages. (-1743)" >&2\nexit 1\n' > "$STUB/osascript"
+printf '#!/bin/sh\necho STUBSENDER >&2\nexit 1\n' > "$STUB/mac"; cp "$STUB/mac" "$STUB/wacli"
+chmod +x "$STUB"/*
+out="$(env -u CHEWBACCA_NO_SEND PATH="$STUB:$PATH" "$P" send "owed olive" "hi" --to +15550201 2>&1)" && fail "a send with Messages blocked reported success"
+grep -q "Privacy & Security > Automation" <<<"$out" || fail "a blocked send did not name the System Settings fix"
+grep -q "STUBSENDER" <<<"$out" && fail "a send reached the sender with Messages automation denied"
+out="$(env -u CHEWBACCA_NO_SEND PATH="$STUB:$PATH" "$P" texts drafts 2>&1)"
+grep -q "blocking this app from controlling Messages" <<<"$out" || fail "the drafts list did not warn before he picks numbers"
 exit 0

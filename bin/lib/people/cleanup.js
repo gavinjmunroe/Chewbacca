@@ -154,7 +154,7 @@ function cmdMerge(argv) {
     );
 
   const moved = {};
-  d.exec("BEGIN");
+  d.exec("BEGIN IMMEDIATE");
   try {
     for (const [table, col] of PERSON_TABLES) {
       // OR IGNORE first: several of these have a unique key on (person_id, x),
@@ -245,7 +245,7 @@ function cmdPurge(argv) {
   // where the data went instead of just that it is gone.
   const note = flags["archived-to"] ? ` archived to ${flags["archived-to"]}` : "";
 
-  d.exec("BEGIN");
+  d.exec("BEGIN IMMEDIATE");
   try {
     for (const [table, col] of PERSON_TABLES) {
       d.prepare(`DELETE FROM ${table} WHERE ${col} = ?`).run(p.id);

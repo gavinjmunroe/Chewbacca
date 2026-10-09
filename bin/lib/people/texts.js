@@ -249,7 +249,7 @@ function ingestRows(d, rows, source, seen) {
     // gives readers a gap to run in.
     const TX_ROWS = 5000;
     let txCount = 0;
-    d.exec("BEGIN");
+    d.exec("BEGIN IMMEDIATE");
     try {
     for (const r of rows) {
       if (r.reaction || r.attachment_only) continue; // "Loved an image" is not a conversation
@@ -280,7 +280,7 @@ function ingestRows(d, rows, source, seen) {
       if (source === "imessage" && r.id > maxId) maxId = r.id;
       if (++txCount % TX_ROWS === 0) {
         d.exec("COMMIT");
-        d.exec("BEGIN");
+        d.exec("BEGIN IMMEDIATE");
       }
     }
       d.exec("COMMIT");
@@ -698,6 +698,11 @@ function cmdTexts(argv) {
       if (dr.why) say(c.dim(`     re: ${printable(dr.why)}`));
       say(`     ${printable(dr.text)}`);
     });
+    // Say it before he picks numbers, not after the first send fails.
+    if (!process.env.CHEWBACCA_NO_SEND && list.some((dr) => !dr.via || dr.via === "imessage")) {
+      const blocked = require("./send").messagesBlocked();
+      if (blocked) say(c.yel ? c.yel(`\n  ${blocked.split("\n").slice(0, 2).join("\n  ")}`) : `\n  ${blocked}`);
+    }
     say(c.dim(`\n  people texts drafts send <n>  |  drop <n>\n`));
     return;
   }

@@ -308,7 +308,7 @@ function cmdIdentities(argv) {
   }
 
   let added = 0, already = 0;
-  if (apply) d.exec("BEGIN");
+  if (apply) d.exec("BEGIN IMMEDIATE");
   const ins = d.prepare(
     `INSERT OR IGNORE INTO identities (person_id, kind, value) VALUES (?,?,?)`,
   );

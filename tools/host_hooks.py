@@ -33,7 +33,7 @@ CLAUDE_ONLY = ('skill-gate.sh', 'Clawd on Desk', "say '", 'terminal-loop.sh', 'p
 # Native tool names to the Claude names the registered matchers expect.
 TOOLS = {
     'cursor': {'Shell': 'Bash', 'Write': 'Write', 'Read': 'Read', 'Grep': 'Grep',
-               'Delete': 'Bash', 'Task': 'Task'},
+               'Delete': 'Delete', 'Task': 'Task'},
     'gemini': {'run_shell_command': 'Bash', 'write_file': 'Write', 'replace': 'Edit',
                'read_file': 'Read', 'read_many_files': 'Read', 'search_file_content': 'Grep',
                'glob': 'Glob', 'web_fetch': 'WebFetch', 'google_web_search': 'WebSearch'},
@@ -156,6 +156,12 @@ def cursor(native):
     if event in ('preToolUse', 'beforeShellExecution'):
         name = 'Bash' if event == 'beforeShellExecution' else TOOLS['cursor'].get(native.get('tool_name', ''), native.get('tool_name', ''))
         tool_input = dict(native.get('tool_input') or {})
+        # Cursor documents no Write input shape. Claude's file guards key on
+        # file_path, so a differently named path field would walk past every
+        # one of them; copy whichever path field arrived into file_path.
+        for alias in ('path', 'target_file', 'file', 'filePath'):
+            if alias in tool_input and 'file_path' not in tool_input:
+                tool_input['file_path'] = tool_input[alias]
         if event == 'beforeShellExecution':
             tool_input = {'command': native.get('command', '')}
         if name.startswith('MCP:'):

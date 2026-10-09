@@ -531,6 +531,9 @@ else
   else
     warn "wacli missing (brew install openclaw/tap/wacli)"
   fi
+  command -v api-anything >/dev/null 2>&1 &&
+    ok "api engine present (chewbacca api)" ||
+    warn "api engine missing, websites fall back to driving a browser (chewbacca api install)"
 
   if command -v mac-use >/dev/null 2>&1; then
     # Same resolution as bin/mac-use: MACOS_USE_HOME, else whichever has a venv.

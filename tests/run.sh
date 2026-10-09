@@ -614,6 +614,12 @@ if group "installer"; then
   check  "reddit parses feeds, retries a 429 and stops at the block page" \
     bash "$ROOT/tests/reddit.sh" "$ROOT"
 
+  # 2026-10-09: api-anything replays a site's own requests, and repairs a
+  # drifted one by rewriting the spec in its store. A sync that copied the
+  # repo's spec over that would undo every repair on the next call.
+  check  "chewbacca api syncs taught sites without clobbering a healed spec" \
+    bash "$ROOT/tests/chewbacca_api.sh" "$ROOT"
+
   # Every kit on the machine matched one 17,000-character message about a club
   # website on 2026-09-22, because hit count was never divided by what was
   # typed and two kits make every stem look distinctive.

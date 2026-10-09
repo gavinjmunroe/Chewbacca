@@ -68,6 +68,7 @@ COMMANDS=(
   "gtme-dedupe|cluster duplicate people across contact CSVs"
   "gtme-signals|list recent SEC Form D raises as buying signals"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
+  "api|any website as an API: call taught sites, teach new ones (not Clay)"
   "clay-fixture-check|compare a CSV export with an expected fixture"
   "oss-apps|open source apps that replace a Mac app, and which can be remixed"
   "task-graph|track local jobs, ownership, and dependencies"
@@ -142,6 +143,12 @@ whatsapp)
   # engines underneath are installed and driven for you.
   shift
   exec bash "$ROOT/bin/chewbacca-whatsapp" "$@"
+  ;;
+api)
+  # Websites with no API, called over plain HTTP from operations learned off
+  # their own frontend. Engine: goodnight000/api-anything.
+  shift
+  exec bash "$ROOT/bin/chewbacca-api" "$@"
   ;;
 connect)
   # One verb wires every installed app (Claude Code, Codex, Cursor, Gemini)

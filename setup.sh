@@ -1673,6 +1673,12 @@ _register("PreToolUse", hooks_dir + "/launch-guard.sh", timeout=10,
 _register("PreToolUse", hooks_dir + "/clay-native-guard.sh", timeout=5,
           matcher="Bash")
 
+# A polling loop has to be able to stop. On 2026-10-09 an uncapped `until` deploy
+# wait hit a zsh parse error, never passed, and polled Railway every 10s for an
+# hour in the background.
+_register("PreToolUse", hooks_dir + "/wait-loop-guard.sh", timeout=5,
+          matcher="Bash")
+
 # Say the ranking rule out loud before ranking, and name what would falsify
 # the answer. Running someone's list top to bottom is not a method.
 _register("UserPromptSubmit", hooks_dir + "/method-guard.sh", timeout=8,

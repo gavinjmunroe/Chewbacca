@@ -637,6 +637,8 @@ if group "installer"; then
 
   check  "plan-guard refuses a skipped phase and permits the active one" \
     bash "$ROOT/tests/plan_guard.sh"
+  check  "wait-loop-guard refuses an uncapped polling loop and permits a capped one" \
+    bash "$ROOT/tests/wait_loop_guard.sh"
 
   # chatdb_guard.sh existed since 2026-10-03 and was never in the suite.
   check  "chatdb-guard refuses raw thread reads and permits the people CLI" \

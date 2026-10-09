@@ -137,10 +137,11 @@ if [ -n "$_SID" ] && [ -s "$_WLOG" ]; then
           # api tab and a todo tab both ran shell in this repo, the todo tab
           # was credited with library/api-sites/usc-dining.json, and its Stop
           # hook told it to commit a file it never wrote, every turn. A weak
-          # claim loses to a row from any other session in the window.
+          # claim loses to a row from any other session, at any age: AGENTS.md
+          # was rewritten by another tab and credited here an hour later.
           if (owner == "")
             for (i = 1; i < last; i++)
-              if (sid[p, i] != who && ts[p, i] >= ts[p, last] - window) owner = sid[p, i]
+              if (sid[p, i] != who) owner = sid[p, i]
           if (owner != "") who = owner
           owner = ""
         }

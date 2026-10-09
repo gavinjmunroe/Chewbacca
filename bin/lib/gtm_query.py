@@ -56,6 +56,13 @@ def _marks(items) -> str:
 
 
 def rank(by: str) -> int:
+    """A verdict's weight. Only a named person outranks a model. A missing
+    or "unknown" author is the weakest of all: the first version ranked
+    anything not clay or model as a person, so an edge with no author beat
+    a real model verdict (security review, 2026-10-09)."""
+    by = (by or "").strip().lower()
+    if by in ("", "unknown", "none"):
+        return -1
     if by == "clay":
         return 0
     if by.startswith("model"):
@@ -116,16 +123,28 @@ def client_rows(db) -> list[dict]:
 
 
 def find_client(db, name: str) -> dict:
+    """The one client whose name is exactly `name` (case and spacing aside),
+    or whose id is exactly `name`. Never a substring: the first version fell
+    back to one, so `gtm suppress --client Acme` quietly answered with the
+    only client whose name CONTAINED "acme", and a refill would have been
+    stamped against another client's list (security review, 2026-10-09).
+    Two clients with one name refuse and print both ids."""
     want = " ".join((name or "").lower().split())
     rows = client_rows(db)
-    hit = [c for c in rows if c["name"].lower() == want or c["id"] == f"client:{slug(name)}"]
+    hit = [c for c in rows if c["id"] == (name or "").strip()]
+    if not hit:
+        hit = [c for c in rows if want and " ".join(c["name"].lower().split()) == want]
+    if not hit and want:
+        hit = [c for c in rows if c["id"] == f"client:{slug(name)}"]
     if len(hit) == 1:
         return hit[0]
-    hit = [c for c in rows if want and want in c["name"].lower()]
-    if len(hit) == 1:
-        return hit[0]
+    if len(hit) > 1:
+        raise LookupError(f"{len(hit)} clients are called {name!r}; pass one id: "
+                          + ", ".join(c["id"] for c in hit))
+    near = [c["name"] for c in rows if want and want in c["name"].lower()]
     names = ", ".join(c["name"] for c in rows) or "none synced yet"
-    raise LookupError(f"no single client called {name!r} (clients: {names})")
+    hint = f"; did you mean {', '.join(repr(n) for n in near)}?" if near else ""
+    raise LookupError(f"no client is exactly {name!r} (clients: {names}){hint}")
 
 
 def campaigns_of(db, client_id: str) -> list[dict]:
@@ -361,7 +380,14 @@ def lead(db, who: str) -> dict:
 # ── lists ─────────────────────────────────────────────────────────────────
 
 
-def replies(db, client_name: str | None = None, unanswered: bool = False, include_all: bool = False) -> dict:
+def replies(db, client_name: str | None = None, unanswered: bool = False, include_all: bool = False,
+            all_clients: bool = False) -> dict:
+    """Replies for one client. Every client's at once only when asked for by
+    name (`all_clients`): the first version listed every client's reply text
+    whenever --client was left off, so a list meant for one client carried
+    the others' leads and what they wrote (security review, 2026-10-09)."""
+    if not client_name and not all_clients:
+        raise LookupError("replies needs --client NAME (or --all-clients to list every client's replies)")
     if client_name:
         c = find_client(db, client_name)
         cams = campaigns_of(db, c["id"])
@@ -397,35 +423,126 @@ def replies(db, client_name: str | None = None, unanswered: bool = False, includ
             "skipped_forwarded": forwarded, "sync": sync_state(db, ws)}
 
 
+def _domain(address: str) -> str:
+    return address.rsplit("@", 1)[-1] if "@" in address else ""
+
+
+def live_suppressions(db, client_id: str) -> dict[str, dict]:
+    """address -> {"last_sent", "reasons"} for everyone this client must never
+    email again, from the graph as it stands. A domain block is the address
+    "*@domain" and also marks every address of the client's at that domain.
+
+    Reasons, any one of which suppresses: emailed (an "Email sent"
+    activity), replied (any reply, any class, in any of the client's
+    campaigns or its workspace inbox even when the campaign name matched
+    nothing), unsubscribed, bounced, labelled not-a-fit, and do-not-contact
+    entries (clients.json, blocklist exports, human labels). The first
+    version listed only "Email sent" addresses plus reply threads that
+    matched a campaign by name, so an unsubscribe, a bounce, a "not a fit"
+    or a reply in an unmatched thread went back into the next refill
+    (security review, 2026-10-09). Enrollment alone still never counts."""
+    cams = [x["id"] for x in campaigns_of(db, client_id)]
+    out: dict[str, dict] = {}
+    known: set[str] = set()
+
+    def mark(address, reason, sent=None):
+        if not address:
+            return
+        slot = out.setdefault(address, {"last_sent": None, "reasons": []})
+        if reason not in slot["reasons"]:
+            slot["reasons"].append(reason)
+        if sent and (slot["last_sent"] or "") < sent:
+            slot["last_sent"] = sent
+
+    if cams:
+        for r in db.execute(
+                "SELECT json_extract(props, '$.email') AS email, MAX(json_extract(props, '$.last_sent_at')) AS last, "
+                "MAX(json_extract(props, '$.replied')) AS replied, MAX(json_extract(props, '$.bounced')) AS bounced "
+                f"FROM edges WHERE verb = 'ENROLLED' AND src IN ({_marks(cams)}) GROUP BY email", cams):
+            e = r["email"]
+            known.add(e)
+            if r["last"]:
+                mark(e, "emailed", r["last"])
+            if r["replied"]:
+                mark(e, "replied")
+            if r["bounced"]:
+                mark(e, "bounced")
+    reps = {r["id"]: r for r in replies_in(db, cams)}
+    for r in db.execute("SELECT id, props FROM nodes WHERE type = 'Reply' "
+                        "AND json_extract(props, '$.client_id') = ?", (client_id,)):
+        reps.setdefault(r["id"], {"id": r["id"], **_props(r)})
+    v = verdicts(db, list(reps))
+    for rid, r in reps.items():
+        e = r.get("lead_email")
+        if not e:
+            continue
+        known.add(e)
+        sent = [t for t in r.get("thread_sent_times") or [] if t]
+        mark(e, "replied", max(sent)[:10] if sent else None)
+        for cls, by in (v.get(rid) or {}).get("all", []):
+            if cls == "unsubscribe":
+                mark(e, "unsubscribed")
+            elif cls == "bounce":
+                mark(e, "bounced")
+            elif cls == "negative":
+                mark(e, f"not a fit (negative by {by})")
+    domains: dict[str, str] = {}
+    for r in db.execute("SELECT props FROM nodes WHERE type = 'Signal' AND json_extract(props, '$.client_id') = ?",
+                        (client_id,)):
+        p = _props(r)
+        if p.get("kind") != "do_not_contact":
+            continue
+        if p.get("email"):
+            mark(p["email"], p.get("reason") or "do not contact")
+        elif p.get("domain"):
+            domains[p["domain"]] = p.get("reason") or "domain blocked"
+            mark(f"*@{p['domain']}", p.get("reason") or "domain blocked")
+    for e in known:
+        d = _domain(e)
+        if d in domains:
+            mark(e, f"domain {d} blocked: {domains[d]}")
+    return out
+
+
 def suppress(db, client_name: str) -> dict:
-    """Every address the client's campaigns actually emailed: an "Email sent"
-    activity, or a reply thread (a reply means we wrote first). Enrollment
-    alone never counts."""
+    """Everyone this client must never email again: the live graph
+    (`live_suppressions`) plus the gtm_suppressed ledger, which keeps an
+    address after its campaign is deleted in Clay and drops out of the
+    snapshot. Each row says why."""
     c = find_client(db, client_name)
     cams = campaigns_of(db, c["id"])
-    ids = [x["id"] for x in cams]
-    emails: dict[str, str] = {}
+    rows = live_suppressions(db, c["id"])
+    ledger_only = 0
+    try:
+        for r in db.execute("SELECT address, reason, last_sent FROM gtm_suppressed WHERE client = ?", (c["id"],)):
+            if r["address"] not in rows:
+                ledger_only += 1
+            slot = rows.setdefault(r["address"], {"last_sent": None, "reasons": []})
+            if r["reason"] not in slot["reasons"]:
+                slot["reasons"].append(r["reason"])
+            if r["last_sent"] and (slot["last_sent"] or "") < r["last_sent"]:
+                slot["last_sent"] = r["last_sent"]
+    except sqlite3.OperationalError:
+        pass  # no ledger table yet: a graph that has never completed a sync
+    domains = {a[2:] for a in rows if a.startswith("*@")}
+    for a, slot in rows.items():
+        d = _domain(a)
+        if not a.startswith("*@") and d in domains and not any(x.startswith("domain ") for x in slot["reasons"]):
+            slot["reasons"].append(f"domain {d} blocked")
     in_only = 0
-    if ids:
-        # One scan: an address with any send is suppressed; one with none is
-        # counted as in a campaign and never emailed.
-        for r in db.execute(
-                "SELECT json_extract(props, '$.email') AS email, MAX(json_extract(props, '$.last_sent_at')) AS last "
-                f"FROM edges WHERE verb = 'ENROLLED' AND src IN ({_marks(ids)}) GROUP BY email", ids):
-            if r["last"]:
-                emails[r["email"]] = r["last"]
-            else:
+    if cams:
+        ids = [x["id"] for x in cams]
+        for r in db.execute("SELECT DISTINCT json_extract(props, '$.email') AS email FROM edges "
+                            f"WHERE verb = 'ENROLLED' AND src IN ({_marks(ids)})", ids):
+            if r["email"] not in rows:
                 in_only += 1
-    from_threads = 0
-    for r in replies_in(db, ids):
-        e = r.get("lead_email")
-        sent = [t for t in r.get("thread_sent_times") or [] if t]
-        if e and e not in emails:
-            from_threads += 1
-            emails[e] = max(sent)[:10] if sent else (r.get("time") or "")[:10]
     clay_sent = sum((x.get("analytics") or {}).get("sent") or 0 for x in cams)
-    return {"client": c["name"], "emails": [{"email": e, "last_sent": d} for e, d in sorted(emails.items())],
-            "from_reply_threads": from_threads, "in_campaign_never_emailed": in_only,
+    emails = [{"email": a, "last_sent": s["last_sent"], "reasons": sorted(s["reasons"])}
+              for a, s in sorted(rows.items())]
+    return {"client": c["name"], "emails": emails,
+            "from_reply_threads": sum(1 for r in emails if "replied" in r["reasons"] and "emailed" not in r["reasons"]),
+            "domains_blocked": len(domains), "from_ledger_only": ledger_only,
+            "in_campaign_never_emailed": in_only,
             "clay_sends_total": clay_sent, "sync": sync_state(db, workspaces_of(db, c["id"]))}
 
 

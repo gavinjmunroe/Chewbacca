@@ -4,8 +4,9 @@
     gtm clients                          every client, with its funnel
     gtm client NAME                      offers, campaigns, sent/replied/positive/booked
     gtm lead EMAIL|NAME                  one person's whole history across clients
-    gtm replies [--unanswered] [--client NAME] [--all]
-    gtm suppress --client NAME [--csv]   addresses actually emailed, for refills
+    gtm replies --client NAME [--unanswered] [--all]   (or --all-clients)
+    gtm suppress --client NAME [--csv]   never email again: emailed, replied, unsubscribed,
+                                         bounced, not a fit, do-not-contact, with the reason
     gtm funnel --client NAME             sent, replied, positive, meetings, with denominators
     gtm sync [--source clay|inbox|calendar] [--background]
 
@@ -172,7 +173,8 @@ def lock_path() -> Path:
 def background(sources: list[str]) -> int:
     import subprocess
     lock = lock_path()
-    lock.parent.mkdir(parents=True, exist_ok=True)
+    # Owner-only: the log names clients and carries Clay's error text.
+    lock.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     try:
         pid = int(lock.read_text().strip())
         os.kill(pid, 0)
@@ -180,7 +182,7 @@ def background(sources: list[str]) -> int:
         return 0
     except (OSError, ValueError):
         pass
-    log = open(lock.parent / "sync.log", "a")
+    log = os.fdopen(os.open(lock.parent / "sync.log", os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "a")
     argv = [sys.executable, str(Path(__file__).resolve()), "sync"] + sum((["--source", s] for s in sources), [])
     proc = subprocess.Popen(argv, stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
                             env=dict(os.environ, GTM_SYNC_PIDFILE=str(lock)))
@@ -201,11 +203,12 @@ def main(argv=None) -> int:
     p.add_argument("who", help="email address, or full name exactly")
     p = sub.add_parser("replies", help="replies, newest first")
     p.add_argument("--unanswered", action="store_true", help="latest reply in a thread with nothing sent after it")
-    p.add_argument("--client")
+    p.add_argument("--client", help="exact client name or id")
+    p.add_argument("--all-clients", action="store_true", help="every client's replies, only when asked for")
     p.add_argument("--all", action="store_true", help="with --unanswered, include negative, unsubscribe, OOO, bounce")
-    p = sub.add_parser("suppress", help="addresses a client's campaigns actually emailed")
-    p.add_argument("--client", required=True)
-    p.add_argument("--csv", action="store_true", help="email,last_sent rows for the stamp workflow")
+    p = sub.add_parser("suppress", help="everyone a client must never email again, with why")
+    p.add_argument("--client", required=True, help="exact client name or id")
+    p.add_argument("--csv", action="store_true", help="email,last_sent,reason rows for the stamp workflow")
     p = sub.add_parser("funnel", help="sent, replied, positive, meetings, with denominators")
     p.add_argument("--client", required=True)
     p = sub.add_parser("sync", help="read Clay, the inbox and the calendar into the graph (read only)")
@@ -242,7 +245,7 @@ def main(argv=None) -> int:
         elif a.cmd == "lead":
             data, show = q.lead(db, a.who), show_lead
         elif a.cmd == "replies":
-            data, show = q.replies(db, a.client, a.unanswered, a.all), show_replies
+            data, show = q.replies(db, a.client, a.unanswered, a.all, a.all_clients), show_replies
         elif a.cmd == "suppress":
             data = q.suppress(db, a.client)
             if a.csv and not a.json:
@@ -250,22 +253,26 @@ def main(argv=None) -> int:
                 # anyone emailing in can shape: csv quotes commas and quotes,
                 # csv_cell defuses a leading =,+,-,@ (security review, 2026-10-09).
                 w = csv.writer(sys.stdout, lineterminator="\n")
-                w.writerow(["email", "last_sent"])
+                w.writerow(["email", "last_sent", "reason"])
                 for r in data["emails"]:
-                    w.writerow([csv_cell(r["email"]), csv_cell(r["last_sent"] or "")])
-                print(f"# {len(data['emails'])} addresses emailed ({data['from_reply_threads']} only from reply threads); "
-                      f"{data['in_campaign_never_emailed']} in a campaign but never emailed are NOT here",
+                    w.writerow([csv_cell(r["email"]), csv_cell(r["last_sent"] or ""),
+                                csv_cell("; ".join(r["reasons"]))])
+                print(f"# {len(data['emails'])} suppressed ({data['from_reply_threads']} only from replies, "
+                      f"{data['domains_blocked']} whole domains as *@domain); "
+                      f"{data['in_campaign_never_emailed']} in a campaign with no reason to suppress are NOT here",
                       file=sys.stderr)
                 return 0
 
             def show(d):
-                return ([f"{d['client']}: {len(d['emails'])} addresses actually emailed "
-                         f"(clay 'Email sent' activities, plus {d['from_reply_threads']} seen only in reply threads)",
-                         f"  {d['in_campaign_never_emailed']} people are in a campaign but were never emailed; "
-                         "they are not suppressed",
+                return ([f"{d['client']}: {len(d['emails'])} addresses never to email again "
+                         f"(emailed, replied, unsubscribed, bounced, not a fit or do-not-contact; "
+                         f"{d['from_reply_threads']} only from replies, {d['domains_blocked']} whole domains, "
+                         f"{d['from_ledger_only']} kept from campaigns no longer in Clay)",
+                         f"  {d['in_campaign_never_emailed']} people are in a campaign with no reason to suppress; "
+                         "they are not here",
                          f"  clay analytics counts {d['clay_sends_total']} sends in total; a record Clay deleted "
                          "cannot be listed here"]
-                        + [f"  {r['email']}  {r['last_sent'] or ''}" for r in d["emails"]]
+                        + [f"  {r['email']}  {r['last_sent'] or '-'}  {'; '.join(r['reasons'])}" for r in d["emails"]]
                         + ["Synced:"] + sync_lines(d["sync"]))
         else:
             data, show = q.funnel(db, a.client), show_funnel

@@ -96,7 +96,20 @@ RECORD_BATCH = 100
 WORKERS = 4
 MAX_TRIES = 6
 SNIPPET = 280
-CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f​-‏‪-‮⁦-⁩]")
+# C0 controls (ESC starts a terminal escape), DEL, the C1 block (U+009B is a
+# one-character CSI that terminals honour in UTF-8 mode, so a reply body could
+# still repaint the screen after ESC was stripped: security review 2026-10-09),
+# zero-width and bidi overrides, line and paragraph separators, the BOM.
+CONTROL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]")
+# An id Clay hands back goes into a clay argv as a positional. One that starts
+# with "-" would be parsed as a flag, so anything outside this shape is refused.
+SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+# The only flags a read may carry. Values after them are not checked here.
+FLAGS = frozenset({"--with-analytics", "--limit", "--cursor", "--query", "--entity-type", "--ids"})
+UNSCREENED = "UNSCREENED: the untrusted-screen pattern layer could not run"
+# Reply and label classes that mean "never email this address again", on top
+# of the plain fact of a reply (any reply suppresses).
+DNC_CLASSES = frozenset({"negative", "unsubscribe", "bounce"})
 
 
 class ReadOnlyViolation(RuntimeError):
@@ -107,17 +120,58 @@ class SourceUnavailable(RuntimeError):
     """The source could not be read. The sync records it and writes nothing."""
 
 
+class WorkspaceMismatch(SourceUnavailable):
+    """A clay answer named no workspace, or another one than the sync asked for."""
+
+
+class ConfigError(RuntimeError):
+    """clients.json exists but cannot be trusted: unparsable, or two clients claim one workspace."""
+
+
 def config_path() -> Path:
     return Path(os.environ.get("GTM_CONFIG") or Path.home() / ".chewbacca" / "gtm" / "clients.json")
 
 
 def load_config(path: Path | None = None) -> dict:
+    """The client config. A missing file is an empty config; a file that
+    exists and cannot be parsed is a ConfigError. The first version returned
+    an empty config for both, so one stray comma made every workspace sync as
+    an unnamed client with none of its do-not-contact entries (security
+    review, 2026-10-09)."""
     path = path or config_path()
+    if not path.exists():
+        return {"clients": []}
     try:
         body = json.loads(path.read_text())
-    except (OSError, ValueError):
-        return {"clients": []}
-    return body if isinstance(body, dict) else {"clients": []}
+    except (OSError, ValueError) as e:
+        raise ConfigError(f"{path} could not be read as JSON: {e}") from e
+    if not isinstance(body, dict) or not isinstance(body.get("clients", []), list):
+        raise ConfigError(f'{path} must be an object with a "clients" list')
+    validate_config(body)
+    return body
+
+
+def client_workspaces(client: dict) -> list[str]:
+    return [str(w) for w in (client.get("workspaces") or [client.get("workspace")]) if w]
+
+
+def validate_config(cfg: dict) -> None:
+    """One workspace belongs to exactly one client, and no two clients share
+    an id. Either would file one client's sends and replies under the other,
+    so both refuse instead of taking the first match."""
+    owner: dict[str, str] = {}
+    ids: dict[str, str] = {}
+    for c in cfg.get("clients") or []:
+        if not isinstance(c, dict) or not c.get("name"):
+            raise ConfigError("every client needs a name")
+        cid = client_id(c)
+        if cid in ids:
+            raise ConfigError(f"clients {ids[cid]!r} and {c['name']!r} both map to {cid}")
+        ids[cid] = c["name"]
+        for w in client_workspaces(c):
+            if w in owner:
+                raise ConfigError(f"workspace {w} is claimed by both {owner[w]!r} and {c['name']!r}")
+            owner[w] = c["name"]
 
 
 def slug(text: str) -> str:
@@ -137,8 +191,12 @@ def utc_now() -> str:
 # ── the clay CLI, read only ──────────────────────────────────────────────────
 
 
+def _prefix(args: list[str]) -> tuple:
+    return next((p for p in READ_ONLY if tuple(args[:len(p)]) == p), ())
+
+
 def allowed(args: list[str]) -> bool:
-    return any(tuple(args[:len(p)]) == p for p in READ_ONLY)
+    return bool(_prefix(args))
 
 
 def _subprocess_runner(argv: list[str]) -> tuple[int, str, str]:
@@ -156,10 +214,20 @@ class ClayCLI:
         self.sleep = sleep
         self.calls = 0
         self.workspace: dict | None = None
+        # The workspace every answer must name while a fetch runs. The clay
+        # CLI has no per-command workspace flag (it runs against `workspaces
+        # current`), so the only proof of which workspace answered is the
+        # `workspace` its output contract puts on every success.
+        self.expect: str | None = None
 
     def run(self, args: list[str]) -> dict:
         if not allowed(args):
             raise ReadOnlyViolation(f"clay {' '.join(args[:3])} is not a read this module may run")
+        rest = args[len(_prefix(args)):]
+        for i, a in enumerate(rest):
+            after_flag = i > 0 and rest[i - 1] in FLAGS and rest[i - 1] != "--with-analytics"
+            if a.startswith("-") and not after_flag and a not in FLAGS:
+                raise ReadOnlyViolation(f"clay {' '.join(args[:3])} carries {a[:40]!r}, not a read flag")
         wait = 2.0
         for _ in range(MAX_TRIES):
             self.calls += 1
@@ -169,9 +237,19 @@ class ClayCLI:
                     body = json.loads(out or "{}")
                 except ValueError as e:
                     raise SourceUnavailable(f"clay {args[0]} {args[1]} printed non-JSON") from e
-                ws = body.get("workspace") if isinstance(body, dict) else None
-                if isinstance(ws, dict) and ws.get("id"):
-                    self.workspace = {"id": str(ws["id"]), "name": ws.get("name") or ""}
+                if not isinstance(body, dict):
+                    raise SourceUnavailable(f"clay {args[0]} {args[1]} printed {type(body).__name__}, not an object")
+                ws = body.get("workspace")
+                ws_id = str(ws["id"]) if isinstance(ws, dict) and ws.get("id") else None
+                if self.expect is not None:
+                    # Missing is a refusal, not a pass: an answer that names
+                    # no workspace cannot be filed under the one we asked for.
+                    if ws_id is None:
+                        raise WorkspaceMismatch(f"clay {' '.join(args[:3])} named no workspace; expected {self.expect}")
+                    if ws_id != self.expect:
+                        raise WorkspaceMismatch(f"clay is signed in to workspace {ws_id}, not {self.expect}")
+                if ws_id:
+                    self.workspace = {"id": ws_id, "name": clip(ws.get("name"), 120)}
                 return body
             if code == 4:  # rate_limited: back off on Clay's own number
                 try:
@@ -189,15 +267,27 @@ class ClayCLI:
         out, cursor = [], None
         for _ in range(500):
             body = self.run(args + (["--cursor", cursor] if cursor else []))
-            out.extend(body.get(key) or [])
+            page = body.get(key)
+            # A success with no list where the list belongs is not "none":
+            # reading it as empty would replace real data with nothing.
+            if not isinstance(page, list):
+                raise SourceUnavailable(f"clay {' '.join(args[:3])} returned no {key!r} list")
+            out.extend(page)
             cursor = body.get("cursor")
             if not cursor:
                 return out
+            if not isinstance(cursor, str) or cursor.startswith("-") or len(cursor) > 4096:
+                raise SourceUnavailable(f"clay {' '.join(args[:3])} returned a cursor this module will not pass on")
         raise SourceUnavailable(f"clay {' '.join(args[:3])} never stopped paging")
 
     def ids(self, query: str) -> list[int]:
-        return [int(i) for i in self.paged(
-            ["audiences", "records", "search-ids", "--query", query, "--limit", str(PAGE)])]
+        out = []
+        for i in self.paged(["audiences", "records", "search-ids", "--query", query, "--limit", str(PAGE)]):
+            try:
+                out.append(int(i))
+            except (TypeError, ValueError) as e:
+                raise SourceUnavailable(f"clay search-ids returned a non-integer id {clip(i, 40)!r}") from e
+        return out
 
 
 def _q(text: str) -> str:
@@ -216,14 +306,31 @@ def fetch_clay(cli: ClayCLI, workspace_id: str, workers: int = WORKERS) -> dict:
     """Everything the clay snapshot needs, read through `cli`. Raises
     SourceUnavailable on a refused read, or when the CLI is signed in to a
     different workspace than the one asked for (writing client A's campaigns
-    under client B is the failure this prevents)."""
+    under client B is the failure this prevents).
+
+    EVERY call is checked, not just the first, and an answer that names no
+    workspace is refused: the first version checked only the campaign list
+    and passed when `workspace` was absent, so a CLI that never reported its
+    workspace had its campaigns filed under whichever id the sync asked for
+    (security review, 2026-10-09)."""
+    cli.workspace = None
+    cli.expect = str(workspace_id)
+    try:
+        return _fetch_clay(cli, str(workspace_id), workers)
+    finally:
+        cli.expect = None
+
+
+def _fetch_clay(cli: ClayCLI, workspace_id: str, workers: int) -> dict:
     campaigns = cli.paged(["campaigns", "list", "--with-analytics", "--limit", "100"])
-    signed_in = (cli.workspace or {}).get("id")
-    if signed_in and str(signed_in) != str(workspace_id):
-        raise SourceUnavailable(f"clay is signed in to workspace {signed_in}, not {workspace_id}")
+    for c in campaigns:
+        if not isinstance(c, dict) or not SAFE_ID.match(str(c.get("id") or "")):
+            raise SourceUnavailable(f"clay campaigns list returned an id this module will not pass on: "
+                                    f"{clip((c or {}).get('id') if isinstance(c, dict) else c, 40)!r}")
 
     def analytics(c):
-        return c["id"], cli.run(["campaigns", "analytics", c["id"]])
+        body = cli.run(["campaigns", "analytics", c["id"]])
+        return c["id"], body
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         stats = dict(pool.map(analytics, campaigns))
@@ -237,8 +344,19 @@ def fetch_clay(cli: ClayCLI, workspace_id: str, workers: int = WORKERS) -> dict:
         jobs.append((cid, "joined", None, activity_query(cid, "campaign_status", STATUS_JOINED)))
         jobs.append((cid, "replied", None, activity_query(cid, "email", REPLIED_TITLE)))
         jobs.append((cid, "bounced", None, activity_query(cid, "email", BOUNCED_TITLE)))
-        for d in (stats[cid].get("stats") or {}).get("daily") or []:
+        daily = (stats[cid].get("stats") or {}).get("daily")
+        sent_total = a.get("sent") or ((stats[cid].get("stats") or {}).get("totals") or {}).get("sent") or 0
+        if sent_total and not isinstance(daily, list):
+            # No per-day breakdown means no "Email sent" searches, so every
+            # emailed lead would read as never emailed and drop out of
+            # suppression. Refuse instead.
+            raise SourceUnavailable(f"clay analytics for {cid} counts {sent_total} sends but has no daily breakdown")
+        for d in daily or []:
             if d.get("sent"):
+                try:
+                    date.fromisoformat(str(d.get("date")))
+                except ValueError as e:
+                    raise SourceUnavailable(f"clay analytics for {cid} has a malformed day {clip(d.get('date'), 30)!r}") from e
                 jobs.append((cid, "sent", d["date"], activity_query(cid, "email", SENT_TITLE, d["date"])))
 
     def search(job):
@@ -254,20 +372,33 @@ def fetch_clay(cli: ClayCLI, workspace_id: str, workers: int = WORKERS) -> dict:
             else:
                 slot[kind] = found
 
+    for c in campaigns:
+        sent_total = (c.get("analytics") or {}).get("sent") or 0
+        found = sum(len(v) for v in ((activity.get(c["id"]) or {}).get("sent") or {}).values())
+        if sent_total and not found:
+            raise SourceUnavailable(f"clay counts {sent_total} sends on {c['id']} but its activities name nobody "
+                                    "emailed; keeping the previous snapshot rather than unsuppressing them")
+
     wanted = sorted({i for a in activity.values() for k, v in a.items()
                      for i in (sum(v.values(), []) if k == "sent" else v)})
     batches = [wanted[i:i + RECORD_BATCH] for i in range(0, len(wanted), RECORD_BATCH)]
 
     def records(batch):
-        return cli.run(["audiences", "records", "get", "--entity-type", "people",
-                        "--ids", ",".join(map(str, batch))]).get("data") or []
+        rows = cli.run(["audiences", "records", "get", "--entity-type", "people",
+                        "--ids", ",".join(map(str, batch))]).get("data")
+        if not isinstance(rows, list):
+            raise SourceUnavailable("clay audiences records get returned no 'data' list")
+        return rows
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        people = {str(r["recordId"]): r.get("fields") or {} for rows in pool.map(records, batches) for r in rows}
+        people = {str(r["recordId"]): r.get("fields") or {} for rows in pool.map(records, batches)
+                  for r in rows if isinstance(r, dict) and "recordId" in r}
 
     tables = cli.paged(["tables", "list", "--limit", "100"])
     audiences = cli.paged(["audiences", "list", "--entity-type", "people"])
-    return {"workspace": cli.workspace or {"id": str(workspace_id), "name": ""},
+    if (cli.workspace or {}).get("id") != workspace_id:
+        raise WorkspaceMismatch(f"clay answered for {(cli.workspace or {}).get('id')}, not {workspace_id}")
+    return {"workspace": cli.workspace,
             "campaigns": campaigns, "analytics": stats, "activity": activity,
             "records": people, "tables": tables, "audiences": audiences,
             "fetched_at": utc_now(), "calls": cli.calls}
@@ -277,11 +408,19 @@ def fetch_clay(cli: ClayCLI, workspace_id: str, workers: int = WORKERS) -> dict:
 
 
 def client_for(cfg: dict, workspace_id: str, workspace_name: str) -> dict:
-    for c in cfg.get("clients") or []:
-        spaces = [str(w) for w in (c.get("workspaces") or [c.get("workspace")]) if w]
-        if str(workspace_id) in spaces:
-            return c
-    return {"name": workspace_name or f"Workspace {workspace_id}", "workspaces": [str(workspace_id)]}
+    """The one configured client that owns this exact workspace id. Two
+    owners refuse. An unconfigured workspace becomes its own client keyed by
+    the workspace id, never by its display name: the first version keyed it
+    by the name's slug, so two workspaces both called "Outbound", or one
+    called "Acme" next to a configured client Acme, became ONE client node
+    and each other's campaigns, sends and suppression list."""
+    owners = [c for c in cfg.get("clients") or [] if str(workspace_id) in client_workspaces(c)]
+    if len(owners) > 1:
+        raise ConfigError(f"workspace {workspace_id} is claimed by {len(owners)} clients")
+    if owners:
+        return owners[0]
+    return {"name": clip(workspace_name, 120) or f"Workspace {workspace_id}", "workspaces": [str(workspace_id)],
+            "id": f"client:clay-ws:{workspace_id}", "unconfigured": True}
 
 
 def offer_for(client: dict, campaign_name: str) -> str | None:
@@ -296,11 +435,68 @@ def offer_for(client: dict, campaign_name: str) -> str | None:
         names = [offer.get("name", "")] + list(offer.get("aliases") or [])
         if any(raw.lower() == n.lower() for n in names if n):
             return offer["name"]
-    return raw
+    return clip(raw, 120)
 
 
 def client_id(client: dict) -> str:
-    return f"client:{slug(client['name'])}"
+    return str(client.get("id") or f"client:{slug(client['name'])}")
+
+
+def client_node(client: dict, ws_id: str) -> Node:
+    """Written identically by the clay and inbox snapshots, so whichever ran
+    last leaves the same row."""
+    return Node(client_id(client), "Client", client["name"], {
+        "principal": client.get("principal", ""), "workspaces": client_workspaces(client) or [ws_id],
+        "unconfigured": bool(client.get("unconfigured"))})
+
+
+def domain_key(value: str) -> str:
+    """A bare domain, ASCII lowercased, or "" when it is not one."""
+    value = (value or "").strip().lower().lstrip("@").removeprefix("*@")
+    if not value.isascii() or not re.fullmatch(r"[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+", value):
+        return ""
+    return value
+
+
+def dnc_entries(client: dict) -> list[dict]:
+    """Every do-not-contact entry configured for a client, as {"email"|"domain", "reason"}.
+
+    Two places: `do_not_contact` rows in clients.json, and `blocklist_files`
+    (one address or domain per line, first CSV column), which is how Clay's
+    global blocklist gets in: clay 1.8 has no read for it, so it is exported
+    from the workspace settings page and named here. A configured file that
+    cannot be read fails the sync rather than shrinking the list."""
+    out = []
+
+    def add(value, reason):
+        value = str(value or "").strip().strip('"')
+        if "@" in value and not value.startswith(("@", "*@")):
+            key = osgraph.email_key(value)
+            if key and key.isprintable():
+                out.append({"email": key, "reason": reason})
+        else:
+            d = domain_key(value)
+            if d:
+                out.append({"domain": d, "reason": reason})
+
+    for row in client.get("do_not_contact") or []:
+        if isinstance(row, str):
+            add(row, "do not contact (config)")
+        elif isinstance(row, dict):
+            add(row.get("email") or row.get("domain"), clip(row.get("reason") or "do not contact (config)", 120))
+    for spec in client.get("blocklist_files") or []:
+        spec = spec if isinstance(spec, dict) else {"path": spec}
+        path = Path(os.path.expanduser(str(spec.get("path") or "")))
+        reason = clip(spec.get("reason") or "blocklist", 120)
+        try:
+            text = path.read_text()
+        except OSError as e:
+            raise SourceUnavailable(f"blocklist file {path} could not be read: {e.strerror}") from e
+        for line in text.splitlines():
+            cell = line.split(",", 1)[0].strip()
+            if cell and not cell.startswith("#") and cell.lower() not in ("email", "domain"):
+                add(cell, reason)
+    return out
 
 
 def lead_person(ids: Identities, email: str, hint: str) -> tuple[Node | None, str]:
@@ -327,14 +523,25 @@ def build_clay(raw: dict, cfg: dict, ids: Identities) -> tuple[list[Node], list[
     def link(src, verb, dst, **props):
         edges[(src, verb, dst)] = Edge(src, verb, dst, props)
 
-    ws_node = add(Node(f"workspace:clay:{ws_id}", "Workspace", ws.get("name") or ws_id,
+    ws_node = add(Node(f"workspace:clay:{ws_id}", "Workspace", clip(ws.get("name"), 120) or ws_id,
                        {"platform": "clay", "workspace_id": ws_id}))
-    add(Node(cid, "Client", client["name"], {"principal": client.get("principal", ""),
-                                             "workspaces": client.get("workspaces") or [ws_id]}))
+    add(client_node(client, ws_id))
     link(cid, "OWNS", ws_node)
+    for entry in dnc_entries(client):
+        target = cid
+        if entry.get("email"):
+            person, _ = lead_person(ids, entry["email"], "gtm-config")
+            if person is None:
+                continue
+            target = add(person)
+        sig = add(Node(node_key("signal", f"clay:{ws_id}", cid, entry.get("email") or entry.get("domain"),
+                                entry["reason"]), "Signal", f"Do not contact {entry.get('email') or entry.get('domain')}",
+                       {"kind": "do_not_contact", "client_id": cid, "email": entry.get("email", ""),
+                        "domain": entry.get("domain", ""), "reason": entry["reason"]}))
+        link(sig, "SIGNAL_ON", target)
     categories: dict[str, str] = {}
     for o in client.get("offers") or []:
-        oid = add(Node(f"offer:{slug(client['name'])}:{slug(o['name'])}", "Offer", o["name"], {}))
+        oid = add(Node(f"offer:{slug(cid)}:{slug(o['name'])}", "Offer", o["name"], {}))
         link(cid, "OFFERS", oid)
 
     for a in raw.get("audiences") or []:
@@ -372,7 +579,7 @@ def build_clay(raw: dict, cfg: dict, ids: Identities) -> tuple[list[Node], list[
         link(cam_id, "FOR_CLIENT", cid)
         link(cam_id, "IN_WORKSPACE", ws_node)
         if offer:
-            oid = add(Node(f"offer:{slug(client['name'])}:{slug(offer)}", "Offer", offer, {}))
+            oid = add(Node(f"offer:{slug(cid)}:{slug(offer)}", "Offer", offer, {}))
             link(cid, "OFFERS", oid)
             link(cam_id, "SELLS", oid)
         seg = (c.get("audience") or {}).get("id")
@@ -434,33 +641,45 @@ def build_clay(raw: dict, cfg: dict, ids: Identities) -> tuple[list[Node], list[
 def screened(text: str) -> str | None:
     """The untrusted-screen pattern layer: deterministic, offline. Returns the
     pattern that matched, or None. Jev's judgment layer is a network call and
-    stays out of a sync."""
+    stays out of a sync.
+
+    A screen that cannot run is UNSCREENED, never clean: the first version
+    returned None when the import failed, which every reader takes as
+    "screened and nothing found" (security review, 2026-10-09)."""
     try:
         import screen  # bin/lib/screen.py
+        hit = screen.pattern_hit(text or "")
     except Exception:
-        return None
-    hit = screen.pattern_hit(text or "")
-    return hit.group(0) if hit else None
+        return UNSCREENED
+    return clip(hit.group(0), 120) if hit else None
 
 
-def load_labels(paths: list[dict]) -> dict[tuple[str, str], list[tuple[str, str, str]]]:
+def load_labels(paths: list[dict], dnc: list | None = None) -> dict[tuple[str, str], list[tuple[str, str, str]]]:
     """(lead email, reply time) -> [(class, by, raw label)] from label files.
 
     Two shapes are read: zeutara-gtme's classified.json (`lead`, `kind`,
     `reply.time`, labelled by togari reply-intent), and a JSONL a person
     writes ({"email", "reply_time", "class", "by"}) for a human verdict like
-    Jonah's good fit / not a fit."""
+    Jonah's good fit / not a fit.
+
+    Every row whose class means never-again (negative, unsubscribe, bounce)
+    is also appended to `dnc` as (email, class, by, raw), with or without a
+    reply time, so a "not a fit" that never joins to a reply still
+    suppresses. A configured file that cannot be read fails the sync: the
+    first version skipped it, which silently dropped every human verdict."""
     out: dict[tuple[str, str], list] = {}
     for spec in paths or []:
-        path = Path(os.path.expanduser(spec.get("path", "")))
-        by = spec.get("by") or "model"
+        path = Path(os.path.expanduser(str(spec.get("path", ""))))
+        by = clip(spec.get("by") or "model", 60)
         try:
             text = path.read_text()
-        except OSError:
-            continue
+        except OSError as e:
+            raise SourceUnavailable(f"reply label file {path} could not be read: {e.strerror}") from e
         try:
             rows = json.loads(text)
-            rows = rows if isinstance(rows, list) else []
+            # A one-line JSONL file parses as a single object; it is one row,
+            # not none (the first version dropped it silently).
+            rows = rows if isinstance(rows, list) else [rows]
         except ValueError:
             rows = []
             for line in text.splitlines():
@@ -473,10 +692,13 @@ def load_labels(paths: list[dict]) -> dict[tuple[str, str], list[tuple[str, str,
                 continue
             email = osgraph.email_key(r.get("lead") or r.get("email") or "")
             when = (r.get("reply") or {}).get("time") if isinstance(r.get("reply"), dict) else r.get("reply_time")
-            raw_label = r.get("class") or r.get("kind") or ""
+            raw_label = clip(r.get("class") or r.get("kind") or "", 60)
             cls = raw_label if raw_label in REPLY_CLASSES else INTENT_CLASS.get(str(raw_label).lower())
+            row_by = clip(r.get("by") or by, 60)
             if email and when and cls:
-                out.setdefault((email, _minute(when)), []).append((cls, r.get("by") or by, str(raw_label)))
+                out.setdefault((email, _minute(when)), []).append((cls, row_by, raw_label))
+            if email and cls in DNC_CLASSES and dnc is not None:
+                dnc.append((email, cls, row_by, raw_label))
     return out
 
 
@@ -501,11 +723,16 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
     ws_row = graph.node(f"workspace:clay:{workspace_id}") or {}
     categories = (ws_row.get("props") or {}).get("reply_categories") or {}
     client = client_for(cfg, str(workspace_id), ws_row.get("label", ""))
-    labels = load_labels(client.get("reply_labels") or [])
+    cid = client_id(client)
+    dnc: list = []
+    labels = load_labels(client.get("reply_labels") or [], dnc)
+    # Campaigns are matched by exact name inside THIS workspace only; a name
+    # two campaigns share matches neither.
     by_name = campaigns_in(graph, workspace_id)
     nodes: dict[str, Node] = {}
     edges: dict[tuple, Edge] = {}
-    report = {"threads": 0, "replies": 0, "unmatched_campaign": 0, "no_email": 0, "flagged": 0}
+    report = {"threads": 0, "replies": 0, "unmatched_campaign": 0, "no_email": 0, "flagged": 0,
+              "unscreened": 0, "dnc_labels": 0}
     for cls in REPLY_CLASSES:
         nodes[f"replyclass:{cls}"] = Node(f"replyclass:{cls}", "ReplyClass", cls)
     for item in replies or []:
@@ -525,24 +752,29 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
         history = ((item.get("history") or {}).get("history")) or []
         history = sorted((m for m in history if isinstance(m, dict)), key=lambda m: str(m.get("time") or ""))
         reply_msgs = [m for m in history if m.get("type") == "REPLY"]
-        cat_name = categories.get(str(item.get("lead_category_id")), "")
+        cat_name = clip(categories.get(str(item.get("lead_category_id")), ""), 80)
         for n, msg in enumerate(reply_msgs):
-            when = str(msg.get("time") or "")
+            when = clip(msg.get("time"), 40)
             later = [m for m in history if str(m.get("time") or "") > when]
             text = msg.get("email_body") or ""
             flag = screen_fn(text)
-            report["flagged"] += bool(flag)
+            report["flagged"] += bool(flag) and flag != UNSCREENED
+            report["unscreened"] += flag == UNSCREENED
             rid = node_key("reply", f"clay:{workspace_id}", item.get("email_lead_map_id") or key,
                            msg.get("message_id") or when)
             nodes[rid] = Node(rid, "Reply", f"Reply from {key} {when[:10]}", {
                 "lead_email": key, "time": when, "campaign_name": clip(name, 200),
-                "smartlead_campaign_id": item.get("email_campaign_id"),
-                "lead_status": item.get("lead_status"), "subject": clip(msg.get("subject"), 160),
+                # The workspace and client the read was made against, so a
+                # reply whose campaign name matched nothing still belongs to
+                # exactly one client (and still suppresses its sender there).
+                "workspace_id": str(workspace_id), "client_id": cid,
+                "smartlead_campaign_id": clip(item.get("email_campaign_id"), 40),
+                "lead_status": clip(item.get("lead_status"), 40), "subject": clip(msg.get("subject"), 160),
                 "snippet": clip(text, SNIPPET), "screen_flag": flag,
                 "answered": any(m.get("type") == "SENT" for m in later),
                 "forwarded": any(m.get("type") == "FORWARD" for m in later),
                 "latest": n == len(reply_msgs) - 1,
-                "thread_sent_times": [m.get("time") for m in history if m.get("type") == "SENT"],
+                "thread_sent_times": [clip(m.get("time"), 40) for m in history if m.get("type") == "SENT"],
                 "clay_category": cat_name if n == len(reply_msgs) - 1 else "",
             })
             report["replies"] += 1
@@ -560,6 +792,17 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
                     e.props["by"].append(by)
                     e.props["raw"].append(raw_label)
                 edges[k] = e
+    for email, cls, by, raw_label in dnc:
+        person, key = lead_person(ids, email, "gtm-labels")
+        if person is None:
+            continue
+        nodes.setdefault(person.id, person)
+        reason = f"labelled {raw_label or cls} by {by}"
+        sig = node_key("signal", f"clay-inbox:{workspace_id}", cid, key, reason)
+        nodes[sig] = Node(sig, "Signal", f"Do not contact {key}", {
+            "kind": "do_not_contact", "client_id": cid, "email": key, "domain": "", "reason": reason})
+        edges[(sig, "SIGNAL_ON", person.id)] = Edge(sig, "SIGNAL_ON", person.id, {})
+        report["dnc_labels"] += 1
     return list(nodes.values()), list(edges.values()), report
 
 
@@ -582,14 +825,15 @@ def fetch_calendar(runner=None, today: date | None = None) -> list[dict]:
     return [e for e in body if isinstance(e, dict)]
 
 
-def lead_index(graph: Graph) -> dict[str, list[tuple[str, str, str | None]]]:
-    """email key -> [(person id, campaign id, last_sent_at)] for every lead."""
+def lead_index(graph: Graph) -> dict[str, list[tuple[str, str, str | None, str]]]:
+    """email key -> [(person id, campaign id, last_sent_at, client id)] for every lead."""
     out: dict[str, list] = {}
     for row in graph.query(
-            "SELECT src, dst, json_extract(props, '$.email') AS email, "
-            "json_extract(props, '$.last_sent_at') AS last FROM edges WHERE verb = 'ENROLLED'"):
+            "SELECT e.src, e.dst, json_extract(e.props, '$.email') AS email, "
+            "json_extract(e.props, '$.last_sent_at') AS last, fc.dst AS client FROM edges e "
+            "LEFT JOIN edges fc ON fc.src = e.src AND fc.verb = 'FOR_CLIENT' WHERE e.verb = 'ENROLLED'"):
         if row["email"]:
-            out.setdefault(row["email"], []).append((row["dst"], row["src"], row["last"]))
+            out.setdefault(row["email"], []).append((row["dst"], row["src"], row["last"], row["client"] or ""))
     return out
 
 
@@ -597,7 +841,7 @@ def build_calendar(events: list[dict], graph: Graph) -> tuple[list[Node], list[E
     leads = lead_index(graph)
     nodes: dict[str, Node] = {}
     edges: dict[tuple, Edge] = {}
-    report = {"events": len(events), "meetings": 0}
+    report = {"events": len(events), "meetings": 0, "ambiguous_client": 0}
     for ev in events:
         attendees = []
         for a in ev.get("attendees") or []:
@@ -616,15 +860,25 @@ def build_calendar(events: list[dict], graph: Graph) -> tuple[list[Node], list[E
             "start": start, "end": str(ev.get("end") or ev.get("endDate") or ""),
             "calendar": clip(ev.get("calendar"), 80), "attendee_emails": sorted(set(attendees))})
         report["meetings"] += 1
+        # Attributed to a campaign only when that campaign emailed this person
+        # on or before the meeting's day, and only when every such campaign
+        # belongs to ONE client. A meeting with someone two clients both
+        # emailed is booked from neither: the first version credited it to
+        # both, so one client's meeting showed in another's funnel.
+        booked = []
         for key in sorted(set(attendees)):
-            for pid, cam, last in leads[key]:
+            for pid, cam, last, owner in leads[key]:
                 edges[(mid, "MEETING_WITH", pid)] = Edge(mid, "MEETING_WITH", pid, {"email": key})
-                # Attributed to a campaign only when that campaign emailed this
-                # person on or before the meeting's day.
                 if last and start and last <= start[:10]:
-                    edges[(mid, "BOOKED_FROM", cam)] = Edge(mid, "BOOKED_FROM", cam,
-                                                            {"attribution": "emailed on or before the meeting day",
-                                                             "last_sent_at": last})
+                    booked.append((cam, last, owner))
+        if len({owner for _, _, owner in booked}) > 1:
+            report["ambiguous_client"] += 1
+            nodes[mid].props["attribution"] = "ambiguous: emailed by more than one client"
+            booked = []
+        for cam, last, _ in booked:
+            edges[(mid, "BOOKED_FROM", cam)] = Edge(mid, "BOOKED_FROM", cam,
+                                                    {"attribution": "emailed on or before the meeting day",
+                                                     "last_sent_at": last})
     return list(nodes.values()), list(edges.values()), report
 
 
@@ -635,9 +889,15 @@ CREATE TABLE IF NOT EXISTS gtm_sync (
   source TEXT PRIMARY KEY, kind TEXT NOT NULL, workspace TEXT, client TEXT,
   ran_at TEXT NOT NULL, ok INTEGER NOT NULL, note TEXT, report TEXT
 );
+CREATE TABLE IF NOT EXISTS gtm_suppressed (
+  client TEXT NOT NULL, address TEXT NOT NULL, reason TEXT NOT NULL,
+  last_sent TEXT, first_seen TEXT NOT NULL, last_seen TEXT NOT NULL,
+  PRIMARY KEY (client, address, reason)
+);
 CREATE INDEX IF NOT EXISTS edges_enrolled_email ON edges (json_extract(props, '$.email')) WHERE verb = 'ENROLLED';
 CREATE INDEX IF NOT EXISTS edges_enrolled_name ON edges (lower(json_extract(props, '$.name'))) WHERE verb = 'ENROLLED';
 CREATE INDEX IF NOT EXISTS nodes_reply_email ON nodes (json_extract(props, '$.lead_email')) WHERE type = 'Reply';
+CREATE INDEX IF NOT EXISTS nodes_reply_workspace ON nodes (json_extract(props, '$.workspace_id')) WHERE type = 'Reply';
 """
 
 
@@ -656,66 +916,146 @@ def record_sync(graph: Graph, source: str, kind: str, ok: bool, note: str, repor
             (source, kind, workspace, client, utc_now(), int(ok), note, json.dumps(report, default=str)))
 
 
+def remember_suppressions(graph: Graph, client: str) -> int:
+    """Copy every address the live graph says this client must never email
+    again into gtm_suppressed, which no snapshot ever deletes from.
+
+    Snapshots replace: a campaign deleted in Clay takes its ENROLLED edges,
+    and with them the proof those people were emailed, out of the graph. A
+    suppression list rebuilt only from the live graph would then hand them
+    back as fresh leads. The ledger keeps them."""
+    import gtm_query  # read-side helpers; the query side never imports this module
+    stamp = utc_now()
+    with graph.lock:
+        live = gtm_query.live_suppressions(graph.db, client)
+        with graph.db:
+            for address, row in live.items():
+                for reason in row["reasons"]:
+                    graph.db.execute(
+                        "INSERT INTO gtm_suppressed (client, address, reason, last_sent, first_seen, last_seen) "
+                        "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(client, address, reason) DO UPDATE SET "
+                        "last_seen = excluded.last_seen, "
+                        "last_sent = MAX(COALESCE(gtm_suppressed.last_sent, ''), COALESCE(excluded.last_sent, ''))",
+                        (client, address, reason, row["last_sent"], stamp, stamp))
+    return len(live)
+
+
+def previous_count(graph: Graph, source: str, node_type: str) -> int:
+    return graph.query("SELECT COUNT(*) AS n FROM nodes WHERE source = ? AND type = ?",
+                       (source, node_type))[0]["n"]
+
+
+def refuse_empty(graph: Graph, source: str, node_type: str, got: int, what: str) -> None:
+    """An empty answer where the last good sync had data is a failed read,
+    not a cleared inbox: the first version applied it, which replaced every
+    stored reply with nothing and unsuppressed everyone who had replied."""
+    had = previous_count(graph, source, node_type)
+    if got == 0 and had:
+        raise SourceUnavailable(f"{what} came back empty where the last sync had {had}; "
+                                "keeping the previous snapshot")
+
+
 def workspaces_to_sync(cfg: dict, cli: ClayCLI) -> list[str]:
-    configured = [str(w) for c in cfg.get("clients") or [] for w in (c.get("workspaces") or [c.get("workspace")]) if w]
+    configured = [w for c in cfg.get("clients") or [] for w in client_workspaces(c)]
     if configured:
         return list(dict.fromkeys(configured))
-    return [str(w["id"]) for w in cli.run(["workspaces", "list"]).get("data") or [] if w.get("active", True)]
+    rows = cli.run(["workspaces", "list"]).get("data")
+    if not isinstance(rows, list):
+        raise SourceUnavailable("clay workspaces list returned no 'data' list")
+    return [str(w["id"]) for w in rows if isinstance(w, dict) and w.get("id") and w.get("active", True)]
+
+
+def _failed(err: BaseException) -> str:
+    """What a failed source records. A SourceUnavailable already says what
+    happened; anything else is a bug and says so, by type, so a KeyError on
+    a malformed answer never reads as a clean sync."""
+    if isinstance(err, (SourceUnavailable, ConfigError, osgraph.OntologyError)):
+        return clip(str(err), 400)
+    return clip(f"FAILED with {type(err).__name__}: {err}", 400)
 
 
 def sync(graph: Graph, sources: list[str], cfg: dict | None = None, ids: Identities | None = None,
          cli: ClayCLI | None = None, inbox_fn=None, calendar_fn=None, log=print) -> list[dict]:
-    """Run the named ingesters. Each one that cannot read its source records
-    the reason and leaves its previous snapshot in place."""
-    cfg = cfg if cfg is not None else load_config()
-    ids = ids or Identities()
-    cli = cli or ClayCLI()
+    """Run the named ingesters. Each one that cannot read its source, or that
+    fails for ANY reason, records FAILED with the reason and leaves its
+    previous snapshot in place. The first version caught only the expected
+    errors, so a KeyError aborted the run with the last row still saying ok."""
     ensure_schema(graph)
     results = []
-    spaces = workspaces_to_sync(cfg, cli) if {"clay", "inbox"} & set(sources) else []
+    try:
+        cfg = cfg if cfg is not None else load_config()
+        validate_config(cfg)
+        ids = ids or Identities()
+        cli = cli or ClayCLI()
+        spaces = workspaces_to_sync(cfg, cli) if {"clay", "inbox"} & set(sources) else []
+    except Exception as err:  # noqa: BLE001  recorded, never swallowed
+        note = _failed(err)
+        for kind in sources:
+            record_sync(graph, f"gtm-{kind}:config", kind, False, note, {})
+            results.append({"source": f"gtm-{kind}", "ok": False, "note": note})
+        return results
     for ws in spaces:
         if "clay" in sources:
             source = f"gtm-clay:{ws}"
             try:
                 raw = fetch_clay(cli, ws)
+                refuse_empty(graph, source, "Campaign", len(raw.get("campaigns") or []), "clay campaigns list")
                 nodes, edges, report = build_clay(raw, cfg, ids)
                 graph.apply(source, nodes, edges)
+                report["suppressed"] = remember_suppressions(graph, client_id(client_for(cfg, ws, "")))
                 record_sync(graph, source, "clay", True, "", report, ws, report["client"])
                 results.append({"source": source, "ok": True, **report})
-            except (SourceUnavailable, osgraph.OntologyError) as err:
-                record_sync(graph, source, "clay", False, str(err), {}, ws)
-                results.append({"source": source, "ok": False, "note": str(err)})
+            except Exception as err:  # noqa: BLE001  recorded, never swallowed
+                record_sync(graph, source, "clay", False, _failed(err), {}, ws)
+                results.append({"source": source, "ok": False, "note": _failed(err)})
         if "inbox" in sources:
             source = f"gtm-inbox:{ws}"
             try:
-                replies = (inbox_fn or fetch_inbox)(ws)
+                client = client_for(cfg, ws, "")
+                replies = (inbox_fn or (lambda w: fetch_inbox(w, profile=client.get("chrome_profile"))))(ws)
+                if not isinstance(replies, list):
+                    raise SourceUnavailable("inbox: the reader did not return a list of replies")
+                refuse_empty(graph, source, "Reply", len(replies), "the Clay inbox")
                 nodes, edges, report = build_inbox(replies, ws, graph, ids, cfg)
                 graph.apply(source, nodes, edges)
+                report["suppressed"] = remember_suppressions(graph, client_id(client))
                 record_sync(graph, source, "inbox", True, "", report, ws)
                 results.append({"source": source, "ok": True, **report})
-            except (SourceUnavailable, osgraph.OntologyError) as err:
-                record_sync(graph, source, "inbox", False, str(err), {}, ws)
-                results.append({"source": source, "ok": False, "note": str(err)})
+            except Exception as err:  # noqa: BLE001  recorded, never swallowed
+                record_sync(graph, source, "inbox", False, _failed(err), {}, ws)
+                results.append({"source": source, "ok": False, "note": _failed(err)})
     if "calendar" in sources:
         source = "gtm-calendar"
         try:
             events = (calendar_fn or fetch_calendar)()
+            if not isinstance(events, list):
+                raise SourceUnavailable("calendar: the reader did not return a list of events")
+            refuse_empty(graph, source, "Meeting", len(events), "the calendar")
             nodes, edges, report = build_calendar(events, graph)
             graph.apply(source, nodes, edges)
             record_sync(graph, source, "calendar", True, "", report)
             results.append({"source": source, "ok": True, **report})
-        except (SourceUnavailable, osgraph.OntologyError) as err:
-            record_sync(graph, source, "calendar", False, str(err), {})
-            results.append({"source": source, "ok": False, "note": str(err)})
+        except Exception as err:  # noqa: BLE001  recorded, never swallowed
+            record_sync(graph, source, "calendar", False, _failed(err), {})
+            results.append({"source": source, "ok": False, "note": _failed(err)})
     return results
 
 
-def fetch_inbox(workspace_id: str, runner=None) -> list:
+def fetch_inbox(workspace_id: str, runner=None, profile: str | None = None) -> list:
     """bin/clay-inbox, which reads Clay's sequencer inbox from inside the
-    signed-in Chrome tab. Anything short of a JSON list is unavailable."""
+    signed-in Chrome tab. Anything short of a JSON list is unavailable.
+
+    The workspace is always passed (clay-inbox's own default is one client's
+    workspace), and so is the client's `chrome_profile` when configured, so a
+    read never falls back to whichever profile the environment names."""
     runner = runner or _subprocess_runner
+    if not SAFE_ID.match(str(workspace_id)):
+        raise SourceUnavailable(f"inbox: {clip(workspace_id, 40)!r} is not a workspace id")
     tool = str(ROOT / "bin" / "clay-inbox")
-    code, out, err = runner([sys.executable, tool, "--workspace", str(workspace_id)])
+    argv = [sys.executable, tool, "--workspace", str(workspace_id)]
+    if profile:
+        argv += ["--profile", str(profile)]
+    code, out, err = runner(argv)
     if code != 0:
         raise SourceUnavailable(f"inbox: clay-inbox could not read the signed-in Clay tab: {clip(err or out, 240)}")
     try:

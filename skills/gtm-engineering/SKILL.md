@@ -141,3 +141,13 @@ Build the suppression list from actual sends (campaign activity, analytics, the
 send log), never from enrollment. On 2026-10-05 every contact ever enrolled in a
 paused campaign was treated as emailed, which hid ~1,400 never-emailed contacts
 of the client's own list for a whole night.
+
+Suppression is also everyone who must never be emailed again, whether or not
+we sent: anyone who replied (any class, any campaign, unmatched threads too),
+unsubscribed, bounced, or was labelled not a fit, plus the client's
+`do_not_contact` entries and `blocklist_files` in `clients.json` (Clay's global
+blocklist has no CLI read in clay 1.8, so export it and name the file there).
+A blocked domain suppresses every address at it and prints as `*@domain`.
+`gtm suppress --client NAME --csv` gives `email,last_sent,reason`, and an
+address stays suppressed after its campaign is deleted in Clay. `--client`
+takes an exact name or id, never a substring.

@@ -16,8 +16,8 @@ and nobody needs to: everything taste cares about is in the DERIVATIVES.
   d/ds        how much changes per pixel of scroll. A DISCONTINUITY in this
               is exactly what a pop-in is, and it is invisible in values.
   d2/ds2      whether motion accelerates smoothly or jitters.
-  Lipschitz   max |dI| / |ds|. Bounded means no jumps. The spikes ARE the
-              ugly moments, and they have frame numbers.
+  SECANTS     Observed adjacent slopes on visible support, with local affine
+              nulls removed. Missing intervals never establish smoothness.
 
 THE MATRIX, WHICH IS THE BETTER HALF. Stack every element's every channel
 against frame: M[i, j]. Its singular values are the page's MOTION MODES, the
@@ -118,6 +118,100 @@ def build(fr):
     return np.array(rows), labels
 
 
+
+def residual_slopes(y, values):
+    """Adjacent observed secants after removing each supported run's affine fit.
+
+    Missing samples split the fit. Repeated/reversed scroll intervals have no
+    forward scroll derivative; they are retained as observations, never given
+    an invented epsilon displacement. This is not a continuous Lipschitz bound.
+    """
+    y = np.asarray(y, dtype=float)
+    values = np.asarray(values, dtype=float)
+    support = np.isfinite(y) & np.isfinite(values)
+    residual = np.full(values.shape, np.nan)
+    edges = np.flatnonzero(np.diff(np.r_[False, support, False]))
+    for start, end in zip(edges[::2], edges[1::2]):
+        yy = y[start:end]
+        vv = values[start:end]
+        X = np.column_stack([np.ones(len(yy)), yy - yy.mean()])
+        residual[start:end] = vv - X @ np.linalg.lstsq(X, vv, rcond=None)[0]
+    dy = np.diff(y)
+    valid = support[:-1] & support[1:] & (dy > 0)
+    slopes = np.full(dy.shape, np.nan)
+    slopes[valid] = np.abs(np.diff(residual)[valid]) / dy[valid]
+    return slopes
+
+
+def derivative_metrics(fr):
+    """Support-aware derivatives, independent of the legacy SVD interpolation.
+
+    Values are normalised with the same heuristic channel scales as build().
+    Both the sum and per-supported-channel mean are retained: coverage can
+    change, so the sum alone is not a comparable motion-intensity measure.
+    """
+    y = np.array([f["y"] for f in fr], dtype=float)
+    n = max(len(fr) - 1, 0)
+    sums = np.zeros(n)
+    counts = np.zeros(n, dtype=int)
+    stationary_changes = np.zeros(n, dtype=int)
+    observations = {}
+    for j, frame in enumerate(fr):
+        for el in frame["el"]:
+            if el.get("gone") or not el.get("vis", False) or el.get("o", 1) <= 0:
+                continue
+            for channel in JND:
+                value = el.get(channel)
+                if not isinstance(value, (int, float)) or not np.isfinite(value):
+                    continue
+                row = observations.setdefault((el["id"], channel),
+                                              np.full(len(fr), np.nan))
+                row[j] = value + y[j] if channel == "top" else value
+    for (_, channel), row in observations.items():
+        scale = JND[channel]
+        if scale is None:
+            scale = max(abs(float(np.nanmedian(row))), 1.0) * WEBER_SIZE
+        values = row / scale
+        slopes = residual_slopes(y, values)
+        valid = np.isfinite(slopes)
+        sums[valid] += slopes[valid]
+        counts[valid] += 1
+        adjacent = np.isfinite(values[:-1]) & np.isfinite(values[1:])
+        stationary_changes += (adjacent & (np.diff(y) == 0) &
+                               (np.abs(np.diff(values)) >= 1.0))
+    defined = counts > 0
+    sums[~defined] = np.nan
+    means = np.full(n, np.nan)
+    means[defined] = sums[defined] / counts[defined]
+    return {"y": y[1:], "sum": sums, "mean": means, "counts": counts,
+            "stationary_intervals": int((np.diff(y) == 0).sum()),
+            "reverse_intervals": int((np.diff(y) < 0).sum()),
+            "stationary_changed_channels": stationary_changes}
+
+
+def report_derivatives(fr):
+    d = derivative_metrics(fr)
+    valid = d["counts"] > 0
+    print(f"\n  d/ds   {int(valid.sum())}/{len(valid)} adjacent intervals defined "
+          "on visible observed support (run-local affine residuals)")
+    print(f"         {d['stationary_intervals']} stationary scroll intervals; "
+          f"{d['reverse_intervals']} reverse intervals excluded")
+    changed = d["stationary_changed_channels"]
+    if changed.any():
+        print(f"         {int((changed > 0).sum())} stationary intervals contain "
+              f"{int(changed.sum())} perceptible channel changes; "
+              "time derivative unmeasured")
+    if not valid.any():
+        print("         no supported forward-scroll slopes; smoothness unmeasured")
+        return
+    peak = int(np.nanargmax(d["sum"]))
+    print(f"         median sum {np.nanmedian(d['sum']):.2f} JND/px; "
+          f"maximum observed slope (sum) {d['sum'][peak]:.2f} JND/px "
+          f"at y={d['y'][peak]:g}, {d['counts'][peak]} supported channels")
+    print(f"         maximum supported-channel mean {np.nanmax(d['mean']):.2f} "
+          "JND/px/channel; unsampled smoothness is not established")
+
+
 def effective_rank(sv):
     """Participation ratio: how many modes actually carry the variance.
 
@@ -141,6 +235,7 @@ def report(name, path, window):
     print(f"\n=== {name} ===")
     print(f"frames {len(fr)}   travel {int(ys[-1])}px   "
           f"moving channels {M.shape[0]} on {len({l[0] for l in labels})} elements")
+    report_derivatives(fr)
     if M.shape[0] < 2:
         print("   too little motion to decompose")
         return
@@ -177,29 +272,6 @@ def report(name, path, window):
             mid = np.sort(rate[(np.abs(rate) >= 0.05) & (np.abs(rate - 1.0) >= 0.05)])
             print(f"         parallax rates {mid[0]:.3f} to {mid[-1]:.3f}, "
                   f"{len(set(np.round(mid, 2)))} distinct")
-
-    # ---- DERIVATIVE ------------------------------------------------------
-    ds = np.gradient(ys)
-    ds[ds == 0] = 1e-6
-    d1 = np.gradient(R, axis=1) / ds          # JND per pixel of scroll
-    speed = np.abs(d1).sum(axis=0)            # total perceptible change / px
-    L = float(speed.max())
-    med = float(np.median(speed))
-    print(f"\n  d/ds   median {med:.2f} JND/px, max {L:.2f} (Lipschitz)")
-    # A discontinuity: change per pixel far above this page's own habit.
-    thresh = med * 8 + 1e-9
-    spikes = np.flatnonzero(speed > thresh)
-    if len(spikes):
-        groups, cur = [], [spikes[0]]
-        for a, b in zip(spikes, spikes[1:]):
-            (cur.append(b) if b - a <= 3 else (groups.append(cur), cur := [b]))
-        groups.append(cur)
-        print(f"         {len(groups)} discontinuity(s) over {thresh:.1f} JND/px:")
-        for g in groups[:6]:
-            at = int(ys[g[len(g) // 2]])
-            print(f"           y={at:<6} peak {speed[g].max():.1f} JND/px")
-    else:
-        print("         no discontinuities: change is smooth in scroll")
 
     # ---- MODES -----------------------------------------------------------
     keepR = np.ptp(R, axis=1) > 1.0     # residual must itself be perceptible

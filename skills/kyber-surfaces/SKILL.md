@@ -1,6 +1,6 @@
 ---
 name: kyber-surfaces
-description: Put a live, pressable panel on the HUD glass instead of opening an app. Use when the user asks what needs them, what's up, to show their day, tasks, texts, mail, inbox, people, or one person ("show me Karthik"), to open a space (school, amber, chewbacca, personal), what's playing, or recent downloads. Also use when building or changing a surface, adding a source to the OS graph, or deciding what a glanceable panel should contain.
+description: Put a live, pressable panel on the HUD glass instead of opening an app. Use when the user asks what needs them, what's up today, to show their day, tasks, texts, mail, inbox, people, or one person ("show me Karthik"), to open a space (school, amber, chewbacca, personal), what's playing, or recent downloads. Also use when building or changing a surface, adding a source to the OS graph, or deciding what a glanceable panel should contain.
 license: MIT
 requires: [hud, mac]
 ---
@@ -23,6 +23,10 @@ kyber-surfaces close all
 Kinds: `needs-you`, `today`, `tasks`, `conversations`, `people`,
 `person <name>`, `space <name>`, `music`, `files`, `meetings`. `kyber-surfaces list` shows
 what is open and where; `activity` shows what the panels did.
+
+`files` here is recent downloads. Browsing the disk is the two-pane file
+manager, a native keyboard panel: `hud files [path]`, or "show me files" /
+"open Finder" to hud-listen. Keys and safety rules are in hud/CLAUDE.md, "Files".
 
 ## What a surface that replaces an app contains
 

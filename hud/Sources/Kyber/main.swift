@@ -113,10 +113,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // worst failure a front door can have, because it is indistinguishable
         // from the request having been understood and ignored.
         model.onEvent = { [weak self, weak server] event in
-            let delivered = server?.send(event.line) ?? false
-            guard !delivered else { return }
+            _ = server?.send(event.line)
             switch event {
             case .heard, .typed:
+                // Delivered is not answered: kyber-surfaces subscribes too and
+                // ignores speech, so only the voice bridge counts (CHW-184).
+                guard !(server?.hasVoiceListener ?? false) else { return }
                 Task { @MainActor in self?.reportNobodyListening() }
             default:
                 // A click on a panel nobody is listening to is not worth a
@@ -151,7 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Two seconds of grace first: a listener left from a previous run may
         // still be reconnecting, and two of them on one socket both answer.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self, weak server] in
-            guard let self, let server, !server.hasSubscribers else { return }
+            guard let self, let server, !server.hasVoiceListener else { return }
             _ = self.startListener()
         }
         // A text to yourself starting with "Kyber" is answered as a text.
@@ -166,7 +168,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func checkListener() {
-        let connected = server?.hasSubscribers ?? false
+        let connected = server?.hasVoiceListener ?? false
         guard watchdog.shouldStart(connected: connected) else { return }
         if startListener() {
             watchdog.started()
@@ -1100,6 +1102,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionsItem.target = self
         menu.addItem(sessionsItem)
 
+        let filesItem = NSMenuItem(
+            title: "Files", action: #selector(filesFromMenu), keyEquivalent: "")
+        filesItem.target = self
+        menu.addItem(filesItem)
+
         let rimItem = NSMenuItem(
             title: "Edit the rim…", action: #selector(rimFromMenu), keyEquivalent: "")
         rimItem.target = self
@@ -1224,6 +1231,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Start `kyber-sessions serve`, which draws the sessions surface and
     /// answers its presses. It holds its own lock, so a second start while
     /// one is running exits at once instead of drawing twice.
+    /// The two-pane file manager. See `FilesPanel`.
+    @objc private func filesFromMenu() {
+        FilesPanel.shared.open()
+    }
+
     @objc private func rimFromMenu() {
         RimEditor.shared.open(showing: model.presence)
     }

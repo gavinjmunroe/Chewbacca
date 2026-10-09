@@ -65,9 +65,13 @@ def render(ref=None):
         names = [rel for rel in files() if rel in tracked]
     else:
         names = files()
+    # With no ref, hash the index (":rel"), never the working tree. On
+    # 2026-10-09 a routine regenerate in one tab wrote the hash of another
+    # tab's unstaged tools/jev.py, and main shipped a manifest describing a
+    # file main did not have. Staged is what this commit ships.
     lines = []
     for rel in names:
-        data = blob(ref, rel) if ref else (REPO / rel).read_bytes()
+        data = blob(ref or "", rel)
         lines.append(f"{hashlib.sha256(data).hexdigest()}  {rel}")
     return "\n".join(lines) + "\n"
 

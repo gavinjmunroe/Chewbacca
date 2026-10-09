@@ -5,3 +5,9 @@
 # public search-only key the page itself serves. No cookie rides along.
 yc 45bwzj1sgc-dsn.algolia.net
 yc 45bwzj1sgc-3.algolianet.com
+
+# 2026-10-09: linkedin-jobs reads LinkedIn's logged-out guest job search and
+# holds no cookie or session ref. It sits on linkedin.com beside his LinkedIn
+# login, so its browser fallback would run signed in; reviewed and accepted
+# because every op is a read of a public page.
+linkedin-jobs signed-in-ok

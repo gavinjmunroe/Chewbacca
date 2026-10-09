@@ -2,7 +2,7 @@
 
 "Show my day", "what do I need to do", "open my texts", "check my inbox",
 "show my tasks", "show me Karthik", "open my school space", "what's playing",
-"show downloads", "close the tasks", "what replaces Notion", "show the engine
+"show downloads", "show me files" (the file manager), "close the tasks", "what replaces Notion", "show the engine
 ollama-models": each names a surface in bin/lib/surfaces/
 and the action is `kyber-surfaces open` or `close`. Working that out with a
 model costs seconds the sentence already paid for.
@@ -40,7 +40,7 @@ CLI_TIMEOUT_S = 10.0
 
 @dataclass
 class Command:
-    verb: str   # "open", "close" or "space"
+    verb: str   # "open", "close", "space", or "panel" for a native HUD panel
     name: str   # a surface kind, a space, or "all"
     arg: str = ""
 
@@ -68,7 +68,9 @@ NOUNS = {
     "tasks": r"(?:tasks|to ?dos?|to do list|lanes)",
     "people": r"(?:people|contacts|friends)",
     "music": r"(?:music|player|spotify|song)",
-    "files": r"(?:downloads|files|download folder|downloads folder|recent files)",
+    # Bare "files" is the file manager now (FILES below); downloads keep
+    # their own words.
+    "files": r"(?:downloads|download folder|downloads folder|recent files)",
     "needs-you": r"(?:needs you|what needs me|inbox zero)",
     "notes": r"(?:notes|apple notes|latest notes|recent notes)",
     "github": r"(?:github|prs|pull requests|reviews|review requests|ci)",
@@ -89,8 +91,10 @@ SHOW_SHAPES = [(name, re.compile(rf"^{SHOW} {MY}{noun}(?: (?:on|up on) (?:the )?
 EXTRA = [
     ("music", re.compile(r"^what(?:'s|s| is) (?:playing|on|this song)(?: right now)?$")),
     ("today", re.compile(r"^show(?: me)? what(?:'s|s| is) (?:on )?(?:today|my day)$")),
+    # A bare "what's up" is a greeting, answered by hud-listen's pleasantry
+    # before this is asked (CHW-184); only "what's up today" means the panel.
     ("needs-you", re.compile(
-        r"^(?:what(?:'s|s| is) up|what do i (?:need|have) to do|what needs (?:me|my attention|doing)"
+        r"^(?:what(?:'s|s| is) up today|what do i (?:need|have) to do|what needs (?:me|my attention|doing)"
         r"|what should i (?:look at|do next|work on)|what(?:'s|s| is) waiting on me|anything (?:need|needs) me)"
         r"(?: today| right now| now)?$")),
     # "What did we decide", "what came out of my call": the meetings panel,
@@ -127,6 +131,16 @@ OSS_QUERY = re.compile(r"^what (?:replaces|can replace|is an open source alterna
 # "Show the engine ollama-models": read off the raw sentence, because _norm
 # drops the digits and hyphens an engine id is made of.
 ENGINE = re.compile(r"^(?:(?:ok|okay|hey|kyber),? )?show (?:me )?(?:the )?engine (?P<id>[a-z0-9-]+)[.!?]?$")
+# "Show me files", "open finder", "file manager": the two-pane file manager,
+# a native HUD panel (hud/Sources/KyberKit/FilesPanel.swift) that takes the
+# keyboard, so it opens through `hud files` and not kyber-surfaces. Built
+# 2026-10-09 for "the reason no app is ever opened, not even Finder".
+FILES = re.compile(
+    rf"^(?:{SHOW} {MY})?(?:files|file manager|file browser|finder)"
+    r"(?: (?:on|up on) (?:the )?(?:screen|glass|hud))?(?: (?:right )?now)?$")
+FILES_CLOSE = re.compile(
+    r"^(?:close|hide|take down|dismiss|get rid of) (?:my |the )?(?:files|file manager|file browser|finder)$")
+HUD = Path(__file__).resolve().parent.parent / "hud"
 NOT_PEOPLE = {"google", "chrome", "terminal", "safari", "sheets", "finder", "spotify", "notion", "slack",
               "messages", "mail", "calendar", "kyber", "chewbacca", "amber", "youtube", "claude", "gmail",
               "github", "notes", "granola", "anarlog"}
@@ -152,6 +166,10 @@ def parse(said: str, resolve_person=find_person) -> Command | None:
     s = _norm(said)
     if not s:
         return None
+    if FILES_CLOSE.match(s):
+        return Command("panel", "files", "off")
+    if FILES.match(s):
+        return Command("panel", "files")
     m = CLOSE.match(s)
     if m:
         what = m.group("what")
@@ -216,6 +234,15 @@ def _ask(body: dict) -> dict | None:
 
 
 def perform(command: Command, run=subprocess.run, ask=None) -> Outcome:
+    if command.verb == "panel":
+        argv = [str(HUD), command.name] + ([command.arg] if command.arg else [])
+        try:
+            done = run(argv, capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+        except (OSError, subprocess.TimeoutExpired):
+            return Outcome(False, "The display didn't answer.")
+        if done.returncode != 0:
+            return Outcome(False, "The file manager didn't open.")
+        return Outcome(True, "Closed." if command.arg == "off" else "Your files are up.")
     if command.verb == "open" and command.name == "oss" and command.arg:
         if open_with_preset("oss", {"/oss/q": command.arg}, run=run, ask=ask):
             return Outcome(True, f"Here's what replaces {command.arg}.")

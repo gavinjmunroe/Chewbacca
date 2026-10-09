@@ -48,11 +48,15 @@ install_engine() {
     ) || { say "Could not build the api engine."; return 1; }
   fi
   # MCP: four tools (list_sites, list_operations, call_operation, login).
-  if have claude && ! claude mcp get api-anything >/dev/null 2>&1; then
-    claude mcp add --scope user api-anything -- api-anything mcp >/dev/null 2>&1
+  # Wired through this script so the kit's specs are re-checked on start.
+  local self="$ROOT/bin/chewbacca-api"
+  if have claude; then
+    claude mcp remove --scope user api-anything >/dev/null 2>&1
+    claude mcp add --scope user api-anything -- bash "$self" mcp >/dev/null 2>&1
   fi
-  if have codex && ! codex mcp get api-anything >/dev/null 2>&1; then
-    codex mcp add api-anything -- api-anything mcp >/dev/null 2>&1
+  if have codex; then
+    codex mcp remove api-anything >/dev/null 2>&1
+    codex mcp add api-anything -- bash "$self" mcp >/dev/null 2>&1
   fi
   local skill
   skill="$(npm root -g 2>/dev/null)/api-anything/skills/api-anything/SKILL.md"
@@ -100,6 +104,26 @@ let allowed = new Set();
 try {
   allowed = new Set(fs.readFileSync(allowFile, "utf8").split("\n").map((l) => l.replace(/#.*/, "").trim().split(/\s+/)).filter((p) => p[0] === name && p[1]).map((p) => p[1].toLowerCase()));
 } catch {}
+// Kit specs are reads. A write op from the repo would be one --allow-writes
+// away from acting as the user.
+for (const op of spec.operations || []) if (op?.readOnly !== true) die(`${name}.${op?.name}: not a read-only operation`);
+// The session check above is by name, but the browser fallback runs in one
+// shared Chrome profile that holds every login's cookies. So a spec on the
+// same domain as any signed-in site (linkedin-jobs beside a linkedin login)
+// would ride that login. Refused, unless a person listed the site as
+// "<site> signed-in-ok" in hosts.allow after reading it.
+const signedInRoots = new Set();
+try {
+  for (const f of fs.readdirSync(sessions)) {
+    if (!f.endsWith(".json")) continue;
+    try {
+      const sess = JSON.parse(fs.readFileSync(path.join(sessions, f), "utf8"));
+      if (sess.source) for (const c of sess.cookies || []) if (c?.domain) signedInRoots.add(root(String(c.domain).replace(/^\./, "").toLowerCase()));
+    } catch { die(`${name}: session ${f} is unreadable, so whether you're signed in can't be checked`); }
+  }
+} catch (e) { if (e.code !== "ENOENT") die(`${name}: sessions unreadable (${e.code})`); }
+if (signedInRoots.has(home) && !allowed.has("signed-in-ok"))
+  die(`${name}: you're signed in on ${home}; list "${name} signed-in-ok" in hosts.allow after reading the spec`);
 // Every string in the spec, keys included: a host can hide in a header value,
 // a redirect, or a template whose host is a parameter.
 const walk = (v, out) => { if (typeof v === "string") out.push(v); else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { out.push(k); walk(x, out); } return out; };
@@ -147,7 +171,16 @@ sync_sites() {
     [ -f "$f" ] || continue
     base="$(basename "$f")"
     dest="$ENGINE_HOME/sites/$base"
-    [ ! -f "$dest" ] || [ "$f" -nt "$dest" ] || continue
+    if [ -f "$dest" ] && ! [ "$f" -nt "$dest" ]; then
+      # Already installed, but a login since then (or an edited hosts.allow)
+      # can make it unsafe now. Re-check what's installed from the kit on
+      # every run and pull it if it no longer passes.
+      if grep -qxF "$base" "$ENGINE_HOME/sites/.from-kit" 2>/dev/null && ! spec_is_safe "$dest" "$base" 2>/dev/null; then
+        rm -f "$dest" "${dest%.json}.md"
+        say "removed $base: it no longer passes the kit's check (chewbacca api sync says why)" >&2
+      fi
+      continue
+    fi
     # Check the copy that gets installed, not the repo file, so nothing can
     # change between the check and the move.
     tmp="$(mktemp "$ENGINE_HOME/sites/.$base.XXXXXX")" || continue
@@ -158,6 +191,7 @@ sync_sites() {
       continue
     fi
     mv -f "$tmp" "$dest" && copied=$((copied + 1))
+    grep -qxF "$base" "$ENGINE_HOME/sites/.from-kit" 2>/dev/null || echo "$base" >> "$ENGINE_HOME/sites/.from-kit"
     # Notes ride along, and only with a spec that passed.
     [ -f "${f%.json}.md" ] && cp "${f%.json}.md" "$ENGINE_HOME/sites/"
   done
@@ -176,7 +210,22 @@ case "$cmd" in
   install|setup) install_engine ;;
   sync) need_engine && sync_sites ;;
   teach) need_engine && exec api-anything add "$@" ;;
-  sites|ops|call|login|logout|capture|inspect|verify|heal|export|add)
+  login)
+    # A login changes which kit specs are safe, so re-check them after it,
+    # not only before the next call.
+    need_engine || exit 1
+    api-anything login "$@"; rc=$?
+    sync_sites --quiet
+    exit "$rc"
+    ;;
+  mcp)
+    # Agents reach the engine through this, never `api-anything mcp` directly,
+    # so the kit's specs are re-checked each time a server starts.
+    need_engine || exit 1
+    sync_sites --quiet
+    exec api-anything mcp "$@"
+    ;;
+  sites|ops|call|logout|capture|inspect|verify|heal|export|add)
     need_engine || exit 1
     sync_sites --quiet
     exec api-anything "$cmd" "$@"

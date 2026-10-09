@@ -318,7 +318,7 @@ fi
 # 2026-09-27.
 _bl_root="${CHEWBACCA_ROOT:-}"
 if [ -z "$_bl_root" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
-  _bl_root="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("repo",""))' \
+  _bl_root="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("repo",""))' \
     "$HOME/.chewbacca/install-manifest.json" 2>/dev/null)"
 fi
 _bl_root="${_bl_root:-$HOME/code/chewbacca}"

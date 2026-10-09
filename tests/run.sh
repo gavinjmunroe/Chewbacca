@@ -411,6 +411,13 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_gtm.py"
   check "gtm dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtm --help
   expect "gtm appears in help" "chewbacca gtm" bash "$ROOT/bin/chewbacca" --help
+  # Recorded, synthetic surface answers; nothing reads Clay, the clay CLI or Chrome.
+  if command -v node >/dev/null 2>&1; then
+    check "chewbacca clay routes to the fastest surface, falls through, and gates writes" \
+      python3 "$ROOT/tests/test_chewbacca_clay.py"
+    check "clay dispatches through chewbacca" bash "$ROOT/bin/chewbacca" clay --help
+    expect "clay appears in help" "chewbacca clay" bash "$ROOT/bin/chewbacca" --help
+  fi
 fi
 
 # ── team board ────────────────────────────────────────────────────────────────
@@ -1042,6 +1049,8 @@ if group "hooks"; then
   check "router shadow log never blocks a hook or lands in a repo" bash "$ROOT/tests/route_shadow.sh"
   check "route_tune follows its written rule and refuses under 50 rows" bash "$ROOT/tests/route_tune.sh"
   check "formatter handles a broken Node runtime" python3 "$ROOT/tests/test_formatter_runtime.py"
+  check "hooks run python3 isolated from the session cwd" bash "$ROOT/tests/hook_python_isolated.sh"
+  check "prayer-guard checks every visible block this turn" bash "$ROOT/tests/prayer_guard.sh"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   # A hook must never fail the session, whatever it is handed.
   for h in "$ROOT"/.claude/hooks/*.sh; do

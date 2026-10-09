@@ -54,21 +54,23 @@ def test_good_morning_is_covered():
 
 def test_it_matches_whole_utterances_only():
     """The guard against answering the wrong half of a sentence."""
-    m = re.search(r"def pleasantry\(self, said: str\) -> bool:(.*?)\n    def ",
+    m = re.search(r"def pleasantry_kind\(cls, words: str\) -> str \| None:(.*?)\n    def ",
                   SRC, re.S)
-    assert m, "pleasantry() not found"
+    assert m, "pleasantry_kind() not found"
     body = m.group(1)
-    assert "words in self.GREETINGS" in body, (
+    assert "core in cls.GREETINGS" in body, (
         "matching must be equality on the whole utterance, never a substring "
         "or a prefix")
     for bad in ("startswith", "in said", ".find(", "search("):
-        assert bad not in body, f"pleasantry uses {bad}, which would match a prefix"
+        assert bad not in body, f"pleasantry_kind uses {bad}, which would match a prefix"
+    p = re.search(r"def pleasantry\(self, said: str\) -> bool:(.*?)\n    def ", SRC, re.S)
+    assert p and "self.pleasantry_kind(words)" in p.group(1), "pleasantry must use pleasantry_kind"
 
 
 def test_it_never_calls_a_model():
-    m = re.search(r"def pleasantry\(self, said: str\) -> bool:(.*?)\n    def ",
+    m = re.search(r"def pleasantry_kind\(cls, words: str\).*?def pleasantry\(self, said: str\) -> bool:(.*?)\n    def ",
                   SRC, re.S)
-    body = m.group(1)
+    body = m.group(0)
     for forbidden in ("subprocess", "self.ask(", "Answerer", "model_cmd", "claude"):
         assert forbidden not in body, (
             f"pleasantry reaches {forbidden}; the whole point is that it does not")
@@ -92,11 +94,95 @@ def test_replies_rotate():
     that never varies is worse than a slow one that does."""
     m = re.search(r"PLEASANTRY_REPLIES = \{(.*?)\n    \}", SRC, re.S)
     assert m, "PLEASANTRY_REPLIES not found"
-    for kind in ("greeting", "farewell", "thanks"):
+    for kind in ("greeting", "checkin", "farewell", "thanks"):
         assert f'"{kind}"' in m.group(1), f"no replies for {kind}"
-    body = re.search(r"def pleasantry.*?\n    def ", SRC, re.S).group(0)
+    body = re.search(r"def pleasantry\(self.*?\n    def ", SRC, re.S).group(0)
     assert "_last_pleasantry" in body, "replies must not repeat back to back"
     assert "random.choice" in body
+
+
+def load_listener():
+    """The real module, for the routing decision itself, not its source."""
+    import importlib.util
+    import os
+    import tempfile
+    from importlib.machinery import SourceFileLoader
+    os.environ.setdefault("BOB_DIR", tempfile.mkdtemp())
+    os.environ.setdefault("BOB_DECISIONS", os.path.join(os.environ["BOB_DIR"], "d.jsonl"))
+    os.environ.setdefault("SUPERASSISTANT_DIR", tempfile.mkdtemp(prefix="superassistant-test-"))
+    sys.dont_write_bytecode = True
+    if "hud_listen" in sys.modules:
+        return sys.modules["hud_listen"]
+    path = str(ROOT / "bin/hud-listen")
+    spec = importlib.util.spec_from_file_location(
+        "hud_listen", path, loader=SourceFileLoader("hud_listen", path))
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["hud_listen"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# CHW-184, 2026-10-09: "whats up" sat on "Working on it 0:22". Every one of
+# these must answer from the pleasantry path, never a model turn.
+SMALL_TALK = [
+    "whats up", "What's up?", "What's up, bro?", "Yo what's up", "Hey what's up",
+    "What's up Chewbacca", "sup", "Wassup", "How are you doing?", "how's it going",
+    "hey how are you", "you there?", "Yo yo yo", "thanks bro", "Good morning",
+]
+# And none of these may be swallowed by it: each is work for the agent.
+REAL_TASKS = [
+    "good morning what's on my calendar", "what's up with my agents",
+    "fix the failing test in the hud", "text Sam that I'm running late",
+    "how are you going to fix the build", "what's going on with this error",
+    "summarize this page", "hey can you rename the branch",
+]
+
+
+def test_small_talk_takes_the_fast_path():
+    m = load_listener()
+    for said in SMALL_TALK:
+        assert m.fast_path(said) == "pleasantry", f"{said!r} -> {m.fast_path(said)!r}, not the fast path"
+
+
+def test_real_tasks_still_reach_the_agent():
+    m = load_listener()
+    for said in REAL_TASKS:
+        got = m.fast_path(said)
+        assert got != "pleasantry", f"{said!r} was answered as small talk"
+
+
+def test_ask_routes_small_talk_fast_and_tasks_to_the_agent():
+    """The decision in `ask` itself: pleasantry answers and the agent is never
+    reached; a real task goes to `to_assistant`."""
+    from unittest.mock import Mock
+    m = load_listener()
+    for said, fast in (("What's up, bro?", True), ("fix the failing test in the hud", False)):
+        listener = m.Listener.__new__(m.Listener)
+        for method in ("hush", "remember", "send", "speak", "settle", "stop",
+                       "to_assistant", "pointed_marks", "handle_agent_answer",
+                       "handle_draft_word", "handle_terminal_word", "handle_agents_word",
+                       "quick_answer", "surface_request", "music_request", "open_request",
+                       "agenda_request", "genui_request"):
+            setattr(listener, method, Mock(return_value=False))
+        listener.pointed_marks.return_value = []
+        listener.in_flight = Mock(return_value=False)
+        listener.verbose = False
+        listener.ask(said)
+        assert listener.to_assistant.called is not fast, (
+            f"{said!r}: to_assistant called={listener.to_assistant.called}")
+        if fast:
+            assert listener.remember.called, "a pleasantry is logged with its elapsed time"
+            req = listener.remember.call_args.args[0]
+            assert req.spoken_at == listener.asked_at, "elapsed must run from arrival"
+
+
+def test_listen_line_says_it_is_the_voice():
+    """Kyber's watchdog tells the voice bridge from kyber-surfaces by this."""
+    import tempfile
+    m = load_listener()
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / "hud.token").write_text("a" * 64, encoding="utf-8")
+        assert m.listen_line(str(Path(d) / "hud.sock")) == "listen token=" + "a" * 64 + " role=voice"
 
 
 def test_random_is_imported():

@@ -1,0 +1,481 @@
+#!/usr/bin/env python3
+"""repo-graph - one deduped graph of every GitHub repo the kit's link lists name.
+
+The kit and the second brain hold a dozen lists of repos (the GTM atlas, the
+starred audit, the links Caleb pasted, the mac landscape, the oss-apps catalog,
+the Amber research notes). The same repo shows up in several of them under old
+names and different casing, and nobody could say which ones were already used.
+This builds one node per canonical owner/name and three kinds of edge:
+
+    LISTED_IN    the repo appears in a list file, with the line
+    USED_BY      the kit installs, vendors, credits, or cites it, with the file
+    REJECTED_IN  a list marks it rejected or skipped, with the line
+    DEFERRED_IN  a list marks it "later" (looked at, not adopted yet)
+    MENTIONED_IN a doc outside the lists names it (not evidence of use)
+
+Status per node: used (any USED_BY or a list marking it used), else rejected
+(any REJECTED_IN), else untriaged.
+
+    repo-graph                    rebuild data/repo-graph.jsonl from the default lists
+    repo-graph stats              counts and the list overlap matrix from the jsonl
+    repo-graph --list a.md --list b.md --root DIR --out x.jsonl --no-cache
+
+GitHub metadata comes from `gh api graphql`, 50 repos per query, 4 queries at a
+time. GraphQL repository lookups follow renames, so the returned nameWithOwner is
+the canonical id. A null result is a 404 and the node is kept with missing=true.
+Set REPO_GRAPH_GH to point at a different gh binary (the test uses a fake one).
+"""
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+KIT = Path(__file__).resolve().parent.parent
+HOME = Path.home()
+BRAIN = HOME / "second-brain"
+AMBER = BRAIN / "projects" / "amber-operating-workspace-2026-10"
+
+# Every list with 15 or more distinct repos, found by scanning the kit and the
+# second brain on 2026-10-09. resources.csv and batch-repos.txt in the Amber
+# folder repeat 06-RESOURCE-LIBRARY.md's 20 repos and are left out. CREDITS.md
+# and config/settings/toolkit.json are evidence of use, so they feed USED_BY.
+DEFAULT_LISTS = [
+    ("REPO-ATLAS", KIT / "skills/gtm-engineering/references/REPO-ATLAS.md"),
+    ("oss-apps", KIT / "config/data/oss-apps/apps.json"),
+    ("amber-repos", AMBER / "research/repos.md"),
+    ("STARRED-AUDIT", KIT / "docs/STARRED-AUDIT.md"),
+    ("LINKS-FROM-CALEB", KIT / "docs/LINKS-FROM-CALEB.md"),
+    ("non-majority", BRAIN / "claude/skills/maintainer-orchestrator/references/non-majority-repositories.md"),
+    ("mac-LANDSCAPE", KIT / "docs/mac/LANDSCAPE.md"),
+    ("mac-tools.json", KIT / "mac/data/tools.json"),
+    ("asks.jsonl", BRAIN / "chewbacca/asks.jsonl"),
+    ("REFERENCE", KIT / "docs/REFERENCE.md"),
+    ("amber-resources", AMBER / "06-RESOURCE-LIBRARY.md"),
+]
+
+HOST = "gi" + "thub.com"
+URL_RE = re.compile(r"(?<![\w.-])(?:https?://)?(?:www\.)?" + re.escape(HOST) +
+                    r"/([A-Za-z0-9][A-Za-z0-9_.-]*)/([A-Za-z0-9_.][A-Za-z0-9_.-]*)", re.I)
+# JSON catalogs name repos as "repo": "owner/name" with no host.
+JSON_REPO_RE = re.compile(r'"repo"\s*:\s*"([A-Za-z0-9][A-Za-z0-9_.-]*)/([A-Za-z0-9_.][A-Za-z0-9_.-]*)"')
+NOT_OWNERS = {
+    "orgs", "features", "topics", "settings", "marketplace", "sponsors", "apps",
+    "collections", "login", "about", "pricing", "enterprise", "site", "search",
+    "trending", "explore", "readme", "notifications", "issues", "pulls", "new",
+    "codespaces", "users", "security", "customer-stories", "resources", "solutions",
+    "team", "events", "contact", "join", "signup", "copilot", "github-copilot",
+}
+
+# A verdict word only counts in the shapes the lists actually write it in, so a
+# description that happens to say "skip" or "use" does not flip a status.
+VERDICTS = [
+    ("REJECTED_IN", re.compile(r"\*\*rejected\*\*|\):\s*rejected\b|\|\s*skipped\s*\||verdict:\s*\**\s*ignore\b", re.I)),
+    ("DEFERRED_IN", re.compile(r"\*\*later\*\*|\):\s*later\b|verdict:\s*\**\s*later\b", re.I)),
+    ("MARKED_USED_IN", re.compile(r"\*\*used\*\*|\):\s*used\b|\|\s*installed\s*\|", re.I)),
+]
+HEADING_RE = re.compile(r"^\s*#{1,6}\s")
+SECTION_VERDICT_RE = re.compile(r"^\s*-?\s*\**verdict", re.I)
+
+INSTALL_RE = re.compile(
+    r"(?:brew\s+install(?:\s+--cask)?|brew\s+tap|npm\s+(?:i|install)(?:\s+-g)?|pnpm\s+add|"
+    r"pip3?\s+install|pipx\s+install|uv\s+tool\s+install|cargo\s+install|go\s+install|"
+    r"gem\s+install|npx)\s+([^\n;&|>\"`)]+)")
+# Install tokens shorter than this, or in this set, match too many repo names.
+NAME_STOP = {"cli", "app", "core", "mcp", "sdk", "api", "tools", "docs", "server", "skills",
+             "agent", "agents", "awesome", "web", "desktop", "chat", "code", "react", "node"}
+
+SKIP_DIRS = {".git", "node_modules", "worktrees", ".venv", "__pycache__", "tests", "dist", "build", ".build"}
+TEXT_EXT = {".md", ".sh", ".py", ".js", ".mjs", ".ts", ".json", ".yml", ".yaml", ".toml", ".txt",
+            ".swift", ".rb", ".plist", ".zsh", ".bash", ".tsv", ".csv", ""}
+INSTALL_FILES = {"setup.sh", "install.sh", "start.sh", "package.json", "Brewfile", "toolkit.json",
+                 "requirements.txt", "pyproject.toml"}
+CODE_DIRS = {"bin", "tools", "mac", "hud", "apps", "config", "plynn", "voice", "library", "superassistant"}
+
+
+def norm(owner, name):
+    name = re.sub(r"\.git$", "", name.strip().rstrip(".,);:'\"`"))
+    owner = owner.strip()
+    if not owner or not name or owner.lower() in NOT_OWNERS:
+        return None
+    if name.lower() in {"blob", "tree", "issues", "pulls", "releases", "wiki"}:
+        return None
+    return f"{owner.lower()}/{name.lower()}"
+
+
+def repos_in_line(line):
+    out = []
+    for rx in (URL_RE, JSON_REPO_RE):
+        for m in rx.finditer(line):
+            key = norm(m.group(1), m.group(2))
+            if key:
+                out.append((m.start(), key))
+    out.sort()
+    seen, keys = set(), []
+    for _, k in out:
+        if k not in seen:
+            seen.add(k)
+            keys.append(k)
+    return keys
+
+
+def snippet(line, n=160):
+    s = " ".join(line.split())
+    return s if len(s) <= n else s[: n - 3] + "..."
+
+
+def display(path):
+    p = Path(path).resolve()
+    for base, label in ((KIT, ""), (HOME, "~/")):
+        try:
+            return label + str(p.relative_to(base))
+        except ValueError:
+            pass
+    return str(p)
+
+
+def parse_list(list_id, path):
+    """Return (listed, verdicts): LISTED_IN and verdict edges for one list file."""
+    listed, verdicts = [], []
+    section = []
+    # Lines from the second brain (asks.jsonl is his own words) stay there: the
+    # edge keeps file and line, not the text, because the graph is committed.
+    private = not Path(path).resolve().is_relative_to(KIT)
+    for i, line in enumerate(Path(path).read_text(errors="ignore").splitlines(), 1):
+        ev = "(private: read the source line)" if private else snippet(line)
+        if HEADING_RE.match(line):
+            section = []
+        keys = repos_in_line(line)
+        for k in keys:
+            listed.append({"repo": k, "list": list_id, "file": display(path), "line": i, "evidence": ev})
+        section.extend(k for k in keys if k not in section)
+        hit = None
+        for kind, rx in VERDICTS:
+            m = rx.search(line)
+            if m and (hit is None or m.start() < hit[1]):
+                hit = (kind, m.start())
+        if not hit:
+            continue
+        targets = keys or (section if SECTION_VERDICT_RE.match(line) else [])
+        for k in targets:
+            verdicts.append({"kind": hit[0], "repo": k, "list": list_id, "file": display(path),
+                             "line": i, "evidence": ev, "via": "list verdict"})
+    return listed, verdicts
+
+
+
+def gh_bin():
+    return os.environ.get("REPO_GRAPH_GH", "gh")
+
+
+def fetch_batch(keys):
+    parts = []
+    for j, k in enumerate(keys):
+        owner, name = k.split("/", 1)
+        parts.append(f"r{j}:repository(owner:{json.dumps(owner)},name:{json.dumps(name)})"
+                     "{nameWithOwner stargazerCount pushedAt isArchived description "
+                     "licenseInfo{spdxId} primaryLanguage{name}}")
+    query = "{" + " ".join(parts) + "}"
+    for attempt in range(3):
+        p = subprocess.run([gh_bin(), "api", "graphql", "-f", f"query={query}"],
+                           capture_output=True, text=True, timeout=120)
+        try:
+            data = json.loads(p.stdout or "{}").get("data")
+        except json.JSONDecodeError:
+            data = None
+        if data is not None:
+            out = {}
+            for j, k in enumerate(keys):
+                r = data.get(f"r{j}")
+                if r is None:
+                    out[k] = {"missing": True}
+                else:
+                    out[k] = {
+                        "canonical": r["nameWithOwner"],
+                        "stars": r.get("stargazerCount"),
+                        "pushed_at": r.get("pushedAt"),
+                        "archived": r.get("isArchived"),
+                        "license": (r.get("licenseInfo") or {}).get("spdxId"),
+                        "language": (r.get("primaryLanguage") or {}).get("name"),
+                        "description": r.get("description"),
+                        "missing": False,
+                    }
+            return out
+        time.sleep(2 * (attempt + 1))
+    sys.stderr.write(f"repo-graph: gh failed for a batch of {len(keys)}: {p.stderr.strip()[:200]}\n")
+    return {k: {"error": True} for k in keys}
+
+
+def fetch_meta(keys, cache_path, refresh, max_age_days=7):
+    cache = {}
+    if cache_path and cache_path.exists() and not refresh:
+        try:
+            cache = json.loads(cache_path.read_text())
+        except json.JSONDecodeError:
+            cache = {}
+    now = time.time()
+    fresh = {k: v for k, v in cache.items()
+             if now - v.get("fetched", 0) < max_age_days * 86400 and not v.get("error")}
+    todo = [k for k in keys if k not in fresh]
+    batches = [todo[i:i + 50] for i in range(0, len(todo), 50)]
+    if batches:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            for result in pool.map(fetch_batch, batches):
+                for k, v in result.items():
+                    v["fetched"] = now
+                    fresh[k] = v
+    if cache_path:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(fresh, sort_keys=True))
+    return {k: fresh.get(k, {"error": True}) for k in keys}
+
+
+
+def usage_kind(rel):
+    """What a mention in this file proves. None means a mention, not use."""
+    parts = rel.split("/")
+    base = parts[-1]
+    if base == "CREDITS.md":
+        return "credited"
+    if base in INSTALL_FILES:
+        return "installed"
+    if base == "SKILL.md":
+        return "skill"
+    if base.endswith(".md"):
+        return None
+    # Catalogs of candidates: the oss-apps inputs, the app-to-surface map's
+    # "oss" alternatives, and engines nobody has wired yet.
+    if rel.startswith("config/data/oss-apps/") or rel == "config/data/surfaces/apps.json" \
+            or ".proposed." in base:
+        return None
+    if parts[0] in CODE_DIRS or parts[0] == "skills":
+        return "code"
+    return None
+
+
+BOOL_FLAGS = {"--cask", "-g", "--global", "-y", "--yes", "-u", "--upgrade", "--user", "-q", "--quiet"}
+INSTALL_STOP = {"install", "add", "run", "exec", "init", "create", "gen", "or", "and", "then", "to",
+                "the", "it", "a", "is", "latest"}
+
+
+def install_names(args):
+    """Package names from the text after an install verb, flags and prose dropped."""
+    names, skip_next = [], False
+    for tok in args.split():
+        tok = tok.strip("\"'`(){},")
+        if not tok:
+            continue
+        if skip_next:
+            skip_next = False
+            continue
+        if tok.startswith("-"):
+            if tok not in BOOL_FLAGS and "=" not in tok:
+                skip_next = True
+            continue
+        if tok.startswith((".", "/", "$", "~")) or tok in INSTALL_STOP:
+            break
+        name = tok.rsplit("/", 1)[-1].split("@")[0] if not tok.startswith("@") else tok.split("/")[-1].split("@")[0]
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", name):
+            break
+        if len(name) >= 4 and name not in NAME_STOP:
+            names.append(name)
+        if len(names) >= 4:
+            break
+    return names
+
+
+def scan_usage(root, exclude):
+    """Index owner/name tokens and install tokens across the kit, one pass."""
+    root = Path(root).resolve()
+    pair_hits, name_hits = {}, {}
+    pair_rx = re.compile(r"([a-z0-9][a-z0-9_.-]*)/([a-z0-9_.][a-z0-9_.-]*)")
+    for dp, dn, fn in os.walk(root):
+        dn[:] = [d for d in dn if d not in SKIP_DIRS and not (d == ".claude" and Path(dp) == root)]
+        for f in fn:
+            p = Path(dp) / f
+            if p.suffix not in TEXT_EXT or p.resolve() in exclude:
+                continue
+            try:
+                if p.stat().st_size > 2_000_000:
+                    continue
+                text = p.read_text(errors="ignore")
+            except OSError:
+                continue
+            rel = str(p.relative_to(root))
+            kind = usage_kind(rel)
+            for i, line in enumerate(text.splitlines(), 1):
+                low = line.lower()
+                if "/" in low:
+                    for m in pair_rx.finditer(low):
+                        k = norm(m.group(1), m.group(2))
+                        if k:
+                            pair_hits.setdefault(k, {}).setdefault(rel, (i, kind, snippet(line)))
+                # An install command proves use only where it runs: an install
+                # manifest or code. In a doc or a SKILL.md it is a mention.
+                ikind = "installed" if kind in ("installed", "code") else None
+                for m in INSTALL_RE.finditer(low):
+                    for name in install_names(m.group(1)):
+                        name_hits.setdefault(name, {}).setdefault(rel, (i, ikind, snippet(line)))
+    return pair_hits, name_hits
+
+
+
+def build(lists, root, out, cache_path, refresh, network=True):
+    listed, verdicts = [], []
+    used_lists = []
+    for list_id, path in lists:
+        path = Path(path).expanduser()
+        if not path.exists():
+            sys.stderr.write(f"repo-graph: skipping missing list {path}\n")
+            continue
+        used_lists.append((list_id, display(path)))
+        a, b = parse_list(list_id, path)
+        listed += a
+        verdicts += b
+
+    keys = sorted({e["repo"] for e in listed})
+    meta = fetch_meta(keys, cache_path, refresh) if network else {k: {} for k in keys}
+
+    canon = {}
+    for k in keys:
+        c = meta[k].get("canonical")
+        canon[k] = c.lower() if c else k
+
+    nodes = {}
+    for k in keys:
+        cid = canon[k]
+        n = nodes.setdefault(cid, {"type": "node", "id": cid, "aliases": [], "lists": [], "used_by": [],
+                                   "canonical": None, "stars": None, "license": None, "pushed_at": None,
+                                   "archived": None, "language": None, "description": None,
+                                   "missing": None, "meta_error": False})
+        if k != cid and k not in n["aliases"]:
+            n["aliases"].append(k)
+        m = meta[k]
+        if m.get("error"):
+            n["meta_error"] = True
+        elif m.get("missing"):
+            n["missing"] = True if n["missing"] is None else n["missing"]
+        elif m:
+            n.update({f: m.get(f) for f in ("canonical", "stars", "license", "pushed_at",
+                                             "archived", "language", "description")})
+            n["missing"] = False
+
+    edges = []
+    for e in listed:
+        cid = canon[e["repo"]]
+        if e["list"] not in nodes[cid]["lists"]:
+            nodes[cid]["lists"].append(e["list"])
+        edges.append({"type": "edge", "kind": "LISTED_IN", "src": cid, "dst": e["list"], "file": e["file"],
+                      "line": e["line"], "evidence": e["evidence"], "via": "link in list"})
+    for v in verdicts:
+        cid = canon[v["repo"]]
+        edges.append({"type": "edge", "kind": v["kind"], "src": cid, "dst": v["list"], "file": v["file"],
+                      "line": v["line"], "evidence": v["evidence"], "via": v["via"]})
+
+    exclude = {Path(p).expanduser().resolve() for _, p in lists}
+    exclude |= {Path(out).resolve(), (KIT / "docs/REPO-GRAPH.md").resolve(),
+                (KIT / "skills/gtm-engineering/references/repo-atlas.json").resolve()}
+    pair_hits, name_hits = scan_usage(root, exclude)
+    for cid, n in nodes.items():
+        forms = [cid] + n["aliases"]
+        hits = {}
+        for f in forms:
+            for rel, (line, kind, ev) in pair_hits.get(f, {}).items():
+                hits.setdefault(rel, (line, kind, ev, f"grep {f}"))
+        names = {f.split("/", 1)[1] for f in forms}
+        for name in names:
+            for rel, (line, kind, ev) in name_hits.get(name, {}).items():
+                hits.setdefault(rel, (line, kind, ev, f"install token {name}"))
+        for rel, (line, kind, ev, via) in sorted(hits.items()):
+            edge_kind = "USED_BY" if kind else "MENTIONED_IN"
+            if kind and kind not in n["used_by"]:
+                n["used_by"].append(kind)
+            edges.append({"type": "edge", "kind": edge_kind, "src": cid, "dst": rel, "file": rel,
+                          "line": line, "evidence": ev, "via": via, "use": kind})
+
+    kinds = {}
+    for e in edges:
+        kinds.setdefault(e["src"], set()).add(e["kind"])
+    for cid, n in nodes.items():
+        k = kinds.get(cid, set())
+        n["status"] = ("used" if {"USED_BY", "MARKED_USED_IN"} & k
+                       else "rejected" if "REJECTED_IN" in k else "untriaged")
+        n["lists"].sort()
+
+    meta_rec = {"type": "meta", "built": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+                "lists": [{"id": i, "file": f} for i, f in used_lists],
+                "raw_links": len(listed), "listed_ids": len(keys), "nodes": len(nodes)}
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w") as fh:
+        fh.write(json.dumps(meta_rec) + "\n")
+        for cid in sorted(nodes):
+            fh.write(json.dumps(nodes[cid], sort_keys=True) + "\n")
+        for e in sorted(edges, key=lambda e: (e["src"], e["kind"], e["file"], e["line"])):
+            fh.write(json.dumps(e, sort_keys=True) + "\n")
+    return meta_rec
+
+
+def stats(path):
+    recs = [json.loads(l) for l in Path(path).read_text().splitlines() if l.strip()]
+    meta = next(r for r in recs if r["type"] == "meta")
+    nodes = [r for r in recs if r["type"] == "node"]
+    ids = [l["id"] for l in meta["lists"]]
+    print(f"raw links {meta['raw_links']}, listed ids {meta['listed_ids']}, canonical repos {len(nodes)}")
+    status = {}
+    for n in nodes:
+        status[n["status"]] = status.get(n["status"], 0) + 1
+    print("status", json.dumps(status, sort_keys=True))
+    print("missing (404)", sum(1 for n in nodes if n.get("missing")))
+    multi = [n for n in nodes if len(n["lists"]) >= 2]
+    print(f"in 2+ lists: {len(multi)}")
+    print("list sizes", json.dumps({i: sum(1 for n in nodes if i in n["lists"]) for i in ids}))
+    print("overlap matrix (repos in both)")
+    print("\t".join(["list"] + ids))
+    for a in ids:
+        row = [a]
+        for b in ids:
+            row.append(str(sum(1 for n in nodes if a in n["lists"] and b in n["lists"])))
+        print("\t".join(row))
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Build the deduped repo graph across every link list.")
+    ap.add_argument("command", nargs="?", default="build", choices=["build", "stats"])
+    ap.add_argument("--list", action="append", default=None, metavar="PATH",
+                    help="a list file to read (repeatable); default is every known list")
+    ap.add_argument("--root", default=str(KIT), help="tree to scan for USED_BY evidence")
+    ap.add_argument("--out", default=str(KIT / "data/repo-graph.jsonl"))
+    ap.add_argument("--cache", default=str(HOME / ".chewbacca/state/repo-graph-meta.json"))
+    ap.add_argument("--no-cache", action="store_true")
+    ap.add_argument("--refresh", action="store_true", help="refetch GitHub metadata even if cached")
+    ap.add_argument("--offline", action="store_true", help="skip GitHub; ids stay as listed")
+    a = ap.parse_args()
+    if a.command == "stats":
+        stats(a.out)
+        return
+    lists = [(Path(p).name, Path(p)) for p in a.list] if a.list else DEFAULT_LISTS
+    # A graph written inside the tree gets committed and installed on other
+    # people's machines, so it reads only lists that live in that tree. The
+    # second-brain lists (asks.jsonl is Caleb's own requests, the Amber folder
+    # is private work) went into data/repo-graph.jsonl on 2026-10-09 and the
+    # commit security review flagged it. Write elsewhere to include them.
+    root = Path(a.root).expanduser().resolve()
+    if Path(a.out).expanduser().resolve().is_relative_to(root):
+        private = [i for i, p in lists if not Path(p).expanduser().resolve().is_relative_to(root)]
+        if private:
+            print(f"repo-graph: skipped private lists {', '.join(private)}: the output is inside {root}. "
+                  f"Pass --out ~/.chewbacca/state/repo-graph.jsonl to include them.", file=sys.stderr)
+        lists = [(i, p) for i, p in lists if i not in private]
+    cache = None if a.no_cache else Path(a.cache).expanduser()
+    m = build(lists, a.root, a.out, cache, a.refresh, network=not a.offline)
+    print(f"repo-graph: {m['raw_links']} links, {m['listed_ids']} listed ids, {m['nodes']} repos -> {a.out}")
+
+
+if __name__ == "__main__":
+    main()

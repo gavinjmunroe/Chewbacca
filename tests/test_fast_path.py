@@ -93,6 +93,11 @@ TABLE = [
     ("plan my Tuesday", "genui"),
     ("show my grades and email Professor Swain", None),
     ("tell me about the Civil War", None),
+    # CHW-184, 2026-10-09: "whats up" sat on "Working on it 0:22".
+    ("whats up", "pleasantry"),
+    ("What's up, bro?", "pleasantry"),
+    ("How are you doing?", "pleasantry"),
+    ("what's up with my agents", None),
 ]
 
 

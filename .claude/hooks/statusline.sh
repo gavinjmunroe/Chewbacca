@@ -1,7 +1,7 @@
 #!/bin/bash
 # Reads Claude Code session JSON on stdin, prints one status line.
 input=$(cat)
-py() { python3 -c "import json,sys;d=json.load(sys.stdin);print($1)" <<< "$input" 2>/dev/null; }
+py() { python3 -I -c "import json,sys;d=json.load(sys.stdin);print($1)" <<< "$input" 2>/dev/null; }
 
 MODEL=$(py "d.get('model',{}).get('display_name','?')")
 CWD=$(py "d.get('workspace',{}).get('current_dir','')")

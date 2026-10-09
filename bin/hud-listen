@@ -119,7 +119,15 @@ def listen_line(socket_path: str) -> str:
         token = (Path(socket_path).parent / "hud.token").read_text(encoding="utf-8").strip()
     except OSError:
         return "listen"
-    return f"listen token={token}" if re.fullmatch(r"[0-9a-f]{64}", token) else "listen"
+    # `role=voice` tells Kyber this subscriber is the one that answers speech.
+    # Without it Kyber counted any subscriber as the voice bridge: from
+    # 2026-10-06 19:00 kyber-surfaces held the only subscription, so the
+    # watchdog never restarted hud-listen and every request (a "whats up" on
+    # 2026-10-09 among them) sat on "Working on it" with nobody to answer.
+    # Kyber builds before this ignore the extra word.
+    if not re.fullmatch(r"[0-9a-f]{64}", token):
+        return "listen"
+    return f"listen token={token} role=voice"
 # Whoever started this listener, read as early as possible. The display
 # spawns it as a child, so when the display is replaced (KeepAlive, a
 # rebuild) this listener is reparented and the number changes. BACKLOG #50:
@@ -1295,7 +1303,7 @@ def fast_path(said: str) -> str | None:
         return "stop"
     if words in Listener.CONNECTION_CHECKS:
         return "connection"
-    if words in Listener.GREETINGS | Listener.FAREWELLS | Listener.THANKS:
+    if Listener.pleasantry_kind(words):
         return "pleasantry"
     if QUICK:
         try:
@@ -1517,6 +1525,17 @@ class Listener:
             self.log("prompt not refreshed:", err)
             return AGENT_PROMPT
 
+    def arrival(self) -> float:
+        """When the request `ask` is handling arrived, on the monotonic clock.
+
+        Fast paths run inside `ask`, so this is their start. Anything outside
+        `ask` gets now, which is what it used before."""
+        at = getattr(self, "asked_at", None)
+        now = time.monotonic()
+        # Guessed, never measured: no fast path inside `ask` runs anywhere
+        # near this long, and a stamp older than it belongs to another request.
+        return at if at is not None and 0 <= now - at < 120 else now
+
     def remember(self, req: Request, answer: str, ok: bool, outcome: str) -> None:
         """Keep the request and its answer in the superassistant log.
 
@@ -1525,6 +1544,11 @@ class Listener:
         through the session-context hook. Never raises; a log that cannot be
         written must not cost a reply.
         """
+        elapsed = time.monotonic() - req.spoken_at
+        # Always written, verbose or not: Kyber appends this to
+        # ~/.chewbacca/logs/hud-listen.log, and a slow answer nobody timed is
+        # how a greeting sat at 0:22 with no record of it (CHW-184).
+        print(f"elapsed {elapsed * 1000:.1f}ms {outcome}: {req.said[:40]!r}", file=sys.stderr, flush=True)
         module = superassistant()
         if module is None:
             return
@@ -1536,7 +1560,8 @@ class Listener:
             "aside": self.aside,
             "outcome": outcome,
             "ok": ok,
-            "seconds": round(time.monotonic() - req.spoken_at, 1),
+            "seconds": round(elapsed, 1),
+            "ms": round(elapsed * 1000, 1),
             "session": self.session,
             "turn": self.turns,
             "usage": self.last_usage,
@@ -2338,6 +2363,9 @@ class Listener:
 
     def ask(self, said: str, typed: bool = False, relayed: bool = False, dest: str | None = None,
             tty: str = "", agent: str = "") -> None:
+        # Every fast path stamps its Request with this, so the `seconds` and
+        # `ms` that `remember` logs run from the moment the words arrived.
+        self.asked_at = time.monotonic()
         self.hush()
         words = normalise(said)
         if words in STOP_WORDS or (words in BARGE_WORDS and self.in_flight()):
@@ -2451,7 +2479,7 @@ class Listener:
         if normalise(said) not in self.CONNECTION_CHECKS or self.in_flight():
             return False
         answer = "Message received." if typed else "I hear you."
-        req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
         self.remember(req, answer, True, "done")
         self.send("s " + json.dumps(answer))
         self.send("w " + json.dumps(answer) + " done=true")
@@ -2488,26 +2516,75 @@ class Listener:
         "thanks", "thank you", "ty", "thx", "appreciate it", "nice one",
         "perfect", "great", "cheers", "you're the best", "youre the best",
     }
+    # Small talk that asks after the assistant and wants nothing done.
+    #
+    # THE MEASUREMENT. superassistant/questions.jsonl: "What's up, bro?" 4.8 s,
+    # "What's up?" 5.1 s, "How are you doing?" 3.5 s and 7.0 s, every one a
+    # model turn to say "Not much, what do you need?". From 2026-10-04 a bare
+    # "what's up" opened the needs-you surface instead, a panel and a daemon
+    # round trip for a hello, while "what's up bro" still went to the model.
+    # Caleb, 2026-10-09: "it took forever when I just said whats up" (CHW-184).
+    # "What's going on" and "what's new" are left out: with an error on the
+    # screen they are questions about it.
+    CHECKINS = {
+        "whats up", "what up", "wassup", "wazzup", "sup", "whats good",
+        "hows it going", "how is it going", "how are you", "how are you doing",
+        "how you doing", "how ya doing", "hows everything", "how goes it",
+        "you there", "are you there", "you up", "you awake",
+    }
+    # Who a pleasantry is said to, dropped from the end before matching:
+    # "what's up bro", "thanks chewbacca". Only whole trailing words from this
+    # set, so "good morning what's on my calendar" still is not a greeting.
+    ADDRESSEES = {
+        "bro", "bruh", "man", "dude", "buddy", "bud", "homie", "dawg", "fam",
+        "chewbacca", "chewie", "kyber", "boss",
+    }
+    # A greeting in front of a check-in is still small talk: "hey what's up".
+    OPENING_WORDS = {"hey", "yo", "hi", "hello"}
     # Rotated, because the prompt forbids repeating an acknowledgement and a
     # canned reply that never varies is worse than a slow one that does.
     PLEASANTRY_REPLIES = {
+        "checkin": ["Not much. What do you need?", "All good. What's on your mind?",
+                    "Here. What do you need?", "Doing good. What can I do?"],
         "greeting": ["Morning.", "Hey.", "Hi.", "Yo."],
         "farewell": ["Night.", "See you.", "Later.", "Sleep well."],
         "thanks": ["Any time.", "Sure thing.", "No problem.", "Course."],
     }
 
+    @classmethod
+    def pleasantry_kind(cls, words: str) -> str | None:
+        """Which pleasantry a normalised utterance is, or None.
+
+        Equality on the whole utterance, after dropping who it was said to,
+        never a prefix: anything with a request in it falls through."""
+        tokens = words.split()
+        while len(tokens) > 1 and tokens[-1] in cls.ADDRESSEES:
+            tokens.pop()
+        core = " ".join(tokens)
+        if core in cls.GREETINGS:
+            return "greeting"
+        if core in cls.CHECKINS:
+            return "checkin"
+        if core in cls.FAREWELLS:
+            return "farewell"
+        if core in cls.THANKS:
+            return "thanks"
+        if len(tokens) > 1 and tokens[0] in cls.OPENING_WORDS:
+            rest = " ".join(tokens[1:])
+            if rest in cls.CHECKINS:
+                return "checkin"
+            if rest in cls.GREETINGS:
+                return "greeting"
+        return None
+
     def pleasantry(self, said: str) -> bool:
-        """Answer a greeting, a goodbye or a thank you with no model turn."""
+        """Answer a greeting, a check-in, a goodbye or a thank you with no
+        model turn."""
         words = normalise(said)
         if not words:
             return False
-        if words in self.GREETINGS:
-            kind = "greeting"
-        elif words in self.FAREWELLS:
-            kind = "farewell"
-        elif words in self.THANKS:
-            kind = "thanks"
-        else:
+        kind = self.pleasantry_kind(words)
+        if kind is None:
             return False
 
         # Time of day beats the literal word: "good morning" at 9pm is a
@@ -2528,7 +2605,7 @@ class Listener:
         self.log(f"pleasantry: {kind}:", answer)
         if self.in_flight():
             self.stop()
-        req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=False)
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=False)
         self.remember(req, answer, True, "done")
         self.send("s " + json.dumps(answer))
         self.speak(answer)
@@ -2555,7 +2632,7 @@ class Listener:
             return False
         answer = found["text"]
         self.log(f"quick: {found['kind']} in {(time.monotonic() - started) * 1000:.0f}ms:", answer)
-        req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
         self.remember(req, answer, True, "done")
         self.send("s " + json.dumps(answer))
         self.send("w " + json.dumps(answer) + " done=true")
@@ -2581,7 +2658,7 @@ class Listener:
             return False
         if command is None:
             return False
-        req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
 
         def work() -> None:
             started = time.monotonic()
@@ -2630,7 +2707,7 @@ class Listener:
                 self.to_assistant(said, typed=typed)
                 return
             answer = "It's on the glass."
-            req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+            req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
             self.remember(req, answer, True, "done")
             self.send("s " + json.dumps(answer))
             self.send("w " + json.dumps(answer) + " done=true")
@@ -2655,7 +2732,7 @@ class Listener:
             return False
         if command is None:
             return False
-        req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
 
         def work() -> None:
             started = time.monotonic()
@@ -2689,7 +2766,7 @@ class Listener:
             return False
         if window is None:
             return False
-        req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
 
         def work() -> None:
             started = time.monotonic()
@@ -2742,7 +2819,7 @@ class Listener:
         if self.in_flight():
             # They want the music now, not the rest of a reply.
             self.stop()
-        req = Request(said=said, spoken_at=time.monotonic(), pointed=None, typed=typed)
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
         with self.state:
             self.current = req
             self.queue.clear()

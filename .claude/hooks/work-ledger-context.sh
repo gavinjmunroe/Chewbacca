@@ -9,7 +9,7 @@
 # which the shared session-context cache cannot key on.
 set -uo pipefail
 
-CWD="$(python3 -c 'import json,sys
+CWD="$(python3 -I -c 'import json,sys
 try: print(json.load(sys.stdin).get("cwd") or "")
 except Exception: print("")' 2>/dev/null)"
 CWD="${CWD:-$PWD}"

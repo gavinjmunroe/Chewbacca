@@ -265,6 +265,14 @@ function cmdSend(argv) {
     );
   const to = target(app, handle);
   if (!to) die(`No ${app} address for ${P(name)} (${P(handle)}).`);
+  // mac/lib/gmail.py files mail whose From failed Gmail's own sender check
+  // under "unverified:" plus the claimed address. A reply there answers
+  // whoever forged the name, so no --to can confirm it.
+  if (/^unverified:/i.test(to))
+    die(
+      `${P(name)}'s last ${app} came from ${P(to.slice(11))}, which failed Gmail's sender check. Nothing was sent.\n` +
+        `  It may be forged. Confirm the address with them another way before writing to it.`,
+    );
 
   // AN ADDRESS ONLY COUNTS IF IT PROVABLY BELONGS TO THEM: the card's own
   // phone or email, or a handle the store resolves back to this same person.

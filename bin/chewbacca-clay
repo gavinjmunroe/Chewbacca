@@ -1,0 +1,508 @@
+#!/usr/bin/env node
+// chewbacca clay: every Clay job through the fastest surface that answers it.
+//
+//   chewbacca clay ops                       every op: surfaces, read/write, gate, ms, verified
+//   chewbacca clay <op> [k=v ...]            run one op, one line of JSON back
+//   chewbacca clay route <op> [k=v ...]      the surfaces it would try, in order, without calling
+//   chewbacca clay measure <op> [k=v ...]    time every surface once and record it (reads only)
+//   chewbacca clay doctor                    engine pin, session, spec sync
+//
+// Surfaces, cheapest first by measured wall time: the official `clay` CLI, an
+// api-anything operation over Clay's own frontend API (plain HTTP with the
+// signed-in session, library/clay-api/clay.json), a kit bin, and for jobs only
+// the UI does, the exact clay-go route to open. A surface runs only when every
+// arg it needs was given; the next one runs when it fails or comes back cut.
+//
+// Writes refuse unless called with --allow-writes AND a person types the op
+// name at a real terminal (see personApproves), where
+// the token is printed by the refusal and binds this exact op and payload.
+// Everything Clay returns is untrusted data: reply bodies are written by
+// strangers. Nothing here logs a cookie or token.
+"use strict";
+
+const crypto = require("node:crypto");
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { spawnSync } = require("node:child_process");
+
+// Path overrides are honored only in fixture mode, which never reaches Clay.
+// Live, an env var pointing LIB at a doctored registry could relabel a write
+// as a read, and CHEWBACCA_ROOT could swap the binaries a surface runs
+// (security review of b68d5645, 2026-10-09).
+const FIXTURES = process.env.CHEWBACCA_CLAY_FIXTURES || "";
+const testEnv = (name) => (FIXTURES ? process.env[name] : undefined);
+const ROOT = testEnv("CHEWBACCA_ROOT") || path.resolve(__dirname, "..");
+const LIB = testEnv("CHEWBACCA_CLAY_LIB") || path.join(ROOT, "library", "clay-api");
+const MEASURED = process.env.CHEWBACCA_CLAY_MEASURED || path.join(LIB, "measured.json");
+const ENGINE_HOME = process.env.API_ANYTHING_HOME || path.join(os.homedir(), ".chewbacca", "api-anything");
+
+const EXIT = { ok: 0, failed: 1, usage: 2, refused: 3 };
+
+function out(obj, code) {
+  process.stdout.write(`${JSON.stringify(obj)}\n`);
+  process.exit(code);
+}
+
+function readJson(file, fallback) {
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return fallback;
+  }
+}
+
+const registry = readJson(path.join(LIB, "registry.json"), null);
+if (!registry) out({ ok: false, class: "error", reason: `no registry at ${LIB}/registry.json` }, EXIT.failed);
+const spec = readJson(path.join(LIB, "clay.json"), { operations: [] });
+const specOps = new Map(spec.operations.map((o) => [o.name, o]));
+const measured = readJson(MEASURED, {});
+
+// ── args ─────────────────────────────────────────────────────────────────────
+function parseArgv(argv) {
+  const flags = { allowWrites: false, surface: null, maxTier: null };
+  const kv = {};
+  const pos = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--allow-writes") flags.allowWrites = true;
+    else if (a === "--surface") {
+      flags.surface = argv[++i] ?? "";
+      if (flags.surface === "api") flags.surface = "api-anything";
+    }
+    else if (a === "--max-tier") flags.maxTier = Number(argv[++i]);
+    else if (a === "-h" || a === "--help") pos.push("help");
+    else if (a.startsWith("--")) out({ ok: false, class: "usage", reason: `unknown flag ${a}` }, EXIT.usage);
+    else if (a.includes("=") && pos.length >= 1) {
+      const k = a.slice(0, a.indexOf("="));
+      let v = a.slice(a.indexOf("=") + 1);
+      if (/^[[{]/.test(v)) {
+        try {
+          v = JSON.parse(v);
+        } catch {
+          out({ ok: false, class: "usage", reason: `${k} is not valid JSON` }, EXIT.usage);
+        }
+      }
+      kv[k] = v;
+    } else pos.push(a);
+  }
+  return { pos, kv, flags };
+}
+
+// ── routing ──────────────────────────────────────────────────────────────────
+const opByName = new Map(registry.ops.map((o) => [o.name, o]));
+const uiByName = new Map((registry.ui_only || []).map((o) => [o.name, o]));
+
+function withDefaults(op, kv) {
+  const args = { ...kv };
+  const wantsWs = op.args.some((a) => a.replace("?", "") === "ws");
+  if (wantsWs && args.ws === undefined) args.ws = process.env.CLAY_WORKSPACE_ID || registry.defaults.ws;
+  return args;
+}
+
+function surfaceKey(op, s) {
+  if (s.type === "api-anything") return `api-anything:${s.op}`;
+  return `${s.type}:${s.argv.join(" ")}`;
+}
+
+// The args a surface would be called with, or null when one it needs is missing.
+function bind(s, args) {
+  if ((s.unless || []).some((k) => args[k] !== undefined)) return null;
+  if (s.type === "api-anything") {
+    const sop = specOps.get(s.op);
+    if (!sop) return null;
+    const bound = {};
+    for (const [param, key] of Object.entries(s.args)) {
+      if (args[key] !== undefined) bound[param] = args[key];
+    }
+    for (const p of sop.params) {
+      if (p.required && bound[p.name] === undefined) return null;
+    }
+    return bound;
+  }
+  // A value that starts with "-" would reach the CLI as a flag: treat it as missing.
+  const fill = (tok) =>
+    tok.replace(/\{(\w+)\}/g, (_, k) => (args[k] === undefined || String(args[k]).startsWith("-") ? "\u0000" : String(args[k])));
+  const argv = s.argv.map(fill);
+  if (argv.some((t) => t.includes("\u0000"))) return null;
+  for (const [k, extra] of Object.entries(s.optional || {})) {
+    if (args[k] !== undefined) argv.push(...extra.map(fill));
+  }
+  return argv;
+}
+
+function plan(op, args, only) {
+  const cands = [];
+  op.surfaces.forEach((s, i) => {
+    if (only && s.type !== only) return;
+    const bound = bind(s, args);
+    if (bound === null) return;
+    const m = measured[op.name]?.[surfaceKey(op, s)];
+    cands.push({ s, bound, i, ms: m?.ms ?? Number.POSITIVE_INFINITY, verified: m?.at ?? null });
+  });
+  // Fastest measured first; an unmeasured surface keeps the registry's order behind measured ones.
+  // "order": "fixed" is for an op whose surfaces answer with different detail (the CLI's
+  // `tables get` has no auto-run settings): the first one is the answer, the rest are fallbacks.
+  if (op.order !== "fixed") cands.sort((a, b) => a.ms - b.ms || a.i - b.i);
+  return cands;
+}
+
+function uiRoute(op, args) {
+  if (!op.ui) return null;
+  return op.ui.replace(/\{(\w+)\}/g, (m, k) => (args[k] === undefined ? m : String(args[k])));
+}
+
+// ── surfaces ─────────────────────────────────────────────────────────────────
+function fixture(kind, name) {
+  const f = path.join(FIXTURES, kind, `${name}.json`);
+  return readJson(f, undefined);
+}
+
+function syncSpec() {
+  const src = path.join(LIB, "clay.json");
+  const dest = path.join(ENGINE_HOME, "sites", "clay.json");
+  try {
+    const s = fs.statSync(src);
+    let d = null;
+    try {
+      d = fs.statSync(dest);
+    } catch {}
+    // A heal rewrites the engine's copy in place; only a newer repo spec replaces it.
+    if (!d || s.mtimeMs > d.mtimeMs) {
+      fs.mkdirSync(path.dirname(dest), { recursive: true, mode: 0o700 });
+      fs.copyFileSync(src, dest);
+    }
+  } catch {}
+}
+
+function engineDist() {
+  if (process.env.API_ANYTHING_DIST) return process.env.API_ANYTHING_DIST;
+  const which = spawnSync("sh", ["-c", "command -v api-anything"], { encoding: "utf8" });
+  const bin = which.stdout.trim();
+  if (!bin) return null;
+  return path.dirname(fs.realpathSync(bin));
+}
+
+// sha256 of dist/*.js in name order. The engine runs with Caleb's Clay session,
+// so only the build made from the pinned commit is trusted; anything else
+// (an install from a moving HEAD) is refused and the next surface answers.
+function distHash(dist) {
+  const h = crypto.createHash("sha256");
+  for (const f of fs.readdirSync(dist).filter((x) => x.endsWith(".js")).sort()) h.update(fs.readFileSync(path.join(dist, f)));
+  return h.digest("hex");
+}
+
+async function callEngine(opName, bound, flags, write) {
+  if (FIXTURES) {
+    const f = fixture("api-anything", opName);
+    return f ?? { ok: false, class: "error", reason: `no fixture for ${opName}` };
+  }
+  const dist = engineDist();
+  if (!dist) return { ok: false, class: "error", reason: "api-anything is not installed", next: "chewbacca api install" };
+  const want = registry.engine.dist_sha256;
+  if (!want || distHash(dist) !== want) {
+    return {
+      ok: false,
+      class: "error",
+      reason: `the installed api-anything is not the build of the pinned commit ${registry.engine.sha.slice(0, 12)}`,
+      next: "rebuild from the pinned clone (chewbacca clay doctor)",
+    };
+  }
+  process.env.API_ANYTHING_HOME = ENGINE_HOME;
+  syncSpec();
+  const { call } = await import(path.join(dist, "execute.js"));
+  const opts = {};
+  if (flags.maxTier) opts.maxTier = flags.maxTier;
+  if (write) opts.allowWrites = true;
+  return call(registry.engine.site, opName, bound, opts);
+}
+
+function runProcess(kind, opName, file, argv) {
+  if (FIXTURES) {
+    const f = fixture(kind, opName);
+    if (!f) return { exit: 127, stdout: "", stderr: `no fixture for ${kind} ${opName}` };
+    return f;
+  }
+  const r = spawnSync(file, argv, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, timeout: 180000 });
+  return { exit: r.status ?? 1, stdout: r.stdout || "", stderr: r.stderr || String(r.error || "") };
+}
+
+function pluck(data, dotted) {
+  if (!dotted) return data;
+  return dotted.split(".").reduce((v, k) => (v == null ? v : v[k]), data);
+}
+
+function where(data, cond) {
+  if (!cond || !Array.isArray(data)) return data;
+  return data.filter((row) => Object.entries(cond).every(([k, v]) => row && row[k] === v));
+}
+
+// The only POSTs that read. Any other non-GET request in the spec is a write,
+// whatever the registry's `kind` says, so relabeling one in the registry can't
+// slip it past the person-at-a-terminal gate.
+const READ_POSTS = new Set(["listResources", "inboxReplies", "threadHistory"]);
+function specWrites(specName) {
+  const so = specOps.get(specName);
+  if (!so) return true;
+  return String(so.request?.method || "").toUpperCase() !== "GET" && !READ_POSTS.has(specName);
+}
+function isWrite(op) {
+  return op.kind === "write" || op.surfaces.some((s) => s.type === "api-anything" && specWrites(s.op));
+}
+
+async function attempt(op, cand, flags) {
+  const { s, bound } = cand;
+  const t0 = Date.now();
+  if (s.type === "api-anything") {
+    const r = await callEngine(s.op, bound, flags, isWrite(op));
+    const res = {
+      ok: !!r.ok,
+      surface: "api-anything",
+      call: `${registry.engine.site}.${s.op}`,
+      tier: r.tier,
+      ms: Date.now() - t0,
+      // The request alone, as api-anything timed it; ms adds loading the engine.
+      ...(typeof r.ms === "number" ? { engine_ms: r.ms } : {}),
+    };
+    if (!r.ok) return { ...res, class: r.class, reason: r.reason, next: r.next };
+    return { ...res, data: where(r.data, s.where), truncated: r.truncated, healed: r.healed };
+  }
+  const file = s.type === "cli" ? "clay" : path.join(ROOT, "bin", bound[0]);
+  const argv = s.type === "cli" ? bound : bound.slice(1);
+  const r = runProcess(s.type, op.name, file, argv);
+  const res = { surface: s.type, call: `${s.type === "cli" ? "clay" : bound[0]} ${argv.join(" ")}`.trim(), ms: Date.now() - t0 };
+  if (r.exit !== 0) {
+    let reason = r.stderr.trim().slice(0, 400);
+    try {
+      reason = JSON.parse(r.stderr).error?.message ?? reason;
+    } catch {}
+    return { ...res, ok: false, class: "error", reason: reason || `exit ${r.exit}` };
+  }
+  let data;
+  try {
+    data = JSON.parse(r.stdout);
+  } catch {
+    return { ...res, ok: false, class: "error", reason: "surface printed something that is not JSON" };
+  }
+  const result = { ...res, ok: true, data: where(pluck(data, s.extract), s.where) };
+  if (data && typeof data === "object" && data.cursor) result.cursor = data.cursor;
+  return result;
+}
+
+// ── commands ─────────────────────────────────────────────────────────────────
+function listOps() {
+  const ops = registry.ops.map((op) => ({
+    op: op.name,
+    kind: op.kind,
+    gate: op.gate,
+    args: op.args,
+    summary: op.summary,
+    surfaces: op.surfaces.map((s, i) => {
+      const m = measured[op.name]?.[surfaceKey(op, s)];
+      return {
+        surface: s.type,
+        call: s.type === "api-anything" ? `${registry.engine.site}.${s.op}` : s.argv.join(" "),
+        order: i,
+        ms: m?.ms ?? null,
+        engine_ms: m?.engine_ms ?? null,
+        tier: m?.tier ?? null,
+        last_verified: m?.at ?? null,
+      };
+    }),
+    ui: op.ui ?? null,
+  }));
+  const ui = (registry.ui_only || []).map((u) => ({ op: u.name, kind: "ui", gate: u.gate, route: u.route, why: u.why }));
+  const untaught = (registry.untaught_writes || []).map((w) => ({ op: w.name, kind: "write", gate: w.gate, endpoint: w.endpoint, taught: false }));
+  return { ok: true, engine: { name: registry.engine.name, sha: registry.engine.sha }, ops, ui_only: ui, untaught_writes: untaught, untaught_reason: registry.untaught_reason };
+}
+
+// Path and query slots are filled into an authenticated api.clay.com URL, so a
+// value like "../../workspaces/9/x" or "a?b=c" would retarget the request
+// (security review, 2026-10-09). Every value must match its slot's shape.
+const ID = /^[A-Za-z0-9_-]{1,80}$/;
+const ARG_SHAPES = {
+  ws: /^\d{1,12}$/,
+  table: ID, row: ID, view: ID, audience: ID, campaign: ID, campaign_id: ID, lead_id: ID,
+  cursor: /^[A-Za-z0-9_=+-]{1,200}$/, after: ID,
+  limit: /^\d{1,5}$/, offset: /^\d{1,7}$/, days: /^\d{1,4}$/,
+  ids: /^[A-Za-z0-9_-]{1,80}(,[A-Za-z0-9_-]{1,80}){0,199}$/,
+  emailOrDomain: /^([A-Za-z0-9._%+-]+@)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
+};
+const JSON_ARGS = new Set(["forward_data", "reply_data"]);
+
+function badArg(args) {
+  for (const [k, v] of Object.entries(args)) {
+    if (JSON_ARGS.has(k)) {
+      let parsed;
+      try { parsed = typeof v === "string" ? JSON.parse(v) : v; } catch { return `${k} is not JSON`; }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return `${k} must be a JSON object`;
+      continue;
+    }
+    const shape = ARG_SHAPES[k];
+    if (!shape) return `${k} has no allowed shape`;
+    if (!shape.test(String(v))) return `${k} does not look like a ${k}`;
+  }
+  return null;
+}
+
+// A write needs a person at a terminal. The old gate printed its own
+// --confirm token in the refusal, so the agent that was refused could pass it
+// straight back and approve itself (security review, 2026-10-09). Now the
+// answer is read from /dev/tty, which agent shells don't have (ENXIO), and
+// CHEWBACCA_NO_SEND=1 refuses outright. Fixture mode reads a canned answer so
+// the gate is testable; fixture mode never reaches Clay.
+function personApproves(name, args) {
+  const prompt = `\nchewbacca clay is about to WRITE to Clay:\n  ${JSON.stringify({ op: name, args })}\nType the op name (${name}) to send it, anything else to stop: `;
+  if (FIXTURES) return (process.env.CHEWBACCA_CLAY_TTY_ANSWER || "") === name;
+  let fd;
+  try { fd = fs.openSync("/dev/tty", "r+"); } catch { return null; }
+  try {
+    fs.writeSync(fd, prompt);
+    const buf = Buffer.alloc(256);
+    const n = fs.readSync(fd, buf, 0, buf.length, null);
+    return buf.toString("utf8", 0, n).trim() === name;
+  } catch {
+    return false;
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+async function runOp(name, kv, flags) {
+  const ui = uiByName.get(name);
+  if (ui) {
+    const route = ui.route.replace(/\{(\w+)\}/g, (m, k) => (kv[k] === undefined ? m : String(kv[k])));
+    out({ ok: true, op: name, surface: "ui", done: false, gate: ui.gate, route, why: ui.why }, EXIT.ok);
+  }
+  const op = opByName.get(name);
+  if (!op) {
+    const untaught = (registry.untaught_writes || []).find((w) => w.name === name);
+    if (untaught) {
+      out({ ok: false, op: name, class: "untaught", gate: untaught.gate, endpoint: untaught.endpoint, reason: registry.untaught_reason }, EXIT.refused);
+    }
+    out({ ok: false, class: "usage", reason: `unknown op ${name}`, next: "chewbacca clay ops" }, EXIT.usage);
+  }
+  const args = withDefaults(op, kv);
+  const known = new Set(op.args.map((a) => a.replace("?", "")));
+  const stray = Object.keys(kv).filter((k) => !known.has(k));
+  if (stray.length) {
+    out({ ok: false, op: name, class: "usage", reason: `unknown arg ${stray.join(", ")}; ${name} takes ${op.args.join(", ") || "no args"}` }, EXIT.usage);
+  }
+  const bad = badArg(args);
+  if (bad) out({ ok: false, op: name, class: "input", reason: bad }, EXIT.usage);
+  if (isWrite(op)) {
+    const refuse = (reason) => out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args } }, EXIT.refused);
+    if (process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
+    if (!flags.allowWrites) refuse("a write needs --allow-writes");
+    const yes = personApproves(name, args);
+    if (yes === null) refuse("a write needs a person at a terminal to type the op name; this shell has none, so hand Caleb the exact command");
+    if (!yes) refuse("the person at the terminal did not approve this payload");
+  }
+  const cands = plan(op, args, flags.surface);
+  if (!cands.length) {
+    out({ ok: false, op: name, class: "input", reason: `no surface has every arg it needs; ${name} takes ${op.args.join(", ")}`, ui: uiRoute(op, args) }, EXIT.usage);
+  }
+  const tried = [];
+  let last;
+  for (const cand of cands) {
+    const r = await attempt(op, cand, flags);
+    last = r;
+    tried.push({ surface: r.surface, call: r.call, ok: r.ok, ms: r.ms, ...(r.ok ? {} : { class: r.class, reason: r.reason }), ...(r.truncated ? { truncated: r.truncated } : {}) });
+    // A write is sent once, through one surface: never fall through to another.
+    if (isWrite(op)) break;
+    if (r.ok && !r.truncated) break;
+    // An input error means the args are wrong, and every surface would say so.
+    if (!r.ok && r.class === "input") break;
+  }
+  const best = last.ok ? last : null;
+  if (best) {
+    const { ok, surface, call, tier, ms, engine_ms, data, truncated, healed, cursor } = best;
+    out({ ok, op: name, surface, call, ...(tier ? { tier } : {}), ms, ...(engine_ms !== undefined ? { engine_ms } : {}), ...(truncated ? { truncated } : {}), ...(healed ? { healed } : {}), ...(cursor ? { cursor } : {}), tried, data }, EXIT.ok);
+  }
+  out({ ok: false, op: name, class: last.class, reason: last.reason, ...(last.next ? { next: last.next } : {}), tried, ui: uiRoute(op, args) }, EXIT.failed);
+}
+
+async function measure(name, kv) {
+  const op = opByName.get(name);
+  if (!op) out({ ok: false, class: "usage", reason: `unknown op ${name}` }, EXIT.usage);
+  if (op.kind !== "read" || isWrite(op)) out({ ok: false, op: name, class: "refused", reason: "measure runs reads only" }, EXIT.refused);
+  const args = withDefaults(op, kv);
+  const rows = [];
+  const at = new Date().toISOString().slice(0, 10);
+  const all = readJson(MEASURED, {});
+  // Median of a few runs: one sample on a loaded Mac swings by 2x.
+  const runs = Math.max(1, Number(process.env.CLAY_MEASURE_RUNS || 3));
+  const median = (xs) => xs.slice().sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+  for (const cand of plan(op, args, null)) {
+    // Never time a surface that moves Caleb's own Chrome tab.
+    if (cand.s.drives_browser) continue;
+    const samples = [];
+    for (let i = 0; i < runs; i++) samples.push(await attempt(op, cand, { maxTier: null }));
+    const good = samples.filter((x) => x.ok && !x.truncated);
+    const r = good.length
+      ? { ...good[0], ms: median(good.map((x) => x.ms)), ...(good[0].engine_ms !== undefined ? { engine_ms: median(good.map((x) => x.engine_ms)) } : {}) }
+      : samples[0];
+    const key = surfaceKey(op, cand.s);
+    rows.push({ surface: key, ok: r.ok, ms: r.ms, engine_ms: r.engine_ms ?? null, tier: r.tier ?? null, truncated: !!r.truncated, ...(r.ok ? {} : { class: r.class, reason: r.reason }) });
+    if (r.ok && !r.truncated) {
+      all[name] = all[name] || {};
+      all[name][key] = { ms: r.ms, at, ...(r.engine_ms !== undefined ? { engine_ms: r.engine_ms } : {}), ...(r.tier ? { tier: r.tier } : {}) };
+    }
+  }
+  const sorted = Object.fromEntries(Object.keys(all).sort().map((k) => [k, all[k]]));
+  fs.writeFileSync(MEASURED, `${JSON.stringify(sorted, null, 1)}\n`);
+  out({ ok: rows.some((r) => r.ok), op: name, measured: rows }, EXIT.ok);
+}
+
+function doctor() {
+  const checks = [];
+  const dist = FIXTURES ? null : engineDist();
+  checks.push({ check: "api-anything installed", ok: !!dist, detail: dist || "not on PATH" });
+  const clone = registry.engine.clone.replace(/^~/, os.homedir());
+  const head = spawnSync("git", ["-C", clone, "rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
+  checks.push({ check: "pinned clone", ok: head === registry.engine.sha, detail: head ? `${clone} at ${head.slice(0, 12)}, pinned ${registry.engine.sha.slice(0, 12)}` : `no clone at ${clone}` });
+  if (dist) {
+    const got = distHash(dist);
+    const want = registry.engine.dist_sha256;
+    checks.push({ check: "installed build is the pinned build", ok: got === want, detail: got === want ? `dist sha256 ${got.slice(0, 12)}` : `dist sha256 ${got.slice(0, 12)}, want ${String(want).slice(0, 12)}: rebuild ${clone} at ${registry.engine.sha.slice(0, 12)} with npm ci --ignore-scripts && npm run build` });
+  }
+  const sess = path.join(ENGINE_HOME, "sessions", `${registry.engine.site}.json`);
+  checks.push({ check: "Clay session imported", ok: fs.existsSync(sess), detail: fs.existsSync(sess) ? sess : registry.engine.login });
+  checks.push({ check: "spec present", ok: specOps.size > 0, detail: `${specOps.size} operations in ${path.join(LIB, "clay.json")}` });
+  const clay = spawnSync("sh", ["-c", "command -v clay"], { encoding: "utf8" }).stdout.trim();
+  checks.push({ check: "clay CLI", ok: !!clay, detail: clay || "not on PATH" });
+  out({ ok: checks.every((c) => c.ok), checks }, checks.every((c) => c.ok) ? EXIT.ok : EXIT.failed);
+}
+
+const HELP = `chewbacca clay: Clay without opening Clay
+
+  chewbacca clay ops                     every op with its surfaces, gate, measured ms
+  chewbacca clay <op> [k=v ...]          run it through the fastest surface that answers
+  chewbacca clay route <op> [k=v ...]    the order it would try, without calling
+  chewbacca clay measure <op> [k=v ...]  time each surface once and record it (reads only)
+  chewbacca clay doctor                  engine pin, session, spec
+
+  --surface cli|api-anything|bin         force one surface
+  --allow-writes                         a write; a person must type the op name at a terminal
+
+ws defaults to $CLAY_WORKSPACE_ID or ${registry.defaults.ws}. Output is one line of JSON.`;
+
+(async () => {
+  const { pos, kv, flags } = parseArgv(process.argv.slice(2));
+  const [cmd, ...rest] = pos;
+  if (!cmd || cmd === "help") {
+    process.stdout.write(`${HELP}\n`);
+    process.exit(EXIT.ok);
+  }
+  if (cmd === "ops") out(listOps(), EXIT.ok);
+  if (cmd === "doctor") doctor();
+  if (cmd === "route") {
+    const op = opByName.get(rest[0]);
+    if (!op) out({ ok: false, class: "usage", reason: `unknown op ${rest[0] ?? ""}` }, EXIT.usage);
+    const args = withDefaults(op, kv);
+    const order = plan(op, args, flags.surface).map((c) => ({ surface: c.s.type, call: surfaceKey(op, c.s), ms: Number.isFinite(c.ms) ? c.ms : null }));
+    out({ ok: true, op: op.name, kind: op.kind, gate: op.gate, order, ui: uiRoute(op, args) }, EXIT.ok);
+  }
+  if (cmd === "measure") await measure(rest[0], kv);
+  await runOp(cmd, kv, flags);
+})().catch((e) => out({ ok: false, class: "error", reason: String(e && e.message ? e.message : e) }, EXIT.failed));

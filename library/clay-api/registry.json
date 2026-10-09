@@ -1,0 +1,977 @@
+{
+  "schema": "clay-ops/1",
+  "revision": "2026-10-09.1",
+  "notes": "Every Clay job `chewbacca clay` answers, and the surfaces that answer it. A surface is tried only when every arg it needs was given; the fastest measured one goes first, and the next is tried when it fails or comes back truncated. ms is end-to-end wall time for one call from a shell on Caleb's Mac on 2026-10-09, load average 60 to 90 from other agents, so read them as relative, not absolute. Writes are listed with a gate class; only three are callable and they refuse without --allow-writes and a person typing the op name at a real terminal, which agent shells don't have.",
+  "engine": {
+    "name": "api-anything",
+    "repo": "https://github.com/goodnight000/api-anything",
+    "sha": "ba26db14a122a684e2de672a24c6480c9b274e53",
+    "clone": "~/Projects/api-anything",
+    "home": "~/.chewbacca/api-anything",
+    "site": "clay",
+    "spec": "library/clay-api/clay.json",
+    "login": "api-anything login clay --profile \"Chrome/Profile 7\"",
+    "output_cap_chars": 20000,
+    "dist_sha256": "a595b981ce1de4663f4ebc2eb1c9fe5ba64f5b96206e5776fab6e5331ebf21ca",
+    "dist_sha256_of": "dist/*.js in name order, concatenated; built with npm ci --ignore-scripts && npm run build at sha"
+  },
+  "defaults": {
+    "ws": "1372623"
+  },
+  "ops": [
+    {
+      "name": "workspaces",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every workspace this login can open: id, name, plan",
+      "args": [],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listWorkspaces",
+          "args": {}
+        }
+      ],
+      "ui": "clay-go home"
+    },
+    {
+      "name": "resources",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every folder, workbook and table in a workspace, one call",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listResources",
+          "args": {
+            "ws": "ws"
+          }
+        }
+      ],
+      "ui": "clay-go tables-list"
+    },
+    {
+      "name": "tables",
+      "kind": "read",
+      "gate": "read",
+      "summary": "tables in the workspace",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listResources",
+          "args": {
+            "ws": "ws"
+          },
+          "where": {
+            "resourceType": "TABLE"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "tables",
+            "list",
+            "--limit",
+            "100"
+          ],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go tables-list"
+    },
+    {
+      "name": "workbooks",
+      "kind": "read",
+      "gate": "read",
+      "summary": "workbooks in the workspace",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listResources",
+          "args": {
+            "ws": "ws"
+          },
+          "where": {
+            "resourceType": "WORKBOOK"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "workbooks",
+            "list",
+            "--limit",
+            "100"
+          ],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go tables-list"
+    },
+    {
+      "name": "folders",
+      "kind": "read",
+      "gate": "read",
+      "summary": "folders in the workspace",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listResources",
+          "args": {
+            "ws": "ws"
+          },
+          "where": {
+            "resourceType": "FOLDER"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "folders",
+            "list",
+            "--filter",
+            "resourceType=FOLDER"
+          ],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go home"
+    },
+    {
+      "name": "table",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a table's settings: AUTO_RUN_ON, AUTO_RUN_MODE, scheduled runs, firstViewId, views. The CLI fallback has row count but no auto-run settings",
+      "args": [
+        "table"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getTable",
+          "args": {
+            "tableId": "table"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "tables",
+            "get",
+            "{table}"
+          ]
+        }
+      ],
+      "ui": "clay-go table-settings --table {table}",
+      "order": "fixed"
+    },
+    {
+      "name": "columns",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a table's columns with type and full settings: enrichment action, inputs binding, run condition, formula",
+      "args": [
+        "table"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getTableColumns",
+          "args": {
+            "tableId": "table"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "tables",
+            "columns",
+            "get",
+            "{table}"
+          ],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go column-settings --table {table}"
+    },
+    {
+      "name": "table-status",
+      "kind": "read",
+      "gate": "read",
+      "summary": "per-column enrichment status counts (success, error, running, queued)",
+      "args": [
+        "ws",
+        "table"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "tableRunStatus",
+          "args": {
+            "ws": "ws",
+            "tableId": "table"
+          }
+        }
+      ],
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "rows",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a page of rows with every cell; pass after=<last row id> (api) or cursor= (cli) for the next page",
+      "args": [
+        "ws",
+        "table",
+        "view?",
+        "limit?",
+        "after?",
+        "cursor?"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listRowsAfter",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "afterRecordId": "after",
+            "limit": "limit"
+          }
+        },
+        {
+          "type": "api-anything",
+          "op": "listRows",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "viewId": "view",
+            "limit": "limit"
+          },
+          "unless": [
+            "after",
+            "cursor"
+          ]
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "tables",
+            "rows",
+            "list",
+            "{table}"
+          ],
+          "optional": {
+            "limit": [
+              "--limit",
+              "{limit}"
+            ],
+            "cursor": [
+              "--cursor",
+              "{cursor}"
+            ]
+          },
+          "unless": [
+            "after"
+          ],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go table --table {table}"
+    },
+    {
+      "name": "row",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one row: every cell with its status (success, error, running, queued, empty)",
+      "args": [
+        "ws",
+        "table",
+        "row"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getRow",
+          "args": {
+            "ws": "ws",
+            "tableId": "table",
+            "rowId": "row"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "tables",
+            "rows",
+            "get",
+            "{table}",
+            "{row}"
+          ]
+        }
+      ],
+      "ui": "clay-go row-detail --table {table}"
+    },
+    {
+      "name": "audiences",
+      "kind": "read",
+      "gate": "read",
+      "summary": "people audiences (segments) with estimated size",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listAudiences",
+          "args": {
+            "ws": "ws"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "audiences",
+            "list",
+            "--entity-type",
+            "people"
+          ],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go people-segments"
+    },
+    {
+      "name": "audience-record-ids",
+      "kind": "read",
+      "gate": "read",
+      "summary": "record ids in an audience, paged (then audience-records ids=...)",
+      "args": [
+        "audience",
+        "limit?",
+        "cursor?"
+      ],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "audiences",
+            "records",
+            "search-ids",
+            "--entity-type",
+            "people",
+            "--audience-id",
+            "{audience}"
+          ],
+          "optional": {
+            "limit": [
+              "--limit",
+              "{limit}"
+            ],
+            "cursor": [
+              "--cursor",
+              "{cursor}"
+            ]
+          },
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go people-segment --audience {audience}"
+    },
+    {
+      "name": "audience-records",
+      "kind": "read",
+      "gate": "read",
+      "summary": "field values for up to 100 people records by id",
+      "args": [
+        "ids"
+      ],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "audiences",
+            "records",
+            "get",
+            "--entity-type",
+            "people",
+            "--ids",
+            "{ids}"
+          ],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go people"
+    },
+    {
+      "name": "campaigns",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every campaign with status and lifetime leads, sent, replies, bounces. The api-anything fallback has status and settings but no counts (campaign-stats has them)",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "campaigns",
+            "list",
+            "--with-analytics",
+            "--limit",
+            "100"
+          ],
+          "extract": "data"
+        },
+        {
+          "type": "api-anything",
+          "op": "listCampaigns",
+          "args": {
+            "ws": "ws"
+          }
+        }
+      ],
+      "ui": "clay-go sequencer",
+      "order": "fixed"
+    },
+    {
+      "name": "campaign-stats",
+      "kind": "read",
+      "gate": "read",
+      "summary": "lifetime leads, sent, replies and bounces for every campaign, one call",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "campaignAnalyticsSummaries",
+          "args": {
+            "ws": "ws"
+          }
+        }
+      ],
+      "ui": "clay-go sequencer"
+    },
+    {
+      "name": "campaign",
+      "kind": "read",
+      "gate": "read",
+      "summary": "a campaign's settings, sequence steps and variants",
+      "args": [
+        "ws",
+        "campaign"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "getCampaign",
+          "args": {
+            "ws": "ws",
+            "campaignId": "campaign"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "campaigns",
+            "get",
+            "{campaign}"
+          ]
+        }
+      ],
+      "ui": "clay-go campaign --campaign {campaign}"
+    },
+    {
+      "name": "campaign-analytics",
+      "kind": "read",
+      "gate": "read",
+      "summary": "funnel, daily stats, reply categories and senders for one campaign",
+      "args": [
+        "campaign"
+      ],
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "campaigns",
+            "analytics",
+            "{campaign}"
+          ]
+        }
+      ],
+      "ui": "clay-go campaign-analytics --campaign {campaign}"
+    },
+    {
+      "name": "campaign-variants",
+      "kind": "read",
+      "gate": "read",
+      "summary": "per-variant sends, replies, bounces and rates for one campaign",
+      "args": [
+        "ws",
+        "campaign"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "campaignVariantAnalytics",
+          "args": {
+            "ws": "ws",
+            "campaignId": "campaign"
+          }
+        }
+      ],
+      "ui": "clay-go campaign-analytics --campaign {campaign}"
+    },
+    {
+      "name": "campaign-leads",
+      "kind": "read",
+      "gate": "read",
+      "summary": "leads enrolled in a campaign, newest first; pass cursor= from nextCursor for the next page",
+      "args": [
+        "ws",
+        "campaign",
+        "limit?",
+        "cursor?"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "campaignLeadsNext",
+          "args": {
+            "ws": "ws",
+            "campaignId": "campaign",
+            "cursor": "cursor",
+            "limit": "limit"
+          }
+        },
+        {
+          "type": "api-anything",
+          "op": "campaignLeads",
+          "args": {
+            "ws": "ws",
+            "campaignId": "campaign",
+            "limit": "limit"
+          },
+          "unless": [
+            "cursor"
+          ]
+        }
+      ],
+      "ui": "clay-go campaign-activity --campaign {campaign}"
+    },
+    {
+      "name": "inbox",
+      "kind": "read",
+      "gate": "read",
+      "summary": "master inbox replies, 20 a page (offset=20, 40...); clay-inbox reads every page with threads",
+      "args": [
+        "ws",
+        "offset?"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "inboxReplies",
+          "args": {
+            "ws": "ws",
+            "offset": "offset"
+          }
+        },
+        {
+          "type": "bin",
+          "argv": [
+            "clay-inbox",
+            "--workspace",
+            "{ws}"
+          ],
+          "drives_browser": true
+        }
+      ],
+      "ui": "clay-go master-inbox"
+    },
+    {
+      "name": "thread",
+      "kind": "read",
+      "gate": "read",
+      "summary": "one lead's full thread: every message with stats_id and message_id",
+      "args": [
+        "ws",
+        "campaign_id",
+        "lead_id"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "threadHistory",
+          "args": {
+            "ws": "ws",
+            "campaign_id": "campaign_id",
+            "lead_id": "lead_id"
+          }
+        }
+      ],
+      "ui": "clay-go inbox-thread"
+    },
+    {
+      "name": "credits",
+      "kind": "read",
+      "gate": "read",
+      "summary": "workspace credit balance",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "creditBalance",
+          "args": {
+            "ws": "ws"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "credits",
+            "balance"
+          ]
+        },
+        {
+          "type": "bin",
+          "argv": [
+            "clay-balance"
+          ]
+        }
+      ],
+      "ui": "clay-go credits"
+    },
+    {
+      "name": "credit-usage",
+      "kind": "read",
+      "gate": "read",
+      "summary": "credits spent in the last days=N (default 7) by table, workflow and column",
+      "args": [
+        "ws",
+        "days?"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "creditUsage",
+          "args": {
+            "ws": "ws",
+            "days": "days"
+          }
+        }
+      ],
+      "ui": "clay-go credits"
+    },
+    {
+      "name": "signals",
+      "kind": "read",
+      "gate": "read",
+      "summary": "signals with destination, schedule and run status",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listSignals",
+          "args": {
+            "ws": "ws"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "signals",
+            "list"
+          ],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go signals"
+    },
+    {
+      "name": "workflows",
+      "kind": "read",
+      "gate": "read",
+      "summary": "workflows with last run and stats",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "listWorkflows",
+          "args": {
+            "ws": "ws"
+          }
+        },
+        {
+          "type": "cli",
+          "argv": [
+            "workflows",
+            "list",
+            "--limit",
+            "200"
+          ],
+          "extract": "data"
+        }
+      ],
+      "ui": "clay-go workflows"
+    },
+    {
+      "name": "blocklist",
+      "kind": "read",
+      "gate": "read",
+      "summary": "every blocked email or domain and where it came from",
+      "args": [
+        "ws"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "blocklist",
+          "args": {
+            "ws": "ws"
+          }
+        }
+      ],
+      "ui": "clay-go blocklist"
+    },
+    {
+      "name": "reply",
+      "kind": "write",
+      "gate": "write:sends-email",
+      "summary": "reply in a lead's thread; reply_data is JSON {email_stats_id, email_body, reply_message_id, reply_email_time, reply_email_body}",
+      "args": [
+        "ws",
+        "campaign_id",
+        "reply_data"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "inboxReply",
+          "args": {
+            "ws": "ws",
+            "campaign_id": "campaign_id",
+            "reply_data": "reply_data"
+          }
+        }
+      ],
+      "ui": "clay-go inbox-thread",
+      "verified": "body verified by clay-navigation in the signed-in tab 2026-10-09; never sent from here"
+    },
+    {
+      "name": "forward",
+      "kind": "write",
+      "gate": "write:sends-email",
+      "summary": "forward a reply; forward_data is JSON {message_id, stats_id, to_emails, forward_email_body?} with the REPLY's ids (our SENT message 500s)",
+      "args": [
+        "ws",
+        "campaign_id",
+        "forward_data"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "inboxForward",
+          "args": {
+            "ws": "ws",
+            "campaign_id": "campaign_id",
+            "forward_data": "forward_data"
+          }
+        }
+      ],
+      "ui": "clay-go inbox-thread",
+      "verified": "body verified by clay-navigation in the signed-in tab 2026-10-09; never sent from here"
+    },
+    {
+      "name": "blocklist-add",
+      "kind": "write",
+      "gate": "write:suppression",
+      "summary": "never email this address or domain again",
+      "args": [
+        "ws",
+        "emailOrDomain"
+      ],
+      "surfaces": [
+        {
+          "type": "api-anything",
+          "op": "blocklistAdd",
+          "args": {
+            "ws": "ws",
+            "emailOrDomain": "emailOrDomain"
+          }
+        }
+      ],
+      "ui": "clay-go blocklist",
+      "verified": "body verified by clay-navigation in the signed-in tab 2026-10-09; never sent from here"
+    }
+  ],
+  "ui_only": [
+    {
+      "name": "find-people",
+      "gate": "write:table-data",
+      "route": "clay-go find-leads-menu",
+      "why": "Find People into a table with the work-email waterfall took minutes in the UI on 10-05; the CLI loop took a night"
+    },
+    {
+      "name": "run-empty-rows",
+      "gate": "write:spends-credits",
+      "route": "clay-go table --table {table}",
+      "why": "the table's bulk Run N empty rows; the standing rule is five selected rows per live test"
+    },
+    {
+      "name": "configure-column",
+      "gate": "write:schema",
+      "route": "clay-go column-settings --table {table} --column {column}",
+      "why": "native column config with tokens bound to row fields; untaught as an API write"
+    },
+    {
+      "name": "start-campaign",
+      "gate": "write:campaign-state",
+      "route": "clay-go campaign --campaign {campaign}",
+      "why": "launch-guard.sh refuses a start without a full pre-send gate pass, and agents never press it"
+    }
+  ],
+  "untaught_writes": [
+    {
+      "name": "add-column",
+      "gate": "write:schema",
+      "endpoint": "POST /v3/workspaces/:workspaceId/tables/:tableId/fields",
+      "contract": "createField",
+      "seen_in": "frontend bundle contract"
+    },
+    {
+      "name": "update-column",
+      "gate": "write:schema",
+      "endpoint": "PATCH /v3/workspaces/:workspaceId/tables/:tableId/fields/:fieldId",
+      "contract": "updateField",
+      "seen_in": "frontend bundle contract",
+      "note": "column config, inputs binding, run condition and per-column auto-run live here"
+    },
+    {
+      "name": "table-auto-run",
+      "gate": "write:spends-credits",
+      "endpoint": "PATCH /v3/workspaces/:workspaceId/tables/:tableId",
+      "contract": "updateTable",
+      "seen_in": "frontend bundle contract",
+      "note": "tableSettings.AUTO_RUN_ON; turning it on spends credits on every new row"
+    },
+    {
+      "name": "run-cells",
+      "gate": "write:spends-credits",
+      "endpoint": "PATCH /v3/workspaces/:workspaceId/tables/:tableId/run",
+      "contract": "runRecordsForWorkspace",
+      "seen_in": "frontend bundle contract",
+      "note": "the standing rule caps a live test at five selected rows"
+    },
+    {
+      "name": "cancel-run",
+      "gate": "write:table-data",
+      "endpoint": "POST /v3/workspaces/:workspaceId/tables/:tableId/cancelrun",
+      "contract": "cancelRuns",
+      "seen_in": "frontend bundle contract"
+    },
+    {
+      "name": "add-rows",
+      "gate": "write:table-data",
+      "endpoint": "POST /v3/workspaces/:workspaceId/tables/:tableId/records",
+      "contract": "createRecordsForWorkspace",
+      "seen_in": "frontend bundle contract"
+    },
+    {
+      "name": "update-rows",
+      "gate": "write:table-data",
+      "endpoint": "PATCH /v3/workspaces/:workspaceId/tables/:tableId/records",
+      "contract": "updateRecordsForWorkspace",
+      "seen_in": "frontend bundle contract"
+    },
+    {
+      "name": "delete-rows",
+      "gate": "write:destructive",
+      "endpoint": "DELETE /v3/workspaces/:workspaceId/tables/:tableId/records",
+      "contract": "deleteRecordsForWorkspace",
+      "seen_in": "frontend bundle contract"
+    },
+    {
+      "name": "import",
+      "gate": "write:table-data",
+      "endpoint": "POST /v3/workspaces/:workspaceId/imports",
+      "contract": "createImportJobForWorkspace",
+      "seen_in": "frontend bundle contract",
+      "note": "a CSV import first goes through imports/multi-part-upload and its /complete"
+    },
+    {
+      "name": "add-leads",
+      "gate": "write:audience",
+      "endpoint": "none direct: a campaign enrolls its base segment (leadBaseSegmentId); leads enter by changing that audience, PUT /v3/workspaces/:workspaceId/audiences/segments/:segmentId (updateAudienceSegment) or a workflow audience writeback",
+      "contract": "updateAudienceSegment",
+      "seen_in": "frontend bundle contract; getCampaign output",
+      "note": "the CLI cannot do it either; clay-navigation routes it to the UI"
+    },
+    {
+      "name": "campaign-status",
+      "gate": "write:campaign-state",
+      "endpoint": "PATCH /v3/workspaces/:workspaceId/clay-sequencer/campaigns/:campaignId/status",
+      "contract": "setCampaignStatus",
+      "seen_in": "frontend bundle contract",
+      "note": "starting or resuming a campaign; launch-guard.sh must pass first and Caleb's standing rule is never from an agent"
+    },
+    {
+      "name": "lead-category",
+      "gate": "write:inbox-state",
+      "endpoint": "PATCH /v3/workspaces/:workspaceId/clay-sequencer/master-inbox/lead-category",
+      "contract": "setLeadCategory",
+      "seen_in": "frontend bundle contract"
+    },
+    {
+      "name": "mark-read",
+      "gate": "write:inbox-state",
+      "endpoint": "PATCH /v3/workspaces/:workspaceId/clay-sequencer/master-inbox/lead-read-status",
+      "contract": "setLeadReadStatus",
+      "seen_in": "frontend bundle contract",
+      "note": "opening a thread in the UI fires this, which is why thread reads go through the API"
+    },
+    {
+      "name": "blocklist-remove",
+      "gate": "write:suppression",
+      "endpoint": "DELETE /v3/workspaces/:workspaceId/clay-sequencer/global-blocklist/:entryId",
+      "contract": "deleteFromGlobalBlocklist",
+      "seen_in": "frontend bundle contract"
+    },
+    {
+      "name": "blocklist-add-bulk",
+      "gate": "write:suppression",
+      "endpoint": "POST /v3/workspaces/:workspaceId/campaigns/global-blocklist/add-bulk",
+      "contract": "addBulkToGlobalBlocklist",
+      "seen_in": "frontend bundle contract"
+    },
+    {
+      "name": "page-view-activity",
+      "gate": "write:telemetry",
+      "endpoint": "POST /v3/workspaces/:workspaceId/resources/:resourceId/activity",
+      "contract": "trackResourceActivity",
+      "seen_in": "clay-navigation crawl: fired on page load and blocked by its guard",
+      "note": "the reason page captures are avoided: loading a page records a view"
+    }
+  ],
+  "untaught_reason": "Teaching a write means making Clay's page send it, which changes real data, and every workspace this login reaches holds client or firm data. Each needs a sandbox workspace with throwaway rows before it can be taught and verified."
+}

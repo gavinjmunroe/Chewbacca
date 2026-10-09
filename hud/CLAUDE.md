@@ -225,6 +225,27 @@ its lane: it has no close button, it is never folded, and panels in its
 region are placed beside it rather than over it. Give it `w=52` and
 `chrome=bare`; it draws its own glass.
 
+## Files
+
+```
+files                    open the two-pane file manager where it was left
+files ~/Downloads        point the active pane there (a file: its folder, with it picked)
+files "/Volumes/My Disk" quote a path with spaces
+files off                put it away
+```
+
+`hud files [path]` sends the same line, "show me files", "open Finder" or
+"file manager" reach it from hud-listen with no model, and Files is in the
+menu. Like the rim editor it is a native panel over the glass, not a
+surface, because the glass never takes key and this is driven by the
+keyboard: Tab switches pane, Up/Down pick, Enter opens a folder or Quick
+Looks a file, Backspace goes up, F3 or Space Quick Look, F4 opens in its app,
+F5 copies and F6 moves to the other pane, F7 makes a folder, F8 or
+Command-Delete sends to the Trash, Command-L edits the path, Escape closes.
+A clash on copy or move keeps both ("report 2.pdf"); nothing is ever
+overwritten and nothing is deleted outside the Trash. Source:
+`Sources/KyberKit/FilesPanel.swift` and `FilePane.swift`.
+
 ## Coding sessions on the glass
 
 Agent work without an editor or a terminal. Sessions are another kind of

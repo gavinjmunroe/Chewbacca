@@ -287,6 +287,24 @@ public enum LineParser {
             }
             return .tuneRim(values)
 
+        case "files":
+            // `files`: open the file manager where it was left. `files
+            // ~/Downloads` or `files "/Volumes/My Disk"` points the active
+            // pane there; `files off` puts it away. A word, like `rim`.
+            guard tokens.count > 1 else { return .openFiles(path: nil) }
+            guard tokens.count == 2 else {
+                throw LineParseError.malformed(
+                    "`files` takes one path; quote a path with spaces", line: trimmed)
+            }
+            if tokens[1] == "off" { return .closeFiles }
+            var path = tokens[1]
+            if path.hasPrefix("\""), path.hasSuffix("\""), path.count >= 2,
+               let data = path.data(using: .utf8),
+               let decoded = try? JSONDecoder().decode(String.self, from: data) {
+                path = decoded
+            }
+            return .openFiles(path: path)
+
         case "press":
             // `press <n> [hold=<h>]`: AXPress on the element pointed at as
             // number n, in hold h when given. A word, not a letter, because

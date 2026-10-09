@@ -166,6 +166,14 @@ else:
                             "--text", "t", *extra], env=e, capture_output=True, text=True)
         return p.returncode, json.loads(p.stdout or "{}")
 
+    # An unverified row's handle is "unverified:" plus the claimed From. The
+    # colon is legal in a local part, so it passed the address check and a
+    # send to it reached gws.
+    p = subprocess.run([sys.executable, str(READER), "send", "--to", "unverified:sagar@example.test", "--subject", "s",
+                        "--text", "t", "--dry-run"], env=env, capture_output=True, text=True)
+    check("send refuses an unverified: handle, even on a dry run",
+          p.returncode != 0 and "unverified" in json.loads(p.stdout or "{}").get("error", ""), p.stdout + p.stderr)
+
     code, res = send(no_send=True)
     check("CHEWBACCA_NO_SEND stops a send", code != 0 and "disabled" in res.get("error", ""), res)
     code, res = send("--dry-run")

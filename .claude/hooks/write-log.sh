@@ -1,7 +1,7 @@
 #!/bin/bash
 # Resolve both checkout hooks and copies installed in ~/.claude/hooks.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-exec python3 -c '
+exec python3 -I -c '
 import os
 from pathlib import Path
 import runpy

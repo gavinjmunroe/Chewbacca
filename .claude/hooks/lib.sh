@@ -17,7 +17,7 @@ CHEWBACCA_HOOK_LOG="$CHEWBACCA_LOG_DIR/hooks.log"
 # session-context hook once emitted an unbounded coursework dump.
 CHEWBACCA_HOOK_MAX_BYTES="${CHEWBACCA_HOOK_MAX_BYTES:-8000}"
 
-_hook_ms() { python3 -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0; }
+_hook_ms() { python3 -I -c 'import time;print(int(time.time()*1000))' 2>/dev/null || echo 0; }
 
 hook_init() {
   _HOOK_NAME="${1:-$(basename "${BASH_SOURCE[1]:-hook}")}"

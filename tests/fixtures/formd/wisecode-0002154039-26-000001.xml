@@ -1,0 +1,163 @@
+<?xml version="1.0"?>
+<edgarSubmission>
+
+    <schemaVersion>X0708</schemaVersion>
+
+    <submissionType>D</submissionType>
+
+    <testOrLive>LIVE</testOrLive>
+
+    <primaryIssuer>
+        <cik>0002154039</cik>
+        <entityName>WISEcode Inc.</entityName>
+        <issuerAddress>
+            <street1>10580 N. MCCARRAN BLVD</street1>
+            <street2>#115-164</street2>
+            <city>RENO</city>
+            <stateOrCountry>NV</stateOrCountry>
+            <stateOrCountryDescription>NEVADA</stateOrCountryDescription>
+            <zipCode>89503</zipCode>
+        </issuerAddress>
+        <issuerPhoneNumber>000-000-0000</issuerPhoneNumber>
+        <jurisdictionOfInc>NEVADA</jurisdictionOfInc>
+        <issuerPreviousNameList>
+            <previousName>WISEcode, LLC</previousName>
+        </issuerPreviousNameList>
+        <edgarPreviousNameList>
+            <value>None</value>
+        </edgarPreviousNameList>
+        <entityType>Corporation</entityType>
+        <yearOfInc>
+            <overFiveYears>true</overFiveYears>
+        </yearOfInc>
+    </primaryIssuer>
+
+    <relatedPersonsList>
+        <relatedPersonInfo>
+            <relatedPersonName>
+                <firstName>Peter</firstName>
+                <lastName>Castleman</lastName>
+            </relatedPersonName>
+            <relatedPersonAddress>
+                <street1>10580 N. McCarron Blvd.</street1>
+                <street2>#115-164</street2>
+                <city>Reno</city>
+                <stateOrCountry>NV</stateOrCountry>
+                <stateOrCountryDescription>NEVADA</stateOrCountryDescription>
+                <zipCode>89503</zipCode>
+            </relatedPersonAddress>
+            <relatedPersonRelationshipList>
+                <relationship>Executive Officer</relationship>
+                <relationship>Director</relationship>
+            </relatedPersonRelationshipList>
+            <relationshipClarification></relationshipClarification>
+        </relatedPersonInfo>
+        <relatedPersonInfo>
+            <relatedPersonName>
+                <firstName>Nicholas</firstName>
+                <lastName>Poaletti</lastName>
+            </relatedPersonName>
+            <relatedPersonAddress>
+                <street1>10580 N. McCarron Blvd.</street1>
+                <street2>#115-164</street2>
+                <city>Reno</city>
+                <stateOrCountry>NV</stateOrCountry>
+                <stateOrCountryDescription>NEVADA</stateOrCountryDescription>
+                <zipCode>89503</zipCode>
+            </relatedPersonAddress>
+            <relatedPersonRelationshipList>
+                <relationship>Executive Officer</relationship>
+                <relationship>Director</relationship>
+            </relatedPersonRelationshipList>
+            <relationshipClarification></relationshipClarification>
+        </relatedPersonInfo>
+        <relatedPersonInfo>
+            <relatedPersonName>
+                <firstName>Ron</firstName>
+                <lastName>Harel</lastName>
+            </relatedPersonName>
+            <relatedPersonAddress>
+                <street1>10580 N. McCarron Blvd.</street1>
+                <street2>#115-164</street2>
+                <city>Reno</city>
+                <stateOrCountry>NV</stateOrCountry>
+                <stateOrCountryDescription>NEVADA</stateOrCountryDescription>
+                <zipCode>89503</zipCode>
+            </relatedPersonAddress>
+            <relatedPersonRelationshipList>
+                <relationship>Executive Officer</relationship>
+            </relatedPersonRelationshipList>
+            <relationshipClarification></relationshipClarification>
+        </relatedPersonInfo>
+    </relatedPersonsList>
+
+    <offeringData>
+        <industryGroup>
+            <industryGroupType>Other Technology</industryGroupType>
+        </industryGroup>
+        <issuerSize>
+            <revenueRange>Decline to Disclose</revenueRange>
+        </issuerSize>
+        <federalExemptionsExclusions>
+            <item>06b</item>
+        </federalExemptionsExclusions>
+        <typeOfFiling>
+            <newOrAmendment>
+                <isAmendment>false</isAmendment>
+            </newOrAmendment>
+            <dateOfFirstSale>
+                <yetToOccur>true</yetToOccur>
+            </dateOfFirstSale>
+        </typeOfFiling>
+        <durationOfOffering>
+            <moreThanOneYear>false</moreThanOneYear>
+        </durationOfOffering>
+        <typesOfSecuritiesOffered>
+            <isEquityType>true</isEquityType>
+            <isOptionToAcquireType>true</isOptionToAcquireType>
+            <isOtherType>true</isOtherType>
+            <descriptionOfOtherType>Restricted Stock, Stock Options and underlying stock of the issuer granted to officers, employees and service providers.</descriptionOfOtherType>
+        </typesOfSecuritiesOffered>
+        <businessCombinationTransaction>
+            <isBusinessCombinationTransaction>false</isBusinessCombinationTransaction>
+            <clarificationOfResponse></clarificationOfResponse>
+        </businessCombinationTransaction>
+        <minimumInvestmentAccepted>0</minimumInvestmentAccepted>
+        <salesCompensationList></salesCompensationList>
+        <offeringSalesAmounts>
+            <totalOfferingAmount>1687128</totalOfferingAmount>
+            <totalAmountSold>0</totalAmountSold>
+            <totalRemaining>1687128</totalRemaining>
+            <clarificationOfResponse></clarificationOfResponse>
+        </offeringSalesAmounts>
+        <investors>
+            <hasNonAccreditedInvestors>false</hasNonAccreditedInvestors>
+            <totalNumberAlreadyInvested>0</totalNumberAlreadyInvested>
+        </investors>
+        <salesCommissionsFindersFees>
+            <salesCommissions>
+                <dollarAmount>0</dollarAmount>
+            </salesCommissions>
+            <findersFees>
+                <dollarAmount>0</dollarAmount>
+            </findersFees>
+            <clarificationOfResponse></clarificationOfResponse>
+        </salesCommissionsFindersFees>
+        <useOfProceeds>
+            <grossProceedsUsed>
+                <dollarAmount>0</dollarAmount>
+            </grossProceedsUsed>
+            <clarificationOfResponse>N/A. Securities offered to eligible officers employees and service providers under the 2026 Equity Incentive Plan.</clarificationOfResponse>
+        </useOfProceeds>
+        <signatureBlock>
+            <authorizedRepresentative>false</authorizedRepresentative>
+            <signature>
+                <issuerName>WISEcode Inc.</issuerName>
+                <signatureName>/s/ Ron Harel</signatureName>
+                <nameOfSigner>Ron Harel</nameOfSigner>
+                <signatureTitle>Chief Financial Officer</signatureTitle>
+                <signatureDate>2026-10-07</signatureDate>
+            </signature>
+        </signatureBlock>
+    </offeringData>
+</edgarSubmission>

@@ -158,7 +158,7 @@ fi
 
 # Offline reusable math, graphs, and UX evidence. No live service calls.
 if group "learning tools"; then
-  for tool in gtme-math gtme-graph gtme-learning gtme-library clay-fixture-check task-graph ux-learning; do
+  for tool in gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning; do
     expect "$tool appears in help" "chewbacca $tool" bash "$ROOT/bin/chewbacca" --help
     check "$tool dispatches" bash "$ROOT/bin/chewbacca" "$tool" --help
     ln -s "$ROOT/bin/$tool" "$TMP/$tool"
@@ -399,6 +399,7 @@ if group "gtme"; then
   check "GTM arithmetic validates assumptions and heldout labels" python3 "$ROOT/tests/test_gtme_math.py"
   check "research library preserves source and reading status" python3 "$ROOT/tests/test_gtme_library.py"
   check "learning promotion requires paired holdouts and preserved regressions" python3 "$ROOT/tests/test_gtme_learning.py"
+  check "Form D signals parse real filings, filter, and cache offline" python3 "$ROOT/tests/test_gtme_signals.py"
   check "Clay exports match the frozen fixture by stable identity" python3 "$ROOT/tests/test_clay_fixture_check.py"
   check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
   check "gtme-dedupe merges one person across lists, never two on name alone" python3 "$ROOT/tests/test_gtme_dedupe.py"

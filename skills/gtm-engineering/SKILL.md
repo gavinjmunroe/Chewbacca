@@ -75,6 +75,10 @@ After each substantial phase, compare results against fixed acceptance limits an
 
 Update the relevant map or procedure only from observed behavior. Distinguish documented, inspected, tested, and independently verified capabilities. Record coverage gaps and failures; do not graduate a domain because its tutorial was read.
 
+Use `gtme-signals formd` for free buying signals: it lists SEC Form D private raises from EDGAR, often weeks before the press release, one row per issuer with its related persons as the people to contact (`--industry`, `--min-amount`, `--state`, `--json`, `--csv`; raw XML cached in `~/.cache/chewbacca/formd/`).
+A Form D is a signal, not proof the company is buying. It shows money raised and who signed, nothing about budget, need or timing, so qualify each row before any outreach.
+Pooled investment funds are dropped unless `--include-funds`; SEC asks for a contact email in `CHEWBACCA_SEC_UA` and the tool stays at five requests a second.
+
 Use `clay-fixture-check` to compare an exported CSV with a frozen synthetic fixture. It checks content, not export authenticity or workspace identity. Use `gtme-learning evaluate` for paired holdout results and regression preservation before proposing promotion. Its local declarations do not prove evaluator independence or that a test was sealed in advance. Obtain those receipts separately.
 
 Training note, 2026-09-23: user required mathematical, creative and proprietary standards throughout the workflow after recorded lessons failed to establish reliable transfer. Measure changed behavior and preserve private evidence, rather than equating added instructions with expertise.

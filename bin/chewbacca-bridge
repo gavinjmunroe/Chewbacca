@@ -197,6 +197,7 @@ REGISTRY = {
     "list-sift": spec("list-sift", timeout=1800), "graph-fuse": spec("graph-fuse", timeout=600),
     "gtme-math": spec("gtme-math"), "gtme-graph": spec("gtme-graph", timeout=600),
     "gtme-library": spec("gtme-library"), "gtme-learning": spec("gtme-learning"),
+    "gtme-signals": spec("gtme-signals", subs={"formd"}, timeout=900),
     "clay-fixture-check": spec("clay-fixture-check"), "intro": spec("intro"),
     "people": spec("people", deny=("delete", "forget", "purge", "send")),
     "work-ledger": spec("work-ledger"), "backlog": spec("backlog"),

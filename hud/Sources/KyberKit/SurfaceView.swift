@@ -539,7 +539,14 @@ public struct SurfaceView: View {
                     onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
 
         case "Diff":
-            return AnyView(DiffView(text: p["text"]?.display ?? ""))
+            return AnyView(DiffView(text: p["text"]?.display ?? "", path: p["path"]?.stringValue ?? ""))
+
+        case "Tree":
+            let action = p["action"]?.stringValue
+            return AnyView(
+                TreeView(
+                    rows: TreeView.rows(p["items"]?.arrayValue ?? []),
+                    onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
 
         case "Rail":
             return AnyView(

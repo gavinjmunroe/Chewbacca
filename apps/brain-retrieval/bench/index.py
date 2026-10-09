@@ -2,7 +2,7 @@
 """Chunk + embed the personal brain locally. No service, no network beyond localhost."""
 import os, re, json, glob, time, urllib.request, hashlib, sys
 
-BRAIN = "/Users/joelnewton/second-brain"
+BRAIN = __import__("os").environ.get("CHEWBACCA_BRAIN", __import__("os").path.expanduser("~/second-brain"))
 DIRS  = ["core", "domains", "memory", "projects", "systems", "wiki"]
 OUT   = os.path.dirname(os.path.abspath(__file__))
 MODEL = "nomic-embed-text"

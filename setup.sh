@@ -983,9 +983,8 @@ if grep -qiE "prayer|pray" "$HOME/.claude/CLAUDE.md" 2>/dev/null && grep -q "Ame
   log "opener gate on: replies must open with a prayer, as CLAUDE.md asks"
 fi
 
-# ux-engine lives in its own repo, so its tools cannot go through link_tool,
-# which resolves against this repo's bin/. Link them when that repo is present,
-# from the same default ux-guard.sh reads.
+# ux-engine lives in apps/ux-engine, outside this repo's bin/, so its tools
+# cannot go through link_tool. Link them from the same path ux-guard.sh reads.
 #
 # WHY THIS MATTERS AND IS NOT COSMETIC. ux-guard blocks a UI write and then
 # tells the agent what to do next: "Derive the constraints first: ux-constrain"
@@ -993,7 +992,7 @@ fi
 # remediation was a dead end and the only move left after a refusal was to
 # guess again. A gate that refuses without a runnable next step trains people
 # to route around it.
-UX_ENGINE_DIR="${UX_ENGINE_DIR:-$HOME/code/tools/ux-engine}"
+UX_ENGINE_DIR="${UX_ENGINE_DIR:-$SCRIPT_DIR/apps/ux-engine}"
 if [ -d "$UX_ENGINE_DIR/bin" ]; then
   mkdir -p "$HOME/.local/bin"
   _ux_linked=""

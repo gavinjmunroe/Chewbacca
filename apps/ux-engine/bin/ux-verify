@@ -1,6 +1,6 @@
 #!/bin/bash
 # Independent check of the scan claims. Reads only lenses/full/scan.json.
-cd ~/code/tools/ux-engine
+cd "$(dirname "$0")/.."
 python3 - <<'PY'
 import json
 D=json.load(open("lenses/full/scan.json"))

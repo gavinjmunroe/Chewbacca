@@ -3,7 +3,7 @@ import os, re, json, math, subprocess, urllib.request, collections, time
 import numpy as np
 
 HERE  = os.path.dirname(os.path.abspath(__file__))
-BRAIN = "/Users/joelnewton/second-brain"
+BRAIN = __import__("os").environ.get("CHEWBACCA_BRAIN", __import__("os").path.expanduser("~/second-brain"))
 MODEL = "nomic-embed-text"
 K     = 5
 

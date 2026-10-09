@@ -4,7 +4,7 @@ by POSITION, with zero LLM calls. Whatever position cannot decide is what the
 LLM pass has to handle, and that count is the real cost of the migration."""
 import os, re, glob, json, collections
 
-BRAIN="/Users/joelnewton/second-brain"
+BRAIN = __import__("os").environ.get("CHEWBACCA_BRAIN", __import__("os").path.expanduser("~/second-brain"))
 DIRS=["core","domains","memory","projects","systems","wiki","log"]
 
 # filename -> path, for resolution

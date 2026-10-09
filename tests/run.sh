@@ -929,6 +929,7 @@ if group "installer"; then
   check  "chewbacca apps runs an app's own tests" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" test
   check  "chewbacca apps refuses an app it cannot start" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" missing
   check  "lemma-replica ships inside the kit" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" real
+  check  "no hook or setup path depends on a folder only one Mac has" bash "$ROOT/tests/same_experience.sh" "$ROOT"
 
   # A store nobody reads is the failure this whole file keeps finding.
   check  "SessionStart injects the backlog" \

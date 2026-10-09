@@ -168,7 +168,7 @@ Single links he saved:
 - [Tobii Pro Spark eye tracker](https://www.tobii.com/products/eye-trackers/screen-based/tobii-pro-spark) (2026-10-01): later. Gaze input for the HUD; hardware purchase, Caleb's call.
 - [chroma-core/chroma](https://github.com/chroma-core/chroma) (2026-09-27): rejected in favor of sqlite-vec, see above.
 - [slackcli.dev](https://slackcli.dev/): **used** (the shaharia-lab slackcli site). [orchid.ai](https://orchid.ai/): later, not opened. [github.com/Mail-0](https://github.com/Mail-0) (2026-10-08): the org behind Zero, see Email.
-- [Charles Zheng's reels](https://www.instagram.com/charles.zhengg/reels/) (2026-10-08): later, not opened. He's the cstack and api-anything author (goodnight000).
+- [Charles Zheng's reels](https://www.instagram.com/charles.zhengg/reels/) (2026-10-08): **adopted** (2026-10-10, read). All 10 reels transcribed in second-brain `raw/charles-zheng-instagram/`. The three tools his 2026-09-15 reel names are now kit skills: `grilling` (mattpocock/skills), `openspec` (Fission-AI/OpenSpec, CLI installed) and `ponytail` (DietrichGebert/ponytail). He's the cstack and api-anything author (goodnight000), and the seed of the dev-creator graph in `raw/creators/`.
 - Instagram posts he saved, not opened yet: [DaeeojNCCaX](https://www.instagram.com/reel/DaeeojNCCaX/), [DbJXJi6DD9X](https://www.instagram.com/reel/DbJXJi6DD9X/), [DdY8okcERHD](https://www.instagram.com/p/DdY8okcERHD/), [DdAw0iqhWm-](https://www.instagram.com/reel/DdAw0iqhWm-/). Later.
 
 Product direction he wrote himself, 2026-10-04: "I should literally need no app,

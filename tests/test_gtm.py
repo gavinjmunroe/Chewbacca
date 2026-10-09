@@ -281,6 +281,14 @@ def test_cli(db_path: Path):
     ok("Widget Co" in out.stdout and "Acme | Widget | Seed" in out.stdout, out.stdout)
     out = run_cli(db_path, "suppress", "--client", "Acme Capital", "--csv")
     ok(out.stdout.splitlines()[0] == "email,last_sent" and "b@fund.example" not in out.stdout, out.stdout)
+    # A reply-thread address can carry a leading = or a comma; --csv must not
+    # hand a spreadsheet a formula or a shifted column (security review, 10-09).
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("gtm_cli", Path(__file__).resolve().parent.parent / "tools/gtm.py")
+    gtm_cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gtm_cli)
+    ok(gtm_cli.csv_cell('=HYPERLINK("http://x","y")@a.example').startswith("'="))
+    ok(gtm_cli.csv_cell("@x.example") == "'@x.example" and gtm_cli.csv_cell("a@b.example") == "a@b.example")
     out = run_cli(db_path, "lead", "Sam Lee", "--json")
     ok(len(json.loads(out.stdout)["people"]) == 2, out.stdout)
     out = run_cli(db_path, "replies", "--unanswered", "--client", "Acme Capital")

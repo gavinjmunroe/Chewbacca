@@ -17,6 +17,7 @@ source last synced. Add --json to any command.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import sys
@@ -25,6 +26,13 @@ from pathlib import Path
 LIB = Path(__file__).resolve().parent.parent / "bin" / "lib"
 sys.path.insert(0, str(LIB))
 import gtm_query as q  # noqa: E402
+
+FORMULA_STARTS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_cell(value: str) -> str:
+    """Quote a cell a spreadsheet would run as a formula (OWASP CSV injection)."""
+    return "'" + value if value.startswith(FORMULA_STARTS) else value
 
 SOURCES = ("clay", "inbox", "calendar")
 
@@ -238,9 +246,13 @@ def main(argv=None) -> int:
         elif a.cmd == "suppress":
             data = q.suppress(db, a.client)
             if a.csv and not a.json:
-                print("email,last_sent")
+                # Addresses come from Clay activities and reply threads, which
+                # anyone emailing in can shape: csv quotes commas and quotes,
+                # csv_cell defuses a leading =,+,-,@ (security review, 2026-10-09).
+                w = csv.writer(sys.stdout, lineterminator="\n")
+                w.writerow(["email", "last_sent"])
                 for r in data["emails"]:
-                    print(f"{r['email']},{r['last_sent'] or ''}")
+                    w.writerow([csv_cell(r["email"]), csv_cell(r["last_sent"] or "")])
                 print(f"# {len(data['emails'])} addresses emailed ({data['from_reply_threads']} only from reply threads); "
                       f"{data['in_campaign_never_emailed']} in a campaign but never emailed are NOT here",
                       file=sys.stderr)

@@ -1,0 +1,810 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pricing — DevTool</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #0d0d0d;
+        --bg1: #141414;
+        --bg2: #1a1a1a;
+        --border: #262626;
+        --border2: #333;
+        --text: #c8c8c8;
+        --dim: #5a5a5a;
+        --bright: #ececec;
+        --accent: #4a9eff;
+        --green: #3dba6e;
+        --mono:
+          "JetBrains Mono", "Fira Code", "Cascadia Code", Consolas,
+          "Courier New", monospace;
+      }
+
+      html {
+        font-size: 12px;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--mono);
+        line-height: 1.45;
+      }
+
+      body {
+        max-width: 920px;
+        margin: 0 auto;
+        padding: 10px 14px 24px;
+      }
+
+      hr {
+        border: none;
+        border-top: 1px solid var(--border);
+        margin: 10px 0;
+      }
+
+      /* ── Topbar ─────────────────────────────────────── */
+      .topbar {
+        display: flex;
+        align-items: baseline;
+        gap: 12px;
+        padding: 7px 0 8px;
+      }
+
+      .topbar-name {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--bright);
+        letter-spacing: 0.01em;
+      }
+
+      .topbar-ver {
+        font-size: 10px;
+        color: var(--dim);
+      }
+
+      .topbar-nav {
+        margin-left: auto;
+        display: flex;
+        gap: 14px;
+      }
+
+      .topbar-nav a {
+        font-size: 11px;
+        color: var(--dim);
+        text-decoration: none;
+      }
+
+      .topbar-nav a:hover {
+        color: var(--text);
+      }
+
+      .topbar-nav a:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
+      /* ── Billing toggle ──────────────────────────────── */
+      .billing-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 0 6px;
+        font-size: 11px;
+        color: var(--dim);
+      }
+
+      .toggle {
+        display: flex;
+        border: 1px solid var(--border2);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+
+      .toggle button {
+        background: transparent;
+        border: none;
+        padding: 3px 10px;
+        font-size: 11px;
+        font-family: var(--mono);
+        color: var(--dim);
+        cursor: pointer;
+      }
+
+      .toggle button:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+
+      .toggle button.active {
+        background: var(--bg2);
+        color: var(--bright);
+      }
+
+      .save-badge {
+        font-size: 10px;
+        color: var(--green);
+        padding: 1px 6px;
+        border: 1px solid var(--green);
+        border-radius: 2px;
+        display: none;
+      }
+
+      /* ── Plans ───────────────────────────────────────── */
+      .plans {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 2px;
+      }
+
+      .plan {
+        padding: 10px 12px 10px;
+        border-right: 1px solid var(--border);
+        background: var(--bg);
+      }
+
+      .plan:last-child {
+        border-right: none;
+      }
+      .plan.featured {
+        background: var(--bg1);
+      }
+
+      .plan-label {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--dim);
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .plan-label .badge {
+        font-size: 9px;
+        font-weight: 600;
+        color: var(--accent);
+        background: transparent;
+        border: 1px solid var(--accent);
+        padding: 0 4px;
+        border-radius: 2px;
+        letter-spacing: 0.05em;
+      }
+
+      .plan-price {
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--bright);
+        font-variant-numeric: tabular-nums;
+        margin: 5px 0 2px;
+        line-height: 1;
+        display: flex;
+        align-items: baseline;
+        gap: 1px;
+      }
+
+      .plan-price .sym {
+        font-size: 14px;
+        font-weight: 400;
+        color: var(--text);
+        align-self: flex-start;
+        margin-top: 3px;
+      }
+
+      .plan-price .per {
+        font-size: 11px;
+        color: var(--dim);
+        font-weight: 400;
+        margin-left: 3px;
+      }
+
+      .plan-sub {
+        font-size: 10px;
+        color: var(--dim);
+        margin-top: 3px;
+      }
+
+      /* ── CTA buttons ─────────────────────────────────── */
+      .cta-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0;
+        padding: 8px 0 2px;
+      }
+
+      .cta-cell {
+        padding: 0 0;
+      }
+
+      .btn {
+        display: inline-block;
+        font-size: 11px;
+        font-family: var(--mono);
+        font-weight: 600;
+        padding: 4px 13px;
+        border-radius: 3px;
+        cursor: pointer;
+        text-decoration: none;
+        border: 1px solid;
+        letter-spacing: 0.01em;
+        white-space: nowrap;
+      }
+
+      .btn:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .btn-ghost {
+        background: transparent;
+        color: var(--text);
+        border-color: var(--border2);
+      }
+
+      .btn-ghost:hover {
+        border-color: var(--text);
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: #000;
+        border-color: var(--accent);
+      }
+
+      .btn-primary:hover {
+        opacity: 0.9;
+      }
+
+      /* ── Section label ───────────────────────────────── */
+      .slabel {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--dim);
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        padding: 6px 0 4px;
+      }
+
+      /* ── Tables ──────────────────────────────────────── */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 11px;
+      }
+
+      thead th {
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--dim);
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        padding: 5px 8px;
+        text-align: left;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+      }
+
+      thead th.c {
+        text-align: center;
+      }
+      thead th.r {
+        text-align: right;
+      }
+
+      tbody tr {
+        border-bottom: 1px solid var(--border);
+      }
+      tbody tr:last-child {
+        border-bottom: none;
+      }
+      tbody tr:hover {
+        background: var(--bg1);
+      }
+
+      td {
+        padding: 4px 8px;
+        color: var(--text);
+        vertical-align: middle;
+      }
+
+      td.c {
+        text-align: center;
+      }
+      td.r {
+        text-align: right;
+      }
+      td.dim {
+        color: var(--dim);
+      }
+      td.num {
+        font-variant-numeric: tabular-nums;
+      }
+
+      .chk {
+        color: var(--green);
+        font-size: 12px;
+      }
+      .dash {
+        color: var(--dim);
+      }
+
+      .tgroup td {
+        padding: 5px 8px 3px;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--dim);
+        text-transform: uppercase;
+        letter-spacing: 0.09em;
+        background: var(--bg1);
+        border-bottom: 1px solid var(--border);
+      }
+
+      /* ── FAQ ─────────────────────────────────────────── */
+      details {
+        border-bottom: 1px solid var(--border);
+      }
+
+      details:last-of-type {
+        border-bottom: none;
+      }
+
+      summary {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 7px 2px;
+        font-size: 11px;
+        color: var(--text);
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+      }
+
+      summary::-webkit-details-marker {
+        display: none;
+      }
+
+      summary::after {
+        content: "+";
+        color: var(--dim);
+        font-size: 13px;
+        font-weight: 300;
+        flex-shrink: 0;
+        margin-left: 16px;
+      }
+
+      details[open] summary::after {
+        content: "−";
+      }
+
+      summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
+      .faq-body {
+        padding: 0 2px 8px;
+        font-size: 11px;
+        color: var(--dim);
+        line-height: 1.65;
+        max-width: 680px;
+      }
+
+      /* ── Footer ──────────────────────────────────────── */
+      .footer {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 8px 0 0;
+      }
+
+      .footer a {
+        font-size: 10px;
+        color: var(--dim);
+        text-decoration: none;
+      }
+
+      .footer a:hover {
+        color: var(--text);
+      }
+
+      .footer a:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+        border-radius: 2px;
+      }
+
+      .status {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 10px;
+        color: var(--dim);
+      }
+
+      .dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--green);
+        flex-shrink: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Topbar -->
+    <div class="topbar">
+      <span class="topbar-name">DevTool</span>
+      <span class="topbar-ver">v2.4.1</span>
+      <nav class="topbar-nav">
+        <a href="#">Docs</a>
+        <a href="#">Changelog</a>
+        <a href="#">GitHub</a>
+        <a href="#" style="color: var(--accent)">Sign in</a>
+      </nav>
+    </div>
+
+    <hr />
+
+    <!-- Billing toggle -->
+    <div class="billing-row">
+      <span>Billing cycle</span>
+      <div class="toggle">
+        <button class="active" id="btn-mo" onclick="setBilling('monthly')">
+          Monthly
+        </button>
+        <button id="btn-yr" onclick="setBilling('annual')">Annual</button>
+      </div>
+      <span class="save-badge" id="save-badge">2 months free</span>
+    </div>
+
+    <!-- Plan grid -->
+    <div class="plans">
+      <div class="plan">
+        <div class="plan-label">Hobby</div>
+        <div class="plan-price">
+          <span class="sym">$</span>
+          <span class="pval" data-mo="0" data-yr="0">0</span>
+          <span class="per">/ mo</span>
+        </div>
+        <div class="plan-sub">Local only &mdash; no account required</div>
+      </div>
+      <div class="plan featured">
+        <div class="plan-label">Pro <span class="badge">MOST USED</span></div>
+        <div class="plan-price">
+          <span class="sym">$</span>
+          <span class="pval" data-mo="12" data-yr="10">12</span>
+          <span class="per">/ mo</span>
+        </div>
+        <div class="plan-sub">One seat &mdash; sync across machines</div>
+      </div>
+      <div class="plan">
+        <div class="plan-label">Team</div>
+        <div class="plan-price">
+          <span class="sym">$</span>
+          <span class="pval" data-mo="28" data-yr="23">28</span>
+          <span class="per">/ mo per seat</span>
+        </div>
+        <div class="plan-sub">Shared config, audit log, SSO</div>
+      </div>
+    </div>
+
+    <!-- CTA buttons -->
+    <div class="cta-row">
+      <div class="cta-cell">
+        <a href="#" class="btn btn-ghost">Download free</a>
+      </div>
+      <div class="cta-cell">
+        <a href="#" class="btn btn-primary">Start 14-day trial</a>
+      </div>
+      <div class="cta-cell">
+        <a href="#" class="btn btn-ghost">Contact sales</a>
+      </div>
+    </div>
+
+    <hr />
+
+    <!-- Feature comparison -->
+    <div class="slabel">Feature comparison</div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 48%">Feature</th>
+          <th class="c" style="width: 17%">Hobby</th>
+          <th class="c" style="width: 17%">Pro</th>
+          <th class="c" style="width: 18%">Team</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="tgroup">
+          <td colspan="4">Core</td>
+        </tr>
+        <tr>
+          <td>CLI &amp; editor extensions (VS Code, JetBrains, Neovim)</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>Language support</td>
+          <td class="c dim">All</td>
+          <td class="c dim">All</td>
+          <td class="c dim">All</td>
+        </tr>
+        <tr>
+          <td>Offline / air-gapped mode</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>Custom rules per project (.toolrc)</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>CI mode (exit codes, JSON output)</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+        </tr>
+
+        <tr class="tgroup">
+          <td colspan="4">Limits</td>
+        </tr>
+        <tr>
+          <td>Active projects</td>
+          <td class="c num">3</td>
+          <td class="c dim">Unlimited</td>
+          <td class="c dim">Unlimited</td>
+        </tr>
+        <tr>
+          <td>Rule sets</td>
+          <td class="c num">10</td>
+          <td class="c dim">Unlimited</td>
+          <td class="c dim">Unlimited</td>
+        </tr>
+        <tr>
+          <td>Runs / day</td>
+          <td class="c num">200</td>
+          <td class="c num">5,000</td>
+          <td class="c num">20,000</td>
+        </tr>
+        <tr>
+          <td>History retention</td>
+          <td class="c dim">7 days</td>
+          <td class="c dim">90 days</td>
+          <td class="c dim">1 year</td>
+        </tr>
+
+        <tr class="tgroup">
+          <td colspan="4">Sync</td>
+        </tr>
+        <tr>
+          <td>Config sync across machines</td>
+          <td class="c dash">—</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>Cloud rule storage</td>
+          <td class="c dash">—</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>Git push hooks</td>
+          <td class="c dash">—</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>API access (REST + webhooks)</td>
+          <td class="c dash">—</td>
+          <td class="c chk">✓</td>
+          <td class="c chk">✓</td>
+        </tr>
+
+        <tr class="tgroup">
+          <td colspan="4">Team</td>
+        </tr>
+        <tr>
+          <td>Shared rule sets (org-level)</td>
+          <td class="c dash">—</td>
+          <td class="c dash">—</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>Audit log (90-day retention)</td>
+          <td class="c dash">—</td>
+          <td class="c dash">—</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>SSO (SAML 2.0, OIDC)</td>
+          <td class="c dash">—</td>
+          <td class="c dash">—</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>Role-based access control</td>
+          <td class="c dash">—</td>
+          <td class="c dash">—</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>Priority support &mdash; 4h SLA</td>
+          <td class="c dash">—</td>
+          <td class="c dash">—</td>
+          <td class="c chk">✓</td>
+        </tr>
+        <tr>
+          <td>Seat management &amp; provisioning (SCIM)</td>
+          <td class="c dash">—</td>
+          <td class="c dash">—</td>
+          <td class="c chk">✓</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr />
+
+    <!-- Add-ons -->
+    <div class="slabel">Add-ons</div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 52%">Add-on</th>
+          <th class="r" style="width: 20%">Price</th>
+          <th style="width: 28%">Available on</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Extra run capacity (+10,000 / day)</td>
+          <td class="r num">$4.00 / mo</td>
+          <td class="dim">Pro, Team</td>
+        </tr>
+        <tr>
+          <td>Extended history (+2 years)</td>
+          <td class="r num">$3.00 / mo</td>
+          <td class="dim">Pro, Team</td>
+        </tr>
+        <tr>
+          <td>Additional seats beyond plan minimum</td>
+          <td class="r num">$28.00 / seat / mo</td>
+          <td class="dim">Team</td>
+        </tr>
+        <tr>
+          <td>On-prem / self-hosted binary license</td>
+          <td class="r dim">Contact sales</td>
+          <td class="dim">Team</td>
+        </tr>
+        <tr>
+          <td>SLA upgrade (1h response, 99.9% uptime)</td>
+          <td class="r dim">Contact sales</td>
+          <td class="dim">Team</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <hr />
+
+    <!-- FAQ -->
+    <div class="slabel">FAQ</div>
+
+    <details>
+      <summary>What counts as a run?</summary>
+      <p class="faq-body">
+        One invocation of the CLI or editor extension against a single file or
+        diff. Batch operations count once per file processed. Background file
+        watchers count only when a change triggers a rule. CI runs share the
+        same daily limit as local runs.
+      </p>
+    </details>
+    <details>
+      <summary>What happens when I hit the daily run limit?</summary>
+      <p class="faq-body">
+        The CLI exits with code 2 and prints a clear message. No silent failures
+        or partial runs. Unused quota does not roll over. You can add capacity
+        via the add-on above or wait for the reset at 00:00 UTC. Team plans can
+        set per-user sub-limits from the admin console.
+      </p>
+    </details>
+    <details>
+      <summary>Is there a free trial on Pro?</summary>
+      <p class="faq-body">
+        14 days, no card required. Trial limits match Pro exactly. Runs consumed
+        during the trial do not carry over when billing starts. You can cancel
+        before the trial ends with no charge.
+      </p>
+    </details>
+    <details>
+      <summary>Can I switch plans mid-cycle?</summary>
+      <p class="faq-body">
+        Upgrades take effect immediately, prorated to the day. Downgrades apply
+        at the end of the current billing period. Annual plans can switch to
+        monthly at renewal. Team plans billed annually can add seats mid-cycle
+        at the daily prorated rate.
+      </p>
+    </details>
+    <details>
+      <summary>What data leaves my machine?</summary>
+      <p class="faq-body">
+        Hobby: nothing. Everything runs locally. Pro and Team sync rule configs
+        and run metadata (file paths, rule IDs, pass/fail status, timestamp) to
+        our servers. Source file contents are never uploaded, hashed, or
+        transmitted. See the security page for the full data flow diagram.
+      </p>
+    </details>
+    <details>
+      <summary>Open source and academic pricing</summary>
+      <p class="faq-body">
+        Open source projects with a public license and fewer than 5 contributors
+        get Pro free. Email a link to your repo. Academic institutions get 60%
+        off Team. Email a .edu address or a purchase order from your
+        institution. Both require annual renewal.
+      </p>
+    </details>
+    <details>
+      <summary>Do you offer invoicing or purchase orders?</summary>
+      <p class="faq-body">
+        Yes, for Team plans with 10 or more seats. Net-30 terms. Contact sales
+        with your billing entity name and expected seat count. Monthly billing
+        is card-only regardless of plan size.
+      </p>
+    </details>
+
+    <hr />
+
+    <div class="footer">
+      <a href="#">Terms</a>
+      <a href="#">Privacy</a>
+      <a href="#">Security</a>
+      <a href="#">Status</a>
+      <a href="#">Changelog</a>
+      <a href="#">Contact</a>
+      <div class="status">
+        <span class="dot"></span>
+        <span>All systems operational</span>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        function setBilling(m) {
+          var isAnnual = m === "annual";
+          document
+            .getElementById("btn-mo")
+            .classList.toggle("active", !isAnnual);
+          document
+            .getElementById("btn-yr")
+            .classList.toggle("active", isAnnual);
+          document.getElementById("save-badge").style.display = isAnnual
+            ? "inline"
+            : "none";
+          document.querySelectorAll(".pval").forEach(function (el) {
+            el.textContent = isAnnual ? el.dataset.yr : el.dataset.mo;
+          });
+        }
+        window.setBilling = setBilling;
+      })();
+    </script>
+  </body>
+</html>

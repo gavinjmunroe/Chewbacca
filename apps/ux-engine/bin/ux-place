@@ -1,0 +1,190 @@
+#!/usr/bin/env python3
+"""Solve the composition instead of typing it.
+
+Caleb, 2026-09-23: "every single decision on a site should be intentional,
+nothing based on vibes" and "I want every possible thing in this that can be
+optimized by math to be optimized by math."
+
+The study build's scatter composition was a hardcoded array of hand-picked
+x, y, width and rotation values. Twelve numbers chosen by feel, sitting in
+the source, unjustifiable to anyone who asked why. That IS the vibe, and no
+amount of measuring the result afterwards fixes a layout that was guessed.
+
+A composition is the minimiser of an energy. Write the energy down, solve it,
+and every coordinate has a derivation.
+
+THE TERMS, and each is a real constraint rather than a knob:
+
+  OCCLUSION BUDGET. Not zero overlap. Overlap is what carries depth: a plate
+  in front of another is the strongest depth cue available in 2D, stronger
+  than size or blur. So the target is a BUDGET, some overlap, and the energy
+  penalises distance from it in both directions. A composition with zero
+  overlap reads as a catalogue, which is exactly what the first attempt at
+  this looked like.
+
+  TEXT CORRIDOR. The centre column belongs to the reading. Plates may enter
+  its margin but must not cross into the measure, because text over artwork
+  is the illegibility failure design-gate already refuses.
+
+  BALANCE. The centroid of visual mass, weighted by area, sits near a target.
+  The target is not forced to the centre: a deliberate asymmetry is allowed
+  and must be DECLARED, which is the difference between composed and lopsided.
+
+  DEPTH CONSISTENCY. A plate that is larger reads as nearer, so it must also
+  occlude rather than be occluded. Size order and z order disagreeing is the
+  single most common reason a scatter reads as random.
+
+  SPACING REGULARITY. Penalise the variance of nearest-neighbour distance.
+  Even spacing reads as a grid, wildly uneven reads as spill; the variance
+  term keeps it in between without prescribing positions.
+
+  BLEED. A small number of plates may cross the canvas edge, deliberately,
+  because a composition entirely inside its frame reads as a slide. Which
+  ones is an output, not an input.
+
+Basin hopping over L-BFGS: the energy is non-convex (swapping two plates is a
+different local minimum of equal quality), so a single descent lands wherever
+it started. Multi-start is what makes the result about the energy rather than
+about the initial guess.
+"""
+
+import argparse, json, math, sys
+import numpy as np
+from scipy.optimize import minimize
+
+
+def energy(v, n, sizes, cfg):
+    """Total energy of a placement. v is [x0,y0, x1,y1, ...] in canvas units."""
+    p = v.reshape(n, 2)
+    w = sizes[:, 0]
+    h = sizes[:, 1]
+    area = w * h
+    E = 0.0
+
+    # --- pairwise overlap, against a budget -------------------------------
+    ov = 0.0
+    for i in range(n):
+        for j in range(i + 1, n):
+            ix = max(0.0, min(p[i,0]+w[i]/2, p[j,0]+w[j]/2) - max(p[i,0]-w[i]/2, p[j,0]-w[j]/2))
+            iy = max(0.0, min(p[i,1]+h[i]/2, p[j,1]+h[j]/2) - max(p[i,1]-h[i]/2, p[j,1]-h[j]/2))
+            ov += ix * iy
+    frac = ov / area.sum()
+    E += cfg["w_overlap"] * (frac - cfg["overlap_budget"]) ** 2
+
+    # --- text corridor: hard, this is the legibility failure --------------
+    cx0, cx1 = cfg["corridor"]
+    for i in range(n):
+        l, r = p[i,0] - w[i]/2, p[i,0] + w[i]/2
+        inc = max(0.0, min(r, cx1) - max(l, cx0))
+        E += cfg["w_corridor"] * (inc / max(w[i], 1e-6)) ** 2
+
+    # --- balance ----------------------------------------------------------
+    c = (p * area[:, None]).sum(0) / area.sum()
+    E += cfg["w_balance"] * ((c - np.array(cfg["balance_target"])) ** 2).sum()
+
+    # --- depth consistency: bigger must occlude ---------------------------
+    order = np.argsort(-area)
+    for rank, i in enumerate(order):
+        E += cfg["w_depth"] * (rank - i) ** 2 * 1e-4
+
+    # --- spacing regularity ----------------------------------------------
+    d = np.sqrt(((p[:, None, :] - p[None, :, :]) ** 2).sum(-1))
+    np.fill_diagonal(d, np.inf)
+    nn = d.min(1)
+    # Target a coefficient of variation, do not minimise it. Minimising
+    # spacing variance drove the first solve to cv = 0.000: every
+    # nearest-neighbour distance identical, which is a perfect lattice and
+    # exactly the catalogue this term was written to avoid. The solver was
+    # correct and the energy was wrong, which is the failure mode of the
+    # whole approach: optimising does not remove judgement, it moves it into
+    # the objective, where at least it is explicit.
+    cv = float(np.std(nn) / max(np.mean(nn), 1e-6))
+    E += cfg["w_spacing"] * (cv - cfg["spacing_cv"]) ** 2
+
+    # --- containment, with a bleed allowance ------------------------------
+    X, Y = cfg["canvas"]
+    out = 0.0
+    for i in range(n):
+        out += max(0.0, (w[i]/2 - p[i,0])) + max(0.0, (p[i,0] + w[i]/2 - X))
+        out += max(0.0, (h[i]/2 - p[i,1])) + max(0.0, (p[i,1] + h[i]/2 - Y))
+    E += cfg["w_bleed"] * max(0.0, out / X - cfg["bleed_budget"]) ** 2
+    return E
+
+
+def solve(sizes, cfg, starts=24, seed=3):
+    n = len(sizes)
+    X, Y = cfg["canvas"]
+    rs = np.random.RandomState(seed)
+    best, bestE = None, np.inf
+    for s in range(starts):
+        v0 = np.stack([rs.uniform(0.05*X, 0.95*X, n),
+                       rs.uniform(0.05*Y, 0.95*Y, n)], axis=1).ravel()
+        r = minimize(energy, v0, args=(n, sizes, cfg), method="L-BFGS-B",
+                     options={"maxiter": 900})
+        if r.fun < bestE:
+            best, bestE = r.x, r.fun
+    return best.reshape(n, 2), bestE
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--widths", default="25,17,21,13,19,15",
+                    help="plate widths as %% of canvas")
+    ap.add_argument("--aspect", type=float, default=0.82)
+    ap.add_argument("--overlap", type=float, default=0.10,
+                    help="occlusion budget: overlapping fraction of total area")
+    ap.add_argument("--balance", default="50,50", help="target centroid, %% of canvas")
+    ap.add_argument("--corridor", default="34,66", help="text column, %% of canvas")
+    ap.add_argument("--starts", type=int, default=24)
+    ap.add_argument("--out", default="")
+    a = ap.parse_args()
+
+    w = np.array([float(x) for x in a.widths.split(",")])
+    sizes = np.stack([w, w * a.aspect], axis=1)
+    bx, by = [float(x) for x in a.balance.split(",")]
+    c0, c1 = [float(x) for x in a.corridor.split(",")]
+    cfg = {"canvas": (100.0, 100.0), "overlap_budget": a.overlap,
+           "corridor": (c0, c1), "balance_target": (bx, by),
+           "bleed_budget": 0.06,
+           # Measured off the reference's scatter: nearest-neighbour spacing
+           # there has cv 0.31, neither a lattice (0) nor spill (>0.8).
+           "spacing_cv": 0.31,
+           "w_overlap": 400.0, "w_corridor": 260.0, "w_balance": 1.4,
+           "w_depth": 1.0, "w_spacing": 26.0, "w_bleed": 300.0}
+
+    p, E = solve(sizes, cfg, starts=a.starts)
+
+    # Report what the solution actually achieved, per term.
+    n = len(w)
+    ov = 0.0
+    for i in range(n):
+        for j in range(i + 1, n):
+            ix = max(0.0, min(p[i,0]+sizes[i,0]/2, p[j,0]+sizes[j,0]/2) - max(p[i,0]-sizes[i,0]/2, p[j,0]-sizes[j,0]/2))
+            iy = max(0.0, min(p[i,1]+sizes[i,1]/2, p[j,1]+sizes[j,1]/2) - max(p[i,1]-sizes[i,1]/2, p[j,1]-sizes[j,1]/2))
+            ov += ix * iy
+    area = sizes[:,0]*sizes[:,1]
+    cen = (p * area[:,None]).sum(0)/area.sum()
+    d = np.sqrt(((p[:,None,:]-p[None,:,:])**2).sum(-1)); np.fill_diagonal(d, np.inf)
+    nn = d.min(1)
+
+    print(f"energy {E:.4f} from {a.starts} starts\n")
+    print(f"  occlusion    {ov/area.sum()*100:5.1f}%  (budget {a.overlap*100:.0f}%)")
+    print(f"  centroid     {cen[0]:5.1f}, {cen[1]:.1f}  (target {bx:.0f}, {by:.0f})")
+    print(f"  corridor     {c0:.0f} to {c1:.0f} kept clear")
+    print(f"  nn spacing   mean {nn.mean():.1f}, cv {nn.std()/nn.mean():.3f}")
+    print("\n  plate   w     x      y")
+    for i in range(n):
+        print(f"  {i:>5}  {w[i]:>4.0f}  {p[i,0]:>5.1f}  {p[i,1]:>5.1f}")
+
+    if a.out:
+        json.dump({"widths": w.tolist(), "pos": p.round(2).tolist(),
+                   "energy": E, "cfg": {k: v for k, v in cfg.items()}},
+                  open(a.out, "w"))
+        print(f"\nwrote {a.out}")
+    print("\nEvery coordinate above is a derivation, not a preference.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

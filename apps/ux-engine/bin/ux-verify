@@ -1,0 +1,41 @@
+#!/bin/bash
+# Independent check of the scan claims. Reads only lenses/full/scan.json.
+cd ~/code/tools/ux-engine
+python3 - <<'PY'
+import json
+D=json.load(open("lenses/full/scan.json"))
+I={n:i for i,n in enumerate(D["fields"])}
+print(f"file: lenses/full/scan.json")
+print(f"url scanned: {D['url']}")
+print(f"page height: {D['height']}px, sampled every {D['step']}px")
+print(f"frames stored: {len(D['frames'])}\n")
+
+state={}; ch={}
+for fr in D["frames"]:
+    y=fr["y"]
+    if "full" in fr: state=dict(fr["full"])
+    else:
+        state.update(fr["d"])
+        for k in fr.get("gone",[]): state.pop(k,None)
+    for k,v in state.items():
+        ch.setdefault(k,{})[y]=v
+
+def varying(field, pred=lambda vs: len(vs)>1):
+    out=[]
+    for k,d in ch.items():
+        vs={str(v[I[field]]) for v in d.values()}
+        if pred(vs): out.append(k)
+    return out
+
+print(f"distinct elements seen : {len(ch)}")
+for f in ("opacity","transform","clipPath","dashoffset","top"):
+    print(f"  vary on {f:<11}: {len(varying(f))}")
+
+# clip-paths that ACTUALLY animate, excluding the constant sr-only utility
+real=[k for k in varying("clipPath")
+      if len({str(v[I['clipPath']]) for v in ch[k].values()})>1]
+sr=[k for k in ch if all(str(v[I['clipPath']])=="inset(50%)" for v in ch[k].values())
+    and any(v[I['clipPath']] for v in ch[k].values())]
+print(f"\nclip-path elements that CHANGE value : {len(real)}")
+print(f"constant inset(50%) sr-only utilities: {len(sr)}  <- not effects")
+PY

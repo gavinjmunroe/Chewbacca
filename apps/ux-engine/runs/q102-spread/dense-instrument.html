@@ -1,0 +1,1600 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notification Preferences</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --fg: #1a1a1a;
+        --fg-muted: #666;
+        --fg-faint: #999;
+        --bg: #f5f5f5;
+        --bg-hover: #efefef;
+        --surface: #fff;
+        --rule: #d8d8d8;
+        --accent: #0057ff;
+        --accent-bg: #e8f0ff;
+        --danger: #c0392b;
+        --danger-bg: #fdecea;
+        --success: #1a7a3c;
+        --success-bg: #e4f5eb;
+        --font:
+          -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+        --mono: "SF Mono", "Fira Code", "Cascadia Code", "Consolas", monospace;
+      }
+
+      body {
+        font-family: var(--font);
+        font-size: 12px;
+        line-height: 1.45;
+        color: var(--fg);
+        background: var(--bg);
+      }
+
+      /* ---- layout ---- */
+      .app {
+        display: grid;
+        grid-template-columns: 192px 1fr;
+        grid-template-rows: 34px 1fr;
+        min-height: 100vh;
+      }
+
+      /* ---- topbar ---- */
+      .topbar {
+        grid-column: 1 / -1;
+        border-bottom: 1px solid var(--rule);
+        display: flex;
+        align-items: center;
+        padding: 0 12px;
+        gap: 14px;
+        background: var(--surface);
+      }
+      .topbar-logo {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: -0.2px;
+      }
+      .topbar-sep {
+        width: 1px;
+        height: 14px;
+        background: var(--rule);
+      }
+      .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 11px;
+        color: var(--fg-muted);
+      }
+      .breadcrumb a {
+        color: var(--fg-muted);
+        text-decoration: none;
+      }
+      .breadcrumb a:hover {
+        color: var(--fg);
+      }
+      .breadcrumb .sep {
+        color: var(--fg-faint);
+      }
+      .breadcrumb .cur {
+        color: var(--fg);
+      }
+      .topbar-end {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      /* ---- sidebar ---- */
+      .sidebar {
+        border-right: 1px solid var(--rule);
+        padding: 10px 0;
+        background: var(--surface);
+        overflow-y: auto;
+      }
+      .nav-group {
+        padding: 8px 10px 3px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+        color: var(--fg-faint);
+      }
+      .nav-item {
+        display: block;
+        width: 100%;
+        padding: 4px 10px;
+        font-size: 12px;
+        color: var(--fg-muted);
+        text-decoration: none;
+        border: none;
+        background: none;
+        text-align: left;
+        cursor: pointer;
+      }
+      .nav-item:hover {
+        background: var(--bg-hover);
+        color: var(--fg);
+      }
+      .nav-item.active {
+        background: var(--accent-bg);
+        color: var(--accent);
+        font-weight: 500;
+      }
+
+      /* ---- main ---- */
+      .main {
+        overflow-y: auto;
+        max-height: calc(100vh - 34px);
+      }
+
+      /* ---- page header ---- */
+      .page-hd {
+        padding: 10px 16px 9px;
+        border-bottom: 1px solid var(--rule);
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        background: var(--surface);
+      }
+      .page-hd h1 {
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .page-hd .sub {
+        font-size: 11px;
+        color: var(--fg-muted);
+      }
+      .page-hd-end {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+      }
+
+      /* ---- buttons ---- */
+      .btn {
+        padding: 3px 9px;
+        font-size: 11px;
+        font-family: var(--font);
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        background: var(--surface);
+        cursor: pointer;
+        color: var(--fg);
+        line-height: 1.5;
+      }
+      .btn:hover {
+        background: var(--bg);
+      }
+      .btn-primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      .btn-primary:hover {
+        background: #0047d4;
+        border-color: #0047d4;
+      }
+      .btn-sm {
+        padding: 2px 7px;
+        font-size: 10px;
+      }
+
+      /* ---- section ---- */
+      .section {
+        border-bottom: 1px solid var(--rule);
+      }
+      .sec-hd {
+        padding: 7px 16px 6px;
+        border-bottom: 1px solid var(--rule);
+        background: var(--bg);
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+      }
+      .sec-hd h2 {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: var(--fg-muted);
+      }
+      .sec-hd .note {
+        font-size: 11px;
+        color: var(--fg-faint);
+        margin-left: auto;
+      }
+
+      /* ---- tables ---- */
+      .tbl {
+        width: 100%;
+        border-collapse: collapse;
+        background: var(--surface);
+      }
+      .tbl th {
+        padding: 5px 16px 4px;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: var(--fg-faint);
+        text-align: left;
+        border-bottom: 1px solid var(--rule);
+        background: var(--bg);
+        white-space: nowrap;
+      }
+      .tbl th.c {
+        text-align: center;
+      }
+      .tbl td {
+        padding: 6px 16px;
+        font-size: 12px;
+        border-bottom: 1px solid var(--rule);
+        vertical-align: middle;
+      }
+      .tbl tr:last-child td {
+        border-bottom: none;
+      }
+      .tbl tr:hover td {
+        background: #fafafa;
+      }
+      .tbl td.c {
+        text-align: center;
+      }
+      .tbl .sub-hd td {
+        padding: 5px 16px 4px;
+        background: var(--bg);
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+        color: var(--fg-faint);
+      }
+      .tbl .indent td:first-child {
+        padding-left: 28px;
+      }
+
+      .lbl {
+        font-weight: 500;
+        font-size: 12px;
+      }
+      .desc {
+        font-size: 11px;
+        color: var(--fg-faint);
+        margin-top: 1px;
+      }
+
+      /* ---- toggle ---- */
+      .tog {
+        position: relative;
+        display: inline-block;
+        width: 28px;
+        height: 15px;
+        flex-shrink: 0;
+      }
+      .tog input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+      }
+      .tog-sl {
+        position: absolute;
+        inset: 0;
+        background: #c8c8c8;
+        border-radius: 2px;
+        cursor: pointer;
+        transition: background 0.12s;
+      }
+      .tog-sl::before {
+        content: "";
+        position: absolute;
+        width: 11px;
+        height: 11px;
+        left: 2px;
+        top: 2px;
+        background: #fff;
+        border-radius: 1px;
+        transition: transform 0.12s;
+      }
+      .tog input:checked + .tog-sl {
+        background: var(--accent);
+      }
+      .tog input:checked + .tog-sl::before {
+        transform: translateX(13px);
+      }
+      .tog input:focus-visible + .tog-sl {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      .tog input:disabled + .tog-sl {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      /* ---- select ---- */
+      select {
+        font-size: 11px;
+        font-family: var(--font);
+        padding: 2px 18px 2px 6px;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        background: var(--surface)
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23aaa'/%3E%3C/svg%3E")
+          no-repeat right 5px center;
+        appearance: none;
+        -webkit-appearance: none;
+        color: var(--fg);
+        cursor: pointer;
+        min-width: 108px;
+      }
+      select:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: 0;
+        border-color: var(--accent);
+      }
+      select:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* ---- inputs ---- */
+      input[type="email"],
+      input[type="text"] {
+        font-size: 11px;
+        font-family: var(--font);
+        padding: 2px 7px;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        background: var(--surface);
+        color: var(--fg);
+        width: 210px;
+      }
+      input[type="email"]:focus,
+      input[type="text"]:focus {
+        outline: 2px solid var(--accent);
+        outline-offset: 0;
+      }
+
+      input[type="time"] {
+        font-size: 11px;
+        font-family: var(--mono);
+        padding: 2px 6px;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        background: var(--surface);
+        color: var(--fg);
+      }
+      input[type="time"]:focus {
+        outline: 2px solid var(--accent);
+      }
+
+      input[type="number"] {
+        font-size: 11px;
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        padding: 2px 6px;
+        width: 52px;
+        text-align: right;
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        background: var(--surface);
+        color: var(--fg);
+      }
+      input[type="number"]:focus {
+        outline: 2px solid var(--accent);
+      }
+
+      /* ---- badges ---- */
+      .badge {
+        display: inline-block;
+        padding: 1px 5px;
+        font-size: 10px;
+        font-weight: 600;
+        border-radius: 2px;
+        letter-spacing: 0.1px;
+      }
+      .b-blue {
+        background: var(--accent-bg);
+        color: var(--accent);
+      }
+      .b-green {
+        background: var(--success-bg);
+        color: var(--success);
+      }
+      .b-red {
+        background: var(--danger-bg);
+        color: var(--danger);
+      }
+      .b-gray {
+        background: #ebebeb;
+        color: var(--fg-muted);
+      }
+      .b-orange {
+        background: #fff3e0;
+        color: #b45309;
+      }
+
+      /* ---- channel icon (text, no emoji) ---- */
+      .ch-icon {
+        width: 17px;
+        height: 17px;
+        border-radius: 2px;
+        border: 1px solid var(--rule);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 8px;
+        font-weight: 800;
+        font-family: var(--mono);
+        background: var(--bg);
+        flex-shrink: 0;
+        color: var(--fg-muted);
+      }
+      .ch-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+
+      /* ---- num ---- */
+      .num {
+        font-family: var(--mono);
+        font-variant-numeric: tabular-nums;
+        font-size: 11px;
+      }
+
+      /* ---- day toggles ---- */
+      .days {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .day {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        font-size: 11px;
+        color: var(--fg-muted);
+        cursor: pointer;
+      }
+      .day input[type="checkbox"] {
+        width: 12px;
+        height: 12px;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      /* ---- checkbox rows ---- */
+      .ck-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .ck-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .ck-row input[type="checkbox"] {
+        width: 12px;
+        height: 12px;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      /* ---- time range ---- */
+      .time-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 11px;
+        color: var(--fg-faint);
+      }
+
+      /* ---- inline link ---- */
+      a.link {
+        color: var(--accent);
+        text-decoration: none;
+        font-size: 11px;
+      }
+      a.link:hover {
+        text-decoration: underline;
+      }
+      a.del {
+        color: var(--danger);
+        text-decoration: none;
+        font-size: 11px;
+      }
+      a.del:hover {
+        text-decoration: underline;
+      }
+
+      /* ---- save bar ---- */
+      .save-bar {
+        position: sticky;
+        bottom: 0;
+        border-top: 1px solid var(--rule);
+        padding: 7px 16px;
+        background: var(--surface);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .save-bar .dirty {
+        font-size: 11px;
+        color: var(--fg-faint);
+        display: none;
+      }
+      .save-bar .dirty.on {
+        display: inline;
+      }
+      .save-bar-end {
+        margin-left: auto;
+        display: flex;
+        gap: 6px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app">
+      <!-- topbar -->
+      <header class="topbar">
+        <span class="topbar-logo">Workspace</span>
+        <span class="topbar-sep"></span>
+        <nav class="breadcrumb">
+          <a href="#">Settings</a>
+          <span class="sep">/</span>
+          <span class="cur">Notifications</span>
+        </nav>
+        <div class="topbar-end">
+          <button class="btn btn-sm">Reset to defaults</button>
+          <button class="btn btn-primary btn-sm" id="save-top">
+            Save changes
+          </button>
+        </div>
+      </header>
+
+      <!-- sidebar -->
+      <aside class="sidebar">
+        <div class="nav-group">Account</div>
+        <a class="nav-item" href="#">Profile</a>
+        <a class="nav-item" href="#">Security</a>
+        <a class="nav-item active" href="#">Notifications</a>
+        <a class="nav-item" href="#">Billing</a>
+        <a class="nav-item" href="#">API keys</a>
+        <div class="nav-group" style="margin-top: 6px">Workspace</div>
+        <a class="nav-item" href="#">Members</a>
+        <a class="nav-item" href="#">Integrations</a>
+        <a class="nav-item" href="#">Roles</a>
+        <a class="nav-item" href="#">Audit log</a>
+      </aside>
+
+      <!-- main -->
+      <main class="main">
+        <!-- page header -->
+        <div class="page-hd">
+          <h1>Notification preferences</h1>
+          <span class="sub"
+            >Controls where and when this account receives alerts. Workspace
+            admins can override channel-level settings.</span
+          >
+          <div class="page-hd-end">
+            <button class="btn btn-sm">View audit log</button>
+          </div>
+        </div>
+
+        <!-- 1. Delivery channels -->
+        <div class="section">
+          <div class="sec-hd">
+            <h2>Delivery channels</h2>
+            <span class="note"
+              >Active channels receive all routed events unless overridden
+              below</span
+            >
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th style="width: 200px">Channel</th>
+                <th style="width: 64px">Enabled</th>
+                <th style="width: 230px">Destination</th>
+                <th style="width: 100px">Status</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="ch-row">
+                    <span class="ch-icon">@</span>
+                    <div>
+                      <div class="lbl">Email</div>
+                      <div class="desc">Digest and immediate delivery</div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td><input type="email" value="m.chen@company.com" /></td>
+                <td><span class="badge b-green">Verified</span></td>
+                <td class="desc">Primary address on account</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="ch-row">
+                    <span class="ch-icon">PN</span>
+                    <div>
+                      <div class="lbl">Push</div>
+                      <div class="desc">Browser and mobile app</div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td><span class="desc num">3 devices registered</span></td>
+                <td><span class="badge b-green">Active</span></td>
+                <td class="desc">
+                  <a class="link" href="#">Manage devices</a>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="ch-row">
+                    <span class="ch-icon">SL</span>
+                    <div>
+                      <div class="lbl">Slack</div>
+                      <div class="desc">Direct message via bot</div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    value="#alerts-mchen"
+                    style="width: 140px"
+                  />
+                </td>
+                <td><span class="badge b-green">Connected</span></td>
+                <td class="desc">Workspace: company.slack.com</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="ch-row">
+                    <span class="ch-icon">WH</span>
+                    <div>
+                      <div class="lbl">Webhook</div>
+                      <div class="desc">POST to custom endpoint</div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    placeholder="https://"
+                    style="width: 180px"
+                  />
+                </td>
+                <td><span class="badge b-gray">Not set</span></td>
+                <td class="desc">HMAC-SHA256 signed payloads</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="ch-row">
+                    <span class="ch-icon">SMS</span>
+                    <div>
+                      <div class="lbl">SMS</div>
+                      <div class="desc">
+                        Critical alerts only, carrier charges may apply
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    placeholder="+1 (555) 000-0000"
+                    style="width: 150px"
+                  />
+                </td>
+                <td><span class="badge b-gray">Not set</span></td>
+                <td class="desc">Security events only when set</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 2. Event routing matrix -->
+        <div class="section">
+          <div class="sec-hd">
+            <h2>Event routing</h2>
+            <span class="note"
+              >Per-event channel assignment. Required events cannot be
+              disabled.</span
+            >
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th style="width: 210px">Event</th>
+                <th class="c" style="width: 54px">Email</th>
+                <th class="c" style="width: 54px">Push</th>
+                <th class="c" style="width: 54px">Slack</th>
+                <th class="c" style="width: 54px">Webhook</th>
+                <th style="width: 128px">Frequency</th>
+                <th>Threshold / notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <!-- group: mentions -->
+              <tr class="sub-hd">
+                <td colspan="7">Mentions and assignments</td>
+              </tr>
+
+              <tr class="indent">
+                <td>
+                  <div class="lbl">Direct mention</div>
+                  <div class="desc">Someone tags you by name (@)</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td>
+                  <select>
+                    <option>Immediate</option>
+                    <option>15 min batch</option>
+                    <option>Hourly digest</option>
+                    <option>Daily digest</option>
+                  </select>
+                </td>
+                <td class="desc">Always</td>
+              </tr>
+              <tr class="indent">
+                <td>
+                  <div class="lbl">Team mention</div>
+                  <div class="desc">A team you belong to is tagged</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td>
+                  <select>
+                    <option>Immediate</option>
+                    <option selected>15 min batch</option>
+                    <option>Hourly digest</option>
+                    <option>Daily digest</option>
+                  </select>
+                </td>
+                <td class="desc">Always</td>
+              </tr>
+              <tr class="indent">
+                <td>
+                  <div class="lbl">Assigned to you</div>
+                  <div class="desc">Task or issue routed to your queue</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td>
+                  <select>
+                    <option selected>Immediate</option>
+                    <option>15 min batch</option>
+                    <option>Hourly digest</option>
+                    <option>Daily digest</option>
+                  </select>
+                </td>
+                <td class="desc">Always</td>
+              </tr>
+              <tr class="indent">
+                <td>
+                  <div class="lbl">Reassigned away</div>
+                  <div class="desc">Item moved out of your queue</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td>
+                  <select>
+                    <option>Immediate</option>
+                    <option>15 min batch</option>
+                    <option selected>Hourly digest</option>
+                    <option>Daily digest</option>
+                  </select>
+                </td>
+                <td class="desc">Always</td>
+              </tr>
+
+              <!-- group: watched items -->
+              <tr class="sub-hd">
+                <td colspan="7">Activity on watched items</td>
+              </tr>
+
+              <tr class="indent">
+                <td>
+                  <div class="lbl">Comment on your post</div>
+                  <div class="desc">Reply or reaction to content you wrote</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td>
+                  <select>
+                    <option>Immediate</option>
+                    <option selected>15 min batch</option>
+                    <option>Hourly digest</option>
+                    <option>Daily digest</option>
+                  </select>
+                </td>
+                <td class="desc">Always</td>
+              </tr>
+              <tr class="indent">
+                <td>
+                  <div class="lbl">Status change</div>
+                  <div class="desc">Open, closed, blocked, resolved</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td>
+                  <select>
+                    <option selected>Immediate</option>
+                    <option>15 min batch</option>
+                    <option>Hourly digest</option>
+                    <option>Daily digest</option>
+                  </select>
+                </td>
+                <td class="desc">Always</td>
+              </tr>
+              <tr class="indent">
+                <td>
+                  <div class="lbl">Due date approaching</div>
+                  <div class="desc">Reminder before a deadline passes</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td>
+                  <select>
+                    <option selected>Immediate</option>
+                    <option>15 min batch</option>
+                    <option>Hourly digest</option>
+                    <option>Daily digest</option>
+                  </select>
+                </td>
+                <td class="desc">24h and 2h before</td>
+              </tr>
+              <tr class="indent">
+                <td>
+                  <div class="lbl">File shared with you</div>
+                  <div class="desc">
+                    New document or asset added to your access
+                  </div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td>
+                  <select>
+                    <option>Immediate</option>
+                    <option selected>Hourly digest</option>
+                    <option>15 min batch</option>
+                    <option>Daily digest</option>
+                  </select>
+                </td>
+                <td class="desc">Always</td>
+              </tr>
+
+              <!-- group: system -->
+              <tr class="sub-hd">
+                <td colspan="7">System and security</td>
+              </tr>
+
+              <tr class="indent">
+                <td>
+                  <div class="lbl">Login from new device</div>
+                  <div class="desc">Unrecognized IP or device fingerprint</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked disabled /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked disabled /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td>
+                  <select disabled>
+                    <option>Immediate</option>
+                  </select>
+                </td>
+                <td><span class="badge b-red">Required</span></td>
+              </tr>
+              <tr class="indent">
+                <td>
+                  <div class="lbl">Password changed</div>
+                  <div class="desc">Confirmation after credential update</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked disabled /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" disabled /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" disabled /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" disabled /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td>
+                  <select disabled>
+                    <option>Immediate</option>
+                  </select>
+                </td>
+                <td><span class="badge b-red">Required</span></td>
+              </tr>
+              <tr class="indent">
+                <td>
+                  <div class="lbl">API key created or revoked</div>
+                  <div class="desc">Credential change under your account</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked disabled /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" disabled /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" disabled /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td>
+                  <select disabled>
+                    <option>Immediate</option>
+                  </select>
+                </td>
+                <td><span class="badge b-red">Required</span></td>
+              </tr>
+              <tr class="indent">
+                <td>
+                  <div class="lbl">Usage alert</div>
+                  <div class="desc">Approaching plan limit</div>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" /><span class="tog-sl"></span
+                  ></label>
+                </td>
+                <td class="c">
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td>
+                  <select>
+                    <option selected>Immediate</option>
+                    <option>15 min batch</option>
+                    <option>Hourly digest</option>
+                    <option>Daily digest</option>
+                  </select>
+                </td>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 4px">
+                    <input type="number" value="80" min="1" max="100" />
+                    <span class="desc">% of plan limit</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 3. Email digest -->
+        <div class="section">
+          <div class="sec-hd">
+            <h2>Email digest</h2>
+            <span class="note"
+              >Batched delivery for events routed to "hourly" or "daily"
+              frequency</span
+            >
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th style="width: 210px">Setting</th>
+                <th style="width: 300px">Value</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="lbl">Daily digest time</div>
+                  <div class="desc">Time the daily summary is sent</div>
+                </td>
+                <td>
+                  <div class="time-row">
+                    <input type="time" value="08:00" />
+                    <span>in</span>
+                    <select style="min-width: 165px">
+                      <option>America/Los_Angeles (UTC-8)</option>
+                      <option>America/New_York (UTC-5)</option>
+                      <option>Europe/London (UTC+0)</option>
+                      <option>UTC</option>
+                    </select>
+                  </div>
+                </td>
+                <td class="desc">Skipped on days with no pending items</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="lbl">Digest includes</div>
+                  <div class="desc">Content bundled into each delivery</div>
+                </td>
+                <td>
+                  <div class="ck-group">
+                    <label class="ck-row"
+                      ><input type="checkbox" checked /> Unread mentions</label
+                    >
+                    <label class="ck-row"
+                      ><input type="checkbox" checked /> Status changes on
+                      watched items</label
+                    >
+                    <label class="ck-row"
+                      ><input type="checkbox" checked /> Upcoming due dates
+                      (next 48h)</label
+                    >
+                    <label class="ck-row"
+                      ><input type="checkbox" /> Team activity summary</label
+                    >
+                  </div>
+                </td>
+                <td class="desc">
+                  Immediate-routed events are never batched into a digest
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="lbl">Minimum items to send</div>
+                  <div class="desc">Suppress digest if below this count</div>
+                </td>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 6px">
+                    <input type="number" value="3" min="1" max="100" />
+                    <span class="desc">items</span>
+                  </div>
+                </td>
+                <td class="desc">Set to 1 to always deliver</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="lbl">Weekly rollup</div>
+                  <div class="desc">Sunday summary of the past 7 days</div>
+                </td>
+                <td>
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="desc">Sent at the daily digest time on Sundays</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 4. Quiet hours -->
+        <div class="section">
+          <div class="sec-hd">
+            <h2>Quiet hours</h2>
+            <span class="note"
+              >Push and Slack suppressed during window. Email digests deliver at
+              their scheduled time regardless.</span
+            >
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th style="width: 210px">Setting</th>
+                <th style="width: 300px">Value</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div class="lbl">Enabled</div></td>
+                <td>
+                  <label class="tog"
+                    ><input type="checkbox" checked id="q-tog" /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="desc">Applies to push and Slack only</td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="lbl">Window</div>
+                  <div class="desc">Start to end, local time</div>
+                </td>
+                <td>
+                  <div class="time-row">
+                    <input type="time" value="22:00" />
+                    <span>to</span>
+                    <input type="time" value="08:00" />
+                  </div>
+                </td>
+                <td class="desc">
+                  Spans midnight when end is earlier than start
+                </td>
+              </tr>
+              <tr>
+                <td><div class="lbl">Active days</div></td>
+                <td>
+                  <div class="days">
+                    <label class="day"
+                      ><input type="checkbox" id="d-mon" checked /><span
+                        >Mon</span
+                      ></label
+                    >
+                    <label class="day"
+                      ><input type="checkbox" id="d-tue" checked /><span
+                        >Tue</span
+                      ></label
+                    >
+                    <label class="day"
+                      ><input type="checkbox" id="d-wed" checked /><span
+                        >Wed</span
+                      ></label
+                    >
+                    <label class="day"
+                      ><input type="checkbox" id="d-thu" checked /><span
+                        >Thu</span
+                      ></label
+                    >
+                    <label class="day"
+                      ><input type="checkbox" id="d-fri" checked /><span
+                        >Fri</span
+                      ></label
+                    >
+                    <label class="day"
+                      ><input type="checkbox" id="d-sat" checked /><span
+                        >Sat</span
+                      ></label
+                    >
+                    <label class="day"
+                      ><input type="checkbox" id="d-sun" checked /><span
+                        >Sun</span
+                      ></label
+                    >
+                  </div>
+                </td>
+                <td class="desc">
+                  Deselect to allow push on that day at all hours
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="lbl">Override for security events</div>
+                  <div class="desc">
+                    Login, password, and API key alerts always deliver
+                    immediately
+                  </div>
+                </td>
+                <td>
+                  <label class="tog"
+                    ><input type="checkbox" checked /><span
+                      class="tog-sl"
+                    ></span
+                  ></label>
+                </td>
+                <td class="desc">
+                  Recommended. Required events ignore this toggle.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- 5. Project overrides -->
+        <div class="section">
+          <div class="sec-hd">
+            <h2>Per-project overrides</h2>
+            <span class="note"
+              >Applied on top of global settings. Last match wins when multiple
+              rules apply.</span
+            >
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th style="width: 180px">Project</th>
+                <th style="width: 140px">Rule</th>
+                <th style="width: 140px">Channels</th>
+                <th style="width: 100px">Added</th>
+                <th style="width: 80px"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div class="lbl">Platform / API</div>
+                  <div class="desc">Production services</div>
+                </td>
+                <td><span class="badge b-red">All immediate</span></td>
+                <td class="desc">Email, Push, Slack</td>
+                <td class="num desc">2026-08-14</td>
+                <td>
+                  <a class="link" href="#">Edit</a>&ensp;<a class="del" href="#"
+                    >Remove</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="lbl">Design / Staging</div>
+                  <div class="desc">Pre-release work</div>
+                </td>
+                <td><span class="badge b-gray">Daily digest</span></td>
+                <td class="desc">Email only</td>
+                <td class="num desc">2026-07-30</td>
+                <td>
+                  <a class="link" href="#">Edit</a>&ensp;<a class="del" href="#"
+                    >Remove</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div class="lbl">Archive / 2025</div>
+                  <div class="desc">Read-only historical data</div>
+                </td>
+                <td><span class="badge b-gray">Muted</span></td>
+                <td class="desc">None</td>
+                <td class="num desc">2026-01-02</td>
+                <td>
+                  <a class="link" href="#">Edit</a>&ensp;<a class="del" href="#"
+                    >Remove</a
+                  >
+                </td>
+              </tr>
+              <tr>
+                <td colspan="5" style="padding: 8px 16px">
+                  <a class="link" href="#">+ Add project override</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- save bar -->
+        <div class="save-bar">
+          <span class="dirty" id="dirty-label">Unsaved changes</span>
+          <div class="save-bar-end">
+            <button class="btn btn-sm" id="cancel-btn">Cancel</button>
+            <button class="btn btn-primary btn-sm" id="save-bot">
+              Save changes
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      const dirtyLabel = document.getElementById("dirty-label");
+      let dirty = false;
+
+      document.querySelector(".main").addEventListener("change", () => {
+        dirty = true;
+        dirtyLabel.classList.add("on");
+      });
+
+      function save() {
+        dirty = false;
+        dirtyLabel.classList.remove("on");
+        ["save-top", "save-bot"].forEach((id) => {
+          const b = document.getElementById(id);
+          const prev = b.textContent;
+          b.textContent = "Saved";
+          b.style.background = "var(--success)";
+          b.style.borderColor = "var(--success)";
+          setTimeout(() => {
+            b.textContent = prev;
+            b.style.background = "";
+            b.style.borderColor = "";
+          }, 1500);
+        });
+      }
+
+      document.getElementById("save-top").addEventListener("click", save);
+      document.getElementById("save-bot").addEventListener("click", save);
+      document.getElementById("cancel-btn").addEventListener("click", () => {
+        dirty = false;
+        dirtyLabel.classList.remove("on");
+      });
+
+      document.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+          e.preventDefault();
+          save();
+        }
+      });
+    </script>
+  </body>
+</html>

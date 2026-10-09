@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pricing</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #0a0a0f;
+        --surface: #13131a;
+        --surface-2: #1c1c26;
+        --border: #2a2a38;
+        --border-active: #4f46e5;
+        --text: #f0f0f8;
+        --muted: #8888aa;
+        --accent: #6366f1;
+        --accent-glow: rgba(99, 102, 241, 0.18);
+        --accent-hover: #818cf8;
+        --green: #22c55e;
+        --radius: 16px;
+        --radius-sm: 10px;
+      }
+
+      html {
+        font-size: 16px;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        min-height: 100vh;
+        padding: 80px 24px 120px;
+        line-height: 1.5;
+      }
+
+      /* background grid */
+      body::before {
+        content: "";
+        position: fixed;
+        inset: 0;
+        background-image:
+          linear-gradient(rgba(99, 102, 241, 0.04) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(99, 102, 241, 0.04) 1px, transparent 1px);
+        background-size: 48px 48px;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      .page {
+        position: relative;
+        z-index: 1;
+        max-width: 1080px;
+        margin: 0 auto;
+      }
+
+      /* header */
+      .header {
+        text-align: center;
+        margin-bottom: 56px;
+      }
+
+      .eyebrow {
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--accent);
+        background: var(--accent-glow);
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        padding: 4px 14px;
+        border-radius: 100px;
+        margin-bottom: 20px;
+      }
+
+      .header h1 {
+        font-size: clamp(32px, 5vw, 52px);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+        line-height: 1.1;
+        margin-bottom: 16px;
+      }
+
+      .header p {
+        font-size: 18px;
+        color: var(--muted);
+        max-width: 480px;
+        margin: 0 auto 32px;
+      }
+
+      /* toggle */
+      .toggle-wrap {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 100px;
+        padding: 6px 18px;
+        cursor: pointer;
+        user-select: none;
+      }
+
+      .toggle-label {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--muted);
+        transition: color 0.2s;
+      }
+
+      .toggle-label.active {
+        color: var(--text);
+      }
+
+      .toggle-pill {
+        width: 42px;
+        height: 24px;
+        background: var(--border);
+        border-radius: 100px;
+        position: relative;
+        transition: background 0.2s;
+      }
+
+      .toggle-pill.on {
+        background: var(--accent);
+      }
+
+      .toggle-pill::after {
+        content: "";
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 18px;
+        height: 18px;
+        background: #fff;
+        border-radius: 50%;
+        transition: transform 0.2s;
+      }
+
+      .toggle-pill.on::after {
+        transform: translateX(18px);
+      }
+
+      .badge-save {
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        color: var(--green);
+        background: rgba(34, 197, 94, 0.12);
+        border: 1px solid rgba(34, 197, 94, 0.25);
+        padding: 2px 8px;
+        border-radius: 100px;
+      }
+
+      /* cards */
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        align-items: start;
+      }
+
+      @media (max-width: 768px) {
+        .cards {
+          grid-template-columns: 1fr;
+          max-width: 420px;
+          margin: 0 auto;
+        }
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 32px 28px;
+        position: relative;
+        transition:
+          border-color 0.2s,
+          transform 0.2s,
+          box-shadow 0.2s;
+      }
+
+      .card:hover {
+        border-color: rgba(99, 102, 241, 0.4);
+        transform: translateY(-2px);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      }
+
+      .card.featured {
+        background: var(--surface-2);
+        border-color: var(--border-active);
+        box-shadow:
+          0 0 0 1px var(--border-active),
+          0 24px 80px rgba(99, 102, 241, 0.15);
+        transform: translateY(-8px);
+      }
+
+      .card.featured:hover {
+        transform: translateY(-12px);
+      }
+
+      .popular-tag {
+        position: absolute;
+        top: -13px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #fff;
+        background: var(--accent);
+        padding: 4px 14px;
+        border-radius: 100px;
+        white-space: nowrap;
+      }
+
+      .tier-name {
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin-bottom: 8px;
+      }
+
+      .featured .tier-name {
+        color: var(--accent-hover);
+      }
+
+      .price-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        margin-bottom: 8px;
+      }
+
+      .price {
+        font-size: 48px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        transition: opacity 0.15s;
+      }
+
+      .price-currency {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--muted);
+        padding-bottom: 6px;
+      }
+
+      .price-period {
+        font-size: 14px;
+        color: var(--muted);
+        padding-bottom: 8px;
+      }
+
+      .price-desc {
+        font-size: 14px;
+        color: var(--muted);
+        margin-bottom: 24px;
+        min-height: 40px;
+      }
+
+      .divider {
+        height: 1px;
+        background: var(--border);
+        margin-bottom: 24px;
+      }
+
+      .features {
+        list-style: none;
+        margin-bottom: 32px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .features li {
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .features li .check {
+        flex-shrink: 0;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(34, 197, 94, 0.12);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-top: 1px;
+      }
+
+      .features li .check svg {
+        width: 10px;
+        height: 10px;
+        stroke: var(--green);
+        fill: none;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .features li .text {
+        color: var(--text);
+      }
+
+      .btn {
+        display: block;
+        width: 100%;
+        padding: 13px 20px;
+        border-radius: var(--radius-sm);
+        font-size: 15px;
+        font-weight: 600;
+        text-align: center;
+        cursor: pointer;
+        border: none;
+        transition:
+          background 0.15s,
+          transform 0.1s,
+          box-shadow 0.15s;
+        letter-spacing: -0.01em;
+      }
+
+      .btn:active {
+        transform: scale(0.98);
+      }
+
+      .btn-outline {
+        background: transparent;
+        border: 1px solid var(--border);
+        color: var(--text);
+      }
+
+      .btn-outline:hover {
+        background: var(--surface-2);
+        border-color: rgba(99, 102, 241, 0.4);
+      }
+
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.35);
+      }
+
+      .btn-primary:hover {
+        background: var(--accent-hover);
+        box-shadow: 0 6px 28px rgba(99, 102, 241, 0.5);
+      }
+
+      /* footer note */
+      .footer-note {
+        text-align: center;
+        margin-top: 48px;
+        font-size: 14px;
+        color: var(--muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+
+      .footer-note span {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .footer-note svg {
+        width: 14px;
+        height: 14px;
+        stroke: var(--green);
+        fill: none;
+        stroke-width: 2.5;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .fade {
+        opacity: 0.45;
+      }
+
+      /* micro-animation for price change */
+      @keyframes pop {
+        0% {
+          transform: scale(1);
+        }
+        40% {
+          transform: scale(1.06);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      .price.animating {
+        animation: pop 0.22s ease-out;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="header">
+        <div class="eyebrow">Pricing</div>
+        <h1>Simple, honest pricing.</h1>
+        <p>
+          Start free, upgrade when you're ready. No hidden fees, no lock-in.
+        </p>
+
+        <div class="toggle-wrap" id="toggleWrap">
+          <span class="toggle-label active" id="labelMonthly">Monthly</span>
+          <div class="toggle-pill" id="togglePill"></div>
+          <span class="toggle-label" id="labelAnnual">Annual</span>
+          <span class="badge-save" id="badgeSave" style="display: none"
+            >Save 20%</span
+          >
+        </div>
+      </div>
+
+      <div class="cards" id="cards">
+        <!-- Starter -->
+        <div class="card">
+          <div class="tier-name">Starter</div>
+          <div class="price-row">
+            <span class="price-currency">$</span>
+            <span class="price" id="price-0">0</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="price-desc">
+            Everything you need to get started. No credit card required.
+          </p>
+          <div class="divider"></div>
+          <ul class="features">
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Up to 3 projects</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">5 GB storage</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Basic analytics</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Community support</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">API access (1k req/day)</span>
+            </li>
+          </ul>
+          <button class="btn btn-outline">Get started free</button>
+        </div>
+
+        <!-- Pro (featured) -->
+        <div class="card featured">
+          <div class="popular-tag">Most Popular</div>
+          <div class="tier-name">Pro</div>
+          <div class="price-row">
+            <span class="price-currency">$</span>
+            <span class="price" id="price-1">29</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="price-desc">
+            For teams shipping fast. Everything in Starter, plus power tools.
+          </p>
+          <div class="divider"></div>
+          <ul class="features">
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Unlimited projects</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">100 GB storage</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Advanced analytics + exports</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Priority email support</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">API access (100k req/day)</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Team collaboration (10 seats)</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Custom integrations</span>
+            </li>
+          </ul>
+          <button class="btn btn-primary">Start 14-day free trial</button>
+        </div>
+
+        <!-- Enterprise -->
+        <div class="card">
+          <div class="tier-name">Enterprise</div>
+          <div class="price-row">
+            <span class="price-currency">$</span>
+            <span class="price" id="price-2">99</span>
+            <span class="price-period">/mo</span>
+          </div>
+          <p class="price-desc">
+            For orgs that need control, compliance, and scale.
+          </p>
+          <div class="divider"></div>
+          <ul class="features">
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Everything in Pro</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">1 TB storage</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Unlimited seats</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Dedicated Slack channel</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Unlimited API requests</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">SSO / SAML</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">SLA + audit logs</span>
+            </li>
+            <li>
+              <span class="check"
+                ><svg viewBox="0 0 12 12">
+                  <polyline points="2,6 5,9 10,3" /></svg></span
+              ><span class="text">Custom contract</span>
+            </li>
+          </ul>
+          <button class="btn btn-outline">Talk to sales</button>
+        </div>
+      </div>
+
+      <div class="footer-note">
+        <span>
+          <svg viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3" /></svg>
+          No credit card to start
+        </span>
+        <span>
+          <svg viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3" /></svg>
+          Cancel anytime
+        </span>
+        <span>
+          <svg viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3" /></svg>
+          Prorated upgrades
+        </span>
+        <span>
+          <svg viewBox="0 0 14 14"><polyline points="2,7 5.5,10.5 12,3" /></svg>
+          SOC 2 Type II
+        </span>
+      </div>
+    </div>
+
+    <script>
+      const monthly = [0, 29, 99];
+      const annual = [0, 23, 79];
+
+      let isAnnual = false;
+
+      const pill = document.getElementById("togglePill");
+      const lMo = document.getElementById("labelMonthly");
+      const lAn = document.getElementById("labelAnnual");
+      const badge = document.getElementById("badgeSave");
+      const prices = [
+        document.getElementById("price-0"),
+        document.getElementById("price-1"),
+        document.getElementById("price-2"),
+      ];
+
+      function setAnnual(val) {
+        isAnnual = val;
+        pill.classList.toggle("on", isAnnual);
+        lMo.classList.toggle("active", !isAnnual);
+        lAn.classList.toggle("active", isAnnual);
+        badge.style.display = isAnnual ? "inline-block" : "none";
+
+        const set = isAnnual ? annual : monthly;
+        prices.forEach((el, i) => {
+          el.textContent = set[i];
+          el.classList.remove("animating");
+          void el.offsetWidth; // force reflow
+          el.classList.add("animating");
+          el.addEventListener(
+            "animationend",
+            () => el.classList.remove("animating"),
+            { once: true },
+          );
+        });
+      }
+
+      document
+        .getElementById("toggleWrap")
+        .addEventListener("click", () => setAnnual(!isAnnual));
+    </script>
+  </body>
+</html>

@@ -1,0 +1,423 @@
+{
+  "brief": "a settings page where a user manages notification preferences",
+  "intent": {
+    "purpose": "A page where users control which notifications they receive and how",
+    "primary_action": "toggle notification preferences on or off",
+    "first_look": "the list of notification categories",
+    "audience": "an existing user who wants to reduce or customize their alerts"
+  },
+  "results": {
+    "one-voltage": {
+      "gaps": [
+        {
+          "kind": "friction",
+          "where": "No save button visible \u2014 unclear if changes apply immediately or require confirmation",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The 'Weekly digest' dropdown breaks the visual pattern of all other rows using toggles, which causes a brief double-take",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "No indication of whether these are email, push, or in-app notifications \u2014 the subtitle 'Choose what you hear about, and how' implies delivery channels exist but none are shown",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The ACTIVITY and UPDATES section labels are very small and low contrast (gray uppercase on white)",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The description subtext under each item (e.g. 'When someone responds to something you wrote') is light gray and small but still readable",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "The bold 'Notification Preferences' heading at the top left",
+        "look_order": [
+          "The toggle switches on the right side of each row, particularly the dark on-state ones",
+          "The 'Reactions' row because its toggle is visually different (off/gray) from all the others",
+          "The 'ACTIVITY' section label in small caps",
+          "The 'Weekly digest' row because it has a dropdown instead of a toggle"
+        ],
+        "purpose": "A settings page for controlling which types of notifications a user receives and how often",
+        "primary_action": "Toggle individual notification types on or off",
+        "primary_action_confidence": "high",
+        "clickable": [
+          "Replies toggle",
+          "Mentions toggle",
+          "Reactions toggle",
+          "New followers toggle",
+          "Direct messages toggle",
+          "Product changes toggle",
+          "Weekly digest dropdown (Every week)",
+          "Security alerts toggle",
+          "Billing toggle"
+        ],
+        "friction": [
+          "No save button visible \u2014 unclear if changes apply immediately or require confirmation",
+          "The 'Weekly digest' dropdown breaks the visual pattern of all other rows using toggles, which causes a brief double-take",
+          "No indication of whether these are email, push, or in-app notifications \u2014 the subtitle 'Choose what you hear about, and how' implies delivery channels exist but none are shown"
+        ],
+        "unreadable": [
+          "The ACTIVITY and UPDATES section labels are very small and low contrast (gray uppercase on white)",
+          "The description subtext under each item (e.g. 'When someone responds to something you wrote') is light gray and small but still readable"
+        ],
+        "guess_at_audience": "Existing users of a social or SaaS platform managing their account notification settings"
+      },
+      "blocking": 0
+    },
+    "typographic": {
+      "gaps": [
+        {
+          "kind": "friction",
+          "where": "The relationship between the dropdown and the toggle is not immediately obvious \u2014 it's unclear whether the dropdown only matters when the toggle is on, or whether they operate independently",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The 'Daily digest' dropdowns for Reactions and New followers appear grayed out, but it is not explicit that this is because the toggle is off \u2014 a user might think the option itself is unavailable rather than just inactive",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The 'ACTIVITY' and 'MESSAGES' section labels are very small and low-contrast light gray \u2014 readable on close inspection but easy to miss on a quick scan",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "The bold 'Notification preferences' heading in the top left",
+        "look_order": [
+          "The subtitle 'Choose what we send, when we send it, and how you get it.'",
+          "The two black filled toggles on the right side (Comments and Mentions)",
+          "The 'ACTIVITY' section label and its four rows",
+          "The two gray/off toggles for Reactions and New followers with 'Daily digest' dropdowns",
+          "The 'MESSAGES' section lower on the page"
+        ],
+        "purpose": "A settings screen for controlling which notification types are enabled and how often they are delivered.",
+        "primary_action": "Toggle individual notification types on or off",
+        "primary_action_confidence": "high",
+        "clickable": [
+          "Comments toggle",
+          "Mentions toggle",
+          "Reactions toggle",
+          "New followers toggle",
+          "Direct messages toggle",
+          "Group messages toggle",
+          "'Instantly' dropdown next to Comments",
+          "'Instantly' dropdown next to Mentions",
+          "'Daily digest' dropdown next to Reactions",
+          "'Daily digest' dropdown next to New followers",
+          "'Instantly' dropdown next to Direct messages",
+          "'Instantly' dropdown next to Group messages"
+        ],
+        "friction": [
+          "The relationship between the dropdown and the toggle is not immediately obvious \u2014 it's unclear whether the dropdown only matters when the toggle is on, or whether they operate independently",
+          "The 'Daily digest' dropdowns for Reactions and New followers appear grayed out, but it is not explicit that this is because the toggle is off \u2014 a user might think the option itself is unavailable rather than just inactive"
+        ],
+        "unreadable": [
+          "The 'ACTIVITY' and 'MESSAGES' section labels are very small and low-contrast light gray \u2014 readable on close inspection but easy to miss on a quick scan"
+        ],
+        "guess_at_audience": "General consumers of a social or content platform who want to fine-tune which activity alerts they receive and how frequently"
+      },
+      "blocking": 0
+    },
+    "dense-instrument": {
+      "gaps": [
+        {
+          "kind": "primary-action-wrong",
+          "where": "save changes",
+          "detail": "viewer read 'save changes' as the main action, intended 'toggle notification preferences on or off'"
+        },
+        {
+          "kind": "attention-misdirected",
+          "where": "the blue 'save changes' button in the top-right corner",
+          "detail": "eye went to \"the blue 'save changes' button in the top-right corner\", intended 'the list of notification categories'"
+        },
+        {
+          "kind": "friction",
+          "where": "The subtitle 'Workspace admins can override channel-level settings' raises a question about whether your own settings here actually take effect",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The EVENT ROUTING section header note 'Required events cannot be disabled' is not connected to any visible indicator of which events are required",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The NOTES column in EVENT ROUTING shows 'Always' for every row with no explanation of what that means in context",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "Webhook destination field is pre-filled with just 'https://' which looks like a placeholder but reads as a real partially-entered URL",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "'Due date approaching' row at the bottom is cut off and only partially visible",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The THRESHOLD / NOTES column header label is small and low-contrast against the gray table header",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "ACCOUNT and WORKSPACE section labels in the sidebar are very small and light gray",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "The blue 'Save changes' button in the top-right corner",
+        "look_order": [
+          "'Notification preferences' heading with its subtitle",
+          "DELIVERY CHANNELS table with Email, Push, Slack, Webhook, SMS rows",
+          "The blue toggle switches indicating what's enabled",
+          "EVENT ROUTING section with the grid of channel checkboxes",
+          "Left sidebar navigation items (Profile, Security, Notifications, Billing, API keys)"
+        ],
+        "purpose": "A settings page for configuring where and how a workspace account receives notifications, broken into delivery channels and per-event routing rules.",
+        "primary_action": "Save changes",
+        "primary_action_confidence": "high",
+        "clickable": [
+          "Save changes (top-right)",
+          "Reset to defaults (top-right)",
+          "View audit log (top-right)",
+          "Cancel (bottom-right)",
+          "Save changes (bottom-right)",
+          "Email toggle",
+          "Push toggle",
+          "Slack toggle",
+          "Webhook toggle",
+          "SMS toggle",
+          "Manage devices (link in Push row)",
+          "Direct mention toggles (Email, Push, Slack, Webhook)",
+          "Team mention toggles",
+          "Assigned to you toggles",
+          "Reassigned away toggles",
+          "Comment on your post toggles",
+          "Status change toggles",
+          "Frequency dropdowns for each event row",
+          "Left sidebar navigation links (Profile, Security, Notifications, Billing, API keys, Members, Integrations, Roles, Audit log)",
+          "Destination input fields (email address, Slack channel, webhook URL, phone number)"
+        ],
+        "friction": [
+          "The subtitle 'Workspace admins can override channel-level settings' raises a question about whether your own settings here actually take effect",
+          "The EVENT ROUTING section header note 'Required events cannot be disabled' is not connected to any visible indicator of which events are required",
+          "The NOTES column in EVENT ROUTING shows 'Always' for every row with no explanation of what that means in context",
+          "Webhook destination field is pre-filled with just 'https://' which looks like a placeholder but reads as a real partially-entered URL"
+        ],
+        "unreadable": [
+          "'Due date approaching' row at the bottom is cut off and only partially visible",
+          "The THRESHOLD / NOTES column header label is small and low-contrast against the gray table header",
+          "ACCOUNT and WORKSPACE section labels in the sidebar are very small and light gray"
+        ],
+        "guess_at_audience": "Developers or technical workspace admins managing notification routing for a SaaS collaboration or project management tool"
+      },
+      "blocking": 0
+    },
+    "editorial": {
+      "gaps": [
+        {
+          "kind": "friction",
+          "where": "The Security alerts toggle looks visually identical to the SMS toggle (both appear gray/muted) but one is 'off by user choice' and the other is 'required/cannot be changed' \u2014 the REQUIRED badge helps but the toggle state is ambiguous at a glance",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The explanation paragraph under 'How you get reached' is dense for a settings page and requires a full read to understand the channel-vs-category interaction",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The note in the top-right corner ('Settings apply to all devices...') is small enough to be easy to miss",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The body text under '01 DELIVERY' at this resolution is readable but small",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The top-right disclaimer text ('Account updated Sept 18, 2026' and the settings-apply note) is noticeably smaller than everything else and lower contrast against the background",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "The large serif heading 'Notification Preferences' \u2014 the word 'Notification' upright, 'Preferences' in italic below it",
+        "look_order": [
+          "The two on/off toggles for Email and Push notifications, both switched on",
+          "The section label '01 DELIVERY' and subheading 'How you get reached'",
+          "The SMS toggle (off) and the Weekly digest dropdown set to 'Every week'",
+          "The '02 CATEGORIES' section starting below with 'What gets through'"
+        ],
+        "purpose": "A settings page for controlling how and what kinds of notifications an account receives",
+        "primary_action": "Toggle individual notification channels on or off",
+        "primary_action_confidence": "high",
+        "clickable": [
+          "Email toggle (on)",
+          "Push notifications toggle (on)",
+          "SMS toggle (off)",
+          "Weekly digest dropdown ('Every week')",
+          "Security alerts toggle (appears dimmed/locked)",
+          "Replies and mentions toggle (on)",
+          "ACCOUNT SETTINGS breadcrumb link",
+          "NOTIFICATIONS breadcrumb link"
+        ],
+        "friction": [
+          "The Security alerts toggle looks visually identical to the SMS toggle (both appear gray/muted) but one is 'off by user choice' and the other is 'required/cannot be changed' \u2014 the REQUIRED badge helps but the toggle state is ambiguous at a glance",
+          "The explanation paragraph under 'How you get reached' is dense for a settings page and requires a full read to understand the channel-vs-category interaction",
+          "The note in the top-right corner ('Settings apply to all devices...') is small enough to be easy to miss"
+        ],
+        "unreadable": [
+          "The body text under '01 DELIVERY' at this resolution is readable but small",
+          "The top-right disclaimer text ('Account updated Sept 18, 2026' and the settings-apply note) is noticeably smaller than everything else and lower contrast against the background"
+        ],
+        "guess_at_audience": "Users of a SaaS or consumer app who are managing their own account notification preferences \u2014 likely desktop, given the layout proportions"
+      },
+      "blocking": 0
+    },
+    "material": {
+      "gaps": [
+        {
+          "kind": "attention-misdirected",
+          "where": "the large bold 'notifications' heading in the upper left",
+          "detail": "eye went to \"the large bold 'notifications' heading in the upper left\", intended 'the list of notification categories'"
+        },
+        {
+          "kind": "friction",
+          "where": "The 'New sign-in detected' toggle appears visually different (greyed out / muted green) compared to other active toggles \u2014 it's marked REQUIRED but looks like it might be off, which is contradictory and requires a second look",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The checkbox squares next to some items (e.g. Billing receipts and failures) look different from the colored squares next to others \u2014 unclear if those are decorative or interactive",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "It is not immediately obvious whether EMAIL/PUSH/SMS tabs show different settings or filter what is shown below",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The subtitle text under ACCOUNT ACTIVITY ('Sign-ins, security events, billing') is small and low contrast",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The subtitle under ACTIVITY AND UPDATES ('Comments, mentions, product news') is similarly small",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "ACCOUNT SETTINGS label above the heading is small uppercase and slightly low contrast",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "The large bold 'Notifications' heading in the upper left",
+        "look_order": [
+          "The bright yellow 'HEADS UP' banner about security alerts always being on",
+          "The 'SAVE CHANGES' dark button in the upper right",
+          "The EMAIL / PUSH / SMS tab row",
+          "The toggle switches on the right side of each row"
+        ],
+        "purpose": "A notification preferences page inside account settings where users control which alerts they receive and how.",
+        "primary_action": "Save changes to notification preferences",
+        "primary_action_confidence": "high",
+        "clickable": [
+          "SAVE CHANGES button",
+          "EMAIL tab",
+          "PUSH tab",
+          "SMS tab",
+          "ACCOUNT ACTIVITY ALL toggle",
+          "New sign-in detected toggle (appears disabled/greyed)",
+          "Password or email changed toggle",
+          "Billing receipts and failures toggle",
+          "ACTIVITY AND UPDATES ALL toggle",
+          "INSTANT button",
+          "DAILY button",
+          "WEEKLY button",
+          "Mentions and replies toggle",
+          "Assigned to you toggle"
+        ],
+        "friction": [
+          "The 'New sign-in detected' toggle appears visually different (greyed out / muted green) compared to other active toggles \u2014 it's marked REQUIRED but looks like it might be off, which is contradictory and requires a second look",
+          "The checkbox squares next to some items (e.g. Billing receipts and failures) look different from the colored squares next to others \u2014 unclear if those are decorative or interactive",
+          "It is not immediately obvious whether EMAIL/PUSH/SMS tabs show different settings or filter what is shown below"
+        ],
+        "unreadable": [
+          "The subtitle text under ACCOUNT ACTIVITY ('Sign-ins, security events, billing') is small and low contrast",
+          "The subtitle under ACTIVITY AND UPDATES ('Comments, mentions, product news') is similarly small",
+          "ACCOUNT SETTINGS label above the heading is small uppercase and slightly low contrast"
+        ],
+        "guess_at_audience": "Logged-in users of a SaaS or consumer web app who want to manage how and when the product contacts them"
+      },
+      "blocking": 0
+    },
+    "quiet-utility": {
+      "gaps": [
+        {
+          "kind": "friction",
+          "where": "The distinction between the DELIVERY section (frequency/channel via dropdowns) and the ACTIVITY section (on/off via toggles) is not immediately obvious \u2014 the two different control types for what feel like related concepts require a moment to reconcile",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "No save button is visible, so it's unclear whether changes apply immediately or need to be submitted",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The section labels DELIVERY, ACTIVITY, and TEAM are small and low-contrast gray \u2014 readable but require deliberate focus",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "The partial row at the very bottom ('Role changes') is cut off and unreadable",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "The bold heading 'Notification preferences' at the top left of the content area",
+        "look_order": [
+          "The subtitle 'Control which notifications you receive and how they reach you'",
+          "The DELIVERY section with its three dropdown controls (Email, Push, SMS)",
+          "The toggle switches in the ACTIVITY section, specifically the off-state 'Reactions' toggle which stands out visually against the three enabled ones",
+          "The TEAM section heading partially visible at the bottom"
+        ],
+        "purpose": "A settings page for configuring how and when a user receives notifications from an app or platform",
+        "primary_action": "Adjust individual notification settings to match your preferences",
+        "primary_action_confidence": "high",
+        "clickable": [
+          "Email dropdown \u2014 'Daily digest'",
+          "Push dropdown \u2014 'As they happen'",
+          "SMS dropdown \u2014 'Urgent only'",
+          "Comments toggle (on)",
+          "Mentions toggle (on)",
+          "Reactions toggle (off)",
+          "Assignments toggle (on)",
+          "Membership changes toggle (on)"
+        ],
+        "friction": [
+          "The distinction between the DELIVERY section (frequency/channel via dropdowns) and the ACTIVITY section (on/off via toggles) is not immediately obvious \u2014 the two different control types for what feel like related concepts require a moment to reconcile",
+          "No save button is visible, so it's unclear whether changes apply immediately or need to be submitted"
+        ],
+        "unreadable": [
+          "The section labels DELIVERY, ACTIVITY, and TEAM are small and low-contrast gray \u2014 readable but require deliberate focus",
+          "The partial row at the very bottom ('Role changes') is cut off and unreadable"
+        ],
+        "guess_at_audience": "Users of a SaaS collaboration or productivity tool who want to tune their notification volume"
+      },
+      "blocking": 0
+    }
+  }
+}

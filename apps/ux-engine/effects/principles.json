@@ -1,0 +1,433 @@
+{
+  "_source": "growth.design/psychology, extracted 2026-09-23",
+  "_note": "The layer effects/catalog.json was missing. That file says what an effect COSTS, in contended perceptual resources. This says why an effect WORKS on a person. A design decision needs both: an effect that claims no contested resource and exploits no principle is decoration.",
+  "_the_one_that_contradicts_naive_rules": "Labor Illusion. People value things more when they see the work behind them, which is why a progress display that shows what is being done can beat a faster silent one. Any rule that says only make it faster is wrong about this case.",
+  "_upstream": "Their four categories come from Buster Benson's Cognitive Biases Codex.",
+  "count": 106,
+  "principles": [
+    {
+      "name": "Hick's Law",
+      "says": "More options leads to harder decisions"
+    },
+    {
+      "name": "Confirmation Bias",
+      "says": "People look for evidence that confirms what they think"
+    },
+    {
+      "name": "Priming",
+      "says": "Previous stimuli influence users' decision"
+    },
+    {
+      "name": "Cognitive Load",
+      "says": "Total amount of mental effort required to complete a task"
+    },
+    {
+      "name": "Anchoring Bias",
+      "says": "Users rely heavily on the first piece of information they see"
+    },
+    {
+      "name": "Nudge",
+      "says": "Subtle hints can affect users' decisions"
+    },
+    {
+      "name": "Progressive Disclosure",
+      "says": "Users are less overwhelmed if exposed to complex features later"
+    },
+    {
+      "name": "Fitts's Law",
+      "says": "Large and close elements are easier to interact with"
+    },
+    {
+      "name": "Banner Blindness",
+      "says": "Users tune out what they get repeatedly exposed to"
+    },
+    {
+      "name": "Decoy Effect",
+      "says": "Create a new option that's easy to discard"
+    },
+    {
+      "name": "Framing",
+      "says": "The way information is presented affects decisions"
+    },
+    {
+      "name": "Attentional Bias",
+      "says": "Users' thoughts filter what they pay attention to"
+    },
+    {
+      "name": "Empathy Gap",
+      "says": "People underestimate how much emotions influence behavior"
+    },
+    {
+      "name": "Visual Anchors",
+      "says": "Elements used to guide users' eyes"
+    },
+    {
+      "name": "Von Restorff Effect",
+      "says": "People notice items that stand out more"
+    },
+    {
+      "name": "Visual Hierarchy",
+      "says": "The order in which people perceive what they see"
+    },
+    {
+      "name": "Selective Attention",
+      "says": "People filter out things from their environment when in focus"
+    },
+    {
+      "name": "Survivorship Bias",
+      "says": "People neglect things that don't make it past a selection process"
+    },
+    {
+      "name": "Juxtaposition",
+      "says": "Elements that are close and similar are perceived as a single unit"
+    },
+    {
+      "name": "Signifiers",
+      "says": "Elements that communicate what they will do"
+    },
+    {
+      "name": "Contrast",
+      "says": "Users' attention is drawn to higher visual weights"
+    },
+    {
+      "name": "External Trigger",
+      "says": "Information on what to do next is within the prompt itself"
+    },
+    {
+      "name": "Centre-Stage Effect",
+      "says": "People tend to choose the middle option in a set"
+    },
+    {
+      "name": "Law of Proximity",
+      "says": "Elements close to each other are considered related"
+    },
+    {
+      "name": "Tesler's Law",
+      "says": "Simplify too much and you transfer complexity to the users"
+    },
+    {
+      "name": "Spark Effect",
+      "says": "Users are more likely to act when the effort is small"
+    },
+    {
+      "name": "Feedback Loop",
+      "says": "When users act, feedback communicates what happened"
+    },
+    {
+      "name": "Expectations Bias",
+      "says": "People are influenced by their own expectations"
+    },
+    {
+      "name": "Aesthetic-Usability Effect",
+      "says": "People perceive beautiful designs as easier to use"
+    },
+    {
+      "name": "Social Proof",
+      "says": "Users adapt their behavior based on what others do"
+    },
+    {
+      "name": "Scarcity",
+      "says": "People value things more when they're in limited supply"
+    },
+    {
+      "name": "Curiosity Gap",
+      "says": "Users have a desire to seek out missing information"
+    },
+    {
+      "name": "Mental Model",
+      "says": "Users have a preconceived opinion of how things work"
+    },
+    {
+      "name": "Familiarity Bias",
+      "says": "People prefer familiar experiences"
+    },
+    {
+      "name": "Skeuomorphism",
+      "says": "Users adapt more easily to things that look like real objects"
+    },
+    {
+      "name": "Reciprocity",
+      "says": "People feel the need to reciprocate when they receive something"
+    },
+    {
+      "name": "Singularity Effect",
+      "says": "Users care more about an individual than about a group"
+    },
+    {
+      "name": "Variable Reward",
+      "says": "People especially enjoy unexpected rewards"
+    },
+    {
+      "name": "Aha Moment",
+      "says": "When new users first realize the value of your product"
+    },
+    {
+      "name": "Goal Gradient Effect",
+      "says": "Motivation increases as users get closer to their goal"
+    },
+    {
+      "name": "Occam's Razor",
+      "says": "Simple solutions are often better than complex ones"
+    },
+    {
+      "name": "Noble Edge Effect",
+      "says": "Users tend to prefer socially responsible companies"
+    },
+    {
+      "name": "Hawthorne Effect",
+      "says": "Users change behavior when they know they're observed"
+    },
+    {
+      "name": "Halo Effect",
+      "says": "People judge things based on feelings toward one trait"
+    },
+    {
+      "name": "Miller's Law",
+      "says": "Users can only keep 7 plus or minus 2 items in working memory"
+    },
+    {
+      "name": "Unit Bias",
+      "says": "One unit of something feels like the optimal amount"
+    },
+    {
+      "name": "Flow State",
+      "says": "Being fully immersed and focused on a task"
+    },
+    {
+      "name": "Authority Bias",
+      "says": "Users weight the opinion of an authority figure more"
+    },
+    {
+      "name": "Pseudo-Set Framing",
+      "says": "Tasks that are part of a group are more tempting to complete"
+    },
+    {
+      "name": "Group Attractiveness Effect",
+      "says": "Items seem more attractive presented in a group"
+    },
+    {
+      "name": "Curse of Knowledge",
+      "says": "Not realizing others lack your level of knowledge"
+    },
+    {
+      "name": "Self-Initiated Triggers",
+      "says": "Users engage more with prompts they set up themselves"
+    },
+    {
+      "name": "Survey Bias",
+      "says": "Users skew answers toward what's socially acceptable"
+    },
+    {
+      "name": "Cognitive Dissonance",
+      "says": "It's painful to hold two opposing ideas at once"
+    },
+    {
+      "name": "Feedforward",
+      "says": "When users know what to expect before they act"
+    },
+    {
+      "name": "Hindsight Bias",
+      "says": "People overestimate their ability to predict outcomes after the fact"
+    },
+    {
+      "name": "Law of Similarity",
+      "says": "Users perceive a relationship between elements that look similar"
+    },
+    {
+      "name": "Law of Pragnanz",
+      "says": "Users interpret ambiguous images in a simpler, more complete form"
+    },
+    {
+      "name": "Streisand Effect",
+      "says": "Censoring information increases awareness of it"
+    },
+    {
+      "name": "Spotlight Effect",
+      "says": "People believe they're noticed more than they really are"
+    },
+    {
+      "name": "Fresh Start Effect",
+      "says": "Users act more readily when there's a feeling of new beginnings"
+    },
+    {
+      "name": "Labor Illusion",
+      "says": "People value things more when they see the work behind them"
+    },
+    {
+      "name": "Default Bias",
+      "says": "Users tend not to change an established behavior"
+    },
+    {
+      "name": "Investment Loops",
+      "says": "When users invest themselves, they're more likely to come back"
+    },
+    {
+      "name": "Loss Aversion",
+      "says": "People avoid losses more than they seek equivalent gains"
+    },
+    {
+      "name": "Commitment and Consistency",
+      "says": "Users tend to be consistent with previous actions"
+    },
+    {
+      "name": "Sunk Cost Effect",
+      "says": "Users are reluctant to pull out of something they're invested in"
+    },
+    {
+      "name": "Reactance",
+      "says": "Users are less likely to adopt a behavior when they feel forced"
+    },
+    {
+      "name": "Law of the Instrument",
+      "says": "If all you have is a hammer, everything looks like a nail"
+    },
+    {
+      "name": "Temptation Bundling",
+      "says": "Hard tasks are less scary coupled with something desired"
+    },
+    {
+      "name": "Dunning-Kruger Effect",
+      "says": "People overestimate their skills when they know little"
+    },
+    {
+      "name": "Discoverability",
+      "says": "The ease with which users can discover your features"
+    },
+    {
+      "name": "Second-Order Effect",
+      "says": "The consequences of the consequences of actions"
+    },
+    {
+      "name": "Decision Fatigue",
+      "says": "Many decisions lower users' ability to make rational ones"
+    },
+    {
+      "name": "Observer-Expectancy Effect",
+      "says": "Researchers' biases influence experiment participants"
+    },
+    {
+      "name": "Weber's Law",
+      "says": "Users adapt better to small incremental changes"
+    },
+    {
+      "name": "Parkinson's Law",
+      "says": "A task expands to fill the time allowed for it"
+    },
+    {
+      "name": "Affect Heuristic",
+      "says": "Current emotions cloud and influence judgment"
+    },
+    {
+      "name": "Hyperbolic Discounting",
+      "says": "People prioritize immediate benefits over bigger future gains"
+    },
+    {
+      "name": "Chronoception",
+      "says": "People's perception of time is subjective"
+    },
+    {
+      "name": "Cashless Effect",
+      "says": "People spend more when they can't see the money"
+    },
+    {
+      "name": "Self-Serving Bias",
+      "says": "People take credit for positives and blame others for negatives"
+    },
+    {
+      "name": "Pareto Principle",
+      "says": "Roughly 80% of effects come from 20% of causes"
+    },
+    {
+      "name": "Backfire Effect",
+      "says": "Challenging convictions makes beliefs stronger"
+    },
+    {
+      "name": "False Consensus Effect",
+      "says": "People overestimate how much others agree with them"
+    },
+    {
+      "name": "Bandwagon Effect",
+      "says": "Users adopt beliefs in proportion to how many already have"
+    },
+    {
+      "name": "Barnum-Forer Effect",
+      "says": "Generic personality descriptions feel specifically true"
+    },
+    {
+      "name": "IKEA Effect",
+      "says": "When users partly create something, they value it more"
+    },
+    {
+      "name": "Planning Fallacy",
+      "says": "People underestimate how much time a task will take"
+    },
+    {
+      "name": "Provide Exit Points",
+      "says": "Invite users to leave your app at the right moment"
+    },
+    {
+      "name": "Peak-End Rule",
+      "says": "People judge an experience by its peak and how it ends"
+    },
+    {
+      "name": "Sensory Appeal",
+      "says": "Users engage more with things appealing to multiple senses"
+    },
+    {
+      "name": "Zeigarnik Effect",
+      "says": "People remember incomplete tasks better than completed ones"
+    },
+    {
+      "name": "Endowment Effect",
+      "says": "Users value something more if they feel it's theirs"
+    },
+    {
+      "name": "Chunking",
+      "says": "People remember grouped information better"
+    },
+    {
+      "name": "Delighters",
+      "says": "People remember unexpected and playful pleasures"
+    },
+    {
+      "name": "Internal Trigger",
+      "says": "Users are prompted to act based on a memory"
+    },
+    {
+      "name": "Picture Superiority Effect",
+      "says": "People remember pictures better than words"
+    },
+    {
+      "name": "Method of Loci",
+      "says": "People remember things associated with a location"
+    },
+    {
+      "name": "Shaping",
+      "says": "Incrementally reinforcing actions toward a target behavior"
+    },
+    {
+      "name": "Recognition Over Recall",
+      "says": "It's easier to recognize than to recall"
+    },
+    {
+      "name": "Storytelling Effect",
+      "says": "People remember stories better than facts alone"
+    },
+    {
+      "name": "Negativity Bias",
+      "says": "Users recall negative events more than positive ones"
+    },
+    {
+      "name": "Availability Heuristic",
+      "says": "Users favor recent information over past information"
+    },
+    {
+      "name": "Spacing Effect",
+      "says": "People learn better when sessions are spaced out"
+    },
+    {
+      "name": "Serial Position Effect",
+      "says": "It's easier to recall the first and last items of a list"
+    }
+  ]
+}

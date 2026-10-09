@@ -1,0 +1,125 @@
+#!/usr/bin/env python3
+"""Every element, every scroll position. No sampling.
+
+Caleb, 2026-09-26: "You said you got roughly 2%, get that to 100% lil bro."
+
+Every capture in this repo samples, and both axes were sampled badly.
+
+  ux-crawl films every 9px of travel, which is dense on the SCROLL axis, and
+  then tracks 260 elements out of thousands. On the reference, 257 of those
+  260 were static, so the element axis was effectively empty and the film
+  reported three moving things on a page full of motion.
+
+  The ad-hoc captures I wrote alongside it sampled the scroll axis every
+  ~800px, which is 2% of a 17,852px page, and missed every curve between.
+
+Sampling is not the price of scale here: 100% coverage is affordable if you
+stop storing what did not change.
+
+DELTA ENCODING IS THE WHOLE TRICK. On any given scroll step almost nothing
+moves. Writing a full snapshot per position stores the static page thousands
+of times over; a 900-position full capture of the reference would run to
+gigabytes. Recording only the CHANGES against the previous position collapses
+that by roughly the fraction of the page that is actually animating, which is
+small by definition, and loses nothing: the full state at any position is the
+baseline plus the deltas up to it.
+
+So this keeps every element and every position, and the file stays small
+because a page where everything changed on every step would not be a design.
+"""
+
+import argparse, json, pathlib, sys
+
+CAPTURE = r"""() => {
+  const out = {};
+  const els = document.querySelectorAll("body *");
+  for (let i = 0; i < els.length; i++) {
+    const e = els[i];
+    const r = e.getBoundingClientRect();
+    // Off-screen by more than a viewport is not observable; keeping it would
+    // record the whole document at every step for nothing.
+    if (r.bottom < -900 || r.top > window.innerHeight + 900) continue;
+    if (r.width < 1 && r.height < 1) continue;
+    const s = getComputedStyle(e);
+    // A stable key. Index alone breaks the moment the DOM mounts a scene.
+    const key = e.tagName.toLowerCase() + "#" +
+      (e.getAttribute("class") || "").slice(0, 38) + "#" + i;
+    out[key] = [
+      Math.round(r.top), Math.round(r.left),
+      Math.round(r.width), Math.round(r.height),
+      +(+s.opacity).toFixed(3),
+      s.transform === "none" ? 0 : s.transform,
+      s.strokeDashoffset === "0px" ? 0 : s.strokeDashoffset,
+      s.color, s.backgroundColor, s.visibility === "visible" ? 1 : 0,
+      s.clipPath === "none" ? 0 : s.clipPath,
+      s.filter === "none" ? 0 : s.filter,
+    ];
+  }
+  return out;
+}"""
+
+FIELDS = ["top", "left", "w", "h", "opacity", "transform",
+          "dashoffset", "color", "background", "visible", "clipPath", "filter"]
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("url")
+    ap.add_argument("--out", required=True)
+    ap.add_argument("--step", type=int, default=24,
+                    help="scroll px per sample. 24 is under one frame of "
+                         "travel at a normal wheel speed, so nothing between "
+                         "two samples is perceivable")
+    ap.add_argument("--settle", type=int, default=30,
+                    help="ms to let scroll-driven state apply before reading")
+    ap.add_argument("--width", type=int, default=1280)
+    ap.add_argument("--height", type=int, default=900)
+    a = ap.parse_args()
+
+    from playwright.sync_api import sync_playwright
+    out = pathlib.Path(a.out); out.mkdir(parents=True, exist_ok=True)
+
+    with sync_playwright() as p:
+        b = p.chromium.launch()
+        pg = b.new_page(viewport={"width": a.width, "height": a.height})
+        pg.goto(a.url, wait_until="networkidle")
+        pg.wait_for_timeout(2600)          # past the load animations
+        total = pg.evaluate("document.documentElement.scrollHeight")
+        positions = list(range(0, max(total - a.height, 1) + a.step, a.step))
+
+        prev, frames, seen = {}, [], set()
+        for n, y in enumerate(positions):
+            pg.evaluate(f"window.scrollTo(0,{y})")
+            pg.wait_for_timeout(a.settle)
+            cur = pg.evaluate(CAPTURE)
+            seen.update(cur)
+            if n == 0:
+                frames.append({"y": y, "full": cur})
+            else:
+                d = {k: v for k, v in cur.items() if prev.get(k) != v}
+                gone = [k for k in prev if k not in cur]
+                frames.append({"y": y, "d": d, **({"gone": gone} if gone else {})})
+            prev = cur
+            if n % 80 == 0:
+                print(f"  y={y:<6} {len(cur):>5} elements  "
+                      f"{len(frames[-1].get('d', frames[-1].get('full', {}))):>5} changed",
+                      flush=True)
+
+        b.close()
+
+    path = out / "scan.json"
+    path.write_text(json.dumps({"url": a.url, "height": total, "step": a.step,
+                                "fields": FIELDS, "frames": frames}))
+    changed = sum(len(f.get("d", f.get("full", {}))) for f in frames)
+    full_would_be = len(seen) * len(frames)
+    print(f"\n  {len(positions)} positions x {len(seen)} distinct elements")
+    print(f"  = {full_would_be:,} element-states at 100% coverage")
+    print(f"  stored {changed:,} deltas ({100*changed/max(full_would_be,1):.2f}% of a full "
+          f"snapshot set), {path.stat().st_size/1048576:.1f} MB")
+    print(f"  wrote {path}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

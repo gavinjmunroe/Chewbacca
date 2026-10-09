@@ -1,0 +1,203 @@
+{
+  "brief": "a pricing page for a solo developer tool",
+  "intent": {
+    "purpose": "a solo developer tool offers paid access at one or more price points",
+    "primary_action": "choose a plan and start a trial or purchase",
+    "first_look": "the price",
+    "audience": "individual developers evaluating whether the tool is worth paying for"
+  },
+  "results": {
+    "one-voltage": {
+      "gaps": [
+        {
+          "kind": "friction",
+          "where": "No visible CTA button on any card \u2014 it is unclear how to actually select or subscribe to a plan",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "Studio's 'Up to 5 seats' conflicts with the headline 'One developer. One price.' \u2014 the headline implies solo-only but Studio goes team",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "'Stays human-sized' under Studio is vague enough to re-read",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "'MOST POPULAR' badge text is small and all-caps with low contrast against the dark pill background \u2014 readable but requires a squint",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "Check-mark feature list items are light gray on white, low contrast",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "The large bold headline 'One developer. One price.'",
+        "look_order": [
+          "The three pricing cards side by side (Hobby $0, Pro $9, Studio $19)",
+          "The 'MOST POPULAR' badge on the Pro card",
+          "The Monthly / Annual toggle",
+          "The subheadline 'No seat math, no usage anxiety. Everything you need to ship, nothing you don't.'"
+        ],
+        "purpose": "A pricing page for a developer tool called DevKit, showing three subscription tiers for solo developers and small teams.",
+        "primary_action": "Choose a plan (implied \u2014 the cards appear selectable but no CTA button is visible in the current scroll position)",
+        "primary_action_confidence": "medium",
+        "clickable": [
+          "Annual toggle button",
+          "Monthly toggle button (currently selected)",
+          "Pro card (elevated/highlighted)",
+          "Docs (nav)",
+          "Changelog (nav)",
+          "Sign in (nav)"
+        ],
+        "friction": [
+          "No visible CTA button on any card \u2014 it is unclear how to actually select or subscribe to a plan",
+          "Studio's 'Up to 5 seats' conflicts with the headline 'One developer. One price.' \u2014 the headline implies solo-only but Studio goes team",
+          "'Stays human-sized' under Studio is vague enough to re-read"
+        ],
+        "unreadable": [
+          "'MOST POPULAR' badge text is small and all-caps with low contrast against the dark pill background \u2014 readable but requires a squint",
+          "Check-mark feature list items are light gray on white, low contrast"
+        ],
+        "guess_at_audience": "Independent software developers and freelancers who want a simple, solo-priced developer tool without per-seat pricing anxiety"
+      },
+      "blocking": 0
+    },
+    "dense-instrument": {
+      "gaps": [
+        {
+          "kind": "friction",
+          "where": "'Local only - no account required' under HOBBY is ambiguous about whether that is a benefit or a limitation",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "TEAM says '$28 / mo per seat' but it is unclear whether there is a minimum seat count",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "the FEATURE COMPARISON section header is very small and easy to skip past",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "section labels CORE, LIMITS, SYNC, TEAM inside the comparison table are low contrast and small",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "nav links Docs, Changelog, GitHub are legible but small",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "the '$12 / mo' PRO price with the blue 'MOST USED' badge next to it",
+        "look_order": [
+          "'Start 14-day trial' button in blue under the PRO column",
+          "the three pricing tiers side by side: HOBBY $0, PRO $12, TEAM $28",
+          "'Download free' button under HOBBY",
+          "the feature comparison table below the pricing cards"
+        ],
+        "purpose": "a pricing page for a developer tool called DevTool that offers three subscription tiers",
+        "primary_action": "Start 14-day trial",
+        "primary_action_confidence": "high",
+        "clickable": [
+          "Monthly / Annual toggle",
+          "Download free",
+          "Start 14-day trial",
+          "Contact sales",
+          "Sign in",
+          "Docs",
+          "Changelog",
+          "GitHub"
+        ],
+        "friction": [
+          "'Local only - no account required' under HOBBY is ambiguous about whether that is a benefit or a limitation",
+          "TEAM says '$28 / mo per seat' but it is unclear whether there is a minimum seat count",
+          "the FEATURE COMPARISON section header is very small and easy to skip past"
+        ],
+        "unreadable": [
+          "section labels CORE, LIMITS, SYNC, TEAM inside the comparison table are low contrast and small",
+          "nav links Docs, Changelog, GitHub are legible but small"
+        ],
+        "guess_at_audience": "individual developers or small engineering teams evaluating a CLI or editor tooling product"
+      },
+      "blocking": 0
+    },
+    "editorial": {
+      "gaps": [
+        {
+          "kind": "attention-misdirected",
+          "where": "one tool. three ways to own it.",
+          "detail": "eye went to 'one tool. three ways to own it.', intended 'the price'"
+        },
+        {
+          "kind": "friction",
+          "where": "'Three ways to own it' \u2014 only two tiers are visible (Free and Pro), so the third way is not immediately apparent",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "No visible Pro price anywhere in the screenshot, making it hard to compare tiers without scrolling",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "friction",
+          "where": "The blockquote philosophy paragraph delays getting to the actual tiers",
+          "detail": "viewer hesitated here"
+        },
+        {
+          "kind": "unreadable",
+          "where": "'forever, no card' beneath $0 is small and low contrast",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "'PRICING \u2014 AS OF SEPTEMBER 2026' label is small and light",
+          "detail": "too small or too low contrast to read comfortably"
+        },
+        {
+          "kind": "unreadable",
+          "where": "Attribution line '\u2014 A. Kowalski, independent developer' is noticeably small",
+          "detail": "too small or too low contrast to read comfortably"
+        }
+      ],
+      "report": {
+        "first_look": "One tool. Three ways to own it.",
+        "look_order": [
+          "$0 forever, no card \u2014 the FREE tier price",
+          "The blockquote: 'Most pricing pages try to convince you to upgrade...'",
+          "The right-column header: 'Built for one person making something real.'",
+          "The AT A GLANCE comparison table (Free / Pro checkmarks)"
+        ],
+        "purpose": "A pricing page for a developer tool called DEVKIT that explains its free and paid tiers.",
+        "primary_action": "Choose a pricing tier (Free or Pro)",
+        "primary_action_confidence": "medium",
+        "clickable": [
+          "Docs",
+          "Changelog",
+          "GitHub",
+          "Sign in",
+          "DEVKIT logo/wordmark"
+        ],
+        "friction": [
+          "'Three ways to own it' \u2014 only two tiers are visible (Free and Pro), so the third way is not immediately apparent",
+          "No visible Pro price anywhere in the screenshot, making it hard to compare tiers without scrolling",
+          "The blockquote philosophy paragraph delays getting to the actual tiers"
+        ],
+        "unreadable": [
+          "'forever, no card' beneath $0 is small and low contrast",
+          "'PRICING \u2014 AS OF SEPTEMBER 2026' label is small and light",
+          "Attribution line '\u2014 A. Kowalski, independent developer' is noticeably small"
+        ],
+        "guess_at_audience": "Individual developers or solo builders who work locally and are skeptical of SaaS pricing models"
+      },
+      "blocking": 0
+    }
+  }
+}

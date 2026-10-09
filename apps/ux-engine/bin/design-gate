@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""Refuse a design that has never been looked at. Exit 2 means stop.
+
+WHY. On 2026-09-23 a page shipped with its hero and its next scene rendered
+on top of each other, body text crossing a 42-cell grid, unreadable. Caleb
+sent the screenshot. Every generative rule in the kit had been followed: the
+components came from the taxonomy, the tokens were consistent, ink was in
+band, no stagger exceeded 400ms. The page was still garbage.
+
+The audit afterwards found why, and it was structural rather than a slip:
+
+  - NO hook in the kit reads a rendered image. Not one.
+  - design-context.sh INJECTS constants and gates nothing.
+  - crafts/interface.md has no verification step at all.
+  - the `interface` skill's five steps end at "build the three states".
+
+The entire design system is feed-forward. It can say what to do and has no
+way to say what was done. `feedback_the_screenshot_beat_the_code` recorded
+this exact lesson on 2026-09-21, two days earlier, and changed nothing,
+because a memory is prose and prose does not fail CI. Per
+`feedback_enforce_dont_document` and `feedback_advisory_hooks_do_nothing`:
+exit 2, or it is decoration.
+
+WHAT IT CHECKS. ux-eye renders the page at N scroll positions and measures
+the IMAGE: text sitting on non-uniform ground, painted boxes colliding,
+visual weight off centre, whether anything survives a squint. Those are
+whole-field properties, and no per-element rule can express them.
+
+This gate does not have taste. It catches the failures that are not matters
+of taste at all: unreadable type, collided scenes, a page with no focal
+point. Passing it means the page is not broken, never that it is good.
+"""
+
+import importlib.machinery, importlib.util
+import subprocess, sys, os, pathlib, json, tempfile, argparse
+
+HERE = pathlib.Path(__file__).resolve().parent
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Render and check a page before shipping.")
+    parser.add_argument("url")
+    parser.add_argument("--shots", type=int, default=6)
+    args = parser.parse_args()
+    if args.shots < 1:
+        parser.error("--shots must be positive")
+
+    # A unique capture directory prevents both stale reports and concurrent
+    # runs sharing the default output root from verifying the wrong page.
+    root = pathlib.Path(os.environ.get("DESIGN_GATE_OUT", "/tmp/design-gate"))
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        out = tempfile.mkdtemp(prefix="capture-", dir=root)
+        r = subprocess.run([sys.executable, str(HERE / "ux-eye"), args.url,
+                            "--out", out, "--shots", str(args.shots)],
+                           capture_output=True, text=True)
+    except OSError as exc:
+        print(f"GATE ERROR: capture could not run: {exc}", file=sys.stderr)
+        return 2
+    sys.stdout.write(r.stdout)
+    if r.stderr.strip():
+        sys.stderr.write(r.stderr)
+
+    # ux-eye returns 1 for visual findings, including advisory ones. A fresh
+    # report with that status is valid input; other exit codes are failures.
+    if r.returncode not in (0, 1):
+        print(f"\nGATE ERROR: ux-eye failed with exit {r.returncode}; "
+              "capture is unverified.", file=sys.stderr)
+        return 2
+    data = pathlib.Path(out) / "eye.json"
+    try:
+        res = json.loads(data.read_text())
+        if not isinstance(res, list) or len(res) != args.shots:
+            raise ValueError("report does not contain every requested shot")
+        for m in res:
+            if not isinstance(m, dict) or not all(
+                key in m for key in ("y", "vh", "ink", "illegible", "overlaps", "texts")
+            ):
+                raise ValueError("report is missing required shot fields")
+            if not all(isinstance(m[key], list) for key in ("illegible", "overlaps", "texts")):
+                raise ValueError("report contains invalid shot collections")
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"\nGATE ERROR: ux-eye produced no complete fresh report: {exc}",
+              file=sys.stderr)
+        return 2
+
+    sys.path.insert(0, str(HERE))
+    import importlib.util
+    spec = importlib.util.spec_from_loader(
+        "ux_eye", importlib.machinery.SourceFileLoader("ux_eye", str(HERE / "ux-eye")))
+    ux_eye = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(ux_eye)
+    try:
+        # Only the failures that are never a matter of taste.
+        hard = []
+        for m in res:
+            if m["illegible"]:
+                hard.append(f"y={m['y']}: {len(m['illegible'])} text box(es) "
+                            f"unreadable over other content "
+                            f"(worst purity {m['illegible'][0]['purity']})")
+            bad = [o for o in m["overlaps"] if o["share"] > 0.35]
+            if bad:
+                hard.append(f"y={m['y']}: {bad[0]['a']} collides with "
+                            f"{bad[0]['b']} over {int(bad[0]['share']*100)}%")
+
+        for c in ux_eye.pinned_and_clipped(res):
+            hard.append(f"y={c['y']}: PINNED AND CLIPPED, cut {c['cut']}px "
+                        f"at {c['fs']:.0f}px: \"{c['text'][:44]}\"")
+        for d in ux_eye.dead_runs(res, ux_eye.INK_LO):
+            hard.append(f"y={d['from']}-{d['to']}: {d['screens']} screens of "
+                        f"dead space, min ink {d['ink']}")
+    except (KeyError, TypeError, ValueError) as exc:
+        print(f"\nGATE ERROR: invalid capture measurements: {exc}", file=sys.stderr)
+        return 2
+
+    if hard:
+        print("\nREFUSED. This is not a taste call, these are broken:",
+              file=sys.stderr)
+        for h in hard[:8]:
+            print(f"  {h}", file=sys.stderr)
+        print(f"\n  images in {out}/ . Open them before changing anything.",
+              file=sys.stderr)
+        return 2
+
+    print("\nGATE PASS. Nothing is broken. That is not the same as good: "
+          "open the images and judge.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

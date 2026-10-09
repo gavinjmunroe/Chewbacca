@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analytics Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222637;
+    --border: #2e3248;
+    --text: #e8eaf6;
+    --muted: #7b80a0;
+    --accent: #6366f1;
+    --accent2: #8b5cf6;
+    --green: #10b981;
+    --red: #f43f5e;
+    --yellow: #f59e0b;
+    --cyan: #06b6d4;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -0.3px;
+  }
+
+  .logo-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .range-select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+  }
+
+  .avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--cyan));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  main {
+    padding: 28px 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .page-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 4px;
+  }
+
+  .page-sub {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 28px;
+  }
+
+  .metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .metric-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .metric-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: 14px 14px 0 0;
+  }
+
+  .metric-card.indigo::before { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .metric-card.green::before  { background: linear-gradient(90deg, var(--green), #34d399); }
+  .metric-card.yellow::before { background: linear-gradient(90deg, var(--yellow), #fbbf24); }
+  .metric-card.cyan::before   { background: linear-gradient(90deg, var(--cyan), #38bdf8); }
+
+  .metric-label {
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 10px;
+  }
+
+  .metric-value {
+    font-size: 28px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 8px;
+  }
+
+  .metric-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .badge.up   { background: rgba(16,185,129,.15); color: var(--green); }
+  .badge.down { background: rgba(244,63,94,.15);  color: var(--red); }
+
+  .charts-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+
+  .card-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .legend {
+    display: flex;
+    gap: 14px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .chart-wrap {
+    position: relative;
+    height: 240px;
+  }
+
+  .bottom-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--muted);
+    padding: 0 0 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+
+  tbody td {
+    padding: 11px 0;
+    font-size: 13px;
+  }
+
+  .source-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+  }
+
+  .bar-bg {
+    width: 80px;
+    height: 5px;
+    background: var(--surface2);
+    border-radius: 99px;
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 99px;
+  }
+
+  .activity-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .activity-item:last-child { border-bottom: none; }
+
+  .activity-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .activity-icon.green  { background: rgba(16,185,129,.15); }
+  .activity-icon.indigo { background: rgba(99,102,241,.15); }
+  .activity-icon.yellow { background: rgba(245,158,11,.15); }
+  .activity-icon.red    { background: rgba(244,63,94,.15); }
+  .activity-icon.cyan   { background: rgba(6,182,212,.15); }
+
+  .activity-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .activity-text {
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .activity-time {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .status-pill {
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .status-pill.live    { background: rgba(16,185,129,.15); color: var(--green); }
+  .status-pill.paused  { background: rgba(245,158,11,.15); color: var(--yellow); }
+  .status-pill.draft   { background: rgba(99,102,241,.15); color: var(--accent); }
+
+  @media (max-width: 1100px) {
+    .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    .charts-row   { grid-template-columns: 1fr; }
+    .bottom-row   { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 640px) {
+    main, header { padding-left: 16px; padding-right: 16px; }
+    .metrics-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-dot">◈</div>
+    Pulse
+  </div>
+  <div class="header-right">
+    <select class="range-select">
+      <option>Last 30 days</option>
+      <option>Last 7 days</option>
+      <option>Last 90 days</option>
+      <option>This year</option>
+    </select>
+    <div class="avatar">CN</div>
+  </div>
+</header>
+
+<main>
+  <div class="page-title">Overview</div>
+  <div class="page-sub">Sep 1 – Sep 20, 2026 · Compared to previous period</div>
+
+  <div class="metrics-grid">
+    <div class="metric-card indigo">
+      <div class="metric-label">Total Users</div>
+      <div class="metric-value">84,219</div>
+      <div class="metric-footer">
+        <span class="badge up">▲ 12.4%</span>
+        vs last period
+      </div>
+    </div>
+    <div class="metric-card green">
+      <div class="metric-label">Revenue</div>
+      <div class="metric-value">$142.6K</div>
+      <div class="metric-footer">
+        <span class="badge up">▲ 8.1%</span>
+        vs last period
+      </div>
+    </div>
+    <div class="metric-card yellow">
+      <div class="metric-label">Conversion Rate</div>
+      <div class="metric-value">3.82%</div>
+      <div class="metric-footer">
+        <span class="badge down">▼ 0.3%</span>
+        vs last period
+      </div>
+    </div>
+    <div class="metric-card cyan">
+      <div class="metric-label">Avg Session</div>
+      <div class="metric-value">4m 37s</div>
+      <div class="metric-footer">
+        <span class="badge up">▲ 5.9%</span>
+        vs last period
+      </div>
+    </div>
+  </div>
+
+  <div class="charts-row">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Traffic & Revenue</div>
+          <div class="card-sub">Daily visitors and revenue over the period</div>
+        </div>
+        <div class="legend">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:var(--accent)"></div>
+            Visitors
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:var(--green)"></div>
+            Revenue
+          </div>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="lineChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">By Device</div>
+          <div class="card-sub">Session share</div>
+        </div>
+      </div>
+      <div class="chart-wrap" style="height:200px; display:flex; align-items:center; justify-content:center;">
+        <canvas id="donutChart"></canvas>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:8px; margin-top:16px;">
+        <div style="display:flex; justify-content:space-between; font-size:13px;">
+          <span style="display:flex;align-items:center;gap:8px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--accent);display:inline-block;"></span>Desktop</span>
+          <span style="font-weight:600;">52%</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:13px;">
+          <span style="display:flex;align-items:center;gap:8px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--cyan);display:inline-block;"></span>Mobile</span>
+          <span style="font-weight:600;">37%</span>
+        </div>
+        <div style="display:flex; justify-content:space-between; font-size:13px;">
+          <span style="display:flex;align-items:center;gap:8px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--accent2);display:inline-block;"></span>Tablet</span>
+          <span style="font-weight:600;">11%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottom-row">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Traffic Sources</div>
+          <div class="card-sub">Where visitors are coming from</div>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Source</th>
+            <th>Visitors</th>
+            <th>Share</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="source-dot" style="background:var(--accent)"></span>Organic Search</td>
+            <td>32,481</td>
+            <td>
+              <div class="bar-bg"><div class="bar-fill" style="width:78%;background:var(--accent)"></div></div>
+            </td>
+            <td><span class="status-pill live">Live</span></td>
+          </tr>
+          <tr>
+            <td><span class="source-dot" style="background:var(--cyan)"></span>Direct</td>
+            <td>18,904</td>
+            <td>
+              <div class="bar-bg"><div class="bar-fill" style="width:46%;background:var(--cyan)"></div></div>
+            </td>
+            <td><span class="status-pill live">Live</span></td>
+          </tr>
+          <tr>
+            <td><span class="source-dot" style="background:var(--green)"></span>Paid Ads</td>
+            <td>14,220</td>
+            <td>
+              <div class="bar-bg"><div class="bar-fill" style="width:34%;background:var(--green)"></div></div>
+            </td>
+            <td><span class="status-pill live">Live</span></td>
+          </tr>
+          <tr>
+            <td><span class="source-dot" style="background:var(--yellow)"></span>Social</td>
+            <td>11,073</td>
+            <td>
+              <div class="bar-bg"><div class="bar-fill" style="width:27%;background:var(--yellow)"></div></div>
+            </td>
+            <td><span class="status-pill paused">Paused</span></td>
+          </tr>
+          <tr>
+            <td><span class="source-dot" style="background:var(--accent2)"></span>Referral</td>
+            <td>7,541</td>
+            <td>
+              <div class="bar-bg"><div class="bar-fill" style="width:18%;background:var(--accent2)"></div></div>
+            </td>
+            <td><span class="status-pill draft">Draft</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Recent Activity</div>
+          <div class="card-sub">Last 24 hours</div>
+        </div>
+      </div>
+      <ul class="activity-list">
+        <li class="activity-item">
+          <div class="activity-icon green">✓</div>
+          <div class="activity-body">
+            <div class="activity-text"><strong>Campaign "Fall Launch"</strong> went live and reached 4,200 impressions</div>
+            <div class="activity-time">12 minutes ago</div>
+          </div>
+        </li>
+        <li class="activity-item">
+          <div class="activity-icon indigo">↑</div>
+          <div class="activity-body">
+            <div class="activity-text">Conversion rate spiked to <strong>4.91%</strong> on the pricing page</div>
+            <div class="activity-time">1 hour ago</div>
+          </div>
+        </li>
+        <li class="activity-item">
+          <div class="activity-icon yellow">!</div>
+          <div class="activity-body">
+            <div class="activity-text">Bounce rate on <strong>/onboarding</strong> exceeded 60% threshold</div>
+            <div class="activity-time">3 hours ago</div>
+          </div>
+        </li>
+        <li class="activity-item">
+          <div class="activity-icon cyan">+</div>
+          <div class="activity-body">
+            <div class="activity-text"><strong>1,482 new users</strong> signed up via organic search today</div>
+            <div class="activity-time">6 hours ago</div>
+          </div>
+        </li>
+        <li class="activity-item">
+          <div class="activity-icon red">↓</div>
+          <div class="activity-body">
+            <div class="activity-text">Revenue from <strong>Social</strong> channel down 14% from yesterday</div>
+            <div class="activity-time">9 hours ago</div>
+          </div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</main>
+
+<script>
+  const labels = ['Sep 1','Sep 2','Sep 3','Sep 4','Sep 5','Sep 6','Sep 7','Sep 8','Sep 9','Sep 10',
+                  'Sep 11','Sep 12','Sep 13','Sep 14','Sep 15','Sep 16','Sep 17','Sep 18','Sep 19','Sep 20'];
+
+  const visitors = [3100,2900,3400,3800,4100,3700,3200,4500,4800,4200,5100,4700,5300,4900,5600,5200,6100,5800,6400,6000];
+  const revenue  = [4200,3900,4800,5200,5900,4800,4100,6200,6800,5700,7300,6400,7800,6900,8200,7600,9100,8400,9700,8900];
+
+  const gridColor   = 'rgba(46,50,72,0.8)';
+  const tickColor   = '#7b80a0';
+  const tooltipBg   = '#1a1d27';
+  const tooltipBorder = '#2e3248';
+
+  Chart.defaults.color = tickColor;
+  Chart.defaults.borderColor = gridColor;
+
+  const lineCtx = document.getElementById('lineChart').getContext('2d');
+
+  const gradientV = lineCtx.createLinearGradient(0, 0, 0, 240);
+  gradientV.addColorStop(0, 'rgba(99,102,241,0.25)');
+  gradientV.addColorStop(1, 'rgba(99,102,241,0)');
+
+  const gradientR = lineCtx.createLinearGradient(0, 0, 0, 240);
+  gradientR.addColorStop(0, 'rgba(16,185,129,0.2)');
+  gradientR.addColorStop(1, 'rgba(16,185,129,0)');
+
+  new Chart(lineCtx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Visitors',
+          data: visitors,
+          borderColor: '#6366f1',
+          backgroundColor: gradientV,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#6366f1',
+          tension: 0.4,
+          fill: true,
+          yAxisID: 'y',
+        },
+        {
+          label: 'Revenue',
+          data: revenue,
+          borderColor: '#10b981',
+          backgroundColor: gradientR,
+          borderWidth: 2,
+          pointRadius: 0,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#10b981',
+          tension: 0.4,
+          fill: true,
+          yAxisID: 'y1',
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: tooltipBg,
+          borderColor: tooltipBorder,
+          borderWidth: 1,
+          titleColor: '#e8eaf6',
+          bodyColor: '#7b80a0',
+          padding: 10,
+          callbacks: {
+            label: ctx => {
+              const v = ctx.raw;
+              return ctx.dataset.label === 'Revenue'
+                ? ` $${v.toLocaleString()}`
+                : ` ${v.toLocaleString()} visitors`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          grid: { color: gridColor },
+          ticks: { font: { size: 11 }, maxTicksLimit: 8 }
+        },
+        y: {
+          position: 'left',
+          grid: { color: gridColor },
+          ticks: { font: { size: 11 }, callback: v => v >= 1000 ? v/1000+'k' : v }
+        },
+        y1: {
+          position: 'right',
+          grid: { drawOnChartArea: false },
+          ticks: { font: { size: 11 }, callback: v => '$'+(v/1000).toFixed(0)+'k' }
+        }
+      }
+    }
+  });
+
+  const donutCtx = document.getElementById('donutChart').getContext('2d');
+  new Chart(donutCtx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Desktop', 'Mobile', 'Tablet'],
+      datasets: [{
+        data: [52, 37, 11],
+        backgroundColor: ['#6366f1', '#06b6d4', '#8b5cf6'],
+        borderWidth: 0,
+        hoverOffset: 4
+      }]
+    },
+    options: {
+      responsive: false,
+      width: 180,
+      height: 180,
+      cutout: '72%',
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: tooltipBg,
+          borderColor: tooltipBorder,
+          borderWidth: 1,
+          titleColor: '#e8eaf6',
+          bodyColor: '#7b80a0',
+          padding: 10,
+          callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw}%` }
+        }
+      }
+    }
+  });
+
+  document.getElementById('donutChart').width  = 180;
+  document.getElementById('donutChart').height = 180;
+</script>
+
+</body>
+</html>

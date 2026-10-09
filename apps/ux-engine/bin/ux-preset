@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Load the behaviour spec for a thing you are about to build.
+
+    ux-preset                 list them
+    ux-preset table           print one
+    ux-preset form --brief    just the rules, no prose
+
+WHY THIS EXISTS, and it is the correction to this repo's original premise.
+
+`systems/` holds 74 design systems and a census of them found roughly 64
+product-UI components against 365 marketing ones. Every one was extracted from
+a MARKETING SITE. Even linear.app carries pricing-card and testimonial-card,
+because that is the website and not the application.
+
+So `ux-pick` answers "what should this look like" and genuinely cannot answer
+"what should this do". There is no data table, no empty state, no form
+validation and no keyboard spec anywhere in that corpus.
+
+These presets answer the second question, and they are not scraped. They are
+compiled from research/, which read the W3C specs, the papers, and the shipped
+source of the libraries that got these primitives right. That is the better
+source anyway: scraping Linear's marketing page tells you its accent is
+#5e6ad2, while reading Radix's focus-scope source tells you that focusout with
+a null relatedTarget must be ignored or the CPU pegs, and that is the thing
+that actually breaks in production.
+
+Pick a system for the look. Load a preset for the behaviour. They do not
+overlap.
+"""
+import argparse
+import pathlib
+import re
+import sys
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+DIR = ROOT / "presets"
+
+ALIAS = {
+    "table": "data-table", "grid": "data-table", "datagrid": "data-table",
+    "list": "data-table", "rows": "data-table",
+    "modal": "dialog", "sheet": "dialog", "drawer": "dialog", "popover": "dialog",
+    "notification": "toast", "snackbar": "toast", "alert": "toast",
+    "palette": "command-palette", "cmdk": "command-palette",
+    "search": "command-palette", "launcher": "command-palette",
+    "input": "form", "field": "form", "checkout": "form", "signup": "form",
+    "login": "form", "settings": "form",
+}
+
+
+def available():
+    return sorted(p.stem for p in DIR.glob("*.md") if p.stem != "README")
+
+
+def main():
+    ap = argparse.ArgumentParser(add_help=True)
+    ap.add_argument("name", nargs="?", help="what you are building")
+    ap.add_argument("--brief", action="store_true",
+                    help="bolded rules only, for when context is tight")
+    a = ap.parse_args()
+
+    names = available()
+    if not a.name:
+        print("presets (behaviour, states and constants; the look comes from ux-pick):\n")
+        for n in names:
+            first = ""
+            for line in (DIR / f"{n}.md").read_text().split("\n"):
+                if line.startswith("Compiled from"):
+                    first = line.replace("Compiled from ", "from ")
+                    break
+            print(f"  {n:18s} {first}")
+        print("\n  systems/ is all marketing-site extractions and cannot describe these.")
+        print("  Anything not listed here has no preset: say so rather than inventing one.")
+        return 0
+
+    key = a.name.lower().strip()
+    key = ALIAS.get(key, key)
+    if key not in names:
+        close = [n for n in names if key in n or n in key]
+        print(f"no preset for {a.name!r}.", file=sys.stderr)
+        if close:
+            print(f"did you mean: {', '.join(close)}", file=sys.stderr)
+        else:
+            print(f"have: {', '.join(names)}", file=sys.stderr)
+            print("\nThere is no preset for this yet. Build it from research/ and add "
+                  "one, rather than improvising the behaviour.", file=sys.stderr)
+        return 1
+
+    text = (DIR / f"{key}.md").read_text()
+    if a.brief:
+        # The bolded lines are the imperatives; the prose around them is the
+        # justification, which matters when a rule is challenged and not when
+        # it is being followed.
+        for line in text.split("\n"):
+            if line.startswith("#") or re.search(r"\*\*.+\*\*", line) or line.startswith("|"):
+                print(line)
+    else:
+        print(text)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

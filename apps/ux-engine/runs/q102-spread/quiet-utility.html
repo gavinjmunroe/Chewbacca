@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notification Preferences</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #f6f6f5;
+        --surface: #ffffff;
+        --border: #e0e0de;
+        --border-light: #ebebea;
+        --text-1: #141414;
+        --text-2: #6a6a6a;
+        --text-3: #b0b0b0;
+        --on: #1e1e1e;
+        --off: #d0d0ce;
+        --knob: #ffffff;
+        --r: 3px;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text-1);
+        font-size: 15px;
+        line-height: 1.5;
+        min-height: 100vh;
+        padding: 56px 24px 80px;
+      }
+
+      .page {
+        max-width: 576px;
+        margin: 0 auto;
+      }
+
+      /* ---- Header ---- */
+      .page-header {
+        margin-bottom: 48px;
+      }
+
+      .page-header h1 {
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.25px;
+        color: var(--text-1);
+        line-height: 1.3;
+      }
+
+      .page-header p {
+        font-size: 14px;
+        color: var(--text-2);
+        margin-top: 8px;
+      }
+
+      /* ---- Section ---- */
+      .section {
+        margin-bottom: 40px;
+      }
+
+      .section-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--text-3);
+        padding: 0 2px;
+        margin-bottom: 8px;
+      }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--r);
+        overflow: hidden;
+      }
+
+      /* ---- Toggle row ---- */
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border-light);
+        gap: 24px;
+      }
+
+      .row:last-child {
+        border-bottom: none;
+      }
+
+      .row-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .row-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-1);
+      }
+
+      .row-desc {
+        font-size: 13px;
+        color: var(--text-2);
+        margin-top: 2px;
+        line-height: 1.4;
+      }
+
+      /* ---- Toggle ---- */
+      .toggle {
+        position: relative;
+        width: 40px;
+        height: 24px;
+        flex-shrink: 0;
+        cursor: pointer;
+      }
+
+      .toggle input {
+        position: absolute;
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .toggle-track {
+        display: block;
+        width: 40px;
+        height: 24px;
+        background: var(--off);
+        border-radius: 12px;
+        transition: background 0.15s ease;
+        position: relative;
+      }
+
+      .toggle-knob {
+        display: block;
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 18px;
+        height: 18px;
+        background: var(--knob);
+        border-radius: 50%;
+        transition: transform 0.15s ease;
+      }
+
+      .toggle input:checked + .toggle-track {
+        background: var(--on);
+      }
+
+      .toggle input:checked + .toggle-track .toggle-knob {
+        transform: translateX(16px);
+      }
+
+      .toggle input:focus-visible + .toggle-track {
+        outline: 2px solid var(--on);
+        outline-offset: 2px;
+      }
+
+      /* ---- Select row ---- */
+      .row-select {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border-light);
+        gap: 24px;
+      }
+
+      .row-select:last-child {
+        border-bottom: none;
+      }
+
+      .row-select .row-info {
+        flex: 1;
+        min-width: 0;
+      }
+
+      select {
+        -webkit-appearance: none;
+        appearance: none;
+        font-family: inherit;
+        font-size: 13px;
+        color: var(--text-1);
+        background-color: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: var(--r);
+        padding: 6px 28px 6px 10px;
+        cursor: pointer;
+        flex-shrink: 0;
+        background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%236a6a6a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 9px center;
+      }
+
+      select:focus {
+        outline: 2px solid var(--on);
+        outline-offset: 1px;
+      }
+
+      /* ---- Sub-header inside card ---- */
+      .card-subhead {
+        padding: 10px 16px 8px;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-3);
+        background: var(--bg);
+        border-bottom: 1px solid var(--border-light);
+      }
+
+      /* ---- Time range row (quiet hours) ---- */
+      .time-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border-light);
+      }
+
+      .time-row:last-child {
+        border-bottom: none;
+      }
+
+      .time-label {
+        font-size: 13px;
+        color: var(--text-2);
+        width: 40px;
+        flex-shrink: 0;
+      }
+
+      /* ---- Unsubscribe link area ---- */
+      .footnote {
+        margin-top: 40px;
+        font-size: 13px;
+        color: var(--text-2);
+      }
+
+      .footnote a {
+        color: var(--text-1);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+
+      .footnote a:hover {
+        color: var(--text-2);
+      }
+
+      /* ---- Save bar ---- */
+      .save-bar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-top: 8px;
+      }
+
+      .btn-save {
+        padding: 10px 24px;
+        background: var(--on);
+        color: #fff;
+        border: none;
+        border-radius: var(--r);
+        font-family: inherit;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: opacity 0.12s;
+      }
+
+      .btn-save:hover {
+        opacity: 0.78;
+      }
+
+      .btn-save:focus-visible {
+        outline: 2px solid var(--on);
+        outline-offset: 3px;
+      }
+
+      .btn-save:active {
+        opacity: 0.6;
+      }
+
+      .saved-text {
+        font-size: 13px;
+        color: var(--text-2);
+        opacity: 0;
+        transition: opacity 0.25s;
+      }
+
+      .saved-text.show {
+        opacity: 1;
+      }
+
+      /* ---- Disabled state ---- */
+      .row.is-disabled .row-title,
+      .row.is-disabled .row-desc {
+        color: var(--text-3);
+      }
+
+      .row.is-disabled .toggle {
+        pointer-events: none;
+        opacity: 0.5;
+      }
+
+      /* ---- Quiet hours reveal ---- */
+      #quiet-details {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="page-header">
+        <h1>Notification preferences</h1>
+        <p>Control which notifications you receive and how they reach you.</p>
+      </div>
+
+      <!-- Delivery channels -->
+      <div class="section">
+        <div class="section-label">Delivery</div>
+        <div class="card">
+          <div class="row-select">
+            <div class="row-info">
+              <div class="row-title">Email</div>
+              <div class="row-desc">Sent to the address on your account</div>
+            </div>
+            <select aria-label="Email frequency">
+              <option>As they happen</option>
+              <option selected>Daily digest</option>
+              <option>Weekly digest</option>
+              <option>Off</option>
+            </select>
+          </div>
+          <div class="row-select">
+            <div class="row-info">
+              <div class="row-title">Push</div>
+              <div class="row-desc">On devices where you are signed in</div>
+            </div>
+            <select aria-label="Push frequency">
+              <option selected>As they happen</option>
+              <option>Off</option>
+            </select>
+          </div>
+          <div class="row-select">
+            <div class="row-info">
+              <div class="row-title">SMS</div>
+              <div class="row-desc">
+                Urgent alerts only, to your verified number
+              </div>
+            </div>
+            <select aria-label="SMS alerts">
+              <option selected>Urgent only</option>
+              <option>Off</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Activity -->
+      <div class="section">
+        <div class="section-label">Activity</div>
+        <div class="card">
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Comments</div>
+              <div class="row-desc">
+                When someone replies to something you wrote
+              </div>
+            </div>
+            <label class="toggle" aria-label="Comments">
+              <input type="checkbox" checked />
+              <span class="toggle-track"
+                ><span class="toggle-knob"></span
+              ></span>
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Mentions</div>
+              <div class="row-desc">
+                When your name appears in a comment or document
+              </div>
+            </div>
+            <label class="toggle" aria-label="Mentions">
+              <input type="checkbox" checked />
+              <span class="toggle-track"
+                ><span class="toggle-knob"></span
+              ></span>
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Reactions</div>
+              <div class="row-desc">Upvotes and responses to your content</div>
+            </div>
+            <label class="toggle" aria-label="Reactions">
+              <input type="checkbox" />
+              <span class="toggle-track"
+                ><span class="toggle-knob"></span
+              ></span>
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Assignments</div>
+              <div class="row-desc">When a task or item is assigned to you</div>
+            </div>
+            <label class="toggle" aria-label="Assignments">
+              <input type="checkbox" checked />
+              <span class="toggle-track"
+                ><span class="toggle-knob"></span
+              ></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Team and admin -->
+      <div class="section">
+        <div class="section-label">Team</div>
+        <div class="card">
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Membership changes</div>
+              <div class="row-desc">
+                When someone joins or leaves your workspace
+              </div>
+            </div>
+            <label class="toggle" aria-label="Membership changes">
+              <input type="checkbox" checked />
+              <span class="toggle-track"
+                ><span class="toggle-knob"></span
+              ></span>
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Role changes</div>
+              <div class="row-desc">
+                When a member's permissions are updated
+              </div>
+            </div>
+            <label class="toggle" aria-label="Role changes">
+              <input type="checkbox" checked />
+              <span class="toggle-track"
+                ><span class="toggle-knob"></span
+              ></span>
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Billing events</div>
+              <div class="row-desc">
+                Renewals, failed payments, and plan changes
+              </div>
+            </div>
+            <label class="toggle" aria-label="Billing events">
+              <input type="checkbox" checked />
+              <span class="toggle-track"
+                ><span class="toggle-knob"></span
+              ></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- System -->
+      <div class="section">
+        <div class="section-label">System</div>
+        <div class="card">
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Security alerts</div>
+              <div class="row-desc">
+                New sign-ins, password changes, connected apps
+              </div>
+            </div>
+            <label class="toggle" aria-label="Security alerts">
+              <input type="checkbox" checked />
+              <span class="toggle-track"
+                ><span class="toggle-knob"></span
+              ></span>
+            </label>
+          </div>
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Product updates</div>
+              <div class="row-desc">New features that affect how you work</div>
+            </div>
+            <label class="toggle" aria-label="Product updates">
+              <input type="checkbox" />
+              <span class="toggle-track"
+                ><span class="toggle-knob"></span
+              ></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quiet hours -->
+      <div class="section">
+        <div class="section-label">Quiet hours</div>
+        <div class="card">
+          <div class="row">
+            <div class="row-info">
+              <div class="row-title">Pause push and SMS</div>
+              <div class="row-desc" id="quiet-desc">
+                Set a window when notifications will not arrive
+              </div>
+            </div>
+            <label class="toggle" aria-label="Pause push and SMS">
+              <input type="checkbox" id="quiet-toggle" />
+              <span class="toggle-track"
+                ><span class="toggle-knob"></span
+              ></span>
+            </label>
+          </div>
+          <div id="quiet-details">
+            <div class="time-row">
+              <span class="time-label">From</span>
+              <select aria-label="Quiet hours start time">
+                <option>8:00 PM</option>
+                <option>9:00 PM</option>
+                <option>10:00 PM</option>
+                <option selected>11:00 PM</option>
+                <option>Midnight</option>
+              </select>
+            </div>
+            <div class="time-row">
+              <span class="time-label">Until</span>
+              <select aria-label="Quiet hours end time">
+                <option>5:00 AM</option>
+                <option>6:00 AM</option>
+                <option selected>7:00 AM</option>
+                <option>8:00 AM</option>
+                <option>9:00 AM</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="save-bar">
+        <button class="btn-save" id="save-btn">Save preferences</button>
+        <span class="saved-text" id="saved-label">Saved</span>
+      </div>
+
+      <p class="footnote">
+        To stop all email from us, <a href="#">unsubscribe here</a>. Security
+        alerts cannot be turned off.
+      </p>
+    </div>
+
+    <script>
+      // Quiet hours reveal
+      const quietToggle = document.getElementById("quiet-toggle");
+      const quietDetails = document.getElementById("quiet-details");
+
+      quietToggle.addEventListener("change", () => {
+        quietDetails.style.display = quietToggle.checked ? "block" : "none";
+      });
+
+      // Save feedback
+      document.getElementById("save-btn").addEventListener("click", () => {
+        const label = document.getElementById("saved-label");
+        label.classList.add("show");
+        clearTimeout(label._t);
+        label._t = setTimeout(() => label.classList.remove("show"), 2200);
+      });
+    </script>
+  </body>
+</html>

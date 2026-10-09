@@ -1,0 +1,567 @@
+#!/usr/bin/env python3
+"""Look at the thing the way the person using it will, and report back blind.
+
+    ux-viewer render page.html --out shot.png
+    ux-viewer probe shot.png --intent intent.json
+    ux-viewer check page.html --intent intent.json      render + probe + diff
+
+WHY THIS EXISTS. Every generator in research/11 writes markup and never sees
+the result. A designer's actual loop is: make it, look at it, notice what your
+eye did first, fix that. The looking is the craft. This closes that loop.
+
+WHY THE VIEWER IS BLIND. research/13: reward models overweight typical outputs,
+alpha-hat 0.57, p < 1e-14. So an LLM asked "is this design good" rates the most
+median candidate highest, and a critic that can see the intent will confirm the
+intent. Both failures come from asking for a judgement.
+
+This asks for a REPORT instead: where did your eye land, what is this for, what
+are you meant to do, what made you stop. Those have correct answers relative to
+declared intent, and none of them is an aesthetic preference, so typicality bias
+has no purchase on them.
+
+The probe process is given the image and nothing else. No brief, no code, no
+intent, no filename that gives it away. What it says is evidence about the
+artifact rather than agreement with the author.
+
+ANY GRAIN. A button, a page, one step of a flow, four steps side by side. The
+probe does not care; it asks a viewer's questions about whatever is in frame.
+"""
+import argparse
+import json
+import pathlib
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+
+CHROME_CANDIDATES = [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    shutil.which("chromium") or "",
+    shutil.which("google-chrome") or "",
+]
+
+# Asked of the image alone. Deliberately a viewer's questions, not a critic's.
+PROBE = """Look at this screenshot. You are seeing it for the first time, the way
+someone would who just landed on it. Answer from that position only. Do not
+evaluate the design and do not say whether you like it.
+
+Answer as strict JSON, no markdown fence, with exactly these keys:
+
+{
+  "first_look": "the single element your eye lands on first",
+  "look_order": ["the next 3 to 5 things you look at, in order"],
+  "purpose": "what this is for, in one sentence, as far as you can tell",
+  "primary_action": "the one thing this wants you to do, or null if unclear",
+  "primary_action_confidence": "high | medium | low",
+  "clickable": ["everything that reads as pressable or interactive"],
+  "friction": ["anything you had to re-read, could not parse, or would hesitate over"],
+  "unreadable": ["any text too small or too low contrast to read comfortably"],
+  "guess_at_audience": "who this appears to be built for"
+}
+
+Report what you actually perceive, including when that is 'I cannot tell'.
+An honest 'unclear' is more useful than a confident guess."""
+
+
+def find_chrome():
+    for c in CHROME_CANDIDATES:
+        if c and pathlib.Path(c).exists():
+            return c
+    return None
+
+
+def render(html_path, out_png, width=1280, height=900, full=False, settle=3500):
+    """Render AFTER the page has finished animating in.
+
+    THE BUG THIS FIXES, 2026-09-20. The previous version screenshotted the
+    instant Chrome finished loading. On uselemma.ai that captured a nearly
+    empty page: every wireframe plot animates in, so the screenshot caught
+    blank frames, and the analysis written from it described "massive negative
+    space" on a page that is actually dense. Caleb caught it.
+
+    Every blind probe run before this fix may have been reading an unfinished
+    page, which makes its findings unreliable rather than merely noisy.
+
+    --virtual-time-budget is NOT the fix and was tried: it fast-forwards the
+    clock and froze the same page mid-headline, which is worse because it
+    looks deliberate.
+
+    What works is a real browser and real wall-clock time: wait for network
+    idle, then wait again for entrance animations that start on load or on
+    intersection. `settle` is that second wait.
+    """
+    src = pathlib.Path(html_path)
+    out = pathlib.Path(out_png).resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    url = src if str(src).startswith("http") else src.resolve().as_uri()
+
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("BLOCKED: pip3 install playwright && playwright install chromium",
+              file=sys.stderr)
+        return False
+
+    with sync_playwright() as pw:
+        # Use the Chrome already on the machine rather than making the user
+        # download Playwright's 150MB bundle. Falls back to the bundle if the
+        # system channel is missing.
+        try:
+            browser = pw.chromium.launch(channel="chrome",
+                                         args=["--hide-scrollbars"])
+        except Exception:
+            browser = pw.chromium.launch(args=["--hide-scrollbars"])
+        page = browser.new_page(viewport={"width": width, "height": height})
+        try:
+            page.goto(str(url), wait_until="networkidle", timeout=45000)
+        except Exception:
+            # networkidle never settles on a page with polling or live sockets.
+            # A page that keeps talking is still a page worth looking at.
+            try:
+                page.goto(str(url), wait_until="load", timeout=45000)
+            except Exception as e:                       # noqa: BLE001
+                print(f"navigation failed: {e}", file=sys.stderr)
+                browser.close()
+                return False
+        page.wait_for_timeout(settle)
+        # Scroll-triggered entrances never fire if nothing ever scrolls, so
+        # nudge the page and come back before capturing the fold.
+        if not full:
+            page.mouse.wheel(0, height // 2)
+            page.wait_for_timeout(600)
+            page.mouse.wheel(0, -height // 2)
+            page.wait_for_timeout(900)
+        page.screenshot(path=str(out), full_page=full)
+        browser.close()
+    return out.exists() and out.stat().st_size > 0
+
+
+MOTION_JS = """
+(() => {
+  const seen = [];
+  const grab = () => {
+    for (const a of document.getAnimations()) {
+      let t = {};
+      try { t = a.effect ? a.effect.getTiming() : {}; } catch (e) {}
+      let target = "";
+      try {
+        const el = a.effect && a.effect.target;
+        if (el) target = (el.tagName || "").toLowerCase() +
+          (el.className && el.className.baseVal === undefined && typeof el.className === "string"
+            ? "." + el.className.split(" ").slice(0, 2).join(".") : "");
+      } catch (e) {}
+      seen.push({
+        id: a.id || "", target: target,
+        dur: typeof t.duration === "number" ? t.duration : null,
+        delay: t.delay || 0,
+        easing: t.easing || "",
+        iterations: t.iterations === Infinity ? "infinite" : t.iterations,
+        kind: a.constructor ? a.constructor.name : "",
+        prop: (a.transitionProperty || a.animationName || "")
+      });
+    }
+  };
+  grab();
+  return seen;
+})()
+"""
+
+
+def motion_report(url, out_dir, frames=10, span=4000, width=1280, height=900):
+    """Watch it move. A still frame cannot tell you whether motion is any good.
+
+    Caleb, 2026-09-20: "you should be able to know how gas the animations are
+    here." Every instrument in this repo until now read one frame, which is
+    the same mistake as judging a song from a spectrogram slice.
+
+    Two things get captured, because neither alone is enough:
+
+      THE NUMBERS, from document.getAnimations(). Every running animation with
+      its real duration, delay and easing, as the browser resolved it. This is
+      what the page actually does, not what the source says it intends. It
+      catches durations a minified bundle hides and it catches animations
+      injected by a library.
+
+      THE FRAMES, one strip across the entrance. Consecutive frames get
+      differenced so the motion envelope is visible as a number per frame: how
+      much of the page was still changing, and when it settled.
+
+    A page that is still moving at the last frame has not settled, and that is
+    both a craft finding and the reason every screenshot before this was
+    unreliable.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        print("BLOCKED: pip3 install playwright", file=sys.stderr)
+        return None
+    out = pathlib.Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    shots, anims = [], []
+    step = span / max(frames - 1, 1)
+
+    with sync_playwright() as pw:
+        try:
+            b = pw.chromium.launch(channel="chrome", args=["--hide-scrollbars"])
+        except Exception:
+            b = pw.chromium.launch(args=["--hide-scrollbars"])
+        page = b.new_page(viewport={"width": width, "height": height})
+        target = url if str(url).startswith("http") else pathlib.Path(url).resolve().as_uri()
+        try:
+            page.goto(str(target), wait_until="commit", timeout=45000)
+        except Exception as e:                            # noqa: BLE001
+            print(f"navigation failed: {e}", file=sys.stderr)
+            b.close()
+            return None
+        for i in range(frames):
+            f = out / f"f{i:02d}.png"
+            page.screenshot(path=str(f))
+            shots.append((i * step, f))
+            try:
+                anims.extend(page.evaluate(MOTION_JS) or [])
+            except Exception:
+                pass
+            page.wait_for_timeout(step)
+        # prefers-reduced-motion, asked of the same page
+        reduced = None
+        try:
+            page.emulate_media(reduced_motion="reduce")
+            page.reload(wait_until="load", timeout=30000)
+            page.wait_for_timeout(1200)
+            reduced = len(page.evaluate(MOTION_JS) or [])
+        except Exception:
+            pass
+        b.close()
+
+    # De-duplicate: the same animation is seen on many polls.
+    uniq = {}
+    for a in anims:
+        k = (a.get("target"), a.get("dur"), a.get("easing"), a.get("prop"))
+        uniq[k] = a
+    return {"frames": shots, "animations": list(uniq.values()),
+            "reduced_motion_count": reduced}
+
+
+def frame_deltas(shots):
+    """Fraction of bytes changed between consecutive frames, as a motion envelope.
+
+    Crude on purpose and dependency-free: PNG size and byte difference track
+    visual change closely enough to say WHEN the page was moving and when it
+    stopped, which is the question being asked.
+    """
+    out = []
+    prev = None
+    for t, f in shots:
+        b = f.read_bytes()
+        if prev is None:
+            out.append((t, None))
+        else:
+            n = min(len(b), len(prev))
+            diff = sum(1 for i in range(0, n, 97) if b[i] != prev[i])
+            out.append((t, diff / max(n // 97, 1)))
+        prev = b
+    return out
+
+
+def probe(png_path, model="sonnet"):
+    """Hand the image to a fresh process that knows nothing else about it."""
+    png = pathlib.Path(png_path).resolve()
+    with tempfile.TemporaryDirectory() as work:
+        # Neutral filename: 'pricing-page-variant-3.png' would leak the answer
+        # to the two questions the probe exists to ask.
+        staged = pathlib.Path(work) / "screenshot.png"
+        shutil.copy(png, staged)
+        r = subprocess.run(
+            ["claude", "-p", "--model", model,
+             f"Read the image at {staged} and then answer.\n\n{PROBE}"],
+            capture_output=True, text=True, timeout=600, cwd=work)
+    txt = r.stdout.strip()
+    m = re.search(r"\{.*\}", txt, re.S)
+    if not m:
+        return {"error": "no json from probe", "raw": txt[-500:]}
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        return {"error": f"bad json: {e}", "raw": m.group(0)[:500]}
+
+
+PREDICT = """Here is the source of a page that is about to be shown to someone
+who has never seen it and knows nothing about it.
+
+<source>
+{src}
+</source>
+
+PREDICT what that first-time viewer will report. Do not evaluate the design
+and do not say what the page intends. Say what you expect a person to actually
+perceive in the first seconds.
+
+Strict JSON, no fence, exactly these keys:
+
+{{
+  "first_look": "the single element you predict their eye lands on first",
+  "purpose": "what you predict they will say this is for, one sentence",
+  "primary_action": "what you predict they will name as the main action, or null",
+  "friction_count": "how many things you predict they will hesitate over, as a number",
+  "confidence": "high | medium | low"
+}}"""
+
+
+def predict(html_path, model="sonnet"):
+    """Form an expectation BEFORE looking. Without one there is no surprise.
+
+    Schultz: dopamine neurons fire for UNPREDICTED reward, not for reward. The
+    signal driving learning is the gap between expected and received, and a
+    system that never predicts has no gap to learn from. Every probe in this
+    repo until now was reported at equal weight, so a result confirming what
+    was already obvious counted the same as one that overturned it.
+
+    This half sees the SOURCE, unlike bin/ux-viewer's probe which sees only a
+    screenshot. That asymmetry is the point: the prediction is what someone
+    who built the thing believes about it, and the probe is what a stranger
+    actually perceives. Where they disagree is the finding.
+    """
+    src = pathlib.Path(html_path).read_text(errors="ignore")
+    if len(src) > 60000:
+        src = src[:60000] + "\n<!-- truncated -->"
+    with tempfile.TemporaryDirectory() as work:
+        r = subprocess.run(["claude", "-p", "--model", model,
+                            PREDICT.format(src=src)],
+                           capture_output=True, text=True, timeout=600, cwd=work)
+    m = re.search(r"\{.*\}", r.stdout, re.S)
+    if not m:
+        return None
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
+def surprise(pred, report):
+    """Only the disagreements. Confirmations are not findings."""
+    if not pred or report.get("error"):
+        return None
+    out = []
+
+    def cmp(key, label):
+        a = (pred.get(key) or "").lower().strip()
+        b = (report.get(key) or "").lower().strip()
+        if not a and not b:
+            return
+        if bool(a) != bool(b) or not _overlap(a, b):
+            out.append({"field": label, "expected": pred.get(key),
+                        "observed": report.get(key)})
+
+    cmp("first_look", "where the eye lands")
+    cmp("primary_action", "the main action")
+    cmp("purpose", "what it reads as")
+
+    try:
+        want = int(str(pred.get("friction_count", 0)).strip() or 0)
+    except ValueError:
+        want = 0
+    got = len(report.get("friction") or []) + len(report.get("unreadable") or [])
+    if abs(got - want) >= 2:
+        out.append({"field": "friction", "expected": want, "observed": got})
+    return out
+
+
+def diff(intent, report):
+    """Where the viewer's report and the declared intent disagree.
+
+    Each gap names a location, because a finding with nowhere to go gets read
+    once and ignored. research/16: a reviewer that cannot say where is a
+    dashboard, and dashboards get turned off.
+    """
+    gaps = []
+    if report.get("error"):
+        return [{"kind": "probe-failed", "detail": report["error"]}]
+
+    want_action = (intent.get("primary_action") or "").lower().strip()
+    got_action = (report.get("primary_action") or "").lower().strip()
+    if want_action:
+        if not got_action:
+            gaps.append({"kind": "primary-action-invisible", "where": "the page as a whole",
+                         "detail": f"nothing read as the main action; intended {want_action!r}"})
+        elif not _overlap(want_action, got_action):
+            gaps.append({"kind": "primary-action-wrong", "where": got_action,
+                         "detail": f"viewer read {got_action!r} as the main action, "
+                                   f"intended {want_action!r}"})
+        elif report.get("primary_action_confidence") == "low":
+            gaps.append({"kind": "primary-action-weak", "where": got_action,
+                         "detail": "found, but the viewer was unsure it was the main action"})
+
+    want_first = (intent.get("first_look") or "").lower().strip()
+    got_first = (report.get("first_look") or "").lower().strip()
+    if want_first and got_first and not _overlap(want_first, got_first):
+        gaps.append({"kind": "attention-misdirected", "where": got_first,
+                     "detail": f"eye went to {got_first!r}, intended {want_first!r}"})
+
+    want_purpose = (intent.get("purpose") or "").lower()
+    got_purpose = (report.get("purpose") or "").lower()
+    if want_purpose and got_purpose and not _overlap(want_purpose, got_purpose, need=2):
+        gaps.append({"kind": "purpose-unclear", "where": "the page as a whole",
+                     "detail": f"viewer read it as {got_purpose!r}"})
+
+    for f in report.get("friction") or []:
+        gaps.append({"kind": "friction", "where": f, "detail": "viewer hesitated here"})
+    for u in report.get("unreadable") or []:
+        gaps.append({"kind": "unreadable", "where": u,
+                     "detail": "too small or too low contrast to read comfortably"})
+    return gaps
+
+
+STOP = {"the", "a", "an", "to", "of", "for", "and", "or", "your", "this",
+        "that", "with", "on", "in", "is", "it", "button", "page", "up"}
+
+
+def _overlap(a, b, need=1):
+    wa = {w for w in re.findall(r"[a-z]+", a) if w not in STOP and len(w) > 2}
+    wb = {w for w in re.findall(r"[a-z]+", b) if w not in STOP and len(w) > 2}
+    return len(wa & wb) >= need
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    r = sub.add_parser("render"); r.add_argument("html"); r.add_argument("--out", required=True)
+    r.add_argument("--settle", type=int, default=3500)
+    r.add_argument("--width", type=int, default=1280); r.add_argument("--height", type=int, default=900)
+    r.add_argument("--full", action="store_true")
+
+    p = sub.add_parser("probe"); p.add_argument("png"); p.add_argument("--intent")
+    p.add_argument("--model", default="sonnet"); p.add_argument("--json", action="store_true")
+
+    mo = sub.add_parser("motion"); mo.add_argument("url")
+    mo.add_argument("--out", default=None); mo.add_argument("--frames", type=int, default=10)
+    mo.add_argument("--span", type=int, default=4000)
+
+    c = sub.add_parser("check"); c.add_argument("html"); c.add_argument("--intent", required=True)
+    c.add_argument("--model", default="sonnet"); c.add_argument("--json", action="store_true")
+    c.add_argument("--full", action="store_true")
+    c.add_argument("--predict", action="store_true",
+                   help="predict the probe first and report only the surprises")
+
+    a = ap.parse_args()
+
+    if a.cmd == "render":
+        return 0 if render(a.html, a.out, a.width, a.height, a.full) else 1
+
+    if a.cmd == "motion":
+        out = a.out or tempfile.mkdtemp(prefix="uxmotion-")
+        r = motion_report(a.url, out, a.frames, a.span)
+        if not r:
+            return 1
+        deltas = frame_deltas(r["frames"])
+        print("MOTION ENVELOPE   how much of the page was still changing")
+        for t, d in deltas:
+            if d is None:
+                print(f"  {int(t):>5}ms   (first frame)")
+            else:
+                bar = "#" * int(round(d * 60))
+                print(f"  {int(t):>5}ms   {d*100:5.1f}%  {bar}")
+        settled = [t for t, d in deltas if d is not None and d < 0.01]
+        if settled:
+            print(f"\n  settles around {int(settled[0])}ms")
+        else:
+            print("\n  NEVER SETTLES in the window. Either a long entrance or "
+                  "something loops forever.")
+
+        A = r["animations"]
+        print(f"\n{len(A)} DISTINCT ANIMATION(S), as the browser resolved them")
+        durs = sorted({a["dur"] for a in A if isinstance(a.get("dur"), (int, float))})
+        eas = {}
+        for a in A:
+            if a.get("easing"):
+                eas[a["easing"]] = eas.get(a["easing"], 0) + 1
+        inf = sum(1 for a in A if a.get("iterations") == "infinite")
+        if durs:
+            print(f"  durations  {', '.join(str(int(d)) + 'ms' for d in durs[:12])}")
+            print(f"  tiers      {len(durs)} distinct. One tier for everything means "
+                  f"the frequent motion is too slow or the rare motion too fast.")
+        for e, n in sorted(eas.items(), key=lambda kv: -kv[1])[:6]:
+            print(f"  {n:>4}x  {e}")
+        if inf:
+            print(f"  {inf} infinite loop(s). At that repetition any personality "
+                  f"in the curve becomes a tic.")
+
+        rc = r.get("reduced_motion_count")
+        print()
+        if rc is None:
+            print("REDUCED MOTION   could not be tested")
+        elif rc == 0:
+            print("REDUCED MOTION   respected: 0 animations under reduce")
+        else:
+            print(f"REDUCED MOTION   NOT RESPECTED: {rc} animation(s) still run "
+                  f"under prefers-reduced-motion: reduce.")
+            print("  research/03: reduce, do not delete. Keep opacity and colour, "
+                  "drop transforms, shorten rather than setting animation: none.")
+        print(f"\nframes in {out}")
+        return 0
+
+    if a.cmd == "probe":
+        rep = probe(a.png, a.model)
+        if a.intent:
+            gaps = diff(json.loads(pathlib.Path(a.intent).read_text()), rep)
+            return _emit(rep, gaps, a.json)
+        print(json.dumps(rep, indent=2))
+        return 0
+
+    if a.cmd == "check":
+        intent = json.loads(pathlib.Path(a.intent).read_text())
+        with tempfile.TemporaryDirectory() as t:
+            png = pathlib.Path(t) / "shot.png"
+            if not render(a.html, png, full=a.full):
+                return 1
+            rep = probe(png, a.model)
+        gaps = diff(intent, rep)
+        if a.predict:
+            pre = predict(a.html, a.model)
+            sur = surprise(pre, rep)
+            if sur is None:
+                print("prediction failed; reporting the probe alone\n")
+            elif not sur:
+                print("NO SURPRISE. The probe said what was predicted, so this "
+                      "run taught nothing.\nThat is a result: the page behaves "
+                      "as its source suggests.\n")
+            else:
+                print(f"{len(sur)} SURPRISE(S). Predicted from the source, "
+                      f"contradicted by a viewer who only saw pixels.")
+                for x in sur:
+                    print(f"  {x['field']}")
+                    print(f"      expected  {x['expected']}")
+                    print(f"      observed  {x['observed']}")
+                print()
+        return _emit(rep, gaps, a.json)
+
+
+def _emit(rep, gaps, as_json):
+    if as_json:
+        print(json.dumps({"report": rep, "gaps": gaps}, indent=2))
+    else:
+        print("WHAT A FIRST-TIME VIEWER SAW")
+        print(f"  first look      {rep.get('first_look')}")
+        print(f"  look order      {' -> '.join(rep.get('look_order') or []) or '-'}")
+        print(f"  read it as      {rep.get('purpose')}")
+        print(f"  main action     {rep.get('primary_action')} "
+              f"({rep.get('primary_action_confidence')})")
+        print(f"  built for       {rep.get('guess_at_audience')}")
+        print()
+        if not gaps:
+            print("NO GAPS. The viewer saw what was intended.")
+        else:
+            print(f"{len(gaps)} GAP(S) BETWEEN INTENT AND WHAT WAS SEEN")
+            for g in gaps:
+                print(f"  [{g['kind']}] {g.get('where','')}")
+                print(f"      {g['detail']}")
+    hard = [g for g in gaps if g["kind"].startswith("primary-action")
+            or g["kind"] in ("attention-misdirected", "purpose-unclear", "probe-failed")]
+    return 1 if hard else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

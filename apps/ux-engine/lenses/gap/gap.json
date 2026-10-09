@@ -1,0 +1,108 @@
+{
+ "reference": {
+  "url": "https://uselemma.ai",
+  "height": 17852,
+  "anims": {
+   "strokeDashoffset [>1500ms] loop": 4,
+   "transform [700-1500ms] loop": 2,
+   "width [>1500ms] once": 2,
+   "opacity [350-700ms] once": 2,
+   "opacity,strokeDashoffset [700-1500ms] once": 48,
+   "opacity,strokeDashoffset [350-700ms] once": 60,
+   "strokeDashoffset [700-1500ms] once": 101,
+   "opacity [>1500ms] loop": 1
+  },
+  "trans": {
+   "opacity [350-700ms]": 9,
+   "transform [150-350ms]": 2,
+   "opacity [150-350ms]": 52,
+   "color [150-350ms]": 58,
+   "background-color [150-350ms]": 57,
+   "border-color [150-350ms]": 48,
+   "outline-color [150-350ms]": 48,
+   "text-decoration-color [150-350ms]": 48,
+   "fill [150-350ms]": 48,
+   "stroke [150-350ms]": 48,
+   "--tw-gradient-from [150-350ms]": 48,
+   "--tw-gradient-via [150-350ms]": 48,
+   "--tw-gradient-to [150-350ms]": 48,
+   "box-shadow [150-350ms]": 9,
+   "scale [150-350ms]": 9,
+   "height [150-350ms]": 1,
+   "padding [150-350ms]": 1,
+   "transform [350-700ms]": 8,
+   "translate [350-700ms]": 17,
+   "scale [350-700ms]": 6,
+   "rotate [350-700ms]": 6,
+   "cx [150-350ms]": 842,
+   "cy [150-350ms]": 842,
+   "filter [150-350ms]": 1,
+   "mask-image [350-700ms]": 1,
+   "-webkit-mask-image [350-700ms]": 1,
+   "opacity [700-1500ms]": 4,
+   "border-color [350-700ms]": 11,
+   "clip-path [150-350ms]": 14,
+   "opacity [<150ms]": 4,
+   "transform [<150ms]": 4
+  },
+  "sections": [
+   [
+    0,
+    400
+   ],
+   [
+    800,
+    1200
+   ],
+   [
+    1600,
+    4000
+   ],
+   [
+    4400,
+    4800
+   ],
+   [
+    5200,
+    17600
+   ]
+  ]
+ },
+ "ours": {
+  "url": "http://localhost:8731/index.html",
+  "height": 16386,
+  "anims": {
+   "opacity,transform [350-700ms] once": 8,
+   "strokeDashoffset [700-1500ms] once": 440,
+   "opacity [350-700ms] once": 2,
+   "opacity,strokeDashoffset [350-700ms] once": 1728
+  },
+  "trans": {
+   "color [150-350ms]": 35,
+   "background-color [150-350ms]": 18,
+   "border-color [150-350ms]": 18,
+   "cx [150-350ms]": 1684,
+   "cy [150-350ms]": 1684,
+   "opacity [150-350ms]": 12,
+   "translate [150-350ms]": 2
+  },
+  "sections": [
+   [
+    0,
+    400
+   ],
+   [
+    800,
+    10000
+   ],
+   [
+    10400,
+    12800
+   ],
+   [
+    13200,
+    16000
+   ]
+  ]
+ }
+}

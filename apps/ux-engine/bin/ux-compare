@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""Build an offline, unscored comparison of matched scene captures.
+
+ux-compare manifest.json --out comparison.html [--blind]
+See research/COMPARE.md for the manifest format.
+"""
+import argparse
+import base64
+import io
+import json
+import math
+import pathlib
+import secrets
+import sys
+
+from PIL import Image, UnidentifiedImageError
+
+
+def picture(value, base, viewport):
+    if isinstance(value, str):
+        value = {"path": value}
+    if not isinstance(value, dict) or not isinstance(value.get("path"), str):
+        raise ValueError("each pair needs reference and candidate image paths")
+    path = base / value["path"]
+    with Image.open(path) as source:
+        source.load()
+        if source.size != viewport:
+            raise ValueError(f"{path}: dimensions {source.size} differ from viewport {viewport}")
+        rgba = source.convert("RGBA")
+        rendered = Image.new("RGBA", rgba.size, "white")
+        rendered.alpha_composite(rgba)
+        rendered = rendered.convert("RGB")
+        if all(low == high for low, high in rendered.getextrema()):
+            raise ValueError(f"{path}: blank (uniform) image")
+        encoded = io.BytesIO()
+        rendered.save(encoded, format="PNG")
+    metadata = {}
+    for key in ("scroll_y", "time_ms"):
+        if key in value:
+            number = value[key]
+            if isinstance(number, bool) or not isinstance(number, (int, float)) or not math.isfinite(number):
+                raise ValueError(f"{path}: {key} must be a finite number")
+            metadata[key] = number
+    return {"image": "data:image/png;base64," + base64.b64encode(encoded.getvalue()).decode(),
+            "metadata": metadata}
+
+
+def prepare(manifest, base, blind=False):
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("checkpoints"), list) or not manifest["checkpoints"]:
+        raise ValueError("manifest needs a nonempty checkpoints list")
+    result, seen = [], set()
+    swapped = blind and bool(secrets.randbits(1))
+    for index, point in enumerate(manifest["checkpoints"]):
+        if not isinstance(point, dict):
+            raise ValueError("checkpoint must be an object")
+        ident, label = point.get("id"), point.get("label")
+        if not isinstance(ident, str) or not ident or ident in seen or not isinstance(label, str) or not label:
+            raise ValueError("checkpoint needs a unique nonempty id and a nonempty label")
+        seen.add(ident)
+        viewport = point.get("viewport", {})
+        if not isinstance(viewport, dict):
+            raise ValueError(f"{ident}: viewport must contain width and height")
+        size = (viewport.get("width"), viewport.get("height"))
+        if any(type(n) is not int or n <= 0 for n in size):
+            raise ValueError(f"{ident}: viewport width and height must be positive integers")
+        pair = [picture(point.get(key), base, size) for key in ("reference", "candidate")]
+        if swapped:
+            pair.reverse()
+        if blind:
+            for image in pair:
+                image["metadata"] = {}
+        result.append({"id": ident, "label": label, "width": size[0], "height": size[1], "pair": pair})
+    return {"labels": ["A", "B"] if blind else ["Reference", "Candidate"], "checkpoints": result}
+
+
+PAGE = r'''<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Matched scene comparison</title>
+<style>
+body{margin:24px;font:16px system-ui;background:#17191d;color:#eee}header{max-width:960px}
+button,select,input{font:inherit}label{display:inline-block;margin:8px 16px 8px 0}
+#checkpoint{width:min(460px,70vw)}#panels{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+figure{margin:0;min-width:0}figcaption{padding:8px 0}img{display:block;width:100%;height:auto}
+#stack{position:relative;display:none;max-width:100%;margin:auto}#upper{position:absolute;inset:0}
+body.overlay #panels{display:none}body.overlay #stack{display:block}#meta{white-space:pre-wrap;color:#c1c7d0}
+@media(max-width:650px){#panels{grid-template-columns:1fr}}
+</style>
+<header><h1>Matched scene comparison</h1>
+<p>Checkpoints match the scene being judged, not absolute scroll distance. Scroll positions and times may differ. No automatic score.</p>
+<label>Checkpoint <input id="checkpoint" type="range" min="0" value="0" step="1"></label>
+<button id="previous" type="button">Previous</button> <button id="next" type="button">Next</button>
+<label>View <select id="mode"><option value="side">Side by side</option><option value="overlay">Overlay</option></select></label>
+<label>Second image opacity <input id="opacity" type="range" min="0" max="100" value="50"></label>
+<p id="status" role="status"></p><h2 id="scene" aria-live="polite"></h2><p id="meta"></p></header>
+<main><div id="panels"><figure><figcaption id="leftLabel"></figcaption><img id="left"></figure>
+<figure><figcaption id="rightLabel"></figcaption><img id="right"></figure></div>
+<div id="stack"><img id="lower"><img id="upper"></div></main>
+<script id="comparison-data" type="application/json">__DATA__</script>
+<script>
+const data=JSON.parse(document.getElementById('comparison-data').textContent);
+const byId=id=>document.getElementById(id);
+byId('checkpoint').max=data.checkpoints.length-1;
+let request=0;
+function show(){
+ const version=++request, index=Number(byId('checkpoint').value), p=data.checkpoints[index];
+ byId('status').textContent='Loading checkpoint…';
+ const images=['left','lower','right','upper'].map((id,i)=>{
+  const side=i<2?0:1, image=new Image();
+  image.id=id;image.alt=data.labels[side]+' — '+p.label;image.src=p.pair[side].image;
+  return image;
+ });
+ Promise.all(images.map(image=>image.decode())).then(()=>{
+ if(version!==request)return;
+ images[3].style.opacity=Number(byId('opacity').value)/100;
+ images.forEach(image=>byId(image.id).replaceWith(image));
+ byId('scene').textContent=p.label+' ('+(index+1)+' / '+data.checkpoints.length+')';
+ const metadata=[p.width+' × '+p.height+' pixels',...data.labels.map((name,i)=>name+': '+JSON.stringify(p.pair[i].metadata))];
+ byId('meta').textContent=metadata.join('\n');
+ byId('leftLabel').textContent=data.labels[0];byId('rightLabel').textContent=data.labels[1];
+ byId('stack').style.width=p.width+'px';
+ byId('previous').disabled=index===0;
+ byId('next').disabled=index===data.checkpoints.length-1;
+ byId('status').textContent='';
+ }).catch(()=>{if(version===request)byId('status').textContent='Image decoding failed; previous checkpoint retained.'});
+}
+function move(delta){byId('checkpoint').value=Math.max(0,Math.min(data.checkpoints.length-1,Number(byId('checkpoint').value)+delta));show()}
+byId('previous').addEventListener('click',()=>move(-1));
+byId('next').addEventListener('click',()=>move(1));
+document.addEventListener('keydown',event=>{
+ if(['INPUT','SELECT','TEXTAREA','BUTTON'].includes(event.target.tagName))return;
+ if(event.key==='ArrowLeft'||event.key==='ArrowRight'){event.preventDefault();move(event.key==='ArrowLeft'?-1:1)}
+});
+byId('checkpoint').addEventListener('input',show);
+byId('mode').addEventListener('change',()=>document.body.classList.toggle('overlay',byId('mode').value==='overlay'));
+byId('opacity').addEventListener('input',()=>byId('upper').style.opacity=Number(byId('opacity').value)/100);
+byId('upper').style.opacity=.5;show();
+</script></html>'''
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("manifest", type=pathlib.Path)
+    parser.add_argument("--out", required=True, type=pathlib.Path)
+    parser.add_argument("--blind", action="store_true", help="randomize sides once; label A/B without source paths")
+    args = parser.parse_args()
+    try:
+        data = prepare(json.loads(args.manifest.read_text()), args.manifest.resolve().parent, args.blind)
+        payload = json.dumps(data, ensure_ascii=True).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+        args.out.parent.mkdir(parents=True, exist_ok=True)
+        args.out.write_text(PAGE.replace("__DATA__", payload))
+    except (OSError, ValueError, UnidentifiedImageError, Image.DecompressionBombError) as error:
+        print(f"ux-compare: {error}", file=sys.stderr)
+        return 2
+    print(f"{args.out}: {len(data['checkpoints'])} matched checkpoints")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

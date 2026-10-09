@@ -204,6 +204,14 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(out.returncode, 1)
         self.assertIn("FAIL", out.stdout)
 
+    def test_bare_command_drills(self):
+        # No subcommand is the documented default (drill); it crashed on a
+        # missing --seed until 2026-10-10.
+        out = subprocess.run([sys.executable, str(ROOT / "bin/gtme-interview")],
+                             capture_output=True, text=True, timeout=30)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("timing:", out.stdout)
+
     def test_unknown_case_is_refused(self):
         out = subprocess.run([sys.executable, str(ROOT / "bin/gtme-interview"), "show", "nope"],
                              capture_output=True, text=True, timeout=30)

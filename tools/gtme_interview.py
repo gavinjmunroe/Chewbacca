@@ -377,7 +377,8 @@ def main(argv=None):
     elif cmd == "ask":
         question = args.question
     else:
-        rng = random.Random(args.seed)
+        # No subcommand means drill, and argparse never set drill's --seed then.
+        rng = random.Random(getattr(args, "seed", None))
         question = rng.choice(cases)["prompt"]
     result = answer_path(question, cases, procedures, registry)
     if cmd == "drill" and result["card"]:

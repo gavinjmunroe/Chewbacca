@@ -33,9 +33,23 @@ Then build it their way and stop.
 
 Start with the business outcome, its denominator, maturity window, and budget. Read existing client instructions and approved ICP before designing a workflow. Keep customer data and research corpora private.
 
+## Grading a campaign before it goes out
+
+Run the five gates in [the playbook's grading section](references/demand-gen-playbooks.md#grading-a-campaign-before-it-goes-out)
+in order, and record each verdict: the list scorecard (B or better, every row
+verified), the copy rubric (85 of 100 or better, every QA line passing), a
+recipient read that ends with nothing material left, a render of every variant
+against real leads with no blocking finding, and the four-item start card
+(verified count, sequence, ramp, each domain's health). A failed gate goes
+back to its own step. Grading never authorizes the send.
+
 ## Reuse before building
 
 Use list-audit and list-gate for inherited contacts. Locate the installed official Clay plugin and read its command help and relevant skills before assuming capabilities. Probe account and workspace identity. Native workflow APIs, table reads, browser operations, and paid enrichments have different capabilities and costs. Use the browser-use skill for verified gaps. Search the private research corpus with `gtme-library --corpus PATH search 'query'`; retrieval is not evidence that the entire corpus was studied.
+
+Run `gtme-dedupe a.csv b.csv` before combining any two contact lists. It merges exact email (plus-tags stripped for Gmail-style providers only), LinkedIn slug and name plus domain, scores the rest with splink, and writes nothing until `--out DIR`.
+Pairs between `--review` (0.7) and `--auto` (0.95) go to `review.csv` for a person to decide, and one name at two companies does not merge. A summary that prints SPLINK DID NOT RUN removed exact duplicates only.
+Its match weights are hand-set rather than trained, so read `review.csv` on the first run against any new source.
 
 Maintain separate identity, execution, and evidence graphs. An account match does not prove current employment. A successful HTTP response does not prove the destination contains the intended rows. A source citation does not prove its claim is true.
 

@@ -401,6 +401,8 @@ if group "gtme"; then
   check "learning promotion requires paired holdouts and preserved regressions" python3 "$ROOT/tests/test_gtme_learning.py"
   check "Clay exports match the frozen fixture by stable identity" python3 "$ROOT/tests/test_clay_fixture_check.py"
   check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
+  check "gtme-dedupe merges one person across lists, never two on name alone" python3 "$ROOT/tests/test_gtme_dedupe.py"
+  check "gtme-dedupe dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-dedupe --help
 fi
 
 # ── team board ────────────────────────────────────────────────────────────────

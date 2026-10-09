@@ -131,6 +131,15 @@ with tempfile.TemporaryDirectory() as tmp:
     linked = sorted(os.listdir(f"{tmp}/home/.claude/skills"))
     check("a deep pack links nested skills and counts them", linked == ["a", "a2"] and "d: 2 skills linked" in out, (linked, out))
 
+# A pack with a rev is fetched at that commit, never at a moving HEAD
+# (security review of 788edb6b, 2026-10-09: unpinned third-party code).
+pinned = {"name": "r", "url": "https://x/r", "skip": [], "subdir": "skills",
+          "rev": "0123456789abcdef0123456789abcdef01234567", "note": []}
+block = inv.cli_block({}, [pinned])
+check("a pinned pack fetches its rev", "fetch -q --depth 1 \"https://x/r.git\" 0123456789abcdef" in block, block)
+check("a pinned pack never clones HEAD", "git clone" not in block[block.index("# Skill pack:"):], block)
+check("a pinned pack warns when an existing clone is elsewhere", "not at the vetted commit" in block, block)
+
 
 # ── the generated files themselves ───────────────────────────────────────────
 

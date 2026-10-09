@@ -36,6 +36,7 @@ STATE="$HOME/.chewbacca"
 # error all read this, so they cannot disagree with each other.
 COMMANDS=(
   "open|the whole kit on one screen"
+  "apps|list, run or test anything the team built (apps/)"
   "doctor|check the install and say what is broken"
   "status|what is installed, what is on, what is stale"
   "version|version installed here and in the repo"
@@ -164,6 +165,11 @@ jobs)
   # The machine queue. See bin/chewbacca-jobs.
   shift
   exec python3 "$ROOT/bin/chewbacca-jobs" "$@"
+  ;;
+apps)
+  # Everything the team builds lives in apps/, runnable by name.
+  shift
+  exec bash "$ROOT/bin/chewbacca-apps" "$@"
   ;;
 api)
   # Websites with no API, called over plain HTTP from operations learned off

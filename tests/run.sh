@@ -908,6 +908,10 @@ if group "installer"; then
   check  "the backlog keeps dead items and their reason" bash "$ROOT/tests/backlog.sh" "$ROOT" dead
 
   check  "a public install without a private backlog stays usable" bash "$ROOT/tests/backlog.sh" "$ROOT" absent
+  check  "chewbacca apps lists builds by name" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" list
+  check  "chewbacca apps runs an app's own tests" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" test
+  check  "chewbacca apps refuses an app it cannot start" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" missing
+  check  "lemma-replica ships inside the kit" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" real
 
   # A store nobody reads is the failure this whole file keeps finding.
   check  "SessionStart injects the backlog" \

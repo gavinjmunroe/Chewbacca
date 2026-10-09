@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# chewbacca apps: everything the team builds lives in apps/, and this is how
+# anyone runs it without knowing what it is made of.
+#
+# Caleb, 2026-10-09: "everything we make should be in chewbs especially that
+# lemma replica the team needs to be able to ball out". The replica sat in its
+# own repo under ~/code/work, so a teammate with Chewbacca had no way to find
+# it, let alone run it. One verb, three shapes it knows how to start: a node
+# app with a start script, a static site with an index.html, or a build.sh.
+#
+#   chewbacca apps                 list every app with a one-line description
+#   chewbacca apps run <name>      start it (static sites open in the browser)
+#   chewbacca apps test <name>     run its own tests
+#   chewbacca apps path <name>     print where it lives
+
+set -uo pipefail
+
+ROOT="${CHEWBACCA_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+APPS="$ROOT/apps"
+
+describe() {
+  local d="$1" line=""
+  if [ -f "$d/.project" ]; then
+    line="$(sed -n 's/^domain:[[:space:]]*//p' "$d/.project" | head -1)"
+  fi
+  if [ -z "$line" ] && [ -f "$d/package.json" ]; then
+    line="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("description",""))' "$d/package.json" 2>/dev/null)"
+  fi
+  if [ -z "$line" ] && [ -f "$d/README.md" ]; then
+    line="$(grep -v '^#' "$d/README.md" | grep -m1 -v '^[[:space:]]*$')"
+  fi
+  printf '%s' "${line:-no description yet}"
+}
+
+app_dir() {
+  local name="${1:-}"
+  if [ -z "$name" ]; then
+    echo "chewbacca apps: name an app. Run \`chewbacca apps\` for the list." >&2
+    exit 1
+  fi
+  if [ ! -d "$APPS/$name" ]; then
+    echo "chewbacca apps: no app called '$name' in $APPS" >&2
+    exit 1
+  fi
+  printf '%s' "$APPS/$name"
+}
+
+has_script() {
+  python3 -c 'import json,sys; sys.exit(0 if sys.argv[2] in json.load(open(sys.argv[1])).get("scripts",{}) else 1)' "$1/package.json" "$2" 2>/dev/null
+}
+
+cmd_list() {
+  local d name
+  for d in "$APPS"/*/; do
+    d="${d%/}"; name="$(basename "$d")"
+    printf '  %-16s %s\n' "$name" "$(describe "$d")"
+  done
+}
+
+cmd_run() {
+  local d port=""
+  d="$(app_dir "${1:-}")" || exit 1
+  shift
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --port) port="${2:-}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  if [ -f "$d/package.json" ] && has_script "$d" start; then
+    [ -d "$d/node_modules" ] || (cd "$d" && npm install --no-audit --no-fund) || exit 1
+    cd "$d" && exec npm start
+  elif [ -f "$d/index.html" ]; then
+    # 4310 is what lemma-replica's own README and browser test use, so the
+    # first static app keeps the port its tests already expect.
+    port="${port:-4310}"
+    local url="http://localhost:$port"
+    echo "Serving $(basename "$d") at $url (ctrl-c to stop)"
+    if command -v open >/dev/null 2>&1; then
+      (sleep 1 && open "$url") &
+    fi
+    cd "$d" && exec python3 -m http.server "$port"
+  elif [ -x "$d/build.sh" ]; then
+    cd "$d" && exec ./build.sh
+  else
+    echo "chewbacca apps: $(basename "$d") has no start script, index.html or build.sh" >&2
+    exit 1
+  fi
+}
+
+cmd_test() {
+  local d
+  d="$(app_dir "${1:-}")" || exit 1
+  if [ -f "$d/package.json" ] && has_script "$d" test; then
+    cd "$d" && exec npm test
+  elif [ -d "$d/tests" ]; then
+    # test_*.py are hermetic. Anything else in tests/ (browser.py) needs a
+    # running server and Playwright, so it is left to `apps run` plus a manual call.
+    cd "$d" && exec python3 -m pytest -q tests/test_*.py
+  else
+    echo "chewbacca apps: $(basename "$d") has no tests yet" >&2
+    exit 1
+  fi
+}
+
+case "${1:-list}" in
+  list|ls) cmd_list ;;
+  run|start|open) shift; cmd_run "$@" ;;
+  test) shift; cmd_test "$@" ;;
+  path|where) shift; app_dir "${1:-}"; echo ;;
+  -h|--help|help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *)
+    # `chewbacca apps lemma-replica` reads as "run it", so treat it that way.
+    if [ -d "$APPS/$1" ]; then cmd_run "$@"; else
+      echo "chewbacca apps: unknown '$1'. Try: list, run, test, path" >&2
+      exit 1
+    fi
+    ;;
+esac

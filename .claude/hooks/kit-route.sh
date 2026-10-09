@@ -132,7 +132,10 @@ def project_paths():
     except OSError:
         pass
     code = os.path.expanduser("~/code")
-    for root in (code, *(os.path.join(code, g) for g in ("kits", "amber", "work", "school", "personal", "tools")),
+    # Team builds live inside the kit now (apps/), so a teammate's clone finds
+    # lemma-replica wherever Chewbacca is checked out.
+    kit_apps = os.path.join(os.environ.get("CHEWBACCA_ROOT") or os.path.join(code, "chewbacca"), "apps")
+    for root in (kit_apps, code, *(os.path.join(code, g) for g in ("kits", "amber", "work", "school", "personal", "tools")),
                  os.path.expanduser("~/dev"), os.path.expanduser("~/Projects")):
         if not os.path.isdir(root):
             continue

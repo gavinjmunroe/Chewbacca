@@ -100,6 +100,13 @@ implying you found nothing.
   body without verifying ownership
 - A query returning rows that could belong to someone else
 - Logging that prints a token, a password, or personal data
+- Text that moves from one agent's context into another's (a shared board, a
+  handoff, a briefing file). Ask all four before the first commit: can it carry
+  markup that poses as the reader's own framing, can it carry a secret to a
+  different provider, which file or export does it end up in, and who else on
+  the machine can read its store. On 2026-10-09 the tab board shipped and then
+  took five rounds of security review, one finding per round, all four
+  questions, each answerable on the first read.
 
 **4. Error paths.** A swallowed exception is a bug, not a style choice. Expected
 failures (validation, a 404) and unexpected ones (the database is down) need

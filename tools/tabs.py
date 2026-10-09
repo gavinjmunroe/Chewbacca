@@ -91,11 +91,14 @@ TAG = re.compile(r'</?[A-Za-z][\w:-]*(?:\s[^<>]*)?>')
 
 
 def one_line(text, limit=TASK_CHARS):
-    text = SECRET.sub('[redacted]', ' '.join(str(text or '').split()))
+    text = ' '.join(str(text or '').split())
     # Another tab's text lands in this tab's context. Markup tags there (a
     # pasted_content or system-reminder block) would read as this tab's own
     # framing, and a bare quote would end the fence the board puts around it.
-    text = TAG.sub('', text).replace('"', "'")
+    # Then no angle bracket survives at all: stripping alone is beatable by
+    # nesting, <sys<b>tem-reminder> collapses into a real tag.
+    text = TAG.sub('', text).replace('"', "'").replace('<', '(').replace('>', ')')
+    text = SECRET.sub('[redacted]', text)
     return text if len(text) <= limit else text[:limit - 3] + '...'
 
 
@@ -219,11 +222,11 @@ def context(session='', cwd='', now=None):
         head = f"- {s['runtime'] or 'agent'}{' ' + s['model'] if s['model'] else ''} in {where}{same}, active {age(now - s['last_seen'])}"
         lines.append(head)
         if s['note']:
-            lines.append(f"  doing: \"{s['note']}\"")
-        if s['first_task'] and s['first_task'] != s['last_task']:
-            lines.append(f"  started on: \"{s['first_task']}\"")
+            lines.append(f"  doing: \"{one_line(s['note'])}\"")
+        if s['first_task'] and one_line(s['first_task']) != one_line(s['last_task']):
+            lines.append(f"  started on: \"{one_line(s['first_task'])}\"")
         if s['last_task']:
-            lines.append(f"  latest ask: \"{s['last_task']}\"")
+            lines.append(f"  latest ask: \"{one_line(s['last_task'])}\"")
         files = []
         for _, path in writes.get(s['id'], []):
             name = short_path(path, s['repo'])
@@ -258,7 +261,7 @@ def _overlap(session, paths, now=None):
             if path in targets:
                 s = board.get(other, {})
                 who = s.get('runtime') or 'another session'
-                task = s.get('note') or s.get('last_task') or 'unknown task'
+                task = one_line(s.get('note') or s.get('last_task')) or 'unknown task'
                 hits.append(f'{short_path(path, s.get("repo", ""))} was written by {who} '
                             f'{age(now - ts)} (working on: "{task}")')
                 break

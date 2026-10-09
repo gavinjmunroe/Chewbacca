@@ -7,7 +7,7 @@ description: Review a finished, stalled or failed work session, read what the us
 
 Review one session, report what helped and hurt, and propose edits to the reusable instructions that shaped it. No instruction change is a valid outcome.
 
-Versus [skill-training](../skill-training/SKILL.md): that skill fires on one correction and persists it. This one reviews a whole session, including the path taken, and may find that nothing should change. Versus [learning-from-mistakes](../learning-from-mistakes/SKILL.md): that one is for video answers. Versus [reviewing-changes](../reviewing-changes/SKILL.md): that reviews a diff, this reviews the work process.
+Versus [skill-training](../skill-training/SKILL.md): that skill fires on one correction and persists it. This one reviews a whole session, including the path taken, and may find that nothing should change. Versus `learning-from-mistakes` (a skill pack skill, not in this repo): that one is for video answers. Versus [reviewing-changes](../reviewing-changes/SKILL.md): that reviews a diff, this reviews the work process.
 
 ## Boundary
 

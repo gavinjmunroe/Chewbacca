@@ -31,6 +31,37 @@ lettering or misregistration just because the film had them. Write three
 genuinely different directions before building. Use the film's look only
 when they literally ask for the Spider-Verse look.
 
+## What every frame of the film does (113 shots read, 2026-10-09)
+
+From a shot-by-shot read of "Amazing Shots of Spider-Man: Across the
+Spider-Verse" (youtu.be/EEXG0HNvsLw), which Caleb sent with "We are nowhere
+near close". Each one is a test a frame of ours has to pass:
+
+1. Every frame is a composed painting. One dominant hue fills the frame edge
+   to edge, the subject is a hard silhouette against it, and the value
+   contrast is extreme. A UI box on a dark field is not a composition.
+2. The palette changes shot to shot with the emotion: magenta dinner, cyan
+   void, acid green rain, molten orange portal. One brand palette held for
+   the whole piece reads as a theme.
+3. Scale contrast carries the drama: a tiny figure on a ledge against a huge
+   city, a single light in a dark void, a whole crowd as specks.
+4. The camera is never neutral: the city upside down above the horizon,
+   worm's-eye, top-down falls, dutch angles, close-ups that crop past the
+   frame.
+5. At the peak, 3D collapses into flat 2D graphics: black-and-white ink
+   bursts, speed-line explosions, hexagon portal tunnels, a white silhouette
+   on a solid field. The emotional high is the most graphic frame.
+6. Texture is handmade everywhere: brush washes, paint smears, paper. Webs
+   and motion are drawn as ribbons and brushstrokes, never as clean digital
+   lines or soft glows.
+7. Silence and negative space between the loud shots carry as much as the
+   action.
+
+On the web this quality comes from pre-rendered, composed shots (Nalana or
+Blender with Grease Pencil lines and painterly shading) scrubbed by scroll,
+with live WebGL only where the viewer's own data has to appear. A real-time
+dot field and a caption box can't reach it.
+
 ## A style pass is not the movie
 
 Caleb, 2026-10-09, on a T Combinator build that had halftone, misregistration

@@ -1,0 +1,83 @@
+#!/usr/bin/env python3
+"""Find, and with --kill stop, jobs an agent tab left running after it died.
+
+  orphan-reap            list orphans (nothing is touched)
+  orphan-reap --kill     stop them (SIGTERM)
+  orphan-reap --json     machine-readable list
+
+WHY. 2026-10-10. Caleb force-quit Claude because the Mac was unusable. After
+the restart, a Clay crawler (`clay-map crawl --resume`) a dead tab had started
+was still running and kept opening Clay pages, a headless Nalana render sat at
+305% CPU, and three `people texts sync` runs overlapped. Nothing owned them
+any more, so nothing would ever stop them.
+
+WHAT COUNTS. A process whose parent is launchd (ppid 1) AND that a tab started:
+  - a Claude shell wrapper (`zsh -c source ~/.claude/shell-snapshots/...`)
+    whose Claude parent is gone, and everything under it
+  - a kit job started detached: anything run from `.claude/worktrees/agent-`,
+    or clay-map, clay-go, ingest_all.py, yt-bulk, yt-transcript, mlx_whisper,
+    or a headless Blender/Nalana render (`-b`)
+launchd's own jobs (people sync, messages refresh) also have ppid 1, but they
+match none of these, so they're never touched.
+"""
+import json
+import os
+import re
+import signal
+import subprocess
+import sys
+
+TAB_JOB = re.compile(
+    r"\.claude/shell-snapshots/|\.claude/worktrees/agent-|\bclay-map\b|\bclay-go\b"
+    r"|ingest_all\.py|\byt-bulk\b|\byt-transcript\b|mlx_whisper"
+    r"|(Blender|Nalana)\.app/Contents/MacOS/\w+(\s.*)?\s-b(\s|$)")
+
+
+def processes():
+    # ORPHAN_REAP_PS lets tests feed a fixed table instead of the live one.
+    fixture = os.environ.get("ORPHAN_REAP_PS")
+    text = open(fixture).read() if fixture else subprocess.run(
+        ["ps", "-Ao", "pid=,ppid=,command="], capture_output=True, text=True).stdout
+    rows = []
+    for line in text.splitlines():
+        parts = line.split(None, 2)
+        if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit():
+            rows.append((int(parts[0]), int(parts[1]), parts[2]))
+    return rows
+
+
+def orphans(rows):
+    me = {os.getpid(), os.getppid()}
+    children = {}
+    for pid, ppid, _ in rows:
+        children.setdefault(ppid, []).append(pid)
+    cmd = {pid: c for pid, _, c in rows}
+    roots = [pid for pid, ppid, c in rows if ppid == 1 and TAB_JOB.search(c) and pid not in me]
+    found, stack = [], list(roots)
+    while stack:
+        pid = stack.pop()
+        if pid in me or pid in found:
+            continue
+        found.append(pid)
+        stack.extend(children.get(pid, []))
+    return [(pid, cmd.get(pid, "")) for pid in found]
+
+
+def main():
+    found = orphans(processes())
+    if "--json" in sys.argv:
+        print(json.dumps([{"pid": p, "command": c} for p, c in found]))
+    else:
+        for p, c in found:
+            print(f"{p:>7}  {c[:140]}")
+        print(f"{len(found)} orphaned job(s)" + ("" if found else ", nothing to do"))
+    if "--kill" in sys.argv and not os.environ.get("ORPHAN_REAP_PS"):
+        for p, _ in found:
+            try:
+                os.kill(p, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+
+if __name__ == "__main__":
+    main()

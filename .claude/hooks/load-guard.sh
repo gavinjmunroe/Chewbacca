@@ -108,7 +108,7 @@ lower="$(printf '%s' "$subject" | tr '[:upper:]' '[:lower:]')"
 heavy=0
 case "$lower" in
   *whisper*|*mlx_whisper*|*mlx-whisper*|*yt-transcript*|*ffmpeg*|*ollama\ run*\
-  |*llama-cli*|*llama-server*|*stable-diffusion*|*comfyui*|*"blender -b"*\
+  |*llama-cli*|*llama-server*|*stable-diffusion*|*comfyui*|*"blender -b"*|*"nalana -b"*|*nalana.app*\
   |*"torch.compile"*|*upscayl*|*handbrakecli*) heavy=1 ;;
 esac
 # `python3 -c "import mlx_whisper"` names the model only inside quotes, which
@@ -189,7 +189,7 @@ if [ "$block" = "load" ]; then
 import os, re, shlex
 heavy = {"whisper", "mlx_whisper", "mlx-whisper", "yt-transcript", "ffmpeg",
          "llama-cli", "llama-server", "stable-diffusion", "comfyui", "upscayl",
-         "handbrakecli", "blender", "ollama"}
+         "handbrakecli", "blender", "nalana", "ollama"}
 skip = {"nice", "time", "env", "nohup", "caffeinate", "exec", "sudo"}
 text = os.environ.get("LG_CMD", "")
 for seg in re.split(r"[;|&\n]|\b(?:do|then|else)\b", text):

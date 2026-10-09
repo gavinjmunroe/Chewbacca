@@ -30,31 +30,45 @@ const { cmdIdentities } = require("./identities");
 // ESC byte in one is a terminal escape sequence when printed raw: it can
 // recolor, retitle or rewrite what is on screen. Strip C0/C1 controls except
 // newline and tab before anything from chat.db reaches the terminal.
-const printable = (s) => String(s).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
+const printable = (s) =>
+  String(s).replace(/[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g, "");
 
 // iMessage is the default and goes unmarked; any other app says which it was,
 // so a reply goes back through the app the conversation is actually in.
-const tag = (r) => (r.source && r.source !== "imessage" ? c.dim(`[${r.source}] `) : "");
+const tag = (r) =>
+  r.source && r.source !== "imessage" ? c.dim(`[${r.source}] `) : "";
 
 function textPartner(d, needle) {
   const n = String(needle).toLowerCase();
   const exact = d
-    .prepare("SELECT * FROM people WHERE deleted_at IS NULL AND (id = ? OR handle = ? OR lower(name) = ?)")
+    .prepare(
+      "SELECT * FROM people WHERE deleted_at IS NULL AND (id = ? OR handle = ? OR lower(name) = ?)",
+    )
     .all(needle, needle, n);
   if (exact.length === 1) return exact[0];
   const like = exact.length
     ? exact
-    : d.prepare("SELECT * FROM people WHERE deleted_at IS NULL AND lower(name) LIKE ?").all(`%${n}%`);
+    : d
+        .prepare(
+          "SELECT * FROM people WHERE deleted_at IS NULL AND lower(name) LIKE ?",
+        )
+        .all(`%${n}%`);
   if (like.length <= 1) return like[0] || null;
   const first = like.filter((p) => nameTokens(p.name)[0] === n);
   const pool = first.length ? first : like;
-  const last = d.prepare("SELECT max(sent_at) t FROM messages WHERE person_id = ?");
+  const last = d.prepare(
+    "SELECT max(sent_at) t FROM messages WHERE person_id = ?",
+  );
   const ranked = pool
     .map((p) => ({ p, t: last.get(p.id).t || "" }))
     .sort((a, b) => (a.t < b.t ? 1 : a.t > b.t ? -1 : 0));
   if (!ranked[0].t) return null;
   const others = ranked.slice(1, 6).map((r) => r.p.name);
-  say(c.dim(`  "${needle}" = ${ranked[0].p.name}, texted most recently. Also: ${others.join(", ")}`));
+  say(
+    c.dim(
+      `  "${needle}" = ${ranked[0].p.name}, texted most recently. Also: ${others.join(", ")}`,
+    ),
+  );
   return ranked[0].p;
 }
 
@@ -115,6 +129,40 @@ function refreshChannel(ch) {
   }
 }
 
+// Take the sync lock, or report that a live process holds it. The file holds
+// the owner's pid; a lock left by a process that died (a force-quit) is stale
+// and gets taken over. Released when this process exits.
+function syncLock() {
+  const file =
+    process.env.PEOPLE_SYNC_LOCK || path.join(DIR, "texts-sync.lock");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      fs.writeFileSync(file, String(process.pid), { flag: "wx" });
+      process.on("exit", () => {
+        try {
+          if (fs.readFileSync(file, "utf8") === String(process.pid))
+            fs.unlinkSync(file);
+        } catch {}
+      });
+      return true;
+    } catch (e) {
+      if (e.code !== "EEXIST") return true; // can't lock at all: don't block the sync
+      const owner = Number(fs.readFileSync(file, "utf8")) || 0;
+      // kill(0) would signal our own process group, so an unreadable pid is stale.
+      try {
+        if (owner > 0) {
+          process.kill(owner, 0);
+          return false;
+        }
+        fs.rmSync(file, { force: true });
+      } catch {
+        fs.rmSync(file, { force: true });
+      }
+    }
+  }
+  return false;
+}
+
 function syncChannel(d, ch, flags) {
   const py = textsReader(ch.reader);
   if (!py) return 0;
@@ -133,7 +181,12 @@ function syncChannel(d, ch, flags) {
     );
   } catch (e) {
     // One app failing must not cost the user their iMessage sync.
-    if (!flags.quiet) say(c.dim(`  ${ch.label} skipped: ${String((e && e.message) || e).split("\n")[0]}`));
+    if (!flags.quiet)
+      say(
+        c.dim(
+          `  ${ch.label} skipped: ${String((e && e.message) || e).split("\n")[0]}`,
+        ),
+      );
     return 0;
   }
   const { added } = ingestRows(d, rows, ch.source, 0);
@@ -163,13 +216,20 @@ function resolvePerson(who, handle, { strict = false } = {}) {
       .get(normHandle(handle) || "");
     // identities store a US number as its last ten digits, so a strict match
     // also needs the full number to be that US number.
-    if (alias && (!strict || String(handle).includes("@") || e164(handle) === "1" + normHandle(handle)))
+    if (
+      alias &&
+      (!strict ||
+        String(handle).includes("@") ||
+        e164(handle) === "1" + normHandle(handle))
+    )
       return alias.person_id;
     if (strict && !String(handle).includes("@")) {
       const want = e164(handle);
       if (want.length < 8) return null;
       const hit = d
-        .prepare("SELECT id, phone FROM people WHERE deleted_at IS NULL AND phone IS NOT NULL AND phone <> ''")
+        .prepare(
+          "SELECT id, phone FROM people WHERE deleted_at IS NULL AND phone IS NOT NULL AND phone <> ''",
+        )
         .all()
         .find((p) => e164(p.phone) === want);
       return hit ? hit.id : null;
@@ -186,14 +246,18 @@ function resolvePerson(who, handle, { strict = false } = {}) {
     }
     if (String(handle).includes("@")) {
       const hit = d
-        .prepare("SELECT id FROM people WHERE deleted_at IS NULL AND lower(email)=lower(?)")
+        .prepare(
+          "SELECT id FROM people WHERE deleted_at IS NULL AND lower(email)=lower(?)",
+        )
         .get(handle);
       if (hit) return hit.id;
     }
   }
   if (who) {
     const exact = d
-      .prepare("SELECT id FROM people WHERE deleted_at IS NULL AND lower(name)=lower(?)")
+      .prepare(
+        "SELECT id FROM people WHERE deleted_at IS NULL AND lower(name)=lower(?)",
+      )
       .get(who);
     if (exact) return exact.id;
   }
@@ -204,8 +268,8 @@ function resolvePerson(who, handle, { strict = false } = {}) {
 // so attribution, FTS and batching behave the same whichever app a row came
 // from. Only iMessage advances messages_max_id: other channels' ids are hashes.
 function ingestRows(d, rows, source, seen) {
-    const ins = d.prepare(
-      `INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, room, source)
+  const ins = d.prepare(
+    `INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, room, source)
        VALUES (?,?,?,?,?,?,?,?,?)
        ON CONFLICT(msg_id) DO UPDATE SET
          -- REPAIR, NOT JUST INSERT. Rows written before the reader learned to
@@ -217,40 +281,41 @@ function ingestRows(d, rows, source, seen) {
          person_id = COALESCE(excluded.person_id, messages.person_id),
          room      = excluded.room
        WHERE messages.room IS NULL AND excluded.room IS NOT NULL`,
-    );
-    const fts = d.prepare("INSERT INTO messages_fts (rowid, body) VALUES (?,?)");
-    let added = 0,
-      maxId = seen,
-      unlinked = new Map();
+  );
+  const fts = d.prepare("INSERT INTO messages_fts (rowid, body) VALUES (?,?)");
+  let added = 0,
+    maxId = seen,
+    unlinked = new Map();
 
-    // resolvePerson runs a LIKE scan over every contact, and a full backfill
-    // asks the same question 600k times for a few thousand distinct threads.
-    // Cache by thread so each one is resolved once.
-    const pidCache = new Map();
-    const resolveCached = (who, handle, strict = false) => {
-      const key = (handle || "") + "\u0000" + (who || "") + (strict ? "\u0000s" : "");
-      if (pidCache.has(key)) return pidCache.get(key);
-      const pid = resolvePerson(who, handle, { strict });
-      pidCache.set(key, pid);
-      return pid;
-    };
+  // resolvePerson runs a LIKE scan over every contact, and a full backfill
+  // asks the same question 600k times for a few thousand distinct threads.
+  // Cache by thread so each one is resolved once.
+  const pidCache = new Map();
+  const resolveCached = (who, handle, strict = false) => {
+    const key =
+      (handle || "") + "\u0000" + (who || "") + (strict ? "\u0000s" : "");
+    if (pidCache.has(key)) return pidCache.get(key);
+    const pid = resolvePerson(who, handle, { strict });
+    pidCache.set(key, pid);
+    return pid;
+  };
 
-    // Batched transactions, not one enormous one.
-    //
-    // Committing per row fsyncs half a million times and turns a backfill into
-    // half an hour. Wrapping the whole backfill in a single transaction fixes
-    // that and creates a worse problem: one writer holding the database for
-    // minutes, which starved the SessionStart hooks until they were killed at
-    // their timeout. Five of those failures are in this machine's log, all
-    // during a full re-sync, and they read as a broken kit rather than as a
-    // busy one.
-    //
-    // A commit every few thousand rows keeps the fsync count negligible and
-    // gives readers a gap to run in.
-    const TX_ROWS = 5000;
-    let txCount = 0;
-    d.exec("BEGIN IMMEDIATE");
-    try {
+  // Batched transactions, not one enormous one.
+  //
+  // Committing per row fsyncs half a million times and turns a backfill into
+  // half an hour. Wrapping the whole backfill in a single transaction fixes
+  // that and creates a worse problem: one writer holding the database for
+  // minutes, which starved the SessionStart hooks until they were killed at
+  // their timeout. Five of those failures are in this machine's log, all
+  // during a full re-sync, and they read as a broken kit rather than as a
+  // busy one.
+  //
+  // A commit every few thousand rows keeps the fsync count negligible and
+  // gives readers a gap to run in.
+  const TX_ROWS = 5000;
+  let txCount = 0;
+  d.exec("BEGIN IMMEDIATE");
+  try {
     for (const r of rows) {
       if (r.reaction || r.attachment_only) continue; // "Loved an image" is not a conversation
       const body = String(r.text || "").trim();
@@ -260,7 +325,10 @@ function ingestRows(d, rows, source, seen) {
       // chose, so a stranger calling himself "Sagar Tiwari" would be filed
       // under Sagar, his number recorded as Sagar's, and `people send sagar`
       // would reach him. Other apps link by address only.
-      const pid = source === "imessage" ? resolveCached(r.with, r.handle) : resolveCached(null, r.handle, true);
+      const pid =
+        source === "imessage"
+          ? resolveCached(r.with, r.handle)
+          : resolveCached(null, r.handle, true);
       const res = ins.run(
         r.id,
         pid,
@@ -283,12 +351,12 @@ function ingestRows(d, rows, source, seen) {
         d.exec("BEGIN IMMEDIATE");
       }
     }
-      d.exec("COMMIT");
-    } catch (e) {
-      d.exec("ROLLBACK");
-      throw e;
-    }
-    return { added, maxId, unlinked };
+    d.exec("COMMIT");
+  } catch (e) {
+    d.exec("ROLLBACK");
+    throw e;
+  }
+  return { added, maxId, unlinked };
 }
 
 function cmdTexts(argv) {
@@ -309,7 +377,18 @@ function cmdTexts(argv) {
 `);
     return;
   }
-  const sub = ["sync", "refresh", "log", "stats", "link", "search", "owed", "drafts"].includes(argv[0]) ? argv.shift() : "log";
+  const sub = [
+    "sync",
+    "refresh",
+    "log",
+    "stats",
+    "link",
+    "search",
+    "owed",
+    "drafts",
+  ].includes(argv[0])
+    ? argv.shift()
+    : "log";
   const { flags, rest } = parseArgs(argv);
 
   // Bring every app's own local copy up to date and stop there. This is what
@@ -328,9 +407,23 @@ function cmdTexts(argv) {
     // Ten minutes is the background refresh cadence plus slack, guessed, not
     // measured. --force or an explicit --days always runs.
     const last = syncState("messages_last_sync");
-    const ageMin = last ? (Date.now() - Date.parse(last.replace(" ", "T") + "Z")) / 60000 : Infinity;
+    const ageMin = last
+      ? (Date.now() - Date.parse(last.replace(" ", "T") + "Z")) / 60000
+      : Infinity;
     if (!flags.force && flags.days === undefined && ageMin < 10) {
-      say(c.dim(`  synced ${Math.max(0, Math.round(ageMin))} min ago, nothing to do (--force to run anyway)`));
+      say(
+        c.dim(
+          `  synced ${Math.max(0, Math.round(ageMin))} min ago, nothing to do (--force to run anyway)`,
+        ),
+      );
+      return;
+    }
+    // One sync at a time. The 10-minute check reads the last FINISHED sync, so
+    // runs that start together all pass it: on 2026-10-10 three syncs (launchd
+    // plus session starts) ran at once while the Mac was swapping, at ~23% CPU
+    // each, and Caleb force-quit Claude over the lag. A second sync now exits.
+    if (!syncLock()) {
+      say(c.dim("  another sync is already running, nothing to do"));
       return;
     }
     const py = textsReader();
@@ -376,10 +469,14 @@ function cmdTexts(argv) {
     const limit = flags.limit === undefined ? 0 : Number(flags.limit);
     let raw;
     try {
-      raw = execFileSync("python3", [py, "--json", "--days", String(days), "--limit", String(limit)], {
-        encoding: "utf8",
-        maxBuffer: 1024 * 1024 * 1024,
-      });
+      raw = execFileSync(
+        "python3",
+        [py, "--json", "--days", String(days), "--limit", String(limit)],
+        {
+          encoding: "utf8",
+          maxBuffer: 1024 * 1024 * 1024,
+        },
+      );
     } catch (e) {
       const err = String((e && e.stderr) || e.message || "");
       if (/operation not permitted|unable to open database/i.test(err))
@@ -417,7 +514,9 @@ function cmdTexts(argv) {
     // normal case: the session hook syncs texts before anyone runs an import.
     let relinked = 0;
     for (const row of d
-      .prepare("SELECT DISTINCT who, handle, source FROM messages WHERE person_id IS NULL")
+      .prepare(
+        "SELECT DISTINCT who, handle, source FROM messages WHERE person_id IS NULL",
+      )
       .all()) {
       const pid =
         row.source === "imessage"
@@ -430,10 +529,14 @@ function cmdTexts(argv) {
       // says who actually sent the message; the thread name does not.
       relinked += row.handle
         ? d
-            .prepare("UPDATE messages SET person_id=? WHERE person_id IS NULL AND handle=?")
+            .prepare(
+              "UPDATE messages SET person_id=? WHERE person_id IS NULL AND handle=?",
+            )
             .run(pid, row.handle).changes
         : d
-            .prepare("UPDATE messages SET person_id=? WHERE person_id IS NULL AND who=? AND handle IS NULL")
+            .prepare(
+              "UPDATE messages SET person_id=? WHERE person_id IS NULL AND who=? AND handle IS NULL",
+            )
             .run(pid, row.who).changes;
     }
 
@@ -446,10 +549,14 @@ function cmdTexts(argv) {
           WHERE m.from_me = 0 AND m.handle IS NOT NULL AND m.handle <> '' AND m.person_id IS NOT NULL`,
       )
       .all()) {
-      const truth = resolvePerson(null, row.handle, { strict: row.source !== "imessage" });
+      const truth = resolvePerson(null, row.handle, {
+        strict: row.source !== "imessage",
+      });
       if (!truth || truth === row.person_id) continue;
       recredited += d
-        .prepare("UPDATE messages SET person_id=? WHERE handle=? AND person_id=? AND from_me=0")
+        .prepare(
+          "UPDATE messages SET person_id=? WHERE handle=? AND person_id=? AND from_me=0",
+        )
         .run(truth, row.handle, row.person_id).changes;
     }
 
@@ -474,9 +581,12 @@ function cmdTexts(argv) {
       .run();
     recomputeScores();
 
-    say(`${c.grn("synced")} ${added} new messages${c.dim(`  (${days}d window)`)}`);
+    say(
+      `${c.grn("synced")} ${added} new messages${c.dim(`  (${days}d window)`)}`,
+    );
     for (const ch of CHANNELS)
-      if (channelAdded[ch.source]) say(c.dim(`  ${channelAdded[ch.source]} of them from ${ch.label}`));
+      if (channelAdded[ch.source])
+        say(c.dim(`  ${channelAdded[ch.source]} of them from ${ch.label}`));
     // Every handle in those messages is an address somebody demonstrably sent
     // from, and identities is what phone-keyed joins run on. Recording them is
     // part of the sync, not a second command to remember.
@@ -487,14 +597,33 @@ function cmdTexts(argv) {
         /* a failed backfill must not fail the sync */
       }
     }
-    if (relinked) say(c.dim(`  ${relinked} older messages linked to people you have since added`));
-    if (recredited) say(c.dim(`  ${recredited} messages re-credited to the person who actually sent them`));
-    if (logged.changes) say(c.dim(`  ${logged.changes} people had their last-contact updated`));
+    if (relinked)
+      say(
+        c.dim(
+          `  ${relinked} older messages linked to people you have since added`,
+        ),
+      );
+    if (recredited)
+      say(
+        c.dim(
+          `  ${recredited} messages re-credited to the person who actually sent them`,
+        ),
+      );
+    if (logged.changes)
+      say(c.dim(`  ${logged.changes} people had their last-contact updated`));
     if (unlinked.size) {
-      const top = [...unlinked.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
-      say(c.dim(`\n  ${unlinked.size} threads are not linked to anyone in your store:`));
+      const top = [...unlinked.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+      say(
+        c.dim(
+          `\n  ${unlinked.size} threads are not linked to anyone in your store:`,
+        ),
+      );
       for (const [w, n] of top) say(c.dim(`    ${w}  (${n})`));
-      say(c.dim(`  people texts link "<thread name>" <person>   to connect one`));
+      say(
+        c.dim(`  people texts link "<thread name>" <person>   to connect one`),
+      );
     }
     return;
   }
@@ -504,21 +633,41 @@ function cmdTexts(argv) {
     const target = rest.join(" ");
     if (!who || !target) die('Try: people texts link "Sam Rivera" sam');
     const p = findPerson(target);
-    const n = d.prepare("UPDATE messages SET person_id=? WHERE who=? AND person_id IS NULL").run(p.id, who);
-    say(`${c.grn("linked")} ${n.changes} messages from ${c.b(who)} to ${c.b(p.name)}`);
+    const n = d
+      .prepare(
+        "UPDATE messages SET person_id=? WHERE who=? AND person_id IS NULL",
+      )
+      .run(p.id, who);
+    say(
+      `${c.grn("linked")} ${n.changes} messages from ${c.b(who)} to ${c.b(p.name)}`,
+    );
     recomputeScores();
     return;
   }
 
   if (sub === "stats") {
-    const t = d.prepare("SELECT count(*) n, min(sent_at) a, max(sent_at) b FROM messages").get();
-    const linked = d.prepare("SELECT count(*) n FROM messages WHERE person_id IS NOT NULL").get().n;
+    const t = d
+      .prepare(
+        "SELECT count(*) n, min(sent_at) a, max(sent_at) b FROM messages",
+      )
+      .get();
+    const linked = d
+      .prepare("SELECT count(*) n FROM messages WHERE person_id IS NOT NULL")
+      .get().n;
     say("");
     say(`  messages   ${t.n}`);
-    say(`  linked     ${linked}${t.n ? c.dim(`  (${Math.round((linked / t.n) * 100)}%)`) : ""}`);
-    say(`  range      ${(t.a || "").slice(0, 10)} to ${(t.b || "").slice(0, 10)}`);
+    say(
+      `  linked     ${linked}${t.n ? c.dim(`  (${Math.round((linked / t.n) * 100)}%)`) : ""}`,
+    );
+    say(
+      `  range      ${(t.a || "").slice(0, 10)} to ${(t.b || "").slice(0, 10)}`,
+    );
     say(`  last sync  ${syncState("messages_last_sync") || "never"}`);
-    for (const r of d.prepare("SELECT source, count(*) n FROM messages GROUP BY source ORDER BY n DESC").all())
+    for (const r of d
+      .prepare(
+        "SELECT source, count(*) n FROM messages GROUP BY source ORDER BY n DESC",
+      )
+      .all())
       say(c.dim(`  ${String(r.source).padEnd(10)} ${r.n}`));
     say("");
     return;
@@ -560,17 +709,27 @@ function cmdTexts(argv) {
     // anything: on 2026-10-09 the Clay community alone was 1,444 room rows.
     const spoke = new Set(
       d
-        .prepare(`SELECT DISTINCT source || char(31) || room AS k FROM messages WHERE from_me = 1 AND room IS NOT NULL`)
+        .prepare(
+          `SELECT DISTINCT source || char(31) || room AS k FROM messages WHERE from_me = 1 AND room IS NOT NULL`,
+        )
         .all()
         .map((r) => r.k),
     );
     const myMail = new Set(
-      (process.env.CHEWBACCA_EMAIL_ME || "").split(",").map((x) => x.trim().toLowerCase()).filter(Boolean),
+      (process.env.CHEWBACCA_EMAIL_ME || "")
+        .split(",")
+        .map((x) => x.trim().toLowerCase())
+        .filter(Boolean),
     );
     try {
-      const home = process.env.CHEWBACCA_EMAIL_HOME || path.join(os.homedir(), ".chewbacca", "email");
-      for (const l of fs.readFileSync(path.join(home, "me"), "utf8").split("\n"))
-        if (l.includes("@") && !l.trim().startsWith("#")) myMail.add(l.trim().toLowerCase());
+      const home =
+        process.env.CHEWBACCA_EMAIL_HOME ||
+        path.join(os.homedir(), ".chewbacca", "email");
+      for (const l of fs
+        .readFileSync(path.join(home, "me"), "utf8")
+        .split("\n"))
+        if (l.includes("@") && !l.trim().startsWith("#"))
+          myMail.add(l.trim().toLowerCase());
     } catch {
       /* no list yet: only the connected inboxes count as the user */
     }
@@ -580,8 +739,20 @@ function cmdTexts(argv) {
       // Mail from one of the user's own addresses is a note to self, not a
       // person waiting; rows ingested before an address was listed in
       // EMAIL_HOME/me still carry from_me 0, so the check is made here too.
-      const fromMe = m.from_me || (m.source === "email" && myMail.has(String(m.handle || "").toLowerCase()));
-      if (!threads.has(key)) threads.set(key, { thread: m.room || m.who, room: m.room, source: m.source, last_at: m.sent_at, from_me: fromMe, person_id: m.person_id, msgs: [] });
+      const fromMe =
+        m.from_me ||
+        (m.source === "email" &&
+          myMail.has(String(m.handle || "").toLowerCase()));
+      if (!threads.has(key))
+        threads.set(key, {
+          thread: m.room || m.who,
+          room: m.room,
+          source: m.source,
+          last_at: m.sent_at,
+          from_me: fromMe,
+          person_id: m.person_id,
+          msgs: [],
+        });
       const t = threads.get(key);
       if (t.msgs.length < ctx) t.msgs.push(m);
     }
@@ -592,7 +763,9 @@ function cmdTexts(argv) {
     const noise = (r) =>
       r.room
         ? !spoke.has(`${r.source}\u001f${r.room}`)
-        : !r.person_id && (/^[+\d]|@/.test(r.thread) || (r.source === "slack" && /^[UW][A-Z0-9]{6,}$/.test(r.thread)));
+        : !r.person_id &&
+          (/^[+\d]|@/.test(r.thread) ||
+            (r.source === "slack" && /^[UW][A-Z0-9]{6,}$/.test(r.thread)));
     const shown = flags.all ? rows : rows.filter((r) => !noise(r));
     const hidden = rows.length - shown.length;
     // --json is for an agent drafting replies: thread, kind, and the context
@@ -603,22 +776,55 @@ function cmdTexts(argv) {
         group: Boolean(r.room),
         source: r.source,
         last_at: r.last_at,
-        messages: r.msgs.slice().reverse().map((m) => ({ from_me: Boolean(m.from_me), who: m.who, body: m.body, sent_at: m.sent_at })),
+        messages: r.msgs
+          .slice()
+          .reverse()
+          .map((m) => ({
+            from_me: Boolean(m.from_me),
+            who: m.who,
+            body: m.body,
+            sent_at: m.sent_at,
+          })),
       }));
-      process.stdout.write(JSON.stringify({ days, threads: out, hidden, last_sync: syncState("messages_last_sync") || null }, null, 2) + "\n");
+      process.stdout.write(
+        JSON.stringify(
+          {
+            days,
+            threads: out,
+            hidden,
+            last_sync: syncState("messages_last_sync") || null,
+          },
+          null,
+          2,
+        ) + "\n",
+      );
       return;
     }
-    if (!rows.length) return say(c.dim(`  nobody is waiting on you from the last ${days} days`));
+    if (!rows.length)
+      return say(
+        c.dim(`  nobody is waiting on you from the last ${days} days`),
+      );
     say("");
     for (const r of shown) {
-      say(`${c.cyn(printable(r.thread))} ${c.dim(`${r.room ? "group " : ""}${r.source !== "imessage" ? r.source + " " : ""}${r.last_at.slice(5, 16)}`)}`);
+      say(
+        `${c.cyn(printable(r.thread))} ${c.dim(`${r.room ? "group " : ""}${r.source !== "imessage" ? r.source + " " : ""}${r.last_at.slice(5, 16)}`)}`,
+      );
       for (const m of r.msgs.slice().reverse()) {
-        const name = r.room && !m.from_me ? c.dim(printable(m.who).split(" ")[0] + ": ") : "";
-        say(`  ${m.from_me ? c.cyn("->") : "  "} ${name}${printable(m.body).replace(/\s+/g, " ").slice(0, 220)}`);
+        const name =
+          r.room && !m.from_me
+            ? c.dim(printable(m.who).split(" ")[0] + ": ")
+            : "";
+        say(
+          `  ${m.from_me ? c.cyn("->") : "  "} ${name}${printable(m.body).replace(/\s+/g, " ").slice(0, 220)}`,
+        );
       }
       say("");
     }
-    say(c.dim(`  ${shown.length} threads waiting on you${hidden ? `, ${hidden} hidden: unsaved numbers, short codes and groups you never wrote in (--all)` : ""}; last sync ${syncState("messages_last_sync") || "never"}`));
+    say(
+      c.dim(
+        `  ${shown.length} threads waiting on you${hidden ? `, ${hidden} hidden: unsaved numbers, short codes and groups you never wrote in (--all)` : ""}; last sync ${syncState("messages_last_sync") || "never"}`,
+      ),
+    );
     say("");
     return;
   }
@@ -644,14 +850,16 @@ function cmdTexts(argv) {
     const list = load();
     const pick = (n) => {
       const i = Number(n) - 1;
-      if (!Number.isInteger(i) || !list[i]) die(`no draft ${n}; run: people texts drafts`);
+      if (!Number.isInteger(i) || !list[i])
+        die(`no draft ${n}; run: people texts drafts`);
       return i;
     };
     const verb = rest[0];
     if (verb === "add") {
       const [, who, ...words] = rest;
       const text = words.join(" ");
-      if (!who || !text) die('Try: people texts drafts add maggie "following up w Jonah tmr"');
+      if (!who || !text)
+        die('Try: people texts drafts add maggie "following up w Jonah tmr"');
       // A draft that doesn't read like him never reaches the queue. On
       // 2026-10-09 two texts for Jonah and Ryan opened "Attached is one more
       // page" and he said "i should never send a text that doesn't sound like
@@ -659,9 +867,14 @@ function cmdTexts(argv) {
       if (!flags["voice-ok"]) {
         const vc = path.join(__dirname, "..", "..", "voice-check");
         try {
-          execFileSync("python3", ["-I", vc, "--to", who, text], { stdio: ["ignore", "pipe", "pipe"] });
+          execFileSync("python3", ["-I", vc, "--to", who, text], {
+            stdio: ["ignore", "pipe", "pipe"],
+          });
         } catch (e) {
-          if (e.status === 1) die(`${String(e.stdout || "").trim()}\n\nNothing drafted. Rewrite it like the texts above, or add --voice-ok if Caleb wrote it himself.`);
+          if (e.status === 1)
+            die(
+              `${String(e.stdout || "").trim()}\n\nNothing drafted. Rewrite it like the texts above, or add --voice-ok if Caleb wrote it himself.`,
+            );
         }
       }
       let to = flags.to ? String(flags.to) : "";
@@ -670,11 +883,26 @@ function cmdTexts(argv) {
       if (flags.group && !to) {
         const { roomThread, chatGuid } = require("./send");
         const rooms = roomThread(d, who, flags.via ? String(flags.via) : null);
-        if (rooms.length !== 1) die(`"${who}" is ${rooms.length ? `${rooms.length} groups; add --via` : "no group you've written in"}. Nothing drafted.`);
-        to = rooms[0].source === "imessage" ? chatGuid(rooms[0].handle) : rooms[0].handle;
-        if (!to) die(`Couldn't read the chat id for "${who}". Nothing drafted.`);
+        if (rooms.length !== 1)
+          die(
+            `"${who}" is ${rooms.length ? `${rooms.length} groups; add --via` : "no group you've written in"}. Nothing drafted.`,
+          );
+        to =
+          rooms[0].source === "imessage"
+            ? chatGuid(rooms[0].handle)
+            : rooms[0].handle;
+        if (!to)
+          die(`Couldn't read the chat id for "${who}". Nothing drafted.`);
       }
-      list.push({ who, text, why: flags.why || "", group: Boolean(flags.group), to, via: flags.via ? String(flags.via) : "", at: nowISO() });
+      list.push({
+        who,
+        text,
+        why: flags.why || "",
+        group: Boolean(flags.group),
+        to,
+        via: flags.via ? String(flags.via) : "",
+        at: nowISO(),
+      });
       save(list);
       return say(`${c.grn("drafted")} #${list.length} to ${c.b(who)}`);
     }
@@ -698,22 +926,44 @@ function cmdTexts(argv) {
       cmdSend(argv);
       if (!flags["dry-run"]) {
         const now = load();
-        now.splice(now.findIndex((x) => x.at === dr.at && x.who === dr.who), 1);
+        now.splice(
+          now.findIndex((x) => x.at === dr.at && x.who === dr.who),
+          1,
+        );
         save(now);
       }
       return;
     }
-    if (!list.length) return say(c.dim("  no drafts waiting. Add one: people texts drafts add <who> \"text\""));
+    if (!list.length)
+      return say(
+        c.dim(
+          '  no drafts waiting. Add one: people texts drafts add <who> "text"',
+        ),
+      );
     say("");
     list.forEach((dr, i) => {
-      say(`  ${c.b(`#${i + 1}`)} ${c.cyn(printable(dr.who))}${dr.group ? c.dim(" group") : ""}${dr.via ? c.dim(` ${printable(dr.via)}`) : ""} ${c.dim(dr.at.slice(5, 16))}`);
+      say(
+        `  ${c.b(`#${i + 1}`)} ${c.cyn(printable(dr.who))}${dr.group ? c.dim(" group") : ""}${dr.via ? c.dim(` ${printable(dr.via)}`) : ""} ${c.dim(dr.at.slice(5, 16))}`,
+      );
       if (dr.why) say(c.dim(`     re: ${printable(dr.why)}`));
       say(`     ${printable(dr.text)}`);
     });
     // Say it before he picks numbers, not after the first send fails.
-    if (!process.env.CHEWBACCA_NO_SEND && list.some((dr) => !dr.via || dr.via === "imessage")) {
+    if (
+      !process.env.CHEWBACCA_NO_SEND &&
+      list.some((dr) => !dr.via || dr.via === "imessage")
+    ) {
       const blocked = require("./send").messagesBlocked();
-      if (blocked) say(c.yel(`\n  ${blocked.split("\n").filter((l) => !/Nothing was sent/.test(l)).map((l) => l.trim()).join("\n  ")}`));
+      if (blocked)
+        say(
+          c.yel(
+            `\n  ${blocked
+              .split("\n")
+              .filter((l) => !/Nothing was sent/.test(l))
+              .map((l) => l.trim())
+              .join("\n  ")}`,
+          ),
+        );
     }
     say(c.dim(`\n  people texts drafts send <n>  |  drop <n>\n`));
     return;
@@ -768,12 +1018,17 @@ function cmdTexts(argv) {
   }
   sql += " ORDER BY sent_at DESC LIMIT ?";
   args.push(limit);
-  const rows = d.prepare(sql).all(...args).reverse();
+  const rows = d
+    .prepare(sql)
+    .all(...args)
+    .reverse();
   if (!rows.length) {
     const any = d.prepare("SELECT count(*) n FROM messages").get().n;
     return say(
       any
-        ? c.dim(`  nothing in the last ${days} days${who ? ` with ${who}` : ""}`)
+        ? c.dim(
+            `  nothing in the last ${days} days${who ? ` with ${who}` : ""}`,
+          )
         : c.dim("  no messages yet. Run: people texts sync"),
     );
   }
@@ -789,11 +1044,18 @@ function cmdTexts(argv) {
     const body = full
       ? printable(r.body).replace(/\n/g, "\n                 ")
       : printable(r.body).replace(/\s+/g, " ").slice(0, 100);
-    say(`  ${c.dim(r.sent_at.slice(5, 16))} ${r.from_me ? c.cyn("->") : "  "} ${tag(r)}${body}`);
+    say(
+      `  ${c.dim(r.sent_at.slice(5, 16))} ${r.from_me ? c.cyn("->") : "  "} ${tag(r)}${body}`,
+    );
   }
   say("");
 }
 
 module.exports = {
-  cmdTexts, textPartner, textsReader, resolvePerson, printable, CHANNELS,
+  cmdTexts,
+  textPartner,
+  textsReader,
+  resolvePerson,
+  printable,
+  CHANNELS,
 };

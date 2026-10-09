@@ -677,6 +677,10 @@ if group "installer"; then
 
   check  "stale-read-guard refuses a silence claim while jobs are outstanding" \
     bash "$ROOT/tests/stale_read_guard.sh"
+  check  "orphan-reap stops what a dead tab left running and spares the rest" \
+    bash "$ROOT/tests/orphan_reap.sh"
+  check  "people texts sync runs one at a time" \
+    bash "$ROOT/tests/texts_sync_lock.sh"
   check  "scope-guard refuses a self-chosen cut of scope he set as all" \
     bash "$ROOT/tests/scope_guard.sh"
 

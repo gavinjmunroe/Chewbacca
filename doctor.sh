@@ -515,6 +515,17 @@ else
     ok "summarize present" ||
     warn "summarize missing (brew install steipete/tap/summarize)"
 
+  command -v wacrawl >/dev/null 2>&1 &&
+    ok "wacrawl present (WhatsApp Desktop archive)" ||
+    warn "wacrawl missing (brew install openclaw/tap/wacrawl)"
+  if command -v wacli >/dev/null 2>&1; then
+    wacli auth status --read-only --json 2>/dev/null | grep -q '"authenticated":true' &&
+      ok "wacli linked to WhatsApp" ||
+      warn "wacli not linked, the WhatsApp surface sees nothing (wacli auth --phone <number>)"
+  else
+    warn "wacli missing (brew install openclaw/tap/wacli)"
+  fi
+
   if command -v mac-use >/dev/null 2>&1; then
     # Same resolution as bin/mac-use: MACOS_USE_HOME, else whichever has a venv.
     if [ -n "${MACOS_USE_HOME:-}" ]; then

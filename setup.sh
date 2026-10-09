@@ -2490,6 +2490,15 @@ if command -v brew &>/dev/null; then
   else
     brew install steipete/tap/summarize &>/dev/null && log "summarize installed" || warn "could not install summarize"
   fi
+  # WhatsApp: wacrawl reads the WhatsApp Desktop archive with no login;
+  # wacli is the linked device the whatsapp surface reads and sends through.
+  for _wa in wacrawl wacli; do
+    if command -v "$_wa" &>/dev/null; then
+      log "$_wa already installed"
+    else
+      brew install "openclaw/tap/$_wa" &>/dev/null && log "$_wa installed" || warn "could not install $_wa"
+    fi
+  done
 else
   warn "Homebrew not found. macOS tools skipped: see docs/MACOS-TOOLS.md"
 fi

@@ -63,6 +63,20 @@ sqlite3 "$DB" "INSERT INTO messages (msg_id, person_id, who, handle, from_me, bo
 out="$("$P" send "sagar real" "x" --via whatsapp 2>&1)" && fail "a number sharing only the last ten digits was trusted"
 grep -q "unconfirmed" <<<"$out"             || fail "a tail-matching foreign number was not refused"
 
+# Mail whose From failed Gmail's own check is filed under "unverified:" plus
+# the claimed address (mac/lib/gmail.py). Replying to it would answer whoever
+# forged the name, so send refuses it even when --to repeats it exactly.
+"$P" add "Mail Sagar" >/dev/null 2>&1
+"$P" set "mail sagar" email "sagar@example.test" >/dev/null 2>&1
+MAIL="$(id 'Mail Sagar')"
+sqlite3 "$DB" "INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, source) VALUES
+   (4000000000097, '$MAIL', 'Mail Sagar', 'unverified:sagar@example.test', 0, 'wire here', datetime('now'), 'email');"
+out="$("$P" send "mail sagar" "x" --via email --dry-run 2>&1)" && fail "a dry run to an unverified email sender succeeded"
+grep -q "failed Gmail's sender check" <<<"$out" || fail "an unverified email sender was not named as the reason"
+out="$("$P" send "mail sagar" "x" --via email --to unverified:sagar@example.test 2>&1)" &&
+  fail "--to repeating an unverified email handle was accepted"
+grep -q "Nothing was sent" <<<"$out"        || fail "the unverified refusal did not say nothing was sent"
+
 out="$(node -e '
   const { waJid } = require(process.argv[1]);
   console.log([waJid("3106946088"), waJid("+44 7700 900123"), waJid("111@lid")].join(" "));

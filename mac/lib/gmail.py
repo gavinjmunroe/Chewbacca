@@ -416,6 +416,11 @@ ADDRESS = re.compile(r"^[^@\s<>,]+@[^@\s<>,]+\.[^@\s<>,]+$")
 
 
 def send(to, subject, text, dry_run=False):
+    # An unverified row's handle is "unverified:" plus the From it claimed. The
+    # colon is legal in a local part, so ADDRESS alone let a reply to a forged
+    # sender through.
+    if (to or "").lower().startswith("unverified:"):
+        return {"ok": False, "error": f"unverified sender, Gmail's check failed for {to[11:]!r}"}
     if not ADDRESS.match(to or ""):
         return {"ok": False, "error": f"not an email address: {to!r}"}
     args = ["gmail", "+send", "--to", to, "--subject", subject or "(no subject)", "--body", text]

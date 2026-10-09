@@ -118,4 +118,11 @@ out="$("$P" texts drafts 2>&1)"
 grep -q "Doing good" <<<"$out"  && fail "dropped draft is still listed"
 grep -q "No allergies" <<<"$out" || fail "drop removed the wrong draft"
 out="$("$P" texts drafts send 9 2>&1)" && fail "a missing draft number did not refuse"
+# A fresh store skips the sync instead of re-walking every app past the 120s
+# tool timeout, and `texts help` explains instead of searching for "help".
+sqlite3 "$DB" "INSERT OR REPLACE INTO sync_state (key, value) VALUES ('messages_last_sync', strftime('%Y-%m-%d %H:%M:%S','now'))"
+out="$("$P" texts sync 2>&1)" || fail "a fresh sync did not exit cleanly"
+grep -q "nothing to do" <<<"$out" || fail "a sync minutes after the last one ran anyway"
+out="$("$P" texts help 2>&1)"
+grep -q "texts owed" <<<"$out" && ! grep -q "nothing in the last" <<<"$out" || fail "texts help searched for a person named help"
 exit 0

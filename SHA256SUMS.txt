@@ -5,7 +5,7 @@ fe3e089e15005d5e68f1f414519f7256ff37f31a5fb4d9e4853cb83aaa095ab1  .claude/hooks/
 f6b1b2e1ce432d92722bca1371d33973a5dc99290c6af3d2562e0f2893a5faae  .claude/hooks/brain-recall.sh
 39a2e8c5f41bc80c6e66be312575128e95bb77302f947a440bd15a9a7ee3fa83  .claude/hooks/brain-sync.sh
 4a1c8a14231bfe159c20cb876d414bff7182d32b0362a3e5507b1054a08c6aa3  .claude/hooks/browser-ux-guard.sh
-de060f6f4523dd4f70eee84d70a079bd6f7247e70ec8122b8f69e7396a693d44  .claude/hooks/chatdb-guard.sh
+779a022cd7362d48b2d1f464584789c441208a4383cd10f9a329b3a519cd3071  .claude/hooks/chatdb-guard.sh
 0cde272521f1895512eb323bc1935b89dd73a1ad3fe02419c82ecf63f03b2c74  .claude/hooks/clay-native-guard.sh
 a4d37c82649e07e58df2332c165b5b24593e43a36208bb604267b5284bd3e367  .claude/hooks/clay-reply-guard.sh
 2b4c3d09aa7d44acece030a70da076a4ee8baae96d348342758125de661bdc38  .claude/hooks/coursework-context.sh
@@ -196,7 +196,7 @@ beb7e10873144ab4c5598504812085436f7ba82cc54929058f78cdcbffa3cf5e  bin/lib/people
 fbffe8ac114dda73591b6db10595f4737e59331184b98d93c6a581029920f0bc  bin/lib/people/scoring.js
 c2352e3e8c7a67843624cd6cdddae081535c37ae8805d5d0be4a64ebee21f666  bin/lib/people/send.js
 a13a67a8f88b46b379dccf2b40fc69fb0def344d7e0db2a33021f0bb46111903  bin/lib/people/show.js
-6026e0d89ea79475993f1ed06df0396afc0a311837f901d7eb0cb11978608dc0  bin/lib/people/texts.js
+60cf86233c28dcc774a39394d8c7e55da0ba96851d668621f1a280d4e9f278e1  bin/lib/people/texts.js
 ddba91063cbd35cb9dfe7b7573a2a786affafb0f5684e61c9819d57a0cc3bcd1  bin/lib/people/who.js
 8479b9c7a0c8d5b277792ef43ffc699dadeb0afcd9e26199a2e7b3295aeb4568  bin/lib/quick.py
 b82907be2f6af61f03325376768aa94366d26a8b3de9f38f1e58ef4dcfec9a97  bin/lib/realm_client.py

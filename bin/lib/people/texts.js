@@ -292,6 +292,23 @@ function ingestRows(d, rows, source, seen) {
 }
 
 function cmdTexts(argv) {
+  // `people texts help` read "help" as a person and printed "nothing in the
+  // last 3 days with help" (2026-10-09), so the one call meant to explain the
+  // command explained nothing.
+  if (["help", "--help", "-h"].includes(argv[0])) {
+    say(`
+  people texts owed [--via app] [--json]     who is waiting on a reply, every app
+  people texts drafts                         replies waiting for your ok
+  people texts drafts add <who> "text" [--group] [--via app] [--why "..."]
+  people texts drafts send <n> [--dry-run]   the number is the approval
+  people texts <name>                         one person's thread, newest, whole
+  people texts search "<query>"               full text, all history
+  people texts [--days 3]                     the running log
+  people texts sync [--force]                 skipped when synced in the last 10 min
+  people texts stats | link "Thread" <person>
+`);
+    return;
+  }
   const sub = ["sync", "refresh", "log", "stats", "link", "search", "owed", "drafts"].includes(argv[0]) ? argv.shift() : "log";
   const { flags, rest } = parseArgs(argv);
 
@@ -305,6 +322,17 @@ function cmdTexts(argv) {
   const d = db();
 
   if (sub === "sync") {
+    // A fresh store needs no sync. On 2026-10-09 a session ran this in the
+    // foreground right after the session-start sync had finished; it walked
+    // every app again, passed the agent's 120s timeout, and bought nothing.
+    // Ten minutes is the background refresh cadence plus slack, guessed, not
+    // measured. --force or an explicit --days always runs.
+    const last = syncState("messages_last_sync");
+    const ageMin = last ? (Date.now() - Date.parse(last.replace(" ", "T") + "Z")) / 60000 : Infinity;
+    if (!flags.force && flags.days === undefined && ageMin < 10) {
+      say(c.dim(`  synced ${Math.max(0, Math.round(ageMin))} min ago, nothing to do (--force to run anyway)`));
+      return;
+    }
     const py = textsReader();
     if (!py)
       die(

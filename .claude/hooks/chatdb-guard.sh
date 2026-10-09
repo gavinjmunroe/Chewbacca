@@ -29,6 +29,38 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null
 [ -n "$cmd" ] || exit 0
 
 printf '%s' "$cmd" | grep -q 'sqlite3' || exit 0
+
+# Reading threads by hand. 2026-10-09, "clear out my texts": the session
+# wrote two chat.db queries joining chat_message_join on is_from_me (both came
+# back empty, an integer compared to strftime TEXT is always smaller), then
+# read the people store's messages table one thread at a time, 25 threads, the
+# better part of an hour. `people texts owed` is that whole read in 1.3s. A
+# command that says RAW_MESSAGES_OK=1 is debugging the reader and passes.
+printf '%s' "$cmd" | grep -q 'RAW_MESSAGES_OK=1' && exit 0
+thread_read=0
+if printf '%s' "$cmd" | grep -q 'chat\.db' \
+  && printf '%s' "$cmd" | grep -qiE 'is_from_me|chat_message_join'; then thread_read=1; fi
+if printf '%s' "$cmd" | grep -q 'people\.db' \
+  && printf '%s' "$cmd" | grep -qiE 'from[[:space:]]+messages([^_a-z]|$)' \
+  && printf '%s' "$cmd" | grep -qiE 'from_me|body' \
+  && ! printf '%s' "$cmd" | grep -qiE '(insert|update|delete)[[:space:]]'; then thread_read=1; fi
+if [ "$thread_read" = 1 ]; then
+  cat >&2 <<'MSG'
+chatdb-guard: refusing. This reads message threads with raw SQL.
+
+The people CLI already does it, decoded, every app, in one call:
+
+  people texts owed [--json]        who is waiting on a reply, with context
+  people texts <name>               one person's thread, newest, whole
+  people texts search "<query>"     full text, all history
+  people texts --days 3             the running log
+
+On 2026-10-09 doing this by hand took eleven calls and most of an hour.
+Debugging the reader itself: prefix the command with RAW_MESSAGES_OK=1.
+MSG
+  exit 2
+fi
+
 printf '%s' "$cmd" | grep -q 'chat\.db' || exit 0
 printf '%s' "$cmd" | grep -qi 'attributedBody' && exit 0
 # A filter on the text column: `text LIKE`, `m.text like`, `text GLOB`, `text =`.

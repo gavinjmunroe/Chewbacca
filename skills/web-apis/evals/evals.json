@@ -1,0 +1,37 @@
+{
+  "skill": "web-apis",
+  "cases": [
+    {
+      "prompt": "Find YC companies in the latest batch doing AI for sales and get me the founders",
+      "expect_tools": ["chewbacca api"],
+      "why": "yc ops answer this in two calls; opening the directory in a browser is the failure",
+      "reject": ["opening ycombinator.com in a browser", "jev-browse"]
+    },
+    {
+      "prompt": "What LA founder events are happening this weekend?",
+      "expect_tools": ["chewbacca api"],
+      "why": "luma cityEvents city=la"
+    },
+    {
+      "prompt": "Which companies near me are hiring SDRs right now?",
+      "expect_tools": ["chewbacca api"],
+      "why": "linkedin-jobs searchJobs with a full location string"
+    },
+    {
+      "prompt": "Is Chappelow a good professor? Thinking of his WRIT section next spring",
+      "expect_tools": ["chewbacca api"],
+      "why": "rmp searchProfessors with USC's base64 school id, then usc-classes getSections"
+    },
+    {
+      "prompt": "Pull the taco trucks near USC with their phone numbers so I can pitch sites",
+      "expect_tools": ["chewbacca api"],
+      "why": "google-maps searchPlaces, with the city in the query"
+    },
+    {
+      "prompt": "Enrich this Clay table with company headcount",
+      "expect_tools": ["clay-navigation"],
+      "why": "Clay has its own engine; this skill does not cover it",
+      "reject": ["chewbacca api"]
+    }
+  ]
+}

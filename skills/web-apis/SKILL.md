@@ -34,19 +34,32 @@ Read them before the first call: most failures are a param format they spell out
 | site | ops | for |
 | --- | --- | --- |
 | yc | searchCompanies, companiesByBatch, getCompany | T Combinator outbound to YC startups, founders |
-| linkedin | getMe, getProfile, getCompany, searchPeople, searchCompanies | his own session (Chrome Default, calebsnewton@gmail.com) |
+| linkedin | getMe, getProfile, getCompany, searchPeople, searchCompanies | his session; see the LinkedIn warning below |
 | linkedin-jobs | searchJobs, getJob | hiring-surge signals, logged out |
 | producthunt | launchesOnDate, searchProducts, getProduct | just-launched signals, makers |
 | luma | cityEvents, getEvent | LA founder events (`city=la`) |
 | google-maps | searchPlaces, getPlace | small-business sites, local leads |
 | usc-classes | listPrograms, listCourses, getSections, searchCourses | registration planning (20271 = Spring 2027) |
 | rmp | searchProfessors, getProfessor | instructors at USC (`schoolId=U2Nob29sLTEzODE=`) |
+| brightspace | myCourses, upcoming, assignments, submissions, grades, announcements, content | his courses; `chewbacca api login brightspace` first (12 hour session) |
+| usc-jobs | searchJobs, getJob | USC's public staff job board, pay included |
+| usc-events | upcoming, searchEvents | calendar.usc.edu |
+| sc-engage | searchOrgs, getOrg, orgEvents | USC clubs, officers, club events |
 | bundled | google-flights, airbnb, amazon, goodreads, youtube, x, instagram, hacker-news | upstream's own |
 
 Formats that bit during teaching: LinkedIn job locations in full
 (`Austin, Texas, United States`, a bare `Austin` became Colorado); Google Maps
 queries need the city or they bias to LA; RMP ids are base64 (`Teacher-123`);
 USC course codes have no space (`CSCI102`).
+
+Not covered yet, each waiting on a sign-in only he can do: webreg and myUSC
+(USC SSO with Duo in the Work Chrome profile) and Handshake (never signed in
+there). Both are on his todo list.
+
+LinkedIn warning: signed-in LinkedIn calls got both of his Chrome sessions
+revoked on 2026-10-10, minutes after use. Use linkedin-jobs (logged out) for
+anything public, and treat the signed-in `linkedin` ops as a last resort, a
+handful of calls at most.
 
 ## Teaching a new site
 

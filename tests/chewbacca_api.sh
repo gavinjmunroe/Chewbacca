@@ -73,12 +73,23 @@ echo '{"name":"z12","baseUrl":"https://z12.com","operations":[{"name":"o","readO
 echo '{"cookies":[{"name":"li","domain":".z13.com"}],"source":"chrome:Default"}' > "$T/engine/sessions/z13main.json"
 echo '{"name":"z13","baseUrl":"https://jobs.z13.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://jobs.z13.com/"}}]}' > "$T/kit/z13.json"
 echo '{"name":"z14","baseUrl":"https://www.z13.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://www.z13.com/"}}]}' > "$T/kit/z14.json"
+# A cookie for one host doesn't reach a sibling host: z17 lives beside the
+# z13 login at the same registrable domain and must still install.
+echo '{"name":"z17","baseUrl":"https://classes.z13b.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://classes.z13b.com/"}}]}' > "$T/kit/z17.json"
+echo '{"cookies":[{"name":"d","domain":"lms.z13b.com"}],"source":"file"}' > "$T/engine/sessions/z13b.json"
 printf 'z14 signed-in-ok\n' > "$T/kit/hosts.allow"
 bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
 [ -f "$T/engine/sites/z12.json" ] && no "a write op synced from the repo"
 [ -f "$T/engine/sites/z13.json" ] && no "a spec on a signed-in domain synced under another name"
 [ -f "$T/engine/sites/z14.json" ] || no "a reviewed signed-in-ok site was refused"
-rm -f "$T/kit/z12.json" "$T/kit/z13.json" "$T/kit/z14.json" "$T/kit/hosts.allow" "$T/engine/sessions/z13main.json"
+[ -f "$T/engine/sites/z17.json" ] || no "a login on one host blocked a sibling host's public spec"
+# A reviewed site is installed even when its own session is signed in.
+echo '{"name":"z18","baseUrl":"https://z18.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://z18.com/"}}]}' > "$T/kit/z18.json"
+echo '{"cookies":[{"name":"s","domain":"z18.com"}],"source":"file"}' > "$T/engine/sessions/z18.json"
+printf 'z18 signed-in-ok\n' >> "$T/kit/hosts.allow"
+bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+[ -f "$T/engine/sites/z18.json" ] || no "a reviewed site was refused because its own session is signed in"
+rm -f "$T/kit/z12.json" "$T/kit/z13.json" "$T/kit/z14.json" "$T/kit/z17.json" "$T/kit/z18.json" "$T/kit/hosts.allow" "$T/engine/sessions/z13main.json" "$T/engine/sessions/z13b.json" "$T/engine/sessions/z18.json"
 # Drift: a kit spec installed while signed out is pulled once a login on its
 # domain appears; an unreadable session file fails closed.
 echo '{"name":"z15","baseUrl":"https://z15.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://z15.com/"}}]}' > "$T/kit/z15.json"
@@ -99,6 +110,14 @@ for z in z7 z8; do
 done
 [ -f "$T/engine/sites/z1.md" ] && no "a refused spec's notes were copied"
 rm -f "$T/kit/z1.md"
+# A URL-shaped pattern inside a response block only parses what came back,
+# so it doesn't block the spec; the same text in the request does.
+echo '{"name":"z19","baseUrl":"https://z19.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://z19.com/"},"response":{"pick":["url=link~(https?://[^\\s]+)"]}}]}' > "$T/kit/z19.json"
+echo '{"name":"z20","baseUrl":"https://z20.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://z20.com/","headers":{"x":"https://evil.example/"}}}]}' > "$T/kit/z20.json"
+bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+[ -f "$T/engine/sites/z19.json" ] || no "a URL pattern in a response block refused the spec"
+[ -f "$T/engine/sites/z20.json" ] && no "an off-site URL in a request header was let through"
+rm -f "$T/kit/z19.json" "$T/kit/z20.json"
 for z in z1 z2 z3; do
   [ -f "$T/engine/sites/$z.json" ] && no "sync accepted $z, whose request can leave its domain"
 done

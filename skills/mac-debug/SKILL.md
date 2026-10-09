@@ -31,6 +31,21 @@ ioreg -l -w 0 -d 1 -k IOConsoleUsers | grep -o 'kCGSSessionSecureInputPID"=[0-9]
 Nonzero is the pid holding it. Fix: `open -a Finder`, retry. If an app is stuck, focus
 and unfocus it, or quit it.
 
+### An app reopens on its own after you quit or force quit it
+**Something sent it an AppleScript.** `tell application "X"` launches X if it isn't
+running, and `mac mail`, `mac calendar` and friends do exactly that. A background
+poller turns one launch into "it keeps coming back". Find the poller:
+
+```bash
+ps -o pid,lstart -p $(pgrep -x Mail)          # launch time, then match it to a job
+grep -rlE 'application "Mail"|"mac", "mail"' bin tools hud
+launchctl list | grep -iE 'chewb|calebnewton'  # the agents that run on a timer
+```
+
+Fix: the poller checks `pgrep -xq <App>` first and leaves the app alone when it's
+closed. On 2026-10-09 kyber-surfaces read unread mail every 60 s and reopened Mail
+after every force quit (b9b9323e, test in tests/test_osgraph.py).
+
 ### Clicks do nothing from inside an app
 **App Sandbox** silently blocks `CGEvent.post`. No error. No fix inside the sandbox;
 this is why every serious macOS automation tool ships outside the App Store.

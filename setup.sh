@@ -2145,10 +2145,9 @@ composio_key = env("D1_COMPOSIO_KEY", "").strip()
 # had them, and every listed tool is paid for in context each session. setdefault, so an existing entry is never clobbered.
 # Everything else is left to the user: ~/.claude.json is where client hostnames
 # and API keys live.
-mcp["mcpServers"].setdefault("filesystem", {
-    "command": "npx",
-    "args": ["-y", "@modelcontextprotocol/server-filesystem", os.path.expanduser("~")],
-})
+# filesystem was dropped 2026-10-09: every Claude tab boots its own copy of
+# each MCP server, and a 12-tab restart put 252 MCP processes on the Mac at
+# load 106. Read, Write and Edit already cover the whole home directory.
 
 if composio_url:
     mcp["mcpServers"]["composio"] = {
@@ -2442,8 +2441,9 @@ if [ "$PLUGINS_OK" -eq 1 ]; then
     else
       warn "could not register $M_NAME"
     fi
+  # git was dropped 2026-10-09 with filesystem above: 26 copies across 13
+  # tabs, for tools the git CLI already gives every agent.
   done <<'KEYLESS_MCP'
-git|uvx|mcp-server-git
 KEYLESS_MCP
 
   while IFS='|' read -r M_NAME M_CMD M_ARGS M_ENV; do

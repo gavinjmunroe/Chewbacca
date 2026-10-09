@@ -19,8 +19,17 @@
 # bundle, and every prompt and list row says Chewbacca.
 #
 # An ad hoc signature is pinned to the binary's hash, so a re-sign is a new
-# identity and needs the grant again. The bundle is therefore rebuilt only when
-# it is missing or node's MAJOR version moved, never on every patch release.
+# identity and needs the grant again. The first version rebuilt only on a node
+# MAJOR change to spare that, and the commit security review (2026-10-10)
+# flagged it: patch releases are where node ships its security fixes, so the
+# Full Disk Access runtime would sit on a known-vulnerable node for months.
+# It now rebuilds on any version change, and `chewbacca permissions` shows the
+# grant as missing again so re-granting is one drag on the card.
+#
+# Known exposure, same as giving Terminal Full Disk Access: anything that can
+# launch this binary as its own responsible process (a launchd job you or a
+# program submit) runs JavaScript with the grant. A launcher that only runs
+# the texts sync would narrow it; tracked in the work ledger.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -47,9 +56,9 @@ if [[ -z "$src" ]]; then
 fi
 [[ -z "$src" ]] && { echo "chewbacca-node: no node found under ~/.nvm or Homebrew" >&2; exit 1; }
 
-major() { "$1" -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo none; }
-want=$(major "$src")
-have=$( [[ -x "$BIN" ]] && /usr/libexec/PlistBuddy -c "Print :ChewbaccaNodeMajor" "$APP/Contents/Info.plist" 2>/dev/null || echo none)
+version() { "$1" -p 'process.versions.node' 2>/dev/null || echo none; }
+want=$(version "$src")
+have=$( [[ -x "$BIN" ]] && /usr/libexec/PlistBuddy -c "Print :ChewbaccaNodeVersion" "$APP/Contents/Info.plist" 2>/dev/null || echo none)
 
 if [[ "$want" != "$have" ]] || ! codesign -v "$APP" 2>/dev/null; then
   # Build beside it and swap whole, so a job starting mid-refresh never runs
@@ -71,7 +80,7 @@ if [[ "$want" != "$have" ]] || ! codesign -v "$APP" 2>/dev/null; then
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>LSUIElement</key><true/>
-  <key>ChewbaccaNodeMajor</key><string>$want</string>
+  <key>ChewbaccaNodeVersion</key><string>$want</string>
 </dict></plist>
 PLIST
   codesign --force --sign - --identifier com.chewbacca.runtime "$stage" >/dev/null 2>&1 \

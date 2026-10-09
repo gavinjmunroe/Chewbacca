@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # chewbacca-node builds the launchd runtime as a signed Chewbacca.app, so
 # System Settings shows "Chewbacca" with an icon instead of a bare "node"
-# (2026-10-10, Caleb: "non devs will think its malware"), and it rebuilds only
-# when node's major version moves, because every re-sign needs the grant again.
+# (2026-10-10, Caleb: "non devs will think its malware"). It rebuilds on any
+# node version change, because patch releases carry node's security fixes
+# (commit security review, 2026-10-10), and never when nothing changed, because
+# every re-sign needs the grant again.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$(command -v node || true)"
@@ -29,8 +31,13 @@ sleep 1
 bash "$ROOT/bin/chewbacca-node" >/dev/null 2>&1 || fail "second run failed"
 [ "$(stat -f %m "$APP/Contents/MacOS/Chewbacca")" = "$before" ] || fail "a second run re-signed, which would cost the grant"
 
-/usr/libexec/PlistBuddy -c 'Set :ChewbaccaNodeMajor 0' "$APP/Contents/Info.plist"
+# A patch release must rebuild. Fake it with a node shim reporting another
+# patch number; the bundle's recorded version is then stale.
+mkdir -p "$T/shim"; printf '#!/bin/sh\ncase "$*" in *process.versions.node*) echo 0.0.1;; *) exec "%s" "$@";; esac\n' "$SRC" > "$T/shim/node"
+chmod +x "$T/shim/node"
+/usr/libexec/PlistBuddy -c 'Print :ChewbaccaNodeVersion' "$APP/Contents/Info.plist" >/dev/null || fail "the bundle does not record node's full version"
+out="$(CHEWBACCA_NODE_SOURCE="$T/shim/node" bash "$ROOT/bin/chewbacca-node" 2>&1)"
+grep -q "built" <<<"$out" || fail "a node patch release did not rebuild, leaving a vulnerable runtime"
 out="$(bash "$ROOT/bin/chewbacca-node" 2>&1)"
-grep -q "built" <<<"$out" || fail "a node major version change did not rebuild"
 codesign -v "$APP" 2>/dev/null || fail "rebuilt bundle does not verify"
 exit 0

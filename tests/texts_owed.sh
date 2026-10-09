@@ -45,6 +45,12 @@ mkdir -p "$CHEWBACCA_EMAIL_HOME"; printf '# mine\nme@second.example\n' > "$CHEWB
 # A stand-in chat.db: the GUID has to be read from it, never built.
 export CHEWBACCA_CHAT_DB="$PEOPLE_DIR/chat.db"
 sqlite3 "$CHEWBACCA_CHAT_DB" "CREATE TABLE chat (guid TEXT, chat_identifier TEXT); INSERT INTO chat VALUES ('any;+;chatDEN42', 'chatDEN42');"
+# The same group under a second GUID with newer messages (RCS beside SMS,
+# 2026-10-10): the live one must win, not whichever row comes first.
+sqlite3 "$PEOPLE_DIR/chat2.db" "CREATE TABLE chat (ROWID INTEGER PRIMARY KEY, guid TEXT, chat_identifier TEXT);
+  CREATE TABLE chat_message_join (chat_id INT, message_id INT); CREATE TABLE message (ROWID INTEGER PRIMARY KEY, date INT);
+  INSERT INTO chat VALUES (1,'SMS;+;chatTWO','chatTWO'),(2,'RCS;+;chatTWO','chatTWO');
+  INSERT INTO message VALUES (1,100),(2,900); INSERT INTO chat_message_join VALUES (1,1),(2,2);"
 
 fail() { echo "$1" >&2; printf '%s\n' "$out" | tail -8 >&2; exit 1; }
 
@@ -91,6 +97,10 @@ out="$("$P" texts drafts add "Nope Room" "x" --group 2>&1)" && fail "a group dra
 out="$("$P" texts drafts send 2 2>&1)" && fail "CHEWBACCA_NO_SEND did not stop a group send"
 out="$("$P" texts drafts 2>&1)"
 grep -q "No allergies" <<<"$out" || fail "a refused group send still removed the draft"
+
+sqlite3 "$DB" "INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, source, room) VALUES (770010, NULL, 'Two Chat', 'chatTWO', 1, 'x', datetime('now','-5 hour'), 'imessage', 'Two Chat');"
+out="$(CHEWBACCA_CHAT_DB="$PEOPLE_DIR/chat2.db" "$P" send --room "Two Chat" "hi" --dry-run 2>&1)"
+grep -q "RCS;+;chatTWO" <<<"$out" || fail "a group with two GUIDs did not resolve to the one with the newest message"
 
 # Group sends: exact room name, room id never a member, ambiguity refused.
 out="$("$P" send --room "den group" "hi" --dry-run 2>&1)" || fail "room send by name failed"

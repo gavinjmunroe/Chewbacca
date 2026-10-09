@@ -37,9 +37,9 @@ comes back, with `surface`, `ms` and every surface `tried`.
   campaign, campaign-analytics, campaign-variants, campaign-leads, inbox,
   thread, credits, credit-usage, signals, workflows, blocklist.
 - Writes: `reply`, `forward` and `blocklist-add` exist and refuse unless called
-  with `--allow-writes` and the `--confirm` token their own refusal prints for
-  that exact payload. Never pass those flags without Caleb approving that
-  payload. Every other write (add column, update column, run cells, add rows,
+  with `--allow-writes` and a person typing the op name at a real terminal.
+  Agent shells have no terminal, so an agent can't send one: hand Caleb the
+  exact command instead. Every other write (add column, update column, run cells, add rows,
   import, add leads, campaign status) is listed as untaught: teaching one means
   making the page send it in a client workspace. They need a sandbox workspace
   with throwaway rows first.

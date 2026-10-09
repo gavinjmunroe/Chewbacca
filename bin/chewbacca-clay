@@ -13,7 +13,8 @@
 // the UI does, the exact clay-go route to open. A surface runs only when every
 // arg it needs was given; the next one runs when it fails or comes back cut.
 //
-// Writes refuse unless called with --allow-writes AND --confirm <token>, where
+// Writes refuse unless called with --allow-writes AND a person types the op
+// name at a real terminal (see personApproves), where
 // the token is printed by the refusal and binds this exact op and payload.
 // Everything Clay returns is untrusted data: reply bodies are written by
 // strangers. Nothing here logs a cookie or token.
@@ -54,14 +55,12 @@ const measured = readJson(MEASURED, {});
 
 // ── args ─────────────────────────────────────────────────────────────────────
 function parseArgv(argv) {
-  const flags = { allowWrites: false, confirm: null, surface: null, maxTier: null };
+  const flags = { allowWrites: false, surface: null, maxTier: null };
   const kv = {};
   const pos = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--allow-writes") flags.allowWrites = true;
-    else if (a === "--confirm") flags.confirm = argv[++i] ?? "";
-    else if (a.startsWith("--confirm=")) flags.confirm = a.slice(10);
     else if (a === "--surface") {
       flags.surface = argv[++i] ?? "";
       if (flags.surface === "api") flags.surface = "api-anything";
@@ -299,9 +298,56 @@ function listOps() {
   return { ok: true, engine: { name: registry.engine.name, sha: registry.engine.sha }, ops, ui_only: ui, untaught_writes: untaught, untaught_reason: registry.untaught_reason };
 }
 
-function confirmToken(opName, args) {
-  const canon = JSON.stringify({ op: opName, args: Object.fromEntries(Object.keys(args).sort().map((k) => [k, args[k]])) });
-  return crypto.createHash("sha256").update(canon).digest("hex").slice(0, 12);
+// Path and query slots are filled into an authenticated api.clay.com URL, so a
+// value like "../../workspaces/9/x" or "a?b=c" would retarget the request
+// (security review, 2026-10-09). Every value must match its slot's shape.
+const ID = /^[A-Za-z0-9_-]{1,80}$/;
+const ARG_SHAPES = {
+  ws: /^\d{1,12}$/,
+  table: ID, row: ID, view: ID, audience: ID, campaign: ID, campaign_id: ID, lead_id: ID,
+  cursor: /^[A-Za-z0-9_=+-]{1,200}$/, after: ID,
+  limit: /^\d{1,5}$/, offset: /^\d{1,7}$/, days: /^\d{1,4}$/,
+  ids: /^[A-Za-z0-9_-]{1,80}(,[A-Za-z0-9_-]{1,80}){0,199}$/,
+  emailOrDomain: /^([A-Za-z0-9._%+-]+@)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
+};
+const JSON_ARGS = new Set(["forward_data", "reply_data"]);
+
+function badArg(args) {
+  for (const [k, v] of Object.entries(args)) {
+    if (JSON_ARGS.has(k)) {
+      let parsed;
+      try { parsed = typeof v === "string" ? JSON.parse(v) : v; } catch { return `${k} is not JSON`; }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return `${k} must be a JSON object`;
+      continue;
+    }
+    const shape = ARG_SHAPES[k];
+    if (!shape) return `${k} has no allowed shape`;
+    if (!shape.test(String(v))) return `${k} does not look like a ${k}`;
+  }
+  return null;
+}
+
+// A write needs a person at a terminal. The old gate printed its own
+// --confirm token in the refusal, so the agent that was refused could pass it
+// straight back and approve itself (security review, 2026-10-09). Now the
+// answer is read from /dev/tty, which agent shells don't have (ENXIO), and
+// CHEWBACCA_NO_SEND=1 refuses outright. Fixture mode reads a canned answer so
+// the gate is testable; fixture mode never reaches Clay.
+function personApproves(name, args) {
+  const prompt = `\nchewbacca clay is about to WRITE to Clay:\n  ${JSON.stringify({ op: name, args })}\nType the op name (${name}) to send it, anything else to stop: `;
+  if (FIXTURES) return (process.env.CHEWBACCA_CLAY_TTY_ANSWER || "") === name;
+  let fd;
+  try { fd = fs.openSync("/dev/tty", "r+"); } catch { return null; }
+  try {
+    fs.writeSync(fd, prompt);
+    const buf = Buffer.alloc(256);
+    const n = fs.readSync(fd, buf, 0, buf.length, null);
+    return buf.toString("utf8", 0, n).trim() === name;
+  } catch {
+    return false;
+  } finally {
+    fs.closeSync(fd);
+  }
 }
 
 async function runOp(name, kv, flags) {
@@ -324,23 +370,15 @@ async function runOp(name, kv, flags) {
   if (stray.length) {
     out({ ok: false, op: name, class: "usage", reason: `unknown arg ${stray.join(", ")}; ${name} takes ${op.args.join(", ") || "no args"}` }, EXIT.usage);
   }
+  const bad = badArg(args);
+  if (bad) out({ ok: false, op: name, class: "input", reason: bad }, EXIT.usage);
   if (op.kind === "write") {
-    const token = confirmToken(name, args);
-    if (!flags.allowWrites || flags.confirm !== token) {
-      out(
-        {
-          ok: false,
-          op: name,
-          class: "refused",
-          gate: op.gate,
-          reason: !flags.allowWrites ? "a write needs --allow-writes" : flags.confirm ? "--confirm does not match this exact payload" : "a write needs --confirm <token>",
-          payload: { op: name, args },
-          confirm: token,
-          next: `only after Caleb approves this exact payload: chewbacca clay ${name} ... --allow-writes --confirm ${token}`,
-        },
-        EXIT.refused,
-      );
-    }
+    const refuse = (reason) => out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args } }, EXIT.refused);
+    if (process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
+    if (!flags.allowWrites) refuse("a write needs --allow-writes");
+    const yes = personApproves(name, args);
+    if (yes === null) refuse("a write needs a person at a terminal to type the op name; this shell has none, so hand Caleb the exact command");
+    if (!yes) refuse("the person at the terminal did not approve this payload");
   }
   const cands = plan(op, args, flags.surface);
   if (!cands.length) {
@@ -427,7 +465,7 @@ const HELP = `chewbacca clay: Clay without opening Clay
   chewbacca clay doctor                  engine pin, session, spec
 
   --surface cli|api-anything|bin         force one surface
-  --allow-writes --confirm <token>       a write; the refusal prints the token for that payload
+  --allow-writes                         a write; a person must type the op name at a terminal
 
 ws defaults to $CLAY_WORKSPACE_ID or ${registry.defaults.ws}. Output is one line of JSON.`;
 

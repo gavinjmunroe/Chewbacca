@@ -1,7 +1,7 @@
 {
   "schema": "clay-ops/1",
   "revision": "2026-10-09.1",
-  "notes": "Every Clay job `chewbacca clay` answers, and the surfaces that answer it. A surface is tried only when every arg it needs was given; the fastest measured one goes first, and the next is tried when it fails or comes back truncated. ms is end-to-end wall time for one call from a shell on Caleb's Mac on 2026-10-09, load average 60 to 90 from other agents, so read them as relative, not absolute. Writes are listed with a gate class; only three are callable and they refuse without --allow-writes and the --confirm token the refusal prints.",
+  "notes": "Every Clay job `chewbacca clay` answers, and the surfaces that answer it. A surface is tried only when every arg it needs was given; the fastest measured one goes first, and the next is tried when it fails or comes back truncated. ms is end-to-end wall time for one call from a shell on Caleb's Mac on 2026-10-09, load average 60 to 90 from other agents, so read them as relative, not absolute. Writes are listed with a gate class; only three are callable and they refuse without --allow-writes and a person typing the op name at a real terminal, which agent shells don't have.",
   "engine": {
     "name": "api-anything",
     "repo": "https://github.com/goodnight000/api-anything",

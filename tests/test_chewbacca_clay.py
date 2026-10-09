@@ -173,26 +173,29 @@ def test_write_gate():
     # "no fixture" (exit 1), never the refusal (exit 3) these assert.
     code, out, _ = run({}, {}, *args)
     ok(code == 3 and out["class"] == "refused" and "allow-writes" in out["reason"], "a write without --allow-writes")
-    token = out["confirm"]
-    ok(len(token) == 12 and out["payload"]["args"]["ws"] == "1372623", "the refusal shows the payload and its token")
+    ok("confirm" not in out, "the refusal never hands back an approval token (review 2026-10-09: self-approval)")
+    ok(out["payload"]["args"]["ws"] == "1372623", "the refusal shows the payload")
     code, out, _ = run({}, {}, *args, "--allow-writes")
-    ok(code == 3 and out["class"] == "refused" and "--confirm" in out["reason"], "--allow-writes alone is refused")
-    code, out, _ = run({}, {}, *args, "--confirm", token)
-    ok(code == 3 and out["class"] == "refused", "--confirm alone is refused")
-    code, out, _ = run({}, {}, *args, "--allow-writes", "--confirm", "000000000000")
-    ok(code == 3 and "does not match" in out["reason"], "a token for another payload is refused")
-    code, out, _ = run({}, {}, "blocklist-add", "emailOrDomain=other.example", "--allow-writes", "--confirm", token)
-    ok(code == 3, "a token is bound to its payload: changing the address voids it")
-    code, out, _ = run({}, {}, *args, "--allow-writes", "--confirm", token, env_extra={"CLAY_WORKSPACE_ID": "999"})
-    ok(code == 3, "a token is bound to the workspace too")
-    code, out, _ = run({"api-anything/blocklistAdd.json": SENT}, {}, *args, "--allow-writes", "--confirm", token)
-    ok(code == 0 and out["ok"] is True and out["surface"] == "api-anything", "both gates and the token let it run")
+    ok(code == 3 and "did not approve" in out["reason"], "--allow-writes with nobody typing is refused")
+    code, out, _ = run({}, {}, *args, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "reply"})
+    ok(code == 3, "typing a different op name is refused")
+    code, out, _ = run({"api-anything/blocklistAdd.json": SENT}, {}, *args, "--allow-writes",
+                       env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "blocklist-add", "CHEWBACCA_NO_SEND": "1"})
+    ok(code == 3 and "NO_SEND" in out["reason"], "CHEWBACCA_NO_SEND=1 refuses even an approved write")
+    code, out, _ = run({"api-anything/blocklistAdd.json": SENT}, {}, *args, "--allow-writes",
+                       env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "blocklist-add"})
+    ok(code == 0 and out["ok"] is True and out["surface"] == "api-anything", "--allow-writes and a typed approval let it run")
     fail = {"api-anything/inboxReply.json": {"ok": False, "class": "error", "reason": "500", "ms": 10}}
     reply = ("reply", "campaign_id=1", 'reply_data={"email_stats_id":"s1","email_body":"x"}')
-    code, out, _ = run(fail, {}, *reply)
-    tok = out["confirm"]
-    code, out, _ = run(fail, {}, *reply, "--allow-writes", "--confirm", tok)
+    code, out, _ = run(fail, {}, *reply, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "reply"})
     ok(code == 1 and len(out["tried"]) == 1, "a failed write is sent once and never retried on another surface")
+    # Slots go into an authenticated api.clay.com URL: a path or query in a value is refused.
+    for bad in ("table=../../workspaces/9/x", "table=t_1?x=y", "table=t_1/rows", "ws=1372623/../9", "limit=5;rm"):
+        k = bad.split("=")[0]
+        op = {"table": "table", "ws": "tables", "limit": "rows"}[k]
+        extra = ("table=t_ok1",) if op == "rows" else ()
+        code, out, _ = run({}, {}, op, bad, *extra)
+        ok(code == 2 and out["class"] == "input", f"a crafted slot is refused before any call: {bad}")
     code, out, _ = run({}, {}, "run-cells", "table=t_example1")
     ok(code == 3 and out["class"] == "untaught" and out["gate"] == "write:spends-credits", "an untaught write refuses")
     code, out, _ = run({}, {}, "measure", "reply")

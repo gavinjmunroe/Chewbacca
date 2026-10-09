@@ -220,6 +220,11 @@ if group "people"; then
     check "texts <name> reads one person's newest messages whole" \
       bash "$ROOT/tests/texts_reader.sh" "${P[@]}"
 
+    check "send resolves strictly and replies in the thread's own app" \
+      bash "$ROOT/tests/people_send.sh" "${P[@]}"
+    check "WhatsApp rows come out in the texts reader's shape" \
+      python3 "$ROOT/tests/test_whatsapp_reader.py"
+
     check  "score runs" "${P[@]}" score
     check  "birthdays runs" "${P[@]}" birthdays --days 30
     check  "reconnect runs" "${P[@]}" reconnect

@@ -53,19 +53,32 @@ echo '{"cookies":[]}' > "$T/engine/sessions/eps.json"
 echo '{"name":"z1","baseUrl":"https://z1.com","operations":[{"url":"https://{host}/x"}]}' > "$T/kit/z1.json"
 printf '%s\n' '{"name":"z2","baseUrl":"https://z2.com","operations":[{"url":"https://evil.example\\@z2.com/x"}]}' > "$T/kit/z2.json"
 echo '{"name":"z3","baseUrl":"https://z3.com","operations":[{"headers":{"referer":"//evil.example/"}}]}' > "$T/kit/z3.json"
-echo '{"name":"z4","baseUrl":"https://www.z4.com","operations":[{"name":"o","request":{"url":"https://api.z4.com/v1?q=%7Bq%7D"},"match":{"host":"api.z4.com"}}]}' > "$T/kit/z4.json"
+echo '{"name":"z4","baseUrl":"https://www.z4.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://api.z4.com/v1?q=%7Bq%7D"},"match":{"host":"api.z4.com"}}]}' > "$T/kit/z4.json"
 # A spec named for another site, a slot that rewrites Host, and the notes of
 # a refused spec: none of them reach the engine.
 echo '{"name":"linkedin","baseUrl":"https://z7.com","operations":[]}' > "$T/kit/z7.json"
-echo '{"name":"z8","baseUrl":"https://z8.com","operations":[{"name":"o","request":{"url":"https://z8.com/"},"slots":[{"param":"h","at":["header:host"]}]}]}' > "$T/kit/z8.json"
+echo '{"name":"z8","baseUrl":"https://z8.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://z8.com/"},"slots":[{"param":"h","at":["header:host"]}]}]}' > "$T/kit/z8.json"
 echo 'notes' > "$T/kit/z1.md"
 bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
-echo '{"name":"z10","baseUrl":"https://z10.com","operations":[{"name":"o","request":{"url":"https://z10.com/"},"slots":[{"param":"h","at":["header:x-forwarded-host"]}]}]}' > "$T/kit/z10.json"
-echo '{"name":"z11","baseUrl":"https://z11.com","operations":[{"name":"o","request":{"url":"https://z11.com/"},"slots":[{"param":"r","at":["header:referer"]},{"ref":"session:o/csrf","at":["header:x-csrf"]}]}]}' > "$T/kit/z11.json"
+echo '{"name":"z10","baseUrl":"https://z10.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://z10.com/"},"slots":[{"param":"h","at":["header:x-forwarded-host"]}]}]}' > "$T/kit/z10.json"
+echo '{"name":"z11","baseUrl":"https://z11.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://z11.com/"},"slots":[{"param":"r","at":["header:referer"]},{"ref":"session:o/csrf","at":["header:x-csrf"]}]}]}' > "$T/kit/z11.json"
 bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
 [ -f "$T/engine/sites/z10.json" ] && no "an argument was allowed to write a forwarding header"
 [ -f "$T/engine/sites/z11.json" ] || no "a referer argument or a same-site session header was refused"
 rm -f "$T/kit/z10.json" "$T/kit/z11.json"
+# A write op never ships from the repo.
+echo '{"name":"z12","baseUrl":"https://z12.com","operations":[{"name":"o","readOnly":false,"request":{"url":"https://z12.com/"}}]}' > "$T/kit/z12.json"
+# A differently named site on a signed-in domain would ride that login through
+# the shared Chrome profile; refused until a person marks it signed-in-ok.
+echo '{"cookies":[{"name":"li","domain":".z13.com"}],"source":"chrome:Default"}' > "$T/engine/sessions/z13main.json"
+echo '{"name":"z13","baseUrl":"https://jobs.z13.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://jobs.z13.com/"}}]}' > "$T/kit/z13.json"
+echo '{"name":"z14","baseUrl":"https://www.z13.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://www.z13.com/"}}]}' > "$T/kit/z14.json"
+printf 'z14 signed-in-ok\n' > "$T/kit/hosts.allow"
+bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
+[ -f "$T/engine/sites/z12.json" ] && no "a write op synced from the repo"
+[ -f "$T/engine/sites/z13.json" ] && no "a spec on a signed-in domain synced under another name"
+[ -f "$T/engine/sites/z14.json" ] || no "a reviewed signed-in-ok site was refused"
+rm -f "$T/kit/z12.json" "$T/kit/z13.json" "$T/kit/z14.json" "$T/kit/hosts.allow" "$T/engine/sessions/z13main.json"
 for z in z7 z8; do
   [ -f "$T/engine/sites/$z.json" ] && no "sync accepted $z"
 done
@@ -78,9 +91,9 @@ done
 ls "$T/engine/sites"/.*.json.* >/dev/null 2>&1 && no "a refused spec left a temp file in the engine store"
 # An exact host listed for that site in hosts.allow is let through; the same
 # host listed for a different site is not.
-echo '{"name":"z5","baseUrl":"https://z5.com","operations":[{"name":"o","request":{"url":"https://idx.search.net/q"}}]}' > "$T/kit/z5.json"
+echo '{"name":"z5","baseUrl":"https://z5.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://idx.search.net/q"}}]}' > "$T/kit/z5.json"
 echo '{"name":"z6","baseUrl":"https://z6.com","operations":[{"url":"https://idx.search.net/q"}]}' > "$T/kit/z6.json"
-echo '{"name":"z9","baseUrl":"https://z9.com","operations":[{"name":"o","request":{"url":"https://idx.search.net/q"},"slots":[{"ref":"cookie:sid","at":["header:x-sid"]}]}]}' > "$T/kit/z9.json"
+echo '{"name":"z9","baseUrl":"https://z9.com","operations":[{"name":"o","readOnly":true,"request":{"url":"https://idx.search.net/q"},"slots":[{"ref":"cookie:sid","at":["header:x-sid"]}]}]}' > "$T/kit/z9.json"
 printf 'z5 idx.search.net  # its frontend queries this index\nz9 idx.search.net\n' > "$T/kit/hosts.allow"
 bash "$ROOT/bin/chewbacca-api" sync >/dev/null 2>&1
 [ -f "$T/engine/sites/z5.json" ] || no "an allowlisted host was refused"

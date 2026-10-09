@@ -100,6 +100,26 @@ let allowed = new Set();
 try {
   allowed = new Set(fs.readFileSync(allowFile, "utf8").split("\n").map((l) => l.replace(/#.*/, "").trim().split(/\s+/)).filter((p) => p[0] === name && p[1]).map((p) => p[1].toLowerCase()));
 } catch {}
+// Kit specs are reads. A write op from the repo would be one --allow-writes
+// away from acting as the user.
+for (const op of spec.operations || []) if (op?.readOnly !== true) die(`${name}.${op?.name}: not a read-only operation`);
+// The session check above is by name, but the browser fallback runs in one
+// shared Chrome profile that holds every login's cookies. So a spec on the
+// same domain as any signed-in site (linkedin-jobs beside a linkedin login)
+// would ride that login. Refused, unless a person listed the site as
+// "<site> signed-in-ok" in hosts.allow after reading it.
+const signedInRoots = new Set();
+try {
+  for (const f of fs.readdirSync(sessions)) {
+    if (!f.endsWith(".json")) continue;
+    try {
+      const sess = JSON.parse(fs.readFileSync(path.join(sessions, f), "utf8"));
+      if (sess.source) for (const c of sess.cookies || []) if (c?.domain) signedInRoots.add(root(String(c.domain).replace(/^\./, "").toLowerCase()));
+    } catch {}
+  }
+} catch {}
+if (signedInRoots.has(home) && !allowed.has("signed-in-ok"))
+  die(`${name}: you're signed in on ${home}; list "${name} signed-in-ok" in hosts.allow after reading the spec`);
 // Every string in the spec, keys included: a host can hide in a header value,
 // a redirect, or a template whose host is a parameter.
 const walk = (v, out) => { if (typeof v === "string") out.push(v); else if (v && typeof v === "object") for (const [k, x] of Object.entries(v)) { out.push(k); walk(x, out); } return out; };

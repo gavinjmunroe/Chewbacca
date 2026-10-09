@@ -33,6 +33,47 @@ SENT = {"ok": True, "class": "ok", "tier": 1, "ms": 200, "data": {"ok": True}}
 
 checks = 0
 
+# The 16 writes derived from Clay's frontend bundle (and one from the CLI), each
+# with the args a caller gives and the request it must build. Written out by
+# hand from the bundle's contracts, not read back from clay.json, so a slot that
+# lands in the wrong path segment fails here (it did once: the campaign id
+# overwrote "campaigns" in clay-sequencer/campaigns/{id}/status).
+V3 = "https://api.clay.com/v3/workspaces/1372623"
+REC_NEW = [{"f_a": "x", "f_b": 2}]
+REC_UPD = [{"id": "r_1", "cells": {"f_a": "y"}}]
+FILTER = {"type": "GroupOp", "combinationMode": "And", "items": []}
+CONFIG = {"source": {"type": "S3_CSV", "filename": "a.csv", "key": "k/1", "recordKeys": ["a"], "records": []},
+          "destination": {"type": "TABLE", "tableId": "t_ex1"}, "map": {}, "isImportWithoutRun": True}
+DERIVED = {
+    "add-column": (["table=t_ex1", "name=Lead score", "data_type=number", "view=gv_ex1"],
+                   ("POST", f"{V3}/tables/t_ex1/fields",
+                    {"name": "Lead score", "type": "number", "typeSettings": {"dataTypeSettings": {"type": "number"}}, "activeViewId": "gv_ex1"})),
+    "update-column": (["table=t_ex1", "field=f_ex1", 'update={"name":"New"}'],
+                      ("PATCH", f"{V3}/tables/t_ex1/fields/f_ex1?skipActionFieldRuns=true", {"name": "New"})),
+    "table-auto-run": (["table=t_ex1", "on=false", 'settings={"AUTO_RUN_ON":true,"AUTO_RUN_MODE":"all","DEDUPE_FIELD_ID":null}'],
+                       ("PATCH", f"{V3}/tables/t_ex1", {"tableSettings": {"AUTO_RUN_ON": False, "AUTO_RUN_MODE": "all", "DEDUPE_FIELD_ID": None}})),
+    "run-cells": (["table=t_ex1", "fields=f_a", "rows=r_1,r_2"],
+                  ("PATCH", f"{V3}/tables/t_ex1/run", {"fieldIds": ["f_a"], "runRecords": {"recordIds": ["r_1", "r_2"]}, "forceRun": True})),
+    "cancel-run": (["table=t_ex1"], ("POST", f"{V3}/tables/t_ex1/cancelrun", {})),
+    "add-rows": (["table=t_ex1", "records=" + json.dumps(REC_NEW)],
+                 ("POST", f"{V3}/tables/t_ex1/records", {"records": [{"cells": REC_NEW[0]}]})),
+    "update-rows": (["table=t_ex1", "records=" + json.dumps(REC_UPD)], ("PATCH", f"{V3}/tables/t_ex1/records", {"records": REC_UPD})),
+    "delete-rows": (["table=t_ex1", "rows=r_1"], ("DELETE", f"{V3}/tables/t_ex1/records", {"recordIds": ["r_1"]})),
+    "import": (["config=" + json.dumps(CONFIG)], ("POST", f"{V3}/imports", {"config": CONFIG, "workspaceId": "1372623"})),
+    "add-leads": (["audience=seg_ex1", "filter=" + json.dumps(FILTER)],
+                  ("CLI", ["clay", "audiences", "update", "seg_ex1", "--filter", json.dumps(FILTER, separators=(",", ":"))], None)),
+    "campaign-status": (["campaign=cam_ex1", "status=PAUSED"], ("PATCH", f"{V3}/clay-sequencer/campaigns/cam_ex1/status", {"status": "PAUSED"})),
+    "lead-category": (["lead_map_id=42", "category_id=3"],
+                      ("PATCH", f"{V3}/clay-sequencer/master-inbox/lead-category", {"email_lead_map_id": 42, "category_id": 3})),
+    "mark-read": (["lead_map_id=42", "read_status=UNREAD"],
+                  ("PATCH", f"{V3}/clay-sequencer/master-inbox/lead-read-status", {"email_lead_map_id": 42, "new_read_status": "UNREAD"})),
+    "blocklist-remove": (["entry=987"], ("DELETE", f"{V3}/clay-sequencer/global-blocklist/987", {})),
+    "blocklist-add-bulk": (["emails=a@example.com,example.org"],
+                           ("POST", f"{V3}/campaigns/global-blocklist/add-bulk", {"emailsOrDomains": ["a@example.com", "example.org"]})),
+    "page-view-activity": (["resource=wb_ex1", "resource_type=WORKBOOK"],
+                           ("POST", f"{V3}/resources/wb_ex1/activity", {"resourceType": "WORKBOOK", "activityType": "LAST_OPENED"})),
+}
+
 
 def ok(cond, msg):
     global checks
@@ -84,13 +125,26 @@ def test_registry_matches_spec():
                 params = {p["name"] for p in sops[s["op"]]["params"]}
                 ok(set(s["args"]) <= params, f"{op['name']}: maps args the spec op does not take")
     # Every spec write is gated through the registry, and nothing else writes.
-    gated = {s["op"] for op in reg["ops"] if op["kind"] == "write" for s in op["surfaces"]}
+    gated = {s["op"] for op in reg["ops"] if op["kind"] == "write" for s in op["surfaces"] if s["type"] == "api-anything"}
     ok({n for n, o in sops.items() if not o["readOnly"]} == gated, "a spec write is not behind the registry's gate")
     for op in reg["ops"]:
         ok(op["gate"] == "read" if op["kind"] == "read" else op["gate"].startswith("write:"), f"{op['name']} gate class")
-    untaught = {w["name"] for w in reg["untaught_writes"]}
-    for name in ("add-column", "update-column", "run-cells", "add-rows", "import", "add-leads"):
-        ok(name in untaught, f"{name} is not recorded as an untaught write")
+    # The 16 writes once listed as untaught are ops now, each carrying where its
+    # request came from, and none claims to be verified: none was ever sent.
+    ok(reg["untaught_writes"] == [], "untaught_writes should be empty")
+    ops = {o["name"]: o for o in reg["ops"]}
+    files = {f["file"]: f["sha256"] for f in reg["bundle"]["files"]}
+    for name in DERIVED:
+        op = ops.get(name)
+        ok(op and op["kind"] == "write" and op["verified"] is False, f"{name} must be a write op with verified:false")
+        ev = op["evidence"]
+        if ev["source"] == "bundle":
+            ok(ev["file"] in files and ev["sha256"] == files[ev["file"]], f"{name} evidence names a bundle file the registry records")
+            ok(ev["contract"] and isinstance(ev["contract_offset"], int) and ev["body_schema"], f"{name} evidence lacks contract, offset or schema")
+        else:
+            ok(ev["source"] == "cli" and ev["command"].startswith("clay "), f"{name} evidence is neither bundle nor cli")
+        ok(op["confidence"].split(":")[0] in ("high", "medium", "low"), f"{name} confidence")
+        ok(op.get("readback", {}).get("op") in ops, f"{name} readback names a read op that exists")
     # The spec carries references, never a credential: no cookie or auth header, no session value.
     for o in spec["operations"]:
         hdrs = {k.lower() for k in o["request"]["headers"]}
@@ -111,7 +165,9 @@ def test_ops_json_shape():
     ok(set(s0) >= {"surface", "call", "ms", "tier", "last_verified"}, "surface entry keys")
     ok(s0["ms"] == 900 and s0["last_verified"] == "2026-10-09", "measured ms and date are reported")
     ok(all(o["kind"] in ("read", "write") for o in out["ops"]), "kind is read or write")
-    ok(out["untaught_writes"] and all(w["taught"] is False for w in out["untaught_writes"]), "untaught writes listed")
+    ok(out["untaught_writes"] == [], "no write is left untaught")
+    derived = [o for o in out["ops"] if o["op"] in DERIVED]
+    ok(len(derived) == 16 and all(o["verified"] is False and o["evidence"] for o in derived), "derived writes list verified:false and evidence")
     ok(out["ui_only"] and all("route" in u for u in out["ui_only"]), "ui-only jobs carry a route")
 
 
@@ -201,8 +257,8 @@ def test_write_gate():
         extra = ("table=t_ok1",) if op == "rows" else ()
         code, out, _ = run({}, {}, op, bad, *extra)
         ok(code == 2 and out["class"] == "input", f"a crafted slot is refused before any call: {bad}")
-    code, out, _ = run({}, {}, "run-cells", "table=t_example1")
-    ok(code == 3 and out["class"] == "untaught" and out["gate"] == "write:spends-credits", "an untaught write refuses")
+    code, out, _ = run({}, {}, "run-cells", "table=t_example1", "fields=f_a", "rows=r_1")
+    ok(code == 3 and out["class"] == "refused" and out["gate"] == "write:spends-credits", "run-cells refuses without --allow-writes")
     code, out, _ = run({}, {}, "measure", "reply")
     ok(code == 3 and out["class"] == "refused", "measure never runs a write")
 
@@ -252,6 +308,99 @@ def test_refuses_an_unpinned_engine():
         ok(not marker.exists(), "the unpinned engine was imported before it was refused")
 
 
+def test_dry_run_builds_each_write():
+    # No fixtures at all: if --dry-run ever reached a surface it would fail with "no fixture".
+    for name, (argv, (method, url, body)) in DERIVED.items():
+        code, out, p = run({}, {}, name, *argv, "--dry-run", env_extra={"CHEWBACCA_NO_SEND": "1"})
+        ok(code == 0 and out and out["dry_run"] is True and out["sent"] is False, f"{name} dry run failed: {p.stdout[:300]}")
+        ok(out["kind"] == "write" and out["verified"] is False, f"{name} dry run says write, unverified")
+        req = out["request"]
+        if method == "CLI":
+            ok(req["argv"] == url, f"{name} argv: {req['argv']}")
+            continue
+        ok(req["method"] == method and req["url"] == url, f"{name} built {req['method']} {req['url']}")
+        ok(req["body"] == body, f"{name} body: {json.dumps(req['body'])}")
+        ok("cookie" not in {h.lower() for h in req["headers"]}, f"{name} dry run carries a cookie")
+
+
+def test_dry_run_never_loads_the_engine():
+    # Not fixture mode: a fake engine on API_ANYTHING_DIST writes a marker when imported.
+    with tempfile.TemporaryDirectory() as d:
+        dist = Path(d) / "dist"
+        dist.mkdir()
+        marker = Path(d) / "imported"
+        (dist / "execute.js").write_text(f"require('fs').writeFileSync({json.dumps(str(marker))}, 'x'); exports.call = async () => ({{ok: true}});\n")
+        (Path(d) / "m.json").write_text("{}")
+        env = dict(os.environ, API_ANYTHING_DIST=str(dist), API_ANYTHING_HOME=str(Path(d) / "home"), CHEWBACCA_CLAY_MEASURED=str(Path(d) / "m.json"))
+        env.pop("CHEWBACCA_CLAY_FIXTURES", None)
+        for name in ("add-column", "delete-rows", "blocklist-add"):
+            argv = DERIVED[name][0] if name in DERIVED else ["emailOrDomain=blocked.example"]
+            p = subprocess.run(["node", str(TOOL), name, *argv, "--dry-run", "--allow-writes"], capture_output=True, text=True, env=env, timeout=60)
+            out = json.loads(p.stdout)
+            ok(p.returncode == 0 and out["sent"] is False, f"{name} live dry run: {p.stdout[:300]}")
+        ok(not marker.exists(), "a dry run imported the engine")
+
+
+def test_derived_writes_stay_gated():
+    for name, (argv, _) in DERIVED.items():
+        code, out, _ = run({}, {}, name, *argv)
+        ok(code == 3 and out["class"] == "refused" and "allow-writes" in out["reason"], f"{name} ran without --allow-writes")
+        ok(out["request"], f"{name} refusal shows the request it would send")
+        code, out, _ = run({}, {}, name, *argv, "--allow-writes")
+        ok(code == 3 and "did not approve" in out["reason"], f"{name} ran with nobody typing its name")
+        code, out, _ = run({}, {}, name, *argv, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": name, "CHEWBACCA_NO_SEND": "1"})
+        ok(code == 3 and "NO_SEND" in out["reason"], f"{name} ran under CHEWBACCA_NO_SEND=1")
+    # A campaign start is never sent from here, approved or not.
+    code, out, _ = run({}, {}, "campaign-status", "campaign=cam_ex1", "status=START", "--allow-writes",
+                       env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "campaign-status"})
+    ok(code == 3 and out["class"] == "refused" and "launch-guard" in out["reason"], "a campaign START was let through")
+    code, out, _ = run({}, {}, "campaign-status", "campaign=cam_ex1", "status=START", "--dry-run")
+    ok(code == 3, "a campaign START is refused even as a dry run")
+
+
+def test_new_args_are_shape_checked():
+    bad = [
+        ("run-cells", ["table=t_ex1", "fields=f_a", "rows=r_1,r_2,r_3,r_4,r_5,r_6"]),  # the five-row cap
+        ("run-cells", ["table=t_ex1", "fields=../x", "rows=r_1"]),
+        ("update-column", ["table=t_ex1", "field=f_1/../../x", 'update={"name":"a"}']),
+        ("update-column", ["table=t_ex1", "field=f_ex1", 'update={"name":"a","tableId":"t_2"}']),
+        ("update-column", ["table=t_ex1", "field=f_ex1", "update={}"]),
+        ("add-column", ["table=t_ex1", "name=a\nb", "data_type=text", "view=gv_ex1"]),
+        ("add-column", ["table=t_ex1", "name=a", "data_type=formula", "view=gv_ex1"]),
+        ("add-rows", ["table=t_ex1", 'records=[{"name":"x"}]']),
+        ("add-rows", ["table=t_ex1", "records=" + json.dumps([{"f_a": 1}] * 101)]),
+        ("update-rows", ["table=t_ex1", 'records=[{"cells":{"f_a":1}}]']),
+        ("delete-rows", ["table=t_ex1", "rows=r_1?all=1"]),
+        ("table-auto-run", ["table=t_ex1", "on=yes", 'settings={"AUTO_RUN_ON":true}']),
+        ("table-auto-run", ["table=t_ex1", "on=true", 'settings={"autoRunOn":true}']),
+        ("import", ['config={"source":{"type":"URL"},"destination":{"type":"TABLE"},"map":{},"isImportWithoutRun":true}']),
+        ("add-leads", ["audience=seg_ex1", 'filter={"type":"BinOp"}']),
+        ("lead-category", ["lead_map_id=1;2", "category_id=3"]),
+        ("mark-read", ["lead_map_id=1", "read_status=SEEN"]),
+        ("blocklist-remove", ["entry=../../x"]),
+        ("blocklist-add-bulk", ["emails=a@example.com,not an email"]),
+        ("page-view-activity", ["resource=wb_1", "resource_type=PAGE"]),
+    ]
+    for name, argv in bad:
+        code, out, _ = run({}, {}, name, *argv, "--dry-run")
+        ok(code == 2 and out["class"] == "input", f"a bad arg reached {name}: {argv}")
+
+
+def test_first_live_use_reads_back():
+    argv = DERIVED["add-column"][0]
+    approve = {"CHEWBACCA_CLAY_TTY_ANSWER": "add-column"}
+    made = {"ok": True, "class": "ok", "tier": 1, "ms": 50, "data": {"field": {"id": "f_new"}}}
+    cols = {"ok": True, "class": "ok", "tier": 1, "ms": 40, "data": [{"id": "f_new", "name": "Lead score", "type": "number"}]}
+    code, out, _ = run({"api-anything/createField.json": made, "api-anything/getTableColumns.json": cols}, {}, *["add-column", *argv], "--allow-writes", env_extra=approve)
+    ok(code == 0 and out["verified"] is False and out["readback"]["ok"] is True and out["readback"]["op"] == "columns", f"readback: {out}")
+    cols_without = {**cols, "data": [{"id": "f_old", "name": "Other"}]}
+    code, out, _ = run({"api-anything/createField.json": made, "api-anything/getTableColumns.json": cols_without,
+                        "cli/columns.json": {"exit": 0, "stdout": json.dumps({"data": []}), "stderr": ""}}, {}, "add-column", *argv, "--allow-writes", env_extra=approve)
+    ok(code == 0 and out["readback"]["ok"] is False, "a column missing on readback is reported")
+    code, out, _ = run({"api-anything/cancelRuns.json": SENT}, {}, "cancel-run", "table=t_ex1", "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "cancel-run"})
+    ok(code == 0 and out["readback"]["check"] == "manual" and out["readback"]["run"].startswith("chewbacca clay table-status"), "a manual readback names the read to run")
+
+
 def test_ui_only_prints_route():
     code, out, _ = run({}, {}, "start-campaign", "campaign=cam_example1")
     ok(code == 0 and out["surface"] == "ui" and out["done"] is False, "a UI-only job is not claimed done")
@@ -297,6 +446,8 @@ def test_fixtures_are_scrubbed():
 def main():
     for fn in (test_registry_matches_spec, test_ops_json_shape, test_routes_to_fastest_measured,
                test_falls_through_on_failure_and_truncation, test_args_pick_the_surface, test_write_gate,
+               test_dry_run_builds_each_write, test_dry_run_never_loads_the_engine, test_derived_writes_stay_gated,
+               test_new_args_are_shape_checked, test_first_live_use_reads_back,
                test_ui_only_prints_route, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")

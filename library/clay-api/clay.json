@@ -1659,6 +1659,1216 @@
    "minTier": 1,
    "learnedLoggedIn": true,
    "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "createField",
+   "description": "WRITE, bundle-derived (contract createField). Add a plain column to a table.",
+   "request": {
+    "method": "POST",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/fields",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"name\":\"x\",\"type\":\"text\",\"typeSettings\":{\"dataTypeSettings\":{\"type\":\"text\"}},\"activeViewId\":\"gv_example\"}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "path:4"
+     ]
+    },
+    {
+     "param": "name",
+     "at": [
+      "body",
+      "json:/name"
+     ]
+    },
+    {
+     "param": "dataType",
+     "at": [
+      "body",
+      "json:/type"
+     ]
+    },
+    {
+     "param": "dataType",
+     "at": [
+      "body",
+      "json:/typeSettings/dataTypeSettings/type"
+     ]
+    },
+    {
+     "param": "viewId",
+     "at": [
+      "body",
+      "json:/activeViewId"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "POST",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tables/*/fields"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_example",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    },
+    {
+     "name": "name",
+     "type": "string",
+     "required": true,
+     "example": "x",
+     "hint": "the column name"
+    },
+    {
+     "name": "dataType",
+     "type": "string",
+     "required": true,
+     "example": "text",
+     "pattern": "text|number|email|url|date|boolean|longtext|image|currency|json",
+     "hint": "a Clay data type"
+    },
+    {
+     "name": "viewId",
+     "type": "string",
+     "required": true,
+     "example": "gv_example",
+     "pattern": "gv_[A-Za-z0-9]+",
+     "hint": "the view the column is added to (table firstViewId)"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "updateField",
+   "description": "WRITE, bundle-derived (contract updateField). Patch a column's name, description or full typeSettings; skipActionFieldRuns=true so the edit runs nothing.",
+   "request": {
+    "method": "PATCH",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/fields/f_example?skipActionFieldRuns=true",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "path:4"
+     ]
+    },
+    {
+     "param": "fieldId",
+     "at": [
+      "path:6"
+     ]
+    },
+    {
+     "param": "update",
+     "at": [
+      "body"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "PATCH",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tables/*/fields/*"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_example",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    },
+    {
+     "name": "fieldId",
+     "type": "string",
+     "required": true,
+     "example": "f_example",
+     "pattern": "f_[A-Za-z0-9]+",
+     "hint": "a column id (getTableColumns)"
+    },
+    {
+     "name": "update",
+     "type": "object",
+     "required": true,
+     "example": {
+      "name": "x"
+     },
+     "hint": "{name?, description?, typeSettings?}; typeSettings is the column's FULL typeSettings"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "updateTableSettings",
+   "description": "WRITE, bundle-derived (contract updateTable). Replace a table's tableSettings; the UI sends the full current settings with AUTO_RUN_ON changed.",
+   "request": {
+    "method": "PATCH",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"tableSettings\":{\"AUTO_RUN_ON\":false}}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "path:4"
+     ]
+    },
+    {
+     "param": "tableSettings",
+     "at": [
+      "body",
+      "json:/tableSettings"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "PATCH",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tables/*"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_example",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    },
+    {
+     "name": "tableSettings",
+     "type": "object",
+     "required": true,
+     "example": {
+      "AUTO_RUN_ON": false
+     },
+     "hint": "the table's full tableSettings (getTable)"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "runCells",
+   "description": "WRITE, bundle-derived (contract runRecordsForWorkspace). Run columns on chosen rows only, as the cell Run button does. Spends credits.",
+   "request": {
+    "method": "PATCH",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/run",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"fieldIds\":[\"f_example\"],\"runRecords\":{\"recordIds\":[\"r_example\"]},\"forceRun\":true}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "path:4"
+     ]
+    },
+    {
+     "param": "fieldIds",
+     "at": [
+      "body",
+      "json:/fieldIds"
+     ]
+    },
+    {
+     "param": "recordIds",
+     "at": [
+      "body",
+      "json:/runRecords/recordIds"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "PATCH",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tables/*/run"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_example",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    },
+    {
+     "name": "fieldIds",
+     "type": "array",
+     "required": true,
+     "example": [
+      "f_example"
+     ],
+     "hint": "column ids"
+    },
+    {
+     "name": "recordIds",
+     "type": "array",
+     "required": true,
+     "example": [
+      "r_example"
+     ],
+     "hint": "row ids, five at most"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "cancelRuns",
+   "description": "WRITE, bundle-derived (contract cancelRuns). Cancel every action run in a table.",
+   "request": {
+    "method": "POST",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/cancelrun",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "path:4"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "POST",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tables/*/cancelrun"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_example",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "createRecords",
+   "description": "WRITE, bundle-derived (contract createRecordsForWorkspace). Add rows: records [{cells:{f_id: value}}].",
+   "request": {
+    "method": "POST",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/records",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"records\":[]}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "path:4"
+     ]
+    },
+    {
+     "param": "records",
+     "at": [
+      "body",
+      "json:/records"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "POST",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tables/*/records"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_example",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    },
+    {
+     "name": "records",
+     "type": "array",
+     "required": true,
+     "example": [
+      {
+       "cells": {
+        "f_example": "x"
+       }
+      }
+     ],
+     "hint": "[{cells:{f_id: value}}], 100 at most"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "updateRecords",
+   "description": "WRITE, bundle-derived (contract updateRecordsForWorkspace). Write cells: records [{id, cells:{f_id: value}}].",
+   "request": {
+    "method": "PATCH",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/records",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"records\":[]}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "path:4"
+     ]
+    },
+    {
+     "param": "records",
+     "at": [
+      "body",
+      "json:/records"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "PATCH",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tables/*/records"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_example",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    },
+    {
+     "name": "records",
+     "type": "array",
+     "required": true,
+     "example": [
+      {
+       "id": "r_example",
+       "cells": {
+        "f_example": "x"
+       }
+      }
+     ],
+     "hint": "[{id, cells:{f_id: value}}], 100 at most"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "deleteRecords",
+   "description": "WRITE, bundle-derived (contract deleteRecordsForWorkspace). Delete the named rows; deleteAll is never sent.",
+   "request": {
+    "method": "DELETE",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_example/records",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"recordIds\":[]}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "path:4"
+     ]
+    },
+    {
+     "param": "recordIds",
+     "at": [
+      "body",
+      "json:/recordIds"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "DELETE",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tables/*/records"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_example",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    },
+    {
+     "name": "recordIds",
+     "type": "array",
+     "required": true,
+     "example": [
+      "r_example"
+     ],
+     "hint": "row ids, 100 at most"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "createImportJob",
+   "description": "WRITE, bundle-derived (contract createImportJobForWorkspace). Start an import of an already uploaded CSV (imports/multi-part-upload and /complete come first).",
+   "request": {
+    "method": "POST",
+    "url": "https://api.clay.com/v3/workspaces/1372623/imports",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"config\":{},\"workspaceId\":\"1372623\"}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "ws",
+     "at": [
+      "body",
+      "json:/workspaceId"
+     ]
+    },
+    {
+     "param": "config",
+     "at": [
+      "body",
+      "json:/config"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks-and-tables"
+   },
+   "match": {
+    "method": "POST",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/imports"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "config",
+     "type": "object",
+     "required": true,
+     "example": {},
+     "hint": "{source:{type:S3_CSV,...}, destination, map, isImportWithoutRun}"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "setCampaignStatus",
+   "description": "WRITE, bundle-derived (contract setCampaignStatus). Pause or stop a campaign; starting is refused by chewbacca clay.",
+   "request": {
+    "method": "PATCH",
+    "url": "https://api.clay.com/v3/workspaces/1372623/clay-sequencer/campaigns/cam_example/status",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"status\":\"PAUSED\"}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "campaignId",
+     "at": [
+      "path:5"
+     ]
+    },
+    {
+     "param": "status",
+     "at": [
+      "body",
+      "json:/status"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/campaigns/{campaignId}"
+   },
+   "match": {
+    "method": "PATCH",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/clay-sequencer/campaigns/*/status"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "campaignId",
+     "type": "string",
+     "required": true,
+     "example": "cam_example",
+     "hint": "the campaign id"
+    },
+    {
+     "name": "status",
+     "type": "string",
+     "required": true,
+     "example": "PAUSED",
+     "pattern": "PAUSED|STOPPED",
+     "hint": "PAUSED or STOPPED"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "setLeadCategory",
+   "description": "WRITE, bundle-derived (contract setLeadCategory). Set a reply's lead category in the master inbox.",
+   "request": {
+    "method": "PATCH",
+    "url": "https://api.clay.com/v3/workspaces/1372623/clay-sequencer/master-inbox/lead-category",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"email_lead_map_id\":1,\"category_id\":1}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "email_lead_map_id",
+     "at": [
+      "body",
+      "json:/email_lead_map_id"
+     ]
+    },
+    {
+     "param": "category_id",
+     "at": [
+      "body",
+      "json:/category_id"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/campaigns/inbox"
+   },
+   "match": {
+    "method": "PATCH",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/clay-sequencer/master-inbox/lead-category"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "email_lead_map_id",
+     "type": "number",
+     "required": true,
+     "example": 1,
+     "hint": "email_lead_map_id from inboxReplies"
+    },
+    {
+     "name": "category_id",
+     "type": "number",
+     "required": true,
+     "example": 1,
+     "hint": "a lead category id"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "setLeadReadStatus",
+   "description": "WRITE, bundle-derived (contract setLeadReadStatus). Mark a master-inbox thread READ or UNREAD.",
+   "request": {
+    "method": "PATCH",
+    "url": "https://api.clay.com/v3/workspaces/1372623/clay-sequencer/master-inbox/lead-read-status",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"email_lead_map_id\":1,\"new_read_status\":\"READ\"}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "email_lead_map_id",
+     "at": [
+      "body",
+      "json:/email_lead_map_id"
+     ]
+    },
+    {
+     "param": "new_read_status",
+     "at": [
+      "body",
+      "json:/new_read_status"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/campaigns/inbox"
+   },
+   "match": {
+    "method": "PATCH",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/clay-sequencer/master-inbox/lead-read-status"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "email_lead_map_id",
+     "type": "number",
+     "required": true,
+     "example": 1,
+     "hint": "email_lead_map_id from inboxReplies"
+    },
+    {
+     "name": "new_read_status",
+     "type": "string",
+     "required": true,
+     "example": "READ",
+     "pattern": "READ|UNREAD",
+     "hint": "READ or UNREAD"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "blocklistRemove",
+   "description": "WRITE, bundle-derived (contract deleteFromGlobalBlocklist). Remove one global blocklist entry: that address can be emailed again.",
+   "request": {
+    "method": "DELETE",
+    "url": "https://api.clay.com/v3/workspaces/1372623/clay-sequencer/global-blocklist/1",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "entryId",
+     "at": [
+      "path:5"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/campaigns?tab=global-blocklist"
+   },
+   "match": {
+    "method": "DELETE",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/clay-sequencer/global-blocklist/*"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "entryId",
+     "type": "string",
+     "required": true,
+     "example": "1",
+     "hint": "the entry id from blocklist"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "blocklistAddBulk",
+   "description": "WRITE, bundle-derived (contract addBulkToGlobalBlocklist). Add up to 1,000 emails or domains to the global blocklist.",
+   "request": {
+    "method": "POST",
+    "url": "https://api.clay.com/v3/workspaces/1372623/campaigns/global-blocklist/add-bulk",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"emailsOrDomains\":[\"blocked.example\"]}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "emailsOrDomains",
+     "at": [
+      "body",
+      "json:/emailsOrDomains"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/campaigns?tab=global-blocklist"
+   },
+   "match": {
+    "method": "POST",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/campaigns/global-blocklist/add-bulk"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "emailsOrDomains",
+     "type": "array",
+     "required": true,
+     "example": [
+      "blocked.example"
+     ],
+     "hint": "emails or bare domains, 1,000 at most"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "trackResourceActivity",
+   "description": "WRITE, bundle-derived (contract trackResourceActivity). Record a LAST_OPENED view of a resource, as every page load does.",
+   "request": {
+    "method": "POST",
+    "url": "https://api.clay.com/v3/workspaces/1372623/resources/t_example/activity",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36",
+     "content-type": "application/json"
+    },
+    "body": "{\"resourceType\":\"TABLE\",\"activityType\":\"LAST_OPENED\"}"
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "resourceId",
+     "at": [
+      "path:4"
+     ]
+    },
+    {
+     "param": "resourceType",
+     "at": [
+      "body",
+      "json:/resourceType"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks-and-tables"
+   },
+   "match": {
+    "method": "POST",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/resources/*/activity"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "resourceId",
+     "type": "string",
+     "required": true,
+     "example": "t_example",
+     "hint": "a table, workbook, folder, workflow or segment id"
+    },
+    {
+     "name": "resourceType",
+     "type": "string",
+     "required": true,
+     "example": "TABLE",
+     "pattern": "FOLDER|TABLE|WORKBOOK|WORKFLOW|AUDIENCE_SEGMENT",
+     "hint": "the resource's type"
+    }
+   ],
+   "readOnly": false,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-09"
   }
  ]
 }

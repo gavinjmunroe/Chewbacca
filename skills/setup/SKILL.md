@@ -41,6 +41,29 @@ email or files, change permission policies, select an account, or publish a repo
 Read back its result: missing dependencies, preserved conflicts and untrusted
 hooks are separate conditions. Configure only what the user requested.
 
+## Every app from one source
+
+When the person already has Chewbacca in one host and wants it in another, run
+`chewbacca connect`. It wires every installed host (Claude Code, Codex, Cursor,
+Gemini CLI) from `~/.claude/CLAUDE.md` and `~/.claude/settings.json`, copies MCP
+servers by name, shims bundled CLIs onto the terminal PATH, and rebuilds the
+ChatGPT and claude.ai exports. A session-start hook connects later installs.
+Lessons already paid for:
+
+- Detect hosts by app bundle too: Codex lived only inside ChatGPT.app and the
+  VS Code extension, so a PATH check reported it missing on a Mac using it daily.
+- Never register a checkout path in another app's hooks. A moved checkout makes
+  Python exit 2, which Cursor and Gemini read as a refusal of every tool call.
+  Hosts call the fail-open `~/.chewbacca/bin/host-hook` launcher instead.
+- Never write a shim over a real binary, and resolve PATH through the login
+  shell: a Dock-launched app's hooks see only /usr/bin:/bin.
+- Skip Claude-only hooks outside Claude (`skill-gate.sh` refuses every tool
+  where no Skill tool exists).
+- In the desktop app's Code tab, macOS privacy grants go to the nested versioned
+  `claude.app` under Application Support, not /Applications/Claude.app.
+- Gemini CLI's free tier was shut off for Antigravity on 2026-06-18; a
+  configured bridge there cannot be verified live.
+
 ## Choose additional setup only when it is useful
 
 The full Mac bootstrap is a separate path for people who need the Mac toolkit.

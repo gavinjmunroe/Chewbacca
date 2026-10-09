@@ -23,7 +23,7 @@ EXPECTS = {"url", "text", "text_re", "css"}
 MATCHES = {"exact", "prefix", "contains"}
 STEP_KEYS = {"id", "title", "note", "holds", "surface", "cost", "actions"}
 ACTION_KEYS = {"find", "do", "value", "enter", "expect", "timeout_s", "approve", "unverified", "measured"}
-FIND_KEYS = {"css", "text", "text_re", "match", "placeholder"}
+FIND_KEYS = {"css", "text", "text_re", "match", "placeholder", "section"}
 APPROVALS = {"test", "rest"}
 
 # The note's title strip holds about 16 Departure Mono caps at w=300; the

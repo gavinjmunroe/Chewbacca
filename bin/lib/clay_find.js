@@ -17,11 +17,29 @@ function matches(text, alt) {
   return t === want;
 }
 
+// The label a control sits under: the nearest earlier sibling with text that
+// is not another control of the same tag. Siblings only: Clay's Find leads
+// flyout on 2026-10-09 was one flat list ("Search directly", five buttons,
+// "Create a workflow", two buttons), and a control with no labelled sibling
+// gets no section, so a recipe asking for one stops instead of guessing.
+function sectionOf(el) {
+  for (let sib = el.previousElementSibling; sib; sib = sib.previousElementSibling) {
+    if (sib.tagName === el.tagName) continue;
+    const text = normalise(sib.innerText);
+    if (text) return text;
+  }
+  return "";
+}
+
+function startsWith(have, want) {
+  return want === undefined || normalise(have).startsWith(normalise(want));
+}
+
 // One visible match, or the reason there is not one. Two matches stop the
 // run rather than pressing whichever came first in the DOM.
 function pick(candidates, alt) {
   const hits = candidates.filter((c) => c.visible && matches(c.text, alt)
-    && (alt.placeholder === undefined || normalise(c.placeholder).startsWith(normalise(alt.placeholder))));
+    && startsWith(c.placeholder, alt.placeholder) && startsWith(c.section, alt.section));
   if (hits.length === 0) return { ok: false, reason: "missing" };
   if (hits.length > 1) return { ok: false, reason: "ambiguous", count: hits.length };
   return { ok: true, index: hits[0].index };
@@ -34,6 +52,7 @@ function describe(el, index) {
     index,
     text: el.innerText || el.value || el.getAttribute("aria-label") || "",
     placeholder: el.getAttribute("placeholder") || "",
+    section: sectionOf(el),
     visible: r.width > 0 && r.height > 0 && s.visibility !== "hidden" && s.display !== "none",
     rect: { x: r.x, y: r.y, w: r.width, h: r.height },
   };
@@ -44,7 +63,7 @@ function locate(alts) {
   for (const alt of alts) {
     const els = Array.from(document.querySelectorAll(alt.css));
     const got = pick(els.map(describe), alt);
-    tried.push({ css: alt.css, text: alt.text || alt.text_re || "", result: got.ok ? "ok" : got.reason,
+    tried.push({ css: alt.css, text: alt.text || alt.text_re || "", section: alt.section || "", result: got.ok ? "ok" : got.reason,
       count: got.count || 0 });
     if (got.ok) {
       const el = els[got.index];
@@ -153,4 +172,4 @@ function waitFor(expect, timeoutMs) {
   });
 }
 
-if (typeof module !== "undefined") module.exports = { normalise, matches, pick, refuse };
+if (typeof module !== "undefined") module.exports = { normalise, matches, pick, refuse, sectionOf };

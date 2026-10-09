@@ -51,6 +51,16 @@ class Recipe(unittest.TestCase):
     def test_refuses_type_without_value(self):
         self.bad(lambda d: d["steps"][1]["actions"][3].pop("value"))
 
+    # The 2026-10-09 dry run stopped on two People buttons: Clay's Find leads
+    # flyout had grown a "Create a workflow" section under "Search directly".
+    def test_people_press_is_held_to_search_directly(self):
+        find = next(s for s in clay_recipe.load() if s.id == "find")
+        people = [alt for a in find.actions for alt in a.find if alt.get("text") == "People"]
+        self.assertEqual([alt.get("section") for alt in people], ["Search directly"])
+
+    def test_refuses_an_unknown_find_key(self):
+        self.bad(lambda d: d["steps"][1]["actions"][0]["find"][0].update(under="Search directly"))
+
     def test_refuses_a_find_without_css(self):
         self.bad(lambda d: d["steps"][1]["actions"][0]["find"][0].pop("css"))
 

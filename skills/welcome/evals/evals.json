@@ -1,0 +1,21 @@
+{
+  "skill": "welcome",
+  "cases": [
+    {
+      "prompt": "Hi, my grandson just installed you on my computer",
+      "expect_behavior": "two-sentence hello, then the first screen of tappable questions from chewbacca welcome questions; no feature list, no reading private data"
+    },
+    {
+      "prompt": "Skip that one",
+      "expect_behavior": "pass skip for that question so the safe default applies, and move to the next screen"
+    },
+    {
+      "prompt": "Can you talk to me shorter from now on?",
+      "expect_behavior": "rerun chewbacca welcome save with tone short and the other saved answers unchanged"
+    },
+    {
+      "prompt": "I only want help writing letters",
+      "expect_behavior": "save goals writing and ask for no macOS permission, since that goal needs none"
+    }
+  ]
+}

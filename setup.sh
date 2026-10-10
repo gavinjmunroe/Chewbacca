@@ -966,7 +966,7 @@ _installed_scanners=""
 # judgement calls.
 # demo-shoot is a wrapper, not a scanner, but it installs the same way: a
 # small executable in bin/ that needs to reach ~/.local/bin.
-for _tool in ai-scan skill-scan prose-check voice-check code-slop demo-shoot craft-gate site-gate claude-tab gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning phone-mirror brain-pull-safe; do
+for _tool in ai-scan skill-scan prose-check voice-check code-slop demo-shoot craft-gate site-gate claude-tab gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning phone-mirror brain-pull-safe mac-db screen-time; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_scanners="$_installed_scanners $_tool"

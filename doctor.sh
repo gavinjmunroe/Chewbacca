@@ -143,16 +143,27 @@ command -v git >/dev/null 2>&1 &&
   ok "git present" ||
   bad "git missing" "xcode-select --install"
 
+# A personal install makes no commits and no repos, so git identity and gh are
+# developer tools there. On 2026-10-09 a fresh personal install ended its setup
+# output with "FAIL major: no global git identity, every commit will fail" and
+# "FAIL major: gh not authenticated", which reads to a non-developer as "the
+# install broke" when nothing they will ever do needs either.
 if [ -n "$(git config --global user.name 2>/dev/null)" ] &&
   [ -n "$(git config --global user.email 2>/dev/null)" ]; then
   ok "git identity: $(git config --global user.name)"
+elif ! for_profile developer; then
+  ok "no git identity, which a $PROFILE install never needs"
 else
   bad "no global git identity, every commit will fail" \
     "git config --global user.name 'You'; git config --global user.email 'you@example.com'"
 fi
 
-command -v gh >/dev/null 2>&1 && ok "gh present" || bad "gh missing" "brew install gh"
-gh auth status >/dev/null 2>&1 && ok "gh authenticated" || bad "gh not authenticated" "gh auth login"
+if for_profile developer; then
+  command -v gh >/dev/null 2>&1 && ok "gh present" || bad "gh missing" "brew install gh"
+  gh auth status >/dev/null 2>&1 && ok "gh authenticated" || bad "gh not authenticated" "gh auth login"
+else
+  ok "GitHub not needed for a $PROFILE install"
+fi
 command -v jq >/dev/null 2>&1 && ok "jq present (hooks parse their input with it)" || bad "jq missing, every hook will no-op" "brew install jq"
 
 # ── The node-on-PATH trap ─────────────────────────────────────────────────────
@@ -174,6 +185,10 @@ if [ -f "$CLAUDE_DIR/hooks/format-and-sync.sh" ]; then
   echo "{\"tool_input\":{\"file_path\":\"$TMPF\"}}" | "$CLAUDE_DIR/hooks/format-and-sync.sh" >/dev/null 2>&1
   if grep -q '"a": 1' "$TMPF" 2>/dev/null; then
     ok "format hook actually formats a file"
+  elif ! for_profile developer && ! command -v prettier >/dev/null 2>&1; then
+    # Formatting code is a developer feature; a personal install has no prettier
+    # and nothing for it to format, so its absence is the design, not a fault.
+    ok "code formatting off, which is fine for a $PROFILE install"
   else
     bad "format hook ran but changed nothing" "check that prettier is installed: npm i -g prettier"
   fi
@@ -282,6 +297,10 @@ if [ -f "$CLAUDE_DIR/d1-config.sh" ]; then
       warn "$name not set"
     elif [ -d "$dir/.git" ]; then
       ok "$name is a git repo"
+    elif ! for_profile developer; then
+      # A personal install with no name given keeps the brain as a plain local
+      # folder, by design: there is no remote for it to sync to.
+      ok "$name is a local folder, kept on this Mac only"
     else
       bad "$name points at $dir, which is not a git repo, so syncing silently does nothing" \
         "fix the path in ~/.claude/d1-config.sh"

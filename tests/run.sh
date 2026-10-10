@@ -540,6 +540,17 @@ if group "tools"; then
     bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck/skills' 2>&1 || true"
   exits  "and the checker exits non-zero" 1 \
     bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck/skills'"
+  # Commit time reads the index: a broken staged skill is refused even when
+  # the working tree has since been fixed, and a clean one passes.
+  FS="$TMP/fmstaged"; mkdir -p "$FS/skills/x" && git -C "$FS" init -q
+  printf -- '---\nname: x\ndescription: a: b\n---\n' > "$FS/skills/x/SKILL.md"
+  git -C "$FS" add skills/x/SKILL.md
+  printf -- '---\nname: x\ndescription: fine\n---\n' > "$FS/skills/x/SKILL.md"
+  exits  "a broken staged skill is refused at commit" 1 \
+    bash -c "cd '$FS' && python3 '$ROOT/tools/frontmatter.py' --staged"
+  git -C "$FS" add skills/x/SKILL.md
+  exits  "and a fixed one passes" 0 \
+    bash -c "cd '$FS' && python3 '$ROOT/tools/frontmatter.py' --staged"
   LONG="$TMP/fmcheck-long/skills/long"; mkdir -p "$LONG"
   printf -- '---\nname: long\ndescription: "%s"\n---\n\n# x\n' "$(printf 'a%.0s' $(seq 1 1100))" > "$LONG/SKILL.md"
   expect "a description over 1024 characters is caught" "the limit is 1024" \
@@ -1177,6 +1188,8 @@ if group "hooks"; then
   check "disk-guard prunes regenerable caches once when the disk runs low" bash "$ROOT/tests/disk_guard.sh"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   check "hook modules import on the stock macOS Python" bash "$ROOT/tests/stock_python_imports.sh"
+  check "welcome: five tappable questions personalize the brain" bash "$ROOT/tests/welcome.sh"
+  check "doctor grades a personal install as personal" bash "$ROOT/tests/doctor_personal.sh"
   # A hook that outlives its watchdog ends with exit 0, never SIGKILL's 137.
   wd="$(mktemp -d)"
   printf '%s\n' "source '$ROOT/.claude/hooks/lib.sh'" 'hook_init watchdog-probe 1' 'sleep 30' > "$wd/probe.sh"

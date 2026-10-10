@@ -17,6 +17,7 @@ narrower claim and an honest one.
   python3 tools/frontmatter.py                check the repo's skills
   python3 tools/frontmatter.py --installed    check ~/.claude/skills too
   python3 tools/frontmatter.py path/to/skills check any directory of skills
+  python3 tools/frontmatter.py --staged       check the staged SKILL.md files
 """
 import re
 import sys
@@ -27,9 +28,10 @@ REQUIRED = ("name", "description")
 MAX_DESCRIPTION = 1024
 
 
-def problems(path):
+def problems(path, text=None):
     """Every reason this file's frontmatter would not load."""
-    text = path.read_text(encoding="utf-8", errors="replace")
+    if text is None:
+        text = path.read_text(encoding="utf-8", errors="replace")
     m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
     if not m:
         return ["no frontmatter block (must open on line 1 with ---)"]
@@ -67,7 +69,38 @@ def problems(path):
     return out
 
 
+def staged():
+    """Check the SKILL.md bytes about to be committed, not the working tree.
+
+    The push gate caught screen-time's unquoted colon on 2026-10-09, but only
+    after the commit was already on main: another tab's push had carried it
+    there, and every Stop hook after that was blocked on a file nobody in that
+    tab had touched. Checking at commit time stops it in the tab that wrote it.
+    The index is read, so an unstaged fix doesn't hide a staged break.
+    """
+    import subprocess
+    names = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"],
+        capture_output=True, check=True).stdout.decode().split("\0")
+    bad = 0
+    for name in names:
+        if not name.endswith("SKILL.md"):
+            continue
+        text = subprocess.run(["git", "show", ":" + name], capture_output=True,
+                              check=True).stdout.decode("utf-8", "replace")
+        for p in problems(Path(name), text):
+            bad += 1
+            print(f"{name}: {p}")
+    if bad:
+        print(f"\n{bad} problem(s) in staged skills. "
+              f"A skill that does not parse is a skill that never fires.")
+        return 1
+    return 0
+
+
 def main():
+    if "--staged" in sys.argv:
+        return staged()
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     # An explicit path wins, so this can check a directory it does not live in.
     # Defaulting to the repo made the tool untestable against a deliberately

@@ -1,0 +1,569 @@
+#!/usr/bin/env python3
+"""chewbacca linkedin: LinkedIn reads from inside your own signed-in Chrome tab.
+
+  chewbacca linkedin me
+  chewbacca linkedin profile <publicId | linkedin.com/in/... URL>
+  chewbacca linkedin people <keywords> [--school USC]
+  chewbacca linkedin company <universalName | linkedin.com/company/... URL>
+  chewbacca linkedin employees <company> [keywords]
+  chewbacca linkedin connections [--limit N]
+  chewbacca linkedin notifications
+  chewbacca linkedin inbox                 thread list only, never opens a thread
+  Every command takes --json.
+
+Why a tab and not HTTP: on 2026-10-10, replaying the LinkedIn cookies from a
+second client (api-anything over plain HTTP) got the sessions revoked in two
+Chrome profiles within minutes. A fetch() run by bin/chrome-js inside a
+linkedin.com tab is the same browser, cookies and fingerprint LinkedIn always
+sees, so nothing here ever reads, copies or prints a cookie. The csrf-token
+header is read from document.cookie inside the page and never leaves it.
+
+Read-only by construction: the in-page script hardcodes GET and refuses any
+path outside /voyager/api/. No send, connect, follow, react or mark-read.
+
+Tab: the first open www.linkedin.com tab. With none, one is opened at /feed/ in
+the Chrome profile whose cookie store holds a LinkedIn session (most recently
+used wins), or CHEWBACCA_LINKEDIN_PROFILE. Works for any student's Mac.
+
+Stops on the first 429, 999, challenge, or redirect to /login or /checkpoint,
+and says so: a flagged account is the user's to recover, not ours.
+"""
+import json
+import os
+import pathlib
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.parse
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+CHROME_JS = os.environ.get("CHEWBACCA_CHROME_JS") or str(ROOT / "bin" / "chrome-js")
+CHROME_DIR = pathlib.Path(os.environ.get(
+    "CHEWBACCA_CHROME_DIR", pathlib.Path.home() / "Library/Application Support/Google/Chrome"))
+MATCH = "www.linkedin.com"
+FEED = "https://www.linkedin.com/feed/"
+
+# Two seconds between Voyager calls inside one command. The 2026-10-10
+# revocation came from a burst out of a second client; LinkedIn's own pages
+# space their background calls by about that much. Guessed, never measured,
+# so the env var may raise it and never lower it.
+PAUSE = max(2.0, float(os.environ.get("CHEWBACCA_LINKEDIN_PAUSE", "2") or 2))
+# Poll the in-page fetch this often, for at most this long.
+POLL_EVERY = float(os.environ.get("CHEWBACCA_LINKEDIN_POLL", "0.4"))
+POLL_LIMIT = 30.0
+
+NORMALIZED = "application/vnd.linkedin.normalized+json+2.1"
+
+
+class Stop(Exception):
+    """LinkedIn pushed back. Never retried."""
+
+
+def die(msg, code=1):
+    print(f"chewbacca linkedin: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def chrome_js(*args, script=None):
+    # --real: the user's own Chrome by PID, never an automation clone (see chrome-js).
+    cmd = [CHROME_JS, "--real", *args]
+    tmp = None
+    if script is not None:
+        fd, tmp = tempfile.mkstemp(suffix=".js")
+        with os.fdopen(fd, "w") as f:
+            f.write(script)
+        cmd += ["--file", tmp]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        die("Chrome did not answer within 60 s. Is it frozen?")
+    finally:
+        if tmp:
+            os.unlink(tmp)
+    if out.returncode == 3:
+        die("Chrome refused: turn on View > Developer > Allow JavaScript from Apple Events "
+            "in the Chrome profile you use LinkedIn in (chrome-js --check shows which).")
+    if out.returncode != 0:
+        die(f"chrome-js failed: {(out.stderr or out.stdout).strip()[:300]}")
+    return out.stdout.strip()
+
+
+def session_profile():
+    """The Chrome profile whose cookie store holds li_at, newest first. Reads
+    only the cookie NAME and last-access time, never a value."""
+    if os.environ.get("CHEWBACCA_LINKEDIN_PROFILE"):
+        return os.environ["CHEWBACCA_LINKEDIN_PROFILE"]
+    best, prof = -1, None
+    for db in sorted(CHROME_DIR.glob("*/Cookies")):
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                copy = pathlib.Path(tmp) / "Cookies"
+                shutil.copy(db, copy)
+                row = sqlite3.connect(copy).execute(
+                    "select max(last_access_utc) from cookies where name = 'li_at' "
+                    "and host_key like '%linkedin.com'").fetchone()
+        except Exception:
+            continue
+        if row and row[0] is not None and row[0] > best:
+            best, prof = row[0], db.parent.name
+    return prof
+
+
+def check_url(url):
+    if re.search(r"linkedin\.com/(login|checkpoint|authwall|uas/login)", url or ""):
+        raise Stop(f"LinkedIn sent this tab to {urllib.parse.urlsplit(url).path}: "
+                   "sign in or clear the challenge in Chrome by hand, then rerun.")
+
+
+def ensure_tab():
+    tabs = [t for t in chrome_js("--list").splitlines() if MATCH in t]
+    if not tabs:
+        prof = session_profile()
+        if not prof:
+            die("no Chrome profile is signed in to LinkedIn. Sign in once at linkedin.com in Chrome.")
+        chrome_js("--open", FEED, "--profile", prof)
+        tabs = [t for t in chrome_js("--list").splitlines() if MATCH in t]
+        if not tabs:
+            die(f"opened LinkedIn in Chrome profile '{prof}' but the tab isn't visible to "
+                "AppleScript. Turn on Allow JavaScript from Apple Events there (chrome-js --check).")
+    check_url(tabs[0])
+
+
+START_JS = r"""
+(function(){
+  var path = %(path)s, accept = %(accept)s, key = %(key)s;
+  if (path.indexOf('/voyager/api/') !== 0) return JSON.stringify({error: 'refused: not a voyager path'});
+  var m = document.cookie.match(/(?:^|; )JSESSIONID=("?)([^;"]+)\1/);
+  if (!m) return JSON.stringify({error: 'signed-out'});
+  window.__chewLi = window.__chewLi || {};
+  window.__chewLi[key] = null;
+  fetch(path, {method: 'GET', credentials: 'include', redirect: 'follow',
+               headers: {'csrf-token': m[2], 'x-restli-protocol-version': '2.0.0', accept: accept}})
+    .then(function(r){ return r.text().then(function(t){
+      window.__chewLi[key] = {status: r.status, url: r.url, redirected: r.redirected, body: t.slice(0, 4000000)};
+    }); })
+    .catch(function(e){ window.__chewLi[key] = {status: 0, error: String(e)}; });
+  return JSON.stringify({started: key, page: location.href});
+})()
+"""
+
+POLL_JS = r"""
+(function(){
+  var k = %(key)s, s = window.__chewLi && window.__chewLi[k];
+  if (!s) return JSON.stringify({pending: true});
+  delete window.__chewLi[k];
+  return JSON.stringify(s);
+})()
+"""
+
+
+class Voyager:
+    def __init__(self):
+        self.last = 0.0
+        self.calls = 0
+
+    def get(self, path, normalized=False):
+        wait = self.last + PAUSE - time.monotonic()
+        if self.last and wait > 0:
+            time.sleep(wait)
+        self.calls += 1
+        key = f"k{os.getpid()}_{self.calls}"
+        accept = NORMALIZED if normalized else "application/json"
+        started = parse(chrome_js("--match", MATCH, script=START_JS % {
+            "path": json.dumps(path), "accept": json.dumps(accept), "key": json.dumps(key)}))
+        # Measured from when the fetch was launched in the page, so a slow
+        # Chrome round trip can never squeeze two requests under the pause.
+        self.last = time.monotonic()
+        if started.get("error") == "signed-out":
+            raise Stop("this Chrome tab isn't signed in to LinkedIn. Sign in in Chrome, then rerun.")
+        if started.get("error"):
+            die(started["error"])
+        check_url(started.get("page"))
+        deadline = time.monotonic() + POLL_LIMIT
+        while True:
+            time.sleep(POLL_EVERY)
+            res = parse(chrome_js("--match", MATCH, script=POLL_JS % {"key": json.dumps(key)}))
+            if not res.get("pending"):
+                break
+            if time.monotonic() > deadline:
+                die("LinkedIn did not answer within 30 s.")
+        status = res.get("status")
+        check_url(res.get("url"))
+        if status in (429, 999):
+            raise Stop(f"LinkedIn answered {status} (rate limit or bot check). Stopped; wait before trying again.")
+        if status in (401, 403):
+            raise Stop(f"LinkedIn answered {status}: the session in Chrome is signed out or challenged.")
+        if status == 0:
+            die(f"the in-page request failed: {res.get('error', '')[:200]}")
+        if status != 200:
+            die(f"LinkedIn answered {status} for {path.split('?')[0]}")
+        try:
+            return json.loads(res.get("body") or "")
+        except ValueError:
+            body = res.get("body") or ""
+            if re.search(r"challenge|captcha", body[:4000], re.I):
+                raise Stop("LinkedIn served a challenge page instead of data. Stopped.")
+            die("LinkedIn sent something other than JSON.")
+
+
+def parse(out):
+    try:
+        return json.loads(out)
+    except ValueError:
+        if out.startswith("NO_TAB_MATCHING"):
+            die("the LinkedIn tab closed mid-command.")
+        die(f"unexpected answer from Chrome: {out[:200]}")
+
+
+# ── shaping ──────────────────────────────────────────────────────────────────
+
+def text(v):
+    return (v or {}).get("text") if isinstance(v, dict) else v
+
+
+def slug(value, kind):
+    m = re.search(rf"linkedin\.com/{kind}/([^/?#]+)", value)
+    return urllib.parse.unquote(m.group(1)) if m else value.strip().strip("/")
+
+
+def by_type(doc, suffix):
+    return [e for e in doc.get("included", []) if str(e.get("$type", "")).endswith(suffix)]
+
+
+DEGREE = {"DISTANCE_1": "1st", "DISTANCE_2": "2nd", "DISTANCE_3": "3rd", "OUT_OF_NETWORK": "out"}
+
+
+def search_path(keywords, result_type, query_parameters="", count=10):
+    # The exact search URL bundled in api-anything's linkedin.json, plus filters.
+    kw = f"keywords:{urllib.parse.quote(keywords)}," if keywords else ""
+    return ("/voyager/api/search/dash/clusters?q=all&query=("
+            f"{kw}flagshipSearchIntent:SEARCH_SRP,queryParameters:({query_parameters}"
+            f"resultType:List({result_type})),includeFiltersInResponse:false)&start=0&count={count}")
+
+
+def search_people(v, query_parameters, keywords, count=10):
+    return people_results(v.get(search_path(keywords, "PEOPLE", query_parameters, count)))
+
+
+def entity_results(doc):
+    for el in doc.get("elements", []):
+        for item in el.get("items", []):
+            r = ((item.get("item") or item).get("itemUnion") or {}).get("entityResult") if isinstance(item, dict) else None
+            if r:
+                yield r
+
+
+def school_id(v, name):
+    """A school's company id for schoolFilter. Schools 404 on the company
+    lookup (2026-10-10, linkedin.com/school/usc), so take the top school hit."""
+    if name.isdigit():
+        return name
+    query = {"usc": "University of Southern California"}.get(name.lower(), name)
+    for r in entity_results(v.get(search_path(query, "SCHOOLS"))):
+        m = re.search(r"urn:li:(?:fsd_company|company|organization):(\d+)",
+                      json.dumps([r.get("trackingUrn"), r.get("entityUrn"), r.get("image")]))
+        if m:
+            return m.group(1)
+    die(f"no LinkedIn school matching '{name}'")
+
+
+def people_results(doc):
+    out = []
+    for r in entity_results(doc):
+        url = r.get("navigationUrl") or ""
+        m = re.search(r"/in/([^/?]+)", url)
+        if not m:
+            continue
+        out.append({
+            "name": text(r.get("title")),
+            "headline": text(r.get("primarySubtitle")),
+            "location": text(r.get("secondarySubtitle")),
+            "publicId": urllib.parse.unquote(m.group(1)),
+            "degree": DEGREE.get((r.get("entityCustomTrackingInfo") or {}).get("memberDistance"), ""),
+        })
+    return out
+
+
+def company_doc(v, name):
+    # Undecorated on purpose: the WebFullCompanyMain decoration drops tagline
+    # (checked 2026-10-10 against Anthropic's page).
+    doc = v.get("/voyager/api/organization/companies?q=universalName&universalName="
+                + urllib.parse.quote(slug(name, "(?:company|school)")))
+    els = doc.get("elements") or []
+    if not els:
+        die(f"no LinkedIn company or school called '{name}'. Use the name from its URL, "
+            "linkedin.com/company/<name>.")
+    return els[0]
+
+
+def company_id(c):
+    return str(c.get("entityUrn", "")).rsplit(":", 1)[-1]
+
+
+def cmd_me(v, a):
+    doc = v.get("/voyager/api/me", normalized=True)
+    mini = (by_type(doc, "MiniProfile") or [{}])[0]
+    return {"name": f"{mini.get('firstName', '')} {mini.get('lastName', '')}".strip(),
+            "headline": mini.get("occupation"), "publicId": mini.get("publicIdentifier")}
+
+
+def date_of(d):
+    if not d:
+        return ""
+    return f"{d.get('year', '')}" + (f"-{d['month']:02d}" if d.get("month") else "")
+
+
+def cmd_profile(v, a):
+    if not a.rest:
+        die("profile needs a public id or a linkedin.com/in/ URL")
+    pid = slug(a.rest[0], "in")
+    doc = v.get("/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity="
+                + urllib.parse.quote(pid)
+                + "&decorationId=com.linkedin.voyager.dash.deco.identity.profile.FullProfileWithEntities-93",
+                normalized=True)
+    profs = [p for p in by_type(doc, "identity.profile.Profile") if p.get("publicIdentifier")]
+    prof = next((p for p in profs if p.get("publicIdentifier", "").lower() == pid.lower()), profs[0] if profs else None)
+    if not prof:
+        die(f"no LinkedIn profile '{pid}'")
+    urn = prof.get("entityUrn")
+    geos = {g.get("entityUrn"): g for g in by_type(doc, "common.Geo")}
+    orgs = {c.get("entityUrn"): c for c in by_type(doc, "organization.Company")}
+    schools = {s.get("entityUrn"): s for s in by_type(doc, "organization.School")}
+    current = []
+    for p in by_type(doc, "identity.profile.Position"):
+        if urn and p.get("profileUrn") not in (None, urn):
+            continue
+        rng = p.get("dateRange") or {}
+        if rng.get("end"):
+            continue
+        org = orgs.get(p.get("companyUrn"), {})
+        current.append({"title": p.get("title"), "company": p.get("companyName") or org.get("name"),
+                        "since": date_of(rng.get("start"))})
+    education = []
+    for e in by_type(doc, "identity.profile.Education"):
+        if urn and e.get("profileUrn") not in (None, urn):
+            continue
+        rng = e.get("dateRange") or {}
+        education.append({"school": e.get("schoolName") or schools.get(e.get("schoolUrn"), {}).get("name"),
+                          "degree": e.get("degreeName"), "field": e.get("fieldOfStudy"),
+                          "years": "-".join(x for x in (date_of(rng.get("start")), date_of(rng.get("end"))) if x)})
+    geo = geos.get((prof.get("geoLocation") or {}).get("geoUrn"), {})
+    sites = [w.get("url") for w in prof.get("websites") or [] if isinstance(w, dict) and w.get("url")]
+    return {"name": f"{prof.get('firstName', '')} {prof.get('lastName', '')}".strip(),
+            "headline": prof.get("headline"), "about": prof.get("summary"),
+            "location": geo.get("defaultLocalizedName") or (prof.get("location") or {}).get("countryCode"),
+            "publicId": prof.get("publicIdentifier"), "current": current, "education": education,
+            "websites": sites}
+
+
+def cmd_people(v, a):
+    if not a.rest:
+        die("people needs keywords")
+    qp = ""
+    if a.school:
+        qp = f"schoolFilter:List({school_id(v, a.school)}),"
+    return search_people(v, qp, " ".join(a.rest))
+
+
+def cmd_company(v, a):
+    if not a.rest:
+        die("company needs a universal name or a linkedin.com/company/ URL")
+    c = company_doc(v, a.rest[0])
+    hq = c.get("headquarter") or next((x for x in c.get("confirmedLocations") or []
+                                        if isinstance(x, dict) and x.get("headquarter")), {})
+    inds = c.get("companyIndustries") or []
+    return {"name": c.get("name"), "universalName": c.get("universalName"), "tagline": c.get("tagline"),
+            "industry": (inds[0] or {}).get("localizedName") if inds else None,
+            "staffCount": c.get("staffCount"), "website": c.get("companyPageUrl"),
+            "headquarters": ", ".join(x for x in (hq.get("city"), hq.get("geographicArea"), hq.get("country")) if x)}
+
+
+def cmd_employees(v, a):
+    if not a.rest:
+        die("employees needs a company")
+    cid = company_id(company_doc(v, a.rest[0]))
+    return search_people(v, f"currentCompany:List({cid}),", " ".join(a.rest[1:]))
+
+
+def cmd_connections(v, a):
+    limit = max(1, a.limit or 40)
+    out, start = [], 0
+    while len(out) < limit:
+        n = min(40, limit - len(out))
+        doc = v.get("/voyager/api/relationships/dash/connections?decorationId=com.linkedin.voyager.dash.deco."
+                    f"web.mynetwork.ConnectionListWithProfile-16&count={n}&q=search&sortType=RECENTLY_ADDED&start={start}",
+                    normalized=True)
+        profs = {p.get("entityUrn"): p for p in by_type(doc, "identity.profile.Profile")}
+        conns = by_type(doc, "relationships.Connection") or []
+        page = []
+        for c in conns:
+            p = profs.get(c.get("connectedMember") or c.get("*connectedMemberResolutionResult")) or {}
+            if p:
+                page.append({"name": f"{p.get('firstName', '')} {p.get('lastName', '')}".strip(),
+                             "headline": p.get("headline"), "publicId": p.get("publicIdentifier")})
+        out += page
+        start += n
+        if len(conns) < n:
+            break
+    return out[:limit]
+
+
+def cmd_notifications(v, a):
+    doc = v.get("/voyager/api/voyagerIdentityDashNotificationCards?decorationId=com.linkedin.voyager.dash.deco."
+                "identity.notifications.CardsCollectionWithInjectionsNoPills-24&count=20"
+                "&filterUrn=urn%3Ali%3Afsd_notificationFilter%3AALL&q=filterVanityName", normalized=True)
+    out = []
+    for c in by_type(doc, "notifications.Card"):
+        ms = c.get("publishedAt")
+        out.append({"text": text(c.get("headline")),
+                    "time": time.strftime("%Y-%m-%d %H:%M", time.localtime(ms / 1000)) if ms else "",
+                    "_t": ms or 0})
+    out.sort(key=lambda x: -x["_t"])
+    for o in out:
+        o.pop("_t")
+    return out
+
+
+def cmd_inbox(v, a):
+    query_id = os.environ.get("CHEWBACCA_LINKEDIN_INBOX_QUERY") or discover_inbox_query()
+    if not query_id:
+        die("couldn't find the inbox query this LinkedIn build uses. Open the messaging "
+            "overlay on linkedin.com once, then rerun.")
+    me = v.get("/voyager/api/me", normalized=True)
+    mini = (by_type(me, "MiniProfile") or [{}])[0]
+    member = str(mini.get("dashEntityUrn") or mini.get("entityUrn", "")).rsplit(":", 1)[-1]
+    mailbox = urllib.parse.quote(f"urn:li:fsd_profile:{member}", safe="")
+    doc = v.get(f"/voyager/api/voyagerMessagingGraphQL/graphql?queryId={query_id}"
+                f"&variables=(mailboxUrn:{mailbox})", normalized=True)
+    convs = by_type(doc, "messenger.Conversation")
+    people = {p.get("entityUrn"): p for p in by_type(doc, "messenger.MessagingParticipant")}
+    msgs = {m.get("entityUrn"): m for m in by_type(doc, "messenger.Message")}
+    out = []
+    for c in convs:
+        names = []
+        for ref in c.get("*conversationParticipants") or []:
+            p = people.get(ref) or {}
+            mem = (p.get("participantType") or {}).get("member") or {}
+            n = " ".join(x for x in (text(mem.get("firstName")), text(mem.get("lastName"))) if x)
+            if n and member not in str(ref):
+                names.append(n)
+        last = None
+        for ref in (c.get("messages") or {}).get("*elements") or []:
+            last = msgs.get(ref) or last
+        ms = c.get("lastActivityAt") or 0
+        out.append({"participants": names or [c.get("title") or "?"],
+                    "snippet": text((last or {}).get("body")) or "",
+                    "time": time.strftime("%Y-%m-%d %H:%M", time.localtime(ms / 1000)) if ms else "",
+                    "unread": (c.get("unreadCount") or 0) > 0, "_t": ms})
+    out.sort(key=lambda x: -x["_t"])
+    for o in out:
+        o.pop("_t")
+    return out
+
+
+DISCOVER_JS = r"""
+(function(){
+  var ids = performance.getEntriesByType('resource').map(function(e){ return e.name; })
+    .map(function(u){ var m = u.match(/queryId=(messengerConversations\.[0-9a-f]+)/); return m && m[1]; })
+    .filter(Boolean);
+  return JSON.stringify({ids: ids});
+})()
+"""
+
+
+def discover_inbox_query():
+    """The inbox query id rotates with each LinkedIn build, so it is read from
+    the tab's own resource timings once LinkedIn's messaging has loaded there,
+    never hardcoded. On 2026-10-10 a fresh /feed/ tab had not requested it, it
+    was in none of the 25 loaded bundles, and the legacy REST inbox answered
+    500. Opening /messaging/ would load it but also opens the newest thread,
+    which marks it read, so this never navigates there itself. The GraphQL
+    parsing below is fixture-tested only, not yet live-verified."""
+    ids = parse(chrome_js("--match", MATCH, script=DISCOVER_JS)).get("ids") or []
+    plain = [i for i in ids if "ByCategory" not in i]
+    return (plain or ids or [None])[-1]
+
+
+# ── output ───────────────────────────────────────────────────────────────────
+
+def show(cmd, data):
+    if cmd in ("me", "company"):
+        for k, val in data.items():
+            print(f"{k:14} {val if val not in (None, '') else '-'}")
+        return
+    if cmd == "profile":
+        for k in ("name", "headline", "location", "publicId"):
+            print(f"{k:10} {data.get(k) or '-'}")
+        for p in data["current"]:
+            print(f"now        {p['title']} at {p['company']}" + (f" (since {p['since']})" if p["since"] else ""))
+        for e in data["education"]:
+            print("school     " + ", ".join(x for x in (e["school"], e["degree"], e["field"], e["years"]) if x))
+        for w in data["websites"]:
+            print(f"site       {w}")
+        if data.get("about"):
+            print("\n" + data["about"])
+        return
+    if not data:
+        print("(nothing)")
+        return
+    for r in data:
+        if cmd in ("people", "employees"):
+            print(f"{r['name']}  [{r['degree'] or '-'}]  {r['publicId']}\n    {r['headline'] or ''}  |  {r['location'] or ''}")
+        elif cmd == "connections":
+            print(f"{r['name']}  {r['publicId']}\n    {r['headline'] or ''}")
+        elif cmd == "notifications":
+            print(f"{r['time']}  {r['text']}")
+        elif cmd == "inbox":
+            print(f"{r['time']}  {'* ' if r['unread'] else ''}{', '.join(r['participants'])}\n    {r['snippet'][:120]}")
+
+
+COMMANDS = {"me": cmd_me, "profile": cmd_profile, "people": cmd_people, "company": cmd_company,
+            "employees": cmd_employees, "connections": cmd_connections,
+            "notifications": cmd_notifications, "inbox": cmd_inbox}
+
+
+class Args:
+    def __init__(self, argv):
+        self.json, self.school, self.limit, self.rest = False, None, None, []
+        it = iter(argv)
+        for x in it:
+            if x == "--json":
+                self.json = True
+            elif x == "--school":
+                self.school = next(it, None) or die("--school needs a name")
+            elif x == "--limit":
+                try:
+                    self.limit = int(next(it, ""))
+                except ValueError:
+                    die("--limit needs a number")
+            else:
+                self.rest.append(x)
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.split("\n\n")[0] + "\n" + __doc__.split("\n\n")[1])
+        return 0
+    cmd = argv[0]
+    if cmd not in COMMANDS:
+        die(f"unknown command '{cmd}'. Try: chewbacca linkedin help", 2)
+    a = Args(argv[1:])
+    v = Voyager()
+    try:
+        ensure_tab()
+        data = COMMANDS[cmd](v, a)
+    except Stop as e:
+        die(f"STOPPED: {e}", 4)
+    if a.json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        show(cmd, data)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

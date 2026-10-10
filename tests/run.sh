@@ -668,6 +668,8 @@ if group "installer"; then
   # signed-out site must not take the other sections down.
   check  "chewbacca usc shows this term's due items, dining and events, and survives a signed-out site" \
     bash "$ROOT/tests/chewbacca_usc.sh" "$ROOT"
+  check  "chewbacca linkedin parses Voyager reads in the real Chrome tab, throttles, and stops on pushback" \
+    bash "$ROOT/tests/chewbacca_linkedin.sh" "$ROOT"
 
   check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \
     bash "$ROOT/tests/chewbacca_google.sh" "$ROOT"

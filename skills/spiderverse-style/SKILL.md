@@ -690,6 +690,40 @@ layout match rose):
   film's; relight it to the frame's values, and stop before reshaping it
   toward anyone else's design.
 
+Full hand-built sets, kept by a blind pairwise judge (a fresh model sees
+reference | A | B in both side orders and must prefer the same render both
+times) plus a light/dark layout guard:
+
+- **tested: a street canyon seen looking up is a reusable set.** Won 3 of 4
+  judged pairs (looking up at a pale sky, a warm sunset gap, a cream sky with
+  towers in the corners; lost on a dark navy street). The recipe: camera at
+  street level pitched up 25 to 62 degrees, lens 18 to 24; two walls of
+  boxes along the street plus a taller second row behind each, heights
+  drawn per side; four flat toon bands from the frame's own palette; a sky
+  gradient seen by the camera only, with its ramp set to the view
+  directions the pitched camera actually sees (looking up 60 degrees sees
+  view Z of about 0.6 to 1, so a ramp over 0 to 0.5 renders one flat
+  colour); Line Art ink; a hatch plate and a light Kuwahara.
+- **tested: place big shapes and figures by screen position, then solve
+  depth.** Cast a ray through the measured screen point to a chosen depth
+  for a figure (size from the frame share it fills) and for camera-aligned
+  blocks (a near wall, a ledge, one tower face). Guessed world positions
+  missed; solved ones landed. Keep figures upright with no camera roll so
+  the head stays up.
+- **tested: a city set needs a ground plane**, or the sky's bottom colour
+  shows through every gap below the horizon.
+- **tested: a figure needs contrast with what is behind it.** A dark figure
+  in a dark canyon vanished; the same figure in a mid colour from the
+  frame's palette read at once.
+- **tested: the judge rewards the right objects, the layout guard rewards
+  the right light falloff.** Two rebuilds won the judge and failed the
+  guard: each had the right subject and setting but lost the frame's
+  value ramp (a near dark mass stopped short of the corner it fills, a sky
+  without its glow side, a canyon gap aimed at the wrong column). Read
+  where the frame is brightest and darkest first, match that, then place
+  the subject. For a canyon, aim the gap at the reference's brightest
+  column.
+
 ## Tools worth reaching for
 
 The full ranked list, with licenses and the file each one plugs into, is

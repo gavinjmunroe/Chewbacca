@@ -13,7 +13,7 @@ live site "looks so ai slop".
 - Branch `Caleb-Rework` (commit 9b7daad), pushed, no PR opened.
 - Deployed with `railway up` (not GitHub-linked) as service **Caleb-Rework**
   in Sagar's `bluemodernadvisory` Railway project, at
-  https://caleb-rework-production.up.railway.app. Prod service `bma-website`
+  https://bma-rework.up.railway.app. Prod service `bma-website`
   untouched. Redeploy: `railway up --service Caleb-Rework` from the repo.
 - The preview service has none of prod's env vars (ICP webhook, Togari key),
   so its forms don't reach the real pipeline. Intentional for a preview.

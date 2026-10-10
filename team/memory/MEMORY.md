@@ -231,7 +231,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_chewbacca_refactor_waits_on_b2b_b2c: Audience refactor (private repo, personal docs in docs/plans, first-run surface) waits on the B2B vs B2C call; checklist inside
 - feedback_people_scratch_is_people_dir: people CLI scratch store is PEOPLE_DIR; a guessed PEOPLE_DB wrote a test person into the real store (purged)
 - project_lessons_enforcement_audit: chewbacca lessons, 49 of 190 corrections enforced by code on 10/10; 149,809-token first turn, rules loaded 2-3x
-- project_bma_site_caleb_rework: Caleb's BMA site redesign, branch Caleb-Rework + separate Railway service caleb-rework-production.up.railway.app; main untouched
+- project_bma_site_caleb_rework: Caleb's BMA site redesign, branch Caleb-Rework + separate Railway service bma-rework.up.railway.app; main untouched
 - project_chewbacca_live_genui_service: Chewbacca Live (apps/live) is ours, hosted genui for clients; BMA/Amber is a customer, Togari only a data source (10/10)
 - feedback_hud_lag_is_the_mac: "HUD laggy" 10/10 was load 95 from 14 tabs + builds + Xprotect, Kyber at 1.4%; measure uptime and Kyber CPU before touching HUD code
 - project_mog_plan: The 6-step plan to prove Chewbacca learns (ledger cc438a52) + 10/10 baseline: r@5 ~55%, 49/190 enforced, 0 kept self-fixes

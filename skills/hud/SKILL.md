@@ -283,7 +283,8 @@ under "Showing them where".
 
 `chewbacca permissions walk` is the same loop run over System Settings for
 every missing macOS grant ("set up my permissions"): it reads the Privacy
-pane's tree through `permission-guide snapshot`, finds the app's row and
+pane's tree through the Swift helper in `mac/permission-guide` (its
+`snapshot` command, built on first use), finds the app's row and
 switch with hud-guide's own matcher, rings the switch ("Turn on Kyber"), and
 moves on when the grant is detected. When the pane's tree is unreadable, the
 ring goes on the list area of the window instead (`bin/lib/permission_walk.py`).

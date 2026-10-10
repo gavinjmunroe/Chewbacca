@@ -1613,6 +1613,10 @@ _register("PreToolUse", hooks_dir + "/load-guard.sh", timeout=10,
 # re-run each on 2026-09-27: `for path in` rebinding $PATH, "$G[v]" parsing as
 # a subscript, and a flags variable passed as one argument. The third was
 # already a memory note from 2026-09-22; it recurred because notes do not fire.
+# Git commands that destroy uncommitted work other tabs may own, and removing
+# another session's worktree (2026-10-09). See the hook's header.
+_register("PreToolUse", hooks_dir + "/destructive-guard.sh", timeout=5,
+          matcher="Bash", status="Checking nothing unsaved gets thrown away...")
 _register("PreToolUse", hooks_dir + "/zsh-guard.sh", timeout=5,
           matcher="Bash",
           status="Checking this reads right in zsh...")

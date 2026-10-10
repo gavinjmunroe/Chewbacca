@@ -98,6 +98,9 @@ SITE_TASK_WORDS = frozenset({
     "write", "set", "move", "invite", "share", "like", "pay", "checkout", "subscribe",
 })
 SITE_TASK_PHRASES = ("sign up", "sign in", "log in", "login to", "turn on", "turn off")
+# A search by its own words. hud-listen answers these on the glass before the
+# router is asked (`search_query`, bin/lib/glass_search.py); the router still
+# calls them browser-shaped for HUD_SEARCH=off and for "in chrome search X".
 SEARCH_OPENERS = ("look up ", "lookup ", "search for ", "search ", "google ")
 EXPLICIT_TERMINAL = ("in terminal", "in the terminal", "terminal,", "to the terminal")
 EXPLICIT_BROWSER = ("in chrome", "in the browser", "in browser", "in safari")
@@ -393,6 +396,30 @@ def _classified(said: str, memory: dict, classify) -> Decision:
     # somebody who asked about their calendar, which is the complaint that
     # started this.
     return Decision("assistant", 0.5, "unsettled")
+
+
+def search_query(said: str) -> str | None:
+    """The query when the sentence is a search by its own words, else None.
+
+    "search who won the dodgers game", "google rust traits", "look up X": the
+    hyper bar answers these on the glass (bin/lib/glass_search.py) instead of
+    opening a Google results page. A sentence that names the browser ("in
+    chrome search X") is an app request and returns None, so it still opens
+    Chrome, and so does "open google.com", which has no search opener.
+    """
+    if _explicit(said):
+        return None
+    norm = _browser_norm(said)
+    # "search X in chrome" names the app at the end instead of the start.
+    if re.search(r" (?:in|on|with) (?:chrome|safari|the browser|browser|google chrome)$", norm):
+        return None
+    norm = re.sub(r"^(?:(?:hey|ok|okay|so|please|can you|could you|kyber)\s+)+", "", norm)
+    for opener in SEARCH_OPENERS:
+        if norm.startswith(opener):
+            query = norm[len(opener):].strip(" .")
+            # "search" on its own, or "google it", leaves nothing to look up.
+            return query if query and query not in ("it", "that", "this") else None
+    return None
 
 
 def _browser_norm(said: str) -> str:

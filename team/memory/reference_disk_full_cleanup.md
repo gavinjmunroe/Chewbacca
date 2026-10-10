@@ -13,4 +13,6 @@ Never ours to delete: `~/Library/Messages` (213 GB of attachments; shortening hi
 
 Measure with `df -h /System/Volumes/Data`, not `/`: the root volume reads mostly empty on APFS. Related: [[feedback_high_load_reads_as_bugs]], [[feedback_slow_means_broken]].
 
+Second time, 2026-10-09 21:35: down to 1.1 GB free, so every shell call failed with ENOSPC and two HUD tests failed that pass on their own. uv had nothing to prune; ShipIt update caches (Mirror, Loom) and pip freed about 9 GB, and removing seven merged agent worktrees under .claude/worktrees freed another 2.5 GB (they hold Swift .build dirs, 300 to 600 MB each). Remove a worktree only when its branch is on origin and `git status` in it is clean, by exact path.
+
 Since 2026-10-09 `disk-guard` (UserPromptSubmit) does this automatically: below 20 GB free it starts one background prune of the safe list per 10 minutes and tells the agent; below 5 GB it says to start nothing large. Log: `~/.chewbacca/logs/disk-guard.log`. The third fill that night left 238 MB and the Bash tool couldn't start at all, since it writes output to a file; the Terminal panel tool still worked and was the way out.

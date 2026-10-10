@@ -63,24 +63,28 @@ class PublicClientApplication:
         if os.environ.get("FAKE_MSAL_MODE") == "consent":
             return {"error": "invalid_grant", "error_description":
                     "AADSTS65001: The user or administrator has not consented to use the application."}
-        self.cache._s = {"account": {"username": "tommy.trojan@usc.edu"}, "at": os.environ["FAKE_TOKEN"],
-                         "rt": os.environ["FAKE_RT"], "exp": time.time() + 3600}
+        self.cache._s = {"Account": {"a": {"username": "tommy.trojan@usc.edu"}},
+                         "AccessToken": {"t": {"secret": os.environ["FAKE_TOKEN"], "expires_on": time.time() + 3600}},
+                         "RefreshToken": {"r": {"secret": os.environ["FAKE_RT"]}}}
         self.cache.has_state_changed = True
         return {"access_token": os.environ["FAKE_TOKEN"], "refresh_token": os.environ["FAKE_RT"],
                 "id_token_claims": {"preferred_username": "tommy.trojan@usc.edu"}}
     def get_accounts(self, username=None):
-        a = (self.cache._s or {}).get("account")
-        return [a] if a else []
+        return list(((self.cache._s or {}).get("Account") or {}).values())
     def acquire_token_silent(self, scopes, account, **kw):
         _log(event="silent", scopes=scopes, account=account.get("username"))
         if os.environ.get("FAKE_SILENT") == "fail":
             return None
-        s = self.cache._s
-        if s.get("exp", 0) < time.time():
-            s["at"] = os.environ["FAKE_TOKEN2"]; s["exp"] = time.time() + 3600
+        at = self.cache._s["AccessToken"]["t"]
+        if os.environ.get("FAKE_SILENT") == "raise":
+            # An MSAL error that carries the token response, the worst case.
+            raise RuntimeError("token endpoint said refresh_token=" + self.cache._s["RefreshToken"]["r"]["secret"]
+                               + " access_token=" + at["secret"])
+        if at["expires_on"] < time.time():
+            at["secret"] = os.environ["FAKE_TOKEN2"]; at["expires_on"] = time.time() + 3600
             self.cache.has_state_changed = True
             _log(event="refreshed")
-        return {"access_token": s["at"]}
+        return {"access_token": at["secret"]}
 PY
 # The venv's python: real python3 with the fake msal on its path.
 cat > "$T/venv/bin/python" <<SH
@@ -89,17 +93,50 @@ PYTHONPATH="$T/fakemsal" exec python3 "\$@"
 SH
 chmod +x "$T/venv/bin/python"
 
-# ── fake security ────────────────────────────────────────────────────────────
+# ── fake keyring and security over one JSON "keychain" ───────────────────────
+mkdir -p "$T/fakemsal/keyring"
+cat > "$T/fakemsal/keyring/errors.py" <<'PY'
+class KeyringError(Exception): pass
+class PasswordSetError(KeyringError): pass
+class PasswordDeleteError(KeyringError): pass
+PY
+cat > "$T/fakemsal/keyring/__init__.py" <<'PY'
+# A stand-in for keyring. It logs which call was made and for whom, never the
+# password. FAKE_KEYRING_FAIL=set raises an error that echoes the password, the
+# way a careless backend might.
+import json, os
+from . import errors
+D = os.environ["FAKE_DIR"]; STORE = os.path.join(D, "keychain.json")
+def _load():
+    try: return json.load(open(STORE))
+    except Exception: return {}
+def _log(*a):
+    with open(os.path.join(D, "keyring.log"), "a") as f: f.write(" ".join(a) + "\n")
+def set_password(service, username, password):
+    _log("set_password", service, username)
+    if os.environ.get("FAKE_KEYRING_FAIL") == "set":
+        raise errors.PasswordSetError("Can't store password on keychain: " + password)
+    kc = _load(); kc[service] = {"acct": username, "pw": password}; json.dump(kc, open(STORE, "w"))
+def get_password(service, username):
+    _log("get_password", service, username)
+    it = _load().get(service)
+    return it["pw"] if it and it["acct"] == username else None
+def delete_password(service, username):
+    _log("delete_password", service, username)
+    kc = _load()
+    if service not in kc or kc[service]["acct"] != username: raise errors.PasswordDeleteError("not found")
+    del kc[service]; json.dump(kc, open(STORE, "w"))
+PY
 cat > "$T/security" <<'PY'
 #!/usr/bin/env python3
-# A stand-in for /usr/bin/security over a JSON file. The log records each verb
-# and its flags with the password replaced, so the log itself can be grepped.
+# A stand-in for /usr/bin/security over the same JSON file. It logs its FULL
+# argv, unredacted, so the test can prove no token or cache text is ever on a
+# command line.
 import json, os, sys
 D = os.environ["FAKE_DIR"]; store = os.path.join(D, "keychain.json")
 a = sys.argv[1:]
-logged = ["<secret>" if i > 0 and a[i - 1] == "-w" and a[0] == "add-generic-password" else x for i, x in enumerate(a)]
 with open(os.path.join(D, "security.log"), "a") as f:
-    f.write(" ".join(logged) + "\n")
+    f.write(json.dumps(a) + "\n")
 try: kc = json.load(open(store))
 except Exception: kc = {}
 def opt(k): return a[a.index(k) + 1] if k in a else None
@@ -110,6 +147,7 @@ if a[0] == "add-generic-password":
 elif a[0] == "find-generic-password":
     if svc not in kc: sys.exit(44)
     if "-w" in a: print(kc[svc]["pw"])
+    else: print('keychain: "login.keychain-db"\nattributes:\n    "acct"<blob>="%s"\n    "svce"<blob>="%s"' % (kc[svc]["acct"], svc))
 elif a[0] == "delete-generic-password":
     if svc not in kc: sys.exit(44)
     del kc[svc]
@@ -161,7 +199,7 @@ class H(BaseHTTPRequestHandler):
             data = pptx() if sp.path.endswith("pptx") else docx()
             return self._send(200, data, "application/octet-stream")
         if ctl.get("status"):
-            return self._send(int(ctl["status"]), b'{"error":{"code":"x","message":"no"}}')
+            return self._send(int(ctl["status"]), json.dumps({"error": {"code": "x", "message": "bad token " + auth}}).encode())
         if ctl.get("redirect"):
             return self._send(302, b"", loc=ctl["redirect"])
         path = sp.path[len("/v1.0"):] if sp.path.startswith("/v1.0") else None
@@ -293,14 +331,14 @@ sc = {s.rsplit("/", 1)[-1] for s in [e for e in ev if e["event"] == "device_flow
 assert sc == {"Mail.Read", "Calendars.Read", "Files.Read.All", "Chat.ReadBasic", "User.Read"}, sc
 PY
 has_item || no "login did not save the cache to the keychain"
-python3 - "$T/keychain.json" <<'PY' || no "the keychain item is not the base64 MSAL cache under the UPN"
-import base64, json, sys
+python3 - "$T/keychain.json" <<'PY' || no "the keychain item is not the MSAL cache under the UPN"
+import json, sys
 it = json.load(open(sys.argv[1]))["chewbacca-office"]
 assert it["acct"] == "tommy.trojan@usc.edu", it["acct"]
-assert json.loads(base64.b64decode(it["pw"]))["account"]["username"] == "tommy.trojan@usc.edu"
+assert json.loads(it["pw"])["Account"]["a"]["username"] == "tommy.trojan@usc.edu"
 PY
-grep -q "add-generic-password -U -s chewbacca-office -a tommy.trojan@usc.edu -w <secret>" "$T/security.log" \
-  || no "login did not store with security add-generic-password -U: $(cat "$T/security.log")"
+grep -q "set_password chewbacca-office tommy.trojan@usc.edu" "$T/keyring.log" \
+  || no "login did not store the cache through keyring: $(cat "$T/keyring.log" 2>/dev/null)"
 # A verification URI that is not Microsoft's is never opened.
 : > "$T/open.log"; FAKE_VERIFY_URI="https://evil.example/devicelogin" off login >/dev/null 2>&1
 [ -s "$T/open.log" ] && no "login opened a non-Microsoft verification page"
@@ -323,24 +361,27 @@ grep -q '"event": "silent"' "$T/msal.log" || no "mail did not get its token thro
 python3 - "$T/calls.log" <<'PY' || no "two Graph calls landed under 1 s apart"
 import json, sys
 t = [json.loads(l)["t"] for l in open(sys.argv[1]) if l.strip()]
-assert all(b - a >= 0.95 for a, b in zip(t, t[1:])), t
+# The client spaces sends 1 s apart; the server sees arrivals, and the first
+# request's connect can lag the second's, so allow 0.2 s of skew. With no
+# throttle the gap is a few milliseconds, so 0.8 still catches it.
+assert all(b - a >= 0.8 for a, b in zip(t, t[1:])), t
 PY
 
 # ── silent refresh: an expired access token is refreshed and saved back ─────
 python3 - "$T/keychain.json" <<'PY'
-import base64, json, sys
+import json, sys
 kc = json.load(open(sys.argv[1])); it = kc["chewbacca-office"]
-c = json.loads(base64.b64decode(it["pw"])); c["exp"] = 0
-it["pw"] = base64.b64encode(json.dumps(c).encode()).decode(); json.dump(kc, open(sys.argv[1], "w"))
+c = json.loads(it["pw"]); c["AccessToken"]["t"]["expires_on"] = 0
+it["pw"] = json.dumps(c); json.dump(kc, open(sys.argv[1], "w"))
 PY
 : > "$T/msal.log"
 off calendar --json >/dev/null 2>&1
 grep -q '"event": "refreshed"' "$T/msal.log" || no "an expired token was not refreshed through acquire_token_silent"
 grep -q '"bearer2": true' "$T/calls.log" || no "the refreshed token was not the one sent"
 python3 - "$T/keychain.json" "$TOKEN2" <<'PY' || no "the refreshed cache was not saved back to the keychain"
-import base64, json, sys
-c = json.loads(base64.b64decode(json.load(open(sys.argv[1]))["chewbacca-office"]["pw"]))
-assert c["at"] == sys.argv[2] and c["exp"] > 0, c
+import json, sys
+at = json.loads(json.load(open(sys.argv[1]))["chewbacca-office"]["pw"])["AccessToken"]["t"]
+assert at["secret"] == sys.argv[2] and at["expires_on"] > 0, at
 PY
 out="$(FAKE_SILENT=fail off mail 2>&1)"; rc=$?
 [ "$rc" = 4 ] && printf '%s' "$out" | grep -q "chewbacca office login" || no "a failed silent refresh did not stop and point at login: $out"
@@ -482,19 +523,52 @@ out="$(CHEWBACCA_OFFICE_GRAPH_BASE=https://evil.example off mail 2>&1)"; rc=$?
 [ "$rc" != 0 ] && printf '%s' "$out" | grep -q "refused" || no "a non-loopback Graph base was accepted: $out"
 
 # ── no token or cache anywhere but the keychain ─────────────────────────────
-# Every output above went through $T or a variable; the keychain stand-in holds
-# the cache base64, so a raw token anywhere under $T is a leak. HOME is $T/home.
+# Every output above went through $T or a variable. HOME is $T/home.
 { off mail --json; off calendar; off login; off read AAA1; } > "$T/leak.out" 2>&1
-grep -rl -e "$TOKEN" -e "$TOKEN2" -e "$RTOK" "$T" 2>/dev/null | grep -v "/fakemsal/" > "$T/leaks" || true
+
+# Forced failures print nothing secret, even when the failure's own message
+# carries the token: Graph errors that echo the bearer, MSAL raising with the
+# token response in its message, and a keychain write error that echoes the
+# cache. None may print a traceback either.
+for case in "status=401" "status=400" "status=403"; do
+  ctl "$case"; off mail > "$T/fail-$case.out" 2>&1 && no "$case: mail exited 0"
+done
+ctl
+out="$(FAKE_SILENT=raise off mail 2>&1)"; rc=$?
+printf '%s\n' "$out" > "$T/fail-msal-raise.out"
+[ "$rc" != 0 ] || no "an MSAL exception did not fail the command"
+printf '%s' "$out" | grep -q "Traceback" && no "an MSAL exception printed a traceback: $out"
+out="$(FAKE_KEYRING_FAIL=set off login 2>&1)"; rc=$?
+printf '%s\n' "$out" > "$T/fail-keyring-set.out"
+[ "$rc" != 0 ] || no "a keychain write failure did not fail login"
+printf '%s' "$out" | grep -q "Traceback" && no "a keychain write failure printed a traceback: $out"
+off login >/dev/null 2>&1 || no "login did not recover after a keychain write failure"
+
+# The keychain stand-in is the one place the cache may be; anywhere else under
+# $T (outputs, logs, the fake security's argv log) is a leak.
+grep -rl -e "$TOKEN" -e "$TOKEN2" -e "$RTOK" "$T" 2>/dev/null | grep -v -e "/fakemsal/" -e "/keychain.json$" > "$T/leaks" || true
 [ -s "$T/leaks" ] && no "a token or refresh token reached a file or output: $(cat "$T/leaks")"
 [ -z "$(find "$T/home" -type f 2>/dev/null)" ] || no "a file was written under HOME: $(find "$T/home" -type f)"
+# Nothing secret on any command line: the fake security logged every argv.
+python3 - "$T/security.log" "$T/keychain.json" "$TOKEN" "$TOKEN2" "$RTOK" <<'PY' || no "a token or the cache was passed on a command line"
+import json, sys
+log, kc, toks = sys.argv[1], sys.argv[2], sys.argv[3:]
+argvs = [json.loads(l) for l in open(log) if l.strip()]
+assert argvs, "security was never called"
+cache = json.load(open(kc)).get("chewbacca-office", {}).get("pw", "")
+for a in argvs:
+    joined = " ".join(a)
+    assert not any(t in joined for t in toks), a
+    assert "-w" not in a and "-g" not in a, a
+    assert not cache or cache not in joined, a
+PY
 
 # ── logout removes the keychain item ─────────────────────────────────────────
 has_item || no "precondition: no keychain item before logout"
 out="$(off logout 2>&1)"; rc=$?
 [ "$rc" = 0 ] || no "logout exited $rc: $out"
 has_item && no "logout left the keychain item in place"
-grep -q "delete-generic-password -s chewbacca-office" "$T/security.log" || no "logout did not call security delete-generic-password"
+grep -q "delete_password chewbacca-office tommy.trojan@usc.edu" "$T/keyring.log" || no "logout did not delete through keyring"
 out="$(off mail 2>&1)"; rc=$?
 [ "$rc" = 4 ] && printf '%s' "$out" | grep -q "chewbacca office login" || no "after logout, mail did not point at login: $out"
 

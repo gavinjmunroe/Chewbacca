@@ -18,6 +18,7 @@ The folder alone could not tell two sessions in one repo apart: the eval's one
 miss, "the heads up display one", was a session the menu only knew as
 `Chewbacca`.
 """
+from __future__ import annotations
 import json
 import os
 import jev

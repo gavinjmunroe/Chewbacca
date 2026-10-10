@@ -113,6 +113,12 @@ MAX_BODY = min(5_000_000, int(os.environ.get("CHEWBACCA_OFFICE_MAXBYTES", "50000
 # Characters kept from one document's extracted text.
 MAX_DOC_CHARS = 500_000
 MAX_SHEET_CHARS = 200_000
+# Decompressed XML read from one .docx/.pptx, across all its parts. The 5 MB
+# download cap bounds the zip, not what it inflates to: deflate reaches about
+# 1000:1, so a 5 MB file could expand to gigabytes inside zf.read() before the
+# character cap ever applied (security review, 2026-10-09). Markup is most of
+# OOXML, so 20 MB of XML still yields far more than MAX_DOC_CHARS of text.
+MAX_XML_BYTES = 20_000_000
 
 # Request templates. Every Graph path is one of these, with {id}/{sid}/{q}
 # filled from values validated against the charset below and then encoded
@@ -694,12 +700,17 @@ def office_text(data, ext):
         parts = ["word/document.xml"]
     else:
         parts = [n for n in names if n.endswith(".xml") and ("document" in n or "slide" in n)]
-    chunks, total = [], 0
+    chunks, total, budget = [], 0, MAX_XML_BYTES
     for n in parts:
+        if budget <= 0:
+            break
         try:
-            xml = zf.read(n).decode("utf-8", "ignore")
-        except KeyError:
+            with zf.open(n) as member:
+                raw = member.read(budget)
+        except (KeyError, zipfile.BadZipFile, RuntimeError, OSError):
             continue
+        budget -= len(raw)
+        xml = raw.decode("utf-8", "ignore")
         xml = re.sub(r"(?i)</w:p>|</a:p>|<w:br/?>|<a:br/?>", "\n", xml)
         xml = re.sub(r"<[^>]+>", "", xml)
         xml = (xml.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")

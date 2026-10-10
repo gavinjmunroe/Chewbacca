@@ -9,12 +9,10 @@ import os
 from pathlib import Path
 import re
 import shlex
-import shutil
 import sqlite3
 import stat
 import subprocess
 import sys
-import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 

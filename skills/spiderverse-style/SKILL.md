@@ -507,7 +507,7 @@ strip. `[ACR-Q]`
 - A dozen comic SFX words on one page.
 - Every section the same palette and the same treatment.
 
-## Tested in Blender (measured, Waves 1 to 4 of the replica study)
+## Tested in Blender (measured, Waves 1 to 5 of the replica study)
 
 From `~/code/work/spiderverse-replica` (private): eight structurally different
 shots rebuilt in Nalana's Blender 5.1 (EEVEE) and scored against the reference
@@ -616,6 +616,17 @@ Wave 4 (23 graphic shots: swirls, bursts, beams, debris, voids):
 - **tested, pipeline: check a generated image against its source numbers.**
   An image filled in memory rendered black in Blender's EEVEE; write it to a
   file and load it.
+
+Wave 5 (portals, crowds, environment-only rebuilds):
+
+- **tested: build a portal as concentric emissive rings with bloom.** Rings,
+  radial streaks and a bloom pass took one portal shot from 0.214 (colour
+  field only) to 0.516, the largest single element gain in the study.
+- **tested: identical stand-ins don't read as a crowd.** Bands of identical
+  figures added little and two crowd shots never matched; a crowd needs
+  varied silhouettes and poses.
+- **tested: add a texture plate or bloom, rarely both.** The plate moved
+  bloomed frames by -0.002 to +0.010 and unbloomed frames by +0.023 to +0.035.
 
 ## Tools worth reaching for
 

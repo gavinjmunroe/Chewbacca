@@ -283,9 +283,9 @@ def test_chat_approval_stands_in_for_the_terminal():
         code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": rec, "CHEWBACCA_NO_SEND": "1"})
         ok(code == 3 and "NO_SEND" in out["reason"], "CHEWBACCA_NO_SEND=1 still refuses a chat-approved write")
         with open(rec, "w") as f:
-            _json.dump({"at": int(_time.time()) - 13 * 3600, "excerpt": "do it urself"}, f)
+            _json.dump({"at": int(_time.time()) - 3 * 3600, "excerpt": "do it urself"}, f)
         code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": rec})
-        ok(code == 3 and "did not approve" in out["reason"], "a chat approval older than 12 hours is refused")
+        ok(code == 3 and "did not approve" in out["reason"], "a chat approval older than 2 hours is refused")
         code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": os.path.join(d, "missing.json")})
         ok(code == 3, "no chat approval and nobody at the terminal is refused")
     code, out, _ = run({}, {}, "campaign-status", "campaign=cam_x", "status=START", "--allow-writes")

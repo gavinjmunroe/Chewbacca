@@ -13,8 +13,9 @@
 # only come from him. launch-guard refuses any tool call that touches the
 # record, so the agent can't write one for itself.
 #
-# The record lasts 12 hours (CHAT_APPROVAL_MS in bin/chewbacca-clay). Silence
-# never revokes it; "stop", "don't send", "pause" or "hold off" in a prompt does.
+# The record lasts 2 hours (CHAT_APPROVAL_MS in bin/chewbacca-clay) and a
+# Start click counts only in the session he said it in. Silence never revokes
+# it; "stop", "don't", "pause", "wait" or "hold off" in any prompt does.
 set -uo pipefail
 STATE="${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}"
 PAYLOAD="$(cat 2>/dev/null)"
@@ -31,14 +32,16 @@ path = os.path.join(os.environ["STATE"], "clay-chat-approval.json")
 
 # "Do the Clay work yourself", in the words he actually used. Built from one
 # message (2026-10-10), never measured; widen it from real prompts that missed.
+# Narrow on purpose: a review of the first version found "run it" and "start
+# them" matched ordinary coding chat and approved sends nobody asked for.
 APPROVE = re.compile(
-    r"\b(do it (ur|your) ?self|do it urself|fuck the guard"
-    r"|(send|launch|start|run) (it|them|the campaigns?|the waves?)\b"
-    r"|press start|hit start|you (have|got) my (ok|approval|go)|i approve"
-    r"|go ahead and (send|launch|start))")
-REVOKE = re.compile(r"\b(stop|don'?t (send|launch|start)|do not (send|launch|start)|pause|hold off|cancel)\b")
+    r"\b(do it (ur|your) ?self|do it urself|fuck the guard|you (have|got) my (ok|approval|go)"
+    r"|i approve|go ahead and (send|launch|start)|(send|launch|start) the (campaigns?|waves?))\b")
+# Any of these anywhere wins over an approval in the same prompt: the first
+# version read "don't send it" as a yes because "send it" matched too.
+REVOKE = re.compile(r"\b(stop|don'?t|do not|never|pause|hold off|cancel|wait)\b")
 
-if REVOKE.search(low) and not APPROVE.search(low):
+if REVOKE.search(low):
     try:
         os.remove(path)
     except OSError:

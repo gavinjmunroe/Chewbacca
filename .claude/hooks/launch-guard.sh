@@ -60,18 +60,46 @@ refuse() {
   exit 2
 }
 
-# Caleb said in chat, within 12 hours, to do the Clay work himself (written by
-# chat-approval.sh from his own prompt). Then a click on a Clay page is his
-# instruction carried out, not an agent improvising, and it goes through. Lists
-# still have to pass pre_send_gate and gtme-grade inside the send path.
+# Caleb said in THIS session, within 2 hours, to do the Clay work himself
+# (written by chat-approval.sh from his own prompt). Then a click on a Clay page
+# is his instruction carried out, not an agent improvising. A launch-shaped
+# click (Start, resume, enroll) also needs a fresh pre-send gate receipt whose
+# lists haven't changed since it passed: a chat ok never skips the gate
+# (security review of 42d642db found the first version did).
+# $1 = "click" or "launch".
 chat_ok() {
-  python3 -I - "$state/clay-chat-approval.json" <<'PY' 2>/dev/null
-import json, sys, time
+  python3 -I - "$1" "$state" "$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null)" <<'PY' 2>/dev/null
+import hashlib, json, os, sys, time
+mode, state, session = sys.argv[1], sys.argv[2], sys.argv[3]
+WINDOW = 2 * 3600
 try:
-    at = int(json.load(open(sys.argv[1]))["at"])
+    rec = json.load(open(os.path.join(state, "clay-chat-approval.json")))
+    fresh = 0 <= time.time() - int(rec["at"]) < WINDOW
 except Exception:
     sys.exit(1)
-sys.exit(0 if 0 <= time.time() - at < 12 * 3600 else 1)
+if not fresh or not session or rec.get("session_id") != session:
+    sys.exit(1)
+if mode != "launch":
+    sys.exit(0)
+try:
+    r = json.load(open(os.path.join(state, "send-gate-receipt.json")))
+except Exception:
+    sys.exit(1)
+if not (0 <= time.time() - int(r.get("time", 0)) < WINDOW):
+    sys.exit(1)
+if not (r.get("full") or r.get("full_but_lines")):
+    sys.exit(1)
+hashes = r.get("hashes") or {}
+if not hashes:
+    sys.exit(1)
+for p, h in hashes.items():
+    try:
+        with open(p, "rb") as f:
+            if hashlib.sha256(f.read()).hexdigest() != h:
+                sys.exit(1)
+    except OSError:
+        sys.exit(1)
+sys.exit(0)
 PY
 }
 
@@ -306,7 +334,7 @@ case "$tool" in
     # A UI driver clicks whatever page is open, which the command line doesn't
     # show, so a launch-shaped UI action refuses whether or not it names Clay.
     if printf '%s' "$lower" | grep -qE 'chewie|jev-browse|peekaboo|mac-use|cliclick|osascript' &&
-       printf '%s' "$lower" | grep -qE "$WORDS" && ! chat_ok; then
+       printf '%s' "$lower" | grep -qE "$WORDS" && ! chat_ok launch; then
       refuse "a UI click can't be tied to one action on one campaign; a person presses Start in the Clay UI."
     fi
     # Cheap first look: a command that never mentions Clay (quotes and
@@ -344,7 +372,7 @@ MSG
     ;;
   mcp__peekaboo__*)
     case "$tool" in *click*|*type*|*hotkey*)
-      printf '%s' "$lower" | grep -qE "$WORDS" && ! chat_ok &&
+      printf '%s' "$lower" | grep -qE "$WORDS" && ! chat_ok launch &&
         refuse "a click on screen can't be tied to one action on one campaign; a person presses Start in the Clay UI." ;;
     esac
     exit 0
@@ -361,7 +389,14 @@ MSG
         # Any Clay page counts: an in-app link click changes the page without a
         # navigate call, so the recorded URL can lag (security review, 2026-10-05).
         last="$(cat "$lasturl" 2>/dev/null || true)"
-        if { printf '%s' "$last" | grep -qiE 'clay\.com' || printf '%s' "$lower" | grep -qE "$WORDS"; } && ! chat_ok; then
+        # The last URL lags in-app navigation, so any click on Clay is treated as
+        # launch-shaped when its words say so, and as a plain click otherwise.
+        # A click by element id carries no words, so anything on a campaign page
+        # is launch-shaped too: the Start button is one uid away.
+        mode=click
+        printf '%s' "$lower" | grep -qE "$WORDS" && mode=launch
+        printf '%s' "$last" | grep -qiE 'clay\.com.*/campaigns' && mode=launch
+        if { printf '%s' "$last" | grep -qiE 'clay\.com' || [ "$mode" = launch ]; } && ! chat_ok "$mode"; then
           refuse "a browser click on a Clay page can't be tied to one action on one campaign; a person presses Start in the Clay UI."
         fi
         ;;

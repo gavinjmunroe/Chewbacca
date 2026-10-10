@@ -31,10 +31,15 @@ G.write_receipt("1372623", "cam_x", "launch", {"name": "t", "raw": json.load(ope
 """
 
 
-def run(tool, tool_input, receipt=None, files=None, last_url=None):
+def run(tool, tool_input, receipt=None, files=None, last_url=None, chat=None):
     home = os.path.realpath(tempfile.mkdtemp())
     state = os.path.join(home, ".chewbacca", "state")
     os.makedirs(state)
+    session = "s-caleb"
+    if chat is not None:
+        rec_session, age = chat
+        with open(os.path.join(state, "clay-chat-approval.json"), "w") as fh:
+            json.dump({"at": int(time.time()) - age, "session_id": rec_session}, fh)
     if last_url:
         with open(os.path.join(state, "launch-guard-last-url"), "w") as fh:
             fh.write(last_url)
@@ -64,7 +69,7 @@ def run(tool, tool_input, receipt=None, files=None, last_url=None):
                GTME_GRADE_CLAY_FIXTURE_DIR=fixtures, CHEWBACCA_ROOT=ROOT)
     subprocess.run([sys.executable, "-c", SIGN, os.path.join(ROOT, "tools"), gin,
                     os.path.join(fixtures, "cam_x.json")], env=env, check=True, timeout=30)
-    p = subprocess.run([H], input=json.dumps({"tool_name": tool, "tool_input": tool_input}),
+    p = subprocess.run([H], input=json.dumps({"tool_name": tool, "tool_input": tool_input, "session_id": session}),
                        capture_output=True, text=True, env=env, timeout=20)
     return p.returncode
 
@@ -130,9 +135,37 @@ cases = [
      "mcp__plugin_playwright_playwright__browser_click", {"ref": "e5"}, None, None, CLAY, 2),
 ]
 
+# 2026-10-10: Caleb's "do it yourself" in chat (chat-approval.sh) stands in for a
+# person at the Clay UI, in his session, for 2 hours, and never skips the gate.
+FULL_NO_LINES = {"time": now, "full": False, "full_but_lines": True}
+HOME_PAGE = "https://app.clay.com/workspaces/1/home"
+cases = [(*c, None) for c in cases] + [
+    ("chat ok: a plain click on a Clay table page", "mcp__chrome-devtools__click", {"uid": "2"},
+     None, None, HOME_PAGE, 0, ("s-caleb", 60)),
+    ("chat ok: a campaign-page click still needs a gate receipt", "mcp__chrome-devtools__click", {"uid": "1_5"},
+     None, None, CLAY, 2, ("s-caleb", 60)),
+    ("chat ok + full receipt, lines off: Start goes through", "mcp__chrome-devtools__click", {"uid": "1_5"},
+     FULL_NO_LINES, SAME, CLAY, 0, ("s-caleb", 60)),
+    ("chat ok + receipt, list edited after the pass", "mcp__chrome-devtools__click", {"uid": "1_5"},
+     FULL_NO_LINES, EDITED, CLAY, 2, ("s-caleb", 60)),
+    ("chat ok + partial receipt", "Bash", {"command": L},
+     {"time": now, "full": False}, SAME, None, 2, ("s-caleb", 60)),
+    ("chat ok from another tab's session", "mcp__chrome-devtools__click", {"uid": "2"},
+     None, None, HOME_PAGE, 2, ("s-other", 60)),
+    ("chat ok older than 2 hours", "mcp__chrome-devtools__click", {"uid": "2"},
+     None, None, HOME_PAGE, 2, ("s-caleb", 3 * 3600)),
+    ("writing the chat approval with the Write tool", "Write",
+     {"file_path": "/Users/x/.chewbacca/state/clay-chat-approval.json", "content": "{}"},
+     None, None, None, 2, None),
+    ("writing the chat approval from the shell", "Bash",
+     {"command": "echo {} > ~/.chewbacca/state/clay-chat-approval.json"}, None, None, None, 2, None),
+    ("an ordinary file write", "Write", {"file_path": "/tmp/notes.md", "content": "x"},
+     None, None, None, 0, None),
+]
+
 bad = 0
-for name, tool, ti, receipt, files, last_url, want in cases:
-    got = run(tool, ti, receipt, files, last_url)
+for name, tool, ti, receipt, files, last_url, want, chat in cases:
+    got = run(tool, ti, receipt, files, last_url, chat)
     ok = got == want
     bad += not ok
     print(f"{'ok  ' if ok else 'FAIL'} {name}: want {want} got {got}")

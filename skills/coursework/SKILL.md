@@ -22,6 +22,25 @@ Two failure modes to design against, both worse than being slow:
    prompt disclosure, allowed for ideation but not for the submitted artifact.
    Getting this wrong is an academic integrity referral, not a style problem.
 
+## Lecture slides: one command, no searching
+
+"Pull the slides", "get the lectures", "lock in on <class>" means:
+
+```bash
+brightspace-sync files "<course code>" --out ~/coursework/slides --apply
+```
+
+It walks the course's whole Brightspace content tree, downloads every visible
+file into `~/coursework/slides/<CODE>/`, and keeps a manifest so a rerun only
+fetches what is new. Run it in the background for every course asked about at
+once, then read what landed. Never hunt the disk first: on 2026-10-10 three
+minutes went to `find` across `~` and turned up a partial ACAD 324 folder and
+four BISC chapter notes, while the full set was one command away.
+
+A 403 means the d2l session in Chrome Profile 1 lapsed. Open
+`https://brightspace.usc.edu/d2l/home` in that profile for him, say BLOCKED in
+one line, and after he signs in run `chewbacca api login brightspace` and rerun.
+
 ## The ledger
 
 Lives in `$COURSEWORK_DIR` (default `~/coursework`), plain YAML in git:

@@ -38,9 +38,13 @@ Exit 1 means no match.
 - A token cut by the snippet edge is dropped, never printed in part.
 - It over-redacts on purpose. "the token count" loses "count", "this session
   allows" loses "allows", and a 10-digit app id comes out as `[PHONE]`.
+- A value is redacted to its real end: an unquoted one to the next
+  whitespace, `,`, `;`, `&` or line end, a quoted one to its closing quote.
 - A seeded fuzz test mutates fake secrets (random shape and case, every
-  syntax above, split by control characters, wrapped in JSON, double JSON,
-  percent and base64 encoding) and requires all 2,349 cases redacted.
+  syntax above, delimiters inside values, short pieces joined by `. - _ ~`,
+  split by 30 kinds of terminal and invisible sequence, wrapped in JSON,
+  double JSON, percent and base64 encoding) and requires all 3,849 cases
+  redacted. 30 other seeds, 115,524 cases, also passed on 2026-10-10.
 - Everything printed, stdout and stderr, goes through one `emit()`. Text a
   transcript planted can't steer the terminal: escape sequences, control
   characters and bidi overrides are removed before redaction (so one can't

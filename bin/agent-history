@@ -68,8 +68,8 @@ HOME = Path.home()
 _SECRET_RULES = [
     ("PRIVATE_KEY", re.compile(
         r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.S)),
-    ("BEARER", re.compile(r"(?i)\b(bearer|basic)(\s{1,10})[A-Za-z0-9._~+/=-]{12,}")),
-    ("AUTH", re.compile(r"(?i)\b(authorization\s{0,10}[:=]\s{0,10})[\"']?[^\s\"',}]{6,}")),
+    ("BEARER", re.compile(r"(?i)\b(bearer|basic)(\s{1,10})[^\s,;&]{8,}")),
+    ("AUTH", re.compile(r"(?i)\b(authorization\s{0,10}[:=]\s{0,10})[^\s,;&]{6,}")),
     ("API_KEY", re.compile(r"\bsk-(?:ant-|proj-|live-|test-)?[A-Za-z0-9_-]{16,}")),
     ("GITHUB_TOKEN", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})")),
     ("AWS_KEY", re.compile(r"(?<![A-Za-z0-9])(?:AKIA|ASIA)[0-9A-Z]{16}(?![A-Za-z0-9])")),
@@ -83,7 +83,7 @@ _SECRET_RULES = [
     # name with no keyword never swallows the text after it.
     ("SECRET", re.compile(
         r"(?<![\w.-])(--?)?([A-Za-z][\w.-]*)"
-        r"([\"']?\s{0,8}[:=]\s{0,8}[\"']?|[\"']?>|\s{1,8})(?=[^\s\"',;}<>\[\])])")),
+        r"([\"']?\s{0,8}[:=]\s{0,8}[\"']?|[\"']?>|\s{1,8})(?=[^\s,;&])")),
     ("HEX", re.compile(r"(?<![0-9A-Za-z_])[0-9a-fA-F]{32,}(?![0-9A-Za-z_])")),
     ("PHONE", re.compile(r"(?<![\w.-])(?:\+?\d{1,3}[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4}(?![\w-])")),
 ]
@@ -188,10 +188,16 @@ def _blob_sub(m: re.Match) -> str:
 # NUL is stripped from the text before any rule runs, so these markers cannot
 # occur naturally. One per quoting style: a quoted value runs to its quote.
 _VALUE_MARK, _MARK_DQ, _MARK_SQ = "\x00V\x00", "\x00D\x00", "\x00S\x00"
+# A value runs to its real end: an unquoted one to the next whitespace, ',',
+# ';', '&' or line end, whatever is inside it (/ + = [ ] ) } < > and quotes
+# included); a quoted one to the quote that closes it, which is a quote
+# followed by a delimiter or the end, so a quote inside the value (left bare
+# once the JSON escapes are decoded) does not end it. Each step consumes one
+# character, so neither can backtrack.
 _MARKED_VALUES = [
-    (re.compile("\x00D\x00[^\"\n]*"), "[REDACTED]"),
-    (re.compile("\x00S\x00[^'\n]*"), "[REDACTED]"),
-    (re.compile("\x00V\x00[^\\s\"',;}<>\\[\\])&]*"), "[REDACTED]"),
+    (re.compile("\x00D\x00(?:[^\"\n]|\"(?![\\s,;&}\\])]|$))*"), "[REDACTED]"),
+    (re.compile("\x00S\x00(?:[^'\n]|'(?![\\s,;&}\\])]|$))*"), "[REDACTED]"),
+    (re.compile("\x00V\x00[^\\s,;&]*"), "[REDACTED]"),
 ]
 _KEYWORDS = (r"key|token|secret|passwd|password|pwd|auth|credentials?|session|cookie|bearer|api|private"
              r"|signature|sig|access|refresh|client_secret")
@@ -237,9 +243,8 @@ def _secret_sub(m: re.Match) -> str:
 _RUN = re.compile(r"(?<![A-Za-z0-9+/=_.~-])[A-Za-z0-9+/=_.~-]{20,}")
 _UUID = re.compile(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\.[a-z]{1,6})?")
 _WORD_PIECE = re.compile(
-    r"[a-z]{1,20}\d{0,3}|[A-Z][a-z]{1,20}\d{0,3}|[A-Z]{1,12}\d{0,3}|\d{1,8}"
+    r"[a-z]{1,20}\d{0,3}|[A-Z][a-z]{2,20}\d{0,3}|[A-Z]{1,12}\d{0,3}|\d{1,8}"
     r"|[a-z]{1,20}(?:[A-Z][a-z]{1,20}){1,4}|(?:[A-Z][a-z]{1,20}){2,5}|\d{1,4}[A-Z]\d{1,4}|[a-z]\d{1,4}")
-_HEX_PIECE_SHORT = re.compile(r"[0-9a-f]{1,12}")
 _HEX_PIECE_PATH = re.compile(r"[0-9a-f]{1,20}")
 _PIECE_SPLIT = re.compile(r"[._~-]")
 
@@ -250,16 +255,28 @@ def _entropy(run: str) -> float:
 
 
 def _safe_run(run: str) -> bool:
+    """A named safe shape: a UUID, a path of word-like segments, or plain
+    words. Outside a path, hex pieces are not words, and two or more pieces
+    that mix letters and digits (Kx4_AK4_Tb6) read as a key cut into pieces,
+    not as an identifier."""
     if _UUID.fullmatch(run):
         return True
     if "+" in run or "=" in run:
         return False
     is_path = run.count("/") >= 2
-    hex_piece = _HEX_PIECE_PATH if is_path else _HEX_PIECE_SHORT
+    mixed = 0
     for seg in run.split("/"):
         for piece in _PIECE_SPLIT.split(seg):
-            if piece and not (_WORD_PIECE.fullmatch(piece) or hex_piece.fullmatch(piece)):
+            if not piece:
+                continue
+            if is_path and _HEX_PIECE_PATH.fullmatch(piece):
+                continue
+            if not _WORD_PIECE.fullmatch(piece):
                 return False
+            if not is_path and any(c.isdigit() for c in piece) and any(c.isalpha() for c in piece):
+                mixed += 1
+                if mixed >= 2:
+                    return False
     return True
 
 
@@ -304,8 +321,27 @@ def _apply_rules(text: str) -> str:
     return _RUN.sub(_entropy_sub, text)
 
 
-_U_ESC = re.compile(r"(?<!\\)\\+u([0-9a-fA-F]{4})")
-_C_ESC = re.compile(r"(?<!\\)\\+([\"'/nrt])")
+# One JSON escape at a time, left to right, as a JSON parser reads them: a
+# backslash pairs with the character after it, so "\\n" is a backslash and an
+# n, not a newline, and a run of backslashes halves per level instead of
+# being read as one escape. Non-overlapping matches, nothing to backtrack.
+_ESC = re.compile(r"\\(u[0-9a-fA-F]{4}|[\\\"'/nrtbf])")
+_ESC_CHARS = {"n": "\n", "r": "", "t": " ", "b": "", "f": "", "\\": "\\", '"': '"', "'": "'", "/": "/"}
+
+
+def _unescape(m: re.Match) -> str:
+    e = m.group(1)
+    return chr(int(e[1:], 16)) if e[0] == "u" else _ESC_CHARS[e]
+
+
+def _unescape_deep(m: re.Match) -> str:
+    """Past the first level a \\n may be a literal backslash-n the level
+    before produced, inside a secret; dropping it rejoins the secret where a
+    newline would split it past every rule."""
+    e = m.group(1)
+    return "" if e == "n" else _unescape(m)
+
+
 _PCT = re.compile(r"%[0-9A-Fa-f]{2}")
 _B64 = re.compile(r"(?<![A-Za-z0-9+/_-])[A-Za-z0-9+/_-]{16,}={0,2}(?![A-Za-z0-9+/=_-])")
 
@@ -316,12 +352,15 @@ def _normalize(text: str) -> str:
     percent-encoding in URLs and form bodies. The snippet is for reading, so
     showing the decoded form costs nothing, and the rules then see one
     spelling of each secret."""
-    for _ in range(3):  # escapes nest: a JSON string inside a JSON string
+    for level in range(3):  # escapes nest: a JSON string inside a JSON string
         before = text
-        text = _U_ESC.sub(lambda m: chr(int(m.group(1), 16)), text)
-        text = _C_ESC.sub(lambda m: {"n": "\n", "r": " ", "t": " "}.get(m.group(1), m.group(1)), text)
+        text = _ESC.sub(_unescape if level == 0 else _unescape_deep, text)
+        # Controls out after every level: a terminal string terminator that a
+        # level just decoded (ESC then backslash) must not survive to be read
+        # as the start of an escape by the next level.
+        text = strip_controls(text)
         if _PCT.search(text):
-            text = unquote(text)
+            text = strip_controls(unquote(text))
         if text == before:
             break
     return text
@@ -362,12 +401,23 @@ def _cap(text: str) -> str:
 # and then the escaping in emit() prints the second half. They come out
 # entirely, introducer and parameters, before any rule runs.
 _ANSI = re.compile(
-    "\x1b\\[[0-?]*[ -/]*[@-~]"              # CSI: ESC [ params final
-    "|\x9b[0-?]*[ -/]*[@-~]"                # C1 CSI
-    "|(?:\x1b\\]|\x9d)[^\x07\x1b\x9c]*(?:\x07|\x1b\\\\|\x9c)"  # OSC ... BEL or ST
-    "|\x1b[@-Z\\\\-_]"                     # other two-byte escapes
+    "\x1b\\[[0-?]*[ -/]*[@-~]"                                  # CSI: ESC [ params final
+    "|\x9b[0-?]*[ -/]*[@-~]"                                    # C1 CSI
+    "|(?:\x1b\\]|\x9d)[^\x07\x1b\x9c]*(?:\x07|\x1b\\\\|\x9c)"   # OSC ... BEL or ST
+    "|(?:\x1b[PX^_]|[\x90\x98\x9e\x9f])[^\x1b\x9c]*(?:\x1b\\\\|\x9c)"  # DCS, SOS, PM, APC strings
+    "|\x1b[ -/]+[0-~]"                                          # ESC with intermediates: ESC ( B, ESC # 8
+    "|\x1b[0-~]"                                                # every other two-byte escape
 )
-_STRIP = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
+# Everything a terminal acts on or a reader cannot see, which is also
+# everything that can sit inside a secret and split it past the rules: C0 but
+# tab and newline, DEL, C1, the Unicode format characters (zero-width
+# space and joiners, word joiner, BOM, soft hyphen, the bidi marks and
+# overrides, the Arabic letter mark, the tag characters) and the line and
+# paragraph separators.
+_INVISIBLE = ("\x00-\x08\x0b-\x1f\x7f-\x9f­؀-؅؜۝܏᠎"
+              "​-‏ -‮⁠-⁤⁦-⁯﻿￹-￻"
+              "\U000e0001\U000e0020-\U000e007f")
+_STRIP = re.compile("[" + _INVISIBLE + "]")
 
 
 def strip_controls(text: str) -> str:
@@ -401,8 +451,8 @@ def _redact_obj(obj):
 
 # C0 controls but tab and newline, DEL, C1 (0x9b is a one-byte CSI on some
 # terminals) and the bidi overrides that reorder what a line appears to say.
-_CONTROL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f‪-‮⁦-⁩]")
-_CONTROL_JSON = re.compile("[\x7f-\x9f‪-‮⁦-⁩]")
+_CONTROL = re.compile("[" + _INVISIBLE + "]")
+_CONTROL_JSON = re.compile("[" + _INVISIBLE.replace("\x00-\x08\x0b-\x1f", "") + "]")
 
 
 def _visible(m: re.Match) -> str:

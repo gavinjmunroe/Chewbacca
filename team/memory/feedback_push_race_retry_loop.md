@@ -13,3 +13,5 @@ On a night with 10+ live tabs, pushing a one-file fix to Chewbacca main failed f
 `git worktree add --detach <scratch> origin/main`, write the change with `git show <sha>:<path> > <path>` (not `git checkout --`, which destructive-guard refuses), run `python3 tools/checksums.py` AFTER committing the change and commit the manifest too, then loop up to 4 times: fetch, rebase origin/main, regenerate checksums, commit if dirty, push. Remove only that worktree by exact path. Related: [[feedback_shared_checkout_mid_merge]], [[feedback_push_only_your_commit]], [[project_chewbacca_autopush]].
 
 Also from that night: skill-gate re-armed on a mid-turn message a minute after the skill loaded and refused the same turn twice; it now treats a load in the last 10 minutes as this turn's graph (3e0948b7).
+
+Since 2026-10-10: `--paths` three-way merges a stale disk copy against main instead of overwriting it (it had reverted three MEMORY.md index lines), team/memory/MEMORY.md merges as a union, and SHA256SUMS.txt and the README counts merge through drivers (tools/merge_regen.py), so back-to-back lands stop conflicting on all three. tests/land.sh and tests/merge_drivers.sh pin it.

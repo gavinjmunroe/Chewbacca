@@ -25,6 +25,19 @@ t "reset --hard, dirty"       2 "$T/dirty" "git reset --hard HEAD"
 t "bare stash, dirty"         2 "$T/dirty" "git stash"
 t "cd then reset, dirty"      2 "/" "cd $T/dirty && git reset --hard"
 t "another session's worktree" 2 "$T/clean" "git worktree remove --force /private/tmp/claude-501/-Users-x/$OTHER/scratchpad/wt3"
+# Security review, 2026-10-10: bypass shapes and a malicious repo.
+t "git -c before the verb"    2 "$T/dirty" "git -c user.name=x reset --hard"
+t "full path to git"          2 "$T/dirty" "/usr/bin/git reset --hard"
+t "command git"               2 "$T/dirty" "command git checkout -- f"
+t "inside sh -c"              2 "$T/dirty" "sh -c 'git reset --hard'"
+t "override not leading"      2 "$T/dirty" "echo DESTRUCTIVE_OK=1; git reset --hard"
+t "eval string"               2 "$T/dirty" 'eval "git reset --hard"'
+t "git in a variable"         2 "$T/dirty" 'x=git; $x reset --hard'
+t "git from a subshell"       2 "$T/dirty" '$(which git) reset --hard'
+git -C "$T/dirty" config core.fsmonitor "touch $T/pwned; false"
+t "fsmonitor repo still refused" 2 "$T/dirty" "git reset --hard"
+[ ! -e "$T/pwned" ] && echo "  ok    fsmonitor never ran" || { echo "  FAIL  fsmonitor ran"; fail=$((fail+1)); }
+git -C "$T/dirty" config --unset core.fsmonitor
 echo "lets through:"
 t "same commands, clean repo" 0 "$T/clean" "git reset --hard HEAD"
 t "restore --staged, dirty"   0 "$T/dirty" "git restore --staged f"
@@ -35,6 +48,6 @@ t "deliberate override"       0 "$T/dirty" "DESTRUCTIVE_OK=1 git reset --hard"
 t "mentioned in a heredoc"    0 "$T/dirty" "git commit -F - <<'MSG'
 explains why git reset --hard is dangerous
 MSG"
-t "not git"                   0 "$T/dirty" "echo git checkout -- f"
+t "not git"                   0 "$T/dirty" "echo checked out the branch"
 [ "$fail" = 0 ] && echo "destructive-guard ok"
 exit "$fail"

@@ -25,7 +25,7 @@ type hook_init >/dev/null 2>&1 && hook_init ask-capture.sh 3
 ASK_PAYLOAD=$(cat)
 export ASK_PAYLOAD
 
-exec python3 <<'PY'
+exec python3 -I <<'PY'
 import json, os, pathlib, time
 
 try:

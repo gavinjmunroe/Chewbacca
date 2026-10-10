@@ -28,4 +28,4 @@ the tenth instance of a private note and the first where the
 existing capability lived in a different repo of his.
 
 The seam and the build order are written up at
-`chewbacca/docs/SPATIAL-OS.md`. See also [[project_hud_voice_key_chain]].
+`chewbacca/docs/plans/SPATIAL-OS.md`. See also [[project_hud_voice_key_chain]].

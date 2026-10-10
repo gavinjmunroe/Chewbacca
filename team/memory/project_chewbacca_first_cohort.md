@@ -1,11 +1,11 @@
 ---
 name: project_chewbacca_first_cohort
-description: Chewbacca's first B2B cohort plan from the 2026-10-06 Gavin call; plan lives in the Chewbacca repo docs/FIRST-COHORT.md
+description: Chewbacca's first B2B cohort plan from the 2026-10-06 Gavin call; plan lives in the Chewbacca repo docs/plans/FIRST-COHORT.md
 metadata:
   type: project
 ---
 
-Chewbacca (the kit, [[project_chewbacca]]) is going 100% B2B contracts first, decided by Caleb and Gavin on the call of 2026-10-06. Consumer waits until contracts are in. The full plan, owners, timeline and open questions are in `~/code/chewbacca/docs/FIRST-COHORT.md`; read that, not this note, for detail.
+Chewbacca (the kit, [[project_chewbacca]]) is going 100% B2B contracts first, decided by Caleb and Gavin on the call of 2026-10-06. Consumer waits until contracts are in. The full plan, owners, timeline and open questions are in `~/code/chewbacca/docs/plans/FIRST-COHORT.md`; read that, not this note, for detail.
 
 - Wave 1: staffing and recruiting firms, venture studios and accelerators, commercial real estate. Non-technical companies, one account = sales, recruiting and ops seats under an owner or COO. Mac only, installed on their machines.
 - Caleb owns: the Clay table for recruiting leads plus the email stack with Karthik (200 a day), Developer ID and notarization, the drag-into-Settings bubble (working with Kyber per his 10-06 text).

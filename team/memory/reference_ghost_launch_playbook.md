@@ -14,7 +14,7 @@ a16z-led seed), already tracked as a Chewbacca competitor in
 pre-launch week (https://youtu.be/GqSXkWbYVZo) on 2026-10-07 and said "save wtv
 we should so when it comes time for growth we go ham."
 
-The full seven-point playbook lives in the Chewbacca repo, docs/COMPETITORS.md,
+The full seven-point playbook lives in the Chewbacca repo, docs/plans/COMPETITORS.md,
 section "How Ghost runs its launch" (commit 4a28caa1 on main). Short version:
 founder story first, weekly factory tours so buyers see the build, channel order
 of events, then founder X, then PR and YouTube, a content plan for the dip after

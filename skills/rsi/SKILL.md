@@ -9,7 +9,7 @@ Improve how the agent works with the model held fixed. The output is a tested ch
 
 This guides experiments. It supplies no runner or spending cap: use the repo's own (`bash tests/run.sh`, `chewbacca live --list`, `evals/evals.json`). A written instruction that passes file validation is not better performance.
 
-Diagnosis comes from [reflect](../reflect/SKILL.md) (reuse a current finding if it still applies). A single correction needs only [skill-training](../skill-training/SKILL.md). Evidence method: [decision standards](../../docs/DECISION-STANDARDS.md).
+Diagnosis comes from [reflect](../reflect/SKILL.md) (reuse a current finding if it still applies). A single correction needs only [skill-training](../skill-training/SKILL.md). Evidence method: [decision standards](../../docs/reference/DECISION-STANDARDS.md).
 
 ## 1. Bound it first
 

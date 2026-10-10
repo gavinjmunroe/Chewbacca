@@ -117,6 +117,9 @@ Optional:
                                Use --dry-run to preview; use agent export for other hosts.
   --brain-dir <path>           With --runtime, choose the private context folder.
   --json                      With --runtime, print machine-readable results.
+  --team                       With --runtime, also load the shared team memory.
+                               Only for Amber, Chewbacca and Firm Foundation teammates.
+  --no-team                    Remove the team memory from an install that has it.
   --github-user <login>        Defaults to the logged-in gh account.
   --repo-dir <path>            Where repos live. Default ~/dev
   --anthropic-key <key>        Written to settings.json env. Omit to leave unset.
@@ -224,6 +227,8 @@ while [ $# -gt 0 ]; do
       SKIP_SECTIONS="$SKIP_SECTIONS editor desktop mcp plugins tools plynn"
       FAST=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --team) AGENT_TEAM=1; shift ;;
+    --no-team) AGENT_TEAM=0; AGENT_NO_TEAM=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) err "unknown argument: $1"; echo; usage; exit 2 ;;
   esac
@@ -235,7 +240,7 @@ if [ -n "$AGENT_RUNTIME" ]; then
   for ((arg_index=0; arg_index<${#REQUESTED_ARGS[@]}; arg_index++)); do
     case "${REQUESTED_ARGS[$arg_index]}" in
       --runtime|--name|--brain-dir) arg_index=$((arg_index + 1)) ;;
-      --dry-run|--json) ;;
+      --dry-run|--json|--team|--no-team) ;;
       *) err "Runtime setup does not accept ${REQUESTED_ARGS[$arg_index]}; use the full installer or native host settings for that option."
          exit 2 ;;
     esac
@@ -246,6 +251,8 @@ if [ -n "$AGENT_RUNTIME" ]; then
   [ -n "$NAME" ] && runtime_args+=(--name "$NAME")
   [ -n "$AGENT_BRAIN" ] && runtime_args+=(--brain-dir "$AGENT_BRAIN")
   [ "$AGENT_JSON" -eq 1 ] && runtime_args+=(--json)
+  [ "${AGENT_TEAM:-0}" -eq 1 ] && runtime_args+=(--team)
+  [ "${AGENT_NO_TEAM:-0}" -eq 1 ] && runtime_args+=(--no-team)
   exec python3 "$SCRIPT_DIR/tools/agent_runtime.py" "${runtime_args[@]}"
 fi
 if [ -n "$AGENT_BRAIN" ] || [ "$AGENT_JSON" -eq 1 ]; then
@@ -520,7 +527,7 @@ install_agent_instructions() {
   install_agent_neutral_rule
   python3 "$SCRIPT_DIR/tools/agents_md.py"
   initialize_personal_context
-  python3 "$SCRIPT_DIR/tools/agent_runtime.py" setup --runtime both --brain-dir "$PC_DIR"
+  python3 "$SCRIPT_DIR/tools/agent_runtime.py" setup --runtime both --brain-dir "$PC_DIR" $( [ "${AGENT_TEAM:-0}" -eq 1 ] && echo --team )
   if ! command -v jq >/dev/null 2>&1; then
     warn "jq is missing: context loading works, but shared file and reply checks require jq"
   fi
@@ -1065,7 +1072,7 @@ unset _tool
 # text-command from ~/.local/bin; text-command was missing from this list until
 # 2026-10-05, so a text to yourself woke Kyber and ran a path that did not exist.
 _installed_hud=""
-for _tool in hud hud-listen hud-runtime hud-codex hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal; do
+for _tool in hud hud-listen hud-runtime hud-codex hud-gemini hud-ollama hud-accounts hud-context hud-watch hud-speak hud-guide hud-music kyber-sessions text-command superassistant chewbacca-mcp portal; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_hud="$_installed_hud $_tool"
@@ -2201,7 +2208,7 @@ cp "$SCRIPT_DIR/.claude/output-styles/"*.md "$GLOBAL_CLAUDE/output-styles/" 2>/d
 # about someone's calendar. That is the right file for people who write code
 # and the wrong file for everyone else.
 case "$PROFILE" in
-  personal|student) STANDARDS="$SCRIPT_DIR/docs/CLAUDE-PERSONAL.md" ;;
+  personal|student) STANDARDS="$SCRIPT_DIR/docs/reference/CLAUDE-PERSONAL.md" ;;
   *)                STANDARDS="$SCRIPT_DIR/CLAUDE.md" ;;
 esac
 # Merge, do not clobber. Anyone who already had a CLAUDE.md lost it here, with
@@ -2357,7 +2364,7 @@ while IFS='|' read -r SK_NAME SK_URL SK_PATH SK_LICENSE SK_AUTHOR; do
     } > "$GLOBAL_CLAUDE/skills/$SK_NAME/.source"
     log "$SK_NAME installed ($SK_LICENSE, $SK_AUTHOR)"
   else
-    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/EXTENSIONS.md to add it later."
+    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/reference/EXTENSIONS.md to add it later."
   fi
   rm -rf "$TMP_SK"
 done <<'UPSTREAM_SKILLS'
@@ -2424,7 +2431,7 @@ elif ! command -v claude &>/dev/null; then
   warn "  chewbacca setup --only plugins"
 fi
 
-# MCP servers, curated from mcpmarket.com. See docs/EXTENSIONS.md.
+# MCP servers, curated from mcpmarket.com. See docs/reference/EXTENSIONS.md.
 #
 # Two tiers on purpose. The keyless ones are installed outright. The ones
 # needing an account are installed only when their variables are already
@@ -2502,7 +2509,7 @@ section "Installing macOS tools"
 
 # BEGIN GENERATED: cli
 # Kit-owned helpers that sit in front of the installed tools.
-#   peekaboo: forces local execution, see docs/MACOS-TOOLS.md
+#   peekaboo: forces local execution, see docs/reference/MACOS-TOOLS.md
 #   chrome-js: reads and clicks a Chrome tab through JavaScript
 mkdir -p "$HOME/.local/bin"
 for HELPER in peekaboo chrome-js slop-check; do
@@ -2615,7 +2622,7 @@ PLIST
   launchctl bootstrap "gui/$(id -u)" "$_jq_plist" &>/dev/null &&
     log "machine job queue ticking every 30 s" || warn "could not schedule the job queue"
 else
-  warn "Homebrew not found. macOS tools skipped: see docs/MACOS-TOOLS.md"
+  warn "Homebrew not found. macOS tools skipped: see docs/reference/MACOS-TOOLS.md"
 fi
 
 # cap: Screen recording with spring-physics zoom that follows your clicks, scriptable with --json on every command

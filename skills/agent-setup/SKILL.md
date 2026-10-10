@@ -56,7 +56,7 @@ Say `BLOCKED: grant Screen Recording and Accessibility` and move on to the rest.
 Come back and re-run `peekaboo permissions` when they say it is done.
 
 If permissions read Granted but capture still fails, it is the Bridge, not TCC.
-See [docs/MACOS-TOOLS.md](../../docs/MACOS-TOOLS.md); the kit's `peekaboo`
+See [docs/reference/MACOS-TOOLS.md](../../docs/reference/MACOS-TOOLS.md); the kit's `peekaboo`
 wrapper already forces local execution.
 
 ## 2. Provider API keys

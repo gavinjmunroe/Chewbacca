@@ -21,7 +21,7 @@ Offer only sources relevant to the person's goal: selected texts, contacts,
 calendar entries, notes, email, files or a LinkedIn export. They can use Chewbacca
 without importing any of these.
 
-Read `docs/PRIVACY.md` before describing a data flow. A local database does not
+Read `docs/guide/PRIVACY.md` before describing a data flow. A local database does not
 mean local-only processing: content placed in a hosted agent's context goes to
 that provider. `people distill` sends selected message content through its model
 backend; connected APIs and MCP services receive their tool inputs. Explain the

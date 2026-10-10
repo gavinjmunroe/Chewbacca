@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""Read a HUD prompt on stdin and print only Gemini CLI's answer.
+
+The same contract as hud-codex: prompt on stdin, the final answer on stdout,
+exit 0 on an answer. `--model <name>` passes `-m`; without it Gemini uses its
+own settings. A quota or rate-limit failure prints one line hud-listen reads
+as a limit notice ("hit your usage limit"), so the listener fails over to the
+next account or runtime instead of showing an error. Stateless: every request
+is a fresh `gemini -p`, so there is no session to resume or leak.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+
+# What Gemini CLI prints when the account or key is out of quota. Read from
+# its error text, never shown whole: it can carry project ids.
+QUOTA = re.compile(r"quota|RESOURCE_EXHAUSTED|rate limit|\b429\b", re.IGNORECASE)
+# The HUD kills a model turn at 240 s (hud-listen run_streamed); stay under it.
+TIMEOUT_S = 200
+
+
+def main(argv: list[str]) -> int:
+    model = None
+    if len(argv) >= 2 and argv[0] == "--model":
+        model = argv[1]
+    elif argv:
+        print("usage: hud-gemini [--model <name>] < prompt", file=sys.stderr)
+        return 2
+    prompt = sys.stdin.read()
+    if not prompt.strip():
+        print("hud-gemini: expected a prompt on stdin", file=sys.stderr)
+        return 2
+    exe = os.environ.get("HUD_GEMINI_BIN", "gemini")
+    command = [exe, "-o", "text"]
+    if model:
+        command += ["-m", model]
+    command += ["-p", prompt]
+    env = dict(os.environ, CHEWBACCA_HUD_CHILD="1")
+    try:
+        done = subprocess.run(command, capture_output=True, text=True, env=env,
+                              stdin=subprocess.DEVNULL, timeout=TIMEOUT_S)
+    except FileNotFoundError:
+        print("hud-gemini: gemini is not installed", file=sys.stderr)
+        return 127
+    except subprocess.TimeoutExpired:
+        print("hud-gemini: Gemini took too long", file=sys.stderr)
+        return 124
+    if done.returncode != 0:
+        if QUOTA.search(done.stderr + done.stdout):
+            print("Gemini: You've hit your usage limit.")
+            return 3
+        print(f"hud-gemini: Gemini exited with status {done.returncode}", file=sys.stderr)
+        return done.returncode if done.returncode > 0 else 1
+    answer = done.stdout.strip()
+    if not answer:
+        print("hud-gemini: Gemini returned no answer", file=sys.stderr)
+        return 1
+    print(answer)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

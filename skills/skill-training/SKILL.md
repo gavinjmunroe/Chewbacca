@@ -8,7 +8,7 @@ description: Improve skills from real corrections and develop expertise in new d
 For developing expertise in a new domain or improving the learning process itself,
 read [learning-transfer.md](references/learning-transfer.md). It separates source
 coverage, procedural change, held-out performance, cross-domain transfer and retention.
-Apply [the decision standards](../../docs/DECISION-STANDARDS.md): measure improvement,
+Apply [the decision standards](../../docs/reference/DECISION-STANDARDS.md): measure improvement,
 test meaningful alternatives, and retain authorized private evidence with provenance.
 
 A skill that is never updated from real runs decays: the world moves and the

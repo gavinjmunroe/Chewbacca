@@ -56,7 +56,7 @@ done
 # The path as the plan writes it, relative to the repo root.
 REL="${FILE#"$ROOT"/}"
 
-ACTIVE=$(ROOT="$ROOT" REL="$REL" python3 - <<'PY'
+ACTIVE=$(ROOT="$ROOT" REL="$REL" python3 -I - <<'PY'
 import os, re, sys, pathlib
 
 root = pathlib.Path(os.environ["ROOT"])

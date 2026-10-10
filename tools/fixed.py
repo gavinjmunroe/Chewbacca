@@ -3,9 +3,9 @@
 
 A claim about progress that nobody can check is worth nothing. Every commit
 that closes an item says so in its message ("Fixes items 12, 15, 221-232"), and
-this reads those, cross-references docs/1000.md, and writes a status file.
+this reads those, cross-references docs/plans/1000.md, and writes a status file.
 
-  python3 tools/fixed.py            rewrite docs/1000-STATUS.md
+  python3 tools/fixed.py            rewrite docs/plans/1000-STATUS.md
   python3 tools/fixed.py --count    just the number
   python3 tools/fixed.py --open N   show N open items, lowest number first
 """
@@ -16,17 +16,19 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-LIST = REPO / "docs/1000.md"
-OUT = REPO / "docs/1000-STATUS.md"
+LIST = REPO / "docs/plans/1000.md"
+OUT = REPO / "docs/plans/1000-STATUS.md"
 # Tolerant on purpose: the claim wraps across lines, and a commit may say
 # "169 (partly)". The first version required the whole thing on one line and
 # silently missed a third of the commits, which is exactly the kind of quiet
 # undercount this file exists to prevent.
-CLAIM = re.compile(r"Fixes items?\s+(.+?)\s+of\s+docs/1000\.md", re.I | re.S)
+# The list moved to docs/plans/ on 2026-10-09; commits written before that say
+# docs/1000.md and are history, so both spellings count.
+CLAIM = re.compile(r"Fixes items?\s+(.+?)\s+of\s+docs/(?:plans/)?1000\.md", re.I | re.S)
 # An item that was wrong when written is closed too, and counted separately.
 # Rolling corrections into "fixed" would inflate the number with entries that
 # never needed work.
-CORRECT = re.compile(r"Corrects items?\s+(.+?)\s+of\s+docs/1000\.md", re.I | re.S)
+CORRECT = re.compile(r"Corrects items?\s+(.+?)\s+of\s+docs/(?:plans/)?1000\.md", re.I | re.S)
 NUMS = re.compile(r"(\d+)\s*-\s*(\d+)|(\d+)")
 
 
@@ -98,7 +100,7 @@ def main():
         "so every line below points at the commit that has to justify it.",
         "",
         "Open items are not a backlog anyone promised to finish. Many are deliberate",
-        "(see [ROADMAP.md](ROADMAP.md)), and the last category is unreasonable on purpose.",
+        "(see [ROADMAP.md](../../ROADMAP.md#earlier-product-priorities)), and the last category is unreasonable on purpose.",
         "",
         "| Section | Fixed | Was wrong | Total |",
         "| --- | --- | --- | --- |",

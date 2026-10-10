@@ -105,7 +105,7 @@ export ROUTE_SHADOW_LOG="$TMP/route-shadow.jsonl"
 export CHEWBACCA_SUITE=1
 generated_fingerprint() {
   { cat "$ROOT/config/settings/toolkit.json" 2>/dev/null
-    for f in README.md setup.sh docs/REFERENCE.md; do
+    for f in README.md setup.sh docs/reference/REFERENCE.md; do
       sed -n '/BEGIN GENERATED/,/END GENERATED/p' "$ROOT/$f" 2>/dev/null
     done; } | shasum | cut -c1-16
 }
@@ -445,7 +445,7 @@ if group "gtme"; then
     expect "clay appears in help" "chewbacca clay" bash "$ROOT/bin/chewbacca" --help
     check "the clay finder picks one visible control or stops" node --test "$ROOT/tests/test_clay_find.mjs"
   fi
-  # clay-build (docs/CLAY-HUD.md): fakes for the page, Clay and Kyber; nothing
+  # clay-build (docs/plans/CLAY-HUD.md): fakes for the page, Clay and Kyber; nothing
   # opens Chrome, reads Clay or draws on the glass.
   check "clay geometry maps page rects to screen points and stops on a bad window" python3 "$ROOT/tests/test_clay_geometry.py"
   check "the clay recipe validates, and paid steps end on their approval" python3 "$ROOT/tests/test_clay_recipe.py"
@@ -684,9 +684,13 @@ if group "installer"; then
     bash "$ROOT/tests/chewbacca_linkedin.sh" "$ROOT"
   check  "chewbacca groupme reads groups and DMs in the real GroupMe tab, GET only, throttled, and stops on pushback" \
     bash "$ROOT/tests/chewbacca_groupme.sh" "$ROOT"
+  check  "chewbacca office reads M365 mail, calendar, files, docs and Teams in the real Office tab, GET only to Graph, token never leaving the page, throttled, never marking read, and stops on pushback" \
+    bash "$ROOT/tests/chewbacca_office.sh" "$ROOT"
 
   check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \
     bash "$ROOT/tests/chewbacca_google.sh" "$ROOT"
+  check  "chewbacca email signs in with calendar write, pins the account, and drops the stale token cache" \
+    bash "$ROOT/tests/chewbacca_email_scopes.sh" "$ROOT"
 
   # Every kit on the machine matched one 17,000-character message about a club
   # website on 2026-09-22, because hit count was never divided by what was
@@ -956,11 +960,19 @@ if group "installer"; then
   # context? I feel like ur gonna forget the to dos we set at the beginning of
   # this session?" Nothing was. session-state/ records files written, never
   # decisions made.
-  # docs/REFERENCE.md carried 57 broken links, all one bug: repo-root-relative
+  # docs/reference/REFERENCE.md carried 57 broken links, all one bug: repo-root-relative
   # paths in a file that lives in docs/, so everything was missing ../. The
   # prose reads fine and every link is dead, which is why it survived.
   check  "every relative link in the docs resolves" \
     python3 "$ROOT/tools/linkcheck.py"
+
+  # 2026-10-09: docs/ had grown to 76 flat files mixing guides, specs and
+  # dated plans. Sorted into guide/, reference/ and plans/ under one index;
+  # this keeps a new doc from landing at the top or outside the index.
+  check  "docs are sorted into guide, reference and plans, all indexed" \
+    bash "$ROOT/tests/docs_layout.sh" "$ROOT"
+  check  "the docs layout check refuses a stray, unindexed or broken doc" \
+    bash "$ROOT/tests/docs_layout.sh" "$ROOT" mutant
 
   # The real BACKLOG.md lives in the team's private repo, so these read a
   # fixture: on CI, where that repo is absent, they failed from 2026-09-21 to
@@ -1140,6 +1152,7 @@ fi
 # ── hooks ─────────────────────────────────────────────────────────────────────
 if group "hooks"; then
   check "brain-recall speaks only over the cosine bar" bash "$ROOT/tests/brain_recall.sh"
+  check "brain index is incremental and a slow model load no longer silences recall" python3 "$ROOT/tests/test_brain_index.py"
   check "router shadow log never blocks a hook or lands in a repo" bash "$ROOT/tests/route_shadow.sh"
   check "route_tune follows its written rule and refuses under 50 rows" bash "$ROOT/tests/route_tune.sh"
   check "formatter handles a broken Node runtime" python3 "$ROOT/tests/test_formatter_runtime.py"
@@ -1391,6 +1404,9 @@ if group "hud"; then
   # happens between hearing something and drawing it.
   check  "the listen loop works end to end" python3 "$ROOT/tests/test_hud_listen.py"
   check  "a search is answered on the glass, never in Chrome" python3 "$ROOT/tests/test_glass_search.py"
+  # 2026-10-09 18:10: a spent account answered "Capital of Australia" with its
+  # weekly-limit notice. Fake homes and a fake claude: limit on A, answer on B.
+  check  "a spent account fails over and the switcher picks runtime, account, model" python3 "$ROOT/tests/test_hud_accounts.py"
   check  "the terminal tab chooser never picks a plain shell" python3 "$ROOT/tests/test_terminal.py"
   check  "voice memory rotates and reads back" python3 "$ROOT/tests/test_memory.py"
   check  "the router's table holds" python3 "$ROOT/tests/test_route.py"

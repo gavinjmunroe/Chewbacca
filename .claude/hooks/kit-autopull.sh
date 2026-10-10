@@ -35,7 +35,7 @@ mkdir -p "$LOG_DIR" 2>/dev/null || true
 note() { echo "$(date -u +%FT%TZ) $*" >> "$LOG" 2>/dev/null || true; }
 
 say() {
-  MSG="$1" python3 <<'PY'
+  MSG="$1" python3 -I <<'PY'
 import json, os
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
       "additionalContext": os.environ.get("MSG", "")}}))

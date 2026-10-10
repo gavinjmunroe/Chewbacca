@@ -25,7 +25,7 @@ BRAIN_SYNC_PAYLOAD="$(cat)"
 export BRAIN_SYNC_PAYLOAD PERSONAL_CONTEXT_DIR="${PERSONAL_CONTEXT_DIR:-}" PUBLIC_CONTEXT_DIR="${PUBLIC_CONTEXT_DIR:-}"
 export CHEWBACCA_WRITE_LOG="${CHEWBACCA_WRITE_LOG:-$HOME/.chewbacca/write-log.tsv}"
 
-python3 <<'PY'
+python3 -I <<'PY'
 import json, os, subprocess, sys
 
 try:
@@ -134,7 +134,7 @@ if [ -d "$lock" ]; then
 fi
 mkdir "$lock" 2>/dev/null || exit 0
 echo $$ > "$lock/pid"
-# A phone session commits to the same repo through GitHub (docs/PHONE.md), so
+# A phone session commits to the same repo through GitHub (docs/guide/PHONE.md), so
 # the remote can be ahead, and a rejected push used to fail silently forever.
 # brain-pull-safe rebases onto note-only remote commits and refuses anything
 # that touches code or instruction files; if it is missing, nothing is pulled.

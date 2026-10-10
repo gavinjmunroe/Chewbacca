@@ -64,7 +64,7 @@ export COURSEWORK_JSON
 
 # Values reach python through the environment, never by string interpolation.
 # A token containing a quote or a backslash would otherwise break the script.
-python3 <<'PY' > "$CACHE.tmp"
+python3 -I <<'PY' > "$CACHE.tmp"
 import json, os, re, urllib.request
 
 ctx_dir = os.environ.get("PERSONAL_CONTEXT_DIR", "")

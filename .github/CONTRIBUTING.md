@@ -129,6 +129,6 @@ run `bash tests/run.sh` locally has already passed most of it.
 - A bug with a failing test in the same change.
 - A doctor check for a failure that was previously silent. That is the pattern
   this repo is built on: every silent failure it ever shipped got a check.
-- An item from [docs/1000.md](../docs/1000.md), with the number in the commit
-  message as `Fixes items N of docs/1000.md`, which is how the status file
+- An item from [docs/plans/1000.md](../docs/plans/1000.md), with the number in the commit
+  message as `Fixes items N of docs/plans/1000.md`, which is how the status file
   counts it.

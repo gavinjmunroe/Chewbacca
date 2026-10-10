@@ -84,7 +84,7 @@ SCAN_NOTE=""
 if [ -x "$SCAN" ]; then
   if ! SCAN_OUT="$("$SCAN" "$REPO_ROOT" 2>&1)"; then
     export SCAN_OUT REPO_ROOT
-    python3 <<'PY'
+    python3 -I <<'PY'
 import json, os
 out = os.environ.get("SCAN_OUT", "").strip()[:800]
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext":
@@ -105,7 +105,7 @@ fi
 REMOTE_URL="$(git -C "$REPO_ROOT" remote get-url origin 2>/dev/null || echo origin)"
 export PUSH_OUT RC BRANCH REMOTE_URL SCAN_NOTE
 
-python3 <<'PY'
+python3 -I <<'PY'
 import json, os
 rc = os.environ.get("RC", "1")
 branch = os.environ.get("BRANCH", "?")

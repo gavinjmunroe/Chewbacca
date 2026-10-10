@@ -65,6 +65,7 @@ MAX_NET = 4
 # Guessed, never measured: long enough that a 10-minute encode finishes in one
 # turn and turns don't thrash, short enough that it never waits an hour.
 SLICE = float(os.environ.get("JOBS_SLICE") or 15 * 60)
+CUT_OFF = ("yielded to a build", "machine busy")
 NICE = {"heavy": 19, "build": 10, "net": 10, "light": 0}
 
 
@@ -180,14 +181,19 @@ def ran(j, now):
 
 
 def hold(j, note, now):
+    # A job cut off mid-turn keeps what it used of the turn, so resuming
+    # finishes that turn instead of starting a fresh one. 2026-10-09: with a
+    # dozen tabs the load crossed the pause line every few minutes, and a
+    # fresh turn on every resume let the long job keep the slot all night.
+    used = now - j["turn"] if j.get("turn") and note in CUT_OFF else 0
     signal_group(j, signal.SIGSTOP)
-    j.update(ran=ran(j, now), turn=None, status="paused", note=note)
+    j.update(ran=ran(j, now), turn=None, turn_used=used, status="paused", note=note)
     save(j)
 
 
 def resume(j, now):
     signal_group(j, signal.SIGCONT)
-    j.update(ran=ran(j, now), turn=now, status="running", note=None)
+    j.update(ran=ran(j, now), turn=now - j.get("turn_used", 0), turn_used=0, status="running", note=None)
     save(j)
 
 
@@ -239,9 +245,8 @@ def _tick():
     running = [j for j in all_jobs if j["class"] == "heavy" and j["status"] == "running"]
     # A job cut off mid-turn by a build or a swamped Mac finishes that turn
     # first; after that, the least-run job goes next.
-    cut_off = ("yielded to a build", "machine busy")
     waiting = sorted((j for j in all_jobs if j["class"] == "heavy" and j["status"] in ("paused", "queued")),
-                     key=lambda j: (j.get("note") not in cut_off, ran(j, now), j["created"]))
+                     key=lambda j: (not (j.get("note") in CUT_OFF and j.get("turn_used", 0) < SLICE), ran(j, now), j["created"]))
     if building or must_pause():
         for j in running:
             hold(j, "yielded to a build" if building else "machine busy", now)

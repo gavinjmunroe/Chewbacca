@@ -1,7 +1,7 @@
 """GTM memory: the people store's architecture, applied to clients, accounts, contacts and Clay.
 
 Caleb, 2026-10-09: GTM memory has to be as good as the relationship store, "if
-not higher". docs/GTM-MEMORY.md maps each people-store capability to the piece
+not higher". docs/reference/GTM-MEMORY.md maps each people-store capability to the piece
 here that implements it. The short version:
 
   identity    contacts and accounts hold KEYS ONLY (email, LinkedIn slug, domain).

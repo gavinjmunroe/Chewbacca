@@ -369,6 +369,25 @@ HUD child sessions cannot claim the selection. An explicit `--model-cmd` or
 `BOB_MODEL_CMD` remains an override. Codex uses its saved user defaults through
 `hud-codex`; neither runtime's model is forced by automatic selection.
 
+**Switching runtime, account and model** happens on the glass with no model
+turn (bin/lib/hud_accounts.py). "Which account" or "which model" draws the
+`accounts` card: what answers now, one Use row per Claude account (its email,
+ok / limit hit with the reset time / signed out) and per runtime (Codex,
+Gemini through `hud-gemini`, local Ollama models through `hud-ollama`), the
+model buttons for the current runtime, Sign in on anything signed out, and Add
+account. "Use sonnet", "use codex", "use gemini", "use local", "use claude",
+"use my other account", "use <email>" and "add an account" act directly. The
+pick lives in `~/.bob/hud-accounts.json`, never in `~/.claude/settings.json`;
+an explicit runtime wins over the hooks' selection until "Follow my last
+session" is pressed. When a reply is a limit notice, that account or runtime
+is marked out until the reset it names, the same request runs once on the
+next one that is not, and the pill says "Answered on <b>, <a> is out until
+9am". With nothing left the pill says who is out until when and the card
+opens. Add account makes `~/.claude-<n>` and opens `claude auth login` for it
+in a Terminal tab, Caleb's hands, then adds it when its `.claude.json` has a
+signed-in email. The menu bar's "Model and account" submenu is the same pick
+through `hud-accounts`. Escape, the X or "close it" takes the card down.
+
 When Claude is selected, `hud listen` runs Claude Code under a lean profile: its own short
 system prompt (`bin/hud-agent.md`, which carries the `mac` usage), one tool,
 and none of the person's settings, with their permission mode and deny list
@@ -380,7 +399,7 @@ The reply is read by `hud-speak` (Python) or, with `HUD_SPEAKER=hud-voice`,
 by the Swift server in `voice/`, which needs nothing installed.
 
 How the voice is meant to sound, and where each rule came from, is in
-`docs/VOICE-DESIGN.md`: a tone on the press, the model's restate-then-acknowledge
+`docs/reference/VOICE-DESIGN.md`: a tone on the press, the model's restate-then-acknowledge
 first sentence ("Texting Caleb you're running ten late. On it."), and a
 context-shaped filler from the bridge only when nothing has been said for two
 seconds. Change `bin/hud-agent.md` with that doc open.

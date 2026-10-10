@@ -52,20 +52,29 @@ function readJson(file, fallback) {
   }
 }
 
-const registry = readJson(path.join(LIB, "registry.json"), null);
+// Read once. A write is built from these in-memory copies, and the files are
+// only re-read after approval to refuse if they changed (see fingerprint).
+function readText(file) {
+  try { return fs.readFileSync(file, "utf8"); } catch { return null; }
+}
+const REGISTRY_TEXT = readText(path.join(LIB, "registry.json"));
+const SPEC_TEXT = readText(path.join(LIB, "clay.json"));
+const parseOr = (t, fallback) => { try { return JSON.parse(t); } catch { return fallback; } };
+const registry = parseOr(REGISTRY_TEXT, null);
 if (!registry) out({ ok: false, class: "error", reason: `no registry at ${LIB}/registry.json` }, EXIT.failed);
-const spec = readJson(path.join(LIB, "clay.json"), { operations: [] });
+const spec = parseOr(SPEC_TEXT, { operations: [] });
 const specOps = new Map(spec.operations.map((o) => [o.name, o]));
 const measured = readJson(MEASURED, {});
 
 // ── args ─────────────────────────────────────────────────────────────────────
 function parseArgv(argv) {
-  const flags = { allowWrites: false, surface: null, maxTier: null };
+  const flags = { allowWrites: false, dryRun: false, surface: null, maxTier: null };
   const kv = {};
   const pos = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--allow-writes") flags.allowWrites = true;
+    else if (a === "--dry-run") flags.dryRun = true;
     else if (a === "--surface") {
       flags.surface = argv[++i] ?? "";
       if (flags.surface === "api") flags.surface = "api-anything";
@@ -74,16 +83,12 @@ function parseArgv(argv) {
     else if (a === "-h" || a === "--help") pos.push("help");
     else if (a.startsWith("--")) out({ ok: false, class: "usage", reason: `unknown flag ${a}` }, EXIT.usage);
     else if (a.includes("=") && pos.length >= 1) {
+      // Values stay the raw strings typed; normalizeArgs parses each one once.
+      // A key given twice is refused: last-one-wins would let a check and a
+      // build read different values (security review of 300f4ddb).
       const k = a.slice(0, a.indexOf("="));
-      let v = a.slice(a.indexOf("=") + 1);
-      if (/^[[{]/.test(v)) {
-        try {
-          v = JSON.parse(v);
-        } catch {
-          out({ ok: false, class: "usage", reason: `${k} is not valid JSON` }, EXIT.usage);
-        }
-      }
-      kv[k] = v;
+      if (Object.hasOwn(kv, k)) out({ ok: false, class: "usage", reason: `${k} is given more than once` }, EXIT.usage);
+      kv[k] = a.slice(a.indexOf("=") + 1);
     } else pos.push(a);
   }
   return { pos, kv, flags };
@@ -93,10 +98,43 @@ function parseArgv(argv) {
 const opByName = new Map(registry.ops.map((o) => [o.name, o]));
 const uiByName = new Map((registry.ui_only || []).map((o) => [o.name, o]));
 
+// Which Clay workspace an op runs against. There is no built-in default: the
+// registry used to name one client's workspace, so any op run without ws=
+// acted on that client (2026-10-09). Order: ws= on the command line, then
+// $CLAY_WORKSPACE_ID, then the GTM client config when it names exactly one
+// workspace across all clients. Anything else refuses. Fixture mode reads only
+// an explicit $GTM_CONFIG, never the real one.
+const WS_FILES = [];
+function gtmConfigPath() {
+  if (process.env.GTM_CONFIG) return process.env.GTM_CONFIG;
+  return FIXTURES ? null : path.join(os.homedir(), ".chewbacca", "gtm", "clients.json");
+}
+
+function resolveWorkspace() {
+  if (process.env.CLAY_WORKSPACE_ID) return { ws: process.env.CLAY_WORKSPACE_ID, from: "CLAY_WORKSPACE_ID" };
+  const file = gtmConfigPath();
+  const cfg = file ? parseOr(readText(file), null) : null;
+  const clients = Array.isArray(cfg?.clients) ? cfg.clients : [];
+  const byWs = new Map();
+  for (const c of clients) for (const w of Array.isArray(c?.workspaces) ? c.workspaces : []) {
+    if (!byWs.has(String(w))) byWs.set(String(w), String(c?.name ?? "unnamed"));
+  }
+  if (byWs.size === 1) {
+    WS_FILES.push(file);
+    return { ws: [...byWs.keys()][0], from: file };
+  }
+  const found = byWs.size ? `; ${file} names ${byWs.size} (${[...byWs.values()].join(", ")})` : file ? `; ${file} names none` : "";
+  return { error: `no Clay workspace chosen: pass ws=<id> or set CLAY_WORKSPACE_ID${found}. chewbacca clay workspaces lists them` };
+}
+
 function withDefaults(op, kv) {
   const args = { ...kv };
   const wantsWs = op.args.some((a) => a.replace("?", "") === "ws");
-  if (wantsWs && args.ws === undefined) args.ws = process.env.CLAY_WORKSPACE_ID || registry.defaults.ws;
+  if (wantsWs && args.ws === undefined) {
+    const r = resolveWorkspace();
+    if (r.error) out({ ok: false, op: op.name, class: "input", reason: r.error }, EXIT.usage);
+    args.ws = r.ws;
+  }
   return args;
 }
 
@@ -121,8 +159,10 @@ function bind(s, args) {
     return bound;
   }
   // A value that starts with "-" would reach the CLI as a flag: treat it as missing.
+  // An object (a filter AST) goes to the CLI as one argv token of JSON.
+  const text = (v) => (v !== null && typeof v === "object" ? JSON.stringify(v) : String(v));
   const fill = (tok) =>
-    tok.replace(/\{(\w+)\}/g, (_, k) => (args[k] === undefined || String(args[k]).startsWith("-") ? "\u0000" : String(args[k])));
+    tok.replace(/\{(\w+)\}/g, (_, k) => (args[k] === undefined || text(args[k]).startsWith("-") ? "\u0000" : text(args[k])));
   const argv = s.argv.map(fill);
   if (argv.some((t) => t.includes("\u0000"))) return null;
   for (const [k, extra] of Object.entries(s.optional || {})) {
@@ -192,7 +232,111 @@ function distHash(dist) {
   return h.digest("hex");
 }
 
+// Fixture mode records what a write hands to its surface, so a test can prove
+// it is the request the person approved.
+function logSent(entry) {
+  const f = FIXTURES && process.env.CHEWBACCA_CLAY_SENT_LOG;
+  if (f) fs.appendFileSync(f, `${JSON.stringify(entry)}\n`);
+}
+
+// ── writes: everything resolved before approval, nothing re-resolved after ──
+//
+// Security review of f3a934cb (TOCTOU): the engine was handed an op name and
+// args and re-resolved the spec, the session and the URL at call time, after
+// the person had approved. A write now never goes through call(). Before the
+// prompt, prepareWrite loads and checks the engine build, imports it, loads the
+// session into memory and resolves the CLI or bin to an absolute path. After
+// approval the only thing that happens is sending the frozen request: the
+// engine's send() gets a synthetic op whose request IS the frozen one (no
+// slots, no params), and a fetch wrapper refuses any hop whose method, URL or
+// body differs from it, so a redirect can't replay the body elsewhere.
+
+const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
+const ENV_PINNED = ["CLAY_WORKSPACE_ID", "GTM_CONFIG", "CHEWBACCA_NO_SEND", "API_ANYTHING_HOME", "API_ANYTHING_DIST", "PATH", "CHEWBACCA_CLAY_LIB", "CHEWBACCA_ROOT"];
+
+// Everything a write depends on, hashed: the registry and spec as read at
+// startup and as on disk, the pinned env, and the files prepareWrite resolved
+// (engine build, session, executable). Taken before the prompt and again after
+// approval; any difference refuses the send.
+function fingerprint(prep) {
+  const parts = [
+    `registry:${sha256(REGISTRY_TEXT ?? "")}:${sha256(readText(path.join(LIB, "registry.json")) ?? "")}`,
+    `spec:${sha256(SPEC_TEXT ?? "")}:${sha256(readText(path.join(LIB, "clay.json")) ?? "")}`,
+    ...ENV_PINNED.map((k) => `env:${k}=${process.env[k] ?? ""}`),
+    ...[...(prep.files || []), ...WS_FILES].map((f) => `file:${f}:${sha256(fs.existsSync(f) ? fs.readFileSync(f) : "")}`),
+    ...(prep.dist ? [`dist:${distHash(prep.dist)}`] : []),
+  ];
+  return sha256(parts.join("\n"));
+}
+
+function whichAbs(name) {
+  const r = spawnSync("sh", ["-c", 'command -v "$1"', "sh", name], { encoding: "utf8" });
+  const p = r.stdout.trim();
+  return p ? fs.realpathSync(p) : null;
+}
+
+async function prepareWrite(op, s, frozen) {
+  if (FIXTURES) return { files: [], send: async () => {
+    logSent({ surface: s.type, op: op.name, request: frozen });
+    if (s.type === "api-anything") return fixture("api-anything", s.op) ?? { ok: false, class: "error", reason: `no fixture for ${s.op}` };
+    const f = fixture(s.type, op.name);
+    if (!f) return { ok: false, class: "error", reason: `no fixture for ${s.type} ${op.name}` };
+    return f.exit === 0 ? { ok: true, data: parseOr(f.stdout, null) } : { ok: false, class: "error", reason: f.stderr || `exit ${f.exit}` };
+  } };
+  if (s.type !== "api-anything") {
+    const exe = s.type === "cli" ? whichAbs("clay") : path.join(ROOT, "bin", frozen.argv[0]);
+    if (!exe || !fs.existsSync(exe)) return { error: `${s.type === "cli" ? "the clay CLI" : frozen.argv[0]} is not installed` };
+    const argv = frozen.argv.slice(1);
+    return { files: [exe], send: async () => {
+      const r = spawnSync(exe, argv, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 180000 });
+      if (r.status !== 0) return { ok: false, class: "error", reason: (r.stderr || String(r.error || `exit ${r.status}`)).trim().slice(0, 400) };
+      return { ok: true, data: parseOr(r.stdout, r.stdout) };
+    } };
+  }
+  const dist = engineDist();
+  if (!dist) return { error: "api-anything is not installed" };
+  if (!registry.engine.dist_sha256 || distHash(dist) !== registry.engine.dist_sha256) {
+    return { error: `the installed api-anything is not the build of the pinned commit ${registry.engine.sha.slice(0, 12)}` };
+  }
+  process.env.API_ANYTHING_HOME = ENGINE_HOME;
+  const http = await import(path.join(dist, "http.js"));
+  const sess = await import(path.join(dist, "session.js"));
+  const sessionPath = sess.sessionFile(registry.engine.site);
+  let session;
+  try { session = sess.loadSession(registry.engine.site); } catch (e) { return { error: `no usable Clay session: ${e.message}` }; }
+  const body = frozen.body === undefined ? undefined : JSON.stringify(frozen.body);
+  const synthetic = { name: op.name, request: { method: frozen.method, url: frozen.url, headers: { ...frozen.headers }, ...(body !== undefined ? { body } : {}) },
+    slots: [], params: [], volatile: [], readOnly: false, minTier: 1, response: { format: "json" } };
+  // The engine's own builder, on the synthetic op, must give back exactly the approved request.
+  const built = http.buildRequest(synthetic, {}, { cookies: [], values: {} });
+  const h = { ...built.headers };
+  delete h.cookie;
+  if (built.method !== frozen.method || built.url !== frozen.url || JSON.stringify(h) !== JSON.stringify(frozen.headers) || (built.body ?? undefined) !== body) {
+    return { error: "the engine would build a request other than the one shown; nothing was sent" };
+  }
+  let hops = 0;
+  const guarded = (url, init) => {
+    hops += 1;
+    const sentBody = init?.body === undefined ? undefined : String(init.body);
+    if (hops > 1 || String(url) !== frozen.url || init?.method !== frozen.method || sentBody !== body) {
+      throw new Error("refused: the outgoing request differs from the approved one (a redirect or a rewrite); nothing more was sent");
+    }
+    return fetch(url, init);
+  };
+  return { dist, files: [sessionPath], send: async () => {
+    try {
+      const r = await http.send(synthetic, {}, session, { site: registry.engine.site, fetchImpl: guarded });
+      const ok = r.status >= 200 && r.status < 300;
+      return { ok, status: r.status, data: parseOr(r.body, r.body), ...(ok ? {} : { class: "error", reason: `HTTP ${r.status}` }) };
+    } catch (e) {
+      return { ok: false, class: "error", reason: String(e.message || e) };
+    }
+  } };
+}
+
+// Reads only: the engine resolves the op itself, which is fine for a GET.
 async function callEngine(opName, bound, flags, write) {
+  if (write) return { ok: false, class: "refused", reason: "a write never goes through call(); it is sent from its frozen request" };
   if (FIXTURES) {
     const f = fixture("api-anything", opName);
     return f ?? { ok: false, class: "error", reason: `no fixture for ${opName}` };
@@ -246,15 +390,59 @@ function specWrites(specName) {
   if (!so) return true;
   return String(so.request?.method || "").toUpperCase() !== "GET" && !READ_POSTS.has(specName);
 }
-function isWrite(op) {
-  return op.kind === "write" || op.surfaces.some((s) => s.type === "api-anything" && specWrites(s.op));
+// Every surface is judged on its own, whatever the op's label says (security
+// review of e5f1edeb: a `clay tables delete` CLI surface or a kit bin under a
+// kind:read op skipped the gate because only api-anything methods were read).
+// A CLI command is a read only when its last subcommand is a known read verb;
+// anything else, a mutating verb or one never seen, is a write. A bin is a
+// write unless it is listed here as read-only.
+const CLI_READ_LEAVES = new Set([
+  "list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
+  "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
+  "schema", "validate", "format", "diagram", "preview-sequence", "resolve", "sender-accounts", "skills",
+  "business-context", "files", "segments", "whoami", "versions",
+]);
+// The clay CLI's mutating subcommands (clay 1.9.1 --help, walked 2026-10-09).
+// Listed so a mutating verb is a write even where it sits mid-command.
+const CLI_WRITE_VERBS = new Set([
+  "create", "update", "delete", "add", "remove", "run", "import", "publish", "set", "enroll", "send", "archive",
+  "restore", "upsert", "insert", "start", "pause", "resume", "cancel", "edit", "upload", "switch", "login",
+  "logout", "rename", "decide", "seed", "test", "start-test", "end-test", "send-test", "update-claygent",
+  "ensure-audience-writeback", "add-nodes", "remove-nodes", "upgrade-to-account-agent", "create-account-agent",
+  "insert", "onboard", "feedback",
+]);
+const READ_BINS = new Set(["clay-inbox", "clay-balance"]);
+
+function cliCommand(argv) {
+  const words = [];
+  for (const t of argv) {
+    if (t.startsWith("-") || t.includes("{")) break;
+    words.push(t);
+  }
+  return words;
 }
 
+function surfaceWrites(s) {
+  if (s.type === "api-anything") return specWrites(s.op) || specOps.get(s.op)?.readOnly === false;
+  if (s.type === "cli") {
+    const words = cliCommand(s.argv || []);
+    return !words.length || words.some((w) => CLI_WRITE_VERBS.has(w)) || !CLI_READ_LEAVES.has(words.at(-1));
+  }
+  if (s.type === "bin") return !READ_BINS.has((s.argv || [])[0]);
+  return true;
+}
+
+function isWrite(op) {
+  return op.kind !== "read" || String(op.gate || "").startsWith("write") || op.surfaces.some(surfaceWrites);
+}
+
+// Reads only. A write never reaches here: runOp sends it through prepareWrite.
 async function attempt(op, cand, flags) {
   const { s, bound } = cand;
   const t0 = Date.now();
+  if (isWrite(op)) return { ok: false, surface: s.type, class: "refused", reason: "a write is only sent from its approved, frozen request", ms: 0 };
   if (s.type === "api-anything") {
-    const r = await callEngine(s.op, bound, flags, isWrite(op));
+    const r = await callEngine(s.op, bound, flags, false);
     const res = {
       ok: !!r.ok,
       surface: "api-anything",
@@ -293,7 +481,7 @@ async function attempt(op, cand, flags) {
 function listOps() {
   const ops = registry.ops.map((op) => ({
     op: op.name,
-    kind: op.kind,
+    kind: isWrite(op) ? "write" : "read",
     gate: op.gate,
     args: op.args,
     summary: op.summary,
@@ -310,6 +498,13 @@ function listOps() {
       };
     }),
     ui: op.ui ?? null,
+    ...(op.kind === "write"
+      ? {
+          verified: op.verified ?? null,
+          ...(op.confidence ? { confidence: op.confidence } : {}),
+          ...(op.evidence ? { evidence: op.evidence.source === "cli" ? op.evidence.command : `${op.evidence.file} ${op.evidence.contract} @${op.evidence.contract_offset}` } : {}),
+        }
+      : {}),
   }));
   const ui = (registry.ui_only || []).map((u) => ({ op: u.name, kind: "ui", gate: u.gate, route: u.route, why: u.why }));
   const untaught = (registry.untaught_writes || []).map((w) => ({ op: w.name, kind: "write", gate: w.gate, endpoint: w.endpoint, taught: false }));
@@ -327,15 +522,73 @@ const ARG_SHAPES = {
   limit: /^\d{1,5}$/, offset: /^\d{1,7}$/, days: /^\d{1,4}$/,
   ids: /^[A-Za-z0-9_-]{1,80}(,[A-Za-z0-9_-]{1,80}){0,199}$/,
   emailOrDomain: /^([A-Za-z0-9._%+-]+@)?[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/,
+  field: /^f_[A-Za-z0-9_-]{1,80}$/,
+  entry: ID, resource: ID,
+  name: /^[^\u0000-\u001f\u007f]{1,128}$/,
+  data_type: /^(text|number|email|url|date|boolean|longtext|image|currency|json)$/,
+  on: /^(true|false)$/,
+  mode: /^(all|keep_existing)$/,
+  status: /^(START|PAUSED|STOPPED)$/,
+  lead_map_id: /^\d{1,15}$/, category_id: /^\d{1,15}$/,
+  read_status: /^(READ|UNREAD)$/,
+  resource_type: /^(FOLDER|TABLE|WORKBOOK|WORKFLOW|AUDIENCE_SEGMENT)$/,
 };
-const JSON_ARGS = new Set(["forward_data", "reply_data"]);
+// Comma lists, or a JSON array: each item must have the item shape. The cap is
+// the op's `limits` entry, else 200.
+const LIST_ARGS = { fields: ARG_SHAPES.field, rows: ID, emails: ARG_SHAPES.emailOrDomain };
 
-function badArg(args) {
+const isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
+const CELL_KEY = /^f_[A-Za-z0-9_-]{1,80}$/;
+const cellsBad = (c) => (!isObj(c) || !Object.keys(c).length || !Object.keys(c).every((k) => CELL_KEY.test(k)) ? "cells must map column ids (f_...) to values" : null);
+// JSON args, each checked for the shape its body slot expects.
+const JSON_ARGS = {
+  forward_data: (v) => (isObj(v) ? null : "must be a JSON object"),
+  reply_data: (v) => (isObj(v) ? null : "must be a JSON object"),
+  settings: (v) => (isObj(v) && Object.keys(v).length <= 100 && Object.keys(v).every((k) => /^[A-Z][A-Z0-9_]{0,63}$/.test(k))
+    ? null : "must be the table's tableSettings object (UPPER_CASE keys), from chewbacca clay table"),
+  update: (v) => {
+    if (!isObj(v) || !Object.keys(v).length) return "must be a non-empty JSON object";
+    const extra = Object.keys(v).filter((k) => !["name", "description", "typeSettings"].includes(k));
+    if (extra.length) return `may only hold name, description, typeSettings (not ${extra.join(", ")})`;
+    if (v.name !== undefined && !(typeof v.name === "string" && ARG_SHAPES.name.test(v.name))) return "name must be a 1 to 128 character string";
+    if (v.typeSettings !== undefined && !isObj(v.typeSettings)) return "typeSettings must be the column's whole typeSettings object";
+    return null;
+  },
+  records: (v, op) => {
+    if (!Array.isArray(v) || !v.length) return "must be a non-empty JSON array";
+    const cap = op?.limits?.records ?? 100;
+    if (v.length > cap) return `holds ${v.length} records, ${cap} at most`;
+    for (const r of v) {
+      const bad = op?.compose === "new-records" ? cellsBad(r) : !isObj(r) || typeof r.id !== "string" || !ID.test(r.id) ? "each record needs an id (r_...)" : cellsBad(r.cells);
+      if (bad) return bad;
+    }
+    return null;
+  },
+  filter: (v) => (isObj(v) && v.type === "GroupOp" && Array.isArray(v.items) ? null : "must be a filter AST whose root is a GroupOp with items"),
+  config: (v) => {
+    if (!isObj(v)) return "must be a JSON object";
+    if (!isObj(v.source) || v.source.type !== "S3_CSV" || typeof v.source.key !== "string") return "source must be {type:S3_CSV, key, ...} from a finished multi-part upload";
+    if (!isObj(v.destination) || !["TABLE", "NOOP", "BULK_ENRICHMENT"].includes(v.destination.type)) return "destination.type must be TABLE, NOOP or BULK_ENRICHMENT";
+    if (!isObj(v.map)) return "map must be an object";
+    if (typeof v.isImportWithoutRun !== "boolean") return "isImportWithoutRun must be true or false";
+    return null;
+  },
+};
+
+function badArg(args, op) {
   for (const [k, v] of Object.entries(args)) {
-    if (JSON_ARGS.has(k)) {
-      let parsed;
-      try { parsed = typeof v === "string" ? JSON.parse(v) : v; } catch { return `${k} is not JSON`; }
-      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return `${k} must be a JSON object`;
+    if (JSON_ARGS[k]) {
+      // v is already parsed, once, by normalizeArgs.
+      const bad = JSON_ARGS[k](v, op);
+      if (bad) return `${k} ${bad}`;
+      continue;
+    }
+    if (LIST_ARGS[k]) {
+      if (!Array.isArray(v)) return `${k} must be a list`;
+      const items = v;
+      const cap = op?.limits?.[k] ?? 200;
+      if (!items.length || items.length > cap) return `${k} holds ${items.length} items, 1 to ${cap} allowed`;
+      if (!items.every((x) => LIST_ARGS[k].test(x))) return `${k} has an item that does not look like a ${k.replace(/s$/, "")}`;
       continue;
     }
     const shape = ARG_SHAPES[k];
@@ -345,14 +598,301 @@ function badArg(args) {
   return null;
 }
 
+// Turn the validated args into what the spec slots take: lists to arrays, JSON
+// strings to objects, and the two composed bodies.
+// ── one parse, then validate what is actually sent ──────────────────────────
+//
+// Security review of 300f4ddb (validator differential): args were checked in
+// one representation and built from another (JSON parsed twice, lists split
+// twice, last duplicate key winning). Now every arg is parsed exactly once
+// here, badArg checks those parsed values, compose and the builder use the
+// same objects, and the builder refuses any value it was not handed by this
+// step. The finished request is checked again (checkFinal).
+
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const CLAY_API_HOST = "api.clay.com";
+
+// JSON.parse keeps the last of two equal keys and treats "__proto__" as a
+// plain key, so a duplicate could be checked one way and read another. This
+// parser refuses both, and builds objects with no prototype chain to reach.
+const PRIMITIVE = /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/y;
+function strictJson(text) {
+  let i = 0;
+  const ws = () => { while (" \t\n\r".includes(text[i]) && i < text.length) i++; };
+  const fail = (m) => { throw new Error(m); };
+  function value(depth) {
+    if (depth > 64) fail("nests too deep");
+    ws();
+    const c = text[i];
+    if (c === "{") {
+      i++;
+      const o = Object.create(null);
+      ws();
+      if (text[i] === "}") { i++; return Object.assign({}, o); }
+      for (;;) {
+        ws();
+        if (text[i] !== '"') fail("has a key that is not a string");
+        const k = value(depth + 1);
+        if (FORBIDDEN_KEYS.has(k)) fail(`has a ${k} key`);
+        if (Object.hasOwn(o, k)) fail(`has the key ${JSON.stringify(k)} twice`);
+        ws();
+        if (text[i++] !== ":") fail("is missing a colon");
+        o[k] = value(depth + 1);
+        ws();
+        if (text[i] === ",") { i++; continue; }
+        if (text[i] === "}") { i++; break; }
+        fail("has an object that is not closed");
+      }
+      // A plain object again, with only own keys from the text.
+      return Object.fromEntries(Object.entries(o));
+    }
+    if (c === "[") {
+      i++;
+      const a = [];
+      ws();
+      if (text[i] === "]") { i++; return a; }
+      for (;;) {
+        a.push(value(depth + 1));
+        ws();
+        if (text[i] === ",") { i++; continue; }
+        if (text[i] === "]") { i++; break; }
+        fail("has an array that is not closed");
+      }
+      return a;
+    }
+    PRIMITIVE.lastIndex = i;
+    const m = PRIMITIVE.exec(text);
+    if (!m) fail("is not valid JSON");
+    i += m[0].length;
+    return JSON.parse(m[0]);
+  }
+  const v = value(0);
+  ws();
+  if (i !== text.length) fail("has text after the JSON");
+  return v;
+}
+
+function normalizeArgs(args) {
+  const n = {};
+  for (const [k, raw] of Object.entries(args)) {
+    if (typeof raw !== "string") return { error: `${k} is not text` };
+    if (JSON_ARGS[k]) {
+      try { n[k] = strictJson(raw); } catch (e) { return { error: `${k} ${e.message}` }; }
+    } else if (LIST_ARGS[k]) {
+      if (raw.trimStart().startsWith("[")) {
+        let a;
+        try { a = strictJson(raw); } catch (e) { return { error: `${k} ${e.message}` }; }
+        if (!Array.isArray(a) || !a.every((x) => typeof x === "string")) return { error: `${k} must be a list of strings` };
+        n[k] = a;
+      } else n[k] = raw.split(",");
+    } else n[k] = raw;
+  }
+  return { values: n };
+}
+
+// Every value the builder may put into a request: the normalized args and
+// what compose derives from them, held by identity.
+function validatedSet(values) {
+  const set = new Set();
+  for (const v of Object.values(values)) set.add(v);
+  return set;
+}
+
+function forbiddenKeyIn(v) {
+  if (v === null || typeof v !== "object") return null;
+  for (const [k, x] of Object.entries(v)) {
+    if (FORBIDDEN_KEYS.has(k)) return k;
+    const deep = forbiddenKeyIn(x);
+    if (deep) return deep;
+  }
+  return null;
+}
+
+// The finished request, checked as it will go out: https to the spec's host,
+// the spec's query, a path that is the spec's template with only slot
+// segments changed, each one the plain validated value with nothing to decode
+// or normalize, and a body that round-trips as JSON with no prototype keys.
+function checkFinal(sop, req, vals) {
+  const tmpl = new URL(sop.request.url);
+  const m = /^https:\/\/([^/?#]+)(\/[^?#]*)(\?[^#]*)?$/.exec(req.url);
+  if (!m) throw new Error("the built URL is not a plain https URL");
+  const [, host, rawPath, query = ""] = m;
+  // A fixed allowlist, not the spec's own host: a doctored spec can't widen it.
+  if (host !== CLAY_API_HOST || host !== tmpl.host) throw new Error(`the built URL goes to ${host}, not ${CLAY_API_HOST}`);
+  if (!rawPath.startsWith("/v3/")) throw new Error("the built path is outside Clay's /v3 API");
+  if (query !== tmpl.search) throw new Error("the built URL's query differs from the spec's");
+  if (rawPath.includes("%") || new URL(req.url).pathname !== rawPath) throw new Error("the built path would be decoded or normalized");
+  const segs = rawPath.slice(1).split("/");
+  const tsegs = tmpl.pathname.slice(1).split("/");
+  if (segs.length !== tsegs.length) throw new Error("the built path has a different number of segments than the spec's");
+  const slotAt = new Map(sop.slots.filter((s) => s.at.length === 1 && s.at[0].startsWith("path:")).map((s) => [Number(s.at[0].slice(5)), s.param]));
+  segs.forEach((seg, i) => {
+    if (slotAt.has(i)) {
+      if (seg !== String(vals[slotAt.get(i)]) || !/^[A-Za-z0-9_-]{1,80}$/.test(seg)) throw new Error(`path segment ${i} is not the validated value`);
+    } else if (seg !== tsegs[i]) throw new Error(`path segment ${i} differs from the spec's`);
+  });
+  if (req.body !== undefined) {
+    const parsed = strictJson(req.body);
+    if (JSON.stringify(parsed) !== req.body) throw new Error("the built body does not round-trip as JSON");
+    const k = forbiddenKeyIn(parsed);
+    if (k) throw new Error(`the built body has a ${k} key`);
+  }
+}
+
+function compose(op, args) {
+  const a = { ...args };
+  if (op.compose === "table-settings") {
+    a.table_settings = { ...a.settings, AUTO_RUN_ON: String(a.on) === "true", ...(a.mode ? { AUTO_RUN_MODE: a.mode } : {}) };
+  }
+  if (op.compose === "new-records") a.records_body = a.records.map((cells) => ({ cells }));
+  return a;
+}
+
+// ── dry run: the request a surface would send, built the way api-anything's
+// buildRequest builds it (http.ts at the pinned sha), minus the cookie ───────
+function coerceParam(p, v) {
+  if (p.type === "number" && typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+  if (p.type === "boolean" && (v === "true" || v === "false")) return v === "true";
+  if ((p.type === "object" || p.type === "array") && typeof v === "string") return JSON.parse(v);
+  if (p.type === "string" && typeof v !== "string") return typeof v === "object" ? JSON.stringify(v) : String(v);
+  return v;
+}
+
+function setSlot(req, at, value) {
+  const [first, ...rest] = at;
+  if (first.startsWith("path:")) {
+    const u = new URL(req.url);
+    const segs = u.pathname.slice(1).split("/");
+    segs[Number(first.slice(5))] = encodeURIComponent(String(value));
+    u.pathname = `/${segs.join("/")}`;
+    return { ...req, url: u.toString() };
+  }
+  if (first !== "body") throw new Error(`dry run does not handle slot step ${first}`);
+  if (!rest.length) return { ...req, body: typeof value === "object" ? JSON.stringify(value) : String(value) };
+  const doc = JSON.parse(req.body);
+  const keys = rest[0].slice("json:/".length).split("/");
+  let node = doc;
+  for (const k of keys.slice(0, -1)) node = node[k];
+  const last = keys.at(-1);
+  // A number written into a JSON string leaf stays a string, as the engine does.
+  node[last] = typeof node[last] === "string" && typeof value !== "string" && typeof value !== "object" ? String(value) : value;
+  return { ...req, body: JSON.stringify(doc) };
+}
+
+function dryRequest(s, bound, validated, args) {
+  if (s.type !== "api-anything") {
+    // Rebuild the argv from the template, taking only validated values, and
+    // refuse if it is not exactly what bind produced.
+    const text = (v) => (v !== null && typeof v === "object" ? JSON.stringify(v) : String(v));
+    const fill = (tok) => tok.replace(/\{(\w+)\}/g, (_, k) => {
+      if (!validated.has(args[k])) throw new Error(`argv value ${k} is not a validated value`);
+      return text(args[k]);
+    });
+    const want = s.argv.map(fill);
+    for (const [k, extra] of Object.entries(s.optional || {})) if (args[k] !== undefined) want.push(...extra.map(fill));
+    const got = s.type === "cli" ? bound : bound.slice(1);
+    const wantArgs = s.type === "cli" ? want : want.slice(1);
+    if (JSON.stringify(got) !== JSON.stringify(wantArgs)) throw new Error("the built argv differs from the validated one");
+    return { argv: [s.type === "cli" ? "clay" : bound[0], ...got] };
+  }
+  const sop = specOps.get(s.op);
+  let req = { method: sop.request.method.toUpperCase(), url: sop.request.url, headers: { ...sop.request.headers }, body: sop.request.body };
+  const vals = {};
+  for (const p of sop.params) {
+    const v = bound[p.name] ?? p.default;
+    if (v === undefined) continue;
+    // The builder takes only values normalizeArgs produced and badArg passed.
+    if (bound[p.name] !== undefined && !validated.has(v)) throw new Error(`param ${p.name} is not a validated value`);
+    vals[p.name] = coerceParam(p, v);
+    if (p.pattern && !new RegExp(`^(?:${p.pattern})$`).test(typeof vals[p.name] === "object" ? JSON.stringify(vals[p.name]) : String(vals[p.name]))) {
+      throw new Error(`param ${p.name} must be ${p.hint || p.pattern}`);
+    }
+  }
+  for (const slot of sop.slots) if (vals[slot.param] !== undefined) req = setSlot(req, slot.at, vals[slot.param]);
+  delete req.headers.cookie;
+  if (req.method === "GET") delete req.body;
+  checkFinal(sop, req, vals);
+  return { method: req.method, url: req.url, headers: req.headers, ...(req.body !== undefined ? { body: JSON.parse(req.body) } : {}) };
+}
+
+// ── readback: after a write that has never been read back, read the thing it
+// changed and say whether the change is there ────────────────────────────────
+function leaves(v, out = []) {
+  if (v !== null && typeof v === "object") for (const x of Object.values(v)) leaves(x, out);
+  else out.push(String(v).toLowerCase());
+  return out;
+}
+
+async function readback(op, args) {
+  const rb = op.readback;
+  if (!rb) return null;
+  const ro = opByName.get(rb.op);
+  const rargs = {};
+  for (const [rk, wk] of Object.entries(rb.args || {})) if (args[wk] !== undefined) rargs[rk] = args[wk];
+  if (ro?.args.some((a) => a.replace("?", "") === "ws")) rargs.ws = args.ws;
+  const cmd = `chewbacca clay ${rb.op} ${Object.entries(rargs).map(([k, v]) => `${k}=${v}`).join(" ")}`.trim();
+  // A readback only ever reads: a read op that turns out to write is never run here.
+  if (!ro || isWrite(ro) || rb.expect === "manual") return { op: rb.op, check: "manual", ok: null, run: cmd, why: "read it and confirm the change by eye; then set verified:true in registry.json" };
+  let got = null;
+  for (const cand of plan(ro, rargs, null)) {
+    const r = await attempt(ro, cand, {});
+    if (r.ok) { got = r.data; break; }
+  }
+  if (got === null) return { op: rb.op, check: rb.expect, ok: false, run: cmd, why: "the read failed, so the write is unconfirmed" };
+  const want = args[rb.value];
+  let ok;
+  if (rb.expect === "contains") ok = Array.isArray(got) && got.some((x) => x && String(x[rb.key]) === String(want));
+  else if (rb.expect === "absent") ok = !leaves(got).includes(String(want).toLowerCase());
+  else if (rb.expect === "contains-all") { const all = leaves(got); ok = [].concat(want).every((w) => all.includes(String(w).toLowerCase())); }
+  else if (rb.expect === "equals") {
+    const seen = [rb.path, `campaign.${rb.path}`, `data.${rb.path}`].map((p) => pluck(got, p)).find((x) => x !== undefined);
+    ok = seen !== undefined && String(seen) === String(want);
+  }
+  return { op: rb.op, check: rb.expect, ok: !!ok, run: cmd };
+}
+
 // A write needs a person at a terminal. The old gate printed its own
 // --confirm token in the refusal, so the agent that was refused could pass it
 // straight back and approve itself (security review, 2026-10-09). Now the
 // answer is read from /dev/tty, which agent shells don't have (ENXIO), and
 // CHEWBACCA_NO_SEND=1 refuses outright. Fixture mode reads a canned answer so
 // the gate is testable; fixture mode never reaches Clay.
-function personApproves(name, args) {
-  const prompt = `\nchewbacca clay is about to WRITE to Clay:\n  ${JSON.stringify({ op: name, args })}\nType the op name (${name}) to send it, anything else to stop: `;
+// What the person reads is the request that goes out, as one line of JSON with
+// every byte outside printable ASCII escaped: a newline, an ESC sequence, a
+// bidi override or a line separator in a value can't hide part of the payload
+// or draw a fake one (security review of e5f1edeb, 2026-10-09). Nothing is
+// clipped; a request too long to read at a terminal is refused instead.
+const SHOW_MAX = 16000;
+function showable(obj) {
+  return JSON.stringify(obj).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+}
+function approvalPrompt(name, request) {
+  const line = showable({ op: name, request });
+  return `\nchewbacca clay is about to WRITE to Clay (sha256 ${sha256(line)}):\n  ${line}\nType the op name (${name}) to send it, anything else to stop: `;
+}
+
+// Fixture mode only, for tests: change something between approval and send
+// ({"write": {"path": ..., "text": ...}} or {"env": {...}}), to prove the send
+// is refused. Fixture mode never reaches Clay.
+function afterApprovalTestHook() {
+  const raw = FIXTURES && process.env.CHEWBACCA_CLAY_TEST_AFTER_APPROVE;
+  if (!raw) return;
+  const h = JSON.parse(raw);
+  if (h.write) fs.writeFileSync(h.write.path, h.write.text);
+  for (const [k, v] of Object.entries(h.env || {})) process.env[k] = v;
+}
+
+function deepFreeze(v) {
+  if (v && typeof v === "object") {
+    for (const x of Object.values(v)) deepFreeze(x);
+    Object.freeze(v);
+  }
+  return v;
+}
+
+function personApproves(name, request) {
+  const prompt = approvalPrompt(name, request);
+  if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT) fs.writeFileSync(process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT, prompt);
   if (FIXTURES) return (process.env.CHEWBACCA_CLAY_TTY_ANSWER || "") === name;
   let fd;
   try { fd = fs.openSync("/dev/tty", "r+"); } catch { return null; }
@@ -388,19 +928,63 @@ async function runOp(name, kv, flags) {
   if (stray.length) {
     out({ ok: false, op: name, class: "usage", reason: `unknown arg ${stray.join(", ")}; ${name} takes ${op.args.join(", ") || "no args"}` }, EXIT.usage);
   }
-  const bad = badArg(args);
+  const norm = normalizeArgs(args);
+  if (norm.error) out({ ok: false, op: name, class: "input", reason: norm.error }, EXIT.usage);
+  const bad = badArg(norm.values, op);
   if (bad) out({ ok: false, op: name, class: "input", reason: bad }, EXIT.usage);
-  if (isWrite(op)) {
-    const refuse = (reason) => out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args } }, EXIT.refused);
-    if (process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
-    if (!flags.allowWrites) refuse("a write needs --allow-writes");
-    const yes = personApproves(name, args);
-    if (yes === null) refuse("a write needs a person at a terminal to type the op name; this shell has none, so hand Caleb the exact command");
-    if (!yes) refuse("the person at the terminal did not approve this payload");
+  // A value this kit never sends (a campaign START) is refused before anything else.
+  for (const [k, banned] of Object.entries(op.refuse_values || {})) {
+    if (args[k] !== undefined && banned[String(args[k])]) {
+      out({ ok: false, op: name, class: "refused", gate: op.gate, reason: banned[String(args[k])] }, EXIT.refused);
+    }
   }
-  const cands = plan(op, args, flags.surface);
+  const sendArgs = compose(op, norm.values);
+  const validated = validatedSet(sendArgs);
+  const cands = plan(op, sendArgs, flags.surface);
   if (!cands.length) {
     out({ ok: false, op: name, class: "input", reason: `no surface has every arg it needs; ${name} takes ${op.args.join(", ")}`, ui: uiRoute(op, args) }, EXIT.usage);
+  }
+  // --dry-run: the exact request the first surface would send. Nothing is sent,
+  // no engine is loaded and no session or cookie is read.
+  // The request is built once and frozen here. --dry-run prints it, the person
+  // approves it, and the surface is handed it: nothing transforms it after.
+  let request;
+  try {
+    request = deepFreeze(dryRequest(cands[0].s, cands[0].bound, validated, sendArgs));
+  } catch (e) {
+    out({ ok: false, op: name, class: "input", reason: e.message }, EXIT.usage);
+  }
+  if (isWrite(op) && showable({ op: name, request }).length > SHOW_MAX) {
+    out({ ok: false, op: name, class: "input", reason: `this request is over ${SHOW_MAX} characters, too long to read at a terminal before approving; split it into smaller writes` }, EXIT.usage);
+  }
+  if (flags.dryRun) {
+    out({ ok: true, op: name, dry_run: true, sent: false, kind: isWrite(op) ? "write" : "read", gate: op.gate, surface: cands[0].s.type,
+      call: surfaceKey(op, cands[0].s), request, ...(op.verified === false ? { verified: false } : {}) }, EXIT.ok);
+  }
+  if (isWrite(op)) {
+    const refuse = (reason) => out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args }, request }, EXIT.refused);
+    if (process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
+    if (!flags.allowWrites) refuse("a write needs --allow-writes");
+    const s = cands[0].s;
+    const prep = await prepareWrite(op, s, request);
+    if (prep.error) refuse(prep.error);
+    const before = fingerprint(prep);
+    const shownHash = sha256(showable({ op: name, request }));
+    const yes = personApproves(name, request);
+    if (yes === null) refuse("a write needs a person at a terminal to type the op name; this shell has none, so hand Caleb the exact command");
+    if (!yes) refuse("the person at the terminal did not approve this payload");
+    afterApprovalTestHook();
+    // Nothing the request depends on may have changed while the person read it.
+    if (fingerprint(prep) !== before) refuse("the registry, spec, environment, engine, session or executable changed after approval; nothing was sent");
+    if (sha256(showable({ op: name, request })) !== shownHash) refuse("the request changed after approval; nothing was sent");
+    const t0 = Date.now();
+    const r = await prep.send();
+    const tried = [{ surface: s.type, call: surfaceKey(op, s), ok: !!r.ok, ms: Date.now() - t0, ...(r.ok ? {} : { class: r.class, reason: r.reason }) }];
+    if (!r.ok) out({ ok: false, op: name, class: r.class, reason: r.reason, sha256: shownHash, tried, ui: uiRoute(op, args) }, EXIT.failed);
+    // A write never read back after a real call reads back now, every time,
+    // until a person sets verified:true in registry.json.
+    const rb = op.verified === false ? await readback(op, sendArgs) : null;
+    out({ ok: true, op: name, surface: s.type, call: surfaceKey(op, s), ms: tried[0].ms, sha256: shownHash, ...(rb ? { verified: false, readback: rb } : {}), tried, data: r.data }, EXIT.ok);
   }
   const tried = [];
   let last;
@@ -408,8 +992,6 @@ async function runOp(name, kv, flags) {
     const r = await attempt(op, cand, flags);
     last = r;
     tried.push({ surface: r.surface, call: r.call, ok: r.ok, ms: r.ms, ...(r.ok ? {} : { class: r.class, reason: r.reason }), ...(r.truncated ? { truncated: r.truncated } : {}) });
-    // A write is sent once, through one surface: never fall through to another.
-    if (isWrite(op)) break;
     if (r.ok && !r.truncated) break;
     // An input error means the args are wrong, and every surface would say so.
     if (!r.ok && r.class === "input") break;
@@ -484,8 +1066,10 @@ const HELP = `chewbacca clay: Clay without opening Clay
 
   --surface cli|api-anything|bin         force one surface
   --allow-writes                         a write; a person must type the op name at a terminal
+  --dry-run                              print the exact request (method, URL, body; no cookie) and send nothing
 
-ws defaults to $CLAY_WORKSPACE_ID or ${registry.defaults.ws}. Output is one line of JSON.`;
+ws is ws=<id>, else $CLAY_WORKSPACE_ID, else the one workspace in
+~/.chewbacca/gtm/clients.json; with none or several it refuses. Output is one line of JSON.`;
 
 (async () => {
   const { pos, kv, flags } = parseArgv(process.argv.slice(2));

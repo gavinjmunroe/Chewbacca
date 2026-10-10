@@ -1,0 +1,155 @@
+{
+  "written": "2026-10-10, before any Jev call on these snapshots",
+  "rule": "intent paraphrases only (an exact label never reaches Jev); expect is the control's label, or none when no listed control does it",
+  "dev": [
+    {
+      "snap": "calculator",
+      "intent": "make the number negative",
+      "expect": "Change Sign"
+    },
+    { "snap": "calculator", "intent": "times", "expect": "Multiply" },
+    { "snap": "calculator", "intent": "minus", "expect": "Subtract" },
+    { "snap": "calculator", "intent": "plus", "expect": "Add" },
+    {
+      "snap": "calculator",
+      "intent": "show me the result",
+      "expect": "Equals"
+    },
+    {
+      "snap": "calculator",
+      "intent": "add a decimal point",
+      "expect": "Point"
+    },
+    {
+      "snap": "calculator",
+      "intent": "remove the last digit I typed",
+      "expect": "Delete"
+    },
+    { "snap": "calculator", "intent": "divided by", "expect": "Divide" },
+    {
+      "snap": "calculator",
+      "intent": "turn it into a percentage",
+      "expect": "Percent"
+    },
+    {
+      "snap": "calculator",
+      "intent": "compute the square root",
+      "expect": "none"
+    },
+    {
+      "snap": "calculator",
+      "intent": "open the history tape",
+      "expect": "none"
+    },
+    { "snap": "textedit", "intent": "make the text bold", "expect": "bold" },
+    { "snap": "textedit", "intent": "italicize it", "expect": "italic" },
+    {
+      "snap": "textedit",
+      "intent": "center the paragraph",
+      "expect": "align center"
+    },
+    {
+      "snap": "textedit",
+      "intent": "right-align this",
+      "expect": "align right"
+    },
+    {
+      "snap": "textedit",
+      "intent": "change the font size",
+      "expect": "font size"
+    },
+    {
+      "snap": "textedit",
+      "intent": "pick a different typeface",
+      "expect": "typeface"
+    },
+    {
+      "snap": "textedit",
+      "intent": "underline the words",
+      "expect": "underline"
+    },
+    {
+      "snap": "textedit",
+      "intent": "make it a bulleted list",
+      "expect": "list style"
+    },
+    {
+      "snap": "textedit",
+      "intent": "change the color of the text",
+      "expect": "text color"
+    },
+    {
+      "snap": "textedit",
+      "intent": "double space the lines",
+      "expect": "line spacing"
+    },
+    { "snap": "textedit", "intent": "insert a table", "expect": "none" },
+    { "snap": "textedit", "intent": "check the spelling", "expect": "none" }
+  ],
+  "sealed": [
+    {
+      "snap": "dictionary",
+      "intent": "go back to the last word",
+      "expect": "Back"
+    },
+    {
+      "snap": "dictionary",
+      "intent": "make the text larger",
+      "expect": "Bigger Text"
+    },
+    {
+      "snap": "dictionary",
+      "intent": "shrink the font",
+      "expect": "Smaller Text"
+    },
+    {
+      "snap": "dictionary",
+      "intent": "look up synonyms instead",
+      "expect": "Thesaurus"
+    },
+    { "snap": "dictionary", "intent": "search every source", "expect": "All" },
+    { "snap": "dictionary", "intent": "go forward again", "expect": "Forward" },
+    {
+      "snap": "dictionary",
+      "intent": "show Wikipedia results",
+      "expect": "none"
+    },
+    {
+      "snap": "dictionary",
+      "intent": "pronounce the word out loud",
+      "expect": "none"
+    },
+    {
+      "snap": "font_book",
+      "intent": "open the font Avenir",
+      "expect": "Show Avenir"
+    },
+    {
+      "snap": "font_book",
+      "intent": "look at Arial Black",
+      "expect": "Show Arial Black"
+    },
+    {
+      "snap": "font_book",
+      "intent": "the braille font",
+      "expect": "Show Apple Braille"
+    },
+    {
+      "snap": "font_book",
+      "intent": "show me the emoji font",
+      "expect": "Show Apple Color Emoji"
+    },
+    {
+      "snap": "font_book",
+      "intent": "the typewriter-looking font",
+      "expect": "Show American Typewriter"
+    },
+    {
+      "snap": "font_book",
+      "intent": "the monospaced Andale one",
+      "expect": "Show Andale Mono"
+    },
+    { "snap": "font_book", "intent": "open Helvetica Neue", "expect": "none" },
+    { "snap": "font_book", "intent": "install a new font", "expect": "none" }
+  ]
+}

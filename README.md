@@ -62,7 +62,7 @@ publication. Use `skills/setup/SKILL.md` for a requested setup.
 
 <!-- BEGIN GENERATED: counts -->
 
-One command installs **57 slash commands, 190 skills (69 written here, 8 cloned from upstream, 113 from 8 skill packs), 7 MCP servers, 61 hooks, 4 subagents, 9 command-line tools and 12 always-on standards (plus 4 that load only when the work calls for them).** About 718,000 lines, every one of them plain text you can read.
+One command installs **57 slash commands, 190 skills (69 written here, 8 cloned from upstream, 113 from 8 skill packs), 7 MCP servers, 61 hooks, 4 subagents, 9 command-line tools and 12 always-on standards (plus 4 that load only when the work calls for them).** About 728,000 lines, every one of them plain text you can read.
 
 <!-- END GENERATED: counts -->
 
@@ -212,6 +212,8 @@ downloading and answer nothing.
 The toolkit is free. Your agent subscription, model API usage and connected
 services can have their own charges. Context loaded at startup also consumes
 the host's context budget; `chewbacca context` measures the installed imports.
+`chewbacca lessons` counts which recorded corrections a hook or test actually
+enforces and which only sit in context for the agent to read.
 
 ### What it changes on your machine
 

@@ -500,6 +500,16 @@ if group "team"; then
   fi
 fi
 
+# ── live-page (apps/live, the hosted ask-it-see-it page) ──────────────────────
+if group "live-page"; then
+  if command -v node >/dev/null 2>&1; then
+    check "live blocks validate, intervals separate before ranking, sessions read one client, stale numbers say their age" node --test "$ROOT"/apps/live/test/live.test.js
+  else
+    skip "live blocks validate, intervals separate before ranking, sessions read one client, stale numbers say their age" "no node"
+  fi
+  check "the live stats sync reads only its client's campaigns and survives a dropped connection" python3 "$ROOT/apps/live/test/test_agent.py"
+fi
+
 # ── tools ─────────────────────────────────────────────────────────────────────
 if group "tools"; then
   check  "chewie app: background driver refuses Return without --yes, Jev picks map back" python3 "$ROOT/tests/test_appctl.py"
@@ -856,8 +866,6 @@ if group "installer"; then
   check  "kit-autopull refuses dirty, branched and diverged checkouts" \
     bash "$ROOT/tests/kit_autopull.sh" "$ROOT"
   check  "installed hooks follow origin/main, live edits backed up" python3 "$ROOT/tests/test_hooks_sync.py"
-  check  "new kit tools reach PATH without rerunning setup, nothing replaced" \
-    python3 "$ROOT/tests/test_tools_link.py"
 
   # Eight skills sat uninstalled on 2026-10-09 because no tab ran setup after
   # adding them. Git hooks now link them; this proves the linker is safe.

@@ -14,8 +14,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
-# Guessed, never measured. Below this `do` shows the candidates instead of
-# pressing. Raise or lower it only against labeled cases from real snapshots.
+# Below this `do` hands the candidates back instead of pressing. Measured
+# 2026-10-10 on 39 labeled picks over frozen snapshots of Calculator, TextEdit,
+# Dictionary and Font Book (mac/appctl/bench, 23 dev and 16 sealed, written
+# before any run): every pick was right, including the 8 "no such control"
+# cases, so no cutoff produced a wrong press. At 0.6 one correct but unsure
+# pick ("the typewriter-looking font", 0.45) went back to the person. Zero
+# errors in 39 bounds the true error rate under about 8% (rule of three), so
+# rerun the bench on new apps before lowering this.
 MIN_CONFIDENCE = 0.6
 # Jev's request cap is 100 KB; 80 one-line candidates stay far under it.
 MAX_CANDIDATES = 80

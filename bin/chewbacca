@@ -355,6 +355,10 @@ context)
   shift
   python3 "$ROOT/tools/context_cost.py" "$@"
   ;;
+lessons)
+  shift
+  python3 "$ROOT/tools/lessons_audit.py" "$@"
+  ;;
 evals)
   shift
   python3 "$ROOT/tools/evals.py" "$@"

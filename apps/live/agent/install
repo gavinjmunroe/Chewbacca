@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Installs the live stats sync as a launchd agent on this Mac, pointing at the
+# script in this checkout, and restarts it. Needs the sync key in the login
+# keychain first (service chewbacca-live-sync). Idempotent.
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+AGENT="$HERE/live-stats-sync"
+DEST="$HOME/Library/LaunchAgents/com.chewbacca.live-stats-sync.plist"
+if ! security find-generic-password -s chewbacca-live-sync >/dev/null 2>&1; then
+  echo "install: no chewbacca-live-sync key in the login keychain" >&2
+  exit 1
+fi
+mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
+sed -e "s#__AGENT__#$AGENT#g" -e "s#__HOME__#$HOME#g" "$HERE/com.chewbacca.live-stats-sync.plist" >"$DEST"
+plutil -lint "$DEST" >/dev/null
+launchctl bootout "gui/$(id -u)/com.chewbacca.live-stats-sync" 2>/dev/null || true
+launchctl bootstrap "gui/$(id -u)" "$DEST"
+echo "installed $DEST -> $AGENT"

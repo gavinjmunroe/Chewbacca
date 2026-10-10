@@ -1,0 +1,130 @@
+[
+  {
+    "snap": "dictionary",
+    "intent": "go back to the last word",
+    "expect": "Back",
+    "got": "Back",
+    "confidence": 0.9,
+    "via": "jev"
+  },
+  {
+    "snap": "dictionary",
+    "intent": "make the text larger",
+    "expect": "Bigger Text",
+    "got": "Bigger Text",
+    "confidence": 0.99,
+    "via": "jev"
+  },
+  {
+    "snap": "dictionary",
+    "intent": "shrink the font",
+    "expect": "Smaller Text",
+    "got": "Smaller Text",
+    "confidence": 0.98,
+    "via": "jev"
+  },
+  {
+    "snap": "dictionary",
+    "intent": "look up synonyms instead",
+    "expect": "Thesaurus",
+    "got": "Thesaurus",
+    "confidence": 0.97,
+    "via": "jev"
+  },
+  {
+    "snap": "dictionary",
+    "intent": "search every source",
+    "expect": "All",
+    "got": "All",
+    "confidence": 0.77,
+    "via": "jev"
+  },
+  {
+    "snap": "dictionary",
+    "intent": "go forward again",
+    "expect": "Forward",
+    "got": "Forward",
+    "confidence": 0.95,
+    "via": "jev"
+  },
+  {
+    "snap": "dictionary",
+    "intent": "show Wikipedia results",
+    "expect": "none",
+    "got": "none",
+    "confidence": 0.87,
+    "via": "jev"
+  },
+  {
+    "snap": "dictionary",
+    "intent": "pronounce the word out loud",
+    "expect": "none",
+    "got": "none",
+    "confidence": 0.87,
+    "via": "jev"
+  },
+  {
+    "snap": "font_book",
+    "intent": "open the font Avenir",
+    "expect": "Show Avenir",
+    "got": "Show Avenir",
+    "confidence": 0.91,
+    "via": "jev"
+  },
+  {
+    "snap": "font_book",
+    "intent": "look at Arial Black",
+    "expect": "Show Arial Black",
+    "got": "Show Arial Black",
+    "confidence": 0.94,
+    "via": "jev"
+  },
+  {
+    "snap": "font_book",
+    "intent": "the braille font",
+    "expect": "Show Apple Braille",
+    "got": "Show Apple Braille",
+    "confidence": 0.71,
+    "via": "jev"
+  },
+  {
+    "snap": "font_book",
+    "intent": "show me the emoji font",
+    "expect": "Show Apple Color Emoji",
+    "got": "Show Apple Color Emoji",
+    "confidence": 0.91,
+    "via": "jev"
+  },
+  {
+    "snap": "font_book",
+    "intent": "the typewriter-looking font",
+    "expect": "Show American Typewriter",
+    "got": "Show American Typewriter",
+    "confidence": 0.45,
+    "via": "jev"
+  },
+  {
+    "snap": "font_book",
+    "intent": "the monospaced Andale one",
+    "expect": "Show Andale Mono",
+    "got": "Show Andale Mono",
+    "confidence": 0.9,
+    "via": "jev"
+  },
+  {
+    "snap": "font_book",
+    "intent": "open Helvetica Neue",
+    "expect": "none",
+    "got": "none",
+    "confidence": 0.84,
+    "via": "jev"
+  },
+  {
+    "snap": "font_book",
+    "intent": "install a new font",
+    "expect": "none",
+    "got": "none",
+    "confidence": 0.86,
+    "via": "jev"
+  }
+]

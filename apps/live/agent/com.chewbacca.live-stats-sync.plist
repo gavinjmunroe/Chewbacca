@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Keeps Chewbacca Live's Clay numbers fresh from this Mac's Clay sign-in.
+     __AGENT__ and __HOME__ are filled in by agent/install. The sync key is
+     read from the login keychain (service chewbacca-live-sync), never here. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.chewbacca.live-stats-sync</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>__AGENT__</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>LIVE_URL</key>
+    <string>https://live-production-fce0.up.railway.app</string>
+    <key>PATH</key>
+    <string>__HOME__/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <!-- A crash loop (signed out of Clay, page down) retries every 30 s, not every second. -->
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <!-- Standard, not Background: under background QoS the 50-read refresh took
+       99.7 s on 2026-10-10 against 9.6 to 22.8 s in a terminal, longer than a
+       question waits (35 s). -->
+  <key>ProcessType</key>
+  <string>Standard</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/chewbacca-live-stats-sync.log</string>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/chewbacca-live-stats-sync.log</string>
+</dict>
+</plist>

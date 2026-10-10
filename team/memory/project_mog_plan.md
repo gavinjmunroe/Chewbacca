@@ -29,3 +29,9 @@ He wanted a plan to close that gap.
 these numbers and the current state of the six steps. Update the baseline line when a
 step lands, w the sealed-set CI. Related: [[feedback_seal_the_test_set]],
 [[project_brain_recall_abort_loop]], [[feedback_enforce_dont_document]].
+
+Competitor half, added 2026-10-10: docs/plans/MOG-PLAN.md turns 36 named competitors into
+11 battles (B0 proof tools through B10 connector breadth). Each competitor gets a test
+with a number and stays "open" until that test passes. Ledger tasks mog-b0 to mog-b10.
+The teardowns behind it live in docs/plans/mog/. Most competitor numbers are their own
+claims with no method, so we set the bar, measure ourselves, and publish both.

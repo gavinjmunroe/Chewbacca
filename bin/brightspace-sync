@@ -10,8 +10,8 @@ dates to Apple Reminders, and download course files.
   brightspace-sync transcripts <course> [--from-chapter N] [--out DIR] [--apply]
   brightspace-sync links <course>          Panopto recording links in a course
 
-Auth is the session api-anything imported from your browser:
-  api-anything login <your-brightspace-host> --profile "Chrome/<profile>"
+Auth is the session `chewbacca api login brightspace` imports from your
+browser (or one api-anything saved under your Brightspace host).
 Nothing here ever writes to Brightspace. Reads only, your own enrolments only.
 
 Every request waits 4 to 8 seconds first (BRIGHTSPACE_DELAY=min,max overrides),
@@ -52,8 +52,13 @@ class Stop(Exception):
 
 def cookie_header(host=HOST):
     session = SESSION if host == HOST else SESSION.parent / f"{host}.json"
+    # `chewbacca api login brightspace` saves the session under the site name,
+    # not the host, and it's the import that holds: a plain profile import loses
+    # the d2l cookies, which have no expiry (2026-10-10).
+    if not session.exists() and host == HOST and "BRIGHTSPACE_SESSION" not in os.environ:
+        session = SESSION.parent / "brightspace.json"
     if not session.exists():
-        raise Stop(f"no session at {session}. Run: api-anything login {host} --profile \"Chrome/<profile>\"")
+        raise Stop(f"no Brightspace session. Run: chewbacca api login brightspace")
     jar = json.load(open(session))["cookies"]
     return "; ".join(
         f"{c['name']}={c['value']}" for c in jar

@@ -56,4 +56,17 @@ printf '%s\n' "$out" | grep -q 'Ch. 5 Lecture.txt' || fail "Ch. 5 recording shou
 [ ! -e "$T/dl" ] || fail "a transcript scan without --apply wrote files"
 
 python3 "$BS" files NOPE-999 >/dev/null 2>&1 && fail "an unknown course should exit non-zero"
+
+# `chewbacca api login brightspace` saves the session as brightspace.json, not
+# under the host name; the tool must find it there.
+mkdir -p "$T/home/.api-anything/sessions"
+echo '{"cookies":[{"name":"d2lSessionVal","value":"fake-session","domain":"brightspace.usc.edu"}]}' \
+  > "$T/home/.api-anything/sessions/brightspace.json"
+HOME="$T/home" python3 - "$BS" <<'PY' || fail "the chewbacca api session name was not found"
+import importlib.machinery, importlib.util, os, sys
+os.environ.pop("BRIGHTSPACE_SESSION", None)
+loader = importlib.machinery.SourceFileLoader("bs", sys.argv[1])
+spec = importlib.util.spec_from_loader("bs", loader); m = importlib.util.module_from_spec(spec); loader.exec_module(m)
+assert "d2lSessionVal=fake-session" in m.cookie_header(), m.cookie_header()
+PY
 echo "  ok"

@@ -1,0 +1,485 @@
+#!/usr/bin/env python3
+"""agent-history: one search across every coding agent's past sessions, redacted.
+
+    agent-history search "<words>"               newest matches first, all runtimes
+    agent-history search "<words>" --runtime codex --since 7d --repo chewbacca
+    agent-history search "<words>" --role user --limit 20 --json
+    agent-history search "<exact text>" --phrase
+    agent-history redact < text                  the redaction alone, for a pipe
+
+Reads Claude Code transcripts (~/.claude/projects/*/*.jsonl, plus ~/.claude-2
+when it exists) and Codex rollouts (~/.codex/sessions/**/*.jsonl) in one pass.
+Each hit prints its session id, time, repo, role (user, assistant, tool_use,
+tool) and a snippet around the match.
+
+Every snippet goes through redact() before it is printed: API keys (sk-,
+ghp_, github_pat_, AKIA, xox, AIza), bearer and Authorization values, JWTs,
+private key blocks, key=value secrets, emails, phone numbers and long hex or
+base64 blobs. A secret the window would cut in half is trimmed off the edge
+rather than printed in part.
+
+Reasoning, thinking blocks and system or developer prompts are skipped: they
+are not what anyone said and they are where the long private context lives.
+
+Read-only. It opens files for reading and writes nothing, not even a cache.
+A ripgrep prefilter (when rg is installed) picks the files that contain the
+words at all, and inside a file a raw substring check on the bytes runs before
+any line is parsed as JSON, so a 3.8 GB transcript store is searched without
+parsing the lines that cannot match.
+
+Environment, for tests: AGENT_HISTORY_CLAUDE_DIRS (os.pathsep separated) and
+AGENT_HISTORY_CODEX_DIR replace the default roots.
+"""
+
+import argparse
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+HOME = Path.home()
+
+# ---------------------------------------------------------------- redaction
+
+# Order matters: a whole private key block or a bearer header is claimed before
+# the generic blob rules see its pieces, and the specific vendor prefixes go
+# before the hex and base64 catch-alls so the label says what leaked.
+_SECRET_RULES = [
+    ("PRIVATE_KEY", re.compile(
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.S)),
+    ("BEARER", re.compile(r"(?i)\b(bearer|basic)(\s+)[A-Za-z0-9._~+/=-]{12,}")),
+    ("AUTH", re.compile(r"(?i)(authorization\s*[:=]\s*)[\"']?[^\s\"',}]{6,}")),
+    ("API_KEY", re.compile(r"\bsk-(?:ant-|proj-|live-|test-)?[A-Za-z0-9_-]{16,}")),
+    ("GITHUB_TOKEN", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})")),
+    ("AWS_KEY", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
+    ("SLACK_TOKEN", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}")),
+    ("GOOGLE_KEY", re.compile(r"\bAIza[0-9A-Za-z_-]{30,}")),
+    ("STRIPE_KEY", re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{16,}")),
+    ("JWT", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
+    ("SECRET", re.compile(
+        r"(?i)\b([\w-]*(?:api[_-]?key|secret|token|passwd|password|pwd|access[_-]?key)[\w-]*)"
+        r"(\"?\s*[:=]\s*[\"']?)(?!\[)([^\s\"',;}]{6,})")),
+    ("EMAIL", re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")),
+    ("HEX", re.compile(r"\b[0-9a-fA-F]{32,}\b")),
+    ("PHONE", re.compile(r"(?<![\w.-])(?:\+?\d{1,3}[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4}(?![\w-])")),
+]
+_BLOB = re.compile(r"[A-Za-z0-9+/_-]{40,}={0,2}")
+
+
+def _blob_sub(m: re.Match) -> str:
+    s = m.group(0)
+    # A long run with upper, lower and a digit is a key or an encoded blob; a
+    # long all-lowercase kebab identifier or a path segment is left alone.
+    if re.search(r"[A-Z]", s) and re.search(r"[a-z]", s) and re.search(r"\d", s):
+        return "[BLOB]"
+    return s
+
+
+def redact(text: str) -> str:
+    """Replace secrets and personal identifiers with [LABEL] placeholders."""
+    if not text:
+        return text
+    for label, rx in _SECRET_RULES:
+        if label == "BEARER":
+            text = rx.sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", text)
+        elif label == "AUTH":
+            text = rx.sub(lambda m: f"{m.group(1)}[REDACTED]", text)
+        elif label == "SECRET":
+            text = rx.sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", text)
+        else:
+            text = rx.sub(f"[{label}]", text)
+    return _BLOB.sub(_blob_sub, text)
+
+
+# ---------------------------------------------------------------- sources
+
+def claude_roots() -> list[Path]:
+    env = os.environ.get("AGENT_HISTORY_CLAUDE_DIRS")
+    if env is not None:
+        return [Path(p) for p in env.split(os.pathsep) if p]
+    roots = [HOME / ".claude" / "projects"]
+    if (HOME / ".claude-2" / "projects").is_dir():
+        roots.append(HOME / ".claude-2" / "projects")
+    return roots
+
+
+def codex_root() -> Path:
+    return Path(os.environ.get("AGENT_HISTORY_CODEX_DIR", str(HOME / ".codex" / "sessions")))
+
+
+def project_of(cwd: str) -> str:
+    """The repo a folder belongs to; a worktree under <repo>/.claude/worktrees/ is that repo."""
+    parts = Path(cwd).parts
+    if ".claude" in parts and "worktrees" in parts:
+        i = parts.index(".claude")
+        if i > 0:
+            return parts[i - 1]
+    return Path(cwd).name or cwd
+
+
+def discover(runtime: str, cutoff: float | None, repo: str | None) -> list[tuple[str, Path, float]]:
+    """(runtime, path, mtime), newest first. A file last written before the
+    cutoff cannot hold an entry after it, so it is skipped without opening."""
+    files: list[tuple[str, Path, float]] = []
+    repo_key = re.sub(r"[^A-Za-z0-9]", "-", repo).lower() if repo else None
+
+    def add(kind: str, p: Path) -> None:
+        try:
+            m = p.stat().st_mtime
+        except OSError:
+            return
+        if cutoff is None or m >= cutoff:
+            files.append((kind, p, m))
+
+    if runtime in ("all", "claude-code"):
+        for root in claude_roots():
+            if not root.is_dir():
+                continue
+            for proj in root.iterdir():
+                # Claude names a project folder after its cwd with / and . as -,
+                # so a repo filter can drop whole folders before reading one.
+                if repo_key and repo_key not in proj.name.lower():
+                    continue
+                if proj.is_dir():
+                    for p in proj.glob("*.jsonl"):
+                        add("claude-code", p)
+    if runtime in ("all", "codex"):
+        root = codex_root()
+        if root.is_dir():
+            for p in root.rglob("*.jsonl"):
+                add("codex", p)
+    files.sort(key=lambda t: t[2], reverse=True)
+    return files
+
+
+def find_rg() -> tuple[str, str] | None:
+    """(executable, argv0) for a ripgrep: one on PATH, else the one Claude Code
+    ships inside its own binary, which answers to argv0 "rg". This Mac has no
+    rg on PATH, and on 2026-10-10 a full search of 5,068 transcripts (4.2 GB)
+    took 9.7 s in pure Python and 1.2 s through Claude Code's embedded rg."""
+    if os.environ.get("AGENT_HISTORY_NO_RG"):
+        return None
+    rg = shutil.which("rg")
+    if rg:
+        return rg, "rg"
+    for exe in (os.environ.get("CLAUDE_CODE_EXECPATH"), str(HOME / ".local" / "bin" / "claude")):
+        if not exe or not os.access(exe, os.X_OK):
+            continue
+        try:
+            p = subprocess.run(["rg", "--version"], executable=exe, capture_output=True, timeout=10)
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if p.returncode == 0 and p.stdout.startswith(b"ripgrep"):
+            return exe, "rg"
+    return None
+
+
+def rg_prefilter(paths: list[Path], needles: list[bytes]) -> set[Path] | None:
+    """Files containing every needle, by ripgrep; None when no rg is found."""
+    found_rg = find_rg() if paths else None
+    if not found_rg:
+        return None
+    exe, argv0 = found_rg
+    keep = {str(p) for p in paths}
+    for needle in needles:
+        found: set[str] = set()
+        todo = sorted(keep)
+        for i in range(0, len(todo), 400):
+            chunk = todo[i:i + 400]
+            try:
+                out = subprocess.run(
+                    [argv0, "--files-with-matches", "--ignore-case", "--fixed-strings", "--no-messages",
+                     "--no-ignore", "--hidden", "-e", needle.decode("utf-8", "replace"), "--", *chunk],
+                    executable=exe, capture_output=True, timeout=600)
+            except (OSError, subprocess.TimeoutExpired):
+                return None
+            if out.returncode not in (0, 1):
+                return None
+            found.update(l for l in out.stdout.decode("utf-8", "replace").splitlines() if l)
+        keep = found
+        if not keep:
+            break
+    return {Path(p) for p in keep}
+
+
+# ---------------------------------------------------------------- parsing
+
+def _text_of(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        out = []
+        for c in content:
+            if isinstance(c, str):
+                out.append(c)
+            elif isinstance(c, dict) and isinstance(c.get("text"), str):
+                out.append(c["text"])
+        return "\n".join(out)
+    return ""
+
+
+def claude_items(e: dict):
+    """(role, text) pieces of one Claude Code entry worth searching."""
+    kind = e.get("type")
+    if kind not in ("user", "assistant"):
+        return
+    msg = e.get("message")
+    if not isinstance(msg, dict):
+        return
+    content = msg.get("content")
+    if isinstance(content, str):
+        yield kind, content
+        return
+    if not isinstance(content, list):
+        return
+    for c in content:
+        if not isinstance(c, dict):
+            continue
+        t = c.get("type")
+        if t == "text":
+            yield kind, str(c.get("text") or "")
+        elif t == "tool_use":
+            yield "tool_use", f"{c.get('name', '')} {json.dumps(c.get('input'), ensure_ascii=False)}"
+        elif t == "tool_result":
+            yield "tool", _text_of(c.get("content"))
+
+
+def codex_items(e: dict):
+    if e.get("type") != "response_item":
+        return
+    p = e.get("payload")
+    if not isinstance(p, dict):
+        return
+    t = p.get("type")
+    if t == "message":
+        role = p.get("role")
+        if role in ("user", "assistant"):
+            yield role, _text_of(p.get("content"))
+    elif t == "agent_message":
+        yield "assistant", _text_of(p.get("content"))
+    elif t in ("function_call", "custom_tool_call"):
+        yield "tool_use", f"{p.get('name', '')} {p.get('arguments') or p.get('input') or ''}"
+    elif t in ("function_call_output", "custom_tool_call_output"):
+        out = p.get("output")
+        yield "tool", out if isinstance(out, str) else _text_of(out) or json.dumps(out, ensure_ascii=False)
+
+
+def parse_ts(s) -> float | None:
+    if not isinstance(s, str) or not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+_TOKEN_CH = re.compile(r"[A-Za-z0-9_+/=.@-]")
+
+
+def snippet(text: str, pos: int, width: int) -> str:
+    """A redacted window around pos. The slice is cut wider than shown and
+    redacted whole, and a token cut by either edge is dropped, so a secret is
+    never printed in part."""
+    lo, hi = max(0, pos - 4 * width), min(len(text), pos + 4 * width)
+    piece = text[lo:hi]
+    if lo > 0:
+        i = 0
+        while i < len(piece) and _TOKEN_CH.match(piece[i]):
+            i += 1
+        piece, pos = piece[i:], pos - lo - i
+    else:
+        pos -= lo
+    if hi < len(text):
+        j = len(piece)
+        while j > 0 and _TOKEN_CH.match(piece[j - 1]):
+            j -= 1
+        piece = piece[:j]
+    marker = "\x00"
+    pos = max(0, min(pos, len(piece)))
+    red = redact(piece[:pos] + marker + piece[pos:])
+    at = red.find(marker)
+    red = red.replace(marker, "")
+    at = at if at >= 0 else 0
+    a, b = max(0, at - width), min(len(red), at + width)
+    # Snap to word edges so the view does not start or end mid-word.
+    while a > 0 and not red[a - 1].isspace() and at - a < width + 30:
+        a -= 1
+    while b < len(red) and not red[b].isspace() and b - at < width + 30:
+        b += 1
+    view = " ".join(red[a:b].split())
+    return ("..." if a > 0 or lo > 0 else "") + view + ("..." if b < len(red) or hi < len(text) else "")
+
+
+def search_file(kind: str, path: Path, terms: list[str], phrase: bool, needles: list[bytes],
+                cutoff: float | None, repo: str | None, role: str | None, width: int):
+    """Stream one transcript; yield hit dicts. Never loads the file whole."""
+    meta_cwd = ""
+    session = path.stem
+    if kind == "codex":
+        m = re.search(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$", path.stem)
+        session = m.group(1) if m else path.stem
+    try:
+        fh = open(path, "rb")
+    except OSError:
+        return
+    with fh:
+        first = True
+        for raw in fh:
+            if kind == "codex" and first:
+                first = False
+                # The session_meta line names the folder; read it whatever it says.
+                try:
+                    e0 = json.loads(raw)
+                    p0 = e0.get("payload") if isinstance(e0, dict) else None
+                    if isinstance(p0, dict) and e0.get("type") == "session_meta":
+                        meta_cwd = str(p0.get("cwd") or "")
+                        continue
+                except ValueError:
+                    pass
+            low = raw.lower()
+            if not all(n in low for n in needles):
+                continue
+            try:
+                e = json.loads(raw)
+            except ValueError:
+                continue
+            if not isinstance(e, dict):
+                continue
+            ts = parse_ts(e.get("timestamp"))
+            if cutoff is not None and ts is not None and ts < cutoff:
+                continue
+            cwd = str(e.get("cwd") or meta_cwd or "")
+            if kind == "claude-code" and not cwd:
+                cwd = path.parent.name
+            proj = project_of(cwd) if cwd else ""
+            if repo and repo.lower() not in proj.lower():
+                continue
+            items = claude_items(e) if kind == "claude-code" else codex_items(e)
+            for r, text in items:
+                if role and r != role:
+                    continue
+                if not text:
+                    continue
+                tl = text.lower()
+                if phrase:
+                    pos = tl.find(terms[0])
+                    if pos < 0:
+                        continue
+                else:
+                    if not all(t in tl for t in terms):
+                        continue
+                    pos = tl.find(terms[0])
+                yield {
+                    "runtime": kind,
+                    "session": str(e.get("sessionId") or session) if kind == "claude-code" else session,
+                    "time": datetime.fromtimestamp(ts, timezone.utc).isoformat().replace("+00:00", "Z") if ts else "",
+                    "repo": proj,
+                    "role": r,
+                    "snippet": snippet(text, pos, width),
+                    "file": str(path),
+                }
+
+
+# ---------------------------------------------------------------- cli
+
+def parse_since(s: str | None) -> float | None:
+    if not s:
+        return None
+    m = re.fullmatch(r"(\d+)\s*([mhdw])", s.strip())
+    if m:
+        n, unit = int(m.group(1)), m.group(2)
+        secs = {"m": 60, "h": 3600, "d": 86400, "w": 604800}[unit]
+        return time.time() - n * secs
+    try:
+        d = datetime.fromisoformat(s)
+    except ValueError:
+        raise SystemExit(f"agent-history: --since takes 30m, 12h, 7d, 2w or a date like 2026-10-01, not {s!r}")
+    if d.tzinfo is None:
+        d = d.astimezone()
+    return d.timestamp()
+
+
+def local_time(iso: str) -> str:
+    if not iso:
+        return "?"
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return iso
+
+
+def cmd_search(a: argparse.Namespace) -> int:
+    started = time.monotonic()
+    query = " ".join(a.query).strip()
+    if not query:
+        print("agent-history: give it something to search for", file=sys.stderr)
+        return 2
+    terms = [query.lower()] if a.phrase else [t.lower() for t in query.split()]
+    # The raw line is JSON, so a quote or backslash in the words appears escaped
+    # there; the prefilter looks for the escaped form.
+    needles = [json.dumps(t, ensure_ascii=False)[1:-1].encode("utf-8") for t in terms]
+    cutoff = parse_since(a.since)
+    files = discover(a.runtime, cutoff, a.repo)
+    candidates = rg_prefilter([p for _, p, _ in files], needles)
+    scanned = 0
+    hits: list[dict] = []
+    for kind, path, _ in files:
+        if candidates is not None and path not in candidates:
+            continue
+        scanned += 1
+        for h in search_file(kind, path, terms, a.phrase, needles, cutoff, a.repo, a.role, a.context):
+            hits.append(h)
+            if len(hits) >= a.limit:
+                break
+        if len(hits) >= a.limit:
+            break
+    hits.sort(key=lambda h: h["time"], reverse=True)
+    elapsed = time.monotonic() - started
+    if a.json:
+        for h in hits:
+            print(json.dumps(h, ensure_ascii=False))
+    else:
+        for h in hits:
+            print(f"{local_time(h['time'])}  {h['runtime']:<11}  {h['repo'] or '-':<18}  "
+                  f"{h['session'][:8]}  {h['role']}")
+            print(f"    {h['snippet']}")
+    more = " (limit reached, --limit raises it)" if len(hits) >= a.limit else ""
+    print(f"{len(hits)} match{'es' if len(hits) != 1 else ''} in {scanned} of {len(files)} "
+          f"transcripts, {elapsed:.2f}s{more}", file=sys.stderr)
+    return 0 if hits else 1
+
+
+def main(argv: list[str]) -> int:
+    ap = argparse.ArgumentParser(prog="agent-history", description=__doc__.split("\n\n")[0])
+    sub = ap.add_subparsers(dest="cmd")
+    s = sub.add_parser("search", help="search every agent transcript, redacted")
+    s.add_argument("query", nargs="+")
+    s.add_argument("--runtime", choices=["all", "claude-code", "codex"], default="all")
+    s.add_argument("--since", help="30m, 12h, 7d, 2w, or a date")
+    s.add_argument("--repo", help="only sessions whose repo name contains this")
+    s.add_argument("--role", choices=["user", "assistant", "tool_use", "tool"])
+    s.add_argument("--limit", type=int, default=30)
+    s.add_argument("--context", type=int, default=90, help="characters each side of the match")
+    s.add_argument("--phrase", action="store_true", help="match the words as one exact phrase")
+    s.add_argument("--json", action="store_true", help="one JSON object per line")
+    sub.add_parser("redact", help="redact stdin to stdout")
+    a = ap.parse_args(argv)
+    if a.cmd == "search":
+        return cmd_search(a)
+    if a.cmd == "redact":
+        sys.stdout.write(redact(sys.stdin.read()))
+        return 0
+    ap.print_help()
+    return 2
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except BrokenPipeError:
+        sys.exit(0)

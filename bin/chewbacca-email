@@ -14,7 +14,10 @@ set -uo pipefail
 PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 HOME_DIR="${CHEWBACCA_EMAIL_HOME:-$HOME/.chewbacca/email}"
 DEFAULT_CFG="$HOME/.config/gws"
-SCOPES="openid,email,profile,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send"
+# Calendar is read-write so "put it on my calendar" works the first time. With
+# calendar.readonly, every event add 403'd, and the improvised re-login that
+# followed picked the wrong Google account and hit "Access blocked" (2026-10-09).
+SCOPES="openid,email,profile,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/calendar"
 LOG="$HOME/Library/Logs/chewbacca-email-add.log"
 
 say() { printf '%s\n' "$*"; }
@@ -82,6 +85,10 @@ add() {
   done
   [ -n "$url" ] && open "$url&login_hint=$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1]))' "$addr")"
   wait "$pid"
+  # gws keeps serving the old access token, with the old scopes, from
+  # token_cache.json after a new login; the fresh scope 403'd until it was
+  # moved aside (2026-10-09).
+  rm -f "$cfg/token_cache.json"
   local got
   got=$(whoami_in "$cfg")
   if [ "$got" = "$addr" ]; then

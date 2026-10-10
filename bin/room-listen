@@ -21,12 +21,15 @@ import argparse, os, re, shutil, subprocess, sys, tempfile, time
 try:
     import mlx_whisper  # noqa: F401
 except ImportError:
-    launcher = shutil.which("mlx_whisper")
-    if not launcher or os.environ.get("ROOM_LISTEN_REEXEC"):
-        sys.exit("room-listen: needs mlx-whisper (uv tool install mlx-whisper) and ffmpeg")
-    interp = open(launcher).readline()[2:].strip()
-    os.environ["ROOM_LISTEN_REEXEC"] = "1"
-    os.execv(interp, [interp] + sys.argv)
+    # Only as the script: an importer (a test) must never have its process
+    # replaced, which is how bin/hud-listen silenced a whole pytest run.
+    if __name__ == "__main__":
+        launcher = shutil.which("mlx_whisper")
+        if not launcher or os.environ.get("ROOM_LISTEN_REEXEC"):
+            sys.exit("room-listen: needs mlx-whisper (uv tool install mlx-whisper) and ffmpeg")
+        interp = open(launcher).readline()[2:].strip()
+        os.environ["ROOM_LISTEN_REEXEC"] = "1"
+        os.execv(interp, [interp] + sys.argv)
 
 MODEL = "mlx-community/whisper-small.en-mlx"
 

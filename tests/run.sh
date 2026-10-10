@@ -1354,6 +1354,7 @@ if group "hud"; then
     skip   "hud-listen starts under launchd's minimal PATH" "no newer python3 here"
   fi
   check  "a greeting costs no model turn" python3 "$ROOT/tests/test_pleasantry.py"
+  check  "importing a bin script never replaces the importer" python3 "$ROOT/tests/test_import_never_reexecs.py"
   check  "hud-speak parses"   python3 -m py_compile "$ROOT/bin/hud-speak"
   # The voice, minus the model: sentence splitting and the cache of short
   # lines, which is what "Done." costs after the first time.

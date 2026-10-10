@@ -29,3 +29,5 @@ Added 2026-10-10 morning (a1c68f98, 5ab0378f): `ask` (voice "press X in App" or 
 - Kyber can't be screenshotted, see [[reference_kyber_invisible_to_screenshots]].
 
 Previously queued (done 2026-10-10): Kyber voice drives apps this way, with Gavin's Mark marker from the clay-build HUD on the control before each press; then drag and clipboard.
+
+Jev cutoff measured 2026-10-10 (mac/appctl/bench): 39 labeled picks over frozen snapshots of Calculator, TextEdit, Dictionary and Font Book, 23 dev and 16 sealed, all correct including 8 no-such-control cases. 0.6 stays; zero errors in 39 bounds the error rate under about 8%, so rerun the bench on new apps before lowering it. Bench needs a Jev key and is not in the hermetic suite.

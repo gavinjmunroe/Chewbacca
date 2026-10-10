@@ -34,13 +34,21 @@ LOG="$LOG_DIR/autopull.log"
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 note() { echo "$(date -u +%FT%TZ) $*" >> "$LOG" 2>/dev/null || true; }
 
-say() {
-  MSG="$1" python3 -I <<'PY'
+# Everything said is collected and printed once on exit: the hook's stdout is
+# one JSON document, and the hook sync below can speak before the pull does.
+SAID=""
+say() { SAID="${SAID:+$SAID
+
+}$1"; }
+flush() {
+  [ -n "$SAID" ] || return 0
+  MSG="$SAID" python3 -I <<'PY'
 import json, os
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart",
       "additionalContext": os.environ.get("MSG", "")}}))
 PY
 }
+trap flush EXIT
 
 # ── Which repo ────────────────────────────────────────────────────────────────
 # Resolved exactly as kit-autopush resolves it, and for the same reason: an
@@ -65,6 +73,22 @@ fi
 [ -n "$REPO" ] || exit 0
 [ -d "$REPO/.git" ] || exit 0
 cd "$REPO" || exit 0
+
+# ── Installed hooks follow origin/main ────────────────────────────────────────
+# Read from the ref, not the working tree, so this works on the dirty shared
+# checkout the pull below refuses. On 2026-10-09 17 live hooks were stale and
+# 2 missing hours after a hand sync. Every overwritten copy is backed up under
+# ~/.chewbacca/runtime/hooks-backup-*. Runs before the throttle: it is local
+# and takes well under a second.
+if [ -f "$REPO/tools/hooks_sync.py" ]; then
+  SYNC="$(python3 -I "$REPO/tools/hooks_sync.py" apply --include-local --repo "$REPO" \
+          --live "${CHEWBACCA_HOOKS_DIR:-$HOME/.claude/hooks}" 2>&1)"
+  note "hooks-sync: $(printf '%s' "$SYNC" | tr '\n' ' ')"
+  case "$SYNC" in
+    *updated*) say "Installed hooks were behind origin/main and were updated in place (backups in ~/.chewbacca/runtime):
+$(printf '%s' "$SYNC" | grep updated)" ;;
+  esac
+fi
 
 # ── Throttle ──────────────────────────────────────────────────────────────────
 # A fetch is a network round trip and SessionStart runs on every new session.

@@ -14,6 +14,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export CHEWBACCA_LOG_DIR="$TMP/logs"
 export CHEWBACCA_PULL_INTERVAL=0
+export CHEWBACCA_HOOKS_DIR="$TMP/live-hooks"
 FAILED=0
 fail() { echo "FAIL: $*"; FAILED=1; }
 

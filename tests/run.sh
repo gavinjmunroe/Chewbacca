@@ -787,6 +787,7 @@ if group "installer"; then
   # An automatic pull is only acceptable if it cannot eat uncommitted work.
   check  "kit-autopull refuses dirty, branched and diverged checkouts" \
     bash "$ROOT/tests/kit_autopull.sh" "$ROOT"
+  check  "installed hooks follow origin/main, live edits backed up" python3 "$ROOT/tests/test_hooks_sync.py"
 
   # Eight skills sat uninstalled on 2026-10-09 because no tab ran setup after
   # adding them. Git hooks now link them; this proves the linker is safe.

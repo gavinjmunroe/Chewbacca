@@ -132,6 +132,10 @@ Describe the thing from its code, never from a test post's wording: the same
 draft called Jonah's assistant "read only" because the test question was, when
 src/agents/client-assistant sends replies, decks, follow-ups and blocklists
 behind a Do it card. Caleb: "Nothing chewb does/makes should ever be read only".
+A thread in iMessage is never the whole picture: Maggie and Sagar also work in
+Slack, and other tabs close things. Before calling anything from a thread still
+open, search Slack and `git log` too. On 2026-10-10 three "open" items from
+Maggie's thread were already done, and Caleb wrote "Retard we did those".
 
 ## Images and QR codes someone sent
 

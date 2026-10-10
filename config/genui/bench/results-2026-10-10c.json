@@ -1,0 +1,2259 @@
+{
+  "summary": {
+    "requests": 30,
+    "valid": 30,
+    "valid_first_try": 30,
+    "fallbacks": 0,
+    "model_calls": 3,
+    "no_model_under_1s": 11,
+    "no_source_answers": 17,
+    "tiers": {
+      "1": {
+        "answered": 27,
+        "valid": 27,
+        "complete_ms": {
+          "median": 4339.6,
+          "p90": 6032.2,
+          "max": 14220.7
+        },
+        "jev_ms": {
+          "median": 138.8,
+          "p90": 203.3,
+          "max": 360.6
+        }
+      },
+      "2": {
+        "answered": 3,
+        "valid": 3,
+        "complete_ms": {
+          "median": 10297.0,
+          "p90": 16549.6,
+          "max": 16549.6
+        },
+        "jev_ms": {
+          "median": 131.4,
+          "p90": 132.8,
+          "max": 132.8
+        }
+      }
+    },
+    "grades": {
+      "right": 30,
+      "wrong-source": 0,
+      "refused": 0,
+      "wrong-path": 0
+    },
+    "paths": {
+      "drawing": 2,
+      "model": 6,
+      "needs": 1,
+      "panel": 11,
+      "weather": 2,
+      "web": 8
+    },
+    "answered": 30,
+    "refusal_lines": 0,
+    "path_ms": {
+      "drawing": {
+        "n": 2,
+        "median": 10297.0,
+        "p90": 16549.6,
+        "max": 16549.6
+      },
+      "model": {
+        "n": 6,
+        "median": 4532.6,
+        "p90": 14220.7,
+        "max": 14220.7
+      },
+      "needs": {
+        "n": 1,
+        "median": 127.6,
+        "p90": 127.6,
+        "max": 127.6
+      },
+      "panel": {
+        "n": 11,
+        "median": 222.6,
+        "p90": 516.9,
+        "max": 6321.8
+      },
+      "weather": {
+        "n": 2,
+        "median": 1447.0,
+        "p90": 2158.5,
+        "max": 2158.5
+      },
+      "web": {
+        "n": 8,
+        "median": 5706.5,
+        "p90": 7242.5,
+        "max": 7242.5
+      }
+    }
+  },
+  "rows": [
+    {
+      "n": 1,
+      "request": "what's the weather in Chicago tomorrow",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.6,
+      "first_component_ms": 2158.5,
+      "model_done_ms": 2158.5,
+      "complete_ms": 2158.5,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ genui at=topRight w=420",
+        "glance genui",
+        "c s Screen title=\"WEATHER IN CHICAGO TOMORROW\"",
+        "c q Text value=\"what's the weather in Chicago tomorrow\" tone=muted",
+        "c a Text value=\"Tomorrow in Chicago: cloudy, high of 73, low of 55.\"",
+        "c c Text value=\"Open-Meteo forecast\" tone=muted",
+        "> s q a c",
+        "r s"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 360.6,
+      "choice": {
+        "archetype": "entity",
+        "archetype_p": 0.7,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": "day"
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Tomorrow in Chicago: cloudy, high of 73, low of 55.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares weather",
+        "say": "Tomorrow in Chicago: cloudy, high of 73, low of 55.",
+        "path": "weather"
+      },
+      "answer": {
+        "path": "weather",
+        "say": "Tomorrow in Chicago: cloudy, high of 73, low of 55.",
+        "lines": [
+          "- genui",
+          "@ genui at=topRight w=420",
+          "glance genui",
+          "c s Screen title=\"WEATHER IN CHICAGO TOMORROW\"",
+          "c q Text value=\"what's the weather in Chicago tomorrow\" tone=muted",
+          "c a Text value=\"Tomorrow in Chicago: cloudy, high of 73, low of 55.\"",
+          "c c Text value=\"Open-Meteo forecast\" tone=muted",
+          "> s q a c",
+          "r s"
+        ],
+        "surface": "genui",
+        "ms": 1721.0,
+        "first_draw_ms": 1721.1
+      },
+      "path": "weather",
+      "grade": "right"
+    },
+    {
+      "n": 2,
+      "request": "show me the weather this weekend",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.5,
+      "first_component_ms": 5900.9,
+      "model_done_ms": 5900.9,
+      "complete_ms": 5900.9,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ search at=topRight w=420",
+        "glance search",
+        "c s Screen title=\"SEARCH\"",
+        "c q Text value=\"show me the weather this weekend\" tone=muted",
+        "c a Text value=@/answer",
+        "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+        "> s q a src",
+        "r s",
+        "d /answer \"Searching\u2026\"",
+        "d /sources []",
+        "d /answer \"weather.com: \u201cThe Weather Channel and weather.com provide a national and local weather forecast for cities, as well as weather radar, report and hurricane coverage\u201d\"",
+        "d /sources [{\"id\":\"src-0\",\"text\":\"National and Local Weather Radar, Daily Forecast, Hurricane and ...  \u00b7  weather.com\"},{\"id\":\"src-1\",\"text\":\"Ninnescah, KS Weather Tomorrow & Extended Forecast  \u00b7  localconditions.com\"},{\"id\":\"src-2\",\"text\":\"Ninnescah KS 10-Day Weather Forecast | LocalConditions.com  \u00b7  localconditions.com\"},{\"id\":\"src-3\",\"text\":\"10-Day US Forecast Map -- Weather.com  \u00b7  weather.com\"},{\"id\":\"src-4\",\"text\":\"Weather Ninnescah Township | Forecast, Radar, Lightning & Satellite  \u00b7  weather.us\"}]",
+        "d /answer \"No actual forecast values in results. NONE\""
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 212.3,
+      "choice": {
+        "archetype": "timeline",
+        "archetype_p": 0.8,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "No actual forecast values in results. NONE",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares weather, weekend",
+        "say": "No actual forecast values in results. NONE",
+        "path": "web"
+      },
+      "answer": {
+        "path": "web",
+        "say": "No actual forecast values in results. NONE",
+        "lines": [
+          "- genui",
+          "@ search at=topRight w=420",
+          "glance search",
+          "c s Screen title=\"SEARCH\"",
+          "c q Text value=\"show me the weather this weekend\" tone=muted",
+          "c a Text value=@/answer",
+          "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+          "> s q a src",
+          "r s",
+          "d /answer \"Searching\u2026\"",
+          "d /sources []",
+          "d /answer \"weather.com: \u201cThe Weather Channel and weather.com provide a national and local weather forecast for cities, as well as weather radar, report and hurricane coverage\u201d\"",
+          "d /sources [{\"id\":\"src-0\",\"text\":\"National and Local Weather Radar, Daily Forecast, Hurricane and ...  \u00b7  weather.com\"},{\"id\":\"src-1\",\"text\":\"Ninnescah, KS Weather Tomorrow & Extended Forecast  \u00b7  localconditions.com\"},{\"id\":\"src-2\",\"text\":\"Ninnescah KS 10-Day Weather Forecast | LocalConditions.com  \u00b7  localconditions.com\"},{\"id\":\"src-3\",\"text\":\"10-Day US Forecast Map -- Weather.com  \u00b7  weather.com\"},{\"id\":\"src-4\",\"text\":\"Weather Ninnescah Township | Forecast, Radar, Lightning & Satellite  \u00b7  weather.us\"}]",
+          "d /answer \"No actual forecast values in results. NONE\""
+        ],
+        "surface": "search",
+        "sources": [
+          {
+            "id": "src-0",
+            "url": "https://weather.com/"
+          },
+          {
+            "id": "src-1",
+            "url": "https://www.localconditions.com/weather-ninnescah-kansas/67069/forecast.php"
+          },
+          {
+            "id": "src-2",
+            "url": "https://www.localconditions.com/us/ninnescah/kansas/weather/forecast/"
+          },
+          {
+            "id": "src-3",
+            "url": "https://weather.com/maps/tendayforecast"
+          },
+          {
+            "id": "src-4",
+            "url": "https://weather.us/weather/4276286-ninnescah-township"
+          }
+        ],
+        "ms": 5684.7,
+        "search_ms": 807,
+        "model_ms": 4876.0,
+        "first_draw_ms": 0.2,
+        "notes": [
+          "weather: no place named and no saved home, so the web answers"
+        ]
+      },
+      "path": "web",
+      "grade": "right"
+    },
+    {
+      "n": 3,
+      "request": "what's Apple stock at right now",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 2.7,
+      "first_component_ms": 4715.7,
+      "model_done_ms": 4715.7,
+      "complete_ms": 4715.7,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ search at=topRight w=420",
+        "glance search",
+        "c s Screen title=\"SEARCH\"",
+        "c q Text value=\"what's Apple stock at right now\" tone=muted",
+        "c a Text value=@/answer",
+        "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+        "> s q a src",
+        "r s",
+        "d /answer \"Searching\u2026\"",
+        "d /sources []",
+        "d /answer \"investing.com: \u201cView today's Apple Inc stock price and latest AAPL news and analysis. Create real-time notifications to follow any changes in the live stock price.\u201d\"",
+        "d /sources [{\"id\":\"src-0\",\"text\":\"Apple Inc. (AAPL) Stock Price, News, Quote & History - Yahoo Finance  \u00b7  finance.yahoo.com\"},{\"id\":\"src-1\",\"text\":\"Stock Price - Apple  \u00b7  investor.apple.com\"},{\"id\":\"src-2\",\"text\":\"Apple Stock Price Today | NASDAQ: AAPL Live - Investing.com  \u00b7  investing.com\"},{\"id\":\"src-3\",\"text\":\"Apple (AAPL) Stock Price & Overview  \u00b7  stockanalysis.com\"},{\"id\":\"src-4\",\"text\":\"AAPL | Apple Inc. Stock Overview (U.S.: Nasdaq) | Barron's  \u00b7  barrons.com\"}]"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 183.5,
+      "choice": {
+        "archetype": "count",
+        "archetype_p": 0.99,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Here's what investing.com says.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares stock",
+        "say": "Here's what investing.com says.",
+        "path": "web"
+      },
+      "answer": {
+        "path": "web",
+        "say": "Here's what investing.com says.",
+        "lines": [
+          "- genui",
+          "@ search at=topRight w=420",
+          "glance search",
+          "c s Screen title=\"SEARCH\"",
+          "c q Text value=\"what's Apple stock at right now\" tone=muted",
+          "c a Text value=@/answer",
+          "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+          "> s q a src",
+          "r s",
+          "d /answer \"Searching\u2026\"",
+          "d /sources []",
+          "d /answer \"investing.com: \u201cView today's Apple Inc stock price and latest AAPL news and analysis. Create real-time notifications to follow any changes in the live stock price.\u201d\"",
+          "d /sources [{\"id\":\"src-0\",\"text\":\"Apple Inc. (AAPL) Stock Price, News, Quote & History - Yahoo Finance  \u00b7  finance.yahoo.com\"},{\"id\":\"src-1\",\"text\":\"Stock Price - Apple  \u00b7  investor.apple.com\"},{\"id\":\"src-2\",\"text\":\"Apple Stock Price Today | NASDAQ: AAPL Live - Investing.com  \u00b7  investing.com\"},{\"id\":\"src-3\",\"text\":\"Apple (AAPL) Stock Price & Overview  \u00b7  stockanalysis.com\"},{\"id\":\"src-4\",\"text\":\"AAPL | Apple Inc. Stock Overview (U.S.: Nasdaq) | Barron's  \u00b7  barrons.com\"}]"
+        ],
+        "surface": "search",
+        "sources": [
+          {
+            "id": "src-0",
+            "url": "https://finance.yahoo.com/quote/AAPL/"
+          },
+          {
+            "id": "src-1",
+            "url": "https://investor.apple.com/stock-price/default.aspx"
+          },
+          {
+            "id": "src-2",
+            "url": "https://www.investing.com/equities/apple-computer-inc"
+          },
+          {
+            "id": "src-3",
+            "url": "https://stockanalysis.com/stocks/aapl/"
+          },
+          {
+            "id": "src-4",
+            "url": "https://www.barrons.com/market-data/stocks/aapl"
+          }
+        ],
+        "ms": 4520.1,
+        "search_ms": 805,
+        "model_ms": 3714.7,
+        "first_draw_ms": 0.1
+      },
+      "path": "web",
+      "grade": "right"
+    },
+    {
+      "n": 4,
+      "request": "pull up the price of Ethereum",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.6,
+      "first_component_ms": 4942.3,
+      "model_done_ms": 4942.3,
+      "complete_ms": 4942.3,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ search at=topRight w=420",
+        "glance search",
+        "c s Screen title=\"SEARCH\"",
+        "c q Text value=\"pull up the price of Ethereum\" tone=muted",
+        "c a Text value=@/answer",
+        "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+        "> s q a src",
+        "r s",
+        "d /answer \"Searching\u2026\"",
+        "d /sources []",
+        "d /answer \"cryptonews.com: \u201cThis makes extremely long-term price levels of up to $10,000 plausible, but far from guaranteed. At present, our Ethereum price prediction includes a maximum value of $5,303.54 in 2030.\u201d\"",
+        "d /sources [{\"id\":\"src-0\",\"text\":\"Will Ethereum Go Up In The Next Bull Run? - Token Metrics  \u00b7  tokenmetrics.com\"},{\"id\":\"src-1\",\"text\":\"Ethereum Price Prediction 2026, 2027 - 2030 - Crypto News  \u00b7  cryptonews.com\"},{\"id\":\"src-2\",\"text\":\"Ethereum (ETH) Price Prediction For 2026 & Beyond - CoinMarketCap  \u00b7  coinmarketcap.com\"},{\"id\":\"src-3\",\"text\":\"Will Ethereum Go Up In 2026? Ethereum Accumulation Trends  \u00b7  tradersunion.com\"},{\"id\":\"src-4\",\"text\":\"Ethereum Price Prediction 2027-2032 - Binance  \u00b7  binance.com\"}]"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 164.0,
+      "choice": {
+        "archetype": "count",
+        "archetype_p": 0.89,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Here's what cryptonews.com says.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares price",
+        "say": "Here's what cryptonews.com says.",
+        "path": "web"
+      },
+      "answer": {
+        "path": "web",
+        "say": "Here's what cryptonews.com says.",
+        "lines": [
+          "- genui",
+          "@ search at=topRight w=420",
+          "glance search",
+          "c s Screen title=\"SEARCH\"",
+          "c q Text value=\"pull up the price of Ethereum\" tone=muted",
+          "c a Text value=@/answer",
+          "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+          "> s q a src",
+          "r s",
+          "d /answer \"Searching\u2026\"",
+          "d /sources []",
+          "d /answer \"cryptonews.com: \u201cThis makes extremely long-term price levels of up to $10,000 plausible, but far from guaranteed. At present, our Ethereum price prediction includes a maximum value of $5,303.54 in 2030.\u201d\"",
+          "d /sources [{\"id\":\"src-0\",\"text\":\"Will Ethereum Go Up In The Next Bull Run? - Token Metrics  \u00b7  tokenmetrics.com\"},{\"id\":\"src-1\",\"text\":\"Ethereum Price Prediction 2026, 2027 - 2030 - Crypto News  \u00b7  cryptonews.com\"},{\"id\":\"src-2\",\"text\":\"Ethereum (ETH) Price Prediction For 2026 & Beyond - CoinMarketCap  \u00b7  coinmarketcap.com\"},{\"id\":\"src-3\",\"text\":\"Will Ethereum Go Up In 2026? Ethereum Accumulation Trends  \u00b7  tradersunion.com\"},{\"id\":\"src-4\",\"text\":\"Ethereum Price Prediction 2027-2032 - Binance  \u00b7  binance.com\"}]"
+        ],
+        "surface": "search",
+        "sources": [
+          {
+            "id": "src-0",
+            "url": "https://tokenmetrics.com/blog/will-ethereum-go-up-in-the-next-bull-run-complete-analysis-in-2026/"
+          },
+          {
+            "id": "src-1",
+            "url": "https://cryptonews.com/price-predictions/ethereum-price-prediction/"
+          },
+          {
+            "id": "src-2",
+            "url": "https://coinmarketcap.com/cmc-ai/ethereum/price-prediction/"
+          },
+          {
+            "id": "src-3",
+            "url": "https://tradersunion.com/currencies/forecast/ethusd/price-forecast/"
+          },
+          {
+            "id": "src-4",
+            "url": "https://www.binance.com/en/price-prediction/ethereum"
+          }
+        ],
+        "ms": 4776.2,
+        "search_ms": 740,
+        "model_ms": 4035.2,
+        "first_draw_ms": 0.2
+      },
+      "path": "web",
+      "grade": "right"
+    },
+    {
+      "n": 5,
+      "request": "who won the Lakers game last night",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.5,
+      "first_component_ms": 7242.5,
+      "model_done_ms": 7242.5,
+      "complete_ms": 7242.5,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ search at=topRight w=420",
+        "glance search",
+        "c s Screen title=\"SEARCH\"",
+        "c q Text value=\"who won the Lakers game last night\" tone=muted",
+        "c a Text value=@/answer",
+        "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+        "> s q a src",
+        "r s",
+        "d /answer \"Searching\u2026\"",
+        "d /sources []",
+        "d /answer \"espn.com: \u201cVisit ESPN for Los Angeles Lakers live scores, video highlights, and latest news. Find standings and the full 2026-27 season schedule.\u201d\"",
+        "d /sources [{\"id\":\"src-0\",\"text\":\"Los Angeles Lakers Scores, Stats and Highlights - ESPN  \u00b7  espn.com\"},{\"id\":\"src-1\",\"text\":\"Golden State Warriors 112 - Los Angeles Lakers 120: Final score ...  \u00b7  sports.yahoo.com\"},{\"id\":\"src-2\",\"text\":\"NBA Scores, 2026-27 Season - ESPN  \u00b7  espn.com\"},{\"id\":\"src-3\",\"text\":\"Steph Curry recaps Golden State Warriors win over Los Angeles Lakers\u2026  \u00b7  nbcsports.com\"},{\"id\":\"src-4\",\"text\":\"Dallas Mavericks 99 - Los Angeles Lakers 107: Final score, results ...  \u00b7  sports.yahoo.com\"}]"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 137.8,
+      "choice": {
+        "archetype": "entity",
+        "archetype_p": 0.95,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Here's what espn.com says.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares won, game, last",
+        "say": "Here's what espn.com says.",
+        "path": "web"
+      },
+      "answer": {
+        "path": "web",
+        "say": "Here's what espn.com says.",
+        "lines": [
+          "- genui",
+          "@ search at=topRight w=420",
+          "glance search",
+          "c s Screen title=\"SEARCH\"",
+          "c q Text value=\"who won the Lakers game last night\" tone=muted",
+          "c a Text value=@/answer",
+          "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+          "> s q a src",
+          "r s",
+          "d /answer \"Searching\u2026\"",
+          "d /sources []",
+          "d /answer \"espn.com: \u201cVisit ESPN for Los Angeles Lakers live scores, video highlights, and latest news. Find standings and the full 2026-27 season schedule.\u201d\"",
+          "d /sources [{\"id\":\"src-0\",\"text\":\"Los Angeles Lakers Scores, Stats and Highlights - ESPN  \u00b7  espn.com\"},{\"id\":\"src-1\",\"text\":\"Golden State Warriors 112 - Los Angeles Lakers 120: Final score ...  \u00b7  sports.yahoo.com\"},{\"id\":\"src-2\",\"text\":\"NBA Scores, 2026-27 Season - ESPN  \u00b7  espn.com\"},{\"id\":\"src-3\",\"text\":\"Steph Curry recaps Golden State Warriors win over Los Angeles Lakers\u2026  \u00b7  nbcsports.com\"},{\"id\":\"src-4\",\"text\":\"Dallas Mavericks 99 - Los Angeles Lakers 107: Final score, results ...  \u00b7  sports.yahoo.com\"}]"
+        ],
+        "surface": "search",
+        "sources": [
+          {
+            "id": "src-0",
+            "url": "https://www.espn.com/nba/team/_/name/lal/los-angeles-lakers"
+          },
+          {
+            "id": "src-1",
+            "url": "https://sports.yahoo.com/nba/golden-state-warriors-los-angeles-lakers-2025020613/"
+          },
+          {
+            "id": "src-2",
+            "url": "https://www.espn.com/nba/scoreboard"
+          },
+          {
+            "id": "src-3",
+            "url": "https://www.nbcsports.com/watch/nba/steph-curry-recaps-golden-state-warriors-win-over-los-angeles-lakers"
+          },
+          {
+            "id": "src-4",
+            "url": "https://sports.yahoo.com/nba/dallas-mavericks-los-angeles-lakers-2025022513/"
+          }
+        ],
+        "ms": 7102.8,
+        "search_ms": 1039,
+        "model_ms": 6063.0,
+        "first_draw_ms": 0.1
+      },
+      "path": "web",
+      "grade": "right"
+    },
+    {
+      "n": 6,
+      "request": "what's the latest news on the Fed",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.7,
+      "first_component_ms": 6023.2,
+      "model_done_ms": 6023.2,
+      "complete_ms": 6023.2,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ search at=topRight w=420",
+        "glance search",
+        "c s Screen title=\"SEARCH\"",
+        "c q Text value=\"what's the latest news on the Fed\" tone=muted",
+        "c a Text value=@/answer",
+        "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+        "> s q a src",
+        "r s",
+        "d /answer \"Searching\u2026\"",
+        "d /sources []",
+        "d /answer \"reuters.com: \u201cStay updated with the latest news on the U.S. Federal Reserve. Get comprehensive coverage and analysis of the Fed's monetary policy decisions and reports.\u201d\"",
+        "d /sources [{\"id\":\"src-0\",\"text\":\"The Fed: Trending News, Latest Updates, Analysis  \u00b7  bloomberg.com\"},{\"id\":\"src-1\",\"text\":\"Federal Reserve Board - News & Events  \u00b7  federalreserve.gov\"},{\"id\":\"src-2\",\"text\":\"U.S. Federal Reserve News | Today's Latest Stories | Reuters  \u00b7  reuters.com\"},{\"id\":\"src-3\",\"text\":\"Federal Reserve Board - Recent Postings  \u00b7  federalreserve.gov\"},{\"id\":\"src-4\",\"text\":\"Federal Reserve raises interest rates for the first time since 2023  \u00b7  cbsnews.com\"}]",
+        "d /answer \"The Federal Reserve raised interest rates for the first time since 2023, reversing its earlier stance when cuts were expected, per cbsnews.com.\""
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 160.7,
+      "choice": {
+        "archetype": "timeline",
+        "archetype_p": 0.74,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "The Federal Reserve raised interest rates for the first time since 2023, reversing its earlier stance when cuts were expected, per cbsnews.com.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares new",
+        "say": "The Federal Reserve raised interest rates for the first time since 2023, reversing its earlier stance when cuts were expected, per cbsnews.com.",
+        "path": "web"
+      },
+      "answer": {
+        "path": "web",
+        "say": "The Federal Reserve raised interest rates for the first time since 2023, reversing its earlier stance when cuts were expected, per cbsnews.com.",
+        "lines": [
+          "- genui",
+          "@ search at=topRight w=420",
+          "glance search",
+          "c s Screen title=\"SEARCH\"",
+          "c q Text value=\"what's the latest news on the Fed\" tone=muted",
+          "c a Text value=@/answer",
+          "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+          "> s q a src",
+          "r s",
+          "d /answer \"Searching\u2026\"",
+          "d /sources []",
+          "d /answer \"reuters.com: \u201cStay updated with the latest news on the U.S. Federal Reserve. Get comprehensive coverage and analysis of the Fed's monetary policy decisions and reports.\u201d\"",
+          "d /sources [{\"id\":\"src-0\",\"text\":\"The Fed: Trending News, Latest Updates, Analysis  \u00b7  bloomberg.com\"},{\"id\":\"src-1\",\"text\":\"Federal Reserve Board - News & Events  \u00b7  federalreserve.gov\"},{\"id\":\"src-2\",\"text\":\"U.S. Federal Reserve News | Today's Latest Stories | Reuters  \u00b7  reuters.com\"},{\"id\":\"src-3\",\"text\":\"Federal Reserve Board - Recent Postings  \u00b7  federalreserve.gov\"},{\"id\":\"src-4\",\"text\":\"Federal Reserve raises interest rates for the first time since 2023  \u00b7  cbsnews.com\"}]",
+          "d /answer \"The Federal Reserve raised interest rates for the first time since 2023, reversing its earlier stance when cuts were expected, per cbsnews.com.\""
+        ],
+        "surface": "search",
+        "sources": [
+          {
+            "id": "src-0",
+            "url": "https://www.bloomberg.com/latest/fed-meeting"
+          },
+          {
+            "id": "src-1",
+            "url": "https://www.federalreserve.gov/newsevents.htm"
+          },
+          {
+            "id": "src-2",
+            "url": "https://www.reuters.com/markets/us/federal-reserve/"
+          },
+          {
+            "id": "src-3",
+            "url": "https://www.federalreserve.gov/recentpostings.htm"
+          },
+          {
+            "id": "src-4",
+            "url": "https://www.cbsnews.com/news/fed-interest-rate-decision-today/"
+          }
+        ],
+        "ms": 5859.8,
+        "search_ms": 822,
+        "model_ms": 5036.5,
+        "first_draw_ms": 0.4
+      },
+      "path": "web",
+      "grade": "right"
+    },
+    {
+      "n": 7,
+      "request": "when does the USC bookstore close today",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.4,
+      "first_component_ms": 5706.5,
+      "model_done_ms": 5706.5,
+      "complete_ms": 5706.5,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ search at=topRight w=420",
+        "glance search",
+        "c s Screen title=\"SEARCH\"",
+        "c q Text value=\"when does the USC bookstore close today\" tone=muted",
+        "c a Text value=@/answer",
+        "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+        "> s q a src",
+        "r s",
+        "d /answer \"Searching\u2026\"",
+        "d /sources []",
+        "d /answer \"uscbookstore.com: \u201cFind out the special operating hours for the USC Bookstore.\u201d\"",
+        "d /sources [{\"id\":\"src-0\",\"text\":\"USC Bookstore Special Hours  \u00b7  uscbookstore.com\"},{\"id\":\"src-1\",\"text\":\"USC Bookstore  \u00b7  uscbookstore.com\"},{\"id\":\"src-2\",\"text\":\"Welcome to the store  \u00b7  sb1.uscbookstore.com\"},{\"id\":\"src-3\",\"text\":\"USC BOOKSTORES - Los Angeles CA - Hours, Directions, Reviews -\u2026  \u00b7  loc8nearme.com\"},{\"id\":\"src-4\",\"text\":\"USC BOOKSTORES - Updated October 2026 - 120 Reviews - Yelp  \u00b7  yelp.com\"}]",
+        "d /answer \"The USC Bookstore closes at 5:00 pm today (Saturday hours 9:00am to 5:00pm), per uscbookstore.com, though special hours may apply.\""
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (0.74)"
+      ],
+      "jev_ms": 138.8,
+      "choice": {
+        "archetype": "entity",
+        "archetype_p": 0.57,
+        "source": "none",
+        "source_p": 0.74,
+        "head_start": "day"
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "The USC Bookstore closes at 5:00 pm today (Saturday hours 9:00am to 5:00pm), per uscbookstore.com, though special hours may apply.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (0.74); no query declares usc, bookstore, close",
+        "say": "The USC Bookstore closes at 5:00 pm today (Saturday hours 9:00am to 5:00pm), per uscbookstore.com, though special hours may apply.",
+        "path": "web"
+      },
+      "answer": {
+        "path": "web",
+        "say": "The USC Bookstore closes at 5:00 pm today (Saturday hours 9:00am to 5:00pm), per uscbookstore.com, though special hours may apply.",
+        "lines": [
+          "- genui",
+          "@ search at=topRight w=420",
+          "glance search",
+          "c s Screen title=\"SEARCH\"",
+          "c q Text value=\"when does the USC bookstore close today\" tone=muted",
+          "c a Text value=@/answer",
+          "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+          "> s q a src",
+          "r s",
+          "d /answer \"Searching\u2026\"",
+          "d /sources []",
+          "d /answer \"uscbookstore.com: \u201cFind out the special operating hours for the USC Bookstore.\u201d\"",
+          "d /sources [{\"id\":\"src-0\",\"text\":\"USC Bookstore Special Hours  \u00b7  uscbookstore.com\"},{\"id\":\"src-1\",\"text\":\"USC Bookstore  \u00b7  uscbookstore.com\"},{\"id\":\"src-2\",\"text\":\"Welcome to the store  \u00b7  sb1.uscbookstore.com\"},{\"id\":\"src-3\",\"text\":\"USC BOOKSTORES - Los Angeles CA - Hours, Directions, Reviews -\u2026  \u00b7  loc8nearme.com\"},{\"id\":\"src-4\",\"text\":\"USC BOOKSTORES - Updated October 2026 - 120 Reviews - Yelp  \u00b7  yelp.com\"}]",
+          "d /answer \"The USC Bookstore closes at 5:00 pm today (Saturday hours 9:00am to 5:00pm), per uscbookstore.com, though special hours may apply.\""
+        ],
+        "surface": "search",
+        "sources": [
+          {
+            "id": "src-0",
+            "url": "https://www.uscbookstore.com/usc-bookstore-special-hours"
+          },
+          {
+            "id": "src-1",
+            "url": "https://www.uscbookstore.com/"
+          },
+          {
+            "id": "src-2",
+            "url": "https://sb1.uscbookstore.com/"
+          },
+          {
+            "id": "src-3",
+            "url": "https://www.loc8nearme.com/california/los-angeles/usc-bookstores/3048081/"
+          },
+          {
+            "id": "src-4",
+            "url": "https://www.yelp.com/biz/usc-bookstores-los-angeles"
+          }
+        ],
+        "ms": 5565.1,
+        "search_ms": 784,
+        "model_ms": 4780.2,
+        "first_draw_ms": 0.1
+      },
+      "path": "web",
+      "grade": "right"
+    },
+    {
+      "n": 8,
+      "request": "what's the exchange rate from dollars to euros",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.5,
+      "first_component_ms": 5158.8,
+      "model_done_ms": 5158.8,
+      "complete_ms": 5158.8,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ search at=topRight w=420",
+        "glance search",
+        "c s Screen title=\"SEARCH\"",
+        "c q Text value=\"what's the exchange rate from dollars to euros\" tone=muted",
+        "c a Text value=@/answer",
+        "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+        "> s q a src",
+        "r s",
+        "d /answer \"Searching\u2026\"",
+        "d /sources []",
+        "d /answer \"exchangerates.org.uk: \u201cConvert USD to EUR at today's live mid-market exchange rate. See the latest US Dollar to Euro rate, chart, forecast, historical performance and common conversions.\u201d\"",
+        "d /sources [{\"id\":\"src-0\",\"text\":\"US dollars to Euros Exchange Rate. Convert USD/EUR - Wise  \u00b7  wise.com\"},{\"id\":\"src-1\",\"text\":\"USD to EUR - Convert US dollars to Euros | USD to EUR Currency ... -\u2026  \u00b7  wise.com\"},{\"id\":\"src-2\",\"text\":\"USD to Euro Exchange Rate Today | Currency Converter  \u00b7  xrates.org\"},{\"id\":\"src-3\",\"text\":\"Currency Converter - Currency Exchange | Xe  \u00b7  xe.com\"},{\"id\":\"src-4\",\"text\":\"USD to EUR Exchange Rate Live - Convert US Dollars to Euros  \u00b7  exchangerates.org.uk\"}]"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 135.7,
+      "choice": {
+        "archetype": "count",
+        "archetype_p": 1.0,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Here's what exchangerates.org.uk says.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); live, though campaign declare a word",
+        "say": "Here's what exchangerates.org.uk says.",
+        "path": "web"
+      },
+      "answer": {
+        "path": "web",
+        "say": "Here's what exchangerates.org.uk says.",
+        "lines": [
+          "- genui",
+          "@ search at=topRight w=420",
+          "glance search",
+          "c s Screen title=\"SEARCH\"",
+          "c q Text value=\"what's the exchange rate from dollars to euros\" tone=muted",
+          "c a Text value=@/answer",
+          "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+          "> s q a src",
+          "r s",
+          "d /answer \"Searching\u2026\"",
+          "d /sources []",
+          "d /answer \"exchangerates.org.uk: \u201cConvert USD to EUR at today's live mid-market exchange rate. See the latest US Dollar to Euro rate, chart, forecast, historical performance and common conversions.\u201d\"",
+          "d /sources [{\"id\":\"src-0\",\"text\":\"US dollars to Euros Exchange Rate. Convert USD/EUR - Wise  \u00b7  wise.com\"},{\"id\":\"src-1\",\"text\":\"USD to EUR - Convert US dollars to Euros | USD to EUR Currency ... -\u2026  \u00b7  wise.com\"},{\"id\":\"src-2\",\"text\":\"USD to Euro Exchange Rate Today | Currency Converter  \u00b7  xrates.org\"},{\"id\":\"src-3\",\"text\":\"Currency Converter - Currency Exchange | Xe  \u00b7  xe.com\"},{\"id\":\"src-4\",\"text\":\"USD to EUR Exchange Rate Live - Convert US Dollars to Euros  \u00b7  exchangerates.org.uk\"}]"
+        ],
+        "surface": "search",
+        "sources": [
+          {
+            "id": "src-0",
+            "url": "https://wise.com/gb/currency-converter/usd-to-eur-rate"
+          },
+          {
+            "id": "src-1",
+            "url": "https://wise.com/us/currency-converter/usd-to-eur-rate?amount=1"
+          },
+          {
+            "id": "src-2",
+            "url": "https://xrates.org/usd-to-eur"
+          },
+          {
+            "id": "src-3",
+            "url": "https://www.xe.com/currencyconverter/"
+          },
+          {
+            "id": "src-4",
+            "url": "https://www.exchangerates.org.uk/Dollars-to-Euros-currency-conversion-page.html"
+          }
+        ],
+        "ms": 5021.3,
+        "search_ms": 874,
+        "model_ms": 4146.7,
+        "first_draw_ms": 0.1
+      },
+      "path": "web",
+      "grade": "right"
+    },
+    {
+      "n": 9,
+      "request": "show me the Premier League standings",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.4,
+      "first_component_ms": 6032.2,
+      "model_done_ms": 6032.2,
+      "complete_ms": 6032.2,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ search at=topRight w=420",
+        "glance search",
+        "c s Screen title=\"SEARCH\"",
+        "c q Text value=\"show me the Premier League standings\" tone=muted",
+        "c a Text value=@/answer",
+        "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+        "> s q a src",
+        "r s",
+        "d /answer \"Searching\u2026\"",
+        "d /sources []",
+        "d /answer \"premierleague.com: \u201cView the latest standings in the Premier League table, along with form guides and season archives, on the official website of the Premier League.\u201d\"",
+        "d /sources [{\"id\":\"src-0\",\"text\":\"Premier League Table and Standings - Football - BBC Sport  \u00b7  bbc.co.uk\"},{\"id\":\"src-1\",\"text\":\"Premier League Table, Standings & Form Guide for 2026/27 season  \u00b7  premierleague.com\"},{\"id\":\"src-2\",\"text\":\"Premier League Football News, Fixtures, Scores & Results  \u00b7  premierleague.com\"},{\"id\":\"src-3\",\"text\":\"Premier League Standings - Home, Away, Form Tables | LiveScore  \u00b7  livescore.com\"},{\"id\":\"src-4\",\"text\":\"Premier League Table \u2014 Live Standings & Season Guide  \u00b7  footypedia.org\"}]"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 144.0,
+      "choice": {
+        "archetype": "compare",
+        "archetype_p": 0.94,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": "grades"
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Here's what premierleague.com says.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); live, though grades declare a word",
+        "say": "Here's what premierleague.com says.",
+        "path": "web"
+      },
+      "answer": {
+        "path": "web",
+        "say": "Here's what premierleague.com says.",
+        "lines": [
+          "- genui",
+          "@ search at=topRight w=420",
+          "glance search",
+          "c s Screen title=\"SEARCH\"",
+          "c q Text value=\"show me the Premier League standings\" tone=muted",
+          "c a Text value=@/answer",
+          "c src List items=@/sources action=gs-open actionLabel=\"Open\"",
+          "> s q a src",
+          "r s",
+          "d /answer \"Searching\u2026\"",
+          "d /sources []",
+          "d /answer \"premierleague.com: \u201cView the latest standings in the Premier League table, along with form guides and season archives, on the official website of the Premier League.\u201d\"",
+          "d /sources [{\"id\":\"src-0\",\"text\":\"Premier League Table and Standings - Football - BBC Sport  \u00b7  bbc.co.uk\"},{\"id\":\"src-1\",\"text\":\"Premier League Table, Standings & Form Guide for 2026/27 season  \u00b7  premierleague.com\"},{\"id\":\"src-2\",\"text\":\"Premier League Football News, Fixtures, Scores & Results  \u00b7  premierleague.com\"},{\"id\":\"src-3\",\"text\":\"Premier League Standings - Home, Away, Form Tables | LiveScore  \u00b7  livescore.com\"},{\"id\":\"src-4\",\"text\":\"Premier League Table \u2014 Live Standings & Season Guide  \u00b7  footypedia.org\"}]"
+        ],
+        "surface": "search",
+        "sources": [
+          {
+            "id": "src-0",
+            "url": "https://www.bbc.co.uk/sport/football/premier-league/table"
+          },
+          {
+            "id": "src-1",
+            "url": "https://www.premierleague.com/en/tables/premier-league"
+          },
+          {
+            "id": "src-2",
+            "url": "https://www.premierleague.com/en/"
+          },
+          {
+            "id": "src-3",
+            "url": "https://www.livescore.com/en/football/england/premier-league/standings/"
+          },
+          {
+            "id": "src-4",
+            "url": "https://footypedia.org/tables/premier-league-table/"
+          }
+        ],
+        "ms": 5886.3,
+        "search_ms": 709,
+        "model_ms": 5176.1,
+        "first_draw_ms": 0.1
+      },
+      "path": "web",
+      "grade": "right"
+    },
+    {
+      "n": 10,
+      "request": "is it going to rain in Seattle today",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.4,
+      "first_component_ms": 1446.9,
+      "model_done_ms": 1446.9,
+      "complete_ms": 1447.0,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ genui at=topRight w=420",
+        "glance genui",
+        "c s Screen title=\"IT GOING TO RAIN\"",
+        "c q Text value=\"is it going to rain in Seattle today\" tone=muted",
+        "c a Text value=\"No, 17% chance of rain today in Seattle.\"",
+        "c c Text value=\"Open-Meteo forecast\" tone=muted",
+        "> s q a c",
+        "r s"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 112.2,
+      "choice": {
+        "archetype": "none",
+        "archetype_p": 0.76,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": "day"
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "No, 17% chance of rain today in Seattle.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares rain",
+        "say": "No, 17% chance of rain today in Seattle.",
+        "path": "weather"
+      },
+      "answer": {
+        "path": "weather",
+        "say": "No, 17% chance of rain today in Seattle.",
+        "lines": [
+          "- genui",
+          "@ genui at=topRight w=420",
+          "glance genui",
+          "c s Screen title=\"IT GOING TO RAIN\"",
+          "c q Text value=\"is it going to rain in Seattle today\" tone=muted",
+          "c a Text value=\"No, 17% chance of rain today in Seattle.\"",
+          "c c Text value=\"Open-Meteo forecast\" tone=muted",
+          "> s q a c",
+          "r s"
+        ],
+        "surface": "genui",
+        "ms": 1332.9,
+        "first_draw_ms": 1332.9
+      },
+      "path": "weather",
+      "grade": "right"
+    },
+    {
+      "n": 11,
+      "request": "how does photosynthesis work",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 2.3,
+      "first_component_ms": 14892.9,
+      "model_done_ms": 16549.6,
+      "complete_ms": 16549.6,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"PHOTOSYNTHESIS\"",
+        "> s d t",
+        "c d Diagram aspect=2.4 parts=[{\"t\":\"node\",\"x\":0.1,\"y\":0.25,\"w\":0.14,\"h\":0.2,\"label\":\"Light\"},{\"t\":\"node\",\"x\":0.1,\"y\":0.6,\"w\":0.14,\"h\":0.2,\"label\":\"Water\"},{\"t\":\"arrow\",\"x\":0.17,\"y\":0.27,\"x2\":0.28,\"y2\":0.37},{\"t\":\"arrow\",\"x\":0.17,\"y\":0.58,\"x2\":0.28,\"y2\":0.45},{\"t\":\"node\",\"x\":0.38,\"y\":0.4,\"w\":0.2,\"h\":0.26,\"label\":\"Light reactions\"},{\"t\":\"arrow\",\"x\":0.38,\"y\":0.53,\"x2\":0.38,\"y2\":0.74},{\"t\":\"node\",\"x\":0.38,\"y\":0.85,\"w\":0.14,\"h\":0.18,\"label\":\"Oxygen\"},{\"t\":\"arrow\",\"x\":0.48,\"y\":0.4,\"x2\":0.56,\"y2\":0.4},{\"t\":\"node\",\"x\":0.66,\"y\":0.4,\"w\":0.2,\"h\":0.26,\"label\":\"Calvin cycle\"},{\"t\":\"node\",\"x\":0.66,\"y\":0.85,\"w\":0.14,\"h\":0.18,\"label\":\"CO2\"},{\"t\":\"arrow\",\"x\":0.66,\"y\":0.76,\"x2\":0.66,\"y2\":0.53},{\"t\":\"arrow\",\"x\":0.76,\"y\":0.4,\"x2\":0.83,\"y2\":0.4},{\"t\":\"node\",\"x\":0.91,\"y\":0.4,\"w\":0.14,\"h\":0.22,\"label\":\"Sugar\"}]",
+        "c t Text value=\"Light reactions split water and make ATP and NADPH. The Calvin cycle spends them to fix CO2 into sugar.\" tone=muted"
+      ],
+      "display_problems": [],
+      "tier": 2,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 132.8,
+      "choice": {
+        "archetype": "connections",
+        "archetype_p": 1.0,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 1,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "drawing",
+      "grade": "right"
+    },
+    {
+      "n": 12,
+      "request": "what's the difference between mitosis and meiosis",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.4,
+      "first_component_ms": 5881.7,
+      "model_done_ms": 5881.7,
+      "complete_ms": 5881.7,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ genui at=topRight w=420",
+        "glance genui",
+        "c s Screen title=\"DIFFERENCE BETWEEN MITOSIS AND\"",
+        "c q Text value=\"what's the difference between mitosis and meiosis\" tone=muted",
+        "c a Text value=\"Mitosis makes two identical diploid cells for growth and repair. Meiosis uses two divisions to make four genetically unique haploid cells, the eggs or sperm.\"",
+        "c c Text value=\"From the model, not the web\" tone=muted",
+        "> s q a c",
+        "r s"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (0.99)"
+      ],
+      "jev_ms": 141.2,
+      "choice": {
+        "archetype": "compare",
+        "archetype_p": 0.99,
+        "source": "none",
+        "source_p": 0.99,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Mitosis makes two identical diploid cells for growth and repair. Meiosis uses two divisions to make four genetically unique haploid cells, the eggs or sperm.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (0.99); no query declares difference, between, mitosis",
+        "say": "Mitosis makes two identical diploid cells for growth and repair. Meiosis uses two divisions to make four genetically unique haploid cells, the eggs or sperm.",
+        "path": "model"
+      },
+      "answer": {
+        "path": "model",
+        "say": "Mitosis makes two identical diploid cells for growth and repair. Meiosis uses two divisions to make four genetically unique haploid cells, the eggs or sperm.",
+        "lines": [
+          "- genui",
+          "@ genui at=topRight w=420",
+          "glance genui",
+          "c s Screen title=\"DIFFERENCE BETWEEN MITOSIS AND\"",
+          "c q Text value=\"what's the difference between mitosis and meiosis\" tone=muted",
+          "c a Text value=\"Mitosis makes two identical diploid cells for growth and repair. Meiosis uses two divisions to make four genetically unique haploid cells, the eggs or sperm.\"",
+          "c c Text value=\"From the model, not the web\" tone=muted",
+          "> s q a c",
+          "r s"
+        ],
+        "surface": "genui",
+        "ms": 5738.9,
+        "model_ms": 5738.5,
+        "first_draw_ms": 5738.8
+      },
+      "path": "model",
+      "grade": "right"
+    },
+    {
+      "n": 13,
+      "request": "who wrote The Brothers Karamazov",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.5,
+      "first_component_ms": 4532.6,
+      "model_done_ms": 4532.6,
+      "complete_ms": 4532.6,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ genui at=topRight w=420",
+        "glance genui",
+        "c s Screen title=\"WROTE BROTHERS KARAMAZOV\"",
+        "c q Text value=\"who wrote The Brothers Karamazov\" tone=muted",
+        "c a Text value=\"Fyodor Dostoevsky wrote The Brothers Karamazov, his final novel, published in serial form in 1879 to 1880.\"",
+        "c c Text value=\"From the model, not the web\" tone=muted",
+        "> s q a c",
+        "r s"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (0.99)"
+      ],
+      "jev_ms": 143.0,
+      "choice": {
+        "archetype": "entity",
+        "archetype_p": 1.0,
+        "source": "none",
+        "source_p": 0.99,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Fyodor Dostoevsky wrote The Brothers Karamazov, his final novel, published in serial form in 1879 to 1880.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (0.99); no query declares wrote, bro, rs",
+        "say": "Fyodor Dostoevsky wrote The Brothers Karamazov, his final novel, published in serial form in 1879 to 1880.",
+        "path": "model"
+      },
+      "answer": {
+        "path": "model",
+        "say": "Fyodor Dostoevsky wrote The Brothers Karamazov, his final novel, published in serial form in 1879 to 1880.",
+        "lines": [
+          "- genui",
+          "@ genui at=topRight w=420",
+          "glance genui",
+          "c s Screen title=\"WROTE BROTHERS KARAMAZOV\"",
+          "c q Text value=\"who wrote The Brothers Karamazov\" tone=muted",
+          "c a Text value=\"Fyodor Dostoevsky wrote The Brothers Karamazov, his final novel, published in serial form in 1879 to 1880.\"",
+          "c c Text value=\"From the model, not the web\" tone=muted",
+          "> s q a c",
+          "r s"
+        ],
+        "surface": "genui",
+        "ms": 4387.8,
+        "model_ms": 4387.5,
+        "first_draw_ms": 4387.7
+      },
+      "path": "model",
+      "grade": "right"
+    },
+    {
+      "n": 14,
+      "request": "explain what a p-value is",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 1.0,
+      "first_component_ms": 5495.5,
+      "model_done_ms": 10296.9,
+      "complete_ms": 10297.0,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"WHAT A P-VALUE IS\"",
+        "> s t1 d t2",
+        "c t1 Text value=\"A p-value is the chance of seeing data at least this extreme if the null hypothesis were true.\"",
+        "c d Diagram aspect=3 parts=[{\"t\":\"node\",\"x\":0.1,\"y\":0.5,\"w\":0.16,\"h\":0.35,\"label\":\"Assume null\"},{\"t\":\"arrow\",\"x\":0.18,\"y\":0.5,\"x2\":0.22,\"y2\":0.5},{\"t\":\"node\",\"x\":0.3,\"y\":0.5,\"w\":0.16,\"h\":0.35,\"label\":\"Collect data\"},{\"t\":\"arrow\",\"x\":0.38,\"y\":0.5,\"x2\":0.42,\"y2\":0.5},{\"t\":\"node\",\"x\":0.5,\"y\":0.5,\"w\":0.16,\"h\":0.35,\"label\":\"Test statistic\"},{\"t\":\"arrow\",\"x\":0.58,\"y\":0.5,\"x2\":0.62,\"y2\":0.5},{\"t\":\"node\",\"x\":0.7,\"y\":0.5,\"w\":0.16,\"h\":0.35,\"label\":\"P(this extreme)\"},{\"t\":\"arrow\",\"x\":0.78,\"y\":0.5,\"x2\":0.82,\"y2\":0.5},{\"t\":\"node\",\"x\":0.9,\"y\":0.5,\"w\":0.16,\"h\":0.35,\"label\":\"p < 0.05: reject\"}]",
+        "c t2 Text value=\"It is not the chance the null is true, and a small p does not mean a large effect.\" tone=muted"
+      ],
+      "display_problems": [],
+      "tier": 2,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 131.4,
+      "choice": {
+        "archetype": "connections",
+        "archetype_p": 0.64,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 1,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "drawing",
+      "grade": "right"
+    },
+    {
+      "n": 15,
+      "request": "what is the capital of Australia",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.4,
+      "first_component_ms": 14220.7,
+      "model_done_ms": 14220.7,
+      "complete_ms": 14220.7,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ genui at=topRight w=420",
+        "glance genui",
+        "c s Screen title=\"CAPITAL OF AUSTRALIA\"",
+        "c q Text value=\"what is the capital of Australia\" tone=muted",
+        "c a Text value=\"The capital of Australia is Canberra.\"",
+        "c c Text value=\"From the model, not the web\" tone=muted",
+        "> s q a c",
+        "r s"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 203.3,
+      "choice": {
+        "archetype": "entity",
+        "archetype_p": 0.95,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "The capital of Australia is Canberra.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares capital",
+        "say": "The capital of Australia is Canberra.",
+        "path": "model"
+      },
+      "answer": {
+        "path": "model",
+        "say": "The capital of Australia is Canberra.",
+        "lines": [
+          "- genui",
+          "@ genui at=topRight w=420",
+          "glance genui",
+          "c s Screen title=\"CAPITAL OF AUSTRALIA\"",
+          "c q Text value=\"what is the capital of Australia\" tone=muted",
+          "c a Text value=\"The capital of Australia is Canberra.\"",
+          "c c Text value=\"From the model, not the web\" tone=muted",
+          "> s q a c",
+          "r s"
+        ],
+        "surface": "genui",
+        "ms": 14015.6,
+        "model_ms": 14015.3,
+        "first_draw_ms": 14015.5
+      },
+      "path": "model",
+      "grade": "right"
+    },
+    {
+      "n": 16,
+      "request": "how many bones are in the human body",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.5,
+      "first_component_ms": 4465.8,
+      "model_done_ms": 4465.8,
+      "complete_ms": 4465.8,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ genui at=topRight w=420",
+        "glance genui",
+        "c s Screen title=\"HOW MANY BONES IN\"",
+        "c q Text value=\"how many bones are in the human body\" tone=muted",
+        "c a Text value=\"An adult human has 206 bones; newborns have around 270 to 300, many of which fuse together during growth.\"",
+        "c c Text value=\"From the model, not the web\" tone=muted",
+        "> s q a c",
+        "r s"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 119.7,
+      "choice": {
+        "archetype": "count",
+        "archetype_p": 1.0,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "An adult human has 206 bones; newborns have around 270 to 300, many of which fuse together during growth.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares bone, human, body",
+        "say": "An adult human has 206 bones; newborns have around 270 to 300, many of which fuse together during growth.",
+        "path": "model"
+      },
+      "answer": {
+        "path": "model",
+        "say": "An adult human has 206 bones; newborns have around 270 to 300, many of which fuse together during growth.",
+        "lines": [
+          "- genui",
+          "@ genui at=topRight w=420",
+          "glance genui",
+          "c s Screen title=\"HOW MANY BONES IN\"",
+          "c q Text value=\"how many bones are in the human body\" tone=muted",
+          "c a Text value=\"An adult human has 206 bones; newborns have around 270 to 300, many of which fuse together during growth.\"",
+          "c c Text value=\"From the model, not the web\" tone=muted",
+          "> s q a c",
+          "r s"
+        ],
+        "surface": "genui",
+        "ms": 4344.5,
+        "model_ms": 4344.2,
+        "first_draw_ms": 4344.4
+      },
+      "path": "model",
+      "grade": "right"
+    },
+    {
+      "n": 17,
+      "request": "what does the Krebs cycle produce",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.4,
+      "first_component_ms": 5461.3,
+      "model_done_ms": 5461.3,
+      "complete_ms": 5461.3,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ genui at=topRight w=420",
+        "glance genui",
+        "c s Screen title=\"DOES KREBS CYCLE PRODUCE\"",
+        "c q Text value=\"what does the Krebs cycle produce\" tone=muted",
+        "c a Text value=\"Per acetyl-CoA, one turn yields 3 NADH, 1 FADH2, 1 GTP (or ATP) and 2 CO2, regenerating oxaloacetate. Double that per glucose.\"",
+        "c c Text value=\"From the model, not the web\" tone=muted",
+        "> s q a c",
+        "r s"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 131.7,
+      "choice": {
+        "archetype": "entity",
+        "archetype_p": 0.47,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Per acetyl-CoA, one turn yields 3 NADH, 1 FADH2, 1 GTP (or ATP) and 2 CO2, regenerating oxaloacetate. Double that per glucose.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares cycle, produce",
+        "say": "Per acetyl-CoA, one turn yields 3 NADH, 1 FADH2, 1 GTP (or ATP) and 2 CO2, regenerating oxaloacetate. Double that per glucose.",
+        "path": "model"
+      },
+      "answer": {
+        "path": "model",
+        "say": "Per acetyl-CoA, one turn yields 3 NADH, 1 FADH2, 1 GTP (or ATP) and 2 CO2, regenerating oxaloacetate. Double that per glucose.",
+        "lines": [
+          "- genui",
+          "@ genui at=topRight w=420",
+          "glance genui",
+          "c s Screen title=\"DOES KREBS CYCLE PRODUCE\"",
+          "c q Text value=\"what does the Krebs cycle produce\" tone=muted",
+          "c a Text value=\"Per acetyl-CoA, one turn yields 3 NADH, 1 FADH2, 1 GTP (or ATP) and 2 CO2, regenerating oxaloacetate. Double that per glucose.\"",
+          "c c Text value=\"From the model, not the web\" tone=muted",
+          "> s q a c",
+          "r s"
+        ],
+        "surface": "genui",
+        "ms": 5328.0,
+        "model_ms": 5327.3,
+        "first_draw_ms": 5327.9
+      },
+      "path": "model",
+      "grade": "right"
+    },
+    {
+      "n": 18,
+      "request": "pull up the quadratic formula",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.9,
+      "first_component_ms": 4339.5,
+      "model_done_ms": 4339.5,
+      "complete_ms": 4339.6,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui",
+        "@ genui at=topRight w=420",
+        "glance genui",
+        "c s Screen title=\"QUADRATIC FORMULA\"",
+        "c q Text value=\"pull up the quadratic formula\" tone=muted",
+        "c a Text value=\"For ax\u00b2 + bx + c = 0, x = (\u2212b \u00b1 \u221a(b\u00b2 \u2212 4ac)) / 2a.\"",
+        "c c Text value=\"From the model, not the web\" tone=muted",
+        "> s q a c",
+        "r s"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 129.7,
+      "choice": {
+        "archetype": "none",
+        "archetype_p": 0.54,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "For ax\u00b2 + bx + c = 0, x = (\u2212b \u00b1 \u221a(b\u00b2 \u2212 4ac)) / 2a.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares quadratic, formula",
+        "say": "For ax\u00b2 + bx + c = 0, x = (\u2212b \u00b1 \u221a(b\u00b2 \u2212 4ac)) / 2a.",
+        "path": "model"
+      },
+      "answer": {
+        "path": "model",
+        "say": "For ax\u00b2 + bx + c = 0, x = (\u2212b \u00b1 \u221a(b\u00b2 \u2212 4ac)) / 2a.",
+        "lines": [
+          "- genui",
+          "@ genui at=topRight w=420",
+          "glance genui",
+          "c s Screen title=\"QUADRATIC FORMULA\"",
+          "c q Text value=\"pull up the quadratic formula\" tone=muted",
+          "c a Text value=\"For ax\u00b2 + bx + c = 0, x = (\u2212b \u00b1 \u221a(b\u00b2 \u2212 4ac)) / 2a.\"",
+          "c c Text value=\"From the model, not the web\" tone=muted",
+          "> s q a c",
+          "r s"
+        ],
+        "surface": "genui",
+        "ms": 4207.2,
+        "model_ms": 4206.9,
+        "first_draw_ms": 4207.2
+      },
+      "path": "model",
+      "grade": "right"
+    },
+    {
+      "n": 19,
+      "request": "what's due for WRIT 150",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.4,
+      "first_component_ms": 463.2,
+      "model_done_ms": 463.2,
+      "complete_ms": 463.2,
+      "queries": [
+        "course:WRIT150"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"WRIT 150\"",
+        "> s m0 ev",
+        "c m0 Metric label=\"Items\" value=@/q/course:WRIT150/count",
+        "c ev Events caption=\"WRIT 150, overdue first\" items=@/q/course:WRIT150/events"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 148.5,
+      "choice": {
+        "archetype": "timeline",
+        "archetype_p": 0.94,
+        "source": "course",
+        "source_p": 0.62,
+        "head_start": null
+      },
+      "why": {
+        "plan": {
+          "key": "course:WRIT150",
+          "companions": [],
+          "archetype": "timeline"
+        },
+        "slots": {
+          "course": "WRIT150",
+          "course_text": "writ 150"
+        },
+        "features": {
+          "n": 11,
+          "groups": 1,
+          "spread": 1.0,
+          "distinct": 1,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Events: 11 timed items, soonest first"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    },
+    {
+      "n": 20,
+      "request": "show me what's overdue",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 170.9,
+      "model_done_ms": 170.9,
+      "complete_ms": 170.9,
+      "queries": [
+        "overdue"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"OVERDUE\"",
+        "> s st",
+        "c st Status message=@/q/overdue/note level=info"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 109.6,
+      "choice": {
+        "archetype": "timeline",
+        "archetype_p": 0.57,
+        "source": "overdue",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {
+        "plan": {
+          "key": "overdue",
+          "companions": [],
+          "archetype": "timeline"
+        },
+        "slots": {},
+        "features": {
+          "n": 0,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": false
+        },
+        "picked": [
+          "Status: nothing came back; the note says why"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    },
+    {
+      "n": 21,
+      "request": "what's on my calendar Thursday",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 478.7,
+      "model_done_ms": 478.7,
+      "complete_ms": 478.7,
+      "queries": [
+        "day:thursday"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"THURSDAY\"",
+        "> s ev",
+        "c ev Events caption=\"Thursday: classes, deadlines, events\" items=@/q/day:thursday/events"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 150.6,
+      "choice": {
+        "archetype": "plan",
+        "archetype_p": 0.92,
+        "source": "day",
+        "source_p": 0.63,
+        "head_start": null
+      },
+      "why": {
+        "plan": {
+          "key": "day:thursday",
+          "companions": [],
+          "archetype": "plan"
+        },
+        "slots": {
+          "day": "thursday",
+          "day_text": "thursday"
+        },
+        "features": {
+          "n": 3,
+          "groups": 1,
+          "spread": 1.0,
+          "distinct": 1,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Events: 3 timed items, soonest first"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    },
+    {
+      "n": 22,
+      "request": "how am I doing in my classes",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 170.5,
+      "model_done_ms": 170.5,
+      "complete_ms": 170.5,
+      "queries": [
+        "grades"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"GRADES\"",
+        "> s m0",
+        "c m0 Metric label=\"Average\" value=@/q/grades/average"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 106.4,
+      "choice": {
+        "archetype": "none",
+        "archetype_p": 0.39,
+        "source": "grades",
+        "source_p": 1.0,
+        "head_start": null
+      },
+      "why": {
+        "plan": {
+          "key": "grades",
+          "companions": [],
+          "archetype": "none"
+        },
+        "slots": {},
+        "features": {
+          "n": 5,
+          "groups": 1,
+          "spread": 1.0,
+          "distinct": 1,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": true
+        },
+        "picked": []
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    },
+    {
+      "n": 23,
+      "request": "who do I need to text back",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 254.2,
+      "model_done_ms": 254.2,
+      "complete_ms": 254.2,
+      "queries": [
+        "unreplied"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"WAITING ON YOU\"",
+        "> s m0 ev",
+        "c m0 Metric label=\"Threads\" value=@/q/unreplied/count",
+        "c ev Events caption=\"They wrote last\" items=@/q/unreplied/events"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 115.7,
+      "choice": {
+        "archetype": "act",
+        "archetype_p": 0.95,
+        "source": "unreplied",
+        "source_p": 0.92,
+        "head_start": "unreplied"
+      },
+      "why": {
+        "plan": {
+          "key": "unreplied",
+          "companions": [],
+          "archetype": "act"
+        },
+        "slots": {},
+        "features": {
+          "n": 7,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Events: 7 timed items, soonest first"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    },
+    {
+      "n": 24,
+      "request": "who haven't I talked to in a while",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 213.2,
+      "model_done_ms": 213.2,
+      "complete_ms": 213.2,
+      "queries": [
+        "reconnect"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"REACH OUT\"",
+        "> s b",
+        "c b Bars caption=\"Days since you last talked\" rows=@/q/reconnect/bars"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 138.9,
+      "choice": {
+        "archetype": "act",
+        "archetype_p": 0.99,
+        "source": "reconnect",
+        "source_p": 1.0,
+        "head_start": "reconnect"
+      },
+      "why": {
+        "plan": {
+          "key": "reconnect",
+          "companions": [],
+          "archetype": "act"
+        },
+        "slots": {},
+        "features": {
+          "n": 9,
+          "groups": 9,
+          "spread": 1.17,
+          "distinct": 9,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": true
+        },
+        "picked": [
+          "Bars: people ranked by days since, a magnitude"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    },
+    {
+      "n": 25,
+      "request": "what did I promise people",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 156.2,
+      "model_done_ms": 156.2,
+      "complete_ms": 156.2,
+      "queries": [
+        "tasks"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"PROMISES\"",
+        "> s tb",
+        "c tb Table caption=\"Open promises\" columns=[{\"field\":\"task\",\"label\":\"Task\"},{\"field\":\"who\",\"label\":\"Who\"},{\"field\":\"status\",\"label\":\"Status\"}] rows=@/q/tasks/rows"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 155.2,
+      "choice": {
+        "archetype": "act",
+        "archetype_p": 0.97,
+        "source": "tasks",
+        "source_p": 1.0,
+        "head_start": "tasks"
+      },
+      "why": {
+        "plan": {
+          "key": "tasks",
+          "companions": [],
+          "archetype": "act"
+        },
+        "slots": {},
+        "features": {
+          "n": 2,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": false
+        },
+        "picked": [
+          "Table: 3 fields that vary across rows"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    },
+    {
+      "n": 26,
+      "request": "how many days until my next exam",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 222.6,
+      "model_done_ms": 222.6,
+      "complete_ms": 222.6,
+      "queries": [
+        "exams:90"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"EXAMS IN 90 DAYS\"",
+        "> s m0 b",
+        "c m0 Metric label=\"Exams\" value=@/q/exams:90/count",
+        "c b Bars caption=\"By course\" rows=@/q/exams:90/bars"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 130.7,
+      "choice": {
+        "archetype": "count",
+        "archetype_p": 1.0,
+        "source": "exams",
+        "source_p": 0.71,
+        "head_start": "before-exam"
+      },
+      "why": {
+        "plan": {
+          "key": "exams:90",
+          "companions": [],
+          "archetype": "count"
+        },
+        "slots": {},
+        "features": {
+          "n": 8,
+          "groups": 3,
+          "spread": 2.0,
+          "distinct": 2,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Bars: 3 groups that differ, the longer look"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    },
+    {
+      "n": 27,
+      "request": "pull up that thing Karthik sent",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 516.9,
+      "model_done_ms": 516.9,
+      "complete_ms": 516.9,
+      "queries": [
+        "conversations"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"CONVERSATIONS\"",
+        "> s m0 ev",
+        "c m0 Metric label=\"Threads\" value=@/q/conversations/count",
+        "c ev Events caption=\"This week, act on first\" items=@/q/conversations/events"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 117.2,
+      "choice": {
+        "archetype": "entity",
+        "archetype_p": 0.83,
+        "source": "conversations",
+        "source_p": 0.56,
+        "head_start": "tasks"
+      },
+      "why": {
+        "plan": {
+          "key": "conversations",
+          "companions": [],
+          "archetype": "entity"
+        },
+        "slots": {
+          "name": "Karthik",
+          "name_text": "Karthik"
+        },
+        "features": {
+          "n": 9,
+          "groups": 0,
+          "spread": 1.0,
+          "distinct": 0,
+          "series": false,
+          "ratio": false,
+          "timed": true,
+          "magnitudes": false
+        },
+        "picked": [
+          "Events: 9 timed items, soonest first"
+        ]
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    },
+    {
+      "n": 28,
+      "request": "Zeutara bounce rate",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 1,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 4911.9,
+      "model_done_ms": 6321.8,
+      "complete_ms": 6321.8,
+      "queries": [
+        "campaign:Zeutara"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"ZEUTARA BOUNCE RATE\"",
+        "> s tb st",
+        "c tb Table caption=\"Zeutara campaign metrics\" columns=[{\"field\":\"metric\",\"label\":\"Metric\"},{\"field\":\"value\",\"label\":\"Value\"},{\"field\":\"change\",\"label\":\"Change\"}] rows=@/q/campaign:Zeutara/rows",
+        "c st Status message=@/q/campaign:Zeutara/note level=info"
+      ],
+      "display_problems": [],
+      "tier": 2,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (0.61)",
+        "gate: Jev said none, but campaign declare its words"
+      ],
+      "jev_ms": 104.7,
+      "choice": {
+        "archetype": "count",
+        "archetype_p": 0.89,
+        "source": "none",
+        "source_p": 0.61,
+        "head_start": null
+      },
+      "why": {},
+      "model_calls": 1,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    },
+    {
+      "n": 29,
+      "request": "how much did I spend on food this week",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.6,
+      "first_component_ms": 127.6,
+      "model_done_ms": 127.6,
+      "complete_ms": 127.6,
+      "queries": [],
+      "problems": [],
+      "lines": [
+        "- genui"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [
+        "tier 1: Jev: no source fits (1.00)"
+      ],
+      "jev_ms": 125.4,
+      "choice": {
+        "archetype": "count",
+        "archetype_p": 1.0,
+        "source": "none",
+        "source_p": 1.0,
+        "head_start": "week"
+      },
+      "why": {},
+      "model_calls": 0,
+      "no_source": true,
+      "say": "Spending and balances need a bank or card connection, and Chewbacca doesn't link one yet.",
+      "gate": {
+        "ok": false,
+        "by": "jev",
+        "why": "Jev: no source fits (1.00); no query declares spend, food",
+        "say": "Spending and balances need a bank or card connection, and Chewbacca doesn't link one yet.",
+        "path": "needs"
+      },
+      "answer": {
+        "path": "needs",
+        "say": "Spending and balances need a bank or card connection, and Chewbacca doesn't link one yet.",
+        "lines": [
+          "- genui"
+        ],
+        "ms": 0.1
+      },
+      "path": "needs",
+      "grade": "right"
+    },
+    {
+      "n": 30,
+      "request": "what's the score in my BISC class",
+      "first_try_valid": true,
+      "valid_after_repair": true,
+      "fallback": false,
+      "attempts": 0,
+      "skeleton_ms": 0.2,
+      "first_component_ms": 220.0,
+      "model_done_ms": 220.1,
+      "complete_ms": 220.1,
+      "queries": [
+        "grades"
+      ],
+      "problems": [],
+      "lines": [
+        "c s Screen title=\"GRADES\"",
+        "> s m0",
+        "c m0 Metric label=\"Average\" value=@/q/grades/average"
+      ],
+      "display_problems": [],
+      "tier": 1,
+      "tier_notes": [],
+      "jev_ms": 132.8,
+      "choice": {
+        "archetype": "count",
+        "archetype_p": 0.87,
+        "source": "grades",
+        "source_p": 1.0,
+        "head_start": "course"
+      },
+      "why": {
+        "plan": {
+          "key": "grades",
+          "companions": [],
+          "archetype": "count"
+        },
+        "slots": {},
+        "features": {
+          "n": 5,
+          "groups": 1,
+          "spread": 1.0,
+          "distinct": 1,
+          "series": false,
+          "ratio": false,
+          "timed": false,
+          "magnitudes": true
+        },
+        "picked": []
+      },
+      "model_calls": 0,
+      "no_source": false,
+      "say": "",
+      "gate": {},
+      "answer": {},
+      "path": "panel",
+      "grade": "right"
+    }
+  ]
+}

@@ -17,6 +17,10 @@ kyber-genui catalog --check                              catalog vs hud/CLAUDE.m
 kyber-genui queries                                      what the model may bind to
 kyber-genui event genui-refresh s                        a press on a generated surface
 kyber-genui bench [--only 1,5] [--out results.json]      the frozen 20-request eval
+kyber-genui bench --requests config/genui/bench/sealed-2026-10-10.json   the sealed 32
+kyber-genui keep [NAME]                                  the last model-written surface becomes a candidate
+kyber-genui promote NAME                                 checks a candidate against the sealed requests
+GENUI_TIERS=0,1 kyber-genui "..." --dry-run --json       no model: which tier answered, and why
 ```
 
 ## What the field says separates useful generative UI from slop
@@ -76,14 +80,82 @@ Sources:
 Coverage gap: the Google paper was read as its HTML version and summary, not
 every appendix; AG-UI and C1 were read from their docs, not their code.
 
+## Tiers: the model is the last resort
+
+Added 2026-10-10 (CHW-203). On 10/04 every request paid a model call, and the
+median panel took 4.4 s. Most requests are one of a few shapes over one of a
+dozen sources, and neither choice needs a generative model. Each tier answers
+only when the cheaper one could not, and every layout any tier makes goes
+through the same validator and policy as a model's.
+
+| Tier | What answers                                                                                                                                                        | Typical time                    | Code                                            |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- | ----------------------------------------------- |
+| 0    | An exemplar, a pinned preset or a promoted framework whose request matches near-exactly (content-word Jaccard of 0.75 or more, slots like a course code abstracted) | under 100 ms                    | `tiers.tier0`                                   |
+| 1    | Jev picks an archetype and a source in one call; code reads the course, day and window; the queries run; a math step picks the components from the data's shape     | 100 to 400 ms on the frozen set | `tiers.classify`, `tiers.plan`, `tiers.compose` |
+| 2    | The model, given the catalog, the queries and now the frameworks, in whichever runtime the HUD answers with (`hud-accounts list`)                                   | seconds                         | `stream_model`                                  |
+
+**Archetypes**, in `config/genui/frameworks.json`: count, compare, timeline,
+act, entity, plan, breakdown, before-after, connections. Each has the
+description Jev reads and the components a model is told it usually takes.
+`connections` always goes to the model: no query returns relationships, so a
+Diagram's parts would have to be written, and only the model writes.
+
+**The math step** (`tiers.features`, `tiers.compose`) measures the answer
+and never copies a value into a line: count, number of groups in the bars
+view and whether they differ, whether a non-constant series of three or more
+exists, whether a ratio exists, whether rows carry a time, and which fields
+vary across rows. Then:
+
+- a source that failed or has none (count is null): a warning Status bound to
+  its note, never a zero (surface rule 8);
+- nothing came back: one Status bound to the note, no Metric over it (rule 6);
+- one number asked for: a Metric, then a Sparkline if the series moves, else
+  Bars if two or more groups differ (rule 2: the glance, then the longer look);
+- compare or breakdown: a Ring only for a ratio, Bars for two or more groups,
+  a Table when there is no magnitude but several fields vary, else a Metric;
+- timed rows: Events, with a Metric count above when more than six (the
+  Events cap) or when the archetype is before-after or one entity;
+- untimed multi-field rows: a Table of at most three varying columns (a
+  400-point card), a Metric count when more than nine;
+- a companion count (overdue beside due) only when it is non-zero.
+
+One row-bearing component per panel at most: Events (6) plus Bars (9) is over
+the 12-row budget, and rule 3 says one source never takes all the rows anyway.
+
+**Slots are code, not Jev.** Course codes (three to five letters and three
+digits, minus "next 100" and its kind), weekdays and today/tonight/tomorrow,
+"before Friday", "next 10 days", "two weeks", "this month", and a capitalised
+name for `campaign` and `person`. Jev's own skill says exact matching stays in
+code, and a regex is free. A named course moves due or overdue to `course`;
+a named day moves week or calendar to `day`.
+
+**Head start.** The graph provider's walks took 480 to 750 ms on
+2026-10-10, which is longer than Jev takes to answer. So the one source whose description shares the
+most words with the request starts running while Jev decides, and its answer
+is used only if Jev picks the same source.
+
+**Glance.** Every generated surface sends `glance <surface>` after its `@`
+line, so a click off the cards takes it down. A pinned preset is drawn
+without it, because a pin is meant to stay.
+
+**Learning loop.** `kyber-genui keep [NAME]` (and `--pin` on a model-written
+surface) distills the layout into `~/.bob/genui/candidates/`: pointer
+arguments that equal a slot in the request become `{course}`, `{day}`,
+`{days}` or `{name}`, and the trigger gets the same slots. Tier 0 never reads
+a candidate. `kyber-genui promote NAME` checks it against every
+`config/genui/bench/sealed-*.json` request: it must match its own request,
+and every sealed request it would take from the existing entries must
+validate when filled. Only then does it move to `~/.bob/genui/promoted/`.
+The check is shape, not relevance, the same gap the validator has.
+
 ## How each rule is enforced here
 
 | Rule                   | Where                                                                       | What it refuses                                                                                                                                                                                                    |
 | ---------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Closed catalog         | `config/genui/catalog.json`, `check_component`                                     | an unknown component or prop, with the nearest real name                                                                                                                                                           |
+| Closed catalog         | `config/genui/catalog.json`, `check_component`                              | an unknown component or prop, with the nearest real name                                                                                                                                                           |
 | Catalog cannot drift   | `catalog_drift`, `kyber-genui catalog --check`, `tests/test_kyber_genui.py` | a component or prop in `hud/CLAUDE.md` or read by `SurfaceView.swift` that the catalog lacks, and the reverse                                                                                                      |
 | Data by reference      | `check_literal`, `check_pointer`                                            | a literal on any data prop (`Metric.value`, `Table.rows`, `Events.items`, `Bars.rows`, `List.items`, `Sparkline.points`, `Ring.value`); a pointer to an unknown query, view or argument; a `d` line from the model |
-| Actions allowlisted    | `config/genui/policy.json` `actions`                                               | any Button action but `genui-refresh` and `genui-close`                                                                                                                                                            |
+| Actions allowlisted    | `config/genui/policy.json` `actions`                                        | any Button action but `genui-refresh` and `genui-close`                                                                                                                                                            |
 | Skeleton first         | `generate`                                                                  | nothing: `- genui`, `@`, a Screen titled from the request, a "Building this view" line and `r s` go out before the model starts                                                                                    |
 | Validate before render | `check_line` while streaming, `check_structure` at the end                  | a bad line never reaches the socket; orphans, missing children, too many rows or buttons fail the surface                                                                                                          |
 | Repair, then fall back | `generate`                                                                  | one repair with the exact error list, then a Status panel that says no view was built and why                                                                                                                      |
@@ -174,11 +246,20 @@ All in `config/genui/policy.json`.
 ## Known gaps
 
 - **Literal prose can still carry a number.** `Text value="You have 3
-  overdue"` validates. Refusing numerals in prose would also refuse "Due in 7
+overdue"` validates. Refusing numerals in prose would also refuse "Due in 7
   days" and "BISC 101"; the prompt forbids it and the bench layouts did not do
   it, but nothing enforces it.
 - **The validator checks shape, not relevance.** #20 in the bench bound a
   campaign query to a note-taking panel.
+- **Tier 2 on Codex has tools.** The Claude path runs with `--tools ""`;
+  `bin/hud-codex` runs `codex exec` with the person's own Codex sandbox. The
+  model still never sees data, but a Codex model could read files while
+  writing a layout. A read-only sandbox flag on that path would close it.
+- **Slots are rules.** "This month" is the days left in the month, a name is
+  the first capitalised word that is not a weekday, month or course, and a
+  course is letters plus three digits. A misread shows on the glass, because
+  every Tier 1 caption names the window and source it understood (surface
+  rule 13), but nothing refuses it.
 - **The drift check reads Swift with regexes.** It attributes reads to
   `case "X":` labels; a read in a `default:` branch counts for no type, and an
   inner switch's labels count as drawn types.
@@ -222,15 +303,19 @@ kyber-genui owns none of these files. These are the exact steps.
    `config/surfaces/genui-queries.json` (or point `GENUI_QUERIES` at any path list):
 
    ```json
-   {"queries": [{
-     "name": "unreplied",
-     "description": "threads and decisions waiting on you, oldest first",
-     "argv": ["kyber-surfaces", "walk", "needs-you", "--json"],
-     "rename": {"label": "who", "app": "channel", "why": "waiting"},
-     "fields": ["who", "channel", "waiting"],
-     "views": ["rows", "events", "list", "count", "note"]
-   }],
-    "row_actions": {}}
+   {
+     "queries": [
+       {
+         "name": "unreplied",
+         "description": "threads and decisions waiting on you, oldest first",
+         "argv": ["kyber-surfaces", "walk", "needs-you", "--json"],
+         "rename": { "label": "who", "app": "channel", "why": "waiting" },
+         "fields": ["who", "channel", "waiting"],
+         "views": ["rows", "events", "list", "count", "note"]
+       }
+     ],
+     "row_actions": {}
+   }
    ```
 
    The command runs with no shell, `{arg}` (when the query declares an `arg`)
@@ -278,6 +363,70 @@ kyber-genui owns none of these files. These are the exact steps.
 
 ## Measured
 
+### 2026-10-10: the tiers (CHW-203)
+
+`kyber-genui bench` on the frozen 20 and on a sealed set of 32 written and
+committed (9c85dc91) before any tier code existed. Live ledger and graph
+data, `--dry-run` sink, Jev `jev-latest`, Tier 2 on Codex through
+`bin/hud-codex` because the HUD's Claude account was at its weekly limit.
+One run per request. Raw rows, with every layout, Jev's choice and the math
+step's measured features: `config/genui/bench/results-2026-10-10-frozen.json`
+and `results-2026-10-10-sealed.json`.
+
+|                             | Frozen 20 (10/04 baseline) | Frozen 20 (tiers)  | Sealed 32 (tiers)  |
+| --------------------------- | -------------------------- | ------------------ | ------------------ |
+| Valid, final                | 19 of 20                   | **20 of 20**       | **32 of 32**       |
+| Valid first try             | 14 of 20                   | 19 of 20           | 32 of 32           |
+| Fell back to a status panel | 1                          | 0                  | 0                  |
+| Answered by Tier 0 / 1 / 2  | 0 / 0 / 20                 | 1 / 16 / 3         | 0 / 24 / 8         |
+| No model and under 1 s      | 0                          | **16 of 20 (80%)** | **24 of 32 (75%)** |
+| Model calls                 | 26                         | 4                  | 8                  |
+| Complete, median (all)      | 4,367 ms                   | 226 ms             | 199 ms             |
+
+Latency per tier, complete with data, nearest-rank percentiles:
+
+| Tier | Set    | n   | Median    | p90       | Max       | Jev median / max |
+| ---- | ------ | --- | --------- | --------- | --------- | ---------------- |
+| 0    | frozen | 1   | 59 ms     | 59 ms     | 59 ms     | none             |
+| 1    | frozen | 16  | 202 ms    | 375 ms    | 1,152 ms  | 122 / 1,148 ms   |
+| 1    | sealed | 24  | 178 ms    | 273 ms    | 381 ms    | 125 / 173 ms     |
+| 2    | frozen | 3   | 12,006 ms | 31,013 ms | 31,013 ms | 121 / 123 ms     |
+| 2    | sealed | 8   | 12,696 ms | 20,442 ms | 20,442 ms | 127 / 169 ms     |
+
+**The falsifier passed**: on the sealed set 100% valid (bar: 95%) and 75%
+answered with no generative model in under a second (bar: 60%).
+
+What the numbers do not say, read off the layouts:
+
+- **Valid is shape, not relevance, and the model is where relevance broke.**
+  Sealed #29 "what's the weather tomorrow" bound `day:tomorrow`, #30 "what's
+  Nvidia stock at" bound `campaign:Nvidia`, #32 "how much money did I spend"
+  bound `needs`, and frozen #3 bound `needs` under a campaign Field. Each
+  panel says plainly it has no data, but it says it about the wrong source.
+  The prompt should tell the model that a request no query covers gets one
+  Status line, with a validator rule refusing a pointer whose query shares no
+  word with the request.
+- **Tier 1 wrong on 1 of 24 sealed, guessing on 1.** #8 "which of my classes
+  is hitting me hardest" went to `week:14` (Jev 0.56), so the Bars group by
+  day, not class. #31 "show me the thing from earlier" drew this week's
+  conversations at 0.58: a guess on a request with no referent. Both sit just
+  over the 0.5 source threshold; raising it to 0.6 would have sent both to
+  the model and kept 22 of 32 (69%) under the bar. Not changed, because the
+  threshold was set before the sealed run and moving it after would be tuning
+  on the test.
+- **Tier 2 is slower than the baseline**: Codex took 8 to 31 s where Claude
+  took 3 to 9 s on 10/04. Every Tier 2 request on the sealed set was a drawing
+  or out of scope, which is the set the model should get.
+- **The one Tier 1 run over a second** (frozen #12, 1,152 ms) was a single Jev
+  call that took 1,148 ms; the next slowest of the 51 Jev calls was 189 ms.
+- **The sealed set is held out by commit order, not blind.** A second agent
+  was meant to write it unseen and the subagent limit refused it, so the
+  author wrote it before building. Nothing was tuned after the sealed run.
+- **No sealed request hit Tier 0.** The exemplars are six requests; Tier 0
+  earns its keep once presets and promoted frameworks accumulate.
+
+### 2026-10-04: the model only (baseline)
+
 `kyber-genui bench`, 2026-10-04, the 20 frozen requests in
 `config/genui/bench/requests.json`, Claude Code 2.1.278 with the model in the
 person's settings (Opus 5.5), auto-memory off, live ledger data, `--dry-run`
@@ -287,39 +436,39 @@ including every layout the model wrote, are in
 two (16/20 and 15/20 first try, both 20/20 after repair) used an earlier
 validator and had auto-memory on, and are not the numbers below.
 
-| | Result |
-| --- | --- |
-| Valid on the first try | **14 of 20** |
-| Valid after one repair | **19 of 20** |
-| Fell back to a status panel | 1 of 20 (#3) |
-| Skeleton on the glass | 0.6 ms worst case, before the model is asked |
-| First model component, median | 3,194 ms (range 2,347 to 6,084; none for #3) |
-| Complete with data, median | 4,367 ms (range 3,202 to 99,249) |
-| Complete, first-try valid only, median | 3,743 ms |
-| Complete, repaired, median | 8,964 ms |
+|                                        | Result                                       |
+| -------------------------------------- | -------------------------------------------- |
+| Valid on the first try                 | **14 of 20**                                 |
+| Valid after one repair                 | **19 of 20**                                 |
+| Fell back to a status panel            | 1 of 20 (#3)                                 |
+| Skeleton on the glass                  | 0.6 ms worst case, before the model is asked |
+| First model component, median          | 3,194 ms (range 2,347 to 6,084; none for #3) |
+| Complete with data, median             | 4,367 ms (range 3,202 to 99,249)             |
+| Complete, first-try valid only, median | 3,743 ms                                     |
+| Complete, repaired, median             | 8,964 ms                                     |
 
-| # | Request | First try | After repair | First component ms | Complete ms | Queries bound | Why the first try was refused |
-|---|---|---|---|---|---|---|---|
-| 1 | compare my three classes' grades | no | yes | 3197 | 8273 | grades | the surface shows up to 18 rows; at most 12. Drop a list or bind a count instead |
-| 2 | who have I not texted back this week | no | yes | 2848 | 8447 | unreplied:7 | line 1: only c, > and @ lines belong in a layout, not 's' |
-| 3 | show my client's outbound campaign numbers | no | no | none | 16921 | none | line 3: campaign needs an argument: campaign or client name |
-| 4 | plan my Tuesday | yes | yes | 2491 | 4021 | day:Tuesday, overdue |  |
-| 5 | what's due before my midterm | yes | yes | 2347 | 3411 | before-exam |  |
-| 6 | what's due this week | yes | yes | 2546 | 3798 | due:7, overdue |  |
-| 7 | am I behind on anything | yes | yes | 3347 | 4655 | overdue, unreplied |  |
-| 8 | how busy is my week, day by day | yes | yes | 2863 | 4418 | overdue, week:7 |  |
-| 9 | who should I reach out to | no | yes | 2867 | 7533 | reconnect, unreplied | the surface shows up to 15 rows; at most 12. Drop a list or bind a count instead |
-| 10 | what promises have I made to people | yes | yes | 3277 | 3323 | tasks |  |
-| 11 | when are my exams | yes | yes | 2856 | 3245 | exams:90 |  |
-| 12 | what do I have tomorrow | yes | yes | 3774 | 4316 | day:tomorrow |  |
-| 13 | how does the HUD get data from a query onto the screen | yes | yes | 4338 | 5533 | none |  |
-| 14 | show my BISC 101 deadlines | yes | yes | 3078 | 3687 | course:BISC101 |  |
-| 15 | what's on my calendar this week | yes | yes | 3116 | 3202 | calendar:7 |  |
-| 16 | how many things are due in the next two weeks, by class | yes | yes | 3194 | 3644 | due:14 |  |
-| 17 | what's the plan for today | yes | yes | 3485 | 3608 | day:today |  |
-| 18 | show me everything I owe anyone, school and people | no | yes | 6084 | 99249 | due:7, overdue, tasks, unreplied | line 9: Heading.level=3 must be between 1 and 2 |
-| 19 | which class has the most work coming up | no | yes | 4128 | 9481 | due:14 | the surface shows up to 18 rows; at most 12. Drop a list or bind a count instead |
-| 20 | give me a spot to jot a note about the Amber pitch | yes | yes | 5349 | 5730 | campaign:Amber |  |
+| #   | Request                                                 | First try | After repair | First component ms | Complete ms | Queries bound                    | Why the first try was refused                                                    |
+| --- | ------------------------------------------------------- | --------- | ------------ | ------------------ | ----------- | -------------------------------- | -------------------------------------------------------------------------------- |
+| 1   | compare my three classes' grades                        | no        | yes          | 3197               | 8273        | grades                           | the surface shows up to 18 rows; at most 12. Drop a list or bind a count instead |
+| 2   | who have I not texted back this week                    | no        | yes          | 2848               | 8447        | unreplied:7                      | line 1: only c, > and @ lines belong in a layout, not 's'                        |
+| 3   | show my client's outbound campaign numbers              | no        | no           | none               | 16921       | none                             | line 3: campaign needs an argument: campaign or client name                      |
+| 4   | plan my Tuesday                                         | yes       | yes          | 2491               | 4021        | day:Tuesday, overdue             |                                                                                  |
+| 5   | what's due before my midterm                            | yes       | yes          | 2347               | 3411        | before-exam                      |                                                                                  |
+| 6   | what's due this week                                    | yes       | yes          | 2546               | 3798        | due:7, overdue                   |                                                                                  |
+| 7   | am I behind on anything                                 | yes       | yes          | 3347               | 4655        | overdue, unreplied               |                                                                                  |
+| 8   | how busy is my week, day by day                         | yes       | yes          | 2863               | 4418        | overdue, week:7                  |                                                                                  |
+| 9   | who should I reach out to                               | no        | yes          | 2867               | 7533        | reconnect, unreplied             | the surface shows up to 15 rows; at most 12. Drop a list or bind a count instead |
+| 10  | what promises have I made to people                     | yes       | yes          | 3277               | 3323        | tasks                            |                                                                                  |
+| 11  | when are my exams                                       | yes       | yes          | 2856               | 3245        | exams:90                         |                                                                                  |
+| 12  | what do I have tomorrow                                 | yes       | yes          | 3774               | 4316        | day:tomorrow                     |                                                                                  |
+| 13  | how does the HUD get data from a query onto the screen  | yes       | yes          | 4338               | 5533        | none                             |                                                                                  |
+| 14  | show my BISC 101 deadlines                              | yes       | yes          | 3078               | 3687        | course:BISC101                   |                                                                                  |
+| 15  | what's on my calendar this week                         | yes       | yes          | 3116               | 3202        | calendar:7                       |                                                                                  |
+| 16  | how many things are due in the next two weeks, by class | yes       | yes          | 3194               | 3644        | due:14                           |                                                                                  |
+| 17  | what's the plan for today                               | yes       | yes          | 3485               | 3608        | day:today                        |                                                                                  |
+| 18  | show me everything I owe anyone, school and people      | no        | yes          | 6084               | 99249       | due:7, overdue, tasks, unreplied | line 9: Heading.level=3 must be between 1 and 2                                  |
+| 19  | which class has the most work coming up                 | no        | yes          | 4128               | 9481        | due:14                           | the surface shows up to 18 rows; at most 12. Drop a list or bind a count instead |
+| 20  | give me a spot to jot a note about the Amber pitch      | yes       | yes          | 5349               | 5730        | campaign:Amber                   |                                                                                  |
 
 What the failures say:
 

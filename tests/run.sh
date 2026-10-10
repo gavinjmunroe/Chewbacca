@@ -1165,7 +1165,11 @@ if group "hooks"; then
   for h in "$ROOT"/.claude/hooks/*.sh; do
     [ "$(basename "$h")" = "lib.sh" ] && continue
     name="$(basename "$h")"
-    exits "$name survives empty input" 0 bash -c "echo '{}' | bash '$h'"
+    # No repo: the kit-auto* hooks otherwise found the real checkout through
+    # ~/.claude/d1-config.sh and ran its push gate (killed at load 35 on
+    # 2026-10-09) or synced the real ~/.claude/hooks from a test.
+    exits "$name survives empty input" 0 env CHEWBACCA_REPO_DIR="$TMP/no-repo" \
+      CHEWBACCA_HOOKS_DIR="$TMP/no-hooks" bash -c "echo '{}' | bash '$h'"
   done
   # A home directory under git reports every cache and Library folder as
   # untracked work. The reminder fired three times in a row in a session whose

@@ -333,8 +333,9 @@ cmd_app() {
     ""|-h|--help) "$bin"
       cat <<'MORE'
       find <app> "<what you want>"      which control does it: exact label, else Jev picks
-      do <app> "<what you want>" [--text T] [--yes]
-                                        find, then press it (or set T); same gate as press
+      do <app> "<what you want>" [--text T]
+                                        find, then press it (or set T); a gated pick is never
+                                        pressed, it comes back to confirm by index
 MORE
       ;;
     press|set|key|menu|raise)

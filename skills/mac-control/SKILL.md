@@ -74,9 +74,15 @@ Without a Jev key, `find` hands back the candidate list for you to pick by index
 
 Labels that are numbers (Calculator's digits) need `label:7`; a bare `7` is an
 index. A press that returns `cannotComplete` usually opened a sheet and landed:
-run `see` again rather than retrying. Anything whose label reads as send,
-submit, delete, remove, pay, post and the like, and any Return key, exits 4
-until you repeat it with `--yes`, which you add only after the person said so.
+run `see` again rather than retrying.
+
+The gate fails closed and exits 4 until you repeat the call with `--yes`,
+which you add only after the person said so. It refuses any element whose
+title, description, help or identifier reads as send, delete, remove, discard,
+trash, pay, post, quit, don't save, allow and the like; any button with no
+label at all; and Return, Enter, Space, Delete and cmd+Q/W/D/S. `do` never
+takes `--yes`: a gated pick comes back with the exact `press <i> --yes` to
+confirm, so consent goes to the control the person saw, not to Jev's guess.
 
 ## Routing examples
 

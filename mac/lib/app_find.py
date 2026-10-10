@@ -79,7 +79,7 @@ def find(snapshot, intent):
 
 def main():
     if len(sys.argv) < 4 or sys.argv[1] not in ("find", "do"):
-        sys.exit("usage: app_find.py find|do <appctl> <app> <intent> [--yes] [--window ID]")
+        sys.exit("usage: app_find.py find|do <appctl> <app> <intent> [--text T] [--window ID]")
     mode, appctl, app, intent = sys.argv[1:5]
     extra = sys.argv[5:]
     window = []
@@ -102,9 +102,15 @@ def main():
     cmd = [appctl, verb, app, str(result["i"]), *window]
     if verb == "set":
         cmd.insert(4, extra[extra.index("--text") + 1])
-    if "--yes" in extra:
-        cmd.append("--yes")
+    # Never forward --yes. Consent was given to a sentence, not to whichever
+    # control Jev picked for it; a gated pick comes back for the person to
+    # confirm by index (`chewie app press <app> <i> --yes`). Security review of
+    # cbd074b3, 2026-10-09.
     done = subprocess.run(cmd, capture_output=True, text=True)
+    if done.returncode == 4:
+        print(json.dumps({"found": result, "refused": done.stderr.strip(),
+                          "confirm_with": f"chewie app {verb} {app} {result['i']} --yes"}, indent=2))
+        sys.exit(4)
     sys.stderr.write(done.stderr)
     out = {"found": result}
     if done.stdout.strip():

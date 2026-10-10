@@ -59,6 +59,28 @@ r = app_find.find(SNAP, "something vague")
 check("Jev unavailable returns candidates, never a guess", r["i"] is None and len(r["candidates"]) == 3)
 jev.evaluate = real_eval
 
+# `do` must never forward --yes: consent went to a sentence, not to the
+# control Jev picked. A fake appctl records every argv it gets.
+with tempfile.TemporaryDirectory() as tmp:
+    log = Path(tmp) / "argv.log"
+    fake_bin = Path(tmp) / "appctl"
+    fake_bin.write_text(f"""#!/usr/bin/env python3
+import json, sys
+open({str(log)!r}, "a").write(json.dumps(sys.argv[1:]) + "\\n")
+if sys.argv[1] == "see":
+    print(json.dumps({json.dumps(SNAP)}))
+    sys.exit(0)
+sys.stderr.write('{{"error":"refused"}}')
+sys.exit(4)
+""")
+    fake_bin.chmod(0o755)
+    run = subprocess.run([sys.executable, str(ROOT / "mac/lib/app_find.py"), "do", str(fake_bin), "Photos",
+                          "remove from mac", "--yes"], capture_output=True, text=True)
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    check("do never forwards --yes to the press", all("--yes" not in c for c in calls) and len(calls) == 2)
+    check("a gated do exits 4 and names the exact confirm command",
+          run.returncode == 4 and "press Photos 2 --yes" in run.stdout)
+
 # The compiled driver, macOS only.
 if platform.system() == "Darwin" and shutil.which("swiftc"):
     with tempfile.TemporaryDirectory() as tmp:
@@ -71,7 +93,15 @@ if platform.system() == "Darwin" and shutil.which("swiftc"):
             check("appctl with no args prints usage", usage.returncode == 0 and "press" in usage.stdout)
             refused = subprocess.run([str(out), "key", "Finder", "return"], capture_output=True, text=True)
             check("Return to an app without --yes is refused with exit 4", refused.returncode == 4
-                  and "irreversible" in refused.stderr)
+                  and "refused without --yes" in refused.stderr)
+            for combo in ("space", "cmd+q", "cmd+d", "enter", "delete"):
+                r = subprocess.run([str(out), "key", "Finder", combo], capture_output=True, text=True)
+                check(f"key {combo} without --yes is refused", r.returncode == 4)
+            menu = subprocess.run([str(out), "menu", "Finder", "File", "Move to Trash"], capture_output=True, text=True)
+            if menu.returncode == 2:
+                print("skip menu gate check: accessibility not granted to this process")
+            else:
+                check("a Move to Trash menu item is refused without --yes", menu.returncode == 4)
             missing = subprocess.run([str(out), "see", "no-such-app-zz"], capture_output=True, text=True)
             check("an unknown app fails with a fix", missing.returncode == 1 and "fix" in missing.stderr)
 else:

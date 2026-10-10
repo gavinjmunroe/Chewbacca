@@ -254,18 +254,58 @@ func resolveElement(_ app: NSRunningApplication, _ ref: String, window: CGWindow
 }
 
 // MARK: irreversible-action gate
+//
+// Fails closed. Every text the element exposes is checked, not just its title
+// (a Delete button labeled only through AXDescription or AXHelp walked past the
+// first version of this gate), and a button that exposes no text at all is
+// refused too, because nothing proves it is harmless. Security review of
+// cbd074b3, 2026-10-09.
 
 let irreversible = try! NSRegularExpression(
-    pattern: "\\b(send|submit|delete|erase|remove|pay|purchase|buy|order|publish|post|empty|sign out|log out|confirm|transfer|unsubscribe|reset|format|overwrite|replace)\\b",
+    pattern: "\\b(send|submit|delete|erase|remove|discard|trash|archive|pay|purchase|buy|order|checkout|"
+        + "publish|post|reply|forward|share|empty|sign out|log ?out|sign|confirm|approve|accept|agree|allow|"
+        + "install|uninstall|transfer|unsubscribe|reset|wipe|format|overwrite|replace|quit|close|"
+        + "don.t save|leave|end|block|revoke|deactivate|cancel subscription)\\b",
     options: [.caseInsensitive])
 
-func gate(_ text: String?, yes: Bool) {
-    guard let t = text, !yes else { return }
-    let r = NSRange(t.startIndex..., in: t)
-    if irreversible.firstMatch(in: t, range: r) != nil {
+func texts(_ el: AXUIElement) -> [String] {
+    [kAXTitleAttribute, kAXDescriptionAttribute, kAXHelpAttribute, kAXValueAttribute, "AXLabel",
+     kAXIdentifierAttribute, kAXRoleDescriptionAttribute]
+        .compactMap { str(el, $0) }
+}
+
+func gate(_ el: AXUIElement, what: String, yes: Bool) {
+    if yes { return }
+    let role = str(el, kAXRoleAttribute) ?? ""
+    let all = texts(el).filter { $0 != (str(el, kAXRoleDescriptionAttribute) ?? "\u{0}") }
+    if all.isEmpty && ["AXButton", "AXMenuItem", "AXMenuButton", "AXLink"].contains(role) {
+        fail("\(what) has no label, so nothing shows it is safe; refused without --yes", code: 4,
+             fix: "look at it with `see --shot`, confirm with the person, then repeat with --yes")
+    }
+    for t in all {
+        if irreversible.firstMatch(in: t, range: NSRange(t.startIndex..., in: t)) != nil {
+            fail("\"\(t)\" looks irreversible, refused without --yes", code: 4,
+                 fix: "confirm with the person, then repeat with --yes")
+        }
+    }
+}
+
+func gateText(_ t: String, yes: Bool) {
+    if yes { return }
+    if irreversible.firstMatch(in: t, range: NSRange(t.startIndex..., in: t)) != nil {
         fail("\"\(t)\" looks irreversible, refused without --yes", code: 4,
              fix: "confirm with the person, then repeat with --yes")
     }
+}
+
+// Keys that commit whatever has focus: Return/Enter submit, Space presses a
+// focused button, Delete removes, and cmd+Q/W/D quit, close and Don't Save.
+func keyCommits(_ combo: String) -> Bool {
+    let parts = combo.lowercased().split(separator: "+").map(String.init)
+    guard let key = parts.last else { return true }
+    if ["return", "enter", "space", "delete", "backspace", "forward_delete"].contains(key) { return true }
+    return parts.contains("cmd") || parts.contains("command")
+        ? ["q", "w", "d", "s"].contains(key) : false
 }
 
 // MARK: screenshot by window id (works when hidden, minimized or off-Space)
@@ -447,7 +487,7 @@ case "press", "focus":
     let app = resolveApp(args[0])
     let (el, e) = resolveElement(app, args[1], window: windowOpt)
     if cmd == "press" {
-        gate(e["label"] as? String, yes: yes)
+        gate(el, what: "element \(args[1])", yes: yes)
         let acts = actions(el)
         let action = acts.contains("AXPress") ? "AXPress" : (acts.contains("AXConfirm") ? "AXConfirm" : (acts.first ?? "AXPress"))
         let r = AXUIElementPerformAction(el, action as CFString)
@@ -467,6 +507,9 @@ case "set":
     let app = resolveApp(args[0])
     let (el, e) = resolveElement(app, args[1], window: windowOpt)
     guard settable(el, kAXValueAttribute) else { fail("element \(args[1]) is not writable", fix: "focus it, then `key`") }
+    // Writing a value commits nothing by itself, but a field labeled for an
+    // amount, recipient or confirmation is part of an irreversible flow.
+    for t in texts(el) where t != (str(el, kAXValueAttribute) ?? "\u{0}") { gateText(t, yes: yes) }
     let r = AXUIElementSetAttributeValue(el, kAXValueAttribute as CFString, args[2] as CFString)
     if r != .success { fail("set failed: AXError \(r.rawValue)") }
     let readBack = str(el, kAXValueAttribute) ?? ""
@@ -475,9 +518,9 @@ case "set":
 case "key":
     guard args.count >= 2 else { fail("key needs an app and a combo") }
     let app = resolveApp(args[0])
-    if args[1].lowercased().contains("return") || args[1].lowercased().contains("enter") {
-        // Return submits forms and sends messages; same gate as a Send button.
-        gate("submit via \(args[1])", yes: yes)
+    if keyCommits(args[1]) && !yes {
+        fail("\(args[1]) can submit, press or delete whatever has focus; refused without --yes", code: 4,
+             fix: "confirm with the person, then repeat with --yes")
     }
     sendKey(app.processIdentifier, args[1])
     emit(["key": args[1], "pid": Int(app.processIdentifier)])
@@ -498,7 +541,8 @@ case "menu":
             return ["title": t, "enabled": enabled, "submenu": sub]
         })
     } else {
-        gate(path.last, yes: yes)
+        gateText(path.joined(separator: " > "), yes: yes)
+        gate(el, what: "menu item \(path.last ?? "")", yes: yes)
         let r = AXUIElementPerformAction(el, kAXPressAction as CFString)
         if r != .success && r != .cannotComplete { fail("menu press failed: AXError \(r.rawValue)") }
         emit(["pressed": path])

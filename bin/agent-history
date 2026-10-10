@@ -5,7 +5,11 @@
     agent-history search "<words>" --runtime codex --since 7d --repo chewbacca
     agent-history search "<words>" --role user --limit 20 --json
     agent-history search "<exact text>" --phrase
+    agent-history search "<words>" --raw-snippets   denylist only, no allowlist (warns)
     agent-history redact < text                  the redaction alone, for a pipe
+
+Snippets are allowlisted by default: after the denylist, only plain words,
+numbers of up to 6 digits and punctuation print; every other chunk is [·].
 
 Reads Claude Code transcripts (~/.claude/projects/*/*.jsonl, plus ~/.claude-2
 when it exists) and Codex rollouts (~/.codex/sessions/**/*.jsonl) in one pass.
@@ -724,10 +728,98 @@ def snippet(text: str, pos: int, width: int, term: str = "") -> str:
     return ("..." if a > 0 or lo > 0 else "") + view + ("..." if b < len(red) or hi < len(text) else "")
 
 
-def render(hit: dict) -> dict:
-    """The last step before stdout: every string field redacted, not only the
-    snippet. A repo, path or session id comes from the transcript too."""
-    return {k: redact(v) if isinstance(v, str) else v for k, v in hit.items()}
+# ---------------------------------------------------------------- allowlist
+#
+# Six review rounds each found a secret shape the denylist above missed, so
+# the default output stops depending on it being complete. After the
+# denylist, every snippet goes through an allowlist: split on whitespace, peel
+# ordinary punctuation off each chunk, and keep the core only if it is a plain
+# word (letters, at most one internal apostrophe or hyphen, 24 at most), a
+# number of 6 digits at most, or nothing (punctuation alone). Anything else,
+# letters mixed with digits, a longer run, or anything holding / + = _ % @ :
+# and the like, becomes MARK. A secret has to be one of those to survive, and
+# no key or token format is a plain dictionary-shaped word.
+
+MARK = "[·]"
+_EDGE_PUNCT = ".,;:!?()[]{}<>\"'`*…"
+_EDGE_PUNCT_NO_BRACKETS = ".,;:!?(){}<>\"'`*…"
+_ALLOWED_WORD = re.compile(r"(?=.{1,24}$)[A-Za-z]+(?:['’-][A-Za-z]+)?")
+_ALLOWED_NUM = re.compile(r"\d{1,6}")
+# Only this tool's own labels: an arbitrary "[ALLCAPS]" in a transcript could
+# be a secret in brackets.
+_PLACEHOLDER = re.compile(r"\[(?:REDACTED|SECRET|API_KEY|GITHUB_TOKEN|AWS_KEY|SLACK_TOKEN|GOOGLE_KEY"
+                          r"|STRIPE_KEY|JWT|EMAIL|HEX|PHONE|BLOB|PRIVATE_KEY|·)\]")
+_PATH_CHUNK = re.compile(r"[A-Za-z0-9._~/-]+")
+_SESSION_ID = re.compile(r"[0-9A-Za-z-]{1,64}")
+_WS_SPLIT = re.compile(r"(\s+)")
+_OWN_FIELDS = {
+    "runtime": re.compile(r"claude-code|codex"),
+    "role": re.compile(r"user|assistant|tool_use|tool"),
+    "time": re.compile(r"(?:\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z)?"),
+}
+
+
+def _allow_chunk(chunk: str, path_ok: bool) -> str:
+    if not chunk or chunk.isspace() or _PLACEHOLDER.fullmatch(chunk):
+        return chunk
+    if path_ok and _PATH_CHUNK.fullmatch(chunk):
+        return chunk
+    # A placeholder already in the text ("[API_KEY]", or a MARK from the last
+    # round) stays as it is inside its quotes and commas; marking it again
+    # would nest brackets on every round of the joining guard.
+    if _PLACEHOLDER.fullmatch(chunk.strip(_EDGE_PUNCT_NO_BRACKETS)):
+        return chunk
+    core = chunk.strip(_EDGE_PUNCT)
+    if not core:
+        return chunk
+    if _ALLOWED_WORD.fullmatch(core) or _ALLOWED_NUM.fullmatch(core) or _PLACEHOLDER.fullmatch(core):
+        return chunk
+    lead = chunk[: len(chunk) - len(chunk.lstrip(_EDGE_PUNCT))]
+    trail = chunk[len(chunk.rstrip(_EDGE_PUNCT)):]
+    return f"{lead}{MARK}{trail}"
+
+
+def allowlist(text: str, path_ok: bool = False) -> str:
+    return "".join(_allow_chunk(c, path_ok) for c in _WS_SPLIT.split(text))
+
+
+def safe_text(text: str, path_ok: bool = False) -> str:
+    """Denylist, then allowlist, then the joining guard: the kept fragments
+    put back together go through the full denylist again, in case two of them
+    side by side spell a secret, and the pair repeats until nothing changes
+    (three rounds at most)."""
+    out = allowlist(redact(text), path_ok)
+    for _ in range(3):
+        again = allowlist(redact(out), path_ok)
+        if again == out:
+            break
+        out = again
+    return out
+
+
+def render(hit: dict, raw_snippets: bool = False) -> dict:
+    """The one place a hit becomes output, for text and JSON alike, so the
+    two cannot disagree. Every field is redacted; the snippet is also
+    allowlisted unless --raw-snippets; repo and file may keep path segments;
+    session must be an id shape; runtime, role and time are this tool's own."""
+    out = {}
+    for k, v in hit.items():
+        if not isinstance(v, str):
+            out[k] = v
+        elif k == "snippet":
+            out[k] = redact(v) if raw_snippets else safe_text(v)
+        elif k in ("repo", "file"):
+            out[k] = safe_text(v, path_ok=True)
+        elif k == "session":
+            red = redact(v)
+            out[k] = red if _SESSION_ID.fullmatch(red) else MARK
+        elif k in _OWN_FIELDS:
+            # Written by this tool, not copied from a transcript: checked
+            # against their own closed shapes instead of allowlisted as prose.
+            out[k] = v if _OWN_FIELDS[k].fullmatch(v) else MARK
+        else:
+            out[k] = safe_text(v)
+    return out
 
 
 def search_file(kind: str, path: Path, terms: list[str], phrase: bool, needles: list[bytes],
@@ -854,7 +946,10 @@ def cmd_search(a: argparse.Namespace) -> int:
         if len(hits) >= a.limit:
             break
     hits.sort(key=lambda h: h["time"], reverse=True)
-    hits = [render(h) for h in hits]
+    if a.raw_snippets:
+        emit("agent-history: --raw-snippets is on: snippets are denylist-redacted only, so a secret "
+             "shape the patterns miss prints as it is. Keep this output on this machine.", sys.stderr)
+    hits = [render(h, a.raw_snippets) for h in hits]
     elapsed = time.monotonic() - started
     if a.json:
         for h in hits:
@@ -883,13 +978,20 @@ def main(argv: list[str]) -> int:
     s.add_argument("--context", type=int, default=90, help="characters each side of the match")
     s.add_argument("--phrase", action="store_true", help="match the words as one exact phrase")
     s.add_argument("--json", action="store_true", help="one JSON object per line")
-    sub.add_parser("redact", help="redact stdin to stdout")
+    s.add_argument("--raw-snippets", action="store_true",
+                   help="denylist redaction only, no allowlist (warns on stderr)")
+    r = sub.add_parser("redact", help="redact stdin to stdout, allowlisted like a snippet")
+    r.add_argument("--raw", action="store_true", help="denylist redaction only (warns on stderr)")
     a = ap.parse_args(argv)
     if a.cmd == "search":
         return cmd_search(a)
     if a.cmd == "redact":
+        if a.raw:
+            emit("agent-history: --raw is on: denylist redaction only. Keep this output on this machine.",
+                 sys.stderr)
         for text_line in sys.stdin:
-            emit(text_line.rstrip("\n"))
+            line = text_line.rstrip("\n")
+            emit(line if a.raw else safe_text(line))
         return 0
     ap.print_help()
     return 2

@@ -212,7 +212,11 @@ TIMING = (
 )
 for name, text in ADVERSARIAL.items():
     try:
-        p = subprocess.run([sys.executable, "-c", TIMING], input=text, capture_output=True, text=True, timeout=5)
+        # The verdict is CPU time, under 1 s. The wall-clock timeout only stops
+        # a quadratic regression from hanging the suite: at load 21 on
+        # 2026-10-10 a 0.47 s CPU run took over 5 s of wall time to start and
+        # finish, so 5 s failed a case that was fine.
+        p = subprocess.run([sys.executable, "-c", TIMING], input=text, capture_output=True, text=True, timeout=30)
         took = float(p.stdout.strip() or "99")
     except subprocess.TimeoutExpired:
         took = 99.0
@@ -334,97 +338,106 @@ def encodings(text):
     yield "base64", _b64.b64encode(text.encode()).decode()
 
 
-fuzz_total = fuzz_pass = 0
-fuzz_fail = []
-for _ in range(400):
-    secret, shape = fake_secret()
-    kw = rand_case(rng.choice(KEYWORDS))
-    syntax = rng.choice(syntaxes(kw, secret))
-    split = rng.choice(SPLITS)
-    if split:
-        cut_at = rng.randint(3, len(secret) - 3)
-        syntax = syntax.replace(secret, secret[:cut_at] + split + secret[cut_at:])
-    for enc, text in encodings(f"see {syntax} done"):
-        out = ah.redact(text)
-        fuzz_total += 1
-        probe = secret[len(secret) // 4: len(secret) // 4 + 6]
-        leaked = secret in out or probe in out or (enc == "base64" and text in out)
-        if leaked:
-            fuzz_fail.append((shape, enc, repr(text[:70]), repr(out[:90])))
+
+
+def run_fuzz(FUZZ_FN, label):
+    global rng
+    rng = random.Random(20261010)
+    fuzz_total = fuzz_pass = 0
+    fuzz_fail = []
+    for _ in range(400):
+        secret, shape = fake_secret()
+        kw = rand_case(rng.choice(KEYWORDS))
+        syntax = rng.choice(syntaxes(kw, secret))
+        split = rng.choice(SPLITS)
+        if split:
+            cut_at = rng.randint(3, len(secret) - 3)
+            syntax = syntax.replace(secret, secret[:cut_at] + split + secret[cut_at:])
+        for enc, text in encodings(f"see {syntax} done"):
+            out = FUZZ_FN(text)
+            fuzz_total += 1
+            probe = secret[len(secret) // 4: len(secret) // 4 + 6]
+            leaked = secret in out or probe in out or (enc == "base64" and text in out)
+            if leaked:
+                fuzz_fail.append((shape, enc, repr(text[:70]), repr(out[:90])))
+            else:
+                fuzz_pass += 1
+        # The bare secret too, no key at all: the entropy rule's job.
+        if shape != "short":
+            out = FUZZ_FN(f"value {secret} end")
+            fuzz_total += 1
+            if secret in out or secret[len(secret) // 4: len(secret) // 4 + 6] in out:
+                fuzz_fail.append((shape, "bare", secret, repr(out[:90])))
+            else:
+                fuzz_pass += 1
+
+    # Round two of the fuzz: values with delimiters inside them, secrets made of
+    # short pieces joined by . - _ ~, and every terminal or invisible sequence
+    # that could split a secret. Each fragment of 4+ characters must be gone.
+    CONTROL_SPLITS = ["\x1b[0m", "\x1b[38;5;196m", "\x1b(B", "\x1b)0", "\x1b7", "\x1b#8", "\x1bPq#0\x1b\\",
+                      "\x1b_app\x1b\\", "\x1b^pm\x1b\\", "\x1bXsos\x1b\\", "\x1b]8;;http://x\x1b\\", "\x90dcs\x9c",
+                      "\x9d0;t\x9c", "\x9b2K", "\x85", "\r", "\x0b", "\x0c", "​", "‌", "‍",
+                      "⁠", "﻿", "­", " ", " ", "؜", "‎", "‏", "⁦"]
+    INNER = ["/", "+", "=", "[", "]", ")", "}", "<", ">", "(", "{", "\"", "'", ":", "|", "!", "#", "%", "*", "^"]
+    JOINERS = [".", "-", "_", "~"]
+
+
+    def fragments(*parts):
+        return [x for x in parts if len(x) >= 4]
+
+
+    for _ in range(300):
+        mode = rng.choice(["inner", "joined", "control", "quoted-inner"])
+        a = "".join(rng.choice("ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789") for _ in range(rng.randint(5, 12)))
+        b = "".join(rng.choice("ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789") for _ in range(rng.randint(5, 12)))
+        c = "".join(rng.choice("ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789") for _ in range(rng.randint(5, 12)))
+        kw = rand_case(rng.choice(KEYWORDS))
+        if mode == "inner":
+            value = a + rng.choice(INNER) + b + rng.choice(INNER) + c
+            text = rng.choice([f"{kw}={value}", f"{kw}: {value}", f"--{kw} {value}", f"{kw} {value}", f"X-{kw}: {value}"])
+        elif mode == "quoted-inner":
+            value = a + rng.choice(INNER + [" ", ",", ";", "&"]) + b + rng.choice(INNER + [" ", ","]) + c
+            q = rng.choice(['"', "'"])
+            if q in value:
+                value = value.replace(q, "#")
+            text = rng.choice([f"{kw}={q}{value}{q}", f"{q}{kw}{q}: {q}{value}{q}", f"{kw} = {q}{value}{q}"])
+        elif mode == "joined":
+            j = rng.choice(JOINERS)
+            # 20+ characters: a bare secret shorter than that, with no key, is the
+            # documented residual risk, not a bypass.
+            value = ""
+            while len(value) < 20:
+                pieces = ["".join(rng.choice("ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789")
+                                  for _ in range(rng.randint(3, 6))) for _ in range(rng.randint(4, 7))]
+                value = j.join(pieces)
+            a, b, c = pieces[0] + j + pieces[1], pieces[2] + j + pieces[3], j.join(pieces[1:3])
+            text = rng.choice([f"value {value} end", f"{kw}={value}"])
         else:
-            fuzz_pass += 1
-    # The bare secret too, no key at all: the entropy rule's job.
-    if shape != "short":
-        out = ah.redact(f"value {secret} end")
-        fuzz_total += 1
-        if secret in out or secret[len(secret) // 4: len(secret) // 4 + 6] in out:
-            fuzz_fail.append((shape, "bare", secret, repr(out[:90])))
-        else:
-            fuzz_pass += 1
+            ctl = rng.choice(CONTROL_SPLITS)
+            while len(a + b + c) < 20:
+                c += rng.choice("ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789")
+            value = a + ctl + b + c
+            text = rng.choice([f"value {value} end", f"{kw}={value}", f"{kw}: \"{value}\""])
+        for enc, wrapped in encodings(f"see {text} done"):
+            out = FUZZ_FN(wrapped)
+            fuzz_total += 1
+            leaked = [f for f in fragments(a, b, c, a + b, b + c) if f in out]
+            if mode == "joined":
+                leaked = [f for f in fragments(a, b, c) if f in out]
+            if leaked:
+                fuzz_fail.append((mode, enc, repr(wrapped[:70]), repr(out[:90])))
+            else:
+                fuzz_pass += 1
 
-# Round two of the fuzz: values with delimiters inside them, secrets made of
-# short pieces joined by . - _ ~, and every terminal or invisible sequence
-# that could split a secret. Each fragment of 4+ characters must be gone.
-CONTROL_SPLITS = ["\x1b[0m", "\x1b[38;5;196m", "\x1b(B", "\x1b)0", "\x1b7", "\x1b#8", "\x1bPq#0\x1b\\",
-                  "\x1b_app\x1b\\", "\x1b^pm\x1b\\", "\x1bXsos\x1b\\", "\x1b]8;;http://x\x1b\\", "\x90dcs\x9c",
-                  "\x9d0;t\x9c", "\x9b2K", "\x85", "\r", "\x0b", "\x0c", "​", "‌", "‍",
-                  "⁠", "﻿", "­", " ", " ", "؜", "‎", "‏", "⁦"]
-INNER = ["/", "+", "=", "[", "]", ")", "}", "<", ">", "(", "{", "\"", "'", ":", "|", "!", "#", "%", "*", "^"]
-JOINERS = [".", "-", "_", "~"]
-
-
-def fragments(*parts):
-    return [x for x in parts if len(x) >= 4]
+    rate = 100.0 * fuzz_pass / fuzz_total
+    print(f"  fuzz [{label}]: {fuzz_pass}/{fuzz_total} redacted ({rate:.2f}%)")
+    for f in fuzz_fail[:12]:
+        print("        leak:", *f)
+    check(f"fuzz [{label}]: zero mutated fake secrets survive", not fuzz_fail, f"{len(fuzz_fail)} leaks")
 
 
-for _ in range(300):
-    mode = rng.choice(["inner", "joined", "control", "quoted-inner"])
-    a = "".join(rng.choice("ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789") for _ in range(rng.randint(5, 12)))
-    b = "".join(rng.choice("ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789") for _ in range(rng.randint(5, 12)))
-    c = "".join(rng.choice("ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789") for _ in range(rng.randint(5, 12)))
-    kw = rand_case(rng.choice(KEYWORDS))
-    if mode == "inner":
-        value = a + rng.choice(INNER) + b + rng.choice(INNER) + c
-        text = rng.choice([f"{kw}={value}", f"{kw}: {value}", f"--{kw} {value}", f"{kw} {value}", f"X-{kw}: {value}"])
-    elif mode == "quoted-inner":
-        value = a + rng.choice(INNER + [" ", ",", ";", "&"]) + b + rng.choice(INNER + [" ", ","]) + c
-        q = rng.choice(['"', "'"])
-        if q in value:
-            value = value.replace(q, "#")
-        text = rng.choice([f"{kw}={q}{value}{q}", f"{q}{kw}{q}: {q}{value}{q}", f"{kw} = {q}{value}{q}"])
-    elif mode == "joined":
-        j = rng.choice(JOINERS)
-        # 20+ characters: a bare secret shorter than that, with no key, is the
-        # documented residual risk, not a bypass.
-        value = ""
-        while len(value) < 20:
-            pieces = ["".join(rng.choice("ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789")
-                              for _ in range(rng.randint(3, 6))) for _ in range(rng.randint(4, 7))]
-            value = j.join(pieces)
-        a, b, c = pieces[0] + j + pieces[1], pieces[2] + j + pieces[3], j.join(pieces[1:3])
-        text = rng.choice([f"value {value} end", f"{kw}={value}"])
-    else:
-        ctl = rng.choice(CONTROL_SPLITS)
-        while len(a + b + c) < 20:
-            c += rng.choice("ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789")
-        value = a + ctl + b + c
-        text = rng.choice([f"value {value} end", f"{kw}={value}", f"{kw}: \"{value}\""])
-    for enc, wrapped in encodings(f"see {text} done"):
-        out = ah.redact(wrapped)
-        fuzz_total += 1
-        leaked = [f for f in fragments(a, b, c, a + b, b + c) if f in out]
-        if mode == "joined":
-            leaked = [f for f in fragments(a, b, c) if f in out]
-        if leaked:
-            fuzz_fail.append((mode, enc, repr(wrapped[:70]), repr(out[:90])))
-        else:
-            fuzz_pass += 1
-
-rate = 100.0 * fuzz_pass / fuzz_total
-print(f"  fuzz: {fuzz_pass}/{fuzz_total} redacted ({rate:.2f}%)")
-for f in fuzz_fail[:12]:
-    print("        leak:", *f)
-check("fuzz: every mutated fake secret is redacted", not fuzz_fail, f"{len(fuzz_fail)} leaks")
+run_fuzz(ah.redact, "denylist alone")
+run_fuzz(ah.safe_text, "default output: denylist, allowlist, joining guard")
 
 # Ordinary text survives the catch-all: words, paths, ids and prose.
 for plain_text in ["the agent-history search covers every runtime", "/Users/someone/code/chewbacca/bin/agent-history",
@@ -478,6 +491,13 @@ write(other / "33333333-3333-3333-3333-333333333333.jsonl", [
     {"type": "user", "sessionId": "33333333-3333-3333-3333-333333333333", "cwd": "/Users/someone/code/otherrepo",
      "timestamp": iso(now - 30 * 86400), "message": {"role": "user", "content": "old zebrafish note from last month"}},
 ], now - 30 * 86400)
+
+SHORT_BARE = "Ab3dE6gH9jK2"  # 12 characters, no key: under every denylist rule
+write(proj / "55555555-5555-5555-5555-555555555555.jsonl", [
+    {"type": "user", "sessionId": "55555555-5555-5555-5555-555555555555", "cwd": "/Users/someone/code/chewbacca",
+     "timestamp": iso(now - 300), "message": {"role": "user",
+     "content": f"otter note {SHORT_BARE} and /Users/someone/code/chewbacca/bin/tool.py ok, 卡比 done"}},
+], now - 300)
 
 leaky = claude_root / f"-Users-someone-code-{FAKE['openai']}"
 leaky.mkdir(parents=True)
@@ -575,6 +595,31 @@ rc, out, err = run("search", "zebrafish", "--runtime", FAKE["aws"])
 check("argparse's own error echo is redacted", rc == 2 and FAKE["aws"] not in err and "invalid choice" in err, err)
 rc, out, err = run("search", FAKE["slack"])
 check("the stderr summary never carries the query's secret", FAKE["slack"] not in err + out, err)
+
+# The allowlist: default snippets keep plain words and numbers only.
+check("denylist alone misses a short bare key (why the allowlist exists)", SHORT_BARE in ah.redact(f"x {SHORT_BARE} y"))
+rc, out, err = run("search", "otter")
+check("default text snippet hides a short bare key the denylist misses", rc == 0 and SHORT_BARE not in out and "otter" in out, out)
+check("default snippet marks a path and non-ASCII letters, keeps words",
+      "/Users/someone" not in out.split("\n", 1)[-1] and "卡比" not in out and "note" in out and ah.MARK in out, out)
+rc, js, raw = hits("search", "otter")
+check("default JSON snippet hides it too", js and SHORT_BARE not in raw, raw)
+check("text and JSON print the same snippet (one code path)", js and f"    {js[0]['snippet']}" in out, raw + out)
+real_file = "/Users/someone/.claude/projects/-Users-someone-code-chewbacca/55555555-5555-5555-5555-555555555555.jsonl"
+rendered = ah.render({"repo": "chewbacca", "file": real_file, "snippet": f"see {real_file} now"})
+check("repo and file keep their path segments, the snippet does not",
+      rendered["repo"] == "chewbacca" and rendered["file"] == real_file and real_file not in rendered["snippet"], rendered)
+rc, out, err = run("search", "otter", "--raw-snippets")
+check("--raw-snippets turns the allowlist off and warns on stderr", SHORT_BARE in out and "--raw-snippets is on" in err, err)
+check("the allowlist keeps prose readable", ah.safe_text("Don't ship it, the well-known fix took 15 minutes.")
+      == "Don't ship it, the well-known fix took 15 minutes.", ah.safe_text("Don't ship it, the well-known fix took 15 minutes."))
+for chunk in ["abc123", "a/b", "x+y", "k=v", "snake_case", "50%", "me@host", "a:b", "supercalifragilisticexpialidocious", "1234567"]:
+    marked = ah.safe_text(f"see {chunk} now")
+    check(f"the allowlist marks {chunk}", chunk not in marked and marked.startswith("see [") and marked.endswith("] now"), marked)
+p = subprocess.run([sys.executable, str(TOOL), "redact"], input=f"note {SHORT_BARE}\n", capture_output=True, text=True, env=env)
+check("the redact pipe is allowlisted by default", SHORT_BARE not in p.stdout, p.stdout)
+p = subprocess.run([sys.executable, str(TOOL), "redact", "--raw"], input=f"note {SHORT_BARE}\n", capture_output=True, text=True, env=env)
+check("redact --raw is denylist only and warns", SHORT_BARE in p.stdout and "--raw is on" in p.stderr, p.stderr)
 
 p = subprocess.run([sys.executable, str(TOOL), "redact"], input=f"key {FAKE['openai']}", capture_output=True, text=True)
 check("redact subcommand works as a pipe", FAKE["openai"] not in p.stdout and "[" in p.stdout, p.stdout)

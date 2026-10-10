@@ -15,6 +15,7 @@ session can't be found, and before reading transcript files by hand.
     agent-history search deploy --runtime codex --since 7d
     agent-history search "tabs board" --repo chewbacca --role user
     agent-history search tizzy --json --limit 100        one JSON object per line
+    agent-history search tizzy --raw-snippets            denylist only, warns on stderr
     agent-history redact < file.txt                      the redaction alone
 
 Each hit is session id, local time, repo, role (`user`, `assistant`,
@@ -24,7 +25,18 @@ Exit 1 means no match.
 
 ## What it does to every line
 
-- Every snippet passes through `redact()`, in three layers:
+Snippets are allowlisted by default. After the denylist below, each snippet
+keeps only plain words (letters, at most one internal apostrophe or hyphen,
+24 at most), numbers of up to 6 digits and punctuation. Every other chunk,
+anything mixing letters and digits, a longer run, or anything holding
+`/ + = _ % @ :`, prints as `[·]`. Then the kept text goes through the denylist
+again, in case two kept pieces side by side spell a secret, until nothing
+changes (three rounds at most). Text and JSON go through the same function.
+Only the `repo` and `file` fields may keep path segments; a path inside a
+snippet prints as `[·]`. `--raw-snippets` (and `redact --raw`) turn the
+allowlist off and say so on stderr.
+
+- The denylist, `redact()`, has three layers:
   - Known shapes: `sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox`, `AIza` and
     Stripe keys, bearer and Authorization values, JWTs, private key blocks,
     URL credentials, emails, phone numbers, hex and base64 blobs.
@@ -44,14 +56,14 @@ Exit 1 means no match.
   syntax above, delimiters inside values, short pieces joined by `. - _ ~`,
   split by 30 kinds of terminal and invisible sequence, wrapped in JSON,
   double JSON, percent and base64 encoding) and requires all 3,849 cases
-  redacted. 30 other seeds, 115,524 cases, also passed on 2026-10-10.
+  redacted, by the denylist alone and by the default output. 30 other seeds,
+  115,524 cases each way, also passed on 2026-10-10.
 - Everything printed, stdout and stderr, goes through one `emit()`. Text a
   transcript planted can't steer the terminal: escape sequences, control
   characters and bidi overrides are removed before redaction (so one can't
   split a secret past the rules) and any left print as visible `\xNN`. It
-  can't stall the
-  redactor either: every pattern runs in linear time, and a 1 MB crafted
-  string redacts in under 1 s (tested per pattern).
+  can't stall the redactor either: every pattern runs in linear time, and a
+  1 MB crafted string redacts in under 1 s of CPU (tested per pattern).
 - Thinking blocks, Codex reasoning, system and developer prompts and Codex
   `event_msg` duplicates are skipped.
 - It writes nothing: every search reads the transcripts fresh and keeps
@@ -63,12 +75,16 @@ Exit 1 means no match.
 
 ## Residual risk
 
-Redaction is best-effort pattern matching over the user's own local files. It
-is never a guarantee. A secret with no key next to it, shorter than 20
-characters and made of plain words, prints as it is, and so does anything
-sensitive that isn't shaped like a secret at all: a name, an address, a
-private sentence. Treat output as local: read it here, and don't paste it
-into a chat, an issue, a commit or anything else that leaves the machine.
+Redaction is best-effort over the user's own local files. It is never a
+guarantee. The default allowlist makes the gap small: a secret survives only
+if it is a plain word of letters (a passphrase word, an all-letter token of 24
+characters or fewer) or a number of 6 digits or fewer, such as a PIN. Anything
+sensitive that is made of ordinary words survives too: a name, an address, a
+private sentence, a password that is a dictionary word. With
+`--raw-snippets` only the denylist runs, and any secret shape it doesn't know
+prints as it is. Treat output as local in both modes: read it here, and don't
+paste it into a chat, an issue, a commit or anything else that leaves the
+machine.
 
 ## Never do
 

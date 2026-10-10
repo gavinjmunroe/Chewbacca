@@ -72,12 +72,14 @@ chat_ok() {
 import hashlib, json, os, sys, time
 mode, state, session = sys.argv[1], sys.argv[2], sys.argv[3]
 WINDOW = 2 * 3600
+if not session or not all(c.isalnum() or c in "_.-" for c in session):
+    sys.exit(1)
 try:
-    rec = json.load(open(os.path.join(state, "clay-chat-approval.json")))
+    rec = json.load(open(os.path.join(state, "clay-chat-approval", session + ".json")))
     fresh = 0 <= time.time() - int(rec["at"]) < WINDOW
 except Exception:
     sys.exit(1)
-if not fresh or not session or rec.get("session_id") != session:
+if not fresh or rec.get("session_id") != session:
     sys.exit(1)
 if mode != "launch":
     sys.exit(0)
@@ -364,7 +366,7 @@ chewbacca gtm/gtme/gtme-grade, clay CLI reads, git (not config), local read tool
 counts.py/checksums.py, code-slop, slop-check, and test runners (python3 tests/x.py,
 bash tests/run.sh [group], pytest tests/...; prefix CHEWBACCA_NO_SEND=1 so nothing
 sends). Writes go through chewbacca clay, which needs Caleb's ok (a terminal, or
-his reply to a "Clay go-ahead:" ask in chat within 2 hours); a
+a prompt from him in chat within 2 hours, his standing instruction); a
 campaign START or add-leads also needs a passing gtme-grade and a full pre-send
 gate receipt, checked in code before it sends.
 MSG
@@ -406,7 +408,7 @@ MSG
   Write|Edit|MultiEdit|NotebookEdit)
     path_in="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null)"
     case "$path_in" in
-      *clay-chat-approval.json*|*send-gate-receipt*|*launch-guard-last-url*)
+      *clay-chat-approval*|*send-gate-receipt*|*launch-guard-last-url*)
         refuse "approvals and receipts are written only by their own tools, never by a file edit." ;;
     esac
     exit 0

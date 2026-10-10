@@ -38,7 +38,8 @@ def run(tool, tool_input, receipt=None, files=None, last_url=None, chat=None):
     session = "s-caleb"
     if chat is not None:
         rec_session, age = chat
-        with open(os.path.join(state, "clay-chat-approval.json"), "w") as fh:
+        os.makedirs(os.path.join(state, "clay-chat-approval"))
+        with open(os.path.join(state, "clay-chat-approval", rec_session + ".json"), "w") as fh:
             json.dump({"at": int(time.time()) - age, "session_id": rec_session}, fh)
     if last_url:
         with open(os.path.join(state, "launch-guard-last-url"), "w") as fh:

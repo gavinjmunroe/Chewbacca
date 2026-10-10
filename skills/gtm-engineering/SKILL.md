@@ -120,12 +120,14 @@ clay campaign-stats`, `chewbacca gtm sync` then `gtm replies --all` answer in
   steals his screen. Caleb: "I thought we had reverse engineered a clay api so
   you don't hv to go back to clay?"
 - **Never hand him the Clay writes as a command.** Caleb: "Bro fuck the guard
-  fix chewbs do it urself". Ask once, in your reply, on a line starting
-  `Clay go-ahead:` that names the exact work. Any reply from him that isn't a
-  no approves it for 2 hours in that tab (`chat-approval.sh`). Never parse his
-  wording for a yes: two phrase lists missed his real replies the same day, and
-  he called it brute forcing. Run the writes through `chewbacca clay`; the gate
-  still has to pass before any Start.
+  fix chewbs do it urself", then "Never tell me what to do always DO EVERYTHING
+  YOURSELF". His approval is standing: every prompt he sends renews it for 2
+  hours in that tab (`chat-approval.sh`), and only a stop aimed at the work
+  ("stop sending", "hold off", a bare "stop") withdraws it. Never ask for a
+  go-ahead and never parse his words for a yes: three versions that did both
+  missed his real replies in one afternoon, and he called it brute forcing. Run
+  the writes through `chewbacca clay`; the pre-send gate still has to pass
+  before any Start.
 
 ## Grading a campaign before it goes out
 

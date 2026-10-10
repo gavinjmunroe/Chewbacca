@@ -33,14 +33,17 @@ case "$cmd" in *CLAY_LOOP_OK=*) exit 0 ;; esac
 # guards together left no way to run an approved verification at all. Bound to
 # the session because a bare "do it" in another tab is about that tab's work
 # (security review of 2e5c1aff).
-python3 -I - "${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}/clay-chat-approval.json" "$session" <<'PY' 2>/dev/null && exit 0
-import json, sys, time
+python3 -I - "${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}/clay-chat-approval" "$session" <<'PY' 2>/dev/null && exit 0
+import json, os, sys, time
+s = sys.argv[2]
+if not s or not all(c.isalnum() or c in "_.-" for c in s):
+    sys.exit(1)
 try:
-    rec = json.load(open(sys.argv[1]))
+    rec = json.load(open(os.path.join(sys.argv[1], s + ".json")))
     at = int(rec["at"])
 except Exception:
     sys.exit(1)
-if not sys.argv[2] or rec.get("session_id") != sys.argv[2]:
+if rec.get("session_id") != s:
     sys.exit(1)
 sys.exit(0 if 0 <= time.time() - at < 2 * 3600 else 1)
 PY

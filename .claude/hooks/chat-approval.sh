@@ -1,24 +1,24 @@
 #!/bin/bash
-# UserPromptSubmit: Caleb's reply to an explicit ask is the approval for the
-# Clay work that ask names, in place of typing at a terminal agent shells
-# never have.
+# UserPromptSubmit: Caleb's standing instruction is the approval. Every prompt
+# he sends in a tab renews that tab's ok for Clay work for 2 hours; an explicit
+# stop aimed at the work withdraws it.
 #
-# How consent is read. The agent asks for a go-ahead in its own reply, on a line
-# starting "Clay go-ahead:" that names the exact work. Caleb's next message
-# approves it unless it says no. Nothing parses his wording for a yes: the
-# first two versions matched phrases ("do it yourself", then "do it" and
-# "DO IT BRUH") and missed his real reply twice in one afternoon, and he said
-# "brute forcing chewbs word is smth we agreed on not doing" (2026-10-10). A
-# yes is anything he sends back to the ask; only a no is read, and a missed no
-# still meets the pre-send gate before any Start.
+# Why standing, not per action. Caleb, 2026-10-10: "Never tell me what to do
+# always DO EVERYTHING YOURSELF fix chewbs bro ur getting anoying", after three
+# versions of this hook that each tried to read a yes out of his words (a phrase
+# list, a wider phrase list, then a "Clay go-ahead:" ask he had to answer). Every
+# one missed a real reply and he called it brute forcing. Approval was never
+# the thing to measure: he gave it once, for good.
 #
-# Why chat counts at all. The gate exists to stop an agent acting on text it
-# READ (a reply, a page, a doc). A prompt reaches this hook from the harness,
-# never from a tool result, and the ask it answers is on his screen, so the
-# approval is his. launch-guard refuses any tool call that names the record.
+# What the record proves is narrower and checkable: Caleb, a human, typed into
+# this tab within 2 hours. A prompt reaches this hook from the harness, never
+# from a tool result, so text an agent READ (a reply, a page, a doc) can't make
+# one. Launches still need the deterministic pre-send gate and gtme-grade in the
+# send path; launch-guard refuses any tool call that names the records.
 #
-# The record lasts 2 hours, carries the session it was given in, and is
-# deleted by any later no ("stop", "don't", "pause", "wait", "hold off").
+# One record per session (clay-chat-approval/<session>.json) for the guards,
+# which see a session id, and the latest one (clay-chat-approval.json) for
+# `chewbacca clay`, whose shell has none.
 set -uo pipefail
 STATE="${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}"
 PAYLOAD="$(cat 2>/dev/null)"
@@ -30,60 +30,59 @@ try:
 except Exception:
     raise SystemExit(0)
 prompt = str(payload.get("prompt") or "")
-path = os.path.join(os.environ["STATE"], "clay-chat-approval.json")
-ASK = "clay go-ahead:"
-# A no is the one thing read from his words: missing a yes costs a re-ask,
-# missing a no costs a send, so this list leans wide.
-NO = re.compile(r"\b(no|nah|stop|don'?t|do not|never|pause|hold off|cancel|wait|not yet)\b", re.I)
+session = re.sub(r"[^A-Za-z0-9_.-]", "", str(payload.get("session_id") or ""))[:80]
+state = os.environ["STATE"]
+latest = os.path.join(state, "clay-chat-approval.json")
+mine = os.path.join(state, "clay-chat-approval", f"{session}.json") if session else None
+
+# A stop aimed at the work, or a whole message that is just "stop". "Never tell
+# me what to do" is not a stop: the version that read any "never" or "don't" as
+# one refused a blocklist write he had plainly asked for (2026-10-10).
+STOP = re.compile(
+    r"^\s*(stop|wait|pause|hold (on|off|up)|cancel|no)\b[\s!.]*$"
+    r"|\b(stop|pause|cancel|hold off on|halt)\s+(the\s+)?(sending|sends?|launch(es|ing)?|campaigns?|waves?|emails?|outreach|clay)\b"
+    r"|\b(don'?t|do not|never)\s+(send|launch|start|email|press start)\b"
+    r"|\bhold off\b|\bnot yet\b",
+    re.I)
 
 
-def last_ask(transcript, prompt):
-    """The Clay go-ahead line in the agent's most recent visible reply, or None."""
+def remove(p):
     try:
-        lines = open(transcript, encoding="utf-8", errors="replace").read().splitlines()[-400:]
-    except OSError:
-        return None
-    for raw in reversed(lines):
-        try:
-            entry = json.loads(raw)
-        except ValueError:
-            continue
-        content = (entry.get("message") or {}).get("content")
-        if entry.get("type") == "user" and isinstance(content, str):
-            if content.strip() == prompt.strip():
-                continue  # this prompt itself, if the harness logged it first
-            return None  # an earlier human turn came first: no ask is pending
-        if entry.get("type") != "assistant":
-            continue
-        for part in (entry.get("message") or {}).get("content") or []:
-            if isinstance(part, dict) and part.get("type") == "text":
-                for line in str(part.get("text", "")).splitlines():
-                    if line.strip().lower().startswith(ASK):
-                        return line.strip()[len(ASK):].strip()
-    return None
-
-
-if NO.search(prompt):
-    try:
-        os.remove(path)
-    except OSError:
+        os.remove(p)
+    except (OSError, TypeError):
         pass
+
+
+# A stop holds until he says to go again: without this, "stop sending" followed
+# by "what's the status?" renewed the ok on the very next prompt (security
+# review, 2026-10-10). Reading a resume is the one place words are parsed, and
+# a missed one fails safe: the work stays paused and the agent says so.
+RESUME = re.compile(r"\b(go|resume|continue|unpause|keep going|do it|do everything|send|launch|start|yourself|urself)\b", re.I)
+stopped = os.path.join(state, "clay-chat-approval", "STOPPED")
+
+if STOP.search(prompt):
+    remove(latest)
+    remove(mine)
+    os.makedirs(os.path.dirname(stopped), exist_ok=True)
+    open(stopped, "w").write(str(int(time.time())))
     raise SystemExit(0)
-ask = last_ask(str(payload.get("transcript_path") or ""), prompt)
-if not ask:
-    raise SystemExit(0)
-os.makedirs(os.path.dirname(path), exist_ok=True)
-record = {
+if os.path.exists(stopped):
+    if not RESUME.search(prompt):
+        raise SystemExit(0)
+    remove(stopped)
+
+record = json.dumps({
     "at": int(time.time()),
-    "session_id": payload.get("session_id", ""),
-    "ask": ask[:300],
+    "session_id": session,
     "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
     "excerpt": prompt[:200],
-}
-tmp = path + ".tmp"
-with open(tmp, "w") as f:
-    json.dump(record, f)
-os.chmod(tmp, 0o600)
-os.replace(tmp, path)
+})
+for path in filter(None, (latest, mine)):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        f.write(record)
+    os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
 PY
 exit 0

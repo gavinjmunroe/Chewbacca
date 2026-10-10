@@ -18,6 +18,11 @@ import sys
 import tempfile
 import time
 import uuid
+import re
+
+# Codex's own wording when the ChatGPT plan is spent ("You've hit your usage
+# limit"), read from its JSON events on a failed run.
+LIMIT = re.compile(r"hit your usage limit|usage limit reached", re.IGNORECASE)
 
 
 def session_id(value: object) -> str | None:
@@ -43,7 +48,7 @@ def signal_group(group: int, signum: int) -> None:
                 raise
 
 
-def run(prompt: str, state: Path) -> int:
+def run(prompt: str, state: Path, model: str | None = None) -> int:
     state.parent.mkdir(parents=True, exist_ok=True)
     cwd = str(Path.cwd().resolve())
     with state.with_suffix(state.suffix + ".lock").open("a") as lock:
@@ -61,6 +66,8 @@ def run(prompt: str, state: Path) -> int:
             if previous:
                 argv += ["resume", previous]
             # launchd starts the HUD in the home directory, outside a repository.
+            if model:
+                argv += ["-m", model]
             argv += ["--skip-git-repo-check", "--json", "--output-last-message", str(final), "-"]
             env = dict(os.environ, CHEWBACCA_HUD_CHILD="1")
             proc = None
@@ -99,6 +106,10 @@ def run(prompt: str, state: Path) -> int:
                 for sig, handler in handlers.items():
                     signal.signal(sig, handler)
             if proc.returncode:
+                # Out of quota: one line hud-listen reads as a limit notice,
+                # so it fails over instead of showing an exit status.
+                if LIMIT.search(events or ""):
+                    print("Codex: You've hit your usage limit.")
                 print(f"hud-codex: Codex exited with status {proc.returncode}", file=sys.stderr)
                 return proc.returncode if proc.returncode > 0 else 1
             if not final.is_file() or not final.read_text().strip():
@@ -126,13 +137,17 @@ def run(prompt: str, state: Path) -> int:
 
 
 def main() -> int:
+    # `--model <name>` from the HUD's switcher; anything else is ignored, as
+    # it always was, so a wrapper that runs this file keeps working.
+    args = sys.argv[1:]
+    model = args[1] if len(args) >= 2 and args[0] == "--model" else None
     prompt = sys.stdin.read()
     if not prompt.strip():
         print("hud-codex: expected a prompt on stdin", file=sys.stderr)
         return 2
     state = Path(os.environ.get("HUD_CODEX_STATE", str(Path.home() / ".bob" / "hud-codex-session.json")))
     try:
-        return run(prompt, state)
+        return run(prompt, state, model)
     except OSError as error:
         print(f"hud-codex: {error}", file=sys.stderr)
         return 1

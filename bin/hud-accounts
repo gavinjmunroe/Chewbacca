@@ -1,0 +1,133 @@
+#!/usr/bin/env python3
+"""The HUD's runtime, account and model pick, from the command line and the
+menu bar's Kyber menu.
+
+    hud-accounts list [--json] [--probe]   what answers, and every choice
+    hud-accounts use <id>                  an id from `list` (acct-0, rt-codex, rt-auto)
+    hud-accounts model <runtime> [<name>]  a model, or the runtime's default
+    hud-accounts add                       a new ~/.claude-<n>, signed in by you
+
+Writes the same store hud-listen reads before every request
+(~/.bob/hud-accounts.json, bin/lib/hud_accounts.py), so a pick here answers
+the next request. `list` without --probe runs no other program, which keeps
+the menu instant; it never prints a token.
+"""
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+import hud_accounts  # noqa: E402
+import hud_runtime  # noqa: E402
+
+
+def auto() -> str:
+    try:
+        return hud_runtime.current()
+    except ValueError:
+        return "claude"
+
+
+def listing(probe: bool) -> dict:
+    data = hud_accounts.load()
+    accounts = hud_accounts.discover_accounts()
+    target, picked = hud_accounts.effective(data, accounts, auto())
+    shown = target or picked
+    model = shown.model or (hud_accounts.settings_model() if shown.runtime == "claude" else None)
+    choices = []
+    for i, account in enumerate(accounts):
+        mail = hud_accounts.email(account)
+        entry = hud_accounts.limited(data, hud_accounts.account_key(account))
+        choices.append({
+            "id": f"acct-{i}", "kind": "account", "runtime": "claude",
+            "label": mail or hud_accounts.short_path(account),
+            "state": "signed out" if not mail else "limit" if entry else "ok",
+            "until": hud_accounts.back_at(entry),
+            "current": shown.runtime == "claude" and shown.account is not None
+            and hud_accounts.same(account, shown.account),
+        })
+    for runtime in hud_accounts.RUNTIMES[1:]:
+        status = hud_accounts.runtime_status(runtime) if probe else None
+        if status is not None and status.state == "missing":
+            continue
+        entry = hud_accounts.limited(data, runtime)
+        choices.append({
+            "id": f"rt-{runtime}", "kind": "runtime", "runtime": runtime,
+            "label": hud_accounts.RUNTIME_NAMES[runtime],
+            "state": "limit" if entry else (status.state if status else "unknown"),
+            "until": hud_accounts.back_at(entry), "current": shown.runtime == runtime,
+        })
+    models = [{"runtime": shown.runtime, "value": v, "label": l, "current": v == model}
+              for v, l in hud_accounts.models_for(shown.runtime)]
+    return {
+        "now": {"runtime": shown.runtime, "name": hud_accounts.RUNTIME_NAMES[shown.runtime],
+                "label": shown.label(), "model": hud_accounts.model_label(shown.runtime, model) if model else "",
+                "auto": data["pick"].get("runtime") not in hud_accounts.RUNTIMES, "answering": target is not None},
+        "following": hud_accounts.RUNTIME_NAMES.get(auto(), auto()),
+        "choices": choices, "models": models,
+    }
+
+
+def use(choice: str) -> str:
+    data = hud_accounts.load()
+    accounts = hud_accounts.discover_accounts()
+    if choice == "rt-auto":
+        hud_accounts.pick_runtime(data, "auto")
+    elif choice.startswith("rt-") and choice[3:] in hud_accounts.RUNTIMES:
+        hud_accounts.pick_runtime(data, choice[3:])
+        data["limits"].pop(choice[3:], None)
+    elif choice.startswith("acct-") and choice[5:].isdigit() and int(choice[5:]) < len(accounts):
+        hud_accounts.pick_account(data, accounts[int(choice[5:])])
+    else:
+        raise SystemExit(f"hud-accounts: no choice called {choice!r}; see `hud-accounts list`")
+    hud_accounts.save(data)
+    return choice
+
+
+def main(argv: list[str]) -> int:
+    if not argv or argv[0] in ("-h", "--help"):
+        print(__doc__.strip())
+        return 0
+    verb, rest = argv[0], argv[1:]
+    if verb == "list":
+        got = listing("--probe" in rest)
+        if "--json" in rest:
+            print(json.dumps(got, ensure_ascii=False))
+        else:
+            now = got["now"]
+            print(f"now: {now['name']} · {now['label']}" + (f" · {now['model']}" if now["model"] else ""))
+            for c in got["choices"]:
+                mark = "*" if c["current"] else " "
+                print(f" {mark} {c['id']:<10} {c['label']}  ({c['state']}{' ' + c['until'] if c['until'] else ''})")
+            print("models: " + ", ".join(m["label"] + (" *" if m["current"] else "") for m in got["models"]))
+        return 0
+    if verb == "use" and len(rest) == 1:
+        print("using", use(rest[0]))
+        return 0
+    if verb == "model" and rest and rest[0] in hud_accounts.RUNTIMES:
+        data = hud_accounts.load()
+        hud_accounts.pick_model(data, rest[0], rest[1] if len(rest) > 1 else None)
+        hud_accounts.save(data)
+        print("model", rest[0], rest[1] if len(rest) > 1 else "default")
+        return 0
+    if verb == "add":
+        accounts = hud_accounts.discover_accounts()
+        config = hud_accounts.new_account_dir(accounts)
+        config.mkdir(mode=0o700)
+        listed = hud_accounts.home() / ".bob" / "accounts"
+        if listed.exists():
+            with listed.open("a") as out:
+                out.write(str(config) + "\n")
+        opened = hud_accounts.open_signin("claude", config)
+        print(f"made {hud_accounts.short_path(config)}; "
+              + ("sign in in the Terminal tab that opened" if opened else "the sign-in did not open"))
+        return 0 if opened else 1
+    print(__doc__.strip(), file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

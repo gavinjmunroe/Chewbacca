@@ -1395,6 +1395,9 @@ if group "hud"; then
   # happens between hearing something and drawing it.
   check  "the listen loop works end to end" python3 "$ROOT/tests/test_hud_listen.py"
   check  "a search is answered on the glass, never in Chrome" python3 "$ROOT/tests/test_glass_search.py"
+  # 2026-10-09 18:10: a spent account answered "Capital of Australia" with its
+  # weekly-limit notice. Fake homes and a fake claude: limit on A, answer on B.
+  check  "a spent account fails over and the switcher picks runtime, account, model" python3 "$ROOT/tests/test_hud_accounts.py"
   check  "the terminal tab chooser never picks a plain shell" python3 "$ROOT/tests/test_terminal.py"
   check  "voice memory rotates and reads back" python3 "$ROOT/tests/test_memory.py"
   check  "the router's table holds" python3 "$ROOT/tests/test_route.py"

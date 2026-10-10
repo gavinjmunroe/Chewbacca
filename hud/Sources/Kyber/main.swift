@@ -16,6 +16,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var voiceMenu: NSMenu?
     private var pushKeyMenu: NSMenu?
+    /// Runtime, account and model, from the menu bar. See `AccountsMenu`.
+    private let accountsMenu = AccountsMenu()
     private var commandBar: CommandBarWindow?
     /// The conversation, as a window. See `ChatWindow`.
     private var chat: ChatWindow?
@@ -1104,6 +1106,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             title: "Agent sessions", action: #selector(sessionsFromMenu), keyEquivalent: "")
         sessionsItem.target = self
         menu.addItem(sessionsItem)
+
+        // Which runtime, account and model answer, and the switch, without
+        // speaking. The same pick "which account" draws on the glass.
+        let accountsItem = NSMenuItem(title: "Model and account", action: nil, keyEquivalent: "")
+        accountsItem.submenu = accountsMenu.menu
+        accountsMenu.onShowOnGlass = { [weak self] in self?.dispatch("which account", typed: true) }
+        menu.addItem(accountsItem)
 
         let rimItem = NSMenuItem(
             title: "Edit the rim…", action: #selector(rimFromMenu), keyEquivalent: "")

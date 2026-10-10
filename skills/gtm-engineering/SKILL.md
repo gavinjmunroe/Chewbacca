@@ -46,6 +46,29 @@ they hired, through `chewbacca gtme`:
 6. Friday: `chewbacca gtme report --client NAME --week` writes the client
    summary as markdown and a PDF in ~/Downloads.
 
+## Client rulings beat your strategy (2026-10-09)
+
+Every client repo keeps `DECISIONS.json`: each standing ruling from the client
+and the team, with who said it, when and where (Zeutara's is the template).
+Read it before recommending anything, and before writing a word the client will
+see. If a recommendation contradicts a ruling, say which ruling and who owns
+changing it, in the same line. Never quietly override one, and never put the
+override in front of the client.
+
+What went wrong on 2026-10-09: a week-1 update for Jonah said "narrowing every
+list" because 59 replies with no confirmed yes looked like a targeting problem.
+Maggie had ruled on 10/5 that Jonah cares about volume, and Sagar on 10/4 to
+send strongest fits first and fill with the rest. Caleb: "Never be retarded
+ever again especially when it comes to clients." The fix that fit both was to
+order each wave by fit and keep the volume.
+
+A client-facing number or claim also has to survive the client asking "show
+me": 1,097 investors plus 610 follow ups, never a 1,707 that looks like a gap,
+and no interest that isn't in the reply text.
+
+When a new ruling arrives in a text, call or Slack, add it to `DECISIONS.json`
+in the same turn, with its source.
+
 ## Read these first, every time (2026-10-06: skipping them cost a day)
 
 Before building anything for a client, load what already exists, in this order:

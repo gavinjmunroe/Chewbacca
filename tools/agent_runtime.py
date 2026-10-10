@@ -240,13 +240,39 @@ def remove(name):
     return results
 
 
-def instruction_block(spec):
+TEAM_LINE = 'Team memory (Amber, Chewbacca, Firm Foundation), loaded every session:'
+
+
+def is_teammate(target=None):
+    """Team memory holds client and teammate notes, so only teammates load it.
+
+    A 2026-10-09 install into an empty home put all 209 index lines of Amber's
+    client work into a stranger's every session. Teammates opt in with --team
+    or CHEWBACCA_TEAM=1; an install that already carries the line keeps it, so
+    nobody on the team loses it on the next setup.
+    """
+    if os.environ.get('CHEWBACCA_TEAM') == '1':
+        return True
+    saved = shared_home() / 'context.json'
+    try:
+        choice = json.loads(saved.read_text()).get('team')
+        if choice is not None:
+            return choice is True
+    except (OSError, ValueError):
+        pass
+    try:
+        return target is not None and TEAM_LINE in Path(target).read_text()
+    except OSError:
+        return False
+
+
+def instruction_block(spec, team=False):
     notes = '\n'.join('- ' + note for note in spec['notes'])
+    team_memory = f'{TEAM_LINE}\n@{ROOT / "team/memory/MEMORY.md"}\n\n' if team else '\n'
     return (f'{BEGIN}\n## Chewbacca runtime: {spec["label"]}\n\n'
             f'Read `{ROOT / "config/instructions/agent-neutral.md"}` for shared guidance.\n'
             f'Shared skills: `{shared_home() / "skills"}`.\n'
-            f'Team memory (Amber, Chewbacca, Firm Foundation), loaded every session:\n'
-            f'@{ROOT / "team/memory/MEMORY.md"}\n\n{notes}\n\n'
+            f'{team_memory}{notes}\n\n'
             f'{spec["model_discovery"]}\n{END}')
 
 
@@ -331,7 +357,7 @@ def claude_hooks():
     return path
 
 
-def setup(name, brain=None, import_claude_skills=False, person_name=None):
+def setup(name, brain=None, import_claude_skills=False, person_name=None, team=False, no_team=False):
     planned = plan(name)
     if any(spec['install_mode'] != 'native' for spec in planned['runtimes']):
         raise ValueError('This target supports export only. Use agent export --runtime NAME --destination PATH; shell hooks need a supported local runtime.')
@@ -344,7 +370,17 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None):
     brain = (brain or context.brain_root(context.codex_home())).expanduser().resolve()
     created_context = context.initialize(brain, person_name)
     shared = shared_home()
-    context.atomic_write(shared / 'context.json', json.dumps({'brain_dir': str(brain)}) + '\n')
+    saved = {}
+    try:
+        saved = json.loads((shared / 'context.json').read_text())
+    except (OSError, ValueError):
+        pass
+    if team:
+        saved['team'] = True
+    if no_team:
+        saved['team'] = False
+    saved['brain_dir'] = str(brain)
+    context.atomic_write(shared / 'context.json', json.dumps(saved) + '\n')
     library = shared / 'skills'
     library_result = skills.install(ROOT / 'skills', library)
     if import_claude_skills:
@@ -384,7 +420,13 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None):
             skill_path = home / 'skills'
             activation = 'Reload the Claude session and verify a real event. Existing native hooks were preserved.'
         if target is not None:
-            context.merge_block(target, instruction_block(spec), BEGIN, END)
+            teammate = not no_team and is_teammate(target)
+            if teammate and saved.get('team') is not True:
+                # Found only by the line an earlier install wrote: save it, so a
+                # host added later (connect, --runtime both) gets it too.
+                saved['team'] = True
+                context.atomic_write(shared / 'context.json', json.dumps(saved) + '\n')
+            context.merge_block(target, instruction_block(spec, teammate), BEGIN, END)
         import host_mcp
         mcp_added = host_mcp.sync([key]).get(key, [])
         existing_links = {p.name for p in skill_path.iterdir()} if skill_path.is_dir() else set()
@@ -565,6 +607,8 @@ def main():
     parser.add_argument('--json', action='store_true', help='machine-readable output')
     parser.add_argument('--destination', type=Path)
     parser.add_argument('--import-claude-skills', action='store_true')
+    parser.add_argument('--team', action='store_true', help='setup: load the shared team memory (Amber, Chewbacca, Firm Foundation teammates only)')
+    parser.add_argument('--no-team', action='store_true', help='setup: remove the shared team memory from this install')
     parser.add_argument('--model', help='native model ID or alias, validated by the selected runtime')
     args = parser.parse_args()
     if args.command == 'list':
@@ -572,7 +616,7 @@ def main():
     elif args.command == 'plan':
         output = plan(args.runtime)
     elif args.command == 'setup':
-        output = setup(args.runtime, args.brain_dir, args.import_claude_skills, args.name)
+        output = setup(args.runtime, args.brain_dir, args.import_claude_skills, args.name, args.team, args.no_team)
     elif args.command == 'status':
         output = status(args.runtime)
     elif args.command == 'remove':

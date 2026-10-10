@@ -15,6 +15,9 @@ Getting set up, for anyone on the team:
 2. Open the board URL in `config.json` and continue with GitHub. That's all the web side needs.
 3. For the terminal, pull Chewbacca and rerun `./setup.sh`, which links `team`. It works from a
    fork too: it always reads and writes calebnewtonusc/Chewbacca, never your fork.
+4. To load the shared team memory (`team/memory/`) in every session, install with
+   `./setup.sh --runtime claude-code --team` once. It holds client and teammate notes, so
+   a plain install for anyone outside the team leaves it out.
 
 Press `?` on the board for filters, keyboard shortcuts and the commit syntax.
 

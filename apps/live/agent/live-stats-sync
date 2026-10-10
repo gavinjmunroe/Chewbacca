@@ -38,6 +38,9 @@ SYNC_EVERY = 10 * 60
 # 2026-10-10 without the CLI reporting a rate limit; never tried higher.
 PARALLEL = 6
 CALL_TIMEOUT = 90
+# Two retries, 2 s then 6 s apart: one transient server_error cleared on its
+# own within a minute (2026-10-10). Guessed spacing, never measured.
+RETRY_WAITS = (2, 6)
 WAIT = 25
 # Anything the network or a half-written response can throw. URLError and
 # TimeoutError are OSErrors; a bad body is a ValueError.
@@ -48,11 +51,21 @@ def log(*a):
     print(time.strftime("%H:%M:%S"), *a, file=sys.stderr, flush=True)
 
 
-def cli(*args):
-    out = subprocess.run([CLI, *args], capture_output=True, text=True, timeout=CALL_TIMEOUT)
-    if out.returncode != 0:
-        raise RuntimeError(f"{' '.join(args[:2])} failed ({out.returncode}): {out.stderr.strip()[:200]}")
-    return json.loads(out.stdout)
+def cli(*args, sleep=time.sleep):
+    """One read, retried on a transient failure. On 2026-10-10 the first
+    launchd run lost a whole 50-read refresh to one analytics call that
+    answered server_error; the same read passed a minute later."""
+    last = None
+    for wait in RETRY_WAITS + (None,):
+        out = subprocess.run([CLI, *args], capture_output=True, text=True, timeout=CALL_TIMEOUT)
+        if out.returncode == 0:
+            return json.loads(out.stdout)
+        last = f"{' '.join(args[:2])} failed ({out.returncode}): {out.stderr.strip()[:200]}"
+        # Exit 2 is a bad argument and 3 is auth: retrying cannot fix either.
+        if out.returncode in (2, 3) or wait is None:
+            break
+        sleep(wait)
+    raise RuntimeError(last)
 
 
 def sync_key():

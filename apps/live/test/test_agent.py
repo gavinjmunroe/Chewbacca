@@ -96,6 +96,26 @@ class AgentTest(unittest.TestCase):
         agent.cli = fake_cli(workspace="999")
         self.assertFalse(agent.sync(live, ZEUTARA, dry=False))
 
+    def test_a_transient_server_error_is_retried_but_auth_is_not(self):
+        import subprocess as sp
+        from unittest import mock
+
+        def proc(code, out="{}", err=""):
+            return sp.CompletedProcess([], code, out, err)
+
+        waits = []
+        with mock.patch.object(agent.subprocess, "run", side_effect=[proc(1, err="server_error"), proc(0, '{"ok": 1}')]):
+            self.assertEqual(self.real_cli("whoami", sleep=waits.append), {"ok": 1})
+        self.assertEqual(waits, [2])
+        with mock.patch.object(agent.subprocess, "run", side_effect=[proc(3, err="auth_forbidden")]) as run:
+            with self.assertRaises(RuntimeError):
+                self.real_cli("whoami", sleep=waits.append)
+            self.assertEqual(run.call_count, 1)
+        with mock.patch.object(agent.subprocess, "run", side_effect=[proc(1), proc(1), proc(1)]) as run:
+            with self.assertRaises(RuntimeError):
+                self.real_cli("whoami", sleep=lambda s: None)
+            self.assertEqual(run.call_count, 3)
+
     def test_pushes_both_windows(self):
         agent.cli = fake_cli()
         live = FakeLive()

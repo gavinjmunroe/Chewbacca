@@ -66,11 +66,28 @@ total = re.search(r"\b(all|every|everything|entire|whole)\b|\ba ton\b|\btons of\
 if not total:
     print("ok"); raise SystemExit
 
-cut = re.search(
-    r"\btop \d+\b|\b\d+ of (the )?\d+\b.*\b(picked|chosen|closest|fit)|\bcapped\b|\bcap(ped)? at\b"
-    r"|\btier[- ]?1\b|\bon hold\b|\bset aside\b|\bnot ingested\b|\bskipped\b|\bfor now\b"
-    r"|\bonly the \d+\b|\bnarrow(ed)? (it|the scope)\b",
-    msg, re.I)
+# "Top N" is also how ranking is described: a reranker re-sorting the top 30
+# candidates for every question cuts nothing. On 2026-10-10 that sentence was
+# refused twice. A top-N inside a sentence about ranking is a parameter.
+RANKING = re.compile(r"\b(rerank\w*|re-sort\w*|candidates?|recall@\d+|retriev\w*|ranked|results? per)\b", re.I)
+
+
+def ranking_param(m):
+    start = max(msg.rfind(".", 0, m.start()), msg.rfind("\n", 0, m.start())) + 1
+    ends = [i for i in (msg.find(".", m.end()), msg.find("\n", m.end())) if i != -1]
+    return bool(RANKING.search(msg[start:min(ends) if ends else len(msg)]))
+
+
+cut = None
+for m in re.finditer(
+        r"\btop \d+\b|\b\d+ of (the )?\d+\b.*\b(picked|chosen|closest|fit)|\bcapped\b|\bcap(ped)? at\b"
+        r"|\btier[- ]?1\b|\bon hold\b|\bset aside\b|\bnot ingested\b|\bskipped\b|\bfor now\b"
+        r"|\bonly the \d+\b|\bnarrow(ed)? (it|the scope)\b",
+        msg, re.I):
+    if m.group(0).lower().startswith("top ") and ranking_param(m):
+        continue
+    cut = m
+    break
 if cut and "BLOCKED:" not in msg:
     print("cut:" + cut.group(0))
 else:

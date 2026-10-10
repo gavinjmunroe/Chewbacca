@@ -203,3 +203,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_suggested_chip_fix_it_here: When he asks about a Suggested task chip, verify it and fix it in this tab; never tell him to click it
 - feedback_subtree_import_merge_not_rebase: After git subtree add, merge origin; rebase replays the import at the repo root
 - feedback_scan_before_import: Scan files and history for personal content before importing a repo into the kit
+- feedback_say_what_you_found_before_digging: On a "the system is cooked" vent, measure once and reply with the diagnosis first; silent digging drew "???" (2026-10-09)

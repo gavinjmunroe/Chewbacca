@@ -1,0 +1,267 @@
+#!/usr/bin/env python3
+"""Mac Screen Time from the Mac's own database, as text, JSON or a phone-style card.
+
+  screen-time                       this week vs last week, every app
+  screen-time --only dev            just the dev and AI apps (VS Code, Claude, Codex...)
+  screen-time --app com.foo.Bar     any bundle ids you name, repeatable
+  screen-time --end 2026-10-09      the 7 days ending on that date (default today)
+  screen-time --days 14             a longer window
+  screen-time --json                machine-readable
+  screen-time --png out.png         render a Settings > Screen Time style card
+
+Reads /app/usage in ~/Library/Application Support/Knowledge/knowledgeC.db, which
+macOS 15 still writes on 2026-10-09 (last row 22:03 that night). It only covers
+this Mac, not the phone. Built 2026-10-09 when Caleb wanted to show his church
+guys a Screen Time chart of how much of his week went to Claude: the numbers
+came from this table and nothing had read it before. SCREEN_TIME_DB overrides
+the path for tests.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import html
+import json
+import os
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+DB = Path(os.environ.get("SCREEN_TIME_DB") or
+          Path.home() / "Library/Application Support/Knowledge/knowledgeC.db")
+APPLE_EPOCH = 978307200  # Core Data dates count from 2001-01-01
+
+# Bundle id -> (display name, bar colour, icon glyph, icon background).
+DEV = {
+    "com.microsoft.VSCode": ("Claude Code (VS Code)", "#0a84ff", "{ }", "#1e3a5f"),
+    "com.anthropic.claudefordesktop": ("Claude", "#ff9f0a", "&#10035;", "#c96442"),
+    "com.openai.codex": ("Codex", "#64d2ff", "&gt;_", "#111"),
+    "com.openai.chat": ("ChatGPT", "#30d158", "&#9678;", "#0f3d2e"),
+    "com.todesktop.230313mzl4w4u92": ("Cursor", "#bf5af2", "&#9650;", "#222"),
+    "com.apple.dt.Xcode": ("Xcode", "#5e5ce6", "&#9874;", "#1d2a5c"),
+    "com.apple.iphonesimulator": ("Simulator", "#5ac8fa", "&#9647;", "#2c2c2e"),
+    "com.apple.Terminal": ("Terminal", "#98989d", "&gt;", "#111"),
+    "com.googlecode.iterm2": ("iTerm", "#98989d", "$", "#111"),
+    "dev.warp.Warp-Stable": ("Warp", "#98989d", "W", "#111"),
+    "com.mitchellh.ghostty": ("Ghostty", "#98989d", "G", "#111"),
+    "com.google.chrome.for.testing": ("Chrome for Testing", "#ffd60a", "T", "#2c2c2e"),
+    "ai.nalana.nalana": ("Nalana", "#ff375f", "N", "#3a1020"),
+    "ai.perplexity.macv3": ("Perplexity", "#20c997", "P", "#0d2f2a"),
+}
+NAMES = {
+    "com.google.Chrome": "Google Chrome", "com.apple.MobileSMS": "Messages",
+    "com.apple.FaceTime": "FaceTime", "com.tinyspeck.slackmacgap": "Slack",
+    "net.whatsapp.WhatsApp": "WhatsApp", "com.apple.Notes": "Notes",
+    "com.apple.finder": "Finder", "us.zoom.xos": "Zoom", "com.spotify.client": "Spotify",
+    "com.granola.app": "Granola", "ai.perplexity.comet": "Comet", "com.apple.Preview": "Preview",
+}
+OTHER_COLOR = "#8e8e93"
+
+
+def name(bundle: str) -> str:
+    return DEV[bundle][0] if bundle in DEV else NAMES.get(bundle, bundle.split(".")[-1])
+
+
+def minutes_by_day(start: dt.date, end: dt.date, apps: set[str] | None) -> dict[str, dict[str, float]]:
+    """{bundle: {YYYY-MM-DD: minutes}} for start..end inclusive, local time."""
+    if not DB.exists():
+        sys.exit(f"screen-time: no Screen Time database at {DB}")
+    # Read-only URI so this never takes a write lock on a file macOS owns.
+    con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    try:
+        rows = con.execute(
+            "select ZVALUESTRING, date(ZSTARTDATE + ?, 'unixepoch', 'localtime') d,"
+            " sum(ZENDDATE - ZSTARTDATE) / 60.0 from ZOBJECT"
+            " where ZSTREAMNAME = '/app/usage' and d between ? and ? group by 1, 2",
+            (APPLE_EPOCH, start.isoformat(), end.isoformat()),
+        ).fetchall()
+    except sqlite3.DatabaseError as exc:
+        sys.exit(f"screen-time: cannot read {DB}: {exc}. The app running this may need Full Disk Access.")
+    finally:
+        con.close()
+    out: dict[str, dict[str, float]] = {}
+    for bundle, day, mins in rows:
+        if not bundle or (apps is not None and bundle not in apps):
+            continue
+        out.setdefault(bundle, {})[day] = out.get(bundle, {}).get(day, 0) + (mins or 0)
+    return out
+
+
+def summarize(end: dt.date, days: int, apps: set[str] | None) -> dict:
+    start = end - dt.timedelta(days=days - 1)
+    prev_end, prev_start = start - dt.timedelta(days=1), start - dt.timedelta(days=days)
+    cur = minutes_by_day(start, end, apps)
+    prev = minutes_by_day(prev_start, prev_end, apps)
+    dates = [(start + dt.timedelta(days=i)).isoformat() for i in range(days)]
+    totals = {b: sum(v.values()) for b, v in cur.items()}
+    ranked = sorted((b for b in totals if totals[b] >= 1), key=totals.get, reverse=True)
+    total = sum(totals.values())
+    prev_total = sum(sum(v.values()) for v in prev.values())
+    return {
+        "start": start.isoformat(), "end": end.isoformat(), "days": dates,
+        "total_minutes": round(total), "daily_average_minutes": round(total / days),
+        "previous_total_minutes": round(prev_total),
+        "change_pct": round((total / prev_total - 1) * 100) if prev_total else None,
+        "apps": [{"bundle": b, "name": name(b), "minutes": round(totals[b]),
+                  "by_day": [round(cur[b].get(d, 0)) for d in dates]} for b in ranked],
+    }
+
+
+def fmt(m: float) -> str:
+    m = round(m)
+    h, r = divmod(m, 60)
+    return f"{h}h {r}m" if h else f"{r}m"
+
+
+def render_html(s: dict, title: str) -> str:
+    apps = s["apps"]
+    stacked = apps[:4]
+    rest = apps[4:]
+    series = [(a["name"], DEV.get(a["bundle"], (0, OTHER_COLOR))[1], a["by_day"]) for a in stacked]
+    if rest:
+        series.append(("Everything else", OTHER_COLOR,
+                       [sum(a["by_day"][i] for a in rest) for i in range(len(s["days"]))]))
+    day_tot = [sum(v[2][i] for v in series) for i in range(len(s["days"]))]
+    top = max(day_tot + [60])
+    step = 60 if top <= 240 else 120 if top <= 480 else 240
+    ceil = -(-top // step) * step
+    H = 170
+    avg = s["daily_average_minutes"]
+    grid = "".join(
+        f'<div class="grid" style="top:{H - v / ceil * H}px"></div>'
+        f'<span class="gl" style="top:{H - v / ceil * H}px">{v // 60}h</span>'
+        for v in range(0, ceil + 1, step)
+        if abs(v - avg) / ceil > 0.08 or v == 0)  # keep the avg label readable
+    cols = ""
+    for i in range(len(s["days"])):
+        segs = "".join(f'<div style="height:{v[2][i] / ceil * H}px;background:{v[1]}"></div>'
+                       for v in series if v[2][i])
+        cols += f'<div class="col">{segs}</div>'
+    letters = "".join(f"<span>{'MTWTFSS'[dt.date.fromisoformat(d).weekday()]}</span>" for d in s["days"])
+    legend = "".join(f'<div><i style="background:{c}"></i>{html.escape(n)}<b>{fmt(sum(v))}</b></div>'
+                     for n, c, v in series[:3])
+    first = apps[0]["minutes"] if apps else 1
+    rows = "".join(
+        f'<div class="row"><div class="ic" style="background:{DEV.get(a["bundle"], (0, 0, 0, "#2c2c2e"))[3]}">'
+        f'{DEV.get(a["bundle"], (0, 0, html.escape(a["name"][:1])))[2]}</div>'
+        f'<div class="nm">{html.escape(a["name"])}<div class="bar" style="width:{max(a["minutes"] / first * 100, 1)}%;'
+        f'background:{DEV.get(a["bundle"], (0, OTHER_COLOR))[1]}"></div></div><div class="tm">{fmt(a["minutes"])}</div></div>'
+        for a in apps[:8])
+    change = s["change_pct"]
+    delta = "" if change is None else (
+        f'<div class="up"><svg width="11" height="11" viewBox="0 0 12 12"><path d="'
+        f'{"M6 1v10M2 5l4-4 4 4" if change >= 0 else "M6 11V1M2 7l4 4 4-4"}" stroke="#8e8e93" '
+        f'stroke-width="1.8" fill="none"/></svg>{abs(change)}% from last week</div>')
+    span = (f"{dt.date.fromisoformat(s['start']):%b} {dt.date.fromisoformat(s['start']).day} to "
+            f"{dt.date.fromisoformat(s['end']):%b} {dt.date.fromisoformat(s['end']).day}")
+    foot = (f'<b style="color:#fff">{fmt(s["total_minutes"])}</b> this week. '
+            f'Last week it was {fmt(s["previous_total_minutes"])}.')
+    return f"""<!doctype html><html><head><meta charset="utf-8"><style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{background:#000;color:#fff;font-family:-apple-system,"SF Pro Text",system-ui;width:390px;padding:0 0 28px}}
+.nav{{display:flex;align-items:center;justify-content:space-between;padding:58px 16px 8px;font-size:17px}}
+.nav .back{{color:#0a84ff;width:90px}}.nav b{{font-weight:600}}
+.seg{{margin:6px 16px 18px;background:#1c1c1e;border-radius:9px;display:flex;padding:2px}}
+.seg div{{flex:1;text-align:center;font-size:13px;font-weight:600;padding:6px 0;border-radius:7px}}
+.seg .on{{background:#636366}}
+.cap{{color:#8e8e93;font-size:13px;text-transform:uppercase;padding:0 32px 6px;letter-spacing:.2px}}
+.card{{background:#1c1c1e;border-radius:12px;margin:0 16px 22px;padding:14px 16px;position:relative}}
+.lab{{color:#8e8e93;font-size:13px}}
+.big{{font-size:34px;font-weight:700;letter-spacing:.3px;margin-top:2px}}
+.up{{display:flex;align-items:center;gap:4px;color:#8e8e93;font-size:13px;position:absolute;right:16px;top:30px}}
+.chart{{position:relative;height:{H}px;margin-top:14px;display:flex;gap:10px;padding-right:34px}}
+.grid{{position:absolute;left:0;right:34px;border-top:1px dotted #48484a}}
+.gl{{position:absolute;right:0;font-size:11px;color:#8e8e93;transform:translateY(-50%)}}
+.avg{{position:absolute;left:0;right:34px;border-top:1.5px dashed #30d158}}
+.avgl{{position:absolute;right:0;font-size:11px;color:#30d158;transform:translateY(-50%)}}
+.col{{flex:1;display:flex;flex-direction:column;justify-content:flex-end;position:relative;z-index:1}}
+.col div:first-child{{border-radius:3px 3px 0 0}}
+.days{{display:flex;gap:10px;padding-right:34px;margin-top:6px}}
+.days span{{flex:1;text-align:center;font-size:11px;color:#8e8e93}}
+.leg{{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;font-size:12px}}
+.leg i{{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}}
+.leg b{{display:block;font-size:13px;font-weight:500;color:#8e8e93;margin-left:13px}}
+.row{{display:flex;align-items:center;gap:12px;padding:9px 0;border-bottom:.5px solid #38383a}}
+.row:last-child{{border:0}}
+.ic{{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;font-weight:700;font-size:15px;flex-shrink:0}}
+.nm{{flex:1;font-size:16px}}
+.bar{{height:6px;border-radius:3px;margin-top:5px}}
+.tm{{color:#8e8e93;font-size:15px}}
+.foot{{color:#8e8e93;font-size:12px;padding:0 32px;line-height:1.4}}
+</style></head><body>
+<div class="nav"><span class="back">&#8249; Settings</span><b>Screen Time</b><span style="width:90px"></span></div>
+<div class="seg"><div class="on">Week</div><div>Day</div></div>
+<div class="cap">{html.escape(title)} &middot; {span}</div>
+<div class="card"><div class="lab">Daily Average</div><div class="big">{fmt(avg)}</div>{delta}
+<div class="chart">{grid}<div class="avg" style="top:{H - avg / ceil * H}px"></div>
+<span class="avgl" style="top:{H - avg / ceil * H}px">avg</span>{cols}</div>
+<div class="days">{letters}</div><div class="leg">{legend}</div></div>
+<div class="cap">Most Used</div><div class="card" style="padding-top:4px;padding-bottom:4px">{rows}</div>
+<div class="foot">{foot}</div></body></html>"""
+
+
+def chrome() -> str | None:
+    for p in ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+              "/Applications/Chromium.app/Contents/MacOS/Chromium"):
+        if Path(p).exists():
+            return p
+    return shutil.which("google-chrome") or shutil.which("chromium")
+
+
+def render_png(page: str, out: Path) -> None:
+    exe = chrome()
+    if not exe:
+        sys.exit("screen-time: --png needs Google Chrome for the headless render")
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "card.html"
+        src.write_text(page)
+        subprocess.run([exe, "--headless=new", "--disable-gpu", "--hide-scrollbars",
+                        "--force-device-scale-factor=3", "--window-size=390,900",
+                        f"--screenshot={out}", src.as_uri()],
+                       check=True, capture_output=True, timeout=60)
+    if not out.exists() or out.stat().st_size == 0:
+        sys.exit(f"screen-time: Chrome exited cleanly but wrote no image at {out}")
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(prog="screen-time", description=__doc__.splitlines()[0])
+    ap.add_argument("--only", choices=["dev"], help="preset filter: dev = coding and AI apps")
+    ap.add_argument("--app", action="append", default=[], help="bundle id to include, repeatable")
+    ap.add_argument("--end", default=None, help="last day of the window, YYYY-MM-DD (default today)")
+    ap.add_argument("--days", type=int, default=7)
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--html", metavar="PATH", help="write the card as HTML")
+    ap.add_argument("--png", metavar="PATH", help="render the card to a PNG")
+    ap.add_argument("--title", default=None, help="caption above the chart")
+    a = ap.parse_args(argv)
+    if a.days < 1:
+        ap.error("--days must be at least 1")
+    apps = set(a.app) | (set(DEV) if a.only == "dev" else set())
+    end = dt.date.fromisoformat(a.end) if a.end else dt.date.today()
+    s = summarize(end, a.days, apps or None)
+    title = a.title or ("Dev & AI on this Mac" if a.only == "dev" else "This Mac")
+    if a.html:
+        Path(a.html).expanduser().write_text(render_html(s, title))
+    if a.png:
+        render_png(render_html(s, title), Path(a.png).expanduser().resolve())
+    if a.json:
+        print(json.dumps(s, indent=2))
+    elif not (a.png or a.html):
+        ch = s["change_pct"]
+        print(f"{s['start']} to {s['end']}: {fmt(s['total_minutes'])} total, "
+              f"{fmt(s['daily_average_minutes'])}/day"
+              + ("" if ch is None else f", {'up' if ch >= 0 else 'down'} {abs(ch)}% vs the week before"))
+        for x in s["apps"][:15]:
+            print(f"  {fmt(x['minutes']):>8}  {x['name']}")
+    else:
+        for p in (a.png, a.html):
+            if p:
+                print(Path(p).expanduser())
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

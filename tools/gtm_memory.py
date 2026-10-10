@@ -113,8 +113,16 @@ def show_overdue(d: dict) -> list[str]:
     out = []
     if d["late"]:
         out.append(f"LATE ({len(d['late'])})")
-        for r in d["late"]:
-            out.append(f"  {r['late_by_hours']:>7.1f}h late  owed by {r['owed_by']:<6} {r['title']}  [{r['client']}]")
+        # Replies before refills: a positive left 24 hours loses about half its
+        # booking chance, a refill a day late loses a day of volume.
+        groups = (("the client owes", lambda r: r["owed_by"] == "client"),
+                  ("we owe on replies", lambda r: r["owed_by"] != "client" and r["kind"] != "refill"),
+                  ("refills (audience fully sent at step 1)", lambda r: r["kind"] == "refill"))
+        for title, pick in groups:
+            rows = [r for r in d["late"] if pick(r)]
+            if rows:
+                out.append(f"  {title} ({len(rows)})")
+                out += [f"    {r['late_by_hours']:>6.1f}h late  {r['title']}  [{r['client']}]" for r in rows]
     else:
         out.append("nothing late")
     if d["upcoming"]:
@@ -177,11 +185,15 @@ def show_experiments(d: dict) -> list[str]:
 
 
 def show_warm(d: dict) -> list[str]:
-    if not d["warm"]:
-        return [d.get("note") or "no contact here is in your people store"] + fresh(d)
     out = [f"{len(d['warm'])} contacts you already know (matched by key, nothing copied from people.db)"]
     for w in d["warm"]:
         out.append(f"  {w['name']:<30} {w['matched_on']:<9} {w['key']:<40} -> {w['next']}  [{w['client']}]")
+    accts = d.get("warm_accounts") or []
+    out.append(f"{len(accts)} accounts where you know someone at the domain")
+    for a in accts:
+        out.append(f"  {a['domain']:<34} {score_line(a['score'])}  [{a['client']}]")
+    if d.get("note"):
+        out.append(d["note"])
     return out + fresh(d)
 
 

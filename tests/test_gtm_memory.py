@@ -410,6 +410,7 @@ def people_store(path: Path) -> Path:
     p.execute("INSERT INTO people VALUES ('pp1', 'Privatename Zzyx', '+15550001111', NULL, "
               "'https://linkedin.com/in/morgan-beta', 'met at a funeral', NULL)")
     p.execute("INSERT INTO identities VALUES ('pp1', 'email', 'pat@shared.example')")
+    p.execute("INSERT INTO identities VALUES ('pp2', 'email', 'quietfriend@betafirm.example')")
     p.execute("INSERT INTO observations VALUES ('o1', 'pp1', 'SECRET-NOTE-QQQ going through a divorce')")
     p.commit()
     p.close()
@@ -431,6 +432,10 @@ def test_warm_path(tmp: Path):
     for leak in ("Privatename", "+15550001111", "SECRET-NOTE", "funeral", "pp1"):
         ok(leak not in dump, f"memory.db stored {leak}")
     ok(not any(x["client"] == "Beta Raise" for x in w["warm"]), "alpha's warm list holds alpha's contacts only")
+    ok([a["domain"] for a in w["warm_accounts"]] == ["shared.example"], "alpha never sees beta's firm as warm")
+    wb = q.warm(db, m.resolve_scope(db, "Beta Raise"), store)
+    ok(sorted(a["domain"] for a in wb["warm_accounts"]) == ["betafirm.example", "shared.example"], wb["warm_accounts"])
+    ok("quietfriend" not in json.dumps(wb), "only the domain crosses, never the address")
     db.close()
 
 

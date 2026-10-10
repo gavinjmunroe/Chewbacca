@@ -445,7 +445,21 @@ def warm(db, scope: m.Scope, people_path: Path | str | None = None) -> dict:
                     "name": m.contact_label(db, r["client_id"], r["subject_id"]), "matched_on": kind,
                     "key": key, "next": f"chewbacca people brief {key}",
                     "score": score_of(db, r["client_id"], "contact", r["subject_id"])})
-    return {"warm": out, "freshness": freshness(db)}
+    # Account level: someone in the people store has an address at this
+    # firm's domain. Only the domain crosses, and it is the GTM side's own key.
+    domains = {m.account_domain(e) for e in emails}
+    domains.discard("")
+    where_a, args_a = scope.sql("ca.client_id")
+    accounts = []
+    for r in db.execute(f"SELECT ca.client_id, ca.account_id, k.value FROM client_accounts ca JOIN account_keys k "
+                        f"ON k.account_id = ca.account_id WHERE {where_a}", args_a):
+        if r["value"] in domains:
+            accounts.append({"client": scope.name(r["client_id"]), "account_id": r["account_id"],
+                             "domain": r["value"], "matched_on": "domain",
+                             "next": f"someone in your people store has an @{r['value']} address: "
+                                     f"chewbacca people who \"at {r['value']}\"",
+                             "score": score_of(db, r["client_id"], "account", r["account_id"])})
+    return {"warm": out, "warm_accounts": accounts, "freshness": freshness(db)}
 
 
 # ── check ────────────────────────────────────────────────────────────────────

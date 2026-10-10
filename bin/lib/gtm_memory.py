@@ -1246,12 +1246,12 @@ def ingest_graph(db, graph: sqlite3.Connection, run_id: str) -> dict:
             continue
         email_contact[(client, email_key(p.get("email")))] = cid
         ref = f"{e['src']}:{','.join(p.get('record_ids') or [])}"
-        observe(db, client, "contact", cid, "email", email_key(p.get("email")), "clay_record", ref, at,
+        observe(db, client, "contact", cid, "email", email_key(p.get("email")), "clay_record", ref, first_seen,
                 provider="clay", origin=run_id)
-        observe(db, client, "contact", cid, "name", p.get("name"), "clay_record", ref, at, provider="clay", origin=run_id)
-        observe(db, client, "contact", cid, "title", p.get("title"), "clay_record", ref, at, provider="clay",
+        observe(db, client, "contact", cid, "name", p.get("name"), "clay_record", ref, first_seen, provider="clay", origin=run_id)
+        observe(db, client, "contact", cid, "title", p.get("title"), "clay_record", ref, first_seen, provider="clay",
                 origin=run_id)
-        observe(db, client, "contact", cid, "linkedin_url", p.get("linkedin_url"), "clay_record", ref, at,
+        observe(db, client, "contact", cid, "linkedin_url", p.get("linkedin_url"), "clay_record", ref, first_seen,
                 provider="clay", confidence=0.6, origin=run_id)
         acct = resolve_account(db, account_domain(p.get("email", "")))
         admit(db, client, cid, acct, first_seen, run_id)

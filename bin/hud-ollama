@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Read a HUD prompt on stdin and print only a local Ollama model's answer.
+
+The same contract as hud-codex: prompt on stdin, the answer on stdout, exit 0
+on an answer. `--model <name>` picks one of the pulled models; without it the
+first pulled chat model answers (embedding models cannot). Nothing leaves the
+Mac and there is no quota, so this is the runtime of last resort when every
+subscription is out. Stateless: no session is kept.
+"""
+
+from __future__ import annotations
+
+import os
+import re
+import subprocess
+import sys
+
+EMBED = re.compile(r"embed|minilm|bge-|nomic", re.IGNORECASE)
+# The HUD kills a model turn at 240 s (hud-listen run_streamed); a cold 8B
+# model load plus an answer is well inside this on Apple silicon.
+TIMEOUT_S = 200
+# Terminal control sequences `ollama run` can write even into a pipe.
+ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
+def first_chat_model(exe: str) -> str | None:
+    try:
+        done = subprocess.run([exe, "list"], capture_output=True, text=True, timeout=10,
+                              stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    for line in done.stdout.splitlines()[1:]:
+        name = line.split()[0] if line.split() else ""
+        if name and not EMBED.search(name):
+            return name
+    return None
+
+
+def main(argv: list[str]) -> int:
+    model = None
+    if len(argv) >= 2 and argv[0] == "--model":
+        model = argv[1]
+    elif argv:
+        print("usage: hud-ollama [--model <name>] < prompt", file=sys.stderr)
+        return 2
+    prompt = sys.stdin.read()
+    if not prompt.strip():
+        print("hud-ollama: expected a prompt on stdin", file=sys.stderr)
+        return 2
+    exe = os.environ.get("HUD_OLLAMA_BIN", "ollama")
+    model = model or first_chat_model(exe)
+    if not model:
+        print("hud-ollama: no chat model is pulled (ollama pull llama3.2)", file=sys.stderr)
+        return 1
+    try:
+        done = subprocess.run([exe, "run", model], input=prompt, capture_output=True, text=True,
+                              env=dict(os.environ, CHEWBACCA_HUD_CHILD="1"), timeout=TIMEOUT_S)
+    except FileNotFoundError:
+        print("hud-ollama: ollama is not installed", file=sys.stderr)
+        return 127
+    except subprocess.TimeoutExpired:
+        print("hud-ollama: the model took too long", file=sys.stderr)
+        return 124
+    if done.returncode != 0:
+        print(f"hud-ollama: ollama exited with status {done.returncode}", file=sys.stderr)
+        return done.returncode if done.returncode > 0 else 1
+    answer = ANSI.sub("", done.stdout).strip()
+    if not answer:
+        print("hud-ollama: the model returned no answer", file=sys.stderr)
+        return 1
+    print(answer)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

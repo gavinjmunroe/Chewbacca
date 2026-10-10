@@ -1338,6 +1338,9 @@ def listener_env(directory: str, path: str) -> dict[str, str]:
         SUPERASSISTANT_DIR=os.path.join(directory, "superassistant"),
         BOB_NAMES=os.path.join(directory, "names.txt"),
         HUD_TERMINAL_CMD="sh -c 'echo []'", HUD_CLASSIFY_CMD="off",
+        # The runtime/account pick and limit marks (bin/lib/hud_accounts.py):
+        # never the person's own.
+        HUD_ACCOUNTS_STORE=os.path.join(directory, "hud-accounts.json"),
     )
 
 

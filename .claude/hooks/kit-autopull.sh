@@ -80,9 +80,12 @@ cd "$REPO" || exit 0
 # 2 missing hours after a hand sync. Every overwritten copy is backed up under
 # ~/.chewbacca/runtime/hooks-backup-*. Runs before the throttle: it is local
 # and takes well under a second.
-if [ -f "$REPO/tools/hooks_sync.py" ]; then
-  SYNC="$(python3 -I "$REPO/tools/hooks_sync.py" apply --include-local --repo "$REPO" \
-          --live "${CHEWBACCA_HOOKS_DIR:-$HOME/.claude/hooks}" 2>&1)"
+# The script comes from the ref too: the shared checkout is usually dirty and
+# behind, so its working tree may not have it yet.
+if git -c core.fsmonitor=false cat-file -e origin/main:tools/hooks_sync.py 2>/dev/null; then
+  SYNC="$(git -c core.fsmonitor=false show origin/main:tools/hooks_sync.py \
+          | python3 -I - apply --include-local --repo "$REPO" \
+            --live "${CHEWBACCA_HOOKS_DIR:-$HOME/.claude/hooks}" 2>&1)"
   note "hooks-sync: $(printf '%s' "$SYNC" | tr '\n' ' ')"
   case "$SYNC" in
     *updated*) say "Installed hooks were behind origin/main and were updated in place (backups in ~/.chewbacca/runtime):

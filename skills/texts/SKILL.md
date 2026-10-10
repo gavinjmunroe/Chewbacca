@@ -110,6 +110,16 @@ isn't a connected inbox goes on its own line in `~/.chewbacca/email/me`. One of 
 that night was a check-scam asking for a bank name, so scan the hidden ones
 before saying nobody else is waiting.
 
+## "What should I respond to X": draft first, dig second
+
+Answer from `people texts <name>` in one or two calls, then fetch anything
+missing. A `￼` in a line is an image the thread reader can't show; say so in
+the reply, give the most likely draft from the rest of the thread, and ask what
+the image was. Never spend calls hand-writing chat.db SQL to find it:
+chatdb-guard refuses both the `text`-column query and raw thread reads, and on
+2026-10-10 four calls into that wall got "What's taking so long?" from Caleb
+before any draft reached him.
+
 ## Images and QR codes someone sent
 
 An image in chat.db with `transfer_state` 0 was never downloaded to this Mac. Its

@@ -188,6 +188,11 @@ fi
 if [ -n "$OPEN_URL" ]; then
   # A named profile needs its own instance argument; Chrome ignores the profile
   # when it just reuses an existing window.
+  # Agent tabs open behind whatever Caleb is using: a page that jumps to the
+  # front takes his keystrokes into a form an agent is filling (2026-10-10,
+  # "I could be interfering with the agent's clicks/types"). -g for open, and
+  # the Chrome binary path, which always comes forward, hands focus back.
+  FRONT_APP=$(osascript -e 'tell application "System Events" to get bundle identifier of first process whose frontmost is true' 2>/dev/null || true)
   if $REAL; then
     # Chrome's own binary with the default user-data-dir forwards to the
     # running browser's singleton and exits ("Opening in existing browser
@@ -195,9 +200,12 @@ if [ -n "$OPEN_URL" ]; then
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
       ${PROFILE:+--profile-directory="$PROFILE"} "$OPEN_URL" >/dev/null 2>&1 || true
   elif [ -n "$PROFILE" ]; then
-    open -na "Google Chrome" --args --profile-directory="$PROFILE" --new-window "$OPEN_URL"
+    open -g -na "Google Chrome" --args --profile-directory="$PROFILE" --new-window "$OPEN_URL"
   else
-    open -a "Google Chrome" "$OPEN_URL"
+    open -g -a "Google Chrome" "$OPEN_URL"
+  fi
+  if [ -n "$FRONT_APP" ] && [ "$FRONT_APP" != "com.google.Chrome" ]; then
+    osascript -e "tell application id \"$FRONT_APP\" to activate" >/dev/null 2>&1 || true
   fi
   # Give the console app time to render past its own loading spinner. Chrome
   # reports loading=false well before an Angular console has painted a form.

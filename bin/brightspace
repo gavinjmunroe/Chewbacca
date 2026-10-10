@@ -147,9 +147,12 @@ class Client:
             raise Forbidden(path)
 
     def refresh(self):
+        # -g keeps the renewal tab behind whatever Caleb is using. A silent SSO
+        # renewal needs nobody, and a tab jumping to the front mid-task puts his
+        # typing into the page an agent is driving (2026-10-10).
         print("brightspace: session expired, reopening it in Chrome", file=sys.stderr)
         subprocess.run(
-            ["open", "-na", "Google Chrome", "--args", f"--profile-directory={PROFILE}",
+            ["open", "-g", "-na", "Google Chrome", "--args", f"--profile-directory={PROFILE}",
              HOST + "/d2l/home"],
             check=False,
         )

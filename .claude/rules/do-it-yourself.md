@@ -45,11 +45,15 @@ timid:
    have everything else already finished so that is the last step.
    A permission switch or a web console step counts here too, and you **open
    the exact pane or page yourself** in the same turn: `open
-   "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation"`
+"x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation"`
    (or `_AllFiles`, `_Accessibility`, `_ScreenCapture`, `_Microphone`), or
    `chewbacca-permissions guide --only <id>`. Naming a settings path and
    leaving them to find it is the same failure as handing over a command
    (2026-10-10: "Always take me there").
+   Every other page an agent opens goes in the background: `open -g`, never a
+   bare `open` or `open -na`. A Brightspace or Clay tab he has nothing to do in
+   should never take focus, because his typing lands in the page the agent is
+   driving (2026-10-10).
 3. **A decision only they can make**, where the options differ in a way you
    cannot resolve from the request, the code, or the repo.
 

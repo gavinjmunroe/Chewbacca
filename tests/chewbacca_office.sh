@@ -60,6 +60,9 @@ class PublicClientApplication:
                 "message": "To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code FAKECODE1 to authenticate."}
     def acquire_token_by_device_flow(self, flow, **kw):
         _log(event="by_device_flow")
+        if os.environ.get("FAKE_MSAL_MODE") == "expired":
+            return {"error": "authorization_pending", "error_description":
+                    "AADSTS70016: OAuth 2.0 device flow error. Authorization is pending. Continue polling."}
         if os.environ.get("FAKE_MSAL_MODE") == "consent":
             return {"error": "invalid_grant", "error_description":
                     "AADSTS65001: The user or administrator has not consented to use the application."}
@@ -313,6 +316,11 @@ has_item && no "a blocked login wrote a keychain item"
 out="$(FAKE_MSAL_MODE=consent off login 2>&1)"; rc=$?
 [ "$rc" = 4 ] && printf '%s' "$out" | grep -q "AADSTS65001" || no "admin consent required did not print AADSTS65001 and stop: $out"
 has_item && no "a login that needed consent wrote a keychain item"
+out="$(FAKE_MSAL_MODE=expired off login 2>&1)"; rc=$?
+[ "$rc" = 4 ] || no "an expired code did not stop with 4 (rc $rc): $out"
+printf '%s' "$out" | grep -q "code expired" || no "an expired code was not reported as expired: $out"
+printf '%s' "$out" | grep -q "Continue polling" && no "an expired code still printed MSAL's 'Continue polling': $out"
+has_item && no "an expired login wrote a keychain item"
 
 # ── login: the device-code message, exactly, and the page opened ────────────
 : > "$T/open.log"; : > "$T/msal.log"

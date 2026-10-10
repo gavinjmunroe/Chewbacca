@@ -341,6 +341,12 @@ def cmd_login():
     for k in ("access_token", "refresh_token", "id_token"):
         remember_secret(res.get(k))
     if "access_token" not in res:
+        if res.get("error") in ("authorization_pending", "expired_token", "code_expired"):
+            # MSAL polls until the flow's expires_at (900 s from Microsoft) and then
+            # returns the last poll's "authorization_pending ... Continue polling",
+            # which read like a bug the first time it happened (2026-10-09, 22:24).
+            die("STOPPED: the sign-in code expired before it was entered (Microsoft "
+                "gives 15 minutes). BLOCKED: run `chewbacca office login` again for a new code.", 4)
         die(f"STOPPED: sign-in did not finish. BLOCKED: {clean(aad_error(res))}", 4)
     claims = res.get("id_token_claims") or {}
     upn = claims.get("preferred_username") or claims.get("upn") or ""

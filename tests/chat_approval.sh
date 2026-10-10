@@ -22,6 +22,9 @@ expect() { # $1 prompt, $2 yes|no
 expect "Bro fuck the guard fix chewbs do it urself" yes
 expect "do it yourself" yes
 expect "you have my ok, launch the campaigns" yes
+expect "DO IT BRUH" yes
+expect "do it" yes
+expect "do it and fix the tests" no
 expect "run it again" no
 expect "start them up and run the tests" no
 expect "send it to Sagar" no

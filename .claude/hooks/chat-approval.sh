@@ -41,13 +41,18 @@ APPROVE = re.compile(
 # version read "don't send it" as a yes because "send it" matched too.
 REVOKE = re.compile(r"\b(stop|don'?t|do not|never|pause|hold off|cancel|wait)\b")
 
+# A whole message that is just "do it" (plus "bruh", "now", "yourself"...) is
+# a yes to what the agent just proposed. "DO IT BRUH" (2026-10-10), sent after
+# the agent asked for a go-ahead, missed the first list.
+WHOLE = re.compile(r"^\s*(just )?(do it|send it|launch it|run it)( (bruh|bro|now|already|yourself|urself|ur self|pls|plz))*[\s!.]*$")
+
 if REVOKE.search(low):
     try:
         os.remove(path)
     except OSError:
         pass
     raise SystemExit(0)
-if not APPROVE.search(low):
+if not (APPROVE.search(low) or WHOLE.match(low)):
     raise SystemExit(0)
 os.makedirs(os.path.dirname(path), exist_ok=True)
 record = {

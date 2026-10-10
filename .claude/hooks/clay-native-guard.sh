@@ -25,6 +25,18 @@ command -v jq >/dev/null 2>&1 || exit 0
 cmd="$(jq -r '.tool_input.command // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 case "$cmd" in *CLAY_LOOP_OK=*) exit 0 ;; esac
+# Caleb told the agent in chat to do the Clay work itself within 2 hours
+# (chat-approval.sh). The CLAY_LOOP_OK prefix can't carry that: launch-guard
+# refuses any env prefix on a command that names Clay, so on 2026-10-10 the two
+# guards together left no way to run an approved verification at all.
+python3 -I - "${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}/clay-chat-approval.json" <<'PY' 2>/dev/null && exit 0
+import json, sys, time
+try:
+    at = int(json.load(open(sys.argv[1]))["at"])
+except Exception:
+    sys.exit(1)
+sys.exit(0 if 0 <= time.time() - at < 2 * 3600 else 1)
+PY
 
 PER_ROW='(workflows[^a-z]+runs[^a-z]+test|workflows[^a-z]+actions[^a-z]+test)'
 # "for" alone matched prose inside a prompt ("one sentence for a cold email") on

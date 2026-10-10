@@ -269,7 +269,7 @@ card takes it down, and so do "close files", `files off`, `- disk` and the X.
 
 This replaced a two-pane keyboard file manager (CHW-198, 2026-10-09): an
 NSPanel with no close button that Escape could not reach, and a copy of
-Finder, which docs/NO-APPS.md rules out. Source: `Sources/KyberKit/FilesGlass.swift`.
+Finder, which docs/plans/NO-APPS.md rules out. Source: `Sources/KyberKit/FilesGlass.swift`.
 
 ## Coding sessions on the glass
 
@@ -319,7 +319,7 @@ e action send row="s-6d901cd1" surface="s-6d901cd1" text="run the tests"
 and the daemon types it into the client the session is open in, through
 Claude Code's own session inbox; only when nothing has the session open does
 it resume it with `claude -p --resume <id>` in its folder, streaming the
-reply onto the card (docs/KYBER-SURFACES.md, "Sending into a session"). `to off`, or the chip's x, gives
+reply onto the card (docs/reference/KYBER-SURFACES.md, "Sending into a session"). `to off`, or the chip's x, gives
 the input back to the assistant. Closing a card sends `e closed <surface>`
 to its owner so it stops redrawing it.
 

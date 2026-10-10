@@ -7,7 +7,7 @@ import Foundation
 /// that took the keyboard, hid its close button and could not be resized, and
 /// on 2026-10-09 Caleb could not get it off the screen: Escape went to the
 /// glass, which never takes key, so it never reached the panel. It was also a
-/// copy of Finder, which is the thing the HUD exists not to be (docs/NO-APPS.md,
+/// copy of Finder, which is the thing the HUD exists not to be (docs/plans/NO-APPS.md,
 /// kyber-surfaces rule 10, "don't mirror the app").
 ///
 /// So this is an ordinary surface, drawn with the same protocol lines any

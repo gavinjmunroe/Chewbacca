@@ -284,6 +284,22 @@ Read them before drafting any club or startup landing page.
 - "It feels like this is talking in lowercase": a credibility fact (who you
   build with, valuations) is the loudest moment on the page, made huge and
   given its own band, and stays exactly as true as the source.
+- "The boring alumni layout lame af get creative" and "Would it be tuff to
+  show an actual map?" (2026-10-10): a grid of logo cards is never the
+  answer for a network or a client list. Use one idea the page already owns
+  (lines of light from the home dot to each person; real land-mask dots
+  with pins at true coordinates). Every dot means a place or a person.
+- "Why do we have a people tab? All that info is on the main page": a nav
+  item whose content already lives on home is a duplicate. Remove it and
+  redirect the route to the home anchor.
+- Glass text (Caleb asked, 2026-10-10): only on one or two numbers, only
+  over a dark band with something moving behind to refract, solid fallback
+  without backdrop-filter. On a light page it reads washed out.
+- Logos (2026-10-10, "clayXperplexityXusc... keep it simple tho... still
+  3d!"): borrow the feel, never the mark. A recolored copy of another
+  brand's logo (Clay's stacked arch) is out. Build the mark from the org's
+  own symbols, fewest pieces, render it in clay, and look at the still
+  before animating it.
 - Interactive Playwright on clay.com trips the outbound send guard, which
   reads the word as a campaign. Screenshot it, or drive it from a
   standalone script.

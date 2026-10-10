@@ -75,4 +75,42 @@ sha=$(git rev-parse HEAD)
 out=$(python3 -I "$LAND" "$sha" 2>&1) || fail "commit mode: $out"
 out=$(python3 -I "$LAND" --paths four.txt -m "feat: again" 2>&1) || fail "no-op errored: $out"
 echo "$out" | grep -q "nothing to land" || fail "no-op said: $out"
+
+# land cherry-picks and amends, so a tab's own clone diverges; resync it.
+sync() { git fetch -q && git reset -q --hard origin/main; }
+
+# --paths from a stale checkout keeps lines main gained since (ledger
+# d72fce61: three MEMORY.md index lines vanished on 2026-10-10 this way).
+cd "$T/tab2" && sync && mkdir -p team/memory
+printf '# index\n- a: first\n' > team/memory/MEMORY.md
+printf 'line one\nline two\n' > c.txt
+echo 'team/memory/MEMORY.md merge=union' > .gitattributes
+git add -A && git commit -qm "feat: index" && python3 -I "$LAND" "$(git rev-parse HEAD)" >/dev/null 2>&1 || fail "seeding the index"
+git clone -q "$T/origin.git" "$T/stale"
+cd "$T/tab2" && sync && echo '- b: another tab' >> team/memory/MEMORY.md && git commit -qam "feat: b" \
+  && python3 -I "$LAND" "$(git rev-parse HEAD)" >/dev/null 2>&1 || fail "another tab's index line"
+cd "$T/stale" && echo '- c: mine' >> team/memory/MEMORY.md
+out=$(python3 -I "$LAND" --paths team/memory/MEMORY.md -m "feat: c" 2>&1) || fail "stale --paths land: $out"
+cd "$T/check" && git pull -q
+grep -q '^- b: another tab' team/memory/MEMORY.md || fail "--paths reverted another tab's index line"
+grep -q '^- c: mine' team/memory/MEMORY.md || fail "--paths lost its own line"
+
+# A stale copy that clashes with main in the same lines is refused, not copied over.
+cd "$T/tab2" && sync && sed -i.bak 's/line one/line ONE upstream/' c.txt && rm c.txt.bak && git commit -qam "feat: c upstream" \
+  && python3 -I "$LAND" "$(git rev-parse HEAD)" >/dev/null 2>&1 || fail "upstream c.txt"
+cd "$T/stale" && sed -i.bak 's/line one/line 1 mine/' c.txt && rm c.txt.bak
+out=$(python3 -I "$LAND" --paths c.txt -m "feat: clash" 2>&1) && fail "a clashing --paths copy landed: $out"
+echo "$out" | grep -q "same lines" || fail "clash message said: $out"
+cd "$T/check" && git pull -q && grep -q 'line ONE upstream' c.txt || fail "the clash overwrote main"
+
+# Two tabs that each commit an index line from the same base land back to
+# back; the second cherry-pick onto the first must not conflict.
+git clone -q "$T/origin.git" "$T/tabA" && git clone -q "$T/origin.git" "$T/tabB"
+cd "$T/tabA" && echo '- d: tab A' >> team/memory/MEMORY.md && git commit -qam "feat: d"
+cd "$T/tabB" && echo '- e: tab B' >> team/memory/MEMORY.md && git commit -qam "feat: e"
+(cd "$T/tabA" && python3 -I "$LAND" "$(git rev-parse HEAD)") >/dev/null 2>&1 || fail "back-to-back land A"
+out=$(cd "$T/tabB" && python3 -I "$LAND" "$(git rev-parse HEAD)" 2>&1) || fail "back-to-back land B conflicted: $out"
+cd "$T/check" && git pull -q
+grep -q '^- d: tab A' team/memory/MEMORY.md && grep -q '^- e: tab B' team/memory/MEMORY.md || fail "a back-to-back index line went missing"
+python3 tools/checksums.py && git diff --quiet SHA256SUMS.txt || fail "manifest stale after back-to-back lands"
 echo ok

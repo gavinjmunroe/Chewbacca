@@ -5,3 +5,7 @@
 # default text merge.
 SHA256SUMS.txt merge=chewbacca-sums
 README.md merge=chewbacca-readme
+# Memory indexes are one line per file, appended by many tabs. Two tabs that
+# each add a line at the end conflicted on every rebase on 2026-10-10; union
+# keeps both lines (ledger d72fce61).
+team/memory/MEMORY.md merge=union

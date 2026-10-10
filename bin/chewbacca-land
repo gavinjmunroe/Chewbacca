@@ -102,6 +102,52 @@ def regenerate(wt, quiet=True):
     return changed
 
 
+def blob(repo, rev, path):
+    """The file's bytes at rev, or None when rev is empty or lacks it."""
+    if not rev:
+        return None
+    p = subprocess.run(["git", "show", f"{rev}:{path}"], cwd=repo, capture_output=True)
+    return p.stdout if p.returncode == 0 else None
+
+
+def merge_into(wt, path, disk, dest, old):
+    """Write the disk copy over main's, keeping lines main gained meanwhile.
+
+    A plain copy reverted other tabs' work: on 2026-10-10 a tab whose
+    team/memory/MEMORY.md predated three index lines landed it with --paths,
+    and the lines vanished from main (ledger d72fce61). So the copy is a
+    three-way merge: base is the file where this checkout forked from main,
+    ours is the disk, theirs is main now. False means a real clash.
+    """
+    with open(disk, "rb") as f:
+        mine = f.read()
+    theirs = None
+    if os.path.exists(dest):
+        with open(dest, "rb") as f:
+            theirs = f.read()
+    if theirs is None or theirs == old or theirs == mine:
+        with open(dest, "wb") as f:
+            f.write(mine)
+        return True
+    if old == mine:
+        return True  # unchanged here; main's newer copy stays
+    union = run(["git", "check-attr", "merge", "--", path], wt).stdout.strip().endswith(": union")
+    with tempfile.TemporaryDirectory() as d:
+        b = os.path.join(d, "base")
+        with open(b, "wb") as f:
+            f.write(old or b"")
+        m = os.path.join(d, "mine")
+        with open(m, "wb") as f:
+            f.write(mine)
+        r = subprocess.run(["git", "merge-file", "-p", *(["--union"] if union else []), m, b, dest],
+                           capture_output=True)
+    if r.returncode != 0:
+        return False
+    with open(dest, "wb") as f:
+        f.write(r.stdout)
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser(prog="chewbacca land", description=__doc__.split("\n\n")[0])
     ap.add_argument("commits", nargs="*", help="commits to land, oldest first")
@@ -125,19 +171,31 @@ def main():
         run(["git", "worktree", "add", "-q", "--detach", wt, target], src)
         try:
             if a.paths:
-                missing = []
+                missing, clashes = [], []
+                base = run(["git", "merge-base", "HEAD", target], src, check=False).stdout.strip()
                 for p in a.paths:
                     s = os.path.join(src, p)
                     d = os.path.join(wt, p)
+                    old = blob(src, base, p)
                     if os.path.exists(s):
                         os.makedirs(os.path.dirname(d) or wt, exist_ok=True)
-                        shutil.copy2(s, d)
+                        if not merge_into(wt, p, s, d, old):
+                            clashes.append(p)
                     elif os.path.exists(d):
-                        os.remove(d)  # deleted on disk: land the deletion
+                        # Deleted on disk: land the deletion, unless someone
+                        # changed the file on main since this checkout saw it.
+                        with open(d, "rb") as f:
+                            if old is not None and f.read() != old:
+                                clashes.append(p)
+                            else:
+                                os.remove(d)
                     else:
                         missing.append(p)
                 if missing:
                     raise SystemExit(f"land: not found anywhere: {', '.join(missing)}")
+                if clashes:
+                    raise SystemExit(f"land: {', '.join(clashes)} changed on {target} in the same lines as your copy; "
+                                     f"pull those lines in and run land again")
                 run(["git", "add", "-A", "--", *a.paths], wt)
                 if not run(["git", "diff", "--cached", "--name-only"], wt).stdout.strip():
                     print("land: nothing to land, origin already has these files")

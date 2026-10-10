@@ -644,6 +644,24 @@ original lead of our own design, never a film character):
 - **hypothesis: a flat figure can't carry a face close-up.** Face close-ups
   were the lowest group (0.31); the film's faces carry line and hatching.
 
+Depth passes (an unattended driver tried one post-render change per version
+on ~90 shots, keeping it only if it beat both the best score and the best
+margin over the control):
+
+- **tested: crisp ink hatching is the most reliable single upgrade.** A plate
+  of thin parallel hatch strokes was kept 17 of 24 times (mean +0.056); a
+  denser version 10 of 15 (+0.043). The soft brush plate, as a second layer,
+  only 4 of 8 (+0.019). The reel's texture is crisp line, not soft paint.
+- **tested: spread values with contrast; don't brighten.** A contrast spread
+  was kept 9 of 11 times (+0.049). Brightening a flat emission frame was kept
+  3 of 17, and a double step 0 of 11: it lifts the darks with everything else.
+  Darkening split 7 kept to 9 reverted.
+- **tested: one step, not two.** Every doubled step (contrast, brighten,
+  darken) was kept once in 37 tries; when a step helps, doubling it doesn't.
+- **tested: a texture can raise the score and still be wrong.** 8 of 12 early
+  keeps raised the score while the render also matched other shots' frames
+  better; judge a change by its margin over a control, not by the score.
+
 ## Tools worth reaching for
 
 The full ranked list, with licenses and the file each one plugs into, is

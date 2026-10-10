@@ -1516,6 +1516,8 @@ if group "hud"; then
   check  "kyber-surfaces parses" python3 -m py_compile "$ROOT/bin/kyber-surfaces"
   check  "the OS graph refuses bad edges, fuses only via people, answers its questions" \
     python3 "$ROOT/tests/test_osgraph.py"
+  check  "waiting on you: his tapback, a 1:1 or a call closes a thread, and the eval asks what the ingester asks" \
+    python3 "$ROOT/tests/test_needs_you.py"
   check  "surfaces draw valid ops, refresh with d only, and send only on a press" \
     python3 "$ROOT/tests/test_kyber_surfaces.py"
   check  "kyber-sessions types into an idle open session through its inbox, refuses a hold, forks on a press" \

@@ -5,6 +5,12 @@
     needs_you_eval.py run --set dev         precision and recall on dev, with failure classes
     needs_you_eval.py run --set sealed      the sealed set, once, at the end
     needs_you_eval.py run --set dev --ingest PATH   score another osgraph_ingest.py (the "before")
+    needs_you_eval.py run --set dev --answer-hours 168   sensitivity: a 7-day answer window
+
+Two precisions are printed. `precision` weights a row by how many
+snapshots showed it (time on the glass); `distinct_precision` counts each
+(thread, newest message of theirs) once, labeled at the first snapshot that
+showed it, which is what the old "8 of 12 threads" hand count measured.
 
 Read-only on chat.db, the people store and CallHistory. Nothing leaves the
 Mac, and a report never prints a message body: counts, and for an example
@@ -72,6 +78,7 @@ WINDOW_DAYS = 7          # the ingester's default window
 OLDEST_DAYS = 30         # snapshots from 30 days back ...
 NEWEST_DAYS = 3          # ... to 3 days back, so every snapshot has 72 h of future
 ANSWER_HOURS = 72
+ANSWER_HOURS_RUN = ANSWER_HOURS  # changed only by --answer-hours, a sensitivity run
 SNAPSHOT_HOURS = (9, 15, 21)
 SALT = "chw135-split:"
 
@@ -239,7 +246,7 @@ def truth(thread: dict, T: datetime, my_imessage: dict[str, list], other: dict[s
 
     if reached(last_in["at"], T):
         return False, "handled in another app"
-    hi = T + timedelta(hours=ANSWER_HOURS)
+    hi = T + timedelta(hours=ANSWER_HOURS_RUN)
     after = [m for m in thread["msgs"] if T < m["at"] <= hi]
     wrote = any(m["from_me"] and countable(m) for m in after)
     if wrote or reached(T, hi):
@@ -248,7 +255,7 @@ def truth(thread: dict, T: datetime, my_imessage: dict[str, list], other: dict[s
         return False, "he only reacted"
     if thread["group"] and any(not m["from_me"] and countable(m) and m["handle"] not in senders for m in after):
         return False, "someone else answered"
-    return False, "never answered in 72 h"
+    return False, "no answer in the window"
 
 
 def my_direct_texts(threads: dict[str, dict]) -> dict[str, list]:
@@ -268,14 +275,20 @@ def my_direct_texts(threads: dict[str, dict]) -> dict[str, list]:
 # ── the rule, as the ingester would have seen it at T ────────────────────
 
 
-def rule(ingest, thread: dict, T: datetime, known: bool) -> bool:
+def rule(ingest, thread: dict, T: datetime, known: bool, reach=None, ids=None) -> bool:
+    """The ingester's decision at T, from exactly the rows its query reads."""
     floor = T - timedelta(days=WINDOW_DAYS)
     window = [m for m in thread["msgs"] if floor < m["at"] <= T]
     if hasattr(ingest, "thread_awaits_me"):
-        view = [m for m in window if m["item_type"] == 0][::-1]
+        view = [m for m in window if m["item_type"] == 0 and (
+            m["assoc"] == 0 or (m["from_me"] and 2000 <= m["assoc"] < 4000))][::-1][: ingest.MESSAGES_PER_THREAD * 4]
+        after = None
+        if reach is not None:
+            def after(at, who):
+                return ingest.reached(reach, who, ids, at, until=T, not_chat=thread["ident"])
         return ingest.thread_awaits_me(
-            [{"from_me": m["from_me"], "text": m["text"], "reaction": is_reaction(m) or m["assoc"] != 0}
-             for m in view], thread["ident"], thread["group"], known)
+            [{"from_me": m["from_me"], "text": m["text"], "reaction": m["assoc"] != 0, "handle": m["handle"],
+              "at": m["at"]} for m in view], thread["ident"], thread["group"], known, reached_after=after)
     # The base commit's ingester: item_type 0, no associated messages, the
     # newest MESSAGES_PER_THREAD, burst = inbound until his first message.
     view = [m for m in window if countable(m)][::-1][: ingest.MESSAGES_PER_THREAD]
@@ -285,6 +298,18 @@ def rule(ingest, thread: dict, T: datetime, known: bool) -> bool:
             break
         burst.append(m["text"])
     return ingest.awaits_me(list(reversed(burst)), thread["ident"], thread["group"], known)
+
+
+def reach_of(ingest, now: datetime, ids: osgraph.Identities):
+    """The ingester's own record of where he answered people outside a
+    thread, when the ingester under test has one (the base commit did not)."""
+    if not hasattr(ingest, "my_reach"):
+        return None
+    db = sqlite3.connect(f"file:{chat_db()}?mode=ro", uri=True, timeout=5)
+    try:
+        return ingest.my_reach(db, apple_ns(now - timedelta(days=OLDEST_DAYS + WINDOW_DAYS + 1)), ids)
+    finally:
+        db.close()
 
 
 def known_of(thread: dict, ids: osgraph.Identities) -> bool:
@@ -339,6 +364,20 @@ def cluster_ci(rows: list[dict], key: str, draws: int = 2000, seed: int = 135) -
     return (vals[int(0.025 * len(vals))], vals[int(0.975 * len(vals)) - 1])
 
 
+def burst_level(flagged: list[dict]) -> dict:
+    """Precision per distinct row instead of per snapshot: one unit per
+    (thread, newest message of theirs), labeled at the first snapshot that
+    showed it. Closer to the old "8 of 12 threads" hand count."""
+    first: dict[tuple, dict] = {}
+    for r in sorted(flagged, key=lambda r: r["T"]):
+        first.setdefault((r["thread"], r["burst"]), r)
+    units = list(first.values())
+    k = sum(r["truth"] for r in units)
+    return {"distinct_rows": len(units), "distinct_rows_right": k,
+            "distinct_precision": round(k / len(units), 3) if units else None,
+            "distinct_precision_wilson95": [round(x, 3) for x in wilson(k, len(units))]}
+
+
 def first_word(text: str) -> str:
     t = osgraph_ingest_url.sub(" ", text or "").strip()
     return (t.split() or ["(none)"])[0][:16]
@@ -363,6 +402,7 @@ def run(args) -> dict:
     threads = read_threads(now, ingest)
     mine = my_direct_texts(threads)
     other = read_other_contacts(now, ids)
+    reach = reach_of(ingest, now, ids)
     want_sealed = args.set == "sealed"
     rows = []
     for ident, t in threads.items():
@@ -372,9 +412,12 @@ def run(args) -> dict:
         for T in snapshots(now):
             if not any(T - timedelta(days=WINDOW_DAYS) < m["at"] <= T for m in t["msgs"]):
                 continue
-            flagged = rule(ingest, t, T, known)
+            flagged = rule(ingest, t, T, known, reach, ids)
             real, why = truth(t, T, mine, other)
+            newest_in = next((m for m in reversed(t["msgs"]) if m["at"] <= T and not m["from_me"] and countable(m)),
+                             None)
             rows.append({"thread": hashed(ident), "T": T.isoformat(), "flag": int(flagged), "truth": int(real),
+                         "burst": hashed(newest_in["guid"]) if newest_in else "",
                          "why": why, **(features(t, T) if flagged != real else {"group": t["group"]})})
     flagged = [r for r in rows if r["flag"]]
     real = [r for r in rows if r["truth"]]
@@ -390,6 +433,7 @@ def run(args) -> dict:
         "recall_wilson95": [round(x, 3) for x in wilson(tp, len(real))],
         "recall_cluster95": [round(x, 3) for x in cluster_ci(real, "flag")],
         "distinct_flagged_threads": len({r["thread"] for r in flagged}),
+        **burst_level(flagged),
         "fp_why": dict(Counter(r["why"] for r in flagged if not r["truth"])),
         "fp_group": sum(1 for r in flagged if not r["truth"] and r["group"]),
         "fn_why": dict(Counter(r["why"] for r in real if not r["flag"])),
@@ -443,12 +487,19 @@ def main(argv=None) -> int:
     r.add_argument("--ingest", help="score this osgraph_ingest.py instead of bin/lib's")
     r.add_argument("--examples", type=int, default=0, help="redacted dev examples to print (first word only)")
     r.add_argument("--rows", help="write every scored (thread, snapshot) row here, hashed ids, no text")
+    r.add_argument("--answer-hours", type=int, default=ANSWER_HOURS,
+                   help="SENSITIVITY ONLY, not the pre-registered label: count an answer this many hours "
+                        "after the snapshot; snapshots then stop that many days before the frozen now")
     args = ap.parse_args(argv)
     if args.cmd == "split":
         print(json.dumps(split(args), indent=1))
         return 0
     if args.set == "sealed":
         verify_split()
+    if args.answer_hours != ANSWER_HOURS:
+        global ANSWER_HOURS_RUN, NEWEST_DAYS  # noqa: PLW0603
+        ANSWER_HOURS_RUN = args.answer_hours
+        NEWEST_DAYS = max(NEWEST_DAYS, -(-args.answer_hours // 24))
     print(json.dumps(run(args), indent=1))
     return 0
 

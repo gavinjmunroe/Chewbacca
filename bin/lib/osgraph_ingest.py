@@ -107,9 +107,12 @@ ASK = re.compile(
     r"\b(u|you) free\b|free (tmr|tomorrow|today|tonight|this|next)|send (me|over|it)|need (you|u)|"
     r"when (are|r|can) (you|u)|how about\b", re.I)
 # Texts no person typed: political blasts, delivery and bank codes. The
-# U+FFFC object marker leads every rich-link blast in the sample.
+# U+FFFC object marker leads every rich-link blast in the sample. A text that
+# opens on a megaphone is an announcement to a list: on the CHW-135 dev set
+# one club's saved number sent three, each asking "are you coming?", 12 wrong
+# rows, never answered.
 AUTOMATED_TEXT = re.compile(
-    r"^\ufffc|reply stop|text stop|stop to (end|opt|unsubscribe)|\bverification code\b|enter code|"
+    r"^\ufffc|^\s*\U0001F4E2|reply stop|text stop|stop to (end|opt|unsubscribe)|\bverification code\b|enter code|"
     r"never (call|text) you|track (at|your)|your order|package|deposited a new message|"
     r"thank you for (joining|checking|your|being)|friendly reminder|courtesy message|ready for your ticket", re.I)
 
@@ -163,6 +166,99 @@ def awaits_me(burst: list[str], handle: str, group: bool, known: bool = True) ->
     return asks
 
 
+def thread_awaits_me(msgs: list[dict], handle: str, group: bool, known: bool = True,
+                     reached_after=None) -> bool:
+    """Does a thread wait on the person, from its messages newest first, each
+    {"from_me", "text", "reaction", "at"}?
+
+    The burst is every message of theirs since his last move, and a tapback
+    of his IS a move: chat.db files it as an associated message, and the
+    first version dropped those with everyone else's, so a text he had
+    already Loved stayed "waiting on you". On the CHW-135 dev set (dev
+    snapshots scored against what he did next, tools/needs_you_eval.py) that
+    was 12 of 217 wrong rows. Their reactions are skipped, as before.
+
+    `reached_after(at, senders)`, when given, says whether he called or
+    texted one of the burst's senders somewhere else after `at`; the dev set had 9 wrong rows he had
+    already answered in a one-to-one or by phone."""
+    burst: list[str] = []
+    senders: set[str] = set()
+    newest_in = None
+    for m in msgs:
+        if m.get("from_me"):
+            break
+        if m.get("reaction"):
+            continue
+        newest_in = newest_in or m
+        if m.get("handle"):
+            senders.add(m["handle"])
+        if len(burst) < MESSAGES_PER_THREAD:
+            burst.append(m.get("text") or "")
+    if not burst:
+        return False
+    if reached_after and newest_in.get("at") and reached_after(newest_in["at"], senders or {handle}):
+        return False
+    return awaits_me(list(reversed(burst)), handle, group, known)
+
+
+# Calls live in CallHistory, next to chat.db and behind the same Full Disk
+# Access. Read-only; a Mac without it (or without the grant) just has no calls.
+CALL_HISTORY = Path("Library") / "Application Support" / "CallHistoryDB" / "CallHistory.storedata"
+
+
+def my_reach(db: sqlite3.Connection, floor_ns: int, ids: Identities, home: Path | None = None) -> dict:
+    """When he reached each person outside a given thread: his messages in
+    one-to-one chats and calls that connected (or that he placed), keyed by
+    handle_key and by people-store id, so a group sender he answered 1:1, or
+    a person he texted from their email handle, counts as answered."""
+    reach: dict[str, list[datetime]] = {}
+
+    def add(handle: str, at: datetime, chat: str = "") -> None:
+        key = osgraph.handle_key(handle)
+        pid = ids.resolve(handle) if handle else None
+        for k in filter(None, (key, pid and f"pid:{pid}")):
+            reach.setdefault(k, []).append((at, chat))
+
+    for ident, date in db.execute(
+            """SELECT c.chat_identifier, m.date FROM message m
+               JOIN chat_message_join j ON j.message_id = m.ROWID JOIN chat c ON c.ROWID = j.chat_id
+               WHERE m.is_from_me = 1 AND m.item_type = 0 AND m.associated_message_type = 0
+                 AND c.style != ? AND m.date > ?""", (STYLE_GROUP, floor_ns)):
+        add(ident, APPLE_EPOCH + timedelta(seconds=(date or 0) / 1e9), ident)
+    path = (home or Path.home()) / CALL_HISTORY
+    if path.exists():
+        try:
+            calls = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+            try:
+                floor_s = floor_ns / 1e9
+                for addr, date, answered, originated, duration in calls.execute(
+                        "SELECT ZADDRESS, ZDATE, ZANSWERED, ZORIGINATED, ZDURATION FROM ZCALLRECORD WHERE ZDATE > ?",
+                        (floor_s,)):
+                    if addr and (originated or answered or (duration or 0) > 0):
+                        add(str(addr), APPLE_EPOCH + timedelta(seconds=date or 0))
+            finally:
+                calls.close()
+        except sqlite3.Error:
+            pass  # no grant for CallHistory: calls simply do not count
+    return reach
+
+
+def reached(reach: dict, handles, ids: Identities, after: datetime, until: datetime | None = None,
+            not_chat: str = "") -> bool:
+    """Did he reach any of `handles` after `after` (and by `until`), outside
+    the chat `not_chat`?"""
+    for h in handles:
+        keys = {osgraph.handle_key(h)}
+        pid = ids.resolve(h) if h else None
+        if pid:
+            keys.add(f"pid:{pid}")
+        for k in keys - {""}:
+            for at, chat in reach.get(k, ()):
+                if at > after and (until is None or at <= until) and (not chat or chat != not_chat):
+                    return True
+    return False
+
+
 def space_for(person: dict | None, mapping: dict) -> str:
     company = ((person or {}).get("props") or {}).get("company", "") if person else ""
     company = (company or "").lower()
@@ -200,6 +296,7 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
     me = snap.add(me_node())
     db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
     try:
+        reach = my_reach(db, floor, ids, ctx.home)
         # One conversation can be several chat rows (iMessage and SMS for the
         # same number). The pilot sample caught a thread read as "waiting"
         # because only one of its two rows was looked at, so rows are folded
@@ -225,13 +322,18 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
             for p in people.values():
                 snap.add(p)
             label = display or ", ".join(p.label for p in people.values()) or ident
-            msgs = db.execute(
-                f"""SELECT m.guid, m.text, m.attributedBody, m.is_from_me, m.date, m.is_read, h.id
+            # His own tapbacks come along so they count as his move; nobody
+            # else's do. They never become Message nodes.
+            seen = db.execute(
+                f"""SELECT m.guid, m.text, m.attributedBody, m.is_from_me, m.date, m.is_read, h.id,
+                          m.associated_message_type
                    FROM message m JOIN chat_message_join j ON j.message_id = m.ROWID
                    LEFT JOIN handle h ON h.ROWID = m.handle_id
-                   WHERE j.chat_id IN ({marks}) AND m.item_type = 0 AND m.associated_message_type = 0
-                     AND m.date > ?
-                   ORDER BY m.date DESC LIMIT ?""", (*rowids, floor, MESSAGES_PER_THREAD)).fetchall()
+                   WHERE j.chat_id IN ({marks}) AND m.item_type = 0 AND m.date > ?
+                     AND (m.associated_message_type = 0
+                          OR (m.is_from_me = 1 AND m.associated_message_type BETWEEN 2000 AND 3999))
+                   ORDER BY m.date DESC LIMIT ?""", (*rowids, floor, MESSAGES_PER_THREAD * 4)).fetchall()
+            msgs = [m[:7] for m in seen if not m[7]][:MESSAGES_PER_THREAD]
             if not msgs:
                 continue
             last_at = (APPLE_EPOCH + timedelta(seconds=(last or 0) / 1e9)).astimezone()
@@ -274,12 +376,10 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
                     snap.link(task, "OWED_TO", sender, confidence=0.6)
                     snap.link(task, "EXTRACTED_FROM", mid)
                     snap.link(task, "BELONGS_TO", f"space:{space}")
-            burst = []
-            for m in msgs:
-                if m[3]:
-                    break
-                burst.append(body_text(m[1], m[2]))
-            if awaits_me(list(reversed(burst)), ident, group, known):
+            view = [{"from_me": bool(m[3]), "text": body_text(m[1], m[2]), "reaction": bool(m[7]),
+                     "handle": m[6] or "", "at": APPLE_EPOCH + timedelta(seconds=(m[4] or 0) / 1e9)} for m in seen]
+            if thread_awaits_me(view, ident, group, known, reached_after=lambda at, who, ident=ident: reached(
+                    reach, who, ids, at, not_chat=ident)):
                 snap.link(tid, "AWAITS_REPLY_FROM", me, confidence=0.9 if not group else 0.6,
                           props={"since": last_at.isoformat()})
             elif newest_from_me and "?" in (newest_text or "") and not group and first_person:

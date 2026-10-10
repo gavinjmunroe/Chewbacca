@@ -9,4 +9,4 @@ On 2026-10-10 the tab-relaunch tab answered "We good?" with "yeah, close it". vi
 
 **Why:** with 9+ tabs on one checkout, closeout almost never passes clean. The dirty files are usually other tabs' work in progress. A yes that a guard then reverses reads as the tab not knowing its own state.
 
-**How to apply:** before any "we good" or "safe to close" answer, run `git status` and `uptime` and read whose each dirty file is (the tab board's recent files). Answer once, in this shape: what this tab made and where it is on main, then the closeout failures with their owners, then whether this tab can close.. Never say "good" bare, and see [[feedback_never_close_without_updating_chewbacca]], [[reference_chewbacca_launch]].
+**How to apply:** before any "we good" or "safe to close" answer, run `git status` and `uptime` and read whose each dirty file is (the tab board's recent files). Answer once, in this shape: what this tab made and where it is on main, then the closeout failures with their owners, then whether this tab can close. Never say "good" bare, and see [[feedback_never_close_without_updating_chewbacca]], [[reference_chewbacca_launch]].

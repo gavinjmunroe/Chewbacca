@@ -1,0 +1,156 @@
+#!/usr/bin/env python3
+"""railway-domain: give the linked Railway service a clean public domain.
+
+Railway generates names like web-production-331de.up.railway.app. That URL is
+what gets texted to people, so it should read like the project, not a build
+artifact. Run from a directory linked with `railway link`:
+
+  railway-domain                 rename to <project-name>.up.railway.app
+  railway-domain askforthefire   rename to askforthefire.up.railway.app
+  railway-domain --check         print the current domain, change nothing
+
+Creates the domain if the service has none. If the name is taken it tries
+<name>-app and <name>-site, then stops and says so.
+
+2026-10-10: the Holy Spirit prayer tool shipped as web-production-331de and
+Caleb wrote "Bro ALWAYS clean up the domain on railway deploys".
+"""
+import json
+import os
+import re
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+API = "https://backboard.railway.com/graphql/v2"
+GENERATED = re.compile(r"-production(-[a-z0-9]{4,6})?\.up\.railway\.app$")
+
+
+def token() -> str:
+    for var in ("RAILWAY_API_TOKEN", "RAILWAY_TOKEN"):
+        if os.environ.get(var):
+            return os.environ[var]
+    path = os.path.expanduser("~/.railway/config.json")
+    try:
+        with open(path) as fh:
+            user = json.load(fh).get("user", {})
+    except (OSError, ValueError):
+        user = {}
+    tok = user.get("token") or user.get("accessToken")
+    if not tok:
+        sys.exit("railway-domain: not signed in to Railway (run `railway login`)")
+    return tok
+
+
+def gql(query: str, variables: dict) -> dict:
+    req = urllib.request.Request(
+        API,
+        data=json.dumps({"query": query, "variables": variables}).encode(),
+        headers={
+            "Authorization": "Bearer " + token(),
+            "Content-Type": "application/json",
+            "User-Agent": "railway-cli",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            body = json.load(resp)
+    except urllib.error.HTTPError as err:
+        sys.exit(f"railway-domain: Railway API HTTP {err.code}")
+    if body.get("errors"):
+        raise RuntimeError(body["errors"][0].get("message", "unknown error"))
+    return body["data"]
+
+
+def slugify(name: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+    return slug[:50] or "app"
+
+
+def linked() -> dict:
+    out = subprocess.run(["railway", "status", "--json"], capture_output=True, text=True)
+    if out.returncode != 0:
+        sys.exit("railway-domain: this directory isn't linked to a Railway project (railway link)")
+    try:
+        return json.loads(out.stdout)
+    except ValueError:
+        sys.exit("railway-domain: couldn't read `railway status --json`")
+
+
+def main() -> int:
+    args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    check_only = "--check" in sys.argv
+    status = linked()
+    project_name = status.get("name") or "app"
+    env_id = None
+    for edge in status.get("environments", {}).get("edges", []):
+        env_id = edge["node"]["id"]
+        if edge["node"].get("name") == "production":
+            break
+
+    # `railway status --json` lists every service; the linked one is in the CLI config.
+    cfg_path = os.path.expanduser("~/.railway/config.json")
+    with open(cfg_path) as fh:
+        projects = json.load(fh).get("projects", {})
+    here = os.path.realpath(os.getcwd())
+    link = None
+    for path, entry in projects.items():
+        if here == os.path.realpath(path) or here.startswith(os.path.realpath(path) + os.sep):
+            if link is None or len(path) > len(link[0]):
+                link = (path, entry)
+    service_id = link[1].get("service") if link else None
+    env_id = (link[1].get("environment") if link else None) or env_id
+    if not service_id:
+        sys.exit("railway-domain: no service linked here (railway service link <name>)")
+
+    data = gql(
+        "query($s:String!){service(id:$s){name serviceInstances{edges{node{environmentId domains{serviceDomains{id domain}}}}}}}",
+        {"s": service_id},
+    )
+    domains = []
+    for edge in data["service"]["serviceInstances"]["edges"]:
+        node = edge["node"]
+        if node["environmentId"] == env_id:
+            domains = node["domains"]["serviceDomains"]
+
+    current = domains[0] if domains else None
+    if check_only:
+        print(f"https://{current['domain']}" if current else "no railway domain yet")
+        return 1 if current and GENERATED.search(current["domain"]) else 0
+
+    base = slugify(args[0] if args else project_name)
+    if current and current["domain"] == f"{base}.up.railway.app":
+        print(f"https://{current['domain']}")
+        return 0
+
+    if not current:
+        made = gql(
+            "mutation($i:ServiceDomainCreateInput!){serviceDomainCreate(input:$i){id domain}}",
+            {"i": {"serviceId": service_id, "environmentId": env_id}},
+        )
+        current = made["serviceDomainCreate"]
+
+    for candidate in (base, f"{base}-app", f"{base}-site"):
+        try:
+            gql(
+                "mutation($i:ServiceDomainUpdateInput!){serviceDomainUpdate(input:$i)}",
+                {
+                    "i": {
+                        "serviceDomainId": current["id"],
+                        "serviceId": service_id,
+                        "environmentId": env_id,
+                        "domain": f"{candidate}.up.railway.app",
+                    }
+                },
+            )
+        except RuntimeError as err:
+            print(f"railway-domain: {candidate}.up.railway.app not available ({err})", file=sys.stderr)
+            continue
+        print(f"https://{candidate}.up.railway.app")
+        return 0
+    sys.exit(f"railway-domain: {base}, {base}-app and {base}-site are all taken; pass a name")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

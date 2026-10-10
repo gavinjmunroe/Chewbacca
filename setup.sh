@@ -1707,6 +1707,11 @@ _register("PreToolUse", hooks_dir + "/clay-native-guard.sh", timeout=5,
 _register("PreToolUse", hooks_dir + "/wait-loop-guard.sh", timeout=5,
           matcher="Bash")
 
+# A deploy goes out on a clean name. On 2026-10-10 the prayer tool shipped as
+# web-production-331de.up.railway.app; bin/railway-domain renames it.
+_register("PostToolUse", hooks_dir + "/railway-domain-guard.sh", timeout=5,
+          matcher="Bash")
+
 # Say the ranking rule out loud before ranking, and name what would falsify
 # the answer. Running someone's list top to bottom is not a method.
 _register("UserPromptSubmit", hooks_dir + "/method-guard.sh", timeout=8,

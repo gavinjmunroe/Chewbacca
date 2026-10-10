@@ -800,6 +800,8 @@ if group "installer"; then
     bash "$ROOT/tests/plan_guard.sh"
   check  "wait-loop-guard refuses an uncapped polling loop and permits a capped one" \
     bash "$ROOT/tests/wait_loop_guard.sh"
+  check  "railway-domain-guard sends a generated Railway domain to railway-domain" \
+    bash "$ROOT/tests/railway_domain_guard.sh"
 
   # chatdb_guard.sh existed since 2026-10-03 and was never in the suite.
   check  "chatdb-guard refuses raw thread reads and permits the people CLI" \

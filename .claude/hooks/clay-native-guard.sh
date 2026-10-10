@@ -22,18 +22,25 @@ type hook_init >/dev/null 2>&1 && hook_init clay-native-guard.sh 5
 
 set -uo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
-cmd="$(jq -r '.tool_input.command // empty' 2>/dev/null)"
+payload="$(cat)"
+cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)"
+session="$(printf '%s' "$payload" | jq -r '.session_id // empty' 2>/dev/null)"
 [ -n "$cmd" ] || exit 0
 case "$cmd" in *CLAY_LOOP_OK=*) exit 0 ;; esac
-# Caleb told the agent in chat to do the Clay work itself within 2 hours
+# Caleb told the agent in THIS session to do the Clay work itself within 2 hours
 # (chat-approval.sh). The CLAY_LOOP_OK prefix can't carry that: launch-guard
 # refuses any env prefix on a command that names Clay, so on 2026-10-10 the two
-# guards together left no way to run an approved verification at all.
-python3 -I - "${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}/clay-chat-approval.json" <<'PY' 2>/dev/null && exit 0
+# guards together left no way to run an approved verification at all. Bound to
+# the session because a bare "do it" in another tab is about that tab's work
+# (security review of 2e5c1aff).
+python3 -I - "${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}/clay-chat-approval.json" "$session" <<'PY' 2>/dev/null && exit 0
 import json, sys, time
 try:
-    at = int(json.load(open(sys.argv[1]))["at"])
+    rec = json.load(open(sys.argv[1]))
+    at = int(rec["at"])
 except Exception:
+    sys.exit(1)
+if not sys.argv[2] or rec.get("session_id") != sys.argv[2]:
     sys.exit(1)
 sys.exit(0 if 0 <= time.time() - at < 2 * 3600 else 1)
 PY

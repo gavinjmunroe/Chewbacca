@@ -7,7 +7,7 @@ f2322dc065f50396af938b1b2a217cf68594aec22b811b7378ba99bbc22d19ba  .claude/hooks/
 530d0354c0e461033302e8e7338f0187a235618a42c0eb0d26b2bb4407af7ba9  .claude/hooks/browser-ux-guard.sh
 d6a14f2e84bb1e3b04e4d500f4b939630b3417809930fa9d4af7651fb306049e  .claude/hooks/chat-approval.sh
 b2e94053791b3748e4521b0a958001dbd2a5a35a6234d6f2f9847b0a879ad543  .claude/hooks/chatdb-guard.sh
-c4302c81100727a41454482fda27a93d0eccae1c6755819c815f8657c654b4ed  .claude/hooks/clay-native-guard.sh
+a77ee5bb4b935d5f486970d934c5b9653c90e1b74354a07eac97e58b14405d68  .claude/hooks/clay-native-guard.sh
 a4d37c82649e07e58df2332c165b5b24593e43a36208bb604267b5284bd3e367  .claude/hooks/clay-reply-guard.sh
 c5d7b0db396449034ca4b4010f04aa5644dd19268abb83d3ccb4230bb004bddb  .claude/hooks/client-rulings.sh
 2825e85717cf4f65ee014185791aef51ccaa4550a1d29e9f13e808d6575b40dd  .claude/hooks/coursework-context.sh

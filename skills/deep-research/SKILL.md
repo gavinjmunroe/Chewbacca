@@ -101,6 +101,24 @@ the finding later, so the research can be re-run instead of redone.
 Put the confidence level on the conclusion. High, medium or low, with the one
 thing that would move it.
 
+## Last step before reporting: every quote is checked
+
+Save each source you quote into the task's sources folder (page text, PDF
+text, transcript, README) and cite the saved file next to the quote:
+`"the exact words" [source: web/page.md]`, a markdown link whose target is
+the saved file, or a backticked path. A URL alone is not a saved source. Then run:
+
+```
+quote-check report.md sources/
+```
+
+It exits 1 and names each quote of 6 or more words whose cited file lacks
+those exact words (after quote-mark and whitespace normalization), whose
+cited file was never saved, or that cites nothing. Fix the quote from the
+source or cut it, and rerun until it exits 0. Do not report research while it
+fails. A pass proves the words are in the source and says nothing about
+whether the claim holds.
+
 ## Before writing for an outside audience
 
 Do this research first, not after the second draft. It changes which examples

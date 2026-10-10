@@ -641,6 +641,10 @@ if group "installer"; then
   check  "reading-check flags readings with no text on disk" \
     bash "$ROOT/tests/reading_check.sh" "$ROOT"
 
+  # deep-research's last step: a quote not verbatim in its saved source fails.
+  check  "quote-check fails a quote not found in its saved source" \
+    bash "$ROOT/tests/quote_check.sh"
+
   # The rule Caleb had to state four times in one session. A gate, not a note.
   check  "kit-debt fires when a session taught the kit nothing" \
     bash "$ROOT/tests/kit_debt.sh" "$ROOT"

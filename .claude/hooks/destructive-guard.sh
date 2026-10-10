@@ -41,19 +41,56 @@ cmd, sid, cwd = os.environ["DG_CMD"], os.environ["DG_SID"], os.environ["DG_CWD"]
 body = re.sub(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\s*$", "", cmd, flags=re.S | re.M)
 segments = re.split(r"&&|\|\||;|\n|\|", body)
 
+SAFE = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
+        "-c", "core.attributesFile=/dev/null"]
+ENV = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+
+def filter_guard(where):
+    # A repo's filter.<name>.clean runs on git status, and attributes can name
+    # it from .git/info/attributes, which no attr-source or flag skips (shown
+    # 2026-10-09). So blank every driver the repo's own config defines, as
+    # bin/lib/surfaces/code.py does. Reading config runs nothing. None means
+    # the config can't be read or names a driver a -c can't take back.
+    r = subprocess.run(SAFE + ["-C", where, "config", "--list", "--show-scope", "-z"],
+                       capture_output=True, text=True, timeout=4, env=ENV)
+    if r.returncode != 0:
+        return None
+    tokens = r.stdout.split("\0")
+    names = set()
+    for scope, entry in zip(tokens[0::2], tokens[1::2]):
+        key = entry.split("\n", 1)[0]
+        if scope in ("global", "system") or not key.lower().startswith("filter."):
+            continue
+        rest = key[len("filter."):]
+        if "." not in rest:
+            continue
+        name = rest.rsplit(".", 1)[0]
+        if not name or any(ch in name for ch in "=\n\0"):
+            return None
+        names.add(name)
+    guard = []
+    for name in sorted(names):
+        for var in ("clean", "smudge", "process"):
+            guard += ["-c", f"filter.{name}.{var}="]
+        guard += ["-c", f"filter.{name}.required=false"]
+    return guard
+
 def repo_dirty(where):
     # `where` comes from the command being checked, so the repo is untrusted:
-    # git status runs core.fsmonitor from repo config, which is arbitrary code.
-    # Turn it and hooks off. If git can't answer, assume there's work to lose
-    # (fail closed), since that's the case this guard exists for.
+    # git status runs core.fsmonitor and filter drivers from repo config, which
+    # are arbitrary code. Turn them and hooks off. If git can't answer, or the
+    # config can't be neutralised, assume there's work to lose (fail closed),
+    # since that's the case this guard exists for.
     try:
-        r = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
-                            "-C", where, "status", "--porcelain"],
-                           capture_output=True, text=True, timeout=4,
-                           # Attributes from the empty tree: no filter driver
-                           # applies, so a repo's filter.*.clean can't run either.
-                           env=dict(os.environ, GIT_OPTIONAL_LOCKS="0",
-                                    GIT_ATTR_SOURCE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"))
+        probe = subprocess.run(SAFE + ["-C", where, "rev-parse", "--git-dir"],
+                               capture_output=True, text=True, timeout=4, env=ENV)
+        if probe.returncode != 0:
+            return "not a git repository" not in probe.stderr
+        guard = filter_guard(where)
+        if guard is None:
+            return True
+        r = subprocess.run(SAFE + guard + ["-C", where, "status", "--porcelain", "--ignore-submodules=all"],
+                           capture_output=True, text=True, timeout=4, env=ENV)
     except Exception:
         return True
     if r.returncode != 0:

@@ -46,6 +46,13 @@ touch -t 202001010000 "$T/dirty/f"
 t "filter-driver repo still refused" 2 "$T/dirty" "git reset --hard"
 [ ! -e "$T/pwned-filter" ] && echo "  ok    filter driver never ran" || { echo "  FAIL  filter driver ran"; fail=$((fail+1)); }
 git -C "$T/dirty" config --unset filter.evil.clean; rm -f "$T/dirty/.gitattributes"
+# .git/info/attributes is read whatever attr-source says (shown 2026-10-09).
+echo '* filter=evil2' > "$T/dirty/.git/info/attributes"
+git -C "$T/dirty" config filter.evil2.clean "touch $T/pwned-info; cat"
+touch -t 202001010001 "$T/dirty/f"
+t "info/attributes filter repo still refused" 2 "$T/dirty" "git reset --hard"
+[ ! -e "$T/pwned-info" ] && echo "  ok    info/attributes filter never ran" || { echo "  FAIL  info/attributes filter ran"; fail=$((fail+1)); }
+git -C "$T/dirty" config --unset filter.evil2.clean; rm -f "$T/dirty/.git/info/attributes"
 echo "lets through:"
 t "same commands, clean repo" 0 "$T/clean" "git reset --hard HEAD"
 t "restore --staged, dirty"   0 "$T/dirty" "git restore --staged f"

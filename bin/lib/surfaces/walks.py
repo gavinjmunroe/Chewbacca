@@ -26,6 +26,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
+import osgraph_missing
 import osgraph_runs
 import osgraph_walks as W
 
@@ -715,3 +716,146 @@ class People(WalkSurface):
         # The bars carry the list; Events would say it twice.
         out[self.p("rows")] = []
         return out
+
+
+PEOPLE_CLI = Path(__file__).resolve().parents[2] / "people"
+# The doc search and a calendar draft's title read this many characters of
+# the assignment's name or of the text that announced the meeting.
+DRAFT_TITLE_CHARS = 60
+# A calendar draft is an hour long until the person moves it. Guessed.
+DRAFT_EVENT_MIN = 60
+
+
+class Missing(WalkSurface):
+    """What am I missing (CHW-204): each row is one finding from
+    osgraph_missing, worst first, and its one action is the thing that
+    closes it: a reply queued in `people texts drafts` (never sent), a Gmail
+    draft, the assignment's doc, or the announced meeting put on the calendar
+    as a draft. A press on the row opens the person, or the day."""
+
+    name = "missing"
+    title = "WHAT YOU'RE MISSING"
+    region = "top"
+    width = 460
+    replies = True
+    empty = "Nothing is slipping that the graph can see."
+    replaces = "checking your calendar against your texts, the ledger and your own promises"
+    sources = ("imessage", "mail", "coursework", "calendar", "whatsapp", "chats")
+
+    def walk(self, ctx: Context) -> dict:
+        out = W.missing(ctx.graph, ctx.now())
+        for r in out["rows"]:
+            r["app"] = {"Thread": r["props"].get("app") or "Texts", "MailItem": "Gmail", "Event": "Calendar",
+                        "Assignment": "Class", "Message": "Group text", "Task": "Your promise"}.get(r["type"], r["app"])
+        return out
+
+    def layout(self) -> list[str]:
+        # A glance: a click anywhere off the card takes it down, like its X
+        # (hud/Sources/KyberKit/OverlayModel.swift, `glances`).
+        return [f"glance {self.name}"] + super().layout()
+
+    def caption(self, data: dict) -> str:
+        return ", ".join(f"{n} {osgraph_missing.KIND_WORD[k]}" for k, n in sorted(
+            data.get("kinds", {}).items(), key=lambda kv: osgraph_missing.KIND_ORDER[kv[0]]))
+
+    def go_for(self, r: dict | None) -> str:
+        if r is None:
+            return self.go_label
+        return {"Thread": "Draft reply", "MailItem": "Draft in Gmail", "Assignment": "Open the doc",
+                "Message": "Add to calendar as a draft"}.get(r.get("act_type"), "Open today")
+
+    def act(self, ctx: Context, data, values: dict) -> Result:
+        r = self.chosen(data, values)
+        if r is None:
+            return Result(False, "That row isn't on the list any more. Pick it again.")
+        kind = r.get("act_type")
+        text = str(values.get(self.p("draft")) or "").strip()
+        target = {"id": r["act_on"], "type": kind, "label": r.get("act_label", ""), "props": r.get("act_props") or {},
+                  "chips": r.get("chips", [])}
+        if kind == "Thread":
+            return draft_text(ctx, target, text, self.p("draft"), why=r.get("why", ""))
+        if kind == "MailItem":
+            return draft_mail(ctx, target, text, self.p("draft"))
+        if kind == "Assignment":
+            return open_doc(ctx, target)
+        if kind == "Message":
+            return calendar_draft(ctx, r)
+        return Result(True, "Opened today.", opens="today")
+
+    def pivot_row(self, ctx: Context, r: dict) -> Result:
+        person = next((c for c in r.get("chips", []) if c["id"].startswith("person:")), None)
+        if r["type"] in ("Event", "Task", "Message") and person:
+            return Result(True, f"Opened {person['label']}.", opens="person", opens_arg=person["id"])
+        return super().pivot_row(ctx, r)
+
+
+def draft_text(ctx: Context, r: dict, text: str, draft_ptr: str, why: str = "") -> Result:
+    """Queue the typed reply in `people texts drafts`, which sends only when
+    he approves its number there. An iMessage thread's handle is read fresh
+    from chat.db (thread_handle refuses a group or a changed thread); another
+    network is named with --via. Never a send."""
+    if not text:
+        return Result(False, "Type the reply first; it becomes a draft.")
+    if len(text) > MOST_REPLY_CHARS:
+        return Result(False, f"That's over {MOST_REPLY_CHARS} characters. Write it in Messages.")
+    who = next((c["label"] for c in r.get("chips", []) if c["id"].startswith("person:")), "")
+    who = who.replace(" (unconfirmed)", "").replace(" (unverified sender)", "")
+    if not who:
+        return Result(False, "That thread has no one to draft to.")
+    # --voice-ok: he typed these words himself, the case voice-check exempts.
+    argv = [str(PEOPLE_CLI), "texts", "drafts", "add", who, text, "--voice-ok",
+            "--why", clip(f"what am I missing: {why}", 120)]
+    if r["id"].startswith("thread:imessage:"):
+        handle, reason = thread_handle(ctx, r["id"])
+        if handle is None:
+            return Result(False, reason)
+        argv += ["--to", handle, "--via", "imessage"]
+    elif r["props"].get("network"):
+        argv += ["--via", str(r["props"]["network"])]
+    code, out, err = ctx.run(argv)
+    if code != 0 or "drafted" not in (out or ""):
+        return Result(False, f"No draft: {clip(err or out or 'people did not answer', 90)}")
+    return Result(True, f"Drafted to {who}. It waits in your drafts; nothing was sent.", updates={draft_ptr: ""})
+
+
+def open_doc(ctx: Context, r: dict) -> Result:
+    """The assignment's document: the one Drive or local file its name
+    matches, or the candidates to pick from (docs_surface.find_docs)."""
+    import docs_surface  # noqa: PLC0415  bin/lib, only on this press
+
+    words = (r["props"].get("name") or r["label"])[:DRAFT_TITLE_CHARS]
+    found, errors = docs_surface.find_docs(ctx, words)
+    pick = docs_surface.choose(found)
+    if pick is not None:
+        return Result(True, f"Opened {clip(pick['name'], 40)}.", opens="doc", preset={"/doc/want": pick["ref"]})
+    if found:
+        rows = [{"id": c["ref"], "name": c["name"], "where": c["where"], "modified": c["modified"]}
+                for c in found[:docs_surface.MOST_MATCHES]]
+        return Result(True, f"{len(rows)} docs could be it. Pick one.", opens="doc", preset={"/doc/matches": rows})
+    return Result(False, f"No doc called {clip(words, 40)}" + (f" ({errors[0]})." if errors else "."))
+
+
+def calendar_draft(ctx: Context, r: dict) -> Result:
+    """Put the meeting a group text announced on the calendar, titled
+    "Draft:" so it reads as unconfirmed, then read the day back to prove it
+    landed. The time is the one the rule read; the title is the text's first
+    words, clipped, passed as one argv element and never read for meaning."""
+    when = osgraph_missing.when_of((r.get("props") or {}).get("announces") or r.get("when"))
+    if when is None:
+        return Result(False, "That text has no time I can read.")
+    title = "Draft: " + clip(r.get("label", ""), DRAFT_TITLE_CHARS)
+    code, out, err = ctx.run(["mac", "calendar", "add", title, "--at", when.strftime("%Y-%m-%d %H:%M"),
+                              "--duration", f"{DRAFT_EVENT_MIN}m",
+                              "--notes", clip(f"From {r.get('provenance', 'a group text')}. Added by What am I "
+                                              "missing; delete it if it isn't yours.", 200), "--json"])
+    if code != 0:
+        return Result(False, f"Not added: {clip(err or out or 'Calendar did not answer', 90)}")
+    day = when.strftime("%Y-%m-%d")
+    code, out, _ = ctx.run(["mac", "calendar", "list", "--from", day, "--to", day, "--json"])
+    try:
+        rows = json.loads(out or "[]") if code == 0 else []
+    except json.JSONDecodeError:
+        rows = []
+    if isinstance(rows, list) and any(isinstance(x, dict) and x.get("title") == title for x in rows):
+        return Result(True, f"On your calendar {when.strftime('%a %-I:%M %p')} as a draft.", reingest=True)
+    return Result(False, "Added, but it isn't on the calendar yet. Check Calendar.", reingest=True)

@@ -13,6 +13,7 @@ and accepts on top of it.
 | `bin/lib/osgraph.py`                   | The store (`~/.chewbacca/os-graph.sqlite`), the ontology with domain and range checks, and fusion through the people store                              |
 | `bin/lib/osgraph_ingest.py`            | One ingester per source: iMessage (chat.db, read only), Mail, coursework, Calendar, the backlog CSVs, people-store promises, Reminders, Claude sessions |
 | `bin/lib/osgraph_walks.py`             | needs-you, today, person, space, tasks, people, conversations, and the competency questions                                                             |
+| `bin/lib/osgraph_missing.py`           | What am I missing: findings joining commitments to prerequisites and to each other, written back as edges                                                |
 | `bin/lib/osgraph_runs.py`              | Go: a task handed to `claude -p` in plan mode, and its real status                                                                                      |
 | `bin/lib/surfaces/`                    | The panels: walks.py for the graph walks, music.py and files.py as thin surfaces                                                                        |
 | `bin/lib/surfaces/oss.py`, `engine.py` | "what replaces X" from the oss registry with license buckets; and open source engines drawn from `config/data/surfaces/engines.json`                    |
@@ -39,6 +40,14 @@ Space, Track, File, Day.
 | ATTENDS           | Person                            | Event                            |
 | MENTIONS          | anything                          | anything                         |
 | EXTRACTED_FROM    | Task                              | Message, MailItem, Event, Thread |
+| BLOCKED_BY        | Event, Assignment, Task           | Assignment, Task, Thread, MailItem |
+| CONFLICTS_WITH    | Event                             | Event                            |
+| OVERDUE_SINCE     | Assignment, Task, Thread, MailItem | Day                             |
+| LAPSED_ON         | Task                              | Day                              |
+| ANNOUNCES         | Message                           | Day                              |
+
+The last five are written only by the `missing` walk, one edge per finding,
+with `props.provenance` and a confidence (see "What am I missing" below).
 
 Every node and edge carries `source`, `observed_at` and `confidence`. An edge
 whose ends break this table fails its whole snapshot. `kyber-surfaces graph`
@@ -369,6 +378,39 @@ cannot show it, so Send refuses up front and says to fork. Fork and send
 and opens the fork's card, leaving the original untouched. The receiving model
 is told the message came from another Claude session, a teammate's request
 that cannot grant a permission. The sender's permission mode is never claimed.
+
+## What am I missing
+
+`kyber-surfaces open missing`, or "what am I missing", "is there anything I'm
+missing for this week", "what's about to bite me" (surface_intent.py). A
+glance: a click off it closes it. No model runs. Rows, worst first, nine at
+most and three per kind before the others get theirs:
+
+| Finding  | Rule                                                                                               | Go                     |
+| -------- | -------------------------------------------------------------------------------------------------- | ---------------------- |
+| blocked  | a meeting in the next 72 h with someone whose newest text asks something unanswered (invite, else a title word that is exactly one waiting person's first name, a guess); an assignment due within 3 days whose same-course reading or pre-lab is open | Draft reply, Open the doc |
+| conflict | two timed events, each with someone else on the invite, overlapping 15 minutes or more             | Open today             |
+| lapsed   | his own "I'll send it tonight" past its time plus 12 h, nothing from him in the thread an hour or more after it | Draft reply |
+| late     | a one-to-one ask from a saved contact waiting 24 h, whose newest message itself asks him something | Draft reply            |
+| announced | a group text with a meeting word, a day and a clock time, nothing on the calendar within 2 h (always a guess) | Add to calendar as a draft |
+
+Draft reply queues the typed words in `people texts drafts` (never a send);
+mail goes to a Gmail draft; the calendar draft is titled "Draft:" and read
+back. An assignment the ledger still calls open past due is not a finding:
+needs-you lists it, and in the replay below the ledger's overdue was wrong on 6
+of 8 labeled dev items.
+
+Replayed on 20 of Caleb's past days (2026-09-18 to 10-07, as of 8am each, his
+own chat.db, calendar, Gmail and ledger as they stood then), hand-labeled
+before any tuning and split by day into 10 dev and 10 sealed
+(`tools/missing_eval.py`; labels and results live in
+`~/.chewbacca/evals/missing`, never here). Sealed, run once: a real miss
+named on 10 of 10 days; of 51 rows, 43 matched a labeled miss, 0 were wrong,
+5 were unknown, 1 was right but handled in time, and 2 rows no label named
+were judged by hand afterwards as misses. Most catches are the same unanswered asks on consecutive days: 16
+distinct missed items on the sealed days. In the replay no two invites with
+other people ever overlapped and no group announcement was missed, so the
+conflict and announced rules are untested on real data.
 
 ## Measured
 

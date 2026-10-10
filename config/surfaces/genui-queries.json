@@ -20,6 +20,15 @@
       "provider": "graph"
     },
     {
+      "name": "missing",
+      "description": "what is about to bite you, worst first: a meeting whose person is waiting on your reply, an assignment whose reading is not done, two commitments at once, your own promise gone quiet, an ask waiting a day or more, a group meeting not on your calendar",
+      "argv": ["kyber-surfaces", "walk", "missing", "--json"],
+      "rename": { "label": "what", "app": "channel" },
+      "fields": ["what", "channel", "waiting", "why"],
+      "views": ["rows", "events", "list", "count", "note"],
+      "provider": "graph"
+    },
+    {
       "name": "person",
       "description": "one person across every network: their threads, mail, what you owe them. Argument: their full name",
       "argv": ["kyber-surfaces", "walk", "person", "{arg}", "--json"],

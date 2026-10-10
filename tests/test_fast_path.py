@@ -113,6 +113,10 @@ TABLE = [
     ("new note Trip ideas", "notes"),
     ("close the notes", "notes"),
     ("show my notes", "surface"),
+    # CHW-204: Ghost's question lands on the glass, not the voice model.
+    ("What am I missing?", "surface"),
+    ("Is there anything I'm missing for this week?", "surface"),
+    ("what am I missing in this essay", None),
 ]
 
 

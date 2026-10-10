@@ -1527,6 +1527,10 @@ if group "hud"; then
   check  "kyber-surfaces parses" python3 -m py_compile "$ROOT/bin/kyber-surfaces"
   check  "the OS graph refuses bad edges, fuses only via people, answers its questions" \
     python3 "$ROOT/tests/test_osgraph.py"
+  # CHW-204. Hand-built graphs and a fixture chat.db; the replay of real days
+  # is tools/missing_eval.py and never runs here.
+  check  "what am I missing joins events to prerequisites, writes typed findings, and only drafts" \
+    python3 "$ROOT/tests/test_osgraph_missing.py"
   check  "surfaces draw valid ops, refresh with d only, and send only on a press" \
     python3 "$ROOT/tests/test_kyber_surfaces.py"
   # CHW-203. Scripted Jev and a scripted model, recorded query answers: no

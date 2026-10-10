@@ -97,6 +97,14 @@ EXTRA = [
         r"^(?:what(?:'s|s| is) up today|what do i (?:need|have) to do|what needs (?:me|my attention|doing)"
         r"|what should i (?:look at|do next|work on)|what(?:'s|s| is) waiting on me|anything (?:need|needs) me)"
         r"(?: today| right now| now)?$")),
+    # "What am I missing", "is there anything I'm missing for this week",
+    # "what's about to bite me": each commitment joined to what it needs
+    # (CHW-204, bin/lib/osgraph_missing.py). Ghost's launch film asks the first.
+    ("missing", re.compile(
+        r"^(?:what am i missing|am i missing (?:anything|something)|is there anything (?:that )?i'?m missing"
+        r"|(?:is there )?anything i'?m (?:missing|forgetting)|what am i forgetting"
+        r"|what(?:'s|s| is) (?:about to|gonna|going to) bite me|what could bite me|what(?:'s|s| is) slipping)"
+        r"(?: (?:for )?(?:today|tomorrow|this week|this weekend|right now|now))?$")),
     # "What did we decide", "what came out of my call": the meetings panel,
     # whose detail carries the Decisions lines and the action items.
     ("meetings", re.compile(
@@ -113,7 +121,7 @@ SPACE_MODE = re.compile(r"^(?P<space>school|amber|zeutara|chewbacca|personal) (?
 CLOSE = re.compile(
     r"^(?:close|hide|take down|dismiss|get rid of) (?:my |the )?"
     r"(?P<what>day|today|calendar|messages|texts|mail|email|inbox|conversations|tasks|to ?dos?|people|"
-    r"music|player|downloads|files|needs you|notes|github|prs|code|changes|meetings|calls|granola|agents|"
+    r"music|player|downloads|files|needs you|missing|notes|github|prs|code|changes|meetings|calls|granola|agents|"
     r"all(?: the)? surfaces|surfaces|everything)(?: surface| panel)?$")
 CLOSE_NAMES = {"day": "today", "calendar": "today", "texts": "conversations", "messages": "conversations",
                "mail": "conversations", "email": "conversations", "inbox": "conversations",
@@ -269,7 +277,8 @@ def perform(command: Command, run=subprocess.run, ask=None) -> Outcome:
             pass
     spoken = {"today": "Your day's up.", "conversations": "Your conversations are up.",
               "tasks": "Your tasks are up.", "people": "Your people are up.", "music": "The player's up.",
-              "files": "Downloads are up.", "needs-you": "Here's what needs you.", "person": "They're up.",
+              "files": "Downloads are up.", "needs-you": "Here's what needs you.",
+              "missing": "Here's what you might be missing.", "person": "They're up.",
               "oss": "The alternatives are up.", "engine": "The engine's up.",
               "code": "What changed is up.", "notes": "Your notes are up.", "github": "GitHub's up.",
               "meetings": "Your meetings are up.", "agents": "Your agent sessions are up."}

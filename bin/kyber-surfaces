@@ -875,8 +875,11 @@ def glass_row(r: dict, now) -> dict:
     from surfaces.walks import short_when  # noqa: PLC0415
 
     label = r.get("label", "")
-    if r.get("type") == "Task" and (r.get("props") or {}).get("kind") == "request":
+    if r.get("type") == "Task" and (r.get("props") or {}).get("kind") in ("request", "commitment"):
         label = (r.get("props") or {}).get("provenance") or "an ask in a text"
+    elif r.get("type") == "Message":
+        # A `missing` row for a group text: who said it and where, not the words.
+        label = r.get("provenance") or "a group text"
     return {"id": r.get("id", ""), "label": label, "app": r.get("app", ""), "why": r.get("why", ""),
             "waiting": short_when(r.get("when", ""), now), "tier": TIER_NAMES[r.get("tier", 2)],
             "people": [c["label"] for c in r.get("chips", []) if c["id"].startswith("person:")][:2]}

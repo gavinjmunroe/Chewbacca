@@ -11,6 +11,8 @@ so a press on a row can open THAT node's walk (navigation is traversal), and
     tasks       Tasks owed by me in four lanes, from real run status
     people      Persons ranked by the people CLI's score, with message counts
     conversations  Threads and mail as cards, ACTION or FYI
+    missing     each commitment joined to what it needs and to the others
+                around it: findings as typed edges (osgraph_missing.py)
 
 The three competency questions the ontology was designed against are walks
 too: `owed_to` ("what do I owe Sagar"), `waiting_longest` ("who's waiting on me
@@ -142,6 +144,14 @@ def _attention(g: Graph, now: datetime, scope: set[str] | None = None) -> list[d
         if node["props"].get("kind") == "agent" and node["props"].get("status") == "done" and keep(node["id"]):
             rows.append(row(g, node, FYI, node["props"].get("at", ""), "an agent finished"))
     return rows
+
+
+def missing(g: Graph, now: datetime) -> dict:
+    """"What am I missing": the findings walk, which writes each finding back
+    as an edge. Lives in osgraph_missing.py with its rules (CHW-204)."""
+    import osgraph_missing  # noqa: PLC0415  it imports this module for row()
+
+    return osgraph_missing.missing(g, now)
 
 
 def needs_you(g: Graph, now: datetime) -> dict:

@@ -3377,10 +3377,12 @@ class Listener:
         return True
 
     def surface_request(self, said: str, typed: bool) -> bool:
-        """"Show my day", "what do I need to do", "show me Karthik": open or
-        close a live surface with no model turn. See bin/lib/surface_intent.py
-        for which sentences count. The panel is the answer; the voice says one
-        line, so a surface is never read aloud."""
+        """"Show my day", "what do I need to do", "show me Karthik", "what am I
+        missing": open or close a live surface with no model turn. See
+        bin/lib/surface_intent.py for which sentences count. The panel is the
+        answer; the voice says one line, so a surface is never read aloud.
+        "What am I missing" (CHW-204) draws the `missing` glance, which a click
+        off it takes down; nothing on it sends."""
         if self.in_flight():
             return False
         try:

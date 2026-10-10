@@ -31,6 +31,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import osgraph
+import osgraph_missing
 from osgraph import ME, Edge, Graph, Identities, Node, day_node, me_node, person_node, space_node
 
 APPLE_EPOCH = datetime(2001, 1, 1, tzinfo=timezone.utc)
@@ -196,6 +197,9 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
         raise FileNotFoundError(f"no chat.db at {path}")
     now = ctx.now()
     floor = int((now - timedelta(days=days) - APPLE_EPOCH).total_seconds() * 1e9)
+    # Nothing after `now`: live there is nothing later anyway, and a replay of
+    # a past day (tools/missing_eval.py) must not read what came after it.
+    ceil = int((now - APPLE_EPOCH).total_seconds() * 1e9)
     snap = Snapshot()
     me = snap.add(me_node())
     db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
@@ -209,7 +213,7 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
                 """SELECT c.ROWID, c.chat_identifier, c.display_name, c.style, MAX(m.date)
                    FROM chat c JOIN chat_message_join j ON j.chat_id = c.ROWID
                    JOIN message m ON m.ROWID = j.message_id
-                   WHERE m.date > ? GROUP BY c.ROWID""", (floor,)):
+                   WHERE m.date > ? AND m.date <= ? GROUP BY c.ROWID""", (floor, ceil)):
             f = folded.setdefault(ident, {"rows": [], "display": "", "style": style, "last": 0})
             f["rows"].append(rowid)
             f["display"] = f["display"] or display or ""
@@ -230,8 +234,8 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
                    FROM message m JOIN chat_message_join j ON j.message_id = m.ROWID
                    LEFT JOIN handle h ON h.ROWID = m.handle_id
                    WHERE j.chat_id IN ({marks}) AND m.item_type = 0 AND m.associated_message_type = 0
-                     AND m.date > ?
-                   ORDER BY m.date DESC LIMIT ?""", (*rowids, floor, MESSAGES_PER_THREAD)).fetchall()
+                     AND m.date > ? AND m.date <= ?
+                   ORDER BY m.date DESC LIMIT ?""", (*rowids, floor, ceil, MESSAGES_PER_THREAD)).fetchall()
             if not msgs:
                 continue
             last_at = (APPLE_EPOCH + timedelta(seconds=(last or 0) / 1e9)).astimezone()
@@ -256,7 +260,9 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
                                              snap.add(person_node(ids, handle or ident, source_hint="imessage")))
                 mid = snap.add(Node(f"message:imessage:{guid}", "Message",
                                     clip(words, osgraph.SNIPPET_CHARS) or "Attachment",
-                                    {"from_me": bool(from_me), "at": at.isoformat()}, observed_at=at.isoformat()))
+                                    {"from_me": bool(from_me), "at": at.isoformat(),
+                                     **({} if from_me else {"asks": osgraph_missing.asks(words)})},
+                                    observed_at=at.isoformat()))
                 snap.link(mid, "IN_THREAD", tid)
                 snap.link(mid, "SENT_BY", sender)
                 # The same filters as AWAITS_REPLY_FROM, one message at a time:
@@ -274,6 +280,8 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
                     snap.link(task, "OWED_TO", sender, confidence=0.6)
                     snap.link(task, "EXTRACTED_FROM", mid)
                     snap.link(task, "BELONGS_TO", f"space:{space}")
+            commitments(snap, db, rowids, floor, ceil, tid, me, group, space,
+                        first_person if not group else None, people, ids, ident)
             burst = []
             for m in msgs:
                 if m[3]:
@@ -288,6 +296,64 @@ def imessage(graph: Graph, ctx, ids: Identities, days: int = 7, db_path: Path | 
     finally:
         db.close()
     return snap.write(graph, "imessage")
+
+
+def commitments(snap: Snapshot, db, rowids: list, floor: int, ceil: int, tid: str, me: str, group: bool,
+                space: str, person: Node | None, people: dict, ids: Identities, ident: str) -> None:
+    """His own promises with a day in them ("I'll send it tonight") as
+    commitment Tasks, and, in a group, a text naming a meeting at a time as an
+    announcement on its Message. Both are guesses read by rule
+    (osgraph_missing.promise_due, announced_at); the `missing` walk decides
+    whether either is a miss. Every message in the window is read, not just
+    the newest five, because a promise is usually buried under the chat that
+    followed it."""
+    marks = ",".join("?" * len(rowids))
+    scan = db.execute(
+        f"""SELECT m.guid, m.text, m.attributedBody, m.is_from_me, m.date, h.id
+           FROM message m JOIN chat_message_join j ON j.message_id = m.ROWID
+           LEFT JOIN handle h ON h.ROWID = m.handle_id
+           WHERE j.chat_id IN ({marks}) AND m.item_type = 0 AND m.associated_message_type = 0
+             AND m.date > ? AND m.date <= ? ORDER BY m.date ASC""", (*rowids, floor, ceil)).fetchall()
+    mine = [(APPLE_EPOCH + timedelta(seconds=(r[4] or 0) / 1e9)).astimezone() for r in scan if r[3]]
+    for guid, text, blob, from_me, date, handle in scan:
+        at = (APPLE_EPOCH + timedelta(seconds=(date or 0) / 1e9)).astimezone()
+        words = body_text(text, blob)
+        mid = f"message:imessage:{guid}"
+        if from_me:
+            due = osgraph_missing.promise_due(words, at)
+            if due is None:
+                continue
+            snap.add(Node(mid, "Message", clip(words, osgraph.SNIPPET_CHARS),
+                          {"from_me": True, "at": at.isoformat()}, observed_at=at.isoformat()))
+            snap.link(mid, "IN_THREAD", tid)
+            snap.link(mid, "SENT_BY", me)
+            followed = next((t for t in mine if t >= at + osgraph_missing.FOLLOW_UP_GAP), None)
+            where = snap.nodes[tid].label
+            task = snap.add(Node(
+                f"task:imessage:promise:{guid}", "Task", clip(words, osgraph.SNIPPET_CHARS),
+                {"kind": "commitment", "status": "ready", "guess": True, "due_at": due.isoformat(),
+                 "followed_at": followed.isoformat() if followed else "",
+                 "provenance": f"your text to {where} {at.strftime('%a %-I:%M%p').lower()}",
+                 "at": at.isoformat()}, confidence=0.6, observed_at=at.isoformat()))
+            snap.link(task, "OWED_BY", me, confidence=0.6)
+            if person is not None:
+                snap.link(task, "OWED_TO", person.id, confidence=0.6)
+            snap.link(task, "EXTRACTED_FROM", mid)
+            snap.link(task, "BELONGS_TO", f"space:{space}")
+        elif group:
+            when = osgraph_missing.announced_at(words, at)
+            if when is None:
+                continue
+            if mid in snap.nodes:
+                snap.nodes[mid].props["announces"] = when.isoformat()
+                continue
+            sender = people[handle].id if handle in people else snap.add(
+                person_node(ids, handle or ident, source_hint="imessage"))
+            snap.add(Node(mid, "Message", clip(words, osgraph.SNIPPET_CHARS),
+                          {"from_me": False, "at": at.isoformat(), "announces": when.isoformat()},
+                          observed_at=at.isoformat()))
+            snap.link(mid, "IN_THREAD", tid)
+            snap.link(mid, "SENT_BY", sender)
 
 
 def address_of(sender: str) -> str:
@@ -390,6 +456,8 @@ def mail(graph: Graph, ctx, ids: Identities, days: int = 7, mapping: dict = SPAC
         verified = not handle.lower().startswith(UNVERIFIED)
         address = handle[len(UNVERIFIED):] if not verified else handle
         key = conversation_key(address, mail_subject(row))
+        if at and at > now:
+            continue  # a replay of a past day never reads what came after it
         if row.get("from_me"):
             if at and (key not in latest_mine or at > latest_mine[key]):
                 latest_mine[key] = at
@@ -451,8 +519,9 @@ def coursework(graph: Graph, ctx, ids: Identities, days: int = 14) -> dict:
             course = str(row.get("course") or "")
             aid = snap.add(Node(osgraph.node_key("assignment", "coursework", course, row["name"]), "Assignment",
                                 clip(f"{course} {row['name']}", 90),
-                                {"course": course, "status": row.get("status") or "", "overdue": bucket == "overdue",
-                                 "type": row.get("type") or "", "app": "Class"}))
+                                {"course": course, "name": str(row["name"]), "status": row.get("status") or "",
+                                 "overdue": bucket == "overdue", "type": row.get("type") or "",
+                                 "at": str(row.get("at") or ""), "app": "Class"}))
             snap.link(aid, "OWED_BY", me)
             snap.link(aid, "BELONGS_TO", "space:school")
             day = str(row.get("date") or row.get("due") or "")[:10]
@@ -468,6 +537,7 @@ def calendar(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
                      "--to", (now + timedelta(days=days)).strftime("%Y-%m-%d"), "--json"], "Calendar")
     snap = Snapshot()
     me = snap.add(me_node())
+    mine = my_addresses(ctx)
     for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict) or not row.get("title") or not row.get("start"):
             continue
@@ -480,7 +550,7 @@ def calendar(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
                             "Event", clip(row["title"], 80),
                             {"start": start.isoformat(), "end": str(row.get("end") or ""),
                              "all_day": bool(row.get("isAllDay")), "calendar": row.get("calendar", ""),
-                             "app": "Calendar"}))
+                             "others": others_on(row, mine), "app": "Calendar"}))
         snap.add(day_node(day))
         snap.link(eid, "DUE_ON", f"day:{day}")
         snap.link(me, "ATTENDS", eid)
@@ -490,6 +560,34 @@ def calendar(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
                 pid = snap.add(person_node(ids, addr, source_hint="calendar"))
                 snap.link(pid, "ATTENDS", eid)
     return snap.write(graph, "calendar")
+
+
+def my_addresses(ctx) -> set:
+    """Every address of his this machine knows: ~/.chewbacca/email/me and the
+    "me" list in ~/.chewbacca/meetings.json (meeting_capture.owner_emails)."""
+    mine = set(my_other_addresses(ctx))
+    try:
+        body = json.loads((ctx.home / ".chewbacca" / "meetings.json").read_text(encoding="utf-8"))
+        mine |= {osgraph.email_key(x) for x in body.get("me") or [] if isinstance(x, str)}
+    except (OSError, ValueError, AttributeError):
+        pass
+    return mine - {""}
+
+
+def others_on(row: dict, mine: set) -> int:
+    """How many people besides him an invite lists. An event he blocked out
+    for himself lists nobody, which is how a conflict tells a commitment from
+    a reminder to work (osgraph_missing.conflicts). An attendee the calendar
+    marks `self` is him whatever the address."""
+    n = 0
+    for attendee in row.get("attendees") or []:
+        if isinstance(attendee, dict) and attendee.get("self"):
+            continue
+        addr = attendee.get("email") if isinstance(attendee, dict) else str(attendee)
+        key = osgraph.email_key(addr or "")
+        if key and key not in mine:
+            n += 1
+    return n
 
 
 def backlog_paths(ctx) -> list[Path]:

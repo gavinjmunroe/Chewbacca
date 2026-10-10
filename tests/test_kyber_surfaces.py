@@ -68,7 +68,7 @@ def validate(lines: list[str]) -> list[str]:
     roots = []
     for line in lines:
         op = line.split(" ", 1)[0]
-        if op not in ("@", "c", ">", "r", "d", "-"):
+        if op not in ("@", "c", ">", "r", "d", "-", "glance"):
             problems.append(f"unknown op: {line[:40]}")
             continue
         if op == "c":
@@ -123,7 +123,7 @@ def make_daemon(ctx, tmp: Path):
 def drawing(tmp: Path) -> None:
     g, ctx, run, _ = fx.world(tmp)
     d, hud = make_daemon(ctx, tmp)
-    specs = [("needs-you", ""), ("today", ""), ("tasks", ""), ("people", ""), ("conversations", ""),
+    specs = [("needs-you", ""), ("missing", ""), ("today", ""), ("tasks", ""), ("people", ""), ("conversations", ""),
              ("person", "Sagar Tiwari"), ("space", "amber"), ("music", ""), ("files", "")]
     for kind, arg in specs:
         provider = surfaces.make(kind, arg) if arg else surfaces.make(kind)
@@ -551,7 +551,8 @@ def genui_wiring(tmp: Path) -> None:
     manifest = json.loads((fx.ROOT / "config" / "surfaces" / "genui-queries.json").read_text())
     check("the manifest's walks are ones kyber-surfaces has",
           all(q["argv"][:3] in (["kyber-surfaces", "walk", "unreplied"], ["kyber-surfaces", "walk", "needs-you"],
-                                ["kyber-surfaces", "walk", "person"], ["kyber-surfaces", "walk", "conversations"])
+                                ["kyber-surfaces", "walk", "person"], ["kyber-surfaces", "walk", "conversations"],
+                                ["kyber-surfaces", "walk", "missing"])
               for q in manifest["queries"]))
     check("the one row action it allows is the pivot the daemon handles", list(manifest["row_actions"]) == ["ks-pivot"])
 

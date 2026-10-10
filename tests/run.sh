@@ -808,6 +808,11 @@ if group "installer"; then
   check  "the Stop reminder will not push you to commit another session's work" \
     bash "$ROOT/tests/stop_check_authorship.sh" "$ROOT"
 
+  # A client's standing rulings reach the model on the prompt that names the
+  # client; 2026-10-09 a Jonah update contradicted two rulings nobody loaded.
+  check  "naming a client loads its standing rulings" \
+    bash "$ROOT/tests/client_rulings.sh"
+
   # The guard that keeps a Claude session's environment out of a person's
   # Terminal window. Its first version only fired when the parent was login,
   # which left every already-open shell broken.

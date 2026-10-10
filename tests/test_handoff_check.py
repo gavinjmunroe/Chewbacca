@@ -48,6 +48,9 @@ MUST_NOT_FIRE = [
     # Naming a decision only the user can make is required, not a handoff.
     # Refused twice on 2026-10-06 and the same answer reached Caleb three times.
     "The one call you'll have to make is when someone replies interested.",
+    # 2026-10-10: payment is a credential only he holds; refused once, sent twice.
+    "Tell me the slot and I'll fill the cart. You'll have to put the card in yourself, I can't enter payment.",
+    "You'll have to type the 2FA code from your phone.",
     # Reporting what was actually done. The honest, correct shape.
     "I ran the suite: 278 passed, 0 failed.",
     "I pushed to main. I ran `swift build` first and it was clean.",

@@ -96,6 +96,22 @@ REPORT = re.compile(
     r"\bI (?:ran|installed|built|pushed|committed|linked|fixed|moved|started)\b", re.I)
 
 
+# A credential only the user holds, named in the same sentence as the match.
+# On 2026-10-10 "You'll have to put the card in yourself, I can't enter
+# payment" was refused at the end of a ticket search and Caleb saw the answer
+# twice. Card numbers, passwords and 2FA codes are a blocker the rule itself
+# names. A permission pane is not here on purpose: that one gets opened for him.
+CREDENTIAL = re.compile(
+    r"\b(?:card|payment|pay|checkout|password|passcode|2fa|two[- ]factor|"
+    r"verification code|one[- ]time code|face ?id|touch ?id)\b", re.I)
+
+
+def sentence_at(message: str, start: int, end: int) -> str:
+    left = max(message.rfind(c, 0, start) for c in ".!?\n")
+    rights = [i for i in (message.find(c, end) for c in ".!?\n") if i != -1]
+    return message[left + 1:min(rights) if rights else len(message)]
+
+
 def asked_for_a_command(user_text: str) -> bool:
     """Did they ask for something runnable? Then handing it over is correct."""
     if not user_text:
@@ -116,6 +132,8 @@ def check(message: str, user_text: str = "") -> list[str]:
     found = []
     for pattern, label in HANDOFF:
         m = re.search(pattern, message, re.I)
+        if m and CREDENTIAL.search(sentence_at(message, m.start(), m.end())):
+            continue
         if m:
             line = message[:m.start()].count("\n") + 1
             found.append(f"line {line}: {label}  ->  \"{m.group(0)}\"")

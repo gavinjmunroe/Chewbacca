@@ -84,6 +84,12 @@ label at all; and Return, Enter, Space, Delete and cmd+Q/W/D/S. `do` never
 takes `--yes`: a gated pick comes back with the exact `press <i> --yes` to
 confirm, so consent goes to the control the person saw, not to Jev's guess.
 
+The gate is a backstop. It doesn't prove a press is safe. It reads labels the
+app supplies, and an app can lie about them, so no word list is ever
+complete: three security reviews on 2026-10-09 each found the next miss. A
+press is safe because `--yes` only gets added after the person saw that exact
+control and said yes.
+
 ## Routing examples
 
 | The user says | Layer | What you run |

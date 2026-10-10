@@ -2,7 +2,7 @@
 
 Each ingester reads one source through what is already on the machine (chat.db
 read only, the `mac` CLI, `coursework`, the people store, backlog CSVs, the
-agent hook's board) and returns a snapshot of nodes and edges for
+agent hook's board, Gmail through gws) and returns a snapshot of nodes and edges for
 `Graph.apply`. None of them writes anywhere else, sends anything, or reads a
 message for instructions: text is stored as a label to be rendered, and the
 one thing derived from it, a request-shaped sentence becoming a Task, is
@@ -303,112 +303,130 @@ def mail_is_person(sender: str) -> bool:
     return bool(addr) and not AUTOMATED_MAIL.search(addr) and " via " not in (sender or "").lower()
 
 
-# The receivers whose Authentication-Results lines are believed. Anyone can
-# put an Authentication-Results header in a message they send; only the line
-# the receiving provider added (its authserv-id, the first token) says what
-# the provider checked. Measured 2026-10-04 on Caleb's iCloud inbox: iCloud
-# writes dmarc.icloud.com, dkim-verifier.icloud.com and spf.icloud.com.
-TRUSTED_AUTHSERV = (".icloud.com", ".me.com", "mx.google.com", ".google.com", ".outlook.com",
-                    ".protection.outlook.com")
-# Mail.app's "whose message id is" search took 9.8 s on one message on
-# 2026-10-04, so only senders the people store already knows are checked,
-# a few per ingest, and each verdict is kept on the MailItem node.
-MOST_AUTH_CHECKS = 3
-MESSAGE_ID_SAFE = re.compile(r"^[A-Za-z0-9._%+=@$<>-]{1,200}$")
+# Mail comes from Gmail through gws (mac/lib/gmail.py), never Mail.app:
+# Caleb, 2026-10-08, "We shouldn't be using the mail app". The reader keeps
+# its own cache, so a 7-day read is one list call plus whatever is new.
+GMAIL_READER = Path(__file__).resolve().parents[2] / "mac" / "lib" / "gmail.py"
+# Every inbound message in the window is a MailItem, newest first, up to
+# this many. Guessed, never measured: a week of Caleb's filtered Gmail was
+# under 100 human messages when the reader was written (2026-10-08).
+MOST_MAIL = 120
+UNVERIFIED = "unverified:"
+# gmail.py prints this on stderr for an inbox with no working sign-in.
+NOT_SIGNED_IN = re.compile(r"^gmail: not signed in: (.+)$", re.M)
 
 
-def auth_headers(ctx, message_id: str) -> str:
-    """Every header of one message, from Mail.app. The id comes from the
-    message itself (its Message-ID), so it is checked against a strict
-    character set before it goes inside an AppleScript string."""
-    if not MESSAGE_ID_SAFE.match(message_id or ""):
-        return ""
-    script = ('tell application "Mail"\n'
-              f'  set ms to (messages of inbox whose message id is "{message_id}")\n'
-              '  if (count of ms) is 0 then return ""\n'
-              '  return all headers of item 1 of ms\n'
-              'end tell')
-    code, out, _ = ctx.run(["osascript", "-e", script])
-    return out if code == 0 else ""
+def mail_subject(row: dict) -> str:
+    """The subject line. gmail.py's text is the subject, a blank line, then
+    the body; with no subject it is the body alone, whose first paragraph
+    stands in for one."""
+    return str(row.get("text") or "").split("\n\n", 1)[0].strip()
 
 
-def sender_verified(headers: str, address: str) -> bool:
-    """DMARC passed for the From domain, as reported by a trusted receiver.
-    Anything else (no header, a fail, a header from an untrusted authserv-id,
-    a different domain) is unverified."""
-    domain = address.rsplit("@", 1)[-1].lower() if "@" in address else ""
-    if not domain:
-        return False
-    unfolded = re.sub(r"\r?\n[ \t]+", " ", headers or "")
-    for line in unfolded.splitlines():
-        name, sep, value = line.partition(":")
-        if not sep or name.strip().lower() != "authentication-results":
-            continue
-        authserv = value.strip().split(";", 1)[0].strip().lower()
-        if not authserv.endswith(TRUSTED_AUTHSERV):
-            continue
-        m = re.search(r"\bdmarc=(\w+)[^;]*?header\.from=([^\s;]+)", value, re.I)
-        if m and m.group(1).lower() == "pass" and m.group(2).strip().lower() == domain:
-            return True
-    return False
+def my_other_addresses(ctx) -> set:
+    """His addresses that are not a connected inbox, one per line in
+    ~/.chewbacca/email/me (gmail.py's me_file). Gmail files mail from them
+    as inbound; the first live run (2026-10-09) showed 2 of 3 needs-you mail
+    rows were his own Blue Modern test mail waiting on him."""
+    home = ctx.env.get("CHEWBACCA_EMAIL_HOME") or str(ctx.home / ".chewbacca" / "email")
+    try:
+        lines = (Path(os.path.expanduser(home)) / "me").read_text().splitlines()
+    except OSError:
+        return set()
+    return {osgraph.email_key(x.strip()) for x in lines
+            if "@" in x and not x.lstrip().startswith("#")} - {""}
+
+
+def gmail_time(stamp) -> datetime | None:
+    """gmail.py writes local wall time with no offset ("%Y-%m-%dT%H:%M:%S"
+    after astimezone()), so a bare stamp is local here, not UTC as
+    osgraph_time would read it: read as UTC, every mail sat hours early."""
+    try:
+        moment = datetime.fromisoformat(str(stamp or ""))
+    except ValueError:
+        return None
+    return moment.astimezone()
+
+
+def conversation_key(address: str, subject: str) -> tuple:
+    return (osgraph.email_key(address) or address.lower(),
+            re.sub(r"^((re|fwd?|aw)\s*:\s*)+", "", subject.strip(), flags=re.I).lower())
 
 
 def mail(graph: Graph, ctx, ids: Identities, days: int = 7, mapping: dict = SPACE_BY_COMPANY) -> dict:
-    """Unread mail. A sender becomes a known Person only when the address is
-    exactly one the people store holds AND DMARC passed for it; the From
-    name is never trusted (push review, 2026-10-04: "Karthik Devarakonda"
-    <attacker@evil> rendered as Karthik). Everyone else is their raw address,
-    flagged unverified."""
-    # Any AppleScript to Mail launches it. This ran every 60 s from
-    # kyber-surfaces, so on 2026-10-09 Mail kept reopening after Caleb force
-    # quit it. Read mail only while he has Mail open, and leave the last
-    # ingest's nodes alone until then.
-    if ctx.run(["pgrep", "-xq", "Mail"])[0] != 0:
-        return {"skipped": "Mail is not open"}
-    rows = ctx.json(["mac", "mail", "unread", "--limit", "40", "--scan", "60", "--json"], "Mail")
+    """Human Gmail from the last `days`, through gws. A sender becomes a known
+    Person only when Gmail's own verdict vouched for the address (gmail.py
+    marks the rest "unverified:") AND the people store holds that exact
+    address; the From name is never trusted (push review, 2026-10-04:
+    "Karthik Devarakonda" <attacker@evil> rendered as Karthik). Everyone
+    else is their raw address, flagged unverified.
+
+    A mail waits on a reply when it is the newest message in its
+    conversation (same correspondent, same subject) and nothing of his went
+    to that address on that subject after it.
+
+    No signed-in Gmail is an error naming it, so the surface says "Gmail: not
+    signed in" instead of drawing an empty inbox (kyber-surfaces rule 8)."""
+    code, out, err = ctx.run(["python3", str(GMAIL_READER), "--json", "--days", str(days)])
+    if code != 0:
+        raise RuntimeError(f"Gmail failed: {clip((err or out or 'no answer').strip().splitlines()[-1], 120)}")
+    try:
+        rows = json.loads(out or "[]")
+    except json.JSONDecodeError:
+        raise RuntimeError("Gmail answered with something that is not JSON") from None
+    rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    missing = NOT_SIGNED_IN.findall(err or "")
+    if missing and not rows:
+        raise RuntimeError("Gmail: not signed in")
     now = ctx.now()
     snap = Snapshot()
     me = snap.add(me_node())
-    checks = 0
-    for row in rows if isinstance(rows, list) else []:
-        if not isinstance(row, dict) or row.get("isRead"):
+    latest_mine: dict = {}
+    inbound = []
+    mine = my_other_addresses(ctx)
+    for row in rows:
+        at = gmail_time(row.get("at"))
+        handle = str(row.get("handle") or "")
+        verified = not handle.lower().startswith(UNVERIFIED)
+        address = handle[len(UNVERIFIED):] if not verified else handle
+        key = conversation_key(address, mail_subject(row))
+        if row.get("from_me"):
+            if at and (key not in latest_mine or at > latest_mine[key]):
+                latest_mine[key] = at
             continue
-        at = osgraph_time(row.get("date"))
-        if at and at < now - timedelta(days=days):
+        if verified and osgraph.email_key(address) in mine:
+            continue  # his own other address, not someone waiting on him
+        if not at or at < now - timedelta(days=days):
             continue
-        sender_raw = str(row.get("from", ""))
-        address = address_of(sender_raw)
-        message_id = str(row.get("id", ""))
-        mid_key = osgraph.node_key("mail", "mail", row.get("account", ""), message_id)
-        verified = False
-        if address and ids.resolve(address):
-            # A kept verdict counts only for this exact message from this
-            # exact address; anything else is checked again or stays false.
-            known = graph.node(mid_key)
-            kept = (known or {}).get("props") or {}
-            if "verified" in kept and kept.get("verified_for") == address and kept.get("message_id") == message_id:
-                verified = bool(kept["verified"])
-            elif checks < MOST_AUTH_CHECKS:
-                checks += 1
-                verified = sender_verified(auth_headers(ctx, str(row.get("id", ""))), address)
-        person = person_node(ids, address or sender_raw, source_hint="mail", verified=verified)
+        inbound.append((at, row, address, verified, key))
+    inbound.sort(key=lambda x: x[0], reverse=True)
+    newest: set = set()
+    for at, row, address, verified, key in inbound[:MOST_MAIL]:
+        mid_key = osgraph.node_key("mail", "gmail", row.get("inbox", ""), str(row.get("id", "")))
+        person = person_node(ids, address, source_hint="mail", verified=verified)
         pid = snap.add(person)
-        human = mail_is_person(sender_raw)
+        human = bool(address) and not AUTOMATED_MAIL.search(address)
         space = space_for({"props": person.props}, mapping)
         shown = person.label if not person.unresolved else (address or "unknown sender")
-        mid = snap.add(Node(mid_key, "MailItem", clip(row.get("subject") or "(no subject)", osgraph.SNIPPET_CHARS),
-                            {"app": "Mail", "from": shown, "address": address, "automated": not human,
-                             "verified": verified, "verified_for": address, "message_id": message_id,
-                             "at": at.isoformat() if at else "",
-                             "account": row.get("account", "")},
-                            observed_at=at.isoformat() if at else ""))
+        mid = snap.add(Node(mid_key, "MailItem", clip(mail_subject(row) or "(no subject)", osgraph.SNIPPET_CHARS),
+                            {"app": "Gmail", "network": "Gmail", "from": shown, "address": address,
+                             "automated": not human, "verified": verified,
+                             "gmail_id": str(row.get("gmail_id") or ""), "inbox": str(row.get("inbox") or ""),
+                             "at": at.isoformat()},
+                            observed_at=at.isoformat()))
         snap.link(mid, "SENT_BY", pid)
         snap.add(space_node(space))
         snap.link(mid, "BELONGS_TO", f"space:{space}")
-        if human:
-            snap.link(mid, "AWAITS_REPLY_FROM", me, confidence=0.6,
-                      props={"since": at.isoformat() if at else ""})
-    return snap.write(graph, "mail")
+        first = key not in newest
+        newest.add(key)
+        answered = latest_mine.get(key) and latest_mine[key] > at
+        if human and first and not answered:
+            snap.link(mid, "AWAITS_REPLY_FROM", me, confidence=0.6, props={"since": at.isoformat()})
+    report = snap.write(graph, "mail")
+    report["threads"] = len({x[4] for x in inbound[:MOST_MAIL]})
+    if missing:
+        report["note"] = "Gmail: not signed in: " + ", ".join(sorted(set(missing)))
+    return report
 
 
 def osgraph_time(stamp) -> datetime | None:

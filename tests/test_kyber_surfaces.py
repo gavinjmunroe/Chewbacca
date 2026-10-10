@@ -213,13 +213,13 @@ def safety(tmp: Path) -> None:
     log = (tmp / "activity.jsonl").read_text()
     check("the activity log has the action and outcome, never the body",
           '"action": "act"' in log and "Monday works" not in log, log)
-    mail = next((r for r in d.open["needs-you"].data["rows"] if r["type"] == "MailItem"), None)
+    mail = next((r for r in d.open["needs-you"].data["rows"] if r["type"] == "MailItem" and r["props"].get("verified")), None)
     if mail:
         d.handle_line(f'v /needs-you/pick {json.dumps(mail["pick"])}')
         d.handle_line('v /needs-you/draft "Sounds right"')
         d.handle_line("e ks-act needs-you-go")
-        check("a mail row makes a draft and sends nothing",
-              any(c[:3] == ["mac", "mail", "draft"] for c in run.calls) and len(run.sent) == 1, run.sent)
+        check("a mail row makes a Gmail draft and sends nothing",
+              len(run.drafts) == 1 and len(run.sent) == 1, (run.drafts, run.sent))
     # Pivot: a row press opens that node's own walk.
     d.handle_line(f'e action ks-pivot row="person:{fx.SAGAR}" surface="needs-you"')
     check("a row press (hud/CLAUDE.md row-action contract) opens that person's walk",
@@ -500,14 +500,14 @@ def one_person_every_network(tmp: Path) -> None:
     line = json.loads(live.sent[f"/{name}/timeline"])
     nets = {item["text"].split(" · ")[0] for item in line}
     check("one timeline holds his texts and his mail, each tagged with its network",
-          {"iMessage", "Mail"} <= nets, [i["text"][:30] for i in line])
-    check("the timeline is newest first", line[0]["text"].startswith("Mail"), line[0]["text"][:40])
+          {"iMessage", "Gmail"} <= nets, [i["text"][:30] for i in line])
+    check("the timeline is newest first", line[0]["text"].startswith("Gmail"), line[0]["text"][:40])
     check("the composer defaults to the network he used last",
-          json.loads(live.sent[f"/{name}/via"]) == "Mail" and json.loads(live.sent[f"/{name}/go"]) == "Draft in Mail")
+          json.loads(live.sent[f"/{name}/via"]) == "Gmail" and json.loads(live.sent[f"/{name}/go"]) == "Draft in Gmail")
     d.handle_line(f'v /{name}/draft "Got it"')
     d.handle_line(f"e ks-reply {name}-go")
-    check("on Mail the reply becomes a draft, nothing is sent",
-          run.sent == [] and any(c[:3] == ["mac", "mail", "draft"] and "sagar@amber.example" in c for c in run.calls))
+    check("on Gmail the reply becomes a draft, nothing is sent",
+          run.sent == [] and any("sagar@amber.example" in c for c in run.drafts), run.drafts)
     d.handle_line(f'v /{name}/via "iMessage"')
     check("switching the network changes the button", json.loads(live.sent[f"/{name}/go"]) == "Send on iMessage")
     d.handle_line(f'v /{name}/draft "Got it"')

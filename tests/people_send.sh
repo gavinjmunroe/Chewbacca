@@ -48,7 +48,7 @@ grep -q "CHEWBACCA_NO_SEND" <<<"$out"       || fail "a matching --to did not rea
 # A WhatsApp stranger whose push name copies a saved contact must not be
 # filed under that contact, or send would reach him. Linking is by address.
 "$P" add "Sagar Real" >/dev/null 2>&1
-"$P" set "sagar real" phone "+16305550101" >/dev/null 2>&1
+"$P" update "sagar real" --phone "+16305550101" >/dev/null 2>&1
 SAGAR="$(id 'Sagar Real')"
 sqlite3 "$DB" "INSERT INTO messages (msg_id, person_id, who, handle, from_me, body, sent_at, source) VALUES
    (2000000000099, '$SAGAR', 'Sagar Real', '+15625550199', 0, 'spoof', datetime('now'), 'whatsapp');"

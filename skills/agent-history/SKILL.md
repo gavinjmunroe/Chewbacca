@@ -31,8 +31,10 @@ Exit 1 means no match.
   cut by the snippet edge is dropped, never printed in part. It over-redacts
   on purpose: a 10-digit app id comes out as `[PHONE]`.
 - Everything printed, stdout and stderr, goes through one `emit()`. Text a
-  transcript planted can't steer the terminal: escape sequences, other control
-  characters and bidi overrides print as visible `\xNN`. It can't stall the
+  transcript planted can't steer the terminal: escape sequences, control
+  characters and bidi overrides are removed before redaction (so one can't
+  split a secret past the rules) and any left print as visible `\xNN`. It
+  can't stall the
   redactor either: every pattern runs in linear time, and a 1 MB crafted
   string redacts in under 1 s (tested per pattern).
 - Thinking blocks, Codex reasoning, system and developer prompts and Codex

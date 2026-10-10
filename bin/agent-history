@@ -64,7 +64,7 @@ HOME = Path.home()
 # before the hex and base64 catch-alls so the label says what leaked.
 _SECRET_RULES = [
     ("PRIVATE_KEY", re.compile(
-        r"-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----.*?(?:-----END [A-Z ]{0,40}PRIVATE KEY-----|\Z)", re.S)),
+        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.S)),
     ("BEARER", re.compile(r"(?i)\b(bearer|basic)(\s{1,10})[A-Za-z0-9._~+/=-]{12,}")),
     ("AUTH", re.compile(r"(?i)\b(authorization\s{0,10}[:=]\s{0,10})[\"']?[^\s\"',}]{6,}")),
     ("API_KEY", re.compile(r"\bsk-(?:ant-|proj-|live-|test-)?[A-Za-z0-9_-]{16,}")),
@@ -74,8 +74,8 @@ _SECRET_RULES = [
     ("GOOGLE_KEY", re.compile(r"\bAIza[0-9A-Za-z_-]{30,}")),
     ("STRIPE_KEY", re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{16,}")),
     ("SECRET", re.compile(
-        r"(?i)(?<![\w-])([\w-]{0,64}?(?:api[_-]?key|secret|token|passwd|password|pwd|access[_-]?key)[\w-]{0,64})"
-        r"(\"?\s{0,8}[:=]\s{0,8}[\"']?)(?!\[)([^\s\"',;}]{6,})")),
+        r"(?<![\w-])([\w-]+)"
+        r"(\"?\s{0,8}[:=]\s{0,8}[\"']?)(?=(?!\[)[^\s\"',;}]{6})")),
     ("HEX", re.compile(r"(?<![0-9A-Za-z_])[0-9a-fA-F]{32,}(?![0-9A-Za-z_])")),
     ("PHONE", re.compile(r"(?<![\w.-])(?:\+?\d{1,3}[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4}(?![\w-])")),
 ]
@@ -86,8 +86,8 @@ _BLOB = re.compile(r"(?<![A-Za-z0-9+/_-])[A-Za-z0-9+/_-]{40,}={0,2}")
 # address starts is the quadratic shape.
 # The userinfo repeat cannot backtrack into itself: each round ends on an '@'
 # its class excludes, so the rounds are unambiguous, and there are at most 16.
-_URL_CRED = re.compile(r"(?i)(?<![a-z0-9+.-])([a-z][a-z0-9+.-]{0,30}://)((?:[^\s/'\"<>@]{0,256}@){1,16})")
-_EMAIL_DOMAIN = re.compile(r"@[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}(?![\w-])")
+_URL_CRED = re.compile(r"(?i)(?<![a-z0-9+.-])([a-z][a-z0-9+.-]{0,30}://)((?:[^\s/'\"<>@]*@)+)")
+_EMAIL_DOMAIN = re.compile(r"@[\w-]+(?:\.[\w-]+)+(?![\w-])")
 _EMAIL_LOCAL = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.+-")
 _TOKEN_CH = re.compile(r"[A-Za-z0-9_+/=.@-]")
 MAX_REDACT = 1 << 20  # characters; past this the rest is cut, never scanned
@@ -173,6 +173,23 @@ def _blob_sub(m: re.Match) -> str:
     return s
 
 
+# The value is not consumed by the name match (a name with no keyword would
+# then swallow "jane&password=..." whole and skip the real key). A keyword
+# match leaves a marker, and one more pass replaces marker plus value. NUL is
+# stripped from the text before any rule runs, so it cannot occur naturally.
+_VALUE_MARK = "\x00V\x00"
+_MARKED_VALUE = re.compile("\x00V\x00[^\\s\"',;}]*")
+_SECRET_NAME = re.compile(r"(?i)api[_-]?key|secret|token|passwd|password|pwd|access[_-]?key")
+
+
+def _secret_sub(m: re.Match) -> str:
+    """The name run is matched whole and checked here, so a keyword anywhere
+    in a name of any length counts, without a regex scanning back for it."""
+    if _SECRET_NAME.search(m.group(1)):
+        return f"{m.group(1)}{m.group(2)}{_VALUE_MARK}"
+    return m.group(0)
+
+
 def _apply_rules(text: str) -> str:
     text = _url_userinfo(text)
     text = _jwts(text)
@@ -182,7 +199,7 @@ def _apply_rules(text: str) -> str:
         elif label == "AUTH":
             text = rx.sub(lambda m: f"{m.group(1)}[REDACTED]", text)
         elif label == "SECRET":
-            text = rx.sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", text)
+            text = _MARKED_VALUE.sub("[REDACTED]", rx.sub(_secret_sub, text))
         else:
             text = rx.sub(f"[{label}]", text)
         if label == "SECRET":
@@ -241,13 +258,35 @@ def _cap(text: str) -> str:
     return head[:j] + f" [TRUNCATED {len(text) - j} chars]"
 
 
+# A terminal sequence inside a secret splits it so no rule sees it whole,
+# and then the escaping in emit() prints the second half. They come out
+# entirely, introducer and parameters, before any rule runs.
+_ANSI = re.compile(
+    "\x1b\\[[0-?]*[ -/]*[@-~]"              # CSI: ESC [ params final
+    "|\x9b[0-?]*[ -/]*[@-~]"                # C1 CSI
+    "|(?:\x1b\\]|\x9d)[^\x07\x1b\x9c]*(?:\x07|\x1b\\\\|\x9c)"  # OSC ... BEL or ST
+    "|\x1b[@-Z\\\\-_]"                     # other two-byte escapes
+)
+_STRIP = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
+
+
+def strip_controls(text: str) -> str:
+    return _STRIP.sub("", _ANSI.sub("", text))
+
+
 def redact(text: str) -> str:
-    """Replace secrets and personal identifiers with [LABEL] placeholders."""
+    """Replace secrets and personal identifiers with [LABEL] placeholders.
+
+    Order: cap, strip terminal controls so a split secret rejoins, decode the
+    escapes a secret hides behind, strip again (decoding can make new
+    controls), then the rules. The cap truncates: what is past it is dropped,
+    never printed."""
     if not text:
         return text
-    text = _normalize(_cap(text))
-    text = _B64.sub(_b64_sub, text)
-    return _apply_rules(_cap(text))
+    text = strip_controls(_cap(text))
+    text = strip_controls(_normalize(text))
+    text = _B64.sub(_b64_sub, _cap(text))
+    return _apply_rules(text)
 
 
 def _redact_obj(obj):

@@ -176,6 +176,11 @@ ADVERSARIAL = {
     "secret keyword, kebab run": "a-" * (MB // 2),
     "secret keyword, password then spaces": "password" + " " * MB,
     "secret keyword, repeated password=": "password=" * (MB // 9),
+    "secret keyword, a=b=c= chain": "ab=" * (MB // 3),
+    "secret keyword, one megabyte name": "api_key" * (MB // 7) + "=value123",
+    "URL userinfo, @ run with no delimiter": "x://" + "@" * MB,
+    "unterminated OSC sequences": "\x1b]0;" * (MB // 4),
+    "CSI with endless parameters": "\x1b[" + "1;" * (MB // 2),
     "private key header with no end": "-----BEGIN " + "A" * MB,
     "bearer then whitespace": "bearer" + " " * MB,
     "bearer repeated": "bearer " * (MB // 7),
@@ -198,7 +203,7 @@ TIMING = (
     "import importlib.machinery,sys,time\n"
     "sys.dont_write_bytecode=True\n"
     f"ah=importlib.machinery.SourceFileLoader('a',{str(TOOL)!r}).load_module()\n"
-    "s=sys.stdin.read();t=time.monotonic();ah.redact(s);print(time.monotonic()-t)\n"
+    "s=sys.stdin.read();t=time.process_time();ah.redact(s);print(time.process_time()-t)\n"
 )
 for name, text in ADVERSARIAL.items():
     try:
@@ -216,6 +221,45 @@ check("a long email local part is redacted whole", "x" not in long_local, long_l
 big = ah.redact("x" * (3 * MB) + " " + FAKE["openai"])
 check("redact caps its input instead of scanning without limit", len(big) < 2 * MB, len(big))
 
+# Regression (a): the cap drops what is past it; it never prints it, and a
+# secret on the cap boundary is not printed in part.
+past = ah.redact("x " * (ah.MAX_REDACT // 2 + 10) + FAKE["github"])
+check("a secret past the cap is dropped, not printed", FAKE["github"] not in past and "[TRUNCATED" in past, past[-80:])
+edge = "y " * ((ah.MAX_REDACT - 10) // 2) + FAKE["openai"] + " tail"
+cut = ah.redact(edge)
+check("a secret straddling the cap is not printed in part", FAKE["openai"][:8] not in cut[-200:], cut[-120:])
+
+# Regression (b): no upper bound lets a long secret through.
+long_cases = {
+    "a 400-character URL password": ("postgres://u:" + "P4ss" * 100 + "@db.example.com/x", "P4ss" * 100),
+    "a URL password with more than 16 @": ("redis://u:" + "p@" * 40 + "Tail99@cache.example.com", "Tail99"),
+    "a 5000-character JWT": ("eyJ" + "a1B2" * 1250 + "." + "c3D4" * 1250 + "." + "e5F6" * 1250, "a1B2" * 50),
+    "a 10,000-character base64 token": ("blob " + "Zm9v" * 1000 + "QmFy9x" * 1000, "QmFy9x" * 20),
+    "a long GitHub token": ("t " + "gh" + "p_" + "Ab3" * 300, "Ab3" * 50),
+    "a key name longer than 64 characters": ("MY_" + "VERY_" * 20 + "LONG_API_KEY=FakeLongKeyName123", "FakeLongKeyName123"),
+    "a value 2000 characters long": ("password=" + "Zz9" * 700, "Zz9" * 50),
+    "a PEM block with a long header": ("-----BEGIN " + "ENCRYPTED " * 10 + "PRIVATE KEY-----\nMIIfakebody\n-----END "
+                                        + "ENCRYPTED " * 10 + "PRIVATE KEY-----", "MIIfakebody"),
+    "an email with a 70-character label": ("mail jane@" + "d" * 70 + ".example.com", "jane@"),
+    "an email with ten domain labels": ("mail jane@" + "a." * 10 + "example.com", "jane@"),
+}
+for name, (text, secret) in long_cases.items():
+    out = ah.redact(text)
+    check(f"redacts {name}", secret not in out, out[:160])
+
+# Regression (c): a control character or escape inside a secret cannot split
+# it so the rule misses it and the rest prints.
+split_cases = {
+    "a key split by an ANSI color code": "sk-" + "proj-AbCdEfGh\x1b[0mIjKlMnOpQrStUv12",
+    "a key split by an OSC sequence": "gh" + "p_abcdefghij\x1b]0;x\x07klmnopqrstuvwxyz0123",
+    "a key split by a raw C1 CSI": "sk-" + "proj-AbCdEfGh\x9b0mIjKlMnOpQrStUv12",
+    "a key split by an escaped ESC": "sk-" + "proj-AbCdEfGh\\u001b[0mIjKlMnOpQrStUv12",
+    "a URL password split by a NUL": "mysql://root:FakeNul\x00Split77@db.example.com/x",
+}
+for name, text in split_cases.items():
+    out = ah.redact(text)
+    check(f"redacts {name}", not any(part in out for part in ("IjKlMnOp", "klmnopqr", "Split77", "FakeNul")), repr(out))
+
 # Terminal control sequences: printed escaped, never raw.
 nasty = "ok \x1b[31mred\x1b[0m \x1b]0;pwned title\x07 \x9b2J \x00\x08\x7f \u202e evil \x85 end\tTAB\nNL"
 buf = io.StringIO()
@@ -223,7 +267,9 @@ ah.emit(nasty, buf)
 out_txt = buf.getvalue()
 raw_ctrl = [c for c in out_txt if (ord(c) < 32 and c not in "\n\t") or 0x7f <= ord(c) <= 0x9f or c == "\u202e"]
 check("text emit prints no raw C0/C1 control, DEL or bidi override", not raw_ctrl, repr(out_txt))
-check("text emit shows the escapes visibly and keeps tab and newline", "\\x1b" in out_txt and "\t" in out_txt and "\n" in out_txt, repr(out_txt))
+check("text emit drops the sequences whole, keeps the words, tab and newline",
+      "red" in out_txt and "evil" in out_txt and "[31m" not in out_txt and "pwned title" not in out_txt
+      and "\t" in out_txt and "\n" in out_txt, repr(out_txt))
 buf = io.StringIO()
 ah.emit({"snippet": nasty, nasty: "key"}, buf)
 out_js = buf.getvalue()

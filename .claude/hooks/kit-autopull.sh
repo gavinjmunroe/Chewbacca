@@ -93,6 +93,26 @@ $(printf '%s' "$SYNC" | grep updated)" ;;
   esac
 fi
 
+# ── New tools reach PATH ──────────────────────────────────────────────────────
+# A symlink follows the repo, so fixes to linked tools land on pull, but a NEW
+# tool has no link until setup reruns, and nobody reruns it. On 2026-10-10 26
+# tools setup.sh links were "command not found" on this Mac, text-command among
+# them (Kyber runs it from ~/.local/bin). This only adds missing links; it never
+# replaces a file. Same ref-not-tree reasoning as the hook sync above.
+if git -c core.fsmonitor=false cat-file -e origin/main:tools/tools_link.py 2>/dev/null; then
+  _tl="$(mktemp -d 2>/dev/null)"
+  if [ -n "$_tl" ] && git -c core.fsmonitor=false show origin/main:tools/tools_link.py > "$_tl/tools_link.py" 2>/dev/null; then
+    LINKED="$(git -c core.fsmonitor=false show origin/main:setup.sh 2>/dev/null \
+              | python3 -I "$_tl/tools_link.py" apply --repo "$REPO" --setup - \
+                --live "${CHEWBACCA_BIN_DIR:-$HOME/.local/bin}" 2>&1)"
+    note "tools-link: $LINKED"
+    case "$LINKED" in
+      linked\ [1-9]*) say "New kit tools were not on PATH and are now: ${LINKED#linked }" ;;
+    esac
+  fi
+  [ -n "$_tl" ] && rm -rf "$_tl"
+fi
+
 # ── Throttle ──────────────────────────────────────────────────────────────────
 # A fetch is a network round trip and SessionStart runs on every new session.
 # Once an hour keeps a long day current without paying for it on every window.

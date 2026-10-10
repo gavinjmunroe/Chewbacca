@@ -15,6 +15,7 @@ trap 'rm -rf "$TMP"' EXIT
 export CHEWBACCA_LOG_DIR="$TMP/logs"
 export CHEWBACCA_PULL_INTERVAL=0
 export CHEWBACCA_HOOKS_DIR="$TMP/live-hooks"
+export CHEWBACCA_BIN_DIR="$TMP/live-bin"
 FAILED=0
 fail() { echo "FAIL: $*"; FAILED=1; }
 

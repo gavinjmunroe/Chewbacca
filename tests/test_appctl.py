@@ -113,6 +113,85 @@ print("{{}}")
     check("yes on one step passes that step only", run.returncode == 0
           and json.loads(log.read_text().splitlines()[-1])[-1] == "--yes")
 
+# Voice route: only an installed app by exact name plus a verb-led action.
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import app_route  # noqa: E402
+APPS = ["Calculator", "Photos", "System Settings", "Notion"]
+for said, want in [
+    ("press Change Sign in Calculator", ("Calculator", "press Change Sign")),
+    ("in Photos, turn off iCloud Photos", ("Photos", "turn off iCloud Photos")),
+    ("hey chewie, clear the display in the Calculator", ("Calculator", "clear the display")),
+    ("toggle dark mode in System Settings.", ("System Settings", "toggle dark mode")),
+]:
+    got = app_route.parse(said, APPS)
+    check(f"route takes {said!r}", got is not None and (got.app, got.intent) == want)
+for said in ["what's the weather in Paris", "set up a meeting in Notion", "press the button in Spotify",
+             "in Calculator", "I was in Photos earlier", "search for cats in Photos"]:
+    check(f"route leaves {said!r} alone", app_route.parse(said, APPS) is None)
+
+# chewie app ask against a fake Kyber: the tap is the only thing that presses.
+import socket as _socket
+import threading as _threading
+def ask_with_fake_kyber(reply):
+    with tempfile.TemporaryDirectory() as tmp:
+        sock_path = str(Path(tmp) / "hud.sock")
+        Path(tmp, "hud.token").write_text("a" * 64)
+        log = Path(tmp) / "argv.log"
+        fake_bin = Path(tmp) / "appctl"
+        fake_bin.write_text(f"""#!/usr/bin/env python3
+import json, sys
+open({str(log)!r}, "a").write(json.dumps(sys.argv[1:]) + "\\n")
+v = sys.argv[1]
+if v == "see":
+    print(json.dumps({{"app": "Calculator", "window": 7, "elements": [
+        {{"i": 1, "role": "AXButton", "label": "Change Sign", "actions": ["AXPress"]}}]}}))
+elif v == "where":
+    print(json.dumps({{"screen": [100, 200, 40, 40]}}))
+elif v == "windows":
+    print(json.dumps([{{"window": 7, "hidden": False, "minimized": False}}]))
+else:
+    print("{{}}")
+""")
+        fake_bin.chmod(0o755)
+        server = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+        server.bind(sock_path); server.listen(1)
+        got = []
+        def serve():
+            conn, _ = server.accept()
+            buf = b""
+            while b"r s" not in buf:
+                chunk = conn.recv(4096)
+                if not chunk:
+                    break
+                buf += chunk
+            got.append(buf.decode())
+            if reply:
+                conn.sendall((reply + "\n").encode())
+            try:
+                while conn.recv(4096):
+                    pass
+            except OSError:
+                pass
+            conn.close()
+        _threading.Thread(target=serve, daemon=True).start()
+        env = dict(os.environ, BOB_HUD_SOCKET=sock_path, APP_ASK_WAIT_S="3")
+        run = subprocess.run([sys.executable, str(ROOT / "mac/lib/app_hud.py"), str(fake_bin), "Calculator",
+                              "change sign"], capture_output=True, text=True, env=env, timeout=30)
+        server.close()
+        calls = [json.loads(line) for line in log.read_text().splitlines()]
+        return run, calls, (got[0] if got else "")
+import os  # noqa: E402
+run, calls, drawn = ask_with_fake_kyber("e action appctl-go")
+check("the ask card brackets the control and offers Press it",
+      "m appctl-target 96 196 48 48" in drawn and "near=100,200,40,40" in drawn and 'label="Press it"' in drawn)
+check("a tap on Press it presses that element with --yes", ["press", "Calculator", "1", "--yes"] in calls)
+run, calls, drawn = ask_with_fake_kyber("e action appctl-no")
+check("Not this presses nothing", not any(c[0] == "press" and "--yes" in c for c in calls)
+      and json.loads(run.stdout)["pressed"] is False)
+run, calls, drawn = ask_with_fake_kyber("")
+check("no answer before the timeout presses nothing", not any(c[0] == "press" and "--yes" in c for c in calls)
+      and json.loads(run.stdout)["answer"] == "timeout")
+
 # The compiled driver, macOS only.
 if platform.system() == "Darwin" and shutil.which("swiftc"):
     with tempfile.TemporaryDirectory() as tmp:

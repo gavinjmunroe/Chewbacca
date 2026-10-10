@@ -69,6 +69,7 @@ import hud_events  # noqa: E402
 import glass_search  # noqa: E402
 import call_pill  # noqa: E402
 import hud_accounts  # noqa: E402
+import app_route  # noqa: E402
 # HUD_REPO_CARDS=off: "show me owner/repo" and a pasted github.com URL go to
 # the model instead of drawing a repo card (bin/lib/repo_card.py).
 REPO_CARDS = os.environ.get("HUD_REPO_CARDS", "on") != "off"
@@ -101,6 +102,10 @@ GENUI = os.environ.get("HUD_GENUI", "on") != "off"
 # HUD_CLAY=off: "find me 50 fintech VC partners in Clay" goes to the model
 # instead of starting clay-build (bin/lib/clay_route.py, docs/plans/CLAY-HUD.md).
 CLAY = os.environ.get("HUD_CLAY", "on") != "off"
+# HUD_APPS=off: "press Change Sign in Calculator" goes to the model instead of
+# `chewie app ask`, which shows the pick on the glass and presses only on a tap
+# (bin/lib/app_route.py, mac/lib/app_hud.py).
+APPS = os.environ.get("HUD_APPS", "on") != "off"
 KYBER_GENUI = Path(__file__).resolve().parent / "kyber-genui"
 # kyber-genui paints its skeleton in under a millisecond and finished in 3.2
 # to 16.9 s on its 20-request bench (2026-10-04, one outlier at 99 s). Past
@@ -1318,6 +1323,7 @@ FAST_PATHS = {
     "clay_request": "clay",
     "search_request": "search",
     "genui_request": "genui",
+    "app_request": "app",
     "handle_agents_word": "agents",
 }
 # These need a pending draft, a waiting agent or a live terminal to decide, and
@@ -1414,6 +1420,12 @@ def fast_path(said: str) -> str | None:
         try:
             if clay_route.parse(said) is not None:
                 return "clay"
+        except Exception:  # noqa: BLE001
+            pass
+    if APPS:
+        try:
+            if app_route.parse(said) is not None:
+                return "app"
         except Exception:  # noqa: BLE001
             pass
     if GENUI and wants_genui(said):
@@ -2886,6 +2898,8 @@ class Listener:
             return
         if CLAY and not relayed and not pointing and dest is None and self.clay_request(said, typed):
             return
+        if APPS and not relayed and not pointing and dest is None and self.app_request(said, typed):
+            return
         # A request shaped like a panel that no fixed surface took: draw one
         # with kyber-genui, and only if that falls back does it reach the model.
         if GENUI and not relayed and not pointing and dest is None and self.genui_request(said, typed):
@@ -3185,6 +3199,40 @@ class Listener:
             answer = outcome.line
             self.log(f"clay: {command.count} x {len(command.who)} chars in "
                      f"{(time.monotonic() - started) * 1000:.0f}ms:", answer)
+            self.remember(req, answer, outcome.ok, "done" if outcome.ok else "failed")
+            self.send("s " + json.dumps(answer))
+            self.send("w " + json.dumps(answer) + " done=true")
+            if not typed:
+                self.speak(answer)
+            self.settle_unless_running("done", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def app_request(self, said: str, typed: bool) -> bool:
+        """Start `chewie app ask` for "press Change Sign in Calculator" or "in
+        Photos, turn off iCloud", with no model turn. The ask draws its own
+        card and presses only when the person taps Press it, so the voice only
+        says it is looking. See bin/lib/app_route.py for which sentences count."""
+        if self.in_flight():
+            return False
+        try:
+            command = app_route.parse(said)
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("app failed:", err)
+            return False
+        if command is None:
+            return False
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+
+        def work() -> None:
+            try:
+                outcome = app_route.perform(command)
+            except Exception as err:  # noqa: BLE001
+                self.log("app failed:", err)
+                outcome = app_route.Outcome(False, f"Couldn't start on {command.app}.")
+            answer = outcome.line
+            self.log(f"app: {command.app} / {command.intent}:", answer)
             self.remember(req, answer, outcome.ok, "done" if outcome.ok else "failed")
             self.send("s " + json.dumps(answer))
             self.send("w " + json.dumps(answer) + " done=true")

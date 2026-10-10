@@ -73,6 +73,28 @@ echo '[{"do":"key","combo":"escape"},{"do":"press","label":"9"},{"do":"press","l
   | chewie app batch Calculator -               # one call, stops at the first failure
 ```
 
+More verbs, same rules:
+
+```bash
+chewie app paste TextEdit 0 "text"              # insert at the caret, clipboard untouched
+chewie app where Calculator label:5             # screen rectangle, for a HUD marker
+chewie app clip get                             # or: clip set "text"
+chewie app drag Finder 4 9                      # events to the app's pid; verify with see
+chewie app ask Photos "turn off iCloud but keep the photos"   # the person taps to press
+```
+
+`paste` writes AXSelectedText, so it works in a hidden window and never
+borrows the clipboard; the clipboard route is only a fallback when the app is
+in front. `drag` sends mouse events to the app's pid, and AppKit text views in
+the background ignore them (tested on hidden TextEdit, 2026-10-10): use `set`
+for sliders and values, and expect drag to need the real cursor in many apps.
+
+`ask` is the voice path. Say "press Change Sign in Calculator" or "in Photos,
+turn off iCloud" to the HUD and it finds the control, brackets it on the glass
+(or puts the card at the right when the window is hidden), notes the gate's
+reason if the press is risky, and presses only on a tap of Press it. Not this,
+closing the card, or 90 seconds of nothing presses nothing.
+
 In a batch, a step addressed by label takes a fresh `see` first and a step
 addressed by `i` uses the last one. A gated step stops the run; `"yes": true`
 belongs only on the step the person approved.

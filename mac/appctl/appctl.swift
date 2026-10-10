@@ -123,8 +123,15 @@ func pickWindow(_ app: NSRunningApplication, _ wanted: CGWindowID?) -> Win {
         fail("\(app.localizedName ?? "app") has no windows", fix: "open a window, or use `menu` which needs none")
     }
     if let w = wanted {
-        guard let win = wins.first(where: { $0.id == w }) else { fail("window \(w) not found; run `windows` again") }
-        return win
+        // The same mid-update gap: a window listed a moment ago can be missing
+        // from one AXWindows read and back in the next.
+        var list = wins
+        for _ in 0..<8 {
+            if let win = list.first(where: { $0.id == w }) { return win }
+            usleep(100_000)
+            list = windows(of: app)
+        }
+        fail("window \(w) not found; run `windows` again")
     }
     let root = AXUIElementCreateApplication(app.processIdentifier)
     if let main = attr(root, kAXFocusedWindowAttribute) {
@@ -144,6 +151,7 @@ struct Node {
     let frame: CGRect?
     let actions: [String]
     let editable: Bool
+    var selected: String? = nil
 }
 
 let interestingRoles: Set<String> = [
@@ -163,7 +171,8 @@ func walk(_ el: AXUIElement, path: [Int], depth: Int, into out: inout [Node], li
     let actionable = acts.contains("AXPress") || acts.contains("AXConfirm") || editable
     let readable = role == "AXStaticText" && (value != nil || lbl != nil)
     if (actionable && interestingRoles.contains(role)) || (actionable && lbl != nil) || readable {
-        out.append(Node(path: path, role: role, label: lbl, value: value, frame: frame(el), actions: acts, editable: editable))
+        out.append(Node(path: path, role: role, label: lbl, value: value, frame: frame(el), actions: acts, editable: editable,
+                        selected: editable ? str(el, kAXSelectedTextAttribute) : nil))
     }
     for (i, child) in children(el).enumerated() {
         walk(child, path: path + [i], depth: depth + 1, into: &out, limit: limit)
@@ -184,6 +193,7 @@ func nodeJSON(_ n: Node, _ i: Int, origin: CGPoint) -> [String: Any] {
         o["frame"] = [Int(f.minX - origin.x), Int(f.minY - origin.y), Int(f.width), Int(f.height)]
     }
     if n.editable { o["editable"] = true }
+    if let sel = n.selected, !sel.isEmpty { o["selected"] = String(sel.prefix(80)) }
     if !n.actions.isEmpty { o["actions"] = n.actions.filter { !$0.hasPrefix("AXScroll") } }
     return o
 }
@@ -198,6 +208,20 @@ func snapshot(_ app: NSRunningApplication, _ win: Win, limit: Int) -> [[String: 
     while nodes.isEmpty && tries < 15 {
         usleep(100_000); tries += 1
         walk(win.element, path: [], depth: 0, into: &nodes, limit: limit)
+    }
+    // A partial tree is worse than an empty one, because it gets saved and
+    // looks complete: under load 11 on 2026-10-10 Calculator's walk returned
+    // only its three title-bar buttons, then all 23 elements a second later,
+    // and Jev, offered three unlabeled buttons, rightly answered "none". So
+    // walk again until two walks agree on the count, keeping the largest.
+    var settle = 0
+    while settle < 10 {
+        usleep(120_000)
+        var again: [Node] = []
+        walk(win.element, path: [], depth: 0, into: &again, limit: limit)
+        if again.count == nodes.count { break }
+        if again.count > nodes.count { nodes = again }
+        settle += 1
     }
     let origin = win.frame?.origin ?? .zero
     let list = nodes.enumerated().map { nodeJSON($0.element, $0.offset, origin: origin) }
@@ -504,6 +528,32 @@ func allText(_ el: AXUIElement, into out: inout [String], depth: Int = 0) {
     for c in children(el) { allText(c, into: &out, depth: depth + 1) }
 }
 
+
+// MARK: drag, clipboard, screen rectangles
+
+func center(_ el: AXUIElement) -> CGPoint? {
+    guard let f = frame(el) else { return nil }
+    return CGPoint(x: f.midX, y: f.midY)
+}
+
+// Mouse events posted to the app's pid, not the HID stream, so the real
+// cursor stays where the person left it. Apps that hit-test against the
+// global cursor ignore these; the result says to verify with `see`.
+func dragEvents(_ pid: pid_t, from a: CGPoint, to b: CGPoint) {
+    let src = CGEventSource(stateID: .hidSystemState)
+    func post(_ type: CGEventType, _ p: CGPoint) {
+        CGEvent(mouseEventSource: src, mouseType: type, mouseCursorPosition: p, mouseButton: .left)?.postToPid(pid)
+        usleep(16_000)
+    }
+    post(.leftMouseDown, a)
+    let steps = 12
+    for k in 1...steps {
+        let t = Double(k) / Double(steps)
+        post(.leftMouseDragged, CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t))
+    }
+    post(.leftMouseUp, b)
+}
+
 // MARK: commands
 
 // ScreenCaptureKit asserts in CGS_REQUIRE_INIT from a bare CLI unless the
@@ -530,6 +580,7 @@ let regionOpt: CGRect? = option("--region").flatMap { v in
     return n.count == 4 ? CGRect(x: n[0], y: n[1], width: n[2] - n[0], height: n[3] - n[1]) : nil
 }
 let horizontal = flag("--horizontal")
+let checkOnly = flag("--check")
 
 guard let cmd = args.first else {
     print("""
@@ -552,6 +603,14 @@ guard let cmd = args.first else {
                                         move the scroll bar holding N (or the first one) by dy
                                         tenths of its range; + is down/right
       read <app> [--window ID]          every visible text in reading order, for content
+      where <app> <N|label>             the element's rectangle in screen points (for a HUD marker)
+      drag <app> <N|label> <N|label|x,y> [--yes]
+                                        drag between two elements (or to window point x,y)
+                                        with events sent to the app's pid; verify with see
+      clip [get | set <text>]           read or write the clipboard
+      paste <app> <N|label> <text> [--yes]
+                                        insert text at the caret without the clipboard;
+                                        falls back to the clipboard only if the app is in front
       shot ... --region x0,y0,x1,y1     crop to a region in window points (zoom)
     """)
     exit(0)
@@ -596,6 +655,9 @@ case "press", "focus":
     let (el, e) = resolveElement(app, args[1], window: windowOpt)
     if cmd == "press" {
         gate(el, what: "element \(args[1])", yes: yes)
+        // --check runs the gate and stops, so a caller can show the person
+        // why a press needs their yes before asking for it.
+        if checkOnly { emit(["would_press": e, "gate": "clear"]); exit(0) }
         let acts = actions(el)
         let action = acts.contains("AXPress") ? "AXPress" : (acts.contains("AXConfirm") ? "AXConfirm" : (acts.first ?? "AXPress"))
         let r = AXUIElementPerformAction(el, action as CFString)
@@ -619,7 +681,11 @@ case "set":
     // amount, recipient or confirmation is part of an irreversible flow.
     for t in texts(el) where t != (str(el, kAXValueAttribute) ?? "\u{0}") { gateText(t, yes: yes) }
     let r = AXUIElementSetAttributeValue(el, kAXValueAttribute as CFString, args[2] as CFString)
-    if r != .success { fail("set failed: AXError \(r.rawValue)") }
+    // TextEdit answers cannotComplete while it is still applying a large
+    // value, and the value lands anyway (2026-10-10); the read-back below is
+    // the real check, so only other errors fail here.
+    if r != .success && r != .cannotComplete { fail("set failed: AXError \(r.rawValue)") }
+    if r == .cannotComplete { usleep(300_000) }
     let readBack = str(el, kAXValueAttribute) ?? ""
     emit(["set": e, "value": readBack, "verified": readBack == args[2]])
 
@@ -689,6 +755,93 @@ case "read":
     var out: [String] = []
     allText(win.element, into: &out)
     emit(["app": app.localizedName ?? "", "window": Int(win.id), "title": win.title ?? "", "text": out])
+
+case "where":
+    guard args.count >= 2 else { fail("where needs an app and an element") }
+    let app = resolveApp(args[0])
+    let (el, e) = resolveElement(app, args[1], window: windowOpt)
+    guard let f = frame(el) else { fail("element \(args[1]) has no frame") }
+    emit(["element": e, "screen": [Int(f.minX), Int(f.minY), Int(f.width), Int(f.height)],
+          "space": "screen points, top-left origin of the main display"])
+
+case "drag":
+    guard args.count >= 3 else { fail("drag needs an app, a source and a target") }
+    let app = resolveApp(args[0])
+    let (src, se) = resolveElement(app, args[1], window: windowOpt)
+    guard let a = center(src) else { fail("source has no frame") }
+    var b: CGPoint
+    var target: [String: Any] = [:]
+    let nums = args[2].split(separator: ",").compactMap { Double($0) }
+    if nums.count == 2 {
+        let origin = pickWindow(app, windowOpt).frame?.origin ?? .zero
+        b = CGPoint(x: origin.x + nums[0], y: origin.y + nums[1])
+        target = ["point": nums]
+    } else {
+        let (dst, de) = resolveElement(app, args[2], window: windowOpt)
+        guard let c = center(dst) else { fail("target has no frame") }
+        // Dropping onto Trash, an outbox or a share target is the dangerous
+        // half of a drag, so the target goes through the same gate as a press.
+        gate(dst, what: "drop target \(args[2])", yes: yes)
+        b = c; target = de
+    }
+    gate(src, what: "dragged element \(args[1])", yes: yes)
+    dragEvents(app.processIdentifier, from: a, to: b)
+    emit(["dragged": se, "to": target, "verify": "run see; some apps ignore events not from the real cursor"])
+
+case "clip":
+    let pb = NSPasteboard.general
+    if args.first == "set" {
+        guard args.count >= 2 else { fail("clip set needs text") }
+        pb.clearContents(); pb.setString(args[1], forType: .string)
+        emit(["clipboard": "set", "chars": args[1].count])
+    } else {
+        emit(["clipboard": pb.string(forType: .string) ?? ""])
+    }
+
+case "paste":
+    guard args.count >= 3 else { fail("paste needs an app, an element and text") }
+    let app = resolveApp(args[0])
+    let (el, e) = resolveElement(app, args[1], window: windowOpt)
+    for t in texts(el) where t != (str(el, kAXValueAttribute) ?? "\u{0}") { gateText(t, yes: yes) }
+    let before = str(el, kAXValueAttribute) ?? ""
+    // Insert at the caret by writing AXSelectedText: no clipboard, no focus,
+    // works in a hidden window. The clipboard route needs a key window: in
+    // hidden TextEdit, Edit > Paste was disabled and cmd+V never landed
+    // (2026-10-10), and borrowing the clipboard overwrote what the person
+    // had copied. So the clipboard is used only when the window is in front.
+    // With no caret yet (a window that was never key), AXSelectedText refuses
+    // with cannotComplete, so place the caret at the end first.
+    if attr(el, kAXSelectedTextRangeAttribute) == nil || before.isEmpty == false {
+        var range = CFRange(location: (before as NSString).length, length: 0)
+        if let v = AXValueCreate(.cfRange, &range) {
+            AXUIElementSetAttributeValue(el, kAXSelectedTextRangeAttribute as CFString, v)
+        }
+    }
+    var r = AXUIElementSetAttributeValue(el, kAXSelectedTextAttribute as CFString, args[2] as CFString)
+    if r == .cannotComplete {
+        usleep(150_000)
+        r = AXUIElementSetAttributeValue(el, kAXSelectedTextAttribute as CFString, args[2] as CFString)
+    }
+    var after = str(el, kAXValueAttribute) ?? ""
+    var via = "AXSelectedText"
+    if r != .success || after == before {
+        guard app.isActive else {
+            fail("couldn't insert into element \(args[1]) in the background (AXError \(r.rawValue))",
+                 fix: "use `set` to replace the whole value, or raise the app and retry")
+        }
+        let pb = NSPasteboard.general
+        let saved = pb.string(forType: .string)
+        pb.clearContents(); pb.setString(args[2], forType: .string)
+        AXUIElementSetAttributeValue(el, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+        sendKey(app.processIdentifier, "cmd+v")
+        usleep(400_000)
+        pb.clearContents()
+        if let s = saved { pb.setString(s, forType: .string) }
+        after = str(el, kAXValueAttribute) ?? ""
+        via = "clipboard (restored)"
+        r = .success
+    }
+    emit(["pasted": e, "via": via, "landed": after.contains(args[2])])
 
 case "raise":
     guard let q = args.first else { fail("raise needs an app") }

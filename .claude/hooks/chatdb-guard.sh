@@ -43,6 +43,10 @@ thread_read=0
 # shape was refused twice while adding the RCS/SMS GUID test.
 writes_file=0
 printf '%s' "$cmd" | grep -qE '^[[:space:]]*(cd [^&;]*(&&|;)[[:space:]]*)?([A-Z_]+=[^ ]* )*(python3|cat|tee)[^|;&]*<<' && writes_file=1
+# A fixture builds a fake database at a scratch path; it never opens the real
+# ones. A heredoc that names Library/Messages/chat.db or the people store is a
+# read, whatever it's fed to (security review, 2026-10-10).
+if printf '%s' "$cmd" | grep -qE 'Library/Messages/chat\.db|\.chewbacca/people/people\.db'; then writes_file=0; fi
 if [ "$writes_file" = 0 ] && printf '%s' "$cmd" | grep -q 'chat\.db' \
   && printf '%s' "$cmd" | grep -qiE 'is_from_me|chat_message_join'; then thread_read=1; fi
 if [ "$writes_file" = 0 ] && printf '%s' "$cmd" | grep -q 'people\.db' \

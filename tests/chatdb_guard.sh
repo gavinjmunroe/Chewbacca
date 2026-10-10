@@ -27,6 +27,18 @@ t "people texts owed"    0 'people texts owed --json'
 t "python heredoc writing a chat.db fixture" 0 "cd ~/code/chewbacca && python3 - <<'EOF'
 s='sqlite3 chat2.db \"CREATE TABLE chat_message_join (chat_id INT)\" is_from_me'
 EOF"
+# Security review, 2026-10-10: the heredoc exemption let a python heredoc that
+# opens the REAL message store read threads. A fixture never names the real path.
+t "python heredoc reading the real chat.db" 2 "python3 - <<'EOF'
+import sqlite3, os
+c = sqlite3.connect(os.path.expanduser('~/Library/Messages/chat.db'))
+print(c.execute('select text, is_from_me from message join chat_message_join').fetchall())
+EOF"
+t "python heredoc reading the real people.db" 2 "python3 - <<'EOF'
+import sqlite3, os
+c = sqlite3.connect(os.path.expanduser('~/.chewbacca/people/people.db'))
+print(c.execute('select body, from_me from messages').fetchall())
+EOF"
 t "a plain sqlite3 thread read still refuses" 2 "sqlite3 ~/Library/Messages/chat.db \"select is_from_me from chat_message_join\""
 t "other db"             0 "sqlite3 notes.db \"select * from notes where text like '%x%'\""
 t "non-Bash tool"        0 'ignored'

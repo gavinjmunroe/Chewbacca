@@ -237,3 +237,65 @@ touch because a lone file is not a folder. Next lever: those top-level hub
 files, which needs a new dev-tuned idea, not another sealed run of these.
 `tests/test_brain_hubs.py` holds the cap with a synthetic hub fixture and fails
 when the cap is removed (checked: 4 of 13 fail at FOLDER_CAP=0).
+
+**Measured 2026-10-10, second pass: lone hub files. Nothing shipped.**
+Frozen copy of the live index (728 files, 3,805 chunks), every variant on top
+of the shipped folder cap, through `brain.rank()`, via `bench/lone.py`. Dev is
+25 queries, so one query is 4 points.
+
+| variant (dev, n=25)                               | r@5       | MRR       |
+| ------------------------------------------------- | --------- | --------- |
+| shipped (folder cap 1)                            | 68.0%     | 0.542     |
+| (a) best chunk, top_m=1 (max)                     | 52.0%     | 0.428     |
+| (a) mean of best 2 chunks                         | 60.0%     | 0.459     |
+| (a) mean of best 3 chunks                         | 60.0%     | 0.481     |
+| (a) mean of best 5 chunks                         | 68.0%     | 0.550     |
+| (b) section unit (file = best section)            | 56.0%     | 0.399     |
+| (b) section unit, top_m=1                         | 56.0%     | 0.397     |
+| (b) section unit, top_m=3                         | 56.0%     | 0.399     |
+| (c) chunk-space k-occurrence, beta=0.05           | 68.0%     | 0.519     |
+| (c) chunk-space k-occurrence, beta=0.1            | 68.0%     | 0.533     |
+| (c) chunk-space k-occurrence, beta=0.2            | 64.0%     | 0.466     |
+| (c) chunk-space k-occurrence, beta=0.3            | 68.0%     | 0.417     |
+| (c) chunk-space k-occurrence, beta=0.5            | 52.0%     | 0.344     |
+| (c) chunk-space k-occurrence, beta=1.0            | 36.0%     | 0.242     |
+| (c) CSLS gamma=0.25                               | 64.0%     | 0.504     |
+| (c) CSLS gamma=0.5                                | 56.0%     | 0.466     |
+| (c) CSLS gamma=1.0                                | 52.0%     | 0.335     |
+| (c) query-space k-occ, heading probes, beta=0.05  | 76.0%     | 0.548     |
+| (c) query-space k-occ, heading probes, beta=0.1   | 72.0%     | 0.571     |
+| (c) query-space k-occ, heading probes, beta=0.2   | 72.0%     | 0.563     |
+| (c) query-space k-occ, heading probes, beta=0.3   | 72.0%     | 0.525     |
+| (c) query-space k-occ, heading probes, beta=0.5   | 64.0%     | 0.378     |
+| (c) query-space k-occ, heading probes, beta=1.0   | 24.0%     | 0.163     |
+| (c) query-space k-occ, slug probes, beta=0.05     | 72.0%     | 0.603     |
+| **(c) query-space k-occ, slug probes, beta=0.1**  | **80.0%** | **0.674** |
+| (c) query-space k-occ, slug probes, beta=0.2      | 80.0%     | 0.609     |
+| (c) query-space k-occ, slug probes, beta=0.3      | 64.0%     | 0.541     |
+| (c) query-space k-occ, slug probes, beta=0.5      | 56.0%     | 0.442     |
+| (c) query-space k-occ, slug probes, beta=1.0      | 40.0%     | 0.347     |
+| (d) lone domains/*.md cap 1 (taken together)      | 64.0%     | 0.531     |
+| (d) lone domains/*.md cap 2                       | 68.0%     | 0.542     |
+
+Chunk-space hubness points the wrong way: with every chunk as a pseudo-query,
+mission, technical-mind and story score 0.24, 0.13 and 0.27 times the mean
+k-occurrence (median file 0.68). They are anti-hubs among chunks and win only
+against real questions. Query-space hubness (649 file-slug probes, each probe
+barred from voting for its own file, top 5 under the shipped ranker) does see
+hubs, but its top 15 are all short memory/ notes; mission is 1.57x the mean,
+so the discount barely touched it. Picked by the r@5-then-MRR rule.
+
+| sealed, run once (n=65 answerable)        | r@5   | 95% CI  | MRR   |
+| ----------------------------------------- | ----- | ------- | ----- |
+| shipped (folder cap 1), same snapshot     | 55.4% | +/-12.1 | 0.357 |
+| query-space k-occ, slug probes, beta=0.1  | 43.1% | +/-12.0 | 0.331 |
+
+A 12.3-point loss, 8 queries. The +12 on dev was 3 queries and did not
+survive. The folder cap stays the shipped config at 55.4%; the knobs stay in
+`rank()` defaulted off so `bench/lone.py` reproduces this table, and
+`tests/test_brain_hubs.py` checks each knob does what its name says and that
+the default path equals all of them off. The lone-file problem is still open
+and dev cannot see it: on the shipped config dev's 8 misses include no lone
+domains/ file. The next attempt needs a dev set that contains the failure
+(a fresh blind batch of questions whose answers sit outside domains/), not
+another knob tuned on these 25.

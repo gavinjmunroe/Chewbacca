@@ -35,6 +35,12 @@ CHUNK_ALPHA = 0.0   # dense mean * chunks^-alpha. Off: 0.01 cost 4 points on dev
                     # 0.1 cost 12, 1.0 cost 52. Short one-chunk notes flood in.
 LEX_LEN_B   = 0.0   # BM25-style length divisor on the lexical file score. Off:
                     # best case tied baseline r@5 and lowered MRR at every b.
+# Lone hub files, 2026-10-10, bench/lone.py. rank() takes top_m, unit, hub,
+# hub_beta, csls and lone_cap so the bench can sweep them; all stay off. Best
+# chunks, section units, corpus k-occurrence, CSLS and a lone-file cap all tied
+# or lost on dev. Query-space hubness (beta 0.1) took dev 68% -> 80% and then
+# the sealed set 55.4% -> 43.1%, run once. Do not turn one on without a new
+# sealed run.
 TARGET_WORDS, OVERLAP = 300, 60
 MAXTOK   = 40       # a token longer than this is a base64 blob, not language. One
                     # 234KB token in a club-application file crashed the first
@@ -364,37 +370,72 @@ def folder(f):
     parts = f.split("/")
     return "/".join(parts[:2]) if len(parts) >= 3 else None
 
-def rank(rows, dense, lex, k, alpha=None, folder_cap=None, len_b=None):
+def topm_mean(v, m):
+    """Mean of the m largest values; m=None is the plain mean."""
+    if not m or m >= len(v): return sum(v) / len(v)
+    return sum(sorted(v, reverse=True)[:m]) / m
+
+def rank(rows, dense, lex, k, alpha=None, folder_cap=None, len_b=None,
+         top_m=None, unit="file", hub=None, hub_beta=0.0, csls=0.0, lone_cap=0):
     """Fuse dense and lexical scores per file and return the top k as
     [(file, score)], plus the per-file mean cosine used for abstention.
 
     rows are (id, file, section, text, row); dense is a cosine per vector row
-    or None; lex maps chunk id to BM25. The three knobs default to the tuned
-    constants below and are arguments only so the bench can sweep them."""
+    or None; lex maps chunk id to BM25. The knobs default to the tuned
+    constants and are arguments only so the bench can sweep them: top_m
+    aggregates over a unit's best m chunks, unit="section" ranks (file,
+    heading) sections and scores a file by its best one, hub is hub_prior()'s
+    output for hub_beta (k-occurrence discount) and csls (density penalty)."""
     alpha = CHUNK_ALPHA if alpha is None else alpha
     folder_cap = FOLDER_CAP if folder_cap is None else folder_cap
     len_b = LEX_LEN_B if len_b is None else len_b
     nchunks = collections.Counter(r[1] for r in rows)
     dv = agg_by_file([(r[1], float(dense[r[4]])) for r in rows]) if dense is not None else {}
-    lv = agg_by_file([(r[1], lex.get(r[0], 0.0)) for r in rows])
-    dvr = {f: s * nchunks[f] ** -alpha for f, s in dv.items()} if alpha else dv
+    key = (lambda r: (r[1], r[2])) if unit == "section" else (lambda r: r[1])
+    agg = (lambda pairs: agg_by_file(pairs)) if not top_m else (
+        lambda pairs: {u: topm_mean(v, top_m) for u, v in _group(pairs).items()})
+    if dense is not None:
+        cs = (lambda r: float(dense[r[4]]) - csls * float(hub["r"][r[4]])) if csls else (
+              lambda r: float(dense[r[4]]))
+        du = agg([(key(r), cs(r)) for r in rows])
+    else:
+        du = {}
+    lu = agg([(key(r), lex.get(r[0], 0.0)) for r in rows])
+    ufile = (lambda u: u[0]) if unit == "section" else (lambda u: u)
+    if alpha:
+        du = {u: s * nchunks[ufile(u)] ** -alpha for u, s in du.items()}
     if len_b and nchunks:
         avg = sum(nchunks.values()) / len(nchunks)
-        lv = {f: s / (1 - len_b + len_b * nchunks[f] / avg) for f, s in lv.items()}
-    dvn, lvn = norm(dvr), norm(lv)
+        lu = {u: s / (1 - len_b + len_b * nchunks[ufile(u)] / avg) for u, s in lu.items()}
+    dvn, lvn = norm(du), norm(lu)
     w = W_DENSE if dense is not None else 0.0
-    score = {f: w*dvn.get(f, 0) + (1-w)*lvn.get(f, 0) for f in set(dvn) | set(lvn)}
+    score = {}
+    for u in set(dvn) | set(lvn):
+        s = w*dvn.get(u, 0) + (1-w)*lvn.get(u, 0)
+        f = ufile(u)
+        if f not in score or s > score[f]: score[f] = s
+    if hub_beta and hub:
+        score = {f: s * (1 + hub["kocc"].get(f, 1.0)) ** -hub_beta for f, s in score.items()}
     ordered = sorted(score.items(), key=lambda kv: (-kv[1], kv[0]))
     if not folder_cap:
         return ordered[:k], dv
     out, per = [], collections.Counter()
     for f, s in ordered:
         g = folder(f)
-        if g is not None and per[g] >= folder_cap: continue
+        if g is None and lone_cap and f.startswith("domains/"):
+            g, cap = "domains/", lone_cap
+        else:
+            cap = folder_cap
+        if g is not None and per[g] >= cap: continue
         if g is not None: per[g] += 1
         out.append((f, s))
         if len(out) == k: break
     return out, dv
+
+def _group(pairs):
+    d = collections.defaultdict(list)
+    for u, s in pairs: d[u].append(s)
+    return d
 
 def classify(e):
     """Name why the query embedding failed. Only a timeout means a model load

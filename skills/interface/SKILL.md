@@ -245,6 +245,32 @@ Read them before drafting any club or startup landing page.
   what past commits built and what he praised (`git log --diff-filter=D`,
   plus the verdicts in docs/). A rebuild that drops the parts he loved
   reads as a downgrade.
+- "Holy fucking wall of text with each section feeling combined... never
+  make smth this shitty ever again" (2026-10-10, after "No sections should
+  read as combined, that diminishes both of their power"). Every section
+  owns one full screen and its own band, with a designed handoff to the
+  next and never a flat color seam or shared space. Body copy stays under
+  about 25 words per section; a list or table becomes a visual (a map, an
+  animated artifact). Enforce it in code: tools/section-check.mjs in
+  TTS-Dev fails a push on over 40 words, a shared background, a short
+  section, a repeated image or a still render in a hero slot.
+- "NEVER MAKE 3d STILLS" (2026-10-10, after asking at 10:29 for looping
+  videos "like the clay site" and still seeing stills at 12:44). Every clay
+  scene ships as a 4 to 8 second loop whose last frame meets its first, poster only under reduced
+  motion. A render job stuck behind a paused one is the same failure, so
+  check `chewbacca jobs list` and free the slot.
+- "These aren't immediately perceived as interactive": headline-sized text
+  that's secretly a link is not a door. Doors are big cards or buttons with
+  an arrow, an action label and visible hover and press states.
+- "I don't like everything getting dimm": hovering one item lifts it and
+  leaves the rest at full strength.
+- "The footer shouldn't have anything the header has": the footer carries
+  only what the nav lacks.
+- "TS NOT EPIC ENOUGH" on three small team cards in half a screen: a team
+  or climax section owns the viewport with full-bleed portraits.
+- "It feels like this is talking in lowercase": a credibility fact (who you
+  build with, valuations) is the loudest moment on the page, made huge and
+  given its own band, and stays exactly as true as the source.
 - Interactive Playwright on clay.com trips the outbound send guard, which
   reads the word as a campaign. Screenshot it, or drive it from a
   standalone script.

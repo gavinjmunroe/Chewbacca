@@ -41,6 +41,11 @@ RESET_RE = re.compile(r"resets? ([^·\n(]+(?:\([^)]*\))?)", re.IGNORECASE)
 # anyone is waiting on.
 SKIP_ENTRYPOINTS = ("sdk-",)
 SKIP_CWDS = ("/private/tmp", "/tmp")
+# A session with a single user turn is a one-shot `claude -p` run (a blind
+# image judge, an eval prompt) that inherits the parent tab's entrypoint. On
+# 2026-10-10 five of the seven "dead tabs" found were these. A person whose
+# first message hits the limit sees the error on their own screen.
+MIN_TURNS = 2
 NOISE_PREFIXES = ("<", "Stop hook", "[", "Another Claude session", "Resume a ", "Resume:")
 
 
@@ -101,6 +106,11 @@ def inspect(path: Path) -> dict | None:
         if ask:
             last_ask = ask
     if not last_text or not is_limit_reply(last_text):
+        return None
+    # head and tail overlap on a small file, so count one of them.
+    seen = head if size <= HEAD_BYTES else head + b"\n" + tail
+    turns = sum(1 for rec in _records(seen) if rec.get("type") == "user")
+    if turns < MIN_TURNS:
         return None
     entry, cwd, first = None, None, None
     for rec in _records(head):

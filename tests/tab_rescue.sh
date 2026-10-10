@@ -30,6 +30,7 @@ session dead1 claude-desktop /Users/x/code/site "Fix the sites based on what Tyl
 session done1 claude-desktop /Users/x/code/site "Ship the page" "Pushed, all done."
 session sdk1  sdk-py /Users/x/code/site "Review this change" "$LIMIT"
 session probe claude-desktop /private/tmp "say ok" "$LIMIT"
+python3 -c "import json,sys; open(sys.argv[1],'w').write('\\n'.join(json.dumps(r) for r in [{'type':'user','entrypoint':'claude-desktop','cwd':'/Users/x/code','message':{'content':'You are a blind image judge'}},{'type':'assistant','timestamp':'2026-10-10T21:50:00Z','message':{'content':[{'type':'text','text':sys.argv[2]}]}}]))" "$P/oneshot.jsonl" "$LIMIT"
 
 out=$(python3 -I "$ROOT/bin/tab-rescue" --json)
 ok "finds the tab that died on the limit" 'printf %s "$out" | python3 -c "import json,sys; d=json.load(sys.stdin); assert [x[\"session\"] for x in d]==[\"dead1\"]"'

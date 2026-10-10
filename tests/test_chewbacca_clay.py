@@ -582,6 +582,55 @@ def test_every_mutating_surface_is_gated():
         ok(all(kinds[n] == "write" for n in ("t-cli-delete", "t-cli-runs", "t-cli-unknown", "t-bin")), "ops lists a mislabelled write as a read")
 
 
+def test_values_that_change_when_decoded_are_refused():
+    # Review of 300f4ddb: a value is checked and built in one representation.
+    # Each of these looks different once decoded, normalized or re-parsed.
+    sneaky_ids = ["%2e%2e", "t_1%2Fx", "t_1%2fx", "..", "t_1∕x", "t_1／x", "t_1 ", " t_1", "t_1\t", "t_1/../x", "tı_1"]
+    for v in sneaky_ids:
+        for name, key, rest in (("cancel-run", "table", []), ("blocklist-remove", "entry", []),
+                                ("page-view-activity", "resource", ["resource_type=TABLE"]),
+                                ("update-column", "field", ["table=t_ex1", 'update={"name":"x"}'])):
+            code, out, _ = run({}, {}, name, f"{key}={v}", *rest, "--dry-run")
+            ok(code == 2 and out["class"] == "input", f"{name} {key}={v!r} reached the builder")
+    code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "table=t_ex2", "--dry-run")
+    ok(code == 2 and "more than once" in out["reason"], "a key given twice was accepted")
+    bad_json = [
+        ("add-rows", ["table=t_ex1", 'records=[{"f_a":1,"f_a":2}]']),
+        ("add-rows", ["table=t_ex1", 'records=[{"__proto__":{"f_a":1}}]']),
+        ("add-rows", ["table=t_ex1", 'records=[{"f_a":{"constructor":{"prototype":1}}}]']),
+        ("table-auto-run", ["table=t_ex1", "on=true", 'settings={"AUTO_RUN_ON":true,"AUTO_RUN_ON":false}']),
+        ("update-column", ["table=t_ex1", "field=f_ex1", 'update={"name":"a","name":"b"}']),
+        ("add-leads", ["audience=seg_ex1", 'filter={"type":"GroupOp","items":[],"items":[{"x":1}]}']),
+        ("add-leads", ["audience=seg_ex1", 'filter={"type":"GroupOp","items":[{"__proto__":{}}]}']),
+        ("add-rows", ["table=t_ex1", 'records=[{"f_a":1}] trailing']),
+        ("run-cells", ["table=t_ex1", 'fields=["f_a","f_a\\u002f.."]', "rows=r_1"]),
+    ]
+    for name, argv in bad_json:
+        code, out, _ = run({}, {}, name, *argv, "--dry-run")
+        ok(code == 2 and out["class"] == "input", f"{name} accepted {argv[-1]!r}")
+    # Whitespace a builder might trim is part of the value: what is checked is what is sent.
+    code, out, _ = run({}, {}, "add-column", "table=t_ex1", "name=Lead score ", "data_type=text", "view=gv_ex1", "--dry-run")
+    ok(code == 0 and out["request"]["body"]["name"] == "Lead score ", "a checked value was altered before sending")
+    code, out, _ = run({}, {}, "run-cells", "table=t_ex1", 'fields=["f_a"]', "rows=r_1", "--dry-run")
+    ok(code == 0 and out["request"]["body"]["fieldIds"] == ["f_a"], "a JSON list was read differently from a comma list")
+    # The finished request is checked too: a spec whose template was tampered with is refused.
+    spec = json.loads((LIB / "clay.json").read_text())
+    tamper = {
+        "host": lambda o: o["request"].update(url=o["request"]["url"].replace("api.clay.com", "evil.example.com")),
+        "dotdot": lambda o: o["request"].update(url=o["request"]["url"].replace("/tables/", "/../")),
+        "proto": lambda o: o["request"].update(body='{"__proto__":{"x":1},"name":"x","type":"text","typeSettings":{"dataTypeSettings":{"type":"text"}},"activeViewId":"gv_example"}'),
+    }
+    for what, fn in tamper.items():
+        doctored = json.loads(json.dumps(spec))
+        fn(next(o for o in doctored["operations"] if o["name"] == "createField"))
+        with tempfile.TemporaryDirectory() as d:
+            lib = Path(d)
+            (lib / "registry.json").write_text((LIB / "registry.json").read_text())
+            (lib / "clay.json").write_text(json.dumps(doctored))
+            code, out, _ = run({}, {}, "add-column", *DERIVED["add-column"][0], "--dry-run", env_extra={"CHEWBACCA_CLAY_LIB": str(lib)})
+            ok(code == 2 and out["class"] == "input", f"a {what}-tampered spec built a request: {out}")
+
+
 def test_ui_only_prints_route():
     code, out, _ = run({}, {}, "start-campaign", "campaign=cam_example1")
     ok(code == 0 and out["surface"] == "ui" and out["done"] is False, "a UI-only job is not claimed done")
@@ -631,6 +680,7 @@ def main():
                test_new_args_are_shape_checked, test_first_live_use_reads_back,
                test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,
                test_every_mutating_surface_is_gated, test_nothing_changes_between_approval_and_send,
+               test_values_that_change_when_decoded_are_refused,
                test_ui_only_prints_route, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")

@@ -83,16 +83,12 @@ function parseArgv(argv) {
     else if (a === "-h" || a === "--help") pos.push("help");
     else if (a.startsWith("--")) out({ ok: false, class: "usage", reason: `unknown flag ${a}` }, EXIT.usage);
     else if (a.includes("=") && pos.length >= 1) {
+      // Values stay the raw strings typed; normalizeArgs parses each one once.
+      // A key given twice is refused: last-one-wins would let a check and a
+      // build read different values (security review of 300f4ddb).
       const k = a.slice(0, a.indexOf("="));
-      let v = a.slice(a.indexOf("=") + 1);
-      if (/^[[{]/.test(v)) {
-        try {
-          v = JSON.parse(v);
-        } catch {
-          out({ ok: false, class: "usage", reason: `${k} is not valid JSON` }, EXIT.usage);
-        }
-      }
-      kv[k] = v;
+      if (Object.hasOwn(kv, k)) out({ ok: false, class: "usage", reason: `${k} is given more than once` }, EXIT.usage);
+      kv[k] = a.slice(a.indexOf("=") + 1);
     } else pos.push(a);
   }
   return { pos, kv, flags };
@@ -549,14 +545,14 @@ const JSON_ARGS = {
 function badArg(args, op) {
   for (const [k, v] of Object.entries(args)) {
     if (JSON_ARGS[k]) {
-      let parsed;
-      try { parsed = typeof v === "string" ? JSON.parse(v) : v; } catch { return `${k} is not JSON`; }
-      const bad = JSON_ARGS[k](parsed, op);
+      // v is already parsed, once, by normalizeArgs.
+      const bad = JSON_ARGS[k](v, op);
       if (bad) return `${k} ${bad}`;
       continue;
     }
     if (LIST_ARGS[k]) {
-      const items = Array.isArray(v) ? v.map(String) : String(v).split(",");
+      if (!Array.isArray(v)) return `${k} must be a list`;
+      const items = v;
       const cap = op?.limits?.[k] ?? 200;
       if (!items.length || items.length > cap) return `${k} holds ${items.length} items, 1 to ${cap} allowed`;
       if (!items.every((x) => LIST_ARGS[k].test(x))) return `${k} has an item that does not look like a ${k.replace(/s$/, "")}`;
@@ -571,10 +567,147 @@ function badArg(args, op) {
 
 // Turn the validated args into what the spec slots take: lists to arrays, JSON
 // strings to objects, and the two composed bodies.
+// ── one parse, then validate what is actually sent ──────────────────────────
+//
+// Security review of 300f4ddb (validator differential): args were checked in
+// one representation and built from another (JSON parsed twice, lists split
+// twice, last duplicate key winning). Now every arg is parsed exactly once
+// here, badArg checks those parsed values, compose and the builder use the
+// same objects, and the builder refuses any value it was not handed by this
+// step. The finished request is checked again (checkFinal).
+
+const FORBIDDEN_KEYS = new Set(["__proto__", "constructor", "prototype"]);
+const CLAY_API_HOST = "api.clay.com";
+
+// JSON.parse keeps the last of two equal keys and treats "__proto__" as a
+// plain key, so a duplicate could be checked one way and read another. This
+// parser refuses both, and builds objects with no prototype chain to reach.
+const PRIMITIVE = /"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/y;
+function strictJson(text) {
+  let i = 0;
+  const ws = () => { while (" \t\n\r".includes(text[i]) && i < text.length) i++; };
+  const fail = (m) => { throw new Error(m); };
+  function value(depth) {
+    if (depth > 64) fail("nests too deep");
+    ws();
+    const c = text[i];
+    if (c === "{") {
+      i++;
+      const o = Object.create(null);
+      ws();
+      if (text[i] === "}") { i++; return Object.assign({}, o); }
+      for (;;) {
+        ws();
+        if (text[i] !== '"') fail("has a key that is not a string");
+        const k = value(depth + 1);
+        if (FORBIDDEN_KEYS.has(k)) fail(`has a ${k} key`);
+        if (Object.hasOwn(o, k)) fail(`has the key ${JSON.stringify(k)} twice`);
+        ws();
+        if (text[i++] !== ":") fail("is missing a colon");
+        o[k] = value(depth + 1);
+        ws();
+        if (text[i] === ",") { i++; continue; }
+        if (text[i] === "}") { i++; break; }
+        fail("has an object that is not closed");
+      }
+      // A plain object again, with only own keys from the text.
+      return Object.fromEntries(Object.entries(o));
+    }
+    if (c === "[") {
+      i++;
+      const a = [];
+      ws();
+      if (text[i] === "]") { i++; return a; }
+      for (;;) {
+        a.push(value(depth + 1));
+        ws();
+        if (text[i] === ",") { i++; continue; }
+        if (text[i] === "]") { i++; break; }
+        fail("has an array that is not closed");
+      }
+      return a;
+    }
+    PRIMITIVE.lastIndex = i;
+    const m = PRIMITIVE.exec(text);
+    if (!m) fail("is not valid JSON");
+    i += m[0].length;
+    return JSON.parse(m[0]);
+  }
+  const v = value(0);
+  ws();
+  if (i !== text.length) fail("has text after the JSON");
+  return v;
+}
+
+function normalizeArgs(args) {
+  const n = {};
+  for (const [k, raw] of Object.entries(args)) {
+    if (typeof raw !== "string") return { error: `${k} is not text` };
+    if (JSON_ARGS[k]) {
+      try { n[k] = strictJson(raw); } catch (e) { return { error: `${k} ${e.message}` }; }
+    } else if (LIST_ARGS[k]) {
+      if (raw.trimStart().startsWith("[")) {
+        let a;
+        try { a = strictJson(raw); } catch (e) { return { error: `${k} ${e.message}` }; }
+        if (!Array.isArray(a) || !a.every((x) => typeof x === "string")) return { error: `${k} must be a list of strings` };
+        n[k] = a;
+      } else n[k] = raw.split(",");
+    } else n[k] = raw;
+  }
+  return { values: n };
+}
+
+// Every value the builder may put into a request: the normalized args and
+// what compose derives from them, held by identity.
+function validatedSet(values) {
+  const set = new Set();
+  for (const v of Object.values(values)) set.add(v);
+  return set;
+}
+
+function forbiddenKeyIn(v) {
+  if (v === null || typeof v !== "object") return null;
+  for (const [k, x] of Object.entries(v)) {
+    if (FORBIDDEN_KEYS.has(k)) return k;
+    const deep = forbiddenKeyIn(x);
+    if (deep) return deep;
+  }
+  return null;
+}
+
+// The finished request, checked as it will go out: https to the spec's host,
+// the spec's query, a path that is the spec's template with only slot
+// segments changed, each one the plain validated value with nothing to decode
+// or normalize, and a body that round-trips as JSON with no prototype keys.
+function checkFinal(sop, req, vals) {
+  const tmpl = new URL(sop.request.url);
+  const m = /^https:\/\/([^/?#]+)(\/[^?#]*)(\?[^#]*)?$/.exec(req.url);
+  if (!m) throw new Error("the built URL is not a plain https URL");
+  const [, host, rawPath, query = ""] = m;
+  // A fixed allowlist, not the spec's own host: a doctored spec can't widen it.
+  if (host !== CLAY_API_HOST || host !== tmpl.host) throw new Error(`the built URL goes to ${host}, not ${CLAY_API_HOST}`);
+  if (!rawPath.startsWith("/v3/")) throw new Error("the built path is outside Clay's /v3 API");
+  if (query !== tmpl.search) throw new Error("the built URL's query differs from the spec's");
+  if (rawPath.includes("%") || new URL(req.url).pathname !== rawPath) throw new Error("the built path would be decoded or normalized");
+  const segs = rawPath.slice(1).split("/");
+  const tsegs = tmpl.pathname.slice(1).split("/");
+  if (segs.length !== tsegs.length) throw new Error("the built path has a different number of segments than the spec's");
+  const slotAt = new Map(sop.slots.filter((s) => s.at.length === 1 && s.at[0].startsWith("path:")).map((s) => [Number(s.at[0].slice(5)), s.param]));
+  segs.forEach((seg, i) => {
+    if (slotAt.has(i)) {
+      if (seg !== String(vals[slotAt.get(i)]) || !/^[A-Za-z0-9_-]{1,80}$/.test(seg)) throw new Error(`path segment ${i} is not the validated value`);
+    } else if (seg !== tsegs[i]) throw new Error(`path segment ${i} differs from the spec's`);
+  });
+  if (req.body !== undefined) {
+    const parsed = strictJson(req.body);
+    if (JSON.stringify(parsed) !== req.body) throw new Error("the built body does not round-trip as JSON");
+    const k = forbiddenKeyIn(parsed);
+    if (k) throw new Error(`the built body has a ${k} key`);
+  }
+}
+
 function compose(op, args) {
   const a = { ...args };
-  for (const k of Object.keys(LIST_ARGS)) if (a[k] !== undefined && !Array.isArray(a[k])) a[k] = String(a[k]).split(",");
-  for (const k of Object.keys(JSON_ARGS)) if (typeof a[k] === "string") a[k] = JSON.parse(a[k]);
   if (op.compose === "table-settings") {
     a.table_settings = { ...a.settings, AUTO_RUN_ON: String(a.on) === "true", ...(a.mode ? { AUTO_RUN_MODE: a.mode } : {}) };
   }
@@ -613,14 +746,30 @@ function setSlot(req, at, value) {
   return { ...req, body: JSON.stringify(doc) };
 }
 
-function dryRequest(s, bound) {
-  if (s.type !== "api-anything") return { argv: [s.type === "cli" ? "clay" : bound[0], ...(s.type === "cli" ? bound : bound.slice(1))] };
+function dryRequest(s, bound, validated, args) {
+  if (s.type !== "api-anything") {
+    // Rebuild the argv from the template, taking only validated values, and
+    // refuse if it is not exactly what bind produced.
+    const text = (v) => (v !== null && typeof v === "object" ? JSON.stringify(v) : String(v));
+    const fill = (tok) => tok.replace(/\{(\w+)\}/g, (_, k) => {
+      if (!validated.has(args[k])) throw new Error(`argv value ${k} is not a validated value`);
+      return text(args[k]);
+    });
+    const want = s.argv.map(fill);
+    for (const [k, extra] of Object.entries(s.optional || {})) if (args[k] !== undefined) want.push(...extra.map(fill));
+    const got = s.type === "cli" ? bound : bound.slice(1);
+    const wantArgs = s.type === "cli" ? want : want.slice(1);
+    if (JSON.stringify(got) !== JSON.stringify(wantArgs)) throw new Error("the built argv differs from the validated one");
+    return { argv: [s.type === "cli" ? "clay" : bound[0], ...got] };
+  }
   const sop = specOps.get(s.op);
   let req = { method: sop.request.method.toUpperCase(), url: sop.request.url, headers: { ...sop.request.headers }, body: sop.request.body };
   const vals = {};
   for (const p of sop.params) {
     const v = bound[p.name] ?? p.default;
     if (v === undefined) continue;
+    // The builder takes only values normalizeArgs produced and badArg passed.
+    if (bound[p.name] !== undefined && !validated.has(v)) throw new Error(`param ${p.name} is not a validated value`);
     vals[p.name] = coerceParam(p, v);
     if (p.pattern && !new RegExp(`^(?:${p.pattern})$`).test(typeof vals[p.name] === "object" ? JSON.stringify(vals[p.name]) : String(vals[p.name]))) {
       throw new Error(`param ${p.name} must be ${p.hint || p.pattern}`);
@@ -629,6 +778,7 @@ function dryRequest(s, bound) {
   for (const slot of sop.slots) if (vals[slot.param] !== undefined) req = setSlot(req, slot.at, vals[slot.param]);
   delete req.headers.cookie;
   if (req.method === "GET") delete req.body;
+  checkFinal(sop, req, vals);
   return { method: req.method, url: req.url, headers: req.headers, ...(req.body !== undefined ? { body: JSON.parse(req.body) } : {}) };
 }
 
@@ -745,7 +895,9 @@ async function runOp(name, kv, flags) {
   if (stray.length) {
     out({ ok: false, op: name, class: "usage", reason: `unknown arg ${stray.join(", ")}; ${name} takes ${op.args.join(", ") || "no args"}` }, EXIT.usage);
   }
-  const bad = badArg(args, op);
+  const norm = normalizeArgs(args);
+  if (norm.error) out({ ok: false, op: name, class: "input", reason: norm.error }, EXIT.usage);
+  const bad = badArg(norm.values, op);
   if (bad) out({ ok: false, op: name, class: "input", reason: bad }, EXIT.usage);
   // A value this kit never sends (a campaign START) is refused before anything else.
   for (const [k, banned] of Object.entries(op.refuse_values || {})) {
@@ -753,7 +905,8 @@ async function runOp(name, kv, flags) {
       out({ ok: false, op: name, class: "refused", gate: op.gate, reason: banned[String(args[k])] }, EXIT.refused);
     }
   }
-  const sendArgs = compose(op, args);
+  const sendArgs = compose(op, norm.values);
+  const validated = validatedSet(sendArgs);
   const cands = plan(op, sendArgs, flags.surface);
   if (!cands.length) {
     out({ ok: false, op: name, class: "input", reason: `no surface has every arg it needs; ${name} takes ${op.args.join(", ")}`, ui: uiRoute(op, args) }, EXIT.usage);
@@ -764,7 +917,7 @@ async function runOp(name, kv, flags) {
   // approves it, and the surface is handed it: nothing transforms it after.
   let request;
   try {
-    request = deepFreeze(dryRequest(cands[0].s, cands[0].bound));
+    request = deepFreeze(dryRequest(cands[0].s, cands[0].bound, validated, sendArgs));
   } catch (e) {
     out({ ok: false, op: name, class: "input", reason: e.message }, EXIT.usage);
   }

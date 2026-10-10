@@ -218,6 +218,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_write_skills_unprompted: Chewbacca writes or updates its own skills the moment a lesson lands; Caleb...
 - feedback_suggested_chip_fix_it_here: When he asks about a Suggested task chip, verify it and fix it in this tab; never tell him to click it
 - feedback_subtree_import_merge_not_rebase: After git subtree add, merge origin; rebase replays the import at the repo root
+- feedback_new_tools_never_reached_path: New bin/ tools stayed command-not-found until setup reran (26 on 10/10, text-command too); kit-autopull links them now via tools_link.py
+- feedback_run_ported_classifiers_on_real_inbox: Parity proves a port copied the bugs; run it on real traffic. 65 real replies showed bounces reaching the client (10/10)
 - feedback_ported_knowledge_must_stand_alone: Ported private-repo knowledge is written out in full (no pointers strangers can't open) and fixtures are anonymized; 27 real investor replies nearly shipped (10/9)
 - feedback_scan_before_import: Scan files and history for personal content before importing a repo into the kit
 - feedback_say_what_you_found_before_digging: On a "the system is cooked" vent, measure once and reply with the diagnosis first; silent digging drew "???" (2026-10-09)

@@ -734,9 +734,9 @@ function checkFinal(sop, req, vals) {
   for (const [k, v] of got) {
     if (seen.has(k)) throw new Error(`the built URL's query repeats ${k}`);
     seen.add(k);
-    if (qSlots.has(k)) {
+    if (qSlots.has(k) && vals[qSlots.get(k)] !== undefined) {
       const val = vals[qSlots.get(k)];
-      if (val === undefined || v !== String(val) || !/^[A-Za-z0-9_=+.-]{1,200}$/.test(v)) throw new Error(`query ${k} is not the validated value`);
+      if (v !== String(val) || !/^[A-Za-z0-9_=+.-]{1,200}$/.test(v)) throw new Error(`query ${k} is not the validated value`);
     } else if (!want.has(k) || want.get(k) !== v) throw new Error("the built URL's query differs from the spec's");
   }
   for (const k of want.keys()) if (!seen.has(k)) throw new Error(`the built URL's query lost ${k}`);

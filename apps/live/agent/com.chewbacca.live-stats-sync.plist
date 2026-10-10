@@ -15,7 +15,7 @@
   <key>EnvironmentVariables</key>
   <dict>
     <key>LIVE_URL</key>
-    <string>https://live-production-fce0.up.railway.app</string>
+    <string>https://chewbacca-live.up.railway.app</string>
     <key>PATH</key>
     <string>__EXTRA_PATH____HOME__/.local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
   </dict>

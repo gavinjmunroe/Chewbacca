@@ -6,7 +6,7 @@ what is waiting on them. Every number comes from a source at question time and
 carries its source and age underneath. Read only: nothing on the page sends,
 saves or changes anything.
 
-Live for BMA's client Zeutara at https://live-production-fce0.up.railway.app
+Live for BMA's client Zeutara at https://chewbacca-live.up.railway.app
 (service `live` in the chewbacca-team Railway project, deployed with
 `railway up` from this folder, like apps/team-web).
 

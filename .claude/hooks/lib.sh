@@ -28,12 +28,23 @@ hook_init() {
   # Watchdog. A hook that hangs blocks the session with no error and no
   # explanation, which is the worst failure this kit has shipped.
   if [ "$_HOOK_TIMEOUT" -gt 0 ] 2>/dev/null; then
+    # It ends the hook with exit 0, not SIGKILL. A straight kill -9 made the
+    # hook exit 137, which the host reports as a hook error: on 2026-10-09, at
+    # load 61, kit-autopush.sh ran past its 30s on git and the suite's "survives
+    # empty input" check failed with exit 137. So the stuck child is stopped
+    # first, the TERM trap exits 0, and -9 is only the last resort.
     ( sleep "$_HOOK_TIMEOUT"
       kill -0 $$ 2>/dev/null && {
         _hook_log timeout "killed after ${_HOOK_TIMEOUT}s"
-        kill -9 $$ 2>/dev/null
+        for child in $(pgrep -P $$ 2>/dev/null); do
+          [ "$child" = "$BASHPID" ] || kill -TERM "$child" 2>/dev/null
+        done
+        kill -TERM $$ 2>/dev/null
+        sleep 2
+        kill -0 $$ 2>/dev/null && kill -9 $$ 2>/dev/null
       } ) >/dev/null 2>&1 &
     _HOOK_WATCHDOG=$!
+    trap 'exit 0' TERM
   fi
   trap '_hook_finish $?' EXIT
 }

@@ -684,7 +684,7 @@ if group "installer"; then
     bash "$ROOT/tests/chewbacca_linkedin.sh" "$ROOT"
   check  "chewbacca groupme reads groups and DMs in the real GroupMe tab, GET only, throttled, and stops on pushback" \
     bash "$ROOT/tests/chewbacca_groupme.sh" "$ROOT"
-  check  "chewbacca office reads M365 mail, calendar, files, docs and Teams in the real Office tab, GET only to Graph, token never leaving the page, throttled, never marking read, and stops on pushback" \
+  check  "chewbacca office signs in with MSAL device code, keeps the cache in the keychain, reads M365 GET-only through Graph with silent refresh, throttled, never marking read, and stops on pushback" \
     bash "$ROOT/tests/chewbacca_office.sh" "$ROOT"
 
   check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \
@@ -1161,6 +1161,14 @@ if group "hooks"; then
   check "voice-check, drafts and voice-guard refuse a text that is not his" bash "$ROOT/tests/voice_check.sh"
   check "prayer-guard checks every visible block this turn" bash "$ROOT/tests/prayer_guard.sh"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
+  # A hook that outlives its watchdog ends with exit 0, never SIGKILL's 137.
+  wd="$(mktemp -d)"
+  printf '%s\n' "source '$ROOT/.claude/hooks/lib.sh'" 'hook_init watchdog-probe 1' 'sleep 30' > "$wd/probe.sh"
+  wd_start=$SECONDS
+  exits "a hook past its watchdog exits 0, not 137" 0 env CHEWBACCA_LOG_DIR="$wd" bash "$wd/probe.sh"
+  expect_ok() { [ $((SECONDS - wd_start)) -lt 10 ]; }
+  exits "the watchdog stops a stuck child within seconds" 0 expect_ok
+  rm -rf "$wd"
   # A hook must never fail the session, whatever it is handed.
   for h in "$ROOT"/.claude/hooks/*.sh; do
     [ "$(basename "$h")" = "lib.sh" ] && continue

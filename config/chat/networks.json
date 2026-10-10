@@ -1,0 +1,263 @@
+{
+  "_doc": "Every chat network `chewbacca chat status` lists, in the order it prints them. kind: bridge (a mautrix bridge on the local Matrix homeserver), existing (a Chewbacca reader that already covers it), skipped (no maintained open bridge). Versions are pinned so an install pulls exactly what was tested; licenses are recorded per project. A bridge runs as its own container from the upstream image, unmodified, so the kit never links or redistributes AGPL code.",
+  "homeserver": {
+    "image": "matrixdotorg/synapse:v1.162.0",
+    "project": "github.com/element-hq/synapse",
+    "license": "AGPL-3.0",
+    "why": "Synapse is the homeserver every mautrix bridge is documented and tested against; continuwuity is lighter but mautrix does not list it as supported, and a bridge that half-works is worse than 400 MB of RAM headroom.",
+    "server_name": "chewbacca.localhost",
+    "host_port": 29300
+  },
+  "networks": [
+    {
+      "id": "imessage",
+      "label": "iMessage + SMS relay",
+      "kind": "existing",
+      "path": "chat.db through people texts sync; sends through Messages",
+      "verdict": "existing path: chat.db is the source of truth on a Mac, and SMS/RCS relayed from the iPhone lands in it too. BlueBubbles adds nothing here: it exists to serve iMessage to non-Mac devices from a Mac, which is this Mac.",
+      "link": "nothing to do; grant Full Disk Access to the app running Chewbacca if people texts sync says chat.db is unreadable"
+    },
+    {
+      "id": "whatsapp",
+      "label": "WhatsApp",
+      "kind": "existing",
+      "path": "wacli linked device + wacrawl desktop copy",
+      "bridge_checked": "mautrix/whatsapp v0.2609.0 (AGPL-3.0)",
+      "verdict": "existing path: wacli is already a live linked device with groups and sends; the bridge would take a second linked-device slot and file every message twice.",
+      "link": "wacli auth (scan the QR in WhatsApp > Linked devices) if chewbacca chat status says unlinked"
+    },
+    {
+      "id": "slack",
+      "label": "Slack",
+      "kind": "existing",
+      "path": "slacrawl desktop cache + slackcli sends",
+      "bridge_checked": "mautrix/slack v0.2609.1 (AGPL-3.0)",
+      "verdict": "existing path: slacrawl reads the signed-in desktop app with no token; the bridge wants the same session cookie and would duplicate every row.",
+      "link": "sign in to the Slack desktop app"
+    },
+    {
+      "id": "email",
+      "label": "Email (Gmail, Outlook)",
+      "kind": "existing",
+      "path": "Gmail through gws (mac/lib/gmail.py); Outlook through chewbacca office",
+      "verdict": "existing path, never bridged: email threads already sit in the same people store, and replies stay drafts.",
+      "link": "chewbacca email (Gmail) or chewbacca office login (Microsoft 365)"
+    },
+    {
+      "id": "signal",
+      "label": "Signal",
+      "kind": "bridge",
+      "flavor": "bridgev2",
+      "repo": "mautrix/signal",
+      "image": "dock.mau.dev/mautrix/signal:v0.2609.0",
+      "license": "AGPL-3.0",
+      "port": 29328,
+      "login": "qr",
+      "verdict": "bridged: no other open way to read Signal from a Mac script.",
+      "link": "chewbacca chat link signal, then on the phone: Signal > Settings > Linked devices > + and scan the QR that opens"
+    },
+    {
+      "id": "telegram",
+      "label": "Telegram",
+      "kind": "bridge",
+      "flavor": "bridgev2",
+      "repo": "mautrix/telegram",
+      "image": "dock.mau.dev/mautrix/telegram:v0.2609.0",
+      "license": "AGPL-3.0",
+      "port": 29317,
+      "login": "qr",
+      "verdict": "bridged: the Telegram app's local store is encrypted, so the bridge is the only reader.",
+      "link": "chewbacca chat link telegram: it first asks for the api_id and api_hash from my.telegram.org/apps (his own account, once), then Telegram > Settings > Devices > Link Desktop Device and scan the QR",
+      "needs": {
+        "file": "telegram-api.json",
+        "what": "a Telegram api_id and api_hash",
+        "where": "https://my.telegram.org/apps",
+        "fields": [
+          "api_id",
+          "api_hash"
+        ],
+        "patch": ".network.api_id = env(API_ID) | .network.api_hash = strenv(API_HASH)"
+      }
+    },
+    {
+      "id": "discord",
+      "label": "Discord",
+      "kind": "bridge",
+      "flavor": "legacy-go",
+      "repo": "mautrix/discord",
+      "image": "dock.mau.dev/mautrix/discord:v0.7.7",
+      "license": "AGPL-3.0",
+      "port": 29334,
+      "login": "qr",
+      "verdict": "bridged: DMs and group DMs; servers stay opt-in per guild so 40 busy servers don't flood the store.",
+      "link": "chewbacca chat link discord, then Discord on the phone > Settings > Scan QR Code"
+    },
+    {
+      "id": "instagram",
+      "label": "Instagram DMs",
+      "kind": "bridge",
+      "flavor": "bridgev2",
+      "repo": "mautrix/meta",
+      "image": "dock.mau.dev/mautrix/meta:v0.2609.0",
+      "license": "AGPL-3.0",
+      "port": 29319,
+      "mode": "instagram",
+      "login": "cookies",
+      "verdict": "bridged: mautrix-meta in instagram mode; chewbacca ig reads posts, not DMs.",
+      "link": "chewbacca chat link instagram, then paste the cookies it asks for from a signed-in instagram.com tab (it says which)"
+    },
+    {
+      "id": "messenger",
+      "label": "Facebook Messenger",
+      "kind": "bridge",
+      "flavor": "bridgev2",
+      "repo": "mautrix/meta",
+      "image": "dock.mau.dev/mautrix/meta:v0.2609.0",
+      "license": "AGPL-3.0",
+      "port": 29318,
+      "mode": "messenger",
+      "login": "cookies",
+      "verdict": "bridged: a second mautrix-meta container in messenger mode, so each account has its own login.",
+      "link": "chewbacca chat link messenger, then paste the cookies it asks for from a signed-in messenger.com tab"
+    },
+    {
+      "id": "twitter",
+      "label": "X (Twitter) DMs",
+      "kind": "bridge",
+      "flavor": "bridgev2",
+      "repo": "mautrix/twitter",
+      "image": "dock.mau.dev/mautrix/twitter:v0.2609.0",
+      "license": "AGPL-3.0",
+      "port": 29327,
+      "login": "cookies",
+      "verdict": "bridged: chewbacca x reads posts only; DMs need the bridge.",
+      "link": "chewbacca chat link twitter, then paste the auth_token and ct0 cookies from a signed-in x.com tab"
+    },
+    {
+      "id": "gmessages",
+      "label": "Google Messages (Android SMS/RCS)",
+      "kind": "bridge",
+      "flavor": "bridgev2",
+      "repo": "mautrix/gmessages",
+      "image": "dock.mau.dev/mautrix/gmessages:v0.2609.0",
+      "license": "AGPL-3.0",
+      "port": 29336,
+      "login": "qr",
+      "verdict": "bridged for an Android phone; on an iPhone SMS already arrives through chat.db, and a gmessages row that repeats an iMessage row (same number, same words, within 2 minutes) is dropped on ingest so a thread never counts twice.",
+      "link": "chewbacca chat link gmessages, then Google Messages on the Android phone > Device pairing > QR code scanner"
+    },
+    {
+      "id": "googlechat",
+      "label": "Google Chat",
+      "kind": "bridge",
+      "flavor": "python",
+      "repo": "mautrix/googlechat",
+      "image": "dock.mau.dev/mautrix/googlechat:v0.5.2",
+      "license": "AGPL-3.0",
+      "port": 29320,
+      "login": "cookies",
+      "verdict": "bridged: the older Python bridge (last release v0.5.2), still the only open Google Chat bridge.",
+      "link": "chewbacca chat link googlechat, then paste the chat.google.com cookies it lists"
+    },
+    {
+      "id": "gvoice",
+      "label": "Google Voice",
+      "kind": "bridge",
+      "flavor": "bridgev2",
+      "repo": "mautrix/gvoice",
+      "image": "dock.mau.dev/mautrix/gvoice:v0.2605.0",
+      "license": "AGPL-3.0",
+      "port": 29338,
+      "login": "cookies",
+      "verdict": "bridged: texts; voicemail transcripts arrive as messages in the same thread.",
+      "link": "chewbacca chat link gvoice, then paste the voice.google.com cookies it lists"
+    },
+    {
+      "id": "linkedin",
+      "label": "LinkedIn messages",
+      "kind": "bridge",
+      "flavor": "bridgev2",
+      "repo": "mautrix/linkedin",
+      "image": "dock.mau.dev/mautrix/linkedin:v0.2609.0",
+      "license": "AGPL-3.0",
+      "port": 29341,
+      "login": "cookies",
+      "verdict": "bridged: chewbacca linkedin reads the inbox in a tab but cannot reply; the bridge adds live messages and sends.",
+      "link": "chewbacca chat link linkedin, then paste the li_at and JSESSIONID cookies from a signed-in linkedin.com tab"
+    },
+    {
+      "id": "bluesky",
+      "label": "Bluesky DMs",
+      "kind": "bridge",
+      "flavor": "bridgev2",
+      "repo": "mautrix/bluesky",
+      "image": "dock.mau.dev/mautrix/bluesky:v0.2510.0",
+      "license": "AGPL-3.0",
+      "port": 29340,
+      "login": "password",
+      "verdict": "bridged: a maintained mautrix bridge exists.",
+      "link": "chewbacca chat link bluesky, then type your handle and an app password made at bsky.app > Settings > App passwords"
+    },
+    {
+      "id": "groupme",
+      "label": "GroupMe",
+      "kind": "existing",
+      "path": "chewbacca groupme, inside the signed-in web.groupme.com tab, read-only",
+      "verdict": "existing path, read-only: no maintained open GroupMe bridge; replies stay in GroupMe.",
+      "link": "sign in at web.groupme.com in Chrome"
+    },
+    {
+      "id": "teams",
+      "label": "Microsoft Teams",
+      "kind": "existing",
+      "path": "chewbacca office teams (Graph, chat list only)",
+      "verdict": "existing path, partial: no maintained open Teams puppeting bridge; Graph's Chat.ReadBasic lists chats and topics but not message text.",
+      "link": "chewbacca office login"
+    },
+    {
+      "id": "sms",
+      "label": "Plain SMS/RCS",
+      "kind": "existing",
+      "path": "folded into iMessage (iPhone relay) and gmessages (Android)",
+      "verdict": "existing path: no separate reader, so no thread is counted twice.",
+      "link": "iPhone: Settings > Messages > Text Message Forwarding > this Mac"
+    },
+    {
+      "id": "calls",
+      "label": "Calls and voicemail",
+      "kind": "existing",
+      "path": "CallHistory.storedata (mac/lib/calls.py), read-only, logged on the person card",
+      "verdict": "existing path, read-only: FaceTime and phone calls become dated interactions on the person whose number it was; Google Voice voicemail arrives through the gvoice bridge.",
+      "link": "nothing beyond Full Disk Access"
+    },
+    {
+      "id": "school",
+      "label": "Brightspace + Handshake",
+      "kind": "existing",
+      "path": "chewbacca api brightspace / handshake (library/api-sites), read-only",
+      "verdict": "existing path, read-only: announcements and inbox through the sites' own requests.",
+      "link": "chewbacca api login brightspace / handshake"
+    },
+    {
+      "id": "snapchat",
+      "label": "Snapchat",
+      "kind": "skipped",
+      "verdict": "not possible: no maintained open bridge or API, and Snapchat bans third-party clients.",
+      "link": "none"
+    },
+    {
+      "id": "line",
+      "label": "LINE",
+      "kind": "skipped",
+      "verdict": "skipped: matrix-puppeteer-line is unmaintained and needs a Chrome extension session.",
+      "link": "none"
+    },
+    {
+      "id": "wechat",
+      "label": "WeChat",
+      "kind": "skipped",
+      "verdict": "skipped: the open bridges need a Windows WeChat agent and are unmaintained.",
+      "link": "none"
+    }
+  ]
+}

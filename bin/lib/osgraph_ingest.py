@@ -642,10 +642,19 @@ def meetings(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
     return ingest_meetings.meetings(graph, ctx, ids, days=days)
 
 
+def chats(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
+    """Signal, Telegram, Discord and the other bridged networks, from the rows
+    `people texts sync` filed out of the local homeserver (ingest_chats.chats).
+    No people store or no bridged rows is an empty snapshot, never an error."""
+    import ingest_chats  # noqa: PLC0415
+
+    return ingest_chats.chats(graph, ctx, ids, days=days)
+
+
 INGESTERS = {
     "imessage": imessage, "mail": mail, "coursework": coursework, "calendar": calendar,
     "backlog": backlog, "people": people_tasks, "reminders": reminders, "agents": agents,
-    "whatsapp": whatsapp, "meetings": meetings,
+    "whatsapp": whatsapp, "meetings": meetings, "chats": chats,
 }
 
 
@@ -673,7 +682,7 @@ def ingest_all(graph: Graph, ctx, days: int = 7, only: list[str] | None = None,
 
 # Meetings ride the message window too: a meeting's snippet and transcript
 # words are other people's words, kept no longer than a text is.
-MESSAGE_SOURCES = ("imessage", "mail", "whatsapp", "meetings")
+MESSAGE_SOURCES = ("imessage", "mail", "whatsapp", "meetings", "chats")
 
 
 def dumps(report: dict) -> str:

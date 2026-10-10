@@ -1,0 +1,769 @@
+#!/usr/bin/env python3
+"""chewbacca chat: one inbox for every chat network, on a homeserver this Mac runs.
+
+  chewbacca chat up [network ...]     start the local homeserver and bridges (all by default)
+  chewbacca chat down                 stop every container this started
+  chewbacca chat status [--json]      every network: bridged/existing/skipped, running, logged in, last message
+  chewbacca chat link <network> [flow] [--show | --cancel]
+                                      start that network's login and show what to scan or paste
+  chewbacca chat networks             the verdict for each network, one line each
+
+WHAT RUNS. Synapse plus one mautrix bridge per network, from pinned upstream
+images (config/chat/networks.json), in a Docker Compose project called
+chewbacca-chat. The homeserver's port is published on 127.0.0.1 only; the
+bridges publish nothing. Federation is off: this homeserver talks to its own
+bridges and to nobody else.
+
+WHERE IT LIVES. ~/.chewbacca/matrix (0700): synapse/, bridges/<network>/,
+secrets/me.json (0600) with the local account's token. Registration tokens
+are generated here, written to 0600 files, and never printed, logged or put
+on a command line: yq reads them from the environment of the one container
+that patches a config.
+
+LOGGING IN is the user's hands. `link` opens the QR the bridge sends, or
+relays the bridge bot's questions to this terminal and what the user types
+back to the bot, then redacts what they typed from the room. Nothing here
+ever types a credential.
+
+Rows land in the people store through mac/lib/matrix.py on `people texts
+sync`; `people send <who> "text" --via signal` replies in the thread's own
+room, and honors CHEWBACCA_NO_SEND like every other app.
+"""
+import argparse
+import hashlib
+import hmac
+import json
+import os
+import secrets
+import shutil
+import sqlite3
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "mac" / "lib"))
+import matrix as M  # noqa: E402
+
+REG = json.loads((ROOT / "config" / "chat" / "networks.json").read_text())
+HS = REG["homeserver"]
+DOMAIN = os.environ.get("CHEWBACCA_MATRIX_DOMAIN") or HS["server_name"]
+PORT = int(os.environ.get("CHEWBACCA_MATRIX_PORT") or HS["host_port"])
+HOME = Path(M.HOME)
+SYNAPSE = HOME / "synapse"
+BRIDGES = HOME / "bridges"
+SECRETS = HOME / "secrets"
+PROJECT = "chewbacca-chat"
+ME_LOCAL = "me"
+ME = f"@{ME_LOCAL}:{DOMAIN}"
+DOCKER = os.environ.get("CHEWBACCA_DOCKER") or shutil.which("docker") or "/usr/local/bin/docker"
+PEOPLE_DB = Path(os.environ.get("PEOPLE_DB") or Path(os.environ.get("PEOPLE_DIR") or Path.home() / ".chewbacca" / "people") / "people.db")
+
+# Refuse to pull or start below this much free disk. The stack is about 3 GB
+# of images (measured 2026-10-10: 11 bridges at 230-290 MB each plus Synapse
+# at 502 MB), and this Mac ran out of disk earlier that night.
+MIN_FREE_GB = 8
+# Per-container memory caps. Idle Go bridges measured 15-40 MB and Synapse
+# about 150 MB on 2026-10-10; the caps leave room for a login burst and stop
+# one runaway bridge from swapping a Mac that was already at load 18.
+BRIDGE_MEM = "256m"
+SYNAPSE_MEM = "768m"
+
+
+def say(*a):
+    print(*a, flush=True)
+
+
+def die(msg, code=1):
+    print(f"chewbacca chat: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def networks(kind=None):
+    return [n for n in REG["networks"] if kind is None or n["kind"] == kind]
+
+
+def bridge(net_id):
+    for n in networks("bridge"):
+        if n["id"] == net_id:
+            return n
+    known = ", ".join(n["id"] for n in networks("bridge"))
+    die(f"{net_id} is not a bridged network. Bridged: {known}")
+
+
+def private_dir(p):
+    p.mkdir(parents=True, exist_ok=True)
+    os.chmod(p, 0o700)
+    return p
+
+
+def write_private(path, text):
+    fd = os.open(str(path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(text)
+    os.chmod(path, 0o600)
+
+
+def docker(*args, env=None, check=True, capture=True, timeout=600):
+    r = subprocess.run([DOCKER, *args], capture_output=capture, text=True, env=env, timeout=timeout)
+    if check and r.returncode != 0:
+        tail = ((r.stderr or "") + (r.stdout or "")).strip().splitlines()[-3:]
+        die(f"docker {args[0]} failed: " + " | ".join(tail))
+    return r
+
+
+def docker_up():
+    try:
+        return subprocess.run([DOCKER, "info", "--format", "{{.ServerVersion}}"], capture_output=True,
+                              text=True, timeout=20).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def free_gb():
+    st = os.statvfs(str(Path.home()))
+    return st.f_bavail * st.f_frsize / 1e9
+
+
+def ids():
+    return str(os.getuid()), str(os.getgid())
+
+
+# ── setup ───────────────────────────────────────────────────────────────────
+
+def dp_token():
+    """The double-puppeting appservice's as_token, made once. With it every
+    bridge logs in as @me, so a message Caleb sends from his phone shows as
+    his, not as a stranger ghost with his name."""
+    reg = SYNAPSE / "appservices" / "doublepuppet.yaml"
+    if not reg.exists():
+        private_dir(reg.parent)
+        tok = secrets.token_hex(32)
+        write_private(reg, "\n".join([
+            "id: doublepuppet", "url: null", f"as_token: {tok}", f"hs_token: {secrets.token_hex(32)}",
+            f"sender_localpart: {secrets.token_hex(8)}", "rate_limited: false",
+            "namespaces:", "  users:", f"  - regex: '@.*:{DOMAIN.replace('.', chr(92) + '.')}'",
+            "    exclusive: false", ""]))
+    for line in reg.read_text().splitlines():
+        if line.startswith("as_token:"):
+            return line.split(":", 1)[1].strip()
+    die("the double-puppet registration has no as_token; delete it and run up again")
+
+
+PATCH = {
+    "bridgev2": " | ".join([
+        '.homeserver.address = "http://synapse:8008"', ".homeserver.domain = strenv(DOMAIN)",
+        '.appservice.address = "http://" + strenv(SVC) + ":" + strenv(PORT)', '.appservice.hostname = "0.0.0.0"',
+        ".appservice.port = env(PORT)", ".appservice.id = strenv(NET)", '.appservice.bot.username = strenv(NET) + "bot"',
+        '.appservice.username_template = strenv(NET) + "_{{.}}"',
+        '.database.type = "sqlite3-fk-wal"', '.database.uri = "file:/data/bridge.db?_txlock=immediate"',
+        ".bridge.permissions = {}", '.bridge.permissions[strenv(DOMAIN)] = "user"', '.bridge.permissions[strenv(ME)] = "admin"',
+        ".double_puppet.servers = {}", ".double_puppet.secrets = {}",
+        '.double_puppet.secrets[strenv(DOMAIN)] = "as_token:" + strenv(DP_TOKEN)',
+        ".encryption.allow = false", ".backfill.enabled = true", ".matrix.federate_rooms = false",
+        ".matrix.ghost_extra_profile_info = true"]),
+    "legacy-go": " | ".join([
+        '.homeserver.address = "http://synapse:8008"', ".homeserver.domain = strenv(DOMAIN)",
+        '.appservice.address = "http://" + strenv(SVC) + ":" + strenv(PORT)', '.appservice.hostname = "0.0.0.0"',
+        ".appservice.port = env(PORT)", ".appservice.id = strenv(NET)", '.appservice.bot.username = strenv(NET) + "bot"',
+        '.appservice.database.type = "sqlite3-fk-wal"', '.appservice.database.uri = "file:/data/bridge.db?_txlock=immediate"',
+        '.bridge.username_template = strenv(NET) + "_{{.}}"',
+        ".bridge.permissions = {}", '.bridge.permissions[strenv(DOMAIN)] = "user"', '.bridge.permissions[strenv(ME)] = "admin"',
+        ".bridge.double_puppet_server_map = {}", ".bridge.login_shared_secret_map = {}",
+        '.bridge.login_shared_secret_map[strenv(DOMAIN)] = "as_token:" + strenv(DP_TOKEN)',
+        ".bridge.encryption.allow = false", ".bridge.federate_rooms = false"]),
+    "python": " | ".join([
+        '.homeserver.address = "http://synapse:8008"', ".homeserver.domain = strenv(DOMAIN)",
+        '.appservice.address = "http://" + strenv(SVC) + ":" + strenv(PORT)', '.appservice.hostname = "0.0.0.0"',
+        ".appservice.port = env(PORT)", ".appservice.id = strenv(NET)", '.appservice.bot_username = strenv(NET) + "bot"',
+        '.appservice.database = "sqlite:/data/bridge.db"',
+        '.bridge.username_template = strenv(NET) + "_{userid}"',
+        ".bridge.permissions = {}", '.bridge.permissions[strenv(DOMAIN)] = "user"', '.bridge.permissions[strenv(ME)] = "admin"',
+        ".bridge.double_puppet_server_map = {}", ".bridge.login_shared_secret_map = {}",
+        '.bridge.login_shared_secret_map[strenv(DOMAIN)] = "as_token:" + strenv(DP_TOKEN)',
+        ".bridge.encryption.allow = false", ".bridge.federate_rooms = false"]),
+}
+
+
+def service(net):
+    return f"mautrix-{net['id']}"
+
+
+def needs_file(net):
+    return SECRETS / net["needs"]["file"] if net.get("needs") else None
+
+
+def needs_ready(net):
+    """A bridge that can't start without something only the user can make
+    (Telegram's api_id and api_hash, registered on his own account) waits for
+    it instead of crash-looping: on 2026-10-10 the Telegram container
+    restarted every few seconds on "api_hash is required"."""
+    f = needs_file(net)
+    return f is None or f.exists()
+
+
+def apply_needs(net, vol):
+    if not net.get("needs") or not needs_ready(net):
+        return
+    raw = needs_file(net).read_text()
+    vals = json.loads(raw)
+    stamp = Path(vol.split(":", 1)[0]) / ".needs-patched"
+    want = hashlib.sha256(raw.encode()).hexdigest()
+    if stamp.exists() and stamp.read_text() == want:
+        return
+    env = dict(os.environ, **{k.upper(): str(vals[k]) for k in net["needs"]["fields"]})
+    args = ["run", "--rm", "-v", vol, "--entrypoint", "yq"]
+    for k in net["needs"]["fields"]:
+        args += ["-e", k.upper()]
+    docker(*args, net["image"], "-I4", "e", "-i", net["needs"]["patch"], "/data/config.yaml", env=env)
+    write_private(stamp, want)
+
+
+def ask_needs(net):
+    """Ask the user, in this terminal, for what the bridge needs. Hidden input
+    for anything secret; nothing typed is echoed or printed back."""
+    import getpass  # noqa: PLC0415
+
+    n = net["needs"]
+    if not sys.stdin.isatty():
+        die(f"BLOCKED: {net['label']} needs {n['what']} from {n['where']}. "
+            f"Run chewbacca chat link {net['id']} in a terminal and type them there.", 4)
+    subprocess.run(["open", n["where"]], check=False)
+    say(f"{net['label']} needs {n['what']}. Opened {n['where']}: sign in, create an app, copy the two values.")
+    vals = {}
+    for k in n["fields"]:
+        vals[k] = (input if k.endswith("_id") else getpass.getpass)(f"  {k}: ").strip()
+        if not vals[k]:
+            die(f"no {k} given; nothing saved")
+    private_dir(SECRETS)
+    write_private(needs_file(net), json.dumps(vals))
+
+
+def setup_bridge(net, token):
+    """Config, patch, registration: the documented Docker flow, run once per
+    step. Re-patches only when the patch itself changed."""
+    private_dir(BRIDGES)
+    d = private_dir(BRIDGES / net["id"])
+    uid, gid = ids()
+    vol = f"{d}:/data"
+    if not (d / "config.yaml").exists():
+        docker("run", "--rm", "-v", vol, "-e", f"UID={uid}", "-e", f"GID={gid}", net["image"], check=False)
+        if not (d / "config.yaml").exists():
+            die(f"{net['id']}: the bridge did not write an example config")
+    expr = PATCH[net["flavor"]]
+    if net.get("mode"):
+        expr += ' | .network.mode = strenv(MODE)'
+    stamp = d / ".patched"
+    want = hashlib.sha256((expr + DOMAIN + str(net["port"])).encode()).hexdigest()
+    if not stamp.exists() or stamp.read_text() != want:
+        env = dict(os.environ, DOMAIN=DOMAIN, SVC=service(net), PORT=str(net["port"]), NET=net["id"],
+                   ME=ME, DP_TOKEN=token, MODE=net.get("mode", ""))
+        args = ["run", "--rm", "-v", vol, "--entrypoint", "yq"]
+        for k in ("DOMAIN", "SVC", "PORT", "NET", "ME", "DP_TOKEN", "MODE"):
+            args += ["-e", k]  # the value comes from env, so the token is never on a command line
+        docker(*args, net["image"], "-I4", "e", "-i", expr, "/data/config.yaml", env=env)
+        write_private(stamp, want)
+        (d / "registration.yaml").unlink(missing_ok=True)
+    if not (d / "registration.yaml").exists():
+        docker("run", "--rm", "-v", vol, "-e", f"UID={uid}", "-e", f"GID={gid}", net["image"], check=False)
+        if not (d / "registration.yaml").exists():
+            die(f"{net['id']}: the bridge did not write a registration file")
+    apply_needs(net, vol)
+    for f in d.iterdir():
+        if f.is_file():
+            os.chmod(f, 0o600)
+    dest =private_dir(SYNAPSE / "appservices") / f"{net['id']}.yaml"
+    reg = (d / "registration.yaml").read_text()
+    if not dest.exists() or dest.read_text() != reg:
+        write_private(dest, reg)
+        return True
+    return False
+
+
+SYNAPSE_PATCH = r"""
+import glob, yaml
+p = "/data/homeserver.yaml"
+c = yaml.safe_load(open(p))
+c.update({
+    "enable_registration": False, "report_stats": False, "trusted_key_servers": [],
+    "suppress_key_server_warning": True, "federation_domain_whitelist": [],
+    "presence": {"enabled": False}, "url_preview_enabled": False,
+    "app_service_config_files": sorted(glob.glob("/data/appservices/*.yaml")),
+})
+yaml.safe_dump(c, open(p, "w"), sort_keys=False)
+"""
+
+
+def setup_synapse():
+    private_dir(SYNAPSE)
+    uid, gid = ids()
+    if not (SYNAPSE / "homeserver.yaml").exists():
+        docker("run", "--rm", "-v", f"{SYNAPSE}:/data", "-e", f"SYNAPSE_SERVER_NAME={DOMAIN}",
+               "-e", "SYNAPSE_REPORT_STATS=no", "-e", f"UID={uid}", "-e", f"GID={gid}", HS["image"], "generate")
+    docker("run", "--rm", "-v", f"{SYNAPSE}:/data", "--entrypoint", "python", HS["image"], "-c", SYNAPSE_PATCH)
+    for f in SYNAPSE.glob("*"):
+        if f.is_file():
+            os.chmod(f, 0o600)
+
+
+def compose_file(enabled):
+    uid, gid = ids()
+    lines = ["# Written by chewbacca chat up. No secrets in here: they live in the mounted folders.",
+             f"name: {PROJECT}", "services:",
+             "  synapse:", f"    image: {HS['image']}", f"    container_name: {PROJECT}-synapse",
+             "    restart: unless-stopped", f"    mem_limit: {SYNAPSE_MEM}",
+             "    environment:", f'      UID: "{uid}"', f'      GID: "{gid}"',
+             f"    volumes: ['{SYNAPSE}:/data']", f"    ports: ['127.0.0.1:{PORT}:8008']"]
+    for net in enabled:
+        lines += [f"  {service(net)}:", f"    image: {net['image']}", f"    container_name: {PROJECT}-{net['id']}",
+                  "    restart: unless-stopped", f"    mem_limit: {BRIDGE_MEM}",
+                  "    environment:", f'      UID: "{uid}"', f'      GID: "{gid}"',
+                  f"    volumes: ['{BRIDGES / net['id']}:/data']",
+                  "    depends_on:", "      synapse:", "        condition: service_healthy"]
+    path = HOME / "compose.yaml"
+    write_private(path, "\n".join(lines) + "\n")
+    return path
+
+
+def compose(*args, check=True, timeout=600):
+    return docker("compose", "-f", str(HOME / "compose.yaml"), "-p", PROJECT, *args, check=check, timeout=timeout)
+
+
+def hs_url():
+    return f"http://127.0.0.1:{PORT}"
+
+
+def http(method, path, body=None, token=None, timeout=15):
+    req = urllib.request.Request(hs_url() + path, method=method,
+                                 data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Content-Type": "application/json",
+                                          **({"Authorization": "Bearer " + token} if token else {})})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        raw = r.read()
+    try:
+        return json.loads(raw or b"{}")
+    except ValueError:
+        return {"raw": raw.decode(errors="replace")}
+
+
+def healthy(wait=0):
+    end = time.time() + wait
+    while True:
+        try:
+            if http("GET", "/health").get("raw") == "OK":
+                return True
+        except (OSError, urllib.error.URLError):
+            pass
+        if time.time() >= end:
+            return False
+        time.sleep(3)
+
+
+def ensure_account():
+    """@me, registered through Synapse's shared-secret admin API from this
+    process, so the password never sits on a command line."""
+    if M.load_me():
+        return
+    secret = None
+    for line in (SYNAPSE / "homeserver.yaml").read_text().splitlines():
+        if line.startswith("registration_shared_secret:"):
+            secret = line.split(":", 1)[1].strip().strip("'\"")
+    if not secret:
+        die("homeserver.yaml has no registration_shared_secret")
+    password = secrets.token_urlsafe(24)
+    nonce = http("GET", "/_synapse/admin/v1/register")["nonce"]
+    mac = hmac.new(secret.encode(), b"\x00".join([nonce.encode(), ME_LOCAL.encode(), password.encode(), b"notadmin"]),
+                   hashlib.sha1).hexdigest()
+    try:
+        out = http("POST", "/_synapse/admin/v1/register",
+                   {"nonce": nonce, "username": ME_LOCAL, "password": password, "admin": False, "mac": mac})
+    except urllib.error.HTTPError as e:
+        if e.code != 400:
+            raise
+        die("@me already exists but secrets/me.json is gone. Run chewbacca chat down, move ~/.chewbacca/matrix aside, and up again.")
+    private_dir(SECRETS)
+    write_private(SECRETS / "me.json", json.dumps({
+        "user_id": out["user_id"], "access_token": out["access_token"], "password": password,
+        "homeserver": hs_url()}, indent=1))
+
+
+def cmd_up(a):
+    if not docker_up():
+        die("Docker isn't running. Open Docker Desktop (open -a Docker), wait for it, and run this again.", 3)
+    if free_gb() < MIN_FREE_GB:
+        die(f"only {free_gb():.1f} GB free; the stack needs about 3 GB of images and {MIN_FREE_GB} GB of headroom.")
+    want = a.networks or [n["id"] for n in networks("bridge")]
+    enabled = [bridge(n) for n in want]
+    private_dir(HOME)
+    token = dp_token()
+    changed = False
+    for net in enabled:
+        say(f"  {net['id']}: config")
+        changed |= setup_bridge(net, token)
+    setup_synapse()
+    write_private(HOME / "enabled.json", json.dumps([n["id"] for n in enabled]))
+    compose_file(enabled)
+    compose("up", "-d", "--remove-orphans", "synapse")
+    if not healthy(wait=120):
+        die("Synapse did not answer /health in 120 s; chewbacca chat status shows its state, docker logs chewbacca-chat-synapse why.")
+    if changed:
+        compose("restart", "synapse")  # it reads appservice registrations at start only
+        healthy(wait=120)
+    ensure_account()
+    ready = [n for n in enabled if needs_ready(n)]
+    for n in enabled:
+        if n not in ready:
+            say(f"  {n['id']}: waiting on {n['needs']['what']}; chewbacca chat link {n['id']} asks for it")
+    if ready:
+        compose("up", "-d", *[service(n) for n in ready])
+    time.sleep(5)
+    cmd_status(argparse.Namespace(json=False))
+
+
+def cmd_down(_a):
+    if not (HOME / "compose.yaml").exists():
+        say("Nothing to stop: chewbacca chat was never started on this Mac.")
+        return
+    if not docker_up():
+        say("Docker isn't running, so nothing of chewbacca chat is either.")
+        return
+    compose("down", "--remove-orphans")
+    say("Stopped every chewbacca-chat container. Data stays in ~/.chewbacca/matrix.")
+
+
+# ── status ──────────────────────────────────────────────────────────────────
+
+def containers():
+    if not docker_up():
+        return None
+    r = docker("ps", "-a", "--filter", f"label=com.docker.compose.project={PROJECT}",
+               "--format", "{{.Names}}\t{{.State}}\t{{.Status}}", check=False)
+    out = {}
+    for line in (r.stdout or "").splitlines():
+        parts = line.split("\t")
+        if len(parts) == 3:
+            out[parts[0].replace(PROJECT + "-", "", 1)] = {"state": parts[1], "status": parts[2]}
+    return out
+
+
+def logged_in(net_id):
+    """How many accounts the bridge holds a login for, from its own database,
+    read-only. None when there is no database yet."""
+    path = BRIDGES / net_id / "bridge.db"
+    if not path.exists():
+        return None
+    try:
+        db = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2)
+    except sqlite3.Error:
+        return None
+    try:
+        for q in ("SELECT count(*) FROM user_login",
+                  'SELECT count(*) FROM "user" WHERE dcid IS NOT NULL',
+                  'SELECT count(*) FROM "user" WHERE gcid IS NOT NULL'):
+            try:
+                return db.execute(q).fetchone()[0]
+            except sqlite3.Error:
+                continue
+        return None
+    finally:
+        db.close()
+
+
+def last_message(source):
+    if not PEOPLE_DB.exists():
+        return None
+    try:
+        db = sqlite3.connect(f"file:{PEOPLE_DB}?mode=ro", uri=True, timeout=2)
+        row = db.execute("SELECT max(sent_at), count(*) FROM messages WHERE source = ?", (source,)).fetchone()
+        db.close()
+        return {"last": row[0], "rows": row[1]} if row and row[1] else None
+    except sqlite3.Error:
+        return None
+
+
+def gmail_inboxes():
+    sys.path.insert(0, str(ROOT / "mac" / "lib"))
+    try:
+        import gmail  # noqa: PLC0415
+    except Exception:  # noqa: BLE001  a missing reader is "not set up", not a crash
+        return []
+    out = []
+    for cfg in gmail.accounts():
+        if cfg is None:
+            continue
+        env = dict(os.environ, GOOGLE_WORKSPACE_CLI_CONFIG_DIR=cfg)
+        try:
+            r = subprocess.run([gmail.GWS, "gmail", "users", "getProfile", "--params", '{"userId":"me"}'],
+                               capture_output=True, text=True, timeout=15, env=env)
+            t = r.stdout
+            out.append(json.loads(t[t.index("{"):])["emailAddress"] if r.returncode == 0 and "{" in t
+                       else f"{Path(cfg).name} (not signed in)")
+        except (OSError, ValueError, KeyError, subprocess.TimeoutExpired):
+            out.append(f"{Path(cfg).name} (not signed in)")
+    return out
+
+
+def outlook_account():
+    """The UPN chewbacca office saved its sign-in under, from the keychain
+    item's attributes. No -w: nothing secret comes out."""
+    try:
+        r = subprocess.run(["/usr/bin/security", "find-generic-password", "-s", "chewbacca-office"],
+                           capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    for line in r.stdout.splitlines():
+        if '"acct"' in line and "=" in line:
+            v = line.split("=", 1)[1].strip().strip('"')
+            return v if v and v != "<NULL>" else None
+    return None
+
+
+def existing_state(net):
+    """One line on an existing path's own state, from files only: status
+    never opens a browser tab or wakes an app."""
+    nid = net["id"]
+    home = Path.home()
+    if nid in ("imessage", "sms"):
+        db = home / "Library" / "Messages" / "chat.db"
+        try:
+            sqlite3.connect(f"file:{db}?mode=ro", uri=True).execute("SELECT 1 FROM message LIMIT 1")
+            return "readable"
+        except sqlite3.Error:
+            return "chat.db not readable (Full Disk Access)"
+    if nid == "whatsapp":
+        if not shutil.which("wacli"):
+            return "wacli not installed"
+        return "linked" if (home / ".wacli" / "wacli.db").exists() else "not linked"
+    if nid == "slack":
+        return "slacrawl ready" if shutil.which("slacrawl") else "slacrawl not installed"
+    if nid == "email":
+        boxes = gmail_inboxes()
+        upn = outlook_account()
+        parts = boxes + ([f"{upn} (Outlook)"] if upn else [])
+        return ", ".join(parts) if parts else "no inbox signed in"
+    if nid == "groupme":
+        return "reader ready (needs the web.groupme.com tab)" if (ROOT / "bin" / "chewbacca-groupme").exists() else "missing"
+    if nid == "teams":
+        upn = outlook_account()
+        return f"chat list via {upn}" if upn else "chewbacca office not signed in"
+    if nid == "calls":
+        db = home / "Library" / "Application Support" / "CallHistoryDB" / "CallHistory.storedata"
+        try:
+            sqlite3.connect(f"file:{db}?mode=ro", uri=True).execute("SELECT 1 FROM ZCALLRECORD LIMIT 1")
+            return "readable"
+        except sqlite3.Error:
+            return "CallHistory not readable (Full Disk Access)"
+    if nid == "school":
+        have = [s for s in ("brightspace", "handshake") if (ROOT / "library" / "api-sites" / f"{s}.json").exists()]
+        return "taught: " + ", ".join(have) if have else "not taught"
+    return ""
+
+
+def status_rows():
+    cs = containers()
+    enabled = []
+    try:
+        enabled = json.loads((HOME / "enabled.json").read_text())
+    except (OSError, ValueError):
+        pass
+    rows = []
+    hs = None
+    if cs is not None and "synapse" in cs:
+        hs = cs["synapse"]["state"] + (", healthy" if healthy() else ", not answering")
+    for net in REG["networks"]:
+        r = {"network": net["id"], "label": net["label"], "kind": net["kind"], "verdict": net["verdict"],
+             "link": net["link"]}
+        src = "imessage" if net["id"] == "sms" else net["id"]
+        if net["kind"] == "bridge":
+            c = (cs or {}).get(net["id"])
+            r["running"] = c["state"] if c else ("docker not running" if cs is None else
+                                                 "not started" if net["id"] in enabled or not enabled else "not enabled")
+            n = logged_in(net["id"])
+            r["logged_in"] = None if n is None else n > 0
+            r["state"] = r["running"] + ", " + ("logged in" if n else "not logged in" if n == 0 else "no login yet")
+            if not needs_ready(net):
+                r["state"] = f"waiting on {net['needs']['what']} ({net['needs']['where']})"
+        elif net["kind"] == "existing":
+            r["state"] = existing_state(net)
+        else:
+            r["state"] = "skipped"
+        lm = last_message(src) if net["kind"] != "skipped" else None
+        r["last_message"] = lm["last"] if lm else None
+        r["rows"] = lm["rows"] if lm else 0
+        rows.append(r)
+    return hs, rows
+
+
+def cmd_status(a):
+    hs, rows = status_rows()
+    if getattr(a, "json", False):
+        print(json.dumps({"homeserver": hs, "networks": rows}, indent=1))
+        return
+    say(f"homeserver  {hs or 'not running'}  (127.0.0.1:{PORT}, {DOMAIN})")
+    for r in rows:
+        last = f"  last {r['last_message'][:16]}" if r["last_message"] else ""
+        say(f"  {r['network']:<11} {r['kind']:<8} {r['state']}{last}")
+
+
+def cmd_networks(_a):
+    for n in REG["networks"]:
+        say(f"  {n['id']:<11} {n['verdict']}")
+
+
+# ── link ────────────────────────────────────────────────────────────────────
+
+def mgmt_room(client, net):
+    """The bridge bot's DM, made once and kept in mgmt.json."""
+    path = HOME / "mgmt.json"
+    try:
+        rooms = json.loads(path.read_text())
+    except (OSError, ValueError):
+        rooms = {}
+    bot = f"@{net['id']}bot:{DOMAIN}"
+    room = rooms.get(net["id"])
+    if room and room in client.call("GET", "/joined_rooms").get("joined_rooms", []):
+        return room, bot
+    room = client.call("POST", "/createRoom", {"preset": "trusted_private_chat", "is_direct": True,
+                                               "invite": [bot], "name": f"{net['label']} login"})["room_id"]
+    rooms[net["id"]] = room
+    write_private(path, json.dumps(rooms, indent=1))
+    for _ in range(20):  # the bot accepts the invite on its own
+        members = client.call("GET", f"/rooms/{client.q(room)}/joined_members").get("joined", {})
+        if bot in members:
+            break
+        time.sleep(1)
+    return room, bot
+
+
+def download(client, mxc, dest):
+    server, media = mxc[len("mxc://"):].split("/", 1)
+    url = f"{client.base}/_matrix/client/v1/media/download/{server}/{media}"
+    req = urllib.request.Request(url, headers={"Authorization": "Bearer " + client.token})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        fd = os.open(str(dest), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(r.read())
+
+
+DONE = ("successfully logged in", "logged in as", "login successful", "successfully linked")
+
+
+def cmd_link(a):
+    net = bridge(a.network)
+    me = M.load_me()
+    if not me:
+        die("chewbacca chat isn't up yet. Run chewbacca chat up first.")
+    client = M.Matrix(me)
+    if not needs_ready(net):
+        ask_needs(net)
+        setup_bridge(net, dp_token())
+        compose("up", "-d", service(net))
+        time.sleep(8)
+    room, bot = mgmt_room(client, net)
+    if a.cancel:
+        send_text(client, room, "cancel")
+        say(f"Cancelled any pending {net['label']} login.")
+        return
+    filt = json.dumps({"room": {"rooms": [room], "timeline": {"limit": 20}}, "presence": {"types": []},
+                       "account_data": {"types": []}})
+    since = client.call("GET", "/sync", query={"filter": filt, "timeout": 0}).get("next_batch")
+    command = "login" + (f" {a.flow}" if a.flow else "")
+    # A login left pending by an earlier run blocks a new one ("You already
+    # have an ongoing login"); cancelling nothing is harmless.
+    send_text(client, room, "cancel")
+    # Wait for the bot to answer the cancel, so its reply (and any QR the old
+    # login was still refreshing) is behind `since` and not shown as new.
+    quiet_until = time.time() + 10
+    while time.time() < quiet_until:
+        out = client.call("GET", "/sync", query={"filter": filt, "since": since, "timeout": 3000})
+        since = out.get("next_batch", since)
+        evs = (((out.get("rooms") or {}).get("join") or {}).get(room) or {}).get("timeline", {}).get("events", [])
+        if any(e.get("sender") == bot for e in evs):
+            quiet_until = min(quiet_until, time.time() + 2)
+    send_text(client, room, command)
+    say(f"Asked the {net['label']} bridge to start a login ({command}). {net['link']}")
+    interactive = sys.stdin.isatty() and not a.show
+    deadline = time.time() + (a.timeout or (600 if interactive else 60))
+    shown, got_image, asks = 0, False, False
+    while time.time() < deadline:
+        out = client.call("GET", "/sync", query={"filter": filt, "since": since, "timeout": 15000})
+        since = out.get("next_batch", since)
+        events = (((out.get("rooms") or {}).get("join") or {}).get(room) or {}).get("timeline", {}).get("events", [])
+        for ev in events:
+            if ev.get("sender") != bot or ev.get("type") != "m.room.message":
+                continue
+            c = ev.get("content") or {}
+            if c.get("msgtype") == "m.image" and str(c.get("url", "")).startswith("mxc://"):
+                dest = HOME / f"link-{net['id']}.png"
+                download(client, c["url"], dest)
+                if not os.environ.get("CHEWBACCA_CHAT_NO_OPEN"):
+                    subprocess.run(["open", str(dest)], check=False)
+                say(f"  QR saved to {dest} and opened. Scan it with {net['label']} on the phone.")
+                got_image = True
+            else:
+                say("  bridge: " + M.clean_name(c.get("body"), 600))
+                # A QR flow announces the code in text first; that is not a question.
+                asks = "scan" not in str(c.get("body") or "").lower()
+            shown += 1
+            body = str(c.get("body") or "").lower()
+            if any(k in body for k in DONE):
+                say(f"{net['label']} is linked. people texts sync pulls its threads in.")
+                return
+        # Show mode returns once the QR is up, or once the bridge has gone
+        # quiet after asking something (a 15 s poll came back empty).
+        if not interactive and (got_image or (shown and not events)):
+            say("Showing only (--show or no terminal). The login stays pending until it times out.")
+            return
+        if interactive and asks and events and not got_image:
+            reply = input("  you (enter to wait, 'cancel' to stop): ").strip()
+            asks = False
+            if reply:
+                ev_id = send_text(client, room, reply)
+                if reply.lower() != "cancel":
+                    # What was typed may be a code or a cookie: take it out of
+                    # the room's history once the bot has it.
+                    time.sleep(2)
+                    try:
+                        client.call("PUT", f"/rooms/{client.q(room)}/redact/{urllib.parse.quote(ev_id, safe='')}/"
+                                    f"chewb{secrets.token_hex(6)}", {"reason": "credential"})
+                    except RuntimeError:
+                        pass
+                else:
+                    return
+    say("Timed out waiting on the bridge. chewbacca chat status shows whether it is running.")
+
+
+def send_text(client, room, text):
+    txn = "chewb" + secrets.token_hex(8)
+    return client.call("PUT", f"/rooms/{client.q(room)}/send/m.room.message/{txn}",
+                       {"msgtype": "m.text", "body": text}).get("event_id", "")
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="chewbacca chat", description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd")
+    p = sub.add_parser("up")
+    p.add_argument("networks", nargs="*")
+    sub.add_parser("down")
+    p = sub.add_parser("status")
+    p.add_argument("--json", action="store_true")
+    sub.add_parser("networks")
+    p = sub.add_parser("link")
+    p.add_argument("network")
+    p.add_argument("flow", nargs="?")
+    p.add_argument("--show", action="store_true", help="show the first prompt or QR and return")
+    p.add_argument("--timeout", type=int, default=0)
+    p.add_argument("--cancel", action="store_true", help="cancel a pending login")
+    a = ap.parse_args()
+    if not a.cmd:
+        print(__doc__)
+        return
+    {"up": cmd_up, "down": cmd_down, "status": cmd_status, "networks": cmd_networks, "link": cmd_link}[a.cmd](a)
+
+
+if __name__ == "__main__":
+    main()

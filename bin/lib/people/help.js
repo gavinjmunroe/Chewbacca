@@ -52,7 +52,8 @@ const HELP = `${c.b("people")} ${c.dim("- everything you know about the people i
   ${c.b("people events scan")}                   log what happened, from your texts
 
   ${c.b("people texts sync")}                    pull new iMessage and WhatsApp in (local only)
-  ${c.b("people send")} maggie "text" [--via whatsapp] [--dry-run]   reply in the app the thread is in
+  ${c.b("people send")} maggie "text" [--via whatsapp|signal|telegram...] [--dry-run]   reply in the app the thread is in
+  ${c.b("people calls")} [sync | who]                   phone and FaceTime calls on the person card
   ${c.b("people send")} --room "Group Name" "text" [--via whatsapp]   a group chat, by its exact name
   ${c.b("people texts")} [--days 3] [--who maggie]   the running log
   ${c.b("people texts owed")} [--via slack] [--json]  who is waiting on a reply, every app

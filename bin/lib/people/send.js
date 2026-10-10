@@ -1,6 +1,8 @@
 // @ts-nocheck
 // people send: one command that replies to a person through the app the
-// conversation is actually in (iMessage, WhatsApp, Slack, email).
+// conversation is actually in (iMessage, WhatsApp, Slack, email, and every
+// network `chewbacca chat up` bridges: Signal, Telegram, Discord, Instagram,
+// Messenger, X, Google Messages, Google Chat, Google Voice, LinkedIn, Bluesky).
 //
 //   people send maggie "running 10 late"            same app as the last message
 //   people send maggie "running 10 late" --via whatsapp
@@ -19,13 +21,17 @@ const { db, nowISO } = require("./db");
 const { textsReader, resolvePerson, printable } = require("./texts");
 const { findPerson } = require("./lookup");
 
-const APPS = ["imessage", "whatsapp", "slack", "email"];
+const { APPS, BRIDGED } = require("./apps");
+
+// The LinkedIn export (msg_id under 6e12) is a one-time dump with nowhere to
+// reply; only bridged LinkedIn rows (6e12 and up) are a thread send can use.
+const REPLYABLE = "NOT (source = 'linkedin' AND msg_id < 6000000000000)";
 
 // Most recent one-to-one message with this person, optionally in one app.
 // Group rows are skipped: their handle is the room or another member.
 function lastThread(d, person, who, via) {
   let sql = `SELECT source, handle, who, sent_at FROM messages
-              WHERE room IS NULL AND handle IS NOT NULL AND handle <> ''`;
+              WHERE room IS NULL AND handle IS NOT NULL AND handle <> '' AND ${REPLYABLE}`;
   const args = [];
   if (person) {
     sql += " AND person_id = ?";
@@ -60,7 +66,8 @@ function waJid(handle) {
   let digits = String(handle).replace(/\D/g, "");
   // A card phone saved without a country code is a US number, the same
   // assumption normHandle makes. "3106946088@s.whatsapp.net" is nobody.
-  if (digits.length === 10 && !String(handle).trim().startsWith("+")) digits = "1" + digits;
+  if (digits.length === 10 && !String(handle).trim().startsWith("+"))
+    digits = "1" + digits;
   return digits.length >= 8 ? `${digits}@s.whatsapp.net` : null;
 }
 
@@ -83,9 +90,28 @@ function run(cmd, args) {
   }
 }
 
+// A bridged thread is answered in its own Matrix room, which the reader
+// recorded against (network, handle) when it filed the rows. No room on file
+// means no send: a room id is never guessed or built from a name.
+function matrixRoom(via, handle) {
+  const { textsReader } = require("./texts");
+  const py = textsReader("matrix.py");
+  if (!py) return null;
+  const r = run("python3", [
+    py,
+    "room",
+    "--network",
+    via,
+    "--handle",
+    String(handle),
+  ]);
+  return r.code === 0 && r.out.trim().startsWith("!") ? r.out.trim() : null;
+}
+
 // The exact address each app is handed. Computed once, then both printed and
 // used, so what a dry run shows is what a send does.
 function target(via, handle) {
+  if (BRIDGED.includes(via)) return matrixRoom(via, handle);
   return via === "whatsapp" ? waJid(handle) : handle;
 }
 
@@ -97,13 +123,16 @@ function target(via, handle) {
 // group chat.
 function roomThread(d, name, via) {
   let sql = `SELECT source, handle, room, max(sent_at) AS last FROM messages
-              WHERE room IS NOT NULL AND lower(room) = lower(?) AND from_me = 1 AND handle IS NOT NULL AND handle <> ''`;
+              WHERE room IS NOT NULL AND lower(room) = lower(?) AND from_me = 1 AND handle IS NOT NULL AND handle <> ''
+                AND ${REPLYABLE}`;
   const args = [name];
   if (via) {
     sql += " AND source = ?";
     args.push(via);
   }
-  return d.prepare(sql + " GROUP BY source, handle ORDER BY last DESC").all(...args);
+  return d
+    .prepare(sql + " GROUP BY source, handle ORDER BY last DESC")
+    .all(...args);
 }
 
 // Messages wants the chat's GUID, which chat.db holds. Read it rather than
@@ -112,7 +141,12 @@ function roomThread(d, name, via) {
 function chatGuid(identifier) {
   const file =
     process.env.CHEWBACCA_CHAT_DB ||
-    require("node:path").join(require("node:os").homedir(), "Library", "Messages", "chat.db");
+    require("node:path").join(
+      require("node:os").homedir(),
+      "Library",
+      "Messages",
+      "chat.db",
+    );
   try {
     const { DatabaseSync } = require("node:sqlite");
     const cdb = new DatabaseSync(file, { readOnly: true });
@@ -130,7 +164,9 @@ function chatGuid(identifier) {
         .get(identifier);
     } catch {
       // A chat.db without the message tables (a stand-in) still names the chat.
-      row = cdb.prepare("SELECT guid FROM chat WHERE chat_identifier = ? LIMIT 1").get(identifier);
+      row = cdb
+        .prepare("SELECT guid FROM chat WHERE chat_identifier = ? LIMIT 1")
+        .get(identifier);
     }
     cdb.close();
     return row ? row.guid : null;
@@ -157,10 +193,15 @@ const MESSAGES_FIX =
   "  Nothing was sent.";
 function messagesBlocked() {
   if (process.platform !== "darwin") return null;
-  const r = run("osascript", ["-e", 'tell application "Messages" to count chats']);
+  const r = run("osascript", [
+    "-e",
+    'tell application "Messages" to count chats',
+  ]);
   if (r.code === 0) return null;
   if (!/-1743|not authorized/i.test(r.err || "")) return null;
-  return openAutomationPane() ? MESSAGES_FIX + "\n  Opened that page for you." : MESSAGES_FIX;
+  return openAutomationPane()
+    ? MESSAGES_FIX + "\n  Opened that page for you."
+    : MESSAGES_FIX;
 }
 
 // "Always take me there" (Caleb, 2026-10-10): naming a settings path makes him
@@ -177,7 +218,9 @@ function openAutomationPane() {
   } catch {
     /* never opened yet */
   }
-  const r = run("open", ["x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation"]);
+  const r = run("open", [
+    "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Automation",
+  ]);
   if (r.code !== 0) return false;
   try {
     fs.writeFileSync(stamp, "");
@@ -191,26 +234,72 @@ function dispatch(via, to, text, flags) {
   // Tests set this so a mistake in a test can never reach a real phone. On
   // 2026-10-08 a check meant to refuse a send had not applied, and the test
   // call delivered "hi" to a client.
-  if (process.env.CHEWBACCA_NO_SEND) return { code: 3, err: "sending is disabled (CHEWBACCA_NO_SEND)" };
+  if (process.env.CHEWBACCA_NO_SEND)
+    return { code: 3, err: "sending is disabled (CHEWBACCA_NO_SEND)" };
   if (via === "imessage") {
     const blocked = messagesBlocked();
     if (blocked) return { code: 4, err: blocked };
     // A group's GUID came from chat.db; make sure Messages itself knows that
     // chat before handing it text, so a stale id fails here and not silently.
     if (flags.room) {
-      const probe = run("osascript", ["-e", "on run argv", "-e", "tell application \"Messages\" to get id of chat id (item 1 of argv)", "-e", "end run", to]);
-      if (probe.code !== 0) return { code: 5, err: `Messages has no chat ${to}: ${(probe.err || "").trim()}` };
+      const probe = run("osascript", [
+        "-e",
+        "on run argv",
+        "-e",
+        'tell application "Messages" to get id of chat id (item 1 of argv)',
+        "-e",
+        "end run",
+        to,
+      ]);
+      if (probe.code !== 0)
+        return {
+          code: 5,
+          err: `Messages has no chat ${to}: ${(probe.err || "").trim()}`,
+        };
     }
   }
   if (via === "imessage" && flags.room)
-    return run("osascript", [...GROUP_SCRIPT.flatMap((l) => ["-e", l]), to, text]);
-  if (via === "imessage") return run("mac", ["messages", "send", to, text, "--json"]);
+    return run("osascript", [
+      ...GROUP_SCRIPT.flatMap((l) => ["-e", l]),
+      to,
+      text,
+    ]);
+  if (via === "imessage")
+    return run("mac", ["messages", "send", to, text, "--json"]);
   if (via === "whatsapp")
-    return run("wacli", ["--json", "--lock-wait=15s", "send", "text", "--to", to, "--message", text]);
+    return run("wacli", [
+      "--json",
+      "--lock-wait=15s",
+      "send",
+      "text",
+      "--to",
+      to,
+      "--message",
+      text,
+    ]);
+  if (BRIDGED.includes(via)) {
+    const py = require("./texts").textsReader("matrix.py");
+    if (!py)
+      return { code: 2, err: "mac/lib/matrix.py is missing from this install" };
+    return run("python3", [
+      py,
+      "send",
+      "--network",
+      via,
+      "--to",
+      to,
+      "--text",
+      text,
+    ]);
+  }
   const reader = textsReader(via === "slack" ? "slack.py" : "gmail.py");
   if (!reader) return { code: 2, err: `${via} is not set up in this kit yet` };
   const args = [reader, "send", "--to", to, "--text", text];
-  if (via === "email") args.push("--subject", String(flags.subject || text.split("\n")[0].slice(0, 60)));
+  if (via === "email")
+    args.push(
+      "--subject",
+      String(flags.subject || text.split("\n")[0].slice(0, 60)),
+    );
   return run("python3", args);
 }
 
@@ -233,22 +322,39 @@ function sendRoom(d, name, text, via, flags, P) {
   // Two chats can share a display name (an RCS and an SMS copy of the same
   // group, 2026-10-10 "premed core"). An exact --to picks the one it names.
   if (rooms.length > 1 && flags.to) {
-    const idOf = (r) => (r.source === "imessage" ? chatGuid(r.handle) : r.handle);
+    const idOf = (r) =>
+      r.source === "imessage" ? chatGuid(r.handle) : r.handle;
     const hit = rooms.filter((r) => idOf(r) === String(flags.to));
     if (hit.length === 1) rooms = hit;
   }
   if (!rooms.length)
-    die(`No group called "${P(name)}" that you've written in${via ? ` on ${via}` : ""}. The name must match exactly; people texts owed prints it.`);
+    die(
+      `No group called "${P(name)}" that you've written in${via ? ` on ${via}` : ""}. The name must match exactly; people texts owed prints it.`,
+    );
   if (rooms.length > 1)
-    die(`"${P(name)}" is ${rooms.length} groups:\n` + rooms.map((r) => `  ${r.source} ${P(r.handle)}`).join("\n") + "\nPick one with --via.");
+    die(
+      `"${P(name)}" is ${rooms.length} groups:\n` +
+        rooms.map((r) => `  ${r.source} ${P(r.handle)}`).join("\n") +
+        "\nPick one with --via.",
+    );
   const r = rooms[0];
   // Slack's own outgoing rows in a channel carry the channel id, the same
   // convention as iMessage and WhatsApp. An email "room" is a subject line
   // with three or more people on it, which is no address at all.
-  if (!["imessage", "whatsapp", "slack"].includes(r.source))
-    die(`Group sends work on iMessage, WhatsApp and Slack, not ${r.source}. Reply to that thread from Gmail.`);
-  const to = r.source === "imessage" ? chatGuid(r.handle) : r.handle;
-  if (!to) die(`Couldn't read the chat id for "${P(r.room)}" from chat.db. Nothing was sent.`);
+  if (!["imessage", "whatsapp", "slack", ...BRIDGED].includes(r.source))
+    die(
+      `Group sends work on iMessage, WhatsApp, Slack and the bridged chats, not ${r.source}. Reply to that thread from Gmail.`,
+    );
+  const to =
+    r.source === "imessage"
+      ? chatGuid(r.handle)
+      : BRIDGED.includes(r.source)
+        ? matrixRoom(r.source, r.handle)
+        : r.handle;
+  if (!to)
+    die(
+      `Couldn't find the chat id for "${P(r.room)}" (chat.db, or the bridge room list people texts sync writes). Nothing was sent.`,
+    );
   const where = `${c.b(P(r.room))} ${c.dim(`group via ${r.source}, ${P(to)}`)}`;
   if (flags["dry-run"]) {
     say(`  would send to ${where}`);
@@ -266,7 +372,16 @@ function sendRoom(d, name, text, via, flags, P) {
         `  If that is the right group, add --to ${P(to)}`,
     );
   const res = dispatch(r.source, to, text, { ...flags, room: true });
-  if (!succeeded(res)) die(`Not sent to ${P(r.room)}: ${P((res.err || res.out || "no output").trim().split("\n").slice(0, res.code === 4 ? 3 : 1).join("\n"))}`);
+  if (!succeeded(res))
+    die(
+      `Not sent to ${P(r.room)}: ${P(
+        (res.err || res.out || "no output")
+          .trim()
+          .split("\n")
+          .slice(0, res.code === 4 ? 3 : 1)
+          .join("\n"),
+      )}`,
+    );
   say(`${c.grn("sent")} to ${where}`);
 }
 
@@ -279,7 +394,10 @@ function cmdSend(argv) {
   }
   const who = rest.shift();
   const text = rest.join(" ").trim();
-  if (!who || !text) die('Try: people send maggie "running 10 late" [--via whatsapp] [--dry-run]   or   people send --room "Group Name" "text"');
+  if (!who || !text)
+    die(
+      'Try: people send maggie "running 10 late" [--via whatsapp] [--dry-run]   or   people send --room "Group Name" "text"',
+    );
   const via = flags.via ? String(flags.via).toLowerCase() : null;
   if (via && !APPS.includes(via)) die(`--via is one of: ${APPS.join(", ")}`);
   const P = (v) => printable(v == null ? "" : v);
@@ -295,11 +413,17 @@ function cmdSend(argv) {
     // A thread nobody's card owns yet (an unsaved WhatsApp number) may still
     // be addressed, but only when exactly one such thread matches.
     const names = d
-      .prepare("SELECT DISTINCT who FROM messages WHERE person_id IS NULL AND room IS NULL AND lower(who) LIKE ? LIMIT 6")
+      .prepare(
+        "SELECT DISTINCT who FROM messages WHERE person_id IS NULL AND room IS NULL AND lower(who) LIKE ? LIMIT 6",
+      )
       .all("%" + String(who).toLowerCase() + "%")
       .map((r) => r.who);
     if (names.length > 1)
-      die(`"${P(who)}" matches ${names.length} threads:\n` + names.map((n) => `  ${P(n)}`).join("\n") + "\nBe more specific.");
+      die(
+        `"${P(who)}" matches ${names.length} threads:\n` +
+          names.map((n) => `  ${P(n)}`).join("\n") +
+          "\nBe more specific.",
+      );
   }
   const thread = lastThread(d, person, who, via);
   const app = via || (thread && thread.source);
@@ -311,7 +435,12 @@ function cmdSend(argv) {
         `  Add one: people set "${P(who)}" phone <number>   or pick an app with --via`,
     );
   const to = target(app, handle);
-  if (!to) die(`No ${app} address for ${P(name)} (${P(handle)}).`);
+  if (!to)
+    die(
+      BRIDGED.includes(app)
+        ? `No ${app} room on file for ${P(name)} (${P(handle)}). people texts sync records it once the bridge has the thread. Nothing was sent.`
+        : `No ${app} address for ${P(name)} (${P(handle)}).`,
+    );
   // mac/lib/gmail.py files mail whose From failed Gmail's own sender check
   // under "unverified:" plus the claimed address. A reply there answers
   // whoever forged the name, so no --to can confirm it.
@@ -328,7 +457,8 @@ function cmdSend(argv) {
   // address the dry run printed, so a person chose the number, not the name.
   const owned =
     Boolean(person) &&
-    (resolvePerson(null, handle, { strict: true }) === person.id || handle === fromCard(person, app));
+    (resolvePerson(null, handle, { strict: true }) === person.id ||
+      handle === fromCard(person, app));
   const where = `${c.b(P(name))} ${c.dim(`via ${app}, ${P(to)}${owned ? "" : ", not a saved contact"}`)}`;
   if (flags["dry-run"]) {
     say(`  would send to ${where}`);
@@ -343,7 +473,16 @@ function cmdSend(argv) {
     );
 
   const r = dispatch(app, to, text, flags);
-  if (!succeeded(r)) die(`Not sent to ${P(name)} via ${app}: ${P((r.err || r.out || "no output").trim().split("\n").slice(0, r.code === 4 ? 3 : 1).join("\n"))}`);
+  if (!succeeded(r))
+    die(
+      `Not sent to ${P(name)} via ${app}: ${P(
+        (r.err || r.out || "no output")
+          .trim()
+          .split("\n")
+          .slice(0, r.code === 4 ? 3 : 1)
+          .join("\n"),
+      )}`,
+    );
   if (person)
     d.prepare(
       "INSERT INTO interactions (id, person_id, channel, note, happened_at) VALUES (lower(hex(randomblob(16))),?,?,NULL,?)",
@@ -351,4 +490,13 @@ function cmdSend(argv) {
   say(`${c.grn("sent")} to ${where}`);
 }
 
-module.exports = { cmdSend, lastThread, waJid, target, roomThread, chatGuid, messagesBlocked };
+module.exports = {
+  cmdSend,
+  lastThread,
+  waJid,
+  target,
+  roomThread,
+  chatGuid,
+  messagesBlocked,
+  matrixRoom,
+};

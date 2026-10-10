@@ -78,6 +78,7 @@ COMMANDS=(
   "api|any website as an API: call taught sites, teach new ones (not Clay)"
   "linkedin|LinkedIn reads inside your own signed-in Chrome tab (me, profile, people, inbox)"
   "groupme|GroupMe group chats and DMs, read inside your own signed-in GroupMe web tab"
+  "chat|one inbox for every chat network: local Matrix bridges (up, down, status, link)"
   "office|Microsoft 365 mail, calendar, files, docs and Teams, read through Graph after one Microsoft device-code sign-in"
   "usc|a USC student's day: due this week, the dining hall, events (setup signs in)"
   "google|find and read Google Docs, Sheets and Slides as text"
@@ -200,6 +201,12 @@ linkedin)
   # LinkedIn reads run inside the user's own Chrome tab. Read-only.
   shift
   exec python3 "$ROOT/bin/chewbacca-linkedin" "$@"
+  ;;
+chat)
+  # Signal, Telegram, Discord, Instagram, Messenger, X, Google Messages and the
+  # rest through mautrix bridges on a homeserver bound to 127.0.0.1.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-chat" "$@"
   ;;
 groupme)
   # GroupMe reads run inside the user's own web.groupme.com tab. Read-only.

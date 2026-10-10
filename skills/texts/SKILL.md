@@ -120,6 +120,15 @@ chatdb-guard refuses both the `text`-column query and raw thread reads, and on
 2026-10-10 four calls into that wall got "What's taking so long?" from Caleb
 before any draft reached him.
 
+When a teammate sends a screenshot and asks "what are these for?", the likely
+subject is something an agent of ours posted where they can see it, not the
+last thing he asked them. Before guessing, read the bot's recent posts in every
+Slack channel shared with that person (Togari, reply cards, test messages). On
+2026-10-10 Maggie's screenshot was three overnight "Test of Jonah's assistant"
+posts from Togari in a Zeutara channel; the draft guessed admin access instead
+and Caleb wrote "Bro ru stupid she was asking abt this". Tests never post in a
+client channel either: that breaks Sagar's no-process-chatter ruling.
+
 ## Images and QR codes someone sent
 
 An image in chat.db with `transfer_state` 0 was never downloaded to this Mac. Its

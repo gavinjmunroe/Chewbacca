@@ -111,6 +111,8 @@ against real leads with no blocking finding, and the four-item start card
 (verified count, sequence, ramp, each domain's health). A failed gate goes
 back to its own step. Grading never authorizes the send.
 
+Run `gtme-grade` on every campaign before any send, resume or add-leads (launch-guard refuses without its fresh pass), and apply the playbook to the client's live data with it before proposing new research.
+
 ## Reuse before building
 
 Use list-audit and list-gate for inherited contacts. Locate the installed official Clay plugin and read its command help and relevant skills before assuming capabilities. Probe account and workspace identity. Native workflow APIs, table reads, browser operations, and paid enrichments have different capabilities and costs. Use the browser-use skill for verified gaps. Search the private research corpus with `gtme-library --corpus PATH search 'query'`; retrieval is not evidence that the entire corpus was studied.

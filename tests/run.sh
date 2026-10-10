@@ -440,6 +440,13 @@ if group "gtme"; then
   check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
   check "gtme-dedupe merges one person across lists, never two on name alone" python3 "$ROOT/tests/test_gtme_dedupe.py"
   check "gtme-dedupe dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-dedupe --help
+  # Synthetic campaigns; nothing reads Clay. Each gate is made to fail on purpose.
+  check "gtme-grade refuses on every gate and passes only a clean campaign" \
+    python3 "$ROOT/tests/test_gtme_grade.py"
+  check "gtme-grade dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-grade --help
+  check "launch-guard refuses a launch without the pre-send gate" python3 "$ROOT/tests/launch-guard-test.py"
+  check "launch-guard refuses a launch without a fresh gtme-grade pass for that campaign" \
+    python3 "$ROOT/tests/test_launch_guard_grade.py"
   # Every case from the upstream TypeScript tests; offline, nothing sends.
   check "gtme-reply labels real replies, cleans HTML, refuses risky auto-sends" python3 "$ROOT/tests/test_gtme_reply.py"
   check "gtme-reply dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-reply intent --help

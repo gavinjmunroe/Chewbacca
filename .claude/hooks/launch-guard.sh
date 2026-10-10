@@ -5,7 +5,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
 type hook_init >/dev/null 2>&1 && hook_init launch-guard.sh 10
 # PreToolUse: HARD BLOCK on launching, resuming or enrolling an outbound
 # campaign unless the pre-send gate passed in full within the last 12 hours,
-# on files that have not changed since.
+# on files that have not changed since, AND gtme-grade passed all five
+# playbook gates for that campaign in the same window (see below).
 #
 # Written 2026-10-05. On 10-04 this kit called Jonah Graham's Zeutara lists
 # "verified, pass the gate". Jonah's own review then found five things the gate
@@ -62,6 +63,10 @@ case "$tool" in
     # fake (security review, 2026-10-05).
     if printf '%s' "$lower" | grep -qE 'send-gate-receipt|launch-guard-last-url'; then
       refuse "only scripts/pre_send_gate.py may write the send-gate receipt."
+    fi
+    # Same for the grade receipts, which only tools/gtme_grade.py writes.
+    if printf '%s' "$lower" | grep -qE 'state/gtme-grade|state" *[,/+] *"?gtme-grade'; then
+      refuse "only gtme-grade may write a grade receipt."
     fi
     if printf '%s' "$lower" | grep -q 'chewie' &&
        printf '%s' "$lower" | grep -qE 'click|eval' &&
@@ -129,6 +134,53 @@ else
       why="the receipt names no input files."
     fi
   fi
+fi
+
+
+# The playbook's five gates (tools/gtme_grade.py) must also have passed for
+# this campaign within 12 hours, on inputs that have not changed since. Added
+# 2026-10-10: the kit had a hundred sourced rules and a five-gate grading
+# section, and no campaign had ever been graded against them. Applied to
+# Zeutara the same day, they found 362 messages sent from inboxes the
+# pre-send gate never saw. The campaign is named by its cam_ id in the command
+# or in the last Clay URL; with no id anywhere, the newest grade receipt must
+# pass, and the refusal says to name the campaign.
+grade_dir="$state/gtme-grade"
+grade_ok() {  # $1 receipt path; prints why it fails, nothing on a pass
+  local r="$1"
+  [ -f "$r" ] || { echo "no gtme-grade pass for $(basename "$r" .json)."; return; }
+  local gt gp
+  gt=$(jq -r '.time // 0' "$r" 2>/dev/null || echo 0)
+  gp=$(jq -r '.pass // false' "$r" 2>/dev/null || echo false)
+  [ "$gp" = "true" ] || { echo "the gtme-grade receipt for $(basename "$r" .json) is not a pass."; return; }
+  [ $((now - gt)) -lt 43200 ] || { echo "the gtme-grade pass for $(basename "$r" .json) is over 12 hours old."; return; }
+  [ "$(jq -r '.hashes // {} | length' "$r" 2>/dev/null)" != "0" ] ||
+    { echo "the gtme-grade receipt names no input files."; return; }
+  while IFS=$'\t' read -r path want; do
+    [ -n "$path" ] || continue
+    got=$(shasum -a 256 "$path" 2>/dev/null | awk '{print $1}')
+    [ "$got" = "$want" ] || { echo "$(basename "$path") changed or vanished after gtme-grade passed."; return; }
+  done < <(jq -r '.hashes // {} | to_entries[] | "\(.key)\t\(.value)"' "$r" 2>/dev/null)
+}
+if [ -z "$why" ]; then
+  ids="$( { printf '%s\n' "$blob"; cat "$lasturl" 2>/dev/null; } | grep -oE 'cam_[A-Za-z0-9]+' | sort -u)"
+  if [ -n "$ids" ]; then
+    while read -r id; do
+      [ -n "$id" ] || continue
+      why="$(grade_ok "$grade_dir/$id.json")"
+      [ -n "$why" ] && break
+    done <<< "$ids"
+  else
+    newest="$(ls -t "$grade_dir"/*.json 2>/dev/null | head -1)"
+    if [ -z "$newest" ]; then
+      why="no gtme-grade pass at all, and no cam_ id in the command or the last Clay URL to say which campaign."
+    else
+      why="$(grade_ok "$newest")"
+    fi
+  fi
+  [ -n "$why" ] && why="$why
+Grade it: gtme-grade --campaign <cam_id> --leads <list>.csv --suppress <sent>.csv \\
+    --senders <sender-accounts>.json --client <name> --review <read>.json"
 fi
 
 [ -n "$why" ] || exit 0

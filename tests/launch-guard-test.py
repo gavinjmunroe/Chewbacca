@@ -9,7 +9,9 @@ import subprocess
 import tempfile
 import time
 
-H = os.path.expanduser("~/.claude/hooks/launch-guard.sh")
+# The repo's hook, not the installed copy: the installed one lags a commit.
+H = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".claude", "hooks",
+                 "launch-guard.sh")
 
 
 def run(tool, tool_input, receipt=None, files=None, last_url=None):
@@ -31,6 +33,17 @@ def run(tool, tool_input, receipt=None, files=None, last_url=None):
             receipt["hashes"] = hashes
         with open(os.path.join(state, "send-gate-receipt.json"), "w") as fh:
             json.dump(receipt, fh)
+    # These cases test the pre-send half; a passing gtme-grade receipt is always
+    # present so only that half decides. tests/test_launch_guard_grade.py covers
+    # the grade half.
+    gdir = os.path.join(state, "gtme-grade")
+    os.makedirs(gdir)
+    gin = os.path.join(home, "graded.csv")
+    with open(gin, "w") as fh:
+        fh.write("email\n")
+    with open(os.path.join(gdir, "cam_x.json"), "w") as fh:
+        json.dump({"campaign": "cam_x", "time": int(time.time()), "pass": True,
+                   "hashes": {gin: hashlib.sha256(b"email\n").hexdigest()}}, fh)
     env = dict(os.environ, HOME=home)
     p = subprocess.run([H], input=json.dumps({"tool_name": tool, "tool_input": tool_input}),
                        capture_output=True, text=True, env=env, timeout=20)

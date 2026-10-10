@@ -69,4 +69,13 @@ if [ "$code" = 0 ] && grep -q plumbing-narration "$CHEWBACCA_HOME/voice-flags.pe
 else
   echo "FAIL  skill narration exited $code, expected 0 and a pending plumbing flag"; fail=1
 fi
+# 2026-10-09: "These are #82 to #84 in your drafts ... The longer versions are
+# deleted." got "what's the point of saying that bruh". Same queue as plumbing.
+rm -f "$CHEWBACCA_HOME/voice-flags.pending"
+code=$(run $'Prayer. Amen.\n\nTy for the file scopes!!\n\nThese are #82 to #84 in your drafts. The longer versions are deleted.' p6)
+if [ "$code" = 0 ] && grep -q backstage-bookkeeping "$CHEWBACCA_HOME/voice-flags.pending" 2>/dev/null; then
+  echo "ok    draft-number bookkeeping is flagged for the next turn"
+else
+  echo "FAIL  bookkeeping exited $code, expected 0 and a pending backstage flag"; fail=1
+fi
 exit $fail

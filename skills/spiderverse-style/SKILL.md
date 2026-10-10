@@ -507,7 +507,7 @@ strip. `[ACR-Q]`
 - A dozen comic SFX words on one page.
 - Every section the same palette and the same treatment.
 
-## Tested in Blender (measured, Wave 1 of the replica study)
+## Tested in Blender (measured, Waves 1 and 2 of the replica study)
 
 From `~/code/work/spiderverse-replica` (private): eight structurally different
 shots rebuilt in Nalana's Blender 5.1 (EEVEE) and scored against the reference
@@ -553,6 +553,32 @@ reasoned, not yet measured. Numbers are 0 to 1, 1 identical.
   once moved every targeted axis and dropped four shot scores, with nothing
   attributable. An axis that reads the same to three decimals after a change
   means the render didn't change: pixel-diff it before tuning further.
+
+Wave 2 (six new shots, three re-runs; same rules, every figure an original
+mannequin):
+
+- **tested: solve the camera before the first render.** Six shots with a
+  solved v1 camera averaged 0.551 at v1, against 0.390 for Wave 1's guessed
+  v1 cameras; one camera solve alone was worth +0.106.
+- **tested: marks need a layer, not a filter.** Overlaying a brush-wash
+  plate (thousands of bristled dabs, painted by our own script) after the
+  Kuwahara pass raised high-frequency texture 0.214 to 0.342 on a painted
+  interior, where Kuwahara alone moved it under 0.005 across three versions.
+  Paint the plate in Krita for real work; it can't paint headless.
+- **tested: a painted backdrop must not cast shadows.** A backlit set put
+  its whole floor in the backdrop's shadow; a probe at 10x key energy read
+  the same value split as 1x, which is how a blocked light differs from a
+  weak one. Turn off `visible_shadow` on flats.
+- **tested: a sun's rotation is not its elevation.** -60 degrees about X
+  leaves the light 30 degrees above the horizon. Set elevation, then convert.
+- **tested: match the palette before the structure.** Pulling a line-web
+  shot's haze from magenta to the measured navy-violet moved it 0.614 to
+  0.696, more than any geometry change on that shot.
+- **tested, negative: a bigger graphic shape isn't more of its colour.**
+  Enlarging a star burst 1.3x to chase its colour share cost 0.038.
+- **hypothesis: test a value ramp on a front-lit scene.** In a backlit set
+  everything facing camera is meant to be in shadow, so a ramp's middle
+  bands never get reached and the test says nothing.
 
 ## Tools worth reaching for
 

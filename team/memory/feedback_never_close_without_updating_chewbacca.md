@@ -46,3 +46,5 @@ whenever a session produced a lesson, a decision or an idea:
 3. The team board (`team add`), for every product idea or decision the session
    produced, owner from `team/members.json`, ideas go in with `--status ideas`.
 Do it as the session goes, not when he asks. See [[project_chewbacca_team_board]].
+
+**The suite is part of "safe" too (2026-10-10).** A session said "safe to close" with every commit pushed and only its touched test groups green. vibe-guard ran closeout, refused because the full suite had never passed on that commit, and the full run then found two failures, one of them that session's own regression. Until `closeout` (not `--fast`) passes, say what is done and what is still unchecked, never "safe to close".

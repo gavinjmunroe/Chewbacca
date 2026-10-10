@@ -73,7 +73,7 @@ Harvested 2026-10-09 from `bluemodernadvisory/togari-platform` at `4308237` (202
 | `lib`, `resilience`, `observability`                                                                    | Retry with gateway markers, cost tracking, tracing, circuit breakers, Sentry                                                                                          | `retry.ts`, `costTracking.ts`, `circuit-breaker.ts`                                                                                                                              |
 | `bigquery`, `storage`, `events`, `tenant`, `config`, `errors`, `sources`, `worker`, `services`, `utils` | Infrastructure                                                                                                                                                        |                                                                                                                                                                                  |
 
-**`sql/`.** `migrations/0000`–`0039` are idempotent BigQuery DDL. The `togari_core` tables run 0000–0021; that dataset was never created in production. Later migrations hold `reply_items` (0033/34/36), `perplexity_calls` (0035), `connection_items` (0037), `client_decks` (0038/39), v1 core (0032), client API keys (0031) and the Clay connector registry (0030). `pdw_create_tables.sql` and `phase15a_*` hold the PDW tables.
+**`sql/`.** `migrations/0000` to `0039` are idempotent BigQuery DDL. The `togari_core` tables run 0000 to 0021; that dataset was never created in production. Later migrations hold `reply_items` (0033/34/36), `perplexity_calls` (0035), `connection_items` (0037), `client_decks` (0038/39), v1 core (0032), client API keys (0031) and the Clay connector registry (0030). `pdw_create_tables.sql` and `phase15a_*` hold the PDW tables.
 
 ## 2. Worth funneling into Chewbacca
 
@@ -104,7 +104,7 @@ Each item ends with a recommendation: (a) reference doc in a skill, (b) ported p
 5. **`replies/autopilot.ts:40-337`.**
    - At most 4 forwards per reply.
    - `returnDate()` reads English, `dd.mm.yyyy` and French "au dd/mm" dates, and defaults to 7 days away.
-   - `followUpDue()` is two business days after return at 14:00 UTC; `inSendWindow()` is 6–10am Pacific on weekdays.
+   - `followUpDue()` is two business days after return at 14:00 UTC; `inSendWindow()` is 6 to 10am Pacific on weekdays.
    - Your own domain is never forwarded to.
    - A failed hook falls back to a Slack card, so a reply is never dropped.
    - Caleb's ruling is in the comment: autopilot runs on the server, not his Mac.
@@ -115,10 +115,10 @@ Each item ends with a recommendation: (a) reference doc in a skill, (b) ported p
 
 7. **`agents/replybot/client-config.ts:270-288` (BMA/Sagar) and `472-488` (Zeutara).**
    - The DIRECTION block: we cold-emailed them, never compliment "their" subject line, any subject line is ours. It came from the inverted drafts of 2026-09-02.
-   - 3–8 sentences, match their tone, confirm and stop selling once they say yes.
+   - 3 to 8 sentences, match their tone, confirm and stop selling once they say yes.
    - Never invent details, write no URLs (code injects them), no em dashes.
    - Sign-off is the bare first name.
-   - Banned phrases: "strong fit", "great fit", "synergy", "leverage", "circle back", "touch base", "I hope this email finds you well", "reach out", "reaching out", "just wanted to", "quick question".
+   - Banned phrases: `strong fit`, `great fit`, `synergy`, `leverage`, `circle back`, `touch base`, `I hope this email finds you well`, `reach out`, `reaching out`, `just wanted to`, `quick question`.
    - For investors: never state terms, valuation or traction; never discuss fees; never imply returns.
    - **(a)** "reply-drafting rules" reference.
 8. **`client-config.ts:434-455`, AIJ article outreach.** Never name or contrast individual outlets (it reads machine-generated when run across many leads); keep the publication name out of the prompt entirely. **(a)**
@@ -129,7 +129,7 @@ Each item ends with a recommendation: (a) reference doc in a skill, (b) ported p
     - needs_review always gets a draft.
     - A 15-row table of decided edge cases: licensing and broker questions, NDA or data-room requests, "send me other deals", out-of-office (a reply pauses the sequence for that firm, so it must not be dropped), and one-word replies.
     - **(a)** This is the best single reference doc to lift, with client names stripped.
-12. **`dialer/script-builder.ts:50-60`.** Cold-call script rules: an 8-second (about 25-word) opener, 3–5 open questions, 4–6 objection handlers, ask for "15 minutes". **(a)**
+12. **`dialer/script-builder.ts:50-60`.** Cold-call script rules: an 8-second (about 25-word) opener, 3 to 5 open questions, 4 to 6 objection handlers, ask for "15 minutes". **(a)**
 13. **`agents/enrichment/systemPrompt.ts:19-117`.** Private-equity contact-finding agent: tier rules, which tool to call when, stop early, never call the same tool more than 4 times running. **(a)**
 14. **Smaller prompts.**
     - Universal extractor (`ingest/universal/extractor.ts:20-41`): the entity schema, plus the rule that a deal is emitted only with a value, stage or explicit intent.
@@ -210,7 +210,7 @@ Each item ends with a recommendation: (a) reference doc in a skill, (b) ported p
     - **(a)** "Slack approval cards" reference.
 32. **`ontology/platform-constraints.ts:26-84` and `guardrails.ts:76-97`.**
     - Character limits per channel: LinkedIn fold at 210, cold email 900 characters and 40 a day.
-    - Send rules: 40 per inbox and 200 per domain per day, Tuesday to Thursday 8–11am recipient time, a 4-week warmup (5/10/20/40).
+    - Send rules: 40 per inbox and 200 per domain per day, Tuesday to Thursday 8 to 11am recipient time, a 4-week warmup (5/10/20/40).
     - Compliance: CAN-SPAM footer, unsubscribe means remove immediately, separate sending domains.
     - **(a)** Verify these against the Lieben playbook already in team memory before adopting.
 
@@ -235,7 +235,7 @@ Each item ends with a recommendation: (a) reference doc in a skill, (b) ported p
   - Data siloed per client, enrichment per client, retained indefinitely, soft-delete by default.
   - DNC keyed on email + domain + id; BMA sees everything, Joe sees only AIJ; AIJ has its own Clay account; the sourcing engine is retired.
   - Sagar still owes 8 answers: AIJ as a tenant, DNC scope, the opportunity email flow, the Joe portal scope, the first demo workflow, status visibility, block or tag on a DNC hit, and what replaces his spreadsheet. I didn't find his answers in the repo.
-- **`docs/SAGAR_TOGARI_HANDOFF.md`.** Production URL and MCP endpoint, connector token via `?token=` (connectors can't send headers), and Exa/ZoomInfo tools registered last because clients truncate the tool list at about 20–25. Remove and re-add the connector in Perplexity to refresh its cached tool list.
+- **`docs/SAGAR_TOGARI_HANDOFF.md`.** Production URL and MCP endpoint, connector token via `?token=` (connectors can't send headers), and Exa/ZoomInfo tools registered last because clients truncate the tool list at about 20 to 25. Remove and re-add the connector in Perplexity to refresh its cached tool list.
 - **`docs/HANDOFF-SLA.md`.** A proposal dated 2026-05-28 that still needs Karthik's sign-off. Covers 2-hour acknowledgement and a 24-hour first reply, tiered ownership, and a manual Acknowledge button.
 - **Clay docs.** `CLAY_INTEGRATION_BRIEF`/`ROADMAP` (inbound fan-out with DNC first, 4 open questions for Karthik), `TOGARI_CLAY_CONNECTOR`, `PR17_CHANGES` (idempotency).
 - **`KARTHIK_GCP_HANDOFF.md`.** Deploy order, IAM matrix, env-var contract, open decisions.
@@ -270,5 +270,5 @@ Each item ends with a recommendation: (a) reference doc in a skill, (b) ported p
 - `docs/BMA_REPLYBOT_CLAY_COLUMN.md:9`: a full Clay inbound source webhook URL with its id. The repo's own comment (`client-config.ts:184`) says Clay webhook URLs are secrets. Worth rotating or redacting.
 - `src/agents/smartlead-responder/__tests__/external-workspace.test.ts:31`: an `xoxb-` string of 20 characters, too short to be a real Slack token. Almost certainly a fixture, but it isn't labelled as fake.
 - Fixtures that look fake: `tests/smoke/setup.ts:293`, `zeutara-clay-reply-send.test.ts:37`, `routes/__tests__/slack-oauth.test.ts:62,108`, and the ZoomInfo test, which only matches a "BEGIN PRIVATE KEY" header pattern.
-- **Not secrets, but don't copy into team memory as-is:** `client-config.ts` hardcodes Slack channel ids, Jonah's Slack user id, sender emails, a Calendly URL and placement LinkedIn URLs. The team-memory rule forbids personal emails.
+- **Keep out of team memory as-is, though none of it is a secret:** `client-config.ts` hardcodes Slack channel ids, Jonah's Slack user id, sender emails, a Calendly URL and placement LinkedIn URLs. The team-memory rule forbids personal emails.
 - **Not checked:** the values in `.env.example`. A deny rule blocked reading them, and I didn't route around it. Git history for deleted secret files wasn't scanned either. The tracked files with secret-like names are code and SQL, not credential files.

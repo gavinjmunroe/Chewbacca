@@ -11,7 +11,7 @@ supervisors) or from practitioners who rebuilt it in a shader, and each says
 where it came from. Sources and what was actually read are in
 [references/sources.md](references/sources.md). Tags like `[SIG23]` point there.
 
-The thesis, from the crew. Danny Dimian (VFX supervisor, Into): "We basically
+The crew stated the thesis. Danny Dimian (VFX supervisor, Into): "We basically
 tried to avoid anything that looked like it was a smooth gradation." `[CB]`
 Phil Lord: freeze any frame and it reads as an illustration. `[INS]` Pav
 Grochola (effects, Across): the technology should serve the artist, and
@@ -26,8 +26,8 @@ equally creative as it within the 2d 3d space." When someone asks for
 "Spider-Verse level", they mean that level of invention, in their own
 visual language. Take the method (per-element decisions, 2D drawn over 3D,
 frame rate and camera as storytelling, one unforgettable shot) and leave
-the film's surface alone: no comic covers, no named universes, no
-lettering or misregistration just because the film had them. Write three
+the film's surface alone: skip the comic covers, the named universes, and
+any lettering or misregistration added just because the film had them. Write three
 genuinely different directions before building. Use the film's look only
 when they literally ask for the Spider-Verse look.
 

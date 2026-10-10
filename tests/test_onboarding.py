@@ -4,7 +4,10 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ImportError:  # 3.11+; hooks and CI may run the stock 3.9
+    tomllib = None
 import unittest
 from unittest.mock import patch
 
@@ -25,6 +28,7 @@ class OnboardingTests(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
 
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_empty_setup_has_complete_private_context_and_no_inferred_identity(self):
         result = runtime.setup('codex')
         brain = self.home / 'brain'

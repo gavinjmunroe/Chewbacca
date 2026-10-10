@@ -80,7 +80,7 @@ key = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAE
 check("redacts a private key block", "b3BlbnNz" not in ah.redact(f"key:\n{key}\ndone"))
 
 plain = ("Fixed the snippet window in /Users/someone/code/chewbacca/bin/agent-history at commit "
-         "c5ac91ba, the token count went from 4096 to 8192 and the session-search-covers-every-runtime test passes.")
+         "c5ac91ba, the line count went from 4096 to 8192 and the session-search-covers-every-runtime test passes.")
 check("leaves ordinary prose, paths and short shas alone", ah.redact(plain) == plain, ah.redact(plain))
 
 # A secret sitting right where the window edge falls must not print in part.
@@ -177,6 +177,11 @@ ADVERSARIAL = {
     "secret keyword, password then spaces": "password" + " " * MB,
     "secret keyword, repeated password=": "password=" * (MB // 9),
     "secret keyword, a=b=c= chain": "ab=" * (MB // 3),
+    "any-syntax key rule, every word a name": "word " * (MB // 5),
+    "any-syntax key rule, every word a keyword": "token " * (MB // 6),
+    "any-syntax key rule, flags": "--token x " * (MB // 10),
+    "entropy rule, many short runs": ("Ab1+" * 6 + " ") * (MB // 25),
+    "entropy rule, one megabyte run": "aZ9_" * (MB // 4),
     "secret keyword, one megabyte name": "api_key" * (MB // 7) + "=value123",
     "URL userinfo, @ run with no delimiter": "x://" + "@" * MB,
     "unterminated OSC sequences": "\x1b]0;" * (MB // 4),
@@ -276,6 +281,97 @@ out_js = buf.getvalue()
 raw_ctrl = [c for c in out_js.rstrip("\n") if ord(c) < 32 or 0x7f <= ord(c) <= 0x9f or c == "\u202e"]
 check("JSON emit has no raw control characters, C1 included", not raw_ctrl, repr(out_js))
 check("JSON emit stays valid and round-trips the text", json.loads(out_js)["snippet"].startswith("ok "), out_js)
+
+# ------------------------------------------------------------- fuzz
+# Mutated fake secrets: random shapes, under every secret-ish key spelled in
+# random case, in every syntax, split by every control the redactor strips,
+# wrapped in every encoding it decodes. Seeded, so a failure reproduces.
+import random
+import urllib.parse
+
+print("fuzz")
+rng = random.Random(20261010)
+KEYWORDS = ["key", "token", "secret", "password", "passwd", "pwd", "auth", "credential", "session",
+            "cookie", "bearer", "api", "private", "signature", "sig", "access", "refresh", "client_secret",
+            "api_key", "ACCESS_TOKEN", "x-api-key", "db_password"]
+
+
+def fake_secret():
+    shape = rng.choice(["mixed", "mixed", "hex", "lowernum", "upper", "b64", "urlsafe", "short"])
+    n = rng.randint(20, 48)
+    pools = {
+        "mixed": "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789",
+        "hex": "0123456789abcdef",
+        "lowernum": "abcdefghijkmnopqrstuvwxyz0123456789",
+        "upper": "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+        "b64": "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789+/",
+        "urlsafe": "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789-_",
+        "short": "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789",
+    }
+    if shape == "short":
+        n = rng.randint(8, 14)
+    return "".join(rng.choice(pools[shape]) for _ in range(n)), shape
+
+
+def rand_case(word):
+    return "".join(c.upper() if rng.random() < 0.5 else c.lower() for c in word)
+
+
+def syntaxes(kw, s):
+    return [f"{kw}={s}", f"{kw}: {s}", f"{kw}:{s}", f'"{kw}": "{s}"', f"'{kw}': '{s}'", f"{kw} = \"{s}\"",
+            f"{kw} {s}", f"--{kw} {s}", f"--{kw}={s}", f"-p {s}", f"X-{kw}: {s}", f"{kw}:\n    {s}",
+            f"export {kw.upper()}={s}", f"<{kw}>{s}</{kw}>", f"{kw}\t{s}", f"?{kw}={s}&next=1"]
+
+
+SPLITS = ["", "\x1b[0m", "\x1b]0;t\x07", "\x9b1m", "\x00", "‮"]
+
+
+def encodings(text):
+    yield "plain", text
+    yield "json", json.dumps(text)[1:-1]
+    yield "double-json", json.dumps(json.dumps(text))[1:-1]
+    yield "percent", urllib.parse.quote(text, safe="")
+    yield "base64", _b64.b64encode(text.encode()).decode()
+
+
+fuzz_total = fuzz_pass = 0
+fuzz_fail = []
+for _ in range(400):
+    secret, shape = fake_secret()
+    kw = rand_case(rng.choice(KEYWORDS))
+    syntax = rng.choice(syntaxes(kw, secret))
+    split = rng.choice(SPLITS)
+    if split:
+        cut_at = rng.randint(3, len(secret) - 3)
+        syntax = syntax.replace(secret, secret[:cut_at] + split + secret[cut_at:])
+    for enc, text in encodings(f"see {syntax} done"):
+        out = ah.redact(text)
+        fuzz_total += 1
+        probe = secret[len(secret) // 4: len(secret) // 4 + 6]
+        leaked = secret in out or probe in out or (enc == "base64" and text in out)
+        if leaked:
+            fuzz_fail.append((shape, enc, repr(text[:70]), repr(out[:90])))
+        else:
+            fuzz_pass += 1
+    # The bare secret too, no key at all: the entropy rule's job.
+    if shape != "short":
+        out = ah.redact(f"value {secret} end")
+        fuzz_total += 1
+        if secret in out or secret[len(secret) // 4: len(secret) // 4 + 6] in out:
+            fuzz_fail.append((shape, "bare", secret, repr(out[:90])))
+        else:
+            fuzz_pass += 1
+rate = 100.0 * fuzz_pass / fuzz_total
+print(f"  fuzz: {fuzz_pass}/{fuzz_total} redacted ({rate:.2f}%)")
+for f in fuzz_fail[:12]:
+    print("        leak:", *f)
+check("fuzz: every mutated fake secret is redacted", not fuzz_fail, f"{len(fuzz_fail)} leaks")
+
+# Ordinary text survives the catch-all: words, paths, ids and prose.
+for plain_text in ["the agent-history search covers every runtime", "/Users/someone/code/chewbacca/bin/agent-history",
+                   "85cdc205-ed5a-4893-88cb-4d732737169d", "useScrollNav and CLAUDE_CODE_EXECPATH in python3",
+                   "api.github.com/repos/calebnewtonusc/Chewbacca"]:
+    check(f"catch-all leaves ordinary text alone: {plain_text[:40]}", ah.redact(plain_text) == plain_text, ah.redact(plain_text))
 
 # ------------------------------------------------------------- fixtures
 

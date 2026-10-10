@@ -22,14 +22,25 @@ Each hit is session id, local time, repo, role (`user`, `assistant`,
 reports as that repo. The count, files scanned and elapsed time go to stderr.
 Exit 1 means no match.
 
-## What it guarantees
+## What it does to every line
 
-- Every snippet passes through `redact()` first: `sk-`, `ghp_`,
-  `github_pat_`, `AKIA`, `xox`, `AIza` and Stripe keys, bearer and
-  Authorization values, JWTs, private key blocks, `password=` style values,
-  emails, phone numbers, and hex or base64 blobs of 32+ characters. A token
-  cut by the snippet edge is dropped, never printed in part. It over-redacts
-  on purpose: a 10-digit app id comes out as `[PHONE]`.
+- Every snippet passes through `redact()`, in three layers:
+  - Known shapes: `sk-`, `ghp_`, `github_pat_`, `AKIA`, `xox`, `AIza` and
+    Stripe keys, bearer and Authorization values, JWTs, private key blocks,
+    URL credentials, emails, phone numbers, hex and base64 blobs.
+  - Any value after a secret-ish key (key, token, secret, password, auth,
+    credential, session, cookie, bearer, api, private, signature, access,
+    refresh and the like), whatever the value looks like, in any syntax:
+    `k=v`, `k: v`, `"k": "v"`, a header line, `--token X`, `-p X`.
+  - A catch-all: any run of 20+ token characters with three of the four
+    character classes, 3.5+ bits of entropy, or letters and digits mixed,
+    unless it is a UUID, a word-like path or plain words.
+- A token cut by the snippet edge is dropped, never printed in part.
+- It over-redacts on purpose. "the token count" loses "count", "this session
+  allows" loses "allows", and a 10-digit app id comes out as `[PHONE]`.
+- A seeded fuzz test mutates fake secrets (random shape and case, every
+  syntax above, split by control characters, wrapped in JSON, double JSON,
+  percent and base64 encoding) and requires all 2,349 cases redacted.
 - Everything printed, stdout and stderr, goes through one `emit()`. Text a
   transcript planted can't steer the terminal: escape sequences, control
   characters and bidi overrides are removed before redaction (so one can't
@@ -45,6 +56,15 @@ Exit 1 means no match.
   else the rg inside Claude Code's own binary), then a byte check runs before
   any line is parsed as JSON. A full scan of 5,068 transcripts (4.2 GB) took
   1.8 s on 2026-10-10; with `AGENT_HISTORY_NO_RG=1` it is about 10 s.
+
+## Residual risk
+
+Redaction is best-effort pattern matching over the user's own local files. It
+is never a guarantee. A secret with no key next to it, shorter than 20
+characters and made of plain words, prints as it is, and so does anything
+sensitive that isn't shaped like a secret at all: a name, an address, a
+private sentence. Treat output as local: read it here, and don't paste it
+into a chat, an issue, a commit or anything else that leaves the machine.
 
 ## Never do
 

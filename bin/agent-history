@@ -35,6 +35,9 @@ import argparse
 import base64
 import binascii
 import json
+import math
+from collections import Counter
+from functools import lru_cache
 import os
 import re
 import shutil
@@ -73,9 +76,14 @@ _SECRET_RULES = [
     ("SLACK_TOKEN", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}")),
     ("GOOGLE_KEY", re.compile(r"\bAIza[0-9A-Za-z_-]{30,}")),
     ("STRIPE_KEY", re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{16,}")),
+    # A secret-ish key in any syntax: name=value, name: value, "name": "value",
+    # 'name': 'value', <name>value, a header line, --name value, --name=value,
+    # -p value, and name value when the name is itself a key. Only the name
+    # and separator are matched; the value is replaced by a marker pass, so a
+    # name with no keyword never swallows the text after it.
     ("SECRET", re.compile(
-        r"(?<![\w-])([\w-]+)"
-        r"(\"?\s{0,8}[:=]\s{0,8}[\"']?)(?=(?!\[)[^\s\"',;}]{6})")),
+        r"(?<![\w.-])(--?)?([A-Za-z][\w.-]*)"
+        r"([\"']?\s{0,8}[:=]\s{0,8}[\"']?|[\"']?>|\s{1,8})(?=[^\s\"',;}<>\[\])])")),
     ("HEX", re.compile(r"(?<![0-9A-Za-z_])[0-9a-fA-F]{32,}(?![0-9A-Za-z_])")),
     ("PHONE", re.compile(r"(?<![\w.-])(?:\+?\d{1,3}[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4}(?![\w-])")),
 ]
@@ -177,17 +185,98 @@ def _blob_sub(m: re.Match) -> str:
 # then swallow "jane&password=..." whole and skip the real key). A keyword
 # match leaves a marker, and one more pass replaces marker plus value. NUL is
 # stripped from the text before any rule runs, so it cannot occur naturally.
-_VALUE_MARK = "\x00V\x00"
-_MARKED_VALUE = re.compile("\x00V\x00[^\\s\"',;}]*")
-_SECRET_NAME = re.compile(r"(?i)api[_-]?key|secret|token|passwd|password|pwd|access[_-]?key")
+# NUL is stripped from the text before any rule runs, so these markers cannot
+# occur naturally. One per quoting style: a quoted value runs to its quote.
+_VALUE_MARK, _MARK_DQ, _MARK_SQ = "\x00V\x00", "\x00D\x00", "\x00S\x00"
+_MARKED_VALUES = [
+    (re.compile("\x00D\x00[^\"\n]*"), "[REDACTED]"),
+    (re.compile("\x00S\x00[^'\n]*"), "[REDACTED]"),
+    (re.compile("\x00V\x00[^\\s\"',;}<>\\[\\])&]*"), "[REDACTED]"),
+]
+_KEYWORDS = (r"key|token|secret|passwd|password|pwd|auth|credentials?|session|cookie|bearer|api|private"
+             r"|signature|sig|access|refresh|client_secret")
+_SECRET_NAME = re.compile(r"(?i)" + _KEYWORDS.replace("|sig|", "|sig|"))
+# With only whitespace between them, "token abc" is a key and its value but
+# "tokenizer output" is prose: the name must be a keyword, or end in one after
+# a separator (API_KEY, db-password), plural allowed.
+_KEY_WORD = re.compile(r"(?i)(?:[\w.-]*[_.-])?(?:" + _KEYWORDS + r")s?")
+
+
+@lru_cache(maxsize=4096)
+def _is_key(prefix: str, name: str, spaced: bool) -> bool:
+    if prefix == "-" and name == "p":
+        return True  # mysql -p X, the one single-letter flag that means password
+    if not _SECRET_NAME.search(name):
+        return False
+    return not spaced or bool(prefix) or bool(_KEY_WORD.fullmatch(name))
 
 
 def _secret_sub(m: re.Match) -> str:
     """The name run is matched whole and checked here, so a keyword anywhere
-    in a name of any length counts, without a regex scanning back for it."""
-    if _SECRET_NAME.search(m.group(1)):
-        return f"{m.group(1)}{m.group(2)}{_VALUE_MARK}"
-    return m.group(0)
+    in a name of any length counts, without a regex scanning back for it.
+    Names repeat, so the decision is cached; a megabyte of "token token"
+    costs one decision, not 140,000."""
+    prefix, name, sep = m.group(1, 2, 3)
+    prefix = prefix or ""
+    last = sep[-1]
+    if not _is_key(prefix, name, last.isspace() and not sep.strip()):
+        return m.group(0)
+    if last == '"':
+        return m.group(0) + _MARK_DQ
+    if last == "'":
+        return m.group(0) + _MARK_SQ
+    return m.group(0) + _VALUE_MARK
+
+
+# The catch-all, last: any maximal run of token characters 20+ long that has
+# three of the four character classes, or 3.5+ bits of entropy per character,
+# is a secret whatever its shape. Only shapes that can be named as safe are
+# exempt: UUIDs, file paths made of word-like segments, and plain words.
+# The run regex cannot backtrack: it starts only where a run starts (the
+# lookbehind) and nothing follows the greedy repeat that could fail.
+_RUN = re.compile(r"(?<![A-Za-z0-9+/=_.~-])[A-Za-z0-9+/=_.~-]{20,}")
+_UUID = re.compile(r"(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:\.[a-z]{1,6})?")
+_WORD_PIECE = re.compile(
+    r"[a-z]{1,20}\d{0,3}|[A-Z][a-z]{1,20}\d{0,3}|[A-Z]{1,12}\d{0,3}|\d{1,8}"
+    r"|[a-z]{1,20}(?:[A-Z][a-z]{1,20}){1,4}|(?:[A-Z][a-z]{1,20}){2,5}|\d{1,4}[A-Z]\d{1,4}|[a-z]\d{1,4}")
+_HEX_PIECE_SHORT = re.compile(r"[0-9a-f]{1,12}")
+_HEX_PIECE_PATH = re.compile(r"[0-9a-f]{1,20}")
+_PIECE_SPLIT = re.compile(r"[._~-]")
+
+
+def _entropy(run: str) -> float:
+    n = len(run)
+    return -sum(k / n * math.log2(k / n) for k in Counter(run).values())
+
+
+def _safe_run(run: str) -> bool:
+    if _UUID.fullmatch(run):
+        return True
+    if "+" in run or "=" in run:
+        return False
+    is_path = run.count("/") >= 2
+    hex_piece = _HEX_PIECE_PATH if is_path else _HEX_PIECE_SHORT
+    for seg in run.split("/"):
+        for piece in _PIECE_SPLIT.split(seg):
+            if piece and not (_WORD_PIECE.fullmatch(piece) or hex_piece.fullmatch(piece)):
+                return False
+    return True
+
+
+def _entropy_sub(m: re.Match) -> str:
+    run = m.group(0)
+    if _safe_run(run):
+        return run
+    classes = (any(c.isupper() for c in run) + any(c.islower() for c in run)
+               + any(c.isdigit() for c in run) + any(not c.isalnum() for c in run))
+    if classes >= 3 or _entropy(run) >= 3.5:
+        return "[SECRET]"
+    # Letters and digits mixed in a run that is not a named safe shape: short
+    # hex, uppercase-and-digit codes and the like sit under 3.5 bits but are
+    # still keys more often than anything else this long.
+    if any(c.isalpha() for c in run) and any(c.isdigit() for c in run):
+        return "[SECRET]"
+    return run
 
 
 def _apply_rules(text: str) -> str:
@@ -199,17 +288,23 @@ def _apply_rules(text: str) -> str:
         elif label == "AUTH":
             text = rx.sub(lambda m: f"{m.group(1)}[REDACTED]", text)
         elif label == "SECRET":
-            text = _MARKED_VALUE.sub("[REDACTED]", rx.sub(_secret_sub, text))
+            # Skipped outright when no keyword and no -p flag is present, so
+            # text full of name=value pairs with no key pays nothing for it.
+            if _SECRET_NAME.search(text) or "-p" in text:
+                text = rx.sub(_secret_sub, text)
+            for marked, repl in _MARKED_VALUES:
+                text = marked.sub(repl, text)
         else:
             text = rx.sub(f"[{label}]", text)
         if label == "SECRET":
             # Emails after the key=value rule, as before: an address in a
             # password= value is claimed whole by SECRET first.
             text = _emails(text)
-    return _BLOB.sub(_blob_sub, text)
+    text = _BLOB.sub(_blob_sub, text)
+    return _RUN.sub(_entropy_sub, text)
 
 
-_U_ESC = re.compile(r"\\u([0-9a-fA-F]{4})")
+_U_ESC = re.compile(r"(?<!\\)\\+u([0-9a-fA-F]{4})")
 _C_ESC = re.compile(r"(?<!\\)\\+([\"'/nrt])")
 _PCT = re.compile(r"%[0-9A-Fa-f]{2}")
 _B64 = re.compile(r"(?<![A-Za-z0-9+/_-])[A-Za-z0-9+/_-]{16,}={0,2}(?![A-Za-z0-9+/=_-])")
@@ -235,6 +330,11 @@ def _normalize(text: str) -> str:
 def _b64_sub(m: re.Match) -> str:
     """A base64 run that decodes to text holding a secret is that secret."""
     tok = m.group(0)
+    if len(tok) > 4096:
+        # Decoding a megabyte only to run every rule on it again doubles the
+        # cost; a run that long is mixed-class or high-entropy, so the
+        # catch-all at the end redacts it whole without the decode.
+        return tok
     raw = tok.replace("-", "+").replace("_", "/")
     raw += "=" * (-len(raw) % 4)
     try:

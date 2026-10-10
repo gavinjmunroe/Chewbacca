@@ -1,0 +1,242 @@
+#!/usr/bin/env python3
+"""Find agent tabs that died on a usage limit and hand back a resume prompt for each.
+
+On 2026-10-10 two Claude Desktop tabs stopped mid-work at 2:47pm with "You've
+hit your weekly limit". Desktop was signed into a second account that had run
+out, while VS Code on the Max account kept working. Nothing said so: Caleb found
+out from red triangles in the sidebar an hour later, then a nudge sent to the
+dead tabs hit the same wall again.
+
+So this reads the tail of every recent transcript, flags a session whose last
+assistant message is a limit reply, and writes one paste-ready prompt per dead
+tab that points a fresh tab at the old transcript. --new reports each death
+once (for the hook), --notify posts a macOS notification.
+
+    tab-rescue                 dead tabs from the last 12 hours, with prompts
+    tab-rescue --hours 3       a narrower window
+    tab-rescue --json          for other tools
+    tab-rescue --new --hook    UserPromptSubmit payload, each death once
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))
+from claude_accounts import accounts, is_limit_reply  # noqa: E402
+
+# 256 KB of tail holds the final turn of every transcript seen on 2026-10-10,
+# the longest being a 47-turn session whose last reply plus hook records ran
+# about 40 KB. The head read only needs the first user ask.
+TAIL_BYTES = 256 * 1024
+HEAD_BYTES = 512 * 1024
+RESET_RE = re.compile(r"resets? ([^·\n(]+(?:\([^)]*\))?)", re.IGNORECASE)
+# Automation sessions (security reviewers, cue models, probes) are not tabs
+# anyone is waiting on.
+SKIP_ENTRYPOINTS = ("sdk-",)
+SKIP_CWDS = ("/private/tmp", "/tmp")
+NOISE_PREFIXES = ("<", "Stop hook", "[", "Another Claude session", "Resume a ", "Resume:")
+
+
+def log_dir() -> Path:
+    return Path(os.environ.get("CHEWBACCA_LOG_DIR", str(Path.home() / ".chewbacca" / "logs")))
+
+
+def project_dirs() -> list[Path]:
+    override = os.environ.get("TAB_RESCUE_PROJECTS")
+    if override:
+        return [Path(p) for p in override.split(os.pathsep) if p]
+    return [cfg / "projects" for cfg in accounts()]
+
+
+def _records(blob: bytes):
+    for line in blob.splitlines():
+        try:
+            yield json.loads(line)
+        except (ValueError, UnicodeDecodeError):
+            continue
+
+
+def _ask(rec: dict) -> str | None:
+    if rec.get("type") != "user":
+        return None
+    content = (rec.get("message") or {}).get("content")
+    if not isinstance(content, str):
+        return None
+    text = content.strip()
+    if not text or text.startswith(NOISE_PREFIXES):
+        return None
+    return " ".join(text.split())
+
+
+def _texts(rec: dict) -> list[str]:
+    if rec.get("type") != "assistant":
+        return []
+    out = []
+    for part in (rec.get("message") or {}).get("content") or []:
+        if isinstance(part, dict) and part.get("type") == "text":
+            out.append(part.get("text") or "")
+    return out
+
+
+def inspect(path: Path) -> dict | None:
+    """The session's state if its last assistant text is a limit reply, else None."""
+    size = path.stat().st_size
+    with path.open("rb") as fh:
+        head = fh.read(HEAD_BYTES)
+        fh.seek(max(0, size - TAIL_BYTES))
+        tail = fh.read()
+    last_text, last_ts, last_ask = None, None, None
+    for rec in _records(tail):
+        texts = _texts(rec)
+        if texts:
+            last_text, last_ts = texts[-1], rec.get("timestamp")
+        ask = _ask(rec)
+        if ask:
+            last_ask = ask
+    if not last_text or not is_limit_reply(last_text):
+        return None
+    entry, cwd, first = None, None, None
+    for rec in _records(head):
+        entry = entry or rec.get("entrypoint")
+        cwd = cwd or rec.get("cwd")
+        first = first or _ask(rec)
+        if entry and cwd and first:
+            break
+    if entry and entry.startswith(SKIP_ENTRYPOINTS):
+        return None
+    if cwd and cwd.startswith(SKIP_CWDS):
+        return None
+    if not first:
+        return None
+    reset = RESET_RE.search(last_text)
+    return {
+        "session": path.stem,
+        "transcript": str(path),
+        "app": entry or "unknown",
+        "cwd": cwd or "",
+        "first_ask": first[:160],
+        "last_ask": (last_ask or first)[:160],
+        "died_at": last_ts,
+        "resets": reset.group(1).strip() if reset else None,
+        "error": last_text.strip()[:200],
+    }
+
+
+def prompt_for(dead: dict) -> str:
+    home = str(Path.home())
+    path = dead["transcript"].replace(home, "~", 1)
+    cwd = dead["cwd"].replace(home, "~", 1) or "the repo it was in"
+    ask = dead["first_ask"]
+    last = dead["last_ask"]
+    tail = "" if last == ask else f' Its last ask was "{last}".'
+    return (f"Resume a tab that died on a usage limit. Read the transcript at {path}. "
+            f'It started on "{ask}".{tail} Check git status in {cwd} for its '
+            "in-progress edits, find exactly where it stopped, and finish the job. "
+            "Don't redo what's already landed.")
+
+
+def scan(hours: float) -> list[dict]:
+    cutoff = time.time() - hours * 3600
+    found, seen = [], set()
+    for root in project_dirs():
+        if not root.is_dir():
+            continue
+        for path in root.glob("*/*.jsonl"):
+            if path.stem in seen:
+                continue
+            try:
+                if path.stat().st_mtime < cutoff:
+                    continue
+                dead = inspect(path)
+            except OSError:
+                continue
+            if dead:
+                seen.add(path.stem)
+                dead["prompt"] = prompt_for(dead)
+                found.append(dead)
+    found.sort(key=lambda d: d.get("died_at") or "")
+    return found
+
+
+def only_new(dead: list[dict]) -> list[dict]:
+    """Each death reported once: keyed by session and the time it died."""
+    state = log_dir() / "tab-rescue-seen.json"
+    try:
+        seen = json.loads(state.read_text())
+    except (OSError, ValueError):
+        seen = {}
+    fresh = [d for d in dead if seen.get(d["session"]) != d["died_at"]]
+    if fresh:
+        for d in fresh:
+            seen[d["session"]] = d["died_at"]
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(json.dumps(seen))
+    return fresh
+
+
+def summary(dead: list[dict]) -> str:
+    apps = sorted({d["app"] for d in dead})
+    reset = next((d["resets"] for d in dead if d["resets"]), None)
+    lines = [f"{len(dead)} agent tab(s) died on a usage limit"
+             + (f" (resets {reset})" if reset else "") + f", running in: {', '.join(apps)}."]
+    if any("desktop" in a for a in apps):
+        lines.append("Claude Desktop runs on whatever account it's signed into, which can differ "
+                     "from this one. Check `claude auth status`; if this tab works, move the work here.")
+    lines.append("Tell Caleb now, in plain words, and give him one paste prompt per dead tab, "
+                 "each in its own code block. Don't nudge the dead tabs, they hit the same wall.")
+    for d in dead:
+        lines.append(f'- {d["app"]} tab "{d["first_ask"][:70]}"\n  prompt: {d["prompt"]}')
+    return "\n".join(lines)
+
+
+def notify(dead: list[dict]) -> None:
+    if os.environ.get("CHEWBACCA_NO_NOTIFY"):
+        return
+    msg = f"{len(dead)} tab(s) stopped on a usage limit. Ask any tab for resume prompts."
+    try:
+        subprocess.run(["osascript", "-e", f'display notification "{msg}" with title "Chewbacca"'],
+                       timeout=5, capture_output=True)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--hours", type=float, default=12)
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--new", action="store_true", help="only deaths not reported before")
+    ap.add_argument("--hook", action="store_true", help="emit a UserPromptSubmit payload")
+    ap.add_argument("--notify", action="store_true")
+    args = ap.parse_args()
+
+    dead = scan(args.hours)
+    if args.new:
+        dead = only_new(dead)
+    if args.json:
+        print(json.dumps(dead, indent=2))
+        return 0
+    if not dead:
+        if not args.hook:
+            print("No tabs died on a usage limit in the last %g hours." % args.hours)
+        return 0
+    if args.notify:
+        notify(dead)
+    if args.hook:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
+                                                 "additionalContext": summary(dead)}}))
+        return 0
+    for d in dead:
+        print(f'{d["app"]}  {d["died_at"]}  "{d["first_ask"][:80]}"')
+        print(f"  {d['prompt']}\n")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

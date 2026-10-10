@@ -13,3 +13,5 @@ How to diagnose in one pass:
 - Separate tabs that died mid-work from tabs that finished before the limit (read the final assistant text).
 
 Fix: move unfinished work to VS Code. Give him one paste prompt per dead tab that points the new tab at the old transcript path and the repo to check, so it resumes instead of redoing. Don't resend to Desktop tabs on the exhausted account. Related: [[feedback_never_route_his_tabs]].
+
+Enforced since 2026-10-10: `tab-rescue` finds tabs whose last reply is a limit error and prints a paste prompt per tab, and the `tab-rescue.sh` UserPromptSubmit hook tells the next tab he talks to (once per death, plus a macOS notification). The same hook runs `sim-reap`, which shuts down simulators booted with nothing driving them.

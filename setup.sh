@@ -1615,6 +1615,10 @@ _register("UserPromptSubmit", hooks_dir + "/time-context.sh", timeout=5)
 # The disk filled three times on 2026-10-09 and the third time Bash could not
 # start at all. Prunes regenerable caches in the background below 20 GB free.
 _register("UserPromptSubmit", hooks_dir + "/disk-guard.sh", timeout=5)
+# Two Desktop tabs died on another account's weekly limit on 2026-10-10 and
+# nothing said so for an hour. Tells the next tab, with resume prompts, and
+# shuts down simulators booted with nothing using them.
+_register("UserPromptSubmit", hooks_dir + "/tab-rescue.sh", timeout=5)
 _register("UserPromptSubmit", hooks_dir + "/client-rulings.sh", timeout=5)
 # Caleb's "do it yourself" in chat approves Clay writes for 12 hours, in place
 # of typing at a terminal agent shells don't have (2026-10-10).

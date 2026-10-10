@@ -27,20 +27,21 @@ error, which is printed as-is.
 
 Token storage: the serialized MSAL token cache lives in the macOS login
 keychain (generic password, service chewbacca-office, account = the UPN),
-base64 so `security -w` returns it byte for byte. It is never written to a
-file, log, stdout or the repo. Each command loads it and calls
-acquire_token_silent, which uses the cached access token or refreshes it.
+written and read through keyring's Security.framework calls, so the secret is
+never on a command line. It is never written to a file, log, stdout or the
+repo, and every printed line is scrubbed of any token this process holds.
+Each command loads it and calls acquire_token_silent, which uses the cached
+access token or refreshes it.
+
+msal and keyring live in a private venv at ~/.chewbacca/venvs/office,
+created on first use (CHEWBACCA_OFFICE_VENV moves it).
 
 Read-only by construction: every request is a GET to the fixed origin
 https://graph.microsoft.com/v1.0, built from a fixed path template with ids
 validated to a strict character set. No send, reply, delete, move, flag,
 accept or edit. `read` fetches a message with GET, which does not mark it
 read. Stops on the first 401, 403, 429 or unexpected redirect, and says so.
-
-msal lives in a private venv at ~/.chewbacca/venvs/office, created on first
-use (CHEWBACCA_OFFICE_VENV moves it).
 """
-import base64
 import datetime
 import json
 import os
@@ -73,6 +74,7 @@ OPENER = os.environ.get("CHEWBACCA_OFFICE_OPEN") or "/usr/bin/open"
 VENV = pathlib.Path(os.environ.get("CHEWBACCA_OFFICE_VENV")
                     or pathlib.Path.home() / ".chewbacca/venvs/office")
 MSAL_PIN = "msal>=1.28,<2"
+KEYRING_PIN = "keyring>=25,<26"
 # Where Microsoft's device-code message may send the browser. Anything else in
 # a flow's verification_uri is printed but never opened.
 DEVICE_LOGIN_HOSTS = ("microsoft.com", "www.microsoft.com", "login.microsoftonline.com",
@@ -161,8 +163,48 @@ class Stop(Exception):
 UNSAFE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f‪-‮⁦-⁩]")
 
 
+# Every token and cache value this process has touched. Anything printed,
+# from a normal line to an error or an exception message, is scrubbed of them
+# first (security review, 2026-10-09: the keychain write and the error paths
+# were the places a refresh token could reach a terminal).
+SECRETS = set()
+
+
+def remember_secret(v):
+    if isinstance(v, str) and len(v) >= 16:
+        SECRETS.add(v)
+
+
+def remember_cache(text):
+    """The cache text itself plus every `secret` value inside it (MSAL keeps
+    access, refresh and id tokens under that key)."""
+    remember_secret(text)
+    try:
+        doc = json.loads(text)
+    except ValueError:
+        return
+    stack = [doc]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k == "secret":
+                    remember_secret(v)
+                else:
+                    stack.append(v)
+        elif isinstance(node, list):
+            stack.extend(node)
+
+
+def scrub(s):
+    s = str(s)
+    for v in sorted(SECRETS, key=len, reverse=True):
+        s = s.replace(v, "[redacted]")
+    return s
+
+
 def clean(s):
-    return UNSAFE.sub("", str(s))
+    return UNSAFE.sub("", scrub(s))
 
 
 def say(*parts, **kw):
@@ -183,10 +225,10 @@ def load_msal():
     if os.environ.get("CHEWBACCA_OFFICE_IN_VENV") != "1":
         py = VENV / "bin" / "python"
         if not py.exists():
-            say(f"chewbacca office: first use, installing {MSAL_PIN} into {VENV} ...", file=sys.stderr)
+            say(f"chewbacca office: first use, installing {MSAL_PIN} and {KEYRING_PIN} into {VENV} ...", file=sys.stderr)
             VENV.parent.mkdir(parents=True, exist_ok=True)
             for cmd in ([sys.executable, "-m", "venv", str(VENV)],
-                        [str(py), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", MSAL_PIN]):
+                        [str(py), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", MSAL_PIN, KEYRING_PIN]):
                 if subprocess.run(cmd).returncode != 0:
                     die(f"could not set up the msal venv at {VENV} ({cmd[2] if len(cmd) > 2 else cmd[0]} failed)")
         os.environ["CHEWBACCA_OFFICE_IN_VENV"] = "1"
@@ -199,39 +241,73 @@ def load_msal():
 
 
 # ── keychain ─────────────────────────────────────────────────────────────────
-# The cache holds a refresh token. It goes to `security` and nowhere else:
-# never a file, never stdout, never a log line, never an exception message.
+# The cache holds a refresh token. It goes to the login keychain through
+# keyring, which calls Security.framework (SecItemAdd, SecItemCopyMatching,
+# SecItemDelete) in this process, so the secret is never on a command line.
+# The first version passed it as `security add-generic-password -w <cache>`,
+# and any local process can read a running process's argv with `ps`
+# (security review, 2026-10-09). `security -i` on stdin is not an option
+# either: it truncates a line near 4 KB (measured: a 12,000-char value came
+# back as 4,031 chars), and a cache is larger. The one `security` call left
+# reads the account name only: no -w, no -g, nothing secret in or out.
+
+def _keyring():
+    load_msal()   # the venv, where keyring lives
+    try:
+        import keyring
+        import keyring.errors
+    except ImportError:
+        die(f"keyring is not importable from {VENV}. Delete that folder and rerun to rebuild it.")
+    return keyring
+
+
+def kc_account():
+    """The UPN the saved item is filed under, read from its attributes."""
+    r = subprocess.run([SECURITY, "find-generic-password", "-s", KEYCHAIN_SERVICE],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    m = re.search(r'"acct"<blob>="([^"]*)"', r.stdout)
+    return m.group(1) if m and m.group(1) else None
+
+
+def _kc_call(what, fn, *args):
+    kr = _keyring()
+    try:
+        return fn(*args)
+    except kr.errors.KeyringError as e:
+        # The type only: a backend message is not trusted to leave the secret out.
+        die(f"could not {what} the login keychain ({type(e).__name__}).")
+
 
 def kc_read():
-    r = subprocess.run([SECURITY, "find-generic-password", "-s", KEYCHAIN_SERVICE, "-w"],
-                       capture_output=True, text=True)
-    if r.returncode != 0 or not r.stdout.strip():
+    acct = kc_account()
+    if not acct:
         return None
-    try:
-        return base64.b64decode(r.stdout.strip(), validate=True).decode("utf-8")
-    except (ValueError, UnicodeDecodeError):
-        return None
+    kr = _keyring()
+    text = _kc_call("read", kr.get_password, KEYCHAIN_SERVICE, acct)
+    if text:
+        remember_cache(text)
+    return text or None
 
 
 def kc_write(upn, cache_text):
+    remember_cache(cache_text)
     if not UPN_RE.fullmatch(upn or "") or upn.startswith("-"):
         die("refused: the signed-in account name has characters a keychain account can't hold")
-    blob = base64.b64encode(cache_text.encode("utf-8")).decode("ascii")
-    r = subprocess.run([SECURITY, "add-generic-password", "-U", "-s", KEYCHAIN_SERVICE,
-                        "-a", upn, "-w", blob], capture_output=True, text=True)
-    if r.returncode != 0:
-        # stderr from security never echoes the password; still, keep it short.
-        die(f"could not save the sign-in to the login keychain (security exit {r.returncode}).")
+    kr = _keyring()
+    _kc_call("save the sign-in to", kr.set_password, KEYCHAIN_SERVICE, upn, cache_text)
 
 
 def kc_delete():
     """Delete every chewbacca-office item. Returns how many went."""
     n = 0
     while n < 20:
-        r = subprocess.run([SECURITY, "delete-generic-password", "-s", KEYCHAIN_SERVICE],
-                           capture_output=True, text=True)
-        if r.returncode != 0:
+        acct = kc_account()
+        if not acct:
             break
+        kr = _keyring()
+        _kc_call("delete from", kr.delete_password, KEYCHAIN_SERVICE, acct)
         n += 1
     return n
 
@@ -262,7 +338,15 @@ def cmd_login():
         subprocess.run([OPENER, uri], capture_output=True)
     say("chewbacca office: waiting for the code to be entered and Duo approved ...", file=sys.stderr, flush=True)
     res = app.acquire_token_by_device_flow(flow)
+    for k in ("access_token", "refresh_token", "id_token"):
+        remember_secret(res.get(k))
     if "access_token" not in res:
+        if res.get("error") in ("authorization_pending", "expired_token", "code_expired"):
+            # MSAL polls until the flow's expires_at (900 s from Microsoft) and then
+            # returns the last poll's "authorization_pending ... Continue polling",
+            # which read like a bug the first time it happened (2026-10-09, 22:24).
+            die("STOPPED: the sign-in code expired before it was entered (Microsoft "
+                "gives 15 minutes). BLOCKED: run `chewbacca office login` again for a new code.", 4)
         die(f"STOPPED: sign-in did not finish. BLOCKED: {clean(aad_error(res))}", 4)
     claims = res.get("id_token_claims") or {}
     upn = claims.get("preferred_username") or claims.get("upn") or ""
@@ -303,6 +387,8 @@ def access_token():
     if not accts:
         raise Stop("the saved sign-in has no account in it. " + LOGIN_HINT)
     res = app.acquire_token_silent(SCOPES, account=accts[0])
+    for k in ("access_token", "refresh_token", "id_token"):
+        remember_secret((res or {}).get(k))
     if not res or "access_token" not in res:
         why = clean(aad_error(res)) if res else "the refresh token is gone or expired"
         raise Stop(f"could not refresh the sign-in ({why}). " + LOGIN_HINT)
@@ -842,7 +928,7 @@ def main(argv):
         die(f"STOPPED: {e}", 4)
     if a.json:
         out = {"items": data, "truncated": truncated} if cmd in LIST_COMMANDS else data
-        print(json.dumps(out, indent=2, ensure_ascii=False))
+        print(scrub(json.dumps(out, indent=2, ensure_ascii=False)))
     else:
         show(cmd, data)
         if truncated:
@@ -850,5 +936,17 @@ def main(argv):
     return 0
 
 
+def run(argv):
+    """main(), with any unexpected exception reduced to its type and a
+    scrubbed message. No traceback: MSAL and urllib exceptions can carry
+    response text, and a traceback prints it unfiltered."""
+    try:
+        return main(argv)
+    except KeyboardInterrupt:
+        return 130
+    except Exception as e:  # noqa: BLE001, the last line of defense on purpose
+        die(f"unexpected {type(e).__name__}: {str(e)[:300]}", 3)
+
+
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    sys.exit(run(sys.argv[1:]))

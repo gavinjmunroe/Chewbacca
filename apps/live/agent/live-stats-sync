@@ -147,7 +147,8 @@ def inbox_threads(ws, prefix, since_dt, categories):
             out.append({
                 "campaign": name,
                 "who": hashlib.sha256(email.encode()).hexdigest(),
-                "category": categories.get(str(r.get("lead_category_id"))),
+                # The page refuses a category over 60 characters; cut, never drop.
+                "category": (categories.get(str(r.get("lead_category_id"))) or None) and categories[str(r.get("lead_category_id"))][:60],
                 "at": when.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
             })
         if len(page) < 20:
@@ -236,6 +237,12 @@ def sync(live, client, dry):
             log(f"{client['clientId']} {b['window']}: pushed {r.get('rows')} rows as of {r.get('as_of')}")
         except NET_ERRORS as e:
             log(f"{client['clientId']} {b['window']}: push failed: {e!r}")
+            # Tell the page, so a question waiting on this refresh stops waiting
+            # and the client is not re-read on every poll.
+            try:
+                live.call("POST", "/sync/fail", {"clientId": client["clientId"], "message": "the refreshed numbers could not be delivered"})
+            except NET_ERRORS as e2:
+                log(f"{client['clientId']}: could not report the failure: {e2!r}")
             return False
     return True
 

@@ -194,12 +194,15 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
     }
 
     if (path === "/api/ask" && req.method === "GET") {
-      if (!session) return json(res, 401, { error: "Sign in with your link" });
+      // The page reads this as an event stream, which shows nothing for a
+      // plain 401 or 429, so every refusal arrives as an error event the page
+      // can show (independent review, 2026-10-10: a blank answer).
+      if (!session) return sseError(res, 401, "Your link has expired or was replaced. Open the newest link you were sent.");
       const q = String(url.searchParams.get("q") || "").trim().slice(0, 500);
-      if (!q) return json(res, 400, { error: "Ask a question" });
-      if (limited(session.c + session.w)) return json(res, 429, { error: "That is a lot of questions at once. Give it a minute." });
+      if (!q) return sseError(res, 400, "Ask a question first.");
+      if (limited(session.c + session.w)) return sseError(res, 429, "That is a lot of questions at once. Give it a minute.");
       const client = await liveClient(session.c);
-      if (!client) return json(res, 503, { error: "Togari is not answering right now" });
+      if (!client) return sseError(res, 503, "Togari is not answering right now. Try again in a minute.");
       res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
       let open = true;
       // The browser leaving ends the work too: no more model rounds billed for
@@ -255,8 +258,14 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
       if (!body) return json(res, 400, { error: "bad json" });
       const c = await liveClient(String(body.clientId || ""));
       if (!c) return json(res, 404, { error: "no live client by that id" });
+      // A refused push also ends the refresh request: left open, the client
+      // stays "wanted" and the agent re-reads Clay on every poll, forever
+      // (independent review, 2026-10-10).
       const bad = checkRows(body, c);
-      if (bad) return json(res, 422, { error: bad });
+      if (bad) {
+        hub.fail(c.clientId, `the numbers were refused: ${bad}`);
+        return json(res, 422, { error: bad });
+      }
       try {
         const snap = hub.put(c.clientId, body.window, {
           as_of: body.as_of,
@@ -266,6 +275,7 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
         });
         return json(res, 200, { ok: true, as_of: snap.as_of, rows: snap.rows.length });
       } catch (err) {
+        hub.fail(c.clientId, `the numbers were refused: ${err.message}`);
         return json(res, 422, { error: err.message });
       }
     }
@@ -273,7 +283,9 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
       if (!bearerOk(req, syncKey)) return json(res, 401, { error: "unauthorized" });
       const body = await readJson(req).catch(() => null);
       if (!body || typeof body.clientId !== "string") return json(res, 400, { error: "bad json" });
-      hub.fail(body.clientId, String(body.message || "refresh failed"));
+      const c = await liveClient(body.clientId);
+      if (!c) return json(res, 404, { error: "no live client by that id" });
+      hub.fail(c.clientId, String(body.message || "refresh failed"));
       return json(res, 200, { ok: true });
     }
 
@@ -390,6 +402,14 @@ function json(res, code, body) {
   headers(res);
   res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
   res.end(JSON.stringify(body));
+}
+
+// EventSource drops a non-200 stream without reading its body, so a refusal
+// is a 200 stream holding one error event; the reason travels as `code`.
+function sseError(res, code, text) {
+  headers(res);
+  res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store" });
+  res.end(`event: error\ndata: ${JSON.stringify({ code, text })}\n\n`);
 }
 
 function send(res, code, body, type, cache = "no-store") {

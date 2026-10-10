@@ -46,8 +46,31 @@ export function campaignKpis(rows, m, window) {
   };
 }
 
+/**
+ * A campaign's name inside its company, without the segment every one of that
+ * company's campaigns repeats: "Pre-seed investors, Wave 2" under Ivy becomes
+ * "Wave 2" (on a 375 px phone the repeated segment wrapped every row to three
+ * lines, 2026-10-10). A campaign named by its segment alone keeps it.
+ */
+export function shortNames(rows) {
+  const firstOf = (r) => String(r.sequence || "").split(", ")[0];
+  const shared = rows.length > 1 && rows.every((r) => firstOf(r) === firstOf(rows[0])) ? firstOf(rows[0]) : null;
+  const out = new Map();
+  for (const r of rows) {
+    const s = String(r.sequence || r.campaign || "");
+    out.set(r, shared && s.startsWith(`${shared}, `) ? s.slice(shared.length + 2) : s);
+  }
+  return out;
+}
+
 function group(rows, by) {
-  if (by === "campaign") return rows.map((r) => ({ label: [r.company, r.sequence].filter(Boolean).join(", "), sub: "", row: r }));
+  if (by === "campaign") {
+    const byCo = new Map();
+    for (const r of rows) byCo.set(r.company, [...(byCo.get(r.company) || []), r]);
+    const names = new Map();
+    for (const rs of byCo.values()) for (const [r, n] of shortNames(rs)) names.set(r, n);
+    return rows.map((r) => ({ label: [r.company, names.get(r)].filter(Boolean).join(", "), sub: "", row: r }));
+  }
   const g = new Map();
   for (const r of rows) {
     const k = r.company || "Other";
@@ -137,7 +160,8 @@ export function campaignTable(rows, m, window, { title, id } = {}) {
   const out = [];
   for (const [company, rs] of [...byCompany].sort((a, b) => a[0].localeCompare(b[0]))) {
     out.push(tableRow(company, rates(sum(rs)), 0));
-    for (const r of [...rs].sort((a, b) => b.sent - a.sent)) out.push(tableRow(r.sequence || r.campaign, rates(r), 1));
+    const names = shortNames(rs);
+    for (const r of [...rs].sort((a, b) => b.sent - a.sent)) out.push(tableRow(names.get(r) || r.campaign, rates(r), 1));
   }
   return {
     type: "table",

@@ -25,6 +25,10 @@ export const REFRESH_WAIT_MS = 35 * 1000;
 // running (Mac asleep, signed out), and waiting for it would only stall.
 export const AGENT_GONE_MS = 90 * 1000;
 
+// Mac and server clocks are both NTP-synced; a minute is far more drift than
+// either shows. Guessed, never measured.
+export const FUTURE_SLACK_MS = 60 * 1000;
+
 export class StatsHub {
   constructor({ now = () => Date.now() } = {}) {
     this.now = now;
@@ -57,6 +61,9 @@ export class StatsHub {
     if (!["7d", "all"].includes(window)) throw new RangeError(`unknown window ${window}`);
     if (!Array.isArray(rows)) throw new TypeError("rows must be an array");
     if (Number.isNaN(Date.parse(as_of))) throw new TypeError("as_of must be a timestamp");
+    // A clock running ahead would pin its snapshot as "live" and refuse every
+    // honest update after it, since older reads lose the race below.
+    if (Date.parse(as_of) > this.now() + FUTURE_SLACK_MS) throw new RangeError("as_of is in the future");
     const prev = this.get(clientId, window);
     if (prev && Date.parse(prev.as_of) > Date.parse(as_of)) return prev; // an older read lost a race
     const snap = { as_of, rows, threads, workspace: workspace || null };

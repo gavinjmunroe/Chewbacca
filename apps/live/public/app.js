@@ -100,14 +100,32 @@ function ask(q) {
     requestAnimationFrame(() => el.classList.add("in"));
     if (block.source === "clay") setSync(!block.stale || block.stale.refreshing);
   });
-  es.addEventListener("done", finish);
+  let done = false;
+  es.addEventListener("done", () => {
+    done = true;
+    finish();
+  });
+  // Any error before "done" gets a visible notice: a refusal from the server
+  // carries its reason, a dropped connection gets the generic one.
   es.addEventListener("error", (e) => {
+    if (done) return;
+    done = true;
     let text = "The connection dropped before the answer finished. Ask again.";
-    try {
-      if (e.data) text = JSON.parse(e.data).text;
-    } catch {}
-    if (es.readyState !== EventSource.CLOSED || e.data) answer.append(h("div", { class: "notice warn", role: "alert" }, text, " ", h("button", { type: "button", class: "retry" }, "Try again")));
-    answer.querySelector(".retry")?.addEventListener("click", () => ask(q));
+    let code = 0;
+    if (e.data) {
+      try {
+        ({ text, code = 0 } = JSON.parse(e.data));
+      } catch (err) {
+        console.error("unreadable error event", err);
+      }
+    }
+    const note = h("div", { class: "notice warn", role: "alert" }, text);
+    if (code !== 401) {
+      const retry = h("button", { type: "button", class: "retry" }, "Try again");
+      retry.addEventListener("click", () => ask(q));
+      note.append(" ", retry);
+    }
+    answer.append(note);
     finish();
   });
 }

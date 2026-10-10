@@ -79,7 +79,9 @@ try:
     fresh = 0 <= time.time() - int(rec["at"]) < WINDOW
 except Exception:
     sys.exit(1)
-if not fresh or rec.get("session_id") != session:
+# v2 records come only from a prompt chat-approval.sh judged a person's; a v1
+# record could be a launched session's own prompt (2026-10-10).
+if not fresh or rec.get("session_id") != session or rec.get("v") != 2 or rec.get("interactive") is not True:
     sys.exit(1)
 if mode != "launch":
     sys.exit(0)

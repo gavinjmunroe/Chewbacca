@@ -274,42 +274,41 @@ def test_chat_approval_stands_in_for_the_terminal():
     import time as _time
     args = ("blocklist-add", "emailOrDomain=blocked.example", "--allow-writes")
     sent = {"api-anything/blocklistAdd.json": SENT}
+    said = "Lock in bro fix chewb the whole point is I give you full permission to do everything gtm"
+
+    def put(sid, age, **extra):
+        rec = {"v": 2, "interactive": True, "at": int(_time.time()) - age, "session_id": sid, "excerpt": said}
+        rec.update(extra)
+        with open(os.path.join(d, sid + ".json"), "w") as f:
+            _json.dump(rec, f)
+
     with tempfile.TemporaryDirectory() as d:
-        rec = os.path.join(d, "clay-chat-approval.json")
-        with open(rec, "w") as f:
-            _json.dump({"at": int(_time.time()) - 60, "excerpt": "do it urself"}, f)
-        code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": rec})
-        ok(code == 0 and out["ok"] is True, "a fresh chat approval lets an approved write run")
-        code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": rec, "CHEWBACCA_NO_SEND": "1"})
+        env = {"CHEWBACCA_CLAY_CHAT_APPROVAL_DIR": d, "CLAUDE_CODE_SESSION_ID": "s-agent-tab"}
+        put("s-caleb", 60)
+        code, out, err = run(sent, {}, *args, env_extra=env)
+        ok(code == 0 and out["ok"] is True, "a fresh chat approval from any of Caleb's tabs lets an approved write run")
+        ok("session s-caleb" in err.stderr and said[:60] in err.stderr and said[:61] not in err.stderr,
+           "the write names the approving session and the first 60 chars of what he typed")
+        code, out, _ = run(sent, {}, *args, env_extra=dict(env, CHEWBACCA_NO_SEND="1"))
         ok(code == 3 and "NO_SEND" in out["reason"], "CHEWBACCA_NO_SEND=1 still refuses a chat-approved write")
-        with open(rec, "w") as f:
-            _json.dump({"at": int(_time.time()) - 3 * 3600, "excerpt": "do it urself"}, f)
-        code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": rec})
+        put("s-caleb", 3 * 3600)
+        code, out, _ = run(sent, {}, *args, env_extra=env)
         ok(code == 3 and "did not approve" in out["reason"], "a chat approval older than 2 hours is refused")
-        code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": os.path.join(d, "missing.json")})
+        # 2026-10-10 13:17: the v1 hook wrote a record from a `claude --bg`
+        # session's own prompt. Records without v2 and interactive never count.
+        os.remove(os.path.join(d, "s-caleb.json"))
+        put("s-launched", 60, v=1)
+        put("s-launched2", 60, interactive=False)
+        code, out, _ = run(sent, {}, *args, env_extra=env)
+        ok(code == 3, "a v1 or non-interactive record (a launched session's prompt) is refused")
+        put("s-caleb", 60)
+        open(os.path.join(d, "STOPPED"), "w").write("1")
+        code, out, _ = run(sent, {}, *args, env_extra=env)
+        ok(code == 3, "a standing stop refuses even beside a fresh record")
+        code, out, _ = run(sent, {}, *args, env_extra=dict(env, CHEWBACCA_CLAY_CHAT_APPROVAL_DIR=os.path.join(d, "missing")))
         ok(code == 3, "no chat approval and nobody at the terminal is refused")
     code, out, _ = run({}, {}, "campaign-status", "campaign=cam_x", "status=START", "--allow-writes")
     ok(code == 3 and out["class"] == "refused", "a START is still never sent from here")
-
-
-def test_campaign_build_ops_touch_drafts_only():
-    # 2026-10-10: the Monday build needed CSV loads, segments and draft campaigns
-    # through the front door. None of them may launch or edit a live campaign.
-    import json as _json
-    import tempfile
-    import time as _time
-    code, out, _ = run({}, {}, "campaign-update", "campaign=cam_x", 'input={"status":"active"}', "--allow-writes")
-    ok(code == 2 and "status" in out["reason"], "campaign-update refuses a status key")
-    code, out, _ = run({}, {}, "csv-upload", "trigger=15a2668a-07fd-4844-be50-37981ebb971a", "csv=/tmp/../etc/x.csv")
-    ok(code == 2, "csv-upload refuses a path with ..")
-    with tempfile.TemporaryDirectory() as d:
-        rec = os.path.join(d, "a.json")
-        with open(rec, "w") as f:
-            _json.dump({"at": int(_time.time())}, f)
-        approve = {"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": rec, "CHEWBACCA_CLAY_TEST_CAMPAIGN_STATUS": "active"}
-        code, out, _ = run({}, {}, "campaign-sequence", "campaign=cam_x", 'input={"ops":[{"op":"deleteStep"}]}',
-                           "--allow-writes", env_extra=approve)
-        ok(code == 3 and "only a draft" in out["reason"], "campaign-sequence refuses a live campaign")
 
 
 def test_a_relabelled_write_is_still_gated():
@@ -561,7 +560,6 @@ SAMPLES = {
     "status": "PAUSED", "lead_map_id": "1", "category_id": "1", "read_status": "READ", "entry": "9",
     "emails": "a@example.com", "resource": "t_ex1", "resource_type": "TABLE", "name": "x", "data_type": "text",
     "workflow": "wf_ex1", "run": "wfr_ex1", "detail": "summary",
-    "trigger": "15a2668a-07fd-4844-be50-37981ebb971a", "csv": "/tmp/leads.csv", "input": '{"name":"x"}',
 }
 CLI_READ_LEAVES = {"list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
                    "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
@@ -590,8 +588,7 @@ def walk_gate(reg_path=None):
     extra = {"CHEWBACCA_CLAY_LIB": str(Path(reg_path).parent)} if reg_path else {}
     walked = 0
     for op in reg["ops"]:
-        own = {"update-rows": {"records": json.dumps(REC_UPD)},
-               "campaign-sequence": {"input": '{"ops":[{"op":"deleteStep"}]}'}}.get(op["name"], {})
+        own = {"update-rows": {"records": json.dumps(REC_UPD)}}.get(op["name"], {})
         argv = [f"{a.rstrip('?')}={own.get(a.rstrip('?'), SAMPLES[a.rstrip('?')])}" for a in op["args"]]
         for s in op["surfaces"]:
             if s.get("unless"):
@@ -835,7 +832,7 @@ def main():
                test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,
                test_every_mutating_surface_is_gated, test_nothing_changes_between_approval_and_send,
                test_values_that_change_when_decoded_are_refused, test_workspace_has_no_built_in_default,
-               test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_campaign_build_ops_touch_drafts_only, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape,
+               test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape,
                test_query_slot_reads_build, test_new_reads_are_reads_with_a_measured_surface, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")

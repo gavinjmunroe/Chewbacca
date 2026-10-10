@@ -43,7 +43,7 @@ try:
     at = int(rec["at"])
 except Exception:
     sys.exit(1)
-if rec.get("session_id") != s:
+if rec.get("session_id") != s or rec.get("v") != 2 or rec.get("interactive") is not True:
     sys.exit(1)
 sys.exit(0 if 0 <= time.time() - at < 2 * 3600 else 1)
 PY

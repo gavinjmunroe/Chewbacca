@@ -24,9 +24,11 @@ printf 'import subprocess\np="one sentence for a cold email"\nsubprocess.run(["c
 # Caleb's chat ok within 2 hours (chat-approval.sh) stands in for CLAY_LOOP_OK,
 # which launch-guard can never let through as an env prefix (2026-10-10).
 mkdir -p "$CHEWBACCA_STATE_DIR/clay-chat-approval"
-printf '{"at": %s, "session_id": "s1"}' "$(date +%s)" > "$CHEWBACCA_STATE_DIR/clay-chat-approval/s1.json"
+printf '{"v": 2, "interactive": true, "at": %s, "session_id": "s1"}' "$(date +%s)" > "$CHEWBACCA_STATE_DIR/clay-chat-approval/s1.json"
 [ "$(run "python3 $TMP/loop.py")" = 0 ] && ok "a fresh chat ok allows an approved loop" || no "a fresh chat ok allows an approved loop"
 [ "$(run "python3 $TMP/loop.py" s2)" = 2 ] && ok "another tab's chat ok does not" || no "another tab's chat ok does not"
-printf '{"at": %s, "session_id": "s1"}' "$(( $(date +%s) - 3 * 3600 ))" > "$CHEWBACCA_STATE_DIR/clay-chat-approval/s1.json"
+printf '{"at": %s, "session_id": "s1"}' "$(date +%s)" > "$CHEWBACCA_STATE_DIR/clay-chat-approval/s1.json"
+[ "$(run "python3 $TMP/loop.py")" = 2 ] && ok "a v1 record (could be a launched session's) does not" || no "a v1 record (could be a launched session's) does not"
+printf '{"v": 2, "interactive": true, "at": %s, "session_id": "s1"}' "$(( $(date +%s) - 3 * 3600 ))" > "$CHEWBACCA_STATE_DIR/clay-chat-approval/s1.json"
 [ "$(run "python3 $TMP/loop.py")" = 2 ] && ok "a stale chat ok does not" || no "a stale chat ok does not"
 echo "  $pass passed, $fail failed"; [ "$fail" -eq 0 ]

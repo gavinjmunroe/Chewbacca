@@ -38,11 +38,6 @@
 # session and prints which one and what he typed. launch-guard refuses any
 # tool call that names the records.
 set -uo pipefail
-# A session an agent launched is typed into by that agent, not by Caleb. At
-# 13:17 on 2026-10-10 a launcher's test prompt ("Reply with exactly: launch test
-# ok") wrote an approval. Launchers set CHEWBACCA_AGENT_LAUNCHED=1, and hooks
-# inherit the session's environment.
-[ "${CHEWBACCA_AGENT_LAUNCHED:-}" = 1 ] && exit 0
 STATE="${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}"
 PAYLOAD="$(cat 2>/dev/null)"
 [ -n "$PAYLOAD" ] || exit 0
@@ -73,6 +68,19 @@ remove(os.path.join(state, "clay-chat-approval.json"))
 INJECTED = re.compile(
     r"^\s*(<task-notification|<cross-session-message|<system-reminder>|\[SYSTEM NOTIFICATION|Stop hook feedback:"
     r"|<local-command-stdout>|<local-command-stderr>|<teammate-message)", re.I)
+# Another tab's message can arrive wrapped after a lead-in line ("The
+# coordinator sent a message:\n<cross-session-message from=...>", seen
+# 2026-10-10), and a desktop send_message turn opens with a "From <title>"
+# header line. Neither is anything Caleb typed. The From rule can catch a
+# typed "From now on" line followed by more lines; that fails safe (no ok).
+CROSS = re.compile(r"<cross-session-message\b|\A\s*From [^\n]{1,80}\n", re.I)
+# chewbacca launch (96015297) seeds every session with this line. The seed
+# runs headless, but the session's later turns run in the desktop app with no
+# env marker, so the session id is remembered here, written only by this hook
+# (launch-guard refuses any tool call naming clay-chat-approval).
+SEED_LINE = "This is your brief. Don't start the work yet."
+launched_dir = os.path.join(recdir, "launched")
+launched_mark = os.path.join(launched_dir, session) if session else None
 
 
 def is_claude_code(pid):
@@ -127,22 +135,32 @@ def nested():
 
 
 def why_not_caleb():
-    if INJECTED.search(prompt):
+    if launched_mark and os.path.exists(launched_mark):
+        return "remembered launched session"
+    if INJECTED.search(prompt) or CROSS.search(prompt):
         return "injected"
+    if SEED_LINE in prompt:
+        return "launched"
     if os.environ.get("CHEWBACCA_LAUNCHED_BY") or os.environ.get("CHEWBACCA_AGENT_LAUNCHED"):
         return "launched"
     if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
-        return "unattended"
+        return "launched"
     n = nested()
     if n is None:
         return "process tree unreadable"
     if n:
-        return "nested"
+        return "launched"
     return None
 
 
-if why_not_caleb():
-    # Neither approves nor stops: the prompt is not his.
+why = why_not_caleb()
+if why:
+    # Neither approves nor stops: the prompt is not his. A launched session is
+    # remembered, so its later desktop turns (no env marker) never count either.
+    if why == "launched" and launched_mark:
+        os.makedirs(launched_dir, exist_ok=True)
+        open(launched_mark, "w").write(str(int(time.time())))
+        remove(mine)
     raise SystemExit(0)
 
 # A stop aimed at the work, or a whole message that is just "stop". "Never tell

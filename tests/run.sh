@@ -754,7 +754,7 @@ if group "installer"; then
 
   check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \
     bash "$ROOT/tests/chewbacca_google.sh" "$ROOT"
-  check  "chewbacca email signs in with calendar write, pins the account, and drops the stale token cache" \
+  check  "chewbacca email signs in with calendar write, Docs and Gmail compose, re-consents the main gws config in place, pins the account, and drops the stale token cache" \
     bash "$ROOT/tests/chewbacca_email_scopes.sh" "$ROOT"
 
   # Every kit on the machine matched one 17,000-character message about a club

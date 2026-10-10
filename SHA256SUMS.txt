@@ -52,7 +52,7 @@ f892df995c4d12be40168af03d8fa9885b7a8713e5f5243ed3ebf783a83c60e5  .claude/hooks/
 a8e5408bbf7e95539a0d45073a280e1934a0ea2467cca8f18ce601ce5354a4a9  .claude/hooks/vibe-guard.sh
 3f56fa753027ba9797945a3f600079b90fb27da8493993a5e1ab92fb6067490d  .claude/hooks/voice-guard.sh
 ccbd844f20b054672833b58d83210a0726b2d4fd283d5054c0ac73b8864cd250  .claude/hooks/voice-remind.sh
-c7a269e9fe02297c59451a651cd7f60708c8c9dc0ac9de9bea448e0f98f05326  .claude/hooks/wait-loop-guard.sh
+8336ba5be66a541ad71a0e5090fa138f86d4eddf657d95dfb7a37f6f8d5967f9  .claude/hooks/wait-loop-guard.sh
 82d711233a6cac8da6ed19b2c04565e3cec1c79edc00415eddcf40d6e139888a  .claude/hooks/work-ledger-context.sh
 605a2ebd0c870bbc8b950a438fd7d956df24c0de3c776fb36f20f2dc36b52470  .claude/hooks/write-log.sh
 dc4e7733cbe795305be8ee8f06ec7bd0e1c71680e367bb393ceedf2e5f774995  .claude/hooks/youtube-transcript-ready.sh

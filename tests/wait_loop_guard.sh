@@ -18,5 +18,13 @@ run(){ jq -n --arg c "$1" '{tool_input:{command:$c}}' | bash "$HOOK" >/dev/null 
 [ "$(run 'timeout 300 bash -c "until check; do sleep 5; done"')" = 0 ] && ok "timeout-wrapped loop allowed" || no "timeout-wrapped loop allowed"
 [ "$(run 'while read -r line; do echo "$line"; done < file')" = 0 ] && ok "a read loop with no sleep is not a poll" || no "a read loop with no sleep is not a poll"
 [ "$(run 'WAIT_LOOP_OK="watcher" until false; do sleep 1; done')" = 0 ] && ok "override with a reason allowed" || no "override with a reason allowed"
+hd=$(printf "python3 - <<'EOF'\nprint('keeps the slot while it has run less; sleep 60')\nEOF\nbash tests/jobs.sh")
+[ "$(run "$hd")" = 0 ] && ok "while and sleep inside a heredoc body are not a poll" || no "while and sleep inside a heredoc body are not a poll"
+hd2=$(printf "cat <<EOF > x\nhi\nEOF\nuntil check; do sleep 5; done")
+[ "$(run "$hd2")" = 2 ] && ok "a real poll after a heredoc is still refused" || no "a real poll after a heredoc is still refused"
+[ "$(run 'git commit -m "guard ignores while and sleep inside heredocs"')" = 0 ] && ok "the words in a commit message are not a poll" || no "the words in a commit message are not a poll"
+[ "$(run 'until check
+do sleep 5
+done')" = 2 ] && ok "a poll split across lines is still refused" || no "a poll split across lines is still refused"
 [ "$(run 'git status')" = 0 ] && ok "unrelated command allowed" || no "unrelated command allowed"
 echo "  $pass passed, $fail failed"; [ "$fail" -eq 0 ]

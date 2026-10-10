@@ -662,6 +662,16 @@ margin over the control):
   keeps raised the score while the render also matched other shots' frames
   better; judge a change by its margin over a control, not by the score.
 
+- **tested: a score built from histograms can be met without the picture.**
+  Hatch plates raised palette, value, edge and texture scores on frames whose
+  figures had left the frame. A coarse layout check (light/dark correlation
+  at 24x10) showed 24 of 67 "improved" shots had lost structure; mean
+  structure didn't move. Check a contact sheet against the reference, and
+  guard any automated keep with a measure the change can't fake.
+- **tested, negative: nudging the main shape toward the measured subject
+  point rarely helps.** 4 of 55 nudges kept; the remaining gap was the value
+  structure inside the frame, not placement.
+
 ## Tools worth reaching for
 
 The full ranked list, with licenses and the file each one plugs into, is

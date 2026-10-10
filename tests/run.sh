@@ -686,6 +686,7 @@ if group "installer"; then
     bash "$ROOT/tests/chewbacca_groupme.sh" "$ROOT"
   check  "chewbacca office signs in with MSAL device code, keeps the cache in the keychain, reads M365 GET-only through Graph with silent refresh, throttled, never marking read, and stops on pushback" \
     bash "$ROOT/tests/chewbacca_office.sh" "$ROOT"
+  check  "office text extraction is bounded on a zip bomb" python3 "$ROOT/tests/test_office_text.py"
 
   check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \
     bash "$ROOT/tests/chewbacca_google.sh" "$ROOT"

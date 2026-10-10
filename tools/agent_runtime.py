@@ -149,8 +149,11 @@ def codex_capacity_config(original):
     """Insert missing defaults only when TOML parsing proves the exact change."""
     try:
         import tomllib
-    except ImportError as error:
-        raise ValueError('Codex capacity setup requires Python 3.11+; no adapter files changed') from error
+    except ImportError:
+        # No parser means no proof, so change nothing. Raising here failed the
+        # whole SessionStart connect on macOS's stock Python 3.9 (2026-10-09),
+        # a hook error on every new session for anyone with Codex installed.
+        return original
     try:
         data = tomllib.loads(original)
     except tomllib.TOMLDecodeError as error:

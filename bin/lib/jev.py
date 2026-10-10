@@ -7,6 +7,7 @@ never costs more than the rules already cost.
 
 Docs: https://docs.typesafe.ai/api.md
 """
+from __future__ import annotations
 import json
 import math
 import os

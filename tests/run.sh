@@ -1509,6 +1509,7 @@ if group "hud"; then
   check  "site-fast types a field value or nothing" python3 "$ROOT/tests/test_site_fast.py"
   check  "untrusted-screen flags text aimed at the agent, and only that" python3 "$ROOT/tests/test_screen.py"
   check  "model-route maps Jev's class to the router's targets" python3 "$ROOT/tests/test_model_route.py"
+  check  "model-route hands a plan to a cheaper session only with runnable acceptance checks" python3 "$ROOT/tests/test_model_handoff.py"
   check  "intro walks you, a person, an org, and nothing else" python3 "$ROOT/tests/test_intro.py"
   check  "ux-do acts on what was meant, asks when unsure, never presses send" python3 "$ROOT/tests/test_ux.py"
   check  "every named Jev decision is logged and joined to what happened" python3 "$ROOT/tests/test_decision_log.py"

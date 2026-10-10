@@ -367,7 +367,7 @@ looks tiny, read the module it runs.
 | Personal data | `people`, `coursework`, `course-ingest`, `bb`, `brightspace`, `textbook`, `intro`, `stays`, `amber-user` | `people` is an 8,000-line Node CLI over SQLite. |
 | Voice and HUD | `hud`, `hud-listen`, `hud-speak`, `hud-guide`, `hud-music`, `hud-context`, `hud-autostart`, `kyber-surfaces`, `kyber-genui`, `kyber-sessions`, `text-command`, `superassistant` | See [Kyber](#kyber-the-hud-app). |
 | Calls | `call-listen`, `call-watch`, `call-practice`, `room-listen` | Live call coaching. |
-| Jev and routing | `jev`, `decisions`, `decision-lab`, `model-route`, `list-sift`, `fanout`, `route-label` | |
+| Jev and routing | `jev`, `decisions`, `decision-lab`, `model-route`, `list-sift`, `fanout`, `route-label` | `model-route handoff` turns a saved plan into a page for a fresh, cheaper build session and refuses one whose acceptance checks are not runnable commands. |
 | GTM and lists | `gtme-*`, `clay-*`, `list-audit` | Offline except `clay-balance` and the first `gtme-dedupe` run, which installs splink. |
 | Work state | `work-ledger`, `task-graph`, `backlog`, `team`, `kits` | |
 | Agent sandbox | `weft-build`, `weft-mcp`, `weft-box`, `weft-view` | Builds agents with weft inside a Lima VM that sees only `~/weft-projects`. |

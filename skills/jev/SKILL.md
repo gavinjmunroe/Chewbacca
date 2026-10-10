@@ -67,6 +67,26 @@ Service token limits still apply. Errors exit 2 without returning a decision.
 There are no automatic retries or automatic actions. Handle failures explicitly
 with the existing deterministic path or the agent's reasoning.
 
+## Plan expensive, build cheap
+
+`model-route` tells a prompt which tier it wants. For work big enough to plan,
+plan on the expensive tier, save the plan, and build it in a fresh session on a
+cheaper one:
+
+- `model-route handoff PLAN.md --out HANDOFF.md` turns a plan with `## Goal`,
+  `## Files`, `## Steps` and `## Acceptance` into a self-contained page. Jev
+  picks the build tier: mechanical builds on haiku, implementation and
+  debugging on sonnet. Architecture or extreme stays on opus and the page warns
+  that design is still open. `## Tier` in the plan or `--tier` pins it, and
+  with Jev unavailable the default is sonnet. `--json` returns the model and
+  the prompt for an Agent call.
+- `model-route check FILE` refuses a plan whose acceptance lines are prose,
+  placeholders, tools not on PATH, or scripts that neither exist nor appear in
+  `## Files`. `handoff` refuses the same plans and writes nothing.
+- `model-route accept HANDOFF.md` runs the acceptance commands from the repo
+  root and exits 1 if any fails. The build session is done when this passes,
+  never when it says so itself.
+
 ## Verify before relying on it
 
 `chewbacca jev smoke` makes one paid call using synthetic text and all three

@@ -3,6 +3,11 @@
 
     model-route "the login test fails on CI"     one JSON line
     model-route --hook < event.json              UserPromptSubmit hook mode
+    model-route handoff PLAN.md [--out F]        plan from the expensive tier,
+                                                 page for a fresh cheaper session
+    model-route check PLAN.md                    refuse a plan whose acceptance
+                                                 checks are not runnable commands
+    model-route accept HANDOFF.md                run its acceptance checks
 
 Hook mode stays silent when claude-model-router-hook's own keywords are
 confident, so it only speaks where that router would have waited on its slow
@@ -39,7 +44,15 @@ def plugin_confident(prompt: str) -> bool:
         return False
 
 
+SUBCOMMANDS = ("handoff", "check", "accept")
+
+
 def main(argv: list[str]) -> int:
+    # Only a real file after the word makes it a subcommand, so a prompt that
+    # happens to start with "check" still gets classified.
+    if argv[:1] and argv[0] in SUBCOMMANDS and len(argv) > 1 and Path(argv[1]).is_file():
+        import model_handoff
+        return model_handoff.main(argv)
     if argv[:1] == ["--hook"]:
         if os.environ.get("CLAUDE_MODEL_ROUTER_CHILD"):
             return 0

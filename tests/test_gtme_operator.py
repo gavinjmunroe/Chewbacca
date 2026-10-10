@@ -366,6 +366,22 @@ class Setup(unittest.TestCase):
         self.assertEqual(cfg2, json.loads(json.dumps(cfg2)))
         self.assertEqual({c["name"] for c in cfg2["clients"]} >= {"Acme Co", "Kept"}, True, again.stdout)
 
+    def test_sync_reports_each_source_from_gtm_sync_json(self):
+        # gtme sync and setup ran `gtm sync` and let its text lines scroll
+        # past; they read `gtm sync --json` now and say per source what was
+        # read. A config gtm cannot parse fails every source before any read,
+        # which keeps this hermetic.
+        tmp = Path(tempfile.mkdtemp())
+        env = env_for(tmp)
+        (tmp / "gtm").mkdir()
+        (tmp / "gtm" / "clients.json").write_text("{not json")
+        r = run(env, "sync")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("gtm-clay: not read,", r.stdout)
+        self.assertIn("gtm-inbox: not read,", r.stdout)
+        self.assertIn("gtm-calendar: not read,", r.stdout)
+        self.assertNotIn("SKIPPED", r.stdout)
+
     def test_no_clay_says_what_clay_is_and_does_not_fail(self):
         tmp = Path(tempfile.mkdtemp())
         r = run(env_for(tmp), "setup")

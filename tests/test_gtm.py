@@ -308,6 +308,17 @@ def test_cli(db_path: Path):
     ok(out.returncode == 1 and "no client is exactly" in out.stderr, out.stderr)
     out = run_cli(Path("/nonexistent/g.sqlite"), "clients")
     ok(out.returncode == 1 and "gtm sync" in out.stderr, out.stderr)
+    # sync --json: one status object per source. A config that cannot be
+    # parsed fails every source before any read, so this stays offline.
+    bad = db_path.parent / "bad-clients.json"
+    bad.write_text("{not json")
+    env = dict(os.environ, KYBER_OS_GRAPH=str(db_path.parent / "sync-json.sqlite"), GTM_CONFIG=str(bad))
+    out = subprocess.run([sys.executable, str(TOOL), "sync", "--json"], capture_output=True, text=True, env=env,
+                         timeout=60)
+    body = json.loads(out.stdout)
+    ok(out.returncode == 3 and body["ok"] is False, (out.returncode, out.stdout))
+    ok([s["kind"] for s in body["sources"]] == ["clay", "inbox", "calendar"], body)
+    ok(all(s["status"] == "failed" and s["note"] and not s["ok"] for s in body["sources"]), body)
 
 
 # ── security review 2026-10-09: one test per finding ─────────────────────────

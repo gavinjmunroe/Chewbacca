@@ -1687,13 +1687,41 @@ def sum_credits(data) -> float | None:
     return round(sum(total(e) for e in data["entities"] if isinstance(e, dict)), 1)
 
 
+GTM_SYNC_TIMEOUT = 1800  # guessed: a 26-campaign Clay read took ~3 minutes on 2026-10-09
+
+
+def gtm_sync(t: Teacher) -> tuple[int, list[dict]]:
+    """`chewbacca gtm sync --json`, reported one source per line. Returns the
+    exit code and the per-source status objects; output that is not that JSON
+    is a failed sync, never a silent one."""
+    try:
+        p = subprocess.run([sys.executable, str(ROOT / "tools" / "gtm.py"), "sync", "--json"], capture_output=True,
+                           text=True, check=False, timeout=GTM_SYNC_TIMEOUT)
+        body = json.loads(p.stdout or "null")
+        rows = [r for r in body.get("sources") or [] if isinstance(r, dict)] if isinstance(body, dict) else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        p, rows = None, None
+    if rows is None:
+        err = (p.stderr if p is not None else "") or "no output"
+        t.say(f"  Sync failed before reporting any source: {err.strip()[-200:]}")
+        return (p.returncode if p is not None and p.returncode else 1), []
+    for r in rows:
+        if r.get("ok"):
+            rep = r.get("report") or {}
+            counts = ", ".join(f"{k} {rep[k]}" for k in ("campaigns", "leads", "replies", "events", "meetings")
+                               if isinstance(rep.get(k), int))
+            t.say(f"  {r.get('source')}: read{', ' + counts if counts else ''}")
+        else:
+            t.say(f"  {r.get('source')}: not read, {(r.get('note') or 'no reason given')[:160]}")
+    return p.returncode, rows
+
+
 def cmd_sync(a, t: Teacher) -> int:
     cfg = load_config()
     ws = [str(w) for c in cfg["clients"] for w in c.get("workspaces") or []]
     code = 0
     if not a.credits_only:
-        p = subprocess.run([sys.executable, str(ROOT / "tools" / "gtm.py"), "sync"], check=False)
-        code = p.returncode
+        code, _ = gtm_sync(t)
     record_credits(ws)
     return 0 if code in (0, 3) else code
 
@@ -1728,7 +1756,7 @@ def cmd_setup(a, t: Teacher) -> int:
         t.say("Skipping the first sync (--no-sync).")
     else:
         t.say("First sync: reading campaigns, replies and your calendar. Read only; this can take a few minutes.")
-        subprocess.run([sys.executable, str(ROOT / "tools" / "gtm.py"), "sync"], check=False)
+        gtm_sync(t)
         record_credits([x["workspace"] for x in named])
     states, _ = load_states()
     for s in states:

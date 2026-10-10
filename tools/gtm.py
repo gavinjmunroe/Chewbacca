@@ -8,7 +8,7 @@
     gtm suppress --client NAME [--csv]   never email again: emailed, replied, unsubscribed,
                                          bounced, not a fit, do-not-contact, with the reason
     gtm funnel --client NAME             sent, replied, positive, meetings, booking signals, with denominators
-    gtm sync [--source clay|inbox|calendar] [--background]
+    gtm sync [--source clay|inbox|calendar] [--background] [--json]
 
 Queries read ~/.chewbacca/os-graph.sqlite only and answer in milliseconds.
 `sync` is the one command that reads Clay, the Clay inbox tab and the
@@ -163,18 +163,32 @@ def show_funnel(d: dict) -> list[str]:
     return [f"{d['client']} funnel"] + funnel_lines(d["funnel"]) + ["Synced:"] + sync_lines(d["sync"])
 
 
-def run_sync(sources: list[str]) -> int:
+def sync_status(r: dict) -> dict:
+    """One source's result as a status object: what was read, whether it
+    worked, and the counts or the reason, so a caller reads fields instead of
+    parsing "clay: ok {...}" lines."""
+    kind, _, ws = str(r.get("source") or "").removeprefix("gtm-").partition(":")
+    return {"source": r.get("source"), "kind": kind, "workspace": ws or None, "ok": bool(r.get("ok")),
+            "status": "ok" if r.get("ok") else "failed", "note": r.get("note") or "",
+            "report": {k: v for k, v in r.items() if k not in ("source", "ok", "note")}}
+
+
+def run_sync(sources: list[str], as_json: bool = False) -> int:
     import gtm_ingest  # the network side, imported only here
     import osgraph
     graph = osgraph.Graph()
     results = gtm_ingest.sync(graph, sources)
+    code = 0 if all(r["ok"] for r in results) else 3
+    if as_json:
+        print(json.dumps({"ok": code == 0, "sources": [sync_status(r) for r in results]}, default=str, indent=1))
+        return code
     for r in results:
         if r["ok"]:
             detail = {k: v for k, v in r.items() if k not in ("source", "ok")}
             print(f"{r['source']}: ok {json.dumps(detail, default=str)}")
         else:
             print(f"{r['source']}: SKIPPED, {r['note']}")
-    return 0 if all(r["ok"] for r in results) else 3
+    return code
 
 
 def lock_path() -> Path:
@@ -234,7 +248,7 @@ def main(argv=None) -> int:
         if a.background:
             return background(sources)
         try:
-            return run_sync(sources)
+            return run_sync(sources, getattr(a, "json", False))
         finally:
             pidfile = os.environ.get("GTM_SYNC_PIDFILE")
             if pidfile:

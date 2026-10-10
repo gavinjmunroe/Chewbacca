@@ -2869,6 +2869,545 @@
    "minTier": 1,
    "learnedLoggedIn": true,
    "learnedAt": "2026-10-09"
+  },
+  {
+   "name": "senderAccounts",
+   "description": "Every sending mailbox in the workspace: address, display name, warmup and health, daily limits.",
+   "request": {
+    "method": "GET",
+    "url": "https://api.clay.com/v3/workspaces/1372623/clay-sequencer-email-accounts",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+    }
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/campaigns?tab=email-accounts"
+   },
+   "match": {
+    "method": "GET",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/clay-sequencer-email-accounts"
+   },
+   "response": {
+    "format": "json",
+    "pick": [
+     "email",
+     "status=smartleadAccountStatus",
+     "day=smartleadData.message_per_day",
+     "sent=smartleadData.daily_sent_count",
+     "smtp=smartleadData.smtp_failure_error",
+     "imap=smartleadData.imap_failure_error",
+     "rep=smartleadData.warmup_details.warmup_reputation"
+    ]
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    }
+   ],
+   "readOnly": true,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-10"
+  },
+  {
+   "name": "bounceHealth",
+   "description": "A campaign's bounce health: bounce rate and whether Clay would pause it.",
+   "request": {
+    "method": "GET",
+    "url": "https://api.clay.com/v3/workspaces/1372623/campaigns/cam_0tmjurxxgw4wnydgmJC/bounce-health",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+    }
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "campaignId",
+     "at": [
+      "path:4"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/campaigns/{campaignId}?tab=sequence"
+   },
+   "match": {
+    "method": "GET",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/campaigns/*/bounce-health"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "campaignId",
+     "type": "string",
+     "required": true,
+     "example": "cam_0tmjurxxgw4wnydgmJC",
+     "pattern": "cam_[A-Za-z0-9]+",
+     "hint": "a campaign id like cam_0tm... (listCampaigns)"
+    }
+   ],
+   "readOnly": true,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-10"
+  },
+  {
+   "name": "campaignActivity",
+   "description": "A campaign's activity feed, newest first: sends, opens, replies, bounces per lead.",
+   "request": {
+    "method": "GET",
+    "url": "https://api.clay.com/v3/workspaces/1372623/audiences/campaigns/cam_0tmjurxxgw4wnydgmJC/activities?limit=50",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+    }
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "campaignId",
+     "at": [
+      "path:5"
+     ]
+    },
+    {
+     "param": "limit",
+     "at": [
+      "query:limit"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/campaigns/{campaignId}?tab=activity"
+   },
+   "match": {
+    "method": "GET",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/audiences/campaigns/*/activities"
+   },
+   "response": {
+    "format": "json",
+    "pick": [
+     "type=activity_type",
+     "at=activity_timestamp",
+     "email=metadata.emailAddress",
+     "event=metadata.eventSubtype",
+     "status=metadata.statusSubtype",
+     "category=metadata.smartleadCategoryName",
+     "step=metadata.sequenceStep",
+     "subject=metadata.subject",
+     "to=metadata.recipientEmail"
+    ],
+    "extract": "activities"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "campaignId",
+     "type": "string",
+     "required": true,
+     "example": "cam_0tmjurxxgw4wnydgmJC",
+     "pattern": "cam_[A-Za-z0-9]+",
+     "hint": "a campaign id like cam_0tm... (listCampaigns)"
+    },
+    {
+     "name": "limit",
+     "type": "number",
+     "required": false,
+     "default": 50,
+     "example": 50,
+     "hint": "page size"
+    }
+   ],
+   "readOnly": true,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-10"
+  },
+  {
+   "name": "tableCount",
+   "description": "How many rows a table holds, without reading them.",
+   "request": {
+    "method": "GET",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_0tltd1yb4ae85teyATw/count",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+    }
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "path:4"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "GET",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tables/*/count"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_0tltd1yb4ae85teyATw",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    }
+   ],
+   "readOnly": true,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-10"
+  },
+  {
+   "name": "tableHistory",
+   "description": "A table's change log: who changed which column or setting, and when.",
+   "request": {
+    "method": "GET",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tables/t_0tltd1yb4ae85teyATw/change-logs",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+    }
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "path:4"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "GET",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tables/*/change-logs"
+   },
+   "response": {
+    "format": "json",
+    "pick": [
+     "id",
+     "logType",
+     "createdAt",
+     "actor=actor.name",
+     "actorEmail=actor.email",
+     "resourceName"
+    ]
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_0tltd1yb4ae85teyATw",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    }
+   ],
+   "readOnly": true,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-10"
+  },
+  {
+   "name": "tableSources",
+   "description": "The sources feeding a table (webhooks, imports, find-leads), with their ids.",
+   "request": {
+    "method": "GET",
+    "url": "https://api.clay.com/v3/workspaces/1372623/sources?tableId=t_0tltd1yb4ae85teyATw",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+    }
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "tableId",
+     "at": [
+      "query:tableId"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/workbooks/home/tables/{tableId}"
+   },
+   "match": {
+    "method": "GET",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/sources"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "tableId",
+     "type": "string",
+     "required": true,
+     "example": "t_0tltd1yb4ae85teyATw",
+     "pattern": "t_[A-Za-z0-9]+",
+     "hint": "a table id like t_0tl... (listResources)"
+    }
+   ],
+   "readOnly": true,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-10"
+  },
+  {
+   "name": "segmentHistory",
+   "description": "An audience segment's history: when its filter or size changed.",
+   "request": {
+    "method": "GET",
+    "url": "https://api.clay.com/v3/workspaces/1372623/audiences/segments/audseg_0tlwq56MF62kASmmtWo/history?limit=50",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+    }
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "segmentId",
+     "at": [
+      "path:5"
+     ]
+    },
+    {
+     "param": "limit",
+     "at": [
+      "query:limit"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/people/audience/{segmentId}"
+   },
+   "match": {
+    "method": "GET",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/audiences/segments/*/history"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "segmentId",
+     "type": "string",
+     "required": true,
+     "example": "audseg_0tlwq56MF62kASmmtWo",
+     "pattern": "audseg_[A-Za-z0-9]+",
+     "hint": "an audience segment id like audseg_0tl... (listAudiences)"
+    },
+    {
+     "name": "limit",
+     "type": "number",
+     "required": false,
+     "default": 50,
+     "example": 50,
+     "hint": "page size"
+    }
+   ],
+   "readOnly": true,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-10"
+  },
+  {
+   "name": "getWorkflow",
+   "description": "One workflow: name, triggers with webhook status, published version, last run.",
+   "request": {
+    "method": "GET",
+    "url": "https://api.clay.com/v3/workspaces/1372623/tc-workflows/wf_0tmmwearV6TZG7ohUhb",
+    "headers": {
+     "accept": "application/json, text/plain, */*",
+     "origin": "https://app.clay.com",
+     "referer": "https://app.clay.com/",
+     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+    }
+   },
+   "slots": [
+    {
+     "param": "ws",
+     "at": [
+      "path:2"
+     ]
+    },
+    {
+     "param": "workflowId",
+     "at": [
+      "path:4"
+     ]
+    }
+   ],
+   "volatile": [],
+   "trigger": {
+    "url": "https://app.clay.com/workspaces/{ws}/terracotta/tc-workflows/{workflowId}"
+   },
+   "match": {
+    "method": "GET",
+    "host": "api.clay.com",
+    "path": "/v3/workspaces/*/tc-workflows/*"
+   },
+   "response": {
+    "format": "json"
+   },
+   "params": [
+    {
+     "name": "ws",
+     "type": "string",
+     "required": true,
+     "example": "1372623",
+     "pattern": "\\d+",
+     "hint": "a numeric Clay workspace id, e.g. 1372623 (listWorkspaces)"
+    },
+    {
+     "name": "workflowId",
+     "type": "string",
+     "required": true,
+     "example": "wf_0tmmwearV6TZG7ohUhb",
+     "pattern": "wf_[A-Za-z0-9]+",
+     "hint": "a workflow id like wf_0tm... (listWorkflows)"
+    }
+   ],
+   "readOnly": true,
+   "minTier": 1,
+   "learnedLoggedIn": true,
+   "learnedAt": "2026-10-10"
   }
  ]
 }

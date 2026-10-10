@@ -31,6 +31,14 @@
    "tier": 1
   }
  },
+ "bounce-health": {
+  "api-anything:bounceHealth": {
+   "ms": 908,
+   "at": "2026-10-10",
+   "engine_ms": 903,
+   "tier": 1
+  }
+ },
  "campaign": {
   "api-anything:getCampaign": {
    "ms": 1010,
@@ -43,6 +51,14 @@
    "at": "2026-10-09"
   }
  },
+ "campaign-activity": {
+  "api-anything:campaignActivity": {
+   "ms": 624,
+   "at": "2026-10-10",
+   "engine_ms": 325,
+   "tier": 1
+  }
+ },
  "campaign-analytics": {
   "cli:campaigns analytics {campaign}": {
    "ms": 1928,
@@ -51,9 +67,9 @@
  },
  "campaign-leads": {
   "api-anything:campaignLeads": {
-   "ms": 1059,
-   "at": "2026-10-09",
-   "engine_ms": 723,
+   "ms": 960,
+   "at": "2026-10-10",
+   "engine_ms": 952,
    "tier": 1
   },
   "api-anything:campaignLeadsNext": {
@@ -105,9 +121,9 @@
  },
  "credit-usage": {
   "api-anything:creditUsage": {
-   "ms": 1183,
-   "at": "2026-10-09",
-   "engine_ms": 733,
+   "ms": 932,
+   "at": "2026-10-10",
+   "engine_ms": 926,
    "tier": 1
   }
  },
@@ -185,6 +201,26 @@
    "tier": 1
   }
  },
+ "segment-history": {
+  "api-anything:segmentHistory": {
+   "ms": 885,
+   "at": "2026-10-10",
+   "engine_ms": 878,
+   "tier": 1
+  }
+ },
+ "sender-accounts": {
+  "api-anything:senderAccounts": {
+   "ms": 867,
+   "at": "2026-10-10",
+   "engine_ms": 858,
+   "tier": 1
+  },
+  "cli:campaigns options sender-accounts": {
+   "ms": 566,
+   "at": "2026-10-10"
+  }
+ },
  "signals": {
   "api-anything:listSignals": {
    "ms": 1534,
@@ -207,6 +243,30 @@
   "cli:tables get {table}": {
    "ms": 734,
    "at": "2026-10-09"
+  }
+ },
+ "table-count": {
+  "api-anything:tableCount": {
+   "ms": 882,
+   "at": "2026-10-10",
+   "engine_ms": 876,
+   "tier": 1
+  }
+ },
+ "table-history": {
+  "api-anything:tableHistory": {
+   "ms": 919,
+   "at": "2026-10-10",
+   "engine_ms": 913,
+   "tier": 1
+  }
+ },
+ "table-sources": {
+  "api-anything:tableSources": {
+   "ms": 937,
+   "at": "2026-10-10",
+   "engine_ms": 931,
+   "tier": 1
   }
  },
  "table-status": {
@@ -247,6 +307,42 @@
   "cli:workbooks list --limit 100": {
    "ms": 968,
    "at": "2026-10-09"
+  }
+ },
+ "workflow": {
+  "api-anything:getWorkflow": {
+   "ms": 925,
+   "at": "2026-10-10",
+   "engine_ms": 919,
+   "tier": 1
+  },
+  "cli:workflows get {workflow}": {
+   "ms": 542,
+   "at": "2026-10-10"
+  }
+ },
+ "workflow-graph": {
+  "cli:workflows graph get {workflow}": {
+   "ms": 556,
+   "at": "2026-10-10"
+  }
+ },
+ "workflow-run": {
+  "cli:workflows runs get {run}": {
+   "ms": 538,
+   "at": "2026-10-10"
+  }
+ },
+ "workflow-run-steps": {
+  "cli:workflows runs steps {workflow} {run}": {
+   "ms": 530,
+   "at": "2026-10-10"
+  }
+ },
+ "workflow-runs": {
+  "cli:workflows runs list {workflow}": {
+   "ms": 540,
+   "at": "2026-10-10"
   }
  },
  "workflows": {

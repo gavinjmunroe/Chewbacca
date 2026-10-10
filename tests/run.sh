@@ -452,6 +452,13 @@ if group "gtme"; then
   check "gtme-reply labels real replies, cleans HTML, refuses risky auto-sends" python3 "$ROOT/tests/test_gtme_reply.py"
   check "gtme-reply dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-reply intent --help
   expect "gtme-reply appears in help" "chewbacca gtme-reply" bash "$ROOT/bin/chewbacca" --help
+  # Ported from togari-platform's dnc and scoring modules with their TypeScript cases; offline.
+  check "gtme-dnc matches Togari's DNC check and calls an unreadable list unknown, never allowed" \
+    python3 "$ROOT/tests/test_gtme_dnc.py"
+  check "gtme-score carries Togari's lead, affiliation, primary-contact and tier cases" \
+    python3 "$ROOT/tests/test_gtme_score.py"
+  check "gtme-dnc dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-dnc --help
+  check "gtme-score dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-score --help
   check "interview cases cite sourced procedures, real clay ops, and answer inside 2 s" \
     python3 "$ROOT/tests/test_gtme_interview.py"
   check "gtme-interview dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-interview list

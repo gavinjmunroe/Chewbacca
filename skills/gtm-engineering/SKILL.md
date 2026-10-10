@@ -82,9 +82,15 @@ Before building anything for a client, load what already exists, in this order:
 the client handoff (`START-HERE.md` in its repo), the team's latest texts and Slack for
 their process, the second brain's `wiki/cold-email-craft.md` (founder story beats
 recipient personalization; first sends are measurement), and the
-`library/learning/clay-navigation` map. Drive Clay with `jev-browse` (goals that work
-whatever state a panel is in), fall back to `chewie web eval` only when jev blocks.
-Then build it their way and stop.
+`library/learning/clay-navigation` map. Read Clay with `chewbacca clay <op>`, never
+the page: the clay-navigation skill maps each question to its op. Drive the Clay UI
+with `jev-browse` only for a UI-only op (goals that work whatever state a panel is
+in), falling back to `chewie web eval` when jev blocks. Then build it their way and stop.
+
+Togari's capabilities and their Chewbacca equivalents, row by row, are in
+`docs/reference/TOGARI-PARITY.md`. `gtme-dnc check` answers "may we email this
+address" across every local source; `gtme-score` ports Togari's lead, affiliation,
+primary-contact, tier and contact-quality rubrics.
 
 ## Client state comes from the graph, never from memory files
 

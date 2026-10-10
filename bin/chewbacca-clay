@@ -518,6 +518,7 @@ const ID = /^[A-Za-z0-9_-]{1,80}$/;
 const ARG_SHAPES = {
   ws: /^\d{1,12}$/,
   table: ID, row: ID, view: ID, audience: ID, campaign: ID, campaign_id: ID, lead_id: ID,
+  workflow: ID, run: ID, detail: /^(summary|full)$/,
   cursor: /^[A-Za-z0-9_=+-]{1,200}$/, after: ID,
   limit: /^\d{1,5}$/, offset: /^\d{1,7}$/, days: /^\d{1,4}$/,
   ids: /^[A-Za-z0-9_-]{1,80}(,[A-Za-z0-9_-]{1,80}){0,199}$/,
@@ -720,7 +721,25 @@ function checkFinal(sop, req, vals) {
   // A fixed allowlist, not the spec's own host: a doctored spec can't widen it.
   if (host !== CLAY_API_HOST || host !== tmpl.host) throw new Error(`the built URL goes to ${host}, not ${CLAY_API_HOST}`);
   if (!rawPath.startsWith("/v3/")) throw new Error("the built path is outside Clay's /v3 API");
-  if (query !== tmpl.search) throw new Error("the built URL's query differs from the spec's");
+  // The query is the spec's, pair for pair, except a key the spec slots, which
+  // must hold exactly its validated value and nothing a server would read twice.
+  const qSlots = new Map(sop.slots.filter((s) => s.at.length === 1 && s.at[0].startsWith("query:")).map((s) => [s.at[0].slice(6), s.param]));
+  const pairsOf = (q) => (q && q !== "?" ? q.replace(/^\?/, "").split("&").map((p) => {
+    const eq = p.indexOf("=");
+    return [decodeURIComponent(eq < 0 ? p : p.slice(0, eq)), decodeURIComponent(eq < 0 ? "" : p.slice(eq + 1))];
+  }) : []);
+  const got = pairsOf(query);
+  const want = new Map(pairsOf(tmpl.search));
+  const seen = new Set();
+  for (const [k, v] of got) {
+    if (seen.has(k)) throw new Error(`the built URL's query repeats ${k}`);
+    seen.add(k);
+    if (qSlots.has(k)) {
+      const val = vals[qSlots.get(k)];
+      if (val === undefined || v !== String(val) || !/^[A-Za-z0-9_=+.-]{1,200}$/.test(v)) throw new Error(`query ${k} is not the validated value`);
+    } else if (!want.has(k) || want.get(k) !== v) throw new Error("the built URL's query differs from the spec's");
+  }
+  for (const k of want.keys()) if (!seen.has(k)) throw new Error(`the built URL's query lost ${k}`);
   if (rawPath.includes("%") || new URL(req.url).pathname !== rawPath) throw new Error("the built path would be decoded or normalized");
   const segs = rawPath.slice(1).split("/");
   const tsegs = tmpl.pathname.slice(1).split("/");
@@ -766,6 +785,20 @@ function setSlot(req, at, value) {
     segs[Number(first.slice(5))] = encodeURIComponent(String(value));
     u.pathname = `/${segs.join("/")}`;
     return { ...req, url: u.toString() };
+  }
+  // query:<key> rewrites that pair in place (appends it when the template has
+  // none), as api-anything's codec does. Until 2026-10-10 this threw, so every
+  // read with a query slot (credit-usage days=, campaign-leads limit= and
+  // cursor=, rows limit=) refused before any surface ran, on main, live.
+  if (first.startsWith("query:") && !rest.length) {
+    const key = first.slice("query:".length);
+    const u = new URL(req.url);
+    const pairs = u.search ? u.search.slice(1).split("&") : [];
+    const enc = `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`;
+    const i = pairs.findIndex((p) => decodeURIComponent(p.split("=")[0]) === key);
+    if (i < 0) pairs.push(enc);
+    else pairs[i] = enc;
+    return { ...req, url: `${u.origin}${u.pathname}${pairs.length ? `?${pairs.join("&")}` : ""}` };
   }
   if (first !== "body") throw new Error(`dry run does not handle slot step ${first}`);
   if (!rest.length) return { ...req, body: typeof value === "object" ? JSON.stringify(value) : String(value) };

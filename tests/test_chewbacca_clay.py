@@ -540,6 +540,7 @@ SAMPLES = {
     "rows": "r_1", "records": json.dumps([{"f_a": "x"}]), "config": json.dumps(CONFIG), "filter": json.dumps(FILTER),
     "status": "PAUSED", "lead_map_id": "1", "category_id": "1", "read_status": "READ", "entry": "9",
     "emails": "a@example.com", "resource": "t_ex1", "resource_type": "TABLE", "name": "x", "data_type": "text",
+    "workflow": "wf_ex1", "run": "wfr_ex1", "detail": "summary",
 }
 CLI_READ_LEAVES = {"list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
                    "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
@@ -739,6 +740,64 @@ def test_inbox_adapter_keeps_clay_inbox_shape():
         ok(p.returncode != 0 and "InboxUnavailable" in p.stderr, "a failed thread read raises, never returns a partial inbox")
 
 
+def test_query_slot_reads_build():
+    # Until 2026-10-10 every op whose spec slotted a query key refused with "dry
+    # run does not handle slot step query:days" before any surface ran, live on
+    # main: credit-usage, campaign-leads and rows with limit= never answered.
+    code, out, p = run({}, {}, "credit-usage", "--dry-run")
+    ok(code == 0 and out["request"]["url"] == f"{V3}/credit-reporting/creditReportType/workspace/recent?days=7",
+       f"credit-usage builds with its default days: {p.stdout[:300]}")
+    code, out, _ = run({}, {}, "credit-usage", "days=30", "--dry-run")
+    ok(code == 0 and out["request"]["url"].endswith("recent?days=30"), "days= replaces the template value in place")
+    code, out, _ = run({}, {}, "campaign-leads", "campaign=cam_ex1", "limit=5", "--dry-run")
+    ok(code == 0 and out["request"]["url"].endswith("/enrolled-leads?limit=5"), "limit= reaches the query")
+    code, out, _ = run({}, {}, "campaign-activity", "campaign=cam_ex1", "limit=7", "--dry-run")
+    ok(code == 0 and out["request"]["url"] == f"{V3}/audiences/campaigns/cam_ex1/activities?limit=7", "a new read's query slot builds")
+    code, out, _ = run({}, {}, "table-sources", "table=t_ex1", "--dry-run")
+    ok(code == 0 and out["request"]["url"] == f"{V3}/sources?tableId=t_ex1", "a query slot can carry an id")
+    for bad in ("days=7&x=1", "days=7%26x%3D1", "days=-1"):
+        code, out, _ = run({}, {}, "credit-usage", bad, "--dry-run")
+        ok(code == 2 and out["class"] == "input", f"a crafted query value is refused before any call: {bad}")
+    # The fixed reads answer through a recorded surface too, not just in a dry run.
+    usage = {"ok": True, "class": "ok", "tier": 1, "ms": 90, "data": {"entities": [], "unattributedCredits": 0}}
+    code, out, _ = run({"api-anything/creditUsage.json": usage}, {}, "credit-usage", "days=3")
+    ok(code == 0 and out["surface"] == "api-anything" and out["data"]["unattributedCredits"] == 0, "credit-usage answers")
+
+
+# The reads added 2026-10-10 so nobody opens Clay for them: mailbox health, a
+# campaign's bounce health and activity, a table's size, history and sources, a
+# segment's history, and a workflow, its graph, its runs and one run's steps.
+NEW_READS = ("sender-accounts", "bounce-health", "campaign-activity", "table-count", "table-history",
+             "table-sources", "segment-history", "workflow", "workflow-graph", "workflow-runs",
+             "workflow-run", "workflow-run-steps")
+
+
+def test_new_reads_are_reads_with_a_measured_surface():
+    reg, _ = registry_and_spec()
+    measured = json.loads((LIB / "measured.json").read_text())
+    ops = {o["name"]: o for o in reg["ops"]}
+    code, listed, _ = run({}, {}, "ops")
+    kinds = {o["op"]: o["kind"] for o in listed["ops"]}
+    for name in NEW_READS:
+        op = ops.get(name)
+        ok(op and op["kind"] == "read" and op["gate"] == "read", f"{name} is a registered read")
+        ok(kinds.get(name) == "read", f"{name}: the front door classifies every surface as a read")
+        ok(op["ui"], f"{name} names the clay-go route it replaces")
+        ok(any(v.get("at") for v in measured.get(name, {}).values()), f"{name} has a measured surface with a date")
+    # Health first: the CLI is faster but has no warmup or SMTP state.
+    code, route, _ = run({}, {"sender-accounts": {"cli:campaigns options sender-accounts": {"ms": 100},
+                                                  "api-anything:senderAccounts": {"ms": 900}}}, "route", "sender-accounts")
+    ok([r["surface"] for r in route["order"]] == ["api-anything", "cli"], "sender-accounts keeps the health surface first")
+    code, route, _ = run({}, {}, "route", "workflow-run-steps", "workflow=wf_ex1", "run=wfr_ex1")
+    ok([r["call"] for r in route["order"]] == ["cli:workflows runs steps {workflow} {run}"], "run steps need the workflow and the run")
+    code, out, _ = run({}, {}, "workflow-graph", "workflow=wf_ex1", "detail=everything", "--dry-run")
+    ok(code == 2 and out["class"] == "input", "detail is summary or full only")
+    code, out, _ = run({}, {}, "workflow-graph", "workflow=wf_ex1", "detail=full", "--dry-run")
+    ok(code == 0 and out["request"]["argv"] == ["clay", "workflows", "graph", "get", "wf_ex1", "--mode", "full"], "detail=full reaches --mode")
+    code, out, _ = run({}, {}, "workflow-run", "run=--live", "--dry-run")
+    ok(code == 2, "a run id shaped like a flag never reaches the CLI argv")
+
+
 def test_fixtures_are_scrubbed():
     text = Path(__file__).read_text()
     import re
@@ -754,7 +813,8 @@ def main():
                test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,
                test_every_mutating_surface_is_gated, test_nothing_changes_between_approval_and_send,
                test_values_that_change_when_decoded_are_refused, test_workspace_has_no_built_in_default,
-               test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
+               test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape,
+               test_query_slot_reads_build, test_new_reads_are_reads_with_a_measured_surface, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")
 

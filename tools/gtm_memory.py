@@ -117,7 +117,7 @@ def show_overdue(d: dict) -> list[str]:
         # booking chance, a refill a day late loses a day of volume.
         groups = (("the client owes", lambda r: r["owed_by"] == "client"),
                   ("we owe on replies", lambda r: r["owed_by"] != "client" and r["kind"] != "refill"),
-                  ("refills (audience fully sent at step 1)", lambda r: r["kind"] == "refill"))
+                  ("refills (every step sent to every lead, nothing queued)", lambda r: r["kind"] == "refill"))
         for title, pick in groups:
             rows = [r for r in d["late"] if pick(r)]
             if rows:

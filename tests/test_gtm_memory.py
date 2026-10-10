@@ -306,6 +306,37 @@ def test_why_and_commitments(tmp: Path):
     db.close()
 
 
+def test_refill_waits_for_every_step(tmp: Path):
+    """2026-10-10: a campaign whose 217 leads had all had step 1, with steps
+    2 and 3 still queued (434 follow-ups), was flagged for refill. Due only
+    when nothing is queued across every step; unknown steps are never dry."""
+    g = G(tmp / "g_refill.sqlite")
+    g.client("client:alpha", "Alpha Fund", "1")
+
+    def cam(cid, name, leads, steps):
+        nid = g.campaign(cid, "client:alpha", "1", name, leads, sum(s[1] for s in steps))
+        row = json.loads(g.db.execute("SELECT props FROM nodes WHERE id = ?", (nid,)).fetchone()[0])
+        row["steps"] = [{"step": n, "sentCount": sent, "repliedCount": rep, "bouncedCount": 0}
+                        for n, sent, rep in steps]
+        g.db.execute("UPDATE nodes SET props = ? WHERE id = ?", (json.dumps(row), nid))
+
+    cam("mid", "Alpha | Ivy | Seed | Midweek", 217, [(1, 217, 0), (2, 0, 0), (3, 0, 0)])
+    cam("done", "Alpha | Ivy | Seed | Done", 10, [(1, 10, 2), (2, 8, 0), (3, 8, 0)])
+    cam("blind", "Alpha | Ivy | Seed | No steps", 5, [])
+    g.close()
+    ok(m.queued_sends(217, [{"step": 1, "sentCount": 217}, {"step": 2, "sentCount": 0},
+                            {"step": 3, "sentCount": 0}]) == 434)
+    ok(m.queued_sends(10, [{"step": 1, "sentCount": 10, "repliedCount": 2}, {"step": 2, "sentCount": 8}]) == 0,
+       "a lead who replied at step 1 is owed no step 2")
+    ok(m.queued_sends(5, []) is None)
+    db = fresh_db(tmp, "refill")
+    m.ingest(db, tmp / "g_refill.sqlite")
+    ov = q.overdue(db, m.resolve_scope(db, "Alpha Fund"))
+    refills = {r["campaign"] for r in ov["late"] + ov["upcoming"] if r["kind"] == "refill"}
+    ok(refills == {"Alpha | Ivy | Seed | Done"}, refills)
+    db.close()
+
+
 def test_dry_run_writes_nothing(tmp: Path):
     gpath = two_client_graph(tmp / "g6.sqlite")
     db = fresh_db(tmp, "dry")
@@ -531,6 +562,7 @@ def main():
         test_supersede_not_erase(tmp)
         test_score_decay()
         test_why_and_commitments(tmp)
+        test_refill_waits_for_every_step(tmp)
         test_dry_run_writes_nothing(tmp)
         test_credit_ledger(tmp)
         test_warm_path(tmp)

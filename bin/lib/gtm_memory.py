@@ -994,6 +994,27 @@ def rebuild_experiments(db, client_id: str) -> int:
 # ── commitments ──────────────────────────────────────────────────────────────
 
 
+def queued_sends(leads: int, steps) -> int | None:
+    """Emails a campaign still has queued across every step, from Clay's
+    per-step funnel (gtm sync stores it on the Campaign), or None when no step
+    data was synced. A lead who replied or bounced at an earlier step leaves
+    the sequence, so later steps are owed only to the rest.
+
+    The first rule called a campaign due for refill once every lead had step
+    1: on 2026-10-10 Ivy's midweek campaign (217 leads, step 1 sent to all
+    217, steps 2 and 3 not yet sent) was flagged with over 400 follow-ups
+    still to go. A campaign with no step data is never called dry: unknown
+    is not empty."""
+    rows = sorted((s for s in steps or [] if isinstance(s, dict)), key=lambda s: int(s.get("step") or 0))
+    if not rows or not leads:
+        return None
+    left, stopped = 0, 0
+    for s in rows:
+        left += max(0, leads - stopped - int(s.get("sentCount") or 0))
+        stopped += int(s.get("repliedCount") or 0) + int(s.get("bouncedCount") or 0)
+    return left
+
+
 def derive_commitments(db, client_id: str) -> dict:
     """Rebuild every derived commitment for a client. One whose condition is
     gone is closed with a reason, never deleted; manual ones are untouched."""
@@ -1025,13 +1046,15 @@ def derive_commitments(db, client_id: str) -> dict:
     for c in db.execute("SELECT * FROM campaigns WHERE client_id = ? AND deleted_at IS NULL AND status = 'active'",
                         (client_id,)):
         a = json.loads(c["analytics"] or "{}")
-        leads, sent = int(a.get("leads") or 0), int(a.get("sent") or 0)
-        if leads and sent >= leads:
+        leads = int(a.get("leads") or 0)
+        left = queued_sends(leads, a.get("steps"))
+        if leads and left == 0:
             last = db.execute("SELECT MAX(happened_at) AS t FROM interactions WHERE client_id = ? AND campaign_id = ? "
-                              "AND kind = 'send' AND step = 1", (client_id, c["id"])).fetchone()["t"]
+                              "AND kind = 'send'", (client_id, c["id"])).fetchone()["t"]
             due = iso(parse_time(last) + timedelta(days=1)) if last else stamp
             want[("refill", c["id"])] = {"owed_by": "us", "contact_id": None, "campaign_id": c["id"],
-                                         "title": f"Refill {c['name']}: all {leads} leads have had step 1",
+                                         "title": f"Refill {c['name']}: all {leads} leads have had every step, "
+                                                  "nothing queued",
                                          "due_at": due}
     have = {(r["kind"], r["source_id"]): dict(r) for r in db.execute(
         "SELECT * FROM commitments WHERE client_id = ? AND origin = 'derived' AND deleted_at IS NULL", (client_id,))}
@@ -1228,7 +1251,7 @@ def ingest_graph(db, graph: sqlite3.Connection, run_id: str) -> dict:
                    "analytics = excluded.analytics, observed_at = excluded.observed_at, deleted_at = NULL",
                    (c["id"], client, str(p.get("workspace_id") or ""), clip(p.get("name") or c["label"], 200),
                     p.get("offer"), p.get("status"), targets.get(c["id"]), p.get("created_at"), p.get("updated_at"),
-                    json.dumps(p.get("analytics") or {}), norm_time(p.get("analytics_as_of") or c["observed_at"]),
+                    json.dumps({**(p.get("analytics") or {}), "steps": p.get("steps") or []}), norm_time(p.get("analytics_as_of") or c["observed_at"]),
                     run_id))
         if p.get("status"):
             observe(db, client, "campaign", c["id"], "status", p["status"], "graph", "gtm-clay",

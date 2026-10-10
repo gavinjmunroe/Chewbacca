@@ -1044,7 +1044,7 @@ def memory_actions(name: str, overdue: dict) -> list[dict]:
         oldest = items[0]
         days = (oldest.get("late_by_hours") or 0) / 24
         if kind == "refill":
-            do = (f"Refill {len(items)} campaigns that have put every lead through step 1 "
+            do = (f"Refill {len(items)} campaigns with nothing left to send: every lead has had every step "
                   f"(oldest: \"{oldest.get('campaign')}\", {days:.0f} days late)")
             gate, score, lesson = "read, then needs your approval to add leads", 40, "dry"
             cmd = f"chewbacca gtm suppress --client \"{name}\" --csv  then  chewbacca clay route find-people"
@@ -1364,8 +1364,8 @@ def cmd_brief(a, t: Teacher) -> int:
         refills = [x for x in ((s.get("memory") or {}).get("overdue") or {}).get("late") or []
                    if isinstance(x, dict) and x.get("kind") == "refill"]
         if refills:
-            t.say(f"  Running dry: {len(refills)} campaigns have put every lead through step 1 "
-                  "(gtm-memory overdue)")
+            t.say(f"  Running dry: {len(refills)} campaigns have nothing left to send, every lead has had "
+                  "every step (gtm-memory overdue)")
         elif dry:
             t.say(f"  Running dry: " + "; ".join(f"\"{c['name']}\" {c['leads_left']} emails queued" for c in dry[:4]))
         if s["drop"]:

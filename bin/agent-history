@@ -35,6 +35,8 @@ Environment, for tests: AGENT_HISTORY_CLAUDE_DIRS (os.pathsep separated) and
 AGENT_HISTORY_CODEX_DIR replace the default roots.
 """
 
+from __future__ import annotations  # tools/review_cross.py loads this under Python 3.9 too
+
 import argparse
 import base64
 import binascii
@@ -203,6 +205,14 @@ _MARKED_VALUES = [
     (re.compile("\x00S\x00(?:[^'\n]|'(?![\\s,;&}\\])]|$))*"), "[REDACTED]"),
     (re.compile("\x00V\x00[^\\s,;&]*"), "[REDACTED]"),
 ]
+def _marked_value_sub(m: re.Match) -> str:
+    """A value that is already exactly one of this tool's labels keeps it
+    ("key [AWS_KEY]" stays saying what leaked); anything else, including a
+    label with more glued on ("[API_KEY]|rest"), becomes [REDACTED]."""
+    value = m.group(0)[3:]
+    return value if _PLACEHOLDER.fullmatch(value) else "[REDACTED]"
+
+
 _KEYWORDS = (r"key|token|secret|passwd|password|pwd|auth|credentials?|session|cookie|bearer|api|private"
              r"|signature|sig|access|refresh|client_secret")
 _SECRET_NAME = re.compile(r"(?i)" + _KEYWORDS.replace("|sig|", "|sig|"))
@@ -313,8 +323,8 @@ def _apply_rules(text: str) -> str:
             # text full of name=value pairs with no key pays nothing for it.
             if _SECRET_NAME.search(text) or "-p" in text:
                 text = rx.sub(_secret_sub, text)
-            for marked, repl in _MARKED_VALUES:
-                text = marked.sub(repl, text)
+            for marked, _ in _MARKED_VALUES:
+                text = marked.sub(_marked_value_sub, text)
         else:
             text = rx.sub(f"[{label}]", text)
         if label == "SECRET":

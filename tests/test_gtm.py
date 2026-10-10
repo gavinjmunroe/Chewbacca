@@ -88,7 +88,7 @@ def world_a(include_b=True, include_c2=True):
     and sam1 were emailed. b sits in the campaign and was never emailed."""
     cams, analytics, ids = [], {}, {}
     c, a = campaign("cam_a1", "Acme | Widget | Seed", 4, 4, ["2026-10-05", "2026-10-08"],
-                    cats=[{"categoryId": "1", "categoryName": "Interested", "leads": 1, "replies": 1},
+                    cats=[{"categoryId": "1", "categoryName": "Interested", "leads": 1, "replies": 1, "sentiment": "positive"},
                           {"categoryId": "4", "categoryName": "Information Request", "leads": 1, "replies": 1}])
     cams.append(c); analytics["cam_a1"] = a
     joined = [1, 2, 3, 4] if include_b else [1, 3, 4]
@@ -176,6 +176,8 @@ def test_lifecycle(tmp: Path):
     res = gi.sync(graph, ["clay"], cfg, ids, cli(world_b()))
     ok(res[1]["ok"] and not res[0]["ok"], "B synced; A refused and left as it was")
     ok(len(graph.edges(verb="ENROLLED")) == 7, graph.edges(verb="ENROLLED"))
+    cats = graph.node("campaign:clay:cam_a1")["props"]["reply_categories"]
+    ok(cats[0] == {"name": "Interested", "leads": 1, "sentiment": "positive"}, cats)
 
     # Read-only: a write is refused before any process starts.
     try:

@@ -237,6 +237,23 @@ class GraphCommands(unittest.TestCase):
         self.assertNotIn("Rework", body)
         self.assertIn("Left out of the report: Not recommended: Rework", rep.stdout)
 
+    def test_report_has_the_company_scorecard_and_named_asks(self):
+        db = sqlite3.connect(self.tmp / "graph.sqlite")
+        row = db.execute("SELECT props FROM nodes WHERE id = 'reply:2'").fetchone()
+        db.execute("UPDATE nodes SET props = ? WHERE id = 'reply:2'", (json.dumps(dict(
+            json.loads(row[0]), snippet="What does it cost? Send the deck please.")),))
+        db.execute("INSERT INTO edges VALUES (?,?,?,?,'gtm-clay:9001')", (
+            "campaign:clay:cam_floor", "ENROLLED", "person:q@beta.example",
+            json.dumps({"email": "q@beta.example", "name": "Quinn Beta"})))
+        db.commit()
+        db.close()
+        rep = run(self.env, "report", "--client", "Northwind Test Co", "--no-pdf", "--out", str(self.tmp / "out"))
+        self.assertEqual(rep.returncode, 0, rep.stderr)
+        self.assertIn("## By company", rep.stdout)
+        self.assertIn("| Widgets | ", rep.stdout)
+        self.assertIn("Quinn Beta (q@beta.example)", rep.stdout)
+        self.assertNotIn("Interested replies", rep.stdout)
+
     def test_rulings_from_a_client_repo_decisions_file(self):
         repos = self.tmp / "repos" / "northwind"
         repos.mkdir(parents=True)
@@ -510,6 +527,58 @@ class Stranger(unittest.TestCase):
         r = run(env, "explain", "waterfall")
         self.assertIn("several data providers", r.stdout)
         self.assertEqual(run(env, "explain", "frobnicate").returncode, 1)
+
+
+def analytics_campaign(cid, name, sent1, sent2, replies, human, pos, bounces, funnel_bounces=0, status="active"):
+    """A campaign in the shape gtm sync stores: stats totals merged into
+    analytics, the funnel's steps, and Clay's reply categories with sentiment."""
+    return {"id": f"campaign:clay:{cid}", "campaign_id": cid, "name": name, "status": status,
+            "analytics": {"leads": sent1, "sent": sent1 + sent2, "replies": replies,
+                          "repliesExcludingOoo": human, "bounces": bounces},
+            "steps": [{"step": 1, "sentCount": sent1, "bouncedCount": funnel_bounces},
+                      {"step": 2, "sentCount": sent2, "bouncedCount": 0}],
+            "reply_categories": [{"name": "Information Request", "sentiment": "positive", "leads": pos},
+                                 {"name": "Not Interested", "sentiment": "negative", "leads": 3},
+                                 {"name": "Out Of Office", "leads": replies - human}]}
+
+
+class Scorecard(unittest.TestCase):
+    def test_rolls_up_by_company_and_skips_inactive(self):
+        import gtme_operator as g
+        camps = [analytics_campaign("a", "Acme | Ivy | Pre-seed | Wave 2", 100, 40, 6, 5, 1, 2),
+                 analytics_campaign("b", "Acme | Ivy | Pre-seed | Midweek", 50, 0, 3, 2, 0, 1),
+                 analytics_campaign("c", "Acme | Ivy | Pre-seed | Old", 999, 0, 99, 99, 9, 9, status="paused"),
+                 analytics_campaign("d", "Acme | Qube | Seed | Wave 1", 80, 20, 4, 4, 2, 18, funnel_bounces=11)]
+        card = g.scorecard(camps)
+        self.assertEqual(card["Ivy"], {"first_emails": 150, "follow_ups": 40, "replies": 9, "human_replies": 7,
+                                       "tagged_positive": 1, "bounces": 3})
+        # Bounces from the stats totals (18), never the funnel's bouncedCount (11).
+        self.assertEqual(card["Qube"]["bounces"], 18)
+        text = "\n".join(g.scorecard_lines(card))
+        self.assertIn("| Total | 230 | 60 | 13 | 11 | 3 | 21 |", text)
+        self.assertIn("tagged, read the text", text)
+        self.assertNotIn("nterested", text.replace("Not Interested", ""))
+
+    def test_real_asks_come_from_the_reply_text(self):
+        import gtme_operator as g
+        replies = [
+            {"email": "pat@fund.example", "class": "positive", "time": "2026-03-19T10:00:00Z", "campaign": "W2",
+             "snippet": "<div>Please send over the deck and we will review.</div>"},
+            {"email": "lee@fund.example", "class": "neutral", "time": "2026-03-19T11:00:00Z", "campaign": "W2",
+             "snippet": "Happy to hop on a call next week."},
+            {"email": "ooo@fund.example", "class": "neutral", "time": "2026-03-19T12:00:00Z", "campaign": "W2",
+             "snippet": "I am travelling. If urgent, call my cell."},
+            {"email": "quoted@fund.example", "class": "neutral", "time": "2026-03-19T13:00:00Z", "campaign": "W2",
+             "snippet": "Thanks, not now. On Tue, Mar 17 Sender wrote: would a short call or the deck help?"},
+            {"email": "no@fund.example", "class": "negative", "time": "2026-03-19T14:00:00Z", "campaign": "W2",
+             "snippet": "No meeting, thanks."},
+        ]
+        asks = g.real_asks(replies, {"pat@fund.example": "Pat Rivera"})
+        self.assertEqual([a["email"] for a in asks], ["lee@fund.example", "pat@fund.example"])
+        self.assertEqual(asks[1]["name"], "Pat Rivera")
+        self.assertIn("deck", asks[1]["asked"])
+        lines = "\n".join(g.asks_lines(asks))
+        self.assertIn("Pat Rivera (pat@fund.example)", lines)
 
 
 class Generalization(unittest.TestCase):

@@ -1037,6 +1037,94 @@ def campaign_view(c: dict) -> dict:
             "bounces": a.get("bounces") or 0, "leads_left": left, "as_of": c.get("analytics_as_of")}
 
 
+# ── the per-company scorecard and the real asks ───────────────────────────
+
+# Ported from a client repo's scripts/scorecard.py (2026-10-09): a week-1
+# summary said 59 replies and nothing could say how many were people or yeses.
+# Bounces come from Clay's stats totals, not the funnel's per-step
+# bouncedCount: for one client's week 1 the funnel said 11 and the totals 18.
+SCORE_COLS = ("first_emails", "follow_ups", "replies", "human_replies", "tagged_positive", "bounces")
+
+
+def company_of(campaign: dict) -> str:
+    """The company (offer) a campaign sells: its recorded offer, else the
+    second "|" part of a "Client | Company | List | Wave" name."""
+    if campaign.get("offer"):
+        return str(campaign["offer"])
+    parts = [p.strip() for p in str(campaign.get("name") or "").split("|")]
+    return parts[1] if len(parts) > 1 and parts[1] else (parts[0] or "unnamed")
+
+
+def score_row(c: dict) -> dict:
+    a = c.get("analytics") or {}
+    steps = [s for s in c.get("steps") or [] if isinstance(s, dict)]
+    first = next((int(s.get("sentCount") or 0) for s in steps if int(s.get("step") or 0) == 1), None)
+    total = sum(int(s.get("sentCount") or 0) for s in steps)
+    if first is None:  # no step data: every send counts as a first email, none as a follow up
+        first, total = int(a.get("sent") or 0), int(a.get("sent") or 0)
+    return {"first_emails": first, "follow_ups": total - first, "replies": int(a.get("replies") or 0),
+            "human_replies": int(a.get("repliesExcludingOoo") or 0),
+            "tagged_positive": sum(int(x.get("leads") or 0) for x in c.get("reply_categories") or []
+                                   if isinstance(x, dict) and str(x.get("sentiment") or "").lower() == "positive"),
+            "bounces": int(a.get("bounces") or 0)}
+
+
+def scorecard(campaigns: list[dict]) -> dict[str, dict]:
+    """Company -> the six columns, summed over its running campaigns."""
+    out: dict[str, dict] = {}
+    for c in campaigns:
+        if c.get("status") != "active":
+            continue
+        row = score_row(c)
+        slot = out.setdefault(company_of(c), dict.fromkeys(SCORE_COLS, 0))
+        for k in SCORE_COLS:
+            slot[k] += row[k]
+    return dict(sorted(out.items()))
+
+
+# Where a reply's own words stop and the quoted thread starts, in a snippet
+# already flattened to one line. Bounded, so a stranger's body can't stall it.
+QUOTED = re.compile(r"\bOn [^\n]{0,200}?wrote:|-{2,40} ?Original Message|\bFrom: |&gt;|>", re.I)
+# A deck, a call or a meeting asked for in so many words. A bare "call" is
+# left out: out-of-office notes say "if urgent, call my cell".
+ASK = re.compile(r"\b(?:(?:pitch )?deck|(?:a|quick|short|intro|brief) (?:call|chat|zoom)|hop on a call|"
+                 r"(?:schedule|set up|book|find) (?:a |some )?(?:call|meeting|time)|meeting|meet (?:with|up)|"
+                 r"calendly|grab time)\b", re.I)
+NOT_AN_ASK = frozenset({"negative", "unsubscribe", "bounce", "ooo"})
+
+
+def own_words(snippet: str) -> str:
+    text = strip_html(snippet)
+    m = QUOTED.search(text)
+    return text[:m.start()] if m else text
+
+
+def real_asks(replies: list[dict], names: dict[str, str]) -> list[dict]:
+    """Everyone whose own reply text asks for a deck, a call or a meeting,
+    newest first, one line each: a real ask, read from words, not a tag."""
+    out, seen = [], set()
+    for r in sorted(replies, key=lambda r: r.get("time") or "", reverse=True):
+        email = r.get("email") or ""
+        if not email or email in seen or r.get("class") in NOT_AN_ASK:
+            continue
+        words = own_words(r.get("snippet") or "")
+        m = ASK.search(words)
+        if m:
+            seen.add(email)
+            out.append({"email": email, "name": names.get(email) or "", "campaign": r.get("campaign"),
+                        "asked": m.group(0).lower(), "quote": words[:160], "time": r.get("time")})
+    return out
+
+
+def lead_names(db, cams: list[str]) -> dict[str, str]:
+    if not cams:
+        return {}
+    marks = ",".join("?" * len(cams))
+    return {r[0]: r[1] for r in db.execute(
+        "SELECT json_extract(props, '$.email'), json_extract(props, '$.name') FROM edges "
+        f"WHERE verb = 'ENROLLED' AND src IN ({marks})", cams) if r[0] and r[1]}
+
+
 def history_alarm(client: str, sent: int, replies: int, as_of: str | None) -> dict | None:
     """Record this sync's totals once per as_of, then compare with the oldest
     record at least DROP_MIN_NEW_SENDS sends back: a recent reply rate under
@@ -1110,6 +1198,10 @@ def client_state(q, db, c: dict) -> dict:
                    if not r.get("forwarded")]
     except LookupError:
         waiting = []
+    try:
+        every = q.replies(db, c["name"])["replies"]
+    except LookupError:
+        every = []
 
     def bounce(r):
         return r.get("class") == "bounce" or is_bounce_notice(r)
@@ -1134,6 +1226,8 @@ def client_state(q, db, c: dict) -> dict:
         "unsubscribe_asks": [r.get("email") for r in unsubscribes if r.get("email")], "credits": credit_view(ws), "sync": sync,
         "drop": history_alarm(c["name"], sent, replies, clay.get("as_of")),
         "rulings": rulings_for(c["name"]),
+        "scorecard": scorecard(cams),
+        "asks": real_asks(every, lead_names(db, [x["id"] for x in cams])),
         "memory": {"overdue": gtm_memory(c["name"], "overdue"),
                    "by_table": gtm_memory(c["name"], "credits", "--by", "table")},
     }
@@ -1587,6 +1681,39 @@ def week_numbers(client: str, start: date, end: date) -> dict:
         db.close()
 
 
+SCORE_HEADS = ("First emails", "Follow ups (step 2+)", "Replies", "Human replies (no out-of-office)",
+               "Tagged positive (tagged, read the text)", "Bounces")
+
+
+def scorecard_lines(card: dict) -> list[str]:
+    """The per-company table, with a total row. Clay analytics, running
+    campaigns only, bounces from Clay's stats totals."""
+    if not card:
+        return []
+    total = dict.fromkeys(SCORE_COLS, 0)
+    out = ["## By company", "", "| Company | " + " | ".join(SCORE_HEADS) + " |",
+           "|---|" + "---:|" * len(SCORE_COLS)]
+    for name, row in card.items():
+        for k in SCORE_COLS:
+            total[k] += row[k]
+        out.append(f"| {md(name)} | " + " | ".join(str(row[k]) for k in SCORE_COLS) + " |")
+    out.append("| Total | " + " | ".join(str(total[k]) for k in SCORE_COLS) + " |")
+    out += ["", "Tagged positive is Clay's tag on a reply, not a read of it; the asks below come from the "
+            "reply text itself.", ""]
+    return out
+
+
+def asks_lines(asks: list[dict]) -> list[str]:
+    out = ["## Asked for a deck, a call or a meeting", ""]
+    if not asks:
+        return out + ["- Nobody yet, read from the reply text.", ""]
+    for a in asks:
+        who = f"{md(a['name'])} ({md(a['email'])})" if a.get("name") else md(a["email"])
+        out.append(f"- {who}, {md(a.get('campaign') or '', 120)}: asked for {md(a['asked'])} "
+                   f"(\"{md(a['quote'], 160)}\")")
+    return out + [""]
+
+
 def render_report(s: dict, this: dict, last: dict, start: date, end: date, actions: list[dict],
                   plan: dict | None) -> str:
     # The report goes to the client: an action a ruling holds is not proposed
@@ -1607,11 +1734,13 @@ def render_report(s: dict, this: dict, last: dict, start: date, end: date, actio
              f"| Emails sent | {this.get('sends', 0)}{delta('sends')} | {s['sent']} |",
              f"| People who replied (any reply, out-of-office included) | {this.get('replies', 0)}{delta('replies')} | "
              f"{(s['funnel'].get('people_replied') or {}).get('n', 0)} |",
-             f"| Interested replies | {this.get('positive', 0)}{delta('positive')} | {s['positive']} |",
+             f"| Replies tagged positive (tagged, read the text) | {this.get('positive', 0)}{delta('positive')} | "
+             f"{s['positive']} |",
              f"| Meetings booked | {this.get('meetings', 0)}{delta('meetings')} | {s['meetings']} |", "",
              f"All-time reply rate {pct(s['replies'], s['sent'])} (benchmark: at least 1%, target 2-4%). "
-             f"Bounce rate {pct(s['bounces'], s['sent'])} (keep under 2%).", "",
-             "## What changed", ""]
+             f"Bounce rate {pct(s['bounces'], s['sent'])} (keep under 2%).", ""]
+    lines += scorecard_lines(s.get("scorecard") or {}) + asks_lines(s.get("asks") or [])
+    lines += ["## What changed", ""]
     changed = []
     if this.get("launched"):
         names = this["launched"]
@@ -1637,7 +1766,7 @@ def render_report(s: dict, this: dict, last: dict, start: date, end: date, actio
     if s["unanswered"]:
         pos = sum(1 for r in s["unanswered"] if r.get("class") == "positive")
         plan_items.insert(0, f"Answer the {len(s['unanswered'])} replies still waiting ({pos} of them "
-                             "interested, those first).")
+                             "tagged positive, those first).")
     lines += [f"{n}. {x}" for n, x in enumerate(plan_items, 1)] or ["1. Keep the running campaigns going."]
     return "\n".join(lines) + "\n"
 

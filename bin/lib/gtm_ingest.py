@@ -689,7 +689,11 @@ def build_clay(raw: dict, cfg: dict, ids: Identities) -> tuple[list[Node], list[
             "analytics": {**(c.get("analytics") or {}), **{k: totals.get(k) for k in
                           ("sent", "replies", "repliesExcludingOoo", "bounces", "unsubscribes") if k in totals}},
             "steps": [{k: s.get(k) for k in ("step", "sentCount", "repliedCount", "bouncedCount")} for s in steps],
-            "reply_categories": [{"name": x.get("categoryName"), "leads": x.get("leads")} for x in cats],
+            # sentiment is Clay's tag on the category ("positive" for
+            # Interested, Information Request...): gtme report counts the
+            # positive ones as "tagged, read the text", never as interest.
+            "reply_categories": [{"name": x.get("categoryName"), "leads": x.get("leads"),
+                                  "sentiment": clip(x.get("sentiment"), 20)} for x in cats],
             "analytics_as_of": stats.get("generatedAt"),
         }))
         link(cam_id, "FOR_CLIENT", cid)

@@ -127,9 +127,16 @@ evidence() {
     # of the shipped bundle all count. An edit followed only by prose does
     # not, and that ordering is the signature of every wrong claim above.
     EV=$(python3 - "$TRANSCRIPT" <<'PY'
-import json, sys
-last_write = -1
-last_run = -1
+import json, re, sys
+# Evidence is a check that PASSED after the last write. 2026-10-10, from the
+# creator distill (Riqor's stale-evidence gate, the most agreed idea across
+# 17 creators): a failing test run, or reading the file back, used to count
+# as "something ran", so a "fixed" claim could stand on a red test. Now a
+# Bash run counts only when its result came back without an error, and a
+# pure read (cat, grep, ls, Read, Grep) never does: The Gray Cat's gate that
+# only grepped source passed while the Delete key was broken.
+READ_ONLY = re.compile(r"^\s*(cd [^;&|]+(&&|;)\s*)?(cat|head|tail|less|ls|grep|rg|sed -n|wc|git (status|log|diff|show)|echo)\b")
+last_write, runs, errors = -1, {}, set()
 names_write = {"Write", "Edit", "NotebookEdit", "MultiEdit"}
 try:
     lines = open(sys.argv[1], encoding="utf-8", errors="replace").readlines()
@@ -140,33 +147,29 @@ for i, raw in enumerate(lines[-4000:]):
         d = json.loads(raw)
     except Exception:
         continue
-    msg = d.get("message") or {}
-    content = msg.get("content")
+    content = (d.get("message") or {}).get("content")
     if not isinstance(content, list):
         continue
     for block in content:
-        if not isinstance(block, dict) or block.get("type") != "tool_use":
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "tool_result" and block.get("is_error"):
+            errors.add(block.get("tool_use_id"))
+        if block.get("type") != "tool_use":
             continue
         name = block.get("name", "")
         if name in names_write:
             last_write = i
         elif name == "Bash":
-            # A bash call that only writes files is not a verification. The
-            # common shape here is a python heredoc that patches a source
-            # file; running one and then claiming the result works is the
-            # thing being guarded against.
             cmd = str((block.get("input") or {}).get("command", ""))
-            if cmd.strip():
-                last_run = i
-                low = cmd.lower()
-                if ("<<'py'" in low or '<<"py"' in low) and (
-                    "test" not in low and "grep" not in low and "build" not in low
-                ):
-                    last_run = -1 if last_run == i else last_run
-                    last_write = i
-        elif name in {"Read", "Grep", "Glob"}:
-            last_run = i
-print("none" if last_write < 0 else (1 if last_run > last_write else 0))
+            low = cmd.lower()
+            # A python heredoc that patches a file is a write, not a check.
+            if ("<<'py'" in low or '<<"py"' in low) and not any(w in low for w in ("test", "build", "check")):
+                last_write = i
+            elif cmd.strip() and not READ_ONLY.search(cmd):
+                runs[block.get("id") or f"line{i}"] = i
+passed = [i for tid, i in runs.items() if tid not in errors and i > last_write]
+print("none" if last_write < 0 else (1 if passed else 0))
 PY
 )
   fi

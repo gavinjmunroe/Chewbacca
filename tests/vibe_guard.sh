@@ -53,6 +53,36 @@ printf '%s\n' '{"type":"user","message":{"content":"add a function"}}' \
   '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"math.js"}}]}}' \
   '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{"command":"npm test"}}]}}' \
   > "$TMP/checked.jsonl"
+# 2026-10-10, from the creator distill (Riqor, 17 creators agreeing): evidence
+# is a check that PASSED after the last edit. A failing test run, or only
+# reading the file back, used to count, so "fixed" stood on a red test.
+printf '%s\n' '{"type":"user","message":{"content":"fix it"}}' \
+  '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"math.js"}}]}}' \
+  '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"npm test"}}]}}' \
+  '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"1 failing"}]}}' \
+  > "$TMP/redtest.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"fix it"}}' \
+  '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"math.js"}}]}}' \
+  '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Read","input":{"file_path":"math.js"}}]}}' \
+  > "$TMP/readback.jsonl"
+printf '%s\n' '{"type":"user","message":{"content":"fix it"}}' \
+  '{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"math.js"}}]}}' \
+  '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"npm test"}}]}}' \
+  '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"12 passing"}]}}' \
+  > "$TMP/greentest.jsonl"
+cprobe() {                    # name, message, transcript, expected exit
+  local code
+  printf '{"last_assistant_message":%s,"transcript_path":"%s","prompt_id":"c-%s"}' \
+    "$(jq -Rn --arg m "$2" '$m')" "$3" "$RANDOM" | bash "$HOOK" >/dev/null 2>&1
+  code=$?
+  if [ "$code" = "$4" ]; then printf '  ok    %s (exit %s)\n' "$1" "$code"
+  else printf '  FAIL  %s: wanted exit %s got %s\n' "$1" "$4" "$code"; fail=$((fail + 1)); fi
+}
+echo "a claim needs a check that passed after the last edit:"
+cprobe "fixed, but the test after the edit failed" "That's fixed now." "$TMP/redtest.jsonl"  2
+cprobe "fixed, only read the file back"            "That's fixed now." "$TMP/readback.jsonl" 2
+cprobe "fixed, test after the edit passed"         "That's fixed now." "$TMP/greentest.jsonl" 0
+
 jevprobe() {                  # name, message, transcript, stub, expected exit
   local code
   printf '{"last_assistant_message":%s,"transcript_path":"%s","prompt_id":"j-%s"}' \

@@ -225,6 +225,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_say_what_you_found_before_digging: On a "the system is cooked" vent, measure once and reply with the diagnosis first; silent digging drew "???" (2026-10-09)
 - feedback_gap_fill_plan_first: "Build what the other tabs aren't" = picks in chat within a minute, claim in ledger, 2 workers max; silence drew "Wtf taking so long?" x2 (10/10)
 - feedback_shared_checkout_mid_merge: The shared checkout can be mid-merge by another tab; never stage there to fix a gate, build the fix in a detached worktree of HEAD
+- feedback_save_wip_without_switching: Saving shared dirty work by commit-and-switch wipes other agents' untracked files; snapshot with a temp index or git stash create
 - feedback_google_signin_calendar_write: Google sign-in asks for calendar write; never improvise gws auth login, clear token_cache.json after re-login
 - project_chewbacca_refactor_waits_on_b2b_b2c: Audience refactor (private repo, personal docs in docs/plans, first-run surface) waits on the B2B vs B2C call; checklist inside
 - feedback_people_scratch_is_people_dir: people CLI scratch store is PEOPLE_DIR; a guessed PEOPLE_DB wrote a test person into the real store (purged)

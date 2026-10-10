@@ -386,3 +386,15 @@ rounded panels for sections, a number as the headline of each case, and a
 type ladder with real jumps (88 / 48 / 72 figure / 17 body). Before a
 professional rework, open the team's own best recent sites and name what
 each does on its first screen.
+
+**A section of copy is a wall; a professional site still needs the story
+(BMA, 2026-10-10).** "So much of the site is just a fat wall of text no one is
+tryna read we gotta tell a MOG story just like lemma" and the other reference
+sites do. The fix was one pinned scene (640vh, canvas, one followed progress
+value) where the client's own records change state per beat: messy wall,
+flagged, gated into a grid, sprouting decision-makers, routed into lanes,
+landing on the result. One headline line and one sub-line per beat, every
+number from a case study with a footnote naming the engagement, and the
+testimonial moved into the final beat so the big number appears once.
+`src/story.jsx` in bluemodernadvisory/bma-website, branch Caleb-Rework, is the
+reference build.

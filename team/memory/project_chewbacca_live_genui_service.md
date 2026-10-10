@@ -14,3 +14,5 @@ First customer: Jonah Graham (Zeutara, BMA's client). The layout starts from Mag
 **Why:** Caleb and Gavin hold full ownership of Chewbacca after the 10/10 Karthik call, and Amber gets an advisor share. Anything built for BMA clients that isn't BMA-specific data belongs on the Chewbacca side.
 
 **How to apply:** new client-facing UI or agent surfaces for BMA go in Chewbacca and call Togari as a data source. Don't build product UI inside togari-platform. Reply rates show Wilson 95% intervals and only get ranked when the intervals separate. Links: [[project_chewbacca_amber_positioning_2026_09_18]], [[project_togari_strategy]], [[feedback_client_cards_one_job]].
+
+Model key: Chewbacca Live calls the model on BMA's Anthropic key, copied from togari-platform's Railway variables. Caleb, 2026-10-10 11:57: "BMA told me do whatever tf I want with the anthropic api key", so using it is authorized and not a blocker.

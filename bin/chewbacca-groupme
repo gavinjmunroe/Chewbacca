@@ -1,0 +1,516 @@
+#!/usr/bin/env python3
+"""chewbacca groupme: GroupMe reads from inside your own signed-in GroupMe web tab.
+
+  chewbacca groupme groups                          name, id, members, last message
+  chewbacca groupme messages <group name | id> [--limit N] [--since YYYY-MM-DD]
+  chewbacca groupme dms                             direct message threads
+  chewbacca groupme dm <person name | user id> [--limit N] [--since YYYY-MM-DD]
+  chewbacca groupme search <words> [--group X] [--limit N]
+                    GroupMe has no server-side search, so this fetches recent
+                    messages (the last N per group, default 100, across your 10
+                    most recent groups unless --group names one) and filters
+                    them here.
+  Every command takes --json.
+
+Why a tab: USC group chats live in GroupMe, and the web app already holds a
+signed-in session. bin/chrome-js runs a fetch() inside the web.groupme.com tab,
+so the request comes from the same browser GroupMe always sees. The access
+token sits in that page's localStorage. The page script reads it, puts it on
+the request as X-Access-Token, scrubs it out of the answer, and returns only
+the response data. It is never returned, printed, logged or written.
+
+Read-only by construction: the in-page script hardcodes GET, fetches only from
+https://api.groupme.com/v3, and refuses any path outside /groups, /chats and
+/direct_messages. No send, like, join, leave or mark-read.
+
+Tab: the first open https://web.groupme.com tab. With none, one is opened at
+/chats in the Chrome profile whose local storage holds a GroupMe session, or
+CHEWBACCA_GROUPME_PROFILE. Stops on the first 401 or 429, or a sign-in page,
+and says so: signing in is the user's to do, once.
+"""
+import datetime
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.parse
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+CHROME_JS = os.environ.get("CHEWBACCA_CHROME_JS") or str(ROOT / "bin" / "chrome-js")
+CHROME_DIR = pathlib.Path(os.environ.get(
+    "CHEWBACCA_CHROME_DIR", pathlib.Path.home() / "Library/Application Support/Google/Chrome"))
+# The only page origin a script runs in, and the only origin it fetches from.
+# Tabs are picked by parsing their URL, never by substring, for the reason
+# bin/chewbacca-linkedin records: a substring test let
+# https://evil.example/?linkedin.com and linkedin.com.evil.example through.
+ORIGIN = "https://web.groupme.com"
+HOST = "web.groupme.com"
+API = "https://api.groupme.com/v3"
+API_HOST = "api.groupme.com"
+CHATS = "https://web.groupme.com/chats"
+TAB = None  # the exact URL of the tab in use, set by ensure_tab()
+
+# At least one second between API calls inside one command. GroupMe documents
+# no rate limit; the web app itself spaces background polls further apart than
+# this. Guessed, never measured, so the env var may raise it and never lower it.
+PAUSE = max(1.0, float(os.environ.get("CHEWBACCA_GROUPME_PAUSE", "1") or 1))
+POLL_EVERY = float(os.environ.get("CHEWBACCA_GROUPME_POLL", "0.3"))
+POLL_LIMIT = 30.0
+# GroupMe's own cap per messages page.
+PAGE = 100
+# The only paths ever fetched: the group list, one group, a group's messages,
+# the DM list and one DM thread, each with a query of plain key=value pairs.
+# Anything else (like, join, leave, read receipts) never matches.
+READ = r"^/(groups|groups/[0-9]+|groups/[0-9]+/messages|chats|direct_messages)(\?[A-Za-z0-9_=&%.-]*)?$"
+SIGNIN = ("/signin", "/login", "/signup", "/sign_in", "/logout")
+
+
+class Stop(Exception):
+    """GroupMe pushed back, or the tab is signed out. Never retried."""
+
+
+def die(msg, code=1):
+    print(f"chewbacca groupme: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def chrome_js(*args, script=None):
+    # --real: the user's own Chrome by PID, never an automation clone (see chrome-js).
+    cmd = [CHROME_JS, "--real", *args]
+    tmp = None
+    if script is not None:
+        fd, tmp = tempfile.mkstemp(suffix=".js")
+        with os.fdopen(fd, "w") as f:
+            f.write(script)
+        cmd += ["--file", tmp]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        die("Chrome did not answer within 60 s. Is it frozen?")
+    finally:
+        if tmp:
+            os.unlink(tmp)
+    if out.returncode == 3:
+        die("Chrome refused: turn on View > Developer > Allow JavaScript from Apple Events "
+            "in the Chrome profile you use GroupMe in (chrome-js --check shows which).")
+    if out.returncode != 0:
+        die(f"chrome-js failed: {(out.stderr or out.stdout).strip()[:300]}")
+    return out.stdout.strip()
+
+
+def session_profile():
+    """The Chrome profile whose local storage holds a web.groupme.com
+    access_token entry, most recently written first. Reads only whether the
+    key name is present, never a value."""
+    if os.environ.get("CHEWBACCA_GROUPME_PROFILE"):
+        return os.environ["CHEWBACCA_GROUPME_PROFILE"]
+    best, prof = -1.0, None
+    marker = b"_https://web.groupme.com\x00\x01access_token"
+    for d in sorted(CHROME_DIR.glob("*/Local Storage/leveldb")):
+        for f in d.iterdir():
+            if f.suffix not in (".ldb", ".log"):
+                continue
+            try:
+                if marker in f.read_bytes() and f.stat().st_mtime > best:
+                    best, prof = f.stat().st_mtime, d.parent.parent.name
+            except OSError:
+                continue
+    return prof
+
+
+def is_groupme(url):
+    """https, and a netloc of exactly web.groupme.com: no userinfo, no port,
+    no lookalike suffix. GroupMe in a path or query is not GroupMe."""
+    try:
+        sp = urllib.parse.urlsplit((url or "").strip())
+    except ValueError:
+        return False
+    return sp.scheme == "https" and sp.netloc.lower() == HOST and sp.hostname == HOST
+
+
+def check_url(url):
+    path = urllib.parse.urlsplit(url or "").path.lower()
+    if any(path.startswith(p) for p in SIGNIN):
+        raise Stop("GroupMe sent this tab to its sign-in page. BLOCKED: sign in once at "
+                   "web.groupme.com in Chrome, then rerun.")
+
+
+def groupme_tabs():
+    return [t.strip() for t in chrome_js("--list").splitlines() if is_groupme(t)]
+
+
+def ensure_tab():
+    global TAB
+    tabs = groupme_tabs()
+    if not tabs:
+        prof = session_profile()
+        chrome_js("--open", CHATS, *(["--profile", prof] if prof else []))
+        tabs = groupme_tabs()
+        if not tabs:
+            die("opened GroupMe in Chrome but the tab isn't visible to AppleScript. Turn on "
+                "Allow JavaScript from Apple Events in that profile (chrome-js --check).")
+    TAB = tabs[0]
+    check_url(TAB)
+
+
+GUARD = ("if (location.origin !== %s) return JSON.stringify({error: 'wrong-origin', origin: location.origin});"
+         % json.dumps(ORIGIN))
+
+
+def in_tab(script):
+    """Run a script in exactly the chosen tab and refuse any answer that does
+    not come from ORIGIN. GroupMe rewrites its URL as you move between chats,
+    so a vanished exact URL is re-resolved once; the script never ran, so this
+    repeats no request."""
+    for attempt in (1, 2):
+        out = chrome_js("--url", TAB, script=script)
+        if not out.startswith("NO_TAB_MATCHING") or attempt == 2:
+            break
+        ensure_tab()
+    res = parse(out)
+    if res.get("origin") != ORIGIN:
+        die(f"refused: the tab answered from {res.get('origin')!r}, not {ORIGIN}.", 5)
+    return res
+
+
+# The token is read here, used on the header, and scrubbed from the body. It
+# is never placed on window, in the stored result, or in any return value.
+START_JS = r"""
+(function(){
+  %(guard)s
+  var path = %(path)s, key = %(key)s, api = %(api)s, READ = new RegExp(%(read)s);
+  if (!READ.test(path))
+    return JSON.stringify({error: 'refused: not a read path', origin: location.origin});
+  var raw = localStorage.getItem('access_token') || '';
+  try { if (raw.charAt(0) === '"') raw = JSON.parse(raw); } catch (e) {}
+  if (!raw) return JSON.stringify({error: 'signed-out', page: location.href, origin: location.origin});
+  window.__chewGm = window.__chewGm || {};
+  window.__chewGm[key] = null;
+  (function(tok){
+    fetch(api + path, {method: 'GET', credentials: 'omit', redirect: 'follow',
+                       headers: {'X-Access-Token': tok, accept: 'application/json'}})
+      .then(function(r){ return r.text().then(function(t){
+        window.__chewGm[key] = {status: r.status, url: r.url.split(tok).join('[redacted]'), redirected: r.redirected,
+                                body: t.split(tok).join('[redacted]').slice(0, 8000000)};
+      }); })
+      .catch(function(e){ window.__chewGm[key] = {status: 0, error: String(e).split(tok).join('[redacted]')}; });
+  })(raw);
+  raw = null;
+  return JSON.stringify({started: key, page: location.href, origin: location.origin});
+})()
+"""
+
+POLL_JS = r"""
+(function(){
+  %(guard)s
+  var k = %(key)s, s = window.__chewGm && window.__chewGm[k];
+  if (!s) return JSON.stringify({pending: true, origin: location.origin});
+  delete window.__chewGm[k];
+  s.origin = location.origin;
+  return JSON.stringify(s);
+})()
+"""
+
+
+class GroupMe:
+    def __init__(self):
+        self.last = 0.0
+        self.calls = 0
+
+    def get(self, path):
+        """GET API + path. Returns the `response` field, or None on 304 (GroupMe's
+        answer for 'no older messages')."""
+        if not re.match(READ, path):
+            die("refused: not a read path")
+        wait = self.last + PAUSE - time.monotonic()
+        if self.last and wait > 0:
+            time.sleep(wait)
+        self.calls += 1
+        key = f"g{os.getpid()}_{self.calls}"
+        started = in_tab(START_JS % {"guard": GUARD, "api": json.dumps(API),
+                                      "path": json.dumps(path), "key": json.dumps(key),
+                                      "read": json.dumps(READ)})
+        # Measured from launch in the page, so a slow Chrome round trip can
+        # never squeeze two requests under the pause.
+        self.last = time.monotonic()
+        if started.get("error") == "signed-out":
+            raise Stop("this GroupMe tab isn't signed in. BLOCKED: sign in once at "
+                       "web.groupme.com in Chrome, then rerun.")
+        if started.get("error"):
+            die(started["error"])
+        check_url(started.get("page"))
+        deadline = time.monotonic() + POLL_LIMIT
+        while True:
+            time.sleep(POLL_EVERY)
+            res = in_tab(POLL_JS % {"guard": GUARD, "key": json.dumps(key)})
+            if not res.get("pending"):
+                break
+            if time.monotonic() > deadline:
+                die("GroupMe did not answer within 30 s.")
+        status = res.get("status")
+        url = res.get("url") or ""
+        if url:
+            sp = urllib.parse.urlsplit(url)
+            check_url(url)
+            if sp.netloc.lower() != API_HOST:
+                raise Stop("the request was redirected off api.groupme.com (a sign-in page?). Stopped.")
+        if status == 401:
+            raise Stop("GroupMe answered 401: the session in Chrome is signed out. BLOCKED: "
+                       "sign in once at web.groupme.com, then rerun.")
+        if status == 429:
+            raise Stop("GroupMe answered 429 (rate limit). Stopped; wait before trying again.")
+        if status == 304:
+            return None
+        if status == 0:
+            die(f"the in-page request failed: {res.get('error', '')[:200]}")
+        if status != 200:
+            die(f"GroupMe answered {status} for {path.split('?')[0]}")
+        try:
+            doc = json.loads(res.get("body") or "")
+        except ValueError:
+            die("GroupMe sent something other than JSON.")
+        return doc.get("response") if isinstance(doc, dict) else None
+
+
+def parse(out):
+    try:
+        return json.loads(out)
+    except ValueError:
+        if out.startswith("NO_TAB_MATCHING"):
+            die("the GroupMe tab closed mid-command.")
+        die(f"unexpected answer from Chrome: {out[:200]}")
+
+
+# ── shaping ──────────────────────────────────────────────────────────────────
+
+def when(ts):
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(ts)) if ts else ""
+
+
+def attachment_urls(atts):
+    out = []
+    for a in atts or []:
+        if not isinstance(a, dict):
+            continue
+        if a.get("url"):
+            out.append(a["url"])
+        elif a.get("type") == "location" and a.get("lat") and a.get("lng"):
+            out.append(f"https://maps.google.com/?q={a['lat']},{a['lng']}")
+    return out
+
+
+def message(m):
+    return {"id": str(m.get("id", "")), "sender": m.get("name") or "",
+            "time": when(m.get("created_at")), "text": m.get("text") or "",
+            "attachments": attachment_urls(m.get("attachments")),
+            "likes": len(m.get("favorited_by") or []), "_t": m.get("created_at") or 0}
+
+
+def since_ts(value):
+    if not value:
+        return 0
+    try:
+        return datetime.datetime.strptime(value, "%Y-%m-%d").timestamp()
+    except ValueError:
+        die("--since needs a date like 2026-09-01")
+
+
+def fetch_groups(g):
+    out, page = [], 1
+    while True:
+        batch = g.get(f"/groups?page={page}&per_page=100") or []
+        out += batch
+        if len(batch) < 100:
+            return out
+        page += 1
+
+
+def group_row(gr):
+    msgs = gr.get("messages") or {}
+    prev = msgs.get("preview") or {}
+    text = prev.get("text") or ("[attachment]" if prev.get("attachments") else "")
+    count = gr.get("members_count")
+    if count is None and isinstance(gr.get("members"), list):
+        count = len(gr["members"])
+    return {"name": gr.get("name") or "", "id": str(gr.get("id", "")), "members": count,
+            "last_message": when(msgs.get("last_message_created_at") or gr.get("updated_at")),
+            "preview": (f"{prev.get('nickname')}: " if prev.get("nickname") else "") + text,
+            "_t": msgs.get("last_message_created_at") or gr.get("updated_at") or 0}
+
+
+def pick(items, query, name_of, id_of, kind):
+    q = query.strip()
+    for it in items:
+        if id_of(it) == q:
+            return it
+    exact = [it for it in items if (name_of(it) or "").lower() == q.lower()]
+    if len(exact) == 1:
+        return exact[0]
+    part = exact or [it for it in items if q.lower() in (name_of(it) or "").lower()]
+    if len(part) == 1:
+        return part[0]
+    if not part:
+        die(f"no {kind} matching '{query}'. Run `chewbacca groupme {kind}s` to see them.")
+    die(f"'{query}' matches {len(part)} {kind}s: " + "; ".join(
+        f"{name_of(it)} ({id_of(it)})" for it in part[:8]) + ". Use the id.")
+
+
+def page_messages(g, base, field, limit, since):
+    out, before = [], None
+    while len(out) < limit:
+        n = min(PAGE, limit - len(out))
+        sep = "&" if "?" in base else "?"
+        resp = g.get(f"{base}{sep}limit={n}" + (f"&before_id={before}" if before else ""))
+        batch = (resp or {}).get(field) or []
+        if not batch:
+            break
+        done = False
+        for m in batch:
+            if since and (m.get("created_at") or 0) < since:
+                done = True
+                break
+            out.append(message(m))
+        before = batch[-1].get("id")
+        if done or len(batch) < n:
+            break
+    return out[:limit]
+
+
+def cmd_groups(g, a):
+    rows = sorted((group_row(x) for x in fetch_groups(g)), key=lambda r: -r["_t"])
+    return rows
+
+
+def cmd_messages(g, a):
+    if not a.rest:
+        die("messages needs a group name or id")
+    gr = pick(fetch_groups(g), " ".join(a.rest), lambda x: x.get("name"), lambda x: str(x.get("id")), "group")
+    return page_messages(g, f"/groups/{urllib.parse.quote(str(gr['id']), safe='')}/messages",
+                         "messages", a.limit or 50, since_ts(a.since))
+
+
+def fetch_chats(g):
+    out, page = [], 1
+    while True:
+        batch = g.get(f"/chats?page={page}&per_page=100") or []
+        out += batch
+        if len(batch) < 100:
+            return out
+        page += 1
+
+
+def dm_row(c):
+    other = c.get("other_user") or {}
+    last = c.get("last_message") or {}
+    text = last.get("text") or ("[attachment]" if last.get("attachments") else "")
+    return {"person": other.get("name") or "", "user_id": str(other.get("id", "")),
+            "messages": c.get("messages_count"), "last_message": when(last.get("created_at") or c.get("updated_at")),
+            "preview": (f"{last.get('name')}: " if last.get("name") else "") + text,
+            "_t": last.get("created_at") or c.get("updated_at") or 0}
+
+
+def cmd_dms(g, a):
+    return sorted((dm_row(c) for c in fetch_chats(g)), key=lambda r: -r["_t"])
+
+
+def cmd_dm(g, a):
+    if not a.rest:
+        die("dm needs a person's name or user id")
+    c = pick(fetch_chats(g), " ".join(a.rest), lambda x: (x.get("other_user") or {}).get("name"),
+             lambda x: str((x.get("other_user") or {}).get("id")), "dm")
+    uid = urllib.parse.quote(str(c["other_user"]["id"]), safe="")
+    return page_messages(g, f"/direct_messages?other_user_id={uid}", "direct_messages",
+                         a.limit or 50, since_ts(a.since))
+
+
+def cmd_search(g, a):
+    words = [w.lower() for w in a.rest]
+    if not words:
+        die("search needs words")
+    groups = fetch_groups(g)
+    if a.group:
+        targets = [pick(groups, a.group, lambda x: x.get("name"), lambda x: str(x.get("id")), "group")]
+    else:
+        targets = sorted(groups, key=lambda x: -group_row(x)["_t"])[:10]
+    hits = []
+    for gr in targets:
+        for m in page_messages(g, f"/groups/{urllib.parse.quote(str(gr['id']), safe='')}/messages",
+                               "messages", a.limit or 100, since_ts(a.since)):
+            if all(w in m["text"].lower() for w in words):
+                m["group"] = gr.get("name") or ""
+                hits.append(m)
+    return sorted(hits, key=lambda m: -m["_t"])
+
+
+# ── output ───────────────────────────────────────────────────────────────────
+
+def show(cmd, data):
+    if not data:
+        print("(nothing)")
+        return
+    for r in data:
+        if cmd == "groups":
+            print(f"{r['last_message']}  {r['name']}  ({r['members'] if r['members'] is not None else '?'} members)  id {r['id']}\n    {r['preview'][:120]}")
+        elif cmd == "dms":
+            print(f"{r['last_message']}  {r['person']}  id {r['user_id']}\n    {r['preview'][:120]}")
+        else:
+            where = f"[{r['group']}] " if r.get("group") else ""
+            likes = f"  ({r['likes']} likes)" if r["likes"] else ""
+            print(f"{r['time']}  {where}{r['sender']}: {r['text']}{likes}")
+            for u in r["attachments"]:
+                print(f"    {u}")
+
+
+COMMANDS = {"groups": cmd_groups, "messages": cmd_messages, "dms": cmd_dms, "dm": cmd_dm,
+            "search": cmd_search}
+
+
+class Args:
+    def __init__(self, argv):
+        self.json, self.group, self.limit, self.since, self.rest = False, None, None, None, []
+        it = iter(argv)
+        for x in it:
+            if x == "--json":
+                self.json = True
+            elif x == "--group":
+                self.group = next(it, None) or die("--group needs a name or id")
+            elif x == "--since":
+                self.since = next(it, None) or die("--since needs a date")
+            elif x == "--limit":
+                try:
+                    self.limit = max(1, int(next(it, "")))
+                except ValueError:
+                    die("--limit needs a number")
+            else:
+                self.rest.append(x)
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.split("\n\n")[0] + "\n" + __doc__.split("\n\n")[1])
+        return 0
+    cmd = argv[0]
+    if cmd not in COMMANDS:
+        die(f"unknown command '{cmd}'. Try: chewbacca groupme help", 2)
+    a = Args(argv[1:])
+    g = GroupMe()
+    try:
+        ensure_tab()
+        data = COMMANDS[cmd](g, a)
+    except Stop as e:
+        die(f"STOPPED: {e}", 4)
+    for r in data:
+        r.pop("_t", None)
+    if a.json:
+        print(json.dumps(data, indent=2, ensure_ascii=False))
+    else:
+        show(cmd, data)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

@@ -77,6 +77,7 @@ COMMANDS=(
   "x|read an X account's own posts with his signed-in session"
   "api|any website as an API: call taught sites, teach new ones (not Clay)"
   "linkedin|LinkedIn reads inside your own signed-in Chrome tab (me, profile, people, inbox)"
+  "groupme|GroupMe group chats and DMs, read inside your own signed-in GroupMe web tab"
   "usc|a USC student's day: due this week, the dining hall, events (setup signs in)"
   "google|find and read Google Docs, Sheets and Slides as text"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
@@ -198,6 +199,11 @@ linkedin)
   # LinkedIn reads run inside the user's own Chrome tab. Read-only.
   shift
   exec python3 "$ROOT/bin/chewbacca-linkedin" "$@"
+  ;;
+groupme)
+  # GroupMe reads run inside the user's own web.groupme.com tab. Read-only.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-groupme" "$@"
   ;;
 usc)
   # Any USC student's day from Brightspace, dining and the campus calendar,

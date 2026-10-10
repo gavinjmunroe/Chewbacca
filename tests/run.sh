@@ -682,6 +682,8 @@ if group "installer"; then
     bash "$ROOT/tests/chewbacca_usc.sh" "$ROOT"
   check  "chewbacca linkedin parses Voyager reads in the real Chrome tab, throttles, and stops on pushback" \
     bash "$ROOT/tests/chewbacca_linkedin.sh" "$ROOT"
+  check  "chewbacca groupme reads groups and DMs in the real GroupMe tab, GET only, throttled, and stops on pushback" \
+    bash "$ROOT/tests/chewbacca_groupme.sh" "$ROOT"
 
   check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \
     bash "$ROOT/tests/chewbacca_google.sh" "$ROOT"

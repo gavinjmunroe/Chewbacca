@@ -126,6 +126,40 @@ check("render() redacts every output field, not only the snippet",
                                                 "repo": f"repo-{FAKE['github']}", "role": "user", "snippet": "x",
                                                 "file": f"/tmp/{FAKE['email']}.jsonl"})))
 
+# Encodings and splits a secret hides behind.
+import base64 as _b64
+import io
+enc_cases = {
+    "a key=value split across a newline": ("password:\n    FakeNlSecret88", "FakeNlSecret88"),
+    "an Authorization header split across a newline": ("Authorization:\n  Bearer FakeNlBearer1234567", "FakeNlBearer1234567"),
+    "a JSON-escaped key=value (backslash quotes)": ('{\\"api_key\\": \\"FakeEscKey12345\\"}', "FakeEscKey12345"),
+    "a double-escaped bearer in tool output": ('{\\\\"Authorization\\\\": \\\\"Bearer FakeDblEsc0987654\\\\"}', "FakeDblEsc0987654"),
+    "a \\u-escaped key": ("\\u0073k-proj-" + "FakeUnicodeEsc0123456789", "FakeUnicodeEsc0123456789"),
+    "a URL-encoded password": ("body=user%3Djane%26password%3DFakePctPw999", "FakePctPw999"),
+    "a URL-encoded connection string": ("dsn=postgres%3A%2F%2Fapp%3AFakePctDsn77%40db.example.com", "FakePctDsn77"),
+    "a base64-encoded secret too short for the blob rule":
+        ("hdr " + _b64.b64encode(b"password=FakeB64Pw42").decode(), "FakeB64Pw42"),
+    "a secret used as a JSON field name": ('{"' + FAKE["openai"] + '": true}', FAKE["openai"]),
+}
+for name, (text, secret) in enc_cases.items():
+    out = ah.redact(text)
+    b64_hidden = secret == "FakeB64Pw42" and _b64.b64encode(b"password=FakeB64Pw42").decode() not in out
+    check(f"redacts {name}", secret not in out and (secret != "FakeB64Pw42" or b64_hidden), out)
+
+buf = io.StringIO()
+ah.emit(f"stderr line with {FAKE['github']} and {FAKE['email']}", buf)
+check("emit redacts a plain line (the stderr route)", FAKE["github"] not in buf.getvalue() and FAKE["email"] not in buf.getvalue(), buf.getvalue())
+buf = io.StringIO()
+ah.emit({"repo": f"/Users/x/{FAKE['openai']}", FAKE["aws"]: "v", "snippet": 'say \\"password\\": \\"FakeJsonPw555\\"'}, buf)
+line = buf.getvalue()
+try:
+    json.loads(line)
+    valid = True
+except ValueError:
+    valid = False
+check("emit redacts a dict's keys and values and keeps it valid JSON",
+      valid and FAKE["openai"] not in line and FAKE["aws"] not in line and "FakeJsonPw555" not in line, line)
+
 # ------------------------------------------------------------- fixtures
 
 tmp = Path(tempfile.mkdtemp(prefix="agent-history-test-"))
@@ -172,6 +206,13 @@ write(other / "33333333-3333-3333-3333-333333333333.jsonl", [
     {"type": "user", "sessionId": "33333333-3333-3333-3333-333333333333", "cwd": "/Users/someone/code/otherrepo",
      "timestamp": iso(now - 30 * 86400), "message": {"role": "user", "content": "old zebrafish note from last month"}},
 ], now - 30 * 86400)
+
+leaky = claude_root / f"-Users-someone-code-{FAKE['openai']}"
+leaky.mkdir(parents=True)
+write(leaky / f"{FAKE['email']}.jsonl", [
+    {"type": "user", "sessionId": FAKE["email"], "cwd": f"/Users/someone/code/{FAKE['openai']}",
+     "timestamp": iso(now - 900), "message": {"role": "user", "content": "platypus in a leaky place"}},
+], now - 900)
 
 cday = codex_root / "2026" / "10" / "09"
 cday.mkdir(parents=True)
@@ -249,6 +290,19 @@ after = sorted((str(p), p.stat().st_mtime, p.stat().st_size) for p in tmp.rglob(
 check("writes nothing: fixture tree unchanged", before == after)
 rc, out, err = run("search", "zebrafish", "--since", "yesterdayish")
 check("a bad --since is refused, not ignored", rc != 0 and "--since" in err, err)
+
+leak_vals = (FAKE["openai"], FAKE["email"])
+rc, out, err = run("search", "platypus")
+check("text stdout redacts repo, session and path fields", rc == 0 and "platypus" in out and not any(v in out + err for v in leak_vals), out)
+rc, out, err = run("search", "platypus", "--json")
+check("JSON stdout redacts every field and stays JSON",
+      rc == 0 and not any(v in out for v in leak_vals) and all(json.loads(l) for l in out.splitlines() if l), out)
+rc, out, err = run("search", "zebrafish", "--since", FAKE["github"])
+check("the --since error path redacts what it echoes", rc == 2 and "--since" in err and FAKE["github"] not in err, err)
+rc, out, err = run("search", "zebrafish", "--runtime", FAKE["aws"])
+check("argparse's own error echo is redacted", rc == 2 and FAKE["aws"] not in err and "invalid choice" in err, err)
+rc, out, err = run("search", FAKE["slack"])
+check("the stderr summary never carries the query's secret", FAKE["slack"] not in err + out, err)
 
 p = subprocess.run([sys.executable, str(TOOL), "redact"], input=f"key {FAKE['openai']}", capture_output=True, text=True)
 check("redact subcommand works as a pipe", FAKE["openai"] not in p.stdout and "[API_KEY]" in p.stdout, p.stdout)

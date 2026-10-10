@@ -32,6 +32,8 @@ AGENT_HISTORY_CODEX_DIR replace the default roots.
 """
 
 import argparse
+import base64
+import binascii
 import json
 import os
 import re
@@ -41,6 +43,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from urllib.parse import unquote
 
 HOME = Path.home()
 
@@ -77,6 +80,13 @@ _BLOB = re.compile(r"[A-Za-z0-9+/_-]{40,}={0,2}")
 
 def _blob_sub(m: re.Match) -> str:
     s = m.group(0)
+    # A file path is a long run too (codex/sessions/2026/09/23/rollout-...).
+    # Random base64 almost never has three slashes with most segments plain
+    # lowercase words or numbers; a path almost always does.
+    segs = [x for x in s.split("/") if x]
+    if len(segs) >= 4 and \
+            sum(bool(re.fullmatch(r"[a-z0-9._-]+", x)) for x in segs) * 2 >= len(segs):
+        return s
     # A long run with upper, lower and a digit is a key or an encoded blob; a
     # long all-lowercase kebab identifier or a path segment is left alone.
     if re.search(r"[A-Z]", s) and re.search(r"[a-z]", s) and re.search(r"\d", s):
@@ -84,10 +94,7 @@ def _blob_sub(m: re.Match) -> str:
     return s
 
 
-def redact(text: str) -> str:
-    """Replace secrets and personal identifiers with [LABEL] placeholders."""
-    if not text:
-        return text
+def _apply_rules(text: str) -> str:
     for label, rx in _SECRET_RULES:
         if label == "URL_USERINFO":
             text = rx.sub(lambda m: f"{m.group(1)}[REDACTED]@", text)
@@ -100,6 +107,90 @@ def redact(text: str) -> str:
         else:
             text = rx.sub(f"[{label}]", text)
     return _BLOB.sub(_blob_sub, text)
+
+
+_U_ESC = re.compile(r"\\u([0-9a-fA-F]{4})")
+_C_ESC = re.compile(r"\\+([\"'/nrt])")
+_PCT = re.compile(r"%[0-9A-Fa-f]{2}")
+_B64 = re.compile(r"(?<![A-Za-z0-9+/_-])[A-Za-z0-9+/_-]{16,}={0,2}(?![A-Za-z0-9+/=_-])")
+
+
+def _normalize(text: str) -> str:
+    """Undo the encodings a secret hides behind in a transcript: JSON escapes
+    nested inside tool output (a backslash-quote, or \\u0073k- for sk-) and
+    percent-encoding in URLs and form bodies. The snippet is for reading, so
+    showing the decoded form costs nothing, and the rules then see one
+    spelling of each secret."""
+    for _ in range(3):  # escapes nest: a JSON string inside a JSON string
+        before = text
+        text = _U_ESC.sub(lambda m: chr(int(m.group(1), 16)), text)
+        text = _C_ESC.sub(lambda m: {"n": "\n", "r": " ", "t": " "}.get(m.group(1), m.group(1)), text)
+        if _PCT.search(text):
+            text = unquote(text)
+        if text == before:
+            break
+    return text
+
+
+def _b64_sub(m: re.Match) -> str:
+    """A base64 run that decodes to text holding a secret is that secret."""
+    tok = m.group(0)
+    raw = tok.replace("-", "+").replace("_", "/")
+    raw += "=" * (-len(raw) % 4)
+    try:
+        dec = base64.b64decode(raw, validate=True).decode("utf-8")
+    except (binascii.Error, ValueError, UnicodeDecodeError):
+        return tok
+    if dec.isprintable() and _apply_rules(_normalize(dec)) != _normalize(dec):
+        return "[BLOB]"
+    return tok
+
+
+def redact(text: str) -> str:
+    """Replace secrets and personal identifiers with [LABEL] placeholders."""
+    if not text:
+        return text
+    text = _normalize(text)
+    text = _B64.sub(_b64_sub, text)
+    return _apply_rules(text)
+
+
+def _redact_obj(obj):
+    if isinstance(obj, str):
+        return redact(obj)
+    if isinstance(obj, dict):
+        return {redact(str(k)): _redact_obj(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_redact_obj(v) for v in obj]
+    return obj
+
+
+def emit(line, stream=None) -> None:
+    """The one door to stdout and stderr. Every byte this tool prints passes
+    here and is redacted as the final string: a dict is redacted key by key and
+    value by value and then serialized, so the JSON stays valid; anything else
+    is redacted whole, after every f-string, truncation and join is done."""
+    stream = stream if stream is not None else sys.stdout
+    if isinstance(line, (dict, list)):
+        out = json.dumps(_redact_obj(line), ensure_ascii=False)
+    else:
+        out = redact(str(line))
+    stream.write(out + "\n")
+
+
+class UsageError(Exception):
+    pass
+
+
+class _Parser(argparse.ArgumentParser):
+    """argparse echoes a bad argument back; that echo goes through emit too."""
+
+    def error(self, message):
+        emit(f"{self.prog}: error: {message}", sys.stderr)
+        raise SystemExit(2)
+
+    def print_help(self, file=None):
+        emit(self.format_help().rstrip("\n"), file)
 
 
 # ---------------------------------------------------------------- sources
@@ -422,7 +513,7 @@ def parse_since(s: str | None) -> float | None:
     try:
         d = datetime.fromisoformat(s)
     except ValueError:
-        raise SystemExit(f"agent-history: --since takes 30m, 12h, 7d, 2w or a date like 2026-10-01, not {s!r}")
+        raise UsageError(f"agent-history: --since takes 30m, 12h, 7d, 2w or a date like 2026-10-01, not {s!r}")
     if d.tzinfo is None:
         d = d.astimezone()
     return d.timestamp()
@@ -441,7 +532,7 @@ def cmd_search(a: argparse.Namespace) -> int:
     started = time.monotonic()
     query = " ".join(a.query).strip()
     if not query:
-        print("agent-history: give it something to search for", file=sys.stderr)
+        emit("agent-history: give it something to search for", sys.stderr)
         return 2
     terms = [query.lower()] if a.phrase else [t.lower() for t in query.split()]
     # The raw line is JSON, so a quote or backslash in the words appears escaped
@@ -467,21 +558,21 @@ def cmd_search(a: argparse.Namespace) -> int:
     elapsed = time.monotonic() - started
     if a.json:
         for h in hits:
-            print(json.dumps(h, ensure_ascii=False))
+            emit(h)
     else:
         for h in hits:
-            print(f"{local_time(h['time'])}  {h['runtime']:<11}  {h['repo'] or '-':<18}  "
-                  f"{h['session'][:8]}  {h['role']}")
-            print(f"    {h['snippet']}")
+            emit(f"{local_time(h['time'])}  {h['runtime']:<11}  {h['repo'] or '-':<18}  "
+                 f"{h['session'][:8]}  {h['role']}")
+            emit(f"    {h['snippet']}")
     more = " (limit reached, --limit raises it)" if len(hits) >= a.limit else ""
-    print(f"{len(hits)} match{'es' if len(hits) != 1 else ''} in {scanned} of {len(files)} "
-          f"transcripts, {elapsed:.2f}s{more}", file=sys.stderr)
+    emit(f"{len(hits)} match{'es' if len(hits) != 1 else ''} in {scanned} of {len(files)} "
+         f"transcripts, {elapsed:.2f}s{more}", sys.stderr)
     return 0 if hits else 1
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="agent-history", description=__doc__.split("\n\n")[0])
-    sub = ap.add_subparsers(dest="cmd")
+    ap = _Parser(prog="agent-history", description=__doc__.split("\n\n")[0])
+    sub = ap.add_subparsers(dest="cmd", parser_class=_Parser)
     s = sub.add_parser("search", help="search every agent transcript, redacted")
     s.add_argument("query", nargs="+")
     s.add_argument("--runtime", choices=["all", "claude-code", "codex"], default="all")
@@ -497,7 +588,7 @@ def main(argv: list[str]) -> int:
     if a.cmd == "search":
         return cmd_search(a)
     if a.cmd == "redact":
-        sys.stdout.write(redact(sys.stdin.read()))
+        emit(sys.stdin.read().rstrip("\n"))
         return 0
     ap.print_help()
     return 2
@@ -508,3 +599,9 @@ if __name__ == "__main__":
         sys.exit(main(sys.argv[1:]))
     except BrokenPipeError:
         sys.exit(0)
+    except UsageError as err:
+        emit(str(err), sys.stderr)
+        sys.exit(2)
+    except Exception as err:  # a crash message can quote transcript text
+        emit(f"agent-history: {type(err).__name__}: {err}", sys.stderr)
+        sys.exit(1)

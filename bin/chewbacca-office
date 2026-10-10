@@ -71,6 +71,12 @@ SCOPES = [
 KEYCHAIN_SERVICE = "chewbacca-office"
 SECURITY = os.environ.get("CHEWBACCA_OFFICE_SECURITY") or "/usr/bin/security"
 OPENER = os.environ.get("CHEWBACCA_OFFICE_OPEN") or "/usr/bin/open"
+# Once his tenant has said no, login stops before asking Microsoft for a code
+# or opening a browser. On 2026-10-09 USC blocked the app and the sign-in page
+# kept reopening on his screen for a login that could not succeed ("why do
+# you keep opening microsoft office if we can't get in?"). --retry clears it.
+HOLD = pathlib.Path(os.environ.get("CHEWBACCA_OFFICE_HOLD")
+                    or pathlib.Path.home() / ".chewbacca" / "office-hold")
 VENV = pathlib.Path(os.environ.get("CHEWBACCA_OFFICE_VENV")
                     or pathlib.Path.home() / ".chewbacca/venvs/office")
 MSAL_PIN = "msal>=1.28,<2"
@@ -323,12 +329,23 @@ def aad_error(res):
     return f"{res.get('error', 'error')}: {res.get('error_description', '').strip()}"
 
 
-def cmd_login():
+def hold(reason):
+    HOLD.parent.mkdir(parents=True, exist_ok=True)
+    HOLD.write_text(reason.strip() + "\n")
+
+
+def cmd_login(retry=False):
+    if HOLD.exists() and not retry:
+        die("STOPPED: not starting a sign-in. " + clean(HOLD.read_text().strip())
+            + " `chewbacca office login --retry` tries again once that changes.", 4)
+    if retry:
+        HOLD.unlink(missing_ok=True)
     msal = load_msal()
     cache = msal.SerializableTokenCache()
     app = make_app(msal, cache)
     flow = app.initiate_device_flow(scopes=SCOPES)
     if "user_code" not in flow:
+        hold(f"Microsoft refused to start the sign-in: {clean(aad_error(flow))}")
         die(f"STOPPED: Microsoft refused to start the sign-in. BLOCKED: {clean(aad_error(flow))}", 4)
     # Microsoft's message, exactly: the code and where to enter it.
     say(flow["message"], flush=True)
@@ -341,6 +358,13 @@ def cmd_login():
     for k in ("access_token", "refresh_token", "id_token"):
         remember_secret(res.get(k))
     if "access_token" not in res:
+        if res.get("error") in ("authorization_pending", "expired_token", "code_expired"):
+            # MSAL polls until the flow's expires_at (900 s from Microsoft) and then
+            # returns the last poll's "authorization_pending ... Continue polling",
+            # which read like a bug the first time it happened (2026-10-09, 22:24).
+            die("STOPPED: the sign-in code expired before it was entered (Microsoft "
+                "gives 15 minutes). BLOCKED: run `chewbacca office login` again for a new code.", 4)
+        hold(f"His Microsoft tenant refused the sign-in: {clean(aad_error(res))}")
         die(f"STOPPED: sign-in did not finish. BLOCKED: {clean(aad_error(res))}", 4)
     claims = res.get("id_token_claims") or {}
     upn = claims.get("preferred_username") or claims.get("upn") or ""
@@ -906,7 +930,7 @@ def main(argv):
         return 0
     cmd = argv[0]
     if cmd == "login":
-        return cmd_login()
+        return cmd_login(retry="--retry" in argv[1:])
     if cmd == "logout":
         return cmd_logout()
     if cmd not in COMMANDS:

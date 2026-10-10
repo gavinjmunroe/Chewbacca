@@ -47,6 +47,11 @@ Say what will appear before it appears.
 
 Run `mac doctor` and read it to them in plain language. Do not paste the table.
 
+`mac-db stores` shows every local Apple database at once (Messages, calls,
+contacts, Mail, Notes, Calendar, Reminders, Safari, Chrome, Photos, Voice
+Memos, Podcasts, downloads, interactions, Screen Time, Biome): readable or
+not, row count, newest entry. `--fix` opens the Full Disk Access pane.
+
 ## 3. Then actually pull it in
 
 Run only commands corresponding to the sources and processing the person has

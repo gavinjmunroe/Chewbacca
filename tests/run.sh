@@ -495,6 +495,18 @@ if group "tools"; then
     skip "memory compact dry run is safe" "no second-brain on this machine"
   fi
   check  "secret scan finds nothing in the repo" python3 "$ROOT/bin/secret-scan" "$ROOT"
+  # Another tab's worktree under .claude/worktrees is another checkout, and its
+  # files blocked an auto-push of commits that never contained them. The
+  # nested literal must be skipped and the top-level one still caught.
+  check  "secret scan skips a nested checkout but still catches its own file" bash -c '
+    d="$(mktemp -d)"; mkdir -p "$d/wt/.git"
+    lit="api_key = \"Zq8LmN2pRt5VwX9yBc3DfG6hJk4Ps7Tu\""
+    printf "%s\n" "$lit" > "$d/wt/leak.py"
+    out="$(python3 "'"$ROOT"'/bin/secret-scan" "$d" 2>&1)"
+    echo "$out" | grep -q "wt/leak.py" && { echo "scanned nested checkout: $out"; exit 1; }
+    printf "%s\n" "$lit" > "$d/top.py"
+    python3 "'"$ROOT"'/bin/secret-scan" "$d" 2>&1 | grep -q "top.py" || { echo "missed top-level literal"; exit 1; }
+    rm -rf "$d"'
   check  "browser-bridge runs nothing a web page could use to run code" python3 "$ROOT/tests/test_browser_bridge.py"
   check  "checksums are current" python3 "$ROOT/tools/checksums.py" --check
   # The checksum file is not decoration. start.sh verifies every downloaded
@@ -1278,6 +1290,27 @@ if group "hooks"; then
     after="$(git --git-dir="$d/origin.git" rev-parse main)"
     [ "$before" = "$after" ] || { echo "it pushed past a failed gate" >&2; exit 1; }
     echo "$out" | grep -q BLOCKED || { echo "said nothing: $out" >&2; exit 1; }
+    exit 0
+  '
+
+  # The secret gate scans only what the push changes, so it must still catch a
+  # literal inside a pushed commit and ignore one already on the remote.
+  check "a secret in a pushed file blocks; one already on the remote does not" bash -c '
+    d="$('"$(declare -f autopush_fixture)"'; autopush_fixture main)"
+    cp "'"$ROOT"'/bin/secret-scan" "$d/work/bin/secret-scan"
+    lit="api_key = \"Zq8LmN2pRt5VwX9yBc3DfG6hJk4Ps7Tu\""
+    cd "$d/work" || exit 1
+    printf "%s\n" "$lit" > old.py
+    git add bin/secret-scan old.py && git commit -qm "already public" && git push -q origin main
+    echo three >> a.txt && git commit -qam clean
+    before="$(git --git-dir="$d/origin.git" rev-parse main)"
+    CHEWBACCA_REPO_DIR="$d/work" bash "'"$ROOT"'/.claude/hooks/kit-autopush.sh" >/dev/null 2>&1
+    [ "$(git --git-dir="$d/origin.git" rev-parse main)" != "$before" ] || { echo "an old remote literal blocked a clean push" >&2; exit 1; }
+    printf "%s\n" "$lit" > new.py && git add new.py && git commit -qm leak
+    before="$(git --git-dir="$d/origin.git" rev-parse main)"
+    out="$(CHEWBACCA_REPO_DIR="$d/work" bash "'"$ROOT"'/.claude/hooks/kit-autopush.sh" 2>&1)"
+    [ "$(git --git-dir="$d/origin.git" rev-parse main)" = "$before" ] || { echo "it pushed a secret" >&2; exit 1; }
+    echo "$out" | grep -q secrets || { echo "did not name the secrets gate: $out" >&2; exit 1; }
     exit 0
   '
 

@@ -27,3 +27,5 @@ writing from Sagar rather than assuming.
 
 Related: [[project_amber_circles_architecture]], [[project_chewbacca]],
 [[reference_medha_id_storage]].
+
+**Update 2026-10-09 (Caleb):** barely anything Karthik engineered is still used in Chewbacca; the team refactored everything after the port.

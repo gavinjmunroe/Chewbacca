@@ -185,6 +185,27 @@ class GraphCommands(unittest.TestCase):
         # A reply the sync stored no ids for says to sync, never prints a guess.
         self.assertIn("gtm sync --source inbox", cmds["q@beta.example"])
 
+    def test_refill_command_names_the_campaign_for_add_leads(self):
+        # add-leads requires campaign= (2026-10-10); the refill suggestion
+        # carries it, the base segment and the grade step.
+        db = sqlite3.connect(self.tmp / "graph.sqlite")
+        db.execute("INSERT INTO edges VALUES (?,?,?,?,'gtm-clay:9001')",
+                   ("campaign:clay:cam_dry", "TARGETS", "audience:clay:audseg_dry", "{}"))
+        db.commit()
+        db.close()
+        items = json.loads(run(self.env, "next", "--json").stdout)
+        dry = next(x for x in items if x["kind"] == "dry")
+        self.assertIn("chewbacca clay add-leads audience=audseg_dry", dry["command"])
+        self.assertIn("campaign=cam_dry --allow-writes", dry["command"])
+        self.assertIn("gtme-grade --campaign cam_dry --action add-leads", dry["command"])
+        late = [{"kind": "refill", "owed_by": "us", "title": "Refill c1", "campaign": "c1",
+                 "source_id": "campaign:clay:cam_dry", "late_by_hours": 30}]
+        fixture(self.tmp, "memory-overdue", {"late": late, "freshness": {"last_ingest": "2026-03-20T08:00:00Z"}})
+        items = json.loads(run(self.env, "next", "--json").stdout)
+        dry = next(x for x in items if x["kind"] == "dry")
+        self.assertIn("add-leads audience=audseg_dry", dry["command"])
+        self.assertIn("campaign=cam_dry", dry["command"])
+
     def test_classes_the_sync_gave_sort_bounces_and_removals(self):
         # 2026-10-10: the sync now classifies bounce notices and removal asks
         # from sender, subject and text; gtme sorts by that class even when

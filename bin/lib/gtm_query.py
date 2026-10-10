@@ -154,9 +154,12 @@ def find_client(db, name: str) -> dict:
 
 def campaigns_of(db, client_id: str) -> list[dict]:
     rows = db.execute(
-        "SELECT n.id, n.label, n.props FROM edges e JOIN nodes n ON n.id = e.src "
+        "SELECT n.id, n.label, n.props, (SELECT t.dst FROM edges t WHERE t.src = n.id AND t.verb = 'TARGETS' "
+        "LIMIT 1) AS audience FROM edges e JOIN nodes n ON n.id = e.src "
         "WHERE e.dst = ? AND e.verb = 'FOR_CLIENT'", (client_id,)).fetchall()
-    return [{"id": r["id"], "name": r["label"], **_props(r)} for r in rows]
+    # audience: the campaign's base segment, which add-leads changes.
+    return [{"id": r["id"], "name": r["label"], **_props(r),
+             "audience": (r["audience"] or "").removeprefix("audience:clay:") or None} for r in rows]
 
 
 def offers_of(db, client_id: str) -> list[str]:

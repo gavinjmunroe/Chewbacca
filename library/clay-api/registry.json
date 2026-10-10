@@ -1521,9 +1521,12 @@
       "args": [
         "audience",
         "filter",
-        "campaign?"
+        "campaign"
       ],
-      "summary": "Change which leads a campaign's base segment holds by replacing that audience's filter (the documented CLI way). A live campaign emails whoever enters its segment, so it needs campaign=cam_... and a passing gtme-grade for add-leads on it, whose base segment must be this audience; checked after the person approves, before the send.",
+      "required_why": {
+        "campaign": "add-leads changes a live campaign's segment; name it with campaign=cam_... so its grade can be checked"
+      },
+      "summary": "Change which leads a campaign's base segment holds by replacing that audience's filter (the documented CLI way). A live campaign emails whoever enters its segment, so it needs campaign=cam_... (required) and a passing gtme-grade for add-leads on it, whose base segment must be this audience; checked after the person approves, before the send.",
       "surfaces": [
         {
           "type": "cli",

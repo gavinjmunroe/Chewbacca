@@ -50,7 +50,9 @@ comes back, with `surface`, `ms` and every surface `tried`.
   own frontend code without ever sending one: `add-column`, `update-column`,
   `table-auto-run`, `run-cells` (five rows at most), `cancel-run`,
   `add-rows`, `update-rows`, `delete-rows`, `import`, `add-leads` (the CLI's
-  `audiences update --filter`), `campaign-status` (PAUSED or STOPPED only;
+  `audiences update --filter`; always `audience= filter= campaign=cam_...`,
+  campaign required, after a passing `gtme-grade --action add-leads` on that
+  campaign), `campaign-status` (PAUSED or STOPPED only;
   a start never goes out from here), `lead-category`, `mark-read`,
   `blocklist-remove`, `blocklist-add-bulk`, `page-view-activity`. Every write
   refuses unless called with `--allow-writes` and a person typing the op name

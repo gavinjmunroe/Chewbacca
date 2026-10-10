@@ -1097,6 +1097,15 @@ async function runOp(name, kv, flags) {
   if (stray.length) {
     out({ ok: false, op: name, class: "usage", reason: `unknown arg ${stray.join(", ")}; ${name} takes ${op.args.join(", ") || "no args"}` }, EXIT.usage);
   }
+  // An arg the registry lists without "?" is required, and is refused here,
+  // before --dry-run or the approval prompt. add-leads listed campaign as
+  // optional until 2026-10-10, so a dry run without it looked sendable and
+  // only the grade gate, after the person approved, said it was missing.
+  const missing = op.args.filter((a) => !a.endsWith("?") && args[a] === undefined);
+  if (missing.length) {
+    const why = missing.map((k) => (op.required_why || {})[k]).filter(Boolean).join("; ");
+    out({ ok: false, op: name, class: "input", reason: `${name} needs ${missing.map((k) => `${k}=`).join(", ")}${why ? `: ${why}` : ""}; ${name} takes ${op.args.join(", ")}` }, EXIT.usage);
+  }
   const norm = normalizeArgs(args);
   if (norm.error) out({ ok: false, op: name, class: "input", reason: norm.error }, EXIT.usage);
   const bad = badArg(norm.values, op);

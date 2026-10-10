@@ -921,7 +921,8 @@ def campaign_view(c: dict) -> dict:
     # Clay sends all of step 1 at once (first live run, 2026-10-09).
     counts = [(s or {}).get("sentCount") for s in steps]
     left = sum(max(0, leads - (n or 0)) for n in counts) if counts else None
-    return {"id": c.get("campaign_id") or c.get("id"), "name": c.get("name"), "status": c.get("status"),
+    return {"id": c.get("campaign_id") or c.get("id"), "audience": c.get("audience"),
+            "name": c.get("name"), "status": c.get("status"),
             "leads": leads, "sent": a.get("sent") or 0, "replies": a.get("repliesExcludingOoo") or 0,
             "bounces": a.get("bounces") or 0, "leads_left": left, "as_of": c.get("analytics_as_of")}
 
@@ -1030,7 +1031,20 @@ def client_state(q, db, c: dict) -> dict:
 # ── the to-do list: one ranking for brief and next ────────────────────────
 
 
-def memory_actions(name: str, overdue: dict) -> list[dict]:
+def refill_command(client: str, campaign: str | None, audience: str | None) -> str:
+    """The whole refill chain for one campaign: who must never be emailed,
+    find new people, grade the add, then add-leads with campaign= (required:
+    chewbacca clay refuses add-leads without it, and checks the grade in
+    code). Unknown ids stay visible placeholders, never a guess."""
+    cam = campaign if campaign and CLAY_ARG_ID.match(campaign) else "<campaign id>"
+    aud = audience if audience and CLAY_ARG_ID.match(audience) else "<its base segment>"
+    return (f"chewbacca gtm suppress --client {shlex.quote(client)} --csv  then  chewbacca clay route find-people"
+            f"  then  gtme-grade --campaign {cam} --action add-leads --leads <new leads csv>"
+            f"  then  chewbacca clay add-leads audience={aud} filter='<segment filter with the new leads>' "
+            f"campaign={cam} --allow-writes")
+
+
+def memory_actions(name: str, overdue: dict, audiences: dict | None = None) -> list[dict]:
     """gtm-memory's late commitments, grouped by kind so 30 refills read as
     one job with a count instead of 30 lines."""
     late = [x for x in overdue.get("late") or [] if isinstance(x, dict)]
@@ -1047,7 +1061,8 @@ def memory_actions(name: str, overdue: dict) -> list[dict]:
             do = (f"Refill {len(items)} campaigns with nothing left to send: every lead has had every step "
                   f"(oldest: \"{oldest.get('campaign')}\", {days:.0f} days late)")
             gate, score, lesson = "read, then needs your approval to add leads", 40, "dry"
-            cmd = f"chewbacca gtm suppress --client \"{name}\" --csv  then  chewbacca clay route find-people"
+            cam = str(oldest.get("source_id") or "").removeprefix("campaign:clay:") or None
+            cmd = refill_command(name, cam, (audiences or {}).get(cam))
         elif kind == "approval_owed":
             who = "the client" if owed_by == "client" else "you"
             do = (f"Get {len(items)} reply verdicts from {who} (oldest: {oldest.get('title')}, {days:.0f} days late)")
@@ -1147,7 +1162,7 @@ def actions_for(s: dict) -> list[dict]:
             out.append({
                 "score": 40, "client": name, "kind": "dry",
                 "do": f"Refill \"{c['name']}\": {c['leads_left']} emails left in its queue ({c['leads']} leads)",
-                "command": f"chewbacca gtm suppress --client \"{name}\" --csv  then  chewbacca clay route find-people",
+                "command": refill_command(name, c["id"], c.get("audience")),
                 "gate": "read, then needs your approval to add leads",
                 "why": f"Clay analytics per-step sends vs leads, as of {c['as_of']}. Under {RUN_DRY_LEADS} "
                        "queued emails runs out in about two sending days.",
@@ -1163,7 +1178,7 @@ def actions_for(s: dict) -> list[dict]:
                    "deliverability; the playbook treats unsubscribes above 2% as a reason to pause.",
         })
     if memory_overdue is not None:
-        out += memory_actions(name, memory_overdue)
+        out += memory_actions(name, memory_overdue, {c["id"]: c.get("audience") for c in s["campaigns"]})
     if s["drop"]:
         d = s["drop"]
         out.append({

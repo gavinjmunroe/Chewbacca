@@ -1623,6 +1623,8 @@ if group "call"; then
   check  "call-watch compiles"       python3 -m py_compile "$ROOT/bin/call-watch"
   check  "call-practice scoring"     python3 "$ROOT/tests/test_call_practice.py"
   check  "segmenter, cue parser, context bank and call watcher" python3 "$ROOT/tests/test_call_listen.py"
+  check  "call-pill compiles"        python3 -m py_compile "$ROOT/bin/call-pill"
+  check  "call pill: people, dial URL, FaceTime's tree, Escape never hangs up" python3 "$ROOT/tests/test_call_pill.py"
 fi
 
 # ── guide ─────────────────────────────────────────────────────────────────────

@@ -366,7 +366,7 @@ looks tiny, read the module it runs.
 | Learning loop | `reflect`, `propose`, `evolve`, `fitness`, `learn`, `scars`, `consolidate`, `maintain`, `method` | See [The learning loop](#the-learning-loop). |
 | Personal data | `people`, `coursework`, `course-ingest`, `bb`, `brightspace`, `textbook`, `intro`, `stays`, `amber-user` | `people` is an 8,000-line Node CLI over SQLite. |
 | Voice and HUD | `hud`, `hud-listen`, `hud-speak`, `hud-guide`, `hud-music`, `hud-context`, `hud-autostart`, `kyber-surfaces`, `kyber-genui`, `kyber-sessions`, `text-command`, `superassistant` | See [Kyber](#kyber-the-hud-app). |
-| Calls | `call-listen`, `call-watch`, `call-practice`, `room-listen` | Live call coaching. |
+| Calls | `call-listen`, `call-watch`, `call-practice`, `room-listen`, `call-pill` | Live call coaching, and FaceTime calls run from the glass. |
 | Jev and routing | `jev`, `decisions`, `decision-lab`, `model-route`, `list-sift`, `fanout`, `route-label` | `model-route handoff` turns a saved plan into a page for a fresh, cheaper build session and refuses one whose acceptance checks are not runnable commands. |
 | GTM and lists | `gtme-*`, `clay-*`, `list-audit` | Offline except `clay-balance` and the first `gtme-dedupe` run, which installs splink. |
 | Work state | `work-ledger`, `task-graph`, `backlog`, `team`, `kits` | |
@@ -574,7 +574,11 @@ The call coach is a sibling: `apps/call/ears.swift` captures the microphone and 
 other side's system audio, `bin/call-listen` segments and transcribes it with
 its own whisper server and shows cues on the glass (rules first, then Jev
 choosing a line from a bank, then a warm model), and `bin/call-watch` offers
-coaching when a call app takes the microphone.
+coaching when a call app takes the microphone. `bin/call-pill` places, takes
+and runs FaceTime audio calls from the glass: "call Mark" resolves through the
+people store and dials `facetime-audio://`, and a pill drawn from FaceTime's
+accessibility tree carries who, a timer, Mute and End, or Accept and Decline
+(`bin/lib/call_pill.py`, hud/CLAUDE.md "Calls").
 
 ---
 

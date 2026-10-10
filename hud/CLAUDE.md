@@ -279,6 +279,39 @@ This replaced a two-pane keyboard file manager (CHW-198, 2026-10-09): an
 NSPanel with no close button that Escape could not reach, and a copy of
 Finder, which docs/plans/NO-APPS.md rules out. Source: `Sources/KyberKit/FilesGlass.swift`.
 
+## Calls
+
+`bin/call-pill` runs FaceTime audio calls from the glass (CHW-190). "Call
+Mark", spoken or typed, goes to hud-listen's call path with no model turn: the
+name resolves through the people store (exact name or nickname, else the
+people whose name starts with those words), one person dials
+`facetime-audio://<handle>` ("on my phone" makes it `tel:`), and the app that
+was in front is put back in front so FaceTime's window sits behind the work.
+Two people, or one person with two numbers and none on the card, draw a
+`call-ask` glance with one button per option; nothing dials until one is
+pressed.
+
+The watcher (`call-pill run`, started by hud-listen) reads FaceTime's tree
+through `chewie app` every two seconds idle and every second on a call, and
+draws `call-pill` while a call rings, is placed or is live: who, a timer bound
+to `/call/status` so a tick is one `d` line, and only the controls the tree
+shows. Mute, End, Accept and Decline press FaceTime's own buttons by AXPress;
+Mute's label is what FaceTime says after the press. Escape and the X hide the
+pill and never end the call; "show the call" brings it back, and it leaves
+when the tree shows no call. "Hang up", "mute the call" and "answer the call"
+press the same controls by voice, shown on the pill and never spoken, since
+the voice would be heard on the line.
+
+Idle FaceTime (15.6.1, launched hidden, 2026-10-10) shows one AX window with
+no window id and no text, and its Video menu's Mute item disabled; that item
+is the fallback mute control when a call window shows none. The call window
+and Notification Center's incoming banner have not been read during a real
+call yet, so their labels (End, Mute, Accept, Decline) are matched by name in
+`bin/lib/call_pill.py` and the first live call should be checked with
+`call-pill observe`. Needs Accessibility for Kyber (the watcher runs in its
+process tree); CallHistory, read only when the tree goes unreadable mid-call,
+needs Full Disk Access. Tests: `tests/test_call_pill.py`.
+
 ## Coding sessions on the glass
 
 Agent work without an editor or a terminal. Sessions are another kind of

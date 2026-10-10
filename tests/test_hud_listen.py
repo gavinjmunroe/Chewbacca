@@ -1334,6 +1334,8 @@ def listener_env(directory: str, path: str) -> dict[str, str]:
         # HUD_SURFACES and HUD_GENUI off: the listener otherwise starts the real surfaces
         # daemon, or runs the real kyber-genui and its model, against ~/.bob.
         BOB_HUD_SOCKET=path, HUD_NAMES="off", HUD_ROUTE="off", HUD_SURFACES="off", HUD_GENUI="off",
+        # HUD_CALLS off: the listener otherwise starts bin/call-pill, which polls FaceTime.
+        HUD_CALLS="off",
         HUD_VOICE="off", BOB_MEMORY_DIR=os.path.join(directory, "mem"),
         SUPERASSISTANT_DIR=os.path.join(directory, "superassistant"),
         BOB_NAMES=os.path.join(directory, "names.txt"),

@@ -233,3 +233,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_bma_site_caleb_rework: Caleb's BMA site redesign, branch Caleb-Rework + separate Railway service caleb-rework-production.up.railway.app; main untouched
 - project_chewbacca_live_genui_service: Chewbacca Live (apps/live) is ours, hosted genui for clients; BMA/Amber is a customer, Togari only a data source (10/10)
 - feedback_hud_lag_is_the_mac: "HUD laggy" 10/10 was load 95 from 14 tabs + builds + Xprotect, Kyber at 1.4%; measure uptime and Kyber CPU before touching HUD code
+- project_mog_plan: The 6-step plan to prove Chewbacca learns (ledger cc438a52) + 10/10 baseline: r@5 ~55%, 49/190 enforced, 0 kept self-fixes

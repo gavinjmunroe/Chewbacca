@@ -46,6 +46,11 @@ with tempfile.TemporaryDirectory() as tmp:
     check("status exits 1 on a red main and names the bisect range",
           st.returncode == 1 and f"git bisect aaaaaaaa..{head[:8]}" in st.stdout and "hooks: the gate refuses" in st.stdout)
 
+env2 = dict(os.environ)
+env2.pop("MAIN_CI_ALLOW_UNATTENDED", None)
+inst = subprocess.run([sys.executable, str(CI), "install"], env=env2, capture_output=True, text=True)
+check("install refuses unattended runs of pushed code", inst.returncode == 3 and "unattended" in inst.stderr)
+
 sys.path.insert(0, str(ROOT / "bin"))
 import importlib.machinery, importlib.util  # noqa: E402
 loader = importlib.machinery.SourceFileLoader("main_ci", str(CI))

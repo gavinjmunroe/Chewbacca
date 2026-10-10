@@ -5,7 +5,7 @@
                       and none is running, queue one run through chewbacca jobs
   main-ci run <sha>   test that commit in a throwaway worktree (what the job runs)
   main-ci status      the last results, and the range a red one came from
-  main-ci install     the launchd agent that ticks every 10 minutes
+  main-ci install     refused: see install() for why runs stay on demand
 
 WHY. GitHub Actions has been dead since 2026-10-03 over billing, and a dozen
 tabs push about 87 commits a day to main, so "tests pass" meant "passed in
@@ -62,9 +62,10 @@ def results() -> list[dict]:
     return out
 
 
-# The suite runs whatever was pushed to main, unattended, as this user. A
-# security review of 83ba37ef called that remote code execution, and it is:
-# anyone with push access would get this Mac. So the run is sandboxed. It gets
+# The suite runs whatever was pushed to main as this user. A security review
+# of 83ba37ef called an unattended run remote code execution, and it is, so
+# runs are on demand only (see install) and this sandbox is a backstop, not a
+# boundary: a later review found IPC, persistence and egress paths it misses. It gets
 # no network beyond loopback, can't read the stores that matter (Messages,
 # Mail, keychains, ssh, browser profiles, the brain, the kit's own secrets),
 # and can't write anywhere that outlives the run or changes what runs later
@@ -204,6 +205,22 @@ def status(n: int = 8) -> int:
 
 
 def install() -> int:
+    # Refused. A second review of the sandbox found three escapes (Apple
+    # events and other IPC to unsandboxed apps, persistence paths the list
+    # missed, egress through local services), the same shape as the word-list
+    # gate that never converged (team memory: feedback_denylist_gate_is_a_backstop).
+    # A blocklist sandbox can't make unattended runs of pushed code safe on
+    # the Mac that holds everything. The right homes for an unattended run are
+    # GitHub Actions or a throwaway VM; until one exists, main-ci runs only
+    # when a person or a tab starts it.
+    if not os.environ.get("MAIN_CI_ALLOW_UNATTENDED"):
+        print("main-ci: unattended runs are off on this Mac; run `main-ci tick` or `main-ci run <sha>` "
+              "by hand, or move it to GitHub Actions or a VM", file=sys.stderr)
+        return 3
+    return _install()
+
+
+def _install() -> int:
     # launchd runs a copy outside any checkout: the shared checkout lags main
     # by hours and worktrees get removed, so neither is a stable path. The
     # copy works on the main checkout's object store (the common git dir),

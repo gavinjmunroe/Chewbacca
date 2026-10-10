@@ -381,12 +381,15 @@ def pick_host() -> Path | None:
 
 def guide(args: argparse.Namespace) -> int:
     known = [need[1] for need in SETS[args.for_]]
-    if args.only and args.only not in known:
-        print(f"--only takes one of: {', '.join(known)}", file=sys.stderr)
+    # A comma list, so the welcome step can ask for exactly the grants the
+    # person's chosen goals need and nothing else.
+    only = [o.strip() for o in (args.only or "").split(",") if o.strip()]
+    if any(o not in known for o in only):
+        print(f"--only takes one or more (comma separated) of: {', '.join(known)}", file=sys.stderr)
         return 2
     report = plan(args.host_app, args.for_)
     steps = [n for n in report["needs"]
-             if (not args.only or n["permission"] == args.only)
+             if (not only or n["permission"] in only)
              and (args.include_granted or n["status"] != "granted")]
     if any(n["status"] == "host-unknown" for n in steps):
         picked = pick_host()
@@ -396,7 +399,7 @@ def guide(args: argparse.Namespace) -> int:
             return 2
         report = plan(str(picked), args.for_)
         steps = [n for n in report["needs"]
-                 if (not args.only or n["permission"] == args.only)
+                 if (not only or n["permission"] in only)
                  and (args.include_granted or n["status"] != "granted")]
     if not steps:
         print("Everything Chewbacca needs is already allowed.")
@@ -483,7 +486,7 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser.add_argument("--for", dest="for_", choices=sorted(SETS), default="chewbacca",
                              help="which grants: Chewbacca's (default) or meeting capture's")
     guide_parser = sub.add_parser("guide", help="walk each missing grant with the card over System Settings")
-    guide_parser.add_argument("--only", help="just this permission")
+    guide_parser.add_argument("--only", help="just these permissions, comma separated")
     guide_parser.add_argument("--host-app", help="the .app running Claude Code, if not detected")
     guide_parser.add_argument("--for", dest="for_", choices=sorted(SETS), default="chewbacca",
                               help="which grants: Chewbacca's (default) or meeting capture's")

@@ -1188,6 +1188,8 @@ if group "hooks"; then
   check "disk-guard prunes regenerable caches once when the disk runs low" bash "$ROOT/tests/disk_guard.sh"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   check "hook modules import on the stock macOS Python" bash "$ROOT/tests/stock_python_imports.sh"
+  check "welcome: five tappable questions personalize the brain" bash "$ROOT/tests/welcome.sh"
+  check "doctor grades a personal install as personal" bash "$ROOT/tests/doctor_personal.sh"
   # A hook that outlives its watchdog ends with exit 0, never SIGKILL's 137.
   wd="$(mktemp -d)"
   printf '%s\n' "source '$ROOT/.claude/hooks/lib.sh'" 'hook_init watchdog-probe 1' 'sleep 30' > "$wd/probe.sh"

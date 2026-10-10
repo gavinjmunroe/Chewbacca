@@ -163,6 +163,12 @@ whatsapp)
   shift
   exec bash "$ROOT/bin/chewbacca-whatsapp" "$@"
   ;;
+welcome|onboard|hello)
+  # The first conversation after install: five tappable questions whose
+  # answers personalize every later reply. See skills/welcome/SKILL.md.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-welcome" "$@"
+  ;;
 permissions|permission|perms)
   # Every macOS grant Chewbacca needs, walked one card at a time over System
   # Settings, each closing itself once detected. No args = the guide, because

@@ -504,18 +504,17 @@ DONE
 if [ -n "$AGENT_CMD" ] && [ -t 0 ] && [ -t 1 ]; then
   say "Starting $AGENT_NAME..."
   sleep 1
-  exec "$AGENT_CMD" "Introduce yourself in three sentences. The person supplied this name: ${PERSON_NAME:-no name provided; do not infer it from the computer account}. You were just
-installed on their Mac. Say what you can now do that you could not before,
-Ask what they want help with today. Do not read their calendar, contacts or
-other private sources until they authorize the relevant access. Record only
-what they choose to share. Do not list your features."
+  # The welcome step asks five tappable questions and saves what they mean,
+  # so the first real reply is already in the style the person picked. The
+  # old prompt said "ask what they want help with today", which is the blank
+  # page life-context warns about, aimed at someone who just installed this.
+  exec "$AGENT_CMD" "You were just installed on this person's Mac. Run the welcome: load the welcome skill and follow it, starting with chewbacca welcome questions. The person supplied this name: ${PERSON_NAME:-none; ask, and do not infer it from the computer account}. Do not read their calendar, contacts or messages before they pick a goal that needs it. Do not list your features."
 else
   # No TTY means this is running inside an agent's shell, which is the common
   # case: someone pasted the repo link at Claude and Claude ran this. Claude is
   # already here, so telling them to go open Claude is nonsense. Tell the agent
   # what to do next instead.
-  echo "  Setup is done. Ask what the person wants help with today."
+  echo "  Setup is done. Now welcome the person: load the welcome skill and"
+  echo "  follow it, starting with: chewbacca welcome questions"
   echo "  Read personal sources only within the access they authorize."
-  echo "  Then load the life-context skill and follow it. Do not ask them to"
-  echo "  describe themselves."
 fi

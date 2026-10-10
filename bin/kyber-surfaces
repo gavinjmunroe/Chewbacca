@@ -26,7 +26,7 @@ conversations. A row is a graph node, so a press on it opens that node's walk.
     kyber-surfaces run                               the daemon, in the foreground
 
 The wire format is hud/CLAUDE.md; what this sends and accepts is in
-docs/KYBER-SURFACES.md.
+docs/reference/KYBER-SURFACES.md.
 
 HOW IT STAYS CHEAP. A surface is drawn once (`@`, `c`, `>`, `r`) with every
 changing prop bound to a pointer. A refresh walks the graph, diffs the data
@@ -840,7 +840,7 @@ def glass_row(r: dict, now) -> dict:
     """One walk row as kyber-genui may draw it: a label, the network, how
     long it has waited, why, and the node id for a row button. Never the
     node's props, and never message text: a request read out of a text is
-    named by who asked, not by what they wrote (docs/GENUI.md, step 4)."""
+    named by who asked, not by what they wrote (docs/reference/GENUI.md, step 4)."""
     from surfaces.walks import short_when  # noqa: PLC0415
 
     label = r.get("label", "")

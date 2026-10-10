@@ -18,7 +18,7 @@ It writes `stays.csv` (one row per listing: site, name, area, type, bedrooms, ra
 | Booking.com | headless Chromium, the public search page       | 20 to 25 cards, per-night and stay totals, scores out of 10  |
 | Vrbo        | not here: its search page answers a headless browser with a "Bot or Not?" human check | read it in the person's own Chrome (`chrome-js`, once "Allow JavaScript from Apple Events" is on), or by hand |
 
-The kit does not work around a human check. That is a hard line, in docs/LEARNING-TO-ACT.md.
+The kit does not work around a human check. That is a hard line, in docs/plans/LEARNING-TO-ACT.md.
 
 ## What the numbers are
 

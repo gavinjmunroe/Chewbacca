@@ -209,7 +209,7 @@ def full_diff(worktree):
 def commit_branch(worktree, aid, note):
     """Keep a change that passed the gate as a branch a person can read.
 
-    A branch and not a merge: tier B in docs/SELF-LEARNING.md is "a branch
+    A branch and not a merge: tier B in docs/plans/SELF-LEARNING.md is "a branch
     with a test, Gavin merges". The branch outlives the worktree, so the
     change survives this run without ever touching the tree anyone works in.
     Files are staged by name, never with -A, per the kit's git rule.

@@ -6,7 +6,7 @@
     site snap https://www.airbnb.com --save   # same, filed under library/maps/<host>/pages/
     site show airbnb.com                      # the map and every page read so far
 
-WHY FIND COMES FIRST. docs/LEARNING-TO-ACT.md names "retrieval before acting"
+WHY FIND COMES FIRST. docs/plans/LEARNING-TO-ACT.md names "retrieval before acting"
 as missing: nothing checked for a procedure before exploring, so the second
 attempt at a task was the first attempt again. Stagehand, Skyvern and
 browser-use all converged on the same fix in 2025 and 2026: explore once with

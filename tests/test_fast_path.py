@@ -90,7 +90,7 @@ TABLE = [
     ("close my texts", "surface"),
     ("What do I have today", "agenda"),
     ("show my texts from Sam and reply that I'm late", None),
-    # Generated panels (docs/GENUI.md), 2026-10-04: a shape no fixed surface takes.
+    # Generated panels (docs/reference/GENUI.md), 2026-10-04: a shape no fixed surface takes.
     ("compare my three classes' grades", "genui"),
     ("who have I not texted back this week", "genui"),
     ("plan my Tuesday", "genui"),
@@ -101,7 +101,7 @@ TABLE = [
     ("What's up, bro?", "pleasantry"),
     ("How are you doing?", "pleasantry"),
     ("what's up with my agents", None),
-    # clay-build (docs/CLAY-HUD.md, Voice), 2026-10-09: who, how many, and Clay.
+    # clay-build (docs/plans/CLAY-HUD.md, Voice), 2026-10-09: who, how many, and Clay.
     ("find me 50 fintech VC partners in Clay", "clay"),
     ("Clay, find 20 seed investors in Austin", "clay"),
     ("build a list of fifty fintech VC partners with work emails", "clay"),

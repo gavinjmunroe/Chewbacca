@@ -199,7 +199,7 @@ the two alternatives on purpose. Ignoring the talk key would add a state where
 the assistant cannot be reached until the person finds the bubble again.
 Discarding the sentence would make a stray keypress cost a paragraph. Committing
 loses nothing and matches the rule the rest of the loop already runs on, which
-`docs/VOICE-DESIGN.md` states as: what they most recently asked for is what they
+`docs/reference/VOICE-DESIGN.md` states as: what they most recently asked for is what they
 mean.
 
 The `SILENCE` backstop reuses the `silenceTimer` that wake mode already has.
@@ -289,7 +289,7 @@ instruction and the answer goes straight into an app.
 
 | Name | Value | Evidence |
 | --- | --- | --- |
-| `SILENCE` | 2.0s | Chosen by Gavin from three stop mechanisms, 2026-09-21. `docs/VOICE-DESIGN.md` puts two seconds at the point where a person notices a gap in conversation, which is the same threshold at which a speaker has clearly finished rather than paused. Not measured against real dictation. |
+| `SILENCE` | 2.0s | Chosen by Gavin from three stop mechanisms, 2026-09-21. `docs/reference/VOICE-DESIGN.md` puts two seconds at the point where a person notices a gap in conversation, which is the same threshold at which a speaker has clearly finished rather than paused. Not measured against real dictation. |
 | `POLL` | 0.1s | Guessed against the eye. The bubble must not visibly trail a window being dragged, and 10Hz is the coarsest rate that does not read as lag. Never measured. |
 | `AX_TIMEOUT` | 0.1s | Guessed, with one hard constraint: it must stay below `POLL` or a hung app queues polls until the display stalls. |
 | `CLEAN_TIMEOUT` | 1.5s | Guessed. No measurement of a haiku turn from this bridge exists yet; the first week of `e dictate` lines should replace this number with one. |
@@ -355,7 +355,7 @@ Swift tests alongside `hud_voicePackageTests`.
   vendor selling the result
 - superwhisper, on running system-wide wherever the caret lands, including
   terminals and editors
-- `docs/VOICE-DESIGN.md`, for the two second threshold and the most-recent-wins
+- `docs/reference/VOICE-DESIGN.md`, for the two second threshold and the most-recent-wins
   rule the talk-key row follows
 - `hud/docs/VOICE-RESEARCH.md`, for why `SFSpeechRecognizer` commits an
   unrevised partial and what replaces it later

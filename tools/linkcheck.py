@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every relative link in the docs points at something that exists.
 
-On 2026-09-21 docs/REFERENCE.md had 57 broken links, all one bug: it used
+On 2026-09-21 docs/reference/REFERENCE.md had 57 broken links, all one bug: it used
 repo-root-relative paths while living in docs/, so every link to a skill, a
 template or a snippet was missing ../. The file reads fine and every link is
 dead, which is why nobody noticed.

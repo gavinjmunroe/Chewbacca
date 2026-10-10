@@ -7,7 +7,7 @@ count and whether the chat waits on him; "Open" on a row shows that chat's
 last lines underneath; a 1:1 chat opened that way can be answered.
 
 SENDING FAILS CLOSED, the same bar as the Messages Thread Go
-(docs/KYBER-SURFACES.md). A send needs all of these at the press:
+(docs/reference/KYBER-SURFACES.md). A send needs all of these at the press:
 
 - the target is the JID of the chat whose Open was pressed, held by the
   provider itself. It is never a label, never a list position, never a value

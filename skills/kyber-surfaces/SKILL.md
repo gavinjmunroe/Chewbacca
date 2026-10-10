@@ -10,7 +10,7 @@ requires: [hud, mac]
 `kyber-surfaces open <kind> [arg]` draws a panel on the HUD and keeps it
 current with no model. The panel is a walk over one local graph that every
 source is ingested into, so a person is one node whether they texted, emailed
-or are on the calendar. Full map: [docs/KYBER-SURFACES.md](../../docs/KYBER-SURFACES.md).
+or are on the calendar. Full map: [docs/reference/KYBER-SURFACES.md](../../docs/reference/KYBER-SURFACES.md).
 
 ```bash
 kyber-surfaces open needs-you          # everything waiting on them, blocked first

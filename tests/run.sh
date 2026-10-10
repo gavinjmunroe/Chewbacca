@@ -105,7 +105,7 @@ export ROUTE_SHADOW_LOG="$TMP/route-shadow.jsonl"
 export CHEWBACCA_SUITE=1
 generated_fingerprint() {
   { cat "$ROOT/config/settings/toolkit.json" 2>/dev/null
-    for f in README.md setup.sh docs/REFERENCE.md; do
+    for f in README.md setup.sh docs/reference/REFERENCE.md; do
       sed -n '/BEGIN GENERATED/,/END GENERATED/p' "$ROOT/$f" 2>/dev/null
     done; } | shasum | cut -c1-16
 }
@@ -445,7 +445,7 @@ if group "gtme"; then
     expect "clay appears in help" "chewbacca clay" bash "$ROOT/bin/chewbacca" --help
     check "the clay finder picks one visible control or stops" node --test "$ROOT/tests/test_clay_find.mjs"
   fi
-  # clay-build (docs/CLAY-HUD.md): fakes for the page, Clay and Kyber; nothing
+  # clay-build (docs/plans/CLAY-HUD.md): fakes for the page, Clay and Kyber; nothing
   # opens Chrome, reads Clay or draws on the glass.
   check "clay geometry maps page rects to screen points and stops on a bad window" python3 "$ROOT/tests/test_clay_geometry.py"
   check "the clay recipe validates, and paid steps end on their approval" python3 "$ROOT/tests/test_clay_recipe.py"
@@ -960,11 +960,19 @@ if group "installer"; then
   # context? I feel like ur gonna forget the to dos we set at the beginning of
   # this session?" Nothing was. session-state/ records files written, never
   # decisions made.
-  # docs/REFERENCE.md carried 57 broken links, all one bug: repo-root-relative
+  # docs/reference/REFERENCE.md carried 57 broken links, all one bug: repo-root-relative
   # paths in a file that lives in docs/, so everything was missing ../. The
   # prose reads fine and every link is dead, which is why it survived.
   check  "every relative link in the docs resolves" \
     python3 "$ROOT/tools/linkcheck.py"
+
+  # 2026-10-09: docs/ had grown to 76 flat files mixing guides, specs and
+  # dated plans. Sorted into guide/, reference/ and plans/ under one index;
+  # this keeps a new doc from landing at the top or outside the index.
+  check  "docs are sorted into guide, reference and plans, all indexed" \
+    bash "$ROOT/tests/docs_layout.sh" "$ROOT"
+  check  "the docs layout check refuses a stray, unindexed or broken doc" \
+    bash "$ROOT/tests/docs_layout.sh" "$ROOT" mutant
 
   # The real BACKLOG.md lives in the team's private repo, so these read a
   # fixture: on CI, where that repo is absent, they failed from 2026-09-21 to

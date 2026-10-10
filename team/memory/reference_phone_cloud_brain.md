@@ -7,7 +7,7 @@ metadata:
 
 The second-brain repo is what a phone cloud session (Claude app, Code tab) runs on when the Mac is off. Set up 2026-10-07.
 
-- `sync-chewbacca.sh` calls Chewbacca `bin/phone-mirror` (docs/PHONE.md, for any kit user) to mirror `~/.claude` (CLAUDE.md, rules, hooks, commands, agents, skills dereferenced, settings with env values REDACTED) into `claude/` on every run.
+- `sync-chewbacca.sh` calls Chewbacca `bin/phone-mirror` (docs/guide/PHONE.md, for any kit user) to mirror `~/.claude` (CLAUDE.md, rules, hooks, commands, agents, skills dereferenced, settings with env values REDACTED) into `claude/` on every run.
 - The coursework ledger moved to `second-brain/coursework/`; `~/coursework` is now a symlink to it. Before this it had no git and no backup.
 - `.claude/skills` links to `claude/skills`, and the root CLAUDE.md has a "Running from the phone" section with the prayer rule and core imports.
 - Missing in the cloud: texts, screen, `mac`, peekaboo, local MCPs, people.db message history, secrets.

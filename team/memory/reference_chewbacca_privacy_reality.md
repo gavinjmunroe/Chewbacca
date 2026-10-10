@@ -18,11 +18,11 @@ never touches a model.**
 
 **False as previously claimed:**
 
-- `docs/PRIVACY.md:29` "Nothing is encrypted at rest. Anything running as your
+- `docs/guide/PRIVACY.md:29` "Nothing is encrypted at rest. Anything running as your
   user can read all of it."
-- `docs/PRIVACY.md:36` "If you ask about your texts, the relevant texts are in
+- `docs/guide/PRIVACY.md:36` "If you ask about your texts, the relevant texts are in
   that request" to Anthropic.
-- `docs/PRIVACY.md:56` "No redaction layer before content reaches a model. No
+- `docs/guide/PRIVACY.md:56` "No redaction layer before content reaches a model. No
   local-model path for sensitive work."
 
 **Fixed 2026-09-18:** `people.db` was `-rw-r--r--`, readable by anything on the
@@ -41,7 +41,7 @@ query.
 **Still missing:** encryption at rest (SQLCipher, and it stops a stolen disk but
 not a process running as that user), a `--local` sensitive mode routing through
 Ollama, and an audit log of what was sent where. Backlog items 549 to 552 and
-570 in `docs/1000.md`.
+570 in `docs/plans/1000.md`.
 
 **Copy rule that came out of this:** never write "nothing uploads" or "your data
 never leaves your machine" in outbound. Documented in `amber-outbound/CAMPAIGNS.md`.

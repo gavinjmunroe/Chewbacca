@@ -399,7 +399,7 @@
     {
       "display": "mac",
       "url": "https://github.com/31Carlton7/mac-cli",
-      "install": "see docs/MACOS-APP-CONTROL.md (clone plus swift build, no formula yet)",
+      "install": "see docs/reference/MACOS-APP-CONTROL.md (clone plus swift build, no formula yet)",
       "description": "Calendar, Reminders, Contacts, Mail, Messages, Notes, and Finder as JSON"
     },
     {
@@ -411,7 +411,7 @@
     {
       "display": "mac-use",
       "url": "https://github.com/browser-use/macOS-use",
-      "install": "see docs/MACOS-TOOLS.md (clone plus a uv venv, no formula)",
+      "install": "see docs/reference/MACOS-TOOLS.md (clone plus a uv venv, no formula)",
       "description": "Natural-language agent that drives any Mac app through Accessibility"
     },
     {
@@ -429,7 +429,7 @@
     {
       "display": "yt-transcript",
       "url": "https://github.com/calebnewtonusc/claude-youtube-transcripts",
-      "install": "see docs/MACOS-TOOLS.md (its own installer, no formula)",
+      "install": "see docs/reference/MACOS-TOOLS.md (its own installer, no formula)",
       "description": "Transcript of any YouTube video, channel, or playlist, read without asking"
     }
   ]

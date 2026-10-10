@@ -557,7 +557,7 @@ reasoned, not yet measured. Numbers are 0 to 1, 1 identical.
 ## Tools worth reaching for
 
 The full ranked list, with licenses and the file each one plugs into, is
-[docs/ANIMATION-ART-REPOS.md](../../docs/ANIMATION-ART-REPOS.md) (319 repos,
+[docs/plans/ANIMATION-ART-REPOS.md](../../docs/plans/ANIMATION-ART-REPOS.md) (319 repos,
 checked 2026-10-09). The ones that map straight onto rules in this file:
 
 - Halftone in the light: paper-design/shaders `halftone-cmyk` (raw WebGL2,

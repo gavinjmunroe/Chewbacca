@@ -16,7 +16,7 @@ updated: 2026-10-04
 
 Backlog status: open.
 Acceptance: Whole-turn p50 under 5 s over a week
-Evidence: Phase 3 of [docs/KYBER-EVERYTHING.md](docs/KYBER-EVERYTHING.md); whole voice turn is 19 s p50 and 61 s p90 over 123 September turns
+Evidence: Phase 3 of [docs/plans/KYBER-EVERYTHING.md](docs/plans/KYBER-EVERYTHING.md); whole voice turn is 19 s p50 and 61 s p90 over 123 September turns
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-119

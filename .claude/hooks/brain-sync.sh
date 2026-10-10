@@ -134,7 +134,7 @@ if [ -d "$lock" ]; then
 fi
 mkdir "$lock" 2>/dev/null || exit 0
 echo $$ > "$lock/pid"
-# A phone session commits to the same repo through GitHub (docs/PHONE.md), so
+# A phone session commits to the same repo through GitHub (docs/guide/PHONE.md), so
 # the remote can be ahead, and a rejected push used to fail silently forever.
 # brain-pull-safe rebases onto note-only remote commits and refuses anything
 # that touches code or instruction files; if it is missing, nothing is pulled.

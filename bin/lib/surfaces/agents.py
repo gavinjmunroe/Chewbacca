@@ -20,7 +20,7 @@ components (hud/CLAUDE.md, Row actions), so the press arrives carrying the id
 that was on the glass: a session id, a permission requestId, a folder. A
 verb that does not apply has no row and is not drawn, which is how a down
 engine offers "Start the engine" and nothing that writes. Each row says what
-the press touches and whether it can be undone (docs/AFTER-PANES.md, Verbs).
+the press touches and whether it can be undone (docs/plans/AFTER-PANES.md, Verbs).
 
 WHICH SESSION. A press acts on the session pinned when it was picked, never
 on a row position: the list re-sorts by state every refresh, and a Send that

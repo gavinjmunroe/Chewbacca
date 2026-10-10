@@ -38,7 +38,7 @@
 | `bin/hud-listen` | The watcher thread, announcements, the answer and stop words, `e terminal focus`. |
 | `hud/Sources/KyberKit/{Spec,LineParser,OverlayModel,OverlayView}.swift`, `TerminalStrip.swift` (new) | The `t` line, the strip, the click. |
 | `tests/test_terminal_events.py` (new), `tests/test_terminal_state.py` (new), `tests/test_terminal.py`, `tests/test_route.py`, `tests/test_hud_listen.py`, `hud/Tests/KyberKitTests/ParserTests.swift`, `ChatTests.swift`, `tests/live/terminal-loop.sh` (new), `tests/run.sh` | Tests. |
-| `docs/VOICE-DESIGN.md`, `docs/REFERENCE.md`, `hud/CLAUDE.md`, `skills/hud/SKILL.md` | Docs and the wire tables. |
+| `docs/reference/VOICE-DESIGN.md`, `docs/reference/REFERENCE.md`, `hud/CLAUDE.md`, `skills/hud/SKILL.md` | Docs and the wire tables. |
 
 ---
 
@@ -594,7 +594,7 @@ git commit -m "feat: chewie terminal hook, registered for six Claude Code events
 
 **Files:**
 - Modify: `mac/lib/terminal.py` (docstring, `KEY_ESCAPE`, three functions, `main`)
-- Modify: `docs/REFERENCE.md:96`
+- Modify: `docs/reference/REFERENCE.md:96`
 - Test: `tests/test_terminal.py`
 
 **Interfaces:**
@@ -717,7 +717,7 @@ The docstring's usage block at the top of the file gains three lines, one per ve
     chewie terminal focus [--tty]           bring that tab to the front
 ```
 
-Line 96 of `docs/REFERENCE.md` becomes:
+Line 96 of `docs/reference/REFERENCE.md` becomes:
 
 ```
 | `chewie terminal`       | The Claude Code tab: draft a prompt, never submit it; answer its permission dialog, interrupt it, focus it; `hook` feeds the terminal loop |
@@ -731,7 +731,7 @@ Expected: all pass.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add mac/lib/terminal.py docs/REFERENCE.md tests/test_terminal.py
+git add mac/lib/terminal.py docs/reference/REFERENCE.md tests/test_terminal.py
 git commit -m "feat: chewie terminal answer, interrupt and focus"
 ```
 
@@ -1576,7 +1576,7 @@ git commit -m "feat: a terminal strip under the pill, driven by the t line"
 ### Task 7: Docs, the live check, and the gates
 
 **Files:**
-- Modify: `docs/VOICE-DESIGN.md` (a section after "Where a sentence goes")
+- Modify: `docs/reference/VOICE-DESIGN.md` (a section after "Where a sentence goes")
 - Create: `tests/live/terminal-loop.sh`
 - Modify: `tests/run.sh` (the `live` list, wherever `terminal.sh` is registered for its parse/SKIP/mutant checks)
 - Modify: `README.md`, `SHA256SUMS.txt` (regenerated if the gates ask)
@@ -1587,7 +1587,7 @@ git commit -m "feat: a terminal strip under the pill, driven by the t line"
 
 - [ ] **Step 1: The doc section**
 
-The section goes in `docs/VOICE-DESIGN.md` after "Where a sentence goes":
+The section goes in `docs/reference/VOICE-DESIGN.md` after "Where a sentence goes":
 
 ```markdown
 ## The terminal talks back
@@ -1618,7 +1618,7 @@ session whose folder is not the remembered one is invisible to all of this:
 the hook exits before writing anything.
 ```
 
-Run `slop-check docs/VOICE-DESIGN.md` and keep the score under 10.
+Run `slop-check docs/reference/VOICE-DESIGN.md` and keep the score under 10.
 
 - [ ] **Step 2: The live check**
 
@@ -1678,7 +1678,7 @@ bash tests/run.sh; git checkout -- CHANGELOG.md
 python3 tools/counts.py --check || python3 tools/counts.py
 python3 tools/checksums.py --check || python3 tools/checksums.py
 code-slop --issues
-slop-check docs/VOICE-DESIGN.md docs/superpowers/specs/2026-09-20-terminal-loop-design.md
+slop-check docs/reference/VOICE-DESIGN.md docs/superpowers/specs/2026-09-20-terminal-loop-design.md
 ```
 
 Expected: the suite is green except `hud: the suite collects under pytest` (pre-existing, from hud-speak's fixtures on the base branch); counts and checksums current after regeneration; code-slop 0; slop scores under 10.
@@ -1686,7 +1686,7 @@ Expected: the suite is green except `hud: the suite collects under pytest` (pre-
 - [ ] **Step 5: Commit and push**
 
 ```bash
-git add docs/VOICE-DESIGN.md tests/live/terminal-loop.sh tests/run.sh README.md SHA256SUMS.txt
+git add docs/reference/VOICE-DESIGN.md tests/live/terminal-loop.sh tests/run.sh README.md SHA256SUMS.txt
 git commit -m "docs: the terminal talks back, and a live check for the hook holding a prompt"
 git push -u origin feat/terminal-loop
 ```

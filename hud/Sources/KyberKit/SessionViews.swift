@@ -243,7 +243,7 @@ struct DiffView: View {
 }
 
 /// The tree beside a session card: what the session touched plus one level
-/// of context, never the whole repo (docs/NO-APPS.md, "The HUD IDE").
+/// of context, never the whole repo (docs/plans/NO-APPS.md, "The HUD IDE").
 ///
 /// `items` are `{"id","name","depth","dir"}` with optional `"mark"` (git's
 /// status letters, or `edited` / `read` from the transcript), `"collapsed"`

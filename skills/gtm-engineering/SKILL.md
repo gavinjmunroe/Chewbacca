@@ -130,7 +130,7 @@ For tools, read [REPO-ATLAS.md](references/REPO-ATLAS.md) (705 GTM repos found 2
 
 Read [domains.md](references/domains.md) before choosing what to evaluate, and [evaluation.md](references/evaluation.md) before claiming competence. Use `gtme-math order` only under its stated fixed-cost independence assumptions. Use `gtme-math funnel` for matured binary outcomes and `gtme-math evaluate` for sealed qualification labels. None of these commands establishes causal business uplift.
 
-Apply [the decision standards](../../docs/DECISION-STANDARDS.md) to list selection, column assembly, enrichment ordering, copy, model routing and measurement. Compare a deterministic baseline with bounded alternatives; use dependency graphs for column order, constrained routing for enrichment and cost-sensitive classification where justified. Test learned selection policies offline or in shadow before promotion. Measure consequential errors, abstentions and cost per verified usable result. A sourced firm fact does not prove personal investment ownership or mandate fit. Five-row fixtures test function, not business uplift. Use Jev only for narrow typed judgments with validated evidence and abstention; it cannot authorize spending or sending.
+Apply [the decision standards](../../docs/reference/DECISION-STANDARDS.md) to list selection, column assembly, enrichment ordering, copy, model routing and measurement. Compare a deterministic baseline with bounded alternatives; use dependency graphs for column order, constrained routing for enrichment and cost-sensitive classification where justified. Test learned selection policies offline or in shadow before promotion. Measure consequential errors, abstentions and cost per verified usable result. A sourced firm fact does not prove personal investment ownership or mandate fit. Five-row fixtures test function, not business uplift. Use Jev only for narrow typed judgments with validated evidence and abstention; it cannot authorize spending or sending.
 
 After each substantial phase, compare results against fixed acceptance limits and choose continue, revise, or stop. Record this with `gtme-graph review` when running a phased graph. Keep verified claims, failures, client data and outcome labels private; publish only authorized sanitized procedures. Novelty and a public integration do not establish an exclusive advantage.
 
@@ -155,7 +155,7 @@ live test; inspect scope before running. Do not send, launch, activate, or
 schedule campaigns. Keep incomplete configuration and unverified outputs explicit.
 
 Retrieve the Clay navigation skill, map, and procedure before exploring again.
-Reuse the existing `docs/LEARNING-TO-ACT.md` design: retain procedure, map,
+Reuse the existing `docs/plans/LEARNING-TO-ACT.md` design: retain procedure, map,
 preference, and strategy separately; replay before promoting a procedure; infer
 parameters only from multiple observed instances. A UX receipt or graph route
 is a partial learning aid, not a free-form recorder, automatic distiller,

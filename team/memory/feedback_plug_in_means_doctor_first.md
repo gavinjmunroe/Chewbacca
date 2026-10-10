@@ -19,7 +19,7 @@ decayed ("UR NOT PRAYIN" twice). Fixed: skills linked, and `prayer-guard.sh`
 
 The other half was behaviour: I kept answering skill-router suggestions with
 "doesn't fit" and researching from scratch while Chewbacca already had the
-answer (docs/VOICE-DESIGN.md for voice UX, bin/people for Amber's memory model,
+answer (docs/reference/VOICE-DESIGN.md for voice UX, bin/people for Amber's memory model,
 ux-engine systems/vercel for the v0 look).
 
 **Why:** a capability that is not wired never runs (a private note),

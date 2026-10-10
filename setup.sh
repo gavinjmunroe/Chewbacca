@@ -2208,7 +2208,7 @@ cp "$SCRIPT_DIR/.claude/output-styles/"*.md "$GLOBAL_CLAUDE/output-styles/" 2>/d
 # about someone's calendar. That is the right file for people who write code
 # and the wrong file for everyone else.
 case "$PROFILE" in
-  personal|student) STANDARDS="$SCRIPT_DIR/docs/CLAUDE-PERSONAL.md" ;;
+  personal|student) STANDARDS="$SCRIPT_DIR/docs/reference/CLAUDE-PERSONAL.md" ;;
   *)                STANDARDS="$SCRIPT_DIR/CLAUDE.md" ;;
 esac
 # Merge, do not clobber. Anyone who already had a CLAUDE.md lost it here, with
@@ -2364,7 +2364,7 @@ while IFS='|' read -r SK_NAME SK_URL SK_PATH SK_LICENSE SK_AUTHOR; do
     } > "$GLOBAL_CLAUDE/skills/$SK_NAME/.source"
     log "$SK_NAME installed ($SK_LICENSE, $SK_AUTHOR)"
   else
-    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/EXTENSIONS.md to add it later."
+    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/reference/EXTENSIONS.md to add it later."
   fi
   rm -rf "$TMP_SK"
 done <<'UPSTREAM_SKILLS'
@@ -2431,7 +2431,7 @@ elif ! command -v claude &>/dev/null; then
   warn "  chewbacca setup --only plugins"
 fi
 
-# MCP servers, curated from mcpmarket.com. See docs/EXTENSIONS.md.
+# MCP servers, curated from mcpmarket.com. See docs/reference/EXTENSIONS.md.
 #
 # Two tiers on purpose. The keyless ones are installed outright. The ones
 # needing an account are installed only when their variables are already
@@ -2509,7 +2509,7 @@ section "Installing macOS tools"
 
 # BEGIN GENERATED: cli
 # Kit-owned helpers that sit in front of the installed tools.
-#   peekaboo: forces local execution, see docs/MACOS-TOOLS.md
+#   peekaboo: forces local execution, see docs/reference/MACOS-TOOLS.md
 #   chrome-js: reads and clicks a Chrome tab through JavaScript
 mkdir -p "$HOME/.local/bin"
 for HELPER in peekaboo chrome-js slop-check; do
@@ -2622,7 +2622,7 @@ PLIST
   launchctl bootstrap "gui/$(id -u)" "$_jq_plist" &>/dev/null &&
     log "machine job queue ticking every 30 s" || warn "could not schedule the job queue"
 else
-  warn "Homebrew not found. macOS tools skipped: see docs/MACOS-TOOLS.md"
+  warn "Homebrew not found. macOS tools skipped: see docs/reference/MACOS-TOOLS.md"
 fi
 
 # cap: Screen recording with spring-physics zoom that follows your clicks, scriptable with --json on every command

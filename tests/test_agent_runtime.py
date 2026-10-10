@@ -5,7 +5,10 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ImportError:  # 3.11+; hooks and CI may run the stock 3.9
+    tomllib = None
 import unittest
 from unittest.mock import patch
 
@@ -29,6 +32,7 @@ class RuntimeTests(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
 
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_codex_install_needs_no_claude_and_preserves_configuration(self):
         home = context.codex_home()
         home.mkdir()
@@ -49,6 +53,7 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue((self.home / '.agents/skills/debugging/SKILL.md').is_file())
         self.assertEqual(context.brain_root(home), (self.home / 'brain').resolve())
 
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_codex_capacity_fresh_install_and_reversible_existing_config(self):
         config = context.codex_home() / 'config.toml'
         runtime.setup('codex')
@@ -67,6 +72,7 @@ class RuntimeTests(unittest.TestCase):
         runtime.remove('codex')
         self.assertEqual(config.read_bytes(), original.encode())
 
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_codex_capacity_preserves_explicit_and_legacy_values(self):
         cases = [
             ('[agents]\nenabled = false\nmax_concurrent_threads_per_session = 3\n', {}),
@@ -95,6 +101,7 @@ class RuntimeTests(unittest.TestCase):
                 if not additions:
                     self.assertEqual(updated, original)
 
+    @unittest.skipUnless(tomllib, 'tomllib needs Python 3.11+')
     def test_codex_unsupported_config_refuses_before_any_install_writes(self):
         for original in ('not valid TOML', 'agents = {enabled = false}\n', 'agents = 3\n'):
             with self.subTest(original=original):

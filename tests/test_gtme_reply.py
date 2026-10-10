@@ -1,8 +1,9 @@
 """gtme-reply: every case from the upstream TypeScript tests, plus the pure
 fit-review and auto-send pieces those tests never covered.
 
-tests/fixtures/gtme-reply/reply_intent_cases.json is the 27 real investor
-replies from reply-intent.test.ts, copied verbatim and stored ASCII-escaped.
+tests/fixtures/gtme-reply/reply_intent_cases.json is the 27 investor
+replies from reply-intent.test.ts, anonymized (every name, firm, address, phone
+number and link invented) and stored ASCII-escaped.
 """
 import importlib.util
 import json
@@ -25,18 +26,18 @@ EN = "–"
 APPLE_MAIL_REPLY = (
     '<html class="apple-mail-supports-explicit-dark-mode"><head><meta http-equiv="content-type" '
     'content="text/html; charset=utf-8"></head><body dir="auto">Sure Sagar happy to help give me a call '
-    "(949) 795-0416 anytime this afternoon after 3pm<div><br><div><div dir=\"ltr\"><div><span "
-    'style="background-color: rgba(255, 255, 255, 0);">Josh Bois</span></div><div><span '
-    'style="background-color: rgba(255, 255, 255, 0);">CEO Global Capital Network - &ldquo;Connecting '
-    "investors to entrepreneurs &amp;amp; deal flow&rdquo;</span></div><div><span>Founder 2030 Ventures, "
-    'Inc. - &amp;nbsp;"Accelerating Ideas With Capital, Leadership, and Marketing"<br><br><a '
-    'href="http://www.linkedin.com/in/joshbois" target="_blank">www.linkedin.com/in/joshbois</a><br>'
-    "(800) 8-EMP-415 | Toll Free<br><br>GLOBAL CAPITAL NETWORK, 2030 VENTURES, INC (2030) "
+    "(949) 555-0107 anytime this afternoon after 3pm<div><br><div><div dir=\"ltr\"><div><span "
+    'style="background-color: rgba(255, 255, 255, 0);">Dale Kemp</span></div><div><span '
+    'style="background-color: rgba(255, 255, 255, 0);">CEO Summit Capital Network - &ldquo;Connecting '
+    "founders with capital &amp;amp; advice&rdquo;</span></div><div><span>Founder 4040 Ventures, "
+    'Inc. - &amp;nbsp;"Growing Ideas With Capital and Counsel"<br><br><a '
+    'href="http://www.linkedin.com/in/example-person-40" target="_blank">www.linkedin.com/in/example-person-40</a><br>'
+    "(800) 5-CAP-010 | Toll Free<br><br>SUMMIT CAPITAL NETWORK, 4040 VENTURES, INC (4040) "
     "Confidentiality&amp;nbsp;<br>Notice:&amp;nbsp; The information contained in this electronic e-mail "
     "and any accompanying attachment(s) is intended only for the use of the intended recipient and may be "
     'confidential.</span></div></div><div dir="ltr"><br><blockquote type="cite">On Sep 2, 2026, at 2:23 PM, '
-    "Sagar Tiwari &lt;sagar@bluemodernadvisory.com&gt; wrote:<br><br>Josh, quick one about the $12M in "
-    "pipeline your Voice AI lab is running.</blockquote></div></div></div></body></html>")
+    "Sagar Tiwari &lt;sagar@bluemodernadvisory.com&gt; wrote:<br><br>Dale, quick one about the $9M in "
+    "pipeline your AI lab is running.</blockquote></div></div></div></body></html>")
 
 
 def run_bin(*args, stdin=""):
@@ -55,11 +56,11 @@ class ReplyIntentRealReplies(unittest.TestCase):
                     self.assertIn(case["step"], intent["nextStep"])
 
     def test_referral_goes_to_every_colleague_not_the_replier(self):
-        jlund = next(c for c in CASES["zeutara"] if c["from"] == "jlund@uventurefund.com")
-        step = reply.reply_intent(jlund["body"], lead_email=jlund["from"])["nextStep"]
-        for email in ("chance.murray@", "carl.adams@", "charlotte.magee@", "jose.moreno@"):
+        referrer = next(c for c in CASES["zeutara"] if c["from"] == "person08@firm06.example")
+        step = reply.reply_intent(referrer["body"], lead_email=referrer["from"])["nextStep"]
+        for email in ("person09@", "person10@", "person11@", "person12@"):
             self.assertIn(email, step)
-        self.assertNotIn("jlund@", step)
+        self.assertNotIn("person08@", step)
 
     def test_our_own_quoted_email_does_not_decide(self):
         body = ("Thanks, not a fit for us.\n\nOn Tue, Oct 6, 2026 at 9:00 AM Jonah Graham "
@@ -67,7 +68,7 @@ class ReplyIntentRealReplies(unittest.TestCase):
         self.assertEqual(reply.reply_intent(body)["kind"], "pass")
 
     def test_fast_and_short_on_a_hostile_reply(self):
-        many = " ".join(f"p{i}@fund.com" for i in range(40))
+        many = " ".join(f"p{i}@fund.example" for i in range(40))
         start = time.monotonic()
         intent = reply.reply_intent(f"Please reach out to them: {many} {'a.' * 50_000}")
         self.assertLess(time.monotonic() - start, 0.2)
@@ -92,7 +93,7 @@ class CleanReplyText(unittest.TestCase):
 
     def test_drops_the_quoted_thread(self):
         out = reply.clean_reply_text(APPLE_MAIL_REPLY)
-        for quoted in ("On Sep 2, 2026", "wrote:", "$12M in pipeline"):
+        for quoted in ("On Sep 2, 2026", "wrote:", "$9M in pipeline"):
             self.assertNotIn(quoted, out)
 
     def test_drops_confidentiality_boilerplate(self):
@@ -106,7 +107,7 @@ class CleanReplyText(unittest.TestCase):
 
     def test_cuts_plain_text_quoted_thread(self):
         out = reply.clean_reply_text("Sounds good, call me Tuesday.\n\nOn Sep 1, 2026, at 9:00 AM, "
-                                     "Sagar Tiwari <sagar@x.com> wrote:\n> our original pitch")
+                                     "Sagar Tiwari <sagar@bluemodernadvisory.com> wrote:\n> our original pitch")
         self.assertEqual(out, "Sounds good, call me Tuesday.")
 
     def test_outlook_original_message_header(self):
@@ -140,13 +141,13 @@ class StripEmDashes(unittest.TestCase):
 
 class FitReviewPieces(unittest.TestCase):
     def test_signature_and_bracket_echoes_cut(self):
-        jeremy = next(c for c in CASES["zeutara"] if c["from"] == "jeremy@infinityvc.capital")
-        self.assertEqual(reply.readable_reply(jeremy["body"]),
+        deck_ask = next(c for c in CASES["zeutara"] if c["from"] == "person13@firm08.example")
+        self.assertEqual(reply.readable_reply(deck_ask["body"]),
                          "Hello Jonah. Is it possible to share the pitch deck before I commit to "
                          "taking a call with the Founder? Thanks.")
-        jack = next(c for c in CASES["zeutara"] if c["from"] == "jack@afore.vc")
-        out = reply.readable_reply(jack["body"])
-        self.assertIn("nathan yu (nathan@afore.vc) is the best person to reach", out)
+        moved_on = next(c for c in CASES["zeutara"] if c["from"] == "person02@firm02.example")
+        out = reply.readable_reply(moved_on["body"])
+        self.assertIn("owen park (person03@firm02.example) is the best person to reach", out)
         self.assertNotIn("[", out)
 
     def test_one_line_reply_survives_and_clips(self):
@@ -190,7 +191,7 @@ class AutoSend(unittest.TestCase):
         self.assertFalse(self.verdict(confidence=True, threshold=0.5)["ok"])
 
     def test_payload_pattern(self):
-        for text in ("www.site.com", "a@b.co", "+1 (555) 123 4567", "€5", "40%", "3.5 million"):
+        for text in ("www.site.com", "a@b.example", "+1 (555) 123 4567", "€5", "40%", "3.5 million"):
             with self.subTest(text):
                 self.assertTrue(reply.CARRIES_PAYLOAD.search(text))
         self.assertFalse(reply.CARRIES_PAYLOAD.search("Does Tuesday at 3 work?"))
@@ -234,6 +235,33 @@ class Cli(unittest.TestCase):
     def test_help(self):
         for sub in ("intent", "clean", "autosend", "campaign"):
             self.assertEqual(run_bin(sub, "--help").returncode, 0)
+
+
+class HostileInput(unittest.TestCase):
+    # Security review 2026-10-09: 200,000 spaces then "x" held readable_reply
+    # for 192s, and a NaN confidence compared False against the threshold so
+    # it never read as too low.
+    def test_long_whitespace_run_stays_fast(self):
+        text = " " * 200000 + "x"
+        for fn in (reply.clean_reply_text, reply.readable_reply, reply.reply_intent):
+            started = time.time()
+            fn(text)
+            self.assertLess(time.time() - started, 2, fn.__name__)
+
+    def test_bracket_echo_still_dropped(self):
+        self.assertEqual(reply.readable_reply("hi there [person39@firm31.example] ok"), "hi there ok")
+
+    def test_non_finite_confidence_never_sends(self):
+        base = {"threshold": 0.9, "sentiment": "interested", "draft": "Tuesday works.\n\nJonah",
+                "reply": "yes, let's talk", "lead_id": 1, "campaign_id": 1}
+        for bad in (float("nan"), float("inf"), "1"):
+            self.assertFalse(reply.auto_sendable({**base, "confidence": bad})["ok"], bad)
+
+    def test_threshold_must_be_a_real_bar(self):
+        base = {"sentiment": "interested", "confidence": 1, "draft": "Tuesday works.\n\nJonah",
+                "reply": "yes, let's talk", "lead_id": 1, "campaign_id": 1}
+        for bad in (0, -1, 2, "0", float("nan")):
+            self.assertFalse(reply.auto_sendable({**base, "threshold": bad})["ok"], bad)
 
 
 if __name__ == "__main__":

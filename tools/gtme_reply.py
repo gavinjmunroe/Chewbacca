@@ -29,6 +29,7 @@ to the source text of Object() there. Here it stays "&constructor;".
 
 import argparse
 import json
+import math
 import re
 import sys
 
@@ -283,7 +284,7 @@ SIGN_OFF = js_regex(
 UNSUBSCRIBE = js_regex(
     r"\b(unsubscribe|remove me|take me off|stop emailing|do not contact|don'?t contact)\b", "i")
 # Mail we must not answer: spam-filter challenges, and a firm's notice that
-# its partner died (Cervin Ventures, 2026-10-06). Redirecting a pitch off a
+# its partner died (one firm, 2026-10-06). Redirecting a pitch off a
 # death notice is not something to automate.
 IGNORE = js_regex(
     r"(verify that the message you sent is not unsolicited|this email is to verify"
@@ -361,7 +362,7 @@ def _own_words(text):
     """The reply without the quoted thread under it, so our own outbound (which
     mentions decks, raises and links) can't decide the label."""
     # Outlook and Gmail wrap "On <date>, <name> <address> wrote:" across lines
-    # (Perceptive Ventures, 2026-10-08), so the match spans newlines.
+    # (an investor's reply, 2026-10-08), so the match spans newlines.
     found = THREAD_CUT.search(text)
     cut = found.start() if found else -1
     body = text[:cut] if cut > 0 else text
@@ -411,8 +412,8 @@ def _reply_intent(reply_text, lead_email, sending_email, company_name):
                 "nextStep": "No reply needed. Zeutara isn't raising debt, so it's logged as replied."}
 
     if OUT_OF_OFFICE.search(text):
-        # A person, not an autoresponder, saying when to come back: Clive at
-        # NABU, "traveling internationally for next 3 weeks. Ball in my court."
+        # A person, not an autoresponder, saying when to come back: one investor
+        # wrote "traveling internationally for next 3 weeks. Ball in my court."
         weeks = WEEKS.search(text.lower())
         if weeks:
             return {"kind": "later", "label": "Come back later",
@@ -424,7 +425,7 @@ def _reply_intent(reply_text, lead_email, sending_email, company_name):
 
     if MOVED_ON.search(text):
         # A personal address in a "left the firm" note is for personal matters
-        # (Claridge and TomorrowVentures, 2026-10-08), never for the pitch.
+        # (two firms, 2026-10-08), never for the pitch.
         firm = [e for e in others if not FREE_MAIL.search(_domain_of(e))]
         if firm:
             more = f" and {len(firm) - MAX_LISTED} more" if len(firm) > MAX_LISTED else ""
@@ -545,11 +546,18 @@ def _quoted_thread_index(text):
     return earliest
 
 
+# Upstream runs these regexes on whatever arrives. "\s*\[" scans a whitespace
+# run once per start position, so 200,000 spaces then "x" took readable_reply
+# 192s (measured 2026-10-09). Real mail with its HTML and quoted thread still
+# fits: the longest Zeutara reply on file was under 20k characters.
+MAX_CLEAN_INPUT = 50000
+
+
 def clean_reply_text(raw):
     """cleanReplyText(): reduce an inbound reply to the plain text a human typed."""
     if not raw:
         return ""
-    text = to_js(str(raw))
+    text = to_js(str(raw))[:MAX_CLEAN_INPUT]
     if LOOKS_HTML.search(text):
         text = NOISE_TAGS.sub(" ", text)
         # A quoted thread inside a <blockquote> is the common Apple Mail shape.
@@ -587,7 +595,7 @@ SIGNATURE_START = js_regex(
     r"^(--\s*$|regards|best( regards)?[,!]?$|thanks[,!]?$|thank you[,!]?$|cheers[,!]?$|sincerely"
     r"|sent (from|via) |get outlook|\[image|this e-?mail and any attachments|confidential|phone\b"
     "|cell:|tel:|mobile\\b|address\\b|website\\b|linkedin\\b|\U0001d54f)", "i")
-# Signature lines the sign-off list misses. Infinity Ventures' card on
+# Signature lines the sign-off list misses. One investor's card on
 # 2026-10-09 showed a bold name, a phone number, a street address and three
 # links under a one-line question: a line that is only a bold name, or that
 # carries a link, a phone number or a street address, is where they stopped
@@ -595,8 +603,8 @@ SIGNATURE_START = js_regex(
 SIGNATURE_LINE = js_regex(
     r"^\*[^*]{2,60}\*$|https?:\/\/|\bwww\.|\d{3}[-. )]+\d{3}[-. ]+\d{3,4}"
     r"|\d+ [A-Z][a-z]+ (Street|St|Avenue|Ave|Road|Rd|Blvd|Suite)\b")
-BRACKET_EMAIL = js_regex(r"\s*\[(mailto:)?[^\]\s]+@[^\]\s]+\]", "g")
-BRACKET_URL = js_regex(r"\s*\[https?:\/\/[^\]\s]+\]", "g")
+BRACKET_EMAIL = js_regex(r"(?<!\s)\s*\[(mailto:)?[^\]\s]+@[^\]\s]+\]", "g")
+BRACKET_URL = js_regex(r"(?<!\s)\s*\[https?:\/\/[^\]\s]+\]", "g")
 PARAGRAPH_BREAK = js_regex(r"\n\s*\n")
 
 
@@ -606,14 +614,14 @@ def _clip(text, limit):
 
 def readable_reply(text, limit=700):
     """readableReply(): signature cut, hard wraps joined, bracketed echoes dropped."""
-    lines = to_js(text or "").split("\n")
+    lines = to_js(text or "")[:MAX_CLEAN_INPUT].split("\n")
     end = len(lines)
     for i in range(1, len(lines)):
         line = js_trim(lines[i])
         if SIGNATURE_START.search(line) or SIGNATURE_LINE.search(line):
             end = i
             break
-    # "nathan@afore.vc [nathan@afore.vc]" and "<https://...>" echoes
+    # "person03@firm02.example [person03@firm02.example]" and "<https://...>" echoes
     body = BRACKET_URL.sub("", BRACKET_EMAIL.sub("", "\n".join(lines[:end])))
     paragraphs = [" ".join(t for t in (js_trim(line) for line in p.split("\n")) if t)
                   for p in PARAGRAPH_BREAK.split(body)]
@@ -646,7 +654,10 @@ CARRIES_PAYLOAD = js_regex(
 
 
 def _is_number(value):
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    # NaN and infinity pass a plain isinstance check and compare False, so a
+    # confidence of NaN would never read as below the threshold.
+    return (isinstance(value, (int, float)) and not isinstance(value, bool)
+            and math.isfinite(value))
 
 
 def auto_sendable(verdict):
@@ -660,6 +671,9 @@ def auto_sendable(verdict):
     threshold = verdict.get("threshold")
     if threshold is None:
         reasons.append("no auto-send threshold for this client")
+    elif not _is_number(threshold) or not 0 < threshold <= 1:
+        reasons.append("auto-send threshold is not a number between 0 and 1")
+        threshold = None
     if verdict.get("sentiment") not in ("interested", "wants_more_info"):
         reasons.append("verdict is not interested or wants_more_info")
     confidence = verdict.get("confidence")

@@ -2,166 +2,166 @@
   "source": "togari-platform 9faffef src/agents/smartlead-responder/__tests__/reply-intent.test.ts",
   "zeutara": [
     {
-      "from": "robert@mavenventures.com",
-      "body": "Hi Jonah, thanks for reaching out. I don't think a call makes sense for us right now, but I appreciate you sharing the opportunity.\n\nRobert Ravanshenas\n\nPartner, Maven Ventures\nCell: (310) 801-5936",
+      "from": "person01@firm01.example",
+      "body": "Hi Jonah, thanks for reaching out. I don't think a call makes sense for us right now, but I appreciate you sharing the opportunity.\n\nRobert Haldane\n\nPartner, Corvid Ventures\nCell: (310) 555-0101",
       "kind": "pass",
       "step": null
     },
     {
-      "from": "jack@afore.vc",
-      "body": "thanks for reaching out - i've left afore to join the founding team of one of\nour portfolio companies, and i no longer monitor this inbox\n\n\n\n\n\nfor anything afore-related, nathan yu (nathan@afore.vc [nathan@afore.vc]) is the\nbest person to reach\n\n\n\n\n\nfor anything else, feel free to text me or reach out on\u00a0linkedin\n[https://www.linkedin.com/in/jackmcclelland/]\u00a0and would love to pick things up\nfrom there\n\n\n\njack",
+      "from": "person02@firm02.example",
+      "body": "thanks for reaching out - i've left northgate to join the founding team of one of\nour portfolio companies, and i no longer monitor this inbox\n\n\n\n\n\nfor anything northgate-related, owen park (person03@firm02.example [person03@firm02.example]) is the\nbest person to reach\n\n\n\n\n\nfor anything else, feel free to text me or reach out on\u00a0linkedin\n[https://www.linkedin.com/in/example-person-02/]\u00a0and would love to pick things up\nfrom there\n\n\n\nmarc",
       "kind": "referral",
-      "step": "nathan@afore.vc"
+      "step": "person03@firm02.example"
     },
     {
-      "from": "s.barrett@cwafamilyoffice.com",
-      "body": "Please send all correspondence to my new email address below.\nThank You\n\n\nSean Barrett\n\n\n\nbusinessexitnavigators@gmail.com [businessexitnavigators@gmail.com]",
+      "from": "person04@firm03.example",
+      "body": "Please send all correspondence to my new email address below.\nThank You\n\n\nDean Porter\n\n\n\nperson05@gmail.com [person05@gmail.com]",
       "kind": "new_address",
-      "step": "businessexitnavigators@gmail.com"
+      "step": "person05@gmail.com"
     },
     {
-      "from": "hunter@homebrew.co",
-      "body": "Thanks for the note. Not a fit for us right now but best of luck!\n\nFeel free\u00a0to stay in touch,\n\nhunter",
+      "from": "person06@firm04.example",
+      "body": "Thanks for the note. Not a fit for us right now but best of luck!\n\nFeel free\u00a0to stay in touch,\n\nmiles",
       "kind": "pass",
       "step": null
     },
     {
-      "from": "clive@nabu-llc.com",
-      "body": "Jonah - I'll take a look at what the company does. May be interested in becoming a client. However,  I am traveling internationally for next 3 weeks.  Ball in my court.\n\nRegards\n\nClive Fleissig\n\nSent via the Samsung Galaxy S22 5G, an AT&T 5G smartphone\nGet Outlook for Android<https://aka.ms/AAb9ysg>",
+      "from": "person07@firm05.example",
+      "body": "Jonah - I'll take a look at what the company does. May be interested in becoming a client. However,  I am traveling internationally for next 3 weeks.  Ball in my court.\n\nRegards\n\nGlen Whitford\n\nSent via the Samsung Galaxy S22 5G, an AT&T 5G smartphone\nGet Outlook for Android<https://aka.ms/AAb9ysg>",
       "kind": "later",
       "step": "3 weeks"
     },
     {
-      "from": "jlund@uventurefund.com",
-      "body": "Chance Murray has now taken over as Managing Director for University Venture\nFund II.\u00a0 Please feel free to reach out to him or anyone else on our team.\n\n\nChance Murray\u00a0chance.murray@sorensonimpact.com\n[chance.murray@sorensonimpact.com])\nCarl Adams\u00a0carl.adams@sorensonimpact.com [carl.adams@sorensonimpact.com]\nCharlote Magee\u00a0charlotte.magee@sorensonimpact.com\n[charlotte.magee@sorensonimpact.com]\nJose Moreno\u00a0jose.moreno@sorensonimpact.com [jose.moreno@sorensonimpact.com]",
+      "from": "person08@firm06.example",
+      "body": "Grant Ellison has now taken over as Managing Director for Keystone Venture\nFund II.\u00a0 Please feel free to reach out to him or anyone else on our team.\n\n\nGrant Ellison\u00a0person09@firm07.example\n[person09@firm07.example])\nNeil Barton\u00a0person10@firm07.example [person10@firm07.example]\nCharlote Reyes\u00a0person11@firm07.example\n[person11@firm07.example]\nLuis Ortega\u00a0person12@firm07.example [person12@firm07.example]",
       "kind": "referral",
-      "step": "jose.moreno@sorensonimpact.com"
+      "step": "person12@firm07.example"
     },
     {
-      "from": "jeremy@infinityvc.capital",
-      "body": "Hello Jonah. Is it possible to share the pitch deck before I commit to taking a call with the Founder? Thanks.\n\n*Jeremy Jonker*\nManaging Partner\n*Infinity Ventures ( http://infinityvc.capital )*\n\n214-629-418 3 infinityvc.capital ( https://infinityvc.capital/ )\n\n101 Montgomery Street, Suite 200, San Francisco, CA 94129 ( https://www.google.com/maps/place/101+Montgomery+St,+San+Francisco,+CA+94129 )\n\nlinkedin.com/in/ ( https://www.linkedin.com/in/jeremyjonker/ ) jeremyjonker",
+      "from": "person13@firm08.example",
+      "body": "Hello Jonah. Is it possible to share the pitch deck before I commit to taking a call with the Founder? Thanks.\n\n*Martin Ellery*\nManaging Partner\n*Lantern Ventures ( http://firm08.example )*\n\n214-555-010 3 firm08.example ( https://firm08.example/ )\n\n200 Harbor Street, Suite 300, San Francisco, CA 94105 ( https://www.google.com/maps/place/200+Harbor+St,+San+Francisco,+CA+94105 )\n\nlinkedin.com/in/ ( https://www.linkedin.com/in/example-person-13/ ) example-person-13",
       "kind": "deck",
       "step": null
     },
     {
-      "from": "john@amokconsumer.com",
-      "body": "We don't do Safes. Sorry.\n\n\n*John Lowe - Managing Director*\njohn@amokconsumer.com\n614-483-9949\n[image: amokconsumer.com] <http://amokconsumer.com>\nCONFIDENTIALITY NOTICE: This email and any attachments may contain\nconfidential information. If you have received this email in error, please\nnotify us immediately by returning it to the sender and delete this copy\nfrom your system.",
+      "from": "person14@firm09.example",
+      "body": "We don't do Safes. Sorry.\n\n\n*Paul Brandt - Managing Director*\nperson14@firm09.example\n614-555-0103\n[image: firm09.example] <http://firm09.example>\nCONFIDENTIALITY NOTICE: This email and any attachments may contain\nconfidential information. If you have received this email in error, please\nnotify us immediately by returning it to the sender and delete this copy\nfrom your system.",
       "kind": "pass",
       "step": null
     },
     {
-      "from": "lfeinzaig@grahamwalker.com",
-      "body": "Hello,\n\nThank you for sharing this opportunity with us. We ask that all\nentrepreneurs review our investment criteria and submit their deck and\ninformation through our website\n<https://df1a7d4a.streak-link.com/DEUdmEczM8FvLBJLWwtrDStU/https%3A%2F%2Fgrahamwalker.com%2Fpitch>,\nfrom where our team reviews and responds to every submission.\n\nBest,\n\nLeslie and the Graham & Walker team\n\u1427",
+      "from": "person15@firm10.example",
+      "body": "Hello,\n\nThank you for sharing this opportunity with us. We ask that all\nentrepreneurs review our investment criteria and submit their deck and\ninformation through our website\n<https://a1b2c3d4.streak-link.com/EXAMPLEtoken00000000000/https%3A%2F%2Ffirm10.example%2Fpitch>,\nfrom where our team reviews and responds to every submission.\n\nBest,\n\nDana and the Hollis & Grant team\n\u1427",
       "kind": "form",
       "step": "streak-link"
     },
     {
-      "from": "jill@costellakirsch.com",
-      "body": "Hi Jonah,\n\nThanks for reaching out. Please see attached one-pager for what we look for in companies we fund as a lender. If this company looks like it hits our thresholds, I\u2019d welcome an intro call.\n\nCheers,\nJill\n\n\ufffc",
+      "from": "person16@firm11.example",
+      "body": "Hi Jonah,\n\nThanks for reaching out. Please see attached one-pager for what we look for in companies we fund as a lender. If this company looks like it hits our thresholds, I\u2019d welcome an intro call.\n\nCheers,\nRuth\n\n\ufffc",
       "kind": "pass",
       "step": "isn't raising debt"
     },
     {
-      "from": "b@dvrgntventures.com",
-      "body": "Hi Jonah, thanks for writing. Best next step is our founder intake form \u2014\nplease submit here and the team will take it from there:\nhttps://dvrgntventures.com/contact?intent=founder\n<https://www.google.com/url?q=https://dvrgntventures.com/contact?intent%3Dfounder&source=gmail&ust=1791485566900000&sa=E>\n\nB. | b@dvrgntventures.com | +1 (773) 368-7971",
+      "from": "person17@firm12.example",
+      "body": "Hi Jonah, thanks for writing. Best next step is our founder intake form \u2014\nplease submit here and the team will take it from there:\nhttps://firm12.example/contact?intent=founder\n<https://www.google.com/url?q=https://firm12.example/contact?intent%3Dfounder&source=gmail&ust=1791485566900000&sa=E>\n\nB. | person17@firm12.example | +1 (773) 555-0102",
       "kind": "form",
-      "step": "https://dvrgntventures.com/contact?intent=founder"
+      "step": "https://firm12.example/contact?intent=founder"
     },
     {
-      "from": "sudhir.kadam@fyda.net",
+      "from": "person18@firm13.example",
       "body": "Are they revenue generating? What is their LTM and NTM revenue? Collected net revenue, not ARR or GMV/GTV.",
       "kind": "question",
       "step": null
     },
     {
-      "from": "darrel@tgnventures.vc",
-      "body": "Hi Jonah,\n\nThanks for reaching out.\n\nAt TGN Ventures, we use Vettable to review all opportunities. Please feel\nfree to have the founder submit here:\nhttps://www.getvettable.com/tgn-ventures/invest/6SPJMW\n\nAdditionally, please feel free to have them join our free founder community\nfor access to investors, other founders, and resources to grow as an\nentrepreneur: The Good News LOOP\n<https://loopis.live/inbox?section=groups&group=rd7729nz7qzwbkv3g9v7xvg33x8ftvcz&invite=980b1535-6bc8-462a-b135-f25246eaaaf9dcb06c8f-282d-42ce-a29c-df708726a409>\n\nBest,\nDarrel Frater\nManaging Partner\nTGN Ventures\nhttps://tgnventures.vc\n\nDarrel Frater, MBA\nFounder & Managing Partner, TGN Ventures\n\n*Set Apart. With Purpose.*\n\nEmaildarrel@tgnventures.vc\nPhone609-331-3928 <6093313928>\nLocationTulsa, Oklahoma\n\n\ud835\udd4f <https://twitter.com/DarrelFrater> @DarrelFrater\n<https://twitter.com/DarrelFrater>\nin <https://linkedin.c",
+      "from": "person19@firm14.example",
+      "body": "Hi Jonah,\n\nThanks for reaching out.\n\nAt Ridgeline Ventures, we use Vettable to review all opportunities. Please feel\nfree to have the founder submit here:\nhttps://www.getvettable.com/ridgeline-ventures/invest/EX4MPL\n\nAdditionally, please feel free to have them join our free founder community\nfor access to investors, other founders, and resources to grow as an\nentrepreneur: The Founder Circle\n<https://community.example/inbox?section=groups&group=examplegroup000000000000000000&invite=00000000-0000-0000-0000-000000000000>\n\nBest,\nDarren Holt\nManaging Partner\nRidgeline Ventures\nhttps://firm14.example\n\nDarren Holt, MBA\nFounder & Managing Partner, Ridgeline Ventures\n\n*Built Together.*\n\nEmailperson19@firm14.example\nPhone609-555-0104 <6095550104>\nLocationBoise, Idaho\n\n\ud835\udd4f <https://twitter.com/DarrenHoltVC> @DarrenHoltVC\n<https://twitter.com/DarrenHoltVC>\nin <https://linkedin.c",
       "kind": "form",
-      "step": "getvettable.com/tgn-ventures"
+      "step": "getvettable.com/ridgeline-ventures"
     },
     {
-      "from": "gary@perceptivevc.com",
-      "body": "Nick (CC'd) is more on the business side for considering this kind of\napplication: Data with physical meet venues.",
+      "from": "person20@firm15.example",
+      "body": "Sam (CC'd) is more on the business side for considering this kind of\napplication: Data with physical meet venues.",
       "kind": "referral",
       "step": null
     },
     {
-      "from": "adryenn@slayventures.io",
-      "body": "Thanks for letting me know another feature of my original dating app has\nnow spun off into its own thing. :) This is already a part of the the app I\nbuilt a decade ago that is in our venture studio. I wish them the best.\nLive and in person is totally the right play.\n[image: Regards,]\nAdryenn Ashley\nManaging Partner / Founder, Slay Ventures\n<http://facebook.com/adryenn> <http://us.linkedin.com/in/adryenn>\n<http://twitter.com/adryenn> <http://instagram.com/adryenn>\nAddress  450 Sinclair St., Reno, NV 89501\nPhone 415-887-8555\nEmail adryenn@slayventures.io\nWebsite https://slayventures.io\nThis e-mail and any attachments to it are confidential and may contain\nproprietary information. The information in this e-mail is intended solely\nfor the use of the individual(s) to whom it is addressed. Unless you are\none of the named addressee(s) (or authorized to receive it for one of the\naddressee(s), yo",
+      "from": "person21@firm16.example",
+      "body": "Thanks for letting me know another feature of my original dating app has\nnow spun off into its own thing. :) This is already a part of the the app I\nbuilt a decade ago that is in our venture studio. I wish them the best.\nLive and in person is totally the right play.\n[image: Regards,]\nBrynn Castle\nManaging Partner / Founder, Vireo Ventures\n<http://facebook.com/example-person-21> <http://us.linkedin.com/in/example-person-21>\n<http://twitter.com/example-person-21> <http://instagram.com/example-person-21>\nAddress  450 Cedar St., Boise, ID 83702\nPhone 415-555-0105\nEmail person21@firm16.example\nWebsite https://firm16.example\nThis e-mail and any attachments to it are confidential and may contain\nproprietary information. The information in this e-mail is intended solely\nfor the use of the individual(s) to whom it is addressed. Unless you are\none of the named addressee(s) (or authorized to receive it for one of the\naddressee(s), yo",
       "kind": "unclear",
       "step": null
     },
     {
-      "from": "kellieo@reciprocityroi.com",
-      "body": "Hello Jonah\nIm always fully transparent so there is no confusion and informed decisions are made from the get-go.\n\nDigerati Investments VC fund only considers (not guaranteed) backing founders they have first worked with in some capacity through Reciprocity ROI Capital Management studio.\n\nWhy?\n\nReciprocity ROI capital management, diligence & syndications studio is to determine issuer and allocator alignment and responsible capital deployment through appropriate compliance and diligence which the startup must participate in.\nWe can\u2019t determine that through phone calls and bit of paperwork\n\nAdditionally, any investor worth being on your cap table should also be bringing coinvestors with them.\nWe 100% own vouching for you to our coinvestors.\nWe cannot authentically do that if we have not personally had a front seat to how you operate & execute.\nAt this stage it is not about the product, it ",
+      "from": "person22@firm17.example",
+      "body": "Hello Jonah\nIm always fully transparent so there is no confusion and informed decisions are made from the get-go.\n\nMeridian Investments VC fund only considers (not guaranteed) backing founders they have first worked with in some capacity through Tandem Capital Management studio.\n\nWhy?\n\nTandem capital management, diligence & syndications studio is to determine issuer and allocator alignment and responsible capital deployment through appropriate compliance and diligence which the startup must participate in.\nWe can\u2019t determine that through phone calls and bit of paperwork\n\nAdditionally, any investor worth being on your cap table should also be bringing coinvestors with them.\nWe 100% own vouching for you to our coinvestors.\nWe cannot authentically do that if we have not personally had a front seat to how you operate & execute.\nAt this stage it is not about the product, it ",
       "kind": "pass",
       "step": null
     }
   ],
   "qube": [
     {
-      "from": "e@laurentpartners.com",
-      "body": "Dear Sender, please kindly address future communication to el@pereim.com. This email will soon cease to function.",
+      "from": "person23@firm18.example",
+      "body": "Dear Sender, please kindly address future communication to person24@firm19.example. This email will soon cease to function.",
       "kind": "new_address",
-      "step": "el@pereim.com"
+      "step": "person24@firm19.example"
     },
     {
-      "from": "afilpo@fortunepartnersgroup.com",
-      "body": "I hope this message finds you well.\n\r\n\n\r\nWe would like to inform you that Antonio Filpo is no longer with Aliya Capital Partners. Please direct all messages and requests to familyofficeops@aliyacapitalpartners.com\n\r\n\n\r\nThank you for your understanding and cooperation.",
+      "from": "person25@firm20.example",
+      "body": "I hope this message finds you well.\n\r\n\n\r\nWe would like to inform you that Marco Bellini is no longer with Calder Capital Partners. Please direct all messages and requests to person26@firm21.example\n\r\n\n\r\nThank you for your understanding and cooperation.",
       "kind": "referral",
-      "step": "familyofficeops@aliyacapitalpartners.com"
+      "step": "person26@firm21.example"
     },
     {
-      "from": "frederic.vanhalteren@waterloo-am.com",
-      "body": "Madame,\n\r\nMonsieur,\n\r\n\u00a0\n\r\nJe suis absent du 03/10 au 10/10 et sans acc\u00e8s r\u00e9guliers \u00e0 ma mes supports de messageries. Les e-mails qui me seront adress\u00e9s durant cette p\u00e9riode ne seront pas\r\n automatiquement retransf\u00e9r\u00e9s vers mon \u00e9quipe.\n\r\n\u00a0\n\r\nPour tout service, requ\u00eate urgente ou prise de rdv, n'h\u00e9sitez-pas \u00e0 contacter mon assistante :\n\r\n\u00a0\n\r\n02/ 357 03 40\n\r\nmaud.dudekem@waterloo-am.com\n\r\n\u00a0\n\r\nBien cordialement,\n\r\n\u00a0\n\r\nFr\u00e9d\u00e9ric Van Halteren",
+      "from": "person27@firm22.example",
+      "body": "Madame,\n\r\nMonsieur,\n\r\n\u00a0\n\r\nJe suis absent du 03/10 au 10/10 et sans acc\u00e8s r\u00e9guliers \u00e0 ma mes supports de messageries. Les e-mails qui me seront adress\u00e9s durant cette p\u00e9riode ne seront pas\r\n automatiquement retransf\u00e9r\u00e9s vers mon \u00e9quipe.\n\r\n\u00a0\n\r\nPour tout service, requ\u00eate urgente ou prise de rdv, n'h\u00e9sitez-pas \u00e0 contacter mon assistante :\n\r\n\u00a0\n\r\n02/ 555 01 40\n\r\nperson28@firm22.example\n\r\n\u00a0\n\r\nBien cordialement,\n\r\n\u00a0\n\r\nFr\u00e9d\u00e9ric Van Doren",
       "kind": "later",
       "step": null
     },
     {
-      "from": "wolfram.kuoni@kuonilaw.ch",
-      "body": "No, txs\r\n\r\nMit freundlichen Gr\u00fcssen\r\nWolfram Kuoni\r\nKUONI Rechtsanw\u00e4lte / Attorneys at Law \r\n\r\nDr.iur.\u00a0Wolfram Kuoni\r\nRechtsanwalt / Attorney at Law \r\nMBA INSEAD \r\nKuoni Rechtsanw\u00e4lte AG\r\nL\u00f6wenstrasse 66\r\nP.O. Box 251\r\nCH-8021 Zurich\r\n\r\nTel +41 43 466 60 60\r\nMobile: +41 79 352 65 76\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0 \r\nFax +41 43 466 60 61\r\nwww.kuonilaw.ch\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0 \r\n\r\nThis e-mail has been sent by a law firm. It is confidential and may be privileged. Only the intended recipient may read, copy and use. If you have received it in error, please contact us immediately. Thank you.",
+      "from": "person29@firm23.example",
+      "body": "No, txs\r\n\r\nMit freundlichen Gr\u00fcssen\r\nAnton Weber\r\nWEBER Rechtsanw\u00e4lte / Attorneys at Law \r\n\r\nDr.iur.\u00a0Anton Weber\r\nRechtsanwalt / Attorney at Law \r\nMBA INSEAD \r\nWeber Rechtsanw\u00e4lte AG\r\nBahnhofstrasse 10\r\nP.O. Box 555\r\nCH-8001 Zurich\r\n\r\nTel +41 43 555 01 00\r\nMobile: +41 79 555 01 02\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0 \r\nFax +41 43 555 01 01\r\nwww.firm23.example\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0\u00a0 \r\n\r\nThis e-mail has been sent by a law firm. It is confidential and may be privileged. Only the intended recipient may read, copy and use. If you have received it in error, please contact us immediately. Thank you.",
       "kind": "pass",
       "step": null
     },
     {
-      "from": "erling.lein@sonnenberg-ag.com",
-      "body": "Thank you for your message.\n\r\nI am currently out of the office and will have limited access to email until the close of business on October 7.\n\r\nPlease note that your message will not be automatically forwarded. I will respond as soon as possible upon my return.\n\r\n\u00a0\n\r\nKind regards,\n\r\n\u00a0\n\r\nErling Lein",
+      "from": "person30@firm24.example",
+      "body": "Thank you for your message.\n\r\nI am currently out of the office and will have limited access to email until the close of business on October 7.\n\r\nPlease note that your message will not be automatically forwarded. I will respond as soon as possible upon my return.\n\r\n\u00a0\n\r\nKind regards,\n\r\n\u00a0\n\r\nLars Moen",
       "kind": "later",
       "step": null
     },
     {
-      "from": "ulrich.guggisberg@fio-partners.ch",
-      "body": "Danke f\u00fcr Ihre Nachricht. \n\r\nDas Postfach ist nicht\n\r\nmehr aktiv. Bei R\u00fcckfragen k\u00f6nnen Sie sich an\n\r\nHerrn Harald Hoffmann unter der Telefonnummer\n\r\n044 515 41 16 wenden. Danke f\u00fcr Ihre\n\r\nKenntnisnahme. \n\r\nMit freundlichen Gr\u00fcssen FIO\n\r\nPartners AG\r\nBasierend auf frueherer E-Mail Korrespondenz mit Ihnen und/oder auf die mit Ihnen getroffene Absprache, betrachtet sich die FIO Partners AG als ermaechtigt, Sie via ungesicherte E-Mail\r\n Netze zu kontaktieren. Warnung: E-Mails koennen bedeutende Risiken aufweisen, wie beispielsweise Vertrauensmaengel, moegliche Verfaelschungen von Inhalten und/oder Senderadressen, unrichtige Empfaengeradressen (Fehlzustellungen), Viren etc. FIO Partners AG\r\n uebernimmt keine Verantwortung fuer einen Verlust oder einen aus dem E-Mail Verkehr entstandenen Schaden. FIO Partners AG empfiehlt, dass insbesondere sensitive Informationen nicht via E-Mail versendet werden, Details aus vorherigen E-Mails nicht in den Rueckantworten\r\n enthalten sind und dass die E-Mail Adresse(n) bei jeder E-Mail erneut manuell eingegeben wird/werden. Informationen in dieser Nachricht sind vertraulich und koennen rechtlich geschuetzt sein. Diese Nachricht ist ausschliesslich fuer",
+      "from": "person31@firm25.example",
+      "body": "Danke f\u00fcr Ihre Nachricht. \n\r\nDas Postfach ist nicht\n\r\nmehr aktiv. Bei R\u00fcckfragen k\u00f6nnen Sie sich an\n\r\nHerrn Peter Keller unter der Telefonnummer\n\r\n044 555 01 16 wenden. Danke f\u00fcr Ihre\n\r\nKenntnisnahme. \n\r\nMit freundlichen Gr\u00fcssen ALTA\n\r\nPartners AG\r\nBasierend auf frueherer E-Mail Korrespondenz mit Ihnen und/oder auf die mit Ihnen getroffene Absprache, betrachtet sich die ALTA Partners AG als ermaechtigt, Sie via ungesicherte E-Mail\r\n Netze zu kontaktieren. Warnung: E-Mails koennen bedeutende Risiken aufweisen, wie beispielsweise Vertrauensmaengel, moegliche Verfaelschungen von Inhalten und/oder Senderadressen, unrichtige Empfaengeradressen (Fehlzustellungen), Viren etc. ALTA Partners AG\r\n uebernimmt keine Verantwortung fuer einen Verlust oder einen aus dem E-Mail Verkehr entstandenen Schaden. ALTA Partners AG empfiehlt, dass insbesondere sensitive Informationen nicht via E-Mail versendet werden, Details aus vorherigen E-Mails nicht in den Rueckantworten\r\n enthalten sind und dass die E-Mail Adresse(n) bei jeder E-Mail erneut manuell eingegeben wird/werden. Informationen in dieser Nachricht sind vertraulich und koennen rechtlich geschuetzt sein. Diese Nachricht ist ausschliesslich fuer",
       "kind": "referral",
       "step": null
     },
     {
-      "from": "maria.lui@mutualtrust.com.au",
-      "body": "Thank you for your email. Please be advised that Maria Lui has retired from Mutual Trust. Please contact Simone James on (03) 9605 9528 or simone.james@mutualtrust.com.au who will be able to assist with your query.\r\n\r\n\r\n\n Mutual Trust Pty Ltd ACN 004 285 330, AFSL 234590. Liability Limited by a scheme approved under Professional Standards Legislation. For participating members (other than for the acts or omissions of Australian Financial Services Licensees).   \r\nThis email is intended for the named recipient only. The information contained in this message may be confidential, privileged or commercially sensitive. If you are not the intended recipient, confidentiality and any privilege are not waived and you must not reproduce or distribute any part of the email, disclose its contents to any other party, or take action in reliance on it. If you have received this email in error, please contact Mutual Trust immediately on +61 3 9605 9500. Please also destroy and delete this email from your computer. Any views expressed in this email are those of the individual sender, except where the sender expressly states them to be otherwise. Mutual Trust Pty Ltd does not represent, warrant or gu",
+      "from": "person32@firm26.example",
+      "body": "Thank you for your email. Please be advised that Helen Ward has retired from Coastal Trust. Please contact Nora Quinn on (03) 9555 0128 or person33@firm26.example who will be able to assist with your query.\r\n\r\n\r\n\n Coastal Trust Pty Ltd ACN 000 555 010, AFSL 555010. Liability Limited by a scheme approved under Professional Standards Legislation. For participating members (other than for the acts or omissions of Australian Financial Services Licensees).   \r\nThis email is intended for the named recipient only. The information contained in this message may be confidential, privileged or commercially sensitive. If you are not the intended recipient, confidentiality and any privilege are not waived and you must not reproduce or distribute any part of the email, disclose its contents to any other party, or take action in reliance on it. If you have received this email in error, please contact Coastal Trust immediately on +61 3 9555 0100. Please also destroy and delete this email from your computer. Any views expressed in this email are those of the individual sender, except where the sender expressly states them to be otherwise. Coastal Trust Pty Ltd does not represent, warrant or gu",
       "kind": "referral",
-      "step": "simone.james@mutualtrust.com.au"
+      "step": "person33@firm26.example"
     },
     {
-      "from": "denise@sagegrowthcapital.com",
-      "body": "I am traveling Oct 5-7 with limited access to email. For immediate\r\nassistance please contact admin@sagegrowthcapital.com. Thanks!\r\n\r\n\r\n-- \r\nDenise Dunlap\r\nManaging Partner\r\n\r\n[image: www.sagegrowthcapital.com] \r\n\r\n\r\n*We invest in companies with:*\r\n* - Growing Recurring Revenue*\r\n\r\n* - Annual revenue over $300k *\r\n* - Stable gross margins 40% +*",
+      "from": "person34@firm27.example",
+      "body": "I am traveling Oct 5-7 with limited access to email. For immediate\r\nassistance please contact person35@firm27.example. Thanks!\r\n\r\n\r\n-- \r\nKaren Doyle\r\nManaging Partner\r\n\r\n[image: www.firm27.example] \r\n\r\n\r\n*We invest in companies with:*\r\n* - Growing Recurring Revenue*\r\n\r\n* - Annual revenue over $250k *\r\n* - Stable gross margins 40% +*",
       "kind": "later",
       "step": null
     },
     {
-      "from": "akbar.poonawala@pivotinvestment.com",
-      "body": "I am traveling and checking e-mails infrequently.\u00a0\n\nIn case of an urgent need, you can text me at +1-917-940-4140.\u00a0\u00a0\n\nThanks,\nAkbar\n\n-- \nAkbar A. Poonawala, CFA\nPivot Investment Partners LLC\nakbar.poonawala@pivotinvestment.com\nMobile:\u00a0 +1-917-940-4140",
+      "from": "person36@firm28.example",
+      "body": "I am traveling and checking e-mails infrequently.\u00a0\n\nIn case of an urgent need, you can text me at +1-917-555-0106.\u00a0\u00a0\n\nThanks,\nVictor\n\n-- \nVictor S. Mehta, CFA\nKeel Investment Partners LLC\nperson36@firm28.example\nMobile:\u00a0 +1-917-555-0106",
       "kind": "later",
       "step": null
     },
     {
-      "from": "dskok@matrix.vc",
+      "from": "person37@firm29.example",
       "body": "I have retired from making new investments. But I wish you the best of luck with the venture.",
       "kind": "pass",
       "step": null
     },
     {
-      "from": "michelle@nrrcap.com",
-      "body": "Jonah,\n\nI invest in companies with minimum annual go-to-market spend of $20M. Based on what you described, this doesn't\u00a0like a fit. Thanks.\n\nMichelle Moon\ncal.com/mmoon\nmichelle@nrrcap.com\n\nSent via Superhuman",
+      "from": "person38@firm30.example",
+      "body": "Jonah,\n\nI invest in companies with minimum annual go-to-market spend of $15M. Based on what you described, this doesn't\u00a0like a fit. Thanks.\n\nLaura Finch\ncal.com/example-person-38\nperson38@firm30.example\n\nSent via Superhuman",
       "kind": "pass",
       "step": null
     }

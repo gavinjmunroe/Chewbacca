@@ -158,7 +158,7 @@ public final class SurfaceStore {
         switch op {
         case .surface, .close, .presence, .mark, .unmark, .say, .step, .write, .queued,
              .terminal, .terminalOff, .agentCursor, .agentCursorOff, .press, .chatTarget, .editRim, .tuneRim,
-             .openFiles, .closeFiles:
+             .openFiles, .closeFiles, .glance:
             // Routed by the overlay, which owns which surface is current and
             // what the ring and the pill are doing. A store knows about one
             // surface's contents and deliberately nothing about the glass

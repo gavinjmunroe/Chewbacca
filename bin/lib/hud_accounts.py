@@ -680,6 +680,7 @@ def card(data: dict, accounts: list[Path], answering: Target | None, picked: Tar
     models = models_for(current.runtime)
     out.lines = [
         f"@ {SURFACE} at=topRight w=440",
+        f"glance {SURFACE}",
         'c s Screen title="MODEL"',
         "c now Text value=@/now",
         "c note Text value=@/note tone=muted",

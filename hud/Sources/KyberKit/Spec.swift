@@ -250,6 +250,10 @@ public enum Op: Sendable, Equatable {
         urgency: Urgency?, chrome: Chrome?, life: Double?, near: Near?)
     /// Close a surface and take it off the screen.
     case close(id: String)
+    /// `glance <surface>`: a click anywhere off that card takes it down and
+    /// sends `e closed`, the same as its X. For answers read once (search,
+    /// a repo card, a note), where clicking on with your work means done.
+    case glance(id: String)
     /// Say what the assistant is doing. Draws the presence ring.
     case presence(Presence, amplitude: Double?)
     /// Put a mark on the screen at absolute coordinates.

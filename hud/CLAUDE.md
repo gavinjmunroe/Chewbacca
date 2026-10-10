@@ -267,6 +267,14 @@ and never go up the socket.
 It leaves like a glance: Escape clears the glass, a click anywhere off its
 card takes it down, and so do "close files", `files off`, `- disk` and the X.
 
+Any other card can leave the same way: `glance <surface>` after its `@`
+line marks it, and a click off every card on the glass then closes it and
+sends `e closed <surface>`, exactly like its X. A click on any card keeps it,
+because pressing a row on one card isn't the person being done. Search, the
+repo card and the model switcher send it; standing surfaces like needs-you
+don't, since they're meant to stay. Source: `clickedAway` in
+`Sources/KyberKit/OverlayModel.swift`, tests in `GlanceTests.swift`.
+
 This replaced a two-pane keyboard file manager (CHW-198, 2026-10-09): an
 NSPanel with no close button that Escape could not reach, and a copy of
 Finder, which docs/plans/NO-APPS.md rules out. Source: `Sources/KyberKit/FilesGlass.swift`.

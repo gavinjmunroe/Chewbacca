@@ -243,6 +243,9 @@ public final class OverlayModel {
             // is the only condition under which stopping it is correct.
             revision += 1
 
+        case .glance(let id):
+            glances.insert(id)
+
         case .close(let id):
             // A clear from the bridge while an answer is still coming takes
             // the glass, never the conversation panel. On 2026-10-03 the panel
@@ -527,6 +530,7 @@ public final class OverlayModel {
 
     public func reset(keepChat: Bool = false) {
         markers = []
+        glances = []
         agentCursorTask?.cancel()
         agentCursor = nil
         sweepTask?.cancel()
@@ -658,6 +662,8 @@ public final class OverlayModel {
 
     /// The folder on the glass, while it is up. See `FilesGlass`.
     public private(set) var files: FilesGlass?
+    /// Surfaces that a click off their card takes down (`glance <id>`).
+    public private(set) var glances: Set<String> = []
     /// What a press on it does to the machine. A test swaps this out so it can
     /// press every row without Finder or Preview opening.
     public var filesEffect: (FilesGlass.Effect) -> Void = { FilesGlass.perform($0) }
@@ -697,11 +703,16 @@ public final class OverlayModel {
     /// folder's card, the folder goes: it is a glance, and clicking on with
     /// what you were doing is the person saying they are done with it.
     public func clickedAway(at point: CGPoint) {
-        guard files != nil, let surface = surfaces.first(where: { $0.id == FilesGlass.id }) else { return }
+        var ids = glances
+        if files != nil { ids.insert(FilesGlass.id) }
         // The same few points of slack the window uses to decide a click is
-        // on a card (`OverlayWindow.updateInteractive`).
-        guard !frame(of: surface).insetBy(dx: -3, dy: -3).contains(point) else { return }
-        dismiss(FilesGlass.id)
+        // on a card (`OverlayWindow.updateInteractive`). A click on any card
+        // keeps every glance up: pressing a row on one card isn't done.
+        let cards = surfaces.map { frame(of: $0).insetBy(dx: -3, dy: -3) }
+        guard !cards.contains(where: { $0.contains(point) }) else { return }
+        for surface in surfaces where ids.contains(surface.id) {
+            dismiss(surface.id)
+        }
     }
 
     /// The X on a card: take it down and tell whoever drew it.
@@ -908,6 +919,7 @@ public final class OverlayModel {
 
     public func close(_ id: String) {
         if id == FilesGlass.id { files = nil }
+        glances.remove(id)
         surfaces.removeAll { $0.id == id }
         heights.removeValue(forKey: id)
         fullHeights.removeValue(forKey: id)

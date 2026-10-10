@@ -228,6 +228,13 @@ public enum LineParser {
                 urgency: urgency, chrome: chrome, life: life,
                 near: target.map { Near(target: $0, side: side) })
 
+        case "glance":
+            // `glance name`: a click off that card closes it, like its X.
+            guard tokens.count == 2 else {
+                throw LineParseError.malformed("`glance` takes one surface name", line: trimmed)
+            }
+            return .glance(id: tokens[1])
+
         case "-":
             // `- name` closes one. `-` on its own clears the glass.
             //

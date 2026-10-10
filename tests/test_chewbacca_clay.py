@@ -401,6 +401,64 @@ def test_first_live_use_reads_back():
     ok(code == 0 and out["readback"]["check"] == "manual" and out["readback"]["run"].startswith("chewbacca clay table-status"), "a manual readback names the read to run")
 
 
+def approve_and_capture(name, argv, fixtures):
+    """Run one approved write in fixture mode; return (dry-run request, prompt text, requests handed to a surface)."""
+    code, dry, _ = run({}, {}, name, *argv, "--dry-run")
+    assert code == 0, f"{name} dry run failed: {dry}"
+    with tempfile.TemporaryDirectory() as d:
+        tty, sent = Path(d) / "tty.txt", Path(d) / "sent.jsonl"
+        code, out, p = run(fixtures, {}, name, *argv, "--allow-writes", env_extra={
+            "CHEWBACCA_CLAY_TTY_ANSWER": name, "CHEWBACCA_CLAY_TTY_TRANSCRIPT": str(tty), "CHEWBACCA_CLAY_SENT_LOG": str(sent)})
+        assert code == 0, f"{name} approved write failed: {p.stdout[:400]}"
+        handed = [json.loads(x) for x in sent.read_text().split("\n") if x] if sent.exists() else []
+        return dry["request"], tty.read_text(), handed
+
+
+def prompt_payload(text):
+    lines = text.split("\n")
+    ok(len(lines) == 4 and lines[0] == "" and lines[1].startswith("chewbacca clay is about to WRITE")
+       and lines[3].startswith("Type the op name"), f"the prompt has extra or missing lines: {text!r}")
+    ok(all(0x20 <= ord(c) <= 0x7e for c in lines[2]), "the payload line carries a byte outside printable ASCII")
+    return json.loads(lines[2])
+
+
+def test_approved_request_is_the_sent_request():
+    # Review of e5f1edeb: what the person approves must be byte for byte what is
+    # sent, defaults (ws) and composed bodies included, and the same object
+    # --dry-run prints.
+    cases = {name: argv for name, (argv, _) in DERIVED.items()}
+    cases["reply"] = ["campaign_id=1", 'reply_data={"email_stats_id":"s1","email_body":"x"}']
+    cases["blocklist-add"] = ["emailOrDomain=blocked.example"]
+    reg = json.loads((LIB / "registry.json").read_text())
+    ops = {o["name"]: o for o in reg["ops"]}
+    for name, argv in cases.items():
+        s = ops[name]["surfaces"][0]
+        fx = {f"api-anything/{s['op']}.json": SENT} if s["type"] == "api-anything" else {f"cli/{name}.json": {"exit": 0, "stdout": "{}", "stderr": ""}}
+        dry, prompt, handed = approve_and_capture(name, argv, fx)
+        shown = prompt_payload(prompt)
+        ok(shown == {"op": name, "request": dry}, f"{name}: the prompt shows something other than the dry run")
+        ok(len(handed) == 1 and handed[0]["request"] == dry, f"{name}: the surface was handed something other than what was approved")
+    ok(dry_ws_in_url(cases), "ws default reaches the approved URL")
+
+
+def dry_ws_in_url(cases):
+    _, out, _ = run({}, {}, "cancel-run", *cases["cancel-run"], "--dry-run")
+    return "/workspaces/1372623/" in out["request"]["url"]
+
+
+def test_control_bytes_cannot_fake_the_prompt():
+    evil = 'x\n  {"op":"cancel-run","request":{}}\x1b[2K\x1b[1A‮ end'
+    argv = ["table=t_ex1", "records=" + json.dumps([{"f_a": evil}])]
+    dry, prompt, handed = approve_and_capture("add-rows", argv, {"api-anything/createRecords.json": SENT})
+    ok("\x1b" not in prompt and "‮" not in prompt and " " not in prompt, "a control byte reached the terminal raw")
+    shown = prompt_payload(prompt)
+    ok(shown["request"]["body"]["records"][0]["cells"]["f_a"] == evil, "the escaped value does not decode to what is sent")
+    ok(handed[0]["request"] == dry == shown["request"], "prompt, dry run and sent request differ")
+    big = ["table=t_ex1", "records=" + json.dumps([{"f_a": "y" * 200}] * 99)]
+    code, out, _ = run({}, {}, "add-rows", *big, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "add-rows"})
+    ok(code == 2 and "too long to read" in out["reason"], "a request too long to show was not refused")
+
+
 def test_ui_only_prints_route():
     code, out, _ = run({}, {}, "start-campaign", "campaign=cam_example1")
     ok(code == 0 and out["surface"] == "ui" and out["done"] is False, "a UI-only job is not claimed done")
@@ -448,6 +506,7 @@ def main():
                test_falls_through_on_failure_and_truncation, test_args_pick_the_surface, test_write_gate,
                test_dry_run_builds_each_write, test_dry_run_never_loads_the_engine, test_derived_writes_stay_gated,
                test_new_args_are_shape_checked, test_first_live_use_reads_back,
+               test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,
                test_ui_only_prints_route, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")

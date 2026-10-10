@@ -211,6 +211,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_write_skills_unprompted: Chewbacca writes or updates its own skills the moment a lesson lands; Caleb...
 - feedback_suggested_chip_fix_it_here: When he asks about a Suggested task chip, verify it and fix it in this tab; never tell him to click it
 - feedback_subtree_import_merge_not_rebase: After git subtree add, merge origin; rebase replays the import at the repo root
+- feedback_ported_knowledge_must_stand_alone: Ported private-repo knowledge is written out in full (no pointers strangers can't open) and fixtures are anonymized; 27 real investor replies nearly shipped (10/9)
 - feedback_scan_before_import: Scan files and history for personal content before importing a repo into the kit
 - feedback_say_what_you_found_before_digging: On a "the system is cooked" vent, measure once and reply with the diagnosis first; silent digging drew "???" (2026-10-09)
 - feedback_shared_checkout_mid_merge: The shared checkout can be mid-merge by another tab; never stage there to fix a gate, build the fix in a detached worktree of HEAD

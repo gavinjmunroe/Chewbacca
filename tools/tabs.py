@@ -35,6 +35,28 @@ OVERLAP_SECONDS = 30 * 60
 LOG_TAIL_BYTES = 1_500_000
 MAX_SHOWN = 8
 TASK_CHARS = 200
+# Lease term, chosen the way Gray and Cheriton chose theirs ("Leases: An
+# Efficient Fault-Tolerant Mechanism for Distributed File Cache Consistency",
+# SOSP 1989): a longer term costs fewer extensions, a shorter one shortens how
+# long a crashed holder keeps others waiting. Here an extension is free, it
+# rides on an edit that happens anyway, so the only cost of a long term is a
+# dead or finished tab still being named, and the cost of a short one is a lease
+# lapsing between two edits of one working stretch. Measured on
+# ~/.chewbacca/write-log.tsv on 2026-10-10 (1,994 edit rows over 19 days, 1,037
+# re-edits of a file by the same session): 80.1% of re-edits land within 10
+# minutes, 87.7% within 20, 91.9% within 30 and 95.9% within 60. Twenty minutes
+# keeps the lease alive across nearly nine in ten edit-test loops while a tab
+# that crashed without SessionEnd stops being named after the same twenty.
+LEASE_SECONDS = 20 * 60
+# Gray and Cheriton's epsilon: a lease check made by another process allows for
+# clock uncertainty in the direction that protects the holder. Their section 5:
+# a checker whose clock runs fast may allow a write "before the term of a lease
+# held by a previous client has expired at that client". So another tab treats
+# a lease as live until expires_at + SKEW_SECONDS. Every process here reads one
+# Mac clock, so the only skew is an NTP step between the holder's write and the
+# checker's read. Guessed, never measured: NTP slews rather than steps small
+# offsets, so 5 s is generous.
+SKEW_SECONDS = 5
 HARNESS_PREFIXES = ('<task-notification', '<system-reminder', '[SYSTEM NOTIFICATION')
 FILE_TOOLS = {'Write', 'Edit', 'MultiEdit', 'NotebookEdit'}
 
@@ -82,6 +104,11 @@ def _open():
             id TEXT PRIMARY KEY, runtime TEXT, model TEXT, cwd TEXT, repo TEXT,
             first_task TEXT, last_task TEXT, note TEXT,
             first_seen REAL, last_seen REAL, ended REAL)''')
+        db.execute('''CREATE TABLE IF NOT EXISTS leases (
+            repo TEXT, rel TEXT, session TEXT, path TEXT, runtime TEXT,
+            acquired REAL, expires_at REAL, PRIMARY KEY (repo, rel, session))''')
+        db.execute('''CREATE TABLE IF NOT EXISTS lease_warnings (
+            session TEXT, repo TEXT, rel TEXT, at REAL, PRIMARY KEY (session, repo, rel))''')
     except sqlite3.Error:
         db.close()
         raise
@@ -147,6 +174,90 @@ def end(session, now=None):
     with connect() as db:
         db.execute('UPDATE sessions SET ended=?, last_seen=? WHERE id=?',
                    (now or time.time(), now or time.time(), session))
+        db.execute('DELETE FROM leases WHERE session=?', (session,))
+        db.execute('DELETE FROM lease_warnings WHERE session=?', (session,))
+
+
+def _git_root(directory):
+    """The main checkout a directory belongs to, read from .git files, no git process.
+
+    A linked worktree's .git is a file naming .git/worktrees/<name>, whose
+    commondir points back at the main .git. Following it means
+    .claude/worktrees/agent-x/tools/tabs.py and tools/tabs.py in the main
+    checkout are one file with one lease.
+    """
+    marker = directory / '.git'
+    if marker.is_dir():
+        return directory
+    text = marker.read_text(errors='replace')[:4096]
+    if not text.startswith('gitdir:'):
+        return None
+    gitdir = Path(text[7:].strip())
+    if not gitdir.is_absolute():
+        gitdir = directory / gitdir
+    common = gitdir / 'commondir'
+    if common.is_file():
+        main = Path(common.read_text(errors='replace').strip())
+        main = main if main.is_absolute() else gitdir / main
+        return main.resolve().parent
+    return directory
+
+
+def lease_key(path):
+    """(repo, repo-relative path) for a file, the same from every worktree of a repo."""
+    resolved = Path(path).resolve()
+    for parent in resolved.parents:
+        try:
+            if not (parent / '.git').exists():
+                continue
+            root = _git_root(parent)
+        except OSError:
+            continue
+        if root is not None:
+            return str(root), str(resolved.relative_to(parent))
+    return '', str(resolved)
+
+
+def lease(session, runtime, paths, now=None):
+    """Take or refresh this session's lease on each path. Never raises."""
+    try:
+        _lease(session, runtime, paths, now)
+    except Exception:  # noqa: BLE001 a lease is advisory and must never fail an edit
+        pass
+
+
+def _lease(session, runtime, paths, now=None):
+    now = now or time.time()
+    keys = {lease_key(p): str(Path(p).resolve()) for p in paths if p}
+    if not session or not keys:
+        return
+    with connect() as db:
+        for (repo, rel), path in keys.items():
+            db.execute('''INSERT INTO leases VALUES (?,?,?,?,?,?,?)
+                ON CONFLICT (repo, rel, session) DO UPDATE SET path=excluded.path,
+                runtime=COALESCE(NULLIF(excluded.runtime,''),runtime), expires_at=excluded.expires_at''',
+                       (repo, rel, session, path, runtime, now, now + LEASE_SECONDS))
+        # The edit is this session's heartbeat too, for runtimes that only
+        # report prompts (Codex calls lease() without upsert()).
+        db.execute('UPDATE sessions SET last_seen=? WHERE id=? AND last_seen<?', (now, session, now))
+        db.execute('DELETE FROM leases WHERE expires_at<?', (now - LEASE_SECONDS,))
+
+
+def held_leases(now=None):
+    """Unexpired leases whose holder is still a live tab, newest first."""
+    if not database_path().exists():
+        return []
+    now = now or time.time()
+    try:
+        with connect() as db:
+            return [dict(r) for r in db.execute(
+                '''SELECT l.*, s.note, s.last_task FROM leases l
+                   JOIN sessions s ON s.id=l.session
+                   WHERE s.ended IS NULL AND s.last_seen>=? AND l.expires_at+?>?
+                   ORDER BY l.expires_at DESC''',
+                (now - LIVE_SECONDS, SKEW_SECONDS, now))]
+    except sqlite3.Error:
+        return []
 
 
 def live(now=None):
@@ -256,26 +367,68 @@ def overlap(session, paths, now=None):
 
 def _overlap(session, paths, now=None):
     now = now or time.time()
-    targets = {str(Path(p).resolve()) for p in paths if p}
-    if not targets:
+    targets = {str(Path(p).resolve()): lease_key(p) for p in paths if p}
+    if not targets or not session:
         return ''
-    board = {s['id']: s for s in live(now)}
-    hits = []
+    keys = set(targets.values())
+    hits = {}
+    for row in held_leases(now):
+        key = (row['repo'], row['rel'])
+        if row['session'] == session or key not in keys or key in hits:
+            continue
+        task = one_line(row['note'] or row['last_task']) or 'unknown task'
+        name = row['rel'] if row['repo'] else short_path(row['path'], '')
+        left = max(1, int((row['expires_at'] - now) // 60))
+        hits[key] = (f'{name} is leased by {row["runtime"] or "another session"} for {left} more min '
+                     f'(working on: "{task}")')
+    # A session from before leases, or a runtime that never calls lease(),
+    # still shows up through the write log.
+    board = None
     for other, rows in recent_writes(now, OVERLAP_SECONDS).items():
         if other == session:
             continue
         for ts, path in rows:
-            if path in targets:
-                s = board.get(other, {})
-                who = s.get('runtime') or 'another session'
-                task = one_line(s.get('note') or s.get('last_task')) or 'unknown task'
-                hits.append(f'{short_path(path, s.get("repo", ""))} was written by {who} '
-                            f'{age(now - ts)} (working on: "{task}")')
-                break
+            key = targets.get(path)
+            if key is None or key in hits:
+                continue
+            board = board if board is not None else {s['id']: s for s in live(now)}
+            if other not in board:
+                continue
+            tab = board[other]
+            task = one_line(tab.get('note') or tab.get('last_task')) or 'unknown task'
+            hits[key] = (f'{short_path(path, tab.get("repo", ""))} was written by '
+                         f'{tab.get("runtime") or "another session"} {age(now - ts)} (working on: "{task}")')
+            break
     if not hits:
         return ''
+    # Once per path per session: a second warning about the same file tells
+    # this tab nothing new and only costs context.
+    fresh = []
+    with connect() as db:
+        for key, text in hits.items():
+            cursor = db.execute('INSERT OR IGNORE INTO lease_warnings VALUES (?,?,?,?)',
+                                (session, key[0], key[1], now))
+            if cursor.rowcount:
+                fresh.append(text)
+        db.execute('DELETE FROM lease_warnings WHERE at<?', (now - LIVE_SECONDS,))
+    if not fresh:
+        return ''
     return ('Another live tab is editing the same file. Read it fresh before changing it, keep '
-            'your edit scoped, and do not stage or commit their changes: ' + '; '.join(hits))
+            'your edit scoped, and do not stage or commit their changes: ' + '; '.join(fresh))
+
+
+def leases_text(now=None):
+    now = now or time.time()
+    rows = held_leases(now)
+    if not rows:
+        return 'No live leases.'
+    lines = [f'Live file leases ({len(rows)}). A lease warns another tab before it edits; it never blocks.']
+    for row in rows:
+        where = f"{Path(row['repo']).name}/{row['rel']}" if row['repo'] else short_path(row['path'], '')
+        task = one_line(row['note'] or row['last_task'], 80) or 'unknown task'
+        left = max(0, int((row['expires_at'] - now) // 60))
+        lines.append(f"- {where}: {row['runtime'] or 'agent'} {row['session'][:8]}, {left}m left, \"{task}\"")
+    return '\n'.join(lines)
 
 
 def file_targets(payload):
@@ -311,6 +464,10 @@ def _handle(payload, runtime):
             prompt = ''
         upsert(session, runtime, cwd, model, task=prompt)
         return context(session, cwd)
+    if event == 'PostToolUse':
+        # The heartbeat and the lease in one write: no git, no write-log read.
+        lease(session, runtime, file_targets(payload))
+        return ''
     upsert(session, runtime, cwd, model)
     if event == 'SessionStart':
         return context(session, cwd)
@@ -346,6 +503,8 @@ def main(argv=None):
     note = sub.add_parser('note', help='say what this tab is doing, in one line')
     note.add_argument('--session', default=os.environ.get('CHEWBACCA_SESSION_ID', ''))
     note.add_argument('text')
+    held = sub.add_parser('leases', help='files live tabs are editing right now')
+    held.add_argument('--json', action='store_true')
     done = sub.add_parser('end', help='take a tab off the board')
     done.add_argument('--session', required=True)
     args = parser.parse_args(argv)
@@ -379,6 +538,9 @@ def main(argv=None):
             print('tabs note needs --session or CHEWBACCA_SESSION_ID', file=sys.stderr)
             return 2
         upsert(args.session, '', note=args.text)
+        return 0
+    if args.command == 'leases':
+        print(json.dumps(held_leases(), indent=2) if args.json else leases_text())
         return 0
     if args.command == 'end':
         end(args.session)

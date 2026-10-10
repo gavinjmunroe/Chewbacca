@@ -43,7 +43,7 @@ def main() -> int:
         ("What's playing?", "open", "music", ""),
         ("show downloads", "open", "files", ""),
         ("Pull up my recent files", "open", "files", ""),
-        # The two-pane file manager, a native panel, 2026-10-09.
+        # A folder on the glass, Kyber's own `disk` surface (CHW-198).
         ("show me files", "panel", "files", ""),
         ("files", "panel", "files", ""),
         ("Open Finder", "panel", "files", ""),
@@ -119,7 +119,7 @@ def main() -> int:
     check("files opens through `hud files`, not kyber-surfaces",
           calls[-1][0].endswith("/hud") and calls[-1][1:] == ["files"] and out.ok, calls[-1])
     out = si.perform(si.Command("panel", "files", "off"), run=fake)
-    check("closing the file manager sends `hud files off`", calls[-1][1:] == ["files", "off"] and out.ok, calls[-1])
+    check("closing files sends `hud files off`", calls[-1][1:] == ["files", "off"] and out.ok, calls[-1])
     out = si.perform(si.Command("open", "today"), run=lambda argv, **kw: Done(1))
     check("a failed open says so instead of claiming it", not out.ok and "didn't" in out.line, out)
     print("all passed" if not failed else f"{failed} failed")

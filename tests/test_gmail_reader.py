@@ -99,10 +99,17 @@ with tempfile.TemporaryDirectory() as tmp:
     (t / "msgs.json").write_text(json.dumps(MSGS))
     fake = t / "gws"
     fake.write_text(f"""#!{sys.executable}
-import json, sys
+import base64, email, json, sys
 a = sys.argv[1:]
+open({str(t / 'calls.jsonl')!r}, "a").write(json.dumps(a) + "\\n")
 M = json.load(open({str(t / 'msgs.json')!r}))
-if a[:3] == ["gmail", "users", "getProfile"]:
+if a[:4] == ["gmail", "users", "messages", "get"] and json.loads(a[a.index("--params") + 1]).get("format") == "metadata":
+    gid = json.loads(a[a.index("--params") + 1])["id"]
+    m = email.message_from_bytes(base64.urlsafe_b64decode(M[gid][1] + "=" * (-len(M[gid][1]) % 4)))
+    print(json.dumps({{"id": gid, "threadId": "thr-" + gid, "payload": {{"headers": [{{"name": k, "value": v}} for k, v in m.items()]}}}}))
+elif a[:4] == ["gmail", "users", "drafts", "create"]:
+    print(json.dumps({{"id": "draft1", "message": {{"id": "x"}}}}))
+elif a[:3] == ["gmail", "users", "getProfile"]:
     print(json.dumps({{"emailAddress": {ME!r}}}))
 elif a[:4] == ["gmail", "users", "messages", "list"]:
     print(json.dumps({{"messages": [{{"id": k}} for k in M]}}))
@@ -180,6 +187,47 @@ else:
     check("a dry run sends nothing and says so", code == 0 and res.get("dry_run"), res)
     code, res = send()
     check("a real send reports gmail's id", code == 0 and res.get("id") == "sent1", res)
+
+    # Draft, never send (CHW-192). The Go on a mail row ends here.
+    calls = t / "calls.jsonl"
+    calls.write_text("")
+
+    def draft(*args):
+        p = subprocess.run([sys.executable, str(READER), "draft", *args], env=env, capture_output=True, text=True)
+        made = [json.loads(line) for line in calls.read_text().splitlines()]
+        calls.write_text("")
+        return p.returncode, json.loads(p.stdout or "{}"), made
+
+    def sends(made):
+        return [c for c in made if "+send" in c or "+reply" in c or "+reply-all" in c or "+forward" in c
+                or c[2:4] in (["messages", "send"], ["drafts", "send"])]
+
+    a1 = next(x for x in r if x["text"].startswith("Terms"))
+    check("each row carries its Gmail id and inbox", a1.get("gmail_id") in ("a1", "d1") and a1.get("inbox") == "", a1)
+    code, res, made = draft("--gmail-id", "a1", "--inbox", "", "--to", "sagar@example.test", "--text", "Tonight works")
+    created = [c for c in made if c[2:4] == ["drafts", "create"]]
+    check("a reply becomes one draft", code == 0 and res.get("draft_id") == "draft1" and len(created) == 1, (res, made))
+    body = json.loads(created[0][created[0].index("--json") + 1]) if created else {}
+    sent_raw = base64.urlsafe_b64decode(body.get("message", {}).get("raw", "") + "==").decode() if body else ""
+    check("in the message's own thread, threaded by its Message-ID",
+          body.get("message", {}).get("threadId") == "thr-a1" and "In-Reply-To: <a1@x>" in sent_raw
+          and "Subject: Re: Terms" in sent_raw and "To: sagar@example.test" in sent_raw, sent_raw)
+    check("drafting calls nothing that sends", sends(made) == [] and {tuple(c[2:4]) for c in made} <= {
+          ("messages", "get"), ("drafts", "create")}, made)
+    code, res, made = draft("--gmail-id", "f1", "--to", "unverified:sagar@example.test", "--text", "x")
+    check("an unverified sender gets no draft and no gws call", code != 0 and made == [], (res, made))
+    code, res, made = draft("--gmail-id", "a1", "--to", "eve@evil.test", "--text", "x")
+    check("an address that isn't the message's sender gets no draft",
+          code != 0 and not any(c[2:4] == ["drafts", "create"] for c in made), (res, made))
+    code, res, made = draft("--gmail-id", "a1;rm", "--to", "sagar@example.test", "--text", "x")
+    check("an id that isn't a Gmail id never reaches gws", code != 0 and made == [], (res, made))
+    code, res, made = draft("--gmail-id", "a1", "--inbox", "../../elsewhere", "--to", "sagar@example.test", "--text", "x")
+    check("an inbox that isn't signed in says so and calls nothing",
+          code != 0 and "not signed in" in res.get("error", "") and made == [], (res, made))
+    src = READER.read_text()
+    fn = src[src.index("def draft("):src.index("def main(")]
+    check("send is unreachable from draft: no send helper or endpoint in its code",
+          not any(w in fn for w in ('"+send"', '"+reply"', '"send"', "send(")), fn[:80])
 
 # An address of his that isn't a connected inbox is still him. Test mail from
 # the Blue Modern address on 2026-10-09 otherwise reads as a stranger waiting.

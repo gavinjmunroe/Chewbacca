@@ -5,9 +5,9 @@ import Testing
 
 @testable import KyberKit
 
-/// The file manager: the pane state machine, and the operations that write,
-/// against throwaway temp folders only. Nothing here touches a real folder
-/// except the Trash test, which removes what it put there.
+/// Files on the glass (CHW-198): a folder's newest few things as a surface,
+/// and every way it leaves. Runs against throwaway temp folders only, and
+/// swaps out the effect so nothing here opens Finder or Preview.
 @Suite("Files")
 @MainActor
 struct FilesTests {
@@ -21,256 +21,58 @@ struct FilesTests {
         return url.resolvingSymlinksInPath()
     }
 
-    private func write(_ text: String, to url: URL) throws {
-        try Data(text.utf8).write(to: url)
+    /// Writes `name` with a modification time `age` seconds ago, so the
+    /// newest-first order is fixed rather than racing the clock.
+    @discardableResult
+    private func touch(_ name: String, in folder: URL, age: TimeInterval, folderItem: Bool = false) throws -> URL {
+        let url = folder.appendingPathComponent(name)
+        if folderItem {
+            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        } else {
+            try Data("x".utf8).write(to: url)
+        }
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date().addingTimeInterval(-age)], ofItemAtPath: url.path)
+        return url
     }
 
-    private func read(_ url: URL) throws -> String {
-        String(decoding: try Data(contentsOf: url), as: UTF8.self)
+    /// A model with the folder on it and every effect recorded, not done.
+    private func glass(_ path: String) -> (OverlayModel, Box) {
+        let model = OverlayModel()
+        let box = Box()
+        model.filesEffect = { box.effects.append($0) }
+        model.onEvent = { box.events.append($0.line) }
+        model.apply(.openFiles(path: path))
+        return (model, box)
     }
 
-    private func items(_ names: [String]) -> [FileItem] {
-        names.map {
-            FileItem(url: URL(fileURLWithPath: "/tmp/x/\($0)"), name: $0, isDirectory: $0.hasSuffix("/"))
+    final class Box {
+        var effects: [FilesGlass.Effect] = []
+        var events: [String] = []
+    }
+
+    /// A listing hands back `/private/var/...` where the fixture says
+    /// `/var/...`: the same file, so compare what the links resolve to.
+    private func real(_ url: URL?) -> String? { url?.resolvingSymlinksInPath().path }
+
+    private func real(_ effect: FilesGlass.Effect) -> String {
+        switch effect {
+        case .none: return "none"
+        case .openDocument(let url): return "open " + (real(url) ?? "")
+        case .reveal(let url): return "reveal " + (real(url) ?? "")
         }
     }
 
-    // MARK: State machine
-
-    @Test("Tab toggles the active pane and back")
-    func tabToggles() {
-        var state = FileManagerState(left: URL(fileURLWithPath: "/"), right: URL(fileURLWithPath: "/tmp"))
-        #expect(state.active == .left)
-        state.toggle()
-        #expect(state.active == .right)
-        #expect(state.inactivePane.directory.path == "/")
-        state.toggle()
-        #expect(state.active == .left)
+    private func store(_ model: OverlayModel) throws -> SurfaceStore {
+        try #require(model.surfaces.first { $0.id == FilesGlass.id }).store
     }
 
-    @Test("Selection clamps at both ends and never wraps")
-    func selectionBounds() {
-        var pane = PaneState(directory: URL(fileURLWithPath: "/tmp"), items: items(["a", "b", "c"]))
-        #expect(pane.selected == 0)
-        pane.move(by: -1)
-        #expect(pane.selected == 0)
-        pane.move(by: 2)
-        #expect(pane.selected == 2)
-        pane.move(by: 1)
-        #expect(pane.selected == 2)
-        pane.move(by: 1_000)
-        #expect(pane.selected == 2)
-        pane.select(-5)
-        #expect(pane.selected == 0)
-
-        var empty = PaneState(directory: URL(fileURLWithPath: "/tmp"))
-        empty.move(by: 1)
-        #expect(empty.selected == 0)
-        #expect(empty.selection == nil)
-
-        // Shrinking the list pulls the pick back inside it.
-        pane.select(2)
-        pane.replace(items: items(["only"]))
-        #expect(pane.selected == 0)
-        #expect(pane.selection?.name == "only")
+    private func names(_ model: OverlayModel) throws -> [String] {
+        let rows = Pointer.get(try store(model).spec.data, "/disk/rows")?.arrayValue ?? []
+        return rows.compactMap { $0.objectValue?["id"]?.stringValue }
     }
 
-    @Test("Up/Down move only the active pane")
-    func selectionIsPerPane() {
-        var state = FileManagerState(left: URL(fileURLWithPath: "/a"), right: URL(fileURLWithPath: "/b"))
-        state.left.replace(items: items(["1", "2", "3"]))
-        state.right.replace(items: items(["x", "y"]))
-        state.moveSelection(by: 1)
-        #expect(state.left.selected == 1)
-        #expect(state.right.selected == 0)
-        state.toggle()
-        state.moveSelection(by: 5)
-        #expect(state.right.selected == 1)
-        #expect(state.left.selected == 1)
-    }
-
-    @Test("Backspace at / stays at /, and from a folder goes up one")
-    func parentNavigation() {
-        var state = FileManagerState(left: URL(fileURLWithPath: "/"), right: URL(fileURLWithPath: "/tmp"))
-        #expect(state.left.parent == nil)
-        #expect(state.goToParent() == nil)
-        #expect(state.left.directory.path == "/")
-
-        state.navigate(to: URL(fileURLWithPath: "/Users/someone/Documents"))
-        let left = state.goToParent()
-        #expect(left?.path == "/Users/someone/Documents")
-        #expect(state.left.directory.path == "/Users/someone")
-        state.goToParent()
-        state.goToParent()
-        #expect(state.left.directory.path == "/")
-        #expect(state.goToParent() == nil)
-    }
-
-    @Test("Going up picks the folder you came out of")
-    func parentReselects() {
-        var pane = PaneState(directory: URL(fileURLWithPath: "/tmp/x"))
-        pane.replace(items: items(["a", "b", "came-from", "z"]), prefer: URL(fileURLWithPath: "/tmp/x/came-from"))
-        #expect(pane.selection?.name == "came-from")
-        // A reload keeps the pick by URL even when rows are added above it.
-        pane.replace(items: items(["0", "a", "b", "came-from", "z"]))
-        #expect(pane.selection?.name == "came-from")
-    }
-
-    @Test("Enter navigates a folder and opens a file")
-    func activation() {
-        var state = FileManagerState(left: URL(fileURLWithPath: "/tmp/x"), right: URL(fileURLWithPath: "/"))
-        state.left.replace(items: items(["dir/", "file.txt"]))
-        #expect(state.activation() == .navigate(URL(fileURLWithPath: "/tmp/x/dir/")))
-        state.moveSelection(by: 1)
-        #expect(state.activation() == .open(URL(fileURLWithPath: "/tmp/x/file.txt")))
-        state.left.replace(items: [])
-        #expect(state.activation() == nil)
-    }
-
-    @Test("The controller's keys drive the same machine, and refuse past /")
-    func controllerKeys() {
-        let controller = FilesController(
-            left: URL(fileURLWithPath: "/"), right: URL(fileURLWithPath: "/tmp"), autoload: false)
-        #expect(controller.handle(.tab))
-        #expect(controller.state.active == .right)
-        #expect(controller.pathText == "/tmp")
-        controller.handle(.tab)
-        controller.handle(.back)
-        #expect(controller.state.left.directory.path == "/")
-        #expect(controller.status?.text == "Already at the top of the disk.")
-        #expect(!controller.handle(.other))
-        controller.handle(.function(7))
-        #expect(controller.newFolderName == "New Folder")
-        controller.handle(.escape)
-        #expect(controller.newFolderName == nil)
-    }
-
-    @Test("A folder that can't be read keeps the old rows and says why")
-    func failedReadKeepsRows() {
-        let controller = FilesController(
-            left: URL(fileURLWithPath: "/tmp/x"), right: URL(fileURLWithPath: "/"), autoload: false)
-        controller.apply(.success(items(["keep.txt"])), to: .left)
-        controller.state.navigate(to: URL(fileURLWithPath: "/tmp/x/locked"))
-        let denied = NSError(domain: NSCocoaErrorDomain, code: NSFileReadNoPermissionError)
-        controller.apply(.failure(denied), to: .left, revertTo: URL(fileURLWithPath: "/tmp/x"))
-        #expect(controller.state.left.directory.path == "/tmp/x")
-        #expect(controller.state.left.items.map(\.name) == ["keep.txt"])
-        #expect(controller.status?.tone == .bad)
-        #expect(controller.status?.text.contains("Can't read locked") == true)
-    }
-
-    // MARK: Listing
-
-    @Test("A listing puts folders first, sorts names like Finder, skips hidden")
-    func listing() throws {
-        let dir = try scratch()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        try write("x", to: dir.appendingPathComponent("file 10.txt"))
-        try write("x", to: dir.appendingPathComponent("file 2.txt"))
-        try write("x", to: dir.appendingPathComponent(".secret"))
-        try FileManager.default.createDirectory(at: dir.appendingPathComponent("zeta"), withIntermediateDirectories: false)
-
-        let rows = try DirectoryLoader.list(dir, icons: false)
-        #expect(rows.map(\.name) == ["zeta", "file 2.txt", "file 10.txt"])
-        #expect(rows[0].isDirectory && rows[0].size == nil)
-        #expect(rows[1].size == 1)
-        #expect(rows[1].modified != nil)
-        #expect(try DirectoryLoader.list(dir, showHidden: true, icons: false).contains { $0.name == ".secret" })
-    }
-
-    // MARK: Writing
-
-    @Test("Copy into a folder that already has the name keeps both")
-    func copyConflictRenames() throws {
-        let root = try scratch()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let a = root.appendingPathComponent("a"), b = root.appendingPathComponent("b")
-        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: false)
-        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: false)
-        try write("new", to: a.appendingPathComponent("report.pdf"))
-        try write("old", to: b.appendingPathComponent("report.pdf"))
-
-        let first = try FileOps.copy(a.appendingPathComponent("report.pdf"), into: b)
-        #expect(first.lastPathComponent == "report 2.pdf")
-        #expect(try read(b.appendingPathComponent("report.pdf")) == "old")
-        #expect(try read(first) == "new")
-        #expect(try read(a.appendingPathComponent("report.pdf")) == "new")
-
-        let second = try FileOps.copy(a.appendingPathComponent("report.pdf"), into: b)
-        #expect(second.lastPathComponent == "report 3.pdf")
-
-        // No clash, no rename.
-        try write("n", to: a.appendingPathComponent("notes"))
-        #expect(try FileOps.copy(a.appendingPathComponent("notes"), into: b).lastPathComponent == "notes")
-    }
-
-    @Test("Move renames on a clash, removes the source, refuses a no-op")
-    func moveConflict() throws {
-        let root = try scratch()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let a = root.appendingPathComponent("a"), b = root.appendingPathComponent("b")
-        try FileManager.default.createDirectory(at: a, withIntermediateDirectories: false)
-        try FileManager.default.createDirectory(at: b, withIntermediateDirectories: false)
-        try write("mine", to: a.appendingPathComponent("x"))
-        try write("theirs", to: b.appendingPathComponent("x"))
-
-        let landed = try FileOps.move(a.appendingPathComponent("x"), into: b)
-        #expect(landed.lastPathComponent == "x 2")
-        #expect(!FileManager.default.fileExists(atPath: a.appendingPathComponent("x").path))
-        #expect(try read(b.appendingPathComponent("x")) == "theirs")
-        #expect(try read(landed) == "mine")
-
-        #expect(throws: FileOps.Failure.sameFolder("x")) {
-            try FileOps.move(b.appendingPathComponent("x"), into: b)
-        }
-        #expect(throws: FileOps.Failure.missing("gone")) {
-            try FileOps.copy(a.appendingPathComponent("gone"), into: b)
-        }
-    }
-
-    @Test("A folder can't be copied or moved into itself")
-    func intoItself() throws {
-        let root = try scratch()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let a = root.appendingPathComponent("a")
-        let inner = a.appendingPathComponent("inner")
-        try FileManager.default.createDirectory(at: inner, withIntermediateDirectories: true)
-        #expect(throws: FileOps.Failure.intoItself("a")) { try FileOps.copy(a, into: a) }
-        #expect(throws: FileOps.Failure.intoItself("a")) { try FileOps.move(a, into: inner) }
-        // A sibling whose name starts the same is not inside it.
-        let sibling = root.appendingPathComponent("ab")
-        try FileManager.default.createDirectory(at: sibling, withIntermediateDirectories: false)
-        #expect(try FileOps.copy(a, into: sibling).lastPathComponent == "a")
-    }
-
-    @Test("Delete goes to the Trash, never removes in place")
-    func trash() throws {
-        let root = try scratch()
-        defer { try? FileManager.default.removeItem(at: root) }
-        let file = root.appendingPathComponent("trash-me-\(UUID().uuidString).txt")
-        try write("bye", to: file)
-        let landed = try FileOps.trash(file)
-        #expect(!FileManager.default.fileExists(atPath: file.path))
-        let inTrash = try #require(landed)
-        #expect(inTrash.pathComponents.contains(".Trash") || inTrash.path.contains("Trash"))
-        #expect(try read(inTrash) == "bye")
-        // Only what this test put in the Trash comes back out of it.
-        try FileManager.default.removeItem(at: inTrash)
-
-        #expect(throws: FileOps.Failure.missing(file.lastPathComponent)) { try FileOps.trash(file) }
-    }
-
-    @Test("New folders get the next free name and refuse a path")
-    func newFolder() throws {
-        let root = try scratch()
-        defer { try? FileManager.default.removeItem(at: root) }
-        #expect(try FileOps.newFolder(named: "New Folder", in: root).lastPathComponent == "New Folder")
-        #expect(try FileOps.newFolder(named: "New Folder", in: root).lastPathComponent == "New Folder 2")
-        #expect(throws: FileOps.Failure.invalidName("../up")) { try FileOps.newFolder(named: "../up", in: root) }
-        #expect(throws: FileOps.Failure.invalidName("  ")) { try FileOps.newFolder(named: "  ", in: root) }
-    }
-
-    // MARK: The verb and the formats
+    // MARK: The verb
 
     @Test("`files` opens, takes one path, and `files off` closes")
     func verb() throws {
@@ -281,74 +83,218 @@ struct FilesTests {
         #expect(throws: LineParseError.self) { try LineParser.parse("files /a /b") }
     }
 
-    @Test("Paths print with ~ and resolve what was typed")
-    func paths() {
-        #expect(FileFormat.display(URL(fileURLWithPath: "/Users/me/Downloads"), home: "/Users/me") == "~/Downloads")
-        #expect(FileFormat.display(URL(fileURLWithPath: "/Users/me"), home: "/Users/me") == "~")
-        #expect(FileFormat.display(URL(fileURLWithPath: "/Users/mel"), home: "/Users/me") == "/Users/mel")
-        let base = URL(fileURLWithPath: "/tmp/x")
-        #expect(FileFormat.resolve("sub", relativeTo: base).path == "/tmp/x/sub")
-        #expect(FileFormat.resolve("/etc", relativeTo: base).path == "/etc")
-        #expect(FileFormat.resolve("..", relativeTo: base).path == "/tmp")
-        #expect(FileFormat.resolve("~", relativeTo: base).path == NSHomeDirectory())
-        #expect(FileFormat.size(nil) == "")
-        #expect(FileFormat.size(2_048).isEmpty == false)
+    // MARK: What it lists
+
+    @Test("Newest first, at most seven, hidden and half-downloaded files left out")
+    func listing() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        for i in 0..<9 { try touch("file-\(i).txt", in: root, age: TimeInterval(100 * i)) }
+        try touch(".secret", in: root, age: 0)
+        try touch("movie.mp4.crdownload", in: root, age: 0)
+        let state = FilesGlass(path: root.path)
+        #expect(state.rows.map(\.name) == (0..<7).map { "file-\($0).txt" })
+        #expect(state.note == FileFormat.display(root))
+    }
+
+    @Test("An empty or unreadable folder says so instead of drawing nothing")
+    func emptyAndMissing() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        #expect(FilesGlass(path: root.path).note == "\(root.lastPathComponent) is empty.")
+        let gone = FilesGlass(path: root.appendingPathComponent("nope").path)
+        #expect(gone.rows.isEmpty)
+        #expect(gone.note.hasPrefix("Can't read nope"))
+    }
+
+    @Test("No path is Downloads; a file opens its folder with it previewed")
+    func paths() throws {
+        let home = try scratch()
+        defer { try? FileManager.default.removeItem(at: home) }
+        let downloads = home.appendingPathComponent("Downloads")
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+        let pdf = try touch("resume.pdf", in: downloads, age: 10)
+        #expect(FilesGlass(path: nil, home: home).folder.path == downloads.path)
+        #expect(FilesGlass(path: "Downloads", home: home).folder.path == downloads.path)
+        let onFile = FilesGlass(path: pdf.path, home: home)
+        #expect(onFile.folder.path == downloads.path)
+        #expect(real(onFile.previewed) == real(pdf))
+    }
+
+    // MARK: Pressing a row
+
+    @Test("Look steps into a folder, Up comes back and stops at the folder asked for")
+    func folders() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inner = try touch("School", in: root, age: 5, folderItem: true)
+        try touch("lab.pdf", in: inner, age: 5)
+        var state = FilesGlass(path: root.path)
+        #expect(state.look(FilesGlass.up) == .none)
+        #expect(state.folder.path == root.path)
+        #expect(state.look("School") == .none)
+        #expect(state.folder.path == inner.path)
+        #expect(state.rows.map(\.name) == ["lab.pdf"])
+        #expect(state.lines().contains { $0.contains(#""id":"..""#) })
+        #expect(state.look(FilesGlass.up) == .none)
+        #expect(state.folder.path == root.path)
+        #expect(!state.lines().contains { $0.contains(#""id":"..""#) })
+    }
+
+    @Test("A document previews in place; anything else is only shown in Finder")
+    func documents() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pdf = try touch("invoice.pdf", in: root, age: 1)
+        let app = try touch("Setup.command", in: root, age: 2)
+        var state = FilesGlass(path: root.path)
+        #expect(state.look("invoice.pdf") == .none)
+        #expect(real(state.previewed) == real(pdf))
+        #expect(real(state.go()) == real(.openDocument(pdf)))
+        #expect(real(state.look("Setup.command")) == real(.reveal(app)))
+        #expect(state.status.contains("shown in Finder"))
+        #expect(state.look("not-there.pdf") == .none)
+        #expect(state.status == "That isn't on the list any more.")
+    }
+
+    @Test("A link dressed as a document is never opened")
+    func symlink() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let target = try touch("Run.command", in: root, age: 3)
+        let link = root.appendingPathComponent("cv.pdf")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        var state = FilesGlass(path: root.path)
+        // The link itself is revealed, never what it points at.
+        guard case .reveal(let shown) = state.look("cv.pdf") else {
+            Issue.record("a link was not just revealed")
+            return
+        }
+        #expect(shown.lastPathComponent == "cv.pdf")
+        #expect(state.previewed == nil)
+        #expect(real(state.go()) == real(.reveal(root)))
+    }
+
+    // MARK: On the glass
+
+    @Test("`files <path>` draws a surface every line of which parses")
+    func draws() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try touch("a.pdf", in: root, age: 1)
+        try touch("b.txt", in: root, age: 2)
+        for line in FilesGlass(path: root.path).lines() {
+            #expect(throws: Never.self) { try LineParser.parse(line) }
+        }
+        let (model, _) = glass(root.path)
+        #expect(try names(model) == ["a.pdf", "b.txt"])
+        #expect(try store(model).isReady)
+        // Drawing it does not steal `current` from whoever was streaming: a
+        // bare `c` afterwards still lands on the main surface, not in here.
+        model.apply(try #require(try LineParser.parse(#"c late Text value="hi""#)))
+        #expect(try store(model).spec.elements["late"] == nil)
+        #expect(model.surfaces.contains { $0.id == "main" })
+    }
+
+    @Test("A press is answered here, never sent up the socket as someone else's")
+    func pressIsLocal() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pdf = try touch("a.pdf", in: root, age: 1)
+        try touch("Tool.command", in: root, age: 2)
+        let (model, box) = glass(root.path)
+        let store = try store(model)
+        store.fireRow(FilesGlass.lookAction, row: "a.pdf")
+        #expect(real(Pointer.get(store.spec.data, "/disk/path")?.stringValue.map(URL.init(fileURLWithPath:))) == real(pdf))
+        #expect(Pointer.get(store.spec.data, "/disk/go")?.stringValue == "Open")
+        store.fire(FilesGlass.goAction, from: "disk-go")
+        store.fireRow(FilesGlass.lookAction, row: "Tool.command")
+        #expect(box.effects.map(real) == [
+            "none", real(.openDocument(pdf)), real(.reveal(root.appendingPathComponent("Tool.command"))),
+        ])
+        #expect(!box.events.contains { $0.contains("disk-look") || $0.contains("disk-go") })
+    }
+
+    @Test("`files off` takes it down and tells the listeners")
+    func off() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (model, box) = glass(root.path)
+        #expect(model.files != nil)
+        model.apply(try #require(try LineParser.parse("files off")))
+        #expect(!model.surfaces.contains { $0.id == FilesGlass.id })
+        #expect(model.files == nil)
+        #expect(box.events.contains { $0.hasPrefix("e closed disk") })
+        // Off with nothing up is a no-op, not an error.
+        model.apply(.closeFiles)
+    }
+
+    @Test("Escape clears it: the reset Escape runs takes the folder with it")
+    func escape() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (model, _) = glass(root.path)
+        // main.swift's escape() -> dismissAll() -> model.reset().
+        model.reset()
+        #expect(model.surfaces.isEmpty)
+        #expect(model.files == nil)
+    }
+
+    @Test("A click off the card takes it down; a click on it does not")
+    func clickAway() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (model, box) = glass(root.path)
+        let surface = try #require(model.surfaces.first { $0.id == FilesGlass.id })
+        let card = model.frame(of: surface)
+        model.clickedAway(at: CGPoint(x: card.midX, y: card.midY))
+        #expect(model.files != nil)
+        model.clickedAway(at: CGPoint(x: card.maxX + 200, y: card.maxY + 200))
+        #expect(model.files == nil)
+        #expect(!model.surfaces.contains { $0.id == FilesGlass.id })
+        #expect(box.events.contains { $0.hasPrefix("e closed disk") })
+    }
+
+    @Test("`- disk` and the X close it like any surface")
+    func closeLikeAnySurface() throws {
+        let root = try scratch()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (model, _) = glass(root.path)
+        model.apply(try #require(try LineParser.parse("- disk")))
+        #expect(model.files == nil)
+        let (again, _) = glass(root.path)
+        again.dismiss(FilesGlass.id)
+        #expect(again.files == nil)
     }
 
     // MARK: Render
 
-    /// Draws the panel offscreen and proves it drew. Set `FILES_SHOT` to a
-    /// .png path to keep the image.
-    @Test("The panel renders both panes, the path and the key bar")
+    /// Draws the surface offscreen and proves it drew. Set `HUD_SNAPSHOT_DIR`
+    /// to keep the image.
+    @Test("The surface renders its rows over the glass")
     func render() throws {
         let root = try scratch()
         defer { try? FileManager.default.removeItem(at: root) }
-        let left = root.appendingPathComponent("Projects")
-        let right = root.appendingPathComponent("Downloads")
-        for dir in ["kyber", "amber-site", "bisc-101", "spiderverse"] {
-            try FileManager.default.createDirectory(
-                at: left.appendingPathComponent(dir), withIntermediateDirectories: true)
+        for (i, name) in ["invoice-october.pdf", "hud-demo.mov", "lab-2-prelab.docx", "notes.txt"].enumerated() {
+            try touch(name, in: root, age: TimeInterval(600 * i))
         }
-        try write(String(repeating: "#", count: 3_200), to: left.appendingPathComponent("README.md"))
-        try write(String(repeating: "x", count: 48_000), to: left.appendingPathComponent("roadmap.pdf"))
-        try FileManager.default.createDirectory(at: right.appendingPathComponent("Screenshots"), withIntermediateDirectories: true)
-        for (name, size) in [("invoice-october.pdf", 182_000), ("hud-demo.mov", 24_600_000),
-                             ("lab-2-prelab.docx", 41_000), ("photo.heic", 2_300_000), ("notes.txt", 900)] {
-            try write(String(repeating: "x", count: min(size, 200_000)), to: right.appendingPathComponent(name))
+        try touch("Screenshots", in: root, age: 4_000, folderItem: true)
+        let (model, _) = glass(root.path)
+        let store = try store(model)
+        store.fireRow(FilesGlass.lookAction, row: "notes.txt")
+        let view = ZStack {
+            Color(red: 0.16, green: 0.20, blue: 0.34)
+            SurfaceView(store: store).frame(width: 420)
         }
-
-        let controller = FilesController(left: left, right: right, autoload: false)
-        controller.apply(.success(try DirectoryLoader.list(left)), to: .left)
-        controller.apply(.success(try DirectoryLoader.list(right)), to: .right)
-        controller.handle(.down)
-        controller.handle(.tab)
-        controller.handle(.down)
-        controller.handle(.down)
-        controller.say("Copied roadmap.pdf to Downloads.", .good)
-        // The fixture lives in a temp folder; show the path a person would see.
-        controller.pathText = "~/Downloads"
-
-        let size = CGSize(width: 1180, height: 720)
-        let scene = ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.16, green: 0.20, blue: 0.34), Color(red: 0.42, green: 0.24, blue: 0.40),
-                         Color(red: 0.93, green: 0.58, blue: 0.42)],
-                startPoint: .topLeading, endPoint: .bottomTrailing)
-            FilesView(controller: controller)
-                .frame(width: FilesPanel.size.width, height: FilesPanel.size.height)
-        }
-        .frame(width: size.width, height: size.height)
+        .frame(width: 480, height: 560)
         .environment(\.hudOffscreen, true)
-
-        let renderer = ImageRenderer(content: scene)
+        let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         let image = try #require(renderer.cgImage)
-        #expect(image.width == Int(size.width * 2))
-
-        if let path = ProcessInfo.processInfo.environment["FILES_SHOT"] {
-            let rep = NSBitmapImageRep(cgImage: image)
-            let png = try #require(rep.representation(using: .png, properties: [:]))
-            try png.write(to: URL(fileURLWithPath: path))
+        #expect(image.width == 960)
+        if let dir = ProcessInfo.processInfo.environment["HUD_SNAPSHOT_DIR"],
+           let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) {
+            try png.write(to: URL(fileURLWithPath: dir).appendingPathComponent("files-glass.png"))
         }
     }
 }

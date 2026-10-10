@@ -712,6 +712,8 @@ if group "installer"; then
 
   check  "stale-read-guard refuses a silence claim while jobs are outstanding" \
     bash "$ROOT/tests/stale_read_guard.sh"
+  check  "time-context gives every prompt the current time" \
+    bash "$ROOT/tests/time_context.sh"
   check  "orphan-reap stops what a dead tab left running and spares the rest" \
     bash "$ROOT/tests/orphan_reap.sh"
   check  "jobs queue admits, pauses and resumes heavy work against the machine" \
@@ -1369,6 +1371,7 @@ if group "hud"; then
   # real app, no microphone, no tokens. It is the only test that covers what
   # happens between hearing something and drawing it.
   check  "the listen loop works end to end" python3 "$ROOT/tests/test_hud_listen.py"
+  check  "a search is answered on the glass, never in Chrome" python3 "$ROOT/tests/test_glass_search.py"
   check  "the terminal tab chooser never picks a plain shell" python3 "$ROOT/tests/test_terminal.py"
   check  "voice memory rotates and reads back" python3 "$ROOT/tests/test_memory.py"
   check  "the router's table holds" python3 "$ROOT/tests/test_route.py"
@@ -1387,6 +1390,10 @@ if group "hud"; then
   check  "agenda reads today or the week aloud and refuses a task" python3 "$ROOT/tests/test_agenda.py"
   check  "a text to yourself starting with Kyber is a command, nothing else is" python3 "$ROOT/tests/test_text_command.py"
   check  "a replayed sentence takes the path the voice would take" python3 "$ROOT/tests/test_fast_path.py"
+  # CHW-193. Fake gh on PATH and a fake display: nothing reaches GitHub,
+  # nothing real is cloned, and the ask, the press and the X run no model.
+  check  "a repo card draws from gh api, clones only on a press, and refuses rows it did not draw" \
+    python3 "$ROOT/tests/test_repo_card.py"
   # The OS graph and the surfaces drawn from it. Fixture chat.db, people
   # store, backlog and mail in a temp dir and a fake display, so nothing real
   # is read and nothing is sent.
@@ -1405,6 +1412,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_surface_code.py"
   check  "notes appends one line only to a text-only pinned note and reads it back" \
     python3 "$ROOT/tests/test_surface_notes.py"
+  check  "dash-notes adds a dash line only to a note with nothing to lose, and reads it back" \
+    python3 "$ROOT/tests/test_notes_surface.py"
   check  "github runs one read-only graphql call and refuses every write" \
     python3 "$ROOT/tests/test_surface_github.py"
   check  "whatsapp sends only to the opened 1:1 chat, verifies the new id, and an unlinked account is a note" \

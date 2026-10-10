@@ -266,7 +266,7 @@ def person(g: Graph, ids: Identities, name: str, now: datetime) -> dict:
 
 # The network a message node came over. An ingester for another network sets
 # props.network on its nodes ("WhatsApp", "Slack") and needs nothing here.
-NETWORK_BY_TYPE = {"Message": "iMessage", "MailItem": "Mail"}
+NETWORK_BY_TYPE = {"Message": "iMessage", "MailItem": "Gmail"}
 
 
 def network_of(node: dict) -> str:
@@ -314,7 +314,7 @@ def reply_routes(g: Graph, pid: str) -> dict[str, dict]:
              if m["type"] == "MailItem" and m["props"].get("address") and m["props"].get("verified")]
     if mails:
         m = max(mails, key=lambda x: when_of(x["props"].get("at")))
-        routes["Mail"] = row(g, m, FYI, m["props"].get("at", ""), "")
+        routes["Gmail"] = row(g, m, FYI, m["props"].get("at", ""), "")
     return routes
 
 

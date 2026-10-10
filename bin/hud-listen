@@ -59,10 +59,20 @@ import opener  # noqa: E402
 import clay_route  # noqa: E402
 import agenda  # noqa: E402
 import surface_intent  # noqa: E402
+import repo_card  # noqa: E402
+import notes_surface  # noqa: E402
 import hud_events  # noqa: E402
+import glass_search  # noqa: E402
+# HUD_REPO_CARDS=off: "show me owner/repo" and a pasted github.com URL go to
+# the model instead of drawing a repo card (bin/lib/repo_card.py).
+REPO_CARDS = os.environ.get("HUD_REPO_CARDS", "on") != "off"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import hud_runtime  # noqa: E402
 
+# HUD_SEARCH=off: "search X", "google X" and "look up X" open a Google results
+# page in Chrome again instead of being answered on the glass
+# (bin/lib/glass_search.py, docs/NO-APPS.md build 1).
+SEARCH = os.environ.get("HUD_SEARCH", "on") != "off"
 # HUD_QUICK=off: math, time, date, conversions and weather go to the model
 # like everything else, instead of being computed (bin/lib/quick.py).
 QUICK = os.environ.get("HUD_QUICK", "on") != "off"
@@ -1284,17 +1294,20 @@ FAST_PATHS = {
     "connection_check": "connection",
     "pleasantry": "pleasantry",
     "quick_answer": "quick",
+    "repo_request": "repo",
+    "notes_request": "notes",
     "surface_request": "surface",
     "music_request": "music",
     "open_request": "open",
     "agenda_request": "agenda",
     "clay_request": "clay",
+    "search_request": "search",
     "genui_request": "genui",
     "handle_agents_word": "agents",
 }
 # These need a pending draft, a waiting agent or a live terminal to decide, and
 # a replayed sentence has none of those, so `fast_path` cannot say.
-STATEFUL_PATHS = ("handle_agent_answer", "handle_draft_word", "handle_terminal_word")
+STATEFUL_PATHS = ("handle_agent_answer", "handle_draft_word", "handle_terminal_word", "search_dismiss")
 
 
 def fast_path(said: str) -> str | None:
@@ -1324,7 +1337,18 @@ def fast_path(said: str) -> str | None:
                 return "quick"
         except Exception:  # noqa: BLE001  the bridge falls through on the same error
             pass
+    if REPO_CARDS:
+        try:
+            if repo_card.parse(said) is not None:
+                return "repo"
+        except Exception:  # noqa: BLE001
+            pass
     if SURFACES:
+        try:
+            if notes_surface.parse(said) is not None:
+                return "notes"
+        except Exception:  # noqa: BLE001
+            pass
         try:
             if surface_intent.parse(said) is not None:
                 return "surface"
@@ -1348,6 +1372,8 @@ def fast_path(said: str) -> str | None:
                 return "agenda"
         except Exception:  # noqa: BLE001
             pass
+    if SEARCH and route.search_query(said):
+        return "search"
     if ROUTE and route.agent_status_word(said):
         return "agents"
     if CLAY:
@@ -1438,6 +1464,11 @@ class Listener:
         # drew on them. Same half-life as the region, and a new press of the
         # talk key starts them again at 1, as the glass does.
         self.marks: dict[int, dict] = {}
+        # The search panel this listener drew: its row ids to the URLs they
+        # open. A press opens only a URL that is in here, never one carried
+        # by the event, so a forged row cannot open anything new.
+        self.search_rows: dict[str, str] = {}
+        self.search_open = False
         self.marks_at = 0.0
         # The press of the talk key the marks belong to. A crop arrives after
         # its mark and is matched by this, never by number alone.
@@ -1776,6 +1807,9 @@ class Listener:
             # the exit just cleared.
             self.hush()
             self.shown = "p dormant"
+            # Escape took the glass down, the search panel with it.
+            self.search_closed()
+            repo_card.BOARD.forget()
         elif line.startswith("g "):
             parts = line.split()
             if len(parts) == 5:
@@ -1855,6 +1889,12 @@ class Listener:
                     argv += ["--surface", ev["surface"]]
                 threading.Thread(target=lambda: subprocess.run(argv, capture_output=True, timeout=60),
                                  daemon=True).start()
+            elif action == "action" and component.startswith("gs-"):
+                # Open on a search source row (bin/lib/glass_search.py).
+                self.search_press(line)
+            elif action == "closed" and component == glass_search.SURFACE:
+                # The card's close button on the search panel.
+                self.search_closed()
             elif action.startswith("ks-") or (action == "action" and component.startswith("ks-")):
                 # A surface's own control (bin/kyber-surfaces owns every
                 # `ks-` action and acts on it). Asked here as well, a press of
@@ -1869,6 +1909,11 @@ class Listener:
                 # buttons, and call-watch acts on them. Asked here as well,
                 # one press would start the coach and a model turn.
                 pass
+            elif repo_card.Board.owns(action, component.split()[0]):
+                # The repo card's button, its pinned rows and its X: acted on
+                # here against the card this listener drew, never asked.
+                threading.Thread(target=lambda: self.log("repo:", repo_card.BOARD.event(line, self.send)),
+                                 daemon=True).start()
             else:
                 # A control was used. Same path: the press is a request in words.
                 self.ask(
@@ -2411,8 +2456,14 @@ class Listener:
         pointing = bool(self.pointed_marks())
         if QUICK and not relayed and not pointing and self.quick_answer(said, typed):
             return
+        if REPO_CARDS and not relayed and not pointing and self.repo_request(said, typed):
+            return
         # A surface before music: "what's playing" opens the player panel and
         # says the song, where the music path only said it.
+        # "Add milk to my groceries note", "new note Trip": before the surface
+        # words, since "close the notes" closes both note panels.
+        if SURFACES and not relayed and not pointing and self.notes_request(said, typed):
+            return
         if SURFACES and not relayed and not pointing and self.surface_request(said, typed):
             return
         if not relayed and not pointing and self.music_request(said, typed):
@@ -2420,6 +2471,10 @@ class Listener:
         if OPEN and not relayed and not pointing and self.open_request(said, typed):
             return
         if OPEN and not relayed and not pointing and self.agenda_request(said, typed):
+            return
+        if not relayed and self.search_dismiss(said):
+            return
+        if SEARCH and not relayed and not pointing and dest is None and self.search_request(said, typed):
             return
         # A relayed event (a click the display reported) and a request already
         # routed by a correction skip the draft and terminal words.
@@ -2742,6 +2797,102 @@ class Listener:
         threading.Thread(target=work, daemon=True).start()
         return True
 
+    # Said with the search panel up, these take it down. Kept apart from the
+    # draft words in bin/lib/route.py ("never mind", "scrap that"): with a
+    # terminal draft outstanding those clear the draft, and this check runs
+    # first.
+    SEARCH_CLOSE_WORDS = frozenset({
+        "close", "close it", "close that", "close search", "close the search", "close this",
+        "dismiss", "dismiss it", "dismiss that", "hide it", "hide that", "hide search",
+        "close the answer", "got it",
+    })
+
+    def search_request(self, said: str, typed: bool) -> bool:
+        """"Search who won the Dodgers game": the answer and its sources on
+        the glass, no model and no browser (bin/lib/glass_search.py). Only
+        when nothing is running, as `open_request`; a search said during a
+        run reaches the same panel through the browser branch of `_run`."""
+        if self.in_flight():
+            return False
+        query = route.search_query(said)
+        if not query:
+            return False
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+
+        def work() -> None:
+            answer, ok = self.search_on_glass(query)
+            self.remember(req, answer, ok, "done" if ok else "failed")
+            self.send("s " + json.dumps(answer))
+            self.send("w " + json.dumps(answer) + " done=true")
+            if not typed:
+                self.speak(answer)
+            self.settle_unless_running("done" if ok else "failed", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def search_on_glass(self, query: str) -> tuple[str, bool]:
+        """Draw the panel, search, fill it in. The one line to say, and
+        whether the search found anything. A failure is drawn on the panel
+        with its reason and never falls back to a browser."""
+        self.search_gen = getattr(self, "search_gen", 0) + 1
+        gen = self.search_gen
+        self.search_rows = {}
+        self.search_open = True
+        for line in glass_search.loading_lines(query):
+            self.send(line)
+        try:
+            result = glass_search.search(query)
+        except Exception as err:  # noqa: BLE001  search() never raises; this is the backstop
+            result = glass_search.Result(query=query, error=f"the search crashed ({type(err).__name__})")
+        self.log(f"search: {result.backend or 'none'} in {result.ms}ms, "
+                 f"{len(result.sources)} sources{', ' + result.error if result.error else ''}")
+        if gen != self.search_gen:
+            # A newer search took the panel while this one was out.
+            return "Searched.", not result.error
+        self.search_rows = {glass_search.row_id(i): s.url for i, s in enumerate(result.sources)}
+        for line in glass_search.result_lines(result):
+            self.send(line)
+        if result.error:
+            return f"Search failed: {result.error}.", False
+        return "Here's what I found.", True
+
+    def search_dismiss(self, said: str) -> bool:
+        """"Close it" with the search panel up takes the panel down."""
+        if not self.search_open or normalise(said) not in self.SEARCH_CLOSE_WORDS:
+            return False
+        self.send(glass_search.close_line())
+        self.search_closed()
+        threading.Thread(target=lambda: self.settle_unless_running("done", 0.0), daemon=True).start()
+        return True
+
+    def search_closed(self) -> None:
+        self.search_open = False
+        self.search_rows = {}
+
+    def search_press(self, line: str) -> None:
+        """Open on a source row: that one page, in the browser, on a press."""
+        ev = hud_events.event(line)
+        if ev is None or ev.get("surface") != glass_search.SURFACE:
+            return
+        url = self.search_rows.get(ev.get("row")) if isinstance(ev.get("row"), str) else None
+        if not url:
+            self.log("search press for an unknown row:", ev.get("row"))
+            return
+
+        def work() -> None:
+            try:
+                done = subprocess.run(OPEN_CMD + [url], capture_output=True, text=True,
+                                      timeout=self.OPEN_BROWSER_TIMEOUT_S)
+                ok = done.returncode == 0
+            except (OSError, subprocess.TimeoutExpired) as err:
+                self.log("search open failed:", err)
+                ok = False
+            host = glass_search.host_of(url)
+            self.send("s " + json.dumps(f"Opened {host}." if ok else f"Couldn't open {host}."))
+
+        threading.Thread(target=work, daemon=True).start()
+
     def start_surfaces(self) -> None:
         try:
             subprocess.run([str(KYBER_SURFACES), "start"], capture_output=True, text=True, timeout=15)
@@ -2781,6 +2932,40 @@ class Listener:
         threading.Thread(target=work, daemon=True).start()
         return True
 
+    def notes_request(self, said: str, typed: bool) -> bool:
+        """"Add X to my <title> note", "new note <title>", "open my <title>
+        note", "close the note": one Apple Note, no model turn. The append
+        refuses any note it could damage and reads the last line back; see
+        bin/lib/notes_surface.py."""
+        if self.in_flight():
+            return False
+        try:
+            command = notes_surface.parse(said)
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("notes failed:", err)
+            return False
+        if command is None:
+            return False
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+
+        def work() -> None:
+            started = time.monotonic()
+            try:
+                outcome = notes_surface.perform(command)
+            except Exception as err:  # noqa: BLE001
+                self.log("notes failed:", err)
+                outcome = notes_surface.Outcome(False, "Notes didn't answer.")
+            self.log(f"notes: {command.verb} in {(time.monotonic() - started) * 1000:.0f}ms:", outcome.line)
+            self.remember(req, outcome.line, outcome.ok, "done" if outcome.ok else "failed")
+            self.send("s " + json.dumps(outcome.line))
+            self.send("w " + json.dumps(outcome.line) + " done=true")
+            if not typed:
+                self.speak(outcome.line)
+            self.settle_unless_running("done", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
     def surface_request(self, said: str, typed: bool) -> bool:
         """"Show my day", "what do I need to do", "show me Karthik": open or
         close a live surface with no model turn. See bin/lib/surface_intent.py
@@ -2811,6 +2996,40 @@ class Listener:
             self.send("w " + json.dumps(answer) + " done=true")
             if not typed:
                 self.speak(answer)
+            self.settle_unless_running("done", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def repo_request(self, said: str, typed: bool) -> bool:
+        """"show me owner/repo", a pasted github.com URL, or a profile URL:
+        one card on the glass from `gh api`, no model turn. "close the repo
+        card", and "close it" while it is up, take it down. See
+        bin/lib/repo_card.py for which sentences count and what a press does."""
+        if self.in_flight():
+            return False
+        try:
+            ask = repo_card.parse(said, card_open=repo_card.BOARD.is_open())
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("repo card failed:", err)
+            return False
+        if ask is None:
+            return False
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+
+        def work() -> None:
+            started = time.monotonic()
+            try:
+                outcome = repo_card.BOARD.answer(ask, self.send)
+            except Exception as err:  # noqa: BLE001
+                self.log("repo card failed:", err)
+                outcome = repo_card.Outcome(False, "That repo card didn't draw.")
+            self.log(f"repo: {ask.kind} {ask.slug} in {(time.monotonic() - started) * 1000:.0f}ms:", outcome.line)
+            self.remember(req, outcome.line, outcome.ok, "done" if outcome.ok else "failed")
+            self.send("s " + json.dumps(outcome.line))
+            self.send("w " + json.dumps(outcome.line) + " done=true")
+            if not typed:
+                self.speak(outcome.line)
             self.settle_unless_running("done", self.LEAVE_AFTER)
 
         threading.Thread(target=work, daemon=True).start()
@@ -3600,6 +3819,13 @@ class Listener:
             if pending and not self.terminal("clear", pending.get("tty")):
                 self.log("correction: couldn't clear the outstanding draft")
             req.said = decision.reroute
+        query = route.search_query(req.said) if SEARCH and decision.dest == "browser" else None
+        if query:
+            answer, ok = self.search_on_glass(query)
+            self.send("s " + json.dumps(answer))
+            outcome = "done" if ok else "failed"
+            self.record(req, decision, answer, outcome)
+            return outcome
         if decision.dest == "browser":
             label, opened = self.open_browser(req.said)
             self.send("s " + json.dumps(label))

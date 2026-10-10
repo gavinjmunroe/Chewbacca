@@ -322,13 +322,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Hand the click to the guides, in the glass's own points.
+    /// Hand the click to the guides, in the glass's own points. A click off
+    /// the folder on the glass also takes it down (`clickedAway`).
     private func strike() {
-        guard model.markers.contains(where: \.isGuide) else { return }
         let mouse = NSEvent.mouseLocation
         guard let screen = OverlayWindow.active, screen.frame.contains(mouse) else { return }
         let frame = screen.frame
-        model.hit(at: CGPoint(x: mouse.x - frame.minX, y: frame.maxY - mouse.y))
+        let point = CGPoint(x: mouse.x - frame.minX, y: frame.maxY - mouse.y)
+        model.clickedAway(at: point)
+        guard model.markers.contains(where: \.isGuide) else { return }
+        model.hit(at: point)
     }
 
     /// Which app the person is in, written where the tools can read it.
@@ -1102,11 +1105,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sessionsItem.target = self
         menu.addItem(sessionsItem)
 
-        let filesItem = NSMenuItem(
-            title: "Files", action: #selector(filesFromMenu), keyEquivalent: "")
-        filesItem.target = self
-        menu.addItem(filesItem)
-
         let rimItem = NSMenuItem(
             title: "Edit the rim…", action: #selector(rimFromMenu), keyEquivalent: "")
         rimItem.target = self
@@ -1228,18 +1226,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func askFromMenu() { showCommandBar() }
     @objc private func chatFromMenu() { model.openChat() }
 
-    /// Start `kyber-sessions serve`, which draws the sessions surface and
-    /// answers its presses. It holds its own lock, so a second start while
-    /// one is running exits at once instead of drawing twice.
-    /// The two-pane file manager. See `FilesPanel`.
-    @objc private func filesFromMenu() {
-        FilesPanel.shared.open()
-    }
-
     @objc private func rimFromMenu() {
         RimEditor.shared.open(showing: model.presence)
     }
 
+    /// Start `kyber-sessions serve`, which draws the sessions surface and
+    /// answers its presses. It holds its own lock, so a second start while
+    /// one is running exits at once instead of drawing twice.
     @objc private func sessionsFromMenu() {
         let candidates = [
             FileManager.default.homeDirectoryForCurrentUser

@@ -59,6 +59,9 @@ TABLE = [
     ("good night", "pleasantry"),
     ("Thanks", "pleasantry"),
     ("what's 17 times 23", "quick"),
+    # CHW-193: a repo card, not a model turn about a URL.
+    ("show me goodnight000/api-anything", "repo"),
+    ("https://github.com/calebnewtonusc", "repo"),
     ("Play Danielle by Fred again", "music"),
     ("Pause", "music"),
     ("what are my agents doing", "agents"),
@@ -105,6 +108,11 @@ TABLE = [
     ("okay so find me fintech VC partners in clay", "clay"),
     ("open clay", None),
     ("build me a list of 5 restaurants in Dallas", None),
+    # CHW-195: one note by title, before the surface words.
+    ("add milk to my groceries note", "notes"),
+    ("new note Trip ideas", "notes"),
+    ("close the notes", "notes"),
+    ("show my notes", "surface"),
 ]
 
 

@@ -1,5 +1,9 @@
 # togari-sandbox: what's in it and what to take
 
+Maintainer-only map into a private repo. The usable knowledge lives in
+[scoring.md](scoring.md), [clay-playbook.md](clay-playbook.md) and
+[outbound-rules.md](outbound-rules.md).
+
 Read 2026-10-09 from `bluemodernadvisory/togari-sandbox` at `adace00`
 (2026-08-03, the last commit, which folded sibling projects into one repo).
 Local clone `~/code/work/bma/togari-sandbox`. Line numbers drift; re-open a file

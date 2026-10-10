@@ -81,5 +81,23 @@ JOBS_SLICE=0 "$J" tick >/dev/null
 check "one heavy job runs after a load pause, not two" "$(python3 -c "import json,glob,sys;print(sum(json.load(open(f))['status']=='running' and json.load(open(f))['class']=='heavy' for f in glob.glob(sys.argv[1]+'/*/job.json')))" "$JOBS_DIR")" 1
 "$J" kill "$idl" >/dev/null
 
+# A load pause doesn't hand the long job a fresh turn, or a Mac that keeps
+# crossing the pause line lets it hold the slot forever.
+idl=$("$J" submit --heavy --title long2 -- sleep 60 | cut -d' ' -f1)
+settle "$idl" running
+ids=$("$J" submit --heavy --title short2 -- sleep 60 | cut -d' ' -f1)
+JOBS_LOAD=40 "$J" tick >/dev/null
+"$J" tick >/dev/null
+check "a load-paused job resumes first" "$(status "$idl")" running
+python3 - "$JOBS_DIR/$idl/job.json" <<'PY'
+import json,sys,time
+p=sys.argv[1]; j=json.load(open(p)); j["turn"]=time.time()-1000; json.dump(j,open(p,"w"))
+PY
+JOBS_LOAD=40 "$J" tick >/dev/null
+JOBS_SLICE=900 "$J" tick >/dev/null
+settle "$ids" running
+check "and still yields when its 15 minutes were used before the pause" "$(status "$ids")" running
+"$J" kill "$ids" >/dev/null; "$J" kill "$idl" >/dev/null
+
 [ "$fail" = 0 ] && echo "jobs ok"
 exit "$fail"

@@ -420,6 +420,10 @@ if group "gtme"; then
   check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
   check "gtme-dedupe merges one person across lists, never two on name alone" python3 "$ROOT/tests/test_gtme_dedupe.py"
   check "gtme-dedupe dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-dedupe --help
+  # Every case from the upstream TypeScript tests; offline, nothing sends.
+  check "gtme-reply labels real replies, cleans HTML, refuses risky auto-sends" python3 "$ROOT/tests/test_gtme_reply.py"
+  check "gtme-reply dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-reply intent --help
+  expect "gtme-reply appears in help" "chewbacca gtme-reply" bash "$ROOT/bin/chewbacca" --help
   check "interview cases cite sourced procedures, real clay ops, and answer inside 2 s" \
     python3 "$ROOT/tests/test_gtme_interview.py"
   check "gtme-interview dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-interview list

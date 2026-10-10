@@ -1557,6 +1557,9 @@ h["Stop"] = [{"hooks": [{
 _register("UserPromptSubmit", hooks_dir + "/prayer-remind.sh", timeout=5)
 # The current time on every prompt; the harness only states the date once.
 _register("UserPromptSubmit", hooks_dir + "/time-context.sh", timeout=5)
+# The disk filled three times on 2026-10-09 and the third time Bash could not
+# start at all. Prunes regenerable caches in the background below 20 GB free.
+_register("UserPromptSubmit", hooks_dir + "/disk-guard.sh", timeout=5)
 _register("UserPromptSubmit", hooks_dir + "/client-rulings.sh", timeout=5)
 
 # coursework-context.sh is not registered for Claude Code. It emits a

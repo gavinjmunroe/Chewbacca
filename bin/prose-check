@@ -63,6 +63,14 @@ CHAT_RULES = [
      r"the hook)\b[^.\n]{0,40}\bskill\b|\bskill\b[^.\n]{0,30}\b(fits|doesn't fit|"
      r"didn't fit|got suggested|loaded|matched)\b)",
      "Narrating skills or hooks. He built the kit; report the result, never the plumbing."),
+    # 2026-10-09: a reply ended "These are #82 to #84 in your drafts, going to
+    # her directly. The longer versions are deleted." Caleb: "what's the point
+    # of saying that bruh". Draft numbers and cleanup notes are backstage.
+    ("backstage-bookkeeping",
+     r"(?i)(#\d+\s*(?:to|-|through)\s*#?\d+\s+(?:are|is)?\s*(?:in|queued in) your drafts|"
+     r"\b(?:in|queued in) your drafts\b|\b(?:the )?(?:old|longer|stale) (?:versions?|drafts?) (?:are|were|got) (?:deleted|dropped|gone)\b|"
+     r"\bi (?:deleted|dropped) the (?:old|stale|longer) (?:drafts?|versions?)\b)",
+     "Backstage bookkeeping (draft numbers, what got deleted). Give him the result, not the filing."),
 ]
 
 

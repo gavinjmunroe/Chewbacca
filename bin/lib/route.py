@@ -14,6 +14,7 @@ that made it one, and `_classify_cmd` carries the measurement that switched
 the CLI call off. `summarize` still runs the CLI, under a budget that can
 afford it.
 """
+from __future__ import annotations
 import json
 import os
 import re

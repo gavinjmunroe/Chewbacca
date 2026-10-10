@@ -15,6 +15,7 @@ bin/lib/decision_log.py, with both picks in `answers`. Prints nothing. The hook
 runs it detached, so a slow or failed Jev call never delays a prompt. Outcomes
 (which skill the session actually loaded) are joined later from the transcript.
 """
+from __future__ import annotations
 import json
 import sys
 import time

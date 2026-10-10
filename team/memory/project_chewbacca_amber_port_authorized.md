@@ -27,3 +27,7 @@ writing from Sagar rather than assuming.
 
 Related: [[project_amber_circles_architecture]], [[project_chewbacca]],
 [[reference_medha_id_storage]].
+
+**Update 2026-10-09 (Caleb):** barely anything Karthik engineered is still used in Chewbacca; the team refactored everything after the port.
+
+**Measured 2026-10-09** (normalized lines of 25+ chars vs amber-id src/api and amber-search at 58104c9): the people layer is ~10.2K lines (~2% of the repo), and 37 of its 3,492 code lines match Amber, so about 1%. 25 of the 37 are in `bin/lib/name-split.js`, a credited direct port of amber-id `src/lib/name-split.js`. Ideas credited in comments: the gather.js retrieval ladder (who.js), the PeopleRank shape (keeping-up.js), api/temporal.py decay (show.js), "known, not good" bars (show.js), schema rules (schema.js), and the Clay webhook row (linkedin.js). Karthik has 0 commits in Chewbacca.

@@ -48,3 +48,5 @@ always, every turn, and the hook won. Fixed in Chewbacca `bef7c51` (hooks now sa
 "carry on silently. Never mention skills to the user.") and `6dcd79c`
 (`prose-check --chat` flags `plumbing-narration`, with a test). Lesson: when a
 rule keeps losing, grep the hooks for the text that contradicts it.
+
+2026-10-09, widened: backstage bookkeeping counts too. A reply ended "These are #82 to #84 in your drafts, going to her directly. The longer versions are deleted." Caleb: "Chewbs should never say ins and outs of what's going on behind the scenes unless I ask ... what's the point of saying that bruh". Draft numbers, what got deleted or cleaned up, which file holds what: leave it out unless he asks. prose-check flags it as backstage-bookkeeping.

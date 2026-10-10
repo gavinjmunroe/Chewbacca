@@ -256,6 +256,32 @@ def save(path, document):
         Path(temporary).unlink(missing_ok=True)
 
 
+# A Pre whose Post never arrives (a killed session, a denied call the host never
+# reported) leaves its snapshot behind with nothing to finish it. No tool call
+# runs for a day, so anything that old is an orphan. Swept at most hourly,
+# because listing 44,000 files on every tool call would cost more than it saves.
+SNAPSHOT_MAX_AGE = 24 * 3600
+PRUNE_EVERY = 3600
+
+
+def prune(state, now):
+    marker = state / '.pruned'
+    try:
+        if now - marker.stat().st_mtime < PRUNE_EVERY:
+            return
+    except FileNotFoundError:
+        pass
+    marker.touch()
+    for entry in os.scandir(state):
+        if not entry.name.endswith('.json'):
+            continue
+        try:
+            if now - entry.stat().st_mtime > SNAPSHOT_MAX_AGE:
+                os.unlink(entry.path)
+        except FileNotFoundError:
+            continue
+
+
 def record(payload):
     sid = payload.get('session_id')
     if not isinstance(sid, str) or not sid or any(c in sid for c in '\t\r\n'):
@@ -277,6 +303,7 @@ def record(payload):
         exact = exact_targets(payload)
         for repo in repos:
             tool = payload.get('tool_use_id') or payload.get('tool_call_id')
+            native = bool(tool)
             if not tool:
                 tool = json.dumps([payload.get('tool_name'), payload.get('tool_input')], sort_keys=True)
             key = hashlib.sha256((sid + '\0' + str(repo) + '\0' + str(tool)).encode()).hexdigest()
@@ -317,10 +344,21 @@ def record(payload):
                     rows.append(f'{now:.6f}\t{sid}\t{path}\tbash\n')
             remaining = 1 if is_pre else max(0, pending - 1)
             keep = not is_pre and remaining
+            # A finished call with a native id is never looked up again: the
+            # next call has its own id, so its key is new. Saving it anyway
+            # left a full repo fingerprint per Bash or Edit call, 6 MB each in
+            # this kit, and on 2026-10-09 that was 44,065 files and 14.2 GB in
+            # ~/.chewbacca/session-state, which filled the disk to 254 MB free.
+            # Without an id the key is the command text, and a post-only host
+            # needs this snapshot as the next identical call's baseline.
+            if not is_pre and not remaining and native:
+                snapshot.unlink(missing_ok=True)
+                continue
             save(snapshot, {'files': before if keep else after,
                             'pending': remaining,
                             'head': prior.get('head') if keep else current_head,
                             'started': prior.get('started') if keep else now})
+        prune(state, now)
         if rows:
             fd = os.open(log, os.O_CREAT | os.O_APPEND | os.O_WRONLY, 0o600)
             with os.fdopen(fd, 'a') as stream:

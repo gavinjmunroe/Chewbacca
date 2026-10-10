@@ -8,7 +8,7 @@ f2322dc065f50396af938b1b2a217cf68594aec22b811b7378ba99bbc22d19ba  .claude/hooks/
 b2e94053791b3748e4521b0a958001dbd2a5a35a6234d6f2f9847b0a879ad543  .claude/hooks/chatdb-guard.sh
 0cde272521f1895512eb323bc1935b89dd73a1ad3fe02419c82ecf63f03b2c74  .claude/hooks/clay-native-guard.sh
 a4d37c82649e07e58df2332c165b5b24593e43a36208bb604267b5284bd3e367  .claude/hooks/clay-reply-guard.sh
-304ba8fe9e877d0ca5f5deb88c694698f52aef9464a39b08c8144de9ce6760a5  .claude/hooks/client-rulings.sh
+c5d7b0db396449034ca4b4010f04aa5644dd19268abb83d3ccb4230bb004bddb  .claude/hooks/client-rulings.sh
 2825e85717cf4f65ee014185791aef51ccaa4550a1d29e9f13e808d6575b40dd  .claude/hooks/coursework-context.sh
 86f870318c9bbd7a51448f1bc4cc52fd03a7dc20f707fc72da330641f00a05da  .claude/hooks/design-context.sh
 0fffd87f84014bb3b3706e0dba65249564b7c7ef5fc80f2eaf86eb36d358c26e  .claude/hooks/design-gate.sh

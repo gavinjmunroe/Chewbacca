@@ -22,5 +22,16 @@ out="$(run "fix the hud")"
 [ -z "$out" ] && ok "no client named: silent" || no "spoke on a prompt with no client"
 out="$(run "compare the acmeco numbers")"
 [ -z "$out" ] && ok "partial word does not match" || no "matched acme inside acmeco"
+# Anyone's install: rulings on a chewbacca gtme client, matched by its offers.
+mkdir -p "$T/gtm"
+cat > "$T/gtm/clients.json" <<'J'
+{"clients": [{"name": "Brightside", "principal": "Dana Ruiz", "offers": [{"name": "Lumen App", "aliases": ["Lumen"]}],
+  "rulings": [{"rule": "Never email on weekends.", "who": "Dana", "date": "2026-10-10"}]}]}
+J
+out="$(printf '{"prompt":"how is lumen doing"}' | CHEWBACCA_CLIENT_REPOS="$T" GTME_HOME="$T/gtm" bash "$HOOK")"
+printf '%s' "$out" | grep -q "Never email on weekends" && ok "gtme client: an offer name loads its rulings" || no "gtme client rulings not loaded"
+out="$(printf '{"prompt":"text Dana about friday"}' | CHEWBACCA_CLIENT_REPOS="$T" GTME_HOME="$T/gtm" bash "$HOOK")"
+printf '%s' "$out" | grep -q "Never email on weekends" && ok "gtme client: the principal's first name loads them" || no "principal first name missed"
+
 echo "  ${pass} passed, ${fail} failed"
 [ "$fail" -eq 0 ]

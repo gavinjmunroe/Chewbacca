@@ -22,6 +22,11 @@ ok "strong hit shown" "$(echo "$out" | grep -c user_a.md)" "1"
 ok "weak hit dropped" "$(echo "$out" | grep -c user_b.md)" "0"
 ok "short prompt silent" "$(run "hi there")" ""
 ok "machine traffic silent" "$(run "SYSTEM NOTIFICATION task done here")" ""
+fake "# brain mode=hybrid files=2 chunks=2
+
+[1] ~/code/chewbacca/team/memory/project_x.md cos=0.80
+    a team note"
+ok "team memory shown by its own path" "$(run "what did my mentor say about loneliness" | grep -c '^  ~/code/chewbacca/team/memory/project_x.md')" "1"
 fake "# brain mode=lexical degraded=ollama_down files=2 chunks=2
 
 [1] memory/user_a.md cos=16.63

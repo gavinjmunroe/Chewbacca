@@ -126,7 +126,9 @@ for m in re.finditer(r"^\[\d+\] (\S+?)(?:#[^\n]*?)? cos=([\d.]+)( \[stale\])?\n\
     SHADOW["candidates"].append({"name": path, "score": round(cos, 4)})
     if cos >= MIN_COS:
         SHADOW["shown"].append(path)
-        hits.append(f"  ~/second-brain/{path}  (cos {cos:.2f}{', stale' if stale else ''})\n    {text[:140]}")
+        # Team memory is indexed by its own ~ path; only brain files are relative.
+        where = path if path.startswith(("~/", "/")) else f"~/second-brain/{path}"
+        hits.append(f"  {where}  (cos {cos:.2f}{', stale' if stale else ''})\n    {text[:140]}")
 SHADOW["candidates"] = sorted(SHADOW["candidates"], key=lambda c: -c["score"])[:3]
 if hits:
     print("Second brain, matched by meaning. Read the file before answering if it bears on this:")

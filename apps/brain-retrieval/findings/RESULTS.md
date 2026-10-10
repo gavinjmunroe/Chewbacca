@@ -262,3 +262,61 @@ the index time to lose 10 points on held-out data.
 
 Dev could not see this: all four variants tie at 80% there. Only the sealed set
 separated them. `bench/final75.py` reproduces it.
+
+## 2026-10-09: recall was off for 78% of prompts, and the corpus moved
+
+### The abort loop
+
+`brain-recall.sh` logs every prompt it sees to `~/.chewbacca/state/route-shadow.jsonl`.
+From 2026-10-03 to 2026-10-09 it saw 2,140 real prompts that reached `brain ask`.
+1,674 of them (78%) came back in lexical mode, so the hook printed nothing; 17
+showed a hit.
+
+Ollama's server log says why. nomic-embed-text was started 568 times on
+2026-10-09 alone, and each start ended with "client connection closed before
+llama-server finished loading, aborting load". A load takes ~280ms, the ask gave
+up at 120ms, and Ollama abandons a load whose client hangs up. The ask path
+could therefore never make the model resident, and every later ask repeated it.
+It worked only in the half hour after the 4am index loaded the model.
+`embed()` also retried the failed call once, so each ask aborted two loads.
+
+Fix: the ask calls Ollama once, and on a timeout starts one detached `brain
+warm` (one at a time across tabs, by lock) that waits out the load.
+`tests/test_brain_index.py` runs a fake Ollama that abandons loads the same way:
+the old `brain.py` stayed lexical for 4 asks in a row with 8 aborted loads, and
+the new one is hybrid again on the next ask.
+
+### Incremental index, and team memory
+
+`brain index` re-embeds only files whose bytes changed (`--full` forces all).
+Measured on the real brain: 20 changed and 175 removed files in 4.7s, against
+85s for a full build. Incremental rows and vectors match a full rebuild exactly
+in the test. The launchd job now runs it every 10 minutes instead of once at 4am,
+because the 20 stale files at 19:00 were the 20 newest memories.
+
+The same day about 180 Amber, Chewbacca and Firm Foundation notes moved from
+the brain to the kit's `team/memory`, so the index lost them. The kit's
+`team/memory` is now indexed beside the brain, named by its `~/` path.
+
+### The sealed set on today's corpus (live index, no tuning)
+
+```
+corpus: 701 files (507 brain + 194 team), 3,759 chunks
+sealed set, answerable n=65, every gold path resolved (by basename if moved)
+live retriever               recall@5 50.8%  95% CI 38.5 to 63.1   MRR 0.327
+  same, team results dropped recall@5 44.6%  95% CI 32.3 to 56.9   MRR 0.313
+abstention                   8/8 unanswerable refused
+```
+
+The September 22 figure was 68% on 476 files. The set is unchanged; the corpus
+is not, so this is not a regression of the code, which this change left alone
+on the ranking side. Most of the 32 misses lose to a few long new files,
+two long folders under `domains/` (a mentor's teaching and a reading project), which rank in the top 3
+for questions they do not answer. That is the hub problem: a long file whose
+every chunk is mildly on topic wins under mean aggregation, which is the same
+property that made mean aggregation the biggest win in September. Fixing it is
+dev-set work (length normalisation, or a cap per folder), and the sealed set
+stays unrun until a change is tuned.
+
+Dropping team results from the ranking is an approximation of an index without
+them (normalisation still saw them), so read the 6 points as a direction.

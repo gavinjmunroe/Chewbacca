@@ -10,7 +10,7 @@ different carry the measurement that set them.
 No network calls leave localhost. No vector database. No API keys.
 """
 import os, re, sys, json, math, time, glob, sqlite3, hashlib, argparse
-import urllib.request, urllib.error, collections
+import urllib.request, urllib.error, collections, subprocess
 import numpy as np
 
 BRAIN = os.environ.get("BRAIN_DIR", os.path.expanduser("~/second-brain"))
@@ -34,21 +34,35 @@ MAXCHARS = 6000     # nomic-embed-text ctx is 8192 tokens; stay well under.
 ABSTAIN  = 0.55     # top cosine below this means say nothing. At 0.55 the sealed
                     # set abstained on 8/8 questions whose answers do not exist,
                     # and wrongly abstained on only 2 of 65 real ones.
-EMBED_TIMEOUT = 0.120   # seconds. Past this, serve lexical and SAY it degraded.
+EMBED_TIMEOUT = float(os.environ.get("BRAIN_EMBED_TIMEOUT", "0.120"))
+                        # seconds. Past this, serve lexical and SAY it degraded.
                         # Measured: warm p50 12ms, cold-process median ~90ms,
-                        # model-not-resident 460ms.
+                        # model-not-resident 460ms. On 2026-10-09 at load
+                        # average 25 to 32, fifteen cold-process calls to a
+                        # resident model took 33 to 100ms, so the bar holds
+                        # when the model is loaded. See WARM for when it is not.
+KEEP_ALIVE = "2h"       # how long Ollama keeps the model resident after a call.
+                        # Was 30m. Any gap longer than this unloads the model,
+                        # and the next ask pays a reload (see WARM). The model
+                        # is 268MB resident, so the longer hold is cheap.
+WARM_TIMEOUT = 60       # seconds the detached warm-up waits for a load. A load
+                        # measured 280ms on 2026-10-09 at load average 25; the
+                        # minute is for a Mac at load 100, not the normal case.
+OLLAMA = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
+if "://" not in OLLAMA:
+    OLLAMA = "http://" + OLLAMA
 
 def die(m, code=2):
     print(f"brain: {m}", file=sys.stderr); sys.exit(code)
 
 # ---------------------------------------------------------------- embedding
 def _post(payload, timeout):
-    req = urllib.request.Request("http://localhost:11434/api/embed",
+    req = urllib.request.Request(OLLAMA + "/api/embed",
         data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())["embeddings"]
 
-def embed(texts, timeout=300, keep_alive="30m"):
+def embed(texts, timeout=300, keep_alive=KEEP_ALIVE):
     out = []
     for i in range(0, len(texts), 64):
         batch = texts[i:i+64]
@@ -59,6 +73,52 @@ def embed(texts, timeout=300, keep_alive="30m"):
                 try:    out.extend(_post({"model": MODEL, "input": [t], "keep_alive": keep_alive}, timeout))
                 except Exception: out.append([0.0]*DIM)
     return out
+
+# WARM. The failure this exists for, found 2026-10-09 in Ollama's server log:
+# nomic-embed-text was started 568 times that day and almost never finished.
+# When the model is not resident, a load takes ~280ms, the ask gives up at
+# EMBED_TIMEOUT (120ms) and closes the connection, and Ollama logs "client
+# connection closed before llama-server finished loading, aborting load". So
+# the model never became resident through the ask path at all, and every ask
+# after it hit the same wall. The brain-recall hook's own log shows the cost:
+# 1,674 of 2,140 real prompts since 10/3 came back lexical, so the hook stayed
+# silent on 78% of everything typed. It only worked in the half hour after
+# something else (the 4am index, a manual run) loaded the model.
+#
+# The ask still answers lexically on a timeout, but it now starts one detached
+# process that waits out the load, so the next ask finds the model resident.
+def spawn_warm():
+    os.makedirs(HOME, exist_ok=True)
+    lock = os.path.join(HOME, "warm.lock")
+    # One warm-up at a time across every tab. A lock older than WARM_TIMEOUT
+    # belongs to a warm-up that died, so it no longer counts.
+    try:
+        if time.time() - os.path.getmtime(lock) < WARM_TIMEOUT:
+            return False
+    except OSError:
+        pass
+    try:
+        with open(lock, "w") as fh: fh.write(str(os.getpid()))
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), "warm"],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True,
+                         env=dict(os.environ, BRAIN_DIR=BRAIN))
+        return True
+    except OSError:
+        return False
+
+def cmd_warm(args):
+    lock = os.path.join(HOME, "warm.lock")
+    try:
+        _post({"model": MODEL, "input": ["warm"], "keep_alive": KEEP_ALIVE}, WARM_TIMEOUT)
+        ok = True
+    except Exception:
+        ok = False
+    try: os.remove(lock)
+    except OSError: pass
+    if not getattr(args, "quiet", True):
+        print("warm" if ok else "warm failed")
+    sys.exit(0 if ok else 1)
 
 # ---------------------------------------------------------------- chunking
 def frontmatter(txt):
@@ -98,15 +158,44 @@ def chunk_file(rel, txt):
             i += TARGET_WORDS - OVERLAP
     return out
 
+def extra_roots():
+    """Folders indexed beside the brain, named by where they live.
+
+    On 2026-10-09 the Amber, Chewbacca and Firm Foundation notes, about 180
+    files, moved out of the private brain into this kit's team/memory so every
+    teammate reads them. The brain was the only thing indexed, so recall went
+    blind to all of them at once. The kit's own team memory is indexed by
+    default; BRAIN_EXTRA_DIRS (colon-separated) replaces that list, and an
+    empty value turns it off."""
+    env = os.environ.get("BRAIN_EXTRA_DIRS")
+    if env is not None:
+        roots = [os.path.expanduser(r) for r in env.split(":") if r]
+    else:
+        kit = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.realpath(__file__)))))
+        roots = [os.path.join(kit, "team", "memory")]
+    return [os.path.realpath(r) for r in roots if os.path.isdir(r)]
+
+def label(path):
+    """A brain file is named relative to the brain, as it always was. Anything
+    else is named from ~ so a reader can open it from the name alone."""
+    home = os.path.realpath(os.path.expanduser("~"))
+    real = os.path.realpath(path)
+    if real.startswith(home + os.sep):
+        return "~/" + os.path.relpath(real, home)
+    return real
+
 def walk():
     docs = []
-    for d in DIRS:
-        for p in glob.glob(os.path.join(BRAIN, d, "**", "*.md"), recursive=True):
-            rel = os.path.relpath(p, BRAIN)
-            if os.path.basename(rel) in ("MEMORY.md", "ARCHIVE.md"): continue
-            try: t = open(p, encoding="utf-8", errors="replace").read()
-            except Exception: continue
-            if t.strip(): docs.append((rel, t))
+    found = [(os.path.relpath(p, BRAIN), p) for d in DIRS
+             for p in glob.glob(os.path.join(BRAIN, d, "**", "*.md"), recursive=True)]
+    for root in extra_roots():
+        found += [(label(p), p) for p in glob.glob(os.path.join(root, "**", "*.md"), recursive=True)]
+    for rel, p in found:
+        if os.path.basename(rel) in ("MEMORY.md", "ARCHIVE.md"): continue
+        try: t = open(p, encoding="utf-8", errors="replace").read()
+        except Exception: continue
+        if t.strip(): docs.append((rel, t))
     return docs
 
 # ---------------------------------------------------------------- index
@@ -123,36 +212,101 @@ CREATE VIRTUAL TABLE IF NOT EXISTS fts USING fts5(
 CREATE TABLE IF NOT EXISTS file (path TEXT PRIMARY KEY, sha TEXT NOT NULL);
 """
 
+def sha(txt):
+    return hashlib.blake2b(txt.encode(), digest_size=16).hexdigest()
+
+def npy_path(db):
+    """The vectors that match this database's rows. Each build writes a new
+    file and names it in meta in the same transaction as the rows, so an ask
+    never pairs new rows with old vectors. Indexes built before that carry no
+    name and use emb.npy."""
+    try:
+        row = db.execute("SELECT v FROM meta WHERE k='npy'").fetchone()
+    except sqlite3.OperationalError:
+        row = None
+    return os.path.join(HOME, row[0]) if row else NPY
+
+def previous(db):
+    """What the last build left: each file's sha and its chunks with vectors,
+    or None when there is nothing safe to reuse."""
+    try:
+        meta = dict(db.execute("SELECT k,v FROM meta"))
+        if meta.get("model") != MODEL or meta.get("dim") != str(DIM): return None
+        E = np.load(npy_path(db))
+        rows = db.execute("SELECT file,section,text,row FROM chunk ORDER BY id").fetchall()
+        shas = dict(db.execute("SELECT path,sha FROM file"))
+    except Exception:
+        return None
+    if len(rows) != E.shape[0]: return None
+    by_file = collections.defaultdict(list)
+    for f, sec, text, row in rows:
+        by_file[f].append(({"file": f, "section": sec, "text": text}, E[row]))
+    return shas, by_file
+
 def cmd_index(args):
+    """Index the brain. By default only files whose bytes changed are
+    re-chunked and re-embedded; --full re-embeds everything.
+
+    Full rebuild measured 85s on 476 files. The 4am job was the only thing
+    rebuilding, so a memory written at noon was invisible to brain-recall until
+    the next morning: on 2026-10-09 the 20 newest memories, the ones most
+    likely to matter that day, were the 20 stale files."""
     os.makedirs(HOME, exist_ok=True)
     t0 = time.time()
     docs = walk()
-    chunks = []
-    for rel, txt in docs: chunks.extend(chunk_file(rel, txt))
-    print(f"files {len(docs)}  chunks {len(chunks)}", flush=True)
-    vecs = embed([c["embed"] for c in chunks])
-    E = np.asarray(vecs, dtype="float32")
-    E /= (np.linalg.norm(E, axis=1, keepdims=True) + 1e-9)
-    np.save(NPY, E)
     db = sqlite3.connect(DB); db.executescript(SCHEMA)
-    db.execute("DELETE FROM chunk"); db.execute("DELETE FROM fts"); db.execute("DELETE FROM file")
-    db.executemany("INSERT INTO chunk(file,ord,section,text,row) VALUES(?,?,?,?,?)",
-                   [(c["file"], i, c["section"], c["text"], i) for i, c in enumerate(chunks)])
-    db.execute("INSERT INTO fts(rowid,text) SELECT id,text FROM chunk")
-    db.executemany("INSERT INTO file(path,sha) VALUES(?,?)",
-                   [(r, hashlib.blake2b(t.encode(), digest_size=16).hexdigest()) for r, t in docs])
-    for k, v in [("model", MODEL), ("dim", str(DIM)), ("built_at", str(time.time())),
-                 ("n", str(len(chunks)))]:
-        db.execute("INSERT OR REPLACE INTO meta VALUES(?,?)", (k, v))
-    db.commit(); db.close()
-    print(f"indexed in {time.time()-t0:.0f}s  {E.nbytes/1e6:.1f}MB", flush=True)
+    prev = None if args.full else previous(db)
+    shas_old, reuse = prev if prev else ({}, {})
+    chunks, vecs, fresh = [], [], []
+    for rel, txt in docs:
+        h = sha(txt)
+        if shas_old.get(rel) == h and rel in reuse:
+            for c, v in reuse[rel]:
+                chunks.append(c); vecs.append(v)
+        else:
+            for c in chunk_file(rel, txt):
+                fresh.append(len(chunks)); chunks.append(c); vecs.append(None)
+    gone = sorted(set(shas_old) - {r for r, _ in docs})
+    changed = sorted({chunks[i]["file"] for i in fresh})
+    if prev and not changed and not gone:
+        db.close()
+        if not args.quiet: print(f"files {len(docs)}  up to date")
+        return
+    if not args.quiet:
+        print(f"files {len(docs)}  chunks {len(chunks)}  "
+              f"{'re-embedding ' + str(len(fresh)) if prev else 'embedding all ' + str(len(fresh))}"
+              f"  changed {len(changed)}  removed {len(gone)}", flush=True)
+    new = embed([chunks[i]["embed"] for i in fresh])
+    for i, v in zip(fresh, new):
+        v = np.asarray(v, dtype="float32")
+        vecs[i] = v / (np.linalg.norm(v) + 1e-9)
+    E = np.asarray(vecs, dtype="float32").reshape(len(chunks), DIM)
+    name = f"emb-{int(time.time()*1000)}.npy"
+    np.save(os.path.join(HOME, name), E)
+    with db:
+        db.execute("DELETE FROM chunk"); db.execute("DELETE FROM fts"); db.execute("DELETE FROM file")
+        db.executemany("INSERT INTO chunk(file,ord,section,text,row) VALUES(?,?,?,?,?)",
+                       [(c["file"], i, c["section"], c["text"], i) for i, c in enumerate(chunks)])
+        db.execute("INSERT INTO fts(rowid,text) SELECT id,text FROM chunk")
+        db.executemany("INSERT INTO file(path,sha) VALUES(?,?)", [(r, sha(t)) for r, t in docs])
+        for k, v in [("model", MODEL), ("dim", str(DIM)), ("built_at", str(time.time())),
+                     ("n", str(len(chunks))), ("npy", name)]:
+            db.execute("INSERT OR REPLACE INTO meta VALUES(?,?)", (k, v))
+    db.close()
+    # Keep the newest two vector files: an ask that read the old meta a moment
+    # ago may still be about to open the previous one.
+    olds = sorted(glob.glob(os.path.join(HOME, "emb-*.npy")), key=os.path.getmtime)
+    for f in olds[:-2] + ([NPY] if os.path.exists(NPY) else []):
+        try: os.remove(f)
+        except OSError: pass
+    if not args.quiet:
+        print(f"indexed in {time.time()-t0:.1f}s  {E.nbytes/1e6:.1f}MB", flush=True)
 
 def stale_files(db):
     have = dict(db.execute("SELECT path,sha FROM file"))
     out = []
     for rel, txt in walk():
-        sha = hashlib.blake2b(txt.encode(), digest_size=16).hexdigest()
-        if have.get(rel) != sha: out.append(rel)
+        if have.get(rel) != sha(txt): out.append(rel)
     return out
 
 # ---------------------------------------------------------------- query
@@ -166,19 +320,38 @@ def agg_by_file(pairs):
     for f, s in pairs: d[f].append(s)
     return {f: (sum(v)/len(v) if AGG == "mean" else max(v)) for f, v in d.items()}
 
+def classify(e):
+    """Name why the query embedding failed. Only a timeout means a model load
+    is in flight (or about to be), so only a timeout is worth a warm-up."""
+    reason = getattr(e, "reason", e)
+    text = str(reason).lower()
+    if isinstance(reason, TimeoutError) or "timed out" in text:
+        return "embed_timeout"
+    if isinstance(reason, ConnectionError) or "refused" in text:
+        return "ollama_down"
+    return "embed_error"
+
 def cmd_ask(args):
     if not os.path.exists(DB): die("no index. run: brain index", 2)
-    db = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
+    db = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, isolation_level=None)
+    db.execute("BEGIN")     # rows and the vector file name from one snapshot
     rows = db.execute("SELECT id,file,section,text,row FROM chunk ORDER BY id").fetchall()
-    E = np.load(NPY)
+    E = np.load(npy_path(db))
+    db.execute("COMMIT")
     degraded, dense = None, None
     try:
-        q = np.asarray(embed([args.query], timeout=EMBED_TIMEOUT)[0], dtype="float32")
+        # _post, not embed(): embed() swallows a failure, retries it once and
+        # returns a zero vector, so every outage used to read as a timeout and
+        # every timeout sent two requests that each aborted a model load.
+        q = np.asarray(_post({"model": MODEL, "input": [args.query],
+                              "keep_alive": KEEP_ALIVE}, EMBED_TIMEOUT)[0], dtype="float32")
         if np.linalg.norm(q) < 1e-6: raise ValueError("zero vector")
         q /= np.linalg.norm(q)
         dense = E @ q
-    except urllib.error.URLError: degraded = "ollama_down"
-    except Exception:             degraded = "embed_timeout"
+    except Exception as e:
+        degraded = classify(e)
+        if degraded == "embed_timeout":
+            spawn_warm()
 
     lex = {}
     try:
@@ -229,7 +402,9 @@ def cmd_status(args):
 def main():
     p = argparse.ArgumentParser(prog="brain")
     sub = p.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("index").set_defaults(fn=cmd_index)
+    ix = sub.add_parser("index"); ix.add_argument("--full", action="store_true")
+    ix.add_argument("--quiet", action="store_true"); ix.set_defaults(fn=cmd_index)
+    sub.add_parser("warm").set_defaults(fn=cmd_warm, quiet=False)
     a = sub.add_parser("ask"); a.add_argument("query"); a.add_argument("--k", type=int, default=5)
     a.add_argument("--width", type=int, default=300); a.set_defaults(fn=cmd_ask)
     sub.add_parser("status").set_defaults(fn=cmd_status)

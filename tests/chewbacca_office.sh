@@ -67,8 +67,8 @@ else if (mode === 'encrypted')
 else if (mode === 'expired')
   store[gk] = JSON.stringify({credentialType:'AccessToken', secret: tok, target: gk.split('|')[6], expiresOn: String(Math.floor(Date.now()/1000) - 10)});
 store['msal.3|acct.realm|env|accesstoken|cid|realm|https://outlook.office.com/mail.readwrite|'] =
-  JSON.stringify({credentialType:'AccessToken', secret: 'OUTLOOKtokenNOTGRAPH0123456789abcdef', target:'https://outlook.office.com/mail.readwrite', expiresOn: String(future)});
-store['msal.3|acct.realm|env|refreshtoken|cid|||'] = JSON.stringify({credentialType:'RefreshToken', secret: 'REFRESHtokenNEVERTOUCH0123456789'});
+  JSON.stringify({credentialType:'AccessToken', secret: 'OUTLOOKtokenNOTGRAPH0123456789abcdef', target:'https://outlook.office.com/mail.readwrite', expiresOn: String(future)}); // fake test token, secret-scan: allow
+store['msal.3|acct.realm|env|refreshtoken|cid|||'] = JSON.stringify({credentialType:'RefreshToken', secret: 'REFRESHtokenNEVERTOUCH0123456789'}); // fake test token, secret-scan: allow
 const keys = Object.keys(store);
 globalThis.localStorage = { get length(){return keys.length;}, key: i => keys[i],
   getItem: k => Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null };

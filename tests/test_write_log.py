@@ -181,6 +181,22 @@ class WriteLogTests(unittest.TestCase):
         self.assertEqual(len(self.records()), 3)
         self.assertEqual(list(state.glob('*.json')), [])
 
+    def test_unchanged_files_reuse_their_digest_and_a_disguised_edit_does_not(self):
+        sys.path.insert(0, str(ROOT / 'tools'))
+        import write_log
+        state = self.folder / 'state'
+        state.mkdir()
+        log = self.folder / 'custom.tsv'
+        self.policy.write_text('dirty one')
+        first = write_log.observe(self.repo, log, state)
+        with patch.object(write_log, 'fingerprint', side_effect=AssertionError('rehashed')):
+            self.assertEqual(write_log.observe(self.repo, log, state), first)
+        # Same size, mtime put back: only ctime moves, and that must be enough.
+        before = self.policy.stat()
+        self.policy.write_text('dirty two')
+        os.utime(self.policy, ns=(before.st_atime_ns, before.st_mtime_ns))
+        self.assertNotEqual(write_log.observe(self.repo, log, state), first)
+
     def test_orphaned_snapshot_is_pruned_after_a_day(self):
         state = Path(self.env['CHEWBACCA_SESSION_STATE'])
         self.hook('PreToolUse', call='never-finished')

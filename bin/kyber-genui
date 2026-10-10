@@ -38,6 +38,11 @@ an exemplar, preset or promoted framework the request matches near-exactly,
 and Tier 1 has Jev pick an archetype and a source, then lays the panel out
 from the shape of the data that came back. GENUI_TIERS=0,1,2 picks which run.
 
+A request no source on this Mac holds is answered, never refused: a live
+fact from the web with its sources, stable knowledge from the model, and a
+personal record nothing here holds gets one line naming the connection it
+would take (bin/lib/glass_answer.py).
+
 Design and sources: docs/reference/GENUI.md.
 """
 
@@ -63,6 +68,8 @@ from typing import Any, Callable
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "bin" / "lib"))
 import genui_tiers as tiers  # noqa: E402
+import glass_answer  # noqa: E402
+import glass_search  # noqa: E402
 
 GENUI = ROOT / "config" / "genui"
 CATALOG_PATH = GENUI / "catalog.json"
@@ -70,11 +77,6 @@ POLICY_PATH = GENUI / "policy.json"
 EXEMPLARS_PATH = GENUI / "exemplars.json"
 FRAMEWORKS_PATH = GENUI / "frameworks.json"
 COVERS_PATH = GENUI / "covers.json"
-GLASS_SEARCH = ROOT / "bin" / "lib" / "glass_search.py"
-# The no-source card's one button. hud-listen answers it with its own glass
-# search (search_on_glass), so it is not in policy.json: a model may never
-# draw it, and the validator refuses it on any layout a model writes.
-SEARCH_ACTION = "genui-search"
 HUD_DOC = ROOT / "hud" / "CLAUDE.md"
 RENDERER = ROOT / "hud" / "Sources" / "KyberKit" / "SurfaceView.swift"
 SOCKET = os.environ.get("BOB_HUD_SOCKET", str(Path.home() / ".bob" / "hud.sock"))
@@ -1434,6 +1436,7 @@ class Run:
     no_source: bool = False
     say: str = ""
     gate: dict = field(default_factory=dict)
+    answer: dict = field(default_factory=dict)  # the open answer, when no source on this Mac holds it
 
 
 class Gate:
@@ -1463,7 +1466,10 @@ class Gate:
         if source in self.verdicts:
             return self.verdicts[source]
         verdict = self.code(source)
-        if verdict.ok is None and self.ask is not None and source in self.queries:
+        # Undecided, or a code no resting on one word, goes to Jev. "pull up
+        # that thing Sagar sent" was refused for `person` on `sent` alone
+        # (labelled 30, #30). Without Jev the code no stands.
+        if (verdict.ok is None or verdict.weak) and self.ask is not None and source in self.queries:
             started = time.monotonic()
             asked = tiers.ask_relevance(self.request, source, self.queries[source].description, self.table,
                                         self.ask)
@@ -1551,38 +1557,51 @@ def fallback_lines(request: str, why: str) -> list[str]:
     ]
 
 
-def offer_path(surface_name: str) -> Path:
-    return STATE / f"offer-{surface_name}.json"
+def web_search(query: str) -> glass_search.Result:
+    """The glass search, unless HUD_SEARCH=off, in which case the model answers instead."""
+    if os.environ.get("HUD_SEARCH", "on") == "off":
+        return glass_search.Result(query=query, error="web search is off (HUD_SEARCH=off)")
+    return glass_search.search(query)
+
+
+# Tests swap these: the search, and the model the open answer asks.
+WEB_SEARCH: Callable[[str], glass_search.Result] = web_search
+
+
+def answer_model(model: Callable[..., str]) -> Callable[[str, str], str]:
+    """The layout model's runtime, asked for plain text: same command, same no-tools flags."""
+    if model is stream_model:
+        return lambda prompt, system: stream_model(prompt, system, lambda _line: None,
+                                                   timeout=glass_answer.MODEL_TIMEOUT_S)
+    return lambda prompt, system: model(prompt, system, lambda _line: None)
 
 
 def answer_no_source(run: Run, verdict: tiers.Verdict | None, sink: Sink, surface_name: str,
-                     table: dict) -> None:
-    """No source on this Mac answers the request: one sentence for the pill, and at most one press.
+                     table: dict, model: Callable[..., str] | None = None) -> None:
+    """No source on this Mac holds the request. Ask for a missing argument, or answer it openly.
 
     Never a panel about the wrong thing (docs/reference/GENUI.md, "Relevance
-    gate"). With glass search on, the card holds one button that searches the
-    web through hud-listen's own glass search; without it the card comes down
-    and the pill alone answers.
+    gate"), and never a refusal: a request that is a query's but lacks its
+    argument gets the question on the pill ("Which class?"); anything else
+    is answered from the web or the model (bin/lib/glass_answer.py).
     """
-    say, searchable = tiers.no_source_line(run.request, verdict, table)
-    searchable = searchable and GLASS_SEARCH.is_file() and os.environ.get("HUD_SEARCH", "on") != "off"
-    if searchable:
-        lines = ['c s Screen title="NOT ON THIS MAC"', "> s ws",
-                 f'c ws Button label="Search the web" action={SEARCH_ACTION} variant=primary']
-        try:
-            STATE.mkdir(parents=True, exist_ok=True)
-            offer_path(surface_name).write_text(json.dumps({"query": run.request, "say": say}), encoding="utf-8")
-        except OSError:
-            lines = [f"- {surface_name}"]
-    else:
-        lines = [f"- {surface_name}"]
-    sink.send(*lines)
     run.no_source = True
-    run.say = say
     run.final_valid = True
-    run.lines = lines
     run.queries = []
-    run.gate = {**(verdict.as_dict() if verdict else {}), "say": say, "search": searchable}
+    question = tiers.clarifying_question(verdict, table)
+    if question:
+        lines = [f"- {surface_name}"]
+        sink.send(*lines)
+        run.say = question
+        run.lines = lines
+        run.gate = {**(verdict.as_dict() if verdict else {}), "say": question, "path": "ask"}
+        return
+    found = glass_answer.answer(run.request, send=sink.send, model=answer_model(model or stream_model),
+                                search=WEB_SEARCH, title=title_guess(run.request), surface=surface_name)
+    run.say = found.say
+    run.lines = found.lines
+    run.answer = found.as_dict()
+    run.gate = {**(verdict.as_dict() if verdict else {}), "say": found.say, "path": found.path}
 
 
 def note_lines(resolver: Resolver, children: list[str], lines: list[str], keys: set[str]) -> list[str]:
@@ -1671,7 +1690,7 @@ def send_layout(surface: Surface, resolver: Resolver, data: dict[str, dict] | No
 def fast_path(request: str, run: Run, queries: dict[str, Query], resolver: Resolver,
               ms: Callable[[], float], enabled: set[int],
               classifier: Callable[..., dict | None] | None, gate: Gate | None = None,
-              surface_name: str = SURFACE) -> Surface | None:
+              surface_name: str = SURFACE, model: Callable[..., str] | None = None) -> Surface | None:
     """Tier 0 then Tier 1. A Surface on the glass, or None and a note on `run` saying why not.
 
     None with `run.no_source` set means the relevance gate answered instead:
@@ -1727,11 +1746,18 @@ def fast_path(request: str, run: Run, queries: dict[str, Query], resolver: Resol
         # lands on any query's declaration. A drawing still goes to the model.
         if choice.source == "none" and choice.archetype != "connections":
             near = tiers.covered_anywhere(request, gate.table, slots)
-            if not near:
+            # A live fact or a personal record (bin/lib/glass_answer.py `route`)
+            # is answered now even when a word lands on a declaration: "what's
+            # the score of the Dodgers game" spent 6.3 s on a layout the gate
+            # then refused, because `score` is a grades measure (labelled 30, #17).
+            kind = glass_answer.route(request)
+            if not near or kind in ("live", "personal"):
                 subject = tiers.subject_words(request, slots, set(gate.table.get("generic", [])))
                 answer_no_source(run, tiers.Verdict(
-                    False, "jev", f"Jev: no source fits ({choice.source_p:.2f}); no query declares "
-                    f"{', '.join(subject[:3]) or 'its words'}"), resolver.sink, surface_name, gate.table)
+                    False, "jev", f"Jev: no source fits ({choice.source_p:.2f}); "
+                    + (f"no query declares {', '.join(subject[:3]) or 'its words'}" if not near else
+                       f"{kind}, though {', '.join(near[:3])} declare a word")),
+                    resolver.sink, surface_name, gate.table, model)
                 return None
             run.tier_notes.append(f"gate: Jev said none, but {', '.join(near[:3])} declare its words")
         # A source that needs an argument the request never said: ask for it
@@ -1741,13 +1767,15 @@ def fast_path(request: str, run: Run, queries: dict[str, Query], resolver: Resol
                 gate.table.get("queries", {}).get(choice.source, {}).get("ask") and \
                 gate.code(choice.source).ok is not False:
             answer_no_source(run, tiers.Verdict(False, "code", reason, other=choice.source), resolver.sink,
-                             surface_name, gate.table)
+                             surface_name, gate.table, model)
             return None
         return None
     if gate is not None:
         # Jev's pick, refused by code: the request's words are another
         # query's. The model, behind the same gate, gets to bind that one.
         verdict = gate.code(plan.source)
+        if verdict.weak:
+            verdict = gate.check(plan.source)  # one stray word: Jev confirms or overrules
         if verdict.ok is False:
             run.choice["gate"] = verdict.as_dict()
             run.tier_notes.append(f"gate: {verdict.why}")
@@ -1795,7 +1823,7 @@ def generate(request: str, *, dry: bool = False, at: str | None = None, surface_
     # Jev is Tier 1's tool, so the gate asks it only when Tier 1 is on; with
     # GENUI_TIERS=2 the gate is code alone (the tests run that way, offline).
     gate = Gate(request, queries, (classifier or default_classifier()) if 1 in enabled else None)
-    known = fast_path(request, run, queries, resolver, ms, enabled, classifier, gate, surface_name)
+    known = fast_path(request, run, queries, resolver, ms, enabled, classifier, gate, surface_name, model)
     if run.no_source:
         run.tier = 1  # decided on Tier 1's Jev answer and code, before any model
         run.first_try_valid = True
@@ -1921,7 +1949,7 @@ def generate(request: str, *, dry: bool = False, at: str | None = None, surface_
     run.model_done_ms = ms()
 
     if refused:
-        answer_no_source(run, refused[0], sink, surface_name, gate.table)
+        answer_no_source(run, refused[0], sink, surface_name, gate.table, model)
         run.complete_ms = ms()
         if not dry:
             sink.close()
@@ -2116,12 +2144,16 @@ def run_eval(path: Path, out: Path | None, only: set[int] | None, live: bool) ->
             "display_problems": run.display_problems, "tier": run.tier, "tier_notes": run.tier_notes,
             "jev_ms": run.jev_ms, "choice": run.choice, "why": run.why,
             "model_calls": run.attempts, "no_source": run.no_source, "say": run.say, "gate": run.gate,
+            "answer": run.answer,
         }
-        if "expect" in item:
+        if "accept" in item:
+            row["path"] = answer_path(row)
+            row["grade"] = grade_open(row, item)
+        elif "expect" in item:
             row["grade"] = grade(row, item)
         rows.append(row)
         print(json.dumps({k: row.get(k) for k in ("n", "tier", "valid_after_repair", "fallback", "complete_ms",
-                                                   "queries", "choice", "say", "grade")}), flush=True)
+                                                   "queries", "choice", "say", "path", "grade")}), flush=True)
         if out:
             out.write_text(json.dumps({"rows": rows}, indent=2), encoding="utf-8")
     summary = bench_summary(rows)
@@ -2148,6 +2180,46 @@ def grade(row: dict, item: dict) -> str:
     return "right"
 
 
+REFUSAL = re.compile(r"\bI don't have\b.*\bon this Mac\b", re.I)
+
+
+def answer_path(row: dict) -> str:
+    """How a bench row answered: panel, drawing, ask, needs, weather, web, model, failed, or refused."""
+    say = row.get("say") or ""
+    if REFUSAL.search(say):
+        return "refused"
+    if row.get("no_source"):
+        gate = row.get("gate") or {}
+        return (row.get("answer") or {}).get("path") or gate.get("path") or "refused"
+    if row.get("fallback") or not row.get("valid_after_repair"):
+        return "failed"
+    return "panel" if row.get("queries") else "drawing"
+
+
+def grade_open(row: dict, item: dict) -> str:
+    """Grade one row against an open-answer label (config/genui/bench/sealed-2026-10-10c.json).
+
+    refused: "I don't have X on this Mac", or nothing answered. wrong-source: a
+    panel bound to a query the label does not list, or a question asking for
+    one. wrong-path: answered, but not by a path the label accepts (a drawing
+    counts as the model answering). right: everything else.
+    """
+    path = row.get("path") or answer_path(row)
+    if path in ("refused", "failed"):
+        return "refused"
+    expect = set(item.get("expect") or [])
+    bound = {q.split(":")[0] for q in row.get("queries") or []}
+    if path == "panel" and bound - expect:
+        return "wrong-source"
+    asked_for = (row.get("gate") or {}).get("other")
+    if path == "ask" and asked_for not in expect:
+        return "wrong-source"
+    accept = set(item.get("accept") or [])
+    if path == "drawing":
+        path = "model"
+    return "right" if path in accept else "wrong-path"
+
+
 def percentile(values: list[float], q: float) -> float | None:
     """Nearest-rank percentile: with 20 or 30 samples an interpolated p90 claims precision it lacks."""
     if not values:
@@ -2171,7 +2243,18 @@ def bench_summary(rows: list[dict]) -> dict:
     }
     graded = [r["grade"] for r in rows if "grade" in r]
     if graded:
-        out["grades"] = {g: graded.count(g) for g in ("right", "wrong-source", "refused")}
+        out["grades"] = {g: graded.count(g) for g in ("right", "wrong-source", "refused", "wrong-path")}
+    paths = [r["path"] for r in rows if r.get("path")]
+    if paths:
+        out["paths"] = {p: paths.count(p) for p in sorted(set(paths))}
+        out["answered"] = sum(1 for p in paths if p not in ("refused", "failed"))
+        out["refusal_lines"] = sum(1 for r in rows if REFUSAL.search(r.get("say") or ""))
+        by_path: dict[str, Any] = {}
+        for p in sorted(set(paths)):
+            times = [r["complete_ms"] for r in rows if r.get("path") == p]
+            by_path[p] = {"n": len(times), "median": percentile(times, 50), "p90": percentile(times, 90),
+                          "max": max(times)}
+        out["path_ms"] = by_path
     for tier in sorted({r["tier"] for r in rows}):
         sub = [r for r in rows if r["tier"] == tier]
         times = [r["complete_ms"] for r in sub]
@@ -2267,7 +2350,8 @@ def main(argv: list[str] | None = None) -> int:
         report = {k: getattr(run, k) for k in ("first_try_valid", "repaired", "fallback", "skeleton_ms",
                                                 "first_component_ms", "complete_ms", "problems",
                                                 "display_problems", "queries", "tier", "tier_notes",
-                                                "jev_ms", "choice", "why", "no_source", "say", "gate")}
+                                                "jev_ms", "choice", "why", "no_source", "say", "gate",
+                                                "answer")}
         print(json.dumps(report, indent=2) if args.json else
               f"{'valid' if run.final_valid else 'fallback'}"
               f"{' after repair' if run.repaired else ''}: first component {run.first_component_ms} ms, "
@@ -2325,8 +2409,16 @@ def main(argv: list[str] | None = None) -> int:
         if args.regrade:
             labels = {i: item for i, item in enumerate(load_json(Path(args.requests))["requests"], 1)}
             rows = load_json(Path(args.regrade))["rows"]
-            rows = [dict(r, grade=grade(r, labels[r["n"]])) if "expect" in labels.get(r["n"], {}) else r
-                    for r in rows]
+            regraded = []
+            for r in rows:
+                label = labels.get(r["n"], {})
+                if "accept" in label:
+                    r = dict(r, path=answer_path(r))
+                    r["grade"] = grade_open(r, label)
+                elif "expect" in label:
+                    r = dict(r, grade=grade(r, label))
+                regraded.append(r)
+            rows = regraded
             print(json.dumps(bench_summary(rows), indent=2))
             return 0
         only = {int(x) for x in args.only.split(",")} if args.only else None
@@ -2442,15 +2534,6 @@ def handle_event(action: str, component: str, surface: str | None = None) -> int
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
         print(f"not a surface name: {name}", file=sys.stderr)
         return 2
-    if action == SEARCH_ACTION:
-        # hud-listen answers this press with its own glass search; this only
-        # says what the offer was for, so the search runs on what was asked.
-        try:
-            print(json.loads(offer_path(name).read_text(encoding="utf-8"))["query"])
-        except (OSError, ValueError, KeyError):
-            print(f"no search offered on {name}", file=sys.stderr)
-            return 1
-        return 0
     if action not in POLICY["actions"]:
         print(f"not a genui action: {action}", file=sys.stderr)
         return 2

@@ -599,6 +599,24 @@ def genui_wiring(tmp: Path) -> None:
               listener.to_assistant.call_args.args[0] == "plan my Tuesday")
     check("a plain question is not a panel", not listener.genui_request("tell me about the Civil War", False))
 
+    # No source on this Mac: kyber-genui answered from the web on the search
+    # surface. The voice says its sentence, and the source rows open on a press.
+    class Answered(Done):
+        stderr = json.dumps({"no_source": True, "say": "Apple closed at 231 dollars, per nasdaq.com.",
+                             "answer": {"path": "web", "surface": "search", "sources": [
+                                 {"id": "src-0", "url": "https://www.nasdaq.com/market-activity/stocks/aapl"},
+                                 {"id": "src-1", "url": "file:///etc/hosts"}]}})
+    with patch.object(m.subprocess, "run", lambda argv, **kw: Answered(0)), \
+            patch.object(m.threading, "Thread") as thread:
+        thread.side_effect = lambda target, daemon=True, args=(): type("T", (), {"start": lambda self: target()})()
+        listener.genui_request("pull up Apple's stock price", False)
+    check("a web answer is spoken, not 'It's on the glass'",
+          listener.speak.call_args.args[0] == "Apple closed at 231 dollars, per nasdaq.com.",
+          listener.speak.call_args)
+    check("its source rows open on a press, and a file: URL is dropped",
+          listener.search_rows == {"src-0": "https://www.nasdaq.com/market-activity/stocks/aapl"}
+          and listener.search_open, getattr(listener, "search_rows", None))
+
     import route
     seen = {}
 

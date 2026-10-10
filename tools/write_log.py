@@ -231,6 +231,17 @@ def observe(repo, log, state):
         if entry[:1] in (b'R', b'C') or entry[1:2] in (b'R', b'C'):
             names.add(os.fsdecode(fields[i]))
             i += 1
+    # A content hash of every dirty file, before AND after every tool call,
+    # cost 0.69s per observation of the brain on 2026-10-10 (3,093 dirty files)
+    # although almost none of them changed between calls. Like git's own index,
+    # reuse a digest while the file's inode, size, mtime and ctime are all
+    # unchanged; any write moves ctime, so a reused digest is never stale.
+    cache_path = state / ('.digests-' + hashlib.sha256(str(repo).encode()).hexdigest()[:16] + '.cache')
+    try:
+        cache = json.loads(cache_path.read_text())
+    except (OSError, ValueError):
+        cache = {}
+    fresh = {}
     result = {}
     for name in names:
         path = repo / name
@@ -240,8 +251,30 @@ def observe(repo, log, state):
             continue
         if '.chewbacca' in path.parts:
             continue
-        result[str(path)] = fingerprint(path)
+        key = stat_key(path)
+        hit = cache.get(str(path))
+        if key and hit and hit[0] == key:
+            result[str(path)] = hit[1]
+        else:
+            result[str(path)] = fingerprint(path)
+        if key:
+            fresh[str(path)] = [key, result[str(path)]]
+    if fresh != cache:
+        try:
+            save(cache_path, fresh)
+        except OSError:
+            pass
     return result
+
+
+def stat_key(path):
+    try:
+        m = path.lstat()
+    except OSError:
+        return None
+    if not stat.S_ISREG(m.st_mode):
+        return None
+    return f'{m.st_ino}:{m.st_size}:{m.st_mtime_ns}:{m.st_ctime_ns}:{m.st_mode}'
 
 
 def save(path, document):

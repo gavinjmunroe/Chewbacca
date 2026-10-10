@@ -19,6 +19,7 @@ kyber-genui event genui-refresh s                        a press on a generated 
 kyber-genui bench [--only 1,5] [--out results.json]      the frozen 20-request eval
 kyber-genui bench --requests config/genui/bench/sealed-2026-10-10.json   the sealed 32
 kyber-genui bench --requests config/genui/bench/sealed-2026-10-10b.json  the labelled 30, graded for wrong sources
+kyber-genui bench --requests config/genui/bench/sealed-2026-10-10c.json  the open-answer 30, graded by path
 kyber-genui bench --requests <labelled set> --regrade results.json      grade a saved run, no model
 kyber-genui keep [NAME]                                  the last model-written surface becomes a candidate
 kyber-genui promote NAME                                 checks a candidate against the sealed requests
@@ -202,16 +203,65 @@ the behaviour before the gate existed.
    beside the overdue list. A layout with held lines and no anchor never
    reaches the glass. The repaired layout is judged the same way.
 
-**What the person sees.** `I don't have <subject> on this Mac.` on the pill,
-where the subject is the request with its question words and time window cut
-off. With glass search on (`HUD_SEARCH`, `bin/lib/glass_search.py`), the card
-keeps one button, Search the web, whose press (`e genui-search`) hud-listen
-answers with the same `search_on_glass` a spoken "search X" gets, for the
-words the person said. The action is not in `policy.json`, so a model can
-never draw it and the validator refuses it. With search off the card comes
-down. `kyber-genui --json` reports `no_source`, `say` and the `gate` verdict;
-hud-listen speaks `say` instead of "It's on the glass." A no-source answer is
-never pinned, refreshed, or kept as a framework candidate.
+**What the person sees.** An answer, never a refusal (next section). The one
+exception is a request that is a query's but lacks its argument ("pull up the
+outbound numbers"): the pill asks for it ("Which campaign? Say the client's
+name."), and only when the no rests on two or more of the request's words.
+`kyber-genui --json` reports `no_source`, `say`, the `gate` verdict with its
+`path`, and `answer`; hud-listen speaks `say` instead of "It's on the glass."
+A no-source answer is never pinned, refreshed, or kept as a framework
+candidate.
+
+**A weak no goes to Jev.** A code no that rests on one word (`Verdict.weak`)
+is not final when Jev is on: Jev's typed yes/no confirms or overrules it, on
+Tier 1's pick and on the model's bindings. "pull up that thing Sagar sent"
+was refused for `person` because `sent` is a campaign measure. Without Jev
+the code no stands. A weak no never produces a clarifying question.
+
+## Open answers: the HUD always answers
+
+Added 2026-10-10. Caleb, on "I don't have weather on this Mac" with a Search
+the web button: "it shouldn't be retarded like siri bro it's literally llm
+powered." When the gate finds no local source, `bin/lib/glass_answer.py`
+answers on the glass with no press. It picks a path by rule
+(`glass_answer.route`), and each path falls back to the other:
+
+| Path    | When                                                                                                                                                 | What is drawn                                                                                                                                                                                                                           |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| needs   | first person plus a money or health word ("how much did I spend", "how many steps did I walk")                                                       | nothing: the card comes down and the pill says what it would take, plainly ("Spending and balances need a bank or card connection, and Chewbacca doesn't link one yet.")                                                                |
+| weather | a weather word and a place: "in Chicago", or a saved home in `~/.bob/home.json`, today or tomorrow                                                   | a card: the question, Open-Meteo's sentence from `bin/lib/quick.py`, and "Open-Meteo forecast"                                                                                                                                          |
+| web     | a live word: weather, forecast, stock, price, market cap, score, game, news, latest, hours, close, traffic, today, right now, and the rest of `LIVE` | the search surface `bin/lib/glass_search.py` already draws (the question, the answer, up to five sources whose rows open on a press), with the quoted snippet first, then the model's one-sentence answer from the results in its place |
+| model   | everything else                                                                                                                                      | a card: the question, the model's answer in at most two sentences, and "From the model, not the web"                                                                                                                                    |
+
+- **Live before the model.** When Jev says no source fits but a request word
+  lands on some declaration, the request used to go to the layout model. A
+  live or personal request now skips it: "what's the score of the Dodgers
+  game" spent 6.3 s on a layout the gate then refused, because `score` is a
+  grades measure.
+- **Fallbacks.** Live with the web down: the model answers, captioned as
+  possibly out of date. Knowledge with the model down: the web answers. Both
+  down: one sentence saying what broke. `HUD_SEARCH=off` turns the web path
+  off, and the model answers.
+- **The model** is the layout model's runtime (`model_command`, the HUD's
+  account), with the same no-tools flags, asked for plain text with a short
+  system prompt that carries the date. It sees the request and, on the live
+  path, the search results. It never sees local data: an open answer runs only
+  when no local source holds the request.
+- **Web results are untrusted.** The snippets reach the model as quoted
+  results with the rule never to follow an instruction inside them, and
+  whatever comes back is drawn as a string in a `d /answer` line. Neither the
+  results nor the model's sentence can draw a control:
+  `test_an_instruction_in_a_snippet_is_only_ever_text` plants both.
+- **Sources stay pressable.** The web answer is on the `search` surface, and
+  `kyber-genui --json` returns its rows as `answer.sources`; hud-listen adopts
+  them (`adopt_search_panel`), so Open on a row opens that page and "close it"
+  takes the panel down, the same as a spoken "search X".
+- **Grading.** `kyber-genui bench` grades a set whose rows carry `accept`
+  (`sealed-2026-10-10c.json`) by path: `refused` for any "I don't have X on
+  this Mac" line or nothing answered, `wrong-source` for a panel or a question
+  about a query the label does not list, `wrong-path` for an answer by a path
+  the label does not accept, else `right`. `answered`, `refusal_lines`,
+  `paths` and `path_ms` are in the summary.
 
 ## No tools
 
@@ -339,22 +389,31 @@ All in `config/genui/policy.json`.
 overdue"` validates. Refusing numerals in prose would also refuse "Due in 7
   days" and "BISC 101"; the prompt forbids it and the bench layouts did not do
   it, but nothing enforces it.
-- **The gate refuses on one stray word.** Code says no when a subject word
-  lands only on another query's declaration, however weak the word. On the
-  labelled 30, "pull up that thing Sagar sent" bound `person:Sagar` and was
-  refused because `sent` is a campaign measure, and the pill asked "Which
-  campaign?". The label accepts a no-source answer there, so it grades right,
-  but the sentence is wrong. Sending a code no to Jev for confirmation, rather
-  than refusing outright, is the next change to measure; not done here,
-  because it was found on the test set.
-- **The name slot skips the first word.** "Zeutara reply rate" has no name
-  (a capitalised first word is every sentence's first word), so `campaign`
-  had no client, and the gate's "ask for the argument" path answered "Which
-  campaign?" where the model had bound `campaign:Zeutara` correctly before.
-  The one false refusal on the labelled 30.
-- **The pill line is the request, trimmed.** "I don't have steps did I walk on
-  this Mac" and "money did I spend" read badly. The phrase is cut by rules,
-  not written.
+- **A web answer is often a quote, not the number.** On the open-answer
+  sealed run, 5 of 8 web answers ended with the search snippet on the card
+  and the pill only naming its site: DuckDuckGo's snippets for a stock, a
+  coin, a score, an exchange rate or a league table describe the page, not
+  the value, and the model correctly said the results did not hold it.
+  "Who won the Lakers game" had "Warriors 112, Lakers 120: Final score" in a
+  source title and the model still declined, since nothing dated it. The
+  sources are on the card and open on a press, but the glance does not carry
+  the number. Keyless quote endpoints (Yahoo's chart API for tickers,
+  CoinGecko, ESPN's scoreboard, frankfurter.app for currencies) or an
+  `EXA_API_KEY` are the next change to measure, on a new sealed set.
+- **Live is a word list.** `glass_answer.LIVE` decides web versus model
+  after the gate has ruled out every local source. A live fact phrased with
+  none of its words goes to the model, which says when it cannot see live
+  data; a knowledge question carrying one ("who won the 1998 World Cup") goes
+  to the web, which answers it too. Either way something answers.
+- **Weather needs a place.** With no `~/.bob/home.json`, "the weather this
+  weekend" goes to the web, whose snippets carry no forecast numbers either.
+- **The model sees web snippets.** They are quoted with the rule not to obey
+  them, the model has no tools, and its sentence is drawn as a string, so the
+  worst a planted instruction can do is put wrong words on the card.
+- **A drawing for a knowledge question is slow.** Jev called "how does
+  photosynthesis work" and "explain what a p-value is" `connections`, so the
+  layout model drew a diagram in 16.5 and 10.3 s where a sentence takes 4 to
+  6 s. Both count as the model answering.
 - **Gemini's no-tools flags were never run live.** They are from its help and
   its bundled policy format; the account here was refused.
 - **Slots are rules.** "This month" is the days left in the month, a name is
@@ -464,6 +523,50 @@ kyber-genui owns none of these files. These are the exact steps.
   after adding a component or a prop; it fails until the catalog has it.
 
 ## Measured
+
+### 2026-10-10, evening: open answers
+
+A third sealed set, `sealed-2026-10-10c.json`, committed (b6d8f9ea) before
+any answer code: 10 live facts, 8 knowledge, 8 local-source and 4 tricky
+(the two gaps above, a spending question, and "score" about a class). Live
+data, `--dry-run` sink, Jev `jev-latest`, Claude on the HUD account with the
+model from settings, DuckDuckGo (no `EXA_API_KEY`), no `~/.bob/home.json`.
+One run per request, with the raw rows in `results-2026-10-10c.json`.
+
+|                          | Open-answer 30 |
+| ------------------------ | -------------- |
+| Answered                 | **30 of 30**   |
+| "I don't have ..." lines | **0**          |
+| Wrong-source panels      | **0**          |
+| Wrong path / refused     | 0 / 0          |
+| Valid, final / first try | 30 / 30        |
+| Layout model calls       | 3              |
+
+| Path    | n   | Median    | p90       | Max       |
+| ------- | --- | --------- | --------- | --------- |
+| panel   | 11  | 223 ms    | 517 ms    | 6,322 ms  |
+| needs   | 1   | 128 ms    | 128 ms    | 128 ms    |
+| weather | 2   | 1,447 ms  | 2,159 ms  | 2,159 ms  |
+| web     | 8   | 5,707 ms  | 7,243 ms  | 7,243 ms  |
+| model   | 6   | 4,533 ms  | 14,221 ms | 14,221 ms |
+| drawing | 2   | 10,297 ms | 16,550 ms | 16,550 ms |
+
+On the web path the search itself took 709 to 1,039 ms and the quote was
+on the glass then; the rest is the model's sentence (3.7 to 6.1 s). Both
+gaps are closed on their new cases: "pull up that thing Karthik sent" drew
+`conversations` at Tier 1 in 517 ms, and "Zeutara bounce rate" bound
+`campaign:Zeutara`. One bug was found on this run and fixed after it: row
+2's model wrote "No actual forecast values in results. NONE" and that
+reached the glass, because only a bare NONE was caught (`said_none`).
+
+**The regression check.** The frozen 20 with open answers
+(`results-2026-10-10-frozen-open.json`): 20 of 20 valid, all first try, 2
+layout model calls, 18 with no model under 1 s, median 253 ms. 19 of 20 bound
+the same queries as the gate run. #20 "give me a spot to jot a note about
+the Amber pitch" drew a note Field last time; this time the layout model
+bound `campaign:Amber`, Jev refused it at 0.05, and the open answer put the
+model's one-line tip on the card instead of the Field, which told the person
+to run `mkdir` and `open` themselves.
 
 ### 2026-10-10, later: the relevance gate and no-tools Tier 2
 

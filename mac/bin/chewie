@@ -45,7 +45,10 @@ chewie - control a Mac from an agent
   chewie shot   [--app NAME] [--out PATH]
                                      screenshot (layer 5) - only when 3 cannot see it
   chewie click  <ref|label> [--app NAME]
-                                     click an element by ref or label
+                                     click an element by ref or label (moves the real mouse)
+  chewie app    see|press|set|key|menu|shot|windows|find|do ...
+                                     drive one app in the BACKGROUND: no mouse, no focus
+                                     steal, hidden windows too. Prefer it over click.
   chewie type   <text> [--paste]     synthetic keystrokes, or clipboard paste
   chewie run    <script> [--js]      AppleScript (layer 2), or JXA with --js
   chewie texts  [--days N] [--who NAME] [--unanswered] [--json]
@@ -302,6 +305,45 @@ cmd_terminal() {
   python3 "$py" ${JSON:+--json} "$@"
 }
 
+# ---------- app (layer 3, in the background) ----------
+# appctl drives one app through accessibility without moving the mouse or
+# raising a window. Built from source on first use and whenever the source
+# changes, so a pull never runs a stale binary.
+appctl_bin() {
+  local src="$CHEWIE_ROOT/appctl/appctl.swift" out="$HOME/.cache/chewbacca/bin/appctl"
+  local stamp="$out.sha"
+  [ -f "$src" ] || die "missing $src"
+  local sum; sum=$(shasum "$src" | cut -d' ' -f1)
+  if [ ! -x "$out" ] || [ "$(cat "$stamp" 2>/dev/null)" != "$sum" ]; then
+    have swiftc || die "swiftc missing: xcode-select --install"
+    mkdir -p "$(dirname "$out")"
+    swiftc -swift-version 5 -O "$src" -o "$out.tmp" >&2 || die "appctl build failed"
+    mv "$out.tmp" "$out" && echo "$sum" > "$stamp"
+  fi
+  printf '%s' "$out"
+}
+
+cmd_app() {
+  local bin; bin=$(appctl_bin) || exit 1
+  case "${1:-}" in
+    find|do)
+      local mode="$1"; shift
+      [ "$DRY" = 1 ] && { echo "[dry-run] app $mode $*"; return 0; }
+      python3 "$LIB/app_find.py" "$mode" "$bin" "$@" ;;
+    ""|-h|--help) "$bin"
+      cat <<'MORE'
+      find <app> "<what you want>"      which control does it: exact label, else Jev picks
+      do <app> "<what you want>" [--text T] [--yes]
+                                        find, then press it (or set T); same gate as press
+MORE
+      ;;
+    press|set|key|menu|raise)
+      if [ "$DRY" = 1 ]; then echo "[dry-run] appctl $*"; return 0; fi
+      "$bin" "$@" ;;
+    *) "$bin" "$@" ;;
+  esac
+}
+
 # ---------- run (layer 2) ----------
 cmd_run() {
   local script="${1:-}"; shift || true
@@ -317,6 +359,7 @@ case "${1:-}" in
   see)    shift; cmd_see "$@" ;;
   shot)   shift; cmd_shot "$@" ;;
   click)  shift; cmd_click "$@" ;;
+  app)    shift; cmd_app "$@" ;;
   type)   shift; cmd_type "$@" ;;
   run)    shift; cmd_run "$@" ;;
   texts)  shift; cmd_texts "$@" ;;

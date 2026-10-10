@@ -313,10 +313,20 @@ printf '%s' "$out" | grep -q "AADSTS700016" || no "a blocked app did not print t
 printf '%s' "$out" | grep -q "BLOCKED" || no "a blocked app was not reported BLOCKED: $out"
 [ -s "$T/open.log" ] && no "a blocked app still opened a browser page"
 has_item && no "a blocked login wrote a keychain item"
-out="$(FAKE_MSAL_MODE=consent off login 2>&1)"; rc=$?
+# Once the tenant has refused, a second login stops before asking Microsoft
+# for a code or opening a page: no sign-in page keeps reappearing for a login
+# that cannot succeed. --retry clears the hold.
+[ -s "$T/home/.chewbacca/office-hold" ] || no "a refused sign-in did not leave a hold"
+: > "$T/open.log"; : > "$T/msal.log"
+out="$(off login 2>&1)"; rc=$?
+[ "$rc" = 4 ] || no "login under a hold exited $rc, want 4: $out"
+printf '%s' "$out" | grep -q "AADSTS700016" || no "login under a hold did not say why: $out"
+[ -s "$T/open.log" ] && no "login under a hold opened a browser page"
+[ -s "$T/msal.log" ] && no "login under a hold asked Microsoft for a device code"
+out="$(FAKE_MSAL_MODE=consent off login --retry 2>&1)"; rc=$?
 [ "$rc" = 4 ] && printf '%s' "$out" | grep -q "AADSTS65001" || no "admin consent required did not print AADSTS65001 and stop: $out"
 has_item && no "a login that needed consent wrote a keychain item"
-out="$(FAKE_MSAL_MODE=expired off login 2>&1)"; rc=$?
+out="$(FAKE_MSAL_MODE=expired off login --retry 2>&1)"; rc=$?
 [ "$rc" = 4 ] || no "an expired code did not stop with 4 (rc $rc): $out"
 printf '%s' "$out" | grep -q "code expired" || no "an expired code was not reported as expired: $out"
 printf '%s' "$out" | grep -q "Continue polling" && no "an expired code still printed MSAL's 'Continue polling': $out"
@@ -324,7 +334,7 @@ has_item && no "an expired login wrote a keychain item"
 
 # ── login: the device-code message, exactly, and the page opened ────────────
 : > "$T/open.log"; : > "$T/msal.log"
-off login > "$T/login.out" 2> "$T/login.err"; rc=$?
+off login --retry > "$T/login.out" 2> "$T/login.err"; rc=$?
 [ "$rc" = 0 ] || no "login exited $rc: $(cat "$T/login.out" "$T/login.err")"
 grep -qxF "To sign in, use a web browser to open the page https://microsoft.com/devicelogin and enter the code FAKECODE1 to authenticate." "$T/login.out" \
   || no "login did not print Microsoft's device-code message exactly: $(cat "$T/login.out")"

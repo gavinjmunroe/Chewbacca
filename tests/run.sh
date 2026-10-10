@@ -471,6 +471,7 @@ fi
 
 # ── tools ─────────────────────────────────────────────────────────────────────
 if group "tools"; then
+  check  "chewie app: background driver refuses Return without --yes, Jev picks map back" python3 "$ROOT/tests/test_appctl.py"
   check "counts handles conflict stages and whitespace paths" python3 "$ROOT/tests/test_counts.py"
   check  "counts --check passes on a clean tree" python3 "$ROOT/tools/counts.py" --check
   check  "counts --json is valid" bash -c "python3 '$ROOT/tools/counts.py' --json | python3 -m json.tool"

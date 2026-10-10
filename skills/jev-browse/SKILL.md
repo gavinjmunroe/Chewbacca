@@ -46,6 +46,12 @@ The wrapper, not the goal text, refuses any click whose label reads like send, s
 
 Owned tabs open in the background of the Chrome profile Browser Harness attaches to. For client work, that should be the profile signed in to the client's account.
 
+## Timed tickets and reservations
+
+- Check availability at the real party size. On 2026-10-10 the Lucas Museum showed a Thu 3:30 slot open for 1 person and sold out for 2, and Caleb's plan was for him and Mark. Ask for the headcount up front if it isn't known, and give the per-person price and the total.
+- Say what the venue's hours rule out before listing slots. He asked for Thu or Mon 4-5, and those days close at 5 with 3:30 as the last entry.
+- Leave the selection in the cart page and stop. Payment is his: state it as a BLOCKED: line so handoff-guard doesn't refuse the reply and send it to him twice.
+
 ## After a run
 
 When a site taught you something (a URL, a control's real name, a mistake), add it to `library/maps/<host>/MAP.md` the same way hud-agent.md asks for any website task.

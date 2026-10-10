@@ -50,6 +50,10 @@ HOME = Path.home()
 # the generic blob rules see its pieces, and the specific vendor prefixes go
 # before the hex and base64 catch-alls so the label says what leaked.
 _SECRET_RULES = [
+    # scheme://user:password@host, and scheme://longtoken@host. First, so the
+    # email rule never claims "password@host" and leaves the user name beside it.
+    ("URL_USERINFO", re.compile(
+        r"(?i)\b([a-z][a-z0-9+.-]*://)(?:[^\s/@:'\"<>]+:[^\s/'\"<>]*|[^\s/@:'\"<>]{16,})@")),
     ("PRIVATE_KEY", re.compile(
         r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.S)),
     ("BEARER", re.compile(r"(?i)\b(bearer|basic)(\s+)[A-Za-z0-9._~+/=-]{12,}")),
@@ -85,7 +89,9 @@ def redact(text: str) -> str:
     if not text:
         return text
     for label, rx in _SECRET_RULES:
-        if label == "BEARER":
+        if label == "URL_USERINFO":
+            text = rx.sub(lambda m: f"{m.group(1)}[REDACTED]@", text)
+        elif label == "BEARER":
             text = rx.sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", text)
         elif label == "AUTH":
             text = rx.sub(lambda m: f"{m.group(1)}[REDACTED]", text)
@@ -281,30 +287,42 @@ def parse_ts(s) -> float | None:
 _TOKEN_CH = re.compile(r"[A-Za-z0-9_+/=.@-]")
 
 
-def snippet(text: str, pos: int, width: int) -> str:
-    """A redacted window around pos. The slice is cut wider than shown and
-    redacted whole, and a token cut by either edge is dropped, so a secret is
-    never printed in part."""
-    lo, hi = max(0, pos - 4 * width), min(len(text), pos + 4 * width)
-    piece = text[lo:hi]
+def snippet(text: str, pos: int, width: int, term: str = "") -> str:
+    """A redacted window around pos.
+
+    Redaction runs on a whole region first, never on a piece cut to the
+    window: a region boundary snaps to a line break, a token cut by a boundary
+    is dropped, and the region reaches far past what is shown. Only after
+    that is the window cut, from the redacted text, so a secret is never split
+    before the regexes see it. Nothing is inserted into the text before
+    redaction either: a marker inside a key would break the match. The match
+    is found again in the redacted text, and when it fell inside a secret the
+    window sits where it was, proportionally."""
+    reach = max(20_000, 10 * width)
+    lo, hi = max(0, pos - reach), min(len(text), pos + reach)
     if lo > 0:
+        nl = text.find("\n", lo, pos)
+        lo = nl + 1 if nl >= 0 else lo
+    if hi < len(text):
+        nl = text.rfind("\n", pos, hi)
+        hi = nl if nl > pos else hi
+    piece = text[lo:hi]
+    rel = pos - lo
+    if lo > 0 and text[lo - 1] != "\n":
         i = 0
         while i < len(piece) and _TOKEN_CH.match(piece[i]):
             i += 1
-        piece, pos = piece[i:], pos - lo - i
-    else:
-        pos -= lo
-    if hi < len(text):
+        piece, rel = piece[i:], rel - i
+    if hi < len(text) and text[hi] != "\n":
         j = len(piece)
         while j > 0 and _TOKEN_CH.match(piece[j - 1]):
             j -= 1
         piece = piece[:j]
-    marker = "\x00"
-    pos = max(0, min(pos, len(piece)))
-    red = redact(piece[:pos] + marker + piece[pos:])
-    at = red.find(marker)
-    red = red.replace(marker, "")
-    at = at if at >= 0 else 0
+    rel = max(0, min(rel, len(piece)))
+    red = redact(piece)
+    at = red.lower().find(term.lower()) if term else -1
+    if at < 0:
+        at = int(rel * len(red) / len(piece)) if piece else 0
     a, b = max(0, at - width), min(len(red), at + width)
     # Snap to word edges so the view does not start or end mid-word.
     while a > 0 and not red[a - 1].isspace() and at - a < width + 30:
@@ -313,6 +331,12 @@ def snippet(text: str, pos: int, width: int) -> str:
         b += 1
     view = " ".join(red[a:b].split())
     return ("..." if a > 0 or lo > 0 else "") + view + ("..." if b < len(red) or hi < len(text) else "")
+
+
+def render(hit: dict) -> dict:
+    """The last step before stdout: every string field redacted, not only the
+    snippet. A repo, path or session id comes from the transcript too."""
+    return {k: redact(v) if isinstance(v, str) else v for k, v in hit.items()}
 
 
 def search_file(kind: str, path: Path, terms: list[str], phrase: bool, needles: list[bytes],
@@ -380,7 +404,7 @@ def search_file(kind: str, path: Path, terms: list[str], phrase: bool, needles: 
                     "time": datetime.fromtimestamp(ts, timezone.utc).isoformat().replace("+00:00", "Z") if ts else "",
                     "repo": proj,
                     "role": r,
-                    "snippet": snippet(text, pos, width),
+                    "snippet": snippet(text, pos, width, terms[0]),
                     "file": str(path),
                 }
 
@@ -439,6 +463,7 @@ def cmd_search(a: argparse.Namespace) -> int:
         if len(hits) >= a.limit:
             break
     hits.sort(key=lambda h: h["time"], reverse=True)
+    hits = [render(h) for h in hits]
     elapsed = time.monotonic() - started
     if a.json:
         for h in hits:

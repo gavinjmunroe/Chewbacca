@@ -92,6 +92,40 @@ edge_text = ("a" * 10) + " " + FAKE["github"] + " needle tail"
 snip2 = ah.snippet(edge_text, edge_text.find("needle"), 20)
 check("snippet never prints a cut secret", FAKE["github"][:12] not in snip2, snip2)
 
+# URL userinfo: every scheme a credential rides in on.
+for url, host in [
+    ("postgres://admin:FakePw0rd123@db.example.com:5432/app", "db.example.com"),
+    ("postgresql://svc:fake-pass@10.0.0.5/app", "10.0.0.5"),
+    ("mysql://root:notreal99@mysql.example.com/x", "mysql.example.com"),
+    ("redis://default:redisfakepw@cache.example.com:6379", "cache.example.com"),
+    ("mongodb+srv://mongo:fakeMongoPw@cluster0.example.net/db", "cluster0.example.net"),
+    ("amqp://guest:fakeguestpw@mq.example.com:5672/", "mq.example.com"),
+    ("https://deploy:fakehttpspw@example.com/repo.git", "example.com"),
+    ("git://bot:fakegitpw@git.example.com/repo.git", "git.example.com"),
+    ("ssh://git:fakesshpw@git.example.com/repo.git", "git.example.com"),
+]:
+    scheme = url.split("://")[0]
+    out = ah.redact(f"connect with {url} now")
+    password = url.split("://")[1].split("@")[0].split(":")[1]
+    check(f"redacts {scheme} URL credentials", password not in out and f"{scheme}://[REDACTED]@{host}" in out, out)
+
+# Bypass routes: a key name cut off by the window edge, and a query that
+# lands inside the secret itself, must still come out redacted.
+pad = "word " * 2000
+cut_kv = pad + "password = FakeKvSecretValue77" + " filler" * 20 + " needle here"
+s = ah.snippet(cut_kv, cut_kv.find("needle"), 300)
+check("snippet redacts a key=value whose key the window would cut", "FakeKvSecretValue77" not in s, s)
+cut_url = pad + "x" * 3 + " postgres://u:FakeUrlPw42@h.example.com/db" + " more" * 5 + " needle"
+s = ah.snippet(cut_url, cut_url.find("needle"), 60)
+check("snippet redacts a URL credential near the window edge", "FakeUrlPw42" not in s, s)
+inside = "token here " + FAKE["openai"] + " end"
+s = ah.snippet(inside, inside.find(FAKE["openai"][6:14]), 30)
+check("a query that matches inside a secret still prints it redacted", FAKE["openai"][6:14] not in s and FAKE["openai"] not in s, s)
+check("render() redacts every output field, not only the snippet",
+      FAKE["email"] not in json.dumps(ah.render({"runtime": "claude-code", "session": FAKE["email"], "time": "",
+                                                "repo": f"repo-{FAKE['github']}", "role": "user", "snippet": "x",
+                                                "file": f"/tmp/{FAKE['email']}.jsonl"})))
+
 # ------------------------------------------------------------- fixtures
 
 tmp = Path(tempfile.mkdtemp(prefix="agent-history-test-"))

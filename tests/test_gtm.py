@@ -864,10 +864,9 @@ def test_bounce_notices_and_removal_asks(tmp: Path):
     db = gq.connect(tmp / "bounce.sqlite")
     un = gq.replies(db, "Acme Capital", unanswered=True)
     waiting = {r["email"]: r for r in un["replies"]}
-    # gtme_reply (2026-10-10) reads "remove me" but not a bare "Remove <name>",
-    # the exact reply Zeutara got. Reported to its owner; when it learns it,
-    # this set goes empty and the line below says so.
-    gaps = {"remove@one.example"}
+    # gtme_reply learned a bare "Remove <name>" (the exact reply Zeutara got) on
+    # main the same day, so no known gaps remain.
+    gaps = set()
     ok(set(waiting) == {"keen@one.example", "changed@one.example", "quiet@one.example"} | gaps, sorted(waiting))
     ok(waiting["changed@one.example"]["class"] is None, "a person's later reply overrides the removal rule")
     ok(waiting["quiet@one.example"]["class"] is None and "deck" in waiting["quiet@one.example"]["snippet"],

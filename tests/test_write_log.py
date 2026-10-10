@@ -171,6 +171,27 @@ class WriteLogTests(unittest.TestCase):
         self.hook('PostToolUse')
         self.assertEqual(len(self.records()), 1)
 
+    def test_finished_native_call_leaves_no_snapshot(self):
+        # 44,065 leftover snapshots filled the disk on 2026-10-09.
+        state = Path(self.env['CHEWBACCA_SESSION_STATE'])
+        for n in range(3):
+            self.hook('PreToolUse', call=f'c{n}')
+            self.policy.write_text(f'edit {n}')
+            self.hook('PostToolUse', call=f'c{n}')
+        self.assertEqual(len(self.records()), 3)
+        self.assertEqual(list(state.glob('*.json')), [])
+
+    def test_orphaned_snapshot_is_pruned_after_a_day(self):
+        state = Path(self.env['CHEWBACCA_SESSION_STATE'])
+        self.hook('PreToolUse', call='never-finished')
+        orphan = next(state.glob('*.json'))
+        old = time.time() - 2 * 86400
+        os.utime(orphan, (old, old))
+        (state / '.pruned').unlink(missing_ok=True)
+        self.hook('PreToolUse', call='next')
+        self.assertFalse(orphan.exists())
+        self.assertEqual(len(list(state.glob('*.json'))), 1)
+
     def test_new_file_delete_and_revert_are_changes(self):
         self.hook('PreToolUse')
         new = self.repo / 'skills/new.md'

@@ -152,7 +152,22 @@ gate committed   python3 tools/committed_checksums.py
 gate counts      python3 tools/counts.py --check
 gate frontmatter python3 tools/frontmatter.py
 gate evals       python3 tools/evals.py
-gate secrets     python3 bin/secret-scan .
+# Only the files this push changes. Everything else is already on the remote,
+# so scanning it cannot stop a leak, and the whole-tree scan took 41-54s at
+# load 33 on 2026-10-09: with the 12s checksum gate that put this hook past
+# its 30s watchdog, so it averaged 27s per Stop and pushed nothing.
+# NUL-separated so a name with a space or newline is one path, "./" so a name
+# starting with "-" is never read as a flag, and a failed diff falls back to
+# the whole tree: an unreadable list must never mean nothing was scanned.
+PUSHED=()
+NAMES="$(mktemp "${TMPDIR:-/tmp}/autopush-names.XXXXXX")"
+if git diff -z --name-only --diff-filter=d '@{u}..HEAD' >"$NAMES" 2>/dev/null; then
+  while IFS= read -r -d '' f; do PUSHED+=("./$f"); done <"$NAMES"
+  [ "${#PUSHED[@]}" -gt 0 ] && gate secrets python3 bin/secret-scan "${PUSHED[@]}"
+else
+  gate secrets python3 bin/secret-scan .
+fi
+rm -f "$NAMES"
 
 # Shell syntax, but only on the files this push would actually ship. Running
 # bash -n over the whole tree on every turn is the kind of cost that gets a
@@ -178,7 +193,7 @@ hint = {
     "counts": "run: python3 tools/counts.py",
     "frontmatter": "a SKILL.md yaml block does not parse, so that skill is silently unregistered",
     "evals": "a skill has malformed or missing evals",
-    "secrets": "run: python3 bin/secret-scan . and remove the literal",
+    "secrets": "run: python3 bin/secret-scan $(git diff --name-only @{u}..HEAD) and remove the literal",
 }
 lines = [f"- {r}: {hint.get(r.split(':')[0], 'see the check output')}" for r in reasons]
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": (

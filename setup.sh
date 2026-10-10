@@ -1619,6 +1619,13 @@ _register("UserPromptSubmit", hooks_dir + "/disk-guard.sh", timeout=5)
 # nothing said so for an hour. Tells the next tab, with resume prompts, and
 # shuts down simulators booted with nothing using them.
 _register("UserPromptSubmit", hooks_dir + "/tab-rescue.sh", timeout=5)
+# Nine tabs, their subagents and a forgotten simulator took the Mac to load 37
+# with 15% memory free on 2026-10-10 ("My slow af rn"). Over load = cores it
+# renices agent shell work and refuses workflows; over twice cores, subagents.
+_register("UserPromptSubmit", hooks_dir + "/machine-budget.sh", timeout=5)
+_register("PreToolUse", hooks_dir + "/machine-budget.sh", timeout=5,
+          matcher="Bash|Agent|Task|Workflow",
+          status="Checking the Mac has room...")
 _register("UserPromptSubmit", hooks_dir + "/client-rulings.sh", timeout=5)
 # Caleb's "do it yourself" in chat approves Clay writes for 12 hours, in place
 # of typing at a terminal agent shells don't have (2026-10-10).

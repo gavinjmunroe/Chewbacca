@@ -206,6 +206,50 @@ class GraphCommands(unittest.TestCase):
         self.assertIn("add-leads audience=audseg_dry", dry["command"])
         self.assertIn("campaign=cam_dry", dry["command"])
 
+    def test_rule_is_saved_and_holds_a_recommendation_that_crosses_it(self):
+        # 2026-10-09: a week-1 update told the client "we'll narrow every list"
+        # against a max-volume ruling nobody's tooling read.
+        before = run(self.env, "next", "--json")
+        self.assertTrue(any(x["kind"] == "floor" and not x.get("held_by") for x in json.loads(before.stdout)))
+        r = run(self.env, "rule", "--client", "Northwind Test Co", "Max volume: send to every list they give us",
+                "--who", "Morgan", "--source", "the client thread, 10/5")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        cfg = json.loads((self.tmp / "gtm" / "clients.json").read_text())
+        rul = next(c for c in cfg["clients"] if c["name"] == "Northwind Test Co")["rulings"]
+        self.assertEqual(len(rul), 1)
+        self.assertEqual({k: rul[0][k] for k in ("rule", "who", "status")},
+                         {"rule": "Max volume: send to every list they give us", "who": "Morgan", "status": "active"})
+        self.assertRegex(rul[0]["date"], r"^\d{4}-\d{2}-\d{2}$")
+        run(self.env, "rule", "--client", "Northwind Test Co", "Max volume: send to every list they give us",
+            "--who", "Morgan")
+        cfg = json.loads((self.tmp / "gtm" / "clients.json").read_text())
+        self.assertEqual(len(next(c for c in cfg["clients"] if c["name"] == "Northwind Test Co")["rulings"]), 1)
+        items = json.loads(run(self.env, "next", "--json").stdout)
+        floor = next(x for x in items if x["kind"] == "floor")
+        self.assertEqual(floor["held_by"]["who"], "Morgan")
+        self.assertTrue(floor["do"].startswith("Not recommended: Rework"), floor["do"])
+        self.assertIn("Morgan owns changing it", floor["do"])
+        self.assertIn("ask Morgan", floor["gate"])
+        brief = run(self.env, "brief").stdout
+        self.assertIn("Ruling: \"Max volume", brief)
+        rep = run(self.env, "report", "--client", "Northwind Test Co", "--no-pdf", "--out", str(self.tmp / "out"))
+        body = rep.stdout.split("Left out of the report:")[0]
+        self.assertNotIn("Rework", body)
+        self.assertIn("Left out of the report: Not recommended: Rework", rep.stdout)
+
+    def test_rulings_from_a_client_repo_decisions_file(self):
+        repos = self.tmp / "repos" / "northwind"
+        repos.mkdir(parents=True)
+        (repos / "DECISIONS.json").write_text(json.dumps({
+            "client": "Northwind Test Co", "aliases": ["northwind"],
+            "rulings": [{"id": "volume", "rule": "Max volume. Send to every list.", "who": "Sagar",
+                         "date": "2026-03-05", "status": "active"},
+                        {"id": "old", "rule": "Cut the list to 50", "who": "X", "status": "retired"}]}))
+        env = dict(self.env, CHEWBACCA_CLIENT_REPOS=str(self.tmp / "repos"))
+        items = json.loads(run(env, "next", "--json").stdout)
+        floor = next(x for x in items if x["kind"] == "floor")
+        self.assertEqual(floor["held_by"]["who"], "Sagar")
+
     def test_classes_the_sync_gave_sort_bounces_and_removals(self):
         # 2026-10-10: the sync now classifies bounce notices and removal asks
         # from sender, subject and text; gtme sorts by that class even when
@@ -428,11 +472,17 @@ class Stranger(unittest.TestCase):
              "category": "Bakery"}]})
         answers = "\n".join(["Flourish Supply", "wholesale flour delivered next day",
                              "the bakery owner", "independent bakeries with 1-3 locations",
-                             "Austin TX", "", "2", "yes", "yes"]) + "\n"
+                             "Austin TX", "", "2", "Never email our current customers; always send volume",
+                             "yes", "yes"]) + "\n"
         r = run(env, stdin=answers)
         out = r.stdout
         self.assertEqual(r.returncode, 0, r.stderr + out)
         self.assertNotIn("Traceback", r.stderr)
+        self.assertIn("always or never do", out)
+        cfg = json.loads((tmp / "gtm" / "clients.json").read_text())
+        rul = next(c for c in cfg["clients"] if c["name"] == "Flourish Supply")["rulings"]
+        self.assertEqual([x["rule"] for x in rul], ["Never email our current customers", "always send volume"])
+        self.assertTrue(all(x["who"] == "the client" and x["status"] == "active" for x in rul))
         plan = json.loads((tmp / "gtm" / "clients" / "flourish-supply" / "plan.json").read_text())
         self.assertTrue(plan["approved"])
         golden = tmp / "gtm" / "clients" / "flourish-supply" / "deduped" / "golden.csv"

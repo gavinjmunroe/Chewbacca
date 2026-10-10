@@ -8,6 +8,8 @@
     gtme brief [--sync]      the morning standup: replies to answer, alarms, credits, top 3 actions
     gtme next                every client's to-do list, each with its command and its gate
     gtme report --client NAME [--week]   the Friday client summary, as markdown and a PDF in ~/Downloads
+    gtme rule --client NAME "always/never ..." --who WHO   save a client's standing ruling; brief, next
+                             and report flag any recommendation that would cross it
     gtme explain TERM        one plain sentence for a word like ICP or deliverability
     gtme why                 why the last recommendation was made, with its numbers and rule
     gtme sync                refresh the graph (chewbacca gtm sync) and record credit balances
@@ -573,7 +575,7 @@ def plan_steps(plan: dict, clay_connected: bool) -> list[dict]:
 
 def interview(ask: Asker, client: str | None) -> dict:
     t = ask.t
-    t.say("Let's set up your outbound, the way a full-time growth engineer would. Seven questions, "
+    t.say("Let's set up your outbound, the way a full-time growth engineer would. Eight questions, "
           "every one has a default, Enter keeps it.")
     name = client or ask.ask("1. What's the business called?", "My business")
     sell = ask.ask("2. What do you sell, in one sentence?", "a service that saves our customers time")
@@ -583,8 +585,11 @@ def interview(ask: Asker, client: str | None) -> dict:
     proof = ask.ask("6. What proof do you have? A case study or a number, like 'cut costs 30% for X'. "
                     "Leave blank if none yet.", "")
     meetings = ask.ask("7. How many sales meetings a week do you want?", "2")
+    rules = ask.ask("8. Anything the client has told you to always or never do? (separate several with ';', "
+                    "leave blank if none)", "")
     return {"name": name, "sell": sell, "buyer": buyer, "great": great,
-            "where": "" if where.lower() == "anywhere" else where, "proof": proof, "meetings": meetings}
+            "where": "" if where.lower() == "anywhere" else where, "proof": proof, "meetings": meetings,
+            "rules": rules}
 
 
 def show_plan(t: Teacher, plan: dict) -> None:
@@ -627,6 +632,9 @@ def cmd_start(a, t: Teacher) -> int:
         show_plan(t, plan)
     else:
         plan = build_plan(interview(ask, a.client))
+        for text in re.split(r"[;\n]", plan["answers"].get("rules") or ""):
+            if text.strip():
+                add_ruling(plan["client"], text, "the client", "told during chewbacca gtme start")
     if not existing or a.redo:
         show_plan(t, plan)
     if not plan.get("approved"):
@@ -671,6 +679,108 @@ def remember_client(name: str) -> None:
     if not any(" ".join(c["name"].lower().split()) == " ".join(name.lower().split()) for c in cfg["clients"]):
         cfg["clients"].append({"name": name, "workspaces": []})
         write_json(config_path(), cfg)
+
+
+# ── client rulings: standing instructions no recommendation crosses silently ──
+
+# On 2026-10-09 a week-1 update told a client we'd "narrow every list" after
+# the account lead had ruled the client wants max volume. A ruling lives on the client's entry
+# in clients.json ("rulings"), where the client-rulings hook reads it too, and
+# in a client repo's DECISIONS.json when one exists.
+RULING_MAX = 500
+
+
+def _same(a: str, b: str) -> bool:
+    return " ".join((a or "").lower().split()) == " ".join((b or "").lower().split())
+
+
+def add_ruling(client: str, rule: str, who: str, source: str | None = None) -> dict:
+    """Append one active ruling to the client's entry, creating the entry if
+    the client is new. The same rule text twice is kept once."""
+    rule = " ".join(safe(rule, RULING_MAX).split())
+    who = " ".join(safe(who, 120).split())
+    if not rule or not who:
+        raise ValueError("a ruling needs the rule text and who made it")
+    cfg = load_config()
+    entry = next((c for c in cfg["clients"] if _same(c.get("name", ""), client)), None)
+    if entry is None:
+        entry = {"name": client, "workspaces": []}
+        cfg["clients"].append(entry)
+    today = utc_now().date().isoformat()
+    for r in entry.get("rulings") or []:
+        if _same(r.get("rule", ""), rule) and (r.get("status") or "active") == "active":
+            return r
+    ruling = {"id": slug(rule)[:48], "rule": rule, "who": who, "date": today,
+              "source": " ".join(safe(source or f"chewbacca gtme rule, {today}", 200).split()), "status": "active"}
+    entry.setdefault("rulings", []).append(ruling)
+    write_json(config_path(), cfg)
+    return ruling
+
+
+def client_repos() -> Path:
+    return Path(os.environ.get("CHEWBACCA_CLIENT_REPOS") or Path.home() / "code" / "work")
+
+
+def rulings_for(client: str) -> list[dict]:
+    """Every active ruling for a client: its clients.json entry, then any
+    client repo DECISIONS.json naming it (by client name or alias)."""
+    out = []
+    cfg = read_json(config_path(), {"clients": []})
+    for c in cfg.get("clients") or [] if isinstance(cfg, dict) else []:
+        if isinstance(c, dict) and _same(c.get("name", ""), client):
+            out += [dict(r, where=str(config_path())) for r in c.get("rulings") or [] if isinstance(r, dict)]
+    try:
+        files = sorted(client_repos().glob("*/DECISIONS.json"))
+    except OSError:
+        files = []
+    for path in files:
+        d = read_json(path, {})
+        if not isinstance(d, dict):
+            continue
+        names = [d.get("client") or ""] + [a for a in d.get("aliases") or [] if isinstance(a, str)]
+        if any(_same(n, client) for n in names):
+            out += [dict(r, where=str(path)) for r in d.get("rulings") or [] if isinstance(r, dict)]
+    seen, active = set(), []
+    for r in out:
+        key = " ".join(str(r.get("rule") or "").lower().split())
+        if key and key not in seen and (r.get("status") or "active") == "active":
+            seen.add(key)
+            active.append(r)
+    return active
+
+
+# What a ruling is about, read off its words, and what crosses it. Volume is
+# the one that has bitten: "narrow the list" against "max volume".
+VOLUME_RULING = re.compile(r"max(?:imum)? volume|\bvolume\b|every list|send to every|never cut|"
+                           r"(?:don'?t|do not) cut|order, never cut", re.I)
+CUTS_VOLUME = re.compile(r"\b(?:narrow\w*|cut\w*|trim\w*|shrink\w*|fewer|smaller (?:list|lists|batch)|"
+                         r"reduce (?:the )?(?:list|volume|sends)|tighten (?:the )?list|send less)\b", re.I)
+# A reply rate under the floor sends a GTME to "who you email" first (playbook
+# lines 34, 131): the list gets narrowed. That is the cut a volume ruling forbids.
+VOLUME_CUTTING_KINDS = frozenset({"floor"})
+
+
+def crosses(action: dict, ruling: dict) -> bool:
+    if not VOLUME_RULING.search(str(ruling.get("rule") or "")):
+        return False
+    text = f"{action.get('do', '')} {action.get('command', '')}"
+    return action.get("kind") in VOLUME_CUTTING_KINDS or bool(CUTS_VOLUME.search(text))
+
+
+def hold_against_rulings(actions: list[dict], rulings: list[dict]) -> list[dict]:
+    """An action that would cross an active ruling is not recommended: it
+    says which ruling, and who owns changing it, and drops below real work."""
+    for a in actions:
+        hit = next((r for r in rulings if crosses(a, r)), None)
+        if hit is None:
+            continue
+        who = hit.get("who") or "whoever made it"
+        a["held_by"] = {"rule": hit.get("rule"), "who": who, "date": hit.get("date"), "where": hit.get("where")}
+        a["do"] = (f"Not recommended: {a['do']}. It contradicts the ruling \"{hit.get('rule')}\" ({who}, "
+                   f"{hit.get('date') or 'undated'}); {who} owns changing it")
+        a["gate"] = f"held by a client ruling: ask {who} before doing this"
+        a["score"] = min(a.get("score", 0), 15)
+    return actions
 
 
 def remember_why(kind: str, title: str, reasons: list[str]) -> None:
@@ -1023,6 +1133,7 @@ def client_state(q, db, c: dict) -> dict:
         "unanswered": unanswered, "bounce_notices": len(bounced),
         "unsubscribe_asks": [r.get("email") for r in unsubscribes if r.get("email")], "credits": credit_view(ws), "sync": sync,
         "drop": history_alarm(c["name"], sent, replies, clay.get("as_of")),
+        "rulings": rulings_for(c["name"]),
         "memory": {"overdue": gtm_memory(c["name"], "overdue"),
                    "by_table": gtm_memory(c["name"], "credits", "--by", "table")},
     }
@@ -1219,7 +1330,7 @@ def actions_for(s: dict) -> list[dict]:
                         else "read only",
                 "why": f"gtm_sync table, {row.get('ran_at')}. Without it meetings read as missing, not zero.",
             })
-    return sorted(out, key=lambda x: -x["score"])
+    return sorted(hold_against_rulings(out, s.get("rulings") or []), key=lambda x: -x["score"])
 
 
 # ── lessons tied to the person's own numbers ──────────────────────────────
@@ -1368,6 +1479,9 @@ def cmd_brief(a, t: Teacher) -> int:
             t.say(f"  Biggest spender: \"{top[0].get('table')}\", {top[0]['credits']:.0f} of "
                   f"{by_table.get('total', 0):.0f} credits in {by_table.get('window_days', '?')} days "
                   f"(gtm-memory credits, as of {by_table.get('as_of')})")
+        for r in s.get("rulings") or []:
+            t.say(f"  Ruling: \"{r.get('rule')}\" ({r.get('who') or '?'}, {r.get('date') or 'undated'}); "
+                  "nothing below crosses it without saying so")
         need = [r for r in s["unanswered"]]
         t.say(f"  Replies waiting on you: {len(need)} (Clay inbox; left out: negative, unsubscribe, out-of-office, "
               f"{s['bounce_notices']} bounce notices and {len(s['unsubscribe_asks'])} removal asks)")
@@ -1475,6 +1589,10 @@ def week_numbers(client: str, start: date, end: date) -> dict:
 
 def render_report(s: dict, this: dict, last: dict, start: date, end: date, actions: list[dict],
                   plan: dict | None) -> str:
+    # The report goes to the client: an action a ruling holds is not proposed
+    # in it at all (cmd_report says which, to the person, in the terminal).
+    actions = [a for a in actions if not a.get("held_by")]
+
     def delta(k):
         if not last:
             return ""
@@ -1646,7 +1764,8 @@ def cmd_report(a, t: Teacher) -> int:
     start = end - timedelta(days=6) if a.week else date(2000, 1, 1)
     this = week_numbers(s["name"], start, end)
     last = week_numbers(s["name"], start - timedelta(days=7), start - timedelta(days=1)) if a.week else {}
-    report = render_report(s, this, last, start, end, actions_for(s),
+    actions = actions_for(s)
+    report = render_report(s, this, last, start, end, actions,
                            read_json(client_dir(s["name"]) / "plan.json", None))
     out_dir = Path(a.out or Path.home() / "Downloads")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1657,6 +1776,9 @@ def cmd_report(a, t: Teacher) -> int:
     pdf = out_dir / f"{base}.pdf"
     how = "" if a.no_pdf else to_pdf(report, f"{safe(s['name'], 120)} outbound report", pdf)
     print(safe(report, 100000))
+    for x in actions:
+        if x.get("held_by"):
+            t.say(f"Left out of the report: {x['do']}.")
     t.say(f"Markdown: {md_path}")
     t.say(f"PDF: {pdf} (made with {how})" if how else "PDF: not made (no Chrome and no cupsfilter)")
     return 0
@@ -1787,6 +1909,18 @@ def cmd_setup(a, t: Teacher) -> int:
     return 0
 
 
+def cmd_rule(a, t: Teacher) -> int:
+    try:
+        r = add_ruling(a.client, " ".join(a.rule), a.who, a.source)
+    except ValueError as err:
+        print(f"chewbacca gtme rule: {err}", file=sys.stderr)
+        return 2
+    t.say(f"Ruling saved for {a.client}: \"{r['rule']}\" ({r['who']}, {r['date']}).")
+    t.say("brief, next and report now check every recommendation against it and say so, naming "
+          f"{r['who']}, when one would cross it.")
+    return 0
+
+
 def cmd_explain(a, t: Teacher) -> int:
     want = " ".join(a.term).strip().lower()
     hit = next((k for k in GLOSSARY if k.lower() == want or k.lower() + "s" == want), None)
@@ -1842,6 +1976,11 @@ def main(argv=None) -> int:
     p.add_argument("--week", action="store_true")
     p.add_argument("--out", help="PDF folder (default ~/Downloads)")
     p.add_argument("--no-pdf", action="store_true")
+    p = sub.add_parser("rule", help="save a standing ruling from the client (always or never do X)")
+    p.add_argument("--client", required=True)
+    p.add_argument("rule", nargs="+", help="the ruling, in plain words")
+    p.add_argument("--who", required=True, help="who made it, and so who owns changing it")
+    p.add_argument("--source", help="where it was said (a thread, a call, a date)")
     p = sub.add_parser("explain", help="one plain sentence for a term")
     p.add_argument("term", nargs="+")
     sub.add_parser("why", help="why the last recommendation")
@@ -1857,7 +1996,7 @@ def main(argv=None) -> int:
                 print(f"chewbacca gtme: {err}", file=sys.stderr)
                 return 1
         return {"start": cmd_start, "list": cmd_list, "setup": cmd_setup, "explain": cmd_explain,
-                "why": cmd_why, "sync": cmd_sync}[a.cmd](a, t)
+                "why": cmd_why, "sync": cmd_sync, "rule": cmd_rule}[a.cmd](a, t)
     finally:
         t.save()
 

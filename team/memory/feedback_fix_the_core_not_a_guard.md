@@ -14,6 +14,8 @@ On 2026-10-10 the Mac lagged until Caleb force-quit Claude. Every tab had starte
 
 The core fix was `chewbacca jobs`, one machine queue owned by launchd. It runs one heavy job at a time, admits work only when the Mac has room, pauses it (SIGSTOP) when he's using the Mac, resumes it after, and keeps it alive when the tab closes. load-guard now points refused work at the queue instead of only refusing it (chewbacca 8418d3ec, ca6c1b89).
 
+Second instance, same day, on the Clay launch guard (commits 5cb64ef8 through d688ba76): six security review rounds each found a new way past a hook that parsed shell commands to guess what they would do to Clay (quoting, chaining, env prefixes, a click whose label wasn't its target). Patching the parser never converged. It held once the check moved into the code that sends (`chewbacca clay` verifies a signed, campaign-bound grade receipt on its own frozen request, and refuses START outright) and the hook flipped from a denylist to an allowlist of exact known reads. The Clay crawler's scrubber had the same arc: three leak findings until the allowed vocabulary became a fixed list written in code instead of words learned from the crawled pages, which had admitted client table and campaign names.
+
 **Why:** a guard only covers the cases someone thought of, and a design change covers the next case too.
 
 **How to apply:** after any fix, ask whether the failure is now impossible or only caught. If it's only caught, find the missing owner, budget or default and build that. Name the bare `jobs` gotcha too: `jobs` is a zsh builtin, so the queue is `chewbacca jobs`. Related: [[feedback_enforce_dont_document]], [[feedback_one_job_not_six]], [[feedback_his_scope_words_are_the_spec]].

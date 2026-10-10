@@ -18,22 +18,31 @@ import json, os, re, sys, time
 d = os.environ["FAKE_DIR"]
 args = sys.argv[1:]
 assert args[0] == "--real", "chewbacca linkedin must target the real Chrome"
+tabs = os.environ.get("FAKE_TABS", "https://www.linkedin.com/feed/").split("|")
 if "--list" in args:
-    print(os.environ.get("FAKE_TAB", "https://www.linkedin.com/feed/")); sys.exit(0)
+    print("\n".join(tabs)); sys.exit(0)
+# Only exact targeting is accepted: a substring --match is what let a decoy in.
+assert "--url" in args and "--match" not in args, "tab must be targeted by exact --url"
+target = args[args.index("--url") + 1]
+if target not in tabs:
+    print("NO_TAB_MATCHING: " + target); sys.exit(0)
+with open(os.path.join(d, "targets.log"), "a") as f:
+    f.write(target + "\n")
 src = open(args[args.index("--file") + 1]).read()
+origin = os.environ.get("FAKE_ORIGIN", "https://www.linkedin.com")
 if "window.__chewLi[key] = null" in src:
     open(os.path.join(d, "script.js"), "w").write(src)
     path = json.loads(re.search(r"var path = (\"[^\"]*\")", src).group(1))
     with open(os.path.join(d, "calls.log"), "a") as f:
         f.write(f"{time.monotonic()} {path}\n")
     open(os.path.join(d, "last"), "w").write(path)
-    print(json.dumps({"started": "k", "page": "https://www.linkedin.com/feed/"})); sys.exit(0)
+    print(json.dumps({"started": "k", "page": target, "origin": origin})); sys.exit(0)
 path = open(os.path.join(d, "last")).read()
 status = int(os.environ.get("FAKE_STATUS", "200"))
 url = os.environ.get("FAKE_URL", "https://www.linkedin.com" + path)
 fx = json.load(open(os.path.join(d, "fixtures.json")))
 body = next((v for k, v in fx.items() if k in path), {"elements": []})
-print(json.dumps({"status": status, "url": url, "body": json.dumps(body)}))
+print(json.dumps({"status": status, "url": url, "body": json.dumps(body), "origin": origin}))
 PY
 chmod +x "$T/chrome-js"
 
@@ -149,8 +158,32 @@ for case in "FAKE_STATUS=429" "FAKE_STATUS=999" "FAKE_URL=https://www.linkedin.c
 done
 
 # A tab already sitting on /login is refused before any call.
-out="$(FAKE_TAB=https://www.linkedin.com/login li me 2>&1)"; rc=$?
+out="$(FAKE_TABS=https://www.linkedin.com/login li me 2>&1)"; rc=$?
 [ "$rc" = 4 ] && [ "$(calls)" = 0 ] || no "a /login tab was not refused before calling (rc $rc, $(calls) calls)"
+
+# Origin validation (security review of 458aec97). A tab only counts as
+# LinkedIn when its URL parses to https and a host of exactly
+# www.linkedin.com or linkedin.com; LinkedIn in a path, query, userinfo or a
+# lookalike host is a decoy, and no script may run in it.
+for decoy in "https://evil.example/?next=www.linkedin.com" "https://evil.example/www.linkedin.com/feed/" \
+             "https://www.linkedin.com.evil.example/feed/" "https://evilwww.linkedin.com/feed/" \
+             "http://www.linkedin.com/feed/" "https://www.linkedin.com@evil.example/feed/" \
+             "https://www.linkedin.com:8443/feed/"; do
+  : > "$T/targets.log"
+  out="$(CHEWBACCA_CHROME_DIR="$T/no-chrome" FAKE_TABS="$decoy" li me 2>&1)"; rc=$?
+  [ "$rc" != 0 ] || no "decoy tab $decoy was accepted"
+  [ -s "$T/targets.log" ] && no "a script ran in decoy tab $decoy"
+done
+# A decoy listed first is skipped for the real tab behind it.
+: > "$T/targets.log"
+FAKE_TABS="https://evil.example/?linkedin.com|https://www.linkedin.com/feed/" li me >/dev/null 2>&1 \
+  || no "the real LinkedIn tab behind a decoy was not used"
+grep -qv '^https://www.linkedin.com/feed/$' "$T/targets.log" && no "a script was sent to a tab other than the exact LinkedIn one"
+# The page reports a different origin: refused, and no request is polled for.
+out="$(FAKE_ORIGIN=https://evil.example li me 2>&1)"; rc=$?
+[ "$rc" = 5 ] || no "an answer from origin https://evil.example was accepted (rc $rc): $out"
+grep -q "location.origin !== \"https://www.linkedin.com\"" "$T/script.js" || no "the in-page script has no origin guard"
+grep -q "fetch(origin + path" "$T/script.js" || no "fetch URL is not built from the fixed origin"
 
 # The env var can raise the pause, never lower it under 2 s.
 grep -q 'PAUSE = max(2.0' "$ROOT/bin/chewbacca-linkedin" || no "the 2 s throttle floor is gone"

@@ -12,6 +12,8 @@
 #   chrome-js --match "console.cloud" --click "Next"    # click a button by label
 #   chrome-js --list                                    # every tab Chrome exposes
 #   chrome-js --real --match "linkedin.com" --file x.js # the user's own Chrome, by PID
+#   chrome-js --real --url "https://www.linkedin.com/feed/" --file x.js
+#                                   # the tab whose URL is exactly this, no substring
 #
 # Requires: View > Developer > Allow JavaScript from Apple Events, in Chrome.
 #
@@ -33,10 +35,14 @@ set -euo pipefail
 MATCH=""; JSFILE=""; OPEN_URL=""; PROFILE=""; MODE="js"; CLICK_TEXT=""; INLINE=""
 ACTIVATE=false
 REAL=false
+EXACT=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --match)   MATCH="$2"; shift 2 ;;
+    # --url: exact equality. A substring match lets https://evil.example/?x=linkedin.com
+    # stand in for LinkedIn (security review, 2026-10-10).
+    --url)     MATCH="$2"; EXACT=true; shift 2 ;;
     --file)    JSFILE="$2"; shift 2 ;;
     --eval)    INLINE="$2"; shift 2 ;;
     --open)    OPEN_URL="$2"; shift 2 ;;
@@ -47,7 +53,7 @@ while [ $# -gt 0 ]; do
     --check)   MODE="check"; shift ;;
     --activate) ACTIVATE=true; shift ;;
     --real)    REAL=true; shift ;;
-    -h|--help) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "chrome-js: unknown argument $1" >&2; exit 2 ;;
   esac
 done
@@ -94,7 +100,7 @@ real_pid() {
 # One JXA runner for --list and script modes under --real. argv: mode pid match jsfile
 REAL_JXA='ObjC.import("ScriptingBridge"); ObjC.import("Foundation");
 function run(argv) {
-  var mode = argv[0], pid = parseInt(argv[1], 10), match = argv[2], file = argv[3];
+  var mode = argv[0], pid = parseInt(argv[1], 10), match = argv[2], file = argv[3], exact = argv[4] === "true";
   var app = $.SBApplication.applicationWithProcessIdentifier(pid);
   if (!app || app.isNil()) return "NO_REAL_CHROME";
   var wins = app.valueForKey("windows"), out = [];
@@ -103,7 +109,7 @@ function run(argv) {
     for (var j = 0; j < tabs.count; j++) {
       var t = tabs.objectAtIndex(j), u = ObjC.unwrap(t.valueForKey("URL")) || "";
       if (mode === "list") { out.push(u); continue; }
-      if (u.indexOf(match) >= 0) {
+      if (exact ? u === match : u.indexOf(match) >= 0) {
         var js = ObjC.unwrap($.NSString.stringWithContentsOfFileEncodingError(file, $.NSUTF8StringEncoding, null));
         var r = t.performSelectorWithObject("executeJavascript:", $(js));
         if (!r || r.isNil()) return "missing value";
@@ -121,7 +127,7 @@ run_real() {
   if [ -z "$pid" ]; then echo "chrome-js: no running Chrome without --user-data-dir" >&2; exit 4; fi
   local runner; runner="$(mktemp "${TMPDIR:-/tmp}/chrome-js-real.XXXXXX")"
   printf '%s' "$REAL_JXA" > "$runner"
-  osascript -l JavaScript "$runner" "$mode" "$pid" "${MATCH:-}" "$TMP_JS" 2>&1 || true
+  osascript -l JavaScript "$runner" "$mode" "$pid" "${MATCH:-}" "$TMP_JS" "$EXACT" 2>&1 || true
   rm -f "$runner"
 }
 
@@ -253,7 +259,7 @@ tell application "Google Chrome"
   repeat with w in windows
     repeat with tabIndex from 1 to count of tabs of w
       set t to tab tabIndex of w
-      if (URL of t) contains "$MATCH" then
+      if ($EXACT and (URL of t) is "$MATCH") or ((not $EXACT) and (URL of t) contains "$MATCH") then
         if $ACTIVATE then
           set active tab index of w to tabIndex
           set index of w to 1

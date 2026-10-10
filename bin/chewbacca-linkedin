@@ -44,7 +44,13 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 CHROME_JS = os.environ.get("CHEWBACCA_CHROME_JS") or str(ROOT / "bin" / "chrome-js")
 CHROME_DIR = pathlib.Path(os.environ.get(
     "CHEWBACCA_CHROME_DIR", pathlib.Path.home() / "Library/Application Support/Google/Chrome"))
-MATCH = "www.linkedin.com"
+# The only origin any script runs in or fetches from. Tabs are picked by
+# parsing their URL, never by substring: the security review of 458aec97
+# showed https://evil.example/?linkedin.com and linkedin.com.evil.example
+# both passed the old `"www.linkedin.com" in url` test.
+ORIGIN = "https://www.linkedin.com"
+HOSTS = ("www.linkedin.com", "linkedin.com")
+TAB = None  # the exact URL of the tab in use, set by ensure_tab()
 FEED = "https://www.linkedin.com/feed/"
 
 # Two seconds between Voyager calls inside one command. The 2026-10-10
@@ -119,43 +125,84 @@ def check_url(url):
                    "sign in or clear the challenge in Chrome by hand, then rerun.")
 
 
+def is_linkedin(url):
+    """https, and a netloc of exactly www.linkedin.com or linkedin.com: no
+    userinfo, no port, no lookalike suffix. LinkedIn in a path or query is
+    not LinkedIn."""
+    try:
+        sp = urllib.parse.urlsplit((url or "").strip())
+    except ValueError:
+        return False
+    return sp.scheme == "https" and sp.netloc.lower() in HOSTS and sp.hostname in HOSTS
+
+
+def linkedin_tabs():
+    tabs = [t.strip() for t in chrome_js("--list").splitlines() if is_linkedin(t)]
+    # www first: the in-page guard only accepts https://www.linkedin.com.
+    return sorted(tabs, key=lambda t: urllib.parse.urlsplit(t).netloc.lower() != "www.linkedin.com")
+
+
 def ensure_tab():
-    tabs = [t for t in chrome_js("--list").splitlines() if MATCH in t]
+    global TAB
+    tabs = linkedin_tabs()
     if not tabs:
         prof = session_profile()
         if not prof:
             die("no Chrome profile is signed in to LinkedIn. Sign in once at linkedin.com in Chrome.")
         chrome_js("--open", FEED, "--profile", prof)
-        tabs = [t for t in chrome_js("--list").splitlines() if MATCH in t]
+        tabs = linkedin_tabs()
         if not tabs:
             die(f"opened LinkedIn in Chrome profile '{prof}' but the tab isn't visible to "
                 "AppleScript. Turn on Allow JavaScript from Apple Events there (chrome-js --check).")
-    check_url(tabs[0])
+    TAB = tabs[0]
+    check_url(TAB)
+
+
+GUARD = "if (location.origin !== %s) return JSON.stringify({error: 'wrong-origin', origin: location.origin});" % json.dumps(ORIGIN)
+
+
+def in_tab(script):
+    """Run a script in exactly the chosen tab and refuse any answer that does
+    not come from ORIGIN. LinkedIn rewrites its own URL as it routes, so a
+    vanished exact URL is re-resolved once; the script never ran, so this
+    repeats no request."""
+    for attempt in (1, 2):
+        out = chrome_js("--url", TAB, script=script)
+        if not out.startswith("NO_TAB_MATCHING") or attempt == 2:
+            break
+        ensure_tab()
+    res = parse(out)
+    if res.get("origin") != ORIGIN:
+        die(f"refused: the tab answered from {res.get('origin')!r}, not {ORIGIN}.", 5)
+    return res
 
 
 START_JS = r"""
 (function(){
-  var path = %(path)s, accept = %(accept)s, key = %(key)s;
-  if (path.indexOf('/voyager/api/') !== 0) return JSON.stringify({error: 'refused: not a voyager path'});
+  %(guard)s
+  var path = %(path)s, accept = %(accept)s, key = %(key)s, origin = %(origin)s;
+  if (path.indexOf('/voyager/api/') !== 0) return JSON.stringify({error: 'refused: not a voyager path', origin: location.origin});
   var m = document.cookie.match(/(?:^|; )JSESSIONID=("?)([^;"]+)\1/);
-  if (!m) return JSON.stringify({error: 'signed-out'});
+  if (!m) return JSON.stringify({error: 'signed-out', origin: location.origin});
   window.__chewLi = window.__chewLi || {};
   window.__chewLi[key] = null;
-  fetch(path, {method: 'GET', credentials: 'include', redirect: 'follow',
+  fetch(origin + path, {method: 'GET', credentials: 'include', redirect: 'follow',
                headers: {'csrf-token': m[2], 'x-restli-protocol-version': '2.0.0', accept: accept}})
     .then(function(r){ return r.text().then(function(t){
       window.__chewLi[key] = {status: r.status, url: r.url, redirected: r.redirected, body: t.slice(0, 4000000)};
     }); })
     .catch(function(e){ window.__chewLi[key] = {status: 0, error: String(e)}; });
-  return JSON.stringify({started: key, page: location.href});
+  return JSON.stringify({started: key, page: location.href, origin: location.origin});
 })()
 """
 
 POLL_JS = r"""
 (function(){
+  %(guard)s
   var k = %(key)s, s = window.__chewLi && window.__chewLi[k];
-  if (!s) return JSON.stringify({pending: true});
+  if (!s) return JSON.stringify({pending: true, origin: location.origin});
   delete window.__chewLi[k];
+  s.origin = location.origin;
   return JSON.stringify(s);
 })()
 """
@@ -173,8 +220,10 @@ class Voyager:
         self.calls += 1
         key = f"k{os.getpid()}_{self.calls}"
         accept = NORMALIZED if normalized else "application/json"
-        started = parse(chrome_js("--match", MATCH, script=START_JS % {
-            "path": json.dumps(path), "accept": json.dumps(accept), "key": json.dumps(key)}))
+        if not path.startswith("/voyager/api/"):
+            die("refused: not a Voyager path")
+        started = in_tab(START_JS % {"guard": GUARD, "origin": json.dumps(ORIGIN),
+            "path": json.dumps(path), "accept": json.dumps(accept), "key": json.dumps(key)})
         # Measured from when the fetch was launched in the page, so a slow
         # Chrome round trip can never squeeze two requests under the pause.
         self.last = time.monotonic()
@@ -186,13 +235,15 @@ class Voyager:
         deadline = time.monotonic() + POLL_LIMIT
         while True:
             time.sleep(POLL_EVERY)
-            res = parse(chrome_js("--match", MATCH, script=POLL_JS % {"key": json.dumps(key)}))
+            res = in_tab(POLL_JS % {"guard": GUARD, "key": json.dumps(key)})
             if not res.get("pending"):
                 break
             if time.monotonic() > deadline:
                 die("LinkedIn did not answer within 30 s.")
         status = res.get("status")
         check_url(res.get("url"))
+        if res.get("url") and urllib.parse.urlsplit(res["url"]).netloc.lower() != "www.linkedin.com":
+            raise Stop("the request was redirected off www.linkedin.com. Stopped.")
         if status in (429, 999):
             raise Stop(f"LinkedIn answered {status} (rate limit or bot check). Stopped; wait before trying again.")
         if status in (401, 403):
@@ -467,10 +518,11 @@ def cmd_inbox(v, a):
 
 DISCOVER_JS = r"""
 (function(){
+  %(guard)s
   var ids = performance.getEntriesByType('resource').map(function(e){ return e.name; })
     .map(function(u){ var m = u.match(/queryId=(messengerConversations\.[0-9a-f]+)/); return m && m[1]; })
     .filter(Boolean);
-  return JSON.stringify({ids: ids});
+  return JSON.stringify({ids: ids, origin: location.origin});
 })()
 """
 
@@ -483,7 +535,7 @@ def discover_inbox_query():
     500. Opening /messaging/ would load it but also opens the newest thread,
     which marks it read, so this never navigates there itself. The GraphQL
     parsing below is fixture-tested only, not yet live-verified."""
-    ids = parse(chrome_js("--match", MATCH, script=DISCOVER_JS)).get("ids") or []
+    ids = in_tab(DISCOVER_JS % {"guard": GUARD}).get("ids") or []
     plain = [i for i in ids if "ByCategory" not in i]
     return (plain or ids or [None])[-1]
 

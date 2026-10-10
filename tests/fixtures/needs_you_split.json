@@ -1,0 +1,8 @@
+{
+ "frozen_now": "2026-10-10T00:00:00-07:00",
+ "rule": "sha256('chw135-split:' + chat_identifier) mod 3 == 0 is sealed",
+ "snapshots": 81,
+ "dev_threads": 247,
+ "sealed_threads": 134,
+ "sealed_digest": "b222eafbedc93b4a417b29de92dfc504aa233859370d5e665e504bf6076b01d8"
+}

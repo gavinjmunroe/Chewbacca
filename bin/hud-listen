@@ -1925,12 +1925,6 @@ class Listener:
                 threading.Thread(
                     target=lambda: self.terminal("focus", voice_memory.project().get("tty")), daemon=True,
                 ).start()
-            elif action == "genui-search":
-                # The one press on kyber-genui's "not on this Mac" card: the
-                # web, through the same glass search a spoken "search X" gets.
-                ev = hud_events.event(line)
-                if ev is not None:
-                    threading.Thread(target=self.genui_search, args=(ev.get("surface"),), daemon=True).start()
             elif action.startswith("genui-"):
                 # A Refresh or Close on a generated panel: kyber-genui redraws
                 # or closes the surface that was pressed, with no model turn.
@@ -3375,13 +3369,18 @@ class Listener:
                 self.to_assistant(said, typed=typed)
                 return
             # `say` is set when no source on this Mac holds what was asked
-            # (kyber-genui's relevance gate): that sentence is the answer.
+            # (kyber-genui's relevance gate): kyber-genui answered it from the
+            # web or the model, or asked for a missing name, and that sentence
+            # is the answer.
             try:
                 report = json.loads(getattr(done, "stderr", "") or "{}")
             except (ValueError, TypeError):
                 report = {}
-            say = report.get("say") if isinstance(report, dict) and report.get("no_source") else None
+            if not isinstance(report, dict):
+                report = {}
+            say = report.get("say") if report.get("no_source") else None
             answer = say if isinstance(say, str) and say else "It's on the glass."
+            self.adopt_search_panel(report.get("answer"))
             req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
             self.remember(req, answer, True, "done")
             self.send("s " + json.dumps(answer))
@@ -3393,25 +3392,23 @@ class Listener:
         threading.Thread(target=work, daemon=True).start()
         return True
 
-    def genui_search(self, surface: object) -> None:
-        """Search the web for what a generated panel had no source for, on the glass."""
-        argv = [str(KYBER_GENUI), "event", "genui-search", "ws"]
-        if isinstance(surface, str):
-            argv += ["--surface", surface]
-        try:
-            done = subprocess.run(argv, capture_output=True, text=True, timeout=10)
-        except (OSError, subprocess.TimeoutExpired) as err:
-            self.log("genui search failed:", err)
+    def adopt_search_panel(self, answer: object) -> None:
+        """kyber-genui drew a web answer on the search surface: take its rows,
+        so Open on a source opens that page (search_press), and "close it"
+        takes the panel down (search_dismiss)."""
+        if not isinstance(answer, dict) or answer.get("surface") != glass_search.SURFACE:
             return
-        query = done.stdout.strip()
-        if done.returncode != 0 or not query:
-            self.log("genui search: nothing offered")
-            return
-        self.send(f"- {surface if isinstance(surface, str) else 'genui'}")
-        answer, ok = self.search_on_glass(query)
-        self.send("s " + json.dumps(answer))
-        self.send("w " + json.dumps(answer) + " done=true")
-        self.settle_unless_running("done" if ok else "failed", self.LEAVE_AFTER)
+        rows = {}
+        for source in answer.get("sources") or []:
+            if not isinstance(source, dict):
+                continue
+            row, url = source.get("id"), source.get("url")
+            # Only an http(s) URL with a host, the same rule glass_search keeps.
+            if isinstance(row, str) and isinstance(url, str) and glass_search.safe_url(url):
+                rows[row] = url
+        self.search_gen = getattr(self, "search_gen", 0) + 1
+        self.search_rows = rows
+        self.search_open = True
 
     def docs_request(self, said: str, typed: bool) -> bool:
         """"Show my <name> doc", "open the <name> sheet", "<edit> in my <name>

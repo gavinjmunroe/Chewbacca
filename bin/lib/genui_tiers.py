@@ -113,12 +113,20 @@ def extract_slots(request: str, today: date | None = None) -> Slots:
             slots.days, slots.days_text = 7, "this week"
         elif re.search(r"\bfortnight\b", text):
             slots.days, slots.days_text = 14, "fortnight"
-    # A capitalised word that is not the first word, a weekday, a month or the
-    # course code is the best a rule can do for a client or campaign name.
+    # A capitalised word that is not a weekday, a month or the course code is
+    # the best a rule can do for a client or campaign name. The first word is
+    # capitalised in every sentence, so it counts only when it is not an
+    # ordinary English word and no later word is capitalised: "Zeutara reply
+    # rate" named no client and the pill asked "Which campaign?" (labelled
+    # 30, #10, 2026-10-10).
     tokens = re.findall(r"[A-Za-z][A-Za-z0-9.'-]*", request)
+    later = any(t[:1].isupper() and t.split("'")[0].lower() not in ("i", "hud", "chewbacca")
+                for t in tokens[1:])
     for i, tok in enumerate(tokens):
         base = tok.split("'")[0]
-        if i == 0 or not base[:1].isupper() or base.isupper() and len(base) <= 4:
+        if not base[:1].isupper() or base.isupper() and len(base) <= 4:
+            continue
+        if i == 0 and (later or common_word(base)):
             continue
         low = base.lower()
         if low in WEEKDAYS or low in MONTHS or low in ("i", "hud", "chewbacca") or \
@@ -127,6 +135,39 @@ def extract_slots(request: str, today: date | None = None) -> Slots:
         slots.name, slots.name_text = base, tok
         break
     return slots
+
+
+DICTIONARY = Path("/usr/share/dict/words")
+_dictionary: list[str] | None = None
+
+
+def common_word(word: str) -> bool:
+    """An ordinary lowercase English word, or a form of one ("Meetings", "Showing").
+
+    /usr/share/dict/words lists proper nouns capitalised and has no plurals or
+    -ing forms, so the stems are tried too. Read only when a first word needs
+    judging: the file takes 16 ms to load (2026-10-10), a set of it 230 ms.
+    Without the file every first word counts as common, the rule before this.
+    """
+    global _dictionary
+    low = word.lower().strip("'.")
+    if not low.isalpha():
+        return False
+    if low in STOP or low in WEEKDAYS or low in MONTHS or low in NUMBER_WORDS:
+        return True
+    if _dictionary is None:
+        try:
+            _dictionary = DICTIONARY.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            _dictionary = []
+    if not _dictionary:
+        return True
+    forms = {low}
+    for suffix, back in (("s", ""), ("es", ""), ("ies", "y"), ("ing", ""), ("ing", "e"), ("ed", ""),
+                         ("ed", "e")):
+        if low.endswith(suffix) and len(low) - len(suffix) > 1:
+            forms.add(low[: -len(suffix)] + back)
+    return any(f in _dictionary for f in forms)
 
 
 # Tier 0: near-exact match against layouts that already exist.
@@ -564,9 +605,15 @@ class Verdict:
     by: str                   # "code", "jev", or "none" (nobody could decide)
     why: str
     other: str | None = None  # the query the subject belongs to instead, when code found one
+    words: int = 0            # how many request words a code no rests on
 
     def as_dict(self) -> dict:
-        return {k: v for k, v in self.__dict__.items() if v is not None}
+        return {k: v for k, v in self.__dict__.items() if v is not None and not (k == "words" and not v)}
+
+    @property
+    def weak(self) -> bool:
+        """A code no resting on one word: `sent` made "that thing Sagar sent" another query's (#30)."""
+        return self.ok is False and self.by == "code" and self.words == 1
 
 
 def _norm(word: str) -> str:
@@ -640,7 +687,8 @@ def relevance(request: str, source: str, covers: dict, slots: Slots | None = Non
     elsewhere = {k: v for k, v in elsewhere.items() if v}
     if elsewhere and source in table:
         best = max(elsewhere, key=lambda k: len(elsewhere[k]))
-        return Verdict(False, "code", f"{', '.join(elsewhere[best])} is {best}'s, not {source}'s", other=best)
+        return Verdict(False, "code", f"{', '.join(elsewhere[best])} is {best}'s, not {source}'s", other=best,
+                       words=len(elsewhere[best]))
     return Verdict(None, "none", f"no query declares {', '.join(subject[:3])}")
 
 
@@ -682,37 +730,17 @@ def ask_relevance(request: str, source: str, description: str, covers: dict,
     return Verdict(p >= 0.5, "jev", f"Jev: {source} answers it at {p:.2f}")
 
 
-# What the pill says instead of a panel.
+# What the pill says when a request is a query's but lacks its argument.
 
-TAIL_WORDS = {"at", "last", "night", "currently"}
+def clarifying_question(verdict: Verdict | None, covers: dict) -> str | None:
+    """The pill's question when the request is a query's but lacks its argument, else None.
 
-
-def subject_phrase(request: str, slots: Slots | None = None, limit: int = 6,
-                   generic: set[str] | frozenset[str] = frozenset()) -> str:
-    """The request with its question words and time window cut off: "what's the weather tomorrow" -> "weather"."""
-    slots = slots or extract_slots(request)
-    text = request.strip().rstrip("?.!")
-    for key in ("day", "days"):
-        span = getattr(slots, f"{key}_text")
-        if span:
-            text = re.sub(r"\s*\b(?:for|on|in|over|this|next)?\s*" + re.escape(span) + r"\b", " ", text,
-                          flags=re.I)
-    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9'.-]*", text.replace(chr(0x2019), "'"))
-    lead = set(generic) | {"does", "did", "was", "were"}
-    while tokens and _filler(tokens[0], lead):
-        tokens.pop(0)
-    while tokens and (_filler(tokens[-1], set(generic)) or tokens[-1].lower() in TAIL_WORDS):
-        tokens.pop()
-    return " ".join(tokens[:limit]) or "that"
-
-
-def no_source_line(request: str, verdict: Verdict | None, covers: dict,
-                   slots: Slots | None = None) -> tuple[str, bool]:
-    """(the sentence for the pill, whether a web search makes sense)."""
-    slots = slots or extract_slots(request)
+    None means no source on this Mac holds it, and the request gets an open
+    answer instead (bin/lib/glass_answer.py). A no resting on one stray word
+    never asks: "pull up that thing Sagar sent" got the client-name question
+    because of `sent` (labelled 30, #30).
+    """
     other = verdict.other if verdict else None
-    ask = covers.get("queries", {}).get(other or "", {}).get("ask")
-    if other and ask:
-        return ask, False
-    phrase = subject_phrase(request, slots, generic=set(covers.get("generic", [])))
-    return f"I don't have {phrase} on this Mac.", True
+    if not other or verdict is None or verdict.weak:
+        return None
+    return covers.get("queries", {}).get(other, {}).get("ask")

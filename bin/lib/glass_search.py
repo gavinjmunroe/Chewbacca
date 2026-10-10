@@ -79,6 +79,9 @@ class Result:
     ms: int = 0
     # True when the answer is a quoted snippet rather than a synthesis.
     quoted: bool = True
+    # The other top snippets, in rank order, for a caller that writes its own
+    # sentence from them (bin/lib/glass_answer.py). Never drawn.
+    snippets: list[str] = field(default_factory=list)
 
 
 def clean(text: str, limit: int) -> str:
@@ -209,7 +212,8 @@ def search_ddg(query: str, timeout: float) -> Result:
     results = parse_ddg(page)
     answer, host = pick_answer(query, results)
     return Result(query=query, answer=answer, answer_host=host,
-                  sources=[s for s, _ in results[:MAX_SOURCES]], backend="duckduckgo")
+                  sources=[s for s, _ in results[:MAX_SOURCES]], backend="duckduckgo",
+                  snippets=[f"{s.host}: {clean(snip, 300)}" for s, snip in results[:MAX_SOURCES] if snip])
 
 
 def search(query: str, timeout: float = TIMEOUT_S) -> Result:
@@ -249,6 +253,11 @@ def _prop(value: str) -> str:
 
 def _data(pointer: str, value) -> str:
     return f"d {pointer} {json.dumps(value, separators=(',', ':'), ensure_ascii=False)}"
+
+
+def data_line(pointer: str, value) -> str:
+    """A `d` line for the search panel's data, for callers that fill it themselves."""
+    return _data(pointer, value)
 
 
 def row_id(index: int) -> str:

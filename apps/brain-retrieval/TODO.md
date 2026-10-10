@@ -11,7 +11,11 @@ than once per change is how 68% becomes a fictional 80%.**
 
 ---
 
-## P0, the retriever is not wired into anything yet
+## P0, wiring. Done 2026-10-09 except the skill
+
+`brain-recall.sh` calls `brain ask` on every prompt, `~/.local/bin/brain`
+links to `src/brain.py`, and launchd keeps the index fresh. What is left is
+item 1's skill file.
 
 ### 1. Ship `brain` as a skill, not an MCP server
 The retriever works and nothing calls it. MCP tool schemas load into every
@@ -55,7 +59,7 @@ aborting the load forever (findings/RESULTS.md). No query cache yet.
 
 Query embedding is the only unreliable cost: warm p50 12ms, cold ~90ms,
 model-not-resident 460ms. Cache query vectors keyed on the normalized string.
-`keep_alive: 30m` is already set in `src/brain.py`; verify it holds.
+`keep_alive` is `2h` in `src/brain.py` since 2026-10-09.
 - **Accept:** p90 end-to-end under 300ms across 50 real queries, and the 120ms
   timeout path demonstrably returns lexical results with `degraded=embed_timeout`
   in the header. Force it by stopping ollama mid-run.

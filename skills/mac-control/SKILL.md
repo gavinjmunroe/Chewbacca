@@ -16,7 +16,7 @@ You are about to act on someone's real machine. Their real email, their real fil
 |-------|-------------------|---------|
 | 1 Data | The answer is in a database or file | `sqlite3`, `defaults read` |
 | 2 Scripting | The app has an AppleScript dictionary | `chewie run '...'` |
-| 3 **Accessibility** | **Any GUI element with a name. The default.** | `chewie see`, `chewie click` |
+| 3 **Accessibility** | **Any GUI element with a name. The default.** | `chewie app see`, `chewie app press` (background), `chewie click` (moves the mouse) |
 | 4 Input | Pure keystrokes, no element | `chewie type`, `peekaboo hotkey` |
 | 5 Vision | Canvas apps, or genuinely visual questions | `chewie shot` |
 | 6 Browser | Anything in a browser tab | `chewie web` |
@@ -48,6 +48,35 @@ Never `see` once and then act four times. Refs are scoped to their snapshot and 
 stale the moment the UI changes: a sheet opening, a navigation, a scroll. Twenty steps
 at 95% reliability is a 36% success rate, and the only defense is checking after each
 one.
+
+## Background first: `chewie app`
+
+`chewie app` drives one app through accessibility without moving the mouse,
+raising a window or stealing focus. The person keeps working while you act,
+and hidden, minimized or off-Space windows still work. Reach for it before
+`chewie click`, which takes over the real cursor.
+
+```bash
+chewie app windows Photos                       # window ids, hidden or not
+chewie app see Photos --shot /tmp/p.png         # indexed elements + a capture of that window only
+chewie app press Photos 4                       # AXPress element 4, revalidated against the see
+chewie app set Notes 7 "milk, eggs"             # write a field's value, read back to verify
+chewie app menu Photos Photos "Settings..."     # walk the menu bar; a path ending on a menu lists it
+chewie app key TextEdit cmd+s                   # keys go to that app's pid, not the frontmost one
+chewie app find Photos "turn off iCloud but keep the photos in the cloud"
+chewie app do Calculator "clear the display"    # find, then press
+```
+
+`find` tries an exact label in code first. Only when that fails does Jev pick
+from the window's actionable elements; its answer comes back with a confidence
+and the runner-up controls, and `do` refuses under 0.6 rather than guessing.
+Without a Jev key, `find` hands back the candidate list for you to pick by index.
+
+Labels that are numbers (Calculator's digits) need `label:7`; a bare `7` is an
+index. A press that returns `cannotComplete` usually opened a sheet and landed:
+run `see` again rather than retrying. Anything whose label reads as send,
+submit, delete, remove, pay, post and the like, and any Return key, exits 4
+until you repeat it with `--yes`, which you add only after the person said so.
 
 ## Routing examples
 

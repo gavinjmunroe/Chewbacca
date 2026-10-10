@@ -38,6 +38,14 @@ from collections.abc import MutableMapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# The display app starts this with launchd's PATH, where python3 is macOS's
+# 3.9, and bin/lib uses `str | None`, which 3.9 rejects while the module loads.
+# Hand off to a newer interpreter before anything imports it.
+if sys.version_info < (3, 10):
+    for newer in ("/opt/homebrew/bin/python3", "/usr/local/bin/python3"):
+        if os.path.exists(newer):
+            os.execv(newer, [newer, *sys.argv])
+
 # The router and the memory live next to this script. bin/lib is not a
 # package, so the path is added rather than imported through.
 sys.path.insert(0, str(Path(__file__).resolve().parent / "lib"))

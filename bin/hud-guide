@@ -178,7 +178,7 @@ def see(app: str | None) -> dict:
     if SNAPSHOT_OVERRIDE:
         return look_from(SNAPSHOT_OVERRIDE, app or "", "")
     app = app or front_app()
-    command = ["peekaboo", "see", "--json", "--timeout-seconds", str(SEE_TIMEOUT)]
+    command = ["peekaboo", "see", "--json", "--timeout", f"{SEE_TIMEOUT}s"]
     if app:
         command += ["--app", app]
     try:
@@ -206,11 +206,37 @@ def see(app: str | None) -> dict:
             message = str((parsed.get("error") or {}).get("message") or "")
         raise LookError(f"the screen could not be read: {message[:160] or 'unknown error'}")
     data = parsed.get("data") or {}
+    snapshot = str(data.get("ui_map") or "")
+    if not Path(snapshot).is_file() and data.get("ui_elements"):
+        snapshot = save_inline(data)
     return look_from(
-        str(data.get("ui_map") or ""),
+        snapshot,
         str(data.get("application_name") or app or ""),
         str(data.get("window_title") or ""),
     )
+
+
+def save_inline(data: dict) -> str:
+    """peekaboo 4 returns the controls in its output and no longer saves a
+    snapshot file, so the file the rest of this reads is written here, in the
+    shape peekaboo 3 left behind."""
+    elements = {}
+    for element in data.get("ui_elements") or []:
+        if not isinstance(element, dict) or not element.get("id"):
+            continue
+        elements[str(element["id"])] = {
+            "id": element["id"],
+            "role": element.get("ax_role") or element.get("role"),
+            "frame": element.get("bounds"),
+            "label": element.get("label"),
+            "title": element.get("title"),
+            "isActionable": element.get("is_actionable"),
+        }
+    target = (data.get("observation") or {}).get("target") or {}
+    BOB_DIR.mkdir(parents=True, exist_ok=True)
+    path = BOB_DIR / "guide-controls.json"
+    path.write_text(json.dumps({"uiMap": elements, "windowBounds": target.get("bounds")}), encoding="utf-8")
+    return str(path)
 
 
 def look_from(snapshot: str, app: str, window: str) -> dict:

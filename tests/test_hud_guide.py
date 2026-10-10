@@ -209,6 +209,40 @@ def main() -> int:
         out = run("clear")
         check("no display is exit 2 with the fix", out.returncode == 2 and "hud open" in out.stderr, out.stderr)
 
+    # peekaboo 4 answers with the controls inline and saves no snapshot file, and
+    # its flag is --timeout. A fake peekaboo on PATH answers in that shape.
+    with tempfile.TemporaryDirectory() as tmp:
+        bindir = Path(tmp) / "bin"
+        bindir.mkdir()
+        answer = {"success": True, "data": {
+            "application_name": "Bank", "window_title": "Sign in", "ui_map": str(Path(tmp) / "gone.json"),
+            "ui_elements": [
+                {"id": "elem_1", "ax_role": "AXButton", "role": "button", "label": "Sign in",
+                 "bounds": {"x": 100, "y": 200, "width": 80, "height": 30}, "is_actionable": True},
+            ],
+            "observation": {"target": {"bounds": [[0, 0], [800, 600]]}},
+        }}
+        fake = bindir / "peekaboo"
+        fake.write_text("#!/bin/sh\ncase \"$*\" in *--timeout-seconds*) echo 'removed in v4' >&2; exit 64;; esac\n"
+                        f"cat <<'EOF'\n{json.dumps(answer)}\nEOF\n")
+        fake.chmod(0o755)
+        saved_env = {k: os.environ.get(k) for k in ("PATH", "HUD_GUIDE_SNAPSHOT", "BOB_DIR")}
+        os.environ["PATH"] = f"{bindir}:{os.environ['PATH']}"
+        os.environ.pop("HUD_GUIDE_SNAPSHOT", None)
+        os.environ["BOB_DIR"] = str(Path(tmp) / "bob")
+        try:
+            module = load("hud_guide_v4", TOOL)
+            found = module.controls(module.see("Bank"))
+            check("peekaboo 4 inline controls are read", [c["name"] for c in found] == ["Sign in"], str(found))
+        except Exception as error:  # noqa: BLE001
+            check("peekaboo 4 inline controls are read", False, repr(error))
+        finally:
+            for key, value in saved_env.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
+
     print("\nall passed" if not failures else f"\n{failures} failed")
     return 1 if failures else 0
 

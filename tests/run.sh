@@ -1323,6 +1323,16 @@ if group "hud"; then
   # silently on somebody else's Mac before this existed.
   check  "the display can say why it is not drawing" python3 "$ROOT/tests/test_hud_doctor.py"
   check  "hud-listen parses"  python3 -m py_compile "$ROOT/bin/hud-listen"
+
+  # The display app starts hud-listen with launchd's PATH, where python3 is
+  # macOS's 3.9 and bin/lib uses `str | None`. It crashed on a fresh Mac on
+  # 2026-10-09 and has to hand off to a newer python instead.
+  if [ -x /opt/homebrew/bin/python3 ] || [ -x /usr/local/bin/python3 ]; then
+    check  "hud-listen starts under launchd's minimal PATH" \
+      env -i PATH=/usr/bin:/bin HOME="$HOME" "$ROOT/bin/hud-listen" --help
+  else
+    skip   "hud-listen starts under launchd's minimal PATH" "no newer python3 here"
+  fi
   check  "a greeting costs no model turn" python3 "$ROOT/tests/test_pleasantry.py"
   check  "hud-speak parses"   python3 -m py_compile "$ROOT/bin/hud-speak"
   # The voice, minus the model: sentence splitting and the cache of short

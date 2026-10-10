@@ -53,10 +53,10 @@ ok "transcripts outside the window are skipped" '[ "$(python3 -I "$ROOT/bin/tab-
 # The hook: stamped, silent when nothing died.
 H="$ROOT/.claude/hooks/tab-rescue.sh"
 session dead2 claude-vscode /Users/x/code/b "Build the dashboard" "$LIMIT"
-out=$(echo '{}' | TAB_RESCUE_BIN="$ROOT/bin/tab-rescue" SIM_REAP_BIN=/nonexistent bash "$H")
+out=$(echo '{}' | TAB_RESCUE_BIN="$ROOT/bin/tab-rescue" SIM_REAP_BIN=/nonexistent AGENT_NICE_BIN=/nonexistent bash "$H")
 ok "hook speaks about a new death" 'printf %s "$out" | grep -q "Build the dashboard"'
 session dead3 claude-vscode /Users/x/code/c "Another one" "$LIMIT"
-out=$(echo '{}' | TAB_RESCUE_BIN="$ROOT/bin/tab-rescue" SIM_REAP_BIN=/nonexistent bash "$H")
+out=$(echo '{}' | TAB_RESCUE_BIN="$ROOT/bin/tab-rescue" SIM_REAP_BIN=/nonexistent AGENT_NICE_BIN=/nonexistent bash "$H")
 ok "hook scans at most once a minute" '[ -z "$out" ]'
 
 # sim-reap with fake simctl and ps.

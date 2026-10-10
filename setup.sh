@@ -1004,7 +1004,7 @@ _installed_scanners=""
 # judgement calls.
 # demo-shoot is a wrapper, not a scanner, but it installs the same way: a
 # small executable in bin/ that needs to reach ~/.local/bin.
-for _tool in ai-scan skill-scan prose-check voice-check code-slop demo-shoot craft-gate site-gate ui-proof claude-tab gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning phone-mirror brain-pull-safe brain-rerank mac-db screen-time tab-rescue sim-reap; do
+for _tool in ai-scan skill-scan prose-check voice-check code-slop demo-shoot craft-gate site-gate ui-proof claude-tab gtme-math gtme-graph gtme-learning gtme-library gtme-signals clay-fixture-check task-graph ux-learning phone-mirror brain-pull-safe brain-rerank mac-db screen-time tab-rescue sim-reap agent-nice; do
   if [ -f "$SCRIPT_DIR/bin/$_tool" ]; then
     link_tool "$_tool"
     _installed_scanners="$_installed_scanners $_tool"
@@ -1621,10 +1621,11 @@ _register("UserPromptSubmit", hooks_dir + "/disk-guard.sh", timeout=5)
 _register("UserPromptSubmit", hooks_dir + "/tab-rescue.sh", timeout=5)
 # Nine tabs, their subagents and a forgotten simulator took the Mac to load 37
 # with 15% memory free on 2026-10-10 ("My slow af rn"). Over load = cores it
-# renices agent shell work and refuses workflows; over twice cores, subagents.
+# refuses workflows, over twice cores subagents too. bin/agent-nice (run by
+# tab-rescue.sh) keeps agents at nice 10 so his apps win the CPU.
 _register("UserPromptSubmit", hooks_dir + "/machine-budget.sh", timeout=5)
 _register("PreToolUse", hooks_dir + "/machine-budget.sh", timeout=5,
-          matcher="Bash|Agent|Task|Workflow",
+          matcher="Agent|Task|Workflow",
           status="Checking the Mac has room...")
 _register("UserPromptSubmit", hooks_dir + "/client-rulings.sh", timeout=5)
 # Caleb's "do it yourself" in chat approves Clay writes for 12 hours, in place

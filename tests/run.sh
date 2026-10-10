@@ -1283,7 +1283,7 @@ if group "hooks"; then
   check "prayer-guard checks every visible block this turn" bash "$ROOT/tests/prayer_guard.sh"
   check "disk-guard prunes regenerable caches once when the disk runs low" bash "$ROOT/tests/disk_guard.sh"
   check "tab-rescue flags tabs dead on a usage limit once, sim-reap stops orphaned simulators" bash "$ROOT/tests/tab_rescue.sh"
-  check "machine-budget renices agent work when the Mac is busy and refuses fan-outs when hot" bash "$ROOT/tests/machine_budget.sh"
+  check "machine-budget refuses fan-outs on a busy Mac, agent-nice keeps agents at nice 10" bash "$ROOT/tests/machine_budget.sh"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   check "hook modules import on the stock macOS Python" bash "$ROOT/tests/stock_python_imports.sh"
   check "welcome: five tappable questions personalize the brain" bash "$ROOT/tests/welcome.sh"

@@ -14,20 +14,19 @@ type hook_init >/dev/null 2>&1 && hook_init machine-budget.sh 5
 # Three levels, read from the 1-minute load average and free memory:
 #
 #   calm   nothing happens.
-#   warm   every Bash command runs reniced to 10, so agent work yields the CPU
-#          to whatever Caleb has in front of him and still finishes. Workflow
-#          fan-outs are refused. The next prompt is told the machine is busy.
-#   hot    shell work runs at nice 19, and subagent spawns are refused too:
-#          a subagent is a whole claude process plus its own MCP servers.
+#   warm   Workflow fan-outs are refused, and the next prompt is told the
+#          machine is busy so it plans one thing at a time.
+#   hot    subagent spawns are refused too: a subagent is a whole claude
+#          process plus its own MCP servers.
+#
+# Priority is handled by bin/agent-nice, run from tab-rescue.sh, which keeps every
+# agent process and its children at nice 10 so Caleb's apps win the CPU.
 #
 # Thresholds, measured on this Mac (14 cores, 24 GB). Usable at load 14 to 17
 # with 48% free while a dozen tabs idled (chewbacca-jobs' notes); "slow af" at
 # 19 with 15% free; unusable at 80+ with 74 MB free. So warm starts at load =
 # cores or under 20% free, hot at twice cores or under 10% free.
 #
-# Renicing rewrites the command, which Claude Code only accepts together with
-# an allow decision. That would skip permission prompts, so it only happens in
-# a session already running bypassPermissions; anywhere else this only warns.
 # ~/.chewbacca/load-authorized (touched in the last 10 minutes, the same file
 # load-guard reads) lets a fan-out through when Caleb said it's worth it.
 
@@ -106,15 +105,5 @@ if tool == "Workflow" or (tool in ("Agent", "Task") and level == "hot"):
          "If he says it is worth the machine: touch ~/.chewbacca/load-authorized "
          "(10 minutes)." % (level, state, what))
 
-if tool != "Bash" or payload.get("permission_mode") != "bypassPermissions":
-    sys.exit(0)
-inp = dict(payload.get("tool_input") or {})
-cmd = inp.get("command") or ""
-if not cmd.strip() or re.search(r"\b(re)?nice\b", cmd):
-    sys.exit(0)
-prio = 19 if level == "hot" else 10
-inp["command"] = "renice -n %d -p $$ >/dev/null 2>&1; %s" % (prio, cmd)
-emit({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow",
-      "permissionDecisionReason": "machine-budget: %s, running at nice %d" % (state, prio),
-      "updatedInput": inp}})
+sys.exit(0)
 '

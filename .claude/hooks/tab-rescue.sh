@@ -34,6 +34,14 @@ if [ -n "$SIM_REAP" ] && stamp_due "$LOG_DIR/.sim-reap-stamp" "${SIM_REAP_INTERV
   disown 2>/dev/null || true
 fi
 
+# Every agent CLI and its children at nice 10 so Caleb's apps win the CPU
+# (load 37 on 14 cores, 2026-10-10). New tabs start at 0, hence once a minute.
+NICER="${AGENT_NICE_BIN:-$(command -v agent-nice 2>/dev/null)}"
+if [ -n "$NICER" ] && stamp_due "$LOG_DIR/.agent-nice-stamp" "${AGENT_NICE_INTERVAL:-60}"; then
+  ( python3 -I "$NICER" >> "$LOG_DIR/agent-nice.log" 2>&1 ) </dev/null >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+fi
+
 RESCUE="${TAB_RESCUE_BIN:-$(command -v tab-rescue 2>/dev/null)}"
 [ -n "$RESCUE" ] || exit 0
 stamp_due "$LOG_DIR/.tab-rescue-stamp" "${TAB_RESCUE_INTERVAL:-60}" || exit 0

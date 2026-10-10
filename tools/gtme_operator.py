@@ -74,9 +74,17 @@ STALE_SYNC_HOURS = 24
 # The reply-rate drop alarm compares two syncs at least this many new sends
 # apart; under 100 sends one reply moves the rate by a whole point.
 DROP_MIN_NEW_SENDS = 100
+# Most replies to a cold email arrive within three days of it (guessed from
+# the 3-day gap between sequence steps in the playbook, line 115; never
+# measured on our own inbox).
+REPLY_LAG_DAYS = 3
 
 # ── the glossary: every term taught once, in one plain sentence ───────────
 GLOSSARY = {
+    "growth engineer": "A growth engineer (GTME) runs the system that finds likely buyers, writes to them "
+                       "and books sales meetings.",
+    "outbound": "Outbound means you reach out first, mostly by email, to people who haven't heard of you.",
+    "cold email": "A cold email is an email to someone who doesn't know you yet.",
     "Clay": "Clay is a web app that finds companies and people, looks up their work emails, "
             "and sends your emails for you; think of it as the engine under the hood.",
     "ICP": "ICP means ideal customer profile: a short description of the companies and people "
@@ -119,7 +127,7 @@ CASE_SENSITIVE = {"Clay", "Form D", "ICP"}
 
 def _term_re(term: str) -> re.Pattern:
     flags = 0 if term in CASE_SENSITIVE else re.IGNORECASE
-    return re.compile(r"(?<![\w`-])" + re.escape(term) + r"s?(?![\w`])", flags)
+    return re.compile(r"(?<![\w`-])" + re.escape(term) + r"(?:e?s)?(?![\w`])", flags)
 
 
 TERM_RES = {t: _term_re(t) for t in GLOSSARY}
@@ -273,10 +281,17 @@ class Teacher:
             return
         # Quoted text is data (a campaign name, a reply), not our words, so a
         # term inside it is not one we used.
-        ours = re.sub(r'"[^"]*"', " ", line)
+        self._explain(re.sub(r'"[^"]*"', " ", line))
+
+    def _explain(self, text: str) -> None:
+        # A definition can use another term ("credits ... a workspace"), so
+        # each one printed is scanned in turn; teach() marks a term known
+        # before recursing, which ends the chain.
         for term, rx in TERM_RES.items():
-            if not self.known(term) and rx.search(ours):
-                print(f"    ({self.teach(term)})", file=self.out)
+            if not self.known(term) and rx.search(text):
+                definition = self.teach(term)
+                print(f"    ({definition})", file=self.out)
+                self._explain(definition)
 
     def lesson_seen(self, key: str) -> bool:
         return key in self.state["lessons"]
@@ -358,13 +373,12 @@ def run_json(argv: list[str], fixture: str, timeout: int = 90) -> dict:
 
 def clay(op: str, **kv) -> dict:
     argv = ["node", str(ROOT / "bin" / "chewbacca-clay"), op] + [f"{k}={v}" for k, v in kv.items()]
-    key = "clay-" + op + "".join(f"-{v}" for v in kv.values())
-    return run_json(argv, re.sub(r"[^A-Za-z0-9_.-]", "_", key))
+    return run_json(argv, f"clay-{op}")
 
 
 def api(site: str, op: str, **kv) -> dict:
     argv = ["bash", str(ROOT / "bin" / "chewbacca-api"), "call", site, op] + [f"{k}={v}" for k, v in kv.items()]
-    return run_json(argv, re.sub(r"[^A-Za-z0-9_.-]", "_", f"api-{site}-{op}-{'-'.join(kv.values())}")[:120])
+    return run_json(argv, f"api-{site}-{op}")
 
 
 def detect_clay() -> dict:
@@ -437,7 +451,7 @@ def owner_of(cfg: dict, ws: str) -> str:
 
 def classify_market(text: str) -> str:
     t = (text or "").lower()
-    if re.search(r"\b(restaurant|cafe|bakery|salon|clinic|dentist|gym|shop|store|plumb|roof|contractor|"
+    if re.search(r"\b(restaurant|caf[eé]|baker|salon|clinic|dentist|gym|shop|store|plumb|roof|contractor|"
                  r"local|realtor|law firm|food truck|spa|studio)\w*", t):
         return "local"
     if re.search(r"\b(investor|vc|venture|fund|angel|family office)\w*", t):
@@ -557,7 +571,7 @@ def plan_steps(plan: dict, clay_connected: bool) -> list[dict]:
 
 def interview(ask: Asker, client: str | None) -> dict:
     t = ask.t
-    t.say("Let's set up your outbound, the way a full-time growth engineer would. Six questions, "
+    t.say("Let's set up your outbound, the way a full-time growth engineer would. Seven questions, "
           "every one has a default, Enter keeps it.")
     name = client or ask.ask("1. What's the business called?", "My business")
     sell = ask.ask("2. What do you sell, in one sentence?", "a service that saves our customers time")
@@ -677,6 +691,16 @@ def rows_from(source: dict, body: dict) -> list[dict]:
         if not isinstance(r, dict):
             continue
         site = source.get("site") or source["op"]
+        raised = r.get("amount_sold") or r.get("offering_amount") or r.get("amount")
+        people = r.get("people")
+        first = people[0] if isinstance(people, list) and people else {}
+        if isinstance(first, dict):
+            r = {**r, "contact": r.get("contact") or first.get("name") or "",
+                 "contact_title": first.get("title") or first.get("relationship") or ""}
+        elif isinstance(first, str):
+            r = {**r, "contact": first}
+        if isinstance(raised, (int, float)) and not r.get("one_liner"):
+            r = {**r, "industry": f"raised ${raised:,.0f}" + (f", {r['industry']}" if r.get("industry") else "")}
         out.append({
             "company": r.get("name") or r.get("issuer") or r.get("entity_name") or r.get("company") or "",
             "website": r.get("website") or r.get("domain") or "",
@@ -684,10 +708,10 @@ def rows_from(source: dict, body: dict) -> list[dict]:
             "title": r.get("contact_title") or "",
             "linkedin": r.get("company_linkedin") or "",
             "email": "",
-            "location": r.get("address") or r.get("location") or r.get("state") or "",
+            "location": r.get("address") or r.get("location") or
+                        ", ".join(x for x in (r.get("city"), r.get("state")) if x) or "",
             "source": f"{site} {source['op']}",
-            "why": (r.get("one_liner") or r.get("category") or r.get("industry") or
-                    (f"raised ${r['amount']:,}" if isinstance(r.get("amount"), (int, float)) else "")),
+            "why": r.get("one_liner") or r.get("category") or r.get("industry") or "",
         })
     return [r for r in out if r["company"]]
 
@@ -704,8 +728,9 @@ def fetch_source(source: dict) -> dict:
             body = json.loads(p.stdout or "null")
         except (OSError, subprocess.SubprocessError, ValueError) as err:
             return {"ok": False, "reason": str(err)[:200]}
-        rows = body if isinstance(body, list) else (body or {}).get("issuers") or (body or {}).get("data")
-        return {"ok": isinstance(rows, list), "data": rows or []}
+        rows = body if isinstance(body, list) else (body or {}).get("rows")
+        return {"ok": isinstance(rows, list), "data": rows or [],
+                "reason": "" if isinstance(rows, list) else (p.stderr or "")[:160]}
     return api(source["site"], source["op"], **source["args"])
 
 
@@ -719,11 +744,22 @@ def build_list(t: Teacher, plan: dict) -> dict:
         notes.append(f"{s.get('site') or s['tool']} {s['op']}: {len(got)} rows"
                      + ("" if got else f" ({body.get('reason') or 'nothing came back'})"))
         rows += got
+    # gtme-dedupe matches people; a company row with no person is its own
+    # cluster there (two identical "Crumb Corner" rows stayed two in the
+    # stranger test). So companies collapse here first, on website domain,
+    # else on the name, and gtme-dedupe then merges the people.
+    companies: dict[str, dict] = {}
+    for r in rows:
+        key = company_key(r)
+        if key in companies and not r.get("name"):
+            continue
+        companies.setdefault(key if not r.get("name") else f"{key}|{len(companies)}", r)
+    merged_companies = len(rows) - len(companies)
     d.mkdir(mode=0o700, parents=True, exist_ok=True)
     with raw.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=LIST_COLUMNS)
         w.writeheader()
-        for r in rows:
+        for r in companies.values():
             w.writerow({k: csv_cell(str(r.get(k) or "")) for k in LIST_COLUMNS})
     t.say(f"Pulled {len(rows)} rows from {len(plan['sources'])} free sources:")
     for n in notes:
@@ -731,8 +767,8 @@ def build_list(t: Teacher, plan: dict) -> dict:
     summary = dedupe(raw, d / "deduped")
     kept = summary.get("clusters") or summary.get("golden_rows") or summary.get("people")
     if summary.get("ok"):
-        t.say(f"Deduped with gtme-dedupe: {len(rows)} rows became {kept} unique entries "
-              f"({d / 'deduped' / 'golden.csv'}).")
+        t.say(f"Deduped: {merged_companies} repeat companies merged by website, then gtme-dedupe checked "
+              f"the people; {kept} unique entries left ({d / 'deduped' / 'golden.csv'}).")
     else:
         t.say(f"Dedupe could not run ({summary.get('reason')}); the raw list is at {raw}.")
     t.say("Next, the list needs work emails. That lookup is called enrichment; it costs credits, so it "
@@ -740,6 +776,11 @@ def build_list(t: Teacher, plan: dict) -> dict:
     result = {"rows": len(rows), "unique": kept, "raw": str(raw), "notes": notes, "at": stamp()}
     write_json(d / "list.json", result)
     return result
+
+
+def company_key(r: dict) -> str:
+    site = re.sub(r"^(https?://)?(www\.)?", "", (r.get("website") or "").lower()).split("/")[0].strip()
+    return site or "name:" + re.sub(r"[^a-z0-9]", "", (r.get("company") or "").lower())
 
 
 def csv_cell(value: str) -> str:
@@ -862,9 +903,12 @@ def graph():
 def campaign_view(c: dict) -> dict:
     a = c.get("analytics") or {}
     steps = c.get("steps") or []
-    first = (steps[0] or {}).get("sentCount") if steps else None
     leads = a.get("leads") or 0
-    left = max(0, leads - first) if first is not None else None
+    # Emails still queued: every lead not yet reached by every step. Counting
+    # only step 1 called every live campaign dry the day it launched, since
+    # Clay sends all of step 1 at once (first live run, 2026-10-09).
+    counts = [(s or {}).get("sentCount") for s in steps]
+    left = sum(max(0, leads - (n or 0)) for n in counts) if counts else None
     return {"id": c.get("campaign_id") or c.get("id"), "name": c.get("name"), "status": c.get("status"),
             "leads": leads, "sent": a.get("sent") or 0, "replies": a.get("repliesExcludingOoo") or 0,
             "bounces": a.get("bounces") or 0, "leads_left": left, "as_of": c.get("analytics_as_of")}
@@ -886,14 +930,24 @@ def history_alarm(client: str, sent: int, replies: int, as_of: str | None) -> di
         with path.open("a") as f:
             f.write(json.dumps({"client": client, "as_of": as_of, "sent": sent, "replies": replies}) + "\n")
         mine.append({"client": client, "as_of": as_of, "sent": sent, "replies": replies})
-    base = [r for r in mine if sent - r["sent"] >= DROP_MIN_NEW_SENDS and r["sent"] > 0]
-    if not base:
+    # Replies trail sends by days, so a window that ends today always looks
+    # dry: the first live run called 4.4% -> 0.6% over 537 sends made that
+    # morning. The window is two snapshots that are both REPLY_LAG_DAYS old.
+    cutoff = utc_now() - timedelta(days=REPLY_LAG_DAYS)
+    settled = sorted((r for r in mine if (parse_time(r["as_of"]) or utc_now()) <= cutoff),
+                     key=lambda r: r["as_of"])
+    if not settled:
         return None
-    b = base[-1]
-    before = b["replies"] / b["sent"]
-    recent = (replies - b["replies"]) / (sent - b["sent"])
+    end = settled[-1]
+    start = [r for r in settled if end["sent"] - r["sent"] >= DROP_MIN_NEW_SENDS and r["sent"] > 0]
+    if not start:
+        return None
+    a = start[-1]
+    before = a["replies"] / a["sent"]
+    recent = (end["replies"] - a["replies"]) / (end["sent"] - a["sent"])
     if before > 0 and recent < before / 2:
-        return {"before": before, "recent": recent, "since": b["as_of"], "new_sends": sent - b["sent"]}
+        return {"before": before, "recent": recent, "since": a["as_of"], "until": end["as_of"],
+                "new_sends": end["sent"] - a["sent"]}
     return None
 
 
@@ -948,8 +1002,11 @@ def actions_for(s: dict) -> list[dict]:
             "command": f"chewbacca gtm lead {r.get('email')}  then  chewbacca clay reply ws={ws} "
                        "campaign_id=... lead_id=... reply_data=... --allow-writes",
             "gate": "read, then needs your approval to send",
-            "why": f"Clay inbox, synced {age(s['as_of'])}. Rule: answer positive replies within "
-                   f"{POSITIVE_ANSWER_MINUTES} minutes; a day's wait loses about half the booking chance.",
+            "why": f"Clay inbox, synced {age(s['as_of'])}. " + (
+                f"Rule: answer positive replies within {POSITIVE_ANSWER_MINUTES} minutes; a day's wait loses "
+                "about half the booking chance." if cls == "positive" else
+                "Rule: questions and referrals count toward the positive rate once answered; answer the "
+                "same day, after the positive ones."),
         })
     for c in s["campaigns"]:
         if c["status"] != "active" or not c["sent"]:
@@ -982,11 +1039,11 @@ def actions_for(s: dict) -> list[dict]:
         if c["leads_left"] is not None and c["leads_left"] < RUN_DRY_LEADS:
             out.append({
                 "score": 40, "client": name, "kind": "dry",
-                "do": f"Refill \"{c['name']}\": {c['leads_left']} of {c['leads']} leads not yet emailed",
+                "do": f"Refill \"{c['name']}\": {c['leads_left']} emails left in its queue ({c['leads']} leads)",
                 "command": f"chewbacca gtm suppress --client \"{name}\" --csv  then  chewbacca clay route find-people",
                 "gate": "read, then needs your approval to add leads",
-                "why": f"Clay analytics step 1 sends vs leads, as of {c['as_of']}. A campaign with under "
-                       f"{RUN_DRY_LEADS} unsent leads runs out in about two sending days.",
+                "why": f"Clay analytics per-step sends vs leads, as of {c['as_of']}. Under {RUN_DRY_LEADS} "
+                       "queued emails runs out in about two sending days.",
                 "lesson": "dry",
             })
     if s["drop"]:
@@ -1152,7 +1209,7 @@ def cmd_brief(a, t: Teacher) -> int:
             t.say(f"      next: {REPLY_NEXT.get(r.get('class'), REPLY_NEXT[None])}")
         dry = [c for c in active if c["leads_left"] is not None and c["leads_left"] < RUN_DRY_LEADS]
         if dry:
-            t.say(f"  Running dry: " + "; ".join(f"\"{c['name']}\" {c['leads_left']} left" for c in dry[:4]))
+            t.say(f"  Running dry: " + "; ".join(f"\"{c['name']}\" {c['leads_left']} emails queued" for c in dry[:4]))
         if s["drop"]:
             t.say(f"  Alarm: reply rate fell to {s['drop']['recent']:.1%} over the last {s['drop']['new_sends']} sends")
         bad = [r for r in s["sync"] if r.get("ok") is not True]
@@ -1263,26 +1320,30 @@ def render_report(s: dict, this: dict, last: dict, start: date, end: date, actio
              "## What changed", ""]
     changed = []
     if this.get("launched"):
-        changed.append(f"New campaigns started: {', '.join(md(x) for x in this['launched'])}.")
+        names = this["launched"]
+        more = f", and {len(names) - 3} more" if len(names) > 3 else ""
+        changed.append(f"{len(names)} new campaigns started: {', '.join(md(x) for x in names[:3])}{more}.")
     for a in actions:
         if a["kind"] in ("bounce", "floor", "drop", "dry"):
             changed.append(md(a["do"], 400) + ".")
     if not any(r.get("ok") for r in s["sync"] if "calendar" in r["source"]):
         changed.append("Meetings come from the calendar, which has not synced, so the meeting count may be low.")
     lines += [f"- {x}" for x in changed] or ["- No alarms this week."]
-    lines += ["", "## Running campaigns", "", "| Campaign | Sent | Replies | Reply rate | Leads not yet emailed |",
+    lines += ["", "## Running campaigns", "", "| Campaign | Sent | Replies | Reply rate | Emails still queued |",
               "|---|---:|---:|---:|---:|"]
     for c in s["campaigns"]:
         if c["status"] == "active":
             lines.append(f"| {md(c['name'])} | {c['sent']} | {c['replies']} | "
                          f"{pct(c['replies'], c['sent'])} | {c['leads_left'] if c['leads_left'] is not None else '?'} |")
     lines += ["", "## Next week", ""]
-    plan_items = [md(a["do"], 400) for a in actions if a["kind"] != "sync"][:5]
+    plan_items = [md(a["do"], 400) for a in actions if a["kind"] not in ("sync", "reply")][:5]
     if plan and not all(x.get("done") for x in plan.get("steps") or []):
         nxt = next(x for x in plan["steps"] if not x.get("done"))
         plan_items.append(f"Plan step: {md(nxt['do'])}.")
     if s["unanswered"]:
-        plan_items.insert(0, f"Answer the {len(s['unanswered'])} replies still waiting.")
+        pos = sum(1 for r in s["unanswered"] if r.get("class") == "positive")
+        plan_items.insert(0, f"Answer the {len(s['unanswered'])} replies still waiting, the {pos} interested "
+                             "ones first.")
     lines += [f"{n}. {x}" for n, x in enumerate(plan_items, 1)] or ["1. Keep the running campaigns going."]
     return "\n".join(lines) + "\n"
 
@@ -1344,12 +1405,16 @@ def to_pdf(md: str, title: str, dest: Path) -> str:
         page = Path(tmp) / "report.html"
         page.write_text(md_to_html(md, title))
         chrome = os.environ.get("GTME_CHROME") or CHROME
+        # Chrome prints into the temp dir and the file is copied after: the
+        # first live run printed straight into ~/Downloads and got nothing.
+        printed = Path(tmp) / "report.pdf"
         if Path(chrome).exists():
             try:
                 subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-pdf-header-footer",
-                                f"--user-data-dir={Path(tmp) / 'profile'}", f"--print-to-pdf={dest}",
-                                page.as_uri()], capture_output=True, timeout=60)
-                if dest.exists() and dest.stat().st_size > 0:
+                                f"--user-data-dir={Path(tmp) / 'profile'}", f"--print-to-pdf={printed}",
+                                page.as_uri()], capture_output=True, timeout=90)
+                if printed.exists() and printed.stat().st_size > 0:
+                    shutil.copyfile(printed, dest)
                     return "chrome"
             except (OSError, subprocess.SubprocessError):
                 pass

@@ -431,6 +431,11 @@ if group "gtme"; then
   # Synthetic graph, Clay answers and people.db; nothing reads a real store.
   check "gtm-memory keeps clients apart, never merges on a name, keeps job and fact history, answers under 100 ms" \
     python3 "$ROOT/tests/test_gtm_memory.py"
+  # A stranger with no Clay reaches an approved plan and a deduped list, every
+  # term explained; brief, next and report rank and render a synthetic graph.
+  check "gtme onboards a stranger, ranks the brief, renders the report, strips escapes" \
+    python3 "$ROOT/tests/test_gtme_operator.py"
+  check "gtme dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme --help
   expect "gtm appears in help" "chewbacca gtm" bash "$ROOT/bin/chewbacca" --help
   # Recorded, synthetic surface answers; nothing reads Clay, the clay CLI or Chrome.
   if command -v node >/dev/null 2>&1; then

@@ -21,6 +21,31 @@ pricing, packaging, accounts, signal, channel, with signals leading messaging)
 and Maggie's texted process. Add a practitioner to that file only with a source
 per rule, and mark anything unverified.
 
+## You are their GTME
+
+The person asking may never have heard of Clay. Act like the growth engineer
+they hired, through `chewbacca gtme`:
+
+1. On any GTM ask, run `chewbacca gtme brief` first (it reads the local graph in
+   well under a second; add `--sync` to refresh in the background). No data
+   yet means `chewbacca gtme start`: seven plain questions about their business
+   become an ICP, an offer and a first campaign plan, saved per client.
+2. Act through `chewbacca clay` and `chewbacca gtm`. `chewbacca gtme next` lists
+   every action with its exact command and its gate (read, needs approval, or
+   their hands only). Nothing sends or spends without their yes, and the first
+   send is a small test of 200.
+3. Never tell them to open Clay unless the op is UI-only (`chewbacca clay ops`
+   lists them). Then hand them the exact `clay-go` route the op prints.
+4. No Clay account is not a blocker: say what Clay is in one line, open the
+   signup page (their step, never ours), and build the first list from
+   `chewbacca api` and `gtme-signals formd` with `chewbacca gtme list`.
+5. `gtme` explains each term the first time a person meets it
+   (`~/.chewbacca/gtm/learned.json`) and ends each brief with one lesson from
+   their own numbers. `chewbacca gtme explain <term>` and `chewbacca gtme why`
+   answer the follow-ups.
+6. Friday: `chewbacca gtme report --client NAME --week` writes the client
+   summary as markdown and a PDF in ~/Downloads.
+
 ## Read these first, every time (2026-10-06: skipping them cost a day)
 
 Before building anything for a client, load what already exists, in this order:

@@ -413,16 +413,18 @@ def _reply_intent(reply_text, lead_email, sending_email, company_name):
     others = _emails_in(text, [lead_email, sending_email])
     links = _urls_in(text)
 
+    # An opt-out wins over every other reading: "remove me, my mailbox is full
+    # of these" must be blocklisted, not filed as a bounce (togari-platform #78).
+    if UNSUBSCRIBE.search(text):
+        return {"kind": "unsubscribe", "label": "Asked to unsubscribe",
+                "nextStep": "Blocklisted. Never email them again."}
+
     if BOUNCE.search(text[:400]):
         return {"kind": "bounce", "label": "Didn't deliver",
                 "nextStep": "Mark the address bad and never resend to it. Nobody to answer."}
 
     if IGNORE.search(text):
         return {"kind": "ignore", "label": "No action", "nextStep": "Leave it. Nothing to send."}
-
-    if UNSUBSCRIBE.search(text):
-        return {"kind": "unsubscribe", "label": "Asked to unsubscribe",
-                "nextStep": "Blocklisted. Never email them again."}
 
     if NEW_ADDRESS.search(text):
         return {"kind": "new_address", "label": "New email address", "addresses": others[:1],

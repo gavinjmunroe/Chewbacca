@@ -253,6 +253,11 @@ class Bounces(unittest.TestCase):
             self.assertEqual(out["kind"], "bounce", text)
             self.assertIn("bounce", reply.AUTO_HANDLED)
 
+    def test_an_opt_out_that_reads_like_a_bounce_is_blocklisted(self):
+        for text in ("Remove me. My mailbox is full of these.",
+                     "Unsubscribe. This was undeliverable to my team anyway."):
+            self.assertEqual(reply.reply_intent(text)["kind"], "unsubscribe", text)
+
     def test_a_person_mentioning_delivery_is_not_a_bounce(self):
         self.assertNotEqual(reply.reply_intent("Interested, can you send the deck? Delivery timing "
                                                "matters to us.")["kind"], "bounce")

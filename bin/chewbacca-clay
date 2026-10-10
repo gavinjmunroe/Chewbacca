@@ -280,8 +280,50 @@ function specWrites(specName) {
   if (!so) return true;
   return String(so.request?.method || "").toUpperCase() !== "GET" && !READ_POSTS.has(specName);
 }
+// Every surface is judged on its own, whatever the op's label says (security
+// review of e5f1edeb: a `clay tables delete` CLI surface or a kit bin under a
+// kind:read op skipped the gate because only api-anything methods were read).
+// A CLI command is a read only when its last subcommand is a known read verb;
+// anything else, a mutating verb or one never seen, is a write. A bin is a
+// write unless it is listed here as read-only.
+const CLI_READ_LEAVES = new Set([
+  "list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
+  "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
+  "schema", "validate", "format", "diagram", "preview-sequence", "resolve", "sender-accounts", "skills",
+  "business-context", "files", "segments", "whoami", "versions",
+]);
+// The clay CLI's mutating subcommands (clay 1.9.1 --help, walked 2026-10-09).
+// Listed so a mutating verb is a write even where it sits mid-command.
+const CLI_WRITE_VERBS = new Set([
+  "create", "update", "delete", "add", "remove", "run", "import", "publish", "set", "enroll", "send", "archive",
+  "restore", "upsert", "insert", "start", "pause", "resume", "cancel", "edit", "upload", "switch", "login",
+  "logout", "rename", "decide", "seed", "test", "start-test", "end-test", "send-test", "update-claygent",
+  "ensure-audience-writeback", "add-nodes", "remove-nodes", "upgrade-to-account-agent", "create-account-agent",
+  "insert", "onboard", "feedback",
+]);
+const READ_BINS = new Set(["clay-inbox", "clay-balance"]);
+
+function cliCommand(argv) {
+  const words = [];
+  for (const t of argv) {
+    if (t.startsWith("-") || t.includes("{")) break;
+    words.push(t);
+  }
+  return words;
+}
+
+function surfaceWrites(s) {
+  if (s.type === "api-anything") return specWrites(s.op) || specOps.get(s.op)?.readOnly === false;
+  if (s.type === "cli") {
+    const words = cliCommand(s.argv || []);
+    return !words.length || words.some((w) => CLI_WRITE_VERBS.has(w)) || !CLI_READ_LEAVES.has(words.at(-1));
+  }
+  if (s.type === "bin") return !READ_BINS.has((s.argv || [])[0]);
+  return true;
+}
+
 function isWrite(op) {
-  return op.kind === "write" || op.surfaces.some((s) => s.type === "api-anything" && specWrites(s.op));
+  return op.kind !== "read" || String(op.gate || "").startsWith("write") || op.surfaces.some(surfaceWrites);
 }
 
 // `frozen` is the approved request for a write: the engine must build exactly
@@ -336,7 +378,7 @@ async function attempt(op, cand, flags, frozen) {
 function listOps() {
   const ops = registry.ops.map((op) => ({
     op: op.name,
-    kind: op.kind,
+    kind: isWrite(op) ? "write" : "read",
     gate: op.gate,
     args: op.args,
     summary: op.summary,
@@ -532,7 +574,8 @@ async function readback(op, args) {
   for (const [rk, wk] of Object.entries(rb.args || {})) if (args[wk] !== undefined) rargs[rk] = args[wk];
   if (ro?.args.some((a) => a.replace("?", "") === "ws")) rargs.ws = args.ws ?? registry.defaults.ws;
   const cmd = `chewbacca clay ${rb.op} ${Object.entries(rargs).map(([k, v]) => `${k}=${v}`).join(" ")}`.trim();
-  if (!ro || rb.expect === "manual") return { op: rb.op, check: "manual", ok: null, run: cmd, why: "read it and confirm the change by eye; then set verified:true in registry.json" };
+  // A readback only ever reads: a read op that turns out to write is never run here.
+  if (!ro || isWrite(ro) || rb.expect === "manual") return { op: rb.op, check: "manual", ok: null, run: cmd, why: "read it and confirm the change by eye; then set verified:true in registry.json" };
   let got = null;
   for (const cand of plan(ro, rargs, null)) {
     const r = await attempt(ro, cand, {});

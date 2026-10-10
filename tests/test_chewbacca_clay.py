@@ -459,6 +459,92 @@ def test_control_bytes_cannot_fake_the_prompt():
     ok(code == 2 and "too long to read" in out["reason"], "a request too long to show was not refused")
 
 
+# One valid sample per arg name any registry op takes, for walking every op.
+SAMPLES = {
+    "ws": "1372623", "table": "t_ex1", "row": "r_ex1", "view": "gv_ex1", "audience": "seg_ex1", "campaign": "cam_ex1",
+    "campaign_id": "1", "lead_id": "2", "cursor": "abc", "after": "r_ex9", "limit": "5", "offset": "0", "days": "7",
+    "ids": "p_1,p_2", "emailOrDomain": "blocked.example", "reply_data": '{"email_stats_id":"s1","email_body":"x"}',
+    "forward_data": '{"message_id":"m","stats_id":"s","to_emails":"a@example.com"}', "field": "f_ex1",
+    "update": '{"name":"x"}', "on": "false", "mode": "all", "settings": '{"AUTO_RUN_ON":true}', "fields": "f_a",
+    "rows": "r_1", "records": json.dumps([{"f_a": "x"}]), "config": json.dumps(CONFIG), "filter": json.dumps(FILTER),
+    "status": "PAUSED", "lead_map_id": "1", "category_id": "1", "read_status": "READ", "entry": "9",
+    "emails": "a@example.com", "resource": "t_ex1", "resource_type": "TABLE", "name": "x", "data_type": "text",
+}
+CLI_READ_LEAVES = {"list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
+                   "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
+                   "schema", "validate", "format", "diagram", "preview-sequence", "resolve", "sender-accounts", "skills",
+                   "business-context", "files", "segments", "whoami", "versions"}
+
+
+def surface_mutates(s, sops):
+    """An independent reading of whether one surface can change Clay."""
+    if s["type"] == "api-anything":
+        o = sops[s["op"]]
+        return o["request"]["method"] != "GET" and not o["readOnly"] or not o["readOnly"]
+    if s["type"] == "cli":
+        words = []
+        for t in s["argv"]:
+            if t.startswith("-") or "{" in t:
+                break
+            words.append(t)
+        return not words or words[-1] not in CLI_READ_LEAVES
+    return s["argv"][0] not in ("clay-inbox", "clay-balance")
+
+
+def walk_gate(reg_path=None):
+    reg = json.loads(Path(reg_path or LIB / "registry.json").read_text())
+    sops = {o["name"]: o for o in json.loads((LIB / "clay.json").read_text())["operations"]}
+    extra = {"CHEWBACCA_CLAY_LIB": str(Path(reg_path).parent)} if reg_path else {}
+    walked = 0
+    for op in reg["ops"]:
+        own = {"update-rows": {"records": json.dumps(REC_UPD)}}.get(op["name"], {})
+        argv = [f"{a.rstrip('?')}={own.get(a.rstrip('?'), SAMPLES[a.rstrip('?')])}" for a in op["args"]]
+        for s in op["surfaces"]:
+            if s.get("unless"):
+                continue
+            mutates = op["kind"] == "write" or surface_mutates(s, sops)
+            code, out, p = run({}, {}, op["name"], *argv, "--surface", s["type"], env_extra=extra)
+            if mutates:
+                ok(code == 3 and out["class"] == "refused" and "allow-writes" in out["reason"],
+                   f"{op['name']} via {s['type']} ran without the gate: {p.stdout[:200]}")
+                code, out, _ = run({}, {}, op["name"], *argv, "--surface", s["type"], "--allow-writes", env_extra=extra)
+                ok(code == 3 and "did not approve" in out["reason"], f"{op['name']} via {s['type']} ran with nobody at the terminal")
+                code, out, _ = run({}, {}, op["name"], *argv, "--surface", s["type"], "--allow-writes",
+                                   env_extra={**extra, "CHEWBACCA_CLAY_TTY_ANSWER": op["name"], "CHEWBACCA_NO_SEND": "1"})
+                ok(code == 3 and "NO_SEND" in out["reason"], f"{op['name']} via {s['type']} ran under CHEWBACCA_NO_SEND=1")
+            else:
+                ok(not (out and out.get("class") == "refused"), f"the read {op['name']} via {s['type']} was refused")
+            walked += 1
+    return walked
+
+
+def test_every_mutating_surface_is_gated():
+    ok(walk_gate() > 40, "walked too few surfaces")
+    # A registry that mislabels mutating surfaces as reads is still gated on each one.
+    reg = json.loads((LIB / "registry.json").read_text())
+    reg["ops"] += [
+        {"name": "t-cli-delete", "kind": "read", "gate": "read", "args": ["table"], "summary": "x",
+         "surfaces": [{"type": "cli", "argv": ["tables", "delete", "{table}"]}]},
+        {"name": "t-cli-runs", "kind": "read", "gate": "read", "args": ["table"], "summary": "x",
+         "surfaces": [{"type": "cli", "argv": ["workflows", "runs", "pause", "{table}"]}]},
+        {"name": "t-cli-unknown", "kind": "read", "gate": "read", "args": ["table"], "summary": "x",
+         "surfaces": [{"type": "cli", "argv": ["tables", "frobnicate", "{table}"]}]},
+        {"name": "t-bin", "kind": "read", "gate": "read", "args": ["table"], "summary": "x",
+         "surfaces": [{"type": "bin", "argv": ["clay-send", "--table", "{table}"]}]},
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        lib = Path(d) / "lib"
+        lib.mkdir()
+        (lib / "registry.json").write_text(json.dumps(reg))
+        (lib / "clay.json").write_text((LIB / "clay.json").read_text())
+        for name in ("t-cli-delete", "t-cli-runs", "t-cli-unknown", "t-bin"):
+            code, out, p = run({}, {}, name, "table=t_ex1", env_extra={"CHEWBACCA_CLAY_LIB": str(lib)})
+            ok(code == 3 and out["class"] == "refused", f"a mislabelled {name} ran without the gate: {p.stdout[:200]}")
+        code, out, _ = run({}, {}, "ops", env_extra={"CHEWBACCA_CLAY_LIB": str(lib)})
+        kinds = {o["op"]: o["kind"] for o in out["ops"]}
+        ok(all(kinds[n] == "write" for n in ("t-cli-delete", "t-cli-runs", "t-cli-unknown", "t-bin")), "ops lists a mislabelled write as a read")
+
+
 def test_ui_only_prints_route():
     code, out, _ = run({}, {}, "start-campaign", "campaign=cam_example1")
     ok(code == 0 and out["surface"] == "ui" and out["done"] is False, "a UI-only job is not claimed done")
@@ -507,6 +593,7 @@ def main():
                test_dry_run_builds_each_write, test_dry_run_never_loads_the_engine, test_derived_writes_stay_gated,
                test_new_args_are_shape_checked, test_first_live_use_reads_back,
                test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,
+               test_every_mutating_surface_is_gated,
                test_ui_only_prints_route, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")

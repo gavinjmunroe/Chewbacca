@@ -166,7 +166,33 @@ class Client:
                 return
             except Expired:
                 continue
-        sys.exit("BLOCKED: Brightspace is signed out in Chrome %s. Sign in there once." % PROFILE)
+        sys.exit(stale_cookie_message() or
+                 "BLOCKED: Brightspace is signed out in Chrome %s. Sign in there once." % PROFILE)
+
+
+def stale_cookie_message():
+    """Say so when the session is live in Chrome but never reached its disk.
+
+    Chrome keeps cookies in memory and writes them to the Cookies file every
+    few seconds. On 2026-10-10 a Chrome up for 5 days stopped answering
+    AppleEvents and had not written that file in 19 hours, so Caleb had 5
+    signed-in Brightspace tabs while every read here saw yesterday's expired
+    session and told him to sign in. Quitting Chrome flushes the file and its
+    tabs come back on relaunch.
+    """
+    try:
+        age_h = (time.time() - COOKIE_DB.stat().st_mtime) / 3600
+    except OSError:
+        return None
+    running = subprocess.run(["pgrep", "-xq", "Google Chrome"]).returncode == 0
+    # Guessed, never measured: an active profile writes its cookie file every
+    # few minutes, so an hour of silence while Chrome runs means it's wedged.
+    if running and age_h > 1:
+        return ("BLOCKED: Chrome hasn't saved its cookies in %.0f hours, so a "
+                "session that's live in your tabs never reached the file this "
+                "reads. Quit Chrome (Cmd+Q) and reopen it, your tabs come back, "
+                "then rerun." % age_h)
+    return None
 
 
 def tokens(text):

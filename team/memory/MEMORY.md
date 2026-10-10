@@ -226,3 +226,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_google_signin_calendar_write: Google sign-in asks for calendar write; never improvise gws auth login, clear token_cache.json after re-login
 - project_chewbacca_refactor_waits_on_b2b_b2c: Audience refactor (private repo, personal docs in docs/plans, first-run surface) waits on the B2B vs B2C call; checklist inside
 - feedback_people_scratch_is_people_dir: people CLI scratch store is PEOPLE_DIR; a guessed PEOPLE_DB wrote a test person into the real store (purged)
+- project_chewbacca_live_genui_service: Chewbacca Live (apps/live) is ours, hosted genui for clients; BMA/Amber is a customer, Togari only a data source (10/10)

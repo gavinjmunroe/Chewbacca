@@ -1,173 +1,271 @@
-# Mog plan: beating all 34, with a test for each
+# Mog plan v2: win the wedge first, then the field
 
-Written 2026-10-10 from three teardowns read that day ([mog/MAC-ASSISTANTS.md](mog/MAC-ASSISTANTS.md), [mog/CLAUDE-ADDONS.md](mog/CLAUDE-ADDONS.md), [mog/PEOPLE-GTM.md](mog/PEOPLE-GTM.md)) plus the personal-AI section of [COMPETITORS.md](COMPETITORS.md). Ledger parent: cc438a52.
+Rewritten 2026-10-10, the same day as v1. v1 gave 36 competitors equal weight and planned 11 battles at once. That contradicted three decisions the team had already made, so v2 starts from them:
 
-A product counts as beaten only when its test below passes, on video or in a logged run, against a named number. Until then the row says "open". Most competitor numbers are their own claims with no method, so where a bar is "unmeasured" we set it, measure ourselves, and publish both.
+- **B2B first, consumer after money** ([FIRST-COHORT.md](FIRST-COHORT.md), 2026-10-06; Sagar's growth-engineer call, 2026-10-07). The only build work until Thanksgiving is the seven bones.
+- **Texting is Amber's surface.** Chewbacca doesn't build an iMessage or text product, because that would compete with Sagar's (team memory `project_chewbacca_positioning`). v1's "morning brief by iMessage" broke this and is cut.
+- **The freeze list** holds until Thanksgiving: HUD motion and glass, the keyboard, group cards, the Ghost film, wearables, VS Code surfaces. Four of v1's battles lived mostly inside it.
 
-## The order, and why
+Evidence: [mog/MAC-ASSISTANTS.md](mog/MAC-ASSISTANTS.md), [mog/CLAUDE-ADDONS.md](mog/CLAUDE-ADDONS.md), [mog/PEOPLE-GTM.md](mog/PEOPLE-GTM.md), [COMPETITORS.md](COMPETITORS.md). Ledger parent: cc438a52.
 
-Battles run in this order because each one feeds the next. Nothing can be filmed until a stranger can install (B1), and nothing can be claimed until the measuring tools exist (B0).
+---
 
-- B0 Proof tools: everything else is measured with them
-- B1 Stranger install under 5 minutes: 11 competitors win here today
-- B2 "Done" means proven: cheapest win, MIT code to port
-- B3 Waiting on you, and what am I missing: the daily habit Muse, Instinct and Lindy sell
-- B4 Meetings to action, kept local
-- B5 Voice that acts across apps with one confirm
-- B6 Sessions that survive and ping you
-- B7 The people graph that books a meeting
-- B8 Outbound that beats the AI SDRs on real sends
-- B9 Nothing leaves the Mac
-- B10 Breadth of connectors
-- Later: calls, finance, health (COMPETITORS.md jobs 8 to 10)
+## 1. The product
 
-## B0. Proof tools
+### Who pays, and for what
 
-Nothing below can be claimed without these.
+A services company of 5 to 50 people buys three seats (sales, recruiting, ops) on their own Macs. In 30 days they get booked meetings, plus a Friday page showing the hours saved per seat and which software spend it can replace.
 
-- Wilson CI and McNemar helper shared by every bench (ledger aeef87f7).
-- A stopwatch rig: screen recording plus a timestamp log of key down, first token and first action, so every latency row is timed the same way.
-- A stranger-install recording kit: a clean macOS user account, `cap` recording, and a checklist of each press.
-- Done when: one existing number (voice first-words, 1.0 to 1.7 s) is re-measured through the rig with a CI.
+The proposed price is $7.5K to $10K to install, then $2.5K to $3K a month. That compares with $5K to $8K a month for a GTM agency and $9.4K to $15K a month for an in-house GTM engineer (FIRST-COHORT.md, "What it costs us").
 
-## B1. Stranger install under 5 minutes
+The first industry is undecided (CHW-159). Karthik's list is staffing, studios and CRE. Sagar's is growth teams at PE-owned companies. The Oct 20 gate decides it from which industry books calls, so this plan doesn't pick it.
 
-Competitors: Jarvis (about 2 min), Fazm, Alter and Dottie (download and open), Highlight and VoiceOS (signed .dmg), noisy-studio (2 commands), Cowork plugins (Customize, Install), OpenClaw (one curl line plus a wizard), Lindy (2 min claim), Artisan (running campaign in about 5 min).
+### North star
 
-- Package Chewbacca as a Git-repo plugin marketplace of 3 to 5 plugins (gates, voice, tabs, people, gtm) inside Cowork's limits: 200 MB a plugin, 5,000 files.
-- Google sign-in for strangers: move the OAuth client out of Testing mode, or ship a path that needs no client of ours.
-- The permission walk on the HUD (ledger 7f7f27f0), with Full Disk Access as an explained step before Apple forces one.
-- `chewbacca welcome` answers land inside the same 5 minutes.
-- Test: three people who've never seen it each install on their own Mac and get one useful answer from their own data in under 5 minutes, no help, filmed. Today: never passed.
+**Meetings booked per seat per week, with the path behind each one written down.** Every other number is a leading indicator for that one:
 
-## B2. "Done" means proven
+- positive reply rate by signal
+- bounce rate
+- minutes and credits per campaign
+- install time
 
-Competitors: groundtruth (8 claim patterns, 21 exclusions, 80+ verifier commands, tuned on 1,272 turns, 0 false positives on that set), No Excuses (6 hooks, blocks done until tests pass).
+"Hours saved" goes in the Friday report only when the run log measured it, never as an estimate (`osgraph_runs.py` already refuses to show an unmeasured "time saved").
 
-- Port groundtruth's Stop gate with attribution (MIT): a "done", "fixed" or "works" claim is refused unless a passing check ran in the same turn.
-- Port its `audit` command over ~/.claude/projects to measure our false-positive rate on Caleb's real turns.
-- Package the gates as one named plugin (B1).
-- Test: on 500 of Caleb's real past turns, the gate catches at least 90% of hand-labelled unproven done claims with a false-positive rate under 2%, both with CIs.
+### The position nobody holds
 
-## B3. Waiting on you, and what am I missing
+The 2026-10-07 sweep found no product that does all four of these in one agent:
 
-Competitors: Meta Muse, Instinct, Lindy (morning brief by text), Actively (agent inbox), Ghost (what am I missing), Automat.
+1. works the person's warm network
+2. runs cold outbound through Clay
+3. acts in their Mac apps
+4. runs on their own machine
 
-- Needs-you precision from 75% (41 of 55, 72-hour label) to 90% on a fresh sealed set.
-- Wire Slack and WhatsApp so a hole doesn't read as "nothing pending".
-- The `missing` walk gets a measured conflict catch and a purchase or order source.
-- A morning brief by iMessage, Lindy-style, built from the same walks.
-- Test: cold install on a second Mac, first brief naming at least 3 real items from the user's own calendar, mail and texts in under 10 minutes, then cut to under 5.
+The pieces exist apart:
 
-## B4. Meetings to action, kept local
+- warm network: Happenstance, Boomerang
+- cold outbound: Clay, Unify, 11x, Artisan
+- acting on the Mac: Highlight, VoiceOS
+- staying local: Ghost, Screenpipe
 
-Competitors: Highlight (3 drafts staged after a call), Shadow (free, local, no bot), Granola, Cluely (300 ms claimed live suggestion, 95% accuracy), OPAL, Ghost.
+That combination is the moat. Every build choice below is judged by whether it deepens it.
 
-- After hang-up, stage 3 drafts (email, message, task) behind one review, in under 60 s.
-- Local summary model so the transcript never leaves the Mac (ties to B9).
-- Measure `bin/call-*`: play one fixed 60 s sales clip, median time from end of question to suggestion, word accuracy against a reference transcript.
-- Never copy Cluely's "undetectable" tier.
-- Tests: 3 drafts in under 60 s from a real 30-minute call on a stranger's laptop; live suggestion median under 1 s with accuracy published; a network capture shows zero transcript bytes leaving.
+What we can claim and they can't is proof from real client sends. The gates on list quality, merges, suppression and launch receipts came from Zeutara's real outbound. Their reply rates are claims with no method shown.
 
-## B5. Voice that acts across apps with one confirm
+### What we refuse
 
-Competitors: VoiceOS (cursor as context, 3-app chain), mrmr (14 connectors, one confirm), Gemini for Mac (Option+Space, ask about the window), Dottie (wake word, no account), Jarvis (Show Me pointer), noisy-studio (speech bound to a session).
+Each of these is a line a competitor crossed. We say it out loud and keep it, because the trust is the product:
 
-- Cursor as context: "reply to him" resolves from what's under the pointer.
-- One confirm card for a 4-write chain, every write verified afterward (mac-runtime plans).
-- Show Me: a Kyber mark lands on the right control, no model in the draw.
-- Ask-about-this-window on the glass in under 3 s.
-- Session-bound speech with fail-open hooks (port noisy-studio, MIT).
-- Tests: one sentence on a Mail thread gives a reply draft plus a calendar hold, read back, in under 10 s with at most 2 presses; a 4-action command with one confirm, all verified; the Show Me mark on the right System Settings control in under 5 s.
+- Nothing sends without a human press. Artisan, 11x and Lindy auto-send. For us the approval gate is a bone, not a setting.
+- No "undetectable" mode. Cluely sells one for $149.99 a month.
+- No LinkedIn automation without the client's written ok, because their accounts carry the risk.
+- No hosted VM holding a client's sign-ins. Instinct and Automat run your life on their cloud.
+- No text or iMessage product, because that's Amber's.
+- Never free.
 
-## B6. Sessions that survive and ping you
+---
 
-Competitors: Fazm (sessions survive restart, 40 windows, phone remote), CallClaude (send and wait by tailing session JSONL), call-me (2,645 stars for "walk away, your watch rings"), claude-voice-multiplexer (heartbeat and zombie detection).
+## 2. The engineering: four layers, not 36 features
 
-- After a reboot, every Claude session listed and resumable with history.
-- Three notify events, done, stuck and needs a decision, by iMessage to your own number with no new accounts. call-me needs 3 accounts and 7 env vars.
-- Zombie state in `tabs`: process alive, no heartbeat for 90 s.
-- Tests: reboot to all sessions resumable in under 10 s, filmed; a stuck session texts you within 60 s of stalling.
+v1 listed features. Most of them are the same four pieces of machinery seen from different angles. So we build the layers once, and each competitor's feature becomes a thin use of them.
 
-## B7. The people graph that books a meeting
+### L1. Sources: one ingest contract into one graph
 
-Competitors: Dex (iMessage sync, last message only), Mesh (many sources, job-change alerts), Happenstance (search over up to 7 accounts, drafts the intro), Boomerang (intro as a state machine with escalation).
+Everything we read lands in `~/.chewbacca/os-graph.sqlite` (`bin/lib/osgraph*.py`) or the people store, under one contract:
 
-- Full-history import resolves 95% of the 20 most-texted handles with zero wrong-person merges, in under 10 minutes cold. Dex keeps one message a contact.
-- Idempotent re-import: zero duplicates after two runs.
-- Weekly job-change diff against the LinkedIn match.
-- `intro` returns a path and drafts the ask; the ask becomes a ledger state machine (drafted, approved, held, nudged, escalated, booked) with connector limits as rows.
-- Tests: on 20 real goal queries, a path whose first hop he's texted in the last year for 15 of 20, with Caleb confirming 10 of 20 are real; one intro that ends in a booked meeting with the path written down.
+- idempotent by source id, so a re-import adds zero rows
+- provenance on every row (source, `extracted_at`, confidence)
+- a `last_seen` cursor, so sync is incremental
+- merges only on more than a first name (`fusion-guard`)
 
-## B8. Outbound that beats the AI SDRs
+That contract is the whole answer to Dex and Mesh, whose weak spot is broken re-imports. It's also where Slack, Gmail for strangers and job-change feeds plug in later, with no new plumbing per source.
 
-Competitors: Clay (Claygent, Sculptor, about 21 credits a row), Unify (9.1% positive reply claim on usage signals), 11x (9.7% reply claim, 3.8 to 5.1% in one independent test), Origami (credit price printed before a play), Artisan (0.098% positive replies per email in its own case study).
+Done when:
 
-All of this runs under Zeutara's standing rulings: max volume, strongest fits first, never cut a list.
+- `tests/test_osgraph.py` gains a re-import property test (run it twice, zero diff)
+- the people import resolves 95% of the 20 most-texted handles with zero wrong merges
 
-- A source URL on every personalization line, and the pre-send gate refuses a row without one. 11x shows this as UX, and Jonah's review demanded it.
-- Credit estimate printed before any Clay run, checked against actual.
-- Each playbook as a named Play (trigger, audience, sequence, stop rule) stored as data.
-- Positive reply rate by signal type on a dashboard.
-- Reasoning trace stored per agent-filled cell.
-- Tests: over 500 Zeutara sends, positive reply rate at least 5% with every send traced to a signal and hard bounces under 2%; Clay credits per verified contact at most half the 21-a-row Claygent baseline; estimate within 20% of actual.
+### L2. The action layer: plan, card, one press, execute, verify, log
 
-## B9. Nothing leaves the Mac
+This is the core. Every write anywhere (Clay, Smartlead, a Gmail draft, a calendar hold, a CRM, Slack) goes through one path:
 
-Competitors: Ghost (nothing leaves the home, $3,499 box), Screenpipe (local by default), Shadow, Alter (local models), Dottie (local model option).
+1. a typed plan (`skills/mac-runtime`)
+2. one preview card showing every write in the plan
+3. one human press, which is the approval-gate bone
+4. execute
+5. read back the result to verify it
+6. one run-log row
 
-- A local model route for classification and summaries on Apple Silicon, so the film can say nothing leaves.
-- Test: a full day of normal use with a network capture shows no transcript, message or mail text leaving, and needs-you precision stays within 5 points of the cloud route.
+One layer covers several competitors' best moments:
 
-## B10. Breadth of connectors
+- mrmr and VoiceOS chain four steps behind one confirm. That's this layer with a voice front end.
+- Highlight stages drafts after a meeting. That's this layer fed by a meeting.
+- Boomerang escalates intros. That's this layer with a timer.
+- An enterprise buyer wants an audit log. That's this layer's run log.
 
-Competitors: Alter (2,000+ services, 80+ actions), mrmr (14 live connectors), OpenClaw (20+ channels, pairing-code approval), Jarvis (30+ OAuth connectors).
+Verification is the part competitors skip, and Zeutara taught it to us. Lists were called "verified" twice before Jonah found five defects, so the read-back is required, never optional.
 
-- Slack, Gmail, Calendar, Linear and Notion working for a stranger, not just Caleb.
-- OpenClaw's pairing code: any inbound channel must be approved before it can instruct the agent (MIT).
-- Test: a fixed 20-task Mac benchmark, same Mac, Chewbacca vs Alter, median time to a correct result, task list published.
+The run-log row is the one schema every later number is computed from:
 
-## Scoreboard
+```
+run_id, client, seat, campaign_id, step, started_at, ended_at,
+credits_estimated, credits_actual, writes_planned, writes_verified,
+route, error, fix, press_by
+```
 
-One row per competitor. "Open" until its test passes.
+Done when:
 
-| Competitor               | Their best thing                     | Battle  | Status |
-| ------------------------ | ------------------------------------ | ------- | ------ |
-| Highlight                | 3 drafts staged after a meeting      | B4      | open   |
-| Shadow                   | free local meeting capture           | B4, B9  | open   |
-| VoiceOS                  | voice plus pointer, 3-app chain      | B5      | open   |
-| Gemini for Mac           | ask about the window                 | B5      | open   |
-| Cluely                   | 300 ms live suggestion (claimed)     | B4      | open   |
-| mrmr                     | 4-step chain, one confirm            | B5, B10 | open   |
-| Jarvis                   | Show Me pointer, 2-min install       | B1, B5  | open   |
-| Fazm                     | restart-proof Claude sessions        | B1, B6  | open   |
-| Dottie                   | wake word, no account                | B5, B9  | open   |
-| Alter                    | 2,000 services, model choice         | B10     | open   |
-| noisy-studio             | 2-command install, session voice     | B1, B5  | open   |
-| claude-voice-multiplexer | heartbeat and zombie detection       | B6      | open   |
-| CallClaude               | send and wait on a session           | B6      | open   |
-| call-me                  | your phone rings when done           | B6      | open   |
-| groundtruth              | done-claim gate, 0 FP on 1,272 turns | B2      | open   |
-| No Excuses               | blocks done until tests pass         | B2      | open   |
-| OpenClaw                 | one-line install, 20 channels        | B1, B10 | open   |
-| Cowork plugins           | plugin install in two clicks         | B1      | open   |
-| Dex                      | iMessage people sync                 | B7      | open   |
-| Mesh                     | job-change alerts                    | B7      | open   |
-| Happenstance             | network search that drafts the intro | B7      | open   |
-| Boomerang                | intro state machine                  | B7      | open   |
-| Clay                     | enrichment table plus agents         | B8      | open   |
-| Unify                    | signal-triggered plays               | B8      | open   |
-| 11x                      | source link per match                | B8      | open   |
-| Origami                  | price shown before a play            | B8      | open   |
-| Artisan                  | 5-min running campaign               | B1, B8  | open   |
-| Lindy                    | morning brief by text                | B3      | open   |
-| Actively                 | per-account agent inbox              | B3, B8  | open   |
-| Ghost                    | what am I missing, local box         | B3, B9  | open   |
-| Instinct                 | follows up on dropped threads        | B3      | open   |
-| Meta Muse                | surfaces unanswered mail, drafts     | B3      | open   |
-| Automat                  | meetings and scheduling              | B3, B4  | open   |
-| Screenpipe               | local screen memory                  | B9      | open   |
-| Granola                  | meeting notes                        | B4      | open   |
-| OPAL                     | acts after the conversation          | B4      | open   |
+- The Zeutara campaign procedure runs end to end through this layer with zero writes outside it. The steps are brief, list, qualify, enrich, draft, approve, send, sort replies.
+- A test fails the build if any script under `bin/` writes to Clay or Smartlead without a run-log row.
 
-OPAL is Langston's company and Caleb leads Tizzy inside it, so that row is about the feature only, never a pitch against him.
+### L3. Reasoning and routing
+
+Each judgment goes to the cheapest path that's accurate enough:
+
+- code, when a rule can decide it
+- Jev, for narrow typed calls (`project_jev_hybrid_route_2026_09_26`)
+- a model, only for the rest
+
+The privacy battle from v1 is one switch inside this router. Classification and summaries go to a local model, and the `route` field records which path each call took. That makes "nothing left the Mac" checkable from a log instead of promised.
+
+Done when every model call writes `route`, and a day on the local route keeps needs-you within 5 points of the cloud route.
+
+### L4. Proof: nothing is claimed without a number
+
+- One stats library, Wilson CI and exact McNemar (ledger aeef87f7), used by every bench.
+- Sealed test sets, at the sizes in section 3.
+- A stopwatch rig: screen recording plus timestamps for key down, first token, first action and verified write.
+- A done-claim gate, ported from groundtruth (MIT, with attribution), including its `audit` command over `~/.claude/projects`. A "done", "fixed" or "works" claim is refused unless a passing check ran in the same turn.
+- A computed scoreboard: each competitor row reads its status from the run log and bench files, so nobody hand-edits "open" into "beat".
+
+The done-claim gate is the one competitor mechanism worth porting before Thanksgiving. It costs about a day, and it attacks this repo's most repeated failure: a fix claimed three times on 2026-09-21, and lists called verified that weren't.
+
+### Packaging
+
+Notarized app plus a Developer ID certificate first. That's a bone, and FIRST-COHORT notes the blocker.
+
+Then a Git-repo plugin marketplace of 3 to 5 plugins (gates, voice, people, gtm, tabs), inside Cowork's limits of 200 MB a plugin and 5,000 files. noisy-studio installs in 2 commands, so that's our ceiling.
+
+The public one-line install waits for the B2B/B2C refactor (team memory `project_chewbacca_refactor_waits_on_b2b_b2c`).
+
+---
+
+## 3. The statistics, decided before the data
+
+v1 said "5% positive over 500 sends beats 11x". It doesn't.
+
+- **Reply rate.** At p = 5% and n = 500, the Wilson 95% interval is about 3.4% to 7.3%. That overlaps the independent 11x range of 3.8% to 5.1%, so 500 sends can't show a win. Separating 5% from 3.8% (one-sided, 80% power) takes about 1,720 sends (at 5% over 1,700 the lower bound is 4.06%). Zeutara's standing ruling is max volume, so the volume exists. The test is at least 1,700 sends, the positive rate's lower CI bound above 3.8%, hard bounces under 2%, and every send traced to a named signal.
+- **Needs-you precision.** Today's 41 of 55 has a 95% interval of 62% to 84%, 22 points wide. Reaching the 90% target takes a fresh sealed set of at least 150 labelled rows, which gives about ±5 points. Build that set only after the rule is frozen.
+- **Done-claim gate.** 500 hand-labelled real turns, with catch rate and false-positive rate both reported with CIs. groundtruth's bar is 0 false positives on its own 1,272 turns.
+- **Latency.** Report medians over at least 30 runs on the same Mac, with load under 20 (`uptime`), never one stopwatch run. Load 95 made the HUD look broken on 10/10.
+- **Comparing two versions of our own.** Use a paired test on the same items (McNemar), never two separate runs side by side.
+
+---
+
+## 4. Phases, dated, with gates
+
+### Phase 1: now to Tue Oct 20 (industry gate)
+
+Only the bones plus the proof layer.
+
+| Work                                                    | Owner (proposed)                           |
+| ------------------------------------------------------- | ------------------------------------------ |
+| L2 action layer and run log under the Zeutara procedure | Caleb                                      |
+| Done-claim gate port, stats library                     | Semyon (gates and benchmarks are his lane) |
+| Cold install on a stranger's Mac, notarized (CHW-146)   | Semyon; Developer ID, Caleb                |
+| Bounce check before every batch                         | Caleb                                      |
+
+Gate: one industry books calls. A pilot signs only after the cold install passes.
+
+Competitors this phase starts beating:
+
+- groundtruth and No Excuses: our gate is ported and audited
+- Origami: a credit estimate printed before every run, within 20% of actual
+- 11x: a source URL on every personalization line, enforced by the gate
+
+### Phase 2: Oct 26 to Thu Nov 26 (Thanksgiving gate)
+
+Pilots 1 to 3 in the winning industry, never more than 3.
+
+| Work                                                                                                                                                                               | Pattern from            | Owner (proposed) |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | ---------------- |
+| Friday client report built from the run log (CHW-156)                                                                                                                              | Lindy, Actively         | Gavin            |
+| Per-account memory in `gtm_memory`: every positive reply has a drafted follow-up within one daily run, none sent before a press                                                    | Actively                | Caleb            |
+| `bin/intro` returns a path, drafts the ask, and runs it as an L2 state machine (drafted, approved, held, nudged, escalated, booked); one booked meeting with the path written down | Boomerang, Happenstance | Caleb            |
+| Plays as data (trigger, audience, sequence, stop rule), reply rate by signal                                                                                                       | Unify                   | Caleb            |
+| Reply-rate test running toward 1,700 sends                                                                                                                                         | 11x, Unify, Artisan     | Caleb            |
+
+Gate, from FIRST-COHORT: paid and renewing, hours saved per seat measured, minutes per campaign down by half.
+
+### Phase 3: after Thanksgiving, only if the gate passes
+
+The freeze lifts, and the consumer and Mac-assistant battles open in this order. Each one is a new front end on layers that already exist:
+
+1. **Meetings to action** (Highlight, Shadow, Granola, Cluely). A meeting feeds L2 and stages 3 drafts within 60 s of hang-up. The local summary comes from L3. Measure `bin/call-*` against Cluely's claimed 300 ms on a fixed clip.
+2. **Voice on the action layer** (VoiceOS, mrmr, Gemini for Mac, Dottie, Jarvis). Cursor-as-context, a Show Me pointer on the glass, and session-bound speech ported from noisy-studio (MIT).
+3. **Needs-you to 90%** on the 150-row sealed set (Muse, Instinct, Lindy, Ghost). The surface is the HUD and Slack, never texts.
+4. **Sessions survive a reboot** (Fazm, CallClaude, call-me). Zombie detection in `tabs` takes voice-multiplexer's heartbeat idea. Its code has no license, so we rebuild the idea.
+5. **Breadth** (Alter, OpenClaw, mrmr connectors). New sources go through the L1 contract. Before any inbound channel can instruct the agent, it needs OpenClaw's pairing code (MIT).
+6. **Privacy proof** (Ghost, Screenpipe). A day on the L3 local route under a network capture.
+
+Phase 3 kill rule: if a battle doesn't move its test number in 3 weeks, it goes back on the freeze list with the reason written down.
+
+---
+
+## 5. Risks we can see now
+
+| Risk                                                           | What breaks                        | Mitigation                                                                        | Owner       |
+| -------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------- | ----------- |
+| Clay's terms on automated UI access (CHW-150)                  | the Clay operator bone             | API surface first, UI only where the API can't; read the ToS before a client pays | Caleb       |
+| Apple adds an explicit Full Disk Access step (2026-10-02)      | chat.db and the people import      | make the grant an explained onboarding step now                                   | Semyon      |
+| Claude plan cost per seat unknown                              | margin on $2.5K a month            | measure tokens per seat-day in the pilot run log before quoting account two       | Jake, Caleb |
+| Carlton's agent environment has no LICENSE file                            | shipping it to clients             | keep it off the client install until he adds one                                  | Caleb       |
+| Mac only                                                       | Windows-heavy prospects            | the waitlist count decides, per FIRST-COHORT                                      | Gavin       |
+| our own Mac at load 50 to 100                                  | every latency bench, and our speed | benches only under load 20; 2 workers max                                         | everyone    |
+| 11x's customer claims were challenged (TechCrunch, 2025-03-24) | bars copied from vendor claims     | every bar marks claim vs independent; beat the independent number                 | Caleb       |
+
+---
+
+## 6. Scoreboard
+
+Status will be computed from the run log and bench files once L4's scoreboard ships. Until then every row is "open". The phase column says when we start on it, not when we win.
+
+| Competitor               | Their best thing                     | Bar we must clear                                           | Layer   | Phase | Status |
+| ------------------------ | ------------------------------------ | ----------------------------------------------------------- | ------- | ----- | ------ |
+| groundtruth              | done-claim gate                      | ours on 500 turns w CI (theirs: 0 FP on 1,272)              | L4      | 1     | open   |
+| No Excuses               | blocks done until tests pass         | same gate, packaged                                         | L4      | 1     | open   |
+| Origami                  | price shown before a play            | estimate within 20% of actual                               | L2      | 1     | open   |
+| 11x                      | source link per match; 9.7% claim    | URL on 100% of lines; lower CI > 3.8% at 1,700 sends        | L2      | 1     | open   |
+| Clay agents              | enrichment table plus agents         | credits per verified contact <= half of ~21                 | L2      | 2     | open   |
+| Unify                    | signal-triggered plays; 9.1% claim   | reply rate by signal, plays as data                         | L2      | 2     | open   |
+| Artisan                  | 5 min to a running campaign          | brief to gated launch-ready < 60 min, receipts present      | L2      | 2     | open   |
+| Actively                 | per-account agent inbox              | 100% of positives drafted in one run, 0 sent unpressed      | L1, L2  | 2     | open   |
+| Boomerang                | intro state machine                  | one booked meeting, path written down                       | L2      | 2     | open   |
+| Happenstance             | network search that drafts the intro | 15 of 20 real goals get a first hop texted in the last year | L1      | 2     | open   |
+| Dex                      | iMessage people sync                 | 95% of top 20 handles, 0 wrong merges, < 10 min             | L1      | 2     | open   |
+| Mesh                     | job-change alerts                    | weekly diff, idempotent re-import                           | L1      | 2     | open   |
+| Cowork plugins           | plugin install in two clicks         | packaged as a marketplace                                   | pkg     | 2     | open   |
+| Lindy                    | proactive assistant, 2-min setup     | brief on HUD or Slack from a cold Mac < 10 min              | L1, L3  | 3     | open   |
+| noisy-studio             | 2-command install, session voice     | install in <= 2 commands; speech port                       | pkg, L3 | 3     | open   |
+| OpenClaw                 | one-line install, 20 channels        | pairing code; sources through L1                            | L1      | 3     | open   |
+| Jarvis                   | Show Me pointer, 2-min install       | mark on the right control < 5 s                             | L2      | 3     | open   |
+| Fazm                     | sessions survive restart             | all sessions resumable < 10 s after reboot                  | L4      | 3     | open   |
+| Dottie                   | wake word, no account                | offline wake to draft < 5 s                                 | L3      | 3     | open   |
+| Alter                    | 2,000 services, model choice         | 20-task benchmark, task list published                      | L1, L3  | 3     | open   |
+| Highlight                | 3 drafts after a meeting             | 3 staged < 60 s after hang-up                               | L2      | 3     | open   |
+| Shadow                   | free local meeting capture           | 0 transcript bytes leave, network capture                   | L3      | 3     | open   |
+| Granola                  | meeting notes                        | Shadow's bar plus L2 drafts                                 | L2, L3  | 3     | open   |
+| Cluely                   | 300 ms live suggestion (claimed)     | median < 1 s over 30 runs, accuracy published               | L3      | 3     | open   |
+| VoiceOS                  | voice plus pointer, 3-app chain      | 2 drafts read back < 10 s, <= 2 presses                     | L2      | 3     | open   |
+| mrmr                     | 4 writes, one confirm                | 4 writes, one card, all verified                            | L2      | 3     | open   |
+| Gemini for Mac           | ask about the window                 | answer on the glass < 3 s                                   | L3      | 3     | open   |
+| claude-voice-multiplexer | heartbeat, zombie detection          | zombie state in tabs at 90 s                                | L4      | 3     | open   |
+| CallClaude               | send and wait on a session           | done, stuck or decision notice < 60 s                       | L4      | 3     | open   |
+| call-me                  | your phone rings when done           | same notice, 0 new accounts                                 | L4      | 3     | open   |
+| Meta Muse                | surfaces unanswered mail             | needs-you >= 90% on 150 sealed rows                         | L1, L3  | 3     | open   |
+| Instinct                 | follows up on dropped threads        | same needs-you bar                                          | L1, L3  | 3     | open   |
+| Ghost                    | what am I missing, local box         | missing walk measured, local-route day                      | L1, L3  | 3     | open   |
+| Screenpipe               | local screen memory                  | local-route network capture                                 | L3      | 3     | open   |
+| Automat                  | scheduling and meetings              | scheduling loop on L2, last press stays human               | L2      | 3     | open   |
+| OPAL                     | acts after the conversation          | feature comparison only                                     | L2      | 3     | open   |
+
+OPAL is Langston's company and Caleb leads Tizzy inside it, so that row compares features only and is never a pitch against him.

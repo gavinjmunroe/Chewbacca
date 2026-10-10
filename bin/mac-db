@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Read any database macOS keeps about you, directly and read-only.
+"""Read and write any database macOS keeps about you, directly.
 
   mac-db stores                          every store: found, readable, rows, newest entry
   mac-db <store> [--days N] [--ahead N] [--search TEXT] [--limit N] [--json]
   mac-db note <id>                       one Apple Note's full text
   mac-db schema <store>                  tables and columns, to write your own query
-  mac-db sql <store> "select ..."        any read-only query against that store
+  mac-db sql <store> "select ..."        any query; a write backs the file up first
+  mac-db backups / restore <dir>         list snapshots, put one back
+  mac-db notes add|append|edit|delete    writes through the app so iCloud syncs it
+  mac-db reminders add|complete, calendar add|edit, contacts add, messages send
   mac-db biome                           list Biome streams; mac-db biome <Stream.Name> reads one
 
 Stores: messages, calls, contacts, mail, notes, calendar, reminders, safari,
@@ -19,9 +22,15 @@ went through AppleScript, and call history, browser history, Photos, Voice
 Memos, Podcasts, downloads, interactionC and Biome were not read at all. Every
 path and column below was checked against this Mac (macOS 15.6) that night.
 
-Nothing here writes. SQLite files open with mode=ro; Chrome holds an exclusive
-lock on History, so it is copied to a temp dir first. MAC_DB_HOME points every
-path at a fake home for tests.
+Reads open mode=ro; Chrome holds an exclusive lock on History, so reads use a
+temp copy. Writes come two ways. App verbs (notes, reminders, calendar,
+contacts, messages) go through the `mac` CLI, so the change goes through the
+app and syncs to iCloud like a tap would; a raw row edit in a synced store is
+overwritten by the next sync. `sql` runs any statement, and anything that
+writes snapshots the database and its WAL into ~/.chewbacca/mac-db/backups
+first, so `mac-db restore` undoes it. Caleb, 2026-10-10, on the first
+read-only version: "NOTHING on chewb should ever be read only that is
+stupid". MAC_DB_HOME points every path at a fake home for tests.
 """
 from __future__ import annotations
 
@@ -549,6 +558,135 @@ def read_biome(stream: str, since: float | None, search: str | None, limit: int)
     return rows[:limit]
 
 
+# ---- writes ------------------------------------------------------------------
+
+BACKUPS = Path(os.environ.get("MAC_DB_BACKUPS") or HOME / ".chewbacca/mac-db/backups")
+# Five per store: chat.db alone was 1.1 GB on 2026-10-10, a night the disk
+# filled to 238 MB free three times, so snapshots cannot pile up unbounded.
+KEEP_BACKUPS = 5
+# store -> (mac CLI app, verbs that write through the app)
+APP_VERBS = {
+    "notes": ("notes", {"add", "append", "edit", "delete"}),
+    "reminders": ("reminders", {"add", "complete"}),
+    "calendar": ("calendar", {"add", "edit"}),
+    "contacts": ("contacts", {"add"}),
+    "messages": ("messages", {"send"}),
+}
+
+
+def backup_files(store: str, files: list[Path]) -> Path:
+    size = sum(f.stat().st_size for f in files if f.exists())
+    BACKUPS.mkdir(parents=True, exist_ok=True)
+    free = shutil.disk_usage(BACKUPS).free
+    if free < size * 2 + 2 * 1024 ** 3:
+        raise Unreadable(f"not enough free disk to snapshot {store} first ({size // 2**20} MB needed, "
+                         f"{free // 2**20} MB free), so nothing was written")
+    dest = BACKUPS / f"{store}-{time.strftime('%Y%m%d-%H%M%S')}"
+    n = 1
+    while dest.exists():
+        n += 1
+        dest = BACKUPS / f"{store}-{time.strftime('%Y%m%d-%H%M%S')}-{n}"
+    dest.mkdir(parents=True)
+    manifest = []
+    for i, f in enumerate(files):
+        for suffix in ("", "-wal", "-shm", "-journal"):
+            src = Path(str(f) + suffix)
+            if src.exists():
+                name = f"{i}-{src.name}"
+                shutil.copy2(src, dest / name)
+                manifest.append({"from": str(src), "file": name})
+    (dest / "manifest.json").write_text(json.dumps({"store": store, "files": manifest}, indent=2))
+    old = sorted(BACKUPS.glob(f"{store}-*"), key=lambda p: p.stat().st_mtime)
+    for stale in old[:-KEEP_BACKUPS]:
+        shutil.rmtree(stale, ignore_errors=True)
+    return dest
+
+
+def allowed_targets() -> set[Path]:
+    """Every file a backup may be restored over: the live store files and their sidecars."""
+    out: set[Path] = set()
+    for spec in STORES.values():
+        for path in spec["paths"]():
+            for suffix in ("", "-wal", "-shm", "-journal"):
+                out.add(Path(str(path) + suffix).resolve())
+    return out
+
+
+def restore_backup(dest: Path) -> list[str]:
+    manifest = json.loads((dest / "manifest.json").read_text())
+    allowed = allowed_targets()
+    biome = [(L / root).resolve() for root in BIOME_ROOTS]
+    # A manifest is a file on disk, so anything could have edited it; restore
+    # only over a store file this tool knows, or inside Biome, and only from a
+    # plain name inside the backup folder (security review, 2026-10-10).
+    for item in manifest["files"]:
+        target = Path(item["from"]).resolve()
+        inside_biome = any(target.is_relative_to(b) for b in biome)
+        if (target not in allowed and not inside_biome) or "/" in item["file"] or item["file"].startswith(".."):
+            raise Unreadable(f"backup manifest points at {item['from']}, which is not a Mac store file; refused")
+    put = []
+    for item in manifest["files"]:
+        shutil.copy2(dest / item["file"], item["from"])
+        put.append(item["from"])
+    originals = {i["from"] for i in manifest["files"]}
+    # A WAL or shm written after the snapshot would replay changes the restore
+    # just undid, so drop sidecars the snapshot did not have.
+    for item in manifest["files"]:
+        base = item["from"]
+        for suffix in ("-wal", "-shm"):
+            if not base.endswith(suffix) and base + suffix not in originals and Path(base + suffix).exists():
+                Path(base + suffix).unlink()
+    return put
+
+
+def run_sql(store: str, statement: str, limit: int) -> dict:
+    spec = STORES[store]
+    paths = spec["paths"]()
+    if not paths:
+        raise Unreadable(f"no {store} database found")
+    con, tmp = connect(paths[0], spec.get("copy", False))
+    try:
+        try:
+            rows = [dict(r) for r in con.execute(statement).fetchmany(max(limit, 1))]
+            return {"rows": rows}
+        except sqlite3.OperationalError as exc:
+            if "readonly" not in str(exc) and "read-only" not in str(exc):
+                raise
+    finally:
+        con.close()
+        if tmp:
+            shutil.rmtree(tmp, ignore_errors=True)
+    # It writes. Snapshot, then run it against the real file, never a copy.
+    dest = backup_files(store, [paths[0]])
+    con = sqlite3.connect(paths[0], timeout=10)
+    con.row_factory = sqlite3.Row
+    try:
+        cur = con.execute(statement)
+        rows = [dict(r) for r in cur.fetchmany(max(limit, 1))] if cur.description else []
+        con.commit()
+        return {"rows": rows, "changed": con.total_changes, "backup": str(dest), "file": str(paths[0])}
+    except sqlite3.OperationalError as exc:
+        if "locked" in str(exc):
+            raise Unreadable(f"{paths[0]} is locked by the app that owns it; quit it and run this again "
+                             f"(backup kept at {dest})") from exc
+        raise
+    finally:
+        con.close()
+
+
+def forward_to_app(store: str, verb: str, args: list[str]) -> int:
+    app, _verbs = APP_VERBS[store]
+    if store == "messages" and os.environ.get("CHEWBACCA_NO_SEND"):
+        # 2026-10-08: a live test send reached a client. CHEWBACCA_NO_SEND
+        # turns every send into a printout.
+        print(f"[no send] mac messages send {' '.join(args)}")
+        return 0
+    exe = shutil.which("mac")
+    if not exe:
+        raise Unreadable("the `mac` CLI is missing; ./doctor.sh says how to install it")
+    return subprocess.run([exe, app, verb, *args]).returncode
+
+
 # ---- output ------------------------------------------------------------------
 
 def when(ts) -> str:
@@ -621,6 +759,12 @@ def main(argv: list[str] | None = None) -> int:
         print(__doc__)
         return 0
     cmd, rest = argv[0], argv[1:]
+    if cmd in APP_VERBS and rest and rest[0] in APP_VERBS[cmd][1]:
+        try:
+            return forward_to_app(cmd, rest[0], rest[1:])
+        except Unreadable as exc:
+            print(f"mac-db: {exc}", file=sys.stderr)
+            return 1
     ap = argparse.ArgumentParser(prog=f"mac-db {cmd}")
     ap.add_argument("target", nargs="?")
     ap.add_argument("query", nargs="?")
@@ -630,6 +774,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--limit", "-n", type=int, default=50)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--fix", action="store_true", help="open the Full Disk Access pane")
+    ap.add_argument("--clear", action="store_true", help="biome: move a stream's files into a backup")
     a = ap.parse_args(rest)
     try:
         if cmd == "stores":
@@ -652,6 +797,31 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(f"{n['title']}  ({when(n['ts'])})\n")
                 print("[locked note, the text is encrypted]" if n.get("locked") else n["text"])
+            return 0
+        if cmd == "backups":
+            for d in sorted(BACKUPS.glob("*-*"), key=lambda p: p.stat().st_mtime, reverse=True) if BACKUPS.is_dir() else []:
+                mb = sum(f.stat().st_size for f in d.iterdir()) // 2**20
+                print(f"{when(d.stat().st_mtime)}  {d.name:<40} {mb:>6,} MB  {d}")
+            return 0
+        if cmd == "restore":
+            if not a.target:
+                ap.error("mac-db restore <backup dir or name>, from `mac-db backups`")
+            dest = Path(a.target) if Path(a.target).is_dir() else BACKUPS / a.target
+            if not (dest / "manifest.json").exists():
+                raise Unreadable(f"no backup at {dest}")
+            for f in restore_backup(dest):
+                print(f"restored {f}")
+            return 0
+        if cmd == "biome" and a.clear:
+            if not a.target:
+                ap.error("mac-db biome <Stream.Name> --clear")
+            files = [f for root in BIOME_ROOTS for f in (L / root / a.target / "local").glob("*") if f.is_file()]
+            if not files:
+                raise Unreadable(f"no Biome stream called {a.target}")
+            dest = backup_files(f"biome-{a.target}", files)
+            for f in files:
+                f.unlink()
+            print(f"cleared {len(files)} files from {a.target}; backup at {dest}")
             return 0
         if cmd == "biome":
             if not a.target:
@@ -682,9 +852,10 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     if not a.query:
                         ap.error('mac-db sql <store> "select ..."')
-                    con.execute("pragma query_only = 1")
-                    rows = [dict(r) for r in con.execute(a.query).fetchmany(max(a.limit, 1))]
-                    print(json.dumps(rows, indent=2, default=lambda b: f"<{len(b)} bytes>" if isinstance(b, bytes) else str(b)))
+                    con.close()
+                    out = run_sql(a.target, a.query, a.limit)
+                    print(json.dumps(out if "changed" in out else out["rows"], indent=2,
+                                     default=lambda b: f"<{len(b)} bytes>" if isinstance(b, bytes) else str(b)))
             finally:
                 con.close()
                 if tmp:
@@ -702,7 +873,7 @@ def main(argv: list[str] | None = None) -> int:
         show(query_store(cmd, since, until, a.search, a.limit), a.json)
         return 0
     except sqlite3.DatabaseError as exc:
-        print(f"mac-db: {exc}. Every store opens read-only, so writes are refused.", file=sys.stderr)
+        print(f"mac-db: {exc}", file=sys.stderr)
         return 1
     except Unreadable as exc:
         msg = str(exc)

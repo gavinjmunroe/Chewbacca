@@ -117,6 +117,9 @@ Optional:
                                Use --dry-run to preview; use agent export for other hosts.
   --brain-dir <path>           With --runtime, choose the private context folder.
   --json                      With --runtime, print machine-readable results.
+  --team                       With --runtime, also load the shared team memory.
+                               Only for Amber, Chewbacca and Firm Foundation teammates.
+  --no-team                    Remove the team memory from an install that has it.
   --github-user <login>        Defaults to the logged-in gh account.
   --repo-dir <path>            Where repos live. Default ~/dev
   --anthropic-key <key>        Written to settings.json env. Omit to leave unset.
@@ -224,6 +227,8 @@ while [ $# -gt 0 ]; do
       SKIP_SECTIONS="$SKIP_SECTIONS editor desktop mcp plugins tools plynn"
       FAST=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --team) AGENT_TEAM=1; shift ;;
+    --no-team) AGENT_TEAM=0; AGENT_NO_TEAM=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) err "unknown argument: $1"; echo; usage; exit 2 ;;
   esac
@@ -235,7 +240,7 @@ if [ -n "$AGENT_RUNTIME" ]; then
   for ((arg_index=0; arg_index<${#REQUESTED_ARGS[@]}; arg_index++)); do
     case "${REQUESTED_ARGS[$arg_index]}" in
       --runtime|--name|--brain-dir) arg_index=$((arg_index + 1)) ;;
-      --dry-run|--json) ;;
+      --dry-run|--json|--team|--no-team) ;;
       *) err "Runtime setup does not accept ${REQUESTED_ARGS[$arg_index]}; use the full installer or native host settings for that option."
          exit 2 ;;
     esac
@@ -246,6 +251,8 @@ if [ -n "$AGENT_RUNTIME" ]; then
   [ -n "$NAME" ] && runtime_args+=(--name "$NAME")
   [ -n "$AGENT_BRAIN" ] && runtime_args+=(--brain-dir "$AGENT_BRAIN")
   [ "$AGENT_JSON" -eq 1 ] && runtime_args+=(--json)
+  [ "${AGENT_TEAM:-0}" -eq 1 ] && runtime_args+=(--team)
+  [ "${AGENT_NO_TEAM:-0}" -eq 1 ] && runtime_args+=(--no-team)
   exec python3 "$SCRIPT_DIR/tools/agent_runtime.py" "${runtime_args[@]}"
 fi
 if [ -n "$AGENT_BRAIN" ] || [ "$AGENT_JSON" -eq 1 ]; then
@@ -520,7 +527,7 @@ install_agent_instructions() {
   install_agent_neutral_rule
   python3 "$SCRIPT_DIR/tools/agents_md.py"
   initialize_personal_context
-  python3 "$SCRIPT_DIR/tools/agent_runtime.py" setup --runtime both --brain-dir "$PC_DIR"
+  python3 "$SCRIPT_DIR/tools/agent_runtime.py" setup --runtime both --brain-dir "$PC_DIR" $( [ "${AGENT_TEAM:-0}" -eq 1 ] && echo --team )
   if ! command -v jq >/dev/null 2>&1; then
     warn "jq is missing: context loading works, but shared file and reply checks require jq"
   fi

@@ -24,7 +24,8 @@ class RuntimeTests(unittest.TestCase):
             'CODEX_HOME': str(self.home / 'codex custom'),
             'CLAUDE_CONFIG_DIR': str(self.home / '.claude'),
             'CHEWBACCA_HOME': str(self.home / '.chewbacca'),
-            'CHEWBACCA_BRAIN_DIR': str(self.home / 'brain')})
+            'CHEWBACCA_BRAIN_DIR': str(self.home / 'brain'),
+            'CHEWBACCA_TEAM': ''})
         self.env.start()
         self.addCleanup(self.env.stop)
 
@@ -203,11 +204,45 @@ class RuntimeTests(unittest.TestCase):
                 runtime.setup('codex')
         self.assertEqual(list(self.home.iterdir()), [])
 
+    def test_stranger_install_never_loads_team_memory(self):
+        # 2026-10-09: a fresh install put Amber's client notes in a stranger's sessions.
+        self.assertFalse(runtime.is_teammate())
+        target = self.home / 'CLAUDE.md'
+        target.write_text('no team line here\n')
+        self.assertFalse(runtime.is_teammate(target))
+
+    def test_teammate_keeps_team_memory_by_flag_env_or_existing_install(self):
+        with patch.dict(os.environ, {'CHEWBACCA_TEAM': '1'}):
+            self.assertTrue(runtime.is_teammate())
+        target = self.home / 'CLAUDE.md'
+        target.write_text(runtime.instruction_block(runtime.registry()['runtimes']['claude-code'], True))
+        self.assertTrue(runtime.is_teammate(target))
+        shared = runtime.shared_home()
+        shared.mkdir(parents=True, exist_ok=True)
+        (shared / 'context.json').write_text('{"brain_dir": "/x", "team": true}')
+        self.assertTrue(runtime.is_teammate())
+
+    def test_team_choice_survives_setup_and_can_be_removed(self):
+        claude = runtime.claude_home() / 'CLAUDE.md'
+        runtime.setup('claude-code', team=True)
+        saved = json.loads((runtime.shared_home() / 'context.json').read_text())
+        self.assertEqual(saved['brain_dir'], str((self.home / 'brain').resolve()))
+        self.assertIs(saved['team'], True)
+        self.assertIn('team/memory/MEMORY.md', claude.read_text())
+        runtime.setup('claude-code')
+        self.assertIn('team/memory/MEMORY.md', claude.read_text())
+        runtime.setup('claude-code', no_team=True)
+        self.assertNotIn('team/memory/MEMORY.md', claude.read_text())
+        runtime.setup('claude-code')
+        self.assertNotIn('team/memory/MEMORY.md', claude.read_text())
+
     def test_shared_guidance_is_discoverable_without_hooks_for_each_runtime(self):
         for key in ('claude-code', 'codex'):
-            block = runtime.instruction_block(runtime.registry()['runtimes'][key])
+            spec = runtime.registry()['runtimes'][key]
+            block = runtime.instruction_block(spec)
             self.assertIn(str(ROOT / 'config/instructions/agent-neutral.md'), block)
-            self.assertIn('@' + str(ROOT / 'team/memory/MEMORY.md'), block)
+            self.assertNotIn('team/memory/MEMORY.md', block)
+            self.assertIn('@' + str(ROOT / 'team/memory/MEMORY.md'), runtime.instruction_block(spec, True))
         source = (ROOT / 'setup.sh').read_text()
         helper = source.split('install_agent_neutral_rule() {', 1)[1].split('\n}', 1)[0]
         self.assertNotIn('paths:', helper)

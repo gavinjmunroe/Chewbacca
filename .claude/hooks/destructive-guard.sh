@@ -34,7 +34,7 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
 printf '%s' "$CMD" | grep -qE '^[[:space:]]*DESTRUCTIVE_OK=1[[:space:]]' && exit 0
 
 REASON=$(DG_CMD="$CMD" DG_SID="$SID" DG_CWD="${CWD:-$PWD}" python3 -I - <<'PY'
-import os, re, shlex, subprocess
+import os, re, shlex, subprocess, time
 cmd, sid, cwd = os.environ["DG_CMD"], os.environ["DG_SID"], os.environ["DG_CWD"]
 
 # Split into simple commands; heredoc bodies and quoted text are data.
@@ -44,6 +44,16 @@ segments = re.split(r"&&|\|\||;|\n|\|", body)
 SAFE = ["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
         "-c", "core.attributesFile=/dev/null"]
 ENV = dict(os.environ, GIT_OPTIONAL_LOCKS="0")
+# One budget for every git call in a check. The hook is registered with a 5 s
+# timeout and a killed hook lets the command through, so three calls at 4 s
+# each (2026-10-09) could fail open. Past the budget, assume dirty.
+DEADLINE = time.monotonic() + 3.0
+
+def left():
+    remaining = DEADLINE - time.monotonic()
+    if remaining <= 0.05:
+        raise TimeoutError("destructive-guard: git budget spent")
+    return remaining
 
 def filter_guard(where):
     # A repo's filter.<name>.clean runs on git status, and attributes can name
@@ -52,7 +62,7 @@ def filter_guard(where):
     # bin/lib/surfaces/code.py does. Reading config runs nothing. None means
     # the config can't be read or names a driver a -c can't take back.
     r = subprocess.run(SAFE + ["-C", where, "config", "--list", "--show-scope", "-z"],
-                       capture_output=True, text=True, timeout=4, env=ENV)
+                       capture_output=True, text=True, timeout=left(), env=ENV)
     if r.returncode != 0:
         return None
     tokens = r.stdout.split("\0")
@@ -83,14 +93,14 @@ def repo_dirty(where):
     # since that's the case this guard exists for.
     try:
         probe = subprocess.run(SAFE + ["-C", where, "rev-parse", "--git-dir"],
-                               capture_output=True, text=True, timeout=4, env=ENV)
+                               capture_output=True, text=True, timeout=left(), env=ENV)
         if probe.returncode != 0:
             return "not a git repository" not in probe.stderr
         guard = filter_guard(where)
         if guard is None:
             return True
         r = subprocess.run(SAFE + guard + ["-C", where, "status", "--porcelain", "--ignore-submodules=all"],
-                           capture_output=True, text=True, timeout=4, env=ENV)
+                           capture_output=True, text=True, timeout=left(), env=ENV)
     except Exception:
         return True
     if r.returncode != 0:

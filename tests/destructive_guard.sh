@@ -53,6 +53,15 @@ touch -t 202001010001 "$T/dirty/f"
 t "info/attributes filter repo still refused" 2 "$T/dirty" "git reset --hard"
 [ ! -e "$T/pwned-info" ] && echo "  ok    info/attributes filter never ran" || { echo "  FAIL  info/attributes filter ran"; fail=$((fail+1)); }
 git -C "$T/dirty" config --unset filter.evil2.clean; rm -f "$T/dirty/.git/info/attributes"
+# A slow git spends the budget: the hook must refuse inside its own 5 s
+# timeout rather than be killed, since a killed hook lets the command run.
+mkdir -p "$T/slowbin"; printf '#!/bin/sh\nsleep 1.4\nexec %s "$@"\n' "$(command -v git)" > "$T/slowbin/git"; chmod +x "$T/slowbin/git"
+start=$SECONDS
+printf '{"tool_name":"Bash","session_id":"%s","cwd":%s,"tool_input":{"command":"git reset --hard"}}' "$ME" "$(jq -Rn --arg v "$T/clean" '$v')" \
+  | PATH="$T/slowbin:$PATH" bash "$H" >/dev/null 2>&1; got=$?
+took=$((SECONDS-start))
+[ "$got" = 2 ] && [ "$took" -lt 5 ] && echo "  ok    slow git refuses inside the hook timeout (${took}s)" \
+  || { echo "  FAIL  slow git: rc $got in ${took}s"; fail=$((fail+1)); }
 echo "lets through:"
 t "same commands, clean repo" 0 "$T/clean" "git reset --hard HEAD"
 t "restore --staged, dirty"   0 "$T/dirty" "git restore --staged f"

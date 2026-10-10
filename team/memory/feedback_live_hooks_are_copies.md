@@ -1,6 +1,6 @@
 ---
 name: feedback_live_hooks_are_copies
-description: "~/.claude/hooks holds COPIES of the kit's hooks, not links, so a hook fix pushed to main never runs until the live copy is replaced; check after every hook change."
+description: "~/.claude/hooks holds COPIES of the kit's hooks; since 2026-10-09 kit-autopull syncs them from origin/main every session start, with backups. Edit hooks in the repo, never live."
 metadata:
   node_type: memory
   type: feedback
@@ -16,3 +16,5 @@ Same shape as the 9/7 stale `people` copy (a private note) and a private note.
 
 **Why:** a fix that's merged but not installed reads as done to everyone and protects nothing.
 **How to apply:** after changing anything in `.claude/hooks/`, `cmp` the live copy against the repo. If the live copy matches an older commit (`git log --all --find-object=$(git hash-object <live>)`), back it up and copy the new one in. If it matches no commit, it was edited live: patch only your change. A new hook also needs its Stop/PreToolUse entry in `~/.claude/settings.json`, made with the Edit tool (a private note). Then prove it fires with a deliberate failing input.
+
+**Automated 2026-10-09 (839f7496, 68d48e7a).** By 9 pm the hand sync above had drifted again: 17 stale, 2 never installed. `kit-autopull` now runs `tools/hooks_sync.py` from origin/main on every SessionStart, before its throttle and regardless of a dirty checkout, and replaces anything behind with a backup in `~/.chewbacca/runtime/hooks-backup-*`. The "matches no commit" copies turned out to be pre-scrub kit versions (history rewrites drop old blobs), not live edits, so they're replaced too, backed up. A real live edit to a hook now gets overwritten next session: put the change in the repo. `python3 tools/hooks_sync.py scan` shows the state without writing.

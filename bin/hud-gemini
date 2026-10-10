@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 # What Gemini CLI prints when the account or key is out of quota. Read from
 # its error text, never shown whole: it can carry project ids.
@@ -23,12 +24,31 @@ QUOTA = re.compile(r"quota|RESOURCE_EXHAUSTED|rate limit|\b429\b", re.IGNORECASE
 TIMEOUT_S = 200
 
 
+# `--no-tools`: a call that must not run anything (kyber-genui's Tier 2 layout
+# model, docs/reference/GENUI.md "No tools"). From `gemini --help` on
+# gemini-cli 0.46.0: --admin-policy loads a policy file at the top tier, and
+# ours denies the wildcard tool (the form the bundled policies/yolo.toml uses
+# to allow everything), so its read-only defaults (read_file, glob,
+# grep_search, google_web_search) are denied too. --allowed-mcp-server-names
+# and --extensions each take a list; naming one that does not exist allows
+# none. Not run live: the only Gemini account here was refused by Google
+# ("migrate to the Antigravity suite") on 2026-10-10.
+NO_TOOLS_POLICY = Path(__file__).resolve().parent.parent / "config" / "runtimes" / "gemini-no-tools.toml"
+NO_TOOLS = ["--admin-policy", str(NO_TOOLS_POLICY), "--allowed-mcp-server-names", "none",
+            "--extensions", "none"]
+
+
 def main(argv: list[str]) -> int:
+    no_tools = "--no-tools" in argv
+    argv = [a for a in argv if a != "--no-tools"]
     model = None
     if len(argv) >= 2 and argv[0] == "--model":
         model = argv[1]
     elif argv:
-        print("usage: hud-gemini [--model <name>] < prompt", file=sys.stderr)
+        print("usage: hud-gemini [--model <name>] [--no-tools] < prompt", file=sys.stderr)
+        return 2
+    if no_tools and not NO_TOOLS_POLICY.is_file():
+        print(f"hud-gemini: no-tools policy missing at {NO_TOOLS_POLICY}", file=sys.stderr)
         return 2
     prompt = sys.stdin.read()
     if not prompt.strip():
@@ -38,6 +58,8 @@ def main(argv: list[str]) -> int:
     command = [exe, "-o", "text"]
     if model:
         command += ["-m", model]
+    if no_tools:
+        command += NO_TOOLS
     command += ["-p", prompt]
     env = dict(os.environ, CHEWBACCA_HUD_CHILD="1")
     try:

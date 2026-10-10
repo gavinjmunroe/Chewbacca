@@ -1,0 +1,327 @@
+{
+  "about": "What each query in the vocabulary can answer, read by the relevance gate (bin/lib/genui_tiers.py `relevance`, docs/reference/GENUI.md 'Relevance gate'). `entities` are the things a query holds, `measures` what it can say about them. Written from each query's own description (bin/kyber-genui builtin_queries and config/surfaces/genui-queries.json) plus the plain synonyms a person says for the same thing, never from a bench request. A word here is evidence a request is about this query; a request whose subject names a word only another query covers is refused for this one. `ask` is what the pill says when the subject is this query's but its required argument is missing. A provider may also declare `covers` in its own manifest entry; that wins over this file.",
+  "generic": [
+    "whats",
+    "what's",
+    "from",
+    "by",
+    "not",
+    "back",
+    "out",
+    "into",
+    "onto",
+    "around",
+    "explain",
+    "draw",
+    "compare",
+    "anyone",
+    "anybody",
+    "anything",
+    "wise",
+    "made",
+    "while",
+    "ago",
+    "how",
+    "many",
+    "much",
+    "which",
+    "when",
+    "where",
+    "why",
+    "whose",
+    "who",
+    "whom",
+    "show",
+    "list",
+    "pull",
+    "put",
+    "see",
+    "check",
+    "get",
+    "want",
+    "need",
+    "know",
+    "find",
+    "bring",
+    "next",
+    "coming",
+    "left",
+    "still",
+    "doing",
+    "going",
+    "go",
+    "been",
+    "being",
+    "was",
+    "were",
+    "will",
+    "should",
+    "could",
+    "would",
+    "more",
+    "most",
+    "less",
+    "first",
+    "some",
+    "lot",
+    "lots",
+    "thing",
+    "things",
+    "stuff",
+    "one",
+    "ones",
+    "across",
+    "today",
+    "tomorrow",
+    "tonight",
+    "week",
+    "weeks",
+    "day",
+    "days",
+    "month",
+    "currently",
+    "rn",
+    "latest",
+    "big",
+    "bad",
+    "good"
+  ],
+  "queries": {
+    "due": {
+      "entities": [
+        "assignment",
+        "homework",
+        "lab",
+        "reading",
+        "deadline",
+        "coursework",
+        "essay",
+        "paper",
+        "project",
+        "problem set",
+        "pset",
+        "quiz",
+        "class",
+        "course",
+        "school",
+        "work"
+      ],
+      "measures": [
+        "due",
+        "left",
+        "remaining",
+        "turn in",
+        "submit",
+        "upcoming",
+        "deadline"
+      ]
+    },
+    "overdue": {
+      "entities": [
+        "assignment",
+        "homework",
+        "lab",
+        "coursework",
+        "deadline",
+        "class",
+        "course",
+        "school"
+      ],
+      "measures": [
+        "overdue",
+        "late",
+        "behind",
+        "past due",
+        "caught up",
+        "missed"
+      ]
+    },
+    "exams": {
+      "entities": ["exam", "midterm", "final", "test"],
+      "measures": ["upcoming", "date"]
+    },
+    "before-exam": {
+      "entities": [
+        "exam",
+        "midterm",
+        "final",
+        "test",
+        "assignment",
+        "deadline"
+      ],
+      "measures": ["before", "prep", "ready"]
+    },
+    "course": {
+      "entities": [
+        "class",
+        "course",
+        "assignment",
+        "homework",
+        "lab",
+        "reading",
+        "deadline",
+        "coursework"
+      ],
+      "measures": ["due", "left", "overdue", "caught up"],
+      "ask": "Which class? Say its code, like BISC 101."
+    },
+    "grades": {
+      "entities": ["grade", "class", "course", "gpa"],
+      "measures": [
+        "standing",
+        "average",
+        "score",
+        "percent",
+        "graded",
+        "doing in"
+      ]
+    },
+    "week": {
+      "entities": [
+        "schedule",
+        "class",
+        "deadline",
+        "event",
+        "meeting",
+        "calendar",
+        "plan"
+      ],
+      "measures": ["busy", "loaded", "packed", "load", "free"]
+    },
+    "day": {
+      "entities": [
+        "schedule",
+        "class",
+        "deadline",
+        "event",
+        "meeting",
+        "calendar",
+        "plan"
+      ],
+      "measures": ["busy", "free"]
+    },
+    "calendar": {
+      "entities": ["calendar", "event", "meeting", "appointment", "call"],
+      "measures": ["busy", "free", "scheduled"]
+    },
+    "reconnect": {
+      "entities": [
+        "people",
+        "person",
+        "friend",
+        "contact",
+        "text",
+        "texted",
+        "texting"
+      ],
+      "measures": [
+        "cadence",
+        "reach out",
+        "catch up",
+        "talked",
+        "talk",
+        "touch",
+        "since"
+      ]
+    },
+    "tasks": {
+      "entities": ["promise", "commitment", "task", "todo", "people"],
+      "measures": ["owe", "open", "promised", "committed"]
+    },
+    "unreplied": {
+      "entities": [
+        "text",
+        "texted",
+        "texting",
+        "message",
+        "mail",
+        "email",
+        "thread",
+        "dm",
+        "reply"
+      ],
+      "measures": [
+        "waiting",
+        "unanswered",
+        "owe",
+        "reply",
+        "replied",
+        "answer",
+        "ignoring",
+        "left on read"
+      ]
+    },
+    "needs": {
+      "entities": [
+        "text",
+        "message",
+        "mail",
+        "email",
+        "class",
+        "agent",
+        "backlog",
+        "school",
+        "people"
+      ],
+      "measures": ["waiting", "blocked", "due", "owe"]
+    },
+    "missing": {
+      "entities": [
+        "meeting",
+        "reply",
+        "assignment",
+        "reading",
+        "commitment",
+        "promise",
+        "ask"
+      ],
+      "measures": [
+        "bite",
+        "missing",
+        "forgot",
+        "forgetting",
+        "conflict",
+        "quiet",
+        "dropped"
+      ]
+    },
+    "person": {
+      "entities": ["person", "thread", "mail", "message", "text"],
+      "measures": ["owe", "waiting"],
+      "ask": "Who? Say their full name."
+    },
+    "conversations": {
+      "entities": [
+        "thread",
+        "mail",
+        "email",
+        "message",
+        "text",
+        "conversation",
+        "dm"
+      ],
+      "measures": ["act on", "waiting"]
+    },
+    "campaign": {
+      "entities": [
+        "campaign",
+        "outbound",
+        "client",
+        "sequence",
+        "email",
+        "lead"
+      ],
+      "measures": [
+        "reply",
+        "rate",
+        "open",
+        "bounce",
+        "sent",
+        "metric",
+        "numbers",
+        "meetings booked"
+      ],
+      "ask": "Which campaign? Say the client's name."
+    }
+  }
+}

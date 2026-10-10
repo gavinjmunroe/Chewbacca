@@ -128,6 +128,10 @@ Slack channel shared with that person (Togari, reply cards, test messages). On
 posts from Togari in a Zeutara channel; the draft guessed admin access instead
 and Caleb wrote "Bro ru stupid she was asking abt this". Tests never post in a
 client channel either: that breaks Sagar's no-process-chatter ruling.
+Describe the thing from its code, never from a test post's wording: the same
+draft called Jonah's assistant "read only" because the test question was, when
+src/agents/client-assistant sends replies, decks, follow-ups and blocklists
+behind a Do it card. Caleb: "Nothing chewb does/makes should ever be read only".
 
 ## Images and QR codes someone sent
 

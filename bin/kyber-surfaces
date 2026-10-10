@@ -64,6 +64,7 @@ from surfaces import ACTION_PREFIX, Context, Result, SurfaceError, data_line  # 
 BOB = Path(os.environ.get("BOB_DIR", str(Path.home() / ".bob")))
 HUD_SOCKET = os.environ.get("BOB_HUD_SOCKET", str(BOB / "hud.sock"))
 CONTROL = os.environ.get("KYBER_SURFACES_SOCK", str(BOB / "surfaces.sock"))
+CONTROL_LOCK = Path(CONTROL + ".start-lock")
 STATE = Path(os.environ.get("KYBER_SURFACES_STATE", str(BOB / "surfaces-state.json")))
 ACTIVITY = Path(os.environ.get("KYBER_SURFACES_ACTIVITY", str(BOB / "surfaces-activity.jsonl")))
 BADGES = Path(os.environ.get("KYBER_SURFACES_BADGES", str(BOB / "badges.json")))
@@ -150,6 +151,11 @@ class Live:
         self.values: dict = {}
         self.due = 0.0
         self.busy = False
+        # What the provider's shape() said at the last full draw. A provider
+        # whose components change with its state (the doc surface: a File, a
+        # Table, or a Diff) is redrawn whole when this moves, because a bound
+        # File with no path draws "Not on disk" rather than nothing.
+        self.shape = None
 
 
 class Daemon:
@@ -308,6 +314,8 @@ class Daemon:
             self.push(live, extra=dict(live.values))
             return
         live.sent = {}
+        shape = getattr(p, "shape", None)
+        live.shape = shape() if callable(shape) else None
         initial = p.initial()
         initial.update({k: v for k, v in live.values.items() if k.startswith(f"/{p.name}/")})
         lines = [head] + p.layout()
@@ -330,6 +338,17 @@ class Daemon:
         except Exception as err:  # noqa: BLE001
             model = {p.p("note"): f"This surface hit a bug: {err}"}
         model.update(extra or {})
+        shape = getattr(p, "shape", None)
+        if callable(shape) and shape() != live.shape:
+            # Its components changed: draw it whole, then send `extra` (a
+            # press's status line) on top, since a full draw reads only the
+            # model and the values.
+            self.draw(live, full=True)
+            if extra:
+                for pointer, value in extra.items():
+                    live.sent[pointer] = json.dumps(value, sort_keys=True)
+                self.hud.send([f"@ {p.name}"] + [data_line(k, v) for k, v in extra.items()])
+            return []
         owned = set(p.initial())
         lines = []
         for pointer, value in model.items():
@@ -741,15 +760,27 @@ def running() -> bool:
 def start_daemon() -> bool:
     if running():
         return True
-    LOG.parent.mkdir(parents=True, exist_ok=True)
-    with LOG.open("a") as out:
-        subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "run"], stdin=subprocess.DEVNULL,
-                         stdout=out, stderr=out, start_new_session=True)
-    deadline = time.monotonic() + START_WAIT_S
-    while time.monotonic() < deadline:
+    # One starter at a time. hud-listen starts the daemon as it comes up, and
+    # a voice command a second later starts it again; both saw "not running"
+    # before either bound, and two daemons drew on one display (seen in
+    # tests/test_docs_e2e.py on 2026-10-09: a press reached the one without
+    # the edit). The second starter now waits on the lock and finds it up.
+    import fcntl  # noqa: PLC0415
+
+    CONTROL_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with open(CONTROL_LOCK, "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
         if running():
             return True
-        time.sleep(0.1)
+        LOG.parent.mkdir(parents=True, exist_ok=True)
+        with LOG.open("a") as out:
+            subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "run"], stdin=subprocess.DEVNULL,
+                             stdout=out, stderr=out, start_new_session=True)
+        deadline = time.monotonic() + START_WAIT_S
+        while time.monotonic() < deadline:
+            if running():
+                return True
+            time.sleep(0.1)
     return False
 
 

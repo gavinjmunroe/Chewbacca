@@ -81,6 +81,7 @@ COMMANDS=(
   "office|Microsoft 365 mail, calendar, files, docs and Teams, read inside your own signed-in Office tab"
   "usc|a USC student's day: due this week, the dining hall, events (setup signs in)"
   "google|find and read Google Docs, Sheets and Slides as text"
+  "docs|local Word, Excel and PowerPoint files through genoffice: read, preview an edit, apply it"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
   "clay-fixture-check|compare a CSV export with an expected fixture"
   "oss-apps|open source apps that replace a Mac app, and which can be remixed"
@@ -192,9 +193,15 @@ x)
   exec python3 "$ROOT/bin/chewbacca-x" "$@"
   ;;
 google)
-  # Docs, Sheets and Slides through the official APIs (gws). Read-only.
+  # Docs, Sheets and Slides through the official APIs (gws). Read-only but
+  # for `replace`, one revision-checked Docs edit the Doc surface previews.
   shift
   exec python3 "$ROOT/bin/chewbacca-google" "$@"
+  ;;
+docs)
+  # Local .docx, .xlsx and .pptx through genoffice. See bin/chewbacca-docs.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-docs" "$@"
   ;;
 linkedin)
   # LinkedIn reads run inside the user's own Chrome tab. Read-only.

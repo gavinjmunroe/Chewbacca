@@ -64,6 +64,7 @@ import agenda  # noqa: E402
 import surface_intent  # noqa: E402
 import repo_card  # noqa: E402
 import notes_surface  # noqa: E402
+import docs_surface  # noqa: E402
 import hud_events  # noqa: E402
 import glass_search  # noqa: E402
 import hud_accounts  # noqa: E402
@@ -1301,6 +1302,7 @@ FAST_PATHS = {
     "accounts_request": "accounts",
     "quick_answer": "quick",
     "repo_request": "repo",
+    "docs_request": "docs",
     "notes_request": "notes",
     "surface_request": "surface",
     "music_request": "music",
@@ -1358,6 +1360,11 @@ def fast_path(said: str) -> str | None:
         except Exception:  # noqa: BLE001
             pass
     if SURFACES:
+        try:
+            if docs_surface.parse(said) is not None:
+                return "docs"
+        except Exception:  # noqa: BLE001
+            pass
         try:
             if notes_surface.parse(said) is not None:
                 return "notes"
@@ -2822,6 +2829,10 @@ class Listener:
         # says the song, where the music path only said it.
         # "Add milk to my groceries note", "new note Trip": before the surface
         # words, since "close the notes" closes both note panels.
+        # "Show my mash up doc", "make the intro shorter in my mash up doc":
+        # one document on the glass, an edit drawn as a diff (CHW-194).
+        if SURFACES and not relayed and not pointing and self.docs_request(said, typed):
+            return
         if SURFACES and not relayed and not pointing and self.notes_request(said, typed):
             return
         if SURFACES and not relayed and not pointing and self.surface_request(said, typed):
@@ -3291,6 +3302,41 @@ class Listener:
             self.send("w " + json.dumps(answer) + " done=true")
             if not typed:
                 self.speak(answer)
+            self.settle_unless_running("done", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def docs_request(self, said: str, typed: bool) -> bool:
+        """"Show my <name> doc", "open the <name> sheet", "<edit> in my <name>
+        doc", "close the doc": one Google or local document on the glass, no
+        model turn to open it. An edit is drafted by a model inside the doc
+        surface and drawn as a diff; only the Apply edit press writes. See
+        bin/lib/docs_surface.py."""
+        if self.in_flight():
+            return False
+        try:
+            command = docs_surface.parse(said)
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("docs failed:", err)
+            return False
+        if command is None:
+            return False
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+
+        def work() -> None:
+            started = time.monotonic()
+            try:
+                outcome = docs_surface.perform(command)
+            except Exception as err:  # noqa: BLE001
+                self.log("docs failed:", err)
+                outcome = docs_surface.Outcome(False, "The doc didn't come up.")
+            self.log(f"docs: {command.verb} in {(time.monotonic() - started) * 1000:.0f}ms:", outcome.line)
+            self.remember(req, outcome.line, outcome.ok, "done" if outcome.ok else "failed")
+            self.send("s " + json.dumps(outcome.line))
+            self.send("w " + json.dumps(outcome.line) + " done=true")
+            if not typed:
+                self.speak(outcome.line)
             self.settle_unless_running("done", self.LEAVE_AFTER)
 
         threading.Thread(target=work, daemon=True).start()

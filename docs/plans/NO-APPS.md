@@ -258,6 +258,13 @@ They are on the team board as CHW-188 to CHW-195, in rank order.
   for v1.
 - **Falsifier:** docs.google.com/document visits in 7 days under 80 (baseline
   about 160 a week).
+- **Built 2026-10-09 (CHW-194):** the `doc` surface,
+  [bin/lib/docs_surface.py](../../bin/lib/docs_surface.py). Google files come
+  through `chewbacca google` (gws); local .docx, .xlsx and .pptx through
+  `chewbacca docs` on genspark-ai/genoffice. The edit model is a tool-less
+  `claude -p` that only rewrites whole paragraphs; the press writes. Not built:
+  Sheet and deck edits, and the Google write needs gws signed in with the Docs
+  scope (it is read-only Drive today, so a Doc edit is refused in words).
 
 ### 8. Dash-list Notes (Notes)
 
@@ -336,7 +343,7 @@ has the project, otherwise marked as not checked here.
 | Cline, OpenCode                 | how an agent's proposed edit becomes an approvable diff                                                   | Apache-2.0, MIT (registry)                        |
 | Orca                            | several agents side by side: the rail and card layout                                                     | MIT (registry)                                    |
 | Zed                             | agent panel behavior as a design reference only                                                           | NOASSERTION in the registry, so no code           |
-| Carlton Aikins' sessions app          | the sessions layout already used                                                                          | no license, design reference only (hud/CLAUDE.md) |
+| Carlton Aikins' sessions app    | the sessions layout already used                                                                          | no license, design reference only (hud/CLAUDE.md) |
 
 ### What it needs that does not exist
 

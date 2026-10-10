@@ -21,8 +21,22 @@ kyber-surfaces close all
 ```
 
 Kinds: `needs-you`, `today`, `tasks`, `conversations`, `people`,
-`person <name>`, `space <name>`, `music`, `files`, `meetings`. `kyber-surfaces list` shows
+`person <name>`, `space <name>`, `music`, `files`, `meetings`, `doc`. `kyber-surfaces list` shows
 what is open and where; `activity` shows what the panels did.
+
+`doc` is one document, opened by name: "show my mash up doc", "open the
+budget sheet". It searches Google Drive (`chewbacca google find`) and
+Downloads, Documents and Desktop (`chewbacca docs find`), opens the one name
+that matches, or lists the candidates as rows to pick. A Doc, .docx or deck is
+its text in a File component; a Sheet or .xlsx is a Table of the first tab's
+first 50 rows. "Open in Google" or "Show in Finder" is the secondary press.
+"Make the intro shorter in my mash up doc" (or the panel's box) has a tool-less
+model rewrite whole paragraphs, drawn as a Diff; only Apply edit writes,
+through `chewbacca docs apply` (genoffice, refused if the file's hash moved)
+or `chewbacca google replace` (refused by Google if the revision moved), and
+the result is read back against the preview. Sheets and decks are read only.
+Escape, the X or "close the doc" take it down. Source:
+[bin/lib/docs_surface.py](../../bin/lib/docs_surface.py).
 
 `files` here is recent downloads. Any other folder goes on the glass the same
 way: `hud files [path]`, or "show me files" / "open Finder" to hud-listen,

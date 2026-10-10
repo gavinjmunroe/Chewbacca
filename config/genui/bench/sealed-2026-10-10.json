@@ -1,0 +1,40 @@
+{
+  "about": "Sealed held-out set for CHW-203, written 2026-10-10 before any tiered-composer code existed and committed first. The author also built the composer, so this is held out by commit order, not blind. The implementation and its frameworks never read this file; only `kyber-genui bench --requests` reads it at eval time. Do not edit to improve a score; add a new sealed file instead.",
+  "sealed": "2026-10-10",
+  "requests": [
+    { "request": "yo whats left for acad 185 this week" },
+    { "request": "anything overdue rn" },
+    { "request": "what do I need to turn in before Friday" },
+    { "request": "list everything due in the next 10 days" },
+    { "request": "how many assignments do I have left this month" },
+    { "request": "when's my next exam" },
+    { "request": "WRIT 150 deadlines" },
+    {
+      "request": "which of my classes is hitting me hardest the next two weeks"
+    },
+    { "request": "what's coming up for BISC 101 lab" },
+    { "request": "am I caught up in ACAD 324" },
+    { "request": "what's my Thursday look like" },
+    { "request": "what do I have tonight" },
+    { "request": "show me my schedule for the next three days" },
+    { "request": "which day this week is the most packed" },
+    { "request": "any meetings on my calendar tomorrow" },
+    { "request": "how am I doing in my classes grade wise" },
+    { "request": "what's my average right now" },
+    { "request": "who haven't I talked to in a while" },
+    { "request": "who's waiting on a reply from me" },
+    { "request": "what did I promise people I'd do" },
+    { "request": "how many people am I overdue to reach out to" },
+    { "request": "who should I text first today" },
+    { "request": "how's the Zeutara campaign doing" },
+    { "request": "pull up the outbound numbers" },
+    { "request": "how does a voice request become a panel on the HUD" },
+    { "request": "explain how the coursework ledger feeds the due list" },
+    { "request": "draw how Chewbacca's hooks run around a tool call" },
+    { "request": "how does the people reconnect cadence work" },
+    { "request": "what's the weather tomorrow" },
+    { "request": "what's Nvidia stock at" },
+    { "request": "show me the thing from earlier" },
+    { "request": "how much money did I spend this week" }
+  ]
+}

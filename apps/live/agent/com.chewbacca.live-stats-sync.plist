@@ -26,8 +26,11 @@
   <!-- A crash loop (signed out of Clay, page down) retries every 30 s, not every second. -->
   <key>ThrottleInterval</key>
   <integer>30</integer>
+  <!-- Standard, not Background: under background QoS the 50-read refresh took
+       99.7 s on 2026-10-10 against 9.6 to 22.8 s in a terminal, longer than a
+       question waits (35 s). -->
   <key>ProcessType</key>
-  <string>Background</string>
+  <string>Standard</string>
   <key>StandardErrorPath</key>
   <string>__HOME__/Library/Logs/chewbacca-live-stats-sync.log</string>
   <key>StandardOutPath</key>

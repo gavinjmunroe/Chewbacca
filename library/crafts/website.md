@@ -354,3 +354,23 @@ numbers and curriculum diagrams were built for the builders, not the reader.
   whole bottom of that page while check, story and slop-check all passed;
   site-gate now fails a heading that paints nothing, and a reviewer that
   did not build the page looks at the screenshots before anything ships.
+
+## Reworking a client's live site (bluemodernadvisory.com, 2026-10-10)
+
+Caleb: "it looks so ai slop rn ... keep it professional maybe a little more
+tts/lemma/firm foundation finesse but ultimately just more professional." It
+was going to Sagar and Maggie, whose site it is.
+
+- Never touch their prod. Branch it, and deploy the branch as its own service
+  in their hosting project (`railway up --service <Name>` plus `railway domain`),
+  so the owners compare two live URLs and merging stays their call.
+- Leave prod secrets off the preview so test form submissions never reach the
+  client's real pipeline, and say so when handing it over.
+- The slop on a professional-services site was the template rather than any
+  single element: stock hero photo, serif plus italic accent, an uppercase
+  kicker over every heading, a logo marquee, three pillar cards, 01/02/03
+  numbers, a rotating quote, a sticky CTA. Removing them did most of the work.
+- Replace the stock photo with an object the buyer recognizes from the
+  service itself (for a data firm, a live record queue), labeled as sample data,
+  and build the scroll story from the client's own published case numbers,
+  with a caption naming which engagement each number came from.

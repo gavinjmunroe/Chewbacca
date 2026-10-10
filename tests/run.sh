@@ -563,6 +563,10 @@ if group "tools"; then
   printf -- '---\nname: long\ndescription: "%s"\n---\n\n# x\n' "$(printf 'a%.0s' $(seq 1 1100))" > "$LONG/SKILL.md"
   expect "a description over 1024 characters is caught" "the limit is 1024" \
     bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck-long/skills' 2>&1 || true"
+  # A skill naming a file or command that is not there sends the agent down a
+  # dead end with nothing failing: 13 such references sat in 5 skills on
+  # 2026-10-10, including a whole corpus tool that only existed on one Mac.
+  check  "skills name no dangling paths or commands" bash "$ROOT/tests/skill_refs_check.sh"
   # Perplexity imports skills as zips; every repo skill must package cleanly.
   check  "every skill packages for Perplexity" bash -c "python3 '$ROOT/tools/agent_runtime.py' export --runtime perplexity-computer --destination '$TMP/px' >/dev/null && [ \"\$(ls '$TMP/px/skills' | wc -l)\" -eq \"\$(ls -d '$ROOT'/skills/*/SKILL.md | wc -l)\" ] && ! grep -q '/Users/' '$TMP/px/CHEWBACCA.md'"
   check  "AGENTS.md exports for other agents" python3 "$ROOT/tools/agents_md.py" "$TMP"

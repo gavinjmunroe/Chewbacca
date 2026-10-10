@@ -183,7 +183,7 @@ before anyone priced a row.
 Use graph engineering instead when it is cheaper than the credit spend and the
 data is reusable: firm -> invested_in -> company -> in_sector, built once from
 each firm's own portfolio page (free HTTP, a no-tools model, a Jev check per
-edge, `scripts/portfolio_graph.py` in zeutara-gtme), then walked per lead.
+edge, `zeutara-gtme/scripts/portfolio_graph.py`), then walked per lead.
 Measured 2026-10-05: zero Clay credits, but only 10 of 309 leads got a line,
 because most portfolio pages are logo-only. Decide by cost per verified usable
 line, not by habit.

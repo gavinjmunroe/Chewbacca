@@ -16,13 +16,18 @@ most answers are worth and crowds out everything else in the session. Search
 returns a passage and an offset; widen only the passage you need.
 
 ```bash
-asa modules                                   # what exists
-asa search "cold email sequence"              # ranked passages, 20 max
-asa search "agent" --module week-3            # one module
-asa show 09-week-3-ai-sales-department/01-workshop.md --at 48210
+ASA="$(chewbacca where)/asa/bin/asa"
+"$ASA" modules                                # what exists
+"$ASA" search "cold email sequence"           # ranked passages, 20 max
+"$ASA" search "agent" --module week-3         # one module
+"$ASA" show 09-week-3-ai-sales-department/01-workshop.md --at 48210
 ```
 
-`asa` lives at `asa/bin/asa`.
+The search tool is `asa/bin/asa` inside the kit checkout, and it is not on
+PATH. The whole `asa/` folder is gitignored (the transcripts are paid
+material), so it exists only on a machine where the corpus was built. If that
+file is missing, say the corpus is not on this machine. Never answer from
+memory of the course as if it were a search result.
 
 ## Read the notes first
 

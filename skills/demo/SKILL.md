@@ -86,15 +86,17 @@ with the real selectors, in the real order, with the real fixture data. A demo
 plan is an e2e spec with dwell times.
 
 ```bash
-rg -l "test\(|it\(|describe\(" --glob "**/*.{spec,cy,e2e}.{ts,tsx,js}" .
-rg "getByTestId|data-testid|getByRole" -N --glob "**/*.spec.ts" . | head -40
+grep -rlE "test\(|it\(|describe\(" --exclude-dir=node_modules \
+  --include="*.spec.*" --include="*.cy.*" --include="*.e2e.*" .
+grep -rE "getByTestId|data-testid|getByRole" --exclude-dir=node_modules \
+  --include="*.spec.ts" . | head -40
 ```
 
 **2. `data-testid` attributes.** Stable by contract, which is exactly what a
 storyboard needs. A class name is a refactor away from breaking the demo.
 
 ```bash
-rg -o 'data-testid="[^"]+"' -N . | sort -u
+grep -rhoE 'data-testid="[^"]+"' --exclude-dir=node_modules . | sort -u
 ```
 
 **3. The routes.** `app/**/page.tsx`, `pages/`, the router config. They are the
@@ -356,5 +358,5 @@ largest window because VS Code also publishes 1512x37 menu-bar strips.
 
 ## When there is no repo
 
-Fall back to `cap-demo <url>`, Cap's deterministic pipeline, and say plainly
+Fall back to the `cap-demo` skill on the URL, Cap's deterministic pipeline, and say plainly
 that it is the ~70% version. Do not pretend a scouted demo read the product.

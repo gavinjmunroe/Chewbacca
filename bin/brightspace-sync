@@ -165,6 +165,7 @@ on run argv
   set time of due to ((item 6 of argv as integer) * 3600 + (item 7 of argv as integer) * 60)
   set alert to due
   set time of alert to 9 * 3600
+  if (time of due) < 10 * 3600 then set alert to due - 12 * 3600
   tell application "Reminders"
     if not (exists list (item 1 of argv)) then make new list with properties {name:(item 1 of argv)}
     tell list (item 1 of argv) to make new reminder with properties {name:(item 2 of argv), body:"From Brightspace", due date:due, remind me date:alert}

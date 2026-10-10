@@ -537,6 +537,9 @@ if group "tools"; then
   # A skill whose YAML is malformed is not registered, so it never fires and
   # the user concludes the skill is bad at triggering. life-ops shipped that
   # way for weeks over one unquoted colon in its description.
+  # recur counts whether a saved correction's mistake came back. Synthetic
+  # transcripts only: a repair after the save counts, one before it doesn't.
+  check  "recur counts a correction that came back, and only after it was saved" python3 "$ROOT/tests/test_recur.py"
   check  "every skill frontmatter parses" python3 "$ROOT/tools/frontmatter.py"
   FM="$TMP/fmcheck/skills/broken"; mkdir -p "$FM"
   printf -- '---\nname: broken\ndescription: a thing that is not code: it breaks\n---\n\n# x\n' > "$FM/SKILL.md"

@@ -281,7 +281,7 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
     return empty
 
 
-KINDS = ("needs-you", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
+KINDS = ("needs-you", "missing", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
          "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps", "dash-notes",
          "doc")
 # Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
@@ -308,7 +308,7 @@ def make(kind: str, arg: str = "") -> Provider:
 
         return docs_surface.DocSurface()
     table = {
-        "needs-you": walks.NeedsYou, "today": walks.Today, "tasks": walks.Tasks,
+        "needs-you": walks.NeedsYou, "missing": walks.Missing, "today": walks.Today, "tasks": walks.Tasks,
         "conversations": walks.Conversations, "people": walks.People,
         "music": music.Music, "files": files.Files,
         "code": code.Code, "notes": notes.Notes, "github": github.GitHub, "whatsapp": whatsapp.WhatsApp,
@@ -328,6 +328,7 @@ def registry() -> dict[str, Provider]:
 
 ALIASES = {
     "needs": "needs-you", "needsyou": "needs-you", "needs_you": "needs-you", "attention": "needs-you",
+    "miss": "missing", "missed": "missing", "what-am-i-missing": "missing", "slipping": "missing",
     "todo": "tasks", "todos": "tasks", "task": "tasks", "lanes": "tasks",
     "day": "today", "calendar": "today", "agenda": "today", "schedule": "today",
     "texts": "conversations", "messages": "conversations", "imessage": "conversations", "mail": "conversations",

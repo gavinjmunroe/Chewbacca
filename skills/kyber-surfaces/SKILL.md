@@ -20,9 +20,17 @@ kyber-surfaces walk tasks              # the same rows as text, no HUD
 kyber-surfaces close all
 ```
 
-Kinds: `needs-you`, `today`, `tasks`, `conversations`, `people`,
+Kinds: `needs-you`, `missing`, `today`, `tasks`, `conversations`, `people`,
 `person <name>`, `space <name>`, `music`, `files`, `meetings`, `doc`. `kyber-surfaces list` shows
 what is open and where; `activity` shows what the panels did.
+
+`missing` answers "what am I missing" and "what's about to bite me": each
+commitment joined to what it needs (a meeting whose person is waiting on your
+reply, an assignment whose reading is open) and to the others around it (two
+invites at once, your own promise gone quiet, a group meeting not on the
+calendar). Every row is a typed edge with provenance; its one action drafts and
+never sends. Rules and the 20-day replay: osgraph_missing.py and the "What am I
+missing" section of the reference.
 
 `doc` is one document, opened by name: "show my mash up doc", "open the
 budget sheet". It searches Google Drive (`chewbacca google find`) and

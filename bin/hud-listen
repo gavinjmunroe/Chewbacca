@@ -1295,6 +1295,7 @@ def read_names() -> list[str]:
 FAST_PATHS = {
     "connection_check": "connection",
     "pleasantry": "pleasantry",
+    "accounts_request": "accounts",
     "quick_answer": "quick",
     "repo_request": "repo",
     "notes_request": "notes",
@@ -1333,6 +1334,14 @@ def fast_path(said: str) -> str | None:
         return "connection"
     if Listener.pleasantry_kind(words):
         return "pleasantry"
+    try:
+        # "Close it" only closes the card while it is up, which a replay
+        # cannot know, so it is left to the paths below.
+        intent = hud_accounts.parse(said, claude_accounts())
+        if intent is not None and intent.verb != "close":
+            return "accounts"
+    except Exception:  # noqa: BLE001
+        pass
     if QUICK:
         try:
             if quick.answer(said):

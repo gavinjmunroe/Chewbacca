@@ -57,9 +57,19 @@ def main() -> int:
             text = p.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
+        # A self-contained app or skill (apps/<name>/, skills/<name>/) has its
+        # own ROOT, so "data/" there means its own folder, not the repo's old
+        # top-level one. Flag it only when that folder doesn't exist in it.
+        # 2026-10-10: apps/ux-engine/data and skills/startup-finance/data were
+        # reported as moved paths while both exist and work.
+        parts = rel.split("/")
+        own_root = ROOT / parts[0] / parts[1] if parts[0] in ("apps", "skills") and len(parts) > 2 else None
         for n, line in enumerate(text.splitlines(), 1):
-            if any(s.search(line) for s in SHAPES):
-                hits.append(f"{rel}:{n}: {line.strip()[:100]}")
+            for shape in SHAPES:
+                m = shape.search(line)
+                if m and not (own_root and (own_root / m.group(1)).exists()):
+                    hits.append(f"{rel}:{n}: {line.strip()[:100]}")
+                    break
     check("no code reaches a moved folder at its old top-level path", not hits, hits)
 
     # The zsh procedures find bin/chrome-js by stripping path components. Expand

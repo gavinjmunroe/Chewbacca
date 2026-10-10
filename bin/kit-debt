@@ -57,8 +57,9 @@ def satellites():
 # "clear" all night while Caleb corrected a website five times, because the
 # team board auto-commits (team: CHW-143 moved to Backlog) and the README
 # count regen are kit commits too. A board move teaches nothing.
-LEARNING = ("skills/", "bin/", ".claude/hooks/", ".claude/rules/", "crafts/",
-            "tools/", "tests/", "methods/", "library/")
+# crafts/ and methods/ moved under library/ on 2026-10-05, which covers them.
+LEARNING = ("skills/", "bin/", ".claude/hooks/", ".claude/rules/",
+            "tools/", "tests/", "library/")
 
 def kit_commits(hours):
     # --all, not HEAD. Work often lands on main from a worktree while the main

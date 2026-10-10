@@ -37,6 +37,11 @@ mkdir -p "$TMP/bin"
 printf '#!/bin/sh\nprintf "%%s\\n" "%s/apply-kit" "%s/accommodations-kit"\n' "$TMP" "$TMP" > "$TMP/bin/kits"
 chmod +x "$TMP/bin/kits"
 export PATH="$TMP/bin:$PATH"
+# The hook asks ~/.local/bin/kits before PATH, so on a machine with kits
+# installed the stub above was never consulted and the real apply-kit answered
+# instead (found 2026-10-10). A temporary HOME makes the stub the only kits.
+export HOME="$TMP/home" CHEWBACCA_ROOT="$TMP/no-kit"
+mkdir -p "$HOME"
 
 run(){ python3 -c '
 import json,sys

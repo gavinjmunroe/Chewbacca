@@ -1,0 +1,458 @@
+#!/usr/bin/env python3
+"""chewbacca docs: local Word, Excel and PowerPoint files, through genoffice.
+
+  chewbacca docs status                      which genoffice runs, and what it can do here
+  chewbacca docs find <words> [--json]       .docx/.xlsx/.pptx whose file name has the words
+  chewbacca docs read <file> [--json] [--rows N]
+                    a .docx as its text, a .pptx as its slides' text, a .xlsx's
+                    first sheet as rows (N, default 50)
+  chewbacca docs blocks <file.docx> --json   the paragraphs an edit can target, and the file's hash
+  chewbacca docs preview <file.docx> --edits edits.json [--json]
+                    the edit made by genoffice on a private copy: before and after text
+  chewbacca docs apply <file.docx> --edits edits.json --expect <sha256> [--json]
+                    the same edit made in place, only if the file is still the
+                    one the preview hashed; then read back
+
+The engine is genoffice (github.com/genspark-ai/genoffice, Apache-2.0), the
+GenOffice suite's headless command line: it reads and edits real .docx, .xlsx
+and .pptx with the same engines as its app, byte-preserving, and makes no model
+or network call. It is found as $CHEWBACCA_GENOFFICE, then `genoffice` on the
+PATH, then a source build in ~/code/vendor/genoffice (packages/cli). Its .xlsx
+reader needs the app's Rust sidecar; without it a workbook is read here from
+its XML with the standard library, values as stored.
+
+edits.json is [{"block": i, "was": "...", "text": "..."}]: whole paragraphs,
+each replaced through genoffice's replace_blocks, which keeps the paragraph's
+own style. `was` must still be what the paragraph reads, or nothing happens.
+Only `apply` writes, and only to the one file named; `preview` writes a copy in
+a private temp dir and deletes it.
+
+File names and text are data. Nothing here opens, runs or follows anything a
+document contains.
+"""
+from __future__ import annotations
+
+import hashlib
+import html
+import json
+import os
+import re
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import zipfile
+from pathlib import Path
+from xml.etree import ElementTree
+
+HOME = Path.home()
+VENDOR = HOME / "code" / "vendor" / "genoffice"
+OFFICE = {".docx": "docx", ".xlsx": "xlsx", ".pptx": "pptx"}
+# Where `find` looks: the folders a downloaded or made document lands in.
+# Depth 4 covers ~/Documents/School/Projects/<class>/<file>.
+DIRS = ("Downloads", "Documents", "Desktop")
+DEPTH = 4
+SKIP = {"node_modules", "Library", ".git", "vendor", "__pycache__"}
+MOST_FOUND = 25
+# genoffice cold-starts Node and jsdom: 2.0 to 2.6 s for a docs read on
+# 2026-10-09 at load 24 to 45. Ten times that before calling it hung.
+TIMEOUT = 60
+MOST_EDITS = 12
+MAX_TEXT = 4000
+
+
+def die(msg: str, code: int = 1):
+    print(f"chewbacca docs: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def genoffice() -> list[str] | None:
+    env = os.environ.get("CHEWBACCA_GENOFFICE")
+    if env:
+        return [env]
+    found = shutil.which("genoffice")
+    if found:
+        return [found]
+    built = VENDOR / "packages" / "cli" / "dist" / "genoffice.cjs"
+    if built.is_file() and shutil.which("node"):
+        return ["node", str(built)]
+    return None
+
+
+def go(*args: str, check: bool = True) -> dict:
+    cmd = genoffice()
+    if cmd is None:
+        die("genoffice isn't installed. It builds from github.com/genspark-ai/genoffice "
+            "(packages/cli), or comes with the GenOffice app.", 4)
+    env = dict(os.environ)
+    sidecar = VENDOR / "apps" / "sheets" / "native" / "xlsx-engine" / "target" / "release" / "xlsx-sidecar"
+    if "XLSX_SIDECAR_PATH" not in env and sidecar.is_file():
+        env["XLSX_SIDECAR_PATH"] = str(sidecar)
+    try:
+        r = subprocess.run([*cmd, *args, "--json"], capture_output=True, text=True, timeout=TIMEOUT, env=env)
+    except subprocess.TimeoutExpired:
+        die(f"genoffice took longer than {TIMEOUT}s")
+    out = (r.stdout or "").strip()
+    try:
+        data = json.loads(out[out.index("{"):]) if "{" in out else {}
+    except ValueError:
+        data = {}
+    if check and (r.returncode != 0 or data.get("status") == "error"):
+        die(str(data.get("message") or (r.stderr or out).strip()[:200] or f"genoffice exited {r.returncode}"))
+    return data
+
+
+def office_file(ref: str, want: str | None = None) -> Path:
+    """A real, regular office file, never a link, named by its own path."""
+    path = Path(os.path.expanduser(ref))
+    if not path.is_absolute():
+        path = Path.cwd() / path
+    if path.is_symlink() or not path.is_file():
+        die(f"{path.name or ref} isn't a file here")
+    kind = OFFICE.get(path.suffix.lower())
+    if kind is None:
+        die(f"{path.name} isn't a .docx, .xlsx or .pptx")
+    if want and kind != want:
+        die(f"{path.name} is a .{kind}; this needs a .{want}")
+    return path.resolve()
+
+
+def sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# ── find ─────────────────────────────────────────────────────────────────
+
+def norm(text: str) -> str:
+    return " ".join(re.sub(r"[_\-.]+", " ", text.lower()).split())
+
+
+def find(words: str) -> list[dict]:
+    want = norm(words)
+    if not want:
+        return []
+    roots = [Path(p) for p in os.environ.get("CHEWBACCA_DOCS_DIRS", "").split(":") if p] or [HOME / d for d in DIRS]
+    found = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        base = len(root.parts)
+        for dirpath, dirnames, filenames in os.walk(root):
+            here = Path(dirpath)
+            if len(here.parts) - base >= DEPTH:
+                dirnames[:] = []
+            dirnames[:] = [d for d in dirnames if not d.startswith(".") and d not in SKIP and not d.endswith(".app")]
+            for name in filenames:
+                p = here / name
+                if name.startswith(("~$", ".")) or p.suffix.lower() not in OFFICE:
+                    continue
+                stem = norm(p.stem)
+                if not all(w in stem for w in want.split()):
+                    continue
+                try:
+                    st = p.lstat()
+                except OSError:
+                    continue
+                if not p.is_file() or p.is_symlink():
+                    continue
+                found.append({"path": str(p), "name": p.name, "kind": OFFICE[p.suffix.lower()],
+                              "folder": str(p.parent).replace(str(HOME), "~", 1), "mtime": st.st_mtime,
+                              "exact": stem == want})
+    found.sort(key=lambda f: (not f["exact"], -f["mtime"]))
+    return found[:MOST_FOUND]
+
+
+# ── read ─────────────────────────────────────────────────────────────────
+
+def docx_blocks(path: Path) -> list[dict]:
+    data = go("docs", "read", str(path), "--full")
+    items = (data.get("detail") or {}).get("items") or []
+    return [{"index": int(b.get("index", i)), "type": str(b.get("type", "paragraph")),
+             "level": b.get("level"), "text": str(b.get("text", ""))} for i, b in enumerate(items)]
+
+
+def blocks_text(blocks: list[dict]) -> str:
+    lines = []
+    for b in blocks:
+        t = b["text"]
+        if b["type"] == "listitem":
+            t = "- " + t
+        lines.append(t)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    return "\n".join(lines)
+
+
+def pptx_text(path: Path) -> str:
+    data = go("slides", "read", str(path), "--full")
+    slides = (data.get("detail") or {}).get("pages") or []
+    out = []
+    for n, slide in enumerate(slides, 1):
+        out.append(f"Slide {n}")
+        for el in slide.get("elements") or []:
+            text = el.get("text")
+            if isinstance(text, str) and text.strip():
+                out.extend("  " + line for line in text.splitlines() if line.strip())
+        out.append("")
+    return "\n".join(out).rstrip()
+
+
+NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"
+
+
+def col_number(ref: str) -> int:
+    n = 0
+    for ch in re.match(r"[A-Z]+", ref).group(0):
+        n = n * 26 + ord(ch) - 64
+    return n - 1
+
+
+# A workbook part bigger than this is not read: the glass shows 50 rows, and a
+# zip bomb inflates without limit. Guessed, never measured.
+MAX_PART = 64 << 20
+
+
+def xml_part(z: zipfile.ZipFile, name: str):
+    """One part of the package, parsed, refusing a DTD outright: OOXML never
+    carries one, and an entity declaration is how an XML bomb starts."""
+    if z.getinfo(name).file_size > MAX_PART:
+        die(f"{name} is over {MAX_PART >> 20} MB; not read")
+    raw = z.read(name)
+    if b"<!DOCTYPE" in raw or b"<!ENTITY" in raw:
+        die("that workbook declares XML entities; not read")
+    return ElementTree.fromstring(raw)
+
+
+def xlsx_rows_stdlib(path: Path, limit: int) -> tuple[str, list[list[str]], int]:
+    """The first sheet's first `limit` rows, read from the workbook XML: values
+    as stored (a formula's last cached result), shared strings resolved."""
+    with zipfile.ZipFile(path) as z:
+        names = set(z.namelist())
+        shared = []
+        if "xl/sharedStrings.xml" in names:
+            root = xml_part(z, "xl/sharedStrings.xml")
+            for si in root.findall("m:si", NS):
+                shared.append("".join(t.text or "" for t in si.iter(f"{{{NS['m']}}}t")))
+        wb = xml_part(z, "xl/workbook.xml")
+        sheets = wb.findall("m:sheets/m:sheet", NS)
+        if not sheets:
+            return "", [], 0
+        first = sheets[0]
+        target = "xl/worksheets/sheet1.xml"
+        if "xl/_rels/workbook.xml.rels" in names:
+            rels = xml_part(z, "xl/_rels/workbook.xml.rels")
+            for r in rels:
+                if r.get("Id") == first.get(REL):
+                    t = r.get("Target", "")
+                    target = t.lstrip("/") if t.startswith("/") else "xl/" + t
+        if target not in names:
+            die("that workbook's first sheet is missing")
+        ws = xml_part(z, target)
+        rows = []
+        for row in ws.iter(f"{{{NS['m']}}}row"):
+            if len(rows) >= limit:
+                break
+            cells: dict[int, str] = {}
+            for c in row.findall("m:c", NS):
+                ref, kind = c.get("r", ""), c.get("t", "")
+                v = c.find("m:v", NS)
+                if kind == "inlineStr":
+                    value = "".join(t.text or "" for t in c.iter(f"{{{NS['m']}}}t"))
+                elif v is None:
+                    value = ""
+                elif kind == "s":
+                    i = int(v.text or 0)
+                    value = shared[i] if i < len(shared) else ""
+                else:
+                    value = v.text or ""
+                if ref:
+                    cells[col_number(ref)] = value
+            width = max(cells) + 1 if cells else 0
+            rows.append([cells.get(i, "") for i in range(width)])
+        return first.get("name", ""), rows, len(sheets)
+
+
+def xlsx_rows(path: Path, limit: int) -> tuple[str, list[list[str]], int, str]:
+    data = go("sheet", "read", str(path), check=False)
+    detail = data.get("detail") or {}
+    if data.get("status") == "ok" and isinstance(detail.get("rows"), list):
+        rows = [[str(c if c is not None else "") for c in r] for r in detail["rows"][:limit]]
+        return str(detail.get("sheet") or ""), rows, int(detail.get("sheets") or 1), "genoffice"
+    tab, rows, tabs = xlsx_rows_stdlib(path, limit)
+    return tab, rows, tabs, "xml"
+
+
+def read(path: Path, rows: int) -> dict:
+    kind = OFFICE[path.suffix.lower()]
+    out = {"path": str(path), "name": path.name, "kind": kind, "modified": path.stat().st_mtime,
+           "sha256": sha256(path)}
+    if kind == "docx":
+        blocks = docx_blocks(path)
+        out["text"] = blocks_text(blocks)
+        out["blocks"] = len(blocks)
+    elif kind == "pptx":
+        out["text"] = pptx_text(path)
+    else:
+        tab, table, tabs, engine = xlsx_rows(path, rows)
+        out.update({"tab": tab, "rows": table, "tabs": tabs, "engine": engine})
+    return out
+
+
+# ── edit ─────────────────────────────────────────────────────────────────
+
+def clean(text) -> str:
+    text = str(text).replace("\r", " ").replace("\n", " ")
+    return "".join(ch for ch in text if ch == "\t" or ord(ch) >= 32).strip()
+
+
+def load_edits(path: str) -> list[dict]:
+    try:
+        with open(path, encoding="utf-8") as f:
+            edits = json.load(f)
+    except (OSError, ValueError) as err:
+        die(f"can't read the edits: {err}")
+    if not isinstance(edits, list) or not edits or len(edits) > MOST_EDITS:
+        die(f"edits must be a list of 1 to {MOST_EDITS} paragraph edits")
+    out, seen = [], set()
+    for e in edits:
+        if not isinstance(e, dict) or not isinstance(e.get("block"), int) or isinstance(e.get("block"), bool):
+            die("each edit needs a block number")
+        text = clean(e.get("text", ""))
+        if not text or len(text) > MAX_TEXT:
+            die(f"paragraph {e['block']}'s new text is empty or over {MAX_TEXT} characters")
+        if e["block"] in seen:
+            die(f"paragraph {e['block']} is edited twice")
+        seen.add(e["block"])
+        out.append({"block": e["block"], "was": str(e.get("was", "")), "text": text})
+    return out
+
+
+def ops_for(blocks: list[dict], edits: list[dict]) -> list[dict]:
+    by_index = {b["index"]: b for b in blocks}
+    ops = []
+    for e in sorted(edits, key=lambda x: x["block"], reverse=True):
+        b = by_index.get(e["block"])
+        if b is None:
+            die(f"there is no paragraph {e['block']}. Nothing was changed.")
+        if b["text"] != e["was"]:
+            die(f"paragraph {e['block']} no longer reads what the preview showed. Nothing was changed.")
+        # Escaped, so a paragraph's text can never become markup.
+        ops.append({"op": "replace_blocks", "startBlockIndex": e["block"], "endBlockIndex": e["block"],
+                    "html": f"<p>{html.escape(e['text'], quote=False)}</p>"})
+    return ops
+
+
+def edit(path: Path, edits_path: str, target: Path, workdir: str) -> list[dict]:
+    blocks = docx_blocks(path)
+    ops = ops_for(blocks, load_edits(edits_path))
+    ops_file = Path(workdir) / "ops.json"
+    ops_file.write_text(json.dumps(ops), encoding="utf-8")
+    args = ["docs", "apply", str(path), "--ops", str(ops_file)]
+    if target != path:
+        args += ["--out", str(target)]
+    data = go(*args)
+    batch = (data.get("detail") or {}).get("batch") or {}
+    if batch and batch.get("applied") != len(ops):
+        die(f"genoffice applied {batch.get('applied')} of {len(ops)} edits; check the file")
+    return blocks
+
+
+def preview(path: Path, edits_path: str) -> dict:
+    before_sha = sha256(path)
+    with tempfile.TemporaryDirectory(prefix="chewbacca-docs-") as tmp:
+        copy = Path(tmp) / ("preview" + path.suffix)
+        before = edit(path, edits_path, copy, tmp)
+        after = docx_blocks(copy)
+    if sha256(path) != before_sha:
+        die("the file changed while the preview was made. Nothing was changed; ask again.")
+    return {"path": str(path), "name": path.name, "sha256": before_sha,
+            "before": blocks_text(before), "after": blocks_text(after)}
+
+
+def apply(path: Path, edits_path: str, expect: str) -> dict:
+    if sha256(path) != expect:
+        die("the file changed since the preview. Nothing was changed; ask for the edit again.")
+    with tempfile.TemporaryDirectory(prefix="chewbacca-docs-") as tmp:
+        edit(path, edits_path, path, tmp)
+    after = docx_blocks(path)
+    return {"ok": True, "path": str(path), "name": path.name, "sha256": sha256(path), "text": blocks_text(after),
+            "blocks": [{"index": b["index"], "text": b["text"]} for b in after]}
+
+
+def status() -> dict:
+    cmd = genoffice()
+    out = {"genoffice": " ".join(cmd) if cmd else None}
+    if cmd:
+        try:
+            r = subprocess.run([*cmd, "--version"], capture_output=True, text=True, timeout=TIMEOUT)
+            out["version"] = (r.stdout or "").strip()
+        except (OSError, subprocess.TimeoutExpired) as err:
+            out["version"] = f"didn't answer: {err}"
+    sidecar = VENDOR / "apps" / "sheets" / "native" / "xlsx-engine" / "target" / "release" / "xlsx-sidecar"
+    out["xlsx"] = "genoffice" if os.environ.get("XLSX_SIDECAR_PATH") or sidecar.is_file() else "xml (no sidecar)"
+    return out
+
+
+def flag(args: list[str], name: str) -> str | None:
+    if name in args:
+        i = args.index(name)
+        if i + 1 < len(args):
+            value = args[i + 1]
+            del args[i:i + 2]
+            return value
+        die(f"{name} needs a value", 2)
+    return None
+
+
+def main(argv: list[str]) -> int:
+    as_json = "--json" in argv
+    args = [a for a in argv if a != "--json"]
+    if not args or args[0] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    cmd, rest = args[0], args[1:]
+    rows = flag(rest, "--rows")
+    edits = flag(rest, "--edits")
+    expect = flag(rest, "--expect")
+    if cmd == "status":
+        s = status()
+        print(json.dumps(s) if as_json else "\n".join(f"{k}: {v}" for k, v in s.items()))
+    elif cmd == "find" and rest:
+        found = find(" ".join(rest))
+        if as_json:
+            print(json.dumps(found))
+        else:
+            print("\n".join(f"{f['kind']:<5} {f['folder']}/{f['name']}" for f in found) or "nothing found")
+    elif cmd == "read" and rest:
+        n = int(rows) if rows and rows.isdigit() else 50
+        out = read(office_file(rest[0]), max(1, min(n, 500)))
+        if as_json:
+            print(json.dumps(out))
+        elif "text" in out:
+            print(out["text"])
+        else:
+            print("\n".join(",".join(r) for r in out["rows"]))
+    elif cmd == "blocks" and rest:
+        path = office_file(rest[0], "docx")
+        print(json.dumps({"path": str(path), "sha256": sha256(path), "blocks": docx_blocks(path)}))
+    elif cmd == "preview" and rest and edits:
+        out = preview(office_file(rest[0], "docx"), edits)
+        print(json.dumps(out) if as_json else out["after"])
+    elif cmd == "apply" and rest and edits and expect:
+        out = apply(office_file(rest[0], "docx"), edits, expect)
+        print(json.dumps(out) if as_json else f"applied to {out['name']}")
+    else:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    sys.exit(main(sys.argv[1:]))

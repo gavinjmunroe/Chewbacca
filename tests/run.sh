@@ -1520,6 +1520,10 @@ if group "hud"; then
     python3 "$ROOT/tests/test_surface_notes.py"
   check  "dash-notes adds a dash line only to a note with nothing to lose, and reads it back" \
     python3 "$ROOT/tests/test_notes_surface.py"
+  check  "doc draws a Google or local document, and writes an edit only on the Apply press, then reads it back" \
+    python3 "$ROOT/tests/test_docs_surface.py"
+  check  "the real hud-listen and surfaces daemon open a doc, draw an edit as a Diff, and write it on one press" \
+    python3 "$ROOT/tests/test_docs_e2e.py"
   check  "github runs one read-only graphql call and refuses every write" \
     python3 "$ROOT/tests/test_surface_github.py"
   check  "whatsapp sends only to the opened 1:1 chat, verifies the new id, and an unlinked account is a note" \

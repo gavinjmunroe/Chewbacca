@@ -289,7 +289,9 @@ async function prepareWrite(op, s, frozen) {
     const argv = frozen.argv.slice(1);
     return { files: [exe], send: async () => {
       const r = spawnSync(exe, argv, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 180000 });
-      if (r.status !== 0) return { ok: false, class: "error", reason: (r.stderr || String(r.error || `exit ${r.status}`)).trim().slice(0, 400) };
+      // The CLI echoes a rejected argument before saying why, so a long error
+      // keeps its tail: the head alone hid every reason on 2026-10-10.
+      if (r.status !== 0) return { ok: false, class: "error", reason: clip((r.stderr || String(r.error || `exit ${r.status}`)).trim()) };
       return { ok: true, data: parseOr(r.stdout, r.stdout) };
     } };
   }
@@ -359,6 +361,10 @@ async function callEngine(opName, bound, flags, write) {
   if (flags.maxTier) opts.maxTier = flags.maxTier;
   if (write) opts.allowWrites = true;
   return call(registry.engine.site, opName, bound, opts);
+}
+
+function clip(s) {
+  return s.length <= 800 ? s : `${s.slice(0, 200)} ... ${s.slice(-600)}`;
 }
 
 function runProcess(kind, opName, file, argv) {

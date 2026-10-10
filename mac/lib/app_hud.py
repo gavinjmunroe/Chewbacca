@@ -192,7 +192,9 @@ def main() -> int:
     answer = glass.answer or "timeout"
     result: dict = {"found": found, "answer": answer, "pressed": False}
     if answer == "go":
-        code, did, err = run(appctl, "press", app, str(found["i"]), "--yes")
+        el = found["element"]
+        shown = json.dumps({"role": el.get("role"), "label": el.get("label"), "path": el.get("path")})
+        code, did, err = run(appctl, "press", app, str(found["i"]), "--yes", "--expect", shown)
         result["pressed"] = code == 0
         result["did"] = did or err
     glass.close()

@@ -581,6 +581,7 @@ let regionOpt: CGRect? = option("--region").flatMap { v in
 }
 let horizontal = flag("--horizontal")
 let checkOnly = flag("--check")
+let expectOpt = option("--expect")
 
 guard let cmd = args.first else {
     print("""
@@ -653,6 +654,18 @@ case "press", "focus":
     guard args.count >= 2 else { fail("\(cmd) needs an app and an element") }
     let app = resolveApp(args[0])
     let (el, e) = resolveElement(app, args[1], window: windowOpt)
+    if let want = expectOpt {
+        // The caller showed the person one element and got a tap for it. The
+        // snapshot file can be rewritten by any later `see` on this app, so
+        // index N alone is not that element: check role, label and path
+        // against what was shown. Security review of a1c68f98 (TOCTOU).
+        let shown = (try? JSONSerialization.jsonObject(with: Data(want.utf8))) as? [String: Any] ?? [:]
+        let same = (shown["role"] as? String) == (e["role"] as? String)
+            && (shown["label"] as? String) == (e["label"] as? String)
+            && (shown["path"] as? [Int]) == (e["path"] as? [Int])
+        if !same { fail("element \(args[1]) is no longer the one that was shown; nothing pressed", code: 5,
+                        fix: "ask again so the person sees the current control") }
+    }
     if cmd == "press" {
         gate(el, what: "element \(args[1])", yes: yes)
         // --check runs the gate and stops, so a caller can show the person
@@ -776,6 +789,13 @@ case "drag":
         let origin = pickWindow(app, windowOpt).frame?.origin ?? .zero
         b = CGPoint(x: origin.x + nums[0], y: origin.y + nums[1])
         target = ["point": nums]
+        // A bare point has no label to check, and whatever sits there (the
+        // Trash, a share target) receives the drop. Security review of
+        // a1c68f98: unlabeled means unknown, so it needs the person's yes.
+        if !yes {
+            fail("a drop onto a bare point can't be checked; refused without --yes", code: 4,
+                 fix: "drag onto an element by index or label, or confirm and repeat with --yes")
+        }
     } else {
         let (dst, de) = resolveElement(app, args[2], window: windowOpt)
         guard let c = center(dst) else { fail("target has no frame") }

@@ -184,7 +184,9 @@ import os  # noqa: E402
 run, calls, drawn = ask_with_fake_kyber("e action appctl-go")
 check("the ask card brackets the control and offers Press it",
       "m appctl-target 96 196 48 48" in drawn and "near=100,200,40,40" in drawn and 'label="Press it"' in drawn)
-check("a tap on Press it presses that element with --yes", ["press", "Calculator", "1", "--yes"] in calls)
+check("a tap on Press it presses that element with --yes, pinned to what was shown",
+      any(c[:4] == ["press", "Calculator", "1", "--yes"] and "--expect" in c
+          and json.loads(c[c.index("--expect") + 1])["label"] == "Change Sign" for c in calls))
 run, calls, drawn = ask_with_fake_kyber("e action appctl-no")
 check("Not this presses nothing", not any(c[0] == "press" and "--yes" in c for c in calls)
       and json.loads(run.stdout)["pressed"] is False)
@@ -208,6 +210,14 @@ if platform.system() == "Darwin" and shutil.which("swiftc"):
             for combo in ("space", "cmd+q", "cmd+d", "enter", "delete"):
                 r = subprocess.run([str(out), "key", "Finder", combo], capture_output=True, text=True)
                 check(f"key {combo} without --yes is refused", r.returncode == 4)
+            # --expect refuses when the snapshot no longer holds what was shown.
+            seen = subprocess.run([str(out), "see", "Calculator"], capture_output=True, text=True)
+            if seen.returncode == 0 and json.loads(seen.stdout)["elements"]:
+                first = json.loads(seen.stdout)["elements"][0]
+                wrong = json.dumps({"role": first["role"], "label": "Not What Was Shown", "path": first["path"]})
+                r = subprocess.run([str(out), "press", "Calculator", str(first["i"]), "--yes", "--expect", wrong],
+                                   capture_output=True, text=True)
+                check("a press pinned to a different shown element is refused, exit 5", r.returncode == 5)
             menu = subprocess.run([str(out), "menu", "Finder", "File", "Move to Trash"], capture_output=True, text=True)
             if menu.returncode == 2:
                 print("skip menu gate check: accessibility not granted to this process")

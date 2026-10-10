@@ -227,7 +227,7 @@ sync_sites() {
 # Entra; Caleb approved importing that session on 2026-10-10.
 PROFILE_LOGIN_SITES="brightspace brightspace.usc.edu d2l
 handshake joinhandshake.com -
-usc-reg webreg.usc.edu,my.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com -"
+usc-reg webreg.usc.edu,my.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -"
 
 profile_login_row() { printf '%s\n' "$PROFILE_LOGIN_SITES" | awk -v s="$1" '$1 == s'; }
 
@@ -247,8 +247,14 @@ import hashlib, json, os, shutil, sqlite3, subprocess, sys, tempfile, time
 from pathlib import Path
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 hosts, prefix, out, profile = sys.argv[1:5]
-hosts = [h for h in hosts.split(",") if h]
-chrome = Path.home() / "Library/Application Support/Google/Chrome"
+# "host:a|b|c" narrows one host to cookies whose names start with a, b or c.
+# login.microsoftonline.com carries his whole Microsoft 365 sign-in, so only
+# the cookies Entra's sign-in reads come along (security review, 2026-10-10:
+# the first version took every cookie there). ESTS* alone was not enough: the
+# sign-in then stopped on Entra's interrupt page and WebReg answered 302, so
+# the device and flow cookies (buid, fpc, esctx, gateway slice) ride too.
+hosts = [(h.split(":")[0], (h.split(":")[1] if ":" in h else prefix)) for h in hosts.split(",") if h]
+chrome = Path(os.environ.get("CHEWBACCA_CHROME_DIR") or Path.home() / "Library/Application Support/Google/Chrome")
 query = ("select host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc"
          " from cookies where host_key = ? or host_key = ? or host_key like ?")
 
@@ -257,7 +263,12 @@ def read(db):
         copy = Path(tmp) / "Cookies"
         shutil.copy(db, copy)
         con = sqlite3.connect(copy)
-        return [r for h in hosts for r in con.execute(query, (h, "." + h, "%." + h)).fetchall()]
+        out = []
+        for h, hp in hosts:
+            for r in con.execute(query, (h, "." + h, "%." + h)).fetchall():
+                if hp == "-" or any(r[1].lower().startswith(p) for p in hp.split("|")):
+                    out.append(r)
+        return out
 
 # Any student, any Mac: with no profile named, use whichever Chrome profile
 # touched these hosts' cookies most recently. Caleb's USC login lives in
@@ -274,13 +285,12 @@ else:
         seen = max((r[6] for r in found), default=-1)
         if found and seen > best:
             best, rows, profile = seen, found, db.parent.name
-secret = subprocess.check_output(["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]).strip()
+secret = (os.environ.get("CHEWBACCA_CHROME_SAFE_KEY", "").encode()
+          or subprocess.check_output(["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]).strip())
 key = hashlib.pbkdf2_hmac("sha1", secret, b"saltysalt", 1003, 16)
 expires = int(time.time()) + 12 * 3600
 jar = []
 for hk, name, blob, path, secure, httponly, _ in rows:
-    if prefix != "-" and not name.lower().startswith(prefix):
-        continue
     dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
     raw = dec.update(blob[3:]) + dec.finalize()
     raw = raw[: -raw[-1]]
@@ -291,7 +301,7 @@ for hk, name, blob, path, secure, httponly, _ in rows:
     jar.append({"name": name, "value": value, "domain": hk, "path": path or "/", "expires": expires,
                 "httpOnly": bool(httponly), "secure": bool(secure), "sameSite": "Lax"})
 if not jar:
-    sys.exit(f"no {hosts[0]} session in any Chrome profile; sign in there once in Chrome")
+    sys.exit(f"no {hosts[0][0]} session in any Chrome profile; sign in there once in Chrome")
 fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
 with os.fdopen(fd, "w") as f:
     json.dump(jar, f)
@@ -316,12 +326,14 @@ for dom, part in groups.items():
         json.dump(part, f)
 PY
   local extra dom siteroot
-  siteroot="$(printf '%s' "$host" | cut -d, -f1 | awk -F. '{print $(NF-1)"."$NF}')"
+  siteroot="$(printf '%s' "$host" | cut -d, -f1 | cut -d: -f1 | awk -F. '{print $(NF-1)"."$NF}')"
   for extra in "$dir"/extra-*.json; do
     [ -f "$extra" ] || continue
     dom="${extra##*/extra-}"; dom="${dom%.json}"
     [ "$dom" = "$siteroot" ] && continue
-    api-anything login "$dom" --cookies "$extra" >/dev/null 2>&1
+    if ! api-anything login "$dom" --cookies "$extra" >/dev/null 2>"$dir/extra.err"; then
+      say "couldn't import the $dom sign-in cookies: $(tail -1 "$dir/extra.err")" >&2
+    fi
   done
   api-anything login "$1" --cookies "$dir/cookies.json" >/dev/null; rc=$?
   rm -rf "$dir"

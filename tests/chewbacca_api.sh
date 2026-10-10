@@ -166,6 +166,51 @@ err="$(bash "$ROOT/bin/chewbacca-api" sync 2>&1 >/dev/null)"
 printf '%s' "$err" | grep -q notaspec && no "a non-spec JSON file printed a refusal"
 rm -f "$T/kit/notaspec.json"
 
+# The profile import takes only the named sign-in cookies from the identity
+# provider's host, picks the profile that used them last, and imports the
+# foreign domain separately. A fake Chrome cookie store, encrypted the way
+# Chrome does it, stands in for his.
+if python3 -c 'import cryptography' 2>/dev/null; then
+  python3 - "$T/chrome" <<'PY'
+import hashlib, os, sqlite3, sys
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+key = hashlib.pbkdf2_hmac("sha1", b"fakekey", b"saltysalt", 1003, 16)
+def enc(v):
+    raw = v.encode(); pad = 16 - len(raw) % 16; raw += bytes([pad]) * pad
+    e = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).encryptor()
+    return b"v10" + e.update(raw) + e.finalize()
+for prof, seen in (("Profile 1", 200), ("Profile 2", 100)):
+    os.makedirs(f"{sys.argv[1]}/{prof}", exist_ok=True)
+    db = sqlite3.connect(f"{sys.argv[1]}/{prof}/Cookies")
+    db.execute("create table cookies (host_key, name, encrypted_value, path, is_secure, is_httponly, last_access_utc)")
+    for host, name in (("webreg.usc.edu", "wr"), (".login.microsoftonline.com", "ESTSAUTH"),
+                       ("login.microsoftonline.com", "buid"), (".login.microsoftonline.com", "OtherMsCookie")):
+        db.execute("insert into cookies values (?,?,?,?,?,?,?)", (host, name, enc("fake-" + name), "/", 1, 1, seen))
+    db.commit()
+PY
+  : > "$T/calls"
+  CHEWBACCA_CHROME_DIR="$T/chrome" CHEWBACCA_CHROME_SAFE_KEY=fakekey \
+    FAKE_KEEP="$T/kept" bash -c '
+      cat > "'"$T"'/bin/api-anything" <<'"'"'SH'"'"'
+#!/bin/bash
+printf "%s\n" "$*" >> "$FAKE_LOG"
+for a in "$@"; do case "$prev" in --cookies) cp "$a" "$FAKE_KEEP.$2.json";; esac; prev="$a"; done
+echo "{\"ok\":true}"
+SH
+      chmod +x "'"$T"'/bin/api-anything"
+      PROFILE_LOGIN_SITES_TEST=1 bash "'"$ROOT"'/bin/chewbacca-api" login usc-reg >/dev/null 2>&1'
+  grep -q 'login microsoftonline.com --cookies' "$T/calls" || no "the identity provider's cookies were not imported under their own domain"
+  grep -q 'login usc-reg --cookies' "$T/calls" || no "the site's own cookies were not imported"
+  if [ -f "$T/kept.microsoftonline.com.json" ]; then
+    grep -q OtherMsCookie "$T/kept.microsoftonline.com.json" && no "an unlisted Microsoft cookie was imported"
+    grep -q ESTSAUTH "$T/kept.microsoftonline.com.json" || no "the Entra session cookie was dropped"
+  else
+    no "no identity-provider cookie file reached the engine"
+  fi
+  # restore the plain fake engine
+  printf '#!/bin/bash\nprintf "%%s\\n" "$*" >> "$FAKE_LOG"\necho "{\\"ok\\":true}"\n' > "$T/bin/api-anything"
+fi
+
 # Calls pass through with their args intact; teach maps to add.
 bash "$ROOT/bin/chewbacca-api" call alpha getThing 'q=two words' >/dev/null
 grep -qx 'call alpha getThing q=two words' "$T/calls" || no "call args changed on the way through"

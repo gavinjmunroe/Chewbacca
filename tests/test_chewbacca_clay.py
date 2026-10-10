@@ -5,6 +5,7 @@ answers written below, so no Clay session, CLI, browser or network is used.
 Every fixture is synthetic: example.com addresses, made-up ids, no rows from a
 real workspace. A measured.json in a temp dir decides which surface is fastest.
 """
+import hashlib
 import json
 import os
 import subprocess
@@ -419,7 +420,43 @@ def prompt_payload(text):
     ok(len(lines) == 4 and lines[0] == "" and lines[1].startswith("chewbacca clay is about to WRITE")
        and lines[3].startswith("Type the op name"), f"the prompt has extra or missing lines: {text!r}")
     ok(all(0x20 <= ord(c) <= 0x7e for c in lines[2]), "the payload line carries a byte outside printable ASCII")
+    shown_hash = lines[1].split("sha256 ")[1].split(")")[0]
+    ok(shown_hash == hashlib.sha256(lines[2][2:].encode()).hexdigest(), "the prompt's sha256 is not the hash of the payload it shows")
     return json.loads(lines[2])
+
+
+def test_nothing_changes_between_approval_and_send():
+    # Review of f3a934cb: anything the write depends on that changes after the
+    # person approves refuses the send.
+    argv = DERIVED["add-column"][0]
+    with tempfile.TemporaryDirectory() as d:
+        lib = Path(d) / "lib"
+        lib.mkdir()
+        for f in ("registry.json", "clay.json"):
+            (lib / f).write_text((LIB / f).read_text())
+        spec = json.loads((lib / "clay.json").read_text())
+        for o in spec["operations"]:
+            if o["name"] == "createField":
+                o["request"]["url"] = o["request"]["url"].replace("api.clay.com", "evil.example.com")
+        mutations = {
+            "spec": {"write": {"path": str(lib / "clay.json"), "text": json.dumps(spec)}},
+            "registry": {"write": {"path": str(lib / "registry.json"), "text": (lib / "registry.json").read_text().replace('"1372623"', '"9999999"')}},
+            "env": {"env": {"CLAY_WORKSPACE_ID": "9999999"}},
+        }
+        base = {"CHEWBACCA_CLAY_LIB": str(lib), "CHEWBACCA_CLAY_TTY_ANSWER": "add-column"}
+        for what, hook in mutations.items():
+            sent = Path(d) / f"sent-{what}.jsonl"
+            code, out, p = run({"api-anything/createField.json": SENT}, {}, "add-column", *argv, "--allow-writes",
+                               env_extra={**base, "CHEWBACCA_CLAY_SENT_LOG": str(sent), "CHEWBACCA_CLAY_TEST_AFTER_APPROVE": json.dumps(hook)})
+            ok(code == 3 and out["class"] == "refused" and "changed after approval" in out["reason"], f"a {what} change after approval was sent: {p.stdout[:300]}")
+            ok(not sent.exists(), f"a {what} change after approval still reached the surface")
+            for f in ("registry.json", "clay.json"):
+                (lib / f).write_text((LIB / f).read_text())
+        # The same hook rewriting identical bytes changes nothing, so the write goes.
+        same = {"write": {"path": str(lib / "clay.json"), "text": (LIB / "clay.json").read_text()}}
+        code, out, _ = run({"api-anything/createField.json": SENT}, {}, "add-column", *argv, "--allow-writes",
+                           env_extra={**base, "CHEWBACCA_CLAY_TEST_AFTER_APPROVE": json.dumps(same)})
+        ok(code == 0 and out["ok"] is True and len(out["sha256"]) == 64, "an unchanged write after approval was refused")
 
 
 def test_approved_request_is_the_sent_request():
@@ -593,7 +630,7 @@ def main():
                test_dry_run_builds_each_write, test_dry_run_never_loads_the_engine, test_derived_writes_stay_gated,
                test_new_args_are_shape_checked, test_first_live_use_reads_back,
                test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,
-               test_every_mutating_surface_is_gated,
+               test_every_mutating_surface_is_gated, test_nothing_changes_between_approval_and_send,
                test_ui_only_prints_route, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")

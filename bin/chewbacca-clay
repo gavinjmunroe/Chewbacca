@@ -52,9 +52,17 @@ function readJson(file, fallback) {
   }
 }
 
-const registry = readJson(path.join(LIB, "registry.json"), null);
+// Read once. A write is built from these in-memory copies, and the files are
+// only re-read after approval to refuse if they changed (see fingerprint).
+function readText(file) {
+  try { return fs.readFileSync(file, "utf8"); } catch { return null; }
+}
+const REGISTRY_TEXT = readText(path.join(LIB, "registry.json"));
+const SPEC_TEXT = readText(path.join(LIB, "clay.json"));
+const parseOr = (t, fallback) => { try { return JSON.parse(t); } catch { return fallback; } };
+const registry = parseOr(REGISTRY_TEXT, null);
 if (!registry) out({ ok: false, class: "error", reason: `no registry at ${LIB}/registry.json` }, EXIT.failed);
-const spec = readJson(path.join(LIB, "clay.json"), { operations: [] });
+const spec = parseOr(SPEC_TEXT, { operations: [] });
 const specOps = new Map(spec.operations.map((o) => [o.name, o]));
 const measured = readJson(MEASURED, {});
 
@@ -202,27 +210,105 @@ function logSent(entry) {
   if (f) fs.appendFileSync(f, `${JSON.stringify(entry)}\n`);
 }
 
-// The engine builds its own request from (op, args) with the spec it loads,
-// which a heal can rewrite. Before a write goes out, build it with the engine's
-// own buildRequest (empty session: no cookie) and refuse unless method, URL,
-// headers and body are byte-for-byte what the person approved.
-async function engineMatches(dist, opName, bound, frozen) {
-  const { loadSite } = await import(path.join(dist, "store.js"));
-  const { buildRequest } = await import(path.join(dist, "http.js"));
-  const site = loadSite(registry.engine.site)?.site;
-  const op = site?.operations.find((o) => o.name === opName);
-  if (!op) return `the engine has no ${opName} operation`;
-  const r = buildRequest(op, bound, { cookies: [], values: {} });
-  const headers = { ...r.headers };
-  delete headers.cookie;
-  const same = r.method === frozen.method && r.url === frozen.url && JSON.stringify(headers) === JSON.stringify(frozen.headers)
-    && (r.body ?? null) === (frozen.body === undefined ? null : JSON.stringify(frozen.body));
-  return same ? null : "the engine would send a request other than the one approved (its spec copy differs); nothing was sent";
+// ── writes: everything resolved before approval, nothing re-resolved after ──
+//
+// Security review of f3a934cb (TOCTOU): the engine was handed an op name and
+// args and re-resolved the spec, the session and the URL at call time, after
+// the person had approved. A write now never goes through call(). Before the
+// prompt, prepareWrite loads and checks the engine build, imports it, loads the
+// session into memory and resolves the CLI or bin to an absolute path. After
+// approval the only thing that happens is sending the frozen request: the
+// engine's send() gets a synthetic op whose request IS the frozen one (no
+// slots, no params), and a fetch wrapper refuses any hop whose method, URL or
+// body differs from it, so a redirect can't replay the body elsewhere.
+
+const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
+const ENV_PINNED = ["CLAY_WORKSPACE_ID", "CHEWBACCA_NO_SEND", "API_ANYTHING_HOME", "API_ANYTHING_DIST", "PATH", "CHEWBACCA_CLAY_LIB", "CHEWBACCA_ROOT"];
+
+// Everything a write depends on, hashed: the registry and spec as read at
+// startup and as on disk, the pinned env, and the files prepareWrite resolved
+// (engine build, session, executable). Taken before the prompt and again after
+// approval; any difference refuses the send.
+function fingerprint(prep) {
+  const parts = [
+    `registry:${sha256(REGISTRY_TEXT ?? "")}:${sha256(readText(path.join(LIB, "registry.json")) ?? "")}`,
+    `spec:${sha256(SPEC_TEXT ?? "")}:${sha256(readText(path.join(LIB, "clay.json")) ?? "")}`,
+    ...ENV_PINNED.map((k) => `env:${k}=${process.env[k] ?? ""}`),
+    ...(prep.files || []).map((f) => `file:${f}:${sha256(fs.existsSync(f) ? fs.readFileSync(f) : "")}`),
+    ...(prep.dist ? [`dist:${distHash(prep.dist)}`] : []),
+  ];
+  return sha256(parts.join("\n"));
 }
 
-async function callEngine(opName, bound, flags, write, frozen) {
+function whichAbs(name) {
+  const r = spawnSync("sh", ["-c", 'command -v "$1"', "sh", name], { encoding: "utf8" });
+  const p = r.stdout.trim();
+  return p ? fs.realpathSync(p) : null;
+}
+
+async function prepareWrite(op, s, frozen) {
+  if (FIXTURES) return { files: [], send: async () => {
+    logSent({ surface: s.type, op: op.name, request: frozen });
+    if (s.type === "api-anything") return fixture("api-anything", s.op) ?? { ok: false, class: "error", reason: `no fixture for ${s.op}` };
+    const f = fixture(s.type, op.name);
+    if (!f) return { ok: false, class: "error", reason: `no fixture for ${s.type} ${op.name}` };
+    return f.exit === 0 ? { ok: true, data: parseOr(f.stdout, null) } : { ok: false, class: "error", reason: f.stderr || `exit ${f.exit}` };
+  } };
+  if (s.type !== "api-anything") {
+    const exe = s.type === "cli" ? whichAbs("clay") : path.join(ROOT, "bin", frozen.argv[0]);
+    if (!exe || !fs.existsSync(exe)) return { error: `${s.type === "cli" ? "the clay CLI" : frozen.argv[0]} is not installed` };
+    const argv = frozen.argv.slice(1);
+    return { files: [exe], send: async () => {
+      const r = spawnSync(exe, argv, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 180000 });
+      if (r.status !== 0) return { ok: false, class: "error", reason: (r.stderr || String(r.error || `exit ${r.status}`)).trim().slice(0, 400) };
+      return { ok: true, data: parseOr(r.stdout, r.stdout) };
+    } };
+  }
+  const dist = engineDist();
+  if (!dist) return { error: "api-anything is not installed" };
+  if (!registry.engine.dist_sha256 || distHash(dist) !== registry.engine.dist_sha256) {
+    return { error: `the installed api-anything is not the build of the pinned commit ${registry.engine.sha.slice(0, 12)}` };
+  }
+  process.env.API_ANYTHING_HOME = ENGINE_HOME;
+  const http = await import(path.join(dist, "http.js"));
+  const sess = await import(path.join(dist, "session.js"));
+  const sessionPath = sess.sessionFile(registry.engine.site);
+  let session;
+  try { session = sess.loadSession(registry.engine.site); } catch (e) { return { error: `no usable Clay session: ${e.message}` }; }
+  const body = frozen.body === undefined ? undefined : JSON.stringify(frozen.body);
+  const synthetic = { name: op.name, request: { method: frozen.method, url: frozen.url, headers: { ...frozen.headers }, ...(body !== undefined ? { body } : {}) },
+    slots: [], params: [], volatile: [], readOnly: false, minTier: 1, response: { format: "json" } };
+  // The engine's own builder, on the synthetic op, must give back exactly the approved request.
+  const built = http.buildRequest(synthetic, {}, { cookies: [], values: {} });
+  const h = { ...built.headers };
+  delete h.cookie;
+  if (built.method !== frozen.method || built.url !== frozen.url || JSON.stringify(h) !== JSON.stringify(frozen.headers) || (built.body ?? undefined) !== body) {
+    return { error: "the engine would build a request other than the one shown; nothing was sent" };
+  }
+  let hops = 0;
+  const guarded = (url, init) => {
+    hops += 1;
+    const sentBody = init?.body === undefined ? undefined : String(init.body);
+    if (hops > 1 || String(url) !== frozen.url || init?.method !== frozen.method || sentBody !== body) {
+      throw new Error("refused: the outgoing request differs from the approved one (a redirect or a rewrite); nothing more was sent");
+    }
+    return fetch(url, init);
+  };
+  return { dist, files: [sessionPath], send: async () => {
+    try {
+      const r = await http.send(synthetic, {}, session, { site: registry.engine.site, fetchImpl: guarded });
+      const ok = r.status >= 200 && r.status < 300;
+      return { ok, status: r.status, data: parseOr(r.body, r.body), ...(ok ? {} : { class: "error", reason: `HTTP ${r.status}` }) };
+    } catch (e) {
+      return { ok: false, class: "error", reason: String(e.message || e) };
+    }
+  } };
+}
+
+// Reads only: the engine resolves the op itself, which is fine for a GET.
+async function callEngine(opName, bound, flags, write) {
+  if (write) return { ok: false, class: "refused", reason: "a write never goes through call(); it is sent from its frozen request" };
   if (FIXTURES) {
-    if (write) logSent({ surface: "api-anything", op: opName, request: frozen });
     const f = fixture("api-anything", opName);
     return f ?? { ok: false, class: "error", reason: `no fixture for ${opName}` };
   }
@@ -239,11 +325,6 @@ async function callEngine(opName, bound, flags, write, frozen) {
   }
   process.env.API_ANYTHING_HOME = ENGINE_HOME;
   syncSpec();
-  if (write) {
-    if (!frozen) return { ok: false, class: "refused", reason: "a write reached the engine without an approved request" };
-    const differs = await engineMatches(dist, opName, bound, frozen);
-    if (differs) return { ok: false, class: "refused", reason: differs };
-  }
   const { call } = await import(path.join(dist, "execute.js"));
   const opts = {};
   if (flags.maxTier) opts.maxTier = flags.maxTier;
@@ -326,14 +407,13 @@ function isWrite(op) {
   return op.kind !== "read" || String(op.gate || "").startsWith("write") || op.surfaces.some(surfaceWrites);
 }
 
-// `frozen` is the approved request for a write: the engine must build exactly
-// it, and a process surface runs exactly its argv.
-async function attempt(op, cand, flags, frozen) {
-  const { s } = cand;
-  let { bound } = cand;
+// Reads only. A write never reaches here: runOp sends it through prepareWrite.
+async function attempt(op, cand, flags) {
+  const { s, bound } = cand;
   const t0 = Date.now();
+  if (isWrite(op)) return { ok: false, surface: s.type, class: "refused", reason: "a write is only sent from its approved, frozen request", ms: 0 };
   if (s.type === "api-anything") {
-    const r = await callEngine(s.op, bound, flags, isWrite(op), frozen);
+    const r = await callEngine(s.op, bound, flags, false);
     const res = {
       ok: !!r.ok,
       surface: "api-anything",
@@ -345,12 +425,6 @@ async function attempt(op, cand, flags, frozen) {
     };
     if (!r.ok) return { ...res, class: r.class, reason: r.reason, next: r.next };
     return { ...res, data: where(r.data, s.where), truncated: r.truncated, healed: r.healed };
-  }
-  if (frozen) {
-    if (!Array.isArray(frozen.argv)) return { ok: false, surface: s.type, class: "refused", reason: "a write reached a process surface without an approved argv", ms: 0 };
-    // frozen.argv is what the person saw: the program name, then its args.
-    bound = s.type === "cli" ? frozen.argv.slice(1) : frozen.argv;
-    logSent({ surface: s.type, op: op.name, request: frozen });
   }
   const file = s.type === "cli" ? "clay" : path.join(ROOT, "bin", bound[0]);
   const argv = s.type === "cli" ? bound : bound.slice(1);
@@ -610,7 +684,19 @@ function showable(obj) {
   return JSON.stringify(obj).replace(/[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
 }
 function approvalPrompt(name, request) {
-  return `\nchewbacca clay is about to WRITE to Clay:\n  ${showable({ op: name, request })}\nType the op name (${name}) to send it, anything else to stop: `;
+  const line = showable({ op: name, request });
+  return `\nchewbacca clay is about to WRITE to Clay (sha256 ${sha256(line)}):\n  ${line}\nType the op name (${name}) to send it, anything else to stop: `;
+}
+
+// Fixture mode only, for tests: change something between approval and send
+// ({"write": {"path": ..., "text": ...}} or {"env": {...}}), to prove the send
+// is refused. Fixture mode never reaches Clay.
+function afterApprovalTestHook() {
+  const raw = FIXTURES && process.env.CHEWBACCA_CLAY_TEST_AFTER_APPROVE;
+  if (!raw) return;
+  const h = JSON.parse(raw);
+  if (h.write) fs.writeFileSync(h.write.path, h.write.text);
+  for (const [k, v] of Object.entries(h.env || {})) process.env[k] = v;
 }
 
 function deepFreeze(v) {
@@ -693,19 +779,33 @@ async function runOp(name, kv, flags) {
     const refuse = (reason) => out({ ok: false, op: name, class: "refused", gate: op.gate, reason, payload: { op: name, args }, request }, EXIT.refused);
     if (process.env.CHEWBACCA_NO_SEND === "1") refuse("CHEWBACCA_NO_SEND=1 is set");
     if (!flags.allowWrites) refuse("a write needs --allow-writes");
+    const s = cands[0].s;
+    const prep = await prepareWrite(op, s, request);
+    if (prep.error) refuse(prep.error);
+    const before = fingerprint(prep);
+    const shownHash = sha256(showable({ op: name, request }));
     const yes = personApproves(name, request);
     if (yes === null) refuse("a write needs a person at a terminal to type the op name; this shell has none, so hand Caleb the exact command");
     if (!yes) refuse("the person at the terminal did not approve this payload");
+    afterApprovalTestHook();
+    // Nothing the request depends on may have changed while the person read it.
+    if (fingerprint(prep) !== before) refuse("the registry, spec, environment, engine, session or executable changed after approval; nothing was sent");
+    if (sha256(showable({ op: name, request })) !== shownHash) refuse("the request changed after approval; nothing was sent");
+    const t0 = Date.now();
+    const r = await prep.send();
+    const tried = [{ surface: s.type, call: surfaceKey(op, s), ok: !!r.ok, ms: Date.now() - t0, ...(r.ok ? {} : { class: r.class, reason: r.reason }) }];
+    if (!r.ok) out({ ok: false, op: name, class: r.class, reason: r.reason, sha256: shownHash, tried, ui: uiRoute(op, args) }, EXIT.failed);
+    // A write never read back after a real call reads back now, every time,
+    // until a person sets verified:true in registry.json.
+    const rb = op.verified === false ? await readback(op, sendArgs) : null;
+    out({ ok: true, op: name, surface: s.type, call: surfaceKey(op, s), ms: tried[0].ms, sha256: shownHash, ...(rb ? { verified: false, readback: rb } : {}), tried, data: r.data }, EXIT.ok);
   }
   const tried = [];
   let last;
-  // A write goes out once, through the surface its frozen request was built for.
-  for (const cand of isWrite(op) ? cands.slice(0, 1) : cands) {
-    const r = await attempt(op, cand, flags, isWrite(op) ? request : undefined);
+  for (const cand of cands) {
+    const r = await attempt(op, cand, flags);
     last = r;
     tried.push({ surface: r.surface, call: r.call, ok: r.ok, ms: r.ms, ...(r.ok ? {} : { class: r.class, reason: r.reason }), ...(r.truncated ? { truncated: r.truncated } : {}) });
-    // A write is sent once, through one surface: never fall through to another.
-    if (isWrite(op)) break;
     if (r.ok && !r.truncated) break;
     // An input error means the args are wrong, and every surface would say so.
     if (!r.ok && r.class === "input") break;
@@ -713,10 +813,7 @@ async function runOp(name, kv, flags) {
   const best = last.ok ? last : null;
   if (best) {
     const { ok, surface, call, tier, ms, engine_ms, data, truncated, healed, cursor } = best;
-    // A write never read back after a real call reads back now, every time,
-    // until a person sets verified:true in registry.json.
-    const rb = isWrite(op) && op.verified === false ? await readback(op, sendArgs) : null;
-    out({ ok, op: name, surface, call, ...(tier ? { tier } : {}), ms, ...(engine_ms !== undefined ? { engine_ms } : {}), ...(truncated ? { truncated } : {}), ...(healed ? { healed } : {}), ...(cursor ? { cursor } : {}), ...(rb ? { verified: false, readback: rb } : {}), tried, data }, EXIT.ok);
+    out({ ok, op: name, surface, call, ...(tier ? { tier } : {}), ms, ...(engine_ms !== undefined ? { engine_ms } : {}), ...(truncated ? { truncated } : {}), ...(healed ? { healed } : {}), ...(cursor ? { cursor } : {}), tried, data }, EXIT.ok);
   }
   out({ ok: false, op: name, class: last.class, reason: last.reason, ...(last.next ? { next: last.next } : {}), tried, ui: uiRoute(op, args) }, EXIT.failed);
 }

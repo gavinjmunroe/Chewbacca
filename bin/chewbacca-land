@@ -1,0 +1,197 @@
+#!/usr/bin/env python3
+"""chewbacca land: put your work on origin/main without touching anyone else's.
+
+    chewbacca land --paths bin/x tests/x.sh -m "fix: ..."   # files as they are on disk now
+    chewbacca land <sha> [<sha>...]                          # commits you already made
+    chewbacca land --dry-run ...                             # everything but the push
+
+It builds the change on a fresh detached worktree of origin/main, so other
+tabs' uncommitted files, half-merged state and unpushed commits in the shared
+checkout never ride along. It regenerates the manifest files the pre-push gate
+checks (SHA256SUMS.txt, README counts) when the repo has those tools, then
+pushes. A push that loses the race fetches, rebases, regenerates and tries
+again. A lock under ~/.chewbacca makes local tabs take turns instead of
+racing each other.
+
+Why it exists: on 2026-10-09 and 10-10, with 10+ tabs on one checkout, every
+tab hand-rolled the same dance (temp worktree, cherry-pick, checksums, retry)
+and got it wrong in a new way each time: a pull that aborted on someone
+else's dirty files, a stale manifest, a rebase that lost the race four times,
+a bare commit that swallowed another tab's staged work. One command, one
+correct path.
+"""
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+# Six tries covered every race seen on 10/9-10/10 (the worst was four losses
+# in a row with ten tabs pushing); past that something else is wrong.
+MAX_TRIES = 6
+# A lock older than this belongs to a tab that died mid-land.
+STALE_LOCK_S = 600
+
+
+def run(args, cwd, check=True, quiet=False):
+    p = subprocess.run(args, cwd=cwd, text=True, capture_output=True)
+    if check and p.returncode != 0:
+        raise SystemExit(f"land: {' '.join(args[:3])} failed:\n{(p.stderr or p.stdout).strip()[-1200:]}")
+    if not quiet and p.stdout.strip() and os.environ.get("LAND_VERBOSE"):
+        print(p.stdout.strip())
+    return p
+
+
+def repo_root(start):
+    return run(["git", "rev-parse", "--show-toplevel"], start).stdout.strip()
+
+
+def git_common_dir(root):
+    d = run(["git", "rev-parse", "--git-common-dir"], root).stdout.strip()
+    return d if os.path.isabs(d) else os.path.join(root, d)
+
+
+class Lock:
+    def __init__(self, root):
+        base = os.path.join(os.path.expanduser(os.environ.get("CHEWBACCA_HOME", "~/.chewbacca")), "land-locks")
+        os.makedirs(base, exist_ok=True)
+        key = os.path.realpath(git_common_dir(root)).replace("/", "_")[-120:]
+        self.path = os.path.join(base, key + ".lock")
+
+    def __enter__(self):
+        waited = 0
+        while True:
+            try:
+                os.mkdir(self.path)
+                with open(os.path.join(self.path, "pid"), "w") as f:
+                    f.write(str(os.getpid()))
+                return self
+            except FileExistsError:
+                try:
+                    age = time.time() - os.path.getmtime(self.path)
+                except FileNotFoundError:
+                    continue
+                if age > STALE_LOCK_S:
+                    shutil.rmtree(self.path, ignore_errors=True)
+                    continue
+                if waited == 0:
+                    print("land: another tab is landing; waiting your turn", file=sys.stderr)
+                time.sleep(2)
+                waited += 2
+                if waited > STALE_LOCK_S:
+                    raise SystemExit("land: waited 10 minutes for the landing lock; giving up")
+
+    def __exit__(self, *a):
+        shutil.rmtree(self.path, ignore_errors=True)
+
+
+def regenerate(wt, quiet=True):
+    """Rebuild the files the pre-push gate compares, and fold them into HEAD."""
+    changed = False
+    for tool in (["tools/counts.py"], ["tools/checksums.py"]):
+        if os.path.exists(os.path.join(wt, tool[0])):
+            run(["python3", "-I", *tool], wt, check=False, quiet=quiet)
+    # The worktree is land's own and was clean, so anything dirty now is
+    # what the tools just rewrote.
+    if run(["git", "status", "--porcelain"], wt).stdout.strip():
+        run(["git", "add", "-A"], wt)
+        run(["git", "commit", "-q", "--amend", "--no-edit", "--no-verify"], wt)
+        changed = True
+    return changed
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="chewbacca land", description=__doc__.split("\n\n")[0])
+    ap.add_argument("commits", nargs="*", help="commits to land, oldest first")
+    ap.add_argument("--paths", nargs="+", help="land these files as they are on disk now")
+    ap.add_argument("-m", "--message", help="commit message for --paths")
+    ap.add_argument("--remote", default="origin")
+    ap.add_argument("--branch", default="main")
+    ap.add_argument("--dry-run", action="store_true", help="build and check, never push")
+    a = ap.parse_args()
+    if bool(a.commits) == bool(a.paths):
+        ap.error("give either commits or --paths, not both")
+    if a.paths and not a.message:
+        ap.error("--paths needs -m")
+
+    src = repo_root(os.getcwd())
+    target = f"{a.remote}/{a.branch}"
+    with Lock(src):
+        run(["git", "fetch", "-q", a.remote, a.branch], src)
+        tmp = tempfile.mkdtemp(prefix="land-")
+        wt = os.path.join(tmp, "wt")
+        run(["git", "worktree", "add", "-q", "--detach", wt, target], src)
+        try:
+            if a.paths:
+                missing = []
+                for p in a.paths:
+                    s = os.path.join(src, p)
+                    d = os.path.join(wt, p)
+                    if os.path.exists(s):
+                        os.makedirs(os.path.dirname(d) or wt, exist_ok=True)
+                        shutil.copy2(s, d)
+                    elif os.path.exists(d):
+                        os.remove(d)  # deleted on disk: land the deletion
+                    else:
+                        missing.append(p)
+                if missing:
+                    raise SystemExit(f"land: not found anywhere: {', '.join(missing)}")
+                run(["git", "add", "-A", "--", *a.paths], wt)
+                if not run(["git", "diff", "--cached", "--name-only"], wt).stdout.strip():
+                    print("land: nothing to land, origin already has these files")
+                    return 0
+                p = subprocess.run(["git", "commit", "-q", "--no-verify", "-F", "-", "--", *a.paths], cwd=wt, input=a.message, text=True, capture_output=True)
+                if p.returncode != 0:
+                    raise SystemExit(f"land: commit failed: {(p.stderr or p.stdout).strip()}")
+            else:
+                for c in a.commits:
+                    p = run(["git", "cherry-pick", "--allow-empty", c], wt, check=False)
+                    if p.returncode != 0:
+                        run(["git", "cherry-pick", "--abort"], wt, check=False)
+                        raise SystemExit(f"land: {c} doesn't apply on {target}; rebase it on main first:\n{p.stderr.strip()[-600:]}")
+            regenerate(wt)
+            if a.dry_run:
+                print(f"land: dry run ok, would push {run(['git', 'rev-parse', '--short', 'HEAD'], wt).stdout.strip()}")
+                return 0
+            for attempt in range(1, MAX_TRIES + 1):
+                p = run(["git", "push", "-q", a.remote, f"HEAD:{a.branch}"], wt, check=False)
+                if p.returncode == 0:
+                    sha = run(["git", "rev-parse", "--short", "HEAD"], wt).stdout.strip()
+                    subj = run(["git", "log", "-1", "--format=%s"], wt).stdout.strip()
+                    print(f"land: {sha} {subj}")
+                    return 0
+                err = (p.stderr or "") + (p.stdout or "")
+                raced = any(k in err for k in ("non-fast-forward", "fetch first", "cannot lock ref"))
+                if not raced:
+                    raise SystemExit(f"land: push refused by a gate, fix this and run land again:\n{err.strip()[-1500:]}")
+                run(["git", "fetch", "-q", a.remote, a.branch], wt)
+                r = run(["git", "rebase", "-q", target], wt, check=False)
+                if r.returncode != 0:
+                    # A manifest conflict is ours to regenerate; anything else is real.
+                    conflicted = run(["git", "diff", "--name-only", "--diff-filter=U"], wt).stdout.split()
+                    # Only the pure manifest is safe to take from upstream; a
+                    # README conflict may hold a real edit and stays a conflict.
+                    regen = {"SHA256SUMS.txt"}
+                    if conflicted and set(conflicted) <= regen:
+                        for f in conflicted:
+                            run(["git", "checkout", "--ours", "--", f], wt)  # upstream's; regenerated below
+                            run(["git", "add", "--", f], wt)
+                        e = subprocess.run(["git", "-c", "core.editor=true", "rebase", "--continue"], cwd=wt, text=True, capture_output=True)
+                        if e.returncode != 0:
+                            run(["git", "rebase", "--abort"], wt, check=False)
+                            raise SystemExit(f"land: rebase onto {target} failed:\n{e.stderr.strip()[-600:]}")
+                    else:
+                        run(["git", "rebase", "--abort"], wt, check=False)
+                        raise SystemExit(f"land: your change conflicts with {target} in {', '.join(conflicted) or 'some file'}; merge by hand")
+                regenerate(wt)
+                time.sleep(min(2 * attempt, 8))
+            raise SystemExit(f"land: lost the push race {MAX_TRIES} times; try again in a minute")
+        finally:
+            run(["git", "worktree", "remove", "--force", wt], src, check=False)
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

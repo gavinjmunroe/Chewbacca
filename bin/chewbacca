@@ -51,6 +51,7 @@ COMMANDS=(
   "task-graph|manage durable agent jobs and verification dependencies"
   "work-ledger|preserve workspace commitments across messages and runtimes"
   "tabs|see what every other live agent tab is doing, in any runtime"
+  "land|put your files or commits on origin/main without anyone else's"
   "graph-fuse|inspect possible entity matches without merging records"
   "review-gate|run independent code review and check its current receipt"
   "update|pull the latest, show what changed, re-run setup"
@@ -182,6 +183,12 @@ permissions|permission|perms)
   shift
   [ $# -eq 0 ] && set -- walk
   exec python3 "$ROOT/bin/chewbacca-permissions" "$@"
+  ;;
+land)
+  # The one way a tab pushes: builds on a fresh worktree of origin/main,
+  # regenerates the manifest, retries lost races. See bin/chewbacca-land.
+  shift
+  exec python3 -I "$ROOT/bin/chewbacca-land" "$@"
   ;;
 jobs)
   # The machine queue. See bin/chewbacca-jobs.

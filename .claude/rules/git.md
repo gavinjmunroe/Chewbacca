@@ -86,5 +86,10 @@ impossible. Remove it when the branch lands: `git worktree remove ../wt-slug`.
   `.githooks/pre-push` run. It checks what the push touches (syntax, counts,
   checksums, undefined Python names, doc links, hook registration) in a few
   seconds. Run `bash tests/run.sh` as well for anything large.
+- In Chewbacca, push with `chewbacca land --paths <files> -m "<msg>"` (or
+  `chewbacca land <sha>...`). It builds on a fresh worktree of origin/main so
+  other tabs' files never ride along, regenerates SHA256SUMS, lets pre-push
+  run, and retries a lost race under a lock. Never push from the shared
+  checkout by hand: ten tabs did on 2026-10-09/10 and broke it a new way each time.
 - Main stays green. A red check on main is fixed or quarantined the day it
   appears, because a main that is always a little red hides the next failure.

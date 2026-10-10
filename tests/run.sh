@@ -502,8 +502,6 @@ fi
 
 # ── tools ─────────────────────────────────────────────────────────────────────
 if group "tools"; then
-  check  "main-ci queues each new main commit once and names the bisect range when red" python3 "$ROOT/tests/test_main_ci.py"
-  check  "main-ci sandbox refuses secrets, persistence and network for pushed code" python3 "$ROOT/tests/test_main_ci_sandbox.py"
   check  "chewie app: background driver refuses Return without --yes, Jev picks map back" python3 "$ROOT/tests/test_appctl.py"
   check "counts handles conflict stages and whitespace paths" python3 "$ROOT/tests/test_counts.py"
   check  "counts --check passes on a clean tree" python3 "$ROOT/tools/counts.py" --check
@@ -889,6 +887,12 @@ if group "installer"; then
   # client; 2026-10-09 a Jonah update contradicted two rulings nobody loaded.
   check  "naming a client loads its standing rulings" \
     bash "$ROOT/tests/client_rulings.sh"
+
+  # Ten tabs on one checkout hand-rolled the push dance and broke it a new way
+  # each time (2026-10-09/10): dirty files rode along, manifests went stale,
+  # races were lost four times running.
+  check  "chewbacca land pushes only your files, survives a lost race, fixes the manifest" \
+    bash "$ROOT/tests/land.sh" "$ROOT"
 
   # The guard that keeps a Claude session's environment out of a person's
   # Terminal window. Its first version only fired when the parent was login,

@@ -1861,6 +1861,9 @@ _register("Stop", hooks_dir + "/kit-debt.sh", timeout=15,
 # times and reported as a silent death; the job was buffering until the end of
 # a twenty minute run. The hook shipped that day and was never registered, so
 # it had not fired once by 2026-10-03, when hooks_registered.sh caught it.
+# slop-guard reads the reply only; 80 thinking blocks in a day carried em
+# dashes he reads in the editor (2026-10-10). Feeds forward, never refuses.
+_register("Stop", hooks_dir + "/thinking-dash-guard.sh", timeout=5)
 _register("Stop", hooks_dir + "/stale-read-guard.sh", timeout=5,
           status="Checking no unfinished job was called silent...")
 

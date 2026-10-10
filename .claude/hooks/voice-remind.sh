@@ -17,6 +17,12 @@ type hook_init >/dev/null 2>&1 && hook_init voice-remind.sh 5
 # prose-check on long drafts first. It was loaded that session and nothing
 # made it happen, so this is the version that doesn't depend on remembering.
 #
+# 2026-10-10, "FIX CHEWB SO IT ALWAYS TALKS LIKE ME NO AI SLOP IT KEEPS
+# FORGETTING AND DOING EM DASHES": the dashes were all in thinking, which
+# nothing read, so the rule names thinking now (thinking-dash-guard.sh feeds
+# back what slipped), and the register line names his measured markers from
+# voice.md instead of only listing what to avoid.
+#
 # It also hands over what slop-guard caught on the previous reply. Format-only
 # flags don't refuse any more (see slop-guard.sh), so this is where they reach
 # the model, one turn later and before the next reply rather than after it.
@@ -30,8 +36,12 @@ Chat register, checked by slop-guard when the reply ends. Get it right the
 first time: a refused reply is re-sent, and Caleb sees both copies.
 - No bold labels opening paragraphs or sections, no markdown headers, no
   tables. Plain sentences, and "-" lists only where there's a real list.
-- No em dashes, no "it's not X, it's Y", no recap ending, no offer of next
-  steps unless it's a real fork. Contractions, not "do not" / "it is".
+- No em dashes ANYWHERE: reply, thinking (he reads it), commit messages,
+  files. Use a comma or a period. No "it's not X, it's Y", no recap ending,
+  no offer of next steps unless it's a real fork.
+- Talk like Caleb texts: short, first word capitalized, no period on a
+  short line, contractions always, u/ur/rn/bc/abt/w/plz where they fit,
+  ALL CAPS on the one word that matters. Don't pile on slang he didn't use.
 EOF
 
 if [ -s "$PENDING" ]; then

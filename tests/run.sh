@@ -1282,6 +1282,7 @@ if group "hooks"; then
   check "voice-check, drafts and voice-guard refuse a text that is not his" bash "$ROOT/tests/voice_check.sh"
   check "prayer-guard checks every visible block this turn" bash "$ROOT/tests/prayer_guard.sh"
   check "disk-guard prunes regenerable caches once when the disk runs low" bash "$ROOT/tests/disk_guard.sh"
+  check "thinking-dash-guard queues em dashes in this turn's thinking and never refuses" bash "$ROOT/tests/thinking_dash_guard.sh"
   check "tab-rescue flags tabs dead on a usage limit once, sim-reap stops orphaned simulators" bash "$ROOT/tests/tab_rescue.sh"
   check "machine-budget refuses fan-outs on a busy Mac, agent-nice keeps agents at nice 10" bash "$ROOT/tests/machine_budget.sh"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"

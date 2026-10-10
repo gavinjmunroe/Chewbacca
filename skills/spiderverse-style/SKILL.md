@@ -507,7 +507,7 @@ strip. `[ACR-Q]`
 - A dozen comic SFX words on one page.
 - Every section the same palette and the same treatment.
 
-## Tested in Blender (measured, Waves 1 to 3 of the replica study)
+## Tested in Blender (measured, Waves 1 to 4 of the replica study)
 
 From `~/code/work/spiderverse-replica` (private): eight structurally different
 shots rebuilt in Nalana's Blender 5.1 (EEVEE) and scored against the reference
@@ -600,6 +600,22 @@ Wave 3 (13 city shots through one parameterised template):
 - **tested: one template per family carries palette and texture, not
   layout.** Shots defined by one specific geometry (a diagonal tower, a dome
   in front of a wall of towers) need their own layout.
+
+Wave 4 (23 graphic shots: swirls, bursts, beams, debris, voids):
+
+- **tested: a coarse colour script carries a quarter of a graphic frame.**
+  A field built from 18 measured cell averages, with nothing on it, scored
+  0.27 mean against these frames; the finished shots reached 0.37. Block the
+  colour script, then spend the effort on shapes, edges and value.
+- **tested: add only the shapes the frame contains.** Swirl bands, debris
+  and ink chaos added +0.13 to +0.27 over the colour field; extra shapes on
+  four frames left them at or below the bare field.
+- **tested: the brush plate helps every frame short of marks.** 12 of 12
+  graphic shots improved with it (mean +0.034). Across four waves it has
+  only hurt frames whose edge density already matched.
+- **tested, pipeline: check a generated image against its source numbers.**
+  An image filled in memory rendered black in Blender's EEVEE; write it to a
+  file and load it.
 
 ## Tools worth reaching for
 

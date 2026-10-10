@@ -170,7 +170,8 @@ not as a last resort.
 | Get the gist of a URL, video, or file | `summarize "<url>" --cli claude`              |
 | Drive a Mac app from one instruction  | `mac-use "open Calculator and add 5 and 4"`   |
 | Read a calendar, contact, or thread   | `mac calendar list --json`, `mac contacts find` |
-| Send a text or file a reminder        | `mac messages send`, `mac reminders add`      |
+| Send a text (positional, no flags)    | `mac messages send <handle> "<text>" --json`  |
+| File a reminder                       | `mac reminders add`                           |
 | Record a demo that zooms on clicks    | `cap record start --screen <id> --detach --json` |
 | Turn a URL into a cinematic demo      | the `cap-demo` skill                          |
 

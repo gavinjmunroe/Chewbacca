@@ -120,9 +120,12 @@ clay campaign-stats`, `chewbacca gtm sync` then `gtm replies --all` answer in
   steals his screen. Caleb: "I thought we had reverse engineered a clay api so
   you don't hv to go back to clay?"
 - **Never hand him the Clay writes as a command.** Caleb: "Bro fuck the guard
-  fix chewbs do it urself". His "do it yourself" in chat is the approval
-  (`chat-approval.sh`, 2 hours): run the writes through `chewbacca clay`, and
-  the gate still has to pass before any Start.
+  fix chewbs do it urself". Ask once, in your reply, on a line starting
+  `Clay go-ahead:` that names the exact work. Any reply from him that isn't a
+  no approves it for 2 hours in that tab (`chat-approval.sh`). Never parse his
+  wording for a yes: two phrase lists missed his real replies the same day, and
+  he called it brute forcing. Run the writes through `chewbacca clay`; the gate
+  still has to pass before any Start.
 
 ## Grading a campaign before it goes out
 

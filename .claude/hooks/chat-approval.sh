@@ -1,21 +1,24 @@
 #!/bin/bash
-# UserPromptSubmit: when Caleb tells the agent in chat to do the Clay work
-# itself, record that approval so `chewbacca clay` writes and Clay UI clicks can
-# go through without a person typing at a terminal.
+# UserPromptSubmit: Caleb's reply to an explicit ask is the approval for the
+# Clay work that ask names, in place of typing at a terminal agent shells
+# never have.
 #
-# Why chat and not a terminal. The write gate read its yes from /dev/tty, which
-# agent shells never have, so every Clay write (loading rows, verifying emails,
-# building drafts, pressing Start) came back to Caleb as a command to run. On
-# 2026-10-10 he answered that with "fuck the guard fix chewbs do it urself".
-# What the gate exists to stop is an agent acting on text it READ (a reply, a
-# page, a doc) rather than on something Caleb SAID. A prompt reaches this hook
-# from the harness, never from a tool result, so an approval written here can
-# only come from him. launch-guard refuses any tool call that touches the
-# record, so the agent can't write one for itself.
+# How consent is read. The agent asks for a go-ahead in its own reply, on a line
+# starting "Clay go-ahead:" that names the exact work. Caleb's next message
+# approves it unless it says no. Nothing parses his wording for a yes: the
+# first two versions matched phrases ("do it yourself", then "do it" and
+# "DO IT BRUH") and missed his real reply twice in one afternoon, and he said
+# "brute forcing chewbs word is smth we agreed on not doing" (2026-10-10). A
+# yes is anything he sends back to the ask; only a no is read, and a missed no
+# still meets the pre-send gate before any Start.
 #
-# The record lasts 2 hours (CHAT_APPROVAL_MS in bin/chewbacca-clay) and a
-# Start click counts only in the session he said it in. Silence never revokes
-# it; "stop", "don't", "pause", "wait" or "hold off" in any prompt does.
+# Why chat counts at all. The gate exists to stop an agent acting on text it
+# READ (a reply, a page, a doc). A prompt reaches this hook from the harness,
+# never from a tool result, and the ask it answers is on his screen, so the
+# approval is his. launch-guard refuses any tool call that names the record.
+#
+# The record lasts 2 hours, carries the session it was given in, and is
+# deleted by any later no ("stop", "don't", "pause", "wait", "hold off").
 set -uo pipefail
 STATE="${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}"
 PAYLOAD="$(cat 2>/dev/null)"
@@ -27,37 +30,53 @@ try:
 except Exception:
     raise SystemExit(0)
 prompt = str(payload.get("prompt") or "")
-low = prompt.lower()
 path = os.path.join(os.environ["STATE"], "clay-chat-approval.json")
+ASK = "clay go-ahead:"
+# A no is the one thing read from his words: missing a yes costs a re-ask,
+# missing a no costs a send, so this list leans wide.
+NO = re.compile(r"\b(no|nah|stop|don'?t|do not|never|pause|hold off|cancel|wait|not yet)\b", re.I)
 
-# "Do the Clay work yourself", in the words he actually used. Built from one
-# message (2026-10-10), never measured; widen it from real prompts that missed.
-# Narrow on purpose: a review of the first version found "run it" and "start
-# them" matched ordinary coding chat and approved sends nobody asked for.
-APPROVE = re.compile(
-    r"\b(do it (ur|your) ?self|do it urself|fuck the guard|you (have|got) my (ok|approval|go)"
-    r"|i approve|go ahead and (send|launch|start)|(send|launch|start) the (campaigns?|waves?))\b")
-# Any of these anywhere wins over an approval in the same prompt: the first
-# version read "don't send it" as a yes because "send it" matched too.
-REVOKE = re.compile(r"\b(stop|don'?t|do not|never|pause|hold off|cancel|wait)\b")
 
-# A whole message that is just "do it" (plus "bruh", "now", "yourself"...) is
-# a yes to what the agent just proposed. "DO IT BRUH" (2026-10-10), sent after
-# the agent asked for a go-ahead, missed the first list.
-WHOLE = re.compile(r"^\s*(just )?(do it|send it|launch it|run it)( (bruh|bro|now|already|yourself|urself|ur self|pls|plz))*[\s!.]*$")
+def last_ask(transcript, prompt):
+    """The Clay go-ahead line in the agent's most recent visible reply, or None."""
+    try:
+        lines = open(transcript, encoding="utf-8", errors="replace").read().splitlines()[-400:]
+    except OSError:
+        return None
+    for raw in reversed(lines):
+        try:
+            entry = json.loads(raw)
+        except ValueError:
+            continue
+        content = (entry.get("message") or {}).get("content")
+        if entry.get("type") == "user" and isinstance(content, str):
+            if content.strip() == prompt.strip():
+                continue  # this prompt itself, if the harness logged it first
+            return None  # an earlier human turn came first: no ask is pending
+        if entry.get("type") != "assistant":
+            continue
+        for part in (entry.get("message") or {}).get("content") or []:
+            if isinstance(part, dict) and part.get("type") == "text":
+                for line in str(part.get("text", "")).splitlines():
+                    if line.strip().lower().startswith(ASK):
+                        return line.strip()[len(ASK):].strip()
+    return None
 
-if REVOKE.search(low):
+
+if NO.search(prompt):
     try:
         os.remove(path)
     except OSError:
         pass
     raise SystemExit(0)
-if not (APPROVE.search(low) or WHOLE.match(low)):
+ask = last_ask(str(payload.get("transcript_path") or ""), prompt)
+if not ask:
     raise SystemExit(0)
 os.makedirs(os.path.dirname(path), exist_ok=True)
 record = {
     "at": int(time.time()),
     "session_id": payload.get("session_id", ""),
+    "ask": ask[:300],
     "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
     "excerpt": prompt[:200],
 }

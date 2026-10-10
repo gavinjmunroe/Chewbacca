@@ -1081,7 +1081,7 @@ async function runOp(name, kv, flags) {
     const before = fingerprint(prep);
     const shownHash = sha256(showable({ op: name, request }));
     const yes = personApproves(name, request);
-    if (yes === null) refuse("a write needs Caleb's ok: him typing the op name at a terminal, or telling the agent in chat to do it (\"do it yourself\") within the last 2 hours");
+    if (yes === null) refuse("a write needs Caleb's ok: him typing the op name at a terminal, or answering the agent's \"Clay go-ahead:\" ask in chat within the last 2 hours");
     if (!yes) refuse("the person at the terminal did not approve this payload");
     afterApprovalTestHook();
     // Nothing the request depends on may have changed while the person read it.

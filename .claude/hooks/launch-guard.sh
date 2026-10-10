@@ -364,7 +364,7 @@ chewbacca gtm/gtme/gtme-grade, clay CLI reads, git (not config), local read tool
 counts.py/checksums.py, code-slop, slop-check, and test runners (python3 tests/x.py,
 bash tests/run.sh [group], pytest tests/...; prefix CHEWBACCA_NO_SEND=1 so nothing
 sends). Writes go through chewbacca clay, which needs Caleb's ok (a terminal, or
-him saying "do it yourself" in chat within 2 hours); a
+his reply to a "Clay go-ahead:" ask in chat within 2 hours); a
 campaign START or add-leads also needs a passing gtme-grade and a full pre-send
 gate receipt, checked in code before it sends.
 MSG

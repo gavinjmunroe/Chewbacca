@@ -1240,9 +1240,10 @@
       "gate": "write:audience",
       "args": [
         "audience",
-        "filter"
+        "filter",
+        "campaign?"
       ],
-      "summary": "Change which leads a campaign's base segment holds by replacing that audience's filter (the documented CLI way). A live campaign emails whoever enters its segment, so launch-guard's rule applies.",
+      "summary": "Change which leads a campaign's base segment holds by replacing that audience's filter (the documented CLI way). A live campaign emails whoever enters its segment, so it needs campaign=cam_... and a passing gtme-grade for add-leads on it, whose base segment must be this audience; checked after the person approves, before the send.",
       "surfaces": [
         {
           "type": "cli",
@@ -1281,7 +1282,7 @@
         "campaign",
         "status"
       ],
-      "summary": "Pause or stop a campaign (status=PAUSED|STOPPED). START is refused here: a start or resume goes through launch-guard and a person in the UI.",
+      "summary": "Pause, stop or start a campaign (status=PAUSED|STOPPED|START). START (a launch or a resume) is sent only after a person types the op name at a terminal AND gtme-grade --verify passes for this workspace, campaign and action; agents never get a terminal.",
       "surfaces": [
         {
           "type": "api-anything",
@@ -1293,11 +1294,6 @@
           }
         }
       ],
-      "refuse_values": {
-        "status": {
-          "START": "starting or resuming a campaign is never sent from here; it needs a full pre_send_gate.py pass (launch-guard) and a person in the Clay UI"
-        }
-      },
       "evidence": {
         "source": "bundle",
         "file": "app-pcUNqd80.js",

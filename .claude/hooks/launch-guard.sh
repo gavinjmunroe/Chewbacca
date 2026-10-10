@@ -4,42 +4,45 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
 type hook_init >/dev/null 2>&1 && hook_init launch-guard.sh 10
 # lib.sh's watchdog ends a slow hook with exit 0, which for this hook would let
-# a launch through whenever the grade check is slow (security review,
+# a Clay command through whenever the check is slow (security review,
 # 2026-10-10). A guard that times out refuses instead.
-trap 'echo "launch-guard: timed out verifying the gate, refusing" >&2; exit 2' TERM
-# PreToolUse: HARD BLOCK on launching, resuming or enrolling an outbound
-# campaign unless the pre-send gate passed in full within the last 12 hours,
-# on files that have not changed since, AND gtme-grade passed all five
-# playbook gates for that campaign in the same window (see below).
+trap 'echo "launch-guard: timed out classifying the command, refusing" >&2; exit 2' TERM
+# PreToolUse: an ALLOWLIST for anything that can reach Clay from a shell, and a
+# refusal for browser or screen clicks on a Clay page.
 #
-# Written 2026-10-05. On 10-04 this kit called Jonah Graham's Zeutara lists
-# "verified, pass the gate". Jonah's own review then found five things the gate
-# never checked: 97 inboxes on domains he had refused, 19 personalized lines
-# claiming investments that never happened, two CFOs, Sep 28 recipients emailed
-# again, and no firm auto-pause. Sagar fixed all of it by hand. The lesson had
-# already been written as prose twice (list-audit, list-guard), and list-guard
-# is advisory, so neither stopped it.
+# History. Written 2026-10-05 after Jonah's review found five defects in lists
+# this kit had called ready; it refused launch-shaped commands without a fresh
+# pre-send gate receipt. On 2026-10-10 three security reviews in a row found
+# shell commands its parser read differently from the shell (quoting, $'..',
+# backslashes, eval, xargs, aliases, IFS, newlines, env and exec prefixes,
+# absolute paths, python -c with requests). Patching the parser was the wrong
+# fix. The core moved instead:
 #
-# The gate (zeutara-gtme scripts/pre_send_gate.py) writes
-# ~/.chewbacca/state/send-gate-receipt.json on a pass: "full" only when every
-# check ran, plus a sha256 of every input file. 12 hours because lists change
-# overnight and Monday's launch should not ride on Saturday's run.
+#   - The only code that sends a campaign START or changes a campaign's leads is
+#     `chewbacca clay` (campaign-status, add-leads). It needs a person typing
+#     the op name at a terminal, and then, in code, on the request's own
+#     workspace, campaign and action, a passing `gtme-grade --verify` and a full
+#     pre-send gate receipt. Nothing there is parsed from text.
+#   - This hook no longer guesses whether a command launches. Any Bash command
+#     that mentions Clay, the sequencer or a campaign runs only if, split with
+#     shlex, it is exactly a known read with no shell syntax at all. Everything
+#     else that mentions Clay is refused, including curl, python, node or
+#     osascript aimed at api.clay.com. What it cannot classify, it refuses.
 #
-# This is a guard against an agent forgetting, not against a determined one:
-# it can't see a click made by hand in the Clay UI, and a browser MCP click
-# carries no label, so on a Clay campaign page every MCP click is treated as a
-# possible launch.
+# It is still a guard against an agent going around the gated path, not a
+# sandbox: a script that never names Clay in its command line is not seen here,
+# which is why the send path itself carries the check.
 
 set -uo pipefail
 
 payload="$(cat)"
-# No jq, or a payload jq cannot parse, means no receipt check either, so fail
-# closed on anything launch-like (security review, 2026-10-10: an unparsable
-# payload used to fall through to exit 0).
+MENTION='clay|sequencer|campaign'
+# No jq, or a payload jq cannot parse: nothing can be classified, so anything
+# that mentions Clay refuses (an unparsable payload used to fall through to 0).
 blind() {
-  printf '%s' "$payload" | tr '[:upper:]' '[:lower:]' |
-    grep -qE 'launch|resume|unpause|enroll|add.leads|activ|start|send-gate-receipt|gtme-grade' &&
-    { echo "launch-guard: $1, cannot verify a gate pass" >&2; exit 2; }
+  printf '%s' "$payload" | tr -d "\"'\\\\" | tr '[:upper:]' '[:lower:]' |
+    grep -qE "$MENTION|send-gate-receipt|gtme-grade" &&
+    { echo "launch-guard: $1, so a command that mentions Clay can't be classified" >&2; exit 2; }
   exit 0
 }
 command -v jq >/dev/null 2>&1 || blind "jq is missing"
@@ -48,9 +51,7 @@ blob="$(printf '%s' "$payload" | jq -r '.tool_input // {} | tostring' 2>/dev/nul
 [ -n "$blob" ] || exit 0
 
 state="$HOME/.chewbacca/state"
-receipt="$state/send-gate-receipt.json"
 lasturl="$state/launch-guard-last-url"
-# Collapse whitespace so `chewie  web   click` matches like `chewie web click`.
 lower="$(printf '%s' "$blob" | tr '[:upper:]' '[:lower:]' | tr -s ' \t\n' '   ')"
 WORDS='launch|resume|unpause|activate|start campaign|start sending|enroll|add leads'
 
@@ -59,38 +60,161 @@ refuse() {
   exit 2
 }
 
-launching=0
+# Shell commands: the allowlist. The classifier is plain Python (shlex), run
+# isolated; if it is missing or fails, a command that mentions Clay refuses.
+CLASSIFY=""
+IFS= read -r -d '' CLASSIFY <<'PY' || true
+import json, os, re, shlex, sys
+
+cmd = sys.stdin.read()
+kit = sys.argv[1]
+MENTION = re.compile(r"clay|sequencer|campaign")
+
+
+def out(verdict, why=""):
+    print(f"{verdict}\t{why}")
+    sys.exit(0)
+
+
+# Quotes and backslashes removed, so "c\lay" and 'cl''ay' still count as Clay.
+if not MENTION.search(re.sub(r"[\"'\\]", "", cmd).lower()):
+    out("skip")
+# No shell syntax at all: operators, substitutions, redirects, globs, escapes,
+# history, comments, newlines. A quoted value can carry spaces, nothing else.
+if re.search(r"[;&|`$<>(){}\[\]*?~!#\\\n\r\t\x00-\x08\x0b-\x1f\x7f]", cmd):
+    out("refuse", "it uses shell syntax (operators, substitution, redirection, globs, escapes or newlines)")
+try:
+    argv = shlex.split(cmd, posix=True)
+except ValueError:
+    out("refuse", "its quoting does not parse")
+if not argv:
+    out("refuse", "it is empty")
+# The command name must be spelled plainly, first, with nothing in front.
+if not re.fullmatch(r"[a-z][a-z0-9-]*", argv[0]) or not re.match(re.escape(argv[0]) + r"(\s|$)", cmd.lstrip()):
+    out("refuse", "the command name is a path, quoted, escaped or behind an env prefix")
+
+try:
+    reg = json.load(open(os.path.join(kit, "library", "clay-api", "registry.json")))
+    READ_OPS = {o["name"] for o in reg["ops"] if o.get("kind") == "read"}
+except (OSError, ValueError, KeyError):
+    out("refuse", "the clay op registry can't be read, so no read can be confirmed")
+
+KV = re.compile(r"[a-z_]+=[^\s]*")
+
+
+def clay_read(args):
+    """chewbacca clay <read-op> k=v... [--surface S] [--json]"""
+    if not args:
+        out("refuse", "chewbacca clay with no op")
+    op, rest = args[0], args[1:]
+    if op in ("ops", "doctor", "--help", "-h") and not rest:
+        out("allow")
+    if op in ("route", "measure"):
+        if not rest or rest[0] not in READ_OPS:
+            out("refuse", f"{op} names something other than a read op")
+        op, rest = rest[0], rest[1:]
+    if op not in READ_OPS:
+        out("refuse", f"'{op}' is not a read op; writes need a person at a terminal running chewbacca clay")
+    i = 0
+    while i < len(rest):
+        a = rest[i]
+        if a == "--surface" and i + 1 < len(rest) and rest[i + 1] in ("cli", "api-anything", "bin"):
+            i += 2
+            continue
+        if a == "--json" or KV.fullmatch(a):
+            i += 1
+            continue
+        out("refuse", f"'{a}' is not an argument a read takes")
+    out("allow")
+
+
+# The clay CLI's read subcommands, as argv prefixes.
+CLAY_READS = [("whoami",), ("credits", "balance"), ("campaigns", "list"), ("campaigns", "get"),
+              ("campaigns", "analytics"), ("campaigns", "options"), ("tables", "list"), ("tables", "get"),
+              ("tables", "columns", "get"), ("tables", "rows", "list"), ("tables", "rows", "get"),
+              ("audiences", "list"), ("audiences", "get"), ("audiences", "records", "get"),
+              ("audiences", "records", "search-ids"), ("workbooks", "list"), ("folders", "list"),
+              ("signals", "list"), ("workflows", "list")]
+LOCAL_READS = {"grep", "ls", "cat", "head", "tail", "wc", "diff", "stat"}
+GIT_READS = {"status", "diff", "log", "show", "add", "commit", "ls-files", "grep", "blame"}
+
+name, args = argv[0], argv[1:]
+if name == "chewbacca":
+    if not args:
+        out("refuse", "chewbacca with no subcommand")
+    sub, args = args[0], args[1:]
+    if sub == "clay":
+        clay_read(args)
+    if sub in ("gtm", "gtme", "gtme-grade"):
+        out("allow")
+    out("refuse", f"chewbacca {sub} is not a known Clay read")
+if name in ("gtm", "gtme", "gtme-grade"):
+    out("allow")
+if name == "clay":
+    if any(tuple(args[:len(p)]) == p for p in CLAY_READS) and "--help" not in args[:1]:
+        out("allow")
+    out("refuse", "that clay subcommand is not a known read")
+if name in LOCAL_READS:
+    out("allow")
+# Opening a page is a read; clicks on it are judged above, before this runs.
+if name == "chewie" and args[:2] == ["web", "goto"] and len(args) == 3 and re.fullmatch(r"https://[^\s]+", args[2]):
+    out("allow")
+if name == "git" and args and args[0] in GIT_READS:
+    out("allow")
+out("refuse", f"{name} is not a known Clay read (curl, python, node, osascript and the like are never allowed near Clay)")
+PY
+
 case "$tool" in
   Bash)
-    # The receipt and the last-URL state are written by the gate and this hook,
-    # never by a shell command. The gate writes from inside Python, so its own
-    # command line never names the file, and no mention is exempt: an earlier
-    # version exempted commands naming pre_send_gate.py, which a comment could
-    # fake (security review, 2026-10-05).
+    # Receipts and the grade key are written only by their own tools.
     if printf '%s' "$lower" | grep -qE 'send-gate-receipt|launch-guard-last-url'; then
       refuse "only scripts/pre_send_gate.py may write the send-gate receipt."
     fi
-    # Same for the grade receipts, which only tools/gtme_grade.py writes.
-    # The receipts are signed, so a forged one fails --verify anyway; the key is
-    # what must never be read or written from a shell.
     if printf '%s' "$lower" | grep -qE 'state/gtme-grade|state" *[,/+] *"?gtme-grade|gtme-grade\.key|gtme_grade_key'; then
       refuse "only gtme-grade may touch a grade receipt or its key."
     fi
-    if printf '%s' "$lower" | grep -q 'chewie' &&
-       printf '%s' "$lower" | grep -qE 'click|eval' &&
+    cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)" ||
+      refuse "the command could not be read."
+    # A UI driver clicks whatever page is open, which the command line doesn't
+    # show, so a launch-shaped UI action refuses whether or not it names Clay.
+    if printf '%s' "$lower" | grep -qE 'chewie|jev-browse|peekaboo|mac-use|cliclick|osascript' &&
        printf '%s' "$lower" | grep -qE "$WORDS"; then
-      launching=1
+      refuse "a UI click can't be tied to one action on one campaign; a person presses Start in the Clay UI."
     fi
-    if printf '%s' "$lower" | grep -qE '\bclay\b' &&
-       printf '%s' "$lower" | grep -q 'campaign' &&
-       printf '%s' "$lower" | grep -qE '"?status"? *[:= ] *"?active|\benroll|\blaunch|\bresume|\bstart\b'; then
-      launching=1
+    # Cheap first look: a command that never mentions Clay (quotes and
+    # backslashes removed) is not this hook's business.
+    printf '%s' "$cmd" | tr -d "\"'\\\\" | tr '[:upper:]' '[:lower:]' | grep -qE "$MENTION" || exit 0
+    kit="${CHEWBACCA_ROOT:-}"
+    if [ -z "$kit" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
+      kit="$(sed -n 's/.*"repo"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$HOME/.chewbacca/install-manifest.json" | head -1)"
     fi
+    for cand in "$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." 2>/dev/null && pwd)" "$kit" "$HOME/code/chewbacca"; do
+      [ -n "$cand" ] && [ -f "$cand/library/clay-api/registry.json" ] && { kit="$cand"; break; }
+    done
+    command -v python3 >/dev/null 2>&1 || refuse "python3 is missing, so a command that mentions Clay can't be classified."
+    verdict="$(printf '%s' "$cmd" | python3 -I -c "$CLASSIFY" "${kit:-/nonexistent}" 2>/dev/null)" ||
+      refuse "the command classifier failed, so a command that mentions Clay is refused."
+    case "$verdict" in
+      allow*|skip*) exit 0 ;;
+    esac
+    why="${verdict#*$'\t'}"
+    cat >&2 <<MSG
+launch-guard: refusing a shell command that mentions Clay: ${why:-it could not be classified}.
+
+Only exact reads run from a shell: chewbacca clay <read-op> k=v..., chewbacca gtm,
+gtme, gtme-grade, or a read subcommand of the clay CLI, with no shell syntax.
+Anything that writes goes through chewbacca clay, which needs a person at a
+terminal; a campaign START or add-leads also needs a passing gtme-grade for that
+campaign and a full pre-send gate receipt, checked in code before it sends.
+MSG
+    exit 2
     ;;
   mcp__peekaboo__*)
     case "$tool" in *click*|*type*|*hotkey*)
-      printf '%s' "$lower" | grep -qE "$WORDS" && launching=1 ;;
+      printf '%s' "$lower" | grep -qE "$WORDS" &&
+        refuse "a click on screen can't be tied to one action on one campaign; a person presses Start in the Clay UI." ;;
     esac
+    exit 0
     ;;
   mcp__chrome-devtools__*|mcp__plugin_playwright_playwright__*)
     url="$(printf '%s' "$payload" | jq -r '.tool_input.url // empty' 2>/dev/null)"
@@ -101,177 +225,15 @@ case "$tool" in
     case "$tool" in
       *navigate*|*new_page*) exit 0 ;;
       *click*|*press_key*|*fill*|*type*|*evaluate*|*run_code*|*select_option*|*drag*|*hover*)
-        # Any Clay page counts, not just a campaign URL: an in-app link click
-        # changes the page without a navigate call, so the recorded URL can lag
-        # (security review, 2026-10-05: the campaign-only match failed open).
+        # Any Clay page counts: an in-app link click changes the page without a
+        # navigate call, so the recorded URL can lag (security review, 2026-10-05).
         last="$(cat "$lasturl" 2>/dev/null || true)"
-        if printf '%s' "$last" | grep -qiE 'clay\.com'; then
-          launching=1
+        if printf '%s' "$last" | grep -qiE 'clay\.com' || printf '%s' "$lower" | grep -qE "$WORDS"; then
+          refuse "a browser click on a Clay page can't be tied to one action on one campaign; a person presses Start in the Clay UI."
         fi
-        printf '%s' "$lower" | grep -qE "$WORDS" && launching=1
         ;;
     esac
+    exit 0
     ;;
   *) exit 0 ;;
 esac
-
-[ "$launching" = 1 ] || exit 0
-
-why=""
-now=$(date +%s)
-if [ ! -f "$receipt" ]; then
-  why="no pre-send gate receipt at all."
-else
-  t=$(jq -r '.time // 0' "$receipt" 2>/dev/null || echo 0)
-  full=$(jq -r '.full // false' "$receipt" 2>/dev/null || echo false)
-  if [ "$full" != "true" ]; then
-    why="the last gate pass skipped a check (no --suppress, --senders, --verification or --mx, or a --no-* flag)."
-  elif [ $((now - t)) -ge 43200 ]; then
-    why="the last full gate pass is over 12 hours old."
-  else
-    # Every input must still hash the same as when the gate passed.
-    while IFS=$'\t' read -r path want; do
-      [ -n "$path" ] || continue
-      got=$(shasum -a 256 "$path" 2>/dev/null | awk '{print $1}')
-      if [ "$got" != "$want" ]; then
-        why="$(basename "$path") changed or vanished after the gate passed."
-        break
-      fi
-    done < <(jq -r '.hashes // {} | to_entries[] | "\(.key)\t\(.value)"' "$receipt" 2>/dev/null)
-    if [ -z "$why" ] && [ "$(jq -r '.hashes // {} | length' "$receipt" 2>/dev/null)" = "0" ]; then
-      why="the receipt names no input files."
-    fi
-  fi
-fi
-
-
-# The playbook's five gates (tools/gtme_grade.py) must also have passed for
-# exactly this action on exactly this campaign in this workspace, within 12
-# hours, on inputs and live campaign state that have not changed since, in a
-# receipt signed with a key only gtme-grade holds. Added 2026-10-10: the kit had
-# a hundred sourced rules and a five-gate grading section, and no campaign had
-# ever been graded against them. Applied to Zeutara the same day, they found
-# 362 messages sent from inboxes the pre-send gate never saw.
-#
-# The check itself is `gtme-grade --verify`, which owns the signature, the
-# binding and the re-hashing. Every way this can fail refuses: no action
-# named, no campaign named, no tool, no python, a verifier error or timeout.
-# No receipt is chosen by "newest": a pass for one campaign never stands in for
-# another (security review, 2026-10-10).
-if [ -z "$why" ]; then
-  # Attribute from exactly what will run, never from a label, a description or
-  # a comment beside it (security review, 2026-10-10). Only one plain Bash
-  # command can be attributed: no chaining, pipes, redirection, substitution,
-  # heredocs, background jobs, comments, env prefixes or wrappers, one action,
-  # one campaign, at most one workspace. A browser or screen click can't show
-  # what its target does, so a launch-shaped one is refused outright.
-  subject=""
-  attrib=""
-  if [ "$tool" != "Bash" ]; then
-    attrib="a click in a browser or on screen can't be tied to one action on one campaign; a person presses Start in the Clay UI."
-  else
-    subject="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)" ||
-      attrib="the command could not be read."
-    nl=$'\n'
-    case "$subject" in
-      *"$nl"*|*";"*|*"&"*|*"|"*|*'`'*|*'$('*|*"<"*|*">"*|*"#"*)
-        attrib="the command chains, pipes, redirects, substitutes or comments, so what runs can't be attributed to one campaign." ;;
-    esac
-    if [ -z "$attrib" ] && printf '%s' "$subject" |
-         grep -qE '^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=|env |sudo |command |exec |eval |nohup |time |xargs |bash |sh |zsh |python[0-9.]* |node )'; then
-      attrib="the command runs behind an env prefix or a wrapper, so what runs can't be attributed."
-    fi
-    if [ -z "$attrib" ] && printf '%s' "$subject" | grep -qiE 'chewie.*\beval\b'; then
-      attrib="a page script can do anything, so it can't be attributed to one action."
-    fi
-  fi
-  slower="$(printf '%s' "$subject" | tr '[:upper:]' '[:lower:]')"
-  actions=""
-  printf '%s' "$slower" | grep -qE 'resume|unpause' && actions="$actions resume"
-  printf '%s' "$slower" | grep -qE 'add leads|add-leads|enroll' && actions="$actions add-leads"
-  printf '%s' "$slower" | grep -qE 'launch|activate|start campaign|start sending|status[ =]+active|\bstart\b' &&
-    actions="$actions launch"
-  nactions=$(printf '%s' "$actions" | wc -w | tr -d ' ')
-  ids="$(printf '%s\n' "$subject" | grep -oE 'cam_[A-Za-z0-9]+' | sort -u)"
-  nids=$(printf '%s' "$ids" | grep -c . | tr -d ' ')
-  ws="$(printf '%s\n' "$subject" | grep -oE 'workspaces/[0-9]+|ws=[0-9]+|--ws[ =][0-9]+' | grep -oE '[0-9]+' | sort -u)"
-  [ -n "$ws" ] || ws="${CLAY_WORKSPACE_ID:-1372623}"
-  if [ -z "$attrib" ] && [ "$nactions" -gt 1 ]; then
-    attrib="the command names more than one of launch, resume and add-leads."
-  elif [ -z "$attrib" ] && [ "$nids" -gt 1 ]; then
-    attrib="the command names more than one campaign."
-  fi
-  kit="${CHEWBACCA_ROOT:-}"
-  if [ -z "$kit" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
-    kit="$(sed -n 's/.*"repo"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$HOME/.chewbacca/install-manifest.json" | head -1)"
-  fi
-  grader=""
-  for cand in "$(dirname "${BASH_SOURCE[0]}")/../../tools/gtme_grade.py" "${kit:-$HOME/code/chewbacca}/tools/gtme_grade.py"; do
-    [ -f "$cand" ] && { grader="$cand"; break; }
-  done
-  if [ -n "$attrib" ]; then
-    why="$attrib"
-  elif [ -z "$actions" ]; then
-    why="cannot tell whether this is a launch, a resume or an add-leads; name the action in the command (an unlabeled click on a Clay page is refused)."
-  elif [ -z "$ids" ]; then
-    why="no cam_ id in the command, so no grade can be matched to it."
-  elif [ "$(printf '%s\n' "$ws" | wc -l | tr -d ' ')" != "1" ]; then
-    why="the command names more than one workspace."
-  elif [ -z "$grader" ] || ! command -v python3 >/dev/null 2>&1; then
-    why="gtme-grade or python3 is missing, so no grade can be verified."
-  else
-    # The verifier gets 8 of the hook's 10 seconds and is killed past that: a
-    # child blocked in a read never lets the TERM trap run, and lib.sh's last
-    # resort is kill -9, which the host treats as a non-blocking error.
-    vout="$(mktemp "${TMPDIR:-/tmp}/launch-guard.XXXXXX")" || vout=/dev/null
-    bounded() {
-      local secs="$1" n=0 pid; shift
-      "$@" >"$vout" 2>&1 &
-      pid=$!
-      while kill -0 "$pid" 2>/dev/null; do
-        if [ "$n" -ge $((secs * 10)) ]; then
-          kill -9 "$pid" 2>/dev/null
-          echo "gtme-grade --verify did not answer within ${secs}s" >"$vout"
-          return 124
-        fi
-        sleep 0.1
-        n=$((n + 1))
-      done
-      wait "$pid"
-    }
-    for action in $actions; do
-      while read -r id; do
-        [ -n "$id" ] || continue
-        if ! bounded 8 python3 -I "$grader" --verify --ws "$ws" --campaign "$id" --action "$action"; then
-          why="$(cat "$vout" 2>/dev/null)"
-          why="${why:-gtme-grade --verify failed with no message} ($action, $id)"
-          break 2
-        fi
-      done <<< "$ids"
-    done
-    [ "$vout" = /dev/null ] || rm -f "$vout"
-  fi
-  [ -n "$why" ] && why="$why
-Grade it: gtme-grade --campaign <cam_id> --action <launch|resume|add-leads> --leads <list>.csv \\
-    --suppress <sent>.csv --senders <sender-accounts>.json --client <name> --review <read>.json"
-fi
-
-[ -n "$why" ] || exit 0
-
-cat >&2 <<MSG
-launch-guard: refusing to launch, resume or enroll a campaign.
-
-Why: $why
-
-Run, from zeutara-gtme:
-
-  clay campaigns options sender-accounts > /tmp/senders.json
-  python3 scripts/pre_send_gate.py <lists>.csv --verification <verdicts>.csv \\
-      --suppress <everyone already emailed>.csv --senders /tmp/senders.json --mx
-
-The lists need title, personalized line and line_source columns. Before that,
-read Jonah's and Sagar's latest Slack feedback and make sure every item is a
-check the gate runs. On 2026-10-04 "passes our gate" meant only "passes the
-checks we thought of", and Sagar fixed five defects by hand.
-MSG
-exit 2

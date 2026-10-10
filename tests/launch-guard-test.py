@@ -1,4 +1,9 @@
-"""launch-guard.sh: a campaign launch needs a full, unchanged pre-send gate receipt.
+"""launch-guard.sh: the original 2026-10-05 cases, kept as regressions.
+
+Reads still run; every launch-shaped command, click or receipt forgery refuses.
+The receipts are set up as before, so a case refusing proves the hook no longer
+lets fresh receipts open a shell launch. tests/test_launch_guard_grade.py holds
+the allowlist and the send-path grade checks.
 
 Run: python3 tests/launch-guard-test.py
 """
@@ -81,9 +86,11 @@ cases = [
      None, None, None, 0),
     ("gate run passes the hook", "Bash",
      {"command": "python3 scripts/pre_send_gate.py l.csv --mx"}, None, None, None, 0),
-    ("launch, fresh full receipt, files unchanged", "Bash",
+    # Since 2026-10-10 no shell command starts a campaign, receipts or not: a
+    # START goes only through chewbacca clay, a person and a passing grade.
+    ("launch from a shell refuses even with fresh receipts", "Bash",
      {"command": "clay campaigns update cam_x --status active"},
-     FULL, SAME, None, 0),
+     FULL, SAME, None, 2),
     ("mcp click off clay", "mcp__chrome-devtools__click", {"uid": "1"},
      None, None, "https://github.com", 0),
     # must BLOCK (2)

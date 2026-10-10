@@ -356,12 +356,17 @@ def test_derived_writes_stay_gated():
         ok(code == 3 and "did not approve" in out["reason"], f"{name} ran with nobody typing its name")
         code, out, _ = run({}, {}, name, *argv, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": name, "CHEWBACCA_NO_SEND": "1"})
         ok(code == 3 and "NO_SEND" in out["reason"], f"{name} ran under CHEWBACCA_NO_SEND=1")
-    # A campaign start is never sent from here, approved or not.
-    code, out, _ = run({}, {}, "campaign-status", "campaign=cam_ex1", "status=START", "--allow-writes",
-                       env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "campaign-status"})
-    ok(code == 3 and out["class"] == "refused" and "launch-guard" in out["reason"], "a campaign START was let through")
+    # A campaign START is sent only after the person approves AND gtme-grade
+    # passes for it (tests/test_launch_guard_grade.py covers the passing side).
+    with tempfile.TemporaryDirectory() as home:
+        code, out, _ = run({"api-anything/setCampaignStatus.json": SENT}, {}, "campaign-status", "campaign=cam_ex1",
+                           "status=START", "--allow-writes",
+                           env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "campaign-status", "HOME": home,
+                                      "GTME_GRADE_KEY_FILE": os.path.join(home, "k")})
+        ok(code == 3 and out["class"] == "refused" and "no passing grade" in out["reason"],
+           "an approved campaign START without a grade was let through")
     code, out, _ = run({}, {}, "campaign-status", "campaign=cam_ex1", "status=START", "--dry-run")
-    ok(code == 3, "a campaign START is refused even as a dry run")
+    ok(code == 0 and out["sent"] is False, "a START dry run should print the request and send nothing")
 
 
 def test_new_args_are_shape_checked():
@@ -469,6 +474,9 @@ def test_approved_request_is_the_sent_request():
     # sent, defaults (ws) and composed bodies included, and the same object
     # --dry-run prints.
     cases = {name: argv for name, (argv, _) in DERIVED.items()}
+    # add-leads also needs a passing grade before it sends; its send path is
+    # tested in tests/test_launch_guard_grade.py.
+    cases.pop("add-leads")
     cases["reply"] = ["campaign_id=1", 'reply_data={"email_stats_id":"s1","email_body":"x"}']
     cases["blocklist-add"] = ["emailOrDomain=blocked.example"]
     reg = json.loads((LIB / "registry.json").read_text())

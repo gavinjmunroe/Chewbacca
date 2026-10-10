@@ -890,6 +890,53 @@ function deepFreeze(v) {
   return v;
 }
 
+// The one write path that makes a campaign send: a START (launch or resume)
+// and add-leads (a live campaign emails whoever enters its base segment). Each
+// needs a passing gtme-grade receipt for exactly this request's workspace,
+// campaign and action, checked by `gtme-grade --verify` on the real values
+// after the person approves and right before the send. Moved here from
+// launch-guard.sh on 2026-10-10: three reviews in a row found shell commands
+// the hook's parser read differently from the shell, so the check now runs in
+// the code that sends, where there is nothing to parse.
+// Live, the verifier runs with a scrubbed environment and the passwd HOME, so a
+// caller's env can't point it at another key, receipt directory or fixture;
+// fixture mode (never reaches Clay) passes the test environment through.
+const GRADE_TIMEOUT_MS = 30000;
+function gradeGate(op, request, args) {
+  let ws, cid, action, audience;
+  if (op.name === "campaign-status") {
+    const body = request.body && typeof request.body === "object" ? request.body : {};
+    if (body.status !== "START") return null;
+    const m = /\/v3\/workspaces\/([0-9]{1,12})\/clay-sequencer\/campaigns\/(cam_[A-Za-z0-9]{1,64})\/status$/.exec(request.url || "");
+    if (!m) return "cannot read the workspace and campaign from this request, so no grade can be matched";
+    [, ws, cid] = m;
+    action = "start";
+  } else if (op.name === "add-leads") {
+    const argv = request.argv || [];
+    if (argv[1] !== "audiences" || argv[2] !== "update" || !argv[3]) return "cannot read the audience from this request";
+    audience = argv[3];
+    cid = args.campaign;
+    ws = process.env.CLAY_WORKSPACE_ID || "1372623";
+    if (!cid) return "add-leads changes a live campaign's segment; name it with campaign=cam_... so its grade can be checked";
+    action = "add-leads";
+  } else {
+    return null;
+  }
+  const grader = path.join(ROOT, "tools", "gtme_grade.py");
+  const env = FIXTURES ? { ...process.env } : { PATH: "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin", HOME: os.userInfo().homedir };
+  const argv = ["-I", grader, "--verify", "--ws", String(ws), "--campaign", String(cid), "--action", action];
+  if (audience) argv.push("--audience", String(audience));
+  let r;
+  try {
+    r = spawnSync("python3", argv, { env, encoding: "utf8", timeout: GRADE_TIMEOUT_MS });
+  } catch (e) {
+    return `gtme-grade --verify could not run: ${e.message}`;
+  }
+  if (r.error) return `gtme-grade --verify could not run: ${r.error.message}`;
+  if (r.status !== 0) return (r.stderr || "").trim() || `gtme-grade --verify exited ${r.status}`;
+  return null;
+}
+
 function personApproves(name, request) {
   const prompt = approvalPrompt(name, request);
   if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT) fs.writeFileSync(process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT, prompt);
@@ -977,6 +1024,8 @@ async function runOp(name, kv, flags) {
     // Nothing the request depends on may have changed while the person read it.
     if (fingerprint(prep) !== before) refuse("the registry, spec, environment, engine, session or executable changed after approval; nothing was sent");
     if (sha256(showable({ op: name, request })) !== shownHash) refuse("the request changed after approval; nothing was sent");
+    const ungraded = gradeGate(op, request, args);
+    if (ungraded) refuse(`no passing grade for this campaign: ${ungraded}. Run gtme-grade on it first; nothing was sent`);
     const t0 = Date.now();
     const r = await prep.send();
     const tried = [{ surface: s.type, call: surfaceKey(op, s), ok: !!r.ok, ms: Date.now() - t0, ...(r.ok ? {} : { class: r.class, reason: r.reason }) }];

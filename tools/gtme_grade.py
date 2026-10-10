@@ -7,8 +7,8 @@ it had touched a live campaign. Applied to Zeutara on 2026-10-10 it found, among
 other things, 362 of 1,778 messages sent from 30 inboxes the pre-send gate had
 never seen (two of them on domains the client refused on 10-04), because the
 gate read a sender file and the campaigns carried their own sender list. A rule
-that is only written down does not run. This runs them, and launch-guard.sh
-refuses a launch, resume or add-leads without a pass from here.
+that is only written down does not run. This runs them, and `chewbacca clay`
+refuses a campaign START or add-leads without a pass from here.
 
     gtme-grade --campaign cam_x --action launch --leads send.csv --suppress sent.csv \\
                --senders sender-accounts.json --warmup-start 2026-10-02 \\
@@ -43,7 +43,10 @@ and of the campaign's own state (sequence, variants, settings, senders), all
 signed with an HMAC key kept 0600 outside the repo and outside ~/.chewbacca
 (~/Library/Application Support/chewbacca/gtme-grade.key, made on first use).
 `--verify` re-checks one receipt against the current files and a fresh read of
-the campaign; launch-guard.sh calls it and refuses on any mismatch or error.
+the campaign; `chewbacca clay` calls it on a START or add-leads request's own
+workspace, campaign and action, after the person approves and before it sends,
+and refuses on any mismatch or error. `--action start` asks for a launch grade
+on a draft and a resume grade on a paused campaign, decided from a fresh read.
 Local --copy grades never write a receipt, since nothing ties them to a Clay
 campaign. Nothing else is written. This never sends, never edits a
 campaign and never spends a credit: Clay is only read through `chewbacca clay`.
@@ -1119,6 +1122,69 @@ def verify(ws, cid, action):
     return ""
 
 
+PRESEND = Path(os.path.expanduser("~/.chewbacca/state/send-gate-receipt.json"))
+
+
+def presend_ok():
+    """The client's pre-send gate (zeutara-gtme scripts/pre_send_gate.py) must
+    also have passed in full in the last 12 hours on unchanged files. This was
+    launch-guard's first check; it moved here with the rest on 2026-10-10."""
+    try:
+        r = json.loads(PRESEND.read_text())
+    except (OSError, ValueError):
+        return "no pre-send gate receipt (scripts/pre_send_gate.py with every check on)"
+    if r.get("full") is not True:
+        return "the last pre-send gate pass skipped a check"
+    t = r.get("time")
+    if not isinstance(t, int) or not (0 <= time.time() - t < RECEIPT_TTL_S):
+        return "the last full pre-send gate pass is over 12 hours old"
+    hashes = r.get("hashes") or {}
+    if not hashes:
+        return "the pre-send gate receipt names no input files"
+    for path, want in hashes.items():
+        try:
+            if sha(path) != want:
+                return f"{os.path.basename(path)} changed after the pre-send gate passed"
+        except OSError:
+            return f"{os.path.basename(path)} vanished after the pre-send gate passed"
+    return ""
+
+
+def verify_request(ws, cid, action, audience=None):
+    """What the send path asks. `start` is a launch for a draft and a resume for
+    a paused campaign, decided from a fresh read; add-leads also needs the
+    audience to be this campaign's own base segment."""
+    if action not in ACTIONS + ("start",):
+        return f"unknown action {action!r}"
+    try:
+        receipt_file(ws, cid, ACTIONS[0])  # validates ws and cid
+    except ValueError as exc:
+        return str(exc)
+    why = presend_ok()
+    if why:
+        return why
+    if action == "start" or audience is not None:
+        try:
+            doc = fetch_state(ws, cid)
+        except Exception as exc:  # a read that fails refuses
+            return f"could not read the campaign from Clay: {exc}"
+    if action == "start":
+        status = str(doc.get("status", "")).lower()
+        if status == "draft":
+            action = "launch"
+        elif status == "paused":
+            action = "resume"
+        else:
+            return f"the campaign is {status or 'in an unknown state'}, not a draft or paused, so START is refused"
+    if action == "add-leads":
+        if audience is None:
+            return "add-leads needs the audience it changes"
+        base = doc.get("leadBaseSegmentId") or (doc.get("audience") or {}).get("id")
+        if not base or base != audience:
+            return f"audience {audience} is not campaign {cid}'s base segment"
+    return verify(ws, cid, action)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="gtme-grade", description=__doc__.split("\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1148,7 +1214,8 @@ def main(argv=None):
     ap.add_argument("--icp-fit-column", help="column holding a yes/no ICP fit per row")
     ap.add_argument("--review", help="JSON recording the recipient read: campaign, reviewer, "
                                      "reviewed_at, unresolved[]")
-    ap.add_argument("--action", choices=ACTIONS,
+    ap.add_argument("--audience", help="with --verify --action add-leads: the audience the write changes")
+    ap.add_argument("--action", choices=ACTIONS + ("start",),
                     help="what this grade unlocks for the campaign (one of the three actions). "
                          "A receipt is written only with an action and a Clay campaign id")
     ap.add_argument("--verify", action="store_true",
@@ -1160,12 +1227,15 @@ def main(argv=None):
         if not (args.campaign and args.action):
             print("gtme-grade --verify: needs --campaign and --action", file=sys.stderr)
             return 2
-        why = verify(args.ws, args.campaign, args.action)
+        why = verify_request(args.ws, args.campaign, args.action, args.audience)
         if why:
             print(f"gtme-grade: {why}", file=sys.stderr)
             return 2
         print(f"gtme-grade: verified {args.action} on {args.campaign} in {args.ws}")
         return 0
+    if args.action == "start":
+        print("gtme-grade: grade for launch or resume; start is only a --verify question", file=sys.stderr)
+        return 2
     try:
         camp, gates, passed, inputs = grade(args)
     except (OSError, ValueError) as exc:

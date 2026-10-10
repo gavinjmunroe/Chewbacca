@@ -4,6 +4,7 @@ Every fixture is synthetic: example.test domains, invented names, fake ids.
 Nothing reads Clay. Run: python3 tests/test_gtme_grade.py
 """
 import csv
+import hashlib
 import json
 import os
 import re
@@ -183,6 +184,12 @@ if receipt.is_file():
     fx.mkdir()
     (fx / "cam_test1.json").write_text((c.dir / "campaign.json").read_text())
     venv = dict(c.env, GTME_GRADE_CLAY_FIXTURE_DIR=str(fx))
+    # --verify also wants the client's full pre-send gate receipt.
+    presend_in = c.home / "presend.csv"
+    presend_in.write_text("email\n")
+    (c.home / ".chewbacca" / "state" / "send-gate-receipt.json").write_text(json.dumps(
+        {"time": int(time.time()), "full": True,
+         "hashes": {str(presend_in): hashlib.sha256(b"email\n").hexdigest()}}))
 
     def verify(action="launch", campaign="cam_test1", ws="1372623"):
         return subprocess.run([sys.executable, str(TOOL), "--verify", "--ws", ws, "--campaign", campaign,

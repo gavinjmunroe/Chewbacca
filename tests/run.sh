@@ -478,6 +478,7 @@ if group "tools"; then
   check  "evals structure pass" python3 "$ROOT/tools/evals.py"
   check  "eval results carry which case failed, not a count" python3 "$ROOT/tests/test_eval_results.py"
   check  "the evolve merge gate refuses a regression" python3 "$ROOT/tests/test_evolve_gate.py"
+  check  "propose refreshes checksums for the working tree, staging nothing" python3 "$ROOT/tests/test_propose_checksums.py"
   check  "a reply that hands over a command is refused" python3 "$ROOT/tests/test_handoff_check.py"
   check  "a correction must change the kit, not just the reply" python3 "$ROOT/tests/test_durable_check.py"
   check  "native write tracking observes content and workspace changes" python3 "$ROOT/tests/test_write_log.py"

@@ -177,6 +177,25 @@ def main() -> int:
     check("--pending lists an unmerged learn/ branch and drops a merged one",
           len(waiting) == 1 and waiting[0].startswith("learn/kept (today): loop: learn/kept"), waiting)
 
+    # A worktree has no voice log of its own (it is gitignored), so the store
+    # is the main checkout's, wherever that checkout lives. The old fallback
+    # was a fixed ~/Chewbacca, which read nothing after the move to
+    # ~/code/chewbacca.
+    (repo / "superassistant").mkdir()
+    (repo / "superassistant" / "questions.jsonl").write_text("{}\n")
+    wt = TMP / "wt"
+    g("worktree", "add", "-q", "--detach", str(wt), "main")
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    saved = os.environ.pop("SUPERASSISTANT_DIR", None)
+    try:
+        import learnloop
+        store = learnloop.voice_store(wt)
+    finally:
+        if saved is not None:
+            os.environ["SUPERASSISTANT_DIR"] = saved
+    check("a worktree reads the main checkout's voice log, wherever it lives",
+          store.resolve() == (repo / "superassistant").resolve(), store)
+
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0
 

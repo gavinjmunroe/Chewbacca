@@ -144,6 +144,42 @@ def revert(bad: list[str]) -> None:
             (ROOT / path).unlink(missing_ok=True)
 
 
+def refresh_checksums(root: Path) -> None:
+    """Bookkeeping the model should not be trusted with: SHA256SUMS.txt for
+    the change as it stands in the working tree.
+
+    tools/checksums.py hashes the INDEX, never the working tree, and nothing
+    here stages: evolve reads the change as `git diff`, so a staged change
+    would vanish from it. Before 2026-10-10 this ran checksums.py on the real
+    index, so every edited file kept its old hash and a new file marked
+    intent-to-add got the empty blob's. The suite's "start.sh's own checksum
+    gate" then failed in the candidate and not on the unchanged commit, and
+    the gate refused every change that touched a tracked file. So the change
+    is staged into a throwaway copy of the index, and checksums.py hashes
+    that one.
+    """
+    def run(*args: str, env: dict | None = None) -> str:
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True,
+                              text=True, env=env).stdout
+    new = [p for p in run("ls-files", "--others", "--exclude-standard").splitlines() if p]
+    if new:
+        # So `git diff` and evolve's archive show the new files.
+        run("add", "--intent-to-add", "--", *new)
+    changed = [line[3:].split(" -> ")[-1].strip()
+               for line in run("status", "--porcelain").splitlines()]
+    changed = [p for p in changed if p and p != "SHA256SUMS.txt"]
+    tool = root / "tools" / "checksums.py"
+    if not changed or not tool.exists():
+        return
+    index = Path(run("rev-parse", "--path-format=absolute", "--git-path", "index").strip())
+    with tempfile.TemporaryDirectory(prefix="propose-index-") as tmp:
+        env = dict(os.environ, GIT_INDEX_FILE=str(Path(tmp) / "index"))
+        if index.exists():
+            shutil.copy(index, env["GIT_INDEX_FILE"])
+        run("add", "--all", "--", *changed, env=env)
+        subprocess.run([sys.executable, str(tool)], capture_output=True, cwd=str(root), env=env)
+
+
 def rule(path: Path) -> str:
     """A permission-rule path: `~/` under home, `//` for any other absolute."""
     try:
@@ -226,16 +262,7 @@ def main() -> int:
     if bad:
         revert(bad)
     else:
-        # Bookkeeping the model should not be trusted with. tools/checksums.py
-        # hashes tracked files only, so new files are marked intent-to-add
-        # first; without this a new parser module fails "checksums are
-        # current" and the gate refuses a correct change for a stale hash.
-        new = [p for p in git("ls-files", "--others", "--exclude-standard").splitlines() if p]
-        if new:
-            git("add", "--intent-to-add", "--", *new)
-        if (ROOT / "tools" / "checksums.py").exists() and git("status", "--porcelain"):
-            subprocess.run([sys.executable, str(ROOT / "tools" / "checksums.py")],
-                           capture_output=True, cwd=str(ROOT))
+        refresh_checksums(ROOT)
     files = [line[3:] for line in git("status", "--porcelain").splitlines()]
     pid = hashlib.sha1(f"{started}{prompt}".encode()).hexdigest()[:10]
     L.write_jsonl(L.PROPOSALS / f"{pid}.json", [{

@@ -255,6 +255,11 @@ def test_the_archived_diff_applies():
         (repo / "new.py").write_text("x = 1\n")
         diff = e.full_diff(repo)
         assert "new.py" in diff, "a created file must be in the archived diff"
+        assert "+two" in diff, "an edited file must be in the archived diff"
+        # The suite runs checksum checks against the index and the disk, so
+        # the candidate's index has to hold the change (2026-10-10).
+        unstaged = run("diff", "--name-only").stdout.strip()
+        assert not unstaged, f"the change must be staged in the candidate: {unstaged}"
         run("reset", "-q", "--hard")
         run("clean", "-qfd")
         patch = Path(tmp) / "change.diff"
@@ -262,6 +267,38 @@ def test_the_archived_diff_applies():
         ok = subprocess.run(["git", "-C", str(repo), "apply", "--check", str(patch)],
                             capture_output=True, text=True)
         assert ok.returncode == 0, ok.stderr
+
+
+def test_the_base_is_the_unchanged_commit_not_the_recorded_score():
+    """2026-10-10: the recorded baseline was 99.5 from a September commit and
+    the unchanged HEAD scored 83.3, so every change was refused for a drop
+    it did not cause. The base is measured in the worktree before the change,
+    into the archive dir, and the recorded score is only a fallback."""
+    import subprocess
+    e = load()
+    with tempfile.TemporaryDirectory() as tmp:
+        repo, dest = Path(tmp) / "repo", Path(tmp) / "dest"
+        (repo / "bin").mkdir(parents=True)
+        dest.mkdir()
+        (repo / "bin/fitness").write_text(
+            "import os, pathlib\n"
+            "pathlib.Path(os.environ['CHEWBACCA_FITNESS_LEDGER']).write_text('{}\\n')\n"
+            "print('  structural   83.3  (57/68 skills covered)')\n")
+        run = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True,
+                                        text=True, check=True)
+        run("init", "-q")
+        run("config", "user.email", "t@t")
+        run("config", "user.name", "t")
+        run("add", "bin/fitness")
+        run("commit", "-qm", "base")
+        recorded = {"structural_score": 99.5, "sha": "36970ae"}
+        base = e.base_in(repo, dest, recorded)
+        assert base["structural_score"] == 83.3, base
+        assert base["sha"] == run("rev-parse", "--short", "HEAD").stdout.strip(), base
+        assert (dest / "fitness-before.jsonl").exists(), "scored into the archive dir"
+        assert not (repo / ".evolve-fitness.jsonl").exists(), "never into the worktree"
+        (repo / "bin/fitness").write_text("print('no score here')\n")
+        assert e.base_in(repo, dest, recorded) == recorded, "unscorable falls back"
 
 
 def test_judge_counts_reads_the_last_judge_line():

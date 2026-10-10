@@ -21,6 +21,15 @@ each one:
 link setup.sh's link_tool makes, and nothing else: it never replaces or
 removes a file that's already there, so a tool someone installed another way
 stays theirs.
+
+--link-root names where the links point when that differs from --repo: the
+kit runtime passes ~/.chewbacca/kit/current, a stable path that survives
+every update, while --repo is the snapshot it reads. --retarget-from moves the
+one kind of existing link this may replace: a symlink that points into that
+directory (the shared checkout, where every tab edits) and whose target also
+exists under --link-root. On 2026-10-10 every kit tool on PATH resolved into
+the dirty shared checkout, so `chewbacca clay` ran code main had already
+replaced. The swap is a rename, so a lookup never finds the name missing.
 """
 from __future__ import annotations
 
@@ -79,16 +88,44 @@ def sort_tools(repo: Path, live: Path, names: list[str]) -> dict[str, list[str]]
     return out
 
 
+def retarget(live: Path, old_root: str, link_root: Path) -> list[str]:
+    """Repoint symlinks into old_root at the same relative path under link_root."""
+    old = old_root.rstrip("/")
+    moved: list[str] = []
+    if not live.is_dir():
+        return moved
+    for entry in sorted(live.iterdir()):
+        if not entry.is_symlink():
+            continue
+        target = os.readlink(entry)
+        if not target.startswith(old + "/"):
+            continue
+        new = link_root / target[len(old) + 1:]
+        if not (new.exists() or new.is_symlink()):
+            continue
+        tmp = live / f".{entry.name}.retarget-{os.getpid()}"
+        if tmp.is_symlink() or tmp.exists():
+            tmp.unlink()
+        os.symlink(new, tmp)
+        os.replace(tmp, entry)
+        moved.append(entry.name)
+    return moved
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tools_link", description=__doc__.splitlines()[0])
     parser.add_argument("mode", nargs="?", choices=("scan", "apply"), default="scan")
     parser.add_argument("--repo", default=str(Path(__file__).resolve().parents[1]))
     parser.add_argument("--live", default=str(Path.home() / ".local" / "bin"))
     parser.add_argument("--setup", help="read setup.sh from here (default: <repo>/setup.sh); - for stdin")
+    parser.add_argument("--link-root", help="where new links point (default: --repo); never resolved")
+    parser.add_argument("--retarget-from", action="append", default=[],
+                        help="apply: repoint links into this directory at --link-root")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
 
     repo, live = Path(args.repo).resolve(), Path(args.live)
+    link_root = Path(args.link_root) if args.link_root else repo
     if args.setup == "-":
         text = sys.stdin.read()
     else:
@@ -107,13 +144,21 @@ def main(argv: list[str] | None = None) -> int:
             # Re-check right before writing: another session may have linked it.
             if dst.exists() or dst.is_symlink():
                 continue
-            os.symlink(repo / "bin" / name, dst)
+            os.symlink(link_root / "bin" / name, dst)
             made.append(name)
+    moved: list[str] = []
+    if args.mode == "apply":
+        for old in args.retarget_from:
+            # Links may spell the checkout either way (a symlinked home, /private/tmp).
+            for spelling in dict.fromkeys((str(Path(old)), str(Path(old).resolve()))):
+                moved += retarget(live, spelling, link_root)
 
     if args.json:
-        print(json.dumps({**state, "linked_now": made}))
+        print(json.dumps({**state, "linked_now": made, "retargeted": moved}))
     elif args.mode == "apply":
         print(f"linked {len(made)}: {' '.join(made)}" if made else "nothing to link")
+        if moved:
+            print(f"retargeted {len(moved)}: {' '.join(moved)}")
     else:
         print(f"{len(state['linked'])} linked, {len(state['missing'])} missing, "
               f"{len(state['absent'])} not in this checkout")

@@ -16,6 +16,8 @@ export CHEWBACCA_LOG_DIR="$TMP/logs"
 export CHEWBACCA_PULL_INTERVAL=0
 export CHEWBACCA_HOOKS_DIR="$TMP/live-hooks"
 export CHEWBACCA_BIN_DIR="$TMP/live-bin"
+# Never this machine's runtime: the hook would build from the scratch clone.
+export CHEWBACCA_KIT_RUNTIME="$TMP/kit"
 FAILED=0
 fail() { echo "FAIL: $*"; FAILED=1; }
 

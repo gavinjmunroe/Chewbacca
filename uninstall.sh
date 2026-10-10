@@ -227,6 +227,30 @@ else
   skip "no local data store to export"
 fi
 
+step "Removing the kit runtime"
+# ~/.chewbacca/kit holds locked git worktrees of origin/main that PATH tools
+# run from, plus a launchd job that refreshes them. Unlock and remove them
+# through git so the checkout does not keep worktree entries for deleted dirs.
+KIT_RT="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}"
+KIT_PLIST="$HOME/Library/LaunchAgents/com.chewbacca.kit-runtime.plist"
+if [ -d "$KIT_RT" ] || [ -f "$KIT_PLIST" ]; then
+  if [ "$DRY" -eq 1 ]; then
+    ok "would remove the kit runtime at $KIT_RT and its timer"
+  else
+    launchctl bootout "gui/$(id -u)/com.chewbacca.kit-runtime" &>/dev/null || true
+    rm -f "$KIT_PLIST"
+    for snap in "$KIT_RT"/snapshots/*/; do
+      [ -d "$snap" ] || continue
+      git -C "$SCRIPT_DIR" worktree remove -f -f "${snap%/}" &>/dev/null || true
+    done
+    rm -rf "$KIT_RT"
+    git -C "$SCRIPT_DIR" worktree prune &>/dev/null || true
+    ok "removed the kit runtime"
+  fi
+else
+  skip "no kit runtime"
+fi
+
 step "Verifying the machine is clean"
 # "Done" was asserted, never checked. A leftover symlink into a deleted repo
 # is exactly the state that makes a reinstall behave strangely later.

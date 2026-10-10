@@ -936,6 +936,38 @@ else
   bad "installed $INST_VER, repo is $REPO_VER" "chewbacca setup" minor
 fi
 
+# PATH tools run from ~/.chewbacca/kit/current, a worktree of origin/main no
+# tab edits. On 2026-10-10 they ran from the dirty shared checkout instead and
+# `chewbacca` on PATH was hours behind main. Compared against the local
+# origin/main ref, which the runtime's own fetch keeps current; no network here.
+if [ -f "$REPO_DIR/tools/kit_runtime.py" ]; then
+  KR_JSON="$(python3 -I "$REPO_DIR/tools/kit_runtime.py" status --json 2>/dev/null)"
+  KR_LINE="$(printf '%s' "$KR_JSON" | python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+except Exception:
+    print("none||||0"); sys.exit()
+print("|".join([d.get("sha") or "none", d.get("origin_main") or "none",
+                "1" if d.get("equal") else "0", str(d.get("behind") or ""),
+                str(len(d.get("links_into_source") or []))]))
+' 2>/dev/null)"
+  IFS='|' read -r KR_SHA KR_ORIGIN KR_EQ KR_BEHIND KR_STRAY <<<"${KR_LINE:-none||||0}"
+  KR_FIX="python3 -I $REPO_DIR/tools/kit_runtime.py update --fetch --link-bin $HOME/.local/bin"
+  if [ "$KR_SHA" = none ]; then
+    fixable "built the kit runtime" bash -c "$KR_FIX" ||
+      bad "no kit runtime: PATH tools run from the shared checkout's working tree" "$KR_FIX" major
+  elif [ "$KR_EQ" = 1 ]; then
+    ok "PATH tools run from runtime ${KR_SHA:0:12}, equal to origin/main"
+  else
+    fixable "moved the kit runtime to origin/main" bash -c "$KR_FIX" ||
+      bad "kit runtime ${KR_SHA:0:12} is ${KR_BEHIND:-?} commit(s) behind origin/main ${KR_ORIGIN:0:12}" "$KR_FIX" major
+  fi
+  if [ "${KR_STRAY:-0}" -gt 0 ]; then
+    warn "$KR_STRAY PATH link(s) still point into the shared checkout (run the runtime update to move them)"
+  fi
+fi
+
 if [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
   ok "install manifest present, uninstall knows what to remove"
 else

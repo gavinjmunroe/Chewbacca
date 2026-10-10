@@ -65,6 +65,17 @@ sedi() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# `chewbacca setup` from PATH runs this copy inside the kit runtime, a snapshot
+# that is replaced on every update. Installing from it would record the
+# snapshot as the repo and link skills into a directory due to be deleted, so
+# hand over to the checkout the runtime was built from.
+_kr_side="$(cd -P "$SCRIPT_DIR" && pwd).kit-runtime.json"
+if [ -f "$_kr_side" ]; then
+  _kr_src="$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1])).get("source",""))' "$_kr_side" 2>/dev/null)"
+  if [ -n "$_kr_src" ] && [ -f "$_kr_src/setup.sh" ]; then
+    exec bash "$_kr_src/setup.sh" "$@"
+  fi
+fi
 BACKUP_DIR="$HOME/.claude/backups/d1-setup-$(date +%Y%m%d-%H%M%S)"
 BACKED_UP=0
 
@@ -501,9 +512,15 @@ link_tool() {
   local name="$1" src="$SCRIPT_DIR/bin/$1" dst="$HOME/.local/bin/$1"
   [ -f "$src" ] || return 1
   mkdir -p "$HOME/.local/bin"
+  # Through the kit runtime when it has the tool (see "Kit runtime" below), so
+  # PATH never runs a tab's uncommitted edit. A tool only on this branch
+  # links here until it reaches origin/main and kit-autopull moves the link.
+  local target="$src"
+  [ -f "${KIT_RUNTIME:-$HOME/.chewbacca/kit}/current/bin/$name" ] &&
+    target="${KIT_RUNTIME:-$HOME/.chewbacca/kit}/current/bin/$name"
   # -n so that when dst is already a symlink to a DIRECTORY we replace it rather
   # than writing inside it; -f to replace an existing copy from an older setup.
-  ln -sfn "$src" "$dst"
+  ln -sfn "$target" "$dst"
   chmod +x "$src"
 }
 
@@ -561,6 +578,24 @@ if [ "$DRY_RUN" -eq 1 ]; then
     [ -n "${pair#*:}" ] && echo "  credential:      ${pair%%:*} (would be written to settings.json)"
   done
   exit 0
+fi
+
+# Kit runtime, unguarded on purpose: every link_tool below reads it, under
+# any --only. PATH tools run from ~/.chewbacca/kit/current, a locked worktree of
+# origin/main that no agent edits, never from this checkout's working tree. On
+# 2026-10-10 every tool in ~/.local/bin linked into the shared checkout, which
+# could not fast-forward under six tabs' edits, so `chewbacca` on PATH ran code
+# main had replaced. Built here, before the first link_tool, so a fresh install
+# gets the same layout kit-autopull and the launchd timer keep current. A
+# checkout with no origin/main (a tarball, a fork mid-setup) falls back to
+# linking this tree, as before. CHEWBACCA_NO_RUNTIME=1 skips it.
+KIT_RUNTIME="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}"
+if [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ -f "$SCRIPT_DIR/tools/kit_runtime.py" ]; then
+  if _kr_out="$(python3 -I "$SCRIPT_DIR/tools/kit_runtime.py" update --repo "$SCRIPT_DIR" --adopt 2>&1)"; then
+    log "Kit runtime: $_kr_out ($KIT_RUNTIME/current)"
+  else
+    warn "Kit runtime not built ($_kr_out). Tools will link into $SCRIPT_DIR"
+  fi
 fi
 
 if [ -n "${CHEWBACCA_BRAIN_DIR:-}" ]; then
@@ -3116,6 +3151,18 @@ if [ -x "$SCRIPT_DIR/bin/install-plynn.sh" ]; then
   "$SCRIPT_DIR/bin/install-plynn.sh" || warn "Plynn install returned non-zero, continuing"
 else
   warn "bin/install-plynn.sh missing, skipping Plynn"
+fi
+fi
+
+# ── Kit runtime timer ─────────────────────────────────────────────────────────
+if should_run tools; then
+# Keeps ~/.chewbacca/kit/current on origin/main between sessions, every 15
+# minutes, from the runtime's own copy of kit_runtime.py. Last, so its first
+# run (RunAtLoad) links the node_modules and builds the steps above produced.
+if [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ "$(uname -s)" = Darwin ] &&
+   [ -f "$KIT_RUNTIME/current/tools/kit_runtime.py" ]; then
+  log "$(python3 -I "$KIT_RUNTIME/current/tools/kit_runtime.py" install-timer \
+          --repo "$SCRIPT_DIR" --link-bin "$HOME/.local/bin" 2>&1)"
 fi
 fi
 

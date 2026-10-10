@@ -74,7 +74,49 @@ fi
 [ -d "$REPO/.git" ] || exit 0
 cd "$REPO" || exit 0
 
+# ── PATH tools run from a clean runtime of origin/main ────────────────────────
+# ~/.local/bin used to link into this checkout's working tree, which is where
+# every tab keeps its uncommitted edits, so the tools on PATH were whatever the
+# dirty tree held. On 2026-10-10 the installed `chewbacca` refused writes main
+# had allowed for hours because this checkout could not fast-forward. Now the
+# links go through ~/.chewbacca/kit/current, a locked worktree of origin/main
+# that nothing edits, and this rebuilds it: fetch (at most every
+# CHEWBACCA_RUNTIME_FETCH_AGE seconds), new snapshot, atomic swap, then link
+# any new tool and move any link still pointing in here. A launchd job runs the
+# same update every 15 minutes between sessions. The script comes from the
+# runtime when there is one, else from the ref, never from this working tree.
+RUNTIME_SHA=""
+_kr="$(mktemp -d 2>/dev/null)"
+if [ -n "$_kr" ]; then
+  _krs="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}/current/tools/kit_runtime.py"
+  if [ -f "$_krs" ]; then
+    cp "$_krs" "$_kr/kit_runtime.py" 2>/dev/null
+  else
+    git -c core.fsmonitor=false show origin/main:tools/kit_runtime.py > "$_kr/kit_runtime.py" 2>/dev/null || rm -f "$_kr/kit_runtime.py"
+  fi
+  if [ -s "$_kr/kit_runtime.py" ]; then
+    KR_OUT="$(python3 -I "$_kr/kit_runtime.py" update --repo "$REPO" --fetch \
+              --max-age "${CHEWBACCA_RUNTIME_FETCH_AGE:-300}" \
+              --link-bin "${CHEWBACCA_BIN_DIR:-$HOME/.local/bin}" --json 2>&1)"
+    note "kit-runtime: $(printf '%s' "$KR_OUT" | tr '\n' ' ')"
+    RUNTIME_SHA="$(printf '%s' "$KR_OUT" | python3 -I -c '
+import json, sys
+try:
+    d = json.loads(sys.stdin.read())
+    print("" if d.get("error") else d.get("sha") or "")
+except Exception:
+    print("")
+' 2>/dev/null)"
+    case "$KR_OUT" in
+      *'"result": "updated"'*) say "PATH tools now run from origin/main ${RUNTIME_SHA:0:12} (runtime ~/.chewbacca/kit/current)." ;;
+    esac
+  fi
+  rm -rf "$_kr"
+fi
+
 # ── Installed hooks follow origin/main ────────────────────────────────────────
+# Same commit as the runtime when there is one, so hooks and tools never come
+# from two different versions of the kit.
 # Read from the ref, not the working tree, so this works on the dirty shared
 # checkout the pull below refuses. On 2026-10-09 17 live hooks were stale and
 # 2 missing hours after a hand sync. Every overwritten copy is backed up under
@@ -84,7 +126,7 @@ cd "$REPO" || exit 0
 # behind, so its working tree may not have it yet.
 if git -c core.fsmonitor=false cat-file -e origin/main:tools/hooks_sync.py 2>/dev/null; then
   SYNC="$(git -c core.fsmonitor=false show origin/main:tools/hooks_sync.py \
-          | python3 -I - apply --include-local --repo "$REPO" \
+          | python3 -I - apply --include-local --repo "$REPO" --ref "${RUNTIME_SHA:-origin/main}" \
             --live "${CHEWBACCA_HOOKS_DIR:-$HOME/.claude/hooks}" 2>&1)"
   note "hooks-sync: $(printf '%s' "$SYNC" | tr '\n' ' ')"
   case "$SYNC" in
@@ -99,7 +141,8 @@ fi
 # tools setup.sh links were "command not found" on this Mac, text-command among
 # them (Kyber runs it from ~/.local/bin). This only adds missing links; it never
 # replaces a file. Same ref-not-tree reasoning as the hook sync above.
-if git -c core.fsmonitor=false cat-file -e origin/main:tools/tools_link.py 2>/dev/null; then
+# Only when there is no runtime: the runtime update above already linked.
+if [ -z "$RUNTIME_SHA" ] && git -c core.fsmonitor=false cat-file -e origin/main:tools/tools_link.py 2>/dev/null; then
   _tl="$(mktemp -d 2>/dev/null)"
   if [ -n "$_tl" ] && git -c core.fsmonitor=false show origin/main:tools/tools_link.py > "$_tl/tools_link.py" 2>/dev/null; then
     LINKED="$(git -c core.fsmonitor=false show origin/main:setup.sh 2>/dev/null \

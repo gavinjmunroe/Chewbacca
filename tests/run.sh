@@ -884,6 +884,9 @@ if group "installer"; then
   check  "kit-autopull refuses dirty, branched and diverged checkouts" \
     bash "$ROOT/tests/kit_autopull.sh" "$ROOT"
   check  "installed hooks follow origin/main, live edits backed up" python3 "$ROOT/tests/test_hooks_sync.py"
+  # 2026-10-10: PATH tools ran from the dirty shared checkout, hours behind main.
+  check  "PATH tools run from a clean origin/main runtime, swapped atomically" \
+    bash "$ROOT/tests/kit_runtime.sh" "$ROOT"
 
   # Eight skills sat uninstalled on 2026-10-09 because no tab ran setup after
   # adding them. Git hooks now link them; this proves the linker is safe.

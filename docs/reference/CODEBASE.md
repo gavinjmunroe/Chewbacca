@@ -212,7 +212,10 @@ what `chewbacca log` and doctor's hook-health check read.
 SESSION START
   session-context.sh     brain digest (identity, NOW, people, memory index),
                          kits list, due coursework, recent voice questions
-  kit-autopull.sh        fast-forward the kit repo, at most hourly
+  kit-autopull.sh        rebuild ~/.chewbacca/kit/current from origin/main
+                         (tools/kit_runtime.py), link PATH tools through it,
+                         sync hooks from the same commit, then fast-forward
+                         the kit repo, at most hourly
 
 EVERY PROMPT (UserPromptSubmit, all advisory)
   skill-route.sh         match prompt to skill descriptions, by meaning then by

@@ -129,6 +129,17 @@ def test_sql_write_backs_up_then_restore_undoes(tmp_path):
     assert count() == 2
 
 
+def test_restore_refuses_a_tampered_manifest(tmp_path):
+    home = _home(tmp_path)
+    out = json.loads(run(home, "sql", "calls", "delete from ZCALLRECORD where ZCALLTYPE = 16").stdout)
+    backup = Path(out["backup"])
+    m = json.loads((backup / "manifest.json").read_text())
+    m["files"][0]["from"] = str(tmp_path / "evil.txt")
+    (backup / "manifest.json").write_text(json.dumps(m))
+    p = run(home, "restore", backup.name, ok=False)
+    assert p.returncode == 1 and "refused" in p.stderr and not (tmp_path / "evil.txt").exists()
+
+
 def _fake_mac(tmp_path):
     bindir = tmp_path / "fakebin"
     bindir.mkdir()

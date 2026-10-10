@@ -1010,47 +1010,46 @@ def thread_bookings(history: list[dict]) -> list[tuple[dict, dict]]:
 
 # ── bounce notices and removal asks, read off the reply itself ───────────────
 
-# Who decided a class by these patterns. gtm_query.rank puts it above Clay's
-# category and below a model or a person.
-RULE_BY = "rule:reply-text"
 # On 2026-10-10 Zeutara's "replies to answer" carried two bounce notices
 # ("Delivery Status Notification (Failure)", "Message blocked") and a
-# "Remove <name>" that Clay had left uncategorised. Mailer-daemon notices
-# arrive as REPLY rows under the lead's address; the sender, subject or first
-# lines give them away. Same rules as the booking patterns: bounded, no nested
-# quantifiers, cut before matching.
+# "Remove <name>" that Clay had left uncategorised. The reply text is read by
+# tools/gtme_reply (the kit's one reply classifier, offline and stdlib-only);
+# only its bounce and unsubscribe kinds become verdicts here.
+RULE_BY = "rule:gtme_reply"
+AUTO_KINDS = frozenset({"bounce", "unsubscribe"})
+# The one thing gtme_reply cannot see: a notice's sender header. Mailer-daemon
+# notices arrive as REPLY rows under the lead's own address.
 BOUNCE_FROM = re.compile(r"mailer-daemon|postmaster@|mail delivery (?:subsystem|system)", re.I)
-BOUNCE_SUBJECT = re.compile(r"delivery status notification|undeliverable|undelivered mail|delivery failure"
-                            r"|mail delivery failed|returned mail|failure notice|message blocked", re.I)
-BOUNCE_TEXT = re.compile(r"address not found|message blocked|message not delivered|delivery has failed"
-                         r"|delivery status notification|undeliverable|has been blocked"
-                         r"|wasn'?t delivered|was not delivered|could ?n[o']t be delivered", re.I)
-# A bounce notice says what it is in its first lines; a person quoting one
-# further down is not one.
-BOUNCE_HEAD = 300
-REMOVAL_WORDS = (r"(?:remove|unsubscribe|take me off|stop emailing|do not contact|don'?t contact"
-                 r"|opt[ \t-]{0,2}out)\b")
-REMOVAL_START = re.compile(r"^[\W_]{0,20}(?:please[ \t\xa0,]{1,5})?" + REMOVAL_WORDS, re.I)
-REMOVAL_ANY = re.compile(r"\b" + REMOVAL_WORDS, re.I)
-# A removal word anywhere counts only in a short message ("Thanks but not a
-# fit. Please unsubscribe."); in a long one it has to lead. Guessed from the
-# four removal asks in Zeutara's 86 replies (2026-10-10, all under 60
-# characters of their own words), never measured on more.
-REMOVAL_SHORT = 200
+# gtme_reply.clean_reply_text is quadratic on a run of unclosed tags: 106 ms
+# on 20,000 characters of "<br<br<br..." (2026-10-10, the 100k adversarial
+# test, cut to MATCH_LIMIT). Its own intent pass reads 6,000 characters; 8,000
+# of raw HTML keeps the worst shape near a fifth of that and still covers the
+# top of a styled reply, where its own words sit.
+AUTO_CLASS_LIMIT = 8_000
+
+
+def _gtme_reply():
+    tools = str(ROOT / "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import gtme_reply  # noqa: PLC0415  tools/gtme_reply.py, imported only by a sync
+    return gtme_reply
 
 
 def auto_class(msg: dict) -> tuple[str, str] | None:
-    """("bounce" | "unsubscribe", the matched words) for a reply whose own
-    text, sender or subject says what it is, else None."""
-    sender = str(msg.get("from") or "")[:500]
+    """("bounce" | "unsubscribe", gtme_reply's label) for a reply whose sender,
+    subject or own words say what it is, else None."""
+    if BOUNCE_FROM.search(str(msg.get("from") or "")[:500]):
+        return "bounce", "sender is a mail server"
+    gr = _gtme_reply()
     subject = clip(msg.get("subject"), 500)
-    text = " ".join(message_text(msg).split())
-    m = BOUNCE_FROM.search(sender) or BOUNCE_SUBJECT.search(subject) or BOUNCE_TEXT.search(text[:BOUNCE_HEAD])
-    if m:
-        return "bounce", clip(m.group(0), 60)
-    m = REMOVAL_START.search(text) or (REMOVAL_ANY.search(text) if len(text) <= REMOVAL_SHORT else None)
-    if m:
-        return "unsubscribe", clip(m.group(0).strip(" \t\xa0,.-_*"), 60)
+    if subject and gr.reply_intent(subject).get("kind") == "bounce":
+        return "bounce", clip(subject, 60)
+    text = gr.clean_reply_text(str(msg.get("email_body") or "")[:AUTO_CLASS_LIMIT])
+    verdict = gr.reply_intent(text)
+    kind = verdict.get("kind")
+    if kind in AUTO_KINDS:
+        return kind, clip(verdict.get("label") or kind, 60)
     return None
 
 

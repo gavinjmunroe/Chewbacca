@@ -619,6 +619,19 @@ class Scorecard(unittest.TestCase):
         self.assertIn("Pat Rivera (pat@fund.example)", lines)
 
 
+class ReplyTextThroughGtmeReply(unittest.TestCase):
+    def test_reply_text_and_names_use_gtme_reply(self):
+        import gtme_operator as g
+        self.assertEqual(g.strip_html("<div>Send the deck.</div><blockquote>On Tue we wrote: a call?</blockquote>"),
+                         "Send the deck.")
+        self.assertEqual(g.strip_html('Thanks, no.<div style="color:rgb(33, 33'), "Thanks, no.")
+        db = sqlite3.connect(":memory:")
+        db.execute("CREATE TABLE edges (src TEXT, verb TEXT, dst TEXT, props TEXT)")
+        db.execute("INSERT INTO edges VALUES ('c1', 'ENROLLED', 'p1', ?)",
+                   (json.dumps({"email": "pat.rivera@fund.example", "name": "Pat Riverae"}),))
+        self.assertEqual(g.lead_names(db, ["c1"]), {"pat.rivera@fund.example": "Pat Rivera"})
+
+
 class Generalization(unittest.TestCase):
     def test_new_files_name_no_real_client(self):
         banned = re.compile(r"caleb|jonah|zeutara|1372623|maggie|graham|bluemodern|joelnewton", re.IGNORECASE)

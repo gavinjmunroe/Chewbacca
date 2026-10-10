@@ -44,6 +44,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 LIB = ROOT / "bin" / "lib"
 sys.path.insert(0, str(LIB))
+# bin/gtme runs this file with runpy, which leaves tools/ off the path:
+# gtme_reply (the kit's reply cleaner and name fixer) lives beside it.
+sys.path.insert(1, str(ROOT / "tools"))
 
 CLAY_SIGNUP = "https://app.clay.com/signup"
 CLAY_LOGIN = "https://app.clay.com"
@@ -986,8 +989,13 @@ def burn_from_balances(snaps: list[dict]) -> tuple[float, float]:
 
 
 def strip_html(text: str) -> str:
-    # A clipped snippet can end inside a tag, so an unclosed one is cut too.
-    text = re.sub(r"<[^>]*(>|$)", " ", text or "")
+    """Reply text as the person typed it, on one line, through gtme_reply's
+    cleaner (tags, entities, the quoted thread). A clipped snippet can end
+    inside a tag, so an unclosed one is cut first; anything still tag-shaped
+    after cleaning goes too."""
+    import gtme_reply  # tools/gtme_reply.py, beside this file
+    text = re.sub(r"<[^<>]{0,2000}$", " ", str(text or "")[:gtme_reply.MAX_CLEAN_INPUT])
+    text = re.sub(r"<[^<>]{0,2000}>", " ", gtme_reply.clean_reply_text(text))
     return safe(" ".join(html.unescape(text).split()))
 
 
@@ -1119,10 +1127,13 @@ def real_asks(replies: list[dict], names: dict[str, str]) -> list[dict]:
 def lead_names(db, cams: list[str]) -> dict[str, str]:
     if not cams:
         return {}
+    import gtme_reply  # its name fixer drops the trailing "e" a lead feeder adds
     marks = ",".join("?" * len(cams))
-    return {r[0]: r[1] for r in db.execute(
+    rows = [(r[0], r[1]) for r in db.execute(
         "SELECT json_extract(props, '$.email'), json_extract(props, '$.name') FROM edges "
-        f"WHERE verb = 'ENROLLED' AND src IN ({marks})", cams) if r[0] and r[1]}
+        f"WHERE verb = 'ENROLLED' AND src IN ({marks})", cams) if r[0] and r[1]]
+    feeder = gtme_reply.feeder_appends_e([n for _, n in rows])
+    return {e: gtme_reply.clean_lead_name(n, e, feeder) for e, n in rows}
 
 
 def history_alarm(client: str, sent: int, replies: int, as_of: str | None) -> dict | None:

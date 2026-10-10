@@ -583,6 +583,7 @@ if group "tools"; then
   check  "amber-user: two people, each recalls their own and never the other's" python3 "$ROOT/tests/test_amber_tenants.py"
   check  "amber agent: greets its own person, recalls across sessions, Jev off until opted in" python3 "$ROOT/tests/test_amber_agent.py"
   check  "amber-redact: known and pattern values never leak, the gap is measured" python3 "$ROOT/tests/test_amber_redact.py"
+  check  "agent-history: one search over Claude Code and Codex transcripts, no fake secret survives" python3 "$ROOT/tests/test_agent_history.py"
   # The craft gate is the only thing making the demo rules fire rather than sit
   # in a markdown file, so its fail-closed behaviour is the property to pin.
   check  "craft-gate refuses a craft nobody studied" bash -c "! CRAFT_DIR='$TMP/craft-empty' python3 '$ROOT/bin/craft-gate' pitch-deck >/dev/null 2>&1"
@@ -1707,6 +1708,7 @@ if group "reasoning backends"; then
   check "review snapshots preserve bytes and child boundaries" python3 "$ROOT/tests/test_review_snapshot.py"
   check "task review scopes retain dirty and concurrent obligations" python3 "$ROOT/tests/test_review_task_scope.py"
   check "task receipts cannot clear repository-wide review duties" python3 "$ROOT/tests/test_review_integration.py"
+  check "cross-model review surfaces only the disagreements, single-model when alone" python3 "$ROOT/tests/test_review_cross.py"
   check "task DAG preserves dependencies, capacity and independent verification" python3 "$ROOT/tests/test_task_graph.py"
   check "work ledger reaches shared startup and Codex prompt context" python3 "$ROOT/tests/test_work_ledger_context.py"
   check "tab board shows every other live tab across runtimes" python3 "$ROOT/tests/test_tabs.py"

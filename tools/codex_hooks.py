@@ -502,6 +502,7 @@ def dispatch_event_body(payload):
             parts.append(shared_hook('write-log.sh', payload, cwd))
         if event == 'PreToolUse' and payload.get('session_id'):
             parts.append(tabs.overlap(payload['session_id'], changed_paths(payload)))
+            tabs.lease(payload['session_id'], 'codex', changed_paths(payload))
         writes = proposed_writes(payload) if event == 'PreToolUse' else {}
         for filename in changed_paths(payload):
             translated = dict(payload, tool_input={'file_path': filename})

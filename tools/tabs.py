@@ -472,7 +472,13 @@ def _handle(payload, runtime):
     if event == 'SessionStart':
         return context(session, cwd)
     if event == 'PreToolUse':
-        return overlap(session, file_targets(payload))
+        # Warn first, then take the lease. The lease is taken here because
+        # PreToolUse is the file-tool event setup.sh registers; a lease taken
+        # only on PostToolUse was never taken at all (ledger ae3bc058).
+        targets = file_targets(payload)
+        warning = overlap(session, targets)
+        lease(session, runtime, targets)
+        return warning
     return ''
 
 
@@ -525,6 +531,8 @@ def main(argv=None):
             print(json.dumps(rows, indent=2))
         else:
             print(context('', '') or 'No live tabs on the board.')
+            print()
+            print(leases_text())
         return 0
     if args.command == 'context':
         print(context(args.session, args.cwd) or 'No other live tabs.')

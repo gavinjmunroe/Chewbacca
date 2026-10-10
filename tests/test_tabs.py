@@ -76,11 +76,13 @@ class TabsTests(unittest.TestCase):
         target.write_text('')
         self.hook({'hook_event_name': 'UserPromptSubmit', 'session_id': 'b', 'prompt': 'Refactor shared'})
         self.log.write_text(f'{time.time()}\tb\t{target}\tedit\n')
+        # Checked first: a's PreToolUse below takes a lease, and b is then
+        # rightly warned about a.
+        self.assertEqual(tabs.overlap('b', [str(target)]), '', 'a tab never warns about itself')
         warning = self.hook({'hook_event_name': 'PreToolUse', 'session_id': 'a', 'tool_name': 'Edit',
                              'tool_input': {'file_path': str(target)}})
         self.assertIn('Another live tab', warning)
         self.assertIn('Refactor shared', warning)
-        self.assertEqual(tabs.overlap('b', [str(target)]), '', 'a tab never warns about itself')
 
     def test_old_write_does_not_warn(self):
         target = self.repo / 'shared.py'

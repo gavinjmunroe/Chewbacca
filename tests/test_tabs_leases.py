@@ -117,6 +117,20 @@ class LeaseTests(unittest.TestCase):
                                  capture_output=True, text=True, env=dict(os.environ, **self.env))
         self.assertEqual(json.loads(as_json.stdout)[0]['rel'], 'tools/shared.py')
 
+    def test_the_registered_pre_tool_use_event_takes_the_lease(self):
+        # setup.sh registers tabs.sh on PreToolUse for file tools, not on
+        # PostToolUse, so a lease taken only after the edit was never taken.
+        self.assertEqual(self.edit('a', self.target, 'PreToolUse'), '')
+        self.assertEqual([r['session'] for r in tabs.held_leases()], ['a'])
+        self.assertIn('leased by claude-code', self.edit('b', self.target, 'PreToolUse'))
+
+    def test_tabs_list_shows_who_holds_which_file(self):
+        self.edit('a', self.target, 'PreToolUse')
+        listed = subprocess.run([sys.executable, str(ROOT / 'tools/tabs.py'), 'list'],
+                                capture_output=True, text=True, env=dict(os.environ, **self.env))
+        self.assertIn('Live file leases (1)', listed.stdout)
+        self.assertIn('repo/tools/shared.py: claude-code a', listed.stdout)
+
     def test_a_broken_database_never_fails_an_edit(self):
         Path(self.env['CHEWBACCA_TABS_DB']).write_text('not sqlite')
         self.assertEqual(self.edit('a', self.target, 'PostToolUse'), '')

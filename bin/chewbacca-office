@@ -23,9 +23,10 @@ response data. It is never returned, printed, logged or written, and neither is
 any refresh token or id token. This never mints a token from a refresh token.
 
 Read-only by construction: the in-page script hardcodes GET, fetches only from
-https://graph.microsoft.com/v1.0, and refuses any path outside a short read
-allowlist. No send, reply, delete, move, flag, accept or edit. `read` fetches a
-message with GET, which does not mark it read.
+https://graph.microsoft.com/v1.0, and builds every path from a fixed template
+with ids validated to a strict character set. No send, reply, delete, move,
+flag, accept or edit. `read` fetches a message with GET, which does not mark it
+read.
 
 Tab: the first open Office tab on an allowed host (outlook.office.com,
 m365.cloud.microsoft, www.office.com, outlook.cloud.microsoft,
@@ -66,6 +67,7 @@ ALLOWED_HOSTS = (
 ALLOWED_ORIGINS = tuple("https://" + h for h in ALLOWED_HOSTS)
 # The one origin every request goes to. Fixed, https, Graph v1.0, GET only.
 GRAPH = "https://graph.microsoft.com/v1.0"
+GRAPH_ORIGIN = "https://graph.microsoft.com"
 GRAPH_HOST = "graph.microsoft.com"
 OPEN_AT = "https://outlook.office.com/mail/"
 TAB = None  # the exact URL of the tab in use, set by ensure_tab()
@@ -78,29 +80,52 @@ PAUSE = max(1.0, float(os.environ.get("CHEWBACCA_OFFICE_PAUSE", "1") or 1))
 POLL_EVERY = float(os.environ.get("CHEWBACCA_OFFICE_POLL", "0.3"))
 POLL_LIMIT = 45.0
 
-# The only Graph paths ever fetched. Each command builds its path from
-# validated pieces; this is the backstop that refuses anything else (any write
-# verb is a different HTTP method and never reaches here, but a crafted id must
-# still not smuggle in a new path). IDs are Graph's own opaque strings, so the
-# id class is broad but bounded, and a path with no leading-slash match fails.
-ID = r"[A-Za-z0-9%:@_=+./!-]+"
-READ = re.compile(
-    r"^/(me/messages|me/mailFolders/[A-Za-z0-9]+/messages"
-    r"|me/messages/" + ID
-    + r"|me/calendarView|me/events"
-    r"|me/drive/recent|me/drive/root/children|me/drive/sharedWithMe"
-    r"|me/drive/root/search\(q='[^']*'\)"
-    r"|me/drive/items/" + ID + r"(/content|/workbook/worksheets"
-    r"|/workbook/worksheets\([^)]*\)/usedRange)?"
-    r"|me/chats|me/chats/" + ID + r"/messages)"
-    r"(\?[^#]*)?$"
-)
-# A GET of a driveItem's bytes, needed by `doc`, returns binary; everything
-# else is JSON. The in-page script base64s a binary body so it survives the
-# text channel, and never calls r.text() on it.
-BINARY = re.compile(r"^/me/drive/items/" + ID + r"/content(\?|$)")
-# A tab sitting on any of these means Office wants an interactive sign-in or
-# consent. That is the user's to do; we stop rather than drive it.
+# Bounds, so a huge mailbox, a giant file or a nextLink cycle cannot run forever
+# or exhaust memory in the page or here. Each is enforced and each truncation is
+# reported. The env vars may only LOWER the two that tests drive; a raised value
+# is ignored.
+MAX_PAGES = min(12, int(os.environ.get("CHEWBACCA_OFFICE_MAXPAGES", "12") or 12))
+# Characters a single response may be before the page refuses to ship it. A
+# partial JSON body cannot be parsed, so an oversize response is refused whole
+# rather than truncated mid-document.
+MAX_BODY = min(5_000_000, int(os.environ.get("CHEWBACCA_OFFICE_MAXBYTES", "5000000") or 5_000_000))
+# Characters kept from one document's extracted text.
+MAX_DOC_CHARS = 500_000
+MAX_SHEET_CHARS = 200_000
+
+# Request templates. Every Graph path is one of these, with {id}/{sid}/{q}
+# filled from values validated against the charset below and then encoded
+# exactly as encodeURIComponent would. The page is handed the template's own
+# regex and refuses any URL whose pathname does not match it, so the string the
+# allowlist checks and the string fetch requests cannot disagree.
+TEMPLATES = {
+    "messages":       "/me/messages",
+    "message":        "/me/messages/{id}",
+    "calendarView":   "/me/calendarView",
+    "drive_recent":   "/me/drive/recent",
+    "drive_search":   "/me/drive/root/search(q='{q}')",
+    "item":           "/me/drive/items/{id}",
+    "item_content":   "/me/drive/items/{id}/content",
+    "worksheets":     "/me/drive/items/{id}/workbook/worksheets",
+    "usedRange":      "/me/drive/items/{id}/workbook/worksheets('{sid}')/usedRange",
+    "chats":          "/me/chats",
+}
+# Graph ids as returned with Prefer: IdType="ImmutableId" are base64url-ish.
+# Worksheet ids are GUIDs, sometimes in braces. Search words are kept to plain
+# text so nothing can break out of the OData '...' literal.
+VALIDATORS = {
+    "id":  re.compile(r"[A-Za-z0-9_=!.-]{1,1024}"),
+    "sid": re.compile(r"[A-Za-z0-9{}.-]{1,128}"),
+    "q":   re.compile(r"[A-Za-z0-9 _.-]{1,128}"),
+}
+# What an encoded id looks like in a pathname: unreserved plus %XX. The page and
+# Python both match against this, so a "/", "?", "#", "\" or ".." in an id can
+# never land unencoded in a path segment.
+ENC_CLASS = r"(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+"
+# The in-page fetch of a driveItem's bytes returns binary; everything else is
+# JSON. The page base64s a binary body so it survives the text channel.
+BINARY_TEMPLATES = ("item_content",)
+# A tab on any of these means Office wants an interactive sign-in or consent.
 SIGNIN_HOSTS = ("login.microsoftonline.com", "login.live.com", "login.windows.net",
                 "account.microsoft.com")
 SIGNIN_PATHS = ("/login", "/signin", "/logout", "/oauth2", "/common/oauth2")
@@ -223,6 +248,53 @@ def ensure_tab():
     check_url(TAB)
 
 
+# ── request building, validated identically here and in the page ─────────────
+
+def enc(v):
+    """encodeURIComponent, in Python: the same characters stay unescaped, so a
+    path built here is byte-for-byte what the page's own encoder would produce
+    and the page's URL re-check cannot disagree with it."""
+    return urllib.parse.quote(v, safe="!*'()~-_.")
+
+
+def template_regex(template):
+    """A regex that matches exactly this template's pathname under /v1.0, with
+    each {placeholder} standing for one encoded segment and everything else a
+    literal. The page gets this and fetches nothing whose pathname fails it."""
+    out = ""
+    for part in re.split(r"(\{[a-z]+\})", template):
+        out += ENC_CLASS if re.fullmatch(r"\{[a-z]+\}", part) else re.escape(part)
+    return r"^/v1\.0" + out + r"$"
+
+
+def build(key, **ids):
+    """(path, its template regex). Each id is validated against a strict set
+    before encoding, so "..", "/", "?", "#", "\\" or an encoded "%2e%2e" is
+    rejected here, never encoded into a traversal."""
+    tmpl = TEMPLATES[key]
+    vals = {}
+    for name in re.findall(r"\{([a-z]+)\}", tmpl):
+        v = ids[name]
+        if not VALIDATORS[name].fullmatch(v):
+            die(f"refused: '{name}' has characters that are not allowed in a Graph id")
+        vals[name] = enc(v)
+    return tmpl.format(**vals), template_regex(tmpl)
+
+
+def nextlink_path(nxt, tmpl_re):
+    """A path rebuilt from Graph's own @odata.nextLink, accepted only if it
+    parses to the Graph origin and its pathname matches the same template the
+    page is already bound to. The raw URL is never fetched as-is."""
+    sp = host_of(nxt)
+    if not sp or sp.scheme != "https" or (sp.hostname or "").lower() != GRAPH_HOST:
+        return None
+    if sp.netloc.lower() != GRAPH_HOST or not sp.path.startswith("/v1.0/"):
+        return None
+    if not re.fullmatch(tmpl_re, sp.path):
+        return None
+    return sp.path[len("/v1.0"):] + (("?" + sp.query) if sp.query else "")
+
+
 # The origin guard runs first in every in-page script: a page whose origin is
 # not one we allow fetches nothing and gets refused on the Python side too.
 GUARD = ("if (%s.indexOf(location.origin) < 0) "
@@ -234,12 +306,26 @@ GUARD = ("if (%s.indexOf(location.origin) < 0) "
 # unexpired access token with a plaintext secret whose scope covers Graph is
 # used; an encrypted-cache entry (no readable secret) is reported as a count,
 # never decrypted. This tool does not reconstruct MSAL's crypto or mint tokens.
+# The URL is built with new URL() and re-validated against the template right
+# before fetch, with the same parser fetch uses, so no encoded segment can slip
+# a path past the allowlist.
 START_JS = r"""
 (function(){
   %(guard)s
-  var path = %(path)s, key = %(key)s, graph = %(graph)s, binary = %(binary)s,
-      READ = new RegExp(%(read)s);
-  if (!READ.test(path))
+  var path = %(path)s, key = %(key)s, origin = %(graph_origin)s, base = %(graph)s,
+      binary = %(binary)s, maxBody = %(maxbody)s, TMPL = new RegExp(%(tmpl)s);
+  var u;
+  try { u = new URL(base + path); } catch (e) {
+    return JSON.stringify({error: 'refused: unparseable url', origin: location.origin}); }
+  if (u.protocol !== 'https:' || u.host !== 'graph.microsoft.com' || u.origin !== origin)
+    return JSON.stringify({error: 'refused: off-origin url', origin: location.origin});
+  if ((u.pathname + u.search) !== ('/v1.0' + path))
+    return JSON.stringify({error: 'refused: url changed on normalization', origin: location.origin});
+  var decoded;
+  try { decoded = decodeURIComponent(u.pathname); } catch (e) { decoded = '\x00'; }
+  if (decoded.indexOf('..') >= 0 || decoded.indexOf('\\') >= 0 || u.pathname.indexOf('//', 1) >= 0)
+    return JSON.stringify({error: 'refused: path traversal', origin: location.origin});
+  if (!TMPL.test(u.pathname))
     return JSON.stringify({error: 'refused: not a read path', origin: location.origin});
 
   // Find an unexpired access token whose scope covers Graph. The scope lives in
@@ -275,19 +361,23 @@ START_JS = r"""
   window.__chewOffice = window.__chewOffice || {};
   window.__chewOffice[key] = null;
   (function(tok){
-    fetch(graph + path, {method: 'GET', credentials: 'omit', redirect: 'follow',
-                         headers: {Authorization: 'Bearer ' + tok, accept: 'application/json'}})
+    fetch(u.href, {method: 'GET', credentials: 'omit', redirect: 'follow',
+                   headers: {Authorization: 'Bearer ' + tok, accept: 'application/json',
+                             Prefer: 'IdType="ImmutableId"'}})
       .then(function(r){
+        var slot = {status: r.status, redirected: r.redirected,
+                    url: r.url.split(tok).join('[redacted]')};
         var body = binary ? r.arrayBuffer().then(function(buf){
-          var b = new Uint8Array(buf), s = '', CH = 0x8000;
-          for (var i = 0; i < b.length; i += CH)
-            s += String.fromCharCode.apply(null, b.subarray(i, i + CH));
-          return 'base64:' + btoa(s);
-        }) : r.text().then(function(t){ return t.split(tok).join('[redacted]'); });
-        return body.then(function(bt){
-          window.__chewOffice[key] = {status: r.status, redirected: r.redirected,
-            url: r.url.split(tok).join('[redacted]'), body: bt.slice(0, 8000000)};
+          var b = new Uint8Array(buf);
+          if (b.length > maxBody) { slot.oversize = b.length; return ''; }
+          var str = '', CH = 0x8000;
+          for (var i = 0; i < b.length; i += CH) str += String.fromCharCode.apply(null, b.subarray(i, i + CH));
+          return 'base64:' + btoa(str);
+        }) : r.text().then(function(t){
+          if (t.length > maxBody) { slot.oversize = t.length; return ''; }
+          return t.split(tok).join('[redacted]');
         });
+        return body.then(function(bt){ slot.body = bt; window.__chewOffice[key] = slot; });
       })
       .catch(function(e){ window.__chewOffice[key] = {status: 0, error: String(e).split(tok).join('[redacted]')}; });
   })(found);
@@ -338,20 +428,26 @@ class Graph:
         self.last = 0.0
         self.calls = 0
 
-    def get(self, path, binary=False):
-        """GET GRAPH + path. Returns the parsed JSON doc, or for a binary path
-        the raw bytes. Stops on 401/403/429 and on any off-Graph redirect."""
-        if not READ.match(path):
+    def get(self, path, tmpl_re, binary=False):
+        """GET GRAPH + path. Returns the parsed JSON doc (or raw bytes for a
+        binary path), with `_oversize` set if the response was too large to
+        ship. Validates the path against its template here too, then lets the
+        page validate the final URL again with fetch's own parser."""
+        pathname = "/v1.0" + path.split("?", 1)[0]
+        if not re.fullmatch(tmpl_re, pathname):
             die("refused: not a read path")
+        dec = urllib.parse.unquote(pathname)
+        if ".." in dec or "\\" in dec or "//" in pathname[1:]:
+            die("refused: path traversal")
         wait = self.last + PAUSE - time.monotonic()
         if self.last and wait > 0:
             time.sleep(wait)
         self.calls += 1
         key = f"o{os.getpid()}_{self.calls}"
         started = in_tab(START_JS % {
-            "guard": GUARD, "graph": json.dumps(GRAPH), "path": json.dumps(path),
-            "key": json.dumps(key), "read": json.dumps(READ.pattern),
-            "binary": "true" if binary else "false"})
+            "guard": GUARD, "graph": json.dumps(GRAPH), "graph_origin": json.dumps(GRAPH_ORIGIN),
+            "path": json.dumps(path), "key": json.dumps(key), "tmpl": json.dumps(tmpl_re),
+            "binary": "true" if binary else "false", "maxbody": str(MAX_BODY)})
         # Measured from launch in the page, so a slow Chrome round trip can
         # never squeeze two requests under the pause.
         self.last = time.monotonic()
@@ -364,8 +460,6 @@ class Graph:
                        "usable token can be read without an interactive sign-in. BLOCKED: this "
                        "needs Microsoft to hand the tab a fresh token. We never decrypt the cache "
                        "or mint a token from a refresh token.")
-        if err and err.startswith("refused"):
-            die(err)
         if err:
             die(err)
         check_url(started.get("page"))
@@ -393,6 +487,9 @@ class Graph:
             raise Stop("Graph answered 429 (rate limit). Stopped; wait before trying again.")
         if status == 0:
             die(f"the in-page request failed: {res.get('error', '')[:200]}")
+        if res.get("oversize"):
+            die(f"Graph response was {res['oversize']} bytes, over the {MAX_BODY}-byte cap; "
+                f"narrow it with --limit, --search or a smaller file.")
         body = res.get("body") or ""
         if binary:
             if status != 200:
@@ -402,7 +499,6 @@ class Graph:
             import base64
             return base64.b64decode(body[len("base64:"):])
         if status not in (200, 206):
-            # Surface Graph's own error message when it is JSON, scrubbed of ids.
             try:
                 e = json.loads(body).get("error", {})
                 die(f"Graph answered {status} for {path.split('?')[0]}: "
@@ -489,29 +585,39 @@ def chat_row(c):
 
 # ── commands ───────────────────────────────────────────────────────────────────
 
-def page_list(g, path, limit):
-    """Follow Graph @odata.nextLink up to `limit` items. nextLink is rebuilt
-    from its own path+query and re-checked against the read allowlist, never
-    fetched as an absolute URL."""
-    out = []
-    while path and len(out) < limit:
-        doc = g.get(path)
-        out += (doc.get("value") or [])
-        nxt = doc.get("@odata.nextLink")
-        if not nxt:
-            break
-        sp = host_of(nxt)
-        if not sp or (sp.hostname or "").lower() != GRAPH_HOST:
-            break
-        p = sp.path
-        if p.startswith("/v1.0"):
-            p = p[len("/v1.0"):]
-        path = p + (("?" + sp.query) if sp.query else "")
-    return out[:limit]
-
-
 def q(params):
     return "?" + urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
+
+
+def page_list(g, key, query, limit, **ids):
+    """Follow Graph @odata.nextLink up to MAX_PAGES. Each nextLink is parsed and
+    must match the same template; a cycle (a nextLink already seen) or an
+    off-template link stops the walk. Returns (items, truncated)."""
+    path, tmpl_re = build(key, **ids)
+    full = path + query
+    out, pages, seen, truncated = [], 0, set(), False
+    while True:
+        doc = g.get(full, tmpl_re)
+        out += (doc.get("value") or [])
+        pages += 1
+        nxt = doc.get("@odata.nextLink")
+        if len(out) >= limit:
+            break
+        if pages >= MAX_PAGES:
+            truncated = bool(nxt)
+            break
+        if not nxt:
+            break
+        np = nextlink_path(nxt, tmpl_re)
+        if not np:
+            truncated = True   # a nextLink off-template or off-origin: stop here
+            break
+        if np in seen:
+            truncated = True   # a cycle: stop here
+            break
+        seen.add(np)
+        full = np
+    return out[:limit], truncated
 
 
 def cmd_mail(g, a):
@@ -526,25 +632,25 @@ def cmd_mail(g, a):
               "$orderby": "receivedDateTime desc"}
     if filt:
         params["$filter"] = " and ".join(filt)
-    rows = page_list(g, "/me/messages" + q(params), a.limit or 25)
-    return [mail_row(m) for m in rows]
+    rows, trunc = page_list(g, "messages", q(params), a.limit or 25)
+    return [mail_row(m) for m in rows], trunc
 
 
 def cmd_read(g, a):
     if not a.rest:
         die("read needs a message id (from `chewbacca office mail`)")
-    mid = urllib.parse.quote(a.rest[0], safe="=-_")
+    path, tmpl_re = build("message", id=a.rest[0])
     # GET of a single message. A GET never sets isRead; only a PATCH would, and
     # this tool issues no PATCH. $select avoids pulling attachments' bytes.
-    doc = g.get(f"/me/messages/{mid}"
-                + q({"$select": "subject,from,sender,toRecipients,receivedDateTime,body,bodyPreview,isRead"}))
+    doc = g.get(path + q({"$select": "subject,from,sender,toRecipients,receivedDateTime,body,bodyPreview,isRead"}),
+                tmpl_re)
     body = doc.get("body") or {}
     content = body.get("content") or doc.get("bodyPreview") or ""
     text = html_to_text(content) if (body.get("contentType") == "html") else content.strip()
     to = ", ".join(addr(r) for r in (doc.get("toRecipients") or []))
     return {"subject": doc.get("subject") or "(no subject)", "from": addr(doc.get("from") or doc.get("sender")),
             "to": to, "received": when(doc.get("receivedDateTime")),
-            "was_unread": not doc.get("isRead", True), "text": text}
+            "was_unread": not doc.get("isRead", True), "text": text[:MAX_DOC_CHARS]}
 
 
 def cmd_calendar(g, a):
@@ -555,23 +661,24 @@ def cmd_calendar(g, a):
               "endDateTime": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
               "$select": "subject,start,end,location,organizer",
               "$orderby": "start/dateTime", "$top": "50"}
-    rows = page_list(g, "/me/calendarView" + q(params), a.limit or 50)
-    return [event_row(e) for e in rows]
+    rows, trunc = page_list(g, "calendarView", q(params), a.limit or 50)
+    return [event_row(e) for e in rows], trunc
 
 
 def cmd_files(g, a):
     sel = "name,file,folder,lastModifiedDateTime,size,id,webUrl,remoteItem"
     if a.search is not None:
-        words = a.search.replace("'", "''")
-        path = f"/me/drive/root/search(q='{words}')" + q({"$select": sel, "$top": "50"})
-    elif a.recent or True:
+        if not VALIDATORS["q"].fullmatch(a.search):
+            die("--search takes plain words (letters, digits, spaces, . _ -)")
+        rows, trunc = page_list(g, "drive_search", q({"$select": sel, "$top": "50"}),
+                                a.limit or 25, q=a.search)
+    else:
         # recent is the default view: files touched lately, across drives.
-        path = "/me/drive/recent" + q({"$top": "50"})
-    rows = page_list(g, path, a.limit or 25)
-    return [file_row(d) for d in rows]
+        rows, trunc = page_list(g, "drive_recent", q({"$top": "50"}), a.limit or 25)
+    return [file_row(d) for d in rows], trunc
 
 
-def resolve_item_id(g, ref):
+def resolve_item_id(ref):
     """A drive-item id as given, or extracted from a OneDrive/SharePoint URL."""
     ref = ref.strip()
     sp = host_of(ref)
@@ -587,29 +694,30 @@ def resolve_item_id(g, ref):
 def cmd_doc(g, a):
     if not a.rest:
         die("doc needs a file id or a OneDrive/SharePoint URL")
-    item_id = urllib.parse.quote(resolve_item_id(g, a.rest[0]), safe="=-_!")
-    meta = g.get(f"/me/drive/items/{item_id}" + q({"$select": "name,file,size"}))
+    item_id = resolve_item_id(a.rest[0])
+    mpath, mtmpl = build("item", id=item_id)
+    meta = g.get(mpath + q({"$select": "name,file,size"}), mtmpl)
     name = meta.get("name") or ""
     mime = (meta.get("file") or {}).get("mimeType") or ""
     ext = name.lower().rsplit(".", 1)[-1] if "." in name else ""
     if ext in ("xlsx", "xlsm", "xlsb") or "spreadsheet" in mime:
         return {"name": name, "type": "excel", "sheets": excel_sheets(g, item_id)}
-    data = g.get(f"/me/drive/items/{item_id}/content", binary=True)
+    cpath, ctmpl = build("item_content", id=item_id)
+    data = g.get(cpath, ctmpl, binary=True)
     return {"name": name, "type": ext or mime or "file", "text": office_text(data, ext)}
 
 
 def excel_sheets(g, item_id):
-    sheets = page_list(g, f"/me/drive/items/{item_id}/workbook/worksheets"
-                       + q({"$select": "id,name,position"}), 50)
+    sheets, _ = page_list(g, "worksheets", q({"$select": "id,name,position"}), 50, id=item_id)
     out = []
     for s in sorted(sheets, key=lambda x: x.get("position", 0)):
-        sid = urllib.parse.quote(str(s.get("id")), safe="{}=-_")
-        rng = g.get(f"/me/drive/items/{item_id}/workbook/worksheets('{sid}')/usedRange"
-                    + q({"$select": "text"}))
+        rpath, rtmpl = build("usedRange", id=item_id, sid=str(s.get("id")))
+        rng = g.get(rpath + q({"$select": "text"}), rtmpl)
         grid = rng.get("text") or []
         lines = ["\t".join("" if c is None else str(c) for c in row) for row in grid]
+        text = "\n".join(lines)
         out.append({"name": s.get("name") or "", "rows": len(grid),
-                    "text": "\n".join(lines)})
+                    "text": text[:MAX_SHEET_CHARS]})
     return out
 
 
@@ -624,7 +732,7 @@ def office_text(data, ext):
         # An older .doc/.ppt (OLE) or an unexpected type: return any printable
         # runs rather than nothing, so the command still says something useful.
         txt = data.decode("latin-1", "ignore")
-        return re.sub(r"[^\x09\x0a\x0d\x20-\x7e]{1,}", " ", txt)[:200000].strip()
+        return re.sub(r"[^\x09\x0a\x0d\x20-\x7e]{1,}", " ", txt)[:MAX_DOC_CHARS].strip()
     names = zf.namelist()
     if ext == "pptx" or any(n.startswith("ppt/slides/slide") for n in names):
         parts = sorted(n for n in names if re.match(r"ppt/slides/slide\d+\.xml$", n))
@@ -632,7 +740,7 @@ def office_text(data, ext):
         parts = ["word/document.xml"]
     else:
         parts = [n for n in names if n.endswith(".xml") and ("document" in n or "slide" in n)]
-    chunks = []
+    chunks, total = [], 0
     for n in parts:
         try:
             xml = zf.read(n).decode("utf-8", "ignore")
@@ -644,16 +752,16 @@ def office_text(data, ext):
                .replace("&quot;", '"').replace("&#39;", "'"))
         if xml.strip():
             chunks.append(xml)
-    return re.sub(r"\n{3,}", "\n\n", "\n\n".join(chunks)).strip()[:500000]
+            total += len(xml)
+        if total >= MAX_DOC_CHARS:
+            break
+    return re.sub(r"\n{3,}", "\n\n", "\n\n".join(chunks)).strip()[:MAX_DOC_CHARS]
 
 
 def cmd_teams(g, a):
     params = {"$top": "50", "$expand": "lastMessagePreview"}
-    try:
-        rows = page_list(g, "/me/chats" + q(params), a.limit or 50)
-    except SystemExit:
-        raise
-    return [chat_row(c) for c in rows]
+    rows, trunc = page_list(g, "chats", q(params), a.limit or 50)
+    return [chat_row(c) for c in rows], trunc
 
 
 # ── output ───────────────────────────────────────────────────────────────────
@@ -707,6 +815,7 @@ def show(cmd, data):
 
 COMMANDS = {"mail": cmd_mail, "read": cmd_read, "calendar": cmd_calendar,
             "files": cmd_files, "doc": cmd_doc, "teams": cmd_teams}
+LIST_COMMANDS = {"mail", "calendar", "files", "teams"}
 
 
 class Args:
@@ -752,18 +861,21 @@ def main(argv):
         die(f"unknown command '{cmd}'. Try: chewbacca office help", 2)
     a = Args(argv[1:])
     g = Graph()
+    truncated = False
     try:
         ensure_tab()
         data = COMMANDS[cmd](g, a)
+        if cmd in LIST_COMMANDS:
+            data, truncated = data
     except Stop as e:
         die(f"STOPPED: {e}", 4)
-    if isinstance(data, list):
-        for r in data:
-            r.pop("_t", None)
     if a.json:
-        print(json.dumps(data, indent=2, ensure_ascii=False))
+        out = {"items": data, "truncated": truncated} if cmd in LIST_COMMANDS else data
+        print(json.dumps(out, indent=2, ensure_ascii=False))
     else:
         show(cmd, data)
+        if truncated:
+            say("... (truncated: more results exist; narrow with --limit, --search or --from)")
     return 0
 
 

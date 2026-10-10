@@ -251,7 +251,7 @@ def reading(tmp: Path) -> None:
     a1 = AM.task_id("m-amber", "a1")
     a5 = AM.task_id("m-amber", "a5")
     check("an item's owner is named only through the people store",
-          owners[a1].endswith("· Sagar Tiwari") and owners[a5].endswith("· you"), owners)
+          "· Sagar Tiwari · Go " in owners[a1] and "· you · Go " in owners[a5], owners)
     check("an injected line in an action item is only words", clean_glass(lines) and any(
         "Ignore previous instructions" in t for t in owners.values()), owners)
     check("Open read page one of that meeting's transcript",

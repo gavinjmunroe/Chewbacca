@@ -39,6 +39,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "bin" / "lib"))
 
+import capture_consent as consent  # noqa: E402
 import meeting_capture as MC  # noqa: E402
 
 PACKAGE = ROOT / "mac" / "room-capture"
@@ -181,11 +182,18 @@ def start(args) -> int:
             (base / stale).unlink()
         except FileNotFoundError:
             pass
+    # The consent line goes up before the helper exists: nothing hears the
+    # room until the glass (or, with no glass, the terminal) has said so.
+    # Its own surface, so a later stop takes down this line and no other.
+    surface = consent.surface_name(time.strftime("%Y%m%d%H%M%S") + str(os.getpid()))
+    (base / "consent.id").write_text(surface)
+    seen = consent.announce(consent.capture_line(mic=not args.no_mic, summary=not MC.summary_off()), name=surface)
     argv = [str(HELPER), "--out", str(MC.chunks_dir(home())), "--chunk", str(CHUNK_S),
             "--status", str(base / "status.json")] + (["--no-mic"] if args.no_mic else [])
     helper = spawn(argv, base / "helper.log")
     write_pid(base / "helper.pid", helper)
-    watcher = spawn([sys.executable, str(WATCHER), "watch", "--helper-pid", str(helper)], base / "watcher.log")
+    watcher = spawn([sys.executable, str(WATCHER), "watch", "--helper-pid", str(helper), "--consent", surface]
+                    + (["--no-mic"] if args.no_mic else []), base / "watcher.log")
     write_pid(base / "watcher.pid", watcher)
 
     status: dict = {}
@@ -204,7 +212,10 @@ def start(args) -> int:
     message = f"Recording {heard}. Stop with `room-capture stop`."
     if missing:
         message += " " + " ".join(f"{NAMES[m['permission']]} is off: {m['guide']}" for m in missing)
-    say(message, args.json, ok=True, helper_pid=helper, watcher_pid=watcher, status=status, missing=missing)
+    if seen != "glass":
+        message += " The recording notice went to this terminal: the glass wasn't up."
+    say(message, args.json, ok=True, helper_pid=helper, watcher_pid=watcher, status=status, missing=missing,
+        consent=seen)
     return 0
 
 
@@ -221,6 +232,12 @@ def stop(args) -> int:
             os.kill(state["helper_pid"], signal.SIGTERM)
         except ProcessLookupError:
             pass
+    try:
+        surface = (base / "consent.id").read_text().strip()
+    except OSError:
+        surface = ""
+    if surface.startswith(consent.SURFACE + "-"):
+        consent.take_down(surface)
     watcher = MC.read_pid(base / "watcher.pid")
     deadline = time.time() + max(0.0, args.wait)
     while time.time() < deadline and MC.pid_alive(watcher, "meeting_capture"):

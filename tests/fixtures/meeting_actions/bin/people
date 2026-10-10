@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+"""Fake `people` for tests/test_meeting_actions.py: `texts drafts add` only,
+written to $PEOPLE_DIR/drafts.json in the real queue's shape. Any other verb,
+send above all, is refused and logged. FAKE_PEOPLE_REFUSE=1 answers the way
+voice-check's refusal does in bin/lib/people/texts.js."""
+import json
+import os
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+state = Path(os.environ["FAKE_STATE"])
+args = sys.argv[1:]
+with (state / "calls.jsonl").open("a") as fh:
+    fh.write(json.dumps(["people"] + args) + "\n")
+if args[:3] != ["texts", "drafts", "add"]:
+    print("fake people refused: " + " ".join(args), file=sys.stderr)
+    sys.exit(9)
+if os.environ.get("FAKE_PEOPLE_REFUSE"):
+    print("people: doesn't read like you\n\nNothing drafted. Rewrite it like the texts above, or add --voice-ok "
+          "if Caleb wrote it himself.", file=sys.stderr)
+    sys.exit(1)
+who, text = args[3], args[4]
+why = next((a.split("=", 1)[1] for a in args if a.startswith("--why=")), "")
+path = Path(os.environ["PEOPLE_DIR"]) / "drafts.json"
+queue = json.loads(path.read_text()) if path.exists() else []
+n = max([d["n"] for d in queue] or [0]) + 1
+queue.append({"who": who, "text": text, "why": why, "group": False, "to": "", "via": "",
+              "at": datetime.now(timezone.utc).isoformat(), "n": n})
+path.write_text(json.dumps(queue, indent=2))
+print(f"drafted #{n} to {who}")

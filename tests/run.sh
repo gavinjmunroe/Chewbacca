@@ -684,7 +684,7 @@ if group "installer"; then
     bash "$ROOT/tests/chewbacca_linkedin.sh" "$ROOT"
   check  "chewbacca groupme reads groups and DMs in the real GroupMe tab, GET only, throttled, and stops on pushback" \
     bash "$ROOT/tests/chewbacca_groupme.sh" "$ROOT"
-  check  "chewbacca office reads M365 mail, calendar, files, docs and Teams in the real Office tab, GET only to Graph, token never leaving the page, throttled, never marking read, and stops on pushback" \
+  check  "chewbacca office signs in with MSAL device code, keeps the cache in the keychain, reads M365 GET-only through Graph with silent refresh, throttled, never marking read, and stops on pushback" \
     bash "$ROOT/tests/chewbacca_office.sh" "$ROOT"
 
   check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \
@@ -787,6 +787,7 @@ if group "installer"; then
   # An automatic pull is only acceptable if it cannot eat uncommitted work.
   check  "kit-autopull refuses dirty, branched and diverged checkouts" \
     bash "$ROOT/tests/kit_autopull.sh" "$ROOT"
+  check  "installed hooks follow origin/main, live edits backed up" python3 "$ROOT/tests/test_hooks_sync.py"
 
   # Eight skills sat uninstalled on 2026-10-09 because no tab ran setup after
   # adding them. Git hooks now link them; this proves the linker is safe.
@@ -1172,7 +1173,11 @@ if group "hooks"; then
   for h in "$ROOT"/.claude/hooks/*.sh; do
     [ "$(basename "$h")" = "lib.sh" ] && continue
     name="$(basename "$h")"
-    exits "$name survives empty input" 0 bash -c "echo '{}' | bash '$h'"
+    # No repo: the kit-auto* hooks otherwise found the real checkout through
+    # ~/.claude/d1-config.sh and ran its push gate (killed at load 35 on
+    # 2026-10-09) or synced the real ~/.claude/hooks from a test.
+    exits "$name survives empty input" 0 env CHEWBACCA_REPO_DIR="$TMP/no-repo" \
+      CHEWBACCA_HOOKS_DIR="$TMP/no-hooks" bash -c "echo '{}' | bash '$h'"
   done
   # A home directory under git reports every cache and Library folder as
   # untracked work. The reminder fired three times in a row in a session whose
@@ -1375,6 +1380,7 @@ if group "hud"; then
     skip   "hud-listen starts under launchd's minimal PATH" "no newer python3 here"
   fi
   check  "a greeting costs no model turn" python3 "$ROOT/tests/test_pleasantry.py"
+  check  "importing a bin script never replaces the importer" python3 "$ROOT/tests/test_import_never_reexecs.py"
   check  "hud-speak parses"   python3 -m py_compile "$ROOT/bin/hud-speak"
   # The voice, minus the model: sentence splitting and the cache of short
   # lines, which is what "Done." costs after the first time.

@@ -506,6 +506,21 @@
       "props": {
         "text": {
           "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      }
+    },
+    "Tree": {
+      "family": "Anything else",
+      "props": {
+        "items": {
+          "type": "array",
+          "items": "object"
+        },
+        "action": {
+          "type": "rowaction"
         }
       }
     }

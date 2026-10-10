@@ -41,7 +41,10 @@ from pathlib import Path
 # The display app starts this with launchd's PATH, where python3 is macOS's
 # 3.9, and bin/lib uses `str | None`, which 3.9 rejects while the module loads.
 # Hand off to a newer interpreter before anything imports it.
-if sys.version_info < (3, 10):
+# Only when run as the script: a test importing this under 3.9 had its whole
+# process replaced, and on 2026-10-09 a uv pytest run of tests/ printed nothing
+# and exited 0, a silent pass. Imported, an old interpreter fails loudly instead.
+if sys.version_info < (3, 10) and __name__ == "__main__":
     for newer in ("/opt/homebrew/bin/python3", "/usr/local/bin/python3"):
         if os.path.exists(newer):
             os.execv(newer, [newer, *sys.argv])
@@ -3158,6 +3161,10 @@ class Listener:
     # draft words in bin/lib/route.py ("never mind", "scrap that"): with a
     # terminal draft outstanding those clear the draft, and this check runs
     # first.
+    # Class default as well as the __init__ one: tests build a Listener with
+    # __new__, and on 2026-10-09 test_pleasantry crashed in search_dismiss on
+    # the missing attribute the day CHW-188 added it.
+    search_open = False
     SEARCH_CLOSE_WORDS = frozenset({
         "close", "close it", "close that", "close search", "close the search", "close this",
         "dismiss", "dismiss it", "dismiss that", "hide it", "hide that", "hide search",

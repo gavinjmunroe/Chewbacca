@@ -40,7 +40,12 @@ READ_TOOLS = frozenset({"Read"})
 EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 
 GIT = ["git", "--no-pager", "--no-optional-locks", "--literal-pathspecs",
-       "-c", "core.fsmonitor=false", "-c", "color.ui=never"]
+       "-c", "core.fsmonitor=false", "-c", "color.ui=never",
+       # Only rev-parse and ls-files run here, which read no file content, so
+       # no filter driver runs. Never add status or diff without the
+       # filter_guard bin/lib/surfaces/code.py uses: attributes from
+       # .git/info/attributes ignore this flag (shown 2026-10-09).
+       "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904"]
 
 
 def clean(text: str) -> str:

@@ -12,7 +12,7 @@ a4d37c82649e07e58df2332c165b5b24593e43a36208bb604267b5284bd3e367  .claude/hooks/
 2b4c3d09aa7d44acece030a70da076a4ee8baae96d348342758125de661bdc38  .claude/hooks/coursework-context.sh
 86f870318c9bbd7a51448f1bc4cc52fd03a7dc20f707fc72da330641f00a05da  .claude/hooks/design-context.sh
 0fffd87f84014bb3b3706e0dba65249564b7c7ef5fc80f2eaf86eb36d358c26e  .claude/hooks/design-gate.sh
-916b2f3ff9e481d959492f957bae8f65dbcbe671348166020573c85af4610b3d  .claude/hooks/destructive-guard.sh
+d033cf849b80707f0bfe6de59ec6d85e16a110eb22c66e4f5d4534080e933ad8  .claude/hooks/destructive-guard.sh
 a5f2a11cce5427579aa9df1b60ec64373494b4699e1056f7c5aa012187c02fc0  .claude/hooks/durable-guard.sh
 3856d3932a4390ab147bc9d9c31db31c931834c902d588b78ee0b3cb8dba56de  .claude/hooks/env-guard.sh
 a1a2beb7ed61ba73bcd5680b3355930066a2e6887b5520bb3c374e6acd204fc0  .claude/hooks/format-and-sync.sh

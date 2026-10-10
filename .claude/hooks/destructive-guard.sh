@@ -58,9 +58,14 @@ def repo_dirty(where):
     return any(l and not l.startswith("??") for l in r.stdout.splitlines())
 
 where = cwd
-nested = re.search(r"\b(?:sh|bash|zsh)\s+-c\s+.*\bgit\b[^;|&]*\b(reset\s+--hard|checkout\s+(--|\.)|clean\s+-\w*f|restore\s+(?!--staged)|stash(\s+(drop|clear))?\s*['\"]?$)", body)
-if nested and repo_dirty(where):
-    print(f"a shell string runs `git {nested.group(1)}`, which would throw away uncommitted work in {where}.")
+# Catch-all on the text itself, whatever names git: eval "...", x=git; $x,
+# $(which git), sh -c '...' (security review of f92c31af, 2026-10-10). The
+# word-level parser below can't see through those, so the verb phrase alone
+# decides when the repo has work to lose. A commit message that mentions one
+# belongs in a -F heredoc, which is stripped above.
+phrase = re.search(r"\b(reset\s+(?:\S+\s+)*--hard|checkout\s+(?:--(?=\s)|\.(?=\s|$|['\";)]))|clean\s+-\w*f|stash\s+(?:drop|clear))", body)
+if phrase and not re.match(r"\s*DESTRUCTIVE_OK=1\s", cmd) and repo_dirty(where):
+    print(f"this runs `{phrase.group(1)}`, which would throw away uncommitted work in {where}.")
     raise SystemExit
 for seg in segments:
     try:

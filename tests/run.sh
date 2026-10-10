@@ -13,6 +13,10 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Tests that run setup.sh or doctor.sh against a scratch HOME must not build a
+# kit runtime: each one is a git worktree registered in this repo.
+# tests/kit_runtime.sh drives tools/kit_runtime.py directly and is unaffected.
+export CHEWBACCA_NO_RUNTIME=1
 GRN='\033[0;32m'; RED='\033[0;31m'; DIM='\033[2m'; BLD='\033[1m'; NC='\033[0m'
 PASS=0; FAIL=0; SKIP=0
 ONLY="${1:-}"

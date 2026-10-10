@@ -940,7 +940,7 @@ fi
 # tab edits. On 2026-10-10 they ran from the dirty shared checkout instead and
 # `chewbacca` on PATH was hours behind main. Compared against the local
 # origin/main ref, which the runtime's own fetch keeps current; no network here.
-if [ -f "$REPO_DIR/tools/kit_runtime.py" ]; then
+if [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ -f "$REPO_DIR/tools/kit_runtime.py" ]; then
   KR_JSON="$(python3 -I "$REPO_DIR/tools/kit_runtime.py" status --json 2>/dev/null)"
   KR_LINE="$(printf '%s' "$KR_JSON" | python3 -I -c '
 import json, sys

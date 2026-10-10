@@ -590,7 +590,10 @@ fi
 # checkout with no origin/main (a tarball, a fork mid-setup) falls back to
 # linking this tree, as before. CHEWBACCA_NO_RUNTIME=1 skips it.
 KIT_RUNTIME="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}"
-if [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ -f "$SCRIPT_DIR/tools/kit_runtime.py" ]; then
+# Only for runs that link tools: `--only coding-agent` and friends never call
+# link_tool, and the hermetic tests run those against a scratch HOME.
+case "${ONLY:-}" in ""|agents|tools) _kr_wanted=1 ;; *) _kr_wanted=0 ;; esac
+if [ "$_kr_wanted" = 1 ] && [ "${CHEWBACCA_NO_RUNTIME:-0}" != 1 ] && [ -f "$SCRIPT_DIR/tools/kit_runtime.py" ]; then
   if _kr_out="$(python3 -I "$SCRIPT_DIR/tools/kit_runtime.py" update --repo "$SCRIPT_DIR" --adopt 2>&1)"; then
     log "Kit runtime: $_kr_out ($KIT_RUNTIME/current)"
   else

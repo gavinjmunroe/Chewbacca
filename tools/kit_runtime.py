@@ -14,7 +14,7 @@ So the tools run from a runtime nobody edits:
 
   ~/.chewbacca/kit/
     current -> snapshots/<sha>      the one path ~/.local/bin links through
-    snapshots/<sha>/                a detached, locked git worktree of origin/main
+    snapshots/<sha>/                a detached git worktree of origin/main
     snapshots/<sha>.kit-runtime.json  sidecar: sha, source checkout, build time
 
 `update` fetches origin/main, builds a snapshot for its commit if there is not
@@ -185,8 +185,12 @@ def build_snapshot(source: Path, base: Path, sha: str) -> Path:
         return snap
     if snap.exists():  # a build that died before its sidecar: start over
         remove_snapshot(source, snap)
-    # Locked, so `git worktree prune` from any tab leaves it alone.
-    r = git(source, "worktree", "add", "--detach", "--lock", str(snap), sha, timeout=120)
+    # Not locked. `git worktree prune` only drops entries whose directory is
+    # gone, so a live snapshot is safe, and a scratch HOME's snapshot (a test,
+    # a deleted install) cleans itself up. Locked, the first day's test runs
+    # left seven entries for deleted temp dirs in the shared repo that prune
+    # would never remove.
+    r = git(source, "worktree", "add", "--detach", str(snap), sha, timeout=120)
     if r.returncode:
         raise RuntimeError("worktree add failed: " + r.stderr.strip())
     Path(str(snap) + SIDECAR).write_text(json.dumps(

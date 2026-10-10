@@ -1,11 +1,11 @@
 ---
 name: project_kit_runtime
-description: PATH tools run from ~/.chewbacca/kit/current, a locked detached worktree of origin/main nobody edits, not from the shared checkout; how it updates, what it links, how to check it.
+description: PATH tools run from ~/.chewbacca/kit/current, a detached worktree of origin/main nobody edits, not from the shared checkout; how it updates, what it links, how to check it.
 metadata:
   type: project
 ---
 
-The kit runtime is `~/.chewbacca/kit/current`, a symlink to `snapshots/<sha>`, a locked detached git worktree of origin/main. Every kit tool in `~/.local/bin` links through `current`, so PATH runs main, never another tab's uncommitted edit. Built by `tools/kit_runtime.py`.
+The kit runtime is `~/.chewbacca/kit/current`, a symlink to `snapshots/<sha>`, a detached git worktree (unlocked, so `git worktree prune` cleans up snapshots whose directory is gone) of origin/main. Every kit tool in `~/.local/bin` links through `current`, so PATH runs main, never another tab's uncommitted edit. Built by `tools/kit_runtime.py`.
 
 **Why:** on 2026-10-10 13:17 every PATH tool linked into the shared checkout `~/code/chewbacca`. Six tabs kept edits there, local main was 2 commits ahead of rebased copies on origin, `git reset --keep origin/main` refused, and the installed `chewbacca` front door still refused writes main had allowed since 19539ff1. Caleb kept getting handed commands.
 

@@ -68,6 +68,10 @@ python3 -I "$KR" update --repo "$S" --link-bin "$BIN" >/dev/null || fail "first 
 [ -L "$RT/current/node_modules" ] && [ -f "$RT/current/node_modules/pkg/index.js" ] || fail "node_modules not linked into the snapshot"
 [ -L "$RT/current/state.log" ] || fail "gitignored state file not linked into the snapshot"
 
+# Unlocked: a locked worktree whose scratch HOME is deleted stays registered
+# in the source repo forever (seven of them, the first afternoon).
+git -C "$S" worktree list --porcelain | grep -q '^locked' && fail "a snapshot worktree is locked"
+
 # 2. The shared checkout is never touched: dirty edit and HEAD intact.
 [ "$(cat "$S/bin/alpha")" = "$(printf '#!/bin/sh\necho DIRTY')" ] || fail "the source's uncommitted edit changed"
 [ "$(git -C "$S" rev-parse HEAD)" = "$HEAD_BEFORE" ] || fail "the source's HEAD moved"

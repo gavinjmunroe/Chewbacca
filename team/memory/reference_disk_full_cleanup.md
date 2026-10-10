@@ -12,3 +12,5 @@ Safe, and they rebuild themselves: `uv cache prune --force` (16.6 GB; without `-
 Never ours to delete: `~/Library/Messages` (213 GB of attachments; shortening history deletes old texts, his call), the iMovie library (51 GB), and the Trash (emptying is permanent, he does it).
 
 Measure with `df -h /System/Volumes/Data`, not `/`: the root volume reads mostly empty on APFS. Related: [[feedback_high_load_reads_as_bugs]], [[feedback_slow_means_broken]].
+
+Since 2026-10-09 `disk-guard` (UserPromptSubmit) does this automatically: below 20 GB free it starts one background prune of the safe list per 10 minutes and tells the agent; below 5 GB it says to start nothing large. Log: `~/.chewbacca/logs/disk-guard.log`. The third fill that night left 238 MB and the Bash tool couldn't start at all, since it writes output to a file; the Terminal panel tool still worked and was the way out.

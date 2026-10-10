@@ -72,6 +72,13 @@ Do none of that. Run `owed --json`, write every reply in his chat register
 (core/voice.md) from that one read, add each to the queue, show the drafts, and
 send only the numbers he names.
 
+A draft keeps its number for life (b46dedf1). They used to be positions, and
+on 2026-10-09 one tab's `drop 42` deleted a Maggie reply another tab had just
+added. Show drafts to him as plain lines, one text per line, never bullets
+("No bullet points", same night). Any price, spec or date inside a draft is
+looked up before it's queued, never left for him to check: a guessed $500
+Mac mini was really $799.
+
 Group drafts send too. `people send --room "Sophomore DT" "text"` addresses the
 room by the chat GUID read from chat.db (iMessage) or the @g.us JID (WhatsApp),
 never a member, and only on an exact room name: "Paul" is a group of four, and

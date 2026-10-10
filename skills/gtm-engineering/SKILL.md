@@ -129,6 +129,34 @@ clay campaign-stats`, `chewbacca gtm sync` then `gtm replies --all` answer in
   the writes through `chewbacca clay`; the pre-send gate still has to pass
   before any Start.
 
+## Four more from the Chewbacca Live build, 2026-10-10
+
+- **Client-facing GTM product lives in Chewbacca, never in Togari.** Caleb:
+  "make this a part of chewbs!!!!! We own it, and bma/amber is using our
+  service." A client page, dashboard or agent goes in `apps/` here; Togari
+  only serves its data over a read-only, client-scoped key. Chewbacca Live
+  (`apps/live`) is the pattern.
+- **It maintains itself.** Caleb: "We should NEVER need to manually update
+  this ux ... when questions are asked it literally pulls from clay through
+  togari for things it is not up to date on." No hand-kept client config:
+  clients, campaigns and briefs come from the source at request time, every
+  number carries its age and source, and a stale one is refreshed on the
+  question or shown with its real age.
+- **Chewbacca does everything Togari does, Clay first.** Caleb: "it's so
+  annoying that we open clay way too much." Before reaching for the Clay UI
+  or Togari, check `chewbacca clay ops` and `docs/reference/TOGARI-PARITY.md`;
+  a missing read gets added as an op, never answered by opening Clay.
+- **A Railway URL is clean before anyone sees it.** Caleb: "bro what did I say
+  ALWAYS CLEAN UP DOMAIN NAME". Run `railway-domain <name>` right after the
+  first deploy, then update every reference to the old name (links handed
+  out, keychain copies, launchd jobs that post to it, READMEs), because the
+  rename kills the old URL.
+
+Also from that build: a reply count that doesn't match across sources is a
+finding, never a footnote. Reconcile person by person before a client sees
+it; on 10/10 the 62 vs 27 gap was 51 replies Togari never got, 10 of them
+opt-outs that had to be blocklisted before Monday.
+
 ## Grading a campaign before it goes out
 
 Run the five gates in [the playbook's grading section](references/demand-gen-playbooks.md#grading-a-campaign-before-it-goes-out)

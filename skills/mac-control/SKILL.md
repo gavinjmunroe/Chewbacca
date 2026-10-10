@@ -161,3 +161,16 @@ you will hit first:
 - Clicks at double the offset → Retina 2x, or stop using coordinates
 
 Three failures on the same action: stop and report. Do not loop.
+
+## Never leave him waiting blind
+
+On 2026-10-09 he asked "What is taking so long?" while Photos chewed through
+172k items after iCloud was flipped off, and "Wtf taking so long?????" two
+hours into building `chewie app`. Both times the work was moving and he
+couldn't see it.
+
+- Before any UI action that makes an app grind (an iCloud toggle, emptying a
+  big Trash, a library rebuild), say how long it will likely take and why,
+  measured if you can (free space now, rate over 30 seconds).
+- On a long build, say what's left and roughly how long before starting each
+  phase, not after he asks. A security re-review loop counts as a phase.

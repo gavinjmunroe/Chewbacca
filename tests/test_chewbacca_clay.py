@@ -39,7 +39,8 @@ checks = 0
 # hand from the bundle's contracts, not read back from clay.json, so a slot that
 # lands in the wrong path segment fails here (it did once: the campaign id
 # overwrote "campaigns" in clay-sequencer/campaigns/{id}/status).
-V3 = "https://api.clay.com/v3/workspaces/1372623"
+WS = "1000001"
+V3 = f"https://api.clay.com/v3/workspaces/{WS}"
 REC_NEW = [{"f_a": "x", "f_b": 2}]
 REC_UPD = [{"id": "r_1", "cells": {"f_a": "y"}}]
 FILTER = {"type": "GroupOp", "combinationMode": "And", "items": []}
@@ -60,7 +61,7 @@ DERIVED = {
                  ("POST", f"{V3}/tables/t_ex1/records", {"records": [{"cells": REC_NEW[0]}]})),
     "update-rows": (["table=t_ex1", "records=" + json.dumps(REC_UPD)], ("PATCH", f"{V3}/tables/t_ex1/records", {"records": REC_UPD})),
     "delete-rows": (["table=t_ex1", "rows=r_1"], ("DELETE", f"{V3}/tables/t_ex1/records", {"recordIds": ["r_1"]})),
-    "import": (["config=" + json.dumps(CONFIG)], ("POST", f"{V3}/imports", {"config": CONFIG, "workspaceId": "1372623"})),
+    "import": (["config=" + json.dumps(CONFIG)], ("POST", f"{V3}/imports", {"config": CONFIG, "workspaceId": "1000001"})),
     "add-leads": (["audience=seg_ex1", "filter=" + json.dumps(FILTER)],
                   ("CLI", ["clay", "audiences", "update", "seg_ex1", "--filter", json.dumps(FILTER, separators=(",", ":"))], None)),
     "campaign-status": (["campaign=cam_ex1", "status=PAUSED"], ("PATCH", f"{V3}/clay-sequencer/campaigns/cam_ex1/status", {"status": "PAUSED"})),
@@ -94,7 +95,8 @@ def run(fixtures, measured, *args, env_extra=None):
         m.write_text(json.dumps(measured))
         env = dict(os.environ, CHEWBACCA_CLAY_FIXTURES=str(base / "fx"), CHEWBACCA_CLAY_MEASURED=str(m),
                    CHEWBACCA_CLAY_LIB=str(LIB), API_ANYTHING_HOME=str(base / "engine-home"))
-        env.pop("CLAY_WORKSPACE_ID", None)
+        # A synthetic workspace, and never the real GTM client config.
+        env.update(CLAY_WORKSPACE_ID=WS, GTM_CONFIG=str(base / "no-clients.json"))
         # tests/run.sh exports CHEWBACCA_NO_SEND=1 for every check, and it refuses
         # before --allow-writes is read, so the write-gate cases saw the wrong
         # reason under the suite and passed alone. Fixture mode never reaches a
@@ -236,7 +238,7 @@ def test_write_gate():
     code, out, _ = run({}, {}, *args)
     ok(code == 3 and out["class"] == "refused" and "allow-writes" in out["reason"], "a write without --allow-writes")
     ok("confirm" not in out, "the refusal never hands back an approval token (review 2026-10-09: self-approval)")
-    ok(out["payload"]["args"]["ws"] == "1372623", "the refusal shows the payload")
+    ok(out["payload"]["args"]["ws"] == "1000001", "the refusal shows the payload")
     code, out, _ = run({}, {}, *args, "--allow-writes")
     ok(code == 3 and "did not approve" in out["reason"], "--allow-writes with nobody typing is refused")
     code, out, _ = run({}, {}, *args, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "reply"})
@@ -252,7 +254,7 @@ def test_write_gate():
     code, out, _ = run(fail, {}, *reply, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "reply"})
     ok(code == 1 and len(out["tried"]) == 1, "a failed write is sent once and never retried on another surface")
     # Slots go into an authenticated api.clay.com URL: a path or query in a value is refused.
-    for bad in ("table=../../workspaces/9/x", "table=t_1?x=y", "table=t_1/rows", "ws=1372623/../9", "limit=5;rm"):
+    for bad in ("table=../../workspaces/9/x", "table=t_1?x=y", "table=t_1/rows", "ws=1000001/../9", "limit=5;rm"):
         k = bad.split("=")[0]
         op = {"table": "table", "ws": "tables", "limit": "rows"}[k]
         extra = ("table=t_ok1",) if op == "rows" else ()
@@ -281,6 +283,7 @@ def test_a_relabelled_write_is_still_gated():
         env = dict(os.environ, CHEWBACCA_CLAY_LIB=str(lib), API_ANYTHING_HOME=str(Path(d) / "home"),
                    CHEWBACCA_CLAY_MEASURED=str(Path(d) / "m.json"))
         env.pop("CHEWBACCA_CLAY_FIXTURES", None)
+        env.update(CLAY_WORKSPACE_ID=WS, GTM_CONFIG=str(Path(d) / "no-clients.json"))
         (Path(d) / "m.json").write_text("{}")
         p = subprocess.run(["node", str(TOOL), "ops"], capture_output=True, text=True, env=env, timeout=60)
         ops = {o["op"]: o for o in json.loads(p.stdout)["ops"]}
@@ -301,6 +304,7 @@ def test_refuses_an_unpinned_engine():
         env = dict(os.environ, API_ANYTHING_DIST=str(dist), API_ANYTHING_HOME=str(Path(d) / "home"),
                    CHEWBACCA_CLAY_MEASURED=str(Path(d) / "m.json"))
         env.pop("CHEWBACCA_CLAY_FIXTURES", None)
+        env.update(CLAY_WORKSPACE_ID=WS, GTM_CONFIG=str(Path(d) / "no-clients.json"))
         env["CHEWBACCA_CLAY_TRUST_ENGINE"] = "1"  # no longer an escape hatch (review of b68d5645)
         p = subprocess.run(["node", str(TOOL), "credits", "--surface", "api"], capture_output=True, text=True,
                            env=env, timeout=60)
@@ -334,6 +338,7 @@ def test_dry_run_never_loads_the_engine():
         (Path(d) / "m.json").write_text("{}")
         env = dict(os.environ, API_ANYTHING_DIST=str(dist), API_ANYTHING_HOME=str(Path(d) / "home"), CHEWBACCA_CLAY_MEASURED=str(Path(d) / "m.json"))
         env.pop("CHEWBACCA_CLAY_FIXTURES", None)
+        env.update(CLAY_WORKSPACE_ID=WS, GTM_CONFIG=str(Path(d) / "no-clients.json"))
         for name in ("add-column", "delete-rows", "blocklist-add"):
             argv = DERIVED[name][0] if name in DERIVED else ["emailOrDomain=blocked.example"]
             p = subprocess.run(["node", str(TOOL), name, *argv, "--dry-run", "--allow-writes"], capture_output=True, text=True, env=env, timeout=60)
@@ -440,7 +445,7 @@ def test_nothing_changes_between_approval_and_send():
                 o["request"]["url"] = o["request"]["url"].replace("api.clay.com", "evil.example.com")
         mutations = {
             "spec": {"write": {"path": str(lib / "clay.json"), "text": json.dumps(spec)}},
-            "registry": {"write": {"path": str(lib / "registry.json"), "text": (lib / "registry.json").read_text().replace('"1372623"', '"9999999"')}},
+            "registry": {"write": {"path": str(lib / "registry.json"), "text": (lib / "registry.json").read_text().replace('"write:schema"', '"write:schema "')}},
             "env": {"env": {"CLAY_WORKSPACE_ID": "9999999"}},
         }
         base = {"CHEWBACCA_CLAY_LIB": str(lib), "CHEWBACCA_CLAY_TTY_ANSWER": "add-column"}
@@ -480,7 +485,7 @@ def test_approved_request_is_the_sent_request():
 
 def dry_ws_in_url(cases):
     _, out, _ = run({}, {}, "cancel-run", *cases["cancel-run"], "--dry-run")
-    return "/workspaces/1372623/" in out["request"]["url"]
+    return "/workspaces/1000001/" in out["request"]["url"]
 
 
 def test_control_bytes_cannot_fake_the_prompt():
@@ -498,7 +503,7 @@ def test_control_bytes_cannot_fake_the_prompt():
 
 # One valid sample per arg name any registry op takes, for walking every op.
 SAMPLES = {
-    "ws": "1372623", "table": "t_ex1", "row": "r_ex1", "view": "gv_ex1", "audience": "seg_ex1", "campaign": "cam_ex1",
+    "ws": "1000001", "table": "t_ex1", "row": "r_ex1", "view": "gv_ex1", "audience": "seg_ex1", "campaign": "cam_ex1",
     "campaign_id": "1", "lead_id": "2", "cursor": "abc", "after": "r_ex9", "limit": "5", "offset": "0", "days": "7",
     "ids": "p_1,p_2", "emailOrDomain": "blocked.example", "reply_data": '{"email_stats_id":"s1","email_body":"x"}',
     "forward_data": '{"message_id":"m","stats_id":"s","to_emails":"a@example.com"}', "field": "f_ex1",
@@ -631,6 +636,45 @@ def test_values_that_change_when_decoded_are_refused():
             ok(code == 2 and out["class"] == "input", f"a {what}-tampered spec built a request: {out}")
 
 
+def test_workspace_has_no_built_in_default():
+    reg = json.loads((LIB / "registry.json").read_text())
+    ok("defaults" not in reg, "the registry still carries a default workspace")
+    with tempfile.TemporaryDirectory() as d:
+        def cfg(*workspace_lists):
+            f = Path(d) / f"clients-{len(list(Path(d).glob('clients-*')))}.json"
+            f.write_text(json.dumps({"clients": [{"name": f"Client {i}", "workspaces": w} for i, w in enumerate(workspace_lists)]}))
+            return str(f)
+        unset = {"CLAY_WORKSPACE_ID": ""}
+        # Nothing set and no config: refuse, naming the ways to choose.
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={**unset, "GTM_CONFIG": str(Path(d) / "missing.json")})
+        ok(code == 2 and "ws=<id>" in out["reason"] and "CLAY_WORKSPACE_ID" in out["reason"], f"no workspace was not refused: {out}")
+        # One workspace across all clients: used.
+        one = cfg(["2000002"], ["2000002"])
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={**unset, "GTM_CONFIG": one})
+        ok(code == 0 and "/workspaces/2000002/" in out["request"]["url"], "the one configured workspace was not used")
+        # Two: refuse and name the clients, never pick one.
+        two = cfg(["2000002"], ["3000003"])
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={**unset, "GTM_CONFIG": two})
+        ok(code == 2 and "names 2" in out["reason"] and "Client 0" in out["reason"], f"two workspaces did not refuse: {out}")
+        # The env var beats the config; ws= beats both.
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={"CLAY_WORKSPACE_ID": "4000004", "GTM_CONFIG": one})
+        ok("/workspaces/4000004/" in out["request"]["url"], "CLAY_WORKSPACE_ID did not win over the config")
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "ws=5000005", "--dry-run", env_extra={"CLAY_WORKSPACE_ID": "4000004"})
+        ok("/workspaces/5000005/" in out["request"]["url"], "ws= did not win")
+        # A workspace from the env or the config is shape-checked like ws=.
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={"CLAY_WORKSPACE_ID": "1/../2"})
+        ok(code == 2 and out["class"] == "input", "a crafted CLAY_WORKSPACE_ID reached the URL")
+        bad = cfg(["9/../1"])
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={**unset, "GTM_CONFIG": bad})
+        ok(code == 2 and out["class"] == "input", "a crafted workspace in the config reached the URL")
+        # The config a write's workspace came from is pinned: editing it after approval refuses.
+        hook = {"write": {"path": one, "text": json.dumps({"clients": [{"name": "x", "workspaces": ["6000006"]}]})}}
+        code, out, _ = run({"api-anything/cancelRuns.json": SENT}, {}, "cancel-run", "table=t_ex1", "--allow-writes",
+                           env_extra={**unset, "GTM_CONFIG": one, "CHEWBACCA_CLAY_TTY_ANSWER": "cancel-run",
+                                      "CHEWBACCA_CLAY_TEST_AFTER_APPROVE": json.dumps(hook)})
+        ok(code == 3 and "changed after approval" in out["reason"], "a clients.json edit after approval was not refused")
+
+
 def test_ui_only_prints_route():
     code, out, _ = run({}, {}, "start-campaign", "campaign=cam_example1")
     ok(code == 0 and out["surface"] == "ui" and out["done"] is False, "a UI-only job is not claimed done")
@@ -680,7 +724,7 @@ def main():
                test_new_args_are_shape_checked, test_first_live_use_reads_back,
                test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,
                test_every_mutating_surface_is_gated, test_nothing_changes_between_approval_and_send,
-               test_values_that_change_when_decoded_are_refused,
+               test_values_that_change_when_decoded_are_refused, test_workspace_has_no_built_in_default,
                test_ui_only_prints_route, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")

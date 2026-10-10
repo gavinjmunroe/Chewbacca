@@ -15,9 +15,6 @@
     "dist_sha256": "a595b981ce1de4663f4ebc2eb1c9fe5ba64f5b96206e5776fab6e5331ebf21ca",
     "dist_sha256_of": "dist/*.js in name order, concatenated; built with npm ci --ignore-scripts && npm run build at sha"
   },
-  "defaults": {
-    "ws": "1372623"
-  },
   "ops": [
     {
       "name": "workspaces",

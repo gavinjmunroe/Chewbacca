@@ -98,10 +98,43 @@ function parseArgv(argv) {
 const opByName = new Map(registry.ops.map((o) => [o.name, o]));
 const uiByName = new Map((registry.ui_only || []).map((o) => [o.name, o]));
 
+// Which Clay workspace an op runs against. There is no built-in default: the
+// registry used to name one client's workspace, so any op run without ws=
+// acted on that client (2026-10-09). Order: ws= on the command line, then
+// $CLAY_WORKSPACE_ID, then the GTM client config when it names exactly one
+// workspace across all clients. Anything else refuses. Fixture mode reads only
+// an explicit $GTM_CONFIG, never the real one.
+const WS_FILES = [];
+function gtmConfigPath() {
+  if (process.env.GTM_CONFIG) return process.env.GTM_CONFIG;
+  return FIXTURES ? null : path.join(os.homedir(), ".chewbacca", "gtm", "clients.json");
+}
+
+function resolveWorkspace() {
+  if (process.env.CLAY_WORKSPACE_ID) return { ws: process.env.CLAY_WORKSPACE_ID, from: "CLAY_WORKSPACE_ID" };
+  const file = gtmConfigPath();
+  const cfg = file ? parseOr(readText(file), null) : null;
+  const clients = Array.isArray(cfg?.clients) ? cfg.clients : [];
+  const byWs = new Map();
+  for (const c of clients) for (const w of Array.isArray(c?.workspaces) ? c.workspaces : []) {
+    if (!byWs.has(String(w))) byWs.set(String(w), String(c?.name ?? "unnamed"));
+  }
+  if (byWs.size === 1) {
+    WS_FILES.push(file);
+    return { ws: [...byWs.keys()][0], from: file };
+  }
+  const found = byWs.size ? `; ${file} names ${byWs.size} (${[...byWs.values()].join(", ")})` : file ? `; ${file} names none` : "";
+  return { error: `no Clay workspace chosen: pass ws=<id> or set CLAY_WORKSPACE_ID${found}. chewbacca clay workspaces lists them` };
+}
+
 function withDefaults(op, kv) {
   const args = { ...kv };
   const wantsWs = op.args.some((a) => a.replace("?", "") === "ws");
-  if (wantsWs && args.ws === undefined) args.ws = process.env.CLAY_WORKSPACE_ID || registry.defaults.ws;
+  if (wantsWs && args.ws === undefined) {
+    const r = resolveWorkspace();
+    if (r.error) out({ ok: false, op: op.name, class: "input", reason: r.error }, EXIT.usage);
+    args.ws = r.ws;
+  }
   return args;
 }
 
@@ -219,7 +252,7 @@ function logSent(entry) {
 // body differs from it, so a redirect can't replay the body elsewhere.
 
 const sha256 = (s) => crypto.createHash("sha256").update(s).digest("hex");
-const ENV_PINNED = ["CLAY_WORKSPACE_ID", "CHEWBACCA_NO_SEND", "API_ANYTHING_HOME", "API_ANYTHING_DIST", "PATH", "CHEWBACCA_CLAY_LIB", "CHEWBACCA_ROOT"];
+const ENV_PINNED = ["CLAY_WORKSPACE_ID", "GTM_CONFIG", "CHEWBACCA_NO_SEND", "API_ANYTHING_HOME", "API_ANYTHING_DIST", "PATH", "CHEWBACCA_CLAY_LIB", "CHEWBACCA_ROOT"];
 
 // Everything a write depends on, hashed: the registry and spec as read at
 // startup and as on disk, the pinned env, and the files prepareWrite resolved
@@ -230,7 +263,7 @@ function fingerprint(prep) {
     `registry:${sha256(REGISTRY_TEXT ?? "")}:${sha256(readText(path.join(LIB, "registry.json")) ?? "")}`,
     `spec:${sha256(SPEC_TEXT ?? "")}:${sha256(readText(path.join(LIB, "clay.json")) ?? "")}`,
     ...ENV_PINNED.map((k) => `env:${k}=${process.env[k] ?? ""}`),
-    ...(prep.files || []).map((f) => `file:${f}:${sha256(fs.existsSync(f) ? fs.readFileSync(f) : "")}`),
+    ...[...(prep.files || []), ...WS_FILES].map((f) => `file:${f}:${sha256(fs.existsSync(f) ? fs.readFileSync(f) : "")}`),
     ...(prep.dist ? [`dist:${distHash(prep.dist)}`] : []),
   ];
   return sha256(parts.join("\n"));
@@ -796,7 +829,7 @@ async function readback(op, args) {
   const ro = opByName.get(rb.op);
   const rargs = {};
   for (const [rk, wk] of Object.entries(rb.args || {})) if (args[wk] !== undefined) rargs[rk] = args[wk];
-  if (ro?.args.some((a) => a.replace("?", "") === "ws")) rargs.ws = args.ws ?? registry.defaults.ws;
+  if (ro?.args.some((a) => a.replace("?", "") === "ws")) rargs.ws = args.ws;
   const cmd = `chewbacca clay ${rb.op} ${Object.entries(rargs).map(([k, v]) => `${k}=${v}`).join(" ")}`.trim();
   // A readback only ever reads: a read op that turns out to write is never run here.
   if (!ro || isWrite(ro) || rb.expect === "manual") return { op: rb.op, check: "manual", ok: null, run: cmd, why: "read it and confirm the change by eye; then set verified:true in registry.json" };
@@ -1035,7 +1068,8 @@ const HELP = `chewbacca clay: Clay without opening Clay
   --allow-writes                         a write; a person must type the op name at a terminal
   --dry-run                              print the exact request (method, URL, body; no cookie) and send nothing
 
-ws defaults to $CLAY_WORKSPACE_ID or ${registry.defaults.ws}. Output is one line of JSON.`;
+ws is ws=<id>, else $CLAY_WORKSPACE_ID, else the one workspace in
+~/.chewbacca/gtm/clients.json; with none or several it refuses. Output is one line of JSON.`;
 
 (async () => {
   const { pos, kv, flags } = parseArgv(process.argv.slice(2));

@@ -1162,6 +1162,7 @@ if group "hooks"; then
   check "voice-check, drafts and voice-guard refuse a text that is not his" bash "$ROOT/tests/voice_check.sh"
   check "prayer-guard checks every visible block this turn" bash "$ROOT/tests/prayer_guard.sh"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
+  check "hook modules import on the stock macOS Python" bash "$ROOT/tests/stock_python_imports.sh"
   # A hook that outlives its watchdog ends with exit 0, never SIGKILL's 137.
   wd="$(mktemp -d)"
   printf '%s\n' "source '$ROOT/.claude/hooks/lib.sh'" 'hook_init watchdog-probe 1' 'sleep 30' > "$wd/probe.sh"

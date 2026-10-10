@@ -140,8 +140,11 @@ cases = [
 FULL_NO_LINES = {"time": now, "full": False, "full_but_lines": True}
 HOME_PAGE = "https://app.clay.com/workspaces/1/home"
 cases = [(*c, None) for c in cases] + [
-    ("chat ok: a plain click on a Clay table page", "mcp__chrome-devtools__click", {"uid": "2"},
-     None, None, HOME_PAGE, 0, ("s-caleb", 60)),
+    # The recorded URL lags in-app navigation, so a "home page" click may land on Start.
+    ("chat ok alone never opens a Clay click, URL lagging", "mcp__chrome-devtools__click", {"uid": "2"},
+     None, None, HOME_PAGE, 2, ("s-caleb", 60)),
+    ("chat ok + gate pass opens a Clay click", "mcp__chrome-devtools__click", {"uid": "2"},
+     FULL_NO_LINES, SAME, HOME_PAGE, 0, ("s-caleb", 60)),
     ("chat ok: a campaign-page click still needs a gate receipt", "mcp__chrome-devtools__click", {"uid": "1_5"},
      None, None, CLAY, 2, ("s-caleb", 60)),
     ("chat ok + full receipt, lines off: Start goes through", "mcp__chrome-devtools__click", {"uid": "1_5"},
@@ -150,10 +153,10 @@ cases = [(*c, None) for c in cases] + [
      FULL_NO_LINES, EDITED, CLAY, 2, ("s-caleb", 60)),
     ("chat ok + partial receipt", "Bash", {"command": L},
      {"time": now, "full": False}, SAME, None, 2, ("s-caleb", 60)),
-    ("chat ok from another tab's session", "mcp__chrome-devtools__click", {"uid": "2"},
-     None, None, HOME_PAGE, 2, ("s-other", 60)),
-    ("chat ok older than 2 hours", "mcp__chrome-devtools__click", {"uid": "2"},
-     None, None, HOME_PAGE, 2, ("s-caleb", 3 * 3600)),
+    ("chat ok from another tab's session, gate passed", "mcp__chrome-devtools__click", {"uid": "2"},
+     FULL_NO_LINES, SAME, HOME_PAGE, 2, ("s-other", 60)),
+    ("chat ok older than 2 hours, gate passed", "mcp__chrome-devtools__click", {"uid": "2"},
+     FULL_NO_LINES, SAME, HOME_PAGE, 2, ("s-caleb", 3 * 3600)),
     ("writing the chat approval with the Write tool", "Write",
      {"file_path": "/Users/x/.chewbacca/state/clay-chat-approval.json", "content": "{}"},
      None, None, None, 2, None),

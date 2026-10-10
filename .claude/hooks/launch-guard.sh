@@ -364,7 +364,7 @@ chewbacca gtm/gtme/gtme-grade, clay CLI reads, git (not config), local read tool
 counts.py/checksums.py, code-slop, slop-check, and test runners (python3 tests/x.py,
 bash tests/run.sh [group], pytest tests/...; prefix CHEWBACCA_NO_SEND=1 so nothing
 sends). Writes go through chewbacca clay, which needs Caleb's ok (a terminal, or
-him saying "do it yourself" in chat within 12 hours); a
+him saying "do it yourself" in chat within 2 hours); a
 campaign START or add-leads also needs a passing gtme-grade and a full pre-send
 gate receipt, checked in code before it sends.
 MSG
@@ -391,12 +391,12 @@ MSG
         last="$(cat "$lasturl" 2>/dev/null || true)"
         # The last URL lags in-app navigation, so any click on Clay is treated as
         # launch-shaped when its words say so, and as a plain click otherwise.
-        # A click by element id carries no words, so anything on a campaign page
-        # is launch-shaped too: the Start button is one uid away.
-        mode=click
-        printf '%s' "$lower" | grep -qE "$WORDS" && mode=launch
-        printf '%s' "$last" | grep -qiE 'clay\.com.*/campaigns' && mode=launch
-        if { printf '%s' "$last" | grep -qiE 'clay\.com' || [ "$mode" = launch ]; } && ! chat_ok "$mode"; then
+        # Every click on Clay is launch-shaped: a click by element id carries no
+        # words, and the recorded URL lags in-app navigation, so a "table page"
+        # can already be a campaign page with Start one uid away (security
+        # review of cccc94ea). A chat ok opens Clay clicks only beside a fresh,
+        # unchanged pre-send gate pass.
+        if { printf '%s' "$last" | grep -qiE 'clay\.com' || printf '%s' "$lower" | grep -qE "$WORDS"; } && ! chat_ok launch; then
           refuse "a browser click on a Clay page can't be tied to one action on one campaign; a person presses Start in the Clay UI."
         fi
         ;;

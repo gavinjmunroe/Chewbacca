@@ -84,25 +84,25 @@ cheaper one:
   takes a plain basename, and a path, `..`, a symlink or an existing file is
   refused.
 - `model-route check FILE` refuses a plan whose acceptance lines are prose,
-  placeholders, or anything but one plain argv: no `;`, `&&`, pipes,
-  redirects, substitutions or env prefixes, argv[0] from a fixed list (python3,
-  bash, node, pytest, tsc, npm test, cargo test/check/clippy, go test/vet,
-  git diff/status/grep/log/show, grep, diff, test, true) or an executable
-  inside the repo, interpreters only on a repo script, and no `env`, `xargs`,
-  `find`, `npx`, `make`, `npm run` or `cargo build`. Options that load, run or
-  write elsewhere are refused by name before any `=`: `-exec`, `-toolexec`,
-  `-vettool`, `--pre`, `--textconv`, `--rootdir`, `--basetemp`, `--out*`,
-  `--config*`, `--hook*`, and `-c`, `-C`, `-o`, `-p`, `-O`, `-r` with or
-  without a value. Paths are resolved with realpath, planned ones too, so a
-  symlinked directory cannot carry a check outside the repo. A plan is
+  placeholders, shell syntax, or anything that does not fit one of these
+  templates exactly: `pytest [-q|-x]... <path>...`,
+  `python3 -m pytest [-q|-x]... <path>...`, `python3 <path>`, `bash <path>`,
+  `sh <path>`, `node <path>`, `test -f|-d|-e <path>`,
+  `grep -q|-qF|-qE <word> <path>`, `git diff --quiet|--exit-code [<path>...]`,
+  `git status --porcelain`, `true`, `false`. No other flag is accepted, a word
+  is `[A-Za-z0-9_.-]` and never starts with `-`, and every path is resolved
+  with realpath, planned ones too, so a symlinked directory cannot carry a
+  check outside the repo. A denylist of options lost three review rounds in a
+  row, so there is none. A check that needs npm, cargo, go, tsc or a direct
+  `./script` goes in a repo script and runs as `bash <path>`. A plan is
   model-written, so treat a planted one as hostile. `handoff` refuses the same
   plans and writes nothing, and never runs a check.
 - `model-route accept HANDOFF.md --yes` prints every argv, then runs them with
   no shell from the repo root, re-validating each one with the same function
   immediately before it runs, and exits 1 if any fails. Without `--yes` it
   prints the argv list and runs nothing. **Use it only in a repo you trust**:
-  a test is repo code, so pytest's conftest, an npm test script or a script
-  the plan names all execute as written. The build session is done when this
+  a test is repo code, so pytest's conftest or a script the plan names
+  executes as written. The build session is done when this
   passes, never when it says so itself. The browser bridge can call `check`
   and `handoff` but never `accept`, `--out` or `--save`.
 

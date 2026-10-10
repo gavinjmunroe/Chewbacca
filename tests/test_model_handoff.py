@@ -33,6 +33,46 @@ GOOD = """# Add a dry-run flag to ship
 """
 
 
+# Every bypass the reviews found or the fuzz reproduced against the old
+# option denylist: option=value forms, wrappers, flags that load or write
+# elsewhere, reads outside the repo, and programs that left the allowlist.
+HOSTILE = [
+    # round 1: shell syntax and wrappers
+    "true; touch PWNED", "true && touch PWNED", "true | sh", "true > PWNED",
+    "bash -c id", "sh -c id", "python3 -c id", "node -e 1", "env touch PWNED",
+    "xargs touch", "find . -exec touch PWNED", "/bin/sh x.sh", "./tests/mark.sh",
+    "tests/mark.sh", "PATH=/tmp true", "make SHELL=/tmp/x", "npx evil",
+    # round 2: option=value forms and programs that run other programs
+    "go test -exec=sh ./...", "go test -exec sh", "go test -toolexec=sh ./...",
+    "go vet -vettool=/tmp/x ./...", "grep --pre=sh x tests", "grep --pre-glob=x x",
+    "git diff --textconv", "git log --output=/tmp/x", "git diff -c core.pager=sh",
+    "pytest -o addopts=-pevil", "pytest --rootdir=/tmp", "pytest -c /tmp/evil.ini",
+    "pytest --config-file=/tmp/x", "pytest -pevil", "pytest --basetemp=/",
+    "git status --hook=x", "tsc --outDir=/tmp", "go test -o=/tmp/x", "npm run evil",
+    "cargo build", "git -C /tmp status", "cargo test --manifest-path=/tmp/C.toml",
+    "git grep -Otouch x", "python3 -m evilmod",
+    # round 3: the fuzz of the denylist validator, all let through before
+    "git diff --no-index /etc/passwd tests/t.py", "grep -f /etc/passwd tests/t.py",
+    "grep -R x /etc", "grep -q x /etc/passwd", "pytest --pyargs evilpkg",
+    "pytest -W error::evil.Mod tests/t.py", "pytest --cov=/ tests/t.py",
+    "pytest --deselect=x --ignore=/ tests/t.py", "go test -args -x",
+    "go test -memprofile=/tmp/x", "go test -trace=/tmp/x", "go test -ldflags=-X",
+    "go test -gccgoflags=-wrapper=x", "cargo test -Zunstable-options",
+    "cargo clippy --fix --allow-dirty", "npm test --prefix /tmp",
+    "npm test --script-shell=sh", "npm test --userconfig=/tmp/x",
+    "npm test --node-options=--require=x", "git show HEAD:secret", "git grep -I x",
+    "git diff --relative=/tmp", "git status --ignored", "git log --format=x",
+    "diff /etc/passwd tests/t.py", "grep --exclude-from=/etc/passwd x tests/t.py",
+    "grep -d recurse x /", "tsc --plugins x", "npm test", "go test ./...",
+    # shapes the templates themselves must hold
+    "grep -q -e tests/t.py", "grep -q --x tests/t.py", "grep -qi x tests/t.py",
+    "test -x tests/t.py", "test -f /etc/passwd", "test -f ../x", "python3 tests/t.py extra",
+    "python3 -u tests/t.py", "bash -x tests/mark.sh", "pytest --x tests/t.py",
+    "pytest -q", "python3 -m pytest -s tests/t.py", "git diff --quiet --stat",
+    "git status --porcelain=v2", "git diff --quiet /etc", "true extra",
+]
+
+
 def stub(choice, p):
     return lambda state, questions: {"task": {"choice": choice, "probabilities": {choice: p}}}
 
@@ -64,7 +104,7 @@ def main():
               any("nowhere.py does not exist" in p for p in model_handoff.check(missing, root)))
         offpath = model_handoff.parse(GOOD.replace("`true`", "`zzz-not-a-tool-xyz --run`"))
         check("a program off the allowlist is refused",
-              any("not an allowed check program" in p for p in model_handoff.check(offpath, root)))
+              any("not an allowed check template" in p for p in model_handoff.check(offpath, root)))
         empty = model_handoff.parse("# x\n## Goal\nsomething\n")
         check("missing files, steps and acceptance are each named",
               len(model_handoff.check(empty, root)) == 3)
@@ -204,35 +244,40 @@ def main():
         check("accept refuses a planted shell check and runs nothing",
               cli("accept", "trap.md", "--yes").returncode == 1 and not (root / "PWNED").exists())
         # (D) accept without --yes prints the exact argv and runs nothing.
-        (root / "touchy.md").write_text(GOOD.replace("`true`", "`tests/mark.sh`")
+        (root / "touchy.md").write_text(GOOD.replace("`true`", "`bash tests/mark.sh`")
                                         .replace("- bin/ship", "- bin/ship\n- tests/mark.sh"))
         (root / "tests" / "mark.sh").write_text("#!/bin/sh\n: > RAN\n")
         os.chmod(root / "tests" / "mark.sh", 0o755)
         dry = cli("accept", "touchy.md")
         check("accept without --yes prints each argv and runs nothing",
-              dry.returncode == 3 and '["tests/mark.sh"]' in dry.stdout and not (root / "RAN").exists())
+              dry.returncode == 3 and '["bash", "tests/mark.sh"]' in dry.stdout and not (root / "RAN").exists())
         check("accept --yes runs it", cli("accept", "touchy.md", "--yes").returncode == 1
               and (root / "RAN").exists())
 
-        # (A) option values: matched on the name before "=", for every program.
-        option_attacks = [
-            "go test -exec=sh ./...", "go test -exec sh", "go test -toolexec=sh ./...",
-            "go vet -vettool=/tmp/x ./...", "grep --pre=sh x tests", "grep --pre-glob=* x",
-            "git diff --textconv", "git log --output=/tmp/x", "git diff -c core.pager=sh",
-            "pytest -o addopts=-pevil", "pytest --rootdir=/tmp", "pytest -c /tmp/evil.ini",
-            "pytest --config-file=/tmp/x", "pytest -pevil", "pytest --basetemp=/",
-            "git status --hook=x", "tsc --outDir=/tmp", "go test -o=/tmp/x",
-            "npm run evil", "cargo build", "git -C /tmp status", "cargo test --manifest-path=/tmp/C.toml",
-        ]
-        slipped = [c for c in option_attacks if model_handoff.argv_for(c, root, set())[0] is not None]
-        check("option-value and wrapper bypasses are refused", slipped == [])
+        # Every bypass from three review rounds and the fuzz of the old
+        # denylist validator. Each must be refused, one assertion per case.
+        # The files they name exist, so a refusal is about the shape.
+        (root / "tests" / "unit").mkdir()
+        (root / "tests" / "t.py").write_text("")
+        slipped = [c for c in HOSTILE if model_handoff.argv_for(c, root, set())[0] is not None]
+        check(f"all {len(HOSTILE)} known bypasses are refused", slipped == [])
         if slipped:
             print("        let through:", slipped)
-        check("plain test flags still pass",
-              model_handoff.argv_for("git diff --exit-code --stat", root, set())[0] is not None
-              and model_handoff.argv_for("grep -q -i -n x plan.md", root, set())[0] is not None
-              and (not shutil.which("go") or model_handoff.argv_for("go test ./...", root, set())[0] is not None)
-              and (not shutil.which("pytest") or model_handoff.argv_for("pytest -q -x", root, set())[0] is not None))
+        fits = [
+            "true", "false", "python3 tests/t.py", "bash tests/mark.sh", "sh tests/mark.sh",
+            "test -f tests/t.py", "test -d tests/unit", "grep -q ship tests/t.py",
+            "grep -qF a.b tests/t.py", "git status --porcelain", "git diff --quiet",
+            "git diff --exit-code tests/t.py",
+        ]
+        if shutil.which("pytest"):
+            fits += ["pytest tests/t.py", "pytest -q -x tests/t.py tests/unit"]
+        fits += ["python3 -m pytest -q tests/t.py"]
+        if shutil.which("node"):
+            fits.append("node tests/t.py")
+        refused_fits = [c for c in fits if model_handoff.argv_for(c, root, set())[0] is None]
+        check("every template still accepts its own shape", refused_fits == [])
+        if refused_fits:
+            print("        refused:", refused_fits)
 
         # (B) a planned file under a symlinked directory resolves outside the repo.
         os.symlink(outside, root / "sub")

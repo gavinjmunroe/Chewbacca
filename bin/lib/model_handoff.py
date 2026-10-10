@@ -15,10 +15,11 @@ trusted with. So `check` refuses any acceptance line that is not a command,
 and `handoff` refuses to write a page `check` would refuse.
 
 A plan is model-written, so a planted one can carry anything. Acceptance
-checks are argv, never shell: no pipes, redirects, `;`, `&&`, substitutions or
-env prefixes; argv[0] matches a fixed list exactly or is an executable inside
-the repo; no interpreter -c, no wrapper that runs another program, and no
-option that loads or writes elsewhere. Nothing runs at handoff time. `accept`
+checks are argv, never shell, and each must fit one of TEMPLATES exactly: the
+only flags are the ones a template names, and every other argument is a repo
+path checked with realpath or a plain word. Anything else, npm, cargo, go or
+a direct ./script included, goes in a repo script run by `bash <path>`.
+Nothing runs at handoff time. `accept`
 prints each argv and runs them without a shell only with --yes, because a
 test is repo code: use it only in a repo you trust. Pages are
 written only as new files inside ~/.chewbacca/handoffs: --save names the file
@@ -66,52 +67,31 @@ DEFAULT_TIER = "sonnet"
 PLACEHOLDER = re.compile(r"<[^>\s]+>|\bTODO\b|\bTBD\b|(?<!/)\.\.\.|\bFIXME\b")
 # Any of these means a shell would have to read the line. A check is an argv.
 SHELL_META = re.compile(r"[;|&`$<>()\n\r\\*?{}~!#]")
-# argv[0] must match one of these exactly. The value says what may follow:
-# None is free arguments, a set is the allowed first argument, "script" means
-# the first argument is a file inside the repo. Wrappers that run another
-# program (env, xargs, find, sudo, npx, timeout) are deliberately absent, and
-# so is make, whose VAR=value arguments can replace the shell it runs.
-ALLOWED = {
-    "true": None, "false": None, "test": None, "grep": None, "diff": None,
-    "pytest": None, "tsc": None,
-    "python3": "script", "python": "script", "bash": "script", "sh": "script",
-    "zsh": "script", "node": "script",
-    # npm run (any package.json script) and cargo build (build.rs only, no
-    # tests) are left out. npm test and cargo test still run repo code, which
-    # is what a test is: see accept().
-    "npm": {"test"},
-    "cargo": {"test", "check", "clippy"},
-    "go": {"test", "vet"},
-    "git": {"diff", "status", "grep", "log", "show"},
-}
-# Options that make an allowed program run, load or write something else.
-# Matched on the option name before any "=", so -exec=sh and --pre=x are
-# caught. A short option in OPT_SHORT is refused with an attached value too
-# (-ofile, -cfoo, -Cdir). Interpreters never reach these: their first
-# argument must be a repo script.
-OPT_EXACT = {
-    "-exec", "-execdir", "-ok", "-toolexec", "-vettool", "--ext-diff", "--textconv",
-    "--pre", "--pre-glob", "--rootdir", "--basetemp", "--confcutdir", "--override-ini",
-    "-modfile", "-overlay", "-pkgdir",
-}
-OPT_PREFIX = (
-    "--exec", "--eval", "--out", "--config", "--hook", "--upload-pack", "--rcfile",
-    "--init-file", "--command", "--require", "--import", "--loader",
-    "--open-files-in-pager", "--junit", "--log-file", "--plugin", "--manifest-path",
-    "--target-dir", "--project", "--outDir", "--outFile",
+# A check must match one of these templates exactly. Every program has more
+# options than any denylist can name, so nothing is free: the only flags are
+# the ones written here, and every other argument is a validated repo path or
+# a plain word. Tokens: "PATH" one path, "PATH*" zero or more, "PATH+" one or
+# more, "WORD" a plain word, "FLAGS(a|b)" zero or more of those flags, and
+# "a|b" exactly one of them. Anything else (npm, cargo, go, tsc, make, diff,
+# git log, a direct ./script) belongs in a repo script run by `bash <path>`.
+TEMPLATES = (
+    ("true",),
+    ("false",),
+    ("pytest", "FLAGS(-q|-x)", "PATH+"),
+    ("python3", "-m", "pytest", "FLAGS(-q|-x)", "PATH+"),
+    ("python3", "PATH"),
+    ("bash", "PATH"),
+    ("sh", "PATH"),
+    ("node", "PATH"),
+    ("test", "-f|-d|-e", "PATH"),
+    ("grep", "-q|-qF|-qE", "WORD", "PATH"),
+    ("git", "diff", "--quiet|--exit-code", "PATH*"),
+    ("git", "status", "--porcelain"),
 )
-OPT_SHORT = ("-c", "-C", "-o", "-p", "-O", "-r")
-
-
-def _forbidden_option(arg: str) -> bool:
-    if not arg.startswith("-") or arg in ("-", "--"):
-        return False
-    name = arg.split("=", 1)[0]
-    if name in OPT_EXACT or name.startswith(OPT_PREFIX):
-        return True
-    return not arg.startswith("--") and arg[:2] in OPT_SHORT
-# python -m is allowed only for these test runners.
-PYTHON_MODULES = {"pytest", "unittest", "py_compile"}
+WORD = re.compile(r"^[A-Za-z0-9_.][A-Za-z0-9_.-]{0,63}$")
+PATH_CHARS = re.compile(r"^[A-Za-z0-9_.][A-Za-z0-9_./-]{0,199}$")
+# Templates whose paths name a script that runs, so they must be files.
+RUNS_FILE = {"python3", "bash", "sh", "node"}
 # A per-command bound for `accept`, so a hung check fails instead of wedging
 # the build session. Guessed, never measured.
 ACCEPT_TIMEOUT_S = 600
@@ -170,25 +150,57 @@ def _command(body: str, fenced: bool) -> str:
     return ticks[0].strip() if ticks else "PROSE: " + body
 
 
-def _repo_path(arg: str, root: Path, planned: set) -> str | None:
-    """None when arg names a file inside root, or one the plan will create."""
-    if not arg or os.path.isabs(arg) or ".." in Path(arg).parts or arg.startswith("-"):
-        return f"{arg or 'the script'} is not a relative path inside the repo"
+def _repo_path(arg: str, root: Path, planned: set, need_file: bool = True) -> str | None:
+    """None when arg names a path inside root, or a file the plan will create."""
+    if (not PATH_CHARS.match(arg or "") or os.path.isabs(arg) or ".." in Path(arg).parts):
+        return f"{arg or 'the path'} is not a relative path inside the repo"
     target = root / arg
     # Resolve first, for planned files too: realpath follows every symlinked
     # directory on the way, so a planned sub/x.py under a sub -> /tmp link is
     # caught before it exists.
-    if Path(os.path.realpath(root)) not in Path(os.path.realpath(target)).parents:
+    real_root = Path(os.path.realpath(root))
+    real = Path(os.path.realpath(target))
+    if real != real_root and real_root not in real.parents:
         return f"{arg} resolves outside the repo"
     if not target.exists() and not target.is_symlink():
         return None if arg in planned else f"{arg} does not exist and is not in Files"
-    if not target.is_file():
+    if need_file and not target.is_file():
         return f"{arg} is not a file"
     return None
 
 
+def _match(template: tuple, args: list, root: Path, planned: set) -> str | None:
+    """None when args fit the template; otherwise why the closest fit failed."""
+    i = 0
+    need_file = template[0] in RUNS_FILE
+    for slot in template:
+        if slot.startswith("FLAGS("):
+            allowed = slot[6:-1].split("|")
+            while i < len(args) and args[i] in allowed:
+                i += 1
+        elif slot in ("PATH", "PATH+", "PATH*"):
+            count = 0
+            while i < len(args) and (slot != "PATH" or count == 0):
+                why = _repo_path(args[i], root, planned, need_file)
+                if why:
+                    return why
+                i, count = i + 1, count + 1
+            if count == 0 and slot != "PATH*":
+                return "a path is missing"
+        elif slot == "WORD":
+            if i >= len(args) or not WORD.match(args[i]):
+                return "the pattern must be a plain word"
+            i += 1
+        else:
+            if i >= len(args) or args[i] not in slot.split("|"):
+                return "not an allowed check template"
+            i += 1
+    return None if i == len(args) else "not an allowed check template"
+
+
 def argv_for(command: str, root: Path, planned: set) -> tuple:
-    """(argv, None) when the check is allowed, else (None, why)."""
+    """(argv, None) when the check fits a template, else (None, why). The
+    checker and the runner both call this, so they cannot disagree."""
     if command.startswith("PROSE: "):
         return None, "prose, not a command: " + command[7:]
     if PLACEHOLDER.search(command):
@@ -201,35 +213,21 @@ def argv_for(command: str, root: Path, planned: set) -> tuple:
         return None, f"does not parse as a command ({exc}): {command}"
     if not argv:
         return None, "empty command"
-    head, rest = argv[0], argv[1:]
-    if "=" in head:
-        return None, "environment prefixes are not allowed: " + command
-    bad = next((a for a in rest if _forbidden_option(a)), None)
-    if bad:
-        return None, f"{bad} lets {head} run something else: {command}"
-    if "/" in head:
-        why = _repo_path(head, root, planned)
-        if why:
-            return None, why + ": " + command
-        if (root / head).exists() and not os.access(root / head, os.X_OK):
-            return None, f"{head} is not executable: {command}"
-        return argv, None
-    if head not in ALLOWED:
-        return None, f"{head} is not an allowed check program: {command}"
-    if shutil.which(head) is None and head not in ("true", "false", "test"):
-        return None, f"{head} is not on PATH: {command}"
-    rule = ALLOWED[head]
-    if isinstance(rule, set) and (not rest or rest[0] not in rule):
-        return None, f"{head} allows only {', '.join(sorted(rule))}: {command}"
-    if rule == "script":
-        if head.startswith("python") and rest[:1] == ["-m"]:
-            if rest[1:2] and rest[1] in PYTHON_MODULES:
-                return argv, None
-            return None, f"python -m allows only {', '.join(sorted(PYTHON_MODULES))}: {command}"
-        why = _repo_path(rest[0] if rest else "", root, planned)
-        if why:
-            return None, why + ": " + command
-    return argv, None
+    reasons = []
+    for template in TEMPLATES:
+        if template[0] != argv[0]:
+            continue
+        why = _match(template, argv, root, planned)
+        if why is None:
+            if argv[0] not in ("true", "false", "test") and shutil.which(argv[0]) is None:
+                return None, f"{argv[0]} is not on PATH: {command}"
+            return argv, None
+        reasons.append(why)
+    if not reasons:
+        return None, "not an allowed check template: " + command
+    # Prefer a specific path reason over the generic shape one.
+    specific = [r for r in reasons if r != "not an allowed check template"]
+    return None, (specific or reasons)[0] + ": " + command
 
 
 def check(plan: dict, root: Path) -> list:
@@ -314,8 +312,6 @@ def accept(plan: dict, root: Path, yes: bool = False) -> int:
             print(f"  FAIL  refused: {why}")
             failed += 1
             continue
-        if "/" in argv[0]:
-            argv[0] = str(root / argv[0])
         try:
             code = subprocess.run(argv, cwd=root, timeout=ACCEPT_TIMEOUT_S).returncode
         except FileNotFoundError:

@@ -99,5 +99,17 @@ settle "$ids" running
 check "and still yields when its 15 minutes were used before the pause" "$(status "$ids")" running
 "$J" kill "$ids" >/dev/null; "$J" kill "$idl" >/dev/null
 
+# One tab's pile of builds doesn't own the lane: another tab's build goes next.
+da=$(mktemp -d); db=$(mktemp -d)
+a1=$(cd "$da" && "$J" submit --build -- sleep 2 | cut -d' ' -f1)
+a2=$(cd "$da" && "$J" submit --build -- sleep 2 | cut -d' ' -f1)
+a3=$(cd "$da" && "$J" submit --build -- sleep 2 | cut -d' ' -f1)
+b1=$(cd "$db" && "$J" submit --build -- sleep 2 | cut -d' ' -f1)
+settle "$a1" done
+"$J" tick >/dev/null
+check "the other tab's build runs before the first tab's second" "$(status "$b1")-$(status "$a2")" "running-queued"
+for x in $a1 $a2 $a3 $b1; do "$J" kill "$x" >/dev/null 2>&1; done
+rm -rf "$da" "$db"
+
 [ "$fail" = 0 ] && echo "jobs ok"
 exit "$fail"

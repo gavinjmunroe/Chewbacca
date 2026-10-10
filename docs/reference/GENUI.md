@@ -18,6 +18,8 @@ kyber-genui queries                                      what the model may bind
 kyber-genui event genui-refresh s                        a press on a generated surface
 kyber-genui bench [--only 1,5] [--out results.json]      the frozen 20-request eval
 kyber-genui bench --requests config/genui/bench/sealed-2026-10-10.json   the sealed 32
+kyber-genui bench --requests config/genui/bench/sealed-2026-10-10b.json  the labelled 30, graded for wrong sources
+kyber-genui bench --requests <labelled set> --regrade results.json      grade a saved run, no model
 kyber-genui keep [NAME]                                  the last model-written surface becomes a candidate
 kyber-genui promote NAME                                 checks a candidate against the sealed requests
 GENUI_TIERS=0,1 kyber-genui "..." --dry-run --json       no model: which tier answered, and why
@@ -146,7 +148,95 @@ a candidate. `kyber-genui promote NAME` checks it against every
 `config/genui/bench/sealed-*.json` request: it must match its own request,
 and every sealed request it would take from the existing entries must
 validate when filled. Only then does it move to `~/.bob/genui/promoted/`.
-The check is shape, not relevance, the same gap the validator has.
+The check is shape, not relevance; the relevance gate below runs when a
+promoted layout is drawn, but promotion itself does not consult it.
+
+## Relevance gate
+
+The validator checks shape. On the first sealed run the model, sent a
+request no query covers, bound one anyway: "what's the weather tomorrow" drew
+`day:tomorrow`, "what's Nvidia stock at" drew `campaign:Nvidia`. Each panel
+said it had no data, about the wrong thing. The gate asks a second question
+before anything bound to a source reaches the glass: can this source answer
+what the request is about?
+
+**Every query declares what it covers**, in `config/genui/covers.json`:
+`entities` (assignment, lab, meeting, thread) and `measures` (due, overdue,
+standing, waiting), written from each query's own description plus the
+synonyms a person says for it. A provider can declare `covers` in its own
+manifest entry, which wins. The test fails if a built-in query declares
+nothing.
+
+**Code decides first** (`tiers.relevance`). The request's subject words are
+its content words minus slots (course, day, window, name), question words and
+the `generic` list in covers.json, plural-stemmed. Then:
+
+- a subject word in the source's declaration: yes;
+- no subject words at all, and the source takes the slot the request named
+  ("what do I have tomorrow" and `day`): yes;
+- subject words that land only on other queries' declarations: no, and the
+  query they land on is named (`other`);
+- subject words no query declares: undecided.
+
+**Jev only where code cannot decide**: one typed yes/no
+(`tiers.ask_relevance`, a `choice` question with criteria yes and no),
+cached per source, at the same 1.5 s timeout as Tier 1. It runs only when
+Tier 1 is enabled, because Jev is Tier 1's tool; with `GENUI_TIERS=2` the
+gate is code alone. An unanswered Jev call lets the source through, which is
+the behaviour before the gate existed.
+
+**Where it runs:**
+
+1. **Before the model.** Tier 1's Jev call already answers "which source",
+   with `none` as a choice. When Jev says `none` at or above the source
+   threshold, the archetype is not `connections` (a drawing), and code finds
+   no request word in any declaration, no model is asked: the run answers on
+   the pill. When Jev picks a source that needs an argument the request never
+   said (`campaign` with no client), the pill asks for it ("Which campaign?
+   Say the client's name.") instead of letting the model bind a neighbour.
+2. **On Tier 1's pick.** Code alone. A no sends the request to the model,
+   behind the same gate, since the words belong to another query.
+3. **On the model's bindings, while it streams.** A line binding a source the
+   gate refuses is held back. A line binding a source it accepts anchors the
+   panel and releases what was held, so "am I behind" can show owed replies
+   beside the overdue list. A layout with held lines and no anchor never
+   reaches the glass. The repaired layout is judged the same way.
+
+**What the person sees.** `I don't have <subject> on this Mac.` on the pill,
+where the subject is the request with its question words and time window cut
+off. With glass search on (`HUD_SEARCH`, `bin/lib/glass_search.py`), the card
+keeps one button, Search the web, whose press (`e genui-search`) hud-listen
+answers with the same `search_on_glass` a spoken "search X" gets, for the
+words the person said. The action is not in `policy.json`, so a model can
+never draw it and the validator refuses it. With search off the card comes
+down. `kyber-genui --json` reports `no_source`, `say` and the `gate` verdict;
+hud-listen speaks `say` instead of "It's on the glass." A no-source answer is
+never pinned, refreshed, or kept as a framework candidate.
+
+## No tools
+
+The layout model writes Kyber Lines from a prompt and never needs a tool.
+With a tool it could read a file while writing a layout, which breaks "the
+model never sees the data". So Tier 2 runs with no tools on every runtime.
+`kyber-genui` adds `--no-tools` to every `hud-<runtime>` command
+(`model_command`), and each wrapper turns it into its CLI's own flags.
+`tests/test_kyber_genui.py` runs each wrapper against a fake CLI and fails if
+any flag below is missing.
+
+| Runtime | Flags                                                                                                                                                                                                                                                                                                              | Verified from                                                                                                                                                                                                                                     |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude  | `--tools ""`, `--strict-mcp-config --mcp-config '{"mcpServers":{}}'`, `--setting-sources local`                                                                                                                                                                                                                    | `claude --help`, 2.1.289: `--tools ""` disables all tools; `--strict-mcp-config` uses only the given MCP config                                                                                                                                   |
+| Codex   | `--ignore-user-config --ignore-rules --ephemeral --sandbox read-only`, `--disable` for `shell_tool unified_exec view_image apps plugins browser_use browser_use_external computer_use image_generation multi_agent code_mode_host hooks tool_suggest skill_search`, `-c web_search="disabled"`, `--cd <empty dir>` | `codex exec --help` and `codex features list`, codex-cli 0.155.0-alpha.16.3. Run live 2026-10-10: asked to `cat /etc/hosts`, the voice's flags ran it (a `command_execution` event); these answered that it had no tool, with no tool event       |
+| Gemini  | `--admin-policy config/runtimes/gemini-no-tools.toml` (deny `*` at priority 999), `--allowed-mcp-server-names none`, `--extensions none`                                                                                                                                                                           | `gemini --help`, gemini-cli 0.46.0, and its bundled `policies/*.toml` for the rule format (`yolo.toml` allows `*` the same way). **Not run live**: Google refused the only Gemini account here on 2026-10-10 ("migrate to the Antigravity suite") |
+| Ollama  | none: `ollama run MODEL`, nothing else                                                                                                                                                                                                                                                                             | `ollama help run`, ollama 0.35.1: no tool flag exists. Tools live on the HTTP API when a caller sends them, and on `ollama launch`; the test holds the wrapper to `run`                                                                           |
+
+`--ignore-user-config` also drops the Codex model and reasoning settings in
+`~/.codex/config.toml`, so Tier 2 on Codex runs Codex's default model unless
+the HUD switcher picked one (`-m`). On the nine requests that went to Codex
+both before and after, every one got faster: 5.5 to 12.4 s after against
+8.3 to 21.5 s before (Measured, below). Nothing here separates the dropped
+config from the missing tools. A hand-written `GENUI_MODEL_CMD` that is
+not a `hud-<runtime>` wrapper or `claude` runs as written.
 
 ## How each rule is enforced here
 
@@ -249,12 +339,24 @@ All in `config/genui/policy.json`.
 overdue"` validates. Refusing numerals in prose would also refuse "Due in 7
   days" and "BISC 101"; the prompt forbids it and the bench layouts did not do
   it, but nothing enforces it.
-- **The validator checks shape, not relevance.** #20 in the bench bound a
-  campaign query to a note-taking panel.
-- **Tier 2 on Codex has tools.** The Claude path runs with `--tools ""`;
-  `bin/hud-codex` runs `codex exec` with the person's own Codex sandbox. The
-  model still never sees data, but a Codex model could read files while
-  writing a layout. A read-only sandbox flag on that path would close it.
+- **The gate refuses on one stray word.** Code says no when a subject word
+  lands only on another query's declaration, however weak the word. On the
+  labelled 30, "pull up that thing Sagar sent" bound `person:Sagar` and was
+  refused because `sent` is a campaign measure, and the pill asked "Which
+  campaign?". The label accepts a no-source answer there, so it grades right,
+  but the sentence is wrong. Sending a code no to Jev for confirmation, rather
+  than refusing outright, is the next change to measure; not done here,
+  because it was found on the test set.
+- **The name slot skips the first word.** "Zeutara reply rate" has no name
+  (a capitalised first word is every sentence's first word), so `campaign`
+  had no client, and the gate's "ask for the argument" path answered "Which
+  campaign?" where the model had bound `campaign:Zeutara` correctly before.
+  The one false refusal on the labelled 30.
+- **The pill line is the request, trimmed.** "I don't have steps did I walk on
+  this Mac" and "money did I spend" read badly. The phrase is cut by rules,
+  not written.
+- **Gemini's no-tools flags were never run live.** They are from its help and
+  its bundled policy format; the account here was refused.
 - **Slots are rules.** "This month" is the days left in the month, a name is
   the first capitalised word that is not a weekday, month or course, and a
   course is letters plus three digits. A misread shows on the glass, because
@@ -362,6 +464,71 @@ kyber-genui owns none of these files. These are the exact steps.
   after adding a component or a prop; it fails until the catalog has it.
 
 ## Measured
+
+### 2026-10-10, later: the relevance gate and no-tools Tier 2
+
+The first sealed set and the frozen 20 had been read while building, so a new
+set of 30 was written and committed (2e8472b4) before any gate code, each
+request labelled with the queries that answer it: 16 one source answers, 11
+no source on this Mac answers, 2 drawings, 1 vague. `kyber-genui bench`
+grades each row against its label: **wrong-source** is a panel bound to a
+query the label does not list, **refused** is a no-source answer to a request
+a listed query answers. The before run is the CHW-203 code on the same
+morning. Live data, `--dry-run` sink, Jev `jev-latest`, Tier 2 on Codex
+(`hud-accounts list`: Claude at its limit). One run per request. Raw rows:
+`config/genui/bench/results-2026-10-10b-before.json` and `-after.json`;
+`--regrade` reproduces the grades from either.
+
+|                                    | Labelled 30, before         | Labelled 30, after              |
+| ---------------------------------- | --------------------------- | ------------------------------- |
+| Wrong-source panels                | **11 of 30**                | **0 of 30**                     |
+| ... of the 11 no-source requests   | 11                          | 0                               |
+| Refused a request a source answers | 0                           | 1                               |
+| Valid, final / first try           | 30 / 30                     | 30 / 30                         |
+| Answered by Tier 0 / 1 / 2         | 0 / 15 / 15                 | 0 / 25 / 5                      |
+| No-source answers on the pill      | 0                           | 13 (11 before any model)        |
+| Model calls                        | 15                          | 5                               |
+| No model and under 1 s             | 15                          | 25 (14 panels, 11 pill answers) |
+| Complete, median / p90 (all)       | 775 / 14,620 ms             | 238 / 8,281 ms                  |
+| Tier 1 median / p90 / max          | 451 / 718 / 775 ms          | 144 / 425 / 612 ms              |
+| Tier 2 median / p90 / max          | 11,132 / 16,545 / 21,454 ms | 8,348 / 12,404 / 12,404 ms      |
+
+Every one of the 11 no-source requests drew a panel before, bound to
+`day:today`, `needs`, `calendar`, `week:7`, `conversations` or
+`campaign:Tesla`. After, 10 were answered before any model (Jev said `none`
+at 0.92 to 1.00 and no request word is in any declaration) and one
+("what's the score of the Dodgers game") went to the model because `score`
+is a grades measure, and the gate refused the model's `calendar` binding.
+
+**The regression check.** Both earlier sets, rerun with the gate:
+
+|                         | Frozen 20, CHW-203 | Frozen 20, gate | Sealed 32, CHW-203 | Sealed 32, gate |
+| ----------------------- | ------------------ | --------------- | ------------------ | --------------- |
+| Valid, final            | 20                 | 20              | 32                 | 32              |
+| Valid first try         | 19                 | 20              | 32                 | 32              |
+| Same bindings as before |                    | 19 of 20        |                    | 28 of 32        |
+| Model calls             | 4                  | 2               | 8                  | 4               |
+| No model and under 1 s  | 16                 | 18              | 24                 | 28              |
+| Complete, median        | 226 ms             | 191 ms          | 199 ms             | 174 ms          |
+
+The five that changed are the five the CHW-203 notes called wrong: frozen #3
+and sealed #24 (a campaign with no client, which had bound `needs`) now ask
+"Which campaign? Say the client's name.", and sealed #29, #30 and #32
+(weather, Nvidia, money) now say so on the pill. No panel that was right
+changed. Raw rows: `results-2026-10-10-frozen-gate.json` and
+`results-2026-10-10-sealed-gate.json`.
+
+The two misfires on the labelled 30 are under Known gaps: #10 "Zeutara
+reply rate" (the first-word name rule left `campaign` without a client, so
+the pill asked for one) and #30 "pull up that thing Sagar sent" (graded right
+by its vague label, but refused on the single word `sent`).
+
+**No tools.** Run live on Codex once each way before the change (see "No
+tools" above): the voice's flags ran `cat /etc/hosts`, the no-tools flags
+did not. The nine requests that reached Codex both before and after, on the
+same Mac the same morning, all got faster: frozen #13 12.0 to 7.5 s, #20 8.3
+to 5.5 s; sealed #25 to #28 15.2, 12.7, 20.4, 15.3 to 8.8, 7.5, 9.1, 10.3 s;
+labelled #15, #28, #29 12.1, 14.6, 21.5 to 8.3, 8.3, 12.4 s.
 
 ### 2026-10-10: the tiers (CHW-203)
 

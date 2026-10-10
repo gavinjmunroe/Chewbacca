@@ -266,6 +266,32 @@ def test_write_gate():
     ok(code == 3 and out["class"] == "refused", "measure never runs a write")
 
 
+def test_chat_approval_stands_in_for_the_terminal():
+    # 2026-10-10: Caleb's "do it yourself" in chat, recorded by chat-approval.sh,
+    # approves a write the way typing the op name at a terminal does, for 12 hours.
+    import json as _json
+    import tempfile
+    import time as _time
+    args = ("blocklist-add", "emailOrDomain=blocked.example", "--allow-writes")
+    sent = {"api-anything/blocklistAdd.json": SENT}
+    with tempfile.TemporaryDirectory() as d:
+        rec = os.path.join(d, "clay-chat-approval.json")
+        with open(rec, "w") as f:
+            _json.dump({"at": int(_time.time()) - 60, "excerpt": "do it urself"}, f)
+        code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": rec})
+        ok(code == 0 and out["ok"] is True, "a fresh chat approval lets an approved write run")
+        code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": rec, "CHEWBACCA_NO_SEND": "1"})
+        ok(code == 3 and "NO_SEND" in out["reason"], "CHEWBACCA_NO_SEND=1 still refuses a chat-approved write")
+        with open(rec, "w") as f:
+            _json.dump({"at": int(_time.time()) - 13 * 3600, "excerpt": "do it urself"}, f)
+        code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": rec})
+        ok(code == 3 and "did not approve" in out["reason"], "a chat approval older than 12 hours is refused")
+        code, out, _ = run(sent, {}, *args, env_extra={"CHEWBACCA_CLAY_CHAT_APPROVAL_FILE": os.path.join(d, "missing.json")})
+        ok(code == 3, "no chat approval and nobody at the terminal is refused")
+    code, out, _ = run({}, {}, "campaign-status", "campaign=cam_x", "status=START", "--allow-writes")
+    ok(code == 3 and out["class"] == "refused", "a START is still never sent from here")
+
+
 def test_a_relabelled_write_is_still_gated():
     # Review of b68d5645: a registry that calls blocklist-add a read, or an env var
     # pointing at such a registry, must not get past the person-at-a-terminal gate.
@@ -728,7 +754,7 @@ def main():
                test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,
                test_every_mutating_surface_is_gated, test_nothing_changes_between_approval_and_send,
                test_values_that_change_when_decoded_are_refused, test_workspace_has_no_built_in_default,
-               test_ui_only_prints_route, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
+               test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")
 

@@ -1561,6 +1561,9 @@ _register("UserPromptSubmit", hooks_dir + "/time-context.sh", timeout=5)
 # start at all. Prunes regenerable caches in the background below 20 GB free.
 _register("UserPromptSubmit", hooks_dir + "/disk-guard.sh", timeout=5)
 _register("UserPromptSubmit", hooks_dir + "/client-rulings.sh", timeout=5)
+# Caleb's "do it yourself" in chat approves Clay writes for 12 hours, in place
+# of typing at a terminal agent shells don't have (2026-10-10).
+_register("UserPromptSubmit", hooks_dir + "/chat-approval.sh", timeout=5)
 
 # coursework-context.sh is not registered for Claude Code. It emits a
 # SessionStart payload, and on UserPromptSubmit Claude Code dropped it on every
@@ -1689,7 +1692,7 @@ _register("PreToolUse", hooks_dir + "/submit-guard.sh", timeout=10,
 # personalized lines, refused sender domains and two CFOs; the client caught it.
 _register("PreToolUse", hooks_dir + "/launch-guard.sh", timeout=10,
           matcher="Bash|mcp__peekaboo__.*|mcp__chrome-devtools__.*|"
-                  "mcp__plugin_playwright_playwright__.*",
+                  "mcp__plugin_playwright_playwright__.*|Write|Edit|MultiEdit|NotebookEdit",
           status="Checking a campaign launch has a full pre-send gate pass...")
 
 # Bulk Clay work goes through Clay tables, not shell loops of per-row workflow

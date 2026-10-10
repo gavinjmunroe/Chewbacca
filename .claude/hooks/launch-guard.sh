@@ -60,6 +60,21 @@ refuse() {
   exit 2
 }
 
+# Caleb said in chat, within 12 hours, to do the Clay work himself (written by
+# chat-approval.sh from his own prompt). Then a click on a Clay page is his
+# instruction carried out, not an agent improvising, and it goes through. Lists
+# still have to pass pre_send_gate and gtme-grade inside the send path.
+chat_ok() {
+  python3 -I - "$state/clay-chat-approval.json" <<'PY' 2>/dev/null
+import json, sys, time
+try:
+    at = int(json.load(open(sys.argv[1]))["at"])
+except Exception:
+    sys.exit(1)
+sys.exit(0 if 0 <= time.time() - at < 12 * 3600 else 1)
+PY
+}
+
 # Shell commands: the allowlist. The classifier is plain Python (shlex), run
 # isolated; if it is missing or fails, a command that mentions Clay refuses.
 CLASSIFY=""
@@ -275,7 +290,11 @@ PY
 
 case "$tool" in
   Bash)
-    # Receipts and the grade key are written only by their own tools.
+    # Receipts and the grade key are written only by their own tools, and the
+    # chat approval only by clay-chat-approval.sh from a prompt Caleb typed.
+    if printf '%s' "$lower" | grep -qE 'clay-chat-approval'; then
+      refuse "only Caleb's own chat message (clay-chat-approval.sh) may write the chat approval."
+    fi
     if printf '%s' "$lower" | grep -qE 'send-gate-receipt|launch-guard-last-url'; then
       refuse "only scripts/pre_send_gate.py may write the send-gate receipt."
     fi
@@ -287,7 +306,7 @@ case "$tool" in
     # A UI driver clicks whatever page is open, which the command line doesn't
     # show, so a launch-shaped UI action refuses whether or not it names Clay.
     if printf '%s' "$lower" | grep -qE 'chewie|jev-browse|peekaboo|mac-use|cliclick|osascript' &&
-       printf '%s' "$lower" | grep -qE "$WORDS"; then
+       printf '%s' "$lower" | grep -qE "$WORDS" && ! chat_ok; then
       refuse "a UI click can't be tied to one action on one campaign; a person presses Start in the Clay UI."
     fi
     # Cheap first look: a command that never mentions Clay (quotes and
@@ -316,7 +335,8 @@ door (chewbacca clay <op>, bin/chewbacca-clay <op>, node bin/chewbacca-clay <op>
 chewbacca gtm/gtme/gtme-grade, clay CLI reads, git (not config), local read tools,
 counts.py/checksums.py, code-slop, slop-check, and test runners (python3 tests/x.py,
 bash tests/run.sh [group], pytest tests/...; prefix CHEWBACCA_NO_SEND=1 so nothing
-sends). Writes go through chewbacca clay, which needs a person at a terminal; a
+sends). Writes go through chewbacca clay, which needs Caleb's ok (a terminal, or
+him saying "do it yourself" in chat within 12 hours); a
 campaign START or add-leads also needs a passing gtme-grade and a full pre-send
 gate receipt, checked in code before it sends.
 MSG
@@ -324,7 +344,7 @@ MSG
     ;;
   mcp__peekaboo__*)
     case "$tool" in *click*|*type*|*hotkey*)
-      printf '%s' "$lower" | grep -qE "$WORDS" &&
+      printf '%s' "$lower" | grep -qE "$WORDS" && ! chat_ok &&
         refuse "a click on screen can't be tied to one action on one campaign; a person presses Start in the Clay UI." ;;
     esac
     exit 0
@@ -341,10 +361,18 @@ MSG
         # Any Clay page counts: an in-app link click changes the page without a
         # navigate call, so the recorded URL can lag (security review, 2026-10-05).
         last="$(cat "$lasturl" 2>/dev/null || true)"
-        if printf '%s' "$last" | grep -qiE 'clay\.com' || printf '%s' "$lower" | grep -qE "$WORDS"; then
+        if { printf '%s' "$last" | grep -qiE 'clay\.com' || printf '%s' "$lower" | grep -qE "$WORDS"; } && ! chat_ok; then
           refuse "a browser click on a Clay page can't be tied to one action on one campaign; a person presses Start in the Clay UI."
         fi
         ;;
+    esac
+    exit 0
+    ;;
+  Write|Edit|MultiEdit|NotebookEdit)
+    path_in="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null)"
+    case "$path_in" in
+      *clay-chat-approval.json*|*send-gate-receipt*|*launch-guard-last-url*)
+        refuse "approvals and receipts are written only by their own tools, never by a file edit." ;;
     esac
     exit 0
     ;;

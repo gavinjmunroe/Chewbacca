@@ -117,11 +117,51 @@ def test_biome_segb_record(tmp_path):
     assert j(home, "biome", "App.InFocus")[0]["values"] == "com.example.App"
 
 
-def test_sql_is_read_only(tmp_path):
+def test_sql_write_backs_up_then_restore_undoes(tmp_path):
     home = _home(tmp_path)
-    p = run(home, "sql", "calls", "delete from ZCALLRECORD", ok=False)
-    assert p.returncode == 1 and "read-only" in p.stderr
-    assert json.loads(run(home, "sql", "calls", "select count(*) n from ZCALLRECORD").stdout)[0]["n"] == 2
+    count = lambda: json.loads(run(home, "sql", "calls", "select count(*) n from ZCALLRECORD").stdout)[0]["n"]
+    out = json.loads(run(home, "sql", "calls", "delete from ZCALLRECORD where ZCALLTYPE = 16").stdout)
+    assert out["changed"] == 1 and count() == 1
+    backup = Path(out["backup"])
+    assert (backup / "manifest.json").exists()
+    assert backup.parent == home / ".chewbacca/mac-db/backups"
+    run(home, "restore", backup.name)
+    assert count() == 2
+
+
+def _fake_mac(tmp_path):
+    bindir = tmp_path / "fakebin"
+    bindir.mkdir()
+    log = tmp_path / "mac.log"
+    (bindir / "mac").write_text(f"#!/bin/sh\necho \"$@\" >> {log}\n")
+    (bindir / "mac").chmod(0o755)
+    return bindir, log
+
+
+def test_app_verbs_go_through_the_mac_cli(tmp_path):
+    home = _home(tmp_path)
+    bindir, log = _fake_mac(tmp_path)
+    env = {**os.environ, "MAC_DB_HOME": str(home), "PATH": f"{bindir}:{os.environ['PATH']}"}
+    env.pop("CHEWBACCA_NO_SEND", None)
+    subprocess.run([sys.executable, str(BIN), "reminders", "add", "Buy milk", "--due", "tomorrow"], env=env, check=True)
+    subprocess.run([sys.executable, str(BIN), "notes", "append", "10", "more"], env=env, check=True)
+    assert log.read_text().splitlines() == ["reminders add Buy milk --due tomorrow", "notes append 10 more"]
+
+
+def test_no_send_never_reaches_messages(tmp_path):
+    home = _home(tmp_path)
+    bindir, log = _fake_mac(tmp_path)
+    env = {**os.environ, "MAC_DB_HOME": str(home), "PATH": f"{bindir}:{os.environ['PATH']}", "CHEWBACCA_NO_SEND": "1"}
+    p = subprocess.run([sys.executable, str(BIN), "messages", "send", "+15550100", "hi"], env=env,
+                       capture_output=True, text=True, check=True)
+    assert "[no send]" in p.stdout and not log.exists()
+
+
+def test_biome_clear_keeps_a_backup(tmp_path):
+    home = _home(tmp_path)
+    assert "cleared 1 files" in run(home, "biome", "App.InFocus", "--clear").stdout
+    assert j(home, "biome") == []
+    assert any((home / ".chewbacca/mac-db/backups").glob("biome-App.InFocus-*"))
 
 
 def test_stores_report_missing_and_present(tmp_path):

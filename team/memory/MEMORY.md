@@ -219,7 +219,6 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_suggested_chip_fix_it_here: When he asks about a Suggested task chip, verify it and fix it in this tab; never tell him to click it
 - feedback_subtree_import_merge_not_rebase: After git subtree add, merge origin; rebase replays the import at the repo root
 - feedback_new_tools_never_reached_path: New bin/ tools stayed command-not-found until setup reran (26 on 10/10, text-command too); kit-autopull links them now via tools_link.py
-- project_kit_runtime: PATH tools run from ~/.chewbacca/kit/current, a locked worktree of origin/main; atomic swap, 15 min timer, doctor checks the sha (10/10)
 - feedback_run_ported_classifiers_on_real_inbox: Parity proves a port copied the bugs; run it on real traffic. 65 real replies showed bounces reaching the client (10/10)
 - feedback_ported_knowledge_must_stand_alone: Ported private-repo knowledge is written out in full (no pointers strangers can't open) and fixtures are anonymized; 27 real investor replies nearly shipped (10/9)
 - feedback_scan_before_import: Scan files and history for personal content before importing a repo into the kit
@@ -235,3 +234,5 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_chewbacca_live_genui_service: Chewbacca Live (apps/live) is ours, hosted genui for clients; BMA/Amber is a customer, Togari only a data source (10/10)
 - feedback_hud_lag_is_the_mac: "HUD laggy" 10/10 was load 95 from 14 tabs + builds + Xprotect, Kyber at 1.4%; measure uptime and Kyber CPU before touching HUD code
 - project_mog_plan: The 6-step plan to prove Chewbacca learns (ledger cc438a52) + 10/10 baseline: r@5 ~55%, 49/190 enforced, 0 kept self-fixes
+- reference_chewbacca_launch: `chewbacca launch` opens a named, briefed desktop tab (seed via -p --session-id, --desktop --resume under script); kickoff via send_message; LAUNCHED_BY marker
+- feedback_we_good_means_closeout_first: "we good?" = run closeout, answer once with what landed + whose files fail; a yes then no drew "Wtfffff" (10/10)

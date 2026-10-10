@@ -5,12 +5,30 @@ chewbacca google: read Google Docs, Sheets and Slides as text, and find them.
   chewbacca google find <words>        Docs, Sheets and Slides whose name or text matches
   chewbacca google recent [N]          the N most recently edited (default 15)
   chewbacca google read <id or url>    a Doc or Slides as plain text, a Sheet as CSV per tab
-  add --json to find/recent for data
+  add --json to find/recent/read for data; `read --json --rows N` gives a
+  Sheet's first tab as rows (N, default 50) instead of every tab as CSV
 
-Read-only. The engine is gws (googleworkspace-cli) with its own sign-in, the
-official Drive, Sheets and Slides APIs, so nothing here drives a browser.
-A Doc exports as text in one call; a Sheet reads every tab's values, since
-Drive's CSV export only returns the first tab; Slides export as text.
+  chewbacca google blocks <doc id> --json
+                    a Doc's paragraphs: index, text, and the revision they came from
+  chewbacca google replace <doc id> --revision R --edits edits.json
+                    rewrite whole paragraphs, only if the Doc is still at
+                    revision R and each paragraph still reads what the edit
+                    says it was; prints the paragraphs read back as JSON
+
+Every command but `replace` is read-only. The engine is gws
+(googleworkspace-cli) with its own sign-in, the official Drive, Docs, Sheets
+and Slides APIs, so nothing here drives a browser. A Doc exports as text in one
+call; a Sheet reads every tab's values, since Drive's CSV export only returns
+the first tab; Slides export as text.
+
+`replace` is the one write, and it is narrow by construction: one Docs
+batchUpdate of deleteContentRange plus insertText per paragraph, sent with
+writeControl.requiredRevisionId so Google itself refuses it if anyone edited the
+Doc after the preview was drawn. It never shares, moves, renames, deletes a file
+or changes a permission. edits.json is [{"block": i, "was": "...", "text":
+"..."}], made by the Doc surface from a preview the person saw (bin/lib/
+docs_surface.py). A paragraph holding anything but text (an image, a footnote,
+a chip) is refused rather than rewritten.
 """
 import json
 import os
@@ -94,14 +112,153 @@ def read_sheet(fid):
     return "\n\n".join(parts)
 
 
-def read(ref):
+def first_tab(fid, rows):
+    """A Sheet's first tab, as its title and its first `rows` rows."""
+    meta = gws("sheets", "spreadsheets", "get", params={"spreadsheetId": fid, "fields": "sheets.properties.title"})
+    tabs = [s["properties"]["title"] for s in meta.get("sheets", [])]
+    if not tabs:
+        return {"tab": "", "rows": [], "tabs": 0}
+    vals = gws("sheets", "spreadsheets", "values", "get",
+               params={"spreadsheetId": fid, "range": f"'{tabs[0]}'!1:{rows}"}).get("values", [])
+    return {"tab": tabs[0], "rows": [[str(c) for c in row] for row in vals[:rows]], "tabs": len(tabs)}
+
+
+def read(ref, as_json=False, rows=50):
     fid = file_id(ref)
-    meta = gws("drive", "files", "get", params={"fileId": fid, "fields": "name,mimeType", "supportsAllDrives": True})
+    meta = gws("drive", "files", "get", params={"fileId": fid, "fields": "name,mimeType,modifiedTime,webViewLink",
+                                                "supportsAllDrives": True})
     kind = KINDS.get(meta.get("mimeType"))
     if kind is None:
         sys.exit(f"chewbacca google: {meta.get('name', fid)} is not a Doc, Sheet or Slides")
+    if as_json:
+        out = {"id": fid, "name": meta.get("name", ""), "kind": kind, "modified": meta.get("modifiedTime", ""),
+               "url": meta.get("webViewLink", "")}
+        if kind == "sheet":
+            out.update(first_tab(fid, rows))
+        else:
+            out["text"] = export_text(fid)
+        print(json.dumps(out))
+        return
     body = read_sheet(fid) if kind == "sheet" else export_text(fid)
     print(f"# {meta['name']}\n\n{body.strip()}")
+
+
+# ── one Doc's paragraphs, and the one write ────────────────────────────────
+
+# Paragraphs a single edit may touch. The surface proposes a handful; a plan
+# rewriting more than this is not "make the intro shorter". Guessed, never
+# measured.
+MOST_EDITS = 12
+MAX_TEXT = 4000
+
+
+def doc_blocks(fid):
+    """(revision, [{index, start, end, text, style, plain}]) for a Doc's body
+    paragraphs. `plain` is False when the paragraph holds anything but text
+    runs, which `replace` refuses to rewrite. Tables and section breaks are
+    not blocks."""
+    doc = gws("docs", "documents", "get", params={"documentId": fid})
+    blocks = []
+    for el in (doc.get("body") or {}).get("content", []):
+        para = el.get("paragraph")
+        if not para:
+            continue
+        parts, plain = [], True
+        for pe in para.get("elements", []):
+            run = pe.get("textRun")
+            if run is None:
+                plain = False
+                continue
+            parts.append(run.get("content", ""))
+        text = "".join(parts)
+        if text.endswith("\n"):
+            text = text[:-1]
+        blocks.append({"index": len(blocks), "start": el.get("startIndex", 0), "end": el.get("endIndex", 0),
+                       "text": text, "plain": plain,
+                       "style": (para.get("paragraphStyle") or {}).get("namedStyleType", "")})
+    return doc.get("revisionId", ""), blocks, doc.get("title", "")
+
+
+def clean_text(text):
+    # One paragraph stays one paragraph: a newline would split it in two and
+    # move every later index. Control characters are dropped.
+    text = str(text).replace("\r", " ").replace("\n", " ")
+    return "".join(ch for ch in text if ch == "\t" or ord(ch) >= 32).strip()
+
+
+def load_edits(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            edits = json.load(f)
+    except (OSError, ValueError) as err:
+        sys.exit(f"chewbacca google: can't read the edits: {err}")
+    if not isinstance(edits, list) or not edits or len(edits) > MOST_EDITS:
+        sys.exit(f"chewbacca google: edits must be a list of 1 to {MOST_EDITS} paragraph edits")
+    out, seen = [], set()
+    for e in edits:
+        if not isinstance(e, dict) or not isinstance(e.get("block"), int) or isinstance(e.get("block"), bool):
+            sys.exit("chewbacca google: each edit needs a block number")
+        text = clean_text(e.get("text", ""))
+        if not text or len(text) > MAX_TEXT:
+            sys.exit(f"chewbacca google: paragraph {e['block']}'s new text is empty or over {MAX_TEXT} characters")
+        if e["block"] in seen:
+            sys.exit(f"chewbacca google: paragraph {e['block']} is edited twice")
+        seen.add(e["block"])
+        out.append({"block": e["block"], "was": str(e.get("was", "")), "text": text})
+    return out
+
+
+def scope_hint(message):
+    m = (message or "").lower()
+    if "insufficient" in m and "scope" in m:
+        return ("Google refused the write: gws is signed in with read-only Drive access, so editing a Doc "
+                "needs a sign-in that adds the Docs scope (gws auth login), which only the account owner can do. "
+                "Nothing was changed.")
+    if "permission" in m:
+        return "Google says this account can't edit that Doc. Nothing was changed."
+    return ""
+
+
+def replace(fid, revision, edits_path):
+    edits = load_edits(edits_path)
+    rev, blocks, title = doc_blocks(fid)
+    if not revision or rev != revision:
+        sys.exit("chewbacca google: the Doc changed since the preview (its revision moved). Nothing was changed; "
+                 "ask for the edit again.")
+    by_index = {b["index"]: b for b in blocks}
+    requests = []
+    for e in sorted(edits, key=lambda x: by_index.get(x["block"], {}).get("start", -1), reverse=True):
+        b = by_index.get(e["block"])
+        if b is None:
+            sys.exit(f"chewbacca google: there is no paragraph {e['block']}. Nothing was changed.")
+        if not b["plain"]:
+            sys.exit(f"chewbacca google: paragraph {e['block']} holds more than text (an image, a chip or a "
+                     "footnote), so it is not rewritten from here. Nothing was changed.")
+        if b["text"] != e["was"]:
+            sys.exit(f"chewbacca google: paragraph {e['block']} no longer reads what the preview showed. "
+                     "Nothing was changed.")
+        # Delete the paragraph's text but keep its newline, so its style and
+        # the paragraph itself survive; then type the new text at its start.
+        if b["end"] - 1 > b["start"]:
+            requests.append({"deleteContentRange": {"range": {"startIndex": b["start"], "endIndex": b["end"] - 1}}})
+        requests.append({"insertText": {"location": {"index": b["start"]}, "text": e["text"]}})
+    body = {"requests": requests, "writeControl": {"requiredRevisionId": revision}}
+    cmd = [GWS, "docs", "documents", "batchUpdate", "--params", json.dumps({"documentId": fid}),
+           "--json", json.dumps(body)]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+    out = r.stdout.strip()
+    try:
+        data = json.loads(out[out.index("{"):]) if "{" in out else {}
+    except json.JSONDecodeError:
+        data = {}
+    if r.returncode != 0 or "error" in data:
+        err = data.get("error")
+        msg = err.get("message") if isinstance(err, dict) else err
+        msg = str(msg or r.stderr.strip() or "gws failed")
+        sys.exit("chewbacca google: " + (scope_hint(msg) or f"the write failed: {msg[:200]}. Check the Doc."))
+    new_rev, after, _ = doc_blocks(fid)
+    print(json.dumps({"ok": True, "title": title, "revision": new_rev,
+                      "blocks": [{"index": b["index"], "text": b["text"]} for b in after]}))
 
 
 def main(argv):
@@ -117,7 +274,21 @@ def main(argv):
     elif cmd == "recent":
         show(listing("", int(rest[0]) if rest and rest[0].isdigit() else 15), as_json)
     elif cmd == "read" and rest:
-        read(rest[0])
+        rows = 50
+        if "--rows" in rest:
+            i = rest.index("--rows")
+            rows = int(rest[i + 1]) if i + 1 < len(rest) and rest[i + 1].isdigit() else 50
+            rest = rest[:i] + rest[i + 2:]
+        read(rest[0], as_json=as_json, rows=max(1, min(rows, 500)))
+    elif cmd == "blocks" and rest:
+        rev, blocks, title = doc_blocks(file_id(rest[0]))
+        print(json.dumps({"id": file_id(rest[0]), "title": title, "revision": rev, "blocks": blocks}))
+    elif cmd == "replace" and rest and "--revision" in rest and "--edits" in rest:
+        i, j = rest.index("--revision"), rest.index("--edits")
+        if i + 1 >= len(rest) or j + 1 >= len(rest):
+            print(__doc__.strip(), file=sys.stderr)
+            return 2
+        replace(file_id(rest[0]), rest[i + 1], rest[j + 1])
     else:
         print(__doc__.strip(), file=sys.stderr)
         return 2

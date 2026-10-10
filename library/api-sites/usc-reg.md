@@ -22,4 +22,4 @@ Caveats observed on 2026-10-09:
 - instructors is a flat list per course, so a section with two instructors makes it longer than sections.
 - An empty term (no registered courses, empty bin) returns [].
 - Once, during setup, a Fall op returned Spring data. That was before the final re-learn, and six later calls that alternated terms all came back correct. Check the term field on appointment results. Schedule and course bin results carry no term label.
-- The myUSC portal (my.usc.edu) has none of this data. Its Registration & Fee Summary tile (atweb.usc.edu/registrationfeesummary) sits behind the same Entra sign-in and wasn't taught.
+- The myUSC portal (my.usc.edu) has none of this data. Its Registration & Fee Summary tile (atweb.usc.edu/registrationfeesummary) is the usc-fees site.

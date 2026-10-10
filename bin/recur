@@ -1,0 +1,382 @@
+#!/usr/bin/env python3
+"""Did a saved correction stop the mistake, or did it come back?
+
+    recur                 every correction: saved, linked to code?, recurrences after
+    recur <slug>          the evidence lines for one correction
+    recur --json          the same, for a machine
+    recur --days 90       how far back to read transcripts (default 120)
+    recur --raw           skip the model check, every word-overlap candidate
+
+WHY. On 2026-10-09 an audit counted 180 correction files (feedback_*.md) across
+team/memory and the private brain, and found 7 named anywhere in a hook, test,
+tool or bin. Nothing measured whether saving a correction changed anything.
+A lesson that is written down and then corrected again a week later was never
+learned, and until now nobody could tell the two apart.
+
+WHAT COUNTS. A recurrence candidate is a message a person typed into Claude
+Code AFTER the correction was first committed, that reads like a repair
+(tools/mine_asks.py's FRUSTRATION markers), and that shares enough rare words
+with the correction's own description. Each message counts for at most one
+correction, the best match, so one angry message can't inflate ten rows.
+
+Word overlap finds candidates and one batched haiku call keeps only the ones
+that read as the same mistake again (see judge). `recur <slug>` prints every
+line it kept so a person can check the call. It never writes a memory,
+a rule or a hook. It writes only its parse cache under ~/.chewbacca/cache/.
+Transcripts are private, so output stays on this machine.
+
+LINKED means the correction's slug appears in .claude/hooks, bin, tools or
+tests. A rule enforced under another name reads as unlinked: that is a known
+undercount, and the honest fix is to cite the slug where the rule is enforced.
+"""
+from __future__ import annotations
+
+import argparse
+import collections
+import importlib.util
+import json
+import math
+import os
+import re
+import subprocess
+import sys
+import time
+from importlib.machinery import SourceFileLoader
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.dont_write_bytecode = True
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import learnloop as L  # noqa: E402
+
+HOME = Path.home()
+CACHE = Path(os.environ.get("CHEWBACCA_RECUR_CACHE") or HOME / ".chewbacca" / "cache" / "recur" / "asks.json")
+
+
+def _dirs() -> list[Path]:
+    env = os.environ.get("CHEWBACCA_RECUR_DIRS")
+    if env:
+        return [Path(p) for p in env.split(os.pathsep) if p]
+    return [ROOT / "team" / "memory", HOME / "second-brain" / "memory"]
+
+
+def _mine_asks():
+    path = ROOT / "tools" / "mine_asks.py"
+    spec = importlib.util.spec_from_file_location("mine_asks", path, loader=SourceFileLoader("mine_asks", str(path)))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+STOP = set("""about after again also always and another any are because been before
+being both but can cant could did does doesnt dont each even every from have
+having here into isnt just like make more most must never not now only other
+over same should some still than that their them then there these they thing
+this those through time until very want what when where which while will with
+without would your youre caleb his him he her she its it's the for you was were
+never always don't doesn't isn't can't won't one two three use used using says
+said session sessions tab tabs file files reply replies""".split())
+WORD = re.compile(r"[a-z][a-z0-9_-]{3,}")
+
+
+def words(text: str) -> set[str]:
+    return {w.strip("-_") for w in WORD.findall((text or "").lower())} - STOP
+
+
+def _frontmatter(text: str) -> dict:
+    m = re.match(r"^---\n(.*?)\n---\n", text, re.S)
+    out = {}
+    if m:
+        for line in m.group(1).splitlines():
+            if ":" in line and not line.startswith(" "):
+                k, v = line.split(":", 1)
+                out[k.strip()] = v.strip().strip('"')
+    return out
+
+
+def _added(directory: Path) -> dict[str, float]:
+    """First-commit time of every file in a memory dir, from one git log."""
+    try:
+        out = subprocess.run(
+            ["git", "-C", str(directory), "log", "--diff-filter=A", "--format=@%at",
+             "--name-only", "--", "."], capture_output=True, text=True, timeout=60).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    seen: dict[str, float] = {}
+    t = 0.0
+    for line in out.splitlines():
+        if line.startswith("@"):
+            t = float(line[1:])
+        elif line.strip():
+            seen[Path(line).name] = t  # log is newest first; the last write wins = oldest add
+    return seen
+
+
+def corrections() -> list[dict]:
+    rows = []
+    for d in _dirs():
+        if not d.is_dir():
+            continue
+        added = _added(d)
+        for path in sorted(d.glob("feedback_*.md")):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            fm = _frontmatter(text)
+            slug = path.stem
+            saved = added.get(path.name) or path.stat().st_mtime
+            desc = fm.get("description") or ""
+            rows.append({"slug": slug, "where": "team" if "team" in d.parts else "brain",
+                         "saved": saved, "description": desc,
+                         "keys": words(desc) | words(slug.replace("feedback_", "").replace("_", " "))})
+    return rows
+
+
+def linked(rows: list[dict]) -> None:
+    """Mark a correction linked when its slug is cited where code runs."""
+    places = [ROOT / ".claude" / "hooks", ROOT / "bin", ROOT / "tools", ROOT / "tests"]
+    blob = []
+    for place in places:
+        for p in place.rglob("*"):
+            if p.is_file() and p.stat().st_size < 2_000_000 and p.name != "recur":
+                try:
+                    blob.append(p.read_text(encoding="utf-8", errors="ignore"))
+                except OSError:
+                    pass
+    text = "\n".join(blob)
+    for r in rows:
+        short = r["slug"].replace("feedback_", "")
+        r["linked"] = r["slug"] in text or (len(short) > 12 and short in text)
+
+
+def _parse(path: Path) -> list[dict]:
+    out = []
+    try:
+        fh = path.open(encoding="utf-8", errors="ignore")
+    except OSError:
+        return out
+    with fh:
+        for line in fh:
+            if '"user"' not in line:
+                continue
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            if e.get("type") != "user" or e.get("isSidechain") or e.get("isMeta") or e.get("isCompactSummary"):
+                continue
+            if e.get("turnOrigin") not in (None, "human"):
+                continue
+            text = L.IMAGE_TAG.sub("", L._typed_text((e.get("message") or {}).get("content")) or "").strip()
+            if not text or text.startswith(L.INTERRUPT) or text.startswith(L.NOISE_PREFIX):
+                continue
+            t = L._epoch(e.get("timestamp", ""))
+            if t is None:
+                continue
+            out.append({"t": t, "said": L.redact(text)[:600]})
+    return out
+
+
+def asks(days: float) -> list[dict]:
+    """Every typed message, cached per transcript by size and mtime."""
+    try:
+        cache = json.loads(CACHE.read_text())
+    except (OSError, ValueError):
+        cache = {}
+    cut = time.time() - days * 86400
+    fresh, rows = {}, []
+    for root in L.transcript_roots():
+        for path in root.rglob("*.jsonl"):
+            if "subagents" in path.parts:
+                continue
+            try:
+                st = path.stat()
+            except OSError:
+                continue
+            if st.st_mtime < cut:
+                continue
+            key = f"{st.st_size}:{int(st.st_mtime)}"
+            hit = cache.get(str(path))
+            parsed = hit["rows"] if hit and hit.get("key") == key else _parse(path)
+            fresh[str(path)] = {"key": key, "rows": parsed}
+            rows.extend(r for r in parsed if r["t"] >= cut)
+    try:
+        CACHE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = CACHE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(fresh))
+        os.replace(tmp, CACHE)
+    except OSError:
+        pass
+    # A message lands in every transcript it was resumed or forked into; the
+    # same words on the same day are one message.
+    uniq = {(time.strftime("%Y-%m-%d", time.localtime(r["t"])), r["said"][:200]): r for r in rows}
+    return sorted(uniq.values(), key=lambda r: r["t"])
+
+
+# Score is the summed rarity of the shared words, where rarity is measured
+# across everything he has typed, not across the corrections: "give", "right"
+# and "need" are in his messages every day and prove nothing. The first cut
+# (rarity across corrections, 2 words, score 6) matched pasted text threads
+# and "give me a text" to the cd rule; 2026-10-10. Guessed, never measured
+# against labelled pairs. `recur <slug>` prints every line so it can be judged.
+# The score threshold is in units of one never-seen word, log(n + 1), so it
+# means the same thing on 30 synthetic messages and on 4,958 real ones: 9.0
+# was the cut on the real corpus, and 9.0 / log(4,959) is 1.06.
+MIN_SHARED = 2
+MIN_SCORE_UNITS = 1.06
+# Pasted material (a text thread, a transcript, a doc) is input he is handing
+# over, not him correcting anything. Measured on the first run: every pasted
+# hit was over 400 characters, and his own repairs run short.
+MAX_LEN = 400
+PASTED = re.compile(r"MESSAGES THIS PERSON SENT|### EPISODE|Transcript:|^\s*[-*] .*\n\s*[-*] ", re.M)
+
+
+def match(rows: list[dict], messages: list[dict]) -> None:
+    frustration = _mine_asks().FRUSTRATION
+    pool = [m for m in messages if len(m["said"]) <= MAX_LEN and not PASTED.search(m["said"])]
+    bags = [words(m["said"]) for m in pool]
+    df = collections.Counter(w for b in bags for w in b)
+    n = max(len(pool), 1)
+    idf = lambda w: math.log((n + 1) / (df.get(w, 0) + 1))
+    floor = MIN_SCORE_UNITS * math.log(n + 1)
+    for r in rows:
+        r["hits"] = []
+    for m, mw in zip(pool, bags):
+        if not frustration.search(m["said"]):
+            continue
+        best, best_score, best_shared = None, 0.0, []
+        for r in rows:
+            if m["t"] <= r["saved"]:
+                continue
+            shared = sorted(r["keys"] & mw)
+            if len(shared) < MIN_SHARED:
+                continue
+            score = sum(idf(w) for w in shared)
+            if score > best_score:
+                best, best_score, best_shared = r, score, shared
+        if best is not None and best_score >= floor:
+            best["hits"].append({"t": m["t"], "score": round(best_score, 1),
+                                 "shared": best_shared, "said": m["said"]})
+
+
+JUDGE_CACHE = CACHE.with_name("verdicts.json")
+JUDGE_PROMPT = """You check whether an AI assistant repeated a mistake it had been corrected for.
+Each item has a CORRECTION (a rule the user gave the assistant earlier) and a
+MESSAGE the user typed later. Answer yes only when the message shows the user
+correcting, or complaining about, the assistant breaking that same rule again.
+A message that merely uses the same words, asks for the thing, or is about
+something else is no.
+Reply with only a JSON object mapping each id to "yes" or "no".
+
+"""
+
+
+def judge(rows: list[dict]) -> None:
+    """Keep only the candidates a model reads as the same mistake again.
+
+    Word overlap alone was 5 of 40 right when every candidate was read by
+    hand on 2026-10-10: "Graph engineer harder bruh" is a real repeat of the
+    graph-engineering rule, "give me a list" is not a repeat of the cd rule.
+    Without this step the counts are mostly noise, so --raw says so.
+    One batched haiku call per run, verdicts cached by content, so a rerun
+    costs nothing. Text goes to the same model provider these transcripts
+    came from and nowhere else.
+    """
+    import hashlib
+    try:
+        cache = json.loads(JUDGE_CACHE.read_text())
+    except (OSError, ValueError):
+        cache = {}
+    todo = {}
+    for r in rows:
+        for h in r["hits"]:
+            hid = hashlib.sha256((r["description"] + "\0" + h["said"]).encode()).hexdigest()[:16]
+            h["id"] = hid
+            if hid not in cache:
+                todo[hid] = {"correction": r["description"], "message": h["said"]}
+    if todo:
+        prompt = JUDGE_PROMPT + json.dumps(todo, indent=1)
+        try:
+            out = subprocess.run(
+                ["claude", "-p", "--model", "haiku", "--tools", "", "--setting-sources", "",
+                 "--strict-mcp-config", "--no-session-persistence", "--output-format", "json"],
+                input=prompt, capture_output=True, text=True, timeout=300).stdout
+            text = json.loads(out).get("result", "")
+            verdicts = json.loads(text[text.index("{"):text.rindex("}") + 1])
+            for k, v in verdicts.items():
+                if k in todo:
+                    cache[k] = str(v).strip().lower().startswith("y")
+        except (OSError, ValueError, subprocess.TimeoutExpired) as e:
+            print(f"recur: judge unavailable ({type(e).__name__}); showing unjudged candidates", file=sys.stderr)
+            return
+        try:
+            JUDGE_CACHE.write_text(json.dumps(cache))
+        except OSError:
+            pass
+    for r in rows:
+        r["unjudged"] = len(r["hits"])
+        r["hits"] = [h for h in r["hits"] if cache.get(h["id"])]
+
+
+def day(t: float) -> str:
+    return time.strftime("%Y-%m-%d", time.localtime(t)) if t else "-"
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Did a saved correction stop the mistake?")
+    ap.add_argument("slug", nargs="?")
+    ap.add_argument("--json", action="store_true")
+    ap.add_argument("--days", type=float, default=120)
+    ap.add_argument("--raw", action="store_true", help="skip the model check, show every word-overlap candidate")
+    a = ap.parse_args()
+
+    rows = corrections()
+    linked(rows)
+    match(rows, asks(a.days))
+    if not a.raw and not os.environ.get("CHEWBACCA_RECUR_NO_JUDGE"):
+        judge(rows)
+
+    if a.slug:
+        want = a.slug if a.slug.startswith("feedback_") else "feedback_" + a.slug
+        r = next((x for x in rows if x["slug"] == want), None)
+        if not r:
+            print(f"recur: no correction named {want}", file=sys.stderr)
+            return 1
+        if a.json:
+            print(json.dumps({k: v for k, v in r.items() if k != "keys"}, default=list, indent=1))
+            return 0
+        print(f"{r['slug']}  saved {day(r['saved'])}  {'linked' if r['linked'] else 'prose only'}")
+        print(f"  {r['description']}")
+        for h in r["hits"]:
+            print(f"\n  {day(h['t'])}  score {h['score']}  shared: {', '.join(h['shared'])}")
+            print("    " + h["said"].replace("\n", " ")[:300])
+        if not r["hits"]:
+            print("\n  no candidate recurrence since it was saved")
+        return 0
+
+    if a.json:
+        print(json.dumps([{"slug": r["slug"], "where": r["where"], "saved": day(r["saved"]),
+                           "linked": r["linked"], "recurrences": len(r["hits"]),
+                           "last": day(r["hits"][-1]["t"]) if r["hits"] else None}
+                          for r in rows], indent=1))
+        return 0
+
+    rows.sort(key=lambda r: (-len(r["hits"]), r["slug"]))
+    for r in rows:
+        last = day(r["hits"][-1]["t"]) if r["hits"] else ""
+        print(f"{len(r['hits']):>3}  {'linked' if r['linked'] else 'prose ':<6}  {day(r['saved'])}  {r['slug']:<58} {last}")
+    total = len(rows)
+    link = sum(r["linked"] for r in rows)
+    came = sum(1 for r in rows if r["hits"])
+    came_prose = sum(1 for r in rows if r["hits"] and not r["linked"])
+    came_link = sum(1 for r in rows if r["hits"] and r["linked"])
+    print(f"\n{total} corrections, {link} linked to code, {total - link} prose only.")
+    print(f"{came} have a candidate recurrence after they were saved: "
+          f"{came_link} of {link} linked, {came_prose} of {total - link} prose only.")
+    if any("unjudged" in r for r in rows):
+        print("Each kept line was read by a model as the same mistake again. `recur <slug>` shows them.")
+    else:
+        print("UNJUDGED word-overlap candidates, about 1 in 8 real when hand-read. `recur <slug>` shows them.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

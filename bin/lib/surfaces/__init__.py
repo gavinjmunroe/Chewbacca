@@ -282,7 +282,8 @@ def note_for(data, error: str | None, empty: str, stale_at: datetime | None = No
 
 
 KINDS = ("needs-you", "today", "tasks", "conversations", "people", "person", "space", "music", "files",
-         "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps", "dash-notes")
+         "oss", "engine", "code", "notes", "github", "whatsapp", "meetings", "agents", "apps", "dash-notes",
+         "doc")
 # Kinds that need an argument: `person karthik`, `space school`, `engine ollama-models`.
 # `oss` is not one: it opens empty, and "what replaces Notion" seeds its query
 # with the preset {"/oss/q": "Notion"} instead.
@@ -302,6 +303,10 @@ def make(kind: str, arg: str = "") -> Provider:
         import notes_surface  # noqa: PLC0415  bin/lib: one note by title, its dash lines, one appended
 
         return notes_surface.DashNotes()
+    if kind == "doc":
+        import docs_surface  # noqa: PLC0415  bin/lib: one Google or local document, and an approved edit
+
+        return docs_surface.DocSurface()
     table = {
         "needs-you": walks.NeedsYou, "today": walks.Today, "tasks": walks.Tasks,
         "conversations": walks.Conversations, "people": walks.People,
@@ -334,6 +339,7 @@ ALIASES = {
     "open-source": "oss", "opensource": "oss", "oss-apps": "oss", "engines": "oss",
     "changes": "code", "diff": "code", "diffs": "code", "repos": "code",
     "note": "notes", "apple-notes": "notes",
+    "docs": "doc", "document": "doc", "google-doc": "doc", "sheet": "doc", "spreadsheet": "doc", "docx": "doc",
     "launcher": "apps", "launchpad": "apps", "dock": "apps", "surfaces": "apps", "wa": "whatsapp", "whats-app": "whatsapp", "gh": "github", "prs": "github", "pulls": "github", "pull-requests": "github", "reviews": "github",
     "granola": "meetings", "anarlog": "meetings", "meeting": "meetings", "calls": "meetings", "call": "meetings",
     "notes-from-meetings": "meetings", "meeting-notes": "meetings",

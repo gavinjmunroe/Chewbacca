@@ -68,6 +68,7 @@ COMMANDS=(
   "gtme-library|index and search a local source corpus"
   "gtme-dedupe|cluster duplicate people across contact CSVs"
   "gtme-signals|list recent SEC Form D raises as buying signals"
+  "gtme-reply|classify a cold-email reply, clean its text, and gate auto-send, offline"
   "gtme-interview|drill GTM engineer interview cases from sourced Clay procedures"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
   "gtme|a hired growth engineer: a plan from your business, first list, brief, next, report"
@@ -81,6 +82,7 @@ COMMANDS=(
   "office|Microsoft 365 mail, calendar, files, docs and Teams, read through Graph after one Microsoft device-code sign-in"
   "usc|a USC student's day: due this week, the dining hall, events (setup signs in)"
   "google|find and read Google Docs, Sheets and Slides as text"
+  "docs|local Word, Excel and PowerPoint files through genoffice: read, preview an edit, apply it"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
   "clay-fixture-check|compare a CSV export with an expected fixture"
   "oss-apps|open source apps that replace a Mac app, and which can be remixed"
@@ -126,7 +128,7 @@ repo_version() { cat "$ROOT/VERSION" 2>/dev/null || echo "unknown"; }
 installed_version() { cat "$STATE/version" 2>/dev/null || echo "unrecorded"; }
 
 case "${1:-}" in
-task-graph|graph-fuse|review-gate|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-interview|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
+task-graph|graph-fuse|review-gate|work-ledger|tabs|ux-learning|jev|decision-lab|ux-decision|ux-policy|clay-review|gtme-math|gtme-graph|gtme-learning|gtme-library|gtme-signals|gtme-reply|gtme-interview|gtm|gtm-memory|gtme|clay-fixture-check|oss-apps)
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"
@@ -198,9 +200,15 @@ x)
   exec python3 "$ROOT/bin/chewbacca-x" "$@"
   ;;
 google)
-  # Docs, Sheets and Slides through the official APIs (gws). Read-only.
+  # Docs, Sheets and Slides through the official APIs (gws). Read-only but
+  # for `replace`, one revision-checked Docs edit the Doc surface previews.
   shift
   exec python3 "$ROOT/bin/chewbacca-google" "$@"
+  ;;
+docs)
+  # Local .docx, .xlsx and .pptx through genoffice. See bin/chewbacca-docs.
+  shift
+  exec python3 "$ROOT/bin/chewbacca-docs" "$@"
   ;;
 linkedin)
   # LinkedIn reads run inside the user's own Chrome tab. Read-only.

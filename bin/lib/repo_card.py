@@ -491,6 +491,7 @@ def loading_lines(ask: Ask) -> list[str]:
     """Drawn before the fetch, so the card is never blank (surface rule 6)."""
     return [
         f"@ {SURFACE} at=right w=440",
+        f"glance {SURFACE}",
         comp("s", "Screen", title=clean(ask.slug, 60).upper()),
         comp("note", "Text", value="@" + p("note"), tone="muted"),
         f"> {cid('s')} {cid('note')}",
@@ -502,7 +503,7 @@ def loading_lines(ask: Ask) -> list[str]:
 def card_lines(card: dict, action_label: str = "") -> list[str]:
     """The whole card. Author text only ever travels in `d` lines."""
     title = clean(card.get("slug") or "", 60).upper()
-    head = [f"@ {SURFACE} at=right w=440", comp("s", "Screen", title=title)]
+    head = [f"@ {SURFACE} at=right w=440", f"glance {SURFACE}", comp("s", "Screen", title=title)]
     if card.get("error"):
         return head + [
             comp("note", "Text", value="@" + p("note"), tone="muted"),

@@ -28,3 +28,10 @@ handshake signed-in-ok
 # Reviewed: 8 GET ops on webreg.usc.edu, read-only; the pages fire only GETs
 # and telemetry. Never touch the bin page forms (Schedule, Remove, grade option).
 usc-reg signed-in-ok
+
+# 2026-10-10: usc-fees reads his Registration and Fee Summary (registered
+# terms, one term's charges, credits, pending aid and net charges) through his
+# USC sign-in (Entra). Reviewed: 2 GET JSON ops on atweb.usc.edu, read-only;
+# the page fires only GETs. The ops pick fields so the profile block (USC ID,
+# addresses, phones) never comes back. The Download Report button is not used.
+usc-fees signed-in-ok

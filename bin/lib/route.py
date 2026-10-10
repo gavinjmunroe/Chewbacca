@@ -14,7 +14,6 @@ that made it one, and `_classify_cmd` carries the measurement that switched
 the CLI call off. `summarize` still runs the CLI, under a budget that can
 afford it.
 """
-from __future__ import annotations
 import json
 import os
 import re
@@ -22,7 +21,7 @@ import shlex
 import subprocess
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Sequence
+from typing import Callable, Optional, Sequence
 from urllib.parse import quote_plus
 
 DESTS = ("terminal", "browser", "assistant", "perplexity")
@@ -159,7 +158,7 @@ class Decision:
     dest: str
     confidence: float
     reason: str
-    reroute: str | None = None
+    reroute: Optional[str] = None
 
 
 def _words(said: str) -> list[str]:
@@ -177,7 +176,7 @@ def _epoch(iso: str) -> float:
         return 0.0
 
 
-def draft_word(said: str) -> str | None:
+def draft_word(said: str) -> Optional[str]:
     words = _norm(said)
     if words in SUBMIT_WORDS:
         return "submit"
@@ -188,7 +187,7 @@ def draft_word(said: str) -> str | None:
     return None
 
 
-def answer_word(said: str) -> str | None:
+def answer_word(said: str) -> Optional[str]:
     words = _norm(said)
     if words in ALLOW_WORDS:
         return "allow"
@@ -224,7 +223,7 @@ def perplexity_prompt(said: str) -> str:
     return text
 
 
-def _explicit(said: str) -> str | None:
+def _explicit(said: str) -> Optional[str]:
     low = said.lower().strip()
     if low.startswith(EXPLICIT_PERPLEXITY) and len(_words(said)) > 1:
         return "perplexity"
@@ -235,7 +234,7 @@ def _explicit(said: str) -> str | None:
     return None
 
 
-def _correction(said: str, memory: dict, now: float) -> Decision | None:
+def _correction(said: str, memory: dict, now: float) -> Optional[Decision]:
     last = memory.get("last")
     if not last or now - _epoch(last.get("t", "")) > CORRECTION_S:
         return None
@@ -329,8 +328,8 @@ def route(
     context: dict,
     memory: dict,
     names: Sequence[str] = (),
-    now: float | None = None,
-    classify: Callable[[str, dict], str | None] | None = None,
+    now: Optional[float] = None,
+    classify: Optional[Callable[[str, dict], Optional[str]]] = None,
 ) -> Decision:
     import time as _time
     now = _time.time() if now is None else now
@@ -399,7 +398,7 @@ def _classified(said: str, memory: dict, classify) -> Decision:
     return Decision("assistant", 0.5, "unsettled")
 
 
-def search_query(said: str) -> str | None:
+def search_query(said: str) -> Optional[str]:
     """The query when the sentence is a search by its own words, else None.
 
     "search who won the dodgers game", "google rust traits", "look up X": the
@@ -466,7 +465,7 @@ def browser_url(said: str) -> tuple[str, str]:
     return f"https://www.google.com/search?q={quote_plus(query)}", f"chrome: {query}"
 
 
-def _model_cmd() -> list[str] | None:
+def _model_cmd() -> Optional[list[str]]:
     """The background command, for work with a budget measured in seconds.
 
     `summarize` is the only caller and it runs after a turn with a 20 second
@@ -479,7 +478,7 @@ def _model_cmd() -> list[str] | None:
     return shlex.split(cmd)
 
 
-def _classify_cmd() -> list[str] | None:
+def _classify_cmd() -> Optional[list[str]]:
     """The classification command, off unless one is configured.
 
     It used to be `_model_cmd`, and the reason the classifier no longer shares
@@ -507,7 +506,7 @@ def _classify_cmd() -> list[str] | None:
     return shlex.split(cmd)
 
 
-def _ask_model(prompt: str, timeout: float, argv: list[str] | None = None) -> str | None:
+def _ask_model(prompt: str, timeout: float, argv: Optional[list[str]] = None) -> Optional[str]:
     argv = _model_cmd() if argv is None else argv
     if not argv:
         return None
@@ -564,14 +563,14 @@ JEV_QUESTION = {"dest": {
 }}
 
 
-def classify_default(said: str, memory: dict) -> str | None:
+def classify_default(said: str, memory: dict) -> Optional[str]:
     """HUD_CLASSIFY_CMD when somebody set one, otherwise Jev."""
     if _classify_cmd():
         return classify_with_haiku(said, memory)
     return classify_with_jev(said, memory)
 
 
-def classify_with_jev(said: str, memory: dict) -> str | None:
+def classify_with_jev(said: str, memory: dict) -> Optional[str]:
     """One Choice question to TypeSafe's Jev, None when it cannot answer.
 
     The frontmost application is in the state because it moved one eval
@@ -603,7 +602,7 @@ def classify_with_jev(said: str, memory: dict) -> str | None:
     return choice
 
 
-def classify_with_haiku(said: str, memory: dict) -> str | None:
+def classify_with_haiku(said: str, memory: dict) -> Optional[str]:
     argv = _classify_cmd()
     if not argv:
         return None
@@ -626,7 +625,7 @@ def classify_with_haiku(said: str, memory: dict) -> str | None:
     return m.group(1) if m else None
 
 
-def summarize(sentences: list[str]) -> str | None:
+def summarize(sentences: list[str]) -> Optional[str]:
     """One line saying what is being built, from the last terminal-bound
     sentences. Never blocks a send: callers run it in a thread."""
     if not sentences:

@@ -72,6 +72,11 @@ bottomLeft bottom bottomRight`. Put what they asked about where the eye already
 is and standing context in a corner. Two or three panels is a workspace, six is
 a mess.
 
+`glance <surface>`, sent right after its `@` line, makes a card leave when the
+person clicks anywhere off the cards, the same as pressing its X. Use it for an
+answer read once: a search result, a repo card, a lookup. Leave it off anything
+meant to stay up.
+
 `urgency=` is `ambient`, `normal`, `alert`, or `critical`. Only `critical`
 appears when the display is hidden. Spend it on a payment failing or a meeting
 starting in one minute, never on a task being due next week.

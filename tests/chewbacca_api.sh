@@ -211,6 +211,21 @@ SH
   printf '#!/bin/bash\nprintf "%%s\\n" "$*" >> "$FAKE_LOG"\necho "{\\"ok\\":true}"\n' > "$T/bin/api-anything"
 fi
 
+# Every profile-login row that reaches Microsoft's sign-in names the Entra
+# cookies it takes. login.microsoftonline.com holds his whole Microsoft 365
+# sign-in, so a row there with the "-" (all cookies) prefix would carry it all
+# (security review, 2026-10-10). Rows are read from the script itself.
+rows="$(sed -n '/^PROFILE_LOGIN_SITES="/,/"$/p' "$ROOT/bin/chewbacca-api" | sed 's/^PROFILE_LOGIN_SITES="//; s/"$//')"
+[ -n "$rows" ] || no "could not read PROFILE_LOGIN_SITES"
+while read -r site hosts _; do
+  [ -n "$site" ] || continue
+  case ",$hosts," in
+    *microsoftonline.com,*) no "$site takes every login.microsoftonline.com cookie; name the Entra set" ;;
+  esac
+done <<EOF
+$rows
+EOF
+
 # Calls pass through with their args intact; teach maps to add.
 bash "$ROOT/bin/chewbacca-api" call alpha getThing 'q=two words' >/dev/null
 grep -qx 'call alpha getThing q=two words' "$T/calls" || no "call args changed on the way through"

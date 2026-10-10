@@ -79,10 +79,14 @@ route "fan out these independent jobs in parallel instead of running them sequen
 # 2026-10-07: loaded at session start, then hours of one-at-a-time jobs with
 # nothing to stop them. The requirement re-arms on every big-work PROMPT.
 BIG2="BIG now render the reel, generate the assets, write the page and prep the deploy"
+# A load in the last 10 minutes counts as this turn's graph (3e0948b7), so a
+# load from an EARLIER prompt is simulated by backdating its marker.
+age_load() { python3 -c 'import os,sys,time; t=time.time()-660; os.utime(sys.argv[1],(t,t))' "$CHEWBACCA_HOME/state/graph-loaded-t1"; }
 rm -rf "$CHEWBACCA_HOME/state/"*-t1
 route "BIG build the onboarding flow"
 [ "$(gate Skill graph-engineering)" = 0 ]
 route "Thanks bro that worked great"
+age_load
 route "$BIG2"
 r="$(gate Bash)$(gate Bash)"
 [ "$r" = "20" ] && echo "ok    second big prompt in a session re-arms the gate, once" || { echo "FAIL  second big prompt gave $r"; fail=1; }
@@ -93,15 +97,23 @@ route "$BIG2"
 [ "$(gate Skill graph-engineering)$(gate Bash)" = "00" ] && echo "ok    re-loading the skill that turn satisfies it" || { echo "FAIL  re-load did not satisfy"; fail=1; }
 route "$BIG2"
 [ "$(gate Agent)$(gate Bash)" = "00" ] && echo "ok    spawning an agent that turn satisfies it" || { echo "FAIL  agent spawn did not satisfy"; fail=1; }
+age_load
 route "$BIG2"
 [ "$(gate Skill handwriting)$(gate Bash)" = "02" ] && echo "ok    another skill's load does not satisfy it" || { echo "FAIL  unrelated skill satisfied it"; fail=1; }
 # Parallel calls in one message: exactly one of them refuses.
+age_load
 route "$BIG2"
 # Wait on these six by pid: a bare wait would block on the fake Ollama.
 pids=""; for i in 1 2 3 4 5 6; do gate Bash > "$TMP/par.$i" & pids="$pids $!"; done
 for p in $pids; do wait "$p"; done
 n=$(cat "$TMP"/par.* | grep -c '^2$')
 [ "$n" = 1 ] && echo "ok    six parallel calls refuse exactly once" || { echo "FAIL  parallel calls refused $n times"; fail=1; }
+# 2026-10-09: a mid-turn message re-armed the gate a minute after the skill
+# loaded, and the same turn was refused twice.
+route "$BIG2"
+[ "$(gate Skill graph-engineering)" = 0 ]
+route "$BIG2"
+[ "$(gate Bash)" = 0 ] && echo "ok    a load minutes ago is still this turn's graph" || { echo "FAIL  re-gated a load from minutes ago"; fail=1; }
 
 # Behavior backstop: a third distinct file, or an agent spawn, without the
 # skill loaded is refused once.

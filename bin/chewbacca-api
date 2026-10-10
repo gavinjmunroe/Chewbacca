@@ -224,10 +224,13 @@ sync_sites() {
 # and deletes the file. One line per site: name, cookie host suffixes (comma
 # separated), and a cookie-name prefix ("-" for all of those hosts' cookies).
 # usc-reg needs the Microsoft sign-in cookies because webreg signs in through
-# Entra; Caleb approved importing that session on 2026-10-10.
+# Entra; Caleb approved importing that session on 2026-10-10, for read-only
+# USC systems. The other usc-* rows sign in the same way and take the same
+# narrowed Entra set, never every login.microsoftonline.com cookie.
 PROFILE_LOGIN_SITES="brightspace brightspace.usc.edu d2l
 handshake joinhandshake.com -
-usc-reg webreg.usc.edu,my.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -"
+usc-reg webreg.usc.edu,my.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -
+usc-fees atweb.usc.edu,shibboleth.usc.edu,login.usc.edu,login.microsoftonline.com:ests|buid|fpc|esctx|x-ms-gateway-slice|stsservicecookie|ccstate|signinstatecookie|aadsso -"
 
 profile_login_row() { printf '%s\n' "$PROFILE_LOGIN_SITES" | awk -v s="$1" '$1 == s'; }
 

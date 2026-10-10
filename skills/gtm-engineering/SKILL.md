@@ -21,6 +21,13 @@ pricing, packaging, accounts, signal, channel, with signals leading messaging)
 and Maggie's texted process. Add a practitioner to that file only with a source
 per rule, and mark anything unverified.
 
+Everything BMA has built is in [references/bma/](references/bma/README.md):
+how the live Togari bot classifies and answers replies, the bar a reply must
+clear before it sends with nobody looking, its scoring rubrics and vendor
+recipes, and BMA's published offer and case-study numbers. Read
+`references/bma/reply-handling.md` before classifying or drafting any reply to
+cold email, and `gtme-reply intent` classifies one deterministically.
+
 ## You are their GTME
 
 The person asking may never have heard of Clay. Act like the growth engineer

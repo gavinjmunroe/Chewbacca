@@ -193,7 +193,8 @@ def test_loading_lines() -> None:
     check("the panel opens on the search surface", lines[0].startswith("@ search "), lines[0])
     check("root is named before the data", lines.index("r s") < lines.index('d /answer "Searching…"'), lines)
     check("rows open on a press", 'action=gs-open actionLabel="Open"' in "\n".join(lines))
-    check("the query is a JSON string prop", 'value="who said \\"hi\\""' in lines[2], lines[2])
+    check("the query is a JSON string prop", 'value="who said \\"hi\\""' in lines[3], lines[3])
+    check("a click off the card closes it", lines[1] == "glance search", lines[1])
 
 
 def test_end_to_end() -> None:

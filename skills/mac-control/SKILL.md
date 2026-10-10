@@ -65,7 +65,17 @@ chewie app menu Photos Photos "Settings..."     # walk the menu bar; a path endi
 chewie app key TextEdit cmd+s                   # keys go to that app's pid, not the frontmost one
 chewie app find Photos "turn off iCloud but keep the photos in the cloud"
 chewie app do Calculator "clear the display"    # find, then press
+chewie app scroll Safari 3                      # move the first scroll bar 3 tenths down, no wheel event
+chewie app read Notes                           # every visible text in order, for content
+chewie app shot Photos --region 0,0,300,200 --out /tmp/z.png   # zoom: crop in window points
+echo '[{"do":"key","combo":"escape"},{"do":"press","label":"9"},{"do":"press","label":"Multiply"},
+       {"do":"press","label":"9"},{"do":"press","label":"Equals"},{"do":"read"}]' \
+  | chewie app batch Calculator -               # one call, stops at the first failure
 ```
+
+In a batch, a step addressed by label takes a fresh `see` first and a step
+addressed by `i` uses the last one. A gated step stops the run; `"yes": true`
+belongs only on the step the person approved.
 
 `find` tries an exact label in code first. Only when that fails does Jev pick
 from the window's actionable elements; its answer comes back with a confidence
@@ -83,6 +93,12 @@ trash, pay, post, quit, don't save, allow and the like; any button with no
 label at all; and Return, Enter, Space, Delete and cmd+Q/W/D/S. `do` never
 takes `--yes`: a gated pick comes back with the exact `press <i> --yes` to
 confirm, so consent goes to the control the person saw, not to Jev's guess.
+
+The gate is a backstop. It doesn't prove a press is safe. It reads labels the
+app supplies, and an app can lie about them, so no word list is ever
+complete: three security reviews on 2026-10-09 each found the next miss. A
+press is safe because `--yes` only gets added after the person saw that exact
+control and said yes.
 
 ## Routing examples
 

@@ -260,6 +260,7 @@ def loading_lines(query: str) -> list[str]:
     loading, then the data, never a blank panel)."""
     return [
         f"@ {SURFACE} at=topRight w=420",
+        f"glance {SURFACE}",
         'c s Screen title="SEARCH"',
         f"c q Text value={_prop(clean(query, 120))} tone=muted",
         "c a Text value=@/answer",

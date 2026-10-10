@@ -420,6 +420,10 @@ if group "gtme"; then
   check "clay-inbox filters by campaign and reports a refused read" python3 "$ROOT/tests/test_clay_inbox.py"
   check "gtme-dedupe merges one person across lists, never two on name alone" python3 "$ROOT/tests/test_gtme_dedupe.py"
   check "gtme-dedupe dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-dedupe --help
+  # Every case from the upstream TypeScript tests; offline, nothing sends.
+  check "gtme-reply labels real replies, cleans HTML, refuses risky auto-sends" python3 "$ROOT/tests/test_gtme_reply.py"
+  check "gtme-reply dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-reply intent --help
+  expect "gtme-reply appears in help" "chewbacca gtme-reply" bash "$ROOT/bin/chewbacca" --help
   check "interview cases cite sourced procedures, real clay ops, and answer inside 2 s" \
     python3 "$ROOT/tests/test_gtme_interview.py"
   check "gtme-interview dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-interview list
@@ -534,6 +538,9 @@ if group "tools"; then
   # A skill whose YAML is malformed is not registered, so it never fires and
   # the user concludes the skill is bad at triggering. life-ops shipped that
   # way for weeks over one unquoted colon in its description.
+  # recur counts whether a saved correction's mistake came back. Synthetic
+  # transcripts only: a repair after the save counts, one before it doesn't.
+  check  "recur counts a correction that came back, and only after it was saved" python3 "$ROOT/tests/test_recur.py"
   check  "every skill frontmatter parses" python3 "$ROOT/tools/frontmatter.py"
   FM="$TMP/fmcheck/skills/broken"; mkdir -p "$FM"
   printf -- '---\nname: broken\ndescription: a thing that is not code: it breaks\n---\n\n# x\n' > "$FM/SKILL.md"
@@ -1180,6 +1187,7 @@ fi
 if group "hooks"; then
   check "brain-recall speaks only over the cosine bar" bash "$ROOT/tests/brain_recall.sh"
   check "brain index is incremental and a slow model load no longer silences recall" python3 "$ROOT/tests/test_brain_index.py"
+  check "a long hub folder cannot fill brain's top 5 for an unrelated question" python3 "$ROOT/tests/test_brain_hubs.py"
   check "router shadow log never blocks a hook or lands in a repo" bash "$ROOT/tests/route_shadow.sh"
   check "route_tune follows its written rule and refuses under 50 rows" bash "$ROOT/tests/route_tune.sh"
   check "formatter handles a broken Node runtime" python3 "$ROOT/tests/test_formatter_runtime.py"
@@ -1513,6 +1521,10 @@ if group "hud"; then
     python3 "$ROOT/tests/test_surface_notes.py"
   check  "dash-notes adds a dash line only to a note with nothing to lose, and reads it back" \
     python3 "$ROOT/tests/test_notes_surface.py"
+  check  "doc draws a Google or local document, and writes an edit only on the Apply press, then reads it back" \
+    python3 "$ROOT/tests/test_docs_surface.py"
+  check  "the real hud-listen and surfaces daemon open a doc, draw an edit as a Diff, and write it on one press" \
+    python3 "$ROOT/tests/test_docs_e2e.py"
   check  "github runs one read-only graphql call and refuses every write" \
     python3 "$ROOT/tests/test_surface_github.py"
   check  "whatsapp sends only to the opened 1:1 chat, verifies the new id, and an unlinked account is a note" \

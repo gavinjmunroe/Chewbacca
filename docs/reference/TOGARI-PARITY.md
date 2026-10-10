@@ -16,14 +16,15 @@ Status:
 - **MISSING**: not here. The last column says why and the gate it would need.
 - **N/A**: Togari server plumbing with nothing for a local kit to do.
 
-Counts, 63 rows: 16 HAVE, 10 PORTED (6 Togari ports, 4 rows of new Clay
-reads), 2 GATED, 13 PARTIAL, 18 MISSING, 4 N/A. Of the 18 MISSING: 2 are
-local computation with nothing to feed them here (cross-validation needs
-ZoomInfo and Enformion records; the platform-limits ontology is not GTM
-work), 2 are reads blocked on a credential that lives only on Togari's Railway
-service (ZoomInfo search, Fireflies), 1 needs read access to Togari's
-warehouse, and 13 send, spend credits, call a paid model, write Togari's or a
-client's systems, or need a hosted server.
+Counts, 63 rows: 16 HAVE, 12 PORTED (8 Togari ports, 4 rows of new Clay
+reads), 2 GATED, 13 PARTIAL, 16 MISSING, 4 N/A. Two of the PORTED rows
+(ZoomInfo search, Fireflies) are tested against a local fake only: their keys
+are not in this Mac's keychain yet, so neither has made a live call. Of the 16
+MISSING: 2 are local computation with nothing to feed them here
+(cross-validation needs ZoomInfo and Enformion records; the platform-limits
+ontology is not GTM work), 1 needs read access to Togari's warehouse, and 13
+send, spend credits, call a paid model, write Togari's or a client's systems,
+or need a hosted server.
 
 Every "ran" below was run on 2026-10-10 from a worktree of `origin/main` on
 Caleb's Mac (load average 50 to 75), exit 0 unless noted. Live Clay reads ran
@@ -96,7 +97,7 @@ which is what `gtme-dnc` matches. `--company-wide` reproduces Togari exactly.
 | Capability | Togari location | Chewbacca | Verified how |
 | --- | --- | --- | --- |
 | Exa search, similar, contents, answer | `src/integrations/exa/*`, `src/mcp/tools/exa.ts` | MISSING | every call bills Exa, and there is no Exa key on this Mac. Gate: write:spends-credits plus the key. `scrape` (one public page) and the deep-research skill cover reading |
-| ZoomInfo company and person search (free) | `src/integrations/zoominfo/*` | MISSING | a free read, but ZoomInfo credentials live only on Togari's Railway service. BLOCKED on the credential |
+| ZoomInfo company and person search (free) | `src/integrations/zoominfo/*` | PORTED: `gtme-lookup zoominfo company-search`, `person-search` (PKI JWT auth, Togari's request bodies; enrich is refused) | `tests/test_gtme_lookup.py` against a local fake. No live call yet: keychain items `chewbacca-zoominfo-username`, `-client-id`, `-private-key` are empty |
 | ZoomInfo company and person enrich, lookalikes (1 credit each) | same | MISSING | gate: write:spends-credits plus the credential |
 | AI column written back onto a CRM record (`togari_enrich`) | `src/enrich/service.ts` | MISSING | writes Togari's CRM and calls a paid model |
 | Structure free text into typed fields (`togari_structure`) | `src/enrich/service.ts` | PARTIAL: `chewbacca jev` typed decisions | `jev --help` ran |
@@ -114,7 +115,7 @@ which is what `gtme-dnc` matches. `--company-wide` reproduces Togari exactly.
 | Context add, move, delete | `v1/service.ts` | PARTIAL: second brain notes and `people` | not a Togari write |
 | Ingest a CSV, file or text; ingest status | `src/ingest/universal/*`, `v1/service.ts` | PARTIAL: `ingest` (file to text), `chewbacca import`, `gtm-memory ingest` | `ingest --help` ran |
 | Pull Gmail, calendar, Slack on command | `src/sources/*`, `src/pdw/adapters/*` | HAVE: `chewbacca email` (gws), `mac calendar`, `chewbacca slack` | all three `--help` ran |
-| Fireflies meetings | `src/sources/fireflies-fetch.ts` | MISSING: Chewbacca reads meetings from Anarlog on device | no Fireflies key here; Anarlog covers Caleb's meetings |
+| Fireflies meetings | `src/sources/fireflies-fetch.ts` | PORTED: `gtme-lookup fireflies meetings` (Anarlog still covers Caleb's own meetings on device) | `tests/test_gtme_lookup.py` against a local fake. No live call yet: keychain item `chewbacca-fireflies-api-key` is empty |
 | Companies, contacts, datapoints in the warehouse | `src/mcp/tools/{companies,contacts,datapoints}.ts` | PARTIAL: `gtm-memory account/contact`, `people` (local stores, not Togari's warehouse) | ran |
 | Custom fields (`togari_schema_*`) | `src/schema/*` | MISSING for Togari; Clay columns are `chewbacca clay columns` (read) and `add-column` (GATED) | Togari DB writes |
 | Pipeline stages, move a deal, activity log, overdue | `src/mcp/tools/pipeline.ts` | PARTIAL: `gtm-memory overdue`, `owe`, `timeline` | deal moves are Togari CRM writes |

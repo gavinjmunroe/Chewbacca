@@ -459,6 +459,12 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_gtme_score.py"
   check "gtme-dnc dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-dnc --help
   check "gtme-score dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-score --help
+  # A local fake plays ZoomInfo and Fireflies; a temp file plays the keychain.
+  check "gtme-lookup signs ZoomInfo's JWT, sends Togari's bodies, refuses credit spends, never prints a key" \
+    python3 "$ROOT/tests/test_gtme_lookup.py"
+  check "gtme-lookup dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-lookup --help
+  check "setup links every gtme tool (a missing space once fused two names)" \
+    bash -c 'grep -q " gtme-score gtme-lookup kit-debt " "$1/setup.sh"' _ "$ROOT"
   check "interview cases cite sourced procedures, real clay ops, and answer inside 2 s" \
     python3 "$ROOT/tests/test_gtme_interview.py"
   check "gtme-interview dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-interview list

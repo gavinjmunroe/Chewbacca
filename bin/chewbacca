@@ -73,6 +73,7 @@ COMMANDS=(
   "gtme-reply|classify a cold-email reply, clean its text, and gate auto-send, offline"
   "gtme-dnc|may we email this address: one check across the graph, DNC lists and the Clay blocklist"
   "gtme-score|Togari's lead, affiliation, primary-contact, tier and quality rubrics, offline"
+  "gtme-lookup|ZoomInfo's free company and person search, Fireflies meetings, keys from the keychain"
   "gtme-interview|drill GTM engineer interview cases from sourced Clay procedures"
   "gtm|every client's campaigns, sends, replies and meetings, from the local graph"
   "gtme|a hired growth engineer: a plan from your business, first list, brief, next, report"
@@ -137,6 +138,11 @@ task-graph|graph-fuse|review-gate|work-ledger|tabs|ux-learning|jev|decision-lab|
   tool="$1"
   shift
   exec python3 "$ROOT/bin/$tool" "$@"
+  ;;
+gtme-lookup)
+  # Node: ZoomInfo's auth signs an RS256 JWT, which stdlib python can't.
+  shift
+  exec node "$ROOT/bin/gtme-lookup" "$@"
   ;;
 gtme-dedupe)
   # Bash, not python: it picks the venv that has splink.

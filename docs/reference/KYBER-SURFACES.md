@@ -290,12 +290,54 @@ Spoken: "show my meetings", "what did we decide", "what came out of my call".
 
 The list is the 6 newest meetings with who was there; Open shows the summary,
 the lines under its Decisions heading, the open action items and one 200-word
-transcript page with Next. Its actions are `ks-open`, `ks-next`, `ks-add` and
-`ks-capture`, which runs `bin/room-capture start`, or `stop` while it records.
-`ks-add` is the one press that writes: it makes one promoted Task in the OS
-graph (source `meetings-promoted`, kind `promise`), which the tasks lanes
-read and the Docket's queue (docs/plans/AFTER-PANES.md, not built yet) can take
-from `_attention()`, and touches nothing else.
+transcript page with Next. Its actions are `ks-open`, `ks-next`, `ks-act`,
+`ks-add` and `ks-capture`, which runs `bin/room-capture start`, or `stop`
+while it records.
+
+**Every action item ends in one press, Go (`ks-act`, CHW-206).** What Go does
+is chosen by rule from the item's shape (`bin/lib/meeting_actions.py`), and
+the row says it before the press:
+
+- a message to a named person ("send the deck to Maggie", "follow up with
+  Jonah") becomes a text draft through `people texts drafts add`, with
+  voice-check inside it, but only when the item is his to send: one another
+  person owes ("Jonah will send the deck to Maggie") never reaches his queue.
+  Nothing sends; a draft goes out only when someone names its number. The
+  item is marked pressed in `acted.json` before the draft is written, so a
+  failed write can't let a second press draft it twice.
+- a day someone named ("Thursday at 3pm", or the summary's due date) becomes a
+  tentative event with no invitees: on Google through gws when its sign-in
+  already holds calendar write (`status: tentative`, `sendUpdates: none`, no
+  `attendees` key), else in Calendar through `mac calendar add` titled
+  "Draft: ...". With neither, the row names the missing consent and nothing is
+  created. A relative day ("next week") stays a task.
+- anything else becomes a work-ledger task under `~`, keyed
+  `meeting:<id>:<item>`, and is promoted into the OS graph as `ks-add` did.
+
+After the press the row reads "Done" with the line read back from where the
+thing landed (`events get`, `calendar list`, the drafts file, `work-ledger
+list`), and `~/.chewbacca/meetings/acted.json` (0600) remembers it, so a
+second press does nothing. Under the items, one line each says where the owner
+and the day came from: the transcript line's clock when a line says it, and
+"(guess)" when it was inferred, because the transcript has no speaker names
+("I'll" is a guess at you; a name is said only when the line names that person
+doing it). Only native capture keeps timed lines, so an Anarlog item says no
+line was found. `ks-add` still makes one promoted Task in the OS graph (source
+`meetings-promoted`, kind `promise`) and touches nothing else.
+
+**The consent line.** `room-capture start` and `room-listen` draw a
+`capture-<id>` surface on the glass, "Recording now: ..., transcribed on this
+Mac", and wait for Kyber to answer a `listen` sent after the drawing before
+the process that writes audio is started (`bin/lib/capture_consent.py`). With
+no glass the line goes to the terminal first. That first drawing has no Stop
+press, because the starter exits and couldn't hear one; the capture watcher
+(or room-listen) redraws the same surface on its own subscribed connection
+with Stop recording (`ks-capture-stop`), so every frame that shows Stop is
+owned by the process that can stop. Each capture has its own surface id
+(kept in `~/.chewbacca/room-capture/consent.id`), so a stop takes down its own
+line and a press only stops the capture it names. When recording ends the
+watcher takes the line down and deletes any half-written chunk the helper
+left; room-listen deletes its temp folder, untranscribed segment included.
 
 In the graph each meeting in the 7-day window is an Event, attendees with an
 email are Persons fused only through the people store's identities (never by
@@ -314,7 +356,11 @@ the button reads Stop capture.
 meetings supersede it for calls and do not replace it.
 `tests/test_surface_meetings.py` runs against fixtures shaped exactly like the
 CLI's JSON (`tests/fixtures/anarlog`); `tests/test_meeting_capture.py` runs
-native capture on fixture chunks with no audio and no model.
+native capture on fixture chunks with no audio and no model;
+`tests/test_meeting_actions.py` presses Go on a fixture meeting's three items
+through the daemon with fake gws, mac and people on PATH; and
+`tests/test_capture_consent.py` holds that the consent line is drawn before
+any audio is written.
 
 ## Agents
 

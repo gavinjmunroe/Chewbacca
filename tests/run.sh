@@ -1565,6 +1565,10 @@ if group "hud"; then
   check  "native capture deletes each chunk once transcribed, writes 0600 meetings in Anarlog's shapes, and marks every summary a guess" \
     python3 "$ROOT/tests/test_meeting_capture.py"
   check  "room-capture and meeting_capture parse" python3 -m py_compile "$ROOT/bin/room-capture" "$ROOT/bin/lib/meeting_capture.py"
+  check  "a meeting's items end in one press each: tentative event, text draft or ledger task, read back, never sent" \
+    python3 "$ROOT/tests/test_meeting_actions.py"
+  check  "capture draws its consent line on the glass before any audio is written, and owns its Stop press" \
+    python3 "$ROOT/tests/test_capture_consent.py"
   check  "agents sends only to the pinned session, answers only the shown request, and a down engine offers only Start" \
     python3 "$ROOT/tests/test_surface_agents.py"
   check  "the launcher lists only real surfaces and the hud-apps sentence reaches it, not genui" \

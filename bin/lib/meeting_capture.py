@@ -628,6 +628,25 @@ def finalize_stale(home: Path, now: datetime | None = None) -> list[str]:
     return closed
 
 
+def discard_leftovers(home: Path, before: float) -> int:
+    """Delete what is left in the chunks folder from a capture that has
+    stopped: files written before `before` (the moment the watcher saw the
+    helper gone). Nothing is deleted while a helper records, so a new
+    capture's chunks are never touched. Returns how many went."""
+    if capture_state(home).get("running"):
+        return 0
+    gone = 0
+    folder = chunks_dir(home)
+    for path in folder.iterdir() if folder.is_dir() else []:
+        try:
+            if path.is_file() and path.stat().st_mtime <= before:
+                path.unlink()
+                gone += 1
+        except OSError:
+            pass
+    return gone
+
+
 def reexec_under_whisper() -> None:
     """mlx-whisper lives in its own uv venv, so the python3 on PATH cannot
     import it; re-exec under the interpreter its launcher names (the same move
@@ -650,6 +669,8 @@ def main(argv: list[str] | None = None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     w = sub.add_parser("watch")
     w.add_argument("--helper-pid", type=int, default=0)
+    w.add_argument("--no-mic", action="store_true", help="the consent line names only the call audio")
+    w.add_argument("--consent", default="capture", help="this capture's own consent surface")
     sub.add_parser("list")
     sub.add_parser("finalize-stale")
     a = p.parse_args(argv)
@@ -664,7 +685,23 @@ def main(argv: list[str] | None = None) -> int:
     finalize_stale(home)
     watcher = Watcher(home, helper_alive=lambda: pid_alive(a.helper_pid, "room-capture"))
     signal.signal(signal.SIGTERM, lambda *_: setattr(watcher, "helper_alive", lambda: False))
-    last = watcher.loop()
+    # The watcher outlives `room-capture start`, so it holds the consent line
+    # and its Stop press for as long as anything records (CHW-206).
+    import capture_consent  # noqa: PLC0415
+
+    def stop_helper() -> None:
+        if a.helper_pid and pid_alive(a.helper_pid, "room-capture"):
+            os.kill(a.helper_pid, signal.SIGTERM)
+
+    glass = capture_consent.Glass(name=a.consent)
+    glass.own(capture_consent.capture_line(mic=not a.no_mic, summary=not summary_off()), stop_helper)
+    try:
+        last = watcher.loop()
+    finally:
+        glass.close()
+        # Whatever the helper left half-written when it stopped never gets
+        # words, so it goes now: audio is only ever kept until transcribed.
+        discard_leftovers(home, time.time())
     print(json.dumps({"meeting": last["id"] if last else None, **watcher.stats}))
     return 0
 

@@ -1394,6 +1394,8 @@ if group "hud"; then
     python3 "$ROOT/tests/test_surface_code.py"
   check  "notes appends one line only to a text-only pinned note and reads it back" \
     python3 "$ROOT/tests/test_surface_notes.py"
+  check  "dash-notes adds a dash line only to a note with nothing to lose, and reads it back" \
+    python3 "$ROOT/tests/test_notes_surface.py"
   check  "github runs one read-only graphql call and refuses every write" \
     python3 "$ROOT/tests/test_surface_github.py"
   check  "whatsapp sends only to the opened 1:1 chat, verifies the new id, and an unlinked account is a note" \

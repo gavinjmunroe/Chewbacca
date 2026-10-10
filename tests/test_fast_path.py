@@ -108,6 +108,11 @@ TABLE = [
     ("okay so find me fintech VC partners in clay", "clay"),
     ("open clay", None),
     ("build me a list of 5 restaurants in Dallas", None),
+    # CHW-195: one note by title, before the surface words.
+    ("add milk to my groceries note", "notes"),
+    ("new note Trip ideas", "notes"),
+    ("close the notes", "notes"),
+    ("show my notes", "surface"),
 ]
 
 

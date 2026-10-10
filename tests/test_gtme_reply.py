@@ -78,8 +78,9 @@ class ReplyIntentRealReplies(unittest.TestCase):
         self.assertEqual(reply.reply_intent("Cool.")["kind"], "unclear")
 
     def test_auto_handled_kinds(self):
+        # Upstream's six, plus Chewbacca's "bounce" (see Bounces below).
         self.assertEqual(reply.AUTO_HANDLED,
-                         {"pass", "later", "new_address", "referral", "unsubscribe", "ignore"})
+                         {"pass", "later", "new_address", "referral", "unsubscribe", "ignore", "bounce"})
 
 
 class CleanReplyText(unittest.TestCase):
@@ -235,6 +236,26 @@ class Cli(unittest.TestCase):
     def test_help(self):
         for sub in ("intent", "clean", "autosend", "campaign"):
             self.assertEqual(run_bin(sub, "--help").returncode, 0)
+
+
+class Bounces(unittest.TestCase):
+    # Chewbacca's addition over upstream: on 65 real replies (2026-10-10) both
+    # delivery failures came out "unclear" and would have reached the client.
+    def test_server_bounces_are_handled(self):
+        for text in (
+            "Address not found\n\nYour message wasn't delivered to person01@gmail.com because "
+            "the address couldn't be found.",
+            "Message blocked\n\nYour message to person02@firm01.example has been blocked.",
+            "Delivery Status Notification (Failure)",
+            "Undeliverable: Quick intro",
+        ):
+            out = reply.reply_intent(text)
+            self.assertEqual(out["kind"], "bounce", text)
+            self.assertIn("bounce", reply.AUTO_HANDLED)
+
+    def test_a_person_mentioning_delivery_is_not_a_bounce(self):
+        self.assertNotEqual(reply.reply_intent("Interested, can you send the deck? Delivery timing "
+                                               "matters to us.")["kind"], "bounce")
 
 
 class LeadNames(unittest.TestCase):

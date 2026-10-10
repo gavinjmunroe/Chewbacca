@@ -18,7 +18,8 @@ Synced from togari-platform 8d7ad77 (these four unchanged since 9faffef), src/ag
   reply-text.ts     cleanReplyText, stripEmDashes
   fit-review.ts     readableReply, splitCampaign
   auto-send.ts      autoSendable, CARRIES_PAYLOAD
-Resync when the live bot's rules change. tests/test_gtme_reply.py carries
+Resync when the live bot's rules change. One deliberate addition: a
+"bounce" kind for delivery failures, which upstream leaves as "unclear". tests/test_gtme_reply.py carries
 every case from the TypeScript tests, so a resync can be checked against them.
 
 Offline and stdlib only. Nothing here reads a mailbox or sends anything.
@@ -265,12 +266,23 @@ def js_parse_int(digits, radix):
 
 # --- reply-intent.ts -------------------------------------------------------
 
-KINDS = ("new_address", "referral", "form", "deck", "question", "later", "pass",
+KINDS = ("bounce", "new_address", "referral", "form", "deck", "question", "later", "pass",
          "interested", "unsubscribe", "ignore", "unclear")
 # Kinds that never need Jonah: zeutara-gtme's autopilot resends, follows up,
 # blocklists or just logs them. Interested, questions, deck requests, forms
 # and anything unclear still reach him.
-AUTO_HANDLED = frozenset(("pass", "later", "new_address", "referral", "unsubscribe", "ignore"))
+AUTO_HANDLED = frozenset(("bounce", "pass", "later", "new_address", "referral", "unsubscribe",
+                          "ignore"))
+
+# Chewbacca's one addition to the upstream rules. Run over Zeutara's 65 real
+# replies on 2026-10-10, both delivery failures in the inbox ("Address not
+# found", "Message blocked") came out "unclear" and would have reached the
+# client as work. The reply guide already rules a bounce has nobody to answer.
+# Matched on the mail server's own wording only, never a person's.
+BOUNCE = js_regex(
+    r"(address not found|wasn'?t delivered|message (was )?blocked|undeliverable|"
+    r"delivery (status notification|has failed|failure)|mail delivery (subsystem|failed)|"
+    r"could not be delivered|recipient address rejected|mailbox (unavailable|not found|full))", "i")
 
 MAX_INPUT = 6000
 FREE_MAIL = js_regex(r"^(gmail|googlemail|yahoo|hotmail|outlook|icloud|me|aol|proton|protonmail)\.", "i")
@@ -400,6 +412,10 @@ def _reply_intent(reply_text, lead_email, sending_email, company_name):
     company = company_name or "the company"
     others = _emails_in(text, [lead_email, sending_email])
     links = _urls_in(text)
+
+    if BOUNCE.search(text[:400]):
+        return {"kind": "bounce", "label": "Didn't deliver",
+                "nextStep": "Mark the address bad and never resend to it. Nobody to answer."}
 
     if IGNORE.search(text):
         return {"kind": "ignore", "label": "No action", "nextStep": "Leave it. Nothing to send."}

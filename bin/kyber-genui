@@ -28,7 +28,7 @@ Usage:
     kyber-genui catalog [--check|--prompt]    the vocabulary, or the drift check
     kyber-genui queries                       the query vocabulary the model may bind to
     kyber-genui event <action> <component>    handle a press on a generated surface
-    kyber-genui bench [--requests FILE] [--out FILE] [--only N,..]
+    kyber-genui bench [--requests FILE] [--out FILE] [--only N,..] [--regrade RESULTS]
     kyber-genui keep [NAME]                   the last model-written surface becomes a framework candidate
     kyber-genui candidates                    candidates held back, and the promoted ones
     kyber-genui promote NAME                  check a candidate against the sealed requests, then use it
@@ -69,6 +69,12 @@ CATALOG_PATH = GENUI / "catalog.json"
 POLICY_PATH = GENUI / "policy.json"
 EXEMPLARS_PATH = GENUI / "exemplars.json"
 FRAMEWORKS_PATH = GENUI / "frameworks.json"
+COVERS_PATH = GENUI / "covers.json"
+GLASS_SEARCH = ROOT / "bin" / "lib" / "glass_search.py"
+# The no-source card's one button. hud-listen answers it with its own glass
+# search (search_on_glass), so it is not in policy.json: a model may never
+# draw it, and the validator refuses it on any layout a model writes.
+SEARCH_ACTION = "genui-search"
 HUD_DOC = ROOT / "hud" / "CLAUDE.md"
 RENDERER = ROOT / "hud" / "Sources" / "KyberKit" / "SurfaceView.swift"
 SOCKET = os.environ.get("BOB_HUD_SOCKET", str(Path.home() / ".bob" / "hud.sock"))
@@ -94,6 +100,7 @@ def load_json(path: Path) -> dict:
 CATALOG = load_json(CATALOG_PATH)
 POLICY = load_json(POLICY_PATH)
 FRAMEWORKS = load_json(FRAMEWORKS_PATH)
+COVERS = load_json(COVERS_PATH)
 LIMITS = POLICY["limits"]
 
 
@@ -210,6 +217,7 @@ class Query:
     arg: dict = field(default_factory=dict)
     scalars: tuple[str, ...] = ()
     provider: str = "builtin"
+    covers: dict = field(default_factory=dict)
 
     def check_arg(self, arg: str | None) -> str | None:
         kind = self.arg.get("kind")
@@ -553,7 +561,8 @@ def provider_query(spec: dict) -> Query:
     return Query(name, str(spec.get("description", "")), [str(f) for f in spec.get("fields", [])],
                  tuple(v for v in spec.get("views", ["rows", "list", "count", "note"]) if v in VIEWS),
                  fetch, dict(spec.get("arg") or {}), tuple(spec.get("scalars", ())),
-                 provider=str(spec.get("provider", "provider")))
+                 provider=str(spec.get("provider", "provider")),
+                 covers=dict(spec["covers"]) if isinstance(spec.get("covers"), dict) else {})
 
 
 def provider_manifests() -> list[Path]:
@@ -1195,11 +1204,35 @@ def model_command() -> list[str]:
                 raw = hud_accounts.runtime_command(target.runtime, target.model)
         except (ImportError, ValueError, OSError, KeyError):
             raw = "claude -p"
-    return shlex.split(raw)
+    argv = shlex.split(raw)
+    # The layout model gets no tools on every runtime, so it cannot read a
+    # file while it writes a layout (the model never sees the data). Claude's
+    # flags are in claude_flags; each hud-<runtime> wrapper turns --no-tools
+    # into its own CLI's flags (docs/reference/GENUI.md, "No tools"). Measured
+    # 2026-10-10: Codex through hud-codex as the voice runs it read
+    # /etc/hosts when asked; with --no-tools it answered that it had no tool.
+    if is_wrapper(argv) and NO_TOOLS_FLAG not in argv:
+        argv.append(NO_TOOLS_FLAG)
+    return argv
+
+
+NO_TOOLS_FLAG = "--no-tools"
+WRAPPED_RUNTIMES = ("codex", "gemini", "ollama")
+
+
+def is_wrapper(argv: list[str]) -> bool:
+    name = Path(argv[0]).name if argv else ""
+    return name.startswith("hud-") and name[4:] in WRAPPED_RUNTIMES
 
 
 def is_claude(argv: list[str]) -> bool:
     return bool(argv) and Path(argv[0]).name == "claude"
+
+
+def tier2_argv(prompt_file: Path) -> list[str]:
+    """The exact command Tier 2 runs: the runtime's command plus its no-tools flags."""
+    argv = model_command()
+    return argv + claude_flags(prompt_file) if is_claude(argv) else argv
 
 
 def claude_flags(prompt_file: Path) -> list[str]:
@@ -1227,10 +1260,10 @@ def claude_flags(prompt_file: Path) -> list[str]:
 
 def stream_model(request: str, system: str, on_line: Callable[[str], None], timeout: float = 120) -> str:
     """Ask once, call on_line for each complete line as it arrives, return all text."""
-    argv = model_command()
     STATE.mkdir(parents=True, exist_ok=True)
     prompt_file = STATE / "prompt.md"
     prompt_file.write_text(system, encoding="utf-8")
+    argv = tier2_argv(prompt_file)
     env = dict(os.environ)
     env["CHEWBACCA_HUD_CHILD"] = "1"
     # `--setting-sources local` still loads the auto-memory index. Measured
@@ -1239,7 +1272,6 @@ def stream_model(request: str, system: str, on_line: Callable[[str], None], time
     # campaign", a name the request never said. A layout needs no memory.
     env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
     if is_claude(argv):
-        argv = argv + claude_flags(prompt_file)
         stdin_text = request
     else:
         stdin_text = f"{system}\n\nRequest: {request}\n"
@@ -1399,6 +1431,59 @@ class Run:
     jev_ms: float | None = None
     choice: dict = field(default_factory=dict)
     why: dict = field(default_factory=dict)
+    no_source: bool = False
+    say: str = ""
+    gate: dict = field(default_factory=dict)
+
+
+class Gate:
+    """The relevance gate for one request: code first, then one Jev yes/no per source code could not decide.
+
+    `ok(source)` is False only on a decided no. Undecided, or Jev unreachable,
+    lets the source through, which is the behaviour before the gate existed:
+    a Jev outage costs the old failure, never a refused right answer.
+    """
+
+    def __init__(self, request: str, queries: dict[str, Query], ask: Callable[..., dict | None] | None):
+        self.request = request
+        self.queries = queries
+        self.ask = ask
+        self.slots = tiers.extract_slots(request)
+        self.table = covers_table(queries)
+        self.verdicts: dict[str, tiers.Verdict] = {}
+        self.jev_ms: list[float] = []
+
+    def code(self, source: str) -> tiers.Verdict:
+        # The framework's argument kinds (days, day, course, name), which say
+        # which slot a source takes; the query's own kinds (int, enum) do not.
+        arg_kind = FRAMEWORKS["sources"].get(source, {}).get("arg", "")
+        return tiers.relevance(self.request, source, self.table, self.slots, arg_kind)
+
+    def check(self, source: str) -> tiers.Verdict:
+        if source in self.verdicts:
+            return self.verdicts[source]
+        verdict = self.code(source)
+        if verdict.ok is None and self.ask is not None and source in self.queries:
+            started = time.monotonic()
+            asked = tiers.ask_relevance(self.request, source, self.queries[source].description, self.table,
+                                        self.ask)
+            self.jev_ms.append(round((time.monotonic() - started) * 1000, 1))
+            if asked.ok is not None:
+                verdict = asked
+        self.verdicts[source] = verdict
+        return verdict
+
+    def ok(self, source: str) -> bool:
+        return self.check(source).ok is not False
+
+
+def covers_table(queries: dict[str, Query]) -> dict:
+    """config/genui/covers.json, with any provider's own `covers` winning for its query."""
+    table = {"generic": COVERS.get("generic", []), "queries": dict(COVERS.get("queries", {}))}
+    for name, query in queries.items():
+        if query.covers:
+            table["queries"][name] = query.covers
+    return table
 
 
 class Resolver:
@@ -1464,6 +1549,40 @@ def fallback_lines(request: str, why: str) -> list[str]:
         "> s fb",
         f"c fb Status message={json.dumps(clean('No view for this one. ' + why, 120))} level=warning",
     ]
+
+
+def offer_path(surface_name: str) -> Path:
+    return STATE / f"offer-{surface_name}.json"
+
+
+def answer_no_source(run: Run, verdict: tiers.Verdict | None, sink: Sink, surface_name: str,
+                     table: dict) -> None:
+    """No source on this Mac answers the request: one sentence for the pill, and at most one press.
+
+    Never a panel about the wrong thing (docs/reference/GENUI.md, "Relevance
+    gate"). With glass search on, the card holds one button that searches the
+    web through hud-listen's own glass search; without it the card comes down
+    and the pill alone answers.
+    """
+    say, searchable = tiers.no_source_line(run.request, verdict, table)
+    searchable = searchable and GLASS_SEARCH.is_file() and os.environ.get("HUD_SEARCH", "on") != "off"
+    if searchable:
+        lines = ['c s Screen title="NOT ON THIS MAC"', "> s ws",
+                 f'c ws Button label="Search the web" action={SEARCH_ACTION} variant=primary']
+        try:
+            STATE.mkdir(parents=True, exist_ok=True)
+            offer_path(surface_name).write_text(json.dumps({"query": run.request, "say": say}), encoding="utf-8")
+        except OSError:
+            lines = [f"- {surface_name}"]
+    else:
+        lines = [f"- {surface_name}"]
+    sink.send(*lines)
+    run.no_source = True
+    run.say = say
+    run.final_valid = True
+    run.lines = lines
+    run.queries = []
+    run.gate = {**(verdict.as_dict() if verdict else {}), "say": say, "search": searchable}
 
 
 def note_lines(resolver: Resolver, children: list[str], lines: list[str], keys: set[str]) -> list[str]:
@@ -1551,8 +1670,13 @@ def send_layout(surface: Surface, resolver: Resolver, data: dict[str, dict] | No
 
 def fast_path(request: str, run: Run, queries: dict[str, Query], resolver: Resolver,
               ms: Callable[[], float], enabled: set[int],
-              classifier: Callable[..., dict | None] | None) -> Surface | None:
-    """Tier 0 then Tier 1. A Surface on the glass, or None and a note on `run` saying why not."""
+              classifier: Callable[..., dict | None] | None, gate: Gate | None = None,
+              surface_name: str = SURFACE) -> Surface | None:
+    """Tier 0 then Tier 1. A Surface on the glass, or None and a note on `run` saying why not.
+
+    None with `run.no_source` set means the relevance gate answered instead:
+    no source on this Mac holds what the request asks about.
+    """
     if 0 in enabled:
         hit = tiers.tier0(request, tier0_entries())
         if hit:
@@ -1593,9 +1717,41 @@ def fast_path(request: str, run: Run, queries: dict[str, Query], resolver: Resol
     run.choice = {"archetype": choice.archetype, "archetype_p": round(choice.archetype_p, 2),
                   "source": choice.source, "source_p": round(choice.source_p, 2), "head_start": guess}
     plan, reason = tiers.plan(choice, slots, FRAMEWORKS, queries)
+    sure = choice.source_p >= FRAMEWORKS["thresholds"]["source"]
     if plan is None:
         run.tier_notes.append(f"tier 1: {reason}")
+        if gate is None or not sure:
+            return None
+        # The relevance gate before the model (docs/reference/GENUI.md). Jev
+        # already said no source fits; code agrees when no word of the request
+        # lands on any query's declaration. A drawing still goes to the model.
+        if choice.source == "none" and choice.archetype != "connections":
+            near = tiers.covered_anywhere(request, gate.table, slots)
+            if not near:
+                subject = tiers.subject_words(request, slots, set(gate.table.get("generic", [])))
+                answer_no_source(run, tiers.Verdict(
+                    False, "jev", f"Jev: no source fits ({choice.source_p:.2f}); no query declares "
+                    f"{', '.join(subject[:3]) or 'its words'}"), resolver.sink, surface_name, gate.table)
+                return None
+            run.tier_notes.append(f"gate: Jev said none, but {', '.join(near[:3])} declare its words")
+        # A source that needs an argument the request never said: ask for it
+        # instead of letting the model bind a neighbour (frozen #3 bound
+        # `needs` under a campaign Field, 2026-10-10).
+        elif choice.source in queries and queries[choice.source].arg.get("required") and \
+                gate.table.get("queries", {}).get(choice.source, {}).get("ask") and \
+                gate.code(choice.source).ok is not False:
+            answer_no_source(run, tiers.Verdict(False, "code", reason, other=choice.source), resolver.sink,
+                             surface_name, gate.table)
+            return None
         return None
+    if gate is not None:
+        # Jev's pick, refused by code: the request's words are another
+        # query's. The model, behind the same gate, gets to bind that one.
+        verdict = gate.code(plan.source)
+        if verdict.ok is False:
+            run.choice["gate"] = verdict.as_dict()
+            run.tier_notes.append(f"gate: {verdict.why}")
+            return None
     keys = [plan.key] + plan.companions
     data = resolve_many(queries, [k for k in keys if k not in head_keys])
     if head_thread and any(k in head_keys for k in keys):
@@ -1636,7 +1792,20 @@ def generate(request: str, *, dry: bool = False, at: str | None = None, surface_
     resolver = Resolver(queries, sink)
 
     enabled = tiers_on if tiers_on is not None else enabled_tiers()
-    known = fast_path(request, run, queries, resolver, ms, enabled, classifier)
+    # Jev is Tier 1's tool, so the gate asks it only when Tier 1 is on; with
+    # GENUI_TIERS=2 the gate is code alone (the tests run that way, offline).
+    gate = Gate(request, queries, (classifier or default_classifier()) if 1 in enabled else None)
+    known = fast_path(request, run, queries, resolver, ms, enabled, classifier, gate, surface_name)
+    if run.no_source:
+        run.tier = 1  # decided on Tier 1's Jev answer and code, before any model
+        run.first_try_valid = True
+        run.model_done_ms = run.first_component_ms = ms()
+        run.complete_ms = ms()
+        if not dry:
+            sink.close()
+            run.display_problems = list(sink.problems)
+        remember(surface_name, run, Surface())
+        return run
     if known is not None:
         run.first_try_valid = run.final_valid = True
         run.lines = list(known.accepted)
@@ -1663,11 +1832,38 @@ def generate(request: str, *, dry: bool = False, at: str | None = None, surface_
         remember(surface_name, run, Surface())
         return run
     system = system_prompt(queries)
+    # The relevance gate on the model's own bindings (docs/reference/GENUI.md).
+    # A line binding a source the gate says no to is held back, not drawn. A
+    # source it says yes to anchors the panel and releases what was held: "am
+    # I behind" may show owed replies beside the overdue list. A layout whose
+    # bound sources are all refused or undecided-and-refused never reaches the
+    # glass; the run answers on the pill instead.
+    refused: list[tiers.Verdict] = []
+
+    def judge(keys: set[str]) -> tuple[bool, tiers.Verdict | None]:
+        """(some key is a yes, the first no) for the keys a line binds."""
+        anchor, wrong = False, None
+        for key in sorted(keys):
+            verdict = gate.check(key.split(":")[0])
+            if verdict.ok is True:
+                anchor = True
+            elif verdict.ok is False and wrong is None:
+                wrong = tiers.Verdict(False, verdict.by, f"{key}: {verdict.why}", verdict.other)
+        return anchor, wrong
 
     def attempt(prompt: str, live: bool) -> tuple[str, Surface, list[Problem]]:
         surface = Surface()
         problems: list[Problem] = []
         counter = [0]
+        anchored = [False]
+        held: list[tuple[str, set[str], tiers.Verdict]] = []
+
+        def draw(line: str, keys: set[str]) -> None:
+            for key in keys:
+                resolver.want(key)
+            sink.send(line)
+            if run.first_component_ms is None and line.startswith("c ") and not line.startswith("c s "):
+                run.first_component_ms = ms()
 
         def on_line(line: str) -> None:
             counter[0] += 1
@@ -1682,24 +1878,35 @@ def generate(request: str, *, dry: bool = False, at: str | None = None, surface_
                 return
             if not live or stripped.startswith("@"):
                 return
-            for key in surface.queries - before:
-                resolver.want(key)
-            sink.send(stripped)
-            if run.first_component_ms is None and stripped.startswith("c ") and not stripped.startswith("c s "):
-                run.first_component_ms = ms()
+            keys = surface.queries - before
+            anchor, wrong = judge(keys)
+            if wrong and not anchor and not anchored[0]:
+                held.append((stripped, keys, wrong))
+                return
+            if anchor and not anchored[0]:
+                anchored[0] = True
+                for held_line, held_keys, _ in held:
+                    draw(held_line, held_keys)
+                held.clear()
+            draw(stripped, keys)
 
         run.attempts += 1
         text = model(prompt, system, on_line)
+        if live and held:
+            refused.append(held[0][2])
         return text, surface, problems + check_structure(surface)
 
     try:
         text, surface, problems = attempt(request, live=True)
         run.first_try_valid = not problems
-        if problems:
+        if problems and not refused:
             run.problems = [str(p) for p in problems]
             text, surface, problems = attempt(repair_prompt(request, text, problems), live=False)
             run.repaired = not problems
-            if problems:
+            anchor, wrong = judge(set(surface.queries)) if not problems else (False, None)
+            if wrong and not anchor:
+                refused.append(wrong)
+            elif problems:
                 run.problems += [f"repair: {p}" for p in problems]
             else:
                 for key in surface.queries:
@@ -1713,6 +1920,14 @@ def generate(request: str, *, dry: bool = False, at: str | None = None, surface_
         surface = Surface()
     run.model_done_ms = ms()
 
+    if refused:
+        answer_no_source(run, refused[0], sink, surface_name, gate.table)
+        run.complete_ms = ms()
+        if not dry:
+            sink.close()
+            run.display_problems = list(sink.problems)
+        remember(surface_name, run, Surface())
+        return run
     if problems:
         run.fallback = True
         reason = problems[0].message if problems else "the model did not answer"
@@ -1741,11 +1956,13 @@ def remember(surface_name: str, run: Run, surface: Surface) -> None:
     record = json.dumps({
         "surface": surface_name, "request": run.request, "lines": run.lines,
         "at": surface.at, "width": surface.width, "valid": run.final_valid, "tier": run.tier,
+        "no_source": run.no_source,
     }, indent=2)
     (STATE / "last.json").write_text(record, encoding="utf-8")
     # Refresh acts on the surface that was pressed, so each surface keeps its
-    # own last good layout; a fallback elsewhere must not erase it.
-    if run.final_valid and re.fullmatch(r"[A-Za-z0-9_-]{1,40}", surface_name):
+    # own last good layout; a fallback elsewhere must not erase it, and neither
+    # may a no-source answer, which has no data to refresh.
+    if run.final_valid and not run.no_source and re.fullmatch(r"[A-Za-z0-9_-]{1,40}", surface_name):
         (STATE / f"layout-{surface_name}.json").write_text(record, encoding="utf-8")
 
 
@@ -1898,11 +2115,13 @@ def run_eval(path: Path, out: Path | None, only: set[int] | None, live: bool) ->
             "queries": run.queries, "problems": run.problems[:6], "lines": run.lines,
             "display_problems": run.display_problems, "tier": run.tier, "tier_notes": run.tier_notes,
             "jev_ms": run.jev_ms, "choice": run.choice, "why": run.why,
-            "model_calls": run.attempts,
+            "model_calls": run.attempts, "no_source": run.no_source, "say": run.say, "gate": run.gate,
         }
+        if "expect" in item:
+            row["grade"] = grade(row, item)
         rows.append(row)
-        print(json.dumps({k: row[k] for k in ("n", "tier", "valid_after_repair", "fallback", "complete_ms",
-                                               "queries", "choice")}), flush=True)
+        print(json.dumps({k: row.get(k) for k in ("n", "tier", "valid_after_repair", "fallback", "complete_ms",
+                                                   "queries", "choice", "say", "grade")}), flush=True)
         if out:
             out.write_text(json.dumps({"rows": rows}, indent=2), encoding="utf-8")
     summary = bench_summary(rows)
@@ -1910,6 +2129,23 @@ def run_eval(path: Path, out: Path | None, only: set[int] | None, live: bool) ->
         out.write_text(json.dumps({"summary": summary, "rows": rows}, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))
     return 0
+
+
+def grade(row: dict, item: dict) -> str:
+    """Grade one bench row against its sealed label (config/genui/bench/sealed-2026-10-10b.json).
+
+    wrong-source: a panel bound a query the label does not list (any query, when
+    the label says no source answers). refused: a no-source answer to a request
+    a listed query answers. right: everything else.
+    """
+    expect = set(item.get("expect") or [])
+    kind = item.get("kind", "")
+    if row.get("no_source"):
+        return "refused" if kind == "one-source" else "right"
+    bound = {q.split(":")[0] for q in row.get("queries") or []}
+    if bound - expect:
+        return "wrong-source"
+    return "right"
 
 
 def percentile(values: list[float], q: float) -> float | None:
@@ -1930,8 +2166,12 @@ def bench_summary(rows: list[dict]) -> dict:
         "model_calls": sum(r.get("model_calls", 0) for r in rows),
         "no_model_under_1s": sum(1 for r in rows if r["tier"] in (0, 1) and r["valid_after_repair"]
                                  and r["complete_ms"] < 1000),
+        "no_source_answers": sum(1 for r in rows if r.get("no_source")),
         "tiers": {},
     }
+    graded = [r["grade"] for r in rows if "grade" in r]
+    if graded:
+        out["grades"] = {g: graded.count(g) for g in ("right", "wrong-source", "refused")}
     for tier in sorted({r["tier"] for r in rows}):
         sub = [r for r in rows if r["tier"] == tier]
         times = [r["complete_ms"] for r in sub]
@@ -1999,6 +2239,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out")
     p.add_argument("--only")
     p.add_argument("--live", action="store_true", help="draw each one on the display")
+    p.add_argument("--regrade", help="grade a saved results file against --requests' labels; no model, no Jev")
     p = sub.add_parser("keep")
     p.add_argument("name", nargs="?")
     sub.add_parser("candidates")
@@ -2026,7 +2267,7 @@ def main(argv: list[str] | None = None) -> int:
         report = {k: getattr(run, k) for k in ("first_try_valid", "repaired", "fallback", "skeleton_ms",
                                                 "first_component_ms", "complete_ms", "problems",
                                                 "display_problems", "queries", "tier", "tier_notes",
-                                                "jev_ms", "choice", "why")}
+                                                "jev_ms", "choice", "why", "no_source", "say", "gate")}
         print(json.dumps(report, indent=2) if args.json else
               f"{'valid' if run.final_valid else 'fallback'}"
               f"{' after repair' if run.repaired else ''}: first component {run.first_component_ms} ms, "
@@ -2081,6 +2322,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "event":
         return handle_event(args.action, args.component, args.surface)
     if args.cmd == "bench":
+        if args.regrade:
+            labels = {i: item for i, item in enumerate(load_json(Path(args.requests))["requests"], 1)}
+            rows = load_json(Path(args.regrade))["rows"]
+            rows = [dict(r, grade=grade(r, labels[r["n"]])) if "expect" in labels.get(r["n"], {}) else r
+                    for r in rows]
+            print(json.dumps(bench_summary(rows), indent=2))
+            return 0
         only = {int(x) for x in args.only.split(",")} if args.only else None
         return run_eval(Path(args.requests), Path(args.out) if args.out else None, only, args.live)
     return 2
@@ -2113,7 +2361,7 @@ def slug(text: str) -> str:
 
 def keep(name: str | None, record: dict | None = None) -> Path | None:
     record = record or load_json(STATE / "last.json")
-    if not record.get("valid") or record.get("tier") != 2:
+    if not record.get("valid") or record.get("tier") != 2 or record.get("no_source"):
         print("not kept: only a valid layout the model wrote becomes a candidate; "
               "Tier 0 and 1 already answer the others without it", file=sys.stderr)
         return None
@@ -2190,12 +2438,21 @@ def handle_event(action: str, component: str, surface: str | None = None) -> int
     display sends with every control since 2026-10-04, and falls back to the
     default surface name when an older display leaves it off.
     """
-    if action not in POLICY["actions"]:
-        print(f"not a genui action: {action}", file=sys.stderr)
-        return 2
     name = surface or SURFACE
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", name):
         print(f"not a surface name: {name}", file=sys.stderr)
+        return 2
+    if action == SEARCH_ACTION:
+        # hud-listen answers this press with its own glass search; this only
+        # says what the offer was for, so the search runs on what was asked.
+        try:
+            print(json.loads(offer_path(name).read_text(encoding="utf-8"))["query"])
+        except (OSError, ValueError, KeyError):
+            print(f"no search offered on {name}", file=sys.stderr)
+            return 1
+        return 0
+    if action not in POLICY["actions"]:
+        print(f"not a genui action: {action}", file=sys.stderr)
         return 2
     if action == "genui-close":
         sink = Sink(False, name)

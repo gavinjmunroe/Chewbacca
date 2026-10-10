@@ -510,6 +510,189 @@ def test_bench_summary_counts_tiers_and_the_falsifier():
     assert s["tiers"]["1"]["complete_ms"]["max"] == 1200.0
 
 
+# The relevance gate (docs/reference/GENUI.md, "Relevance gate").
+
+def jev_full(archetype: str, source: str, s_p: float = 1.0, relevant: dict | None = None):
+    """A scripted Jev that also answers the gate's yes/no, per source description."""
+    calls = []
+
+    def ask(state, questions):
+        calls.append(sorted(questions))
+        if "relevant" in questions:
+            text = questions["relevant"]["instructions"]
+            yes = next((p for frag, p in (relevant or {}).items() if frag in text), 0.5)
+            return {"answers": {"relevant": {"type": "choice", "probabilities": {"yes": yes, "no": 1 - yes}}}}
+        return jev(archetype, source, s_p=s_p)[0](state, questions)
+    return ask, calls
+
+
+def test_gate_code_decides_what_it_can():
+    covers = G.covers_table(G.builtin_queries())
+    v = T.relevance("what's due this week", "due", covers, arg_kind="days")
+    assert v.ok is True and v.by == "code", v
+    v = T.relevance("what do I have tomorrow", "day", covers, arg_kind="day")
+    assert v.ok is True, v  # only a day was asked, and day takes one
+    v = T.relevance("pull up the outbound numbers", "needs", covers)
+    assert v.ok is False and v.other == "campaign", v
+    v = T.relevance("what's the weather tomorrow", "day", covers, arg_kind="day")
+    assert v.ok is None, v  # no query declares weather: Jev's call, not code's
+    assert T.covered_anywhere("what's the weather tomorrow", covers) == []
+    assert T.no_source_line("what's the weather tomorrow", None, covers)[0] == \
+        "I don't have weather on this Mac.", T.no_source_line("what's the weather tomorrow", None, covers)
+    assert T.subject_phrase("what's Nvidia stock at") == "Nvidia stock"
+
+
+def test_every_builtin_query_declares_what_it_covers():
+    table = G.covers_table(G.builtin_queries())["queries"]
+    missing = [name for name in G.builtin_queries() if not T.cover_words(table.get(name, {}))]
+    assert not missing, missing
+
+
+def test_no_source_request_never_reaches_the_model():
+    ask, calls = jev_full("count", "none")
+    sink = G.DevNull()
+    run = G.generate("what's the weather tomorrow", model=no_model, sink=sink, classifier=ask,
+                     tiers_on={0, 1, 2})
+    assert run.no_source and run.final_valid and run.attempts == 0 and run.tier == 1, run
+    assert run.say == "I don't have weather on this Mac.", run.say
+    assert not any("/q/" in line for line in sink.sent), sink.sent
+    assert any(f"action={G.SEARCH_ACTION}" in line for line in sink.sent), sink.sent
+    # The press asks kyber-genui what the offer was for; hud-listen searches it.
+    import contextlib
+    import io
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        assert G.handle_event(G.SEARCH_ACTION, "ws", "genui") == 0
+    assert out.getvalue().strip() == "what's the weather tomorrow", out.getvalue()
+    # A model may never draw that button: the validator refuses it.
+    refused = problems('c s Screen title="X"\n> s b\nc b Button label="Search" action=genui-search')
+    assert refused, "a model-written genui-search button validated"
+
+
+def test_a_drawing_still_goes_to_the_model():
+    ask, _ = jev_full("connections", "none")
+    model, calls = scripted('c s Screen title="FLOW"\n> s t\nc t Text value="A then B"')
+    run = G.generate("how does a voice request become a panel", model=model, sink=G.DevNull(), classifier=ask,
+                     tiers_on={0, 1, 2})
+    assert run.tier == 2 and len(calls) == 1 and not run.no_source, run
+
+
+def test_wrong_source_from_the_model_is_held_and_answered_on_the_pill():
+    # Code alone (Tier 1 off): the subject is campaign's, the model bound tasks.
+    (Path(FIXTURES) / "tasks.json").write_text(json.dumps({"rows": [], "note": "No open promises."}))
+    model, _ = scripted('c s Screen title="OUTBOUND"\n> s st\nc st Status message=@/q/tasks/note level=info')
+    sink = G.DevNull()
+    run = G.generate("pull up the outbound numbers", model=model, sink=sink, tiers_on={2})
+    assert run.no_source and run.say == "Which campaign? Say the client's name.", (run.say, run.gate)
+    assert not any("/q/tasks" in line for line in sink.sent), sink.sent
+    # Jev decides what code cannot: weather is declared by no query.
+    ask, calls = jev_full("entity", "day", s_p=0.3, relevant={"one day's": 0.04})
+    model, _ = scripted('c s Screen title="TOMORROW"\n> s st\nc st Status message=@/q/day:tomorrow/note level=info')
+    sink = G.DevNull()
+    run = G.generate("what's the weather tomorrow", model=model, sink=sink, classifier=ask, tiers_on={0, 1, 2})
+    assert run.no_source and run.attempts == 1 and run.gate.get("by") == "jev", (run.gate, run.tier_notes)
+    assert ["relevant"] in calls and not any("/q/day" in line for line in sink.sent), sink.sent
+
+
+def test_a_relevant_source_releases_a_held_companion():
+    (Path(FIXTURES) / "unreplied.json").write_text(json.dumps({"rows": [{"who": "Sam", "waiting": "2d"}]}))
+    layout = ('c s Screen title="BEHIND"\n> s m st\n'
+              'c m Metric label="Owed replies" value=@/q/unreplied/count\n'
+              'c st Status message=@/q/overdue/note level=info')
+    model, _ = scripted(layout)
+    sink = G.DevNull()
+    run = G.generate("am I behind", model=model, sink=sink, tiers_on={2})
+    assert not run.no_source and run.final_valid, run.gate
+    assert any(line.startswith("c m Metric") for line in sink.sent), sink.sent
+
+
+def test_bench_grades_wrong_source_and_refusals():
+    assert G.grade({"queries": ["day:tomorrow"]}, {"kind": "no-source", "expect": []}) == "wrong-source"
+    assert G.grade({"queries": [], "no_source": True}, {"kind": "no-source", "expect": []}) == "right"
+    assert G.grade({"queries": [], "no_source": True}, {"kind": "one-source", "expect": ["due"]}) == "refused"
+    assert G.grade({"queries": ["due:7", "overdue"]}, {"kind": "one-source", "expect": ["due", "overdue"]}) == "right"
+
+
+# Tier 2 runs with no tools on every runtime (docs/reference/GENUI.md, "No tools").
+# These lists are copies on purpose: dropping a flag from a wrapper fails here.
+
+CODEX_NO_TOOLS = [("--ignore-user-config",), ("--ephemeral",), ("--sandbox", "read-only"),
+                  ("--disable", "shell_tool"), ("--disable", "unified_exec"), ("--disable", "view_image"),
+                  ("--disable", "apps"), ("--disable", "plugins"), ("--disable", "browser_use"),
+                  ("--disable", "browser_use_external"), ("--disable", "computer_use"),
+                  ("--disable", "multi_agent"), ("--disable", "code_mode_host"), ("--disable", "hooks"),
+                  ("-c", 'web_search="disabled"')]
+GEMINI_NO_TOOLS = [("--allowed-mcp-server-names", "none"), ("--extensions", "none")]
+
+
+def has_run(argv: list[str], flags: tuple[str, ...]) -> bool:
+    return any(tuple(argv[i:i + len(flags)]) == flags for i in range(len(argv)))
+
+
+def fake_cli(name: str, body: str) -> Path:
+    folder = Path(FIXTURES) / "fakebin"
+    folder.mkdir(exist_ok=True)
+    path = folder / name
+    path.write_text(f"#!{sys.executable}\nimport json, os, sys\nargv = sys.argv\n" + body)
+    path.chmod(0o755)
+    return path
+
+
+def test_tier2_runs_with_no_tools_on_every_runtime():
+    sys.path.insert(0, str(ROOT / "bin" / "lib"))
+    import hud_accounts  # noqa: PLC0415
+    record = Path(FIXTURES) / "argv.json"
+    fake_cli("codex", f"""
+if argv[1:2] == ['exec']:
+    json.dump(argv, open({str(record)!r}, 'w'))
+    out = argv[argv.index('--output-last-message') + 1]
+    sys.stdin.read()
+    open(out, 'w').write('c s Screen title="X"\\n')
+""")
+    gemini = fake_cli("gemini", f"json.dump(argv, open({str(record)!r}, 'w'))\nprint('c s Screen title=\"X\"')\n")
+    ollama = fake_cli("ollama", f"""
+if argv[1] == 'list':
+    print('NAME ID SIZE'); print('llama3.2:latest abc 2GB')
+else:
+    json.dump(argv, open({str(record)!r}, 'w')); sys.stdin.read(); print('c s Screen title="X"')
+""")
+    saved = {k: os.environ.get(k) for k in ("GENUI_MODEL_CMD", "PATH", "HUD_GEMINI_BIN", "HUD_OLLAMA_BIN",
+                                            "HUD_CODEX_STATE")}
+    os.environ["PATH"] = str(gemini.parent) + os.pathsep + os.environ.get("PATH", "")
+    os.environ["HUD_GEMINI_BIN"], os.environ["HUD_OLLAMA_BIN"] = str(gemini), str(ollama)
+    try:
+        for runtime in ("codex", "gemini", "ollama", "claude"):
+            os.environ["GENUI_MODEL_CMD"] = hud_accounts.runtime_command(runtime)
+            argv = G.tier2_argv(Path(FIXTURES) / "prompt.md")
+            if runtime == "claude":
+                assert has_run(argv, ("--tools", "")), argv
+                assert has_run(argv, ("--strict-mcp-config", "--mcp-config", json.dumps({"mcpServers": {}}))), argv
+                continue
+            assert argv[-1] == "--no-tools", (runtime, argv)
+            if record.exists():
+                record.unlink()
+            seen: list[str] = []
+            G.stream_model("week", "system", seen.append)
+            ran = json.loads(record.read_text())
+            if runtime == "codex":
+                missing = [f for f in CODEX_NO_TOOLS if not has_run(ran, f)]
+                assert not missing and "resume" not in ran, (missing, ran)
+            elif runtime == "gemini":
+                missing = [f for f in GEMINI_NO_TOOLS if not has_run(ran, f)]
+                policy = Path(ran[ran.index("--admin-policy") + 1])
+                assert not missing and policy.is_file(), (missing, ran)
+                assert 'toolName = "*"' in policy.read_text() and 'decision = "deny"' in policy.read_text()
+            else:
+                assert ran[1:] == ["run", "llama3.2:latest"], ran
+            assert seen and seen[0] == 'c s Screen title="X"', (runtime, seen)
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def main() -> int:
     failed = []
     tests = [(k, v) for k, v in globals().items() if k.startswith("test_") and callable(v)]

@@ -37,11 +37,18 @@ def first_chat_model(exe: str) -> str | None:
 
 
 def main(argv: list[str]) -> int:
+    # `--no-tools` (kyber-genui's Tier 2) changes nothing here, on purpose:
+    # `ollama run` has no tool flag and runs no tools (`ollama help run`,
+    # ollama 0.35.1, read 2026-10-10); tools exist only on the HTTP API when a
+    # caller sends them, and on `ollama launch`, which this never runs. The
+    # flag is accepted so every runtime takes the same arguments, and the test
+    # holds this file to `ollama run MODEL` with nothing else.
+    argv = [a for a in argv if a != "--no-tools"]
     model = None
     if len(argv) >= 2 and argv[0] == "--model":
         model = argv[1]
     elif argv:
-        print("usage: hud-ollama [--model <name>] < prompt", file=sys.stderr)
+        print("usage: hud-ollama [--model <name>] [--no-tools] < prompt", file=sys.stderr)
         return 2
     prompt = sys.stdin.read()
     if not prompt.strip():

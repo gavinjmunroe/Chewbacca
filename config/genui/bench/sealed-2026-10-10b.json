@@ -1,0 +1,156 @@
+{
+  "about": "Second sealed set, written 2026-10-10 for the relevance gate and committed before any gate code. The first sealed set (sealed-2026-10-10.json) and the frozen 20 had been read while building, so neither can measure the gate honestly. None of these 30 repeats a request from either. Labels were written with the requests and are the grading key: `expect` lists every query that answers the request; an empty list means no source on this Mac holds the answer, and the right response is to say so, not to draw. `kind`: one-source (some query in the vocabulary answers it), no-source (nothing on this Mac does), drawing (an explanation, no query), vague (no clear referent; an honest no-source answer or a panel bound to one of `expect` both pass). The author also builds the gate, so this is held out by commit order, not blind. Do not edit to improve a score; add a new sealed file instead.",
+  "sealed": "2026-10-10",
+  "requests": [
+    {
+      "request": "how many labs do I still have to do",
+      "kind": "one-source",
+      "expect": ["due", "course"]
+    },
+    {
+      "request": "is anything late",
+      "kind": "one-source",
+      "expect": ["overdue", "due"]
+    },
+    {
+      "request": "when's my next midterm",
+      "kind": "one-source",
+      "expect": ["exams", "before-exam"]
+    },
+    {
+      "request": "what's my standing in each class",
+      "kind": "one-source",
+      "expect": ["grades"]
+    },
+    {
+      "request": "what does my Wednesday look like",
+      "kind": "one-source",
+      "expect": ["day", "week", "calendar"]
+    },
+    {
+      "request": "whose texts have I been ignoring",
+      "kind": "one-source",
+      "expect": ["unreplied", "conversations", "needs"]
+    },
+    {
+      "request": "who's past due for a catch up",
+      "kind": "one-source",
+      "expect": ["reconnect"]
+    },
+    {
+      "request": "what am I on the hook for with people",
+      "kind": "one-source",
+      "expect": ["tasks", "needs"]
+    },
+    {
+      "request": "show me ACAD 324 assignments",
+      "kind": "one-source",
+      "expect": ["course", "due"]
+    },
+    {
+      "request": "Zeutara reply rate",
+      "kind": "one-source",
+      "expect": ["campaign"]
+    },
+    {
+      "request": "meetings over the next two weeks",
+      "kind": "one-source",
+      "expect": ["calendar", "week"]
+    },
+    {
+      "request": "what's going on with Karthik Devarakonda",
+      "kind": "one-source",
+      "expect": ["person"]
+    },
+    {
+      "request": "how loaded are the next five days",
+      "kind": "one-source",
+      "expect": ["week", "calendar"]
+    },
+    {
+      "request": "what's on my plate across everything",
+      "kind": "one-source",
+      "expect": ["needs", "missing"]
+    },
+    {
+      "request": "what's about to slip through the cracks",
+      "kind": "one-source",
+      "expect": ["missing", "needs"]
+    },
+    {
+      "request": "anything due before Wednesday",
+      "kind": "one-source",
+      "expect": ["due", "week"]
+    },
+    {
+      "request": "what's the score of the Dodgers game",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "how much is in my checking account",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "what's traffic like to campus",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "how many steps did I walk today",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "what time does Trader Joe's close",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "show me Bitcoin's price this week",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "what's the forecast for Saturday",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "how much did I spend on Uber this month",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "what's trending on Twitter right now",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "how many hours did I sleep last night",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "what's Tesla's market cap",
+      "kind": "no-source",
+      "expect": []
+    },
+    {
+      "request": "draw how a text gets from my phone into the people store",
+      "kind": "drawing",
+      "expect": []
+    },
+    {
+      "request": "explain how Jev picks a source for a panel",
+      "kind": "drawing",
+      "expect": []
+    },
+    {
+      "request": "pull up that thing Sagar sent",
+      "kind": "vague",
+      "expect": ["person", "conversations", "unreplied", "needs"]
+    }
+  ]
+}

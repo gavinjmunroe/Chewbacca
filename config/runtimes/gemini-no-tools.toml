@@ -1,0 +1,15 @@
+# Gemini CLI policy for a model call that must use no tools at all.
+#
+# Passed with `--admin-policy` by bin/hud-gemini --no-tools (kyber-genui's
+# Tier 2 layout model). Admin is the top tier of Gemini's policy engine, so
+# this outranks every user, workspace and extension rule, including its own
+# read-only defaults (read_file, glob, grep_search, google_web_search allowed
+# at priority 50 in the bundled policies/read-only.toml). The wildcard form is
+# the one the bundled policies/yolo.toml uses to allow everything.
+# Verified against gemini-cli 0.46.0 (docs/reference/GENUI.md, "No tools").
+
+[[rule]]
+toolName = "*"
+decision = "deny"
+priority = 999
+denyMessage = "This call writes a layout and has no tools."

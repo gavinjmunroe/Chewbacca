@@ -546,3 +546,173 @@ def load_entries(exemplars_path: Path, presets_dir: Path, promoted_dir: Path) ->
             elif data.get("request") and data.get("lines"):
                 entries.append(Entry(path.stem, kind, [data["request"]], list(data["lines"])))
     return entries
+
+
+# The relevance gate: can the bound source answer what the request is about?
+#
+# The validator checks shape. On 2026-10-10 the model, sent a request no query
+# covers, bound one anyway: "what's the weather tomorrow" drew `day:tomorrow`,
+# "what's Nvidia stock at" drew `campaign:Nvidia` (sealed set, CHW-203). Each
+# panel said it had no data, about the wrong thing. Every query declares what
+# it covers (config/genui/covers.json); code decides when the request's subject
+# words land on that declaration, and only an undecided case asks Jev one
+# typed yes/no.
+
+@dataclass
+class Verdict:
+    ok: bool | None           # True answers it, False does not, None undecided
+    by: str                   # "code", "jev", or "none" (nobody could decide)
+    why: str
+    other: str | None = None  # the query the subject belongs to instead, when code found one
+
+    def as_dict(self) -> dict:
+        return {k: v for k, v in self.__dict__.items() if v is not None}
+
+
+def _norm(word: str) -> str:
+    word = word.lower().replace(chr(0x2019), "'")
+    if word.endswith("'s"):
+        word = word[:-2]
+    word = word.strip("'")
+    # Regular plurals only: "deadlines" and "deadline" must meet, and cutting
+    # "-es" off every word turned "grades" into "grad".
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 4 and word.endswith(("sses", "xes", "ches", "shes", "zes")):
+        return word[:-2]
+    if len(word) > 3 and word.endswith("s") and not word.endswith(("ss", "us", "is")):
+        return word[:-1]
+    return word
+
+
+def _filler(word: str, generic: set[str]) -> bool:
+    """A word that asks rather than names: "how's", "when's", "I'd" count by their first part."""
+    low = word.lower().replace(chr(0x2019), "'")
+    base = low.split("'")[0]
+    return low in STOP or low in generic or base in STOP or base in generic
+
+
+def cover_words(spec: dict) -> set[str]:
+    words: set[str] = set()
+    for phrase in list(spec.get("entities", [])) + list(spec.get("measures", [])):
+        words |= {_norm(w) for w in re.findall(r"[a-z']+", phrase.lower()) if w not in STOP}
+    return words
+
+
+def subject_words(request: str, slots: Slots, generic: set[str]) -> list[str]:
+    """The request's words that name what it is about, in order: slots, filler and question words removed."""
+    text = request.lower()
+    for key in ("course", "day", "days", "name"):
+        span = getattr(slots, f"{key}_text")
+        if span:
+            text = text.replace(span.lower(), " ")
+    out: list[str] = []
+    for w in re.findall(r"[a-z0-9']+", text):
+        n = _norm(w)
+        if _filler(w, generic) or n in generic or w.isdigit() or not n:
+            continue
+        if n not in out:
+            out.append(n)
+    return out
+
+
+SLOT_FOR_ARG = {"course": "course", "course?": "course", "name": "name", "day": "day", "days": "days"}
+
+
+def relevance(request: str, source: str, covers: dict, slots: Slots | None = None,
+              arg_kind: str = "") -> Verdict:
+    """Code's verdict on one source. Never asks anything; None means ask Jev."""
+    slots = slots or extract_slots(request)
+    generic = set(covers.get("generic", []))
+    table = covers.get("queries", {})
+    subject = subject_words(request, slots, generic)
+    mine = cover_words(table[source]) if source in table else set()
+    hits = [w for w in subject if w in mine]
+    if hits:
+        return Verdict(True, "code", f"{source} covers {', '.join(hits)}")
+    if not subject:
+        slot = SLOT_FOR_ARG.get(arg_kind)
+        if slot and getattr(slots, slot, None):
+            return Verdict(True, "code", f"only a {slot} was asked, and {source} takes one")
+        return Verdict(None, "none", "the request names no subject")
+    elsewhere = {name: [w for w in subject if w in cover_words(spec)]
+                 for name, spec in table.items() if name != source}
+    elsewhere = {k: v for k, v in elsewhere.items() if v}
+    if elsewhere and source in table:
+        best = max(elsewhere, key=lambda k: len(elsewhere[k]))
+        return Verdict(False, "code", f"{', '.join(elsewhere[best])} is {best}'s, not {source}'s", other=best)
+    return Verdict(None, "none", f"no query declares {', '.join(subject[:3])}")
+
+
+def covered_anywhere(request: str, covers: dict, slots: Slots | None = None) -> list[str]:
+    """The queries whose declaration any subject word lands on."""
+    slots = slots or extract_slots(request)
+    subject = set(subject_words(request, slots, set(covers.get("generic", []))))
+    return [name for name, spec in covers.get("queries", {}).items() if subject & cover_words(spec)]
+
+
+def jev_relevance_question(description: str, spec: dict) -> dict:
+    holds = ", ".join(spec.get("entities", [])[:8])
+    says = ", ".join(spec.get("measures", [])[:8])
+    detail = (f" It holds {holds}" if holds else "") + (f"; it can say {says}" if says else "")
+    return {"relevant": {
+        "type": "choice",
+        "instructions": ("A person asked a heads-up display this request. The panel would show one data "
+                         f"source: {description}.{detail}. Can this source answer what the request is "
+                         "asking about?"),
+        "criteria": {"yes": "this source holds what the request asks about",
+                     "no": "the request asks about something this source does not hold"},
+    }}
+
+
+def ask_relevance(request: str, source: str, description: str, covers: dict,
+                  ask: Callable[..., dict | None]) -> Verdict:
+    """Jev's typed yes/no for a source code could not decide. ok=None if Jev gave no answer."""
+    spec = covers.get("queries", {}).get(source, {})
+    try:
+        result = ask(request, jev_relevance_question(description, spec))
+    except Exception:  # noqa: BLE001  a gate that cannot ask lets the source through, as before it existed
+        return Verdict(None, "none", "Jev could not be asked")
+    answers = (result or {}).get("answers") if isinstance(result, dict) and "answers" in result else result
+    answer = answers.get("relevant") if isinstance(answers, dict) else None
+    probs = answer.get("probabilities") if isinstance(answer, dict) else None
+    if not isinstance(probs, dict) or "yes" not in probs:
+        return Verdict(None, "none", "Jev gave no answer")
+    p = float(probs.get("yes", 0))
+    return Verdict(p >= 0.5, "jev", f"Jev: {source} answers it at {p:.2f}")
+
+
+# What the pill says instead of a panel.
+
+TAIL_WORDS = {"at", "last", "night", "currently"}
+
+
+def subject_phrase(request: str, slots: Slots | None = None, limit: int = 6,
+                   generic: set[str] | frozenset[str] = frozenset()) -> str:
+    """The request with its question words and time window cut off: "what's the weather tomorrow" -> "weather"."""
+    slots = slots or extract_slots(request)
+    text = request.strip().rstrip("?.!")
+    for key in ("day", "days"):
+        span = getattr(slots, f"{key}_text")
+        if span:
+            text = re.sub(r"\s*\b(?:for|on|in|over|this|next)?\s*" + re.escape(span) + r"\b", " ", text,
+                          flags=re.I)
+    tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9'.-]*", text.replace(chr(0x2019), "'"))
+    lead = set(generic) | {"does", "did", "was", "were"}
+    while tokens and _filler(tokens[0], lead):
+        tokens.pop(0)
+    while tokens and (_filler(tokens[-1], set(generic)) or tokens[-1].lower() in TAIL_WORDS):
+        tokens.pop()
+    return " ".join(tokens[:limit]) or "that"
+
+
+def no_source_line(request: str, verdict: Verdict | None, covers: dict,
+                   slots: Slots | None = None) -> tuple[str, bool]:
+    """(the sentence for the pill, whether a web search makes sense)."""
+    slots = slots or extract_slots(request)
+    other = verdict.other if verdict else None
+    ask = covers.get("queries", {}).get(other or "", {}).get("ask")
+    if other and ask:
+        return ask, False
+    phrase = subject_phrase(request, slots, generic=set(covers.get("generic", [])))
+    return f"I don't have {phrase} on this Mac.", True

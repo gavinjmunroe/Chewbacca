@@ -56,7 +56,9 @@ def msg(i, gid="101"):
             "created_at": BASE - (2000 - i) * 86400, "text": f"note {i}" + (" midterm review" if i % 50 == 0 else ""),
             "attachments": [{"type": "image", "url": f"https://i.groupme.com/{i}.png"}, {"type": "mentions", "user_ids": ["1"]}]
                            + ([{"type": "location", "lat": "34.02", "lng": "-118.28", "name": "Leavey"}] if i == 2000 else []),
-            "favorited_by": ["1", "2"] if i == 2000 else []}
+            "favorited_by": ["1", "2"] if i == 2000 else []} if gid != "202" or i != 5 else {
+            "id": "5", "created_at": BASE, "name": "\x1b[2JMallory", "attachments": [], "favorited_by": [],
+            "text": "\x1b[31mred\x1b[0m \x1b]8;;https://evil.example\x07click\x1b]8;;\x07 safe\roverwrite \u202egnp.exe \x9bc1"}
 if path == "/groups":
     body = [{"id": "101", "name": "Study Group A", "members_count": 42, "members": [],
              "description": "token " + tok,
@@ -164,6 +166,19 @@ printf '%s' "$out" | python3 -c '
 import json,sys; d=json.load(sys.stdin)
 assert [m["id"] for m in d] == ["2000","1950","1900","1850","1800"] and d[0]["group"] == "Study Group A", d' \
   || no "search did not filter client-side: $(printf '%s' "$out" | head -c 300)"
+
+# Text from other people reaches plain output with no terminal controls: no
+# ANSI color, OSC 8 link, BEL, CR overwrite, C1 byte or bidi override. --json
+# keeps the raw text, escaped.
+gm messages 202 > "$T/plain.out" 2>&1
+python3 - "$T/plain.out" <<'PY2' || no "a terminal control sequence reached plain output"
+import re, sys
+out = open(sys.argv[1], encoding="utf-8", newline="").read()
+assert "red" in out and "overwrite" in out and "Mallory" in out, out
+assert not re.search("[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]", out), repr(out)
+PY2
+gm messages 202 --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d[0]["text"].startswith("\x1b[31m") and "\r" in d[0]["text"], d' \
+  || no "--json no longer carries the raw text"
 
 # GET only, and only to the fixed API origin, across every command above.
 python3 - "$T/fetch.log" <<'PY' || no "a request was not a GET to https://api.groupme.com/v3"

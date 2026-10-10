@@ -73,8 +73,24 @@ class Stop(Exception):
     """GroupMe pushed back, or the tab is signed out. Never retried."""
 
 
+# Message text, names, headlines and group names are written by other people
+# and printed to a terminal an agent also reads. A raw ESC/CSI/OSC sequence,
+# BEL, CR overwrite or bidi override in one could recolor, hide, relink or
+# rewrite what is shown (security review, 2026-10-09). Every human-readable
+# line goes through clean(); --json stays raw, since JSON escapes all of these.
+UNSAFE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
+
+
+def clean(s):
+    return UNSAFE.sub("", str(s))
+
+
+def say(*parts, **kw):
+    print(*(clean(p) for p in parts), **kw)
+
+
 def die(msg, code=1):
-    print(f"chewbacca groupme: {msg}", file=sys.stderr)
+    say(f"chewbacca groupme: {msg}", file=sys.stderr)
     sys.exit(code)
 
 
@@ -450,19 +466,19 @@ def cmd_search(g, a):
 
 def show(cmd, data):
     if not data:
-        print("(nothing)")
+        say("(nothing)")
         return
     for r in data:
         if cmd == "groups":
-            print(f"{r['last_message']}  {r['name']}  ({r['members'] if r['members'] is not None else '?'} members)  id {r['id']}\n    {r['preview'][:120]}")
+            say(f"{r['last_message']}  {r['name']}  ({r['members'] if r['members'] is not None else '?'} members)  id {r['id']}\n    {r['preview'][:120]}")
         elif cmd == "dms":
-            print(f"{r['last_message']}  {r['person']}  id {r['user_id']}\n    {r['preview'][:120]}")
+            say(f"{r['last_message']}  {r['person']}  id {r['user_id']}\n    {r['preview'][:120]}")
         else:
             where = f"[{r['group']}] " if r.get("group") else ""
             likes = f"  ({r['likes']} likes)" if r["likes"] else ""
-            print(f"{r['time']}  {where}{r['sender']}: {r['text']}{likes}")
+            say(f"{r['time']}  {where}{r['sender']}: {r['text']}{likes}")
             for u in r["attachments"]:
-                print(f"    {u}")
+                say(f"    {u}")
 
 
 COMMANDS = {"groups": cmd_groups, "messages": cmd_messages, "dms": cmd_dms, "dm": cmd_dm,

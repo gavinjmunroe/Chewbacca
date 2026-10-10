@@ -84,7 +84,9 @@ json.dump({
        "headline": "Analyst", "publicIdentifier": "ada-l"}]},
   "voyagerIdentityDashNotificationCards": {"included": [
       {"$type": "com.linkedin.voyager.dash.identity.notifications.Card", "headline": {"text": "Ada viewed your profile"}, "publishedAt": 1760000000000},
-      {"$type": "com.linkedin.voyager.dash.identity.notifications.Card", "headline": {"text": "Older one"}, "publishedAt": 1750000000000}]},
+      {"$type": "com.linkedin.voyager.dash.identity.notifications.Card", "headline": {"text": "Older one"}, "publishedAt": 1750000000000},
+      {"$type": "com.linkedin.voyager.dash.identity.notifications.Card", "publishedAt": 1740000000000,
+       "headline": {"text": "\x1b[31mred\x1b[0m \x1b]8;;https://evil.example\x07click\x1b]8;;\x07 safe\roverwrite \u202egnp.exe \x9bc1"}}]},
   "voyagerMessagingGraphQL": {"included": [
       {"$type": "com.linkedin.messenger.Conversation", "entityUrn": "urn:li:msg_conversation:1", "lastActivityAt": 1760000000000,
        "unreadCount": 1, "*conversationParticipants": ["urn:li:msg_messagingParticipant:urn:li:fsd_profile:ACoTESS",
@@ -139,8 +141,18 @@ printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert
   || no "connections did not parse: $out"
 
 out="$(li notifications --json 2>&1)"
-printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert [r["text"] for r in d]==["Ada viewed your profile","Older one"], d' \
+printf '%s' "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert [r["text"] for r in d][:2]==["Ada viewed your profile","Older one"], d' \
   || no "notifications did not parse newest first: $out"
+
+# A notification written by someone else reaches plain output with no terminal
+# controls: no ANSI color, OSC 8 link, BEL, CR overwrite, C1 byte or bidi override.
+li notifications > "$T/plain.out" 2>&1
+python3 - "$T/plain.out" <<'PY2' || no "a terminal control sequence reached plain output"
+import re, sys
+out = open(sys.argv[1], encoding="utf-8", newline="").read()
+assert "red" in out and "overwrite" in out, out
+assert not re.search("[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]", out), repr(out)
+PY2
 
 out="$(CHEWBACCA_LINKEDIN_INBOX_QUERY=messengerConversations.abc li inbox --json 2>&1)"
 printf '%s' "$out" | python3 -c '

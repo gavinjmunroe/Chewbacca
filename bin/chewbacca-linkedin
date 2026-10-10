@@ -69,8 +69,24 @@ class Stop(Exception):
     """LinkedIn pushed back. Never retried."""
 
 
+# Message text, names, headlines and group names are written by other people
+# and printed to a terminal an agent also reads. A raw ESC/CSI/OSC sequence,
+# BEL, CR overwrite or bidi override in one could recolor, hide, relink or
+# rewrite what is shown (security review, 2026-10-09). Every human-readable
+# line goes through clean(); --json stays raw, since JSON escapes all of these.
+UNSAFE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
+
+
+def clean(s):
+    return UNSAFE.sub("", str(s))
+
+
+def say(*parts, **kw):
+    print(*(clean(p) for p in parts), **kw)
+
+
 def die(msg, code=1):
-    print(f"chewbacca linkedin: {msg}", file=sys.stderr)
+    say(f"chewbacca linkedin: {msg}", file=sys.stderr)
     sys.exit(code)
 
 
@@ -545,32 +561,32 @@ def discover_inbox_query():
 def show(cmd, data):
     if cmd in ("me", "company"):
         for k, val in data.items():
-            print(f"{k:14} {val if val not in (None, '') else '-'}")
+            say(f"{k:14} {val if val not in (None, '') else '-'}")
         return
     if cmd == "profile":
         for k in ("name", "headline", "location", "publicId"):
-            print(f"{k:10} {data.get(k) or '-'}")
+            say(f"{k:10} {data.get(k) or '-'}")
         for p in data["current"]:
-            print(f"now        {p['title']} at {p['company']}" + (f" (since {p['since']})" if p["since"] else ""))
+            say(f"now        {p['title']} at {p['company']}" + (f" (since {p['since']})" if p["since"] else ""))
         for e in data["education"]:
-            print("school     " + ", ".join(x for x in (e["school"], e["degree"], e["field"], e["years"]) if x))
+            say("school     " + ", ".join(x for x in (e["school"], e["degree"], e["field"], e["years"]) if x))
         for w in data["websites"]:
-            print(f"site       {w}")
+            say(f"site       {w}")
         if data.get("about"):
-            print("\n" + data["about"])
+            say("\n" + data["about"])
         return
     if not data:
-        print("(nothing)")
+        say("(nothing)")
         return
     for r in data:
         if cmd in ("people", "employees"):
-            print(f"{r['name']}  [{r['degree'] or '-'}]  {r['publicId']}\n    {r['headline'] or ''}  |  {r['location'] or ''}")
+            say(f"{r['name']}  [{r['degree'] or '-'}]  {r['publicId']}\n    {r['headline'] or ''}  |  {r['location'] or ''}")
         elif cmd == "connections":
-            print(f"{r['name']}  {r['publicId']}\n    {r['headline'] or ''}")
+            say(f"{r['name']}  {r['publicId']}\n    {r['headline'] or ''}")
         elif cmd == "notifications":
-            print(f"{r['time']}  {r['text']}")
+            say(f"{r['time']}  {r['text']}")
         elif cmd == "inbox":
-            print(f"{r['time']}  {'* ' if r['unread'] else ''}{', '.join(r['participants'])}\n    {r['snippet'][:120]}")
+            say(f"{r['time']}  {'* ' if r['unread'] else ''}{', '.join(r['participants'])}\n    {r['snippet'][:120]}")
 
 
 COMMANDS = {"me": cmd_me, "profile": cmd_profile, "people": cmd_people, "company": cmd_company,

@@ -241,6 +241,19 @@ Read them before drafting any club or startup landing page.
   reused as the about image, a card and the film still repeats, even when
   each crop differs. One scene, one place. List every image and video with
   its source file before shipping, and check that none appears twice.
+- "Bro it reads like a giant wall of text with an annoying moving fire"
+  (askforthefire, 2026-10-10): a WebGL fire fixed behind the whole page, plus
+  eight sections of paragraphs and an FAQ wall. A figure that follows you
+  everywhere is wallpaper, and it carries no beat. What fixed it was one
+  pinned scene where the product plays as itself (a phone running the real
+  session, with lines from a real test run), the figure living only inside
+  that object, one big line and one small line per beat, and the FAQ moved
+  to its own page. Never ship a page-wide ambient layer as the story.
+- A WebGL canvas that fails to start paints white on some browsers. On
+  2026-10-10 the live prayer screen showed a white box with a broken-image
+  icon in headless Chromium. Every shader figure needs a CSS fallback that
+  swaps in when compile or link fails, and you have to screenshot that path
+  with the GPU off before shipping.
 - Bring the best of earlier versions forward. Before a rebuild, inventory
   what past commits built and what he praised (`git log --diff-filter=D`,
   plus the verdicts in docs/). A rebuild that drops the parts he loved

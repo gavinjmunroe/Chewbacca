@@ -19,4 +19,13 @@ visible to the user.
 **How to apply:** for a missing Google scope, re-run `chewbacca email add <the
 account in gws auth status "user">`, which pins the account and clears the cache.
 Never hand-roll the login URL. Guarded by tests/chewbacca_email_scopes.sh.
+
+Since 2026-10-10 the same sign-in also asks for `documents` (Docs edits; with
+read-only Drive, Google leaves revisionId out and the Doc surface refuses) and
+`gmail.compose` (Gmail drafts), and keeps `drive.readonly` for Drive search.
+When the address is the account already in `~/.config/gws`, `email add`
+re-consents that main config in place, because `chewbacca google`, the Doc
+surface and meeting follow-ups all call plain `gws` and read only it. A failed
+re-consent puts the old credentials back.
+
 Related: [[feedback_never_hand_him_a_command]].

@@ -212,7 +212,8 @@ def scope_hint(message):
     m = (message or "").lower()
     if "insufficient" in m and "scope" in m:
         return ("Google refused the write: gws is signed in with read-only Drive access, so editing a Doc "
-                "needs a sign-in that adds the Docs scope (gws auth login), which only the account owner can do. "
+                "needs a sign-in that adds the Docs scope (chewbacca email add <that address>), which only the "
+                "account owner can approve. "
                 "Nothing was changed.")
     if "permission" in m:
         return "Google says this account can't edit that Doc. Nothing was changed."

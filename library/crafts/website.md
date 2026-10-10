@@ -374,3 +374,15 @@ was going to Sagar and Maggie, whose site it is.
   service itself (for a data firm, a live record queue), labeled as sample data,
   and build the scroll story from the client's own published case numbers,
   with a caption naming which engagement each number came from.
+
+**Calm is not professional (BMA, 2026-10-10).** v1 cut every slop tell and
+landed as hairline rows on one off-white ground at one heading size. Caleb:
+"so chopped and boring and terrible visual heiarchy", "This is so shit lmao".
+What fixed it came from usctts.com and lemma-replica, not from removing more:
+a dark first screen with drawings of the client's own work in thin
+mono-labelled windows around a centered headline with one accent phrase, a
+paper sheet that rises over it and widens to the edges on scroll, tinted
+rounded panels for sections, a number as the headline of each case, and a
+type ladder with real jumps (88 / 48 / 72 figure / 17 body). Before a
+professional rework, open the team's own best recent sites and name what
+each does on its first screen.

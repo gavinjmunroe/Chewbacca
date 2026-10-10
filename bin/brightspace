@@ -15,10 +15,12 @@ topics first come first served) was in neither the syllabus schedule nor the
 ledger, and was found the day after it was due only because Caleb remembered
 it. `due` exists to make that a listed line instead of a memory.
 
-Auth is Caleb's own d2l cookies from Chrome Profile 1 ("Caleb (Work)"). They
-expire: on 2026-10-03 a cookie that decrypted fine returned 403 on every call.
-Opening Brightspace in that profile renews them, so on a 403 this opens it once
-and retries. It never writes to Brightspace and never submits anything.
+Auth is the student's own d2l cookies from Chrome: CHEWIE_CHROME_PROFILE if
+set, otherwise whichever profile touched Brightspace most recently, so any USC
+student's Mac works without naming one. Courses come from their own current
+enrollments, not a list written for one person. Sessions expire (on 2026-10-03
+a cookie that decrypted fine returned 403 on every call); a page they already
+have open renews it. It never writes to Brightspace and never submits anything.
 
 BRIGHTSPACE_FIXTURE=<file.json> replaces the network with {"path": response}
 for tests.
@@ -40,14 +42,45 @@ import urllib.request
 from pathlib import Path
 
 HOST = "https://brightspace.usc.edu"
-PROFILE = os.environ.get("CHEWIE_CHROME_PROFILE", "Profile 1")
-COOKIE_DB = Path.home() / "Library/Application Support/Google/Chrome" / PROFILE / "Cookies"
+CHROME_DIR = Path(os.environ.get("CHEWBACCA_CHROME_DIR")
+                  or Path.home() / "Library/Application Support/Google/Chrome")
+
+
+def pick_profile():
+    """The Chrome profile holding the Brightspace session.
+
+    Hardcoding "Profile 1" was right for exactly one Mac. Any other student's
+    USC login lives in whatever profile they use for school, so take the one
+    whose brightspace.usc.edu cookies were used last.
+    """
+    if os.environ.get("CHEWIE_CHROME_PROFILE"):
+        return os.environ["CHEWIE_CHROME_PROFILE"]
+    best, best_at = "Default", -1
+    for db in CHROME_DIR.glob("*/Cookies"):
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                copy = Path(tmp) / "Cookies"
+                shutil.copy(db, copy)
+                at = sqlite3.connect(copy).execute(
+                    "select max(last_access_utc) from cookies"
+                    " where host_key in ('brightspace.usc.edu', '.brightspace.usc.edu')"
+                ).fetchone()[0]
+        except (OSError, sqlite3.Error):
+            continue
+        if at and at > best_at:
+            best, best_at = db.parent.name, at
+    return best
+
+
+PROFILE = pick_profile()
+COOKIE_DB = CHROME_DIR / PROFILE / "Cookies"
 LEDGER = Path(os.environ.get("COURSEWORK_DIR", Path.home() / "coursework")) / "courses"
 
-# Fall 2026 org units, from /lp/1.63/enrollments/myenrollments/?orgUnitTypeId=3
-# on 2026-09-21. The lab is its own org unit, which is where Presentation
-# Topics lived; reading only the lecture would have missed it again.
-COURSES = {
+# Caleb's Fall 2026 org units, read 2026-09-21. Only the test fixture uses
+# these now; a live run reads the student's own enrollments (enrolled_courses).
+# The lab is its own org unit, which is where Presentation Topics lived, and
+# enrolled_courses keeps every unit of a code for the same reason.
+FIXTURE_COURSES = {
     "ACAD 185": [298850],
     "ACAD 324g": [299120],
     "WRIT 150": [302009],
@@ -237,12 +270,63 @@ def in_ledger(dropbox_name, names):
     return False
 
 
+def enrolled_courses(client):
+    """{"BISC 101": [lecture ou, lab ou], ...} for the newest term enrolled."""
+    path = "/lp/1.43/enrollments/myenrollments/?orgUnitTypeId=3&pageSize=100"
+    if client.fixture is not None and path not in client.fixture:
+        return FIXTURE_COURSES
+    items, bookmark = [], None
+    while True:
+        page = client.get(path + (f"&bookmark={bookmark}" if bookmark else ""))
+        items += page.get("Items", [])
+        paging = page.get("PagingInfo") or {}
+        bookmark = paging.get("Bookmark")
+        if not paging.get("HasMoreItems"):
+            break
+
+    # USC names sections "20263_10212 ACAD-185: ...", term first. Old terms stay
+    # enrolled forever (a 20253 GESM course was still listed in Fall 2026).
+    def term(org):
+        m = re.match(r"(\d{5})_", org.get("Name", ""))
+        return m.group(1) if m else ""
+
+    # Code is the section ("20263_10212"), so the course comes from the Name.
+    # The first version keyed on Code and printed section numbers, caught only
+    # by running it against the live account (2026-10-10).
+    def course(org):
+        m = re.match(r"\d{5}_\S+\s+([A-Z]{2,5}-\d{2,3}[A-Za-z]*)", org.get("Name", ""))
+        return (m.group(1) if m else org.get("Code", "")).replace("-", " ")
+
+    newest = max((term(i["OrgUnit"]) for i in items), default="")
+    out = {}
+    for i in items:
+        org = i["OrgUnit"]
+        if term(org) == newest:
+            out.setdefault(course(org), []).append(org["Id"])
+    return out
+
+
+def norm_code(code):
+    return re.sub(r"[^a-z0-9]", "", code.lower())
+
+
+def ledger_items_for(course, names):
+    """Ledger codes carry suffixes ("BISC 101Lxg", "ACAD 324g") that the
+    enrollment code ("BISC 101") does not, so match on the shared prefix."""
+    want = norm_code(course)
+    for code, items in names.items():
+        have = norm_code(code)
+        if have.startswith(want) or want.startswith(have):
+            return items
+    return []
+
+
 def cmd_due(client, days, ledger_dir, as_json):
     now = dt.datetime.now(dt.timezone.utc)
     lo, hi = now - dt.timedelta(days=days), now + dt.timedelta(days=days)
     names = ledger_names(ledger_dir)
     rows = []
-    for course, units in COURSES.items():
+    for course, units in enrolled_courses(client).items():
         for ou in units:
             for folder in client.get(f"/le/1.99/{ou}/dropbox/folders/"):
                 due = folder.get("DueDate")
@@ -259,7 +343,7 @@ def cmd_due(client, days, ledger_dir, as_json):
                 rows.append({
                     "course": course, "name": folder["Name"], "due": due, "ou": ou,
                     "id": folder["Id"], "submitted": submitted,
-                    "in_ledger": in_ledger(folder["Name"], names.get(course, [])),
+                    "in_ledger": in_ledger(folder["Name"], ledger_items_for(course, names)),
                 })
     rows.sort(key=lambda r: r["due"])
     if as_json:

@@ -37,9 +37,13 @@ once, then read what landed. Never hunt the disk first: on 2026-10-10 three
 minutes went to `find` across `~` and turned up a partial ACAD 324 folder and
 four BISC chapter notes, while the full set was one command away.
 
-A 403 means the d2l session in Chrome Profile 1 lapsed. Open
-`https://brightspace.usc.edu/d2l/home` in that profile for him, say BLOCKED in
-one line, and after he signs in run `chewbacca api login brightspace` and rerun.
+Any USC student's Mac works as is: the tools pick whichever Chrome profile used
+Brightspace last and read that student's own enrollments. On a 403, run
+`brightspace whoami` first. If it says Chrome stopped saving cookies, the
+student is signed in and only needs to quit and reopen Chrome. Only a real
+sign-out opens Brightspace, and that's the one page they see. Never open a
+tab to "renew" anything. After they sign in, run `chewbacca api login
+brightspace` and rerun.
 
 ## The ledger
 
@@ -182,9 +186,9 @@ and grading weights that do not sum to 100.
 
 ## References
 
-| File                            | Read when                                                            |
-| ------------------------------- | -------------------------------------------------------------------- |
-| `references/syllabus-intake.md` | Ingesting a syllabus into the ledger                                 |
-| `references/grading-models.md`  | Weighted, points-based, or labor-contract grading math               |
-| `references/integrity.md`       | Deciding what help a course actually permits, and how to disclose it |
+| File                            | Read when                                                                                                              |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `references/syllabus-intake.md` | Ingesting a syllabus into the ledger                                                                                   |
+| `references/grading-models.md`  | Weighted, points-based, or labor-contract grading math                                                                 |
+| `references/integrity.md`       | Deciding what help a course actually permits, and how to disclose it                                                   |
 | `references/lms-ingest.md`      | Reading the term straight out of the LMS (Blackboard Ultra, D2L Brightspace), and checking what was actually submitted |

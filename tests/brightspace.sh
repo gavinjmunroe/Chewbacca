@@ -49,4 +49,30 @@ echo "$out" | grep "P2_Chindogu" | grep -q "submitted" || fail "submission not r
 echo '  - { name: "Presentation Topic Proposals", due: 2026-10-02 }' >> "$T/courses/bisc.yml"
 BRIGHTSPACE_FIXTURE="$T/fixture.json" COURSEWORK_DIR="$T" python3 "$ROOT/bin/brightspace" due --days 3 >/dev/null \
   || fail "still flagged after the ledger recorded it"
+
+# Any student: courses come from their own enrollments, the newest term only,
+# named from the section Name (Code is the section number), and a ledger code
+# with a suffix ("BISC 101Lxg") still matches "BISC-101".
+python3 - "$T/fixture2.json" "$DUE" <<'PY'
+import json, sys
+path, due = sys.argv[1], sys.argv[2]
+enr = "/lp/1.43/enrollments/myenrollments/?orgUnitTypeId=3&pageSize=100"
+org = lambda i, code, name: {"OrgUnit": {"Id": i, "Code": code, "Name": name}}
+fx = {enr: {"Items": [org(11, "20263_13102", "20263_13102 BISC-101: Cells"),
+                      org(12, "20263_13105", "20263_13105 BISC-101: Cells"),
+                      org(13, "20263_39000", "20263_39000 MATH-125: Calculus"),
+                      org(14, "20253_35382", "20253_35382 GESM-120: Old term")]}}
+fx["/le/1.99/11/dropbox/folders/"] = []
+fx["/le/1.99/12/dropbox/folders/"] = [{"Id": 5, "Name": "Lab 4 Post-Lab", "DueDate": due}]
+fx["/le/1.99/12/dropbox/folders/5/submissions/"] = [{"Submissions": []}]
+fx["/le/1.99/13/dropbox/folders/"] = [{"Id": 6, "Name": "Problem Set 3", "DueDate": due}]
+fx["/le/1.99/13/dropbox/folders/6/submissions/"] = [{"Submissions": []}]
+json.dump(fx, open(path, "w"))
+PY
+out=$(BRIGHTSPACE_FIXTURE="$T/fixture2.json" COURSEWORK_DIR="$T" python3 "$ROOT/bin/brightspace" due --days 3) \
+  && fail "MATH problem set is in no ledger, expected exit 1"
+echo "$out" | grep -q "^MATH 125" || fail "course not named from the section Name: $out"
+echo "$out" | grep "Lab 4 Post-Lab" | grep -q "NOT IN LEDGER" && fail "BISC 101 should match ledger code BISC 101Lxg: $out"
+echo "$out" | grep "Problem Set 3" | grep -q "NOT IN LEDGER" || fail "another student's course not read: $out"
+echo "$out" | grep -q "GESM" && fail "old-term course listed: $out"
 echo "  ok"

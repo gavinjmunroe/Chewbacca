@@ -915,20 +915,26 @@ def key_path():
 
 
 def load_key(create):
+    """The signing key. Only a grade may mint it (from the OS CSPRNG); --verify
+    never does, so deleting the key strands every receipt instead of re-minting."""
+    import secrets
     p = key_path()
+    if p.is_symlink():
+        raise PermissionError(f"grade key {p} is a symlink; refusing to trust it")
     if not p.exists():
         if not create:
             raise PermissionError(f"no grade key at {p}; run gtme-grade once to make it")
-        p.parent.mkdir(parents=True, exist_ok=True)
+        p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as fh:
-            fh.write(os.urandom(32).hex())
-    mode = p.stat().st_mode & 0o777
-    if mode & 0o077:
-        raise PermissionError(f"grade key {p} is mode {oct(mode)}, not 0600; refusing to trust it")
+            fh.write(secrets.token_hex(32))
+    st = p.stat()
+    if st.st_mode & 0o077 or st.st_uid != os.getuid():
+        raise PermissionError(f"grade key {p} is mode {oct(st.st_mode & 0o777)} or not owned by "
+                              f"this user, not 0600; refusing to trust it")
     k = p.read_text().strip()
-    if len(k) < 32:
-        raise PermissionError(f"grade key {p} is too short")
+    if not re.fullmatch(r"[0-9a-f]{64}", k):
+        raise PermissionError(f"grade key {p} is empty or malformed")
     return k.encode()
 
 
@@ -943,6 +949,8 @@ def fetch_state(ws, cid):
     """Live campaign state for verification. GTME_GRADE_CLAY_FIXTURE_DIR is a test
     seam read from the hook's own environment, which a tool call cannot set."""
     fixtures = os.environ.get("GTME_GRADE_CLAY_FIXTURE_DIR")
+    if not WS_RE.fullmatch(str(ws)) or not CID_RE.fullmatch(cid or ""):
+        raise ValueError("bad workspace or campaign id")
     if fixtures:
         doc = json.loads((Path(fixtures) / f"{cid}.json").read_text())
         return doc.get("data", doc)
@@ -954,83 +962,159 @@ def fetch_state(ws, cid):
     return doc["data"]
 
 
+WS_RE = re.compile(r"[0-9]{1,12}")
+CID_RE = re.compile(r"cam_[A-Za-z0-9]{1,64}")
+
+
+def key_id(key):
+    return hashlib.sha256(b"gtme-grade key id:" + key).hexdigest()[:16]
+
+
 def receipt_file(ws, cid, action):
-    safe = re.sub(r"[^A-Za-z0-9_-]", "_", f"{ws}-{cid}-{action}")
-    return STATE / f"{safe}.json"
+    """The only place a receipt can live: a fixed directory under the hook's own
+    HOME, named from values that were validated first. Never a caller's path."""
+    if not WS_RE.fullmatch(str(ws)) or not CID_RE.fullmatch(cid or "") or action not in ACTIONS:
+        raise ValueError(f"refusing a receipt name from {ws!r}, {cid!r}, {action!r}")
+    return STATE / f"{ws}-{cid}-{action}.json"
+
+
+def canonical(body):
+    """The exact bytes signed: sorted keys, no whitespace, ints only for numbers
+    (a float's text can differ between writers)."""
+    def walk(v):
+        if isinstance(v, float):
+            raise ValueError("floats are not signed")
+        if isinstance(v, dict):
+            for x in v.values():
+                walk(x)
+        if isinstance(v, list):
+            for x in v:
+                walk(x)
+    walk(body)
+    return json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
 
 
 def sign(body, key):
     import hmac
-    msg = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
-    return hmac.new(key, msg, hashlib.sha256).hexdigest()
+    return hmac.new(key, canonical(body), hashlib.sha256).hexdigest()
+
+
+def input_roots():
+    """Graded files must sit under one of these, resolved. Read from the
+    verifier's own environment, which a tool call cannot set."""
+    raw = os.environ.get("GTME_GRADE_INPUT_ROOTS") or os.path.expanduser("~")
+    return [os.path.realpath(r) for r in raw.split(os.pathsep) if r]
+
+
+def check_input(p):
+    """'' for a regular, non-symlinked file under an allowed root; else why not."""
+    if not os.path.isabs(p):
+        return f"{p} is not an absolute path"
+    if os.path.realpath(p) != os.path.normpath(p):
+        return f"{os.path.basename(p)} sits behind a symlink"
+    if os.path.islink(p) or not os.path.isfile(p):
+        return f"{os.path.basename(p)} is not a regular file"
+    if not any(os.path.commonpath([p, r]) == r for r in input_roots()):
+        return f"{os.path.basename(p)} is outside the allowed input roots"
+    return ""
 
 
 def write_receipt(ws, cid, action, camp, gates, inputs):
-    """Bound to one workspace, one campaign, one action and these exact inputs,
-    and signed, so a pass for one target never unlocks another."""
+    """Bound to one workspace, one campaign, one action, these exact inputs and
+    this key, and signed, so a pass for one target never unlocks another."""
+    dest = receipt_file(ws, cid, action)
+    # Checked as given, not resolved first: a symlinked input is refused here
+    # rather than quietly replaced by its target.
+    paths = [os.path.abspath(p) for p in inputs]
+    for p in paths:
+        why = check_input(p)
+        if why:
+            raise ValueError(f"no receipt: {why}")
     key = load_key(create=True)
     now = int(time.time())
-    body = {"v": 2, "workspace": str(ws), "campaign": cid, "action": action,
+    body = {"v": 3, "workspace": str(ws), "campaign": cid, "action": action, "key_id": key_id(key),
             "name": camp.get("name"), "time": now, "expires": now + RECEIPT_TTL_S, "pass": True,
             "gates": [g.n for g in gates if g.passed],
-            "inputs": {os.path.abspath(p): sha(p) for p in inputs},
+            "inputs": {p: sha(p) for p in paths},
             "campaign_state": canonical_state(camp.get("raw"))}
     body["mac"] = sign(body, key)
-    STATE.mkdir(parents=True, exist_ok=True)
-    dest = receipt_file(ws, cid, action)
-    tmp = dest.with_name(f".{dest.name}.tmp")
-    tmp.write_text(json.dumps(body, indent=1))
-    os.chmod(tmp, 0o600)
-    tmp.replace(dest)
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    tmp = dest.with_name(f".{dest.name}.{os.getpid()}.tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(json.dumps(body, indent=1))
+    os.replace(tmp, dest)
     return dest
+
+
+SIGNED = ("v", "workspace", "campaign", "action", "key_id", "name", "time", "expires", "pass",
+          "gates", "inputs", "campaign_state")
 
 
 def verify(ws, cid, action):
     """'' when a signed, fresh, passing grade for exactly this workspace,
     campaign and action exists and nothing it graded has changed; else why not.
-    Every error is a refusal."""
+    Takes only those three values; the receipt, the key and the inputs are found
+    from fixed places and the signed record. Every error is a refusal, and the
+    key is never created here."""
     import hmac
-    if action not in ACTIONS:
-        return f"unknown action {action!r}"
-    if not re.fullmatch(r"cam_[A-Za-z0-9]+", cid or ""):
-        return f"not a campaign id: {cid!r}"
-    path = receipt_file(ws, cid, action)
     try:
+        path = receipt_file(ws, cid, action)
+    except ValueError as exc:
+        return str(exc)
+    try:
+        if os.path.islink(STATE) or os.path.islink(path):
+            return "the grade receipt or its directory is a symlink"
+        if not path.exists():
+            return f"no gtme-grade pass for {action} on {cid} in workspace {ws}"
+        st = path.stat()
+        if st.st_uid != os.getuid() or st.st_mode & 0o077:
+            return "the grade receipt is not a 0600 file owned by this user"
         body = json.loads(path.read_text())
         key = load_key(create=False)
-    except FileNotFoundError:
-        return f"no gtme-grade pass for {action} on {cid} in workspace {ws}"
     except (OSError, ValueError, PermissionError) as exc:
         return f"grade receipt unreadable: {exc}"
-    if not isinstance(body, dict) or not isinstance(body.get("mac"), str):
+    if not isinstance(body, dict):
+        return "grade receipt is not an object"
+    mac = body.pop("mac", None)
+    if not isinstance(mac, str) or len(mac) != 64:
         return "grade receipt carries no signature"
-    mac = body.pop("mac")
-    if not hmac.compare_digest(mac, sign(body, key)):
+    if set(body) != set(SIGNED):
+        return "grade receipt fields differ from what gtme-grade signs"
+    try:
+        good = hmac.compare_digest(mac, sign(body, key))
+    except ValueError:
+        good = False
+    if not good:
         return "grade receipt signature does not verify (written by something other than gtme-grade)"
-    if (body.get("workspace"), body.get("campaign"), body.get("action")) != (str(ws), cid, action):
-        return (f"grade receipt is for {body.get('action')} on {body.get('campaign')} in "
-                f"{body.get('workspace')}, not {action} on {cid} in {ws}")
-    if body.get("pass") is not True:
+    if body["key_id"] != key_id(key):
+        return "grade receipt was signed with a different key"
+    if (body["workspace"], body["campaign"], body["action"]) != (str(ws), cid, action):
+        return (f"grade receipt is for {body['action']} on {body['campaign']} in "
+                f"{body['workspace']}, not {action} on {cid} in {ws}")
+    if body["pass"] is not True:
         return "the recorded grade is not a pass"
     now = time.time()
-    t, exp = body.get("time", 0), body.get("expires", 0)
-    if not (t <= now < exp) or now - t >= RECEIPT_TTL_S:
+    t, exp = body["time"], body["expires"]
+    if not (isinstance(t, int) and isinstance(exp, int)) or exp - t != RECEIPT_TTL_S \
+            or not (t <= now < exp):
         return "the gtme-grade pass is over 12 hours old or not yet valid"
-    inputs = body.get("inputs") or {}
-    if not inputs:
+    inputs = body["inputs"]
+    if not isinstance(inputs, dict) or not inputs:
         return "the grade receipt names no input files"
     for p, want in inputs.items():
-        try:
-            got = sha(p)
-        except OSError:
+        if not os.path.exists(p) and not os.path.islink(p):
             return f"{os.path.basename(p)} vanished after gtme-grade passed"
-        if got != want:
+        why = check_input(p)
+        if why:
+            return why
+        if sha(p) != want:
             return f"{os.path.basename(p)} changed after gtme-grade passed"
     try:
         live = canonical_state(fetch_state(ws, cid))
     except Exception as exc:  # any failure to re-read the campaign refuses
         return f"could not re-read the campaign from Clay to compare: {exc}"
-    if live != body.get("campaign_state"):
+    if not hmac.compare_digest(live, str(body["campaign_state"])):
         return "the campaign's copy, variants, settings or senders changed after gtme-grade passed"
     return ""
 
@@ -1090,7 +1174,11 @@ def main(argv=None):
     key = camp.get("id") or args.name
     receipt = None
     if passed and args.action and camp.get("raw") is not None and camp.get("id"):
-        receipt = str(write_receipt(args.ws, camp["id"], args.action, camp, gates, inputs))
+        try:
+            receipt = str(write_receipt(args.ws, camp["id"], args.action, camp, gates, inputs))
+        except (OSError, ValueError, PermissionError) as exc:
+            print(f"gtme-grade: {exc}", file=sys.stderr)
+            return 2
     if args.json:
         print(json.dumps({"campaign": key, "name": camp.get("name"), "pass": passed,
                           "receipt": receipt, "gates": [g.as_dict() for g in gates]}, indent=1))

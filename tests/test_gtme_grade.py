@@ -99,7 +99,8 @@ def clay_doc(copy_path, settings):
 
 class Case:
     def __init__(self):
-        self.dir = Path(tempfile.mkdtemp())
+        # resolved: macOS temp dirs sit behind the /var -> /private/var symlink
+        self.dir = Path(os.path.realpath(tempfile.mkdtemp()))
         self.home = self.dir / "home"
         self.home.mkdir()
         self.copy = COPY
@@ -134,7 +135,8 @@ class Case:
                 argv += [k, str(v)]
         argv += self.extra
         env = dict(os.environ, HOME=str(self.home), GTME_CLIENTS=str(d / "clients.json"),
-                   GTME_GRADE_KEY_FILE=str(self.home / "keys" / "gtme-grade.key"))
+                   GTME_GRADE_KEY_FILE=str(self.home / "keys" / "gtme-grade.key"),
+                   GTME_GRADE_INPUT_ROOTS=os.path.realpath(str(d)))
         self.env = env
         p = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=60)
         try:
@@ -194,6 +196,31 @@ if receipt.is_file():
         fh.write("dan@fundfour.example.test,Dan,Fund Four,Partner,valid,x,https://x.example.test\n")
     v = verify()
     check("--verify refuses once a graded input changes", v.returncode == 2 and "changed" in v.stderr, v.stderr)
+
+c = Case()
+c.run()
+real = c.dir / "leads.real.csv"
+(c.dir / "leads.csv").rename(real)
+(c.dir / "leads.csv").symlink_to(real)
+for f in (c.home / ".chewbacca" / "state" / "gtme-grade").glob("*"):
+    f.unlink()
+rc, out = c.run()
+check("a symlinked input gets no receipt", rc == 2 and
+      not any((c.home / ".chewbacca" / "state" / "gtme-grade").glob("*.json")), (rc, out))
+
+c = Case()
+c.run()
+for f in (c.home / ".chewbacca" / "state" / "gtme-grade").glob("*"):
+    f.unlink()
+# The inputs live in c.dir; allowing only c.home puts every one of them outside.
+p = subprocess.run([sys.executable, str(TOOL), "--campaign-json", str(c.dir / "campaign.json"),
+                    "--action", "launch", "--leads", str(c.dir / "leads.csv"), "--senders",
+                    str(c.dir / "senders.csv"), "--suppress", str(c.dir / "suppress.csv"),
+                    "--review", str(c.dir / "review.json"), "--icp-titles", "partner,principal"],
+                   capture_output=True, text=True, timeout=60,
+                   env=dict(c.env, GTME_GRADE_INPUT_ROOTS=str(c.home)))
+check("an input outside the allowed roots gets no receipt",
+      p.returncode == 2 and "outside the allowed input roots" in p.stderr, p.stderr[:200])
 
 c = Case()
 rc, out = c.run(mode="copy")

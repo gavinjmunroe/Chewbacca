@@ -159,15 +159,48 @@ fi
 # No receipt is chosen by "newest": a pass for one campaign never stands in for
 # another (security review, 2026-10-10).
 if [ -z "$why" ]; then
+  # Attribute from exactly what will run, never from a label, a description or
+  # a comment beside it (security review, 2026-10-10). Only one plain Bash
+  # command can be attributed: no chaining, pipes, redirection, substitution,
+  # heredocs, background jobs, comments, env prefixes or wrappers, one action,
+  # one campaign, at most one workspace. A browser or screen click can't show
+  # what its target does, so a launch-shaped one is refused outright.
+  subject=""
+  attrib=""
+  if [ "$tool" != "Bash" ]; then
+    attrib="a click in a browser or on screen can't be tied to one action on one campaign; a person presses Start in the Clay UI."
+  else
+    subject="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null)" ||
+      attrib="the command could not be read."
+    nl=$'\n'
+    case "$subject" in
+      *"$nl"*|*";"*|*"&"*|*"|"*|*'`'*|*'$('*|*"<"*|*">"*|*"#"*)
+        attrib="the command chains, pipes, redirects, substitutes or comments, so what runs can't be attributed to one campaign." ;;
+    esac
+    if [ -z "$attrib" ] && printf '%s' "$subject" |
+         grep -qE '^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*=|env |sudo |command |exec |eval |nohup |time |xargs |bash |sh |zsh |python[0-9.]* |node )'; then
+      attrib="the command runs behind an env prefix or a wrapper, so what runs can't be attributed."
+    fi
+    if [ -z "$attrib" ] && printf '%s' "$subject" | grep -qiE 'chewie.*\beval\b'; then
+      attrib="a page script can do anything, so it can't be attributed to one action."
+    fi
+  fi
+  slower="$(printf '%s' "$subject" | tr '[:upper:]' '[:lower:]')"
   actions=""
-  printf '%s' "$lower" | grep -qE 'resume|unpause' && actions="$actions resume"
-  printf '%s' "$lower" | grep -qE 'add leads|add-leads|enroll' && actions="$actions add-leads"
-  printf '%s' "$lower" | grep -qE 'launch|activate|start campaign|start sending|"?status"? *[:= ] *"?active|\bstart\b' &&
+  printf '%s' "$slower" | grep -qE 'resume|unpause' && actions="$actions resume"
+  printf '%s' "$slower" | grep -qE 'add leads|add-leads|enroll' && actions="$actions add-leads"
+  printf '%s' "$slower" | grep -qE 'launch|activate|start campaign|start sending|status[ =]+active|\bstart\b' &&
     actions="$actions launch"
-  ids="$( { printf '%s\n' "$blob"; cat "$lasturl" 2>/dev/null; } | grep -oE 'cam_[A-Za-z0-9]+' | sort -u)"
-  ws="$( { printf '%s\n' "$blob"; cat "$lasturl" 2>/dev/null; } |
-         grep -oE 'workspaces/[0-9]+|ws=[0-9]+|--ws[ =][0-9]+' | grep -oE '[0-9]+' | sort -u)"
+  nactions=$(printf '%s' "$actions" | wc -w | tr -d ' ')
+  ids="$(printf '%s\n' "$subject" | grep -oE 'cam_[A-Za-z0-9]+' | sort -u)"
+  nids=$(printf '%s' "$ids" | grep -c . | tr -d ' ')
+  ws="$(printf '%s\n' "$subject" | grep -oE 'workspaces/[0-9]+|ws=[0-9]+|--ws[ =][0-9]+' | grep -oE '[0-9]+' | sort -u)"
   [ -n "$ws" ] || ws="${CLAY_WORKSPACE_ID:-1372623}"
+  if [ -z "$attrib" ] && [ "$nactions" -gt 1 ]; then
+    attrib="the command names more than one of launch, resume and add-leads."
+  elif [ -z "$attrib" ] && [ "$nids" -gt 1 ]; then
+    attrib="the command names more than one campaign."
+  fi
   kit="${CHEWBACCA_ROOT:-}"
   if [ -z "$kit" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
     kit="$(sed -n 's/.*"repo"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$HOME/.chewbacca/install-manifest.json" | head -1)"
@@ -176,10 +209,12 @@ if [ -z "$why" ]; then
   for cand in "$(dirname "${BASH_SOURCE[0]}")/../../tools/gtme_grade.py" "${kit:-$HOME/code/chewbacca}/tools/gtme_grade.py"; do
     [ -f "$cand" ] && { grader="$cand"; break; }
   done
-  if [ -z "$actions" ]; then
+  if [ -n "$attrib" ]; then
+    why="$attrib"
+  elif [ -z "$actions" ]; then
     why="cannot tell whether this is a launch, a resume or an add-leads; name the action in the command (an unlabeled click on a Clay page is refused)."
   elif [ -z "$ids" ]; then
-    why="no cam_ id in the command or the last Clay URL, so no grade can be matched to it."
+    why="no cam_ id in the command, so no grade can be matched to it."
   elif [ "$(printf '%s\n' "$ws" | wc -l | tr -d ' ')" != "1" ]; then
     why="the command names more than one workspace."
   elif [ -z "$grader" ] || ! command -v python3 >/dev/null 2>&1; then

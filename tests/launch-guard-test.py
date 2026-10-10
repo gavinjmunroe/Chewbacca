@@ -27,7 +27,7 @@ G.write_receipt("1372623", "cam_x", "launch", {"name": "t", "raw": json.load(ope
 
 
 def run(tool, tool_input, receipt=None, files=None, last_url=None):
-    home = tempfile.mkdtemp()
+    home = os.path.realpath(tempfile.mkdtemp())
     state = os.path.join(home, ".chewbacca", "state")
     os.makedirs(state)
     if last_url:
@@ -81,7 +81,8 @@ cases = [
      None, None, None, 0),
     ("gate run passes the hook", "Bash",
      {"command": "python3 scripts/pre_send_gate.py l.csv --mx"}, None, None, None, 0),
-    ("launch, fresh full receipt, files unchanged", "Bash", {"command": L},
+    ("launch, fresh full receipt, files unchanged", "Bash",
+     {"command": "clay campaigns update cam_x --status active"},
      FULL, SAME, None, 0),
     ("mcp click off clay", "mcp__chrome-devtools__click", {"uid": "1"},
      None, None, "https://github.com", 0),

@@ -47,7 +47,8 @@ if spec.get("rename_to"):
 
 class Env:
     def __init__(self):
-        self.home = tempfile.mkdtemp()
+        # resolved: macOS temp dirs sit behind the /var -> /private/var symlink
+        self.home = os.path.realpath(tempfile.mkdtemp())
         self.state = os.path.join(self.home, ".chewbacca", "state")
         os.makedirs(self.state)
         self.fixtures = os.path.join(self.home, "clay")
@@ -107,7 +108,7 @@ def bin_without(*missing):
 
 
 LAUNCH = {"command": "clay campaigns update cam_alpha --status active"}
-RESUME = {"command": 'chewie web click "Resume campaign" # cam_alpha'}
+RESUME = {"command": "clay campaigns resume cam_alpha"}
 CLAY_A = "https://app.clay.com/workspaces/1372623/campaigns/cam_alpha"
 results = []
 # A refusal must be for the reason the case is about, not an incidental one.
@@ -118,7 +119,7 @@ WHY = {
     "cam_beta's receipt copied to cam_alpha's name is refused": "not launch on cam_alpha",
     "a pass for another campaign does not unlock this one": "no gtme-grade pass for launch on cam_alpha",
     "a grade in another workspace does not unlock this one": "in workspace 1372623",
-    "an unlabeled click on a graded campaign page refuses": "cannot tell",
+    "an unlabeled click on a graded campaign page refuses": "can't be tied",
     "a launch with no campaign id refuses even with grades on file": "no cam_ id",
     "a list edited after grading refuses": "leads.csv changed",
     "a list deleted after grading refuses": "leads.csv vanished",
@@ -171,8 +172,7 @@ case("cam_beta's receipt copied to cam_alpha's name is refused", 2,
 case("a pass for another campaign does not unlock this one", 2, lambda e: e.grade("cam_beta", "launch"))
 case("a grade in another workspace does not unlock this one", 2,
      lambda e: e.grade("cam_alpha", "launch", ws="999"),
-     ti={"command": "chewie web goto https://app.clay.com/workspaces/1372623/campaigns/cam_alpha && "
-                    'chewie web click "Launch"'})
+     ti={"command": "clay campaigns update cam_alpha --status active --ws 1372623"})
 case("an unlabeled click on a graded campaign page refuses", 2,
      lambda e: e.grade("cam_alpha", "launch"), tool="mcp__chrome-devtools__click", ti={"uid": "1"},
      last_url=CLAY_A)
@@ -282,9 +282,11 @@ def unsigned(e):
     e.grade("cam_beta", "launch")  # so the key exists and only the signature is missing
     e.campaign("cam_alpha")
     gdir = os.path.join(e.state, "gtme-grade")
-    with open(os.path.join(gdir, f"{WS}-cam_alpha-launch.json"), "w") as fh:
-        json.dump({"workspace": WS, "campaign": "cam_alpha", "action": "launch", "pass": True,
-                   "time": NOW, "expires": NOW + 3600, "inputs": {}}, fh)
+    # 0600 like a real one, so the missing signature is what refuses
+    fd = os.open(os.path.join(gdir, f"{WS}-cam_alpha-launch.json"), os.O_WRONLY | os.O_CREAT, 0o600)
+    os.write(fd, json.dumps({"workspace": WS, "campaign": "cam_alpha", "action": "launch", "pass": True,
+                             "time": NOW, "expires": NOW + 3600, "inputs": {}}).encode())
+    os.close(fd)
 
 
 def other_key(e):
@@ -314,6 +316,181 @@ case("touching the key from the shell refuses", 2, nothing,
      ti={"command": "cat ~/Library/Application\\ Support/chewbacca/gtme-grade.key"})
 case("writing a receipt from the shell refuses", 2, nothing,
      ti={"command": "echo '{}' > ~/.chewbacca/state/gtme-grade/1372623-cam_alpha-launch.json"})
+
+
+
+# Second review, 2026-10-10. (a) attribution: derive from what runs, refuse
+# anything that can't be attributed. Each case below has cam_alpha graded.
+def both(e):
+    e.grade("cam_alpha", "launch")
+    e.grade("cam_beta", "launch")
+
+
+ATTRIB = [
+    ("a chained second launch refuses", both,
+     "clay campaigns update cam_alpha --status active && clay campaigns update cam_beta --status active",
+     "chains"),
+    ("an env-prefixed launch refuses", lambda e: e.grade("cam_alpha", "launch"),
+     "X=1 clay campaigns update cam_alpha --status active", "env prefix"),
+    ("a heredoc launch refuses", lambda e: e.grade("cam_alpha", "launch"),
+     "clay campaigns update cam_alpha --status active <<EOF", "chains"),
+    ("a comment naming the graded campaign refuses", lambda e: e.grade("cam_alpha", "launch"),
+     "clay campaigns update cam_beta --status active # cam_alpha", "chains"),
+    ("a bash -c wrapper refuses", lambda e: e.grade("cam_alpha", "launch"),
+     "bash -c 'clay campaigns update cam_alpha --status active'", "wrapper"),
+    ("one command with two actions refuses", lambda e: (e.grade("cam_alpha", "launch"),
+                                                        e.grade("cam_alpha", "resume")),
+     "clay campaigns resume cam_alpha --status active", "more than one of"),
+    ("one command with two campaigns refuses", both,
+     "clay campaigns update cam_alpha cam_beta --status active", "more than one campaign"),
+    ("a page script refuses", lambda e: e.grade("cam_alpha", "launch"),
+     "chewie web eval launchCampaign('cam_alpha')", "page script"),
+]
+for name, setup, cmd, need in ATTRIB:
+    WHY[name] = need
+    case(name, 2, setup, ti={"command": cmd})
+
+WHY["a description naming the graded campaign does not cover the command"] = "cam_beta"
+case("a description naming the graded campaign does not cover the command", 2,
+     lambda e: (e.campaign("cam_beta"), e.grade("cam_alpha", "launch")),
+     ti={"command": "clay campaigns update cam_beta --status active",
+         "description": "launch cam_alpha"})
+WHY["a labeled screen click refuses even when graded"] = "can't be tied"
+case("a labeled screen click refuses even when graded", 2, lambda e: e.grade("cam_alpha", "launch"),
+     tool="mcp__peekaboo__click", ti={"query": "Launch cam_alpha"})
+
+
+# (b) integrity: canonical signature over every field, constant-time compare,
+# the key never re-minted by a check
+def resign(e, mutate, sign=True, after=None):
+    e.grade("cam_alpha", "launch")
+    gdir = os.path.join(e.state, "gtme-grade")
+    p = os.path.join(gdir, os.listdir(gdir)[0])
+    body = json.load(open(p))
+    body.pop("mac")
+    mutate(body)
+    if after:  # signed first, changed after: the signature must not cover the change
+        resign_body = dict(body)
+        code = ("import json,sys; sys.path.insert(0, sys.argv[1]); import gtme_grade as G; "
+                "b = json.loads(sys.argv[2]); print(G.sign(b, G.load_key(False)))")
+        mac = subprocess.run([sys.executable, "-c", code, TOOLS, json.dumps(resign_body)], env=e.env,
+                             capture_output=True, text=True).stdout.strip()
+        after(body)
+        body["mac"] = mac
+        fd = os.open(p + ".new", os.O_WRONLY | os.O_CREAT, 0o600)
+        os.write(fd, json.dumps(body).encode())
+        os.close(fd)
+        os.replace(p + ".new", p)
+        return
+    if sign:
+        code = ("import json,sys; sys.path.insert(0, sys.argv[1]); import gtme_grade as G; "
+                "b = json.loads(sys.argv[2]); print(G.sign(b, G.load_key(False)))")
+        mac = subprocess.run([sys.executable, "-c", code, TOOLS, json.dumps(body)], env=e.env,
+                             capture_output=True, text=True).stdout.strip()
+    else:
+        mac = ""
+    body["mac"] = mac
+    fd = os.open(p + ".new", os.O_WRONLY | os.O_CREAT, 0o600)
+    os.write(fd, json.dumps(body).encode())
+    os.close(fd)
+    os.replace(p + ".new", p)
+
+
+INTEGRITY = [
+    ("an empty signature refuses", lambda e: resign(e, lambda b: None, sign=False), "no signature"),
+    ("an extra unsigned field refuses", lambda e: resign(e, lambda b: b.update(note="x")),
+     "fields differ"),
+    ("a receipt claiming another key id refuses",
+     lambda e: resign(e, lambda b: b.update(key_id="0" * 16)), "different key"),
+    ("a float slipped into a signed body refuses",
+     lambda e: resign(e, lambda b: None, after=lambda b: b.update(time=b["time"] + 0.0)),
+     "signature does not verify"),
+    ("a field changed after signing refuses",
+     lambda e: resign(e, lambda b: None, after=lambda b: b.update(campaign_state="0" * 64)),
+     "signature does not verify"),
+    ("an expiry stretched past 12 hours refuses even if re-signed",
+     lambda e: resign(e, lambda b: b.update(expires=b["expires"] + 3600)), "12 hours"),
+]
+for name, setup, need in INTEGRITY:
+    WHY[name] = need
+    case(name, 2, setup)
+
+
+def empty_key(e):
+    e.grade("cam_alpha", "launch")
+    with open(e.key, "w") as fh:
+        fh.write("")
+
+
+def symlink_key(e):
+    e.grade("cam_alpha", "launch")
+    real = e.key + ".real"
+    os.replace(e.key, real)
+    os.symlink(real, e.key)
+
+
+WHY["an empty key refuses"] = "empty or malformed"
+case("an empty key refuses", 2, empty_key)
+WHY["a symlinked key refuses"] = "symlink"
+case("a symlinked key refuses", 2, symlink_key)
+
+e = Env()
+e.presend()
+e.grade("cam_alpha", "launch")
+os.remove(e.key)
+got, err = e.run("Bash", LAUNCH)
+ok = got == 2 and "no grade key" in err and not os.path.exists(e.key)
+results.append(ok)
+print(f"{'ok  ' if ok else 'FAIL'} a deleted key is never re-minted by the check: got {got}, "
+      f"key exists {os.path.exists(e.key)}")
+
+
+# (c) untrusted verifier inputs: fixed receipt place, validated ids, inputs
+# resolved under an allowed root, no symlinks
+def receipt_symlink(e):
+    e.grade("cam_alpha", "launch")
+    gdir = os.path.join(e.state, "gtme-grade")
+    p = os.path.join(gdir, os.listdir(gdir)[0])
+    elsewhere = os.path.join(e.home, "elsewhere.json")
+    os.replace(p, elsewhere)
+    os.symlink(elsewhere, p)
+
+
+def loose_receipt(e):
+    e.grade("cam_alpha", "launch")
+    gdir = os.path.join(e.state, "gtme-grade")
+    os.chmod(os.path.join(gdir, os.listdir(gdir)[0]), 0o644)
+
+
+def input_symlink(e):
+    e.grade("cam_alpha", "launch")
+    copy = e.inputs + ".copy"
+    shutil.copy(e.inputs, copy)
+    os.remove(e.inputs)
+    os.symlink(copy, e.inputs)
+
+
+def outside_root(e):
+    e.grade("cam_alpha", "launch")
+    e.env["GTME_GRADE_INPUT_ROOTS"] = tempfile.mkdtemp()
+
+
+for name, setup, need in [
+        ("a receipt that is a symlink refuses", receipt_symlink, "symlink"),
+        ("a receipt readable by others refuses", loose_receipt, "0600"),
+        ("a graded input swapped for a symlink refuses", input_symlink, "symlink"),
+        ("a graded input outside the allowed roots refuses", outside_root, "outside the allowed")]:
+    WHY[name] = need
+    case(name, 2, setup)
+
+e = Env()
+e.grade("cam_alpha", "launch")
+bad = subprocess.run([sys.executable, os.path.join(TOOLS, "gtme_grade.py"), "--verify", "--ws", "1372623",
+                      "--campaign", "../../keys/x", "--action", "launch"], env=e.env,
+                     capture_output=True, text=True, timeout=30)
+ok = bad.returncode == 2 and "refusing a receipt name" in bad.stderr
+results.append(ok)
+print(f"{'ok  ' if ok else 'FAIL'} --verify refuses a path-shaped campaign id: {bad.stderr.strip()[:120]}")
 
 print(f"\n{sum(results)}/{len(results)} passed")
 raise SystemExit(0 if all(results) else 1)

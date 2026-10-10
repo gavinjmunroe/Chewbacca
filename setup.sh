@@ -1096,6 +1096,10 @@ for _tool in orphan-reap list-audit list-gate gtme-dedupe gtme-reply gtme-dnc gt
     log "$_tool installed to ~/.local/bin/"
   fi
 done
+# The Clay front door behind `chewbacca clay`, on PATH under its own name so
+# `readlink ~/.local/bin/chewbacca-clay` shows which kit a write runs from.
+# On 2026-10-10 the copy that ran was the dirty shared checkout's, hours behind.
+link_tool chewbacca-clay && log "chewbacca-clay installed to ~/.local/bin/"
 ensure_local_bin_on_path
 unset _tool
 

@@ -86,16 +86,25 @@ cheaper one:
 - `model-route check FILE` refuses a plan whose acceptance lines are prose,
   placeholders, or anything but one plain argv: no `;`, `&&`, pipes,
   redirects, substitutions or env prefixes, argv[0] from a fixed list (python3,
-  bash, node, pytest, npm test/run, git diff/status/grep/log/show, grep, diff,
-  test, true) or an executable inside the repo, interpreters only on a repo
-  script, and no `-c`, `env`, `xargs`, `find -exec` or `npx`. A plan is
+  bash, node, pytest, tsc, npm test, cargo test/check/clippy, go test/vet,
+  git diff/status/grep/log/show, grep, diff, test, true) or an executable
+  inside the repo, interpreters only on a repo script, and no `env`, `xargs`,
+  `find`, `npx`, `make`, `npm run` or `cargo build`. Options that load, run or
+  write elsewhere are refused by name before any `=`: `-exec`, `-toolexec`,
+  `-vettool`, `--pre`, `--textconv`, `--rootdir`, `--basetemp`, `--out*`,
+  `--config*`, `--hook*`, and `-c`, `-C`, `-o`, `-p`, `-O`, `-r` with or
+  without a value. Paths are resolved with realpath, planned ones too, so a
+  symlinked directory cannot carry a check outside the repo. A plan is
   model-written, so treat a planted one as hostile. `handoff` refuses the same
   plans and writes nothing, and never runs a check.
-- `model-route accept HANDOFF.md` re-validates and runs the acceptance checks
-  as argv with no shell, from the repo root, and exits 1 if any fails. The
-  build session is done when this passes, never when it says so itself. The
-  browser bridge can call `check` and `handoff` but never `accept`, `--out` or
-  `--save`.
+- `model-route accept HANDOFF.md --yes` prints every argv, then runs them with
+  no shell from the repo root, re-validating each one with the same function
+  immediately before it runs, and exits 1 if any fails. Without `--yes` it
+  prints the argv list and runs nothing. **Use it only in a repo you trust**:
+  a test is repo code, so pytest's conftest, an npm test script or a script
+  the plan names all execute as written. The build session is done when this
+  passes, never when it says so itself. The browser bridge can call `check`
+  and `handoff` but never `accept`, `--out` or `--save`.
 
 ## Verify before relying on it
 

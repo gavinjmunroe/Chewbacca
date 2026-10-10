@@ -4,6 +4,7 @@ placeholders or missing scripts is refused. Offline: Jev is a stub or absent,
 and no model is ever called."""
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -99,7 +100,7 @@ def main():
         with open(os.devnull, "w") as sink:
             saved, sys.stdout = sys.stdout, sink
             try:
-                code = model_handoff.accept(trap, root)
+                code = model_handoff.accept(trap, root, yes=True)
             finally:
                 sys.stdout = saved
         check("accept on a hostile page runs nothing and fails",
@@ -194,14 +195,89 @@ def main():
 
         (root / "pass.md").write_text(GOOD.replace("`python3 tests/test_ship_dry_run.py`", "`true`"))
         (root / "fail.md").write_text(GOOD.replace("`python3 tests/test_ship_dry_run.py`", "`false`"))
-        check("accept exits 0 when every check passes", cli("accept", "pass.md").returncode == 0)
-        failed = cli("accept", "fail.md")
+        check("accept exits 0 when every check passes", cli("accept", "pass.md", "--yes").returncode == 0)
+        failed = cli("accept", "fail.md", "--yes")
         check("accept exits 1 and names the failing check",
               failed.returncode == 1 and "FAIL" in failed.stdout and "false" in failed.stdout)
-        check("accept refuses to run a page check would refuse", cli("accept", "bad.md").returncode == 1)
+        check("accept refuses to run a page check would refuse", cli("accept", "bad.md", "--yes").returncode == 1)
         (root / "trap.md").write_text(GOOD.replace("`true`", "`true; touch PWNED`"))
         check("accept refuses a planted shell check and runs nothing",
-              cli("accept", "trap.md").returncode == 1 and not (root / "PWNED").exists())
+              cli("accept", "trap.md", "--yes").returncode == 1 and not (root / "PWNED").exists())
+        # (D) accept without --yes prints the exact argv and runs nothing.
+        (root / "touchy.md").write_text(GOOD.replace("`true`", "`tests/mark.sh`")
+                                        .replace("- bin/ship", "- bin/ship\n- tests/mark.sh"))
+        (root / "tests" / "mark.sh").write_text("#!/bin/sh\n: > RAN\n")
+        os.chmod(root / "tests" / "mark.sh", 0o755)
+        dry = cli("accept", "touchy.md")
+        check("accept without --yes prints each argv and runs nothing",
+              dry.returncode == 3 and '["tests/mark.sh"]' in dry.stdout and not (root / "RAN").exists())
+        check("accept --yes runs it", cli("accept", "touchy.md", "--yes").returncode == 1
+              and (root / "RAN").exists())
+
+        # (A) option values: matched on the name before "=", for every program.
+        option_attacks = [
+            "go test -exec=sh ./...", "go test -exec sh", "go test -toolexec=sh ./...",
+            "go vet -vettool=/tmp/x ./...", "grep --pre=sh x tests", "grep --pre-glob=* x",
+            "git diff --textconv", "git log --output=/tmp/x", "git diff -c core.pager=sh",
+            "pytest -o addopts=-pevil", "pytest --rootdir=/tmp", "pytest -c /tmp/evil.ini",
+            "pytest --config-file=/tmp/x", "pytest -pevil", "pytest --basetemp=/",
+            "git status --hook=x", "tsc --outDir=/tmp", "go test -o=/tmp/x",
+            "npm run evil", "cargo build", "git -C /tmp status", "cargo test --manifest-path=/tmp/C.toml",
+        ]
+        slipped = [c for c in option_attacks if model_handoff.argv_for(c, root, set())[0] is not None]
+        check("option-value and wrapper bypasses are refused", slipped == [])
+        if slipped:
+            print("        let through:", slipped)
+        check("plain test flags still pass",
+              model_handoff.argv_for("git diff --exit-code --stat", root, set())[0] is not None
+              and model_handoff.argv_for("grep -q -i -n x plan.md", root, set())[0] is not None
+              and (not shutil.which("go") or model_handoff.argv_for("go test ./...", root, set())[0] is not None)
+              and (not shutil.which("pytest") or model_handoff.argv_for("pytest -q -x", root, set())[0] is not None))
+
+        # (B) a planned file under a symlinked directory resolves outside the repo.
+        os.symlink(outside, root / "sub")
+        planned_escape = model_handoff.argv_for("python3 sub/x.py", root, {"sub/x.py"})
+        check("a planned script under a symlinked dir is refused",
+              planned_escape[0] is None and "outside the repo" in planned_escape[1])
+        # And the runner re-judges at run time: a script that passed check
+        # and was swapped for an escaping symlink is refused, not run.
+        (root / "tests" / "swap.py").write_text("print(1)\n")
+        swap = dict(model_handoff.parse(GOOD), acceptance=["python3 tests/swap.py"])
+        ok_before = model_handoff.check(swap, root) == []
+        os.remove(root / "tests" / "swap.py")
+        os.symlink(outside / "evil.py", root / "tests" / "swap.py")
+        with open(os.devnull, "w") as sink:
+            saved, sys.stdout = sys.stdout, sink
+            try:
+                code = model_handoff.accept(swap, root, yes=True)
+            finally:
+                sys.stdout = saved
+        check("accept re-validates each check right before running it",
+              ok_before and code == 1 and not (root / "PWNED").exists())
+
+        # (C) a symlink anywhere from ~/.chewbacca down is refused.
+        real = Path(tempfile.mkdtemp())
+        linked = Path(tmp) / "linked-handoffs"
+        os.symlink(real, linked)
+        os.environ["CHEWBACCA_HANDOFF_DIR"] = str(linked)
+        try:
+            model_handoff.save("x", "page")
+            wrote_through = True
+        except (OSError, ValueError):
+            wrote_through = False
+        check("save refuses a symlinked handoff dir", not wrote_through and not any(real.iterdir()))
+        fake_home = Path(tempfile.mkdtemp())
+        os.symlink(real, fake_home / ".chewbacca")
+        os.environ.pop("CHEWBACCA_HANDOFF_DIR")
+        old_home, os.environ["HOME"] = os.environ.get("HOME"), str(fake_home)
+        try:
+            model_handoff.save("x", "page")
+            wrote_through = True
+        except (OSError, ValueError):
+            wrote_through = False
+        finally:
+            os.environ["HOME"] = old_home or ""
+        check("save refuses a symlinked ~/.chewbacca", not wrote_through and not any(real.iterdir()))
         check("a prompt starting with 'check' is still a prompt, not a subcommand",
               cli("check", "the", "logs").returncode == 0 and cli("check", "the", "logs").stdout.startswith("{"))
     print()

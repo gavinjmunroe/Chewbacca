@@ -2,7 +2,7 @@
 
     model-route handoff PLAN.md [--save | --out NAME] [--tier haiku|sonnet|opus] [--json]
     model-route check PLAN_OR_HANDOFF.md
-    model-route accept HANDOFF.md [--root DIR]
+    model-route accept HANDOFF.md [--root DIR] [--yes]
 
 After Jordan Urbs' opencode milestone handoff: plan with a smart, expensive
 model, save the plan to a file, and build it in a fresh session on a cheaper
@@ -17,8 +17,10 @@ and `handoff` refuses to write a page `check` would refuse.
 A plan is model-written, so a planted one can carry anything. Acceptance
 checks are argv, never shell: no pipes, redirects, `;`, `&&`, substitutions or
 env prefixes; argv[0] matches a fixed list exactly or is an executable inside
-the repo; no interpreter -c and no wrapper that runs another program. Nothing
-runs at handoff time, and `accept` runs checks without a shell. Pages are
+the repo; no interpreter -c, no wrapper that runs another program, and no
+option that loads or writes elsewhere. Nothing runs at handoff time. `accept`
+prints each argv and runs them without a shell only with --yes, because a
+test is repo code: use it only in a repo you trust. Pages are
 written only as new files inside ~/.chewbacca/handoffs: --save names the file
 from the title, --out NAME picks a plain basename.
 
@@ -61,7 +63,7 @@ BUILD_TIER = {
 # Guessed, never measured: with Jev unavailable, sonnet is the cheaper tier
 # that still writes code; haiku only when Jev or the plan says mechanical.
 DEFAULT_TIER = "sonnet"
-PLACEHOLDER = re.compile(r"<[^>\s]+>|\bTODO\b|\bTBD\b|\.\.\.|\bFIXME\b")
+PLACEHOLDER = re.compile(r"<[^>\s]+>|\bTODO\b|\bTBD\b|(?<!/)\.\.\.|\bFIXME\b")
 # Any of these means a shell would have to read the line. A check is an argv.
 SHELL_META = re.compile(r"[;|&`$<>()\n\r\\*?{}~!#]")
 # argv[0] must match one of these exactly. The value says what may follow:
@@ -74,16 +76,40 @@ ALLOWED = {
     "pytest": None, "tsc": None,
     "python3": "script", "python": "script", "bash": "script", "sh": "script",
     "zsh": "script", "node": "script",
-    "npm": {"test", "run"},
-    "cargo": {"test", "build", "check", "clippy"},
-    "go": {"test", "build", "vet"},
+    # npm run (any package.json script) and cargo build (build.rs only, no
+    # tests) are left out. npm test and cargo test still run repo code, which
+    # is what a test is: see accept().
+    "npm": {"test"},
+    "cargo": {"test", "check", "clippy"},
+    "go": {"test", "vet"},
     "git": {"diff", "status", "grep", "log", "show"},
 }
-# Arguments that turn an allowed program into one that runs something else.
-# Interpreters never reach these: their first argument must be a repo script.
-FORBIDDEN_ARG = re.compile(r"^(--eval.*|--exec.*|-exec|-execdir|-ok|--ext-diff|--output.*|"
-                           r"--upload-pack.*|--config.*|--rcfile.*|--init-file.*|--command.*|"
-                           r"--require.*|--import.*|--loader.*|-p|-O.*|--open-files-in-pager.*)$")
+# Options that make an allowed program run, load or write something else.
+# Matched on the option name before any "=", so -exec=sh and --pre=x are
+# caught. A short option in OPT_SHORT is refused with an attached value too
+# (-ofile, -cfoo, -Cdir). Interpreters never reach these: their first
+# argument must be a repo script.
+OPT_EXACT = {
+    "-exec", "-execdir", "-ok", "-toolexec", "-vettool", "--ext-diff", "--textconv",
+    "--pre", "--pre-glob", "--rootdir", "--basetemp", "--confcutdir", "--override-ini",
+    "-modfile", "-overlay", "-pkgdir",
+}
+OPT_PREFIX = (
+    "--exec", "--eval", "--out", "--config", "--hook", "--upload-pack", "--rcfile",
+    "--init-file", "--command", "--require", "--import", "--loader",
+    "--open-files-in-pager", "--junit", "--log-file", "--plugin", "--manifest-path",
+    "--target-dir", "--project", "--outDir", "--outFile",
+)
+OPT_SHORT = ("-c", "-C", "-o", "-p", "-O", "-r")
+
+
+def _forbidden_option(arg: str) -> bool:
+    if not arg.startswith("-") or arg in ("-", "--"):
+        return False
+    name = arg.split("=", 1)[0]
+    if name in OPT_EXACT or name.startswith(OPT_PREFIX):
+        return True
+    return not arg.startswith("--") and arg[:2] in OPT_SHORT
 # python -m is allowed only for these test runners.
 PYTHON_MODULES = {"pytest", "unittest", "py_compile"}
 # A per-command bound for `accept`, so a hung check fails instead of wedging
@@ -149,12 +175,15 @@ def _repo_path(arg: str, root: Path, planned: set) -> str | None:
     if not arg or os.path.isabs(arg) or ".." in Path(arg).parts or arg.startswith("-"):
         return f"{arg or 'the script'} is not a relative path inside the repo"
     target = root / arg
+    # Resolve first, for planned files too: realpath follows every symlinked
+    # directory on the way, so a planned sub/x.py under a sub -> /tmp link is
+    # caught before it exists.
+    if Path(os.path.realpath(root)) not in Path(os.path.realpath(target)).parents:
+        return f"{arg} resolves outside the repo"
     if not target.exists() and not target.is_symlink():
         return None if arg in planned else f"{arg} does not exist and is not in Files"
     if not target.is_file():
         return f"{arg} is not a file"
-    if Path(os.path.realpath(root)) not in Path(os.path.realpath(target)).parents:
-        return f"{arg} resolves outside the repo"
     return None
 
 
@@ -175,7 +204,7 @@ def argv_for(command: str, root: Path, planned: set) -> tuple:
     head, rest = argv[0], argv[1:]
     if "=" in head:
         return None, "environment prefixes are not allowed: " + command
-    bad = next((a for a in rest if FORBIDDEN_ARG.match(a)), None)
+    bad = next((a for a in rest if _forbidden_option(a)), None)
     if bad:
         return None, f"{bad} lets {head} run something else: {command}"
     if "/" in head:
@@ -248,7 +277,7 @@ def render(plan: dict, tier: dict) -> str:
              "more expensive model and is settled. Build it; do not re-plan it. If a step turns",
              "out to be wrong, stop and report what contradicts the plan instead of redesigning.",
              "You are done only when every acceptance command exits 0, run from the repo root",
-             "(`model-route accept` on this page runs them all).", ""]
+             "(`model-route accept PAGE --yes` runs them all as argv).", ""]
     if tier["open_design"]:
         lines += ["Warning: Jev reads this plan as still carrying design work, so the build",
                   "tier stayed at opus. Finish the plan first if you can.", ""]
@@ -262,11 +291,23 @@ def render(plan: dict, tier: dict) -> str:
     return "\n".join(lines)
 
 
-def accept(plan: dict, root: Path) -> int:
-    """Run each check as an argv, never through a shell. Every check is
-    re-validated here, so a page edited after `check` still cannot escape."""
-    failed = 0
+def accept(plan: dict, root: Path, yes: bool = False) -> int:
+    """Run each check as an argv, never through a shell.
+
+    This runs repo code by definition: an interpreter on a repo script, a
+    pytest conftest, an npm test script. So it prints every argv first and
+    runs nothing without yes. Each check goes through argv_for, the same
+    function `check` uses, immediately before its own subprocess.run, so a
+    page or a symlink changed after `check` is judged again at run time."""
     planned = set(plan["files"])
+    print("model-route accept runs these as argv, no shell, in " + str(root) + ":")
+    for command in plan["acceptance"]:
+        argv, why = argv_for(command, root, planned)
+        print("  " + (json.dumps(argv) if argv else "refused: " + str(why)))
+    if not yes:
+        print("model-route: nothing run. These execute repo code; pass --yes only in a repo you trust.")
+        return 3
+    failed = 0
     for command in plan["acceptance"]:
         argv, why = argv_for(command, root, planned)
         if argv is None:
@@ -293,24 +334,40 @@ def slug(title: str) -> str:
 
 
 def save(page: str, name: str) -> Path:
-    """Write the page as a new file directly inside handoff_dir(). The name
-    must be a plain basename; a symlink or an existing file at the target is
-    never followed or overwritten."""
+    """Write the page as a new file directly inside handoff_dir(), the only
+    file this tool writes. The name must be a plain basename. The directories
+    from ~/.chewbacca down (or the override dir itself) are walked one at a
+    time by file descriptor with O_NOFOLLOW, so a symlink anywhere on that
+    path is refused, and the page is created O_EXCL so nothing is overwritten."""
     if not name.endswith(".md"):
         name += ".md"
     if not SAFE_NAME.match(name) or ".." in name:
         raise ValueError(f"handoff name {name!r} must be a plain file name")
-    folder = handoff_dir()
-    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if folder.is_symlink():
-        raise ValueError(f"{folder} is a symlink")
-    target = folder / name
-    if Path(os.path.realpath(target)).parent != Path(os.path.realpath(folder)):
-        raise ValueError(f"{name} resolves outside {folder}")
-    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
-    with os.fdopen(fd, "w") as fh:
+    override = os.environ.get("CHEWBACCA_HANDOFF_DIR")
+    if override:
+        base, parts = Path(override).parent, [Path(override).name]
+    else:
+        base, parts = Path.home(), [".chewbacca", "handoffs"]
+    dir_flags = os.O_RDONLY | os.O_DIRECTORY
+    fd = os.open(base, dir_flags)
+    try:
+        for part in parts:
+            try:
+                os.mkdir(part, 0o700, dir_fd=fd)
+            except FileExistsError:
+                pass
+            try:
+                child = os.open(part, dir_flags | os.O_NOFOLLOW, dir_fd=fd)
+            except OSError as exc:
+                raise ValueError(f"{base / part} is a symlink or not a directory") from exc
+            os.close(fd)
+            fd, base = child, base / part
+        out = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+    finally:
+        os.close(fd)
+    with os.fdopen(out, "w") as fh:
         fh.write(page)
-    return target
+    return base / name
 
 
 def _opt(argv: list, name: str) -> str:
@@ -331,7 +388,8 @@ def main(argv: list, ask=None) -> int:
     root = Path(_opt(argv, "--root") or os.getcwd())
     as_json = "--json" in argv
     to_dir = "--save" in argv
-    argv = [a for a in argv if a not in ("--json", "--save")]
+    yes = "--yes" in argv
+    argv = [a for a in argv if a not in ("--json", "--save", "--yes")]
     if not argv:
         print(__doc__.strip(), file=sys.stderr)
         return 2
@@ -346,7 +404,7 @@ def main(argv: list, ask=None) -> int:
             print("  - " + p, file=sys.stderr)
         return 1
     if cmd == "accept":
-        return accept(plan, root)
+        return accept(plan, root, yes=yes)
     if cmd == "check":
         print(f"model-route: {argv[0]} is a complete handoff "
               f"({len(plan['acceptance'])} runnable acceptance checks)")

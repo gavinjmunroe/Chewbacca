@@ -13,6 +13,9 @@ fixtures). AWAITS_REPLY_FROM(Thread -> me):
   rule 3, groups need his name, automated texts:  8/12 on a held-out 90-day sample
   rule 4, unsaved number + 140+ chars is a blast: fixes the 3 automated misses
           on that sample after the fact; not yet measured on unseen threads.
+  CHW-135 (2026-10-10): hand samples replaced by tools/needs_you_eval.py, which
+          labels from what he did next and scores a sealed set once. Its cases
+          live in tests/test_needs_you.py.
 The cases below are the misses each rule was written against.
 """
 import sys

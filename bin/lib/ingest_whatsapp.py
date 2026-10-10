@@ -263,18 +263,30 @@ def by_chat(rows: list[dict]) -> dict[str, list[dict]]:
     return out
 
 
-def waiting(msgs: list[dict], chat: dict, known: bool) -> bool:
-    """Does this chat wait on the person? The iMessage rule, unchanged: the
-    inbound burst since his last message has to ask for something."""
+def my_reactions(rows: list[dict]) -> dict[str, datetime]:
+    """When he last reacted in each chat. A reaction of his is his move: the
+    same mistake on iMessage left Loved texts "waiting on you" (CHW-135)."""
+    out: dict[str, datetime] = {}
+    for m in rows:
+        at = when(m.get("Timestamp"))
+        if m.get("FromMe") and m.get("ReactionToID") and at and at > out.get(m.get("ChatJID"), at - timedelta(1)):
+            out[m["ChatJID"]] = at
+    return out
+
+
+def waiting(msgs: list[dict], chat: dict, known: bool, reacted_at: datetime | None = None) -> bool:
+    """Does this chat wait on the person? The iMessage rule
+    (osgraph_ingest.thread_awaits_me): the inbound burst since his last
+    message or reaction has to ask for something."""
     import osgraph_ingest  # noqa: PLC0415  heavy module, only needed here
 
-    burst = []
-    for m in msgs:
-        if m.get("FromMe"):
-            break
-        burst.append(words_of(m))
+    view = [{"from_me": bool(m.get("FromMe")), "text": words_of(m), "at": when(m.get("Timestamp"))} for m in msgs]
+    if reacted_at:
+        view.append({"from_me": True, "reaction": True, "text": "", "at": reacted_at})
+    floor = datetime.min.replace(tzinfo=timezone.utc)
+    view.sort(key=lambda v: v["at"] or floor, reverse=True)
     group = chat.get("kind") == "group"
-    return osgraph_ingest.awaits_me(list(reversed(burst)), handle_of(str(chat.get("jid") or "")), group, known)
+    return osgraph_ingest.thread_awaits_me(view, handle_of(str(chat.get("jid") or "")), group, known)
 
 
 def whatsapp(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
@@ -297,7 +309,9 @@ def whatsapp(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
 
     snap = Snapshot()
     me = snap.add(me_node())
-    grouped = by_chat(messages(ctx, after=since))
+    rows = messages(ctx, after=since)
+    grouped = by_chat(rows)
+    reacted = my_reactions(rows)
     for chat in listed:
         jid = chat["jid"]
         msgs = grouped.get(jid, [])[:MESSAGES_PER_THREAD]
@@ -348,7 +362,7 @@ def whatsapp(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
             if sender:
                 snap.link(mid, "SENT_BY", sender)
         known = any(not p.unresolved for p in people.values()) or group
-        if waiting(msgs, chat, known):
+        if waiting(msgs, chat, known, reacted.get(jid)):
             snap.link(tid, "AWAITS_REPLY_FROM", me, confidence=0.9 if not group else 0.6,
                       props={"since": last_at.isoformat()})
     report = snap.write(graph, SOURCE)

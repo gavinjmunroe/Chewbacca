@@ -1,6 +1,6 @@
 """Hand a plan from the expensive tier to a fresh, cheaper build session.
 
-    model-route handoff PLAN.md [--out FILE] [--tier haiku|sonnet|opus] [--json]
+    model-route handoff PLAN.md [--save | --out NAME] [--tier haiku|sonnet|opus] [--json]
     model-route check PLAN_OR_HANDOFF.md
     model-route accept HANDOFF.md [--root DIR]
 
@@ -11,8 +11,16 @@ has to hold the goal, the files, the steps, and checks that prove it is done.
 
 A check that is prose ("tests pass", "the UI looks right") is a judgment the
 cheap tier makes about its own work, which is the one thing it should not be
-trusted with. So `check` refuses any acceptance line that is not a command a
-shell can run, and `handoff` refuses to write a page `check` would refuse.
+trusted with. So `check` refuses any acceptance line that is not a command,
+and `handoff` refuses to write a page `check` would refuse.
+
+A plan is model-written, so a planted one can carry anything. Acceptance
+checks are argv, never shell: no pipes, redirects, `;`, `&&`, substitutions or
+env prefixes; argv[0] matches a fixed list exactly or is an executable inside
+the repo; no interpreter -c and no wrapper that runs another program. Nothing
+runs at handoff time, and `accept` runs checks without a shell. Pages are
+written only as new files inside ~/.chewbacca/handoffs: --save names the file
+from the title, --out NAME picks a plain basename.
 
 Plan format, the same headings in and out so one parser reads both:
 
@@ -53,15 +61,45 @@ BUILD_TIER = {
 # Guessed, never measured: with Jev unavailable, sonnet is the cheaper tier
 # that still writes code; haiku only when Jev or the plan says mechanical.
 DEFAULT_TIER = "sonnet"
-INTERPRETERS = {"python", "python3", "bash", "sh", "zsh", "node", "ruby", "perl"}
 PLACEHOLDER = re.compile(r"<[^>\s]+>|\bTODO\b|\bTBD\b|\.\.\.|\bFIXME\b")
+# Any of these means a shell would have to read the line. A check is an argv.
+SHELL_META = re.compile(r"[;|&`$<>()\n\r\\*?{}~!#]")
+# argv[0] must match one of these exactly. The value says what may follow:
+# None is free arguments, a set is the allowed first argument, "script" means
+# the first argument is a file inside the repo. Wrappers that run another
+# program (env, xargs, find, sudo, npx, timeout) are deliberately absent, and
+# so is make, whose VAR=value arguments can replace the shell it runs.
+ALLOWED = {
+    "true": None, "false": None, "test": None, "grep": None, "diff": None,
+    "pytest": None, "tsc": None,
+    "python3": "script", "python": "script", "bash": "script", "sh": "script",
+    "zsh": "script", "node": "script",
+    "npm": {"test", "run"},
+    "cargo": {"test", "build", "check", "clippy"},
+    "go": {"test", "build", "vet"},
+    "git": {"diff", "status", "grep", "log", "show"},
+}
+# Arguments that turn an allowed program into one that runs something else.
+# Interpreters never reach these: their first argument must be a repo script.
+FORBIDDEN_ARG = re.compile(r"^(--eval.*|--exec.*|-exec|-execdir|-ok|--ext-diff|--output.*|"
+                           r"--upload-pack.*|--config.*|--rcfile.*|--init-file.*|--command.*|"
+                           r"--require.*|--import.*|--loader.*|-p|-O.*|--open-files-in-pager.*)$")
+# python -m is allowed only for these test runners.
+PYTHON_MODULES = {"pytest", "unittest", "py_compile"}
 # A per-command bound for `accept`, so a hung check fails instead of wedging
 # the build session. Guessed, never measured.
 ACCEPT_TIMEOUT_S = 600
+SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
+
+
+def handoff_dir() -> Path:
+    """The only place a page is written. CHEWBACCA_HANDOFF_DIR is for tests."""
+    return Path(os.environ.get("CHEWBACCA_HANDOFF_DIR")
+                or Path.home() / ".chewbacca" / "handoffs")
 
 
 def parse(text: str) -> dict:
-    """Split a plan into its sections. Unknown headings are kept as notes."""
+    """Split a plan into its sections. Unknown headings are ignored."""
     plan = {"title": "", "goal": "", "files": [], "steps": [], "acceptance": [], "tier": ""}
     current = None
     fenced = False
@@ -106,33 +144,63 @@ def _command(body: str, fenced: bool) -> str:
     return ticks[0].strip() if ticks else "PROSE: " + body
 
 
-def _runnable(command: str, root: Path, planned: set) -> str | None:
-    """None when the command can run; otherwise why it cannot."""
+def _repo_path(arg: str, root: Path, planned: set) -> str | None:
+    """None when arg names a file inside root, or one the plan will create."""
+    if not arg or os.path.isabs(arg) or ".." in Path(arg).parts or arg.startswith("-"):
+        return f"{arg or 'the script'} is not a relative path inside the repo"
+    target = root / arg
+    if not target.exists() and not target.is_symlink():
+        return None if arg in planned else f"{arg} does not exist and is not in Files"
+    if not target.is_file():
+        return f"{arg} is not a file"
+    if Path(os.path.realpath(root)) not in Path(os.path.realpath(target)).parents:
+        return f"{arg} resolves outside the repo"
+    return None
+
+
+def argv_for(command: str, root: Path, planned: set) -> tuple:
+    """(argv, None) when the check is allowed, else (None, why)."""
     if command.startswith("PROSE: "):
-        return "prose, not a command: " + command[7:]
+        return None, "prose, not a command: " + command[7:]
     if PLACEHOLDER.search(command):
-        return "placeholder left in: " + command
+        return None, "placeholder left in: " + command
+    if SHELL_META.search(command):
+        return None, "shell syntax is not allowed, one plain command per line: " + command
     try:
         argv = shlex.split(command)
     except ValueError as exc:
-        return f"does not parse as a shell command ({exc}): {command}"
-    while argv and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", argv[0]):
-        argv = argv[1:]
+        return None, f"does not parse as a command ({exc}): {command}"
     if not argv:
-        return "empty command"
-    head = argv[0]
+        return None, "empty command"
+    head, rest = argv[0], argv[1:]
+    if "=" in head:
+        return None, "environment prefixes are not allowed: " + command
+    bad = next((a for a in rest if FORBIDDEN_ARG.match(a)), None)
+    if bad:
+        return None, f"{bad} lets {head} run something else: {command}"
     if "/" in head:
-        path = (root / head) if not os.path.isabs(head) else Path(head)
-        if head not in planned and not (path.is_file() and os.access(path, os.X_OK)):
-            return f"{head} is not an executable file and not in Files: {command}"
-    elif shutil.which(head) is None and head not in {"cd", "test", "[", "true", "false"}:
-        return f"{head} is not on PATH: {command}"
-    if os.path.basename(head) in INTERPRETERS:
-        script = next((a for a in argv[1:] if not a.startswith("-")), None)
-        if script and ("/" in script or script.endswith((".py", ".sh", ".js"))):
-            if script not in planned and not (root / script).exists():
-                return f"{script} does not exist and is not in Files: {command}"
-    return None
+        why = _repo_path(head, root, planned)
+        if why:
+            return None, why + ": " + command
+        if (root / head).exists() and not os.access(root / head, os.X_OK):
+            return None, f"{head} is not executable: {command}"
+        return argv, None
+    if head not in ALLOWED:
+        return None, f"{head} is not an allowed check program: {command}"
+    if shutil.which(head) is None and head not in ("true", "false", "test"):
+        return None, f"{head} is not on PATH: {command}"
+    rule = ALLOWED[head]
+    if isinstance(rule, set) and (not rest or rest[0] not in rule):
+        return None, f"{head} allows only {', '.join(sorted(rule))}: {command}"
+    if rule == "script":
+        if head.startswith("python") and rest[:1] == ["-m"]:
+            if rest[1:2] and rest[1] in PYTHON_MODULES:
+                return argv, None
+            return None, f"python -m allows only {', '.join(sorted(PYTHON_MODULES))}: {command}"
+        why = _repo_path(rest[0] if rest else "", root, planned)
+        if why:
+            return None, why + ": " + command
+    return argv, None
 
 
 def check(plan: dict, root: Path) -> list:
@@ -150,7 +218,7 @@ def check(plan: dict, root: Path) -> list:
         problems.append(f"## Tier is {plan['tier']!r}, expected one of {', '.join(TIERS)}")
     planned = set(plan["files"])
     for command in plan["acceptance"]:
-        why = _runnable(command, root, planned)
+        _, why = argv_for(command, root, planned)
         if why:
             problems.append("acceptance " + why)
     return problems
@@ -195,16 +263,54 @@ def render(plan: dict, tier: dict) -> str:
 
 
 def accept(plan: dict, root: Path) -> int:
+    """Run each check as an argv, never through a shell. Every check is
+    re-validated here, so a page edited after `check` still cannot escape."""
     failed = 0
+    planned = set(plan["files"])
     for command in plan["acceptance"]:
+        argv, why = argv_for(command, root, planned)
+        if argv is None:
+            print(f"  FAIL  refused: {why}")
+            failed += 1
+            continue
+        if "/" in argv[0]:
+            argv[0] = str(root / argv[0])
         try:
-            code = subprocess.run(command, shell=True, cwd=root, timeout=ACCEPT_TIMEOUT_S).returncode
+            code = subprocess.run(argv, cwd=root, timeout=ACCEPT_TIMEOUT_S).returncode
+        except FileNotFoundError:
+            code = 127
         except subprocess.TimeoutExpired:
             code = 124
         print(("  ok    " if code == 0 else f"  FAIL  ({code}) ") + command)
         failed += code != 0
     print(f"{len(plan['acceptance']) - failed}/{len(plan['acceptance'])} acceptance checks pass")
     return 1 if failed else 0
+
+
+def slug(title: str) -> str:
+    words = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60].strip("-")
+    return words or "handoff"
+
+
+def save(page: str, name: str) -> Path:
+    """Write the page as a new file directly inside handoff_dir(). The name
+    must be a plain basename; a symlink or an existing file at the target is
+    never followed or overwritten."""
+    if not name.endswith(".md"):
+        name += ".md"
+    if not SAFE_NAME.match(name) or ".." in name:
+        raise ValueError(f"handoff name {name!r} must be a plain file name")
+    folder = handoff_dir()
+    folder.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if folder.is_symlink():
+        raise ValueError(f"{folder} is a symlink")
+    target = folder / name
+    if Path(os.path.realpath(target)).parent != Path(os.path.realpath(folder)):
+        raise ValueError(f"{name} resolves outside {folder}")
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(page)
+    return target
 
 
 def _opt(argv: list, name: str) -> str:
@@ -224,7 +330,8 @@ def main(argv: list, ask=None) -> int:
     override = _opt(argv, "--tier").lower()
     root = Path(_opt(argv, "--root") or os.getcwd())
     as_json = "--json" in argv
-    argv = [a for a in argv if a != "--json"]
+    to_dir = "--save" in argv
+    argv = [a for a in argv if a not in ("--json", "--save")]
     if not argv:
         print(__doc__.strip(), file=sys.stderr)
         return 2
@@ -239,8 +346,6 @@ def main(argv: list, ask=None) -> int:
             print("  - " + p, file=sys.stderr)
         return 1
     if cmd == "accept":
-        # Only a page that passed check runs: these are the planner's own
-        # shell commands, executed as written, which is the point of them.
         return accept(plan, root)
     if cmd == "check":
         print(f"model-route: {argv[0]} is a complete handoff "
@@ -252,9 +357,13 @@ def main(argv: list, ask=None) -> int:
         print(json.dumps({"model": tier["model"], "why": tier["why"], "class": tier["class"],
                           "open_design": tier["open_design"], "files": plan["files"],
                           "acceptance": plan["acceptance"], "prompt": page}))
-    elif out:
-        Path(out).write_text(page)
-        print(f"model-route: wrote {out} for a fresh {tier['model']} session ({tier['why']})")
+    elif out or to_dir:
+        try:
+            path = save(page, out or slug(plan["title"]))
+        except (ValueError, OSError) as exc:
+            print(f"model-route: refused to write: {exc}", file=sys.stderr)
+            return 1
+        print(f"model-route: wrote {path} for a fresh {tier['model']} session ({tier['why']})")
     else:
         print(page)
     return 0

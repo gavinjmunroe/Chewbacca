@@ -73,19 +73,29 @@ with the existing deterministic path or the agent's reasoning.
 plan on the expensive tier, save the plan, and build it in a fresh session on a
 cheaper one:
 
-- `model-route handoff PLAN.md --out HANDOFF.md` turns a plan with `## Goal`,
+- `model-route handoff PLAN.md --save` turns a plan with `## Goal`,
   `## Files`, `## Steps` and `## Acceptance` into a self-contained page. Jev
   picks the build tier: mechanical builds on haiku, implementation and
   debugging on sonnet. Architecture or extreme stays on opus and the page warns
   that design is still open. `## Tier` in the plan or `--tier` pins it, and
   with Jev unavailable the default is sonnet. `--json` returns the model and
-  the prompt for an Agent call.
+  the prompt for an Agent call. Pages land only as new files in
+  `~/.chewbacca/handoffs`: `--save` names one from the title, `--out NAME`
+  takes a plain basename, and a path, `..`, a symlink or an existing file is
+  refused.
 - `model-route check FILE` refuses a plan whose acceptance lines are prose,
-  placeholders, tools not on PATH, or scripts that neither exist nor appear in
-  `## Files`. `handoff` refuses the same plans and writes nothing.
-- `model-route accept HANDOFF.md` runs the acceptance commands from the repo
-  root and exits 1 if any fails. The build session is done when this passes,
-  never when it says so itself.
+  placeholders, or anything but one plain argv: no `;`, `&&`, pipes,
+  redirects, substitutions or env prefixes, argv[0] from a fixed list (python3,
+  bash, node, pytest, npm test/run, git diff/status/grep/log/show, grep, diff,
+  test, true) or an executable inside the repo, interpreters only on a repo
+  script, and no `-c`, `env`, `xargs`, `find -exec` or `npx`. A plan is
+  model-written, so treat a planted one as hostile. `handoff` refuses the same
+  plans and writes nothing, and never runs a check.
+- `model-route accept HANDOFF.md` re-validates and runs the acceptance checks
+  as argv with no shell, from the repo root, and exits 1 if any fails. The
+  build session is done when this passes, never when it says so itself. The
+  browser bridge can call `check` and `handoff` but never `accept`, `--out` or
+  `--save`.
 
 ## Verify before relying on it
 

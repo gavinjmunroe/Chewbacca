@@ -47,6 +47,13 @@ class BridgeTests(unittest.TestCase):
         self.assertIn("--json", argv)
         self.assertEqual(argv[argv.index("--url") + 1], "https://x.com/a")
 
+    def test_model_route_never_runs_or_writes_a_plan_through_the_bridge(self):
+        for args in (["accept", "/tmp/plan.md"], ["handoff", "/tmp/plan.md", "--out", "x"],
+                     ["handoff", "/tmp/plan.md", "--save"]):
+            with self.subTest(args=args), self.assertRaises(self.b.Refused):
+                self.b.REGISTRY["model-route"](args)
+        self.b.REGISTRY["model-route"](["check", "/tmp/plan.md"])
+
     def test_fixed_tools_take_no_args(self):
         with self.assertRaises(self.b.Refused):
             self.b.TOOLS["ping"](["; rm -rf ~"])

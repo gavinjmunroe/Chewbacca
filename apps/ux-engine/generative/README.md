@@ -5,8 +5,11 @@ to PNG, and looked at. Constants that are published but produce mud are marked
 as such. Constants with no published value were derived by sweep and are
 labelled as findings rather than citations.
 
-Ships as `generative.mjs` rather than as a document, because a parameter set in
-prose gets retyped wrong and a parameter set in a module gets imported.
+Meant to ship as `generative.mjs`, because a parameter set in prose gets
+retyped wrong and a parameter set in a module gets imported. That module was
+never committed (no commit in this repo's history has it), so for now the
+constants below are the only copy. Port them into a module before relying on
+them.
 
 ## The quality gate, which is the most useful thing here
 

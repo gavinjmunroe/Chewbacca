@@ -19,7 +19,6 @@ from pathlib import Path
 import shutil
 import sqlite3
 import signal
-import stat
 import subprocess
 import sys
 import tempfile

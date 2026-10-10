@@ -1548,6 +1548,8 @@ h["Stop"] = [{"hooks": [{
 #
 # Inert without ~/.chewbacca/opener-marker, same as prayer-guard.
 _register("UserPromptSubmit", hooks_dir + "/prayer-remind.sh", timeout=5)
+# The current time on every prompt; the harness only states the date once.
+_register("UserPromptSubmit", hooks_dir + "/time-context.sh", timeout=5)
 
 # coursework-context.sh is not registered for Claude Code. It emits a
 # SessionStart payload, and on UserPromptSubmit Claude Code dropped it on every

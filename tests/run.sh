@@ -712,6 +712,8 @@ if group "installer"; then
 
   check  "stale-read-guard refuses a silence claim while jobs are outstanding" \
     bash "$ROOT/tests/stale_read_guard.sh"
+  check  "time-context gives every prompt the current time" \
+    bash "$ROOT/tests/time_context.sh"
   check  "orphan-reap stops what a dead tab left running and spares the rest" \
     bash "$ROOT/tests/orphan_reap.sh"
   check  "jobs queue admits, pauses and resumes heavy work against the machine" \

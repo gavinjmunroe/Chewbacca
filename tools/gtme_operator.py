@@ -1656,13 +1656,16 @@ def week_numbers(client: str, start: date, end: date) -> dict:
         cams = q.campaigns_of(db, c["id"])
         ids = [x["id"] for x in cams]
         if not ids:
-            return {"sends": 0, "replies": 0, "positive": 0, "meetings": 0, "launched": []}
+            return {"sends": 0, "first": 0, "follow_ups": 0, "replies": 0, "positive": 0, "meetings": 0, "launched": []}
         marks = ",".join("?" * len(ids))
-        sends = 0
+        sends = first = 0
         for r in db.execute(f"SELECT props FROM edges WHERE verb = 'ENROLLED' AND src IN ({marks})", ids):
-            for d in (json.loads(r["props"] or "{}").get("sent_dates") or []):
+            # A lead's earliest send date is its first email; every later one
+            # is a follow up, so the week splits the way the scorecard does.
+            for n, d in enumerate(sorted(json.loads(r["props"] or "{}").get("sent_dates") or [])):
                 if start.isoformat() <= d[:10] <= end.isoformat():
                     sends += 1
+                    first += n == 0
         reps = q.replies_in(db, ids)
         v = q.verdicts(db, [r["id"] for r in reps])
         inside = [r for r in reps if r.get("time") and start.isoformat() <= r["time"][:10] <= end.isoformat()]
@@ -1675,7 +1678,8 @@ def week_numbers(client: str, start: date, end: date) -> dict:
                 meetings += 1
         launched = [x["name"] for x in cams if (x.get("created_at") or "")[:10] >= start.isoformat()
                     and (x.get("created_at") or "")[:10] <= end.isoformat()]
-        return {"sends": sends, "replies": len({r["person"] for r in inside if r["person"]}),
+        return {"sends": sends, "first": first, "follow_ups": sends - first,
+                "replies": len({r["person"] for r in inside if r["person"]}),
                 "positive": len(positive), "meetings": meetings, "launched": launched}
     finally:
         db.close()
@@ -1714,11 +1718,57 @@ def asks_lines(asks: list[dict]) -> list[str]:
     return out + [""]
 
 
+def card_totals(card: dict) -> dict:
+    return {k: sum(row[k] for row in card.values()) for k in SCORE_COLS}
+
+
+def volume_ruled(s: dict) -> bool:
+    return any(VOLUME_RULING.search(str(r.get("rule") or "")) for r in s.get("rulings") or [])
+
+
+def update_text(s: dict) -> list[str]:
+    """The client update: true numbers first, then who asked for a deck, a
+    call or a meeting. Sends are "first emails plus N follow ups", never one
+    total a reader compares against the list size and reads as a gap. Nobody
+    is called interested from a tag, and nothing proposes sending less when a
+    volume ruling stands (2026-10-09: "we'll narrow every list" went to a
+    client who had asked for max volume)."""
+    card = s.get("scorecard") or {}
+    out = []
+    if card:
+        t = card_totals(card)
+        sent = t["first_emails"] + t["follow_ups"]
+        out.append(f"{t['first_emails']} first emails plus {t['follow_ups']} follow ups went out across "
+                   f"{len(card)} {'company' if len(card) == 1 else 'companies'}, and {t['human_replies']} replies "
+                   f"came from people ({t['replies']} counting out-of-office notes).")
+        out.append(f"Clay tagged {t['tagged_positive']} of those replies positive; each one gets read before it "
+                   f"counts. {t['bounces']} bounced ({pct(t['bounces'], sent)}).")
+    else:
+        out.append(f"{s['sent']} emails went out (first emails and follow ups together: the per-step split has "
+                   f"not synced yet), and {s['replies']} replies came back not counting out-of-office notes.")
+    asks = s.get("asks") or []
+    if asks:
+        who = "; ".join(f"{a.get('name') or a['email']} asked for {a['asked']}" for a in asks[:8])
+        more = f", and {len(asks) - 8} more" if len(asks) > 8 else ""
+        out.insert(1, f"Asked for a deck, a call or a meeting: {who}{more}.")
+    else:
+        out.insert(1, "Nobody has asked for a deck, a call or a meeting in their reply yet.")
+    if volume_ruled(s):
+        out = [x for x in out if not CUTS_VOLUME.search(x)]
+    return out
+
+
 def render_report(s: dict, this: dict, last: dict, start: date, end: date, actions: list[dict],
                   plan: dict | None) -> str:
     # The report goes to the client: an action a ruling holds is not proposed
     # in it at all (cmd_report says which, to the person, in the terminal).
     actions = [a for a in actions if not a.get("held_by")]
+    if volume_ruled(s):
+        actions = [a for a in actions if not CUTS_VOLUME.search(f"{a['do']} {a.get('command', '')}")]
+    card = s.get("scorecard") or {}
+    totals = card_totals(card) if card else None
+    all_first = totals["first_emails"] if totals else f"{s['sent']} (with follow ups; split not synced)"
+    all_follow = totals["follow_ups"] if totals else "?"
 
     def delta(k):
         if not last:
@@ -1729,9 +1779,11 @@ def render_report(s: dict, this: dict, last: dict, start: date, end: date, actio
     lines = [f"# {md(s['name'])}: outbound week of {start:%b %d} to {end:%b %d, %Y}", "",
              f"Prepared {utc_now():%Y-%m-%d}. Campaign numbers from Clay analytics as of {s['as_of'] or 'never'}; "
              "weekly counts from per-lead send dates, reply times and calendar events in the local graph.", "",
+             "## Summary", ""] + [md(x, 1000) for x in update_text(s)] + ["",
              "## This week", "",
              "| | This week | All time |", "|---|---:|---:|",
-             f"| Emails sent | {this.get('sends', 0)}{delta('sends')} | {s['sent']} |",
+             f"| First emails | {this.get('first', 0)}{delta('first')} | {all_first} |",
+             f"| Follow ups | {this.get('follow_ups', 0)}{delta('follow_ups')} | {all_follow} |",
              f"| People who replied (any reply, out-of-office included) | {this.get('replies', 0)}{delta('replies')} | "
              f"{(s['funnel'].get('people_replied') or {}).get('n', 0)} |",
              f"| Replies tagged positive (tagged, read the text) | {this.get('positive', 0)}{delta('positive')} | "
@@ -1905,6 +1957,9 @@ def cmd_report(a, t: Teacher) -> int:
     pdf = out_dir / f"{base}.pdf"
     how = "" if a.no_pdf else to_pdf(report, f"{safe(s['name'], 120)} outbound report", pdf)
     print(safe(report, 100000))
+    t.say("Update text for the client, ready to paste:")
+    for line in update_text(s):
+        t.say(f"  {line}")
     for x in actions:
         if x.get("held_by"):
             t.say(f"Left out of the report: {x['do']}.")

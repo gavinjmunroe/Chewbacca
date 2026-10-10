@@ -254,6 +254,40 @@ class GraphCommands(unittest.TestCase):
         self.assertIn("Quinn Beta (q@beta.example)", rep.stdout)
         self.assertNotIn("Interested replies", rep.stdout)
 
+    def test_client_update_leads_with_true_numbers_and_never_cuts_volume(self):
+        # The 2026-10-09 week-1 update, rebuilt on synthetic data: one total
+        # that read as a gap, "interested" from a Clay tag, and "we'll narrow
+        # every list" against a max-volume ruling. None of it may come back.
+        db = sqlite3.connect(self.tmp / "graph.sqlite")
+        row = db.execute("SELECT props FROM nodes WHERE id = 'campaign:clay:cam_floor'").fetchone()
+        props = dict(json.loads(row[0]), name="Acme | Ivy | Pre-seed investors | Midweek founder story", offer=None,
+                     steps=[{"step": 1, "sentCount": 250}, {"step": 2, "sentCount": 120}],
+                     reply_categories=[{"name": "Interested", "sentiment": "positive", "leads": 2},
+                                       {"name": "Out Of Office", "sentiment": "neutral", "leads": 1}])
+        props["analytics"] = dict(props["analytics"], sent=370, replies=2, repliesExcludingOoo=1, bounces=3)
+        db.execute("UPDATE nodes SET props = ? WHERE id = 'campaign:clay:cam_floor'", (json.dumps(props),))
+        row = db.execute("SELECT props FROM nodes WHERE id = 'reply:2'").fetchone()
+        db.execute("UPDATE nodes SET props = ? WHERE id = 'reply:2'", (json.dumps(dict(
+            json.loads(row[0]), snippet="Please send over the deck and we will take a look.")),))
+        db.execute("INSERT INTO edges VALUES (?,?,?,?,'gtm-clay:9001')", (
+            "campaign:clay:cam_floor", "ENROLLED", "person:q@beta.example",
+            json.dumps({"email": "q@beta.example", "name": "Quinn Beta"})))
+        db.commit()
+        db.close()
+        run(self.env, "rule", "--client", "Northwind Test Co", "Max volume. Send to every list they give us.",
+            "--who", "Morgan")
+        rep = run(self.env, "report", "--client", "Northwind Test Co", "--no-pdf", "--out", str(self.tmp / "out"))
+        self.assertEqual(rep.returncode, 0, rep.stderr)
+        body = rep.stdout.split("Left out of the report:")[0]
+        summary = body.split("## Summary")[1].split("## This week")[0].strip().splitlines()
+        self.assertIn("first emails plus", summary[0])
+        self.assertTrue(summary[0][0].isdigit(), summary[0])
+        self.assertIn("Asked for a deck, a call or a meeting: Quinn Beta asked for deck", summary[1])
+        self.assertNotRegex(body.lower(), r"\binterested\b")
+        self.assertNotIn("Emails sent", body)
+        self.assertNotRegex(body, r"(?i)\b(narrow\w*|cut\w*|trim\w*|fewer|rework)\b")
+        self.assertIn("Update text for the client, ready to paste:", rep.stdout)
+
     def test_rulings_from_a_client_repo_decisions_file(self):
         repos = self.tmp / "repos" / "northwind"
         repos.mkdir(parents=True)
@@ -319,7 +353,11 @@ class GraphCommands(unittest.TestCase):
         out = self.tmp / "dl"
         r = run(self.env, "report", "--client", "Northwind Test Co", "--week", "--out", str(out), "--no-pdf")
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertIn("| Emails sent | 5", r.stdout)     # 5 leads x one send date inside Mar 14-20
+        # 5 leads, each first emailed Mar 10 and followed up Mar 17: inside
+        # Mar 14-20 that is 0 first emails and 5 follow ups, never "5 sent".
+        self.assertIn("| First emails | 0", r.stdout)
+        self.assertIn("| Follow ups | 5", r.stdout)
+        self.assertNotIn("Emails sent", r.stdout)
         self.assertIn("## Next week", r.stdout)
         self.assertIn("Nearly empty", r.stdout)           # launched this week
         md = list((self.tmp / "gtm" / "clients").glob("*/*.md"))

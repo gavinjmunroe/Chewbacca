@@ -219,6 +219,24 @@ def tick(quiet=False):
         list_jobs([])
 
 
+def source(j):
+    # Who a job belongs to: the submitting session when the environment
+    # names one, else the folder it was submitted from.
+    return j.get("owner") or j.get("cwd") or ""
+
+
+def next_build(waiting, all_jobs):
+    """The next build to start: from the source served least recently, oldest
+    first within it. 2026-10-09: one tab queued 26 render builds and a
+    one-off test run from another tab sat behind all of them; first come
+    first served let a single tab own the lane for an hour."""
+    last = {}
+    for j in all_jobs:
+        if j["class"] == "build" and j.get("started"):
+            last[source(j)] = max(last.get(source(j), 0), j["started"])
+    return min(waiting, key=lambda j: (last.get(source(j), 0), j["created"]))
+
+
 def _tick():
     all_jobs = jobs()
     # Reap: a running job whose supervisor is gone without writing a result.
@@ -232,12 +250,11 @@ def _tick():
     # so the long job is held paused (SIGSTOP) until the build ends, which
     # keeps one CPU-heavy thing running at a time.
     building = [j for j in all_jobs if j["class"] == "build" and j["status"] == "running"]
-    for j in sorted((j for j in all_jobs if j["status"] == "queued" and j["class"] == "build"),
-                    key=lambda j: j["created"]):
-        if building or not room_for_heavy():
-            break
-        start(j)
-        building = [j]
+    waiting = [j for j in all_jobs if j["status"] == "queued" and j["class"] == "build"]
+    if waiting and not building and room_for_heavy():
+        nxt = next_build(waiting, all_jobs)
+        start(nxt)
+        building = [nxt]
     # Heavy jobs: one runs at a time, and they take turns. Pause everything
     # for a running build or a swamped Mac; otherwise, once the running job's
     # turn is up, the least-run waiting job goes next.

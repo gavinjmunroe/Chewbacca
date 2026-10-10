@@ -243,39 +243,39 @@ Frozen copy of the live index (728 files, 3,805 chunks), every variant on top
 of the shipped folder cap, through `brain.rank()`, via `bench/lone.py`. Dev is
 25 queries, so one query is 4 points.
 
-| variant (dev, n=25)                               | r@5       | MRR       |
-| ------------------------------------------------- | --------- | --------- |
-| shipped (folder cap 1)                            | 68.0%     | 0.542     |
-| (a) best chunk, top_m=1 (max)                     | 52.0%     | 0.428     |
-| (a) mean of best 2 chunks                         | 60.0%     | 0.459     |
-| (a) mean of best 3 chunks                         | 60.0%     | 0.481     |
-| (a) mean of best 5 chunks                         | 68.0%     | 0.550     |
-| (b) section unit (file = best section)            | 56.0%     | 0.399     |
-| (b) section unit, top_m=1                         | 56.0%     | 0.397     |
-| (b) section unit, top_m=3                         | 56.0%     | 0.399     |
-| (c) chunk-space k-occurrence, beta=0.05           | 68.0%     | 0.519     |
-| (c) chunk-space k-occurrence, beta=0.1            | 68.0%     | 0.533     |
-| (c) chunk-space k-occurrence, beta=0.2            | 64.0%     | 0.466     |
-| (c) chunk-space k-occurrence, beta=0.3            | 68.0%     | 0.417     |
-| (c) chunk-space k-occurrence, beta=0.5            | 52.0%     | 0.344     |
-| (c) chunk-space k-occurrence, beta=1.0            | 36.0%     | 0.242     |
-| (c) CSLS gamma=0.25                               | 64.0%     | 0.504     |
-| (c) CSLS gamma=0.5                                | 56.0%     | 0.466     |
-| (c) CSLS gamma=1.0                                | 52.0%     | 0.335     |
-| (c) query-space k-occ, heading probes, beta=0.05  | 76.0%     | 0.548     |
-| (c) query-space k-occ, heading probes, beta=0.1   | 72.0%     | 0.571     |
-| (c) query-space k-occ, heading probes, beta=0.2   | 72.0%     | 0.563     |
-| (c) query-space k-occ, heading probes, beta=0.3   | 72.0%     | 0.525     |
-| (c) query-space k-occ, heading probes, beta=0.5   | 64.0%     | 0.378     |
-| (c) query-space k-occ, heading probes, beta=1.0   | 24.0%     | 0.163     |
-| (c) query-space k-occ, slug probes, beta=0.05     | 72.0%     | 0.603     |
-| **(c) query-space k-occ, slug probes, beta=0.1**  | **80.0%** | **0.674** |
-| (c) query-space k-occ, slug probes, beta=0.2      | 80.0%     | 0.609     |
-| (c) query-space k-occ, slug probes, beta=0.3      | 64.0%     | 0.541     |
-| (c) query-space k-occ, slug probes, beta=0.5      | 56.0%     | 0.442     |
-| (c) query-space k-occ, slug probes, beta=1.0      | 40.0%     | 0.347     |
-| (d) lone domains/*.md cap 1 (taken together)      | 64.0%     | 0.531     |
-| (d) lone domains/*.md cap 2                       | 68.0%     | 0.542     |
+| variant (dev, n=25)                              | r@5       | MRR       |
+| ------------------------------------------------ | --------- | --------- |
+| shipped (folder cap 1)                           | 68.0%     | 0.542     |
+| (a) best chunk, top_m=1 (max)                    | 52.0%     | 0.428     |
+| (a) mean of best 2 chunks                        | 60.0%     | 0.459     |
+| (a) mean of best 3 chunks                        | 60.0%     | 0.481     |
+| (a) mean of best 5 chunks                        | 68.0%     | 0.550     |
+| (b) section unit (file = best section)           | 56.0%     | 0.399     |
+| (b) section unit, top_m=1                        | 56.0%     | 0.397     |
+| (b) section unit, top_m=3                        | 56.0%     | 0.399     |
+| (c) chunk-space k-occurrence, beta=0.05          | 68.0%     | 0.519     |
+| (c) chunk-space k-occurrence, beta=0.1           | 68.0%     | 0.533     |
+| (c) chunk-space k-occurrence, beta=0.2           | 64.0%     | 0.466     |
+| (c) chunk-space k-occurrence, beta=0.3           | 68.0%     | 0.417     |
+| (c) chunk-space k-occurrence, beta=0.5           | 52.0%     | 0.344     |
+| (c) chunk-space k-occurrence, beta=1.0           | 36.0%     | 0.242     |
+| (c) CSLS gamma=0.25                              | 64.0%     | 0.504     |
+| (c) CSLS gamma=0.5                               | 56.0%     | 0.466     |
+| (c) CSLS gamma=1.0                               | 52.0%     | 0.335     |
+| (c) query-space k-occ, heading probes, beta=0.05 | 76.0%     | 0.548     |
+| (c) query-space k-occ, heading probes, beta=0.1  | 72.0%     | 0.571     |
+| (c) query-space k-occ, heading probes, beta=0.2  | 72.0%     | 0.563     |
+| (c) query-space k-occ, heading probes, beta=0.3  | 72.0%     | 0.525     |
+| (c) query-space k-occ, heading probes, beta=0.5  | 64.0%     | 0.378     |
+| (c) query-space k-occ, heading probes, beta=1.0  | 24.0%     | 0.163     |
+| (c) query-space k-occ, slug probes, beta=0.05    | 72.0%     | 0.603     |
+| **(c) query-space k-occ, slug probes, beta=0.1** | **80.0%** | **0.674** |
+| (c) query-space k-occ, slug probes, beta=0.2     | 80.0%     | 0.609     |
+| (c) query-space k-occ, slug probes, beta=0.3     | 64.0%     | 0.541     |
+| (c) query-space k-occ, slug probes, beta=0.5     | 56.0%     | 0.442     |
+| (c) query-space k-occ, slug probes, beta=1.0     | 40.0%     | 0.347     |
+| (d) lone domains/*.md cap 1 (taken together)     | 64.0%     | 0.531     |
+| (d) lone domains/*.md cap 2                      | 68.0%     | 0.542     |
 
 Chunk-space hubness points the wrong way: with every chunk as a pseudo-query,
 mission, technical-mind and story score 0.24, 0.13 and 0.27 times the mean
@@ -285,10 +285,10 @@ barred from voting for its own file, top 5 under the shipped ranker) does see
 hubs, but its top 15 are all short memory/ notes; mission is 1.57x the mean,
 so the discount barely touched it. Picked by the r@5-then-MRR rule.
 
-| sealed, run once (n=65 answerable)        | r@5   | 95% CI  | MRR   |
-| ----------------------------------------- | ----- | ------- | ----- |
-| shipped (folder cap 1), same snapshot     | 55.4% | +/-12.1 | 0.357 |
-| query-space k-occ, slug probes, beta=0.1  | 43.1% | +/-12.0 | 0.331 |
+| sealed, run once (n=65 answerable)       | r@5   | 95% CI  | MRR   |
+| ---------------------------------------- | ----- | ------- | ----- |
+| shipped (folder cap 1), same snapshot    | 55.4% | +/-12.1 | 0.357 |
+| query-space k-occ, slug probes, beta=0.1 | 43.1% | +/-12.0 | 0.331 |
 
 A 12.3-point loss, 8 queries. The +12 on dev was 3 queries and did not
 survive. The folder cap stays the shipped config at 55.4%; the knobs stay in
@@ -299,3 +299,38 @@ and dev cannot see it: on the shipped config dev's 8 misses include no lone
 domains/ file. The next attempt needs a dev set that contains the failure
 (a fresh blind batch of questions whose answers sit outside domains/), not
 another knob tuned on these 25.
+
+**Measured 2026-10-10, third pass: dev2, a set built to contain the lone-hub
+failure. Nothing tuned.** 46 new questions in
+`~/second-brain/.bench/brain-retrieval/queries_dev2.json` (private, untracked,
+like the other two sets). Targets were picked first, across memory/ (30),
+projects/ (6), wiki/ (5), domains/ subfolders (2), core/, systems/ and team
+memory (1 each), then each question was written from the target note alone,
+before any ranker ran. 32 of the 46 targets are short notes whose topic sits
+in the vocabulary of a long top-level domains/*.md file (mission, story,
+health, technical-mind, faith, pre-usc, work, academics, the syllabi digest),
+and each was checked by grep so the long file does not also hold the answer.
+Fields match the sealed set (`q`, `gold`, `hops`, `why`) plus `overlap`, the
+lone files each question was written to collide with.
+
+| shipped ranker (folder cap 1), frozen index 729 files / 3,821 chunks | r@5       | 95% CI  | MRR   |
+| -------------------------------------------------------------------- | --------- | ------- | ----- |
+| dev2, n=46                                                           | **84.8%** | +/-10.4 | 0.662 |
+
+7 misses. **1** is caused by lone domains/*.md files by the strict test (a
+lone file holds a top-5 slot, and removing lone files puts the gold in the
+top 5). 3 more have a lone file in the top 5 but the gold ranks 21st or below
+50, so no lone-file fix rescues them. The other 3 lose to memory/ and team
+memory notes. Lone files took 7 of the 35 top-5 slots on misses; memory/ and
+team memory took 21.
+
+So dev2 does not reproduce the sealed failure either: aimed straight at it,
+the lone hubs cost one query in 46. Two readings, and the next step is to
+tell them apart rather than tune: (a) the sealed misses are about question
+style (the sealed questions were written to avoid lexical overlap, while
+dev2's plain phrasing often carries the note's subject by name) more than
+about lone files, or (b) the lone-hub effect is real but concentrated in
+topics dev2 sampled lightly. A cheap test of (a): strip every proper noun and
+note-specific term from dev2's 32 overlap questions and rerun `bench/dev2.py`
+once. `bench/dev2.py` runs `brain.rank()` with its defaults and refuses the
+sealed file.

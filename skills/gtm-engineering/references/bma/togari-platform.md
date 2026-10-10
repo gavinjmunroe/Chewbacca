@@ -4,7 +4,7 @@ Maintainer-only map into a private repo. The usable knowledge lives in
 [scoring.md](scoring.md), [vendor-recipes.md](vendor-recipes.md),
 [outbound-rules.md](outbound-rules.md) and [reply-handling.md](reply-handling.md).
 
-Harvested 2026-10-09 from `bluemodernadvisory/togari-platform` at `4308237 2026-10-09`, local clone `~/code/work/bma/togari-platform`. It is the live Togari bot on Railway, so pushing to it deploys: never push from a Chewbacca session unless the task says to. Line numbers drift; re-open the file before quoting one.
+Harvested 2026-10-09 from `bluemodernadvisory/togari-platform` at `4308237` (2026-10-09; the ported reply functions were rechecked unchanged at `8d7ad77` on 2026-10-10), local clone `~/code/work/bma/togari-platform`. It is the live Togari bot on Railway, so pushing to it deploys: never push from a Chewbacca session unless the task says to. Line numbers drift; re-open the file before quoting one.
 
 ## Summary
 

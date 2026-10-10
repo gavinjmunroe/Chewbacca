@@ -420,7 +420,7 @@ def draft(ctx: Context, doc: Doc, instruction: str) -> Pending:
         # 178-paragraph Doc). Without one the write can't be pinned to what
         # the preview showed, so no model is asked and nothing is drawn.
         raise SurfaceError("Google gave no revision to pin an edit to, because gws is signed in read only. "
-                           "Docs stay read only here until gws is signed in with the Docs scope")
+                           "Docs stay read only here until `chewbacca email add` for that account adds the Docs scope")
     edits, summary = ask_model(ctx, instruction, doc.name, blocks)
     if doc.google:
         before = "\n".join(b["text"] for b in blocks)

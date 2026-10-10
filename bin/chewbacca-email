@@ -12,12 +12,22 @@
 set -uo pipefail
 
 PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+# Tests point this at a fake; the PATH line above would otherwise put the real
+# gws, and a real Google sign-in, ahead of any fake on PATH.
+GWS_BIN="${CHEWBACCA_GWS:-gws}"
+gws() { command "$GWS_BIN" "$@"; }
 HOME_DIR="${CHEWBACCA_EMAIL_HOME:-$HOME/.chewbacca/email}"
 DEFAULT_CFG="$HOME/.config/gws"
 # Calendar is read-write so "put it on my calendar" works the first time. With
 # calendar.readonly, every event add 403'd, and the improvised re-login that
 # followed picked the wrong Google account and hit "Access blocked" (2026-10-09).
-SCOPES="openid,email,profile,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/calendar"
+# drive.readonly keeps `chewbacca google find` searching every Drive file by
+# name; drive.file would only see files this app opened, so search would go
+# blind. documents is what Docs edits need: with read-only Drive alone, Google
+# left revisionId out of documents.get and the Doc surface refused every edit
+# (2026-10-10). gmail.compose lets a meeting follow-up become a Gmail draft;
+# gmail.send alone can't create one.
+SCOPES="openid,email,profile,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/gmail.compose,https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/drive.readonly,https://www.googleapis.com/auth/documents"
 LOG="$HOME/Library/Logs/chewbacca-email-add.log"
 
 say() { printf '%s\n' "$*"; }
@@ -39,6 +49,13 @@ client_secret() {
   [ -f "$DEFAULT_CFG/client_secret.json" ] && { echo "$DEFAULT_CFG/client_secret.json"; return 0; }
   for d in "$HOME_DIR"/*/; do [ -f "$d/client_secret.json" ] && { echo "$d/client_secret.json"; return 0; }; done
   return 1
+}
+
+# The account a config is signed in as, from `gws auth status`. Needs no API
+# scope, so it answers even when the token is missing the scope being added.
+status_user() {
+  GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$1" gws auth status 2>/dev/null |
+    python3 -c 'import json,sys; t=sys.stdin.read(); print((json.loads(t[t.index("{"):]).get("user") or "").lower())' 2>/dev/null
 }
 
 whoami_in() {
@@ -73,9 +90,20 @@ add() {
     secret=$(client_secret) || return 1
   fi
 
-  local cfg="$HOME_DIR/$addr"
+  # The main gws config (~/.config/gws) is the one `chewbacca google`, the Doc
+  # surface and meeting follow-ups read, since they call plain `gws`. When the
+  # address is the account already signed in there, re-consent that config in
+  # place; a per-inbox copy would hold the new scopes where none of them look.
+  local cfg="$HOME_DIR/$addr" backup=""
+  if [ "$(status_user "$DEFAULT_CFG")" = "$addr" ]; then
+    cfg="$DEFAULT_CFG"
+    if [ -f "$cfg/credentials.enc" ]; then
+      backup="$cfg/credentials.enc.before-reconsent"
+      cp -p "$cfg/credentials.enc" "$backup"
+    fi
+  fi
   mkdir -p "$cfg" && chmod 700 "$cfg"
-  cp "$secret" "$cfg/client_secret.json"
+  [ "$secret" -ef "$cfg/client_secret.json" ] || cp "$secret" "$cfg/client_secret.json"
   say "A browser window is opening. Pick $addr and click Allow."
   : >"$LOG"
   GOOGLE_WORKSPACE_CLI_CONFIG_DIR="$cfg" gws auth login --scopes "$SCOPES" >>"$LOG" 2>&1 &
@@ -92,11 +120,14 @@ add() {
   local got
   got=$(whoami_in "$cfg")
   if [ "$got" = "$addr" ]; then
+    [ -n "$backup" ] && rm -f "$backup"
     say "Connected $addr. Pulling its mail in..."
     command -v people >/dev/null 2>&1 && people texts sync --quiet >/dev/null 2>&1
     say "Done."
     return 0
   fi
+  # A re-consent that didn't finish leaves the main sign-in as it was.
+  [ -n "$backup" ] && [ -f "$backup" ] && mv -f "$backup" "$cfg/credentials.enc"
   # A Google sign-in app in testing mode admits only listed testers, and the
   # error page says "Access blocked ... has not completed the Google
   # verification process" (Caleb hit it on 2026-10-08 with his work inbox).

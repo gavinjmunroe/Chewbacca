@@ -2,14 +2,57 @@
 # chewbacca email's Google sign-in must ask for calendar WRITE and drop gws's
 # token cache after login. With calendar.readonly every event add 403'd, and
 # the cached token kept the old scopes after a fresh login (2026-10-09).
+# It must also ask for Docs and Gmail compose, and land them in the main gws
+# config: with read-only Drive the Doc surface refused every edit (2026-10-10),
+# and a per-inbox copy of the main account would hold the new scopes where
+# `chewbacca google`, the Doc surface and meeting follow-ups never look.
 set -uo pipefail
 ROOT="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
 f="$ROOT/bin/chewbacca-email"
 fail=0
 scopes=$(grep -o '^SCOPES="[^"]*"' "$f")
-printf '%s' "$scopes" | grep -q 'auth/calendar"' || { echo "FAIL: sign-in scopes lack calendar write: $scopes"; fail=1; }
+printf '%s' "$scopes" | grep -q 'auth/calendar[,"]' || { echo "FAIL: sign-in scopes lack calendar write: $scopes"; fail=1; }
 printf '%s' "$scopes" | grep -q 'calendar.readonly' && { echo "FAIL: calendar is read-only in sign-in scopes"; fail=1; }
+printf '%s' "$scopes" | grep -q 'auth/documents[,"]' || { echo "FAIL: sign-in scopes lack Docs write (documents)"; fail=1; }
+printf '%s' "$scopes" | grep -q 'auth/gmail.compose[,"]' || { echo "FAIL: sign-in scopes lack gmail.compose for drafts"; fail=1; }
+for keep in gmail.readonly gmail.send drive.readonly; do
+  printf '%s' "$scopes" | grep -q "auth/$keep[,\"]" || { echo "FAIL: re-consent would drop $keep"; fail=1; }
+done
+# drive.file sees only files this app opened, so Drive search by name breaks.
+printf '%s' "$scopes" | grep -q 'drive.file' && { echo "FAIL: drive.file would blind chewbacca google find"; fail=1; }
 grep -q 'rm -f "$cfg/token_cache.json"' "$f" || { echo "FAIL: login no longer clears the stale token cache"; fail=1; }
 grep -q 'login_hint' "$f" || { echo "FAIL: login no longer pins the account with login_hint"; fail=1; }
+grep -q 'cfg="$DEFAULT_CFG"' "$f" || { echo "FAIL: re-consent of the main account no longer targets ~/.config/gws"; fail=1; }
+# The readers call plain gws, so they read ~/.config/gws. Pointing one at a
+# per-inbox config would hide the scopes the main re-consent just added.
+for r in bin/chewbacca-google bin/lib/docs_surface.py bin/lib/meeting_actions.py; do
+  grep -q 'GOOGLE_WORKSPACE_CLI_CONFIG_DIR' "$ROOT/$r" && { echo "FAIL: $r no longer reads the main gws config"; fail=1; }
+done
+
+# Behaviour: with a fake gws whose main config is signed in as the address,
+# `add` must log in against the main config, not a per-inbox copy.
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+mkdir -p "$tmp/home/.config/gws" "$tmp/bin" "$tmp/home/Library/Logs"
+echo '{"installed":{"project_id":"p"}}' >"$tmp/home/.config/gws/client_secret.json"
+echo old >"$tmp/home/.config/gws/credentials.enc"
+cat >"$tmp/bin/gws" <<'EOF'
+#!/bin/bash
+echo "$GOOGLE_WORKSPACE_CLI_CONFIG_DIR $*" >>"$FAKE_GWS_LOG"
+case "$1 $2" in
+  "auth status") echo '{"user":"me@example.com"}' ;;
+  "auth login") echo "https://accounts.google.com/o/oauth2/auth?x=1"; exit 1 ;;
+esac
+EOF
+chmod +x "$tmp/bin/gws"
+printf '#!/bin/bash\nexit 0\n' >"$tmp/bin/open"; chmod +x "$tmp/bin/open"
+CHEWBACCA_GWS="$tmp/bin/gws" HOME="$tmp/home" CHEWBACCA_EMAIL_HOME="$tmp/home/.chewbacca/email" FAKE_GWS_LOG="$tmp/gws.log" \
+  PATH="$tmp/bin:$PATH" bash "$f" add me@example.com >/dev/null 2>&1
+grep -q "^$tmp/home/.config/gws auth login" "$tmp/gws.log" ||
+  { echo "FAIL: main-account re-consent did not log in against the main config"; cat "$tmp/gws.log"; fail=1; }
+[ -d "$tmp/home/.chewbacca/email/me@example.com" ] && { echo "FAIL: main account got a per-inbox copy"; fail=1; }
+[ "$(cat "$tmp/home/.config/gws/credentials.enc")" = old ] || { echo "FAIL: failed re-consent did not restore credentials"; fail=1; }
+[ -e "$tmp/home/.config/gws/credentials.enc.before-reconsent" ] && { echo "FAIL: failed re-consent left its backup behind"; fail=1; }
+
 [ $fail -eq 0 ] && echo "ok: chewbacca email scopes"
 exit $fail

@@ -64,6 +64,48 @@ Tracked submodules, special files and unmerged indexes still fail closed. Snapsh
 hashes read fresh content, including same-size edits with restored mtime. Stability
 checks detect ordinary concurrent writes; this is not an atomic filesystem snapshot.
 
+## A second model, and the human reads only the disagreements
+
+The model that wrote the code should not be its only reviewer, and rerunning the
+same model as a skeptic does not help: Ayush measured a skeptical second pass
+moving accuracy from 68 to 66.7 percent, while a human reading only the cells
+where two passes disagreed moved it from 63.3 to 88.3 percent and read 43 percent
+of them. So the second reviewer runs on a different model, and plain code, not a
+third model, decides what agrees.
+
+```sh
+review-cross detect                       # which reviewers would run; spends nothing
+review-cross run --repo PATH [--base REV] # two reviewers, merged
+review-cross run --repo PATH --a-report <review-gate receipt or failure JSON>
+review-cross merge a.json b.json          # merge two saved reports, no model call
+```
+
+`detect` picks reviewer A and B from what is installed (`codex`, `claude`, in
+that order; `CHEWBACCA_REVIEWERS=claude,codex` reorders). With two runtimes
+installed, each reviewer runs on its own default model. Only `claude` means two models on it (`opus` and
+`sonnet` by default, `CHEWBACCA_REVIEW_CLAUDE_MODEL_A` and `_B` override). Only
+`codex` runs single-model unless `CHEWBACCA_REVIEW_CODEX_MODEL_B` names a second.
+`--a-report` reuses the review-gate's codex findings as A instead of paying for
+them twice.
+
+The merge matches findings on the same file by line proximity and word overlap
+of message plus scenario, one to one, best match first. Output has three parts:
+
+- **Agreed**: both models found it. Fix these yourself, as with any substantiated
+  finding. A severity mismatch is noted but is not a disagreement.
+- **Only A / only B**: the disagreements. These, and only these, go to the user,
+  each with the scenario, because one model's word against the other's is a
+  judgment the agent should not settle by picking the reviewer it likes.
+- **Single-model**: no second model was installed, or it failed or timed out.
+  The output says SINGLE-MODEL on its first line and every finding is labeled
+  unconfirmed. Never describe it as cross-checked.
+
+Exit 0 means neither reviewer found anything, 1 means findings to fix or
+arbitrate, 2 means the review could not run. `review-cross` is advisory and
+mints no receipt; the `review-gate` receipt above is still the gate. The match
+thresholds in `tools/review_cross.py` are guesses until calibrated against real
+paired reviews.
+
 ## Get the code first
 
 Never review from memory of what was written. Read the actual diff.

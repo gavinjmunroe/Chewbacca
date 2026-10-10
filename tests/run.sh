@@ -1703,6 +1703,7 @@ if group "reasoning backends"; then
   check "review snapshots preserve bytes and child boundaries" python3 "$ROOT/tests/test_review_snapshot.py"
   check "task review scopes retain dirty and concurrent obligations" python3 "$ROOT/tests/test_review_task_scope.py"
   check "task receipts cannot clear repository-wide review duties" python3 "$ROOT/tests/test_review_integration.py"
+  check "cross-model review surfaces only the disagreements, single-model when alone" python3 "$ROOT/tests/test_review_cross.py"
   check "task DAG preserves dependencies, capacity and independent verification" python3 "$ROOT/tests/test_task_graph.py"
   check "work ledger reaches shared startup and Codex prompt context" python3 "$ROOT/tests/test_work_ledger_context.py"
   check "tab board shows every other live tab across runtimes" python3 "$ROOT/tests/test_tabs.py"

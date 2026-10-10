@@ -13,13 +13,13 @@ rather than an opinion.
 Measured on a **sealed 73-question test set** built by a separate process from
 the one that tuned the retriever, over a real 476-file / 462k-word corpus.
 
-| method | recall@5 | MRR |
-| --- | --- | --- |
-| grep, the original design | 12% | 0.079 |
-| BM25 | 38% | 0.253 |
-| dense vectors only | 55% | 0.405 |
-| hybrid fusion, w=0.7 | 66% | 0.466 |
-| **+ mean chunk aggregation** | **68%** | **0.486** |
+| method                       | recall@5 | MRR       |
+| ---------------------------- | -------- | --------- |
+| grep, the original design    | 12%      | 0.079     |
+| BM25                         | 38%      | 0.253     |
+| dense vectors only           | 55%      | 0.405     |
+| hybrid fusion, w=0.7         | 66%      | 0.466     |
+| **+ mean chunk aggregation** | **68%**  | **0.486** |
 
 Cost: $0, 7.4MB on disk, 85 seconds to index, ~175ms per query.
 
@@ -102,6 +102,7 @@ python3 bench/index.py     # chunk + embed into bench/
 python3 bench/eval.py      # dev set, 25 queries
 python3 bench/tune.py      # sweeps fusion weight, aggregation, query prefix
 python3 bench/final.py     # the sealed 73. Run this LAST and only once per change.
+python3 bench/hubs.py      # hub-file knobs swept on dev through brain.rank(); --sealed CFG once
 python3 bench/stack.py     # PPR over the wikilink graph, on top of the tuned retriever
 ```
 

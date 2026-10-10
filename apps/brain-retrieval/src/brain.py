@@ -26,6 +26,15 @@ DIM   = 768
 W_DENSE = 0.70      # dense/lexical fusion weight. 0.5 and 1.0 both scored lower.
 AGG     = "mean"    # chunk->file aggregation. max scored 64% where mean scored 80%
                     # on dev; the single largest win found, bigger than the model.
+# Hub files, 2026-10-10. Long domains/ subfolders filled the top 5 for questions
+# they do not answer. Swept on dev (25) against a 717-file snapshot, sealed run
+# once; bench/hubs.py reproduces it and TODO.md has the table.
+FOLDER_CAP  = 1     # files per domains/<x> subfolder in the top k. Dev: tie at
+                    # 68% r@5, MRR 0.536 -> 0.542. Sealed: 52.3% -> 55.4%.
+CHUNK_ALPHA = 0.0   # dense mean * chunks^-alpha. Off: 0.01 cost 4 points on dev,
+                    # 0.1 cost 12, 1.0 cost 52. Short one-chunk notes flood in.
+LEX_LEN_B   = 0.0   # BM25-style length divisor on the lexical file score. Off:
+                    # best case tied baseline r@5 and lowered MRR at every b.
 TARGET_WORDS, OVERLAP = 300, 60
 MAXTOK   = 40       # a token longer than this is a base64 blob, not language. One
                     # 234KB token in a club-application file crashed the first
@@ -332,6 +341,61 @@ def agg_by_file(pairs):
     for f, s in pairs: d[f].append(s)
     return {f: (sum(v)/len(v) if AGG == "mean" else max(v)) for f, v in d.items()}
 
+def lexical(db, query):
+    """BM25 score per chunk id from the FTS index. Empty when nothing matches."""
+    lex = {}
+    try:
+        fq = " OR ".join(re.findall(r"[A-Za-z]{3,}", query))
+        if fq:
+            for cid, sc in db.execute(
+                "SELECT rowid,-bm25(fts) FROM fts WHERE fts MATCH ? LIMIT 400", (fq,)):
+                lex[cid] = sc
+    except sqlite3.OperationalError: pass
+    return lex
+
+def folder(f):
+    """The subfolder a brain file sits in, like domains/<topic>, or None.
+
+    Top-level stores (memory/, core/, the team memory root) are flat lists of
+    unrelated notes, so sharing one is not a sign two files say the same
+    thing. A subfolder is: on 2026-10-09 most sealed misses lost to files from
+    two domains/ subfolders that filled the top 5 together."""
+    if f.startswith(("~", "/")): return None
+    parts = f.split("/")
+    return "/".join(parts[:2]) if len(parts) >= 3 else None
+
+def rank(rows, dense, lex, k, alpha=None, folder_cap=None, len_b=None):
+    """Fuse dense and lexical scores per file and return the top k as
+    [(file, score)], plus the per-file mean cosine used for abstention.
+
+    rows are (id, file, section, text, row); dense is a cosine per vector row
+    or None; lex maps chunk id to BM25. The three knobs default to the tuned
+    constants below and are arguments only so the bench can sweep them."""
+    alpha = CHUNK_ALPHA if alpha is None else alpha
+    folder_cap = FOLDER_CAP if folder_cap is None else folder_cap
+    len_b = LEX_LEN_B if len_b is None else len_b
+    nchunks = collections.Counter(r[1] for r in rows)
+    dv = agg_by_file([(r[1], float(dense[r[4]])) for r in rows]) if dense is not None else {}
+    lv = agg_by_file([(r[1], lex.get(r[0], 0.0)) for r in rows])
+    dvr = {f: s * nchunks[f] ** -alpha for f, s in dv.items()} if alpha else dv
+    if len_b and nchunks:
+        avg = sum(nchunks.values()) / len(nchunks)
+        lv = {f: s / (1 - len_b + len_b * nchunks[f] / avg) for f, s in lv.items()}
+    dvn, lvn = norm(dvr), norm(lv)
+    w = W_DENSE if dense is not None else 0.0
+    score = {f: w*dvn.get(f, 0) + (1-w)*lvn.get(f, 0) for f in set(dvn) | set(lvn)}
+    ordered = sorted(score.items(), key=lambda kv: (-kv[1], kv[0]))
+    if not folder_cap:
+        return ordered[:k], dv
+    out, per = [], collections.Counter()
+    for f, s in ordered:
+        g = folder(f)
+        if g is not None and per[g] >= folder_cap: continue
+        if g is not None: per[g] += 1
+        out.append((f, s))
+        if len(out) == k: break
+    return out, dv
+
 def classify(e):
     """Name why the query embedding failed. Only a timeout means a model load
     is in flight (or about to be), so only a timeout is worth a warm-up."""
@@ -365,21 +429,8 @@ def cmd_ask(args):
         if degraded == "embed_timeout":
             spawn_warm()
 
-    lex = {}
-    try:
-        fq = " OR ".join(re.findall(r"[A-Za-z]{3,}", args.query))
-        if fq:
-            for cid, sc in db.execute(
-                "SELECT rowid,-bm25(fts) FROM fts WHERE fts MATCH ? LIMIT 400", (fq,)):
-                lex[cid] = sc
-    except sqlite3.OperationalError: pass
-
-    dv = agg_by_file([(r[1], float(dense[r[4]])) for r in rows]) if dense is not None else {}
-    lv = agg_by_file([(r[1], lex.get(r[0], 0.0)) for r in rows])
-    dvn, lvn = norm(dv), norm(lv)
-    w = W_DENSE if dense is not None else 0.0
-    score = {k: w*dvn.get(k, 0) + (1-w)*lvn.get(k, 0) for k in set(dvn) | set(lvn)}
-    ranked = sorted(score.items(), key=lambda kv: -kv[1])[:args.k]
+    lex = lexical(db, args.query)
+    ranked, dv = rank(rows, dense, lex, args.k)
 
     top_cos = max(dv.values()) if dv else 0.0
     st = stale_files(db)

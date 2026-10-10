@@ -63,6 +63,7 @@ import repo_card  # noqa: E402
 import notes_surface  # noqa: E402
 import hud_events  # noqa: E402
 import glass_search  # noqa: E402
+import hud_accounts  # noqa: E402
 # HUD_REPO_CARDS=off: "show me owner/repo" and a pasted github.com URL go to
 # the model instead of drawing a repo card (bin/lib/repo_card.py).
 REPO_CARDS = os.environ.get("HUD_REPO_CARDS", "on") != "off"
@@ -71,7 +72,7 @@ import hud_runtime  # noqa: E402
 
 # HUD_SEARCH=off: "search X", "google X" and "look up X" open a Google results
 # page in Chrome again instead of being answered on the glass
-# (bin/lib/glass_search.py, docs/NO-APPS.md build 1).
+# (bin/lib/glass_search.py, docs/plans/NO-APPS.md build 1).
 SEARCH = os.environ.get("HUD_SEARCH", "on") != "off"
 # HUD_QUICK=off: math, time, date, conversions and weather go to the model
 # like everything else, instead of being computed (bin/lib/quick.py).
@@ -85,10 +86,10 @@ OPEN = os.environ.get("HUD_OPEN", "on") != "off"
 SURFACES = os.environ.get("HUD_SURFACES", "on") != "off"
 KYBER_SURFACES = Path(__file__).resolve().parent / "kyber-surfaces"
 # HUD_GENUI=off: a request shaped like a panel ("compare my three classes'
-# grades") goes to the model in words instead of to kyber-genui (docs/GENUI.md).
+# grades") goes to the model in words instead of to kyber-genui (docs/reference/GENUI.md).
 GENUI = os.environ.get("HUD_GENUI", "on") != "off"
 # HUD_CLAY=off: "find me 50 fintech VC partners in Clay" goes to the model
-# instead of starting clay-build (bin/lib/clay_route.py, docs/CLAY-HUD.md).
+# instead of starting clay-build (bin/lib/clay_route.py, docs/plans/CLAY-HUD.md).
 CLAY = os.environ.get("HUD_CLAY", "on") != "off"
 KYBER_GENUI = Path(__file__).resolve().parent / "kyber-genui"
 # kyber-genui paints its skeleton in under a millisecond and finished in 3.2
@@ -828,7 +829,8 @@ def claude_accounts() -> list[Path]:
     """The config directories to answer from, in the order to try them.
 
     `~/.bob/accounts` lists them one per line when it exists; otherwise the
-    default `~/.claude` and, when present, `~/.claude-2`.
+    default `~/.claude` and every `~/.claude-<n>` that exists, which is where
+    "add an account" on the glass puts a new one (bin/lib/hud_accounts.py).
     """
     if ACCOUNTS_FILE.exists():
         found = [
@@ -838,8 +840,8 @@ def claude_accounts() -> list[Path]:
         ]
         if found:
             return found
-    second = Path.home() / ".claude-2"
-    return [DEFAULT_CONFIG] + ([second] if second.is_dir() else [])
+    extra = hud_accounts.discover_accounts(ACCOUNTS_FILE.with_name(".no-accounts-file"))[1:]
+    return [DEFAULT_CONFIG] + extra
 
 
 def is_limit_reply(text: str) -> bool:
@@ -1293,6 +1295,7 @@ def read_names() -> list[str]:
 FAST_PATHS = {
     "connection_check": "connection",
     "pleasantry": "pleasantry",
+    "accounts_request": "accounts",
     "quick_answer": "quick",
     "repo_request": "repo",
     "notes_request": "notes",
@@ -1331,6 +1334,14 @@ def fast_path(said: str) -> str | None:
         return "connection"
     if Listener.pleasantry_kind(words):
         return "pleasantry"
+    try:
+        # "Close it" only closes the card while it is up, which a replay
+        # cannot know, so it is left to the paths below.
+        intent = hud_accounts.parse(said, claude_accounts())
+        if intent is not None and intent.verb != "close":
+            return "accounts"
+    except Exception:  # noqa: BLE001
+        pass
     if QUICK:
         try:
             if quick.answer(said):
@@ -1434,11 +1445,20 @@ class Listener:
         # Which subscription answers. Kept in ~/.bob/account so a switch made
         # because one ran out outlives a restart of the display.
         self.accounts = claude_accounts()
+        self.account = 0
+        picked = hud_accounts.load()["pick"].get("account")
         try:
-            saved = Path(ACCOUNT_STATE.read_text().strip()).expanduser()
+            saved = Path(picked) if picked else Path(ACCOUNT_STATE.read_text().strip()).expanduser()
             self.account = self.accounts.index(saved)
         except (OSError, ValueError):
             self.account = 0
+        # What answers right now (runtime, account, model), the `--model` the
+        # Claude process was started with, and the switcher card this
+        # listener drew, so a press acts only on a row it put there.
+        self.answering: hud_accounts.Target | None = None
+        self.claude_model: str | None = None
+        self.acct_card: hud_accounts.Card | None = None
+        self.acct_lock = threading.Lock()
 
         # The reply is said out loud, by this voice, unless it is None. A
         # Kokoro voice (`af_heart`, `am_michael`: two letters, underscore,
@@ -1810,6 +1830,7 @@ class Listener:
             # Escape took the glass down, the search panel with it.
             self.search_closed()
             repo_card.BOARD.forget()
+            self.acct_card = None
         elif line.startswith("g "):
             parts = line.split()
             if len(parts) == 5:
@@ -1895,6 +1916,12 @@ class Listener:
             elif action == "closed" and component == glass_search.SURFACE:
                 # The card's close button on the search panel.
                 self.search_closed()
+            elif action.startswith("acct-") or (action == "action" and component.startswith("acct-")):
+                # The switcher's Use, Sign in, model and Add account presses,
+                # acted on against the card this listener drew, never asked.
+                self.accounts_press(line)
+            elif action == "closed" and component == hud_accounts.SURFACE:
+                self.acct_card = None
             elif action.startswith("ks-") or (action == "action" and component.startswith("ks-")):
                 # A surface's own control (bin/kyber-surfaces owns every
                 # `ks-` action and acts on it). Asked here as well, a press of
@@ -2184,6 +2211,329 @@ class Listener:
         self.log(f"account: {spent} hit its limit, answering from {chosen}")
         return True
 
+    # --- runtime, account and model (bin/lib/hud_accounts.py) ----------------
+
+    def auto_name(self) -> str:
+        try:
+            return hud_runtime.current()
+        except ValueError:
+            return "claude"
+
+    def current_target(self) -> hud_accounts.Target:
+        """What is answering, as the switcher names it."""
+        answering = getattr(self, "answering", None)
+        if answering is not None:
+            return answering
+        runtime = hud_accounts.runtime_of(self.model_cmd) or "claude"
+        accounts = getattr(self, "accounts", [])
+        index = getattr(self, "account", 0)
+        account = accounts[index] if runtime == "claude" and 0 <= index < len(accounts) else None
+        return hud_accounts.Target(runtime, account, getattr(self, "claude_model", None))
+
+    def sync_target(self) -> None:
+        """Follow the store: the runtime, account and model Caleb picked on the
+        glass or the menu, skipping any marked out until its reset. Nothing
+        picked follows the last foreground session, as before."""
+        try:
+            data = hud_accounts.load()
+            target, picked = hud_accounts.effective(data, getattr(self, "accounts", []), self.auto_name())
+        except Exception as err:  # noqa: BLE001  the store never costs an answer
+            self.log("accounts: could not read the pick:", err)
+            return
+        # Everything out: run the pick anyway, and the limit reply it gets
+        # back opens the switcher (`fail_over`).
+        self.apply_target(target or picked)
+
+    def apply_target(self, target: hud_accounts.Target) -> None:
+        """Make `target` the one that answers the next turn. A change is a
+        fresh session: each account and runtime keeps its own transcripts, and
+        `--resume` of an id another one never saw is an error."""
+        accounts = getattr(self, "accounts", [])
+        index = getattr(self, "account", 0)
+        if target.runtime == "claude" and target.account is not None:
+            index = next((i for i, a in enumerate(accounts) if hud_accounts.same(a, target.account)), index)
+        if self.auto_runtime:
+            command = hud_accounts.runtime_command(
+                target.runtime, None if target.runtime == "claude" else target.model)
+        else:
+            command = self.model_cmd
+        model = target.model if target.runtime == "claude" else None
+        changed = (command != self.model_cmd
+                   or (target.runtime == "claude" and index != getattr(self, "account", 0))
+                   or model != getattr(self, "claude_model", None))
+        self.answering = target
+        if not changed:
+            return
+        proc = self.model
+        if proc is not None and proc.poll() is None:
+            proc.kill()
+            proc.wait()
+        self.model = None
+        self.model_cmd = command
+        self.account = index
+        self.claude_model = model
+        self.session = str(uuid.uuid4())
+        self.started = False
+        self.turns = 0
+        self.last_usage = {}
+        self.log("HUD runtime switched to", target.runtime, target.label(), model or "")
+
+    def fail_over(self, reply: str) -> tuple[hud_accounts.Target | None, str]:
+        """The answering account or runtime ran out under a request: mark it
+        out until the reset the notice names and move to the next one that
+        isn't. Returns the new target and the line for the pill; the target is
+        None when nothing is left, and the line then says who is out until
+        when."""
+        spent = self.current_target()
+        data = hud_accounts.load()
+        entry = hud_accounts.mark_limited(data, spent.key, reply)
+        try:
+            hud_accounts.save(data)
+        except OSError as err:
+            self.log("accounts: could not save the limit:", err)
+        if self.auto_runtime:
+            # The runtime this request started on, not whatever a hook claimed
+            # since: a foreground switch takes effect on the next request.
+            auto = self.auto_name() if data["pick"].get("runtime") else spent.runtime
+            target, _ = hud_accounts.effective(data, self.accounts, auto)
+        elif spent.runtime == "claude":
+            account = hud_accounts.next_account(data, self.accounts, spent.account)
+            target = hud_accounts.Target("claude", account, spent.model) if account else None
+        else:
+            target = None
+        out = f"{spent.label()} is out {hud_accounts.back_at(entry)}"
+        if target is None or target.key == spent.key:
+            others = [f"{hud_accounts.key_label(k)} {hud_accounts.back_at(e)}"
+                      for k, e in data["limits"].items()
+                      if k != spent.key and hud_accounts.limited(data, k)]
+            line = (f"Nothing left to answer: {out}" + (f", {', '.join(others)}" if others else "")
+                    + ". Pick another or add an account.")
+            self.log("accounts:", line)
+            return None, line
+        self.apply_target(target)
+        if target.runtime == "claude":
+            try:
+                ACCOUNT_STATE.parent.mkdir(parents=True, exist_ok=True)
+                ACCOUNT_STATE.write_text(str(self.accounts[self.account]) + "\n")
+            except (OSError, IndexError):
+                pass
+        line = f"Answered on {target.label()}, {out}"
+        self.log("accounts:", line)
+        return target, line
+
+    # Retries after a limit reply, per request. Each hop marks one candidate
+    # out, so this only bounds a store that keeps reading as not limited;
+    # six covers three Claude accounts and the three other runtimes.
+    FAILOVER_HOPS = 6
+
+    ACCOUNT_CLOSE = frozenset({"close it", "close", "close that", "done", "dismiss", "close accounts",
+                               "close the accounts", "hide accounts", "close models"})
+
+    def accounts_request(self, said: str, typed: bool) -> bool:
+        """"Which account", "use sonnet", "use codex", "use my other account",
+        "add an account": acted on and drawn with no model turn."""
+        try:
+            cached = hud_accounts._status_cache.get("ollama")
+            intent = hud_accounts.parse(said, self.accounts, cached[1].models if cached else None)
+        except Exception as err:  # noqa: BLE001  a fast path never costs the answer
+            self.log("accounts: parse failed:", err)
+            return False
+        if intent is None:
+            return False
+        if intent.verb == "close":
+            # "Close it" belongs to the switcher only while it is up.
+            if self.acct_card is None or normalise(said) not in self.ACCOUNT_CLOSE:
+                return False
+            self.send(hud_accounts.close_line())
+            self.acct_card = None
+            threading.Thread(target=lambda: self.settle_unless_running("done", 0.0), daemon=True).start()
+            return True
+        if intent.verb != "show" and self.in_flight():
+            return False
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+
+        def work() -> None:
+            try:
+                line = self.account_act(intent.verb, intent.value)
+            except Exception as err:  # noqa: BLE001
+                self.log("accounts failed:", err)
+                line = "That switch didn't happen."
+            self.remember(req, line, True, "done")
+            self.send("s " + json.dumps(line))
+            self.send("w " + json.dumps(line) + " done=true")
+            if not typed:
+                self.speak(line)
+            self.settle_unless_running("done", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def account_act(self, verb: str, value: str = "", note: str = "") -> str:
+        """One switcher action: pick, sign in or add, then redraw the card.
+        Returns the one line to say."""
+        with self.acct_lock:
+            self.accounts = claude_accounts()
+            data = hud_accounts.load()
+            line = ""
+            if verb == "runtime":
+                if value not in ("auto", "claude"):
+                    status = hud_accounts.runtime_status(value, fresh=True)
+                    if not status.ok:
+                        name = hud_accounts.RUNTIME_NAMES[value]
+                        line = f"{name} is {status.detail or status.state}." + (
+                            " Press Sign in to fix it." if status.state == "signed out" else "")
+                if not line:
+                    hud_accounts.pick_runtime(data, value)
+                    data["limits"].pop(value, None)
+            elif verb == "account":
+                hud_accounts.pick_account(data, Path(value))
+            elif verb == "next":
+                current = self.current_target()
+                account = hud_accounts.next_account(
+                    data, self.accounts, current.account if current.runtime == "claude" else None)
+                if account is None:
+                    line = ("There's no other signed-in Claude account. Press Add account."
+                            if len(self.accounts) < 2 else "Every other Claude account is out right now.")
+                else:
+                    hud_accounts.pick_account(data, account)
+            elif verb == "model":
+                runtime, _, model = value.partition("|")
+                if runtime not in hud_accounts.RUNTIMES:
+                    return "That model isn't one I know."
+                hud_accounts.pick_model(data, runtime, model or None)
+                if self.current_target().runtime != runtime:
+                    hud_accounts.pick_runtime(data, runtime)
+            elif verb == "add":
+                line = self.add_account()
+            elif verb == "signin":
+                line = self.sign_in(value)
+            if verb in ("runtime", "account", "next", "model") and not line:
+                hud_accounts.save(data)
+                if self.auto_runtime:
+                    self.sync_target()
+                else:
+                    target, _ = hud_accounts.effective(data, self.accounts, "claude")
+                    if target is not None and target.runtime == "claude":
+                        self.apply_target(target)
+                line = "Using " + self.describe_target()
+            if not line:
+                line = self.describe_target()
+            self.draw_accounts(note or (line if verb != "show" else ""))
+            return line
+
+    def shown_target(self) -> hud_accounts.Target:
+        now = self.current_target()
+        if now.runtime == "claude" and not now.model:
+            configured = user_settings().get("model")
+            now = hud_accounts.Target("claude", now.account, configured if isinstance(configured, str) else None)
+        return now
+
+    def describe_target(self) -> str:
+        now = self.shown_target()
+        where = f" on {now.label()}" if now.runtime == "claude" and now.account else ""
+        model = hud_accounts.model_label(now.runtime, now.model) if now.model else ""
+        return f"{hud_accounts.RUNTIME_NAMES[now.runtime]}{where}" + (f", {model}" if model else "") + "."
+
+    def draw_accounts(self, note: str = "", nothing_left: bool = False) -> None:
+        data = hud_accounts.load()
+        _, picked = hud_accounts.effective(data, self.accounts, self.auto_name())
+        card = hud_accounts.card(data, self.accounts, None if nothing_left else self.shown_target(),
+                                 picked, self.auto_name(), note=note)
+        self.acct_card = card
+        for line in card.lines:
+            self.send(line)
+
+    def accounts_press(self, line: str) -> None:
+        """A Use, Sign in, model or Add account press on the card this
+        listener drew. A row or button it did not draw does nothing."""
+        ev = hud_events.event(line)
+        card = self.acct_card
+        if ev is None or card is None or ev.get("surface") not in (None, hud_accounts.SURFACE):
+            return
+        if ev["name"] in ("acct-use", "acct-signin"):
+            found = card.rows.get(ev.get("row")) if isinstance(ev.get("row"), str) else None
+        else:
+            found = card.buttons.get(ev.get("component"))
+        if found is None:
+            self.log("accounts: press on something not drawn:", line[:120])
+            return
+        kind, value = found
+        verb = {"signin-claude": "signin"}.get(kind, kind)
+        if kind == "signin-claude":
+            value = "claude:" + value
+        if verb in ("runtime", "account", "model") and self.in_flight():
+            self.send("s " + json.dumps("Switching after this answer finishes. Press it again then."))
+            return
+
+        def work() -> None:
+            try:
+                said = self.account_act(verb, value)
+            except Exception as err:  # noqa: BLE001
+                self.log("accounts press failed:", err)
+                said = "That didn't work."
+            self.send("s " + json.dumps(said))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def add_account(self) -> str:
+        """Make the next `~/.claude-<n>`, open its sign-in for Caleb, and watch
+        for it to finish. Never touches `~/.claude`, never reads a token."""
+        config = hud_accounts.new_account_dir(self.accounts)
+        try:
+            config.mkdir(mode=0o700)
+        except OSError as err:
+            return f"Couldn't make {hud_accounts.short_path(config)}: {err.strerror}."
+        if ACCOUNTS_FILE.exists():
+            with ACCOUNTS_FILE.open("a") as out:
+                out.write(str(config) + "\n")
+        self.accounts = claude_accounts()
+        return self.sign_in("claude:" + str(config))
+
+    def sign_in(self, value: str) -> str:
+        """Open one sign-in where Caleb finishes it, and watch for it."""
+        if value.startswith("claude:"):
+            config = Path(value[7:])
+            if not hud_accounts.open_signin("claude", config):
+                return "Couldn't open the sign-in. Press Add account again."
+            self.watch_signin(lambda: hud_accounts.email(config), hud_accounts.short_path(config))
+            return "Sign in in the Terminal tab that opened. The account joins the list when it's done."
+        runtime = value
+        name = hud_accounts.RUNTIME_NAMES.get(runtime, runtime)
+        if not hud_accounts.open_signin(runtime):
+            return f"{name} has no sign-in I can open."
+
+        def check() -> str | None:
+            return name if hud_accounts.runtime_status(runtime, fresh=True).ok else None
+
+        self.watch_signin(check, name)
+        return f"Sign in to {name} in the Terminal tab that opened."
+
+    # Between looks at a sign-in in progress. Guessed, never measured: a
+    # browser OAuth round trip is several seconds, so three feels immediate.
+    SIGNIN_POLL_S = float(os.environ.get("HUD_SIGNIN_POLL_S", "3"))
+
+    def watch_signin(self, done, name: str) -> None:
+        def watch() -> None:
+            deadline = time.monotonic() + hud_accounts.SIGNIN_WAIT_S
+            while time.monotonic() < deadline:
+                time.sleep(self.SIGNIN_POLL_S)
+                got = done()
+                if got:
+                    self.accounts = claude_accounts()
+                    line = f"Signed in: {got} is on the list."
+                    self.log("accounts:", line)
+                    if self.acct_card is not None:
+                        with self.acct_lock:
+                            self.draw_accounts(line)
+                    self.send("s " + json.dumps(line))
+                    return
+            self.log("accounts: sign-in for", name, "didn't finish")
+            if self.acct_card is not None:
+                with self.acct_lock:
+                    self.draw_accounts(f"{name} didn't finish signing in. Press Sign in to try again.")
+
+        threading.Thread(target=watch, daemon=True).start()
+
     def retire(self) -> None:
         """Close the session and open the next one, warm, before it is needed.
 
@@ -2352,13 +2702,14 @@ class Listener:
                 break
         killer.cancel()
         if is_limit_reply(reply):
-            # Found at launch rather than under the first request. One hop
-            # per other account, so two spent accounts end here, not in a
-            # loop.
-            if _hops < len(self.accounts) - 1 and self.switch_account():
+            # Found at launch rather than under the first request: marked out
+            # until its reset, and the next one primed instead. One hop per
+            # candidate, so spent accounts end here, not in a loop.
+            target, line = self.fail_over(reply) if _hops < self.FAILOVER_HOPS else (None, "")
+            if target is not None:
                 self.prime(_hops + 1)
             else:
-                self.log("prime: every account is at its limit:", reply.strip()[:80])
+                self.log("prime: nothing left to answer:", line or reply.strip()[:80])
             return
         if proc.poll() is not None:
             self.log(f"prime failed: the model exited ({proc.returncode})")
@@ -2447,6 +2798,12 @@ class Listener:
         # Cheapest test first: a greeting costs nothing to recognise and 21
         # seconds to send to a model.
         if not relayed and self.pleasantry(said):
+            return
+        # "Which account", "use sonnet", "use codex": the switcher, no model.
+        # Whole sentences only (bin/lib/hud_accounts.py `parse`), and before
+        # the model is asked, because a spent account would answer the
+        # request to leave it with its own limit notice.
+        if not relayed and self.accounts_request(said, typed):
             return
         # Something pointed at is what "this" means, so the shortcuts that
         # read "this" as the song step aside. On 2026-10-03 three "what is
@@ -2859,7 +3216,7 @@ class Listener:
 
     def search_dismiss(self, said: str) -> bool:
         """"Close it" with the search panel up takes the panel down."""
-        if not self.search_open or normalise(said) not in self.SEARCH_CLOSE_WORDS:
+        if not getattr(self, "search_open", False) or normalise(said) not in self.SEARCH_CLOSE_WORDS:
             return False
         self.send(glass_search.close_line())
         self.search_closed()
@@ -2900,7 +3257,7 @@ class Listener:
             self.log("surfaces daemon did not start:", err)
 
     def genui_request(self, said: str, typed: bool) -> bool:
-        """Draw a generated panel for a request shaped like one (docs/GENUI.md,
+        """Draw a generated panel for a request shaped like one (docs/reference/GENUI.md,
         step 1). Exit 0 means a valid panel is on the glass and the voice says
         one line; anything else means it fell back, and the request goes to the
         model in words, as if this had not been tried."""
@@ -3245,23 +3602,13 @@ class Listener:
         failure.
         """
         if self.auto_runtime and refresh_runtime:
-            selected = hud_runtime.model_command()
-            if selected != self.model_cmd:
-                if self.model is not None and self.model.poll() is None:
-                    self.model.kill()
-                    self.model.wait()
-                self.model = None
-                self.model_cmd = selected
-                self.session = str(uuid.uuid4())
-                self.started = False
-                self.turns = 0
-                self.last_usage = {}
-                self.log('HUD runtime switched to', hud_runtime.current())
+            self.sync_target()
         argv = shlex.split(self.model_cmd)
         if not argv or Path(argv[0]).name != "claude":
             return argv
         if self.auto_runtime and self.lean:
-            configured_model = user_settings().get('model')
+            # A model picked on the glass wins over the person's settings.
+            configured_model = getattr(self, "claude_model", None) or user_settings().get('model')
             if isinstance(configured_model, str) and configured_model:
                 argv += ['--model', configured_model]
         self.refresh_prompt()
@@ -3844,29 +4191,48 @@ class Listener:
         argv = self.command()
         first: str | None = None
         voiced = False
-        if Path(argv[0]).name == "claude":
-            ok, out, said, first, answer, voiced = self.run_streamed(
-                argv, prompt, typed=req.typed, asked_at=req.spoken_at, said=req.said
-            )
-            # The account ran out under this request: the same request, once,
-            # on the next one, so the person gets the answer rather than the
-            # notice.
-            if is_limit_reply(answer or out) and self.switch_account():
-                self.send("s " + json.dumps("switching accounts"))
-                # Finish this request with the runtime already selected. A
-                # foreground switch takes effect on the next request, not
-                # halfway through a Claude account retry.
-                argv = self.command(refresh_runtime=False)
+        # Which account or runtime answered after the first ran out, for the
+        # pill; and whether nothing was left, which opens the switcher.
+        note = ""
+        nothing_left = False
+        hops = 0
+        while True:
+            if Path(argv[0]).name == "claude":
                 ok, out, said, first, answer, voiced = self.run_streamed(
                     argv, prompt, typed=req.typed, asked_at=req.spoken_at, said=req.said
                 )
-        else:
-            ok, out, said = self.run_plain(argv, prompt)
-            answer = prose(out).strip()
+            else:
+                ok, out, said = self.run_plain(argv, prompt)
+                answer = prose(out).strip()
+                first, voiced = None, False
+            # The account or runtime ran out under this request: the same
+            # request on the next one that isn't out, so the person gets the
+            # answer rather than the notice. One hop per candidate at most
+            # (accounts plus three other runtimes), never a loop.
+            if not is_limit_reply(answer or out) or hops >= self.FAILOVER_HOPS:
+                break
+            with self.state:
+                if self.cancelled is req:
+                    break
+            hops += 1
+            target, note = self.fail_over(answer or out)
+            if target is None:
+                nothing_left = True
+                ok, out, answer, said = False, note, note, None
+                break
+            self.send("s " + json.dumps(f"Asking {target.label()} instead"))
+            # Finish this request with what fail_over chose. A foreground
+            # runtime switch takes effect on the next request, not halfway
+            # through a retry.
+            argv = self.command(refresh_runtime=False)
         with self.state:
             if self.cancelled is req:
                 self.remember(req, answer, False, "cancelled")
                 return "cancelled"
+        if nothing_left:
+            # Never a dead notice: the switcher, with who is out until when.
+            with self.acct_lock:
+                self.draw_accounts(note, nothing_left=True)
         # An agent with tools draws for itself and answers in prose, so
         # stray lines here are the exception rather than the payload.
         # Only after a request has actually run, or a first attempt that
@@ -3889,7 +4255,11 @@ class Listener:
         # and `result.result` are the same words on CLI 2.1.278), or the
         # voice is captioning the pill itself as it reads.
         reply = subtitle(prose(out))
-        if reply and reply != said and not voiced:
+        if note and not nothing_left:
+            # Which account answered goes on the pill with the answer, first,
+            # so a long answer cannot push it off.
+            self.send("s " + json.dumps(f"{note}. {reply}" if reply else note))
+        elif reply and reply != said and not voiced:
             self.send("s " + json.dumps(reply))
         # A typed request is answered in writing. A run that was one
         # sentence long already had it spoken as it arrived, and one read

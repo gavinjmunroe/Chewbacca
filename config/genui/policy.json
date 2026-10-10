@@ -1,5 +1,5 @@
 {
-  "about": "What generated surfaces may use, on top of what the HUD accepts. The catalog says what the renderer can draw; this says what a model is trusted to draw on its own. Every number carries why it is this number, in docs/GENUI.md under Limits. `row_actions` is empty on purpose: a row button needs a handler for `e action <name> row=<id>`, and the surfaces daemon registers its names here when it has one.",
+  "about": "What generated surfaces may use, on top of what the HUD accepts. The catalog says what the renderer can draw; this says what a model is trusted to draw on its own. Every number carries why it is this number, in docs/reference/GENUI.md under Limits. `row_actions` is empty on purpose: a row button needs a handler for `e action <name> row=<id>`, and the surfaces daemon registers its names here when it has one.",
   "excluded_components": {
     "File": "an editable File writes to disk on save, and a generated path is a path nobody chose",
     "Screen": "the root Screen is s and is written by kyber-genui; a second Screen is never right",

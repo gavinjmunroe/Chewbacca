@@ -36,7 +36,7 @@ the `study-system` skill.
 Also added: a rule routing corrections (judgment to a doc, mechanical failure
 to a test), a rule that constants carry the evidence that set them, a
 scan-must-not-write rule, and a refusal in `chrome-js` to read password fields
-in any mode. `docs/THREAT-MODEL.md` documents realm's keychain design as the
+in any mode. `docs/reference/THREAT-MODEL.md` documents realm's keychain design as the
 real bar and says plainly that Chewbacca does not implement it.
 
 Carlton wrote mac-cli and Plynn, which Chewbacca already shipped. See

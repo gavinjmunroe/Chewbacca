@@ -57,7 +57,8 @@ class RuntimeTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.path = Path(self.temp.name) / 'runtime.json'
         self.env = patch.dict(os.environ, {'CHEWBACCA_HUD_RUNTIME_STATE': str(self.path),
-                                           'CHEWBACCA_HUD_CHILD': '0'})
+                                           'CHEWBACCA_HUD_CHILD': '0',
+                                           'HUD_ACCOUNTS_STORE': str(Path(self.temp.name) / 'accounts.json')})
         self.env.start()
         self.addCleanup(self.env.stop)
 

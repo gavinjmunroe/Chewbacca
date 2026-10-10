@@ -16,7 +16,7 @@ claude-code`, `codex`, or `both` installs the chosen adapters. Shared skills liv
 under `~/.chewbacca/skills`; native discovery links point at that library. Existing
 conflicting skills and unrelated configuration are preserved and reported.
 `config/runtimes/profiles.json` records runtime and platform requirements, with sources.
-See `docs/RUNTIMES.md` for setup, migration, model selection and capability limits.
+See `docs/reference/RUNTIMES.md` for setup, migration, model selection and capability limits.
 
 Claude Code uses its native JSON hooks, tools and skill extensions. Codex uses
 its own lifecycle adapter, including multi-file patch translation and private
@@ -110,7 +110,7 @@ verified evidence and reusable procedures; public tools and untested ideas are n
 an exclusive advantage. **Coachable:** treat corrections as evidence, check their
 source and scope, update the owning procedure, then verify retrieval and changed
 behavior on a later untouched task. Saving a lesson alone is not learning. Read
-`docs/DECISION-STANDARDS.md` for substantial decisions.
+`docs/reference/DECISION-STANDARDS.md` for substantial decisions.
 Routine deterministic actions use a direct check, without a new essay or model call.
 
 After each substantial phase, compare evidence with the baseline and acceptance
@@ -134,7 +134,7 @@ Test unfamiliar tasks and retention before claiming transfer or durable expertis
 relative improvement alone does not establish an acceptable success rate.
 
 For UI learning, `chewbacca ux-learning` validates versioned navigation maps and
-records explicitly supplied private evidence. Read `docs/UX-LEARNING-FORMAT.md`
+records explicitly supplied private evidence. Read `docs/reference/UX-LEARNING-FORMAT.md`
 and the relevant map before reuse; routes are suggestions, not current-screen
 observations. Retain failures and recovery evidence privately; share only sanitized
 recipes with tested scope. Verified once does not mean mastered. Build reusable
@@ -162,7 +162,7 @@ failure conditions into shared packages. Verified once does not mean mastered;
 recheck stale UI observations and test transfer on heldout tasks. Use the offline
 `gtme-math`, `gtme-graph`, `gtme-learning`, `gtme-library`, `task-graph`,
 `clay-fixture-check`, and `ux-learning` commands through `chewbacca` or directly.
-See `docs/MATH-GRAPH-CAPABILITIES.md` for their assumptions and platform limits.
+See `docs/reference/MATH-GRAPH-CAPABILITIES.md` for their assumptions and platform limits.
 These methods grant no sending, publication, spending, or hook permissions.
 
 ## Team memory

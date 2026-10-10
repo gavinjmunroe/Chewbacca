@@ -5,6 +5,7 @@ answers written below, so no Clay session, CLI, browser or network is used.
 Every fixture is synthetic: example.com addresses, made-up ids, no rows from a
 real workspace. A measured.json in a temp dir decides which surface is fastest.
 """
+import hashlib
 import json
 import os
 import subprocess
@@ -33,6 +34,48 @@ SENT = {"ok": True, "class": "ok", "tier": 1, "ms": 200, "data": {"ok": True}}
 
 checks = 0
 
+# The 16 writes derived from Clay's frontend bundle (and one from the CLI), each
+# with the args a caller gives and the request it must build. Written out by
+# hand from the bundle's contracts, not read back from clay.json, so a slot that
+# lands in the wrong path segment fails here (it did once: the campaign id
+# overwrote "campaigns" in clay-sequencer/campaigns/{id}/status).
+WS = "1000001"
+V3 = f"https://api.clay.com/v3/workspaces/{WS}"
+REC_NEW = [{"f_a": "x", "f_b": 2}]
+REC_UPD = [{"id": "r_1", "cells": {"f_a": "y"}}]
+FILTER = {"type": "GroupOp", "combinationMode": "And", "items": []}
+CONFIG = {"source": {"type": "S3_CSV", "filename": "a.csv", "key": "k/1", "recordKeys": ["a"], "records": []},
+          "destination": {"type": "TABLE", "tableId": "t_ex1"}, "map": {}, "isImportWithoutRun": True}
+DERIVED = {
+    "add-column": (["table=t_ex1", "name=Lead score", "data_type=number", "view=gv_ex1"],
+                   ("POST", f"{V3}/tables/t_ex1/fields",
+                    {"name": "Lead score", "type": "number", "typeSettings": {"dataTypeSettings": {"type": "number"}}, "activeViewId": "gv_ex1"})),
+    "update-column": (["table=t_ex1", "field=f_ex1", 'update={"name":"New"}'],
+                      ("PATCH", f"{V3}/tables/t_ex1/fields/f_ex1?skipActionFieldRuns=true", {"name": "New"})),
+    "table-auto-run": (["table=t_ex1", "on=false", 'settings={"AUTO_RUN_ON":true,"AUTO_RUN_MODE":"all","DEDUPE_FIELD_ID":null}'],
+                       ("PATCH", f"{V3}/tables/t_ex1", {"tableSettings": {"AUTO_RUN_ON": False, "AUTO_RUN_MODE": "all", "DEDUPE_FIELD_ID": None}})),
+    "run-cells": (["table=t_ex1", "fields=f_a", "rows=r_1,r_2"],
+                  ("PATCH", f"{V3}/tables/t_ex1/run", {"fieldIds": ["f_a"], "runRecords": {"recordIds": ["r_1", "r_2"]}, "forceRun": True})),
+    "cancel-run": (["table=t_ex1"], ("POST", f"{V3}/tables/t_ex1/cancelrun", {})),
+    "add-rows": (["table=t_ex1", "records=" + json.dumps(REC_NEW)],
+                 ("POST", f"{V3}/tables/t_ex1/records", {"records": [{"cells": REC_NEW[0]}]})),
+    "update-rows": (["table=t_ex1", "records=" + json.dumps(REC_UPD)], ("PATCH", f"{V3}/tables/t_ex1/records", {"records": REC_UPD})),
+    "delete-rows": (["table=t_ex1", "rows=r_1"], ("DELETE", f"{V3}/tables/t_ex1/records", {"recordIds": ["r_1"]})),
+    "import": (["config=" + json.dumps(CONFIG)], ("POST", f"{V3}/imports", {"config": CONFIG, "workspaceId": "1000001"})),
+    "add-leads": (["audience=seg_ex1", "filter=" + json.dumps(FILTER)],
+                  ("CLI", ["clay", "audiences", "update", "seg_ex1", "--filter", json.dumps(FILTER, separators=(",", ":"))], None)),
+    "campaign-status": (["campaign=cam_ex1", "status=PAUSED"], ("PATCH", f"{V3}/clay-sequencer/campaigns/cam_ex1/status", {"status": "PAUSED"})),
+    "lead-category": (["lead_map_id=42", "category_id=3"],
+                      ("PATCH", f"{V3}/clay-sequencer/master-inbox/lead-category", {"email_lead_map_id": 42, "category_id": 3})),
+    "mark-read": (["lead_map_id=42", "read_status=UNREAD"],
+                  ("PATCH", f"{V3}/clay-sequencer/master-inbox/lead-read-status", {"email_lead_map_id": 42, "new_read_status": "UNREAD"})),
+    "blocklist-remove": (["entry=987"], ("DELETE", f"{V3}/clay-sequencer/global-blocklist/987", {})),
+    "blocklist-add-bulk": (["emails=a@example.com,example.org"],
+                           ("POST", f"{V3}/campaigns/global-blocklist/add-bulk", {"emailsOrDomains": ["a@example.com", "example.org"]})),
+    "page-view-activity": (["resource=wb_ex1", "resource_type=WORKBOOK"],
+                           ("POST", f"{V3}/resources/wb_ex1/activity", {"resourceType": "WORKBOOK", "activityType": "LAST_OPENED"})),
+}
+
 
 def ok(cond, msg):
     global checks
@@ -52,7 +95,8 @@ def run(fixtures, measured, *args, env_extra=None):
         m.write_text(json.dumps(measured))
         env = dict(os.environ, CHEWBACCA_CLAY_FIXTURES=str(base / "fx"), CHEWBACCA_CLAY_MEASURED=str(m),
                    CHEWBACCA_CLAY_LIB=str(LIB), API_ANYTHING_HOME=str(base / "engine-home"))
-        env.pop("CLAY_WORKSPACE_ID", None)
+        # A synthetic workspace, and never the real GTM client config.
+        env.update(CLAY_WORKSPACE_ID=WS, GTM_CONFIG=str(base / "no-clients.json"))
         # tests/run.sh exports CHEWBACCA_NO_SEND=1 for every check, and it refuses
         # before --allow-writes is read, so the write-gate cases saw the wrong
         # reason under the suite and passed alone. Fixture mode never reaches a
@@ -84,13 +128,26 @@ def test_registry_matches_spec():
                 params = {p["name"] for p in sops[s["op"]]["params"]}
                 ok(set(s["args"]) <= params, f"{op['name']}: maps args the spec op does not take")
     # Every spec write is gated through the registry, and nothing else writes.
-    gated = {s["op"] for op in reg["ops"] if op["kind"] == "write" for s in op["surfaces"]}
+    gated = {s["op"] for op in reg["ops"] if op["kind"] == "write" for s in op["surfaces"] if s["type"] == "api-anything"}
     ok({n for n, o in sops.items() if not o["readOnly"]} == gated, "a spec write is not behind the registry's gate")
     for op in reg["ops"]:
         ok(op["gate"] == "read" if op["kind"] == "read" else op["gate"].startswith("write:"), f"{op['name']} gate class")
-    untaught = {w["name"] for w in reg["untaught_writes"]}
-    for name in ("add-column", "update-column", "run-cells", "add-rows", "import", "add-leads"):
-        ok(name in untaught, f"{name} is not recorded as an untaught write")
+    # The 16 writes once listed as untaught are ops now, each carrying where its
+    # request came from, and none claims to be verified: none was ever sent.
+    ok(reg["untaught_writes"] == [], "untaught_writes should be empty")
+    ops = {o["name"]: o for o in reg["ops"]}
+    files = {f["file"]: f["sha256"] for f in reg["bundle"]["files"]}
+    for name in DERIVED:
+        op = ops.get(name)
+        ok(op and op["kind"] == "write" and op["verified"] is False, f"{name} must be a write op with verified:false")
+        ev = op["evidence"]
+        if ev["source"] == "bundle":
+            ok(ev["file"] in files and ev["sha256"] == files[ev["file"]], f"{name} evidence names a bundle file the registry records")
+            ok(ev["contract"] and isinstance(ev["contract_offset"], int) and ev["body_schema"], f"{name} evidence lacks contract, offset or schema")
+        else:
+            ok(ev["source"] == "cli" and ev["command"].startswith("clay "), f"{name} evidence is neither bundle nor cli")
+        ok(op["confidence"].split(":")[0] in ("high", "medium", "low"), f"{name} confidence")
+        ok(op.get("readback", {}).get("op") in ops, f"{name} readback names a read op that exists")
     # The spec carries references, never a credential: no cookie or auth header, no session value.
     for o in spec["operations"]:
         hdrs = {k.lower() for k in o["request"]["headers"]}
@@ -111,7 +168,9 @@ def test_ops_json_shape():
     ok(set(s0) >= {"surface", "call", "ms", "tier", "last_verified"}, "surface entry keys")
     ok(s0["ms"] == 900 and s0["last_verified"] == "2026-10-09", "measured ms and date are reported")
     ok(all(o["kind"] in ("read", "write") for o in out["ops"]), "kind is read or write")
-    ok(out["untaught_writes"] and all(w["taught"] is False for w in out["untaught_writes"]), "untaught writes listed")
+    ok(out["untaught_writes"] == [], "no write is left untaught")
+    derived = [o for o in out["ops"] if o["op"] in DERIVED]
+    ok(len(derived) == 16 and all(o["verified"] is False and o["evidence"] for o in derived), "derived writes list verified:false and evidence")
     ok(out["ui_only"] and all("route" in u for u in out["ui_only"]), "ui-only jobs carry a route")
 
 
@@ -179,7 +238,7 @@ def test_write_gate():
     code, out, _ = run({}, {}, *args)
     ok(code == 3 and out["class"] == "refused" and "allow-writes" in out["reason"], "a write without --allow-writes")
     ok("confirm" not in out, "the refusal never hands back an approval token (review 2026-10-09: self-approval)")
-    ok(out["payload"]["args"]["ws"] == "1372623", "the refusal shows the payload")
+    ok(out["payload"]["args"]["ws"] == "1000001", "the refusal shows the payload")
     code, out, _ = run({}, {}, *args, "--allow-writes")
     ok(code == 3 and "did not approve" in out["reason"], "--allow-writes with nobody typing is refused")
     code, out, _ = run({}, {}, *args, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "reply"})
@@ -195,14 +254,14 @@ def test_write_gate():
     code, out, _ = run(fail, {}, *reply, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "reply"})
     ok(code == 1 and len(out["tried"]) == 1, "a failed write is sent once and never retried on another surface")
     # Slots go into an authenticated api.clay.com URL: a path or query in a value is refused.
-    for bad in ("table=../../workspaces/9/x", "table=t_1?x=y", "table=t_1/rows", "ws=1372623/../9", "limit=5;rm"):
+    for bad in ("table=../../workspaces/9/x", "table=t_1?x=y", "table=t_1/rows", "ws=1000001/../9", "limit=5;rm"):
         k = bad.split("=")[0]
         op = {"table": "table", "ws": "tables", "limit": "rows"}[k]
         extra = ("table=t_ok1",) if op == "rows" else ()
         code, out, _ = run({}, {}, op, bad, *extra)
         ok(code == 2 and out["class"] == "input", f"a crafted slot is refused before any call: {bad}")
-    code, out, _ = run({}, {}, "run-cells", "table=t_example1")
-    ok(code == 3 and out["class"] == "untaught" and out["gate"] == "write:spends-credits", "an untaught write refuses")
+    code, out, _ = run({}, {}, "run-cells", "table=t_example1", "fields=f_a", "rows=r_1")
+    ok(code == 3 and out["class"] == "refused" and out["gate"] == "write:spends-credits", "run-cells refuses without --allow-writes")
     code, out, _ = run({}, {}, "measure", "reply")
     ok(code == 3 and out["class"] == "refused", "measure never runs a write")
 
@@ -224,6 +283,7 @@ def test_a_relabelled_write_is_still_gated():
         env = dict(os.environ, CHEWBACCA_CLAY_LIB=str(lib), API_ANYTHING_HOME=str(Path(d) / "home"),
                    CHEWBACCA_CLAY_MEASURED=str(Path(d) / "m.json"))
         env.pop("CHEWBACCA_CLAY_FIXTURES", None)
+        env.update(CLAY_WORKSPACE_ID=WS, GTM_CONFIG=str(Path(d) / "no-clients.json"))
         (Path(d) / "m.json").write_text("{}")
         p = subprocess.run(["node", str(TOOL), "ops"], capture_output=True, text=True, env=env, timeout=60)
         ops = {o["op"]: o for o in json.loads(p.stdout)["ops"]}
@@ -244,12 +304,375 @@ def test_refuses_an_unpinned_engine():
         env = dict(os.environ, API_ANYTHING_DIST=str(dist), API_ANYTHING_HOME=str(Path(d) / "home"),
                    CHEWBACCA_CLAY_MEASURED=str(Path(d) / "m.json"))
         env.pop("CHEWBACCA_CLAY_FIXTURES", None)
+        env.update(CLAY_WORKSPACE_ID=WS, GTM_CONFIG=str(Path(d) / "no-clients.json"))
         env["CHEWBACCA_CLAY_TRUST_ENGINE"] = "1"  # no longer an escape hatch (review of b68d5645)
         p = subprocess.run(["node", str(TOOL), "credits", "--surface", "api"], capture_output=True, text=True,
                            env=env, timeout=60)
         out = json.loads(p.stdout)
         ok(p.returncode == 1 and "pinned commit" in out["tried"][0]["reason"], f"an unpinned engine ran: {p.stdout[:300]}")
         ok(not marker.exists(), "the unpinned engine was imported before it was refused")
+
+
+def test_dry_run_builds_each_write():
+    # No fixtures at all: if --dry-run ever reached a surface it would fail with "no fixture".
+    for name, (argv, (method, url, body)) in DERIVED.items():
+        code, out, p = run({}, {}, name, *argv, "--dry-run", env_extra={"CHEWBACCA_NO_SEND": "1"})
+        ok(code == 0 and out and out["dry_run"] is True and out["sent"] is False, f"{name} dry run failed: {p.stdout[:300]}")
+        ok(out["kind"] == "write" and out["verified"] is False, f"{name} dry run says write, unverified")
+        req = out["request"]
+        if method == "CLI":
+            ok(req["argv"] == url, f"{name} argv: {req['argv']}")
+            continue
+        ok(req["method"] == method and req["url"] == url, f"{name} built {req['method']} {req['url']}")
+        ok(req["body"] == body, f"{name} body: {json.dumps(req['body'])}")
+        ok("cookie" not in {h.lower() for h in req["headers"]}, f"{name} dry run carries a cookie")
+
+
+def test_dry_run_never_loads_the_engine():
+    # Not fixture mode: a fake engine on API_ANYTHING_DIST writes a marker when imported.
+    with tempfile.TemporaryDirectory() as d:
+        dist = Path(d) / "dist"
+        dist.mkdir()
+        marker = Path(d) / "imported"
+        (dist / "execute.js").write_text(f"require('fs').writeFileSync({json.dumps(str(marker))}, 'x'); exports.call = async () => ({{ok: true}});\n")
+        (Path(d) / "m.json").write_text("{}")
+        env = dict(os.environ, API_ANYTHING_DIST=str(dist), API_ANYTHING_HOME=str(Path(d) / "home"), CHEWBACCA_CLAY_MEASURED=str(Path(d) / "m.json"))
+        env.pop("CHEWBACCA_CLAY_FIXTURES", None)
+        env.update(CLAY_WORKSPACE_ID=WS, GTM_CONFIG=str(Path(d) / "no-clients.json"))
+        for name in ("add-column", "delete-rows", "blocklist-add"):
+            argv = DERIVED[name][0] if name in DERIVED else ["emailOrDomain=blocked.example"]
+            p = subprocess.run(["node", str(TOOL), name, *argv, "--dry-run", "--allow-writes"], capture_output=True, text=True, env=env, timeout=60)
+            out = json.loads(p.stdout)
+            ok(p.returncode == 0 and out["sent"] is False, f"{name} live dry run: {p.stdout[:300]}")
+        ok(not marker.exists(), "a dry run imported the engine")
+
+
+def test_derived_writes_stay_gated():
+    for name, (argv, _) in DERIVED.items():
+        code, out, _ = run({}, {}, name, *argv)
+        ok(code == 3 and out["class"] == "refused" and "allow-writes" in out["reason"], f"{name} ran without --allow-writes")
+        ok(out["request"], f"{name} refusal shows the request it would send")
+        code, out, _ = run({}, {}, name, *argv, "--allow-writes")
+        ok(code == 3 and "did not approve" in out["reason"], f"{name} ran with nobody typing its name")
+        code, out, _ = run({}, {}, name, *argv, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": name, "CHEWBACCA_NO_SEND": "1"})
+        ok(code == 3 and "NO_SEND" in out["reason"], f"{name} ran under CHEWBACCA_NO_SEND=1")
+    # A campaign start is never sent from here, approved or not.
+    code, out, _ = run({}, {}, "campaign-status", "campaign=cam_ex1", "status=START", "--allow-writes",
+                       env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "campaign-status"})
+    ok(code == 3 and out["class"] == "refused" and "launch-guard" in out["reason"], "a campaign START was let through")
+    code, out, _ = run({}, {}, "campaign-status", "campaign=cam_ex1", "status=START", "--dry-run")
+    ok(code == 3, "a campaign START is refused even as a dry run")
+
+
+def test_new_args_are_shape_checked():
+    bad = [
+        ("run-cells", ["table=t_ex1", "fields=f_a", "rows=r_1,r_2,r_3,r_4,r_5,r_6"]),  # the five-row cap
+        ("run-cells", ["table=t_ex1", "fields=../x", "rows=r_1"]),
+        ("update-column", ["table=t_ex1", "field=f_1/../../x", 'update={"name":"a"}']),
+        ("update-column", ["table=t_ex1", "field=f_ex1", 'update={"name":"a","tableId":"t_2"}']),
+        ("update-column", ["table=t_ex1", "field=f_ex1", "update={}"]),
+        ("add-column", ["table=t_ex1", "name=a\nb", "data_type=text", "view=gv_ex1"]),
+        ("add-column", ["table=t_ex1", "name=a", "data_type=formula", "view=gv_ex1"]),
+        ("add-rows", ["table=t_ex1", 'records=[{"name":"x"}]']),
+        ("add-rows", ["table=t_ex1", "records=" + json.dumps([{"f_a": 1}] * 101)]),
+        ("update-rows", ["table=t_ex1", 'records=[{"cells":{"f_a":1}}]']),
+        ("delete-rows", ["table=t_ex1", "rows=r_1?all=1"]),
+        ("table-auto-run", ["table=t_ex1", "on=yes", 'settings={"AUTO_RUN_ON":true}']),
+        ("table-auto-run", ["table=t_ex1", "on=true", 'settings={"autoRunOn":true}']),
+        ("import", ['config={"source":{"type":"URL"},"destination":{"type":"TABLE"},"map":{},"isImportWithoutRun":true}']),
+        ("add-leads", ["audience=seg_ex1", 'filter={"type":"BinOp"}']),
+        ("lead-category", ["lead_map_id=1;2", "category_id=3"]),
+        ("mark-read", ["lead_map_id=1", "read_status=SEEN"]),
+        ("blocklist-remove", ["entry=../../x"]),
+        ("blocklist-add-bulk", ["emails=a@example.com,not an email"]),
+        ("page-view-activity", ["resource=wb_1", "resource_type=PAGE"]),
+    ]
+    for name, argv in bad:
+        code, out, _ = run({}, {}, name, *argv, "--dry-run")
+        ok(code == 2 and out["class"] == "input", f"a bad arg reached {name}: {argv}")
+
+
+def test_first_live_use_reads_back():
+    argv = DERIVED["add-column"][0]
+    approve = {"CHEWBACCA_CLAY_TTY_ANSWER": "add-column"}
+    made = {"ok": True, "class": "ok", "tier": 1, "ms": 50, "data": {"field": {"id": "f_new"}}}
+    cols = {"ok": True, "class": "ok", "tier": 1, "ms": 40, "data": [{"id": "f_new", "name": "Lead score", "type": "number"}]}
+    code, out, _ = run({"api-anything/createField.json": made, "api-anything/getTableColumns.json": cols}, {}, *["add-column", *argv], "--allow-writes", env_extra=approve)
+    ok(code == 0 and out["verified"] is False and out["readback"]["ok"] is True and out["readback"]["op"] == "columns", f"readback: {out}")
+    cols_without = {**cols, "data": [{"id": "f_old", "name": "Other"}]}
+    code, out, _ = run({"api-anything/createField.json": made, "api-anything/getTableColumns.json": cols_without,
+                        "cli/columns.json": {"exit": 0, "stdout": json.dumps({"data": []}), "stderr": ""}}, {}, "add-column", *argv, "--allow-writes", env_extra=approve)
+    ok(code == 0 and out["readback"]["ok"] is False, "a column missing on readback is reported")
+    code, out, _ = run({"api-anything/cancelRuns.json": SENT}, {}, "cancel-run", "table=t_ex1", "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "cancel-run"})
+    ok(code == 0 and out["readback"]["check"] == "manual" and out["readback"]["run"].startswith("chewbacca clay table-status"), "a manual readback names the read to run")
+
+
+def approve_and_capture(name, argv, fixtures):
+    """Run one approved write in fixture mode; return (dry-run request, prompt text, requests handed to a surface)."""
+    code, dry, _ = run({}, {}, name, *argv, "--dry-run")
+    assert code == 0, f"{name} dry run failed: {dry}"
+    with tempfile.TemporaryDirectory() as d:
+        tty, sent = Path(d) / "tty.txt", Path(d) / "sent.jsonl"
+        code, out, p = run(fixtures, {}, name, *argv, "--allow-writes", env_extra={
+            "CHEWBACCA_CLAY_TTY_ANSWER": name, "CHEWBACCA_CLAY_TTY_TRANSCRIPT": str(tty), "CHEWBACCA_CLAY_SENT_LOG": str(sent)})
+        assert code == 0, f"{name} approved write failed: {p.stdout[:400]}"
+        handed = [json.loads(x) for x in sent.read_text().split("\n") if x] if sent.exists() else []
+        return dry["request"], tty.read_text(), handed
+
+
+def prompt_payload(text):
+    lines = text.split("\n")
+    ok(len(lines) == 4 and lines[0] == "" and lines[1].startswith("chewbacca clay is about to WRITE")
+       and lines[3].startswith("Type the op name"), f"the prompt has extra or missing lines: {text!r}")
+    ok(all(0x20 <= ord(c) <= 0x7e for c in lines[2]), "the payload line carries a byte outside printable ASCII")
+    shown_hash = lines[1].split("sha256 ")[1].split(")")[0]
+    ok(shown_hash == hashlib.sha256(lines[2][2:].encode()).hexdigest(), "the prompt's sha256 is not the hash of the payload it shows")
+    return json.loads(lines[2])
+
+
+def test_nothing_changes_between_approval_and_send():
+    # Review of f3a934cb: anything the write depends on that changes after the
+    # person approves refuses the send.
+    argv = DERIVED["add-column"][0]
+    with tempfile.TemporaryDirectory() as d:
+        lib = Path(d) / "lib"
+        lib.mkdir()
+        for f in ("registry.json", "clay.json"):
+            (lib / f).write_text((LIB / f).read_text())
+        spec = json.loads((lib / "clay.json").read_text())
+        for o in spec["operations"]:
+            if o["name"] == "createField":
+                o["request"]["url"] = o["request"]["url"].replace("api.clay.com", "evil.example.com")
+        mutations = {
+            "spec": {"write": {"path": str(lib / "clay.json"), "text": json.dumps(spec)}},
+            "registry": {"write": {"path": str(lib / "registry.json"), "text": (lib / "registry.json").read_text().replace('"write:schema"', '"write:schema "')}},
+            "env": {"env": {"CLAY_WORKSPACE_ID": "9999999"}},
+        }
+        base = {"CHEWBACCA_CLAY_LIB": str(lib), "CHEWBACCA_CLAY_TTY_ANSWER": "add-column"}
+        for what, hook in mutations.items():
+            sent = Path(d) / f"sent-{what}.jsonl"
+            code, out, p = run({"api-anything/createField.json": SENT}, {}, "add-column", *argv, "--allow-writes",
+                               env_extra={**base, "CHEWBACCA_CLAY_SENT_LOG": str(sent), "CHEWBACCA_CLAY_TEST_AFTER_APPROVE": json.dumps(hook)})
+            ok(code == 3 and out["class"] == "refused" and "changed after approval" in out["reason"], f"a {what} change after approval was sent: {p.stdout[:300]}")
+            ok(not sent.exists(), f"a {what} change after approval still reached the surface")
+            for f in ("registry.json", "clay.json"):
+                (lib / f).write_text((LIB / f).read_text())
+        # The same hook rewriting identical bytes changes nothing, so the write goes.
+        same = {"write": {"path": str(lib / "clay.json"), "text": (LIB / "clay.json").read_text()}}
+        code, out, _ = run({"api-anything/createField.json": SENT}, {}, "add-column", *argv, "--allow-writes",
+                           env_extra={**base, "CHEWBACCA_CLAY_TEST_AFTER_APPROVE": json.dumps(same)})
+        ok(code == 0 and out["ok"] is True and len(out["sha256"]) == 64, "an unchanged write after approval was refused")
+
+
+def test_approved_request_is_the_sent_request():
+    # Review of e5f1edeb: what the person approves must be byte for byte what is
+    # sent, defaults (ws) and composed bodies included, and the same object
+    # --dry-run prints.
+    cases = {name: argv for name, (argv, _) in DERIVED.items()}
+    cases["reply"] = ["campaign_id=1", 'reply_data={"email_stats_id":"s1","email_body":"x"}']
+    cases["blocklist-add"] = ["emailOrDomain=blocked.example"]
+    reg = json.loads((LIB / "registry.json").read_text())
+    ops = {o["name"]: o for o in reg["ops"]}
+    for name, argv in cases.items():
+        s = ops[name]["surfaces"][0]
+        fx = {f"api-anything/{s['op']}.json": SENT} if s["type"] == "api-anything" else {f"cli/{name}.json": {"exit": 0, "stdout": "{}", "stderr": ""}}
+        dry, prompt, handed = approve_and_capture(name, argv, fx)
+        shown = prompt_payload(prompt)
+        ok(shown == {"op": name, "request": dry}, f"{name}: the prompt shows something other than the dry run")
+        ok(len(handed) == 1 and handed[0]["request"] == dry, f"{name}: the surface was handed something other than what was approved")
+    ok(dry_ws_in_url(cases), "ws default reaches the approved URL")
+
+
+def dry_ws_in_url(cases):
+    _, out, _ = run({}, {}, "cancel-run", *cases["cancel-run"], "--dry-run")
+    return "/workspaces/1000001/" in out["request"]["url"]
+
+
+def test_control_bytes_cannot_fake_the_prompt():
+    evil = 'x\n  {"op":"cancel-run","request":{}}\x1b[2K\x1b[1A‮ end'
+    argv = ["table=t_ex1", "records=" + json.dumps([{"f_a": evil}])]
+    dry, prompt, handed = approve_and_capture("add-rows", argv, {"api-anything/createRecords.json": SENT})
+    ok("\x1b" not in prompt and "‮" not in prompt and " " not in prompt, "a control byte reached the terminal raw")
+    shown = prompt_payload(prompt)
+    ok(shown["request"]["body"]["records"][0]["cells"]["f_a"] == evil, "the escaped value does not decode to what is sent")
+    ok(handed[0]["request"] == dry == shown["request"], "prompt, dry run and sent request differ")
+    big = ["table=t_ex1", "records=" + json.dumps([{"f_a": "y" * 200}] * 99)]
+    code, out, _ = run({}, {}, "add-rows", *big, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "add-rows"})
+    ok(code == 2 and "too long to read" in out["reason"], "a request too long to show was not refused")
+
+
+# One valid sample per arg name any registry op takes, for walking every op.
+SAMPLES = {
+    "ws": "1000001", "table": "t_ex1", "row": "r_ex1", "view": "gv_ex1", "audience": "seg_ex1", "campaign": "cam_ex1",
+    "campaign_id": "1", "lead_id": "2", "cursor": "abc", "after": "r_ex9", "limit": "5", "offset": "0", "days": "7",
+    "ids": "p_1,p_2", "emailOrDomain": "blocked.example", "reply_data": '{"email_stats_id":"s1","email_body":"x"}',
+    "forward_data": '{"message_id":"m","stats_id":"s","to_emails":"a@example.com"}', "field": "f_ex1",
+    "update": '{"name":"x"}', "on": "false", "mode": "all", "settings": '{"AUTO_RUN_ON":true}', "fields": "f_a",
+    "rows": "r_1", "records": json.dumps([{"f_a": "x"}]), "config": json.dumps(CONFIG), "filter": json.dumps(FILTER),
+    "status": "PAUSED", "lead_map_id": "1", "category_id": "1", "read_status": "READ", "entry": "9",
+    "emails": "a@example.com", "resource": "t_ex1", "resource_type": "TABLE", "name": "x", "data_type": "text",
+}
+CLI_READ_LEAVES = {"list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
+                   "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
+                   "schema", "validate", "format", "diagram", "preview-sequence", "resolve", "sender-accounts", "skills",
+                   "business-context", "files", "segments", "whoami", "versions"}
+
+
+def surface_mutates(s, sops):
+    """An independent reading of whether one surface can change Clay."""
+    if s["type"] == "api-anything":
+        o = sops[s["op"]]
+        return o["request"]["method"] != "GET" and not o["readOnly"] or not o["readOnly"]
+    if s["type"] == "cli":
+        words = []
+        for t in s["argv"]:
+            if t.startswith("-") or "{" in t:
+                break
+            words.append(t)
+        return not words or words[-1] not in CLI_READ_LEAVES
+    return s["argv"][0] not in ("clay-inbox", "clay-balance")
+
+
+def walk_gate(reg_path=None):
+    reg = json.loads(Path(reg_path or LIB / "registry.json").read_text())
+    sops = {o["name"]: o for o in json.loads((LIB / "clay.json").read_text())["operations"]}
+    extra = {"CHEWBACCA_CLAY_LIB": str(Path(reg_path).parent)} if reg_path else {}
+    walked = 0
+    for op in reg["ops"]:
+        own = {"update-rows": {"records": json.dumps(REC_UPD)}}.get(op["name"], {})
+        argv = [f"{a.rstrip('?')}={own.get(a.rstrip('?'), SAMPLES[a.rstrip('?')])}" for a in op["args"]]
+        for s in op["surfaces"]:
+            if s.get("unless"):
+                continue
+            mutates = op["kind"] == "write" or surface_mutates(s, sops)
+            code, out, p = run({}, {}, op["name"], *argv, "--surface", s["type"], env_extra=extra)
+            if mutates:
+                ok(code == 3 and out["class"] == "refused" and "allow-writes" in out["reason"],
+                   f"{op['name']} via {s['type']} ran without the gate: {p.stdout[:200]}")
+                code, out, _ = run({}, {}, op["name"], *argv, "--surface", s["type"], "--allow-writes", env_extra=extra)
+                ok(code == 3 and "did not approve" in out["reason"], f"{op['name']} via {s['type']} ran with nobody at the terminal")
+                code, out, _ = run({}, {}, op["name"], *argv, "--surface", s["type"], "--allow-writes",
+                                   env_extra={**extra, "CHEWBACCA_CLAY_TTY_ANSWER": op["name"], "CHEWBACCA_NO_SEND": "1"})
+                ok(code == 3 and "NO_SEND" in out["reason"], f"{op['name']} via {s['type']} ran under CHEWBACCA_NO_SEND=1")
+            else:
+                ok(not (out and out.get("class") == "refused"), f"the read {op['name']} via {s['type']} was refused")
+            walked += 1
+    return walked
+
+
+def test_every_mutating_surface_is_gated():
+    ok(walk_gate() > 40, "walked too few surfaces")
+    # A registry that mislabels mutating surfaces as reads is still gated on each one.
+    reg = json.loads((LIB / "registry.json").read_text())
+    reg["ops"] += [
+        {"name": "t-cli-delete", "kind": "read", "gate": "read", "args": ["table"], "summary": "x",
+         "surfaces": [{"type": "cli", "argv": ["tables", "delete", "{table}"]}]},
+        {"name": "t-cli-runs", "kind": "read", "gate": "read", "args": ["table"], "summary": "x",
+         "surfaces": [{"type": "cli", "argv": ["workflows", "runs", "pause", "{table}"]}]},
+        {"name": "t-cli-unknown", "kind": "read", "gate": "read", "args": ["table"], "summary": "x",
+         "surfaces": [{"type": "cli", "argv": ["tables", "frobnicate", "{table}"]}]},
+        {"name": "t-bin", "kind": "read", "gate": "read", "args": ["table"], "summary": "x",
+         "surfaces": [{"type": "bin", "argv": ["clay-send", "--table", "{table}"]}]},
+    ]
+    with tempfile.TemporaryDirectory() as d:
+        lib = Path(d) / "lib"
+        lib.mkdir()
+        (lib / "registry.json").write_text(json.dumps(reg))
+        (lib / "clay.json").write_text((LIB / "clay.json").read_text())
+        for name in ("t-cli-delete", "t-cli-runs", "t-cli-unknown", "t-bin"):
+            code, out, p = run({}, {}, name, "table=t_ex1", env_extra={"CHEWBACCA_CLAY_LIB": str(lib)})
+            ok(code == 3 and out["class"] == "refused", f"a mislabelled {name} ran without the gate: {p.stdout[:200]}")
+        code, out, _ = run({}, {}, "ops", env_extra={"CHEWBACCA_CLAY_LIB": str(lib)})
+        kinds = {o["op"]: o["kind"] for o in out["ops"]}
+        ok(all(kinds[n] == "write" for n in ("t-cli-delete", "t-cli-runs", "t-cli-unknown", "t-bin")), "ops lists a mislabelled write as a read")
+
+
+def test_values_that_change_when_decoded_are_refused():
+    # Review of 300f4ddb: a value is checked and built in one representation.
+    # Each of these looks different once decoded, normalized or re-parsed.
+    sneaky_ids = ["%2e%2e", "t_1%2Fx", "t_1%2fx", "..", "t_1∕x", "t_1／x", "t_1 ", " t_1", "t_1\t", "t_1/../x", "tı_1"]
+    for v in sneaky_ids:
+        for name, key, rest in (("cancel-run", "table", []), ("blocklist-remove", "entry", []),
+                                ("page-view-activity", "resource", ["resource_type=TABLE"]),
+                                ("update-column", "field", ["table=t_ex1", 'update={"name":"x"}'])):
+            code, out, _ = run({}, {}, name, f"{key}={v}", *rest, "--dry-run")
+            ok(code == 2 and out["class"] == "input", f"{name} {key}={v!r} reached the builder")
+    code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "table=t_ex2", "--dry-run")
+    ok(code == 2 and "more than once" in out["reason"], "a key given twice was accepted")
+    bad_json = [
+        ("add-rows", ["table=t_ex1", 'records=[{"f_a":1,"f_a":2}]']),
+        ("add-rows", ["table=t_ex1", 'records=[{"__proto__":{"f_a":1}}]']),
+        ("add-rows", ["table=t_ex1", 'records=[{"f_a":{"constructor":{"prototype":1}}}]']),
+        ("table-auto-run", ["table=t_ex1", "on=true", 'settings={"AUTO_RUN_ON":true,"AUTO_RUN_ON":false}']),
+        ("update-column", ["table=t_ex1", "field=f_ex1", 'update={"name":"a","name":"b"}']),
+        ("add-leads", ["audience=seg_ex1", 'filter={"type":"GroupOp","items":[],"items":[{"x":1}]}']),
+        ("add-leads", ["audience=seg_ex1", 'filter={"type":"GroupOp","items":[{"__proto__":{}}]}']),
+        ("add-rows", ["table=t_ex1", 'records=[{"f_a":1}] trailing']),
+        ("run-cells", ["table=t_ex1", 'fields=["f_a","f_a\\u002f.."]', "rows=r_1"]),
+    ]
+    for name, argv in bad_json:
+        code, out, _ = run({}, {}, name, *argv, "--dry-run")
+        ok(code == 2 and out["class"] == "input", f"{name} accepted {argv[-1]!r}")
+    # Whitespace a builder might trim is part of the value: what is checked is what is sent.
+    code, out, _ = run({}, {}, "add-column", "table=t_ex1", "name=Lead score ", "data_type=text", "view=gv_ex1", "--dry-run")
+    ok(code == 0 and out["request"]["body"]["name"] == "Lead score ", "a checked value was altered before sending")
+    code, out, _ = run({}, {}, "run-cells", "table=t_ex1", 'fields=["f_a"]', "rows=r_1", "--dry-run")
+    ok(code == 0 and out["request"]["body"]["fieldIds"] == ["f_a"], "a JSON list was read differently from a comma list")
+    # The finished request is checked too: a spec whose template was tampered with is refused.
+    spec = json.loads((LIB / "clay.json").read_text())
+    tamper = {
+        "host": lambda o: o["request"].update(url=o["request"]["url"].replace("api.clay.com", "evil.example.com")),
+        "dotdot": lambda o: o["request"].update(url=o["request"]["url"].replace("/tables/", "/../")),
+        "proto": lambda o: o["request"].update(body='{"__proto__":{"x":1},"name":"x","type":"text","typeSettings":{"dataTypeSettings":{"type":"text"}},"activeViewId":"gv_example"}'),
+    }
+    for what, fn in tamper.items():
+        doctored = json.loads(json.dumps(spec))
+        fn(next(o for o in doctored["operations"] if o["name"] == "createField"))
+        with tempfile.TemporaryDirectory() as d:
+            lib = Path(d)
+            (lib / "registry.json").write_text((LIB / "registry.json").read_text())
+            (lib / "clay.json").write_text(json.dumps(doctored))
+            code, out, _ = run({}, {}, "add-column", *DERIVED["add-column"][0], "--dry-run", env_extra={"CHEWBACCA_CLAY_LIB": str(lib)})
+            ok(code == 2 and out["class"] == "input", f"a {what}-tampered spec built a request: {out}")
+
+
+def test_workspace_has_no_built_in_default():
+    reg = json.loads((LIB / "registry.json").read_text())
+    ok("defaults" not in reg, "the registry still carries a default workspace")
+    with tempfile.TemporaryDirectory() as d:
+        def cfg(*workspace_lists):
+            f = Path(d) / f"clients-{len(list(Path(d).glob('clients-*')))}.json"
+            f.write_text(json.dumps({"clients": [{"name": f"Client {i}", "workspaces": w} for i, w in enumerate(workspace_lists)]}))
+            return str(f)
+        unset = {"CLAY_WORKSPACE_ID": ""}
+        # Nothing set and no config: refuse, naming the ways to choose.
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={**unset, "GTM_CONFIG": str(Path(d) / "missing.json")})
+        ok(code == 2 and "ws=<id>" in out["reason"] and "CLAY_WORKSPACE_ID" in out["reason"], f"no workspace was not refused: {out}")
+        # One workspace across all clients: used.
+        one = cfg(["2000002"], ["2000002"])
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={**unset, "GTM_CONFIG": one})
+        ok(code == 0 and "/workspaces/2000002/" in out["request"]["url"], "the one configured workspace was not used")
+        # Two: refuse and name the clients, never pick one.
+        two = cfg(["2000002"], ["3000003"])
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={**unset, "GTM_CONFIG": two})
+        ok(code == 2 and "names 2" in out["reason"] and "Client 0" in out["reason"], f"two workspaces did not refuse: {out}")
+        # The env var beats the config; ws= beats both.
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={"CLAY_WORKSPACE_ID": "4000004", "GTM_CONFIG": one})
+        ok("/workspaces/4000004/" in out["request"]["url"], "CLAY_WORKSPACE_ID did not win over the config")
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "ws=5000005", "--dry-run", env_extra={"CLAY_WORKSPACE_ID": "4000004"})
+        ok("/workspaces/5000005/" in out["request"]["url"], "ws= did not win")
+        # A workspace from the env or the config is shape-checked like ws=.
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={"CLAY_WORKSPACE_ID": "1/../2"})
+        ok(code == 2 and out["class"] == "input", "a crafted CLAY_WORKSPACE_ID reached the URL")
+        bad = cfg(["9/../1"])
+        code, out, _ = run({}, {}, "cancel-run", "table=t_ex1", "--dry-run", env_extra={**unset, "GTM_CONFIG": bad})
+        ok(code == 2 and out["class"] == "input", "a crafted workspace in the config reached the URL")
+        # The config a write's workspace came from is pinned: editing it after approval refuses.
+        hook = {"write": {"path": one, "text": json.dumps({"clients": [{"name": "x", "workspaces": ["6000006"]}]})}}
+        code, out, _ = run({"api-anything/cancelRuns.json": SENT}, {}, "cancel-run", "table=t_ex1", "--allow-writes",
+                           env_extra={**unset, "GTM_CONFIG": one, "CHEWBACCA_CLAY_TTY_ANSWER": "cancel-run",
+                                      "CHEWBACCA_CLAY_TEST_AFTER_APPROVE": json.dumps(hook)})
+        ok(code == 3 and "changed after approval" in out["reason"], "a clients.json edit after approval was not refused")
 
 
 def test_ui_only_prints_route():
@@ -297,6 +720,11 @@ def test_fixtures_are_scrubbed():
 def main():
     for fn in (test_registry_matches_spec, test_ops_json_shape, test_routes_to_fastest_measured,
                test_falls_through_on_failure_and_truncation, test_args_pick_the_surface, test_write_gate,
+               test_dry_run_builds_each_write, test_dry_run_never_loads_the_engine, test_derived_writes_stay_gated,
+               test_new_args_are_shape_checked, test_first_live_use_reads_back,
+               test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,
+               test_every_mutating_surface_is_gated, test_nothing_changes_between_approval_and_send,
+               test_values_that_change_when_decoded_are_refused, test_workspace_has_no_built_in_default,
                test_ui_only_prints_route, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")

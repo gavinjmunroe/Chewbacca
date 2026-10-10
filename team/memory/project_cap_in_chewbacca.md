@@ -69,7 +69,7 @@ tools before registering an MCP server.
 - `read_frontmatter` in `tools/inventory.py` handled a bare `|` and `>` and
   nothing else. Cap writes `description: >-`, so the marker became the value and
   the folded text was appended behind it, and it published into
-  `docs/REFERENCE.md`, which is public.
+  `docs/reference/REFERENCE.md`, which is public.
 - Vendored descriptions ship verbatim into the generated tables and Cap's
   carried an **em dash**, which the kit bans outright. New `house_style()`
   normalises third-party text into generated copy and leaves the vendored

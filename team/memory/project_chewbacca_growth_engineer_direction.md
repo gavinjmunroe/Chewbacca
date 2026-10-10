@@ -9,7 +9,7 @@ Chewbacca is Caleb and Gavin's Mac layer on Claude Code and Codex ([[project_che
 
 Texts the same day: Sagar wants "Clay a living machine first, with clear recipes for Jonah's offers and eventually our offers too" (15:46); offered Sunday AM planning and an offer with pricing by Friday so Caleb can onboard him to build a custom instance for Maggie. He pushed back on recruiting as the ICP ("enterprise growth teams are the play", PE-owned companies at Tide Rock). Karthik's Loom (14:53) builds the staffing/RE/studio ICP from FIRST-COHORT, so the first ICP is UNDECIDED. Karthik: Amber got into Pear VC's accelerator, starts next Wednesday; he'd "pay a ton" for software that has his network and executes his ideas.
 
-Competitive research the same day: no product found joins personal network, Clay outbound and Mac actions in one agent; see docs/COMPETITORS.md in Chewbacca, commit 80a21ab.
+Competitive research the same day: no product found joins personal network, Clay outbound and Mac actions in one agent; see docs/plans/COMPETITORS.md in Chewbacca, commit 80a21ab.
 
 **Why:** the team board and pitch both changed on this call; older notes pitch the consumer OS first.
 **How to apply:** lead pitches and weekly tasks with booked-meeting outcomes for Jonah's offers (team board CHW-154 to CHW-161). Don't call the ICP settled until Sagar, Karthik and Gavin agree. Related: a private note, [[project_chewbacca_first_cohort]], a private note.

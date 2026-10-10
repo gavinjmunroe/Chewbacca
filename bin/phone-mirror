@@ -6,7 +6,7 @@
 # starts from a GitHub repo with none of ~/.claude. Caleb wanted the data to stay
 # a bunch of folders on GitHub rather than behind a server (2026-10-07), so the
 # whole route is: mirror ~/.claude into <brain>/claude/, push, and point the
-# Code tab or the GitHub connector at that repo. See docs/PHONE.md.
+# Code tab or the GitHub connector at that repo. See docs/guide/PHONE.md.
 #
 #   phone-mirror              mirror into $PERSONAL_CONTEXT_DIR from d1-config.sh
 #   phone-mirror <brain-dir>  mirror into that repo instead

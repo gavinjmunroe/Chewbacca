@@ -33,7 +33,7 @@ CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
 # git reset --hard" through (security review, 2026-10-10).
 printf '%s' "$CMD" | grep -qE '^[[:space:]]*DESTRUCTIVE_OK=1[[:space:]]' && exit 0
 
-REASON=$(DG_CMD="$CMD" DG_SID="$SID" DG_CWD="${CWD:-$PWD}" python3 - <<'PY'
+REASON=$(DG_CMD="$CMD" DG_SID="$SID" DG_CWD="${CWD:-$PWD}" python3 -I - <<'PY'
 import os, re, shlex, subprocess
 cmd, sid, cwd = os.environ["DG_CMD"], os.environ["DG_SID"], os.environ["DG_CWD"]
 

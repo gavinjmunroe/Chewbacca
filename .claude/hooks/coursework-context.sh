@@ -34,7 +34,7 @@ COURSEWORK_JSON="$(coursework due --days 10 --json 2>/dev/null || true)"
 [ -n "$COURSEWORK_JSON" ] || exit 0
 export COURSEWORK_JSON
 
-python3 <<'PY' > "$CACHE.tmp"
+python3 -I <<'PY' > "$CACHE.tmp"
 import json, os
 
 raw = os.environ.get("COURSEWORK_JSON", "")

@@ -338,7 +338,7 @@ CLI_TOOLS = {
     "macos-use": {
         "display": "mac-use",
         "url": "https://github.com/browser-use/macOS-use",
-        "install": "see docs/MACOS-TOOLS.md (clone plus a uv venv, no formula)",
+        "install": "see docs/reference/MACOS-TOOLS.md (clone plus a uv venv, no formula)",
         "probe": ("bin", "mac-use"),
         "description": "Natural-language agent that drives any Mac app through Accessibility",
         # No formula and no console script upstream, so the kit ships the CLI
@@ -446,7 +446,7 @@ CLI_TOOLS = {
     "mac-cli": {
         "display": "mac",
         "url": "https://github.com/31Carlton7/mac-cli",
-        "install": "see docs/MACOS-APP-CONTROL.md (clone plus swift build, no formula yet)",
+        "install": "see docs/reference/MACOS-APP-CONTROL.md (clone plus swift build, no formula yet)",
         "probe": ("bin", "mac"),
         "description": "Calendar, Reminders, Contacts, Mail, Messages, Notes, and Finder as JSON",
         # No Homebrew tap yet (it is on the upstream roadmap), and `make install`
@@ -484,7 +484,7 @@ CLI_TOOLS = {
     "youtube-transcripts": {
         "display": "yt-transcript",
         "url": "https://github.com/calebnewtonusc/claude-youtube-transcripts",
-        "install": "see docs/MACOS-TOOLS.md (its own installer, no formula)",
+        "install": "see docs/reference/MACOS-TOOLS.md (its own installer, no formula)",
         "probe": ("bin", "yt-transcript"),
         "description": "Transcript of any YouTube video, channel, or playlist, read without asking",
         # Cloning the skill alone shipped a skill that told Claude to run a
@@ -538,7 +538,7 @@ def house_style(value):
     """Normalise third-party text before it is published under this repo's name.
 
     Vendored skills are written to their authors' house rules, not this one, and
-    their descriptions land verbatim in README.md and docs/REFERENCE.md, which
+    their descriptions land verbatim in README.md and docs/reference/REFERENCE.md, which
     ship publicly. Cap's cap-demo description arrived carrying an em dash and
     put one straight into the generated table, where the kit's own writing rules
     ban it outright.
@@ -575,11 +575,11 @@ def read_frontmatter(path):
             # chomping indicator (- or +) and an explicit indentation digit.
             # Matching only the bare "|" and ">" let Cap's `description: >-`
             # through as a literal value, so the marker was published into
-            # docs/REFERENCE.md ahead of the text it was supposed to introduce.
+            # docs/reference/REFERENCE.md ahead of the text it was supposed to introduce.
             # A quoted scalar is still a scalar. YAML requires quotes around a
             # value containing ": ", so deslop's description had to be quoted to
             # parse at all, and the parser then published the opening quote into
-            # docs/REFERENCE.md as if it were part of the sentence.
+            # docs/reference/REFERENCE.md as if it were part of the sentence.
             if len(val) > 1 and val[0] == val[-1] and val[0] in "\"'":
                 if val[0] not in val[1:-1]:
                     val = val[1:-1]
@@ -689,7 +689,7 @@ def collect_skills():
         else:
             # VENDORED is an OVERRIDE, not a gate. It was acting as a gate,
             # so a skill added to skills/ without a hand-written entry here
-            # vanished from docs/REFERENCE.md entirely and was subtracted
+            # vanished from docs/reference/REFERENCE.md entirely and was subtracted
             # from its count.
             #
             # Measured 2026-09-20: 20 entries in the dict against 32 skills on
@@ -739,7 +739,7 @@ def collect_skills():
 # whichever process happened to run this. On 2026-09-21 a hook ran with
 # Homebrew on PATH but without ~/.local/bin, and five tools that live only
 # there (bd, cap, mac, mac-use, yt-transcript) were dropped from toolkit.json,
-# setup.sh and docs/REFERENCE.md in a single pass. yt-transcript is Caleb's own
+# setup.sh and docs/reference/REFERENCE.md in a single pass. yt-transcript is Caleb's own
 # tool and CLAUDE.md promises it is on PATH, so a fresh install would have
 # contradicted the instructions shipped beside it. This is the same disease
 # described at the top of KIT_MCP, where it was fixed for MCP servers and left
@@ -812,13 +812,14 @@ def collect_mcp():
 def md_table(upstream, vendored, packs, plugins, mcp):
     rows = []
     for v in vendored:
-        # ../ because this table is spliced into docs/REFERENCE.md and nowhere
-        # else. Emitting a repo-root-relative path put 57 dead links in that
-        # file on 2026-09-21: every link to a skill resolved to docs/skills/...
+        # ../../ because this table is spliced into docs/reference/REFERENCE.md and
+        # nowhere else (it sat one level up, in docs/, until 2026-10-09).
+        # Emitting a repo-root-relative path put 57 dead links in that file on
+        # 2026-09-21: every link to a skill resolved to docs/skills/...
         # and none of them existed. The prose reads fine and every link is
         # broken, which is why it survived a long time. Fixing the rendered
         # file does nothing; this generator writes it back on the next run.
-        rows.append((f"[skills/{v['name']}](../skills/{v['name']})", "Skill", v["description"]))
+        rows.append((f"[skills/{v['name']}](../../skills/{v['name']})", "Skill", v["description"]))
     for u in upstream:
         rows.append((f"[{u['name']}]({u['url']})", "Skill", u["description"]))
     for k in packs:
@@ -910,7 +911,7 @@ def cli_block(cli, packs):
     """
     lines = [
         "# Kit-owned helpers that sit in front of the installed tools.",
-        "#   peekaboo: forces local execution, see docs/MACOS-TOOLS.md",
+        "#   peekaboo: forces local execution, see docs/reference/MACOS-TOOLS.md",
         "#   chrome-js: reads and clicks a Chrome tab through JavaScript",
         'mkdir -p "$HOME/.local/bin"',
         "for HELPER in peekaboo chrome-js slop-check; do",
@@ -947,7 +948,7 @@ def cli_block(cli, packs):
         ]
     lines += [
         "else",
-        '  warn "Homebrew not found. macOS tools skipped: see docs/MACOS-TOOLS.md"',
+        '  warn "Homebrew not found. macOS tools skipped: see docs/reference/MACOS-TOOLS.md"',
         "fi",
     ]
 
@@ -1065,7 +1066,7 @@ def badge_block(plugins):
         [
             f'  <a href=".claude/commands"><img src="{b}/slash_commands-{cmds}-indigo" alt="Commands"></a>',
             f'  <a href=".claude/rules"><img src="{b}/always_on_rules-{rules}-green" alt="Rules"></a>',
-            f'  <a href="docs/EXTENSIONS.md"><img src="{b}/plugins-{len(plugins)}-orange" alt="Plugins"></a>',
+            f'  <a href="docs/reference/EXTENSIONS.md"><img src="{b}/plugins-{len(plugins)}-orange" alt="Plugins"></a>',
         ]
     )
 
@@ -1138,7 +1139,7 @@ def setup_block(upstream, plugins, markets, mcp):
         '    } > "$GLOBAL_CLAUDE/skills/$SK_NAME/.source"',
         '    log "$SK_NAME installed ($SK_LICENSE, $SK_AUTHOR)"',
         "  else",
-        '    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/EXTENSIONS.md to add it later."',
+        '    warn "Could not fetch $SK_NAME from $SK_URL${SK_PATH:+ ($SK_PATH)}. See docs/reference/EXTENSIONS.md to add it later."',
         "  fi",
         '  rm -rf "$TMP_SK"',
         "done <<'UPSTREAM_SKILLS'",
@@ -1201,7 +1202,7 @@ def setup_block(upstream, plugins, markets, mcp):
         keyed = [m for m in mcp if m["env"]]
         lines += [
             "",
-            "# MCP servers, curated from mcpmarket.com. See docs/EXTENSIONS.md.",
+            "# MCP servers, curated from mcpmarket.com. See docs/reference/EXTENSIONS.md.",
             "#",
             "# Two tiers on purpose. The keyless ones are installed outright. The ones",
             "# needing an account are installed only when their variables are already",
@@ -1415,7 +1416,7 @@ def main():
     # The inventory tables live in the reference doc, not on the front door.
     # A first-time reader does not need 40 rows of plugin names before the
     # install command, and the generator does not care which file it writes.
-    reference = REPO / "docs" / "REFERENCE.md"
+    reference = REPO / "docs" / "reference" / "REFERENCE.md"
     touched = splice(
         reference,
         "<!-- BEGIN GENERATED: extensions -->",

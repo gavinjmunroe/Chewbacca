@@ -62,7 +62,7 @@ cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // empty' 2>/dev/null
 # A heredoc body is ALWAYS data. Nothing executes from inside one, so it is
 # stripped unconditionally. This matters more than it looks: the commit
 # message explaining this very fix was itself a heredoc quoting `xargs -P 4
-# python3 -c "import mlx_whisper"`, and the first version of this fix blocked
+# python3 -I -c "import mlx_whisper"`, and the first version of this fix blocked
 # the commit, because it had decided to read the raw text whenever it saw the
 # word xargs anywhere. Describing a fan-out is not performing one.
 nohd="$(printf '%s\n' "$cmd" | awk '
@@ -111,7 +111,7 @@ case "$lower" in
   |*llama-cli*|*llama-server*|*stable-diffusion*|*comfyui*|*"blender -b"*|*"nalana -b"*|*nalana.app*\
   |*"torch.compile"*|*upscayl*|*handbrakecli*) heavy=1 ;;
 esac
-# `python3 -c "import mlx_whisper"` names the model only inside quotes, which
+# `python3 -I -c "import mlx_whisper"` names the model only inside quotes, which
 # the stripped subject drops. A python command importing it is a real job.
 if [ "$heavy" = 0 ] && printf '%s' "$nohd" | grep -qiE 'python[0-9.]*[^|;&]*(import|-m) *(mlx_whisper|whisper|torch)'; then
   heavy=1
@@ -185,7 +185,7 @@ fi
 # 2026-10-09 `command -v ffmpeg`, `ls ~/.cache | grep whisper` and similar
 # lookups were refused at load 30, because the word appeared at all.
 if [ "$block" = "load" ]; then
-  running=$(LG_CMD="$nohd" python3 - <<'PY'
+  running=$(LG_CMD="$nohd" python3 -I - <<'PY'
 import os, re, shlex
 heavy = {"whisper", "mlx_whisper", "mlx-whisper", "yt-transcript", "ffmpeg",
          "llama-cli", "llama-server", "stable-diffusion", "comfyui", "upscayl",

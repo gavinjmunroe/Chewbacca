@@ -10,7 +10,7 @@ import SwiftUI
 /// over several lines stays grey. Anything it does not know is plain.
 ///
 /// Written here rather than borrowed: CodeEdit's highlighter (MIT, cleared in
-/// docs/NO-APPS.md) sits on tree-sitter grammars, a dependency the HUD
+/// docs/plans/NO-APPS.md) sits on tree-sitter grammars, a dependency the HUD
 /// package does not carry. tree-sitter is the v2 path for "what touches X";
 /// for color, a scanner is enough. The text is untrusted and only drawn.
 public enum Syntax {

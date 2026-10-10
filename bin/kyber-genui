@@ -30,7 +30,7 @@ Usage:
     kyber-genui event <action> <component>    handle a press on a generated surface
     kyber-genui bench [--requests FILE] [--out FILE] [--only N,..]
 
-Design and sources: docs/GENUI.md.
+Design and sources: docs/reference/GENUI.md.
 """
 
 from __future__ import annotations

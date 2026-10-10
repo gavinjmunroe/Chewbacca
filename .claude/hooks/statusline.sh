@@ -31,7 +31,7 @@ else CTX="\033[38;5;245m${PCT}%\033[0m"; fi
 # configured location instead, and check both the current schema (core/now.md)
 # and the flat one setup.sh writes (NOW.md).
 [ -f "$HOME/.claude/d1-config.sh" ] && . "$HOME/.claude/d1-config.sh" 2>/dev/null
-STALE=$(PCD="${PERSONAL_CONTEXT_DIR:-}" python3 - <<'PY' 2>/dev/null
+STALE=$(PCD="${PERSONAL_CONTEXT_DIR:-}" python3 -I - <<'PY' 2>/dev/null
 import datetime, os, re, pathlib
 roots = [p for p in (os.environ.get("PCD", ""), str(pathlib.Path.home() / "second-brain")) if p]
 for root in roots:

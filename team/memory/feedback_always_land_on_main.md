@@ -25,7 +25,7 @@ forgotten branch name away from being lost.
 2. **Verify the pickup.** Clone the remote fresh into a temp dir and run the
    documented command. That is the only proof the instructions work; it
    caught nothing this time and would have caught a missing bundled asset.
-3. **Make the docs describe the present.** `docs/SPATIAL-OS.md` was still a
+3. **Make the docs describe the present.** `docs/plans/SPATIAL-OS.md` was still a
    plan for finished work, which is worse than no document, because the next
    person builds what it describes instead of what is missing. Rewrite a
    plan into a status report the moment the work lands.

@@ -1,0 +1,883 @@
+#!/usr/bin/env python3
+"""chewbacca office: Microsoft 365 reads from inside your own signed-in Office tab.
+
+  chewbacca office mail [--unread] [--from X] [--limit N]
+                    from, subject, received, preview, has attachments
+  chewbacca office read <message id>        the message body as plain text
+  chewbacca office calendar [--days N]       subject, start, end, location, organizer
+  chewbacca office files [--recent | --search words]
+                    OneDrive and shared files: name, type, modified, webUrl
+  chewbacca office doc <file id | sharing url>
+                    a Word, PowerPoint or Excel file as text (Excel: every sheet)
+  chewbacca office teams                     chat list, topic, last message preview
+                    (only if the token covers Chat.Read)
+  Every command takes --json. Every command is read-only.
+
+Why a tab: USC mail, calendar and files live in Microsoft 365, and the Office
+web apps already hold a signed-in session. bin/chrome-js runs a fetch() inside
+the Office tab, so the request comes from the same browser Microsoft always
+sees. Office keeps its MSAL access tokens in that page. The page script finds
+an unexpired token whose scope covers Microsoft Graph, puts it on the request
+as the Authorization header, scrubs it out of the answer, and returns only the
+response data. It is never returned, printed, logged or written, and neither is
+any refresh token or id token. This never mints a token from a refresh token.
+
+Read-only by construction: the in-page script hardcodes GET, fetches only from
+https://graph.microsoft.com/v1.0, and builds every path from a fixed template
+with ids validated to a strict character set. No send, reply, delete, move,
+flag, accept or edit. `read` fetches a message with GET, which does not mark it
+read.
+
+Tab: the first open Office tab on an allowed host (outlook.office.com,
+m365.cloud.microsoft, www.office.com, outlook.cloud.microsoft,
+www.microsoft365.com). With none, one is opened at outlook.office.com/mail in
+the Chrome profile whose storage holds an Office session, or
+CHEWBACCA_OFFICE_PROFILE. Stops on the first 401, 403, 429 or a redirect, and
+says so. If the only Graph token in the page is encrypted or absent, it stops:
+signing in or granting consent is the user's to do, once.
+"""
+import datetime
+import json
+import os
+import pathlib
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.parse
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+CHROME_JS = os.environ.get("CHEWBACCA_CHROME_JS") or str(ROOT / "bin" / "chrome-js")
+CHROME_DIR = pathlib.Path(os.environ.get(
+    "CHEWBACCA_CHROME_DIR", pathlib.Path.home() / "Library/Application Support/Google/Chrome"))
+
+# Every origin a script may run in, and the only place a tab is accepted. Hosts
+# are matched exactly after urlsplit, never by substring, for the reason
+# bin/chewbacca-linkedin records: a substring test let
+# https://evil.example/?outlook.office.com and outlook.office.com.evil.example
+# both through. The fetch origin is fixed and is NOT one of these.
+ALLOWED_HOSTS = (
+    "outlook.office.com",
+    "outlook.cloud.microsoft",
+    "m365.cloud.microsoft",
+    "www.office.com",
+    "www.microsoft365.com",
+)
+ALLOWED_ORIGINS = tuple("https://" + h for h in ALLOWED_HOSTS)
+# The one origin every request goes to. Fixed, https, Graph v1.0, GET only.
+GRAPH = "https://graph.microsoft.com/v1.0"
+GRAPH_ORIGIN = "https://graph.microsoft.com"
+GRAPH_HOST = "graph.microsoft.com"
+OPEN_AT = "https://outlook.office.com/mail/"
+TAB = None  # the exact URL of the tab in use, set by ensure_tab()
+
+# At least one second between Graph calls inside one command. Graph throttles
+# per-app and per-mailbox; its own web clients space background calls further
+# apart than this. Guessed, never measured, so the env var may raise it and
+# never lower it.
+PAUSE = max(1.0, float(os.environ.get("CHEWBACCA_OFFICE_PAUSE", "1") or 1))
+POLL_EVERY = float(os.environ.get("CHEWBACCA_OFFICE_POLL", "0.3"))
+POLL_LIMIT = 45.0
+
+# Bounds, so a huge mailbox, a giant file or a nextLink cycle cannot run forever
+# or exhaust memory in the page or here. Each is enforced and each truncation is
+# reported. The env vars may only LOWER the two that tests drive; a raised value
+# is ignored.
+MAX_PAGES = min(12, int(os.environ.get("CHEWBACCA_OFFICE_MAXPAGES", "12") or 12))
+# Characters a single response may be before the page refuses to ship it. A
+# partial JSON body cannot be parsed, so an oversize response is refused whole
+# rather than truncated mid-document.
+MAX_BODY = min(5_000_000, int(os.environ.get("CHEWBACCA_OFFICE_MAXBYTES", "5000000") or 5_000_000))
+# Characters kept from one document's extracted text.
+MAX_DOC_CHARS = 500_000
+MAX_SHEET_CHARS = 200_000
+
+# Request templates. Every Graph path is one of these, with {id}/{sid}/{q}
+# filled from values validated against the charset below and then encoded
+# exactly as encodeURIComponent would. The page is handed the template's own
+# regex and refuses any URL whose pathname does not match it, so the string the
+# allowlist checks and the string fetch requests cannot disagree.
+TEMPLATES = {
+    "messages":       "/me/messages",
+    "message":        "/me/messages/{id}",
+    "calendarView":   "/me/calendarView",
+    "drive_recent":   "/me/drive/recent",
+    "drive_search":   "/me/drive/root/search(q='{q}')",
+    "item":           "/me/drive/items/{id}",
+    "item_content":   "/me/drive/items/{id}/content",
+    "worksheets":     "/me/drive/items/{id}/workbook/worksheets",
+    "usedRange":      "/me/drive/items/{id}/workbook/worksheets('{sid}')/usedRange",
+    "chats":          "/me/chats",
+}
+# Graph ids as returned with Prefer: IdType="ImmutableId" are base64url-ish.
+# Worksheet ids are GUIDs, sometimes in braces. Search words are kept to plain
+# text so nothing can break out of the OData '...' literal.
+VALIDATORS = {
+    "id":  re.compile(r"[A-Za-z0-9_=!.-]{1,1024}"),
+    "sid": re.compile(r"[A-Za-z0-9{}.-]{1,128}"),
+    "q":   re.compile(r"[A-Za-z0-9 _.-]{1,128}"),
+}
+# What an encoded id looks like in a pathname: unreserved plus %XX. The page and
+# Python both match against this, so a "/", "?", "#", "\" or ".." in an id can
+# never land unencoded in a path segment.
+ENC_CLASS = r"(?:[A-Za-z0-9_.!~*'()-]|%[0-9A-Fa-f]{2})+"
+# The in-page fetch of a driveItem's bytes returns binary; everything else is
+# JSON. The page base64s a binary body so it survives the text channel.
+BINARY_TEMPLATES = ("item_content",)
+# A tab on any of these means Office wants an interactive sign-in or consent.
+SIGNIN_HOSTS = ("login.microsoftonline.com", "login.live.com", "login.windows.net",
+                "account.microsoft.com")
+SIGNIN_PATHS = ("/login", "/signin", "/logout", "/oauth2", "/common/oauth2")
+
+
+class Stop(Exception):
+    """Office pushed back, or the tab needs a sign-in. Never retried."""
+
+
+# Subjects, names, bodies, file names and chat text are written by other people
+# and printed to a terminal an agent also reads. A raw ESC/CSI/OSC sequence,
+# BEL, CR overwrite or bidi override in one could recolor, hide, relink or
+# rewrite what is shown (security review, 2026-10-09). Every human-readable
+# line goes through clean(); --json stays raw, since JSON escapes all of these.
+UNSAFE = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f‪-‮⁦-⁩]")
+
+
+def clean(s):
+    return UNSAFE.sub("", str(s))
+
+
+def say(*parts, **kw):
+    print(*(clean(p) for p in parts), **kw)
+
+
+def die(msg, code=1):
+    say(f"chewbacca office: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+
+def chrome_js(*args, script=None):
+    # --real: the user's own Chrome by PID, never an automation clone (see chrome-js).
+    cmd = [CHROME_JS, "--real", *args]
+    tmp = None
+    if script is not None:
+        fd, tmp = tempfile.mkstemp(suffix=".js")
+        with os.fdopen(fd, "w") as f:
+            f.write(script)
+        cmd += ["--file", tmp]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except subprocess.TimeoutExpired:
+        die("Chrome did not answer within 60 s. Is it frozen?")
+    finally:
+        if tmp:
+            os.unlink(tmp)
+    if out.returncode == 3:
+        die("Chrome refused: turn on View > Developer > Allow JavaScript from Apple Events "
+            "in the Chrome profile you use Office in (chrome-js --check shows which).")
+    if out.returncode != 0:
+        die(f"chrome-js failed: {(out.stderr or out.stdout).strip()[:300]}")
+    return out.stdout.strip()
+
+
+def session_profile():
+    """The Chrome profile whose local storage holds an Office MSAL token cache,
+    most recently written first. Reads only whether a marker key name is
+    present, never a value."""
+    if os.environ.get("CHEWBACCA_OFFICE_PROFILE"):
+        return os.environ["CHEWBACCA_OFFICE_PROFILE"]
+    best, prof = -1.0, None
+    markers = [("_https://" + h + "\x00\x01msal.").encode() for h in ALLOWED_HOSTS]
+    for d in sorted(CHROME_DIR.glob("*/Local Storage/leveldb")):
+        for f in d.iterdir():
+            if f.suffix not in (".ldb", ".log"):
+                continue
+            try:
+                blob = f.read_bytes()
+            except OSError:
+                continue
+            if any(m in blob for m in markers) and f.stat().st_mtime > best:
+                best, prof = f.stat().st_mtime, d.parent.parent.name
+    return prof
+
+
+def host_of(url):
+    try:
+        return urllib.parse.urlsplit((url or "").strip())
+    except ValueError:
+        return None
+
+
+def is_office(url):
+    """https, and a netloc of exactly one allowed host: no userinfo, no port,
+    no lookalike suffix. An allowed host in a path or query is not a match."""
+    sp = host_of(url)
+    if not sp:
+        return False
+    return (sp.scheme == "https" and sp.hostname in ALLOWED_HOSTS
+            and sp.netloc.lower() == sp.hostname)
+
+
+def check_url(url):
+    """A redirect to a Microsoft sign-in or consent page stops the command."""
+    sp = host_of(url)
+    if not sp:
+        return
+    host = (sp.hostname or "").lower()
+    path = (sp.path or "").lower()
+    if host in SIGNIN_HOSTS or any(path.startswith(p) for p in SIGNIN_PATHS):
+        raise Stop("Office sent this tab to a sign-in or consent page. BLOCKED: sign in "
+                   "once at outlook.office.com in Chrome, then rerun.")
+
+
+def office_tabs():
+    return [t.strip() for t in chrome_js("--list").splitlines() if is_office(t)]
+
+
+def ensure_tab():
+    global TAB
+    tabs = office_tabs()
+    if not tabs:
+        prof = session_profile()
+        chrome_js("--open", OPEN_AT, *(["--profile", prof] if prof else []))
+        tabs = office_tabs()
+        if not tabs:
+            die("opened Office in Chrome but the tab isn't visible to AppleScript. Turn on "
+                "Allow JavaScript from Apple Events in that profile (chrome-js --check).")
+    TAB = tabs[0]
+    check_url(TAB)
+
+
+# ── request building, validated identically here and in the page ─────────────
+
+def enc(v):
+    """encodeURIComponent, in Python: the same characters stay unescaped, so a
+    path built here is byte-for-byte what the page's own encoder would produce
+    and the page's URL re-check cannot disagree with it."""
+    return urllib.parse.quote(v, safe="!*'()~-_.")
+
+
+def template_regex(template):
+    """A regex that matches exactly this template's pathname under /v1.0, with
+    each {placeholder} standing for one encoded segment and everything else a
+    literal. The page gets this and fetches nothing whose pathname fails it."""
+    out = ""
+    for part in re.split(r"(\{[a-z]+\})", template):
+        out += ENC_CLASS if re.fullmatch(r"\{[a-z]+\}", part) else re.escape(part)
+    return r"^/v1\.0" + out + r"$"
+
+
+def build(key, **ids):
+    """(path, its template regex). Each id is validated against a strict set
+    before encoding, so "..", "/", "?", "#", "\\" or an encoded "%2e%2e" is
+    rejected here, never encoded into a traversal."""
+    tmpl = TEMPLATES[key]
+    vals = {}
+    for name in re.findall(r"\{([a-z]+)\}", tmpl):
+        v = ids[name]
+        if not VALIDATORS[name].fullmatch(v):
+            die(f"refused: '{name}' has characters that are not allowed in a Graph id")
+        vals[name] = enc(v)
+    return tmpl.format(**vals), template_regex(tmpl)
+
+
+def nextlink_path(nxt, tmpl_re):
+    """A path rebuilt from Graph's own @odata.nextLink, accepted only if it
+    parses to the Graph origin and its pathname matches the same template the
+    page is already bound to. The raw URL is never fetched as-is."""
+    sp = host_of(nxt)
+    if not sp or sp.scheme != "https" or (sp.hostname or "").lower() != GRAPH_HOST:
+        return None
+    if sp.netloc.lower() != GRAPH_HOST or not sp.path.startswith("/v1.0/"):
+        return None
+    if not re.fullmatch(tmpl_re, sp.path):
+        return None
+    return sp.path[len("/v1.0"):] + (("?" + sp.query) if sp.query else "")
+
+
+# The origin guard runs first in every in-page script: a page whose origin is
+# not one we allow fetches nothing and gets refused on the Python side too.
+GUARD = ("if (%s.indexOf(location.origin) < 0) "
+         "return JSON.stringify({error: 'wrong-origin', origin: location.origin});"
+         % json.dumps(list(ALLOWED_ORIGINS)))
+
+# The token is read here, used on the header, and scrubbed from the body. It is
+# never placed on window, in the stored result, or in any return value. Only an
+# unexpired access token with a plaintext secret whose scope covers Graph is
+# used; an encrypted-cache entry (no readable secret) is reported as a count,
+# never decrypted. This tool does not reconstruct MSAL's crypto or mint tokens.
+# The URL is built with new URL() and re-validated against the template right
+# before fetch, with the same parser fetch uses, so no encoded segment can slip
+# a path past the allowlist.
+START_JS = r"""
+(function(){
+  %(guard)s
+  var path = %(path)s, key = %(key)s, origin = %(graph_origin)s, base = %(graph)s,
+      binary = %(binary)s, maxBody = %(maxbody)s, TMPL = new RegExp(%(tmpl)s);
+  var u;
+  try { u = new URL(base + path); } catch (e) {
+    return JSON.stringify({error: 'refused: unparseable url', origin: location.origin}); }
+  if (u.protocol !== 'https:' || u.host !== 'graph.microsoft.com' || u.origin !== origin)
+    return JSON.stringify({error: 'refused: off-origin url', origin: location.origin});
+  if ((u.pathname + u.search) !== ('/v1.0' + path))
+    return JSON.stringify({error: 'refused: url changed on normalization', origin: location.origin});
+  var decoded;
+  try { decoded = decodeURIComponent(u.pathname); } catch (e) { decoded = '\x00'; }
+  if (decoded.indexOf('..') >= 0 || decoded.indexOf('\\') >= 0 || u.pathname.indexOf('//', 1) >= 0)
+    return JSON.stringify({error: 'refused: path traversal', origin: location.origin});
+  if (!TMPL.test(u.pathname))
+    return JSON.stringify({error: 'refused: not a read path', origin: location.origin});
+
+  // Find an unexpired access token whose scope covers Graph. The scope lives in
+  // the token's `target` and also in the storage key; the secret must be
+  // present in cleartext (an encrypted cache has `data`/`nonce` and no secret).
+  var now = Date.now() / 1000, found = null, graphKeyPresent = false, encryptedGraph = 0;
+  var stores = [localStorage, sessionStorage];
+  for (var s = 0; s < stores.length && !found; s++) {
+    var st = stores[s];
+    for (var i = 0; i < st.length; i++) {
+      var k = st.key(i), kl = k.toLowerCase();
+      if (kl.indexOf('accesstoken') < 0) continue;
+      var raw = st.getItem(k) || '', o = null;
+      try { o = JSON.parse(raw); } catch (e) { continue; }
+      if (!o || String(o.credentialType || '').toLowerCase() !== 'accesstoken') continue;
+      var target = String(o.target || '').toLowerCase();
+      var coversGraph = target.indexOf('graph.microsoft.com') >= 0
+                        || kl.indexOf('graph.microsoft.com') >= 0;
+      if (!coversGraph) continue;
+      graphKeyPresent = true;
+      if (typeof o.secret !== 'string' || o.secret.length < 20) { encryptedGraph++; continue; }
+      var exp = Number(o.expiresOn || o.expires_on || 0);
+      if (exp && exp - now <= 30) continue;  // expired or about to
+      found = o.secret;
+      break;
+    }
+  }
+  if (!found)
+    return JSON.stringify({error: graphKeyPresent ? 'graph-token-encrypted' : 'no-graph-token',
+                           graphKeyPresent: graphKeyPresent, encryptedGraph: encryptedGraph,
+                           page: location.href, origin: location.origin});
+
+  window.__chewOffice = window.__chewOffice || {};
+  window.__chewOffice[key] = null;
+  (function(tok){
+    fetch(u.href, {method: 'GET', credentials: 'omit', redirect: 'follow',
+                   headers: {Authorization: 'Bearer ' + tok, accept: 'application/json',
+                             Prefer: 'IdType="ImmutableId"'}})
+      .then(function(r){
+        var slot = {status: r.status, redirected: r.redirected,
+                    url: r.url.split(tok).join('[redacted]')};
+        var body = binary ? r.arrayBuffer().then(function(buf){
+          var b = new Uint8Array(buf);
+          if (b.length > maxBody) { slot.oversize = b.length; return ''; }
+          var str = '', CH = 0x8000;
+          for (var i = 0; i < b.length; i += CH) str += String.fromCharCode.apply(null, b.subarray(i, i + CH));
+          return 'base64:' + btoa(str);
+        }) : r.text().then(function(t){
+          if (t.length > maxBody) { slot.oversize = t.length; return ''; }
+          return t.split(tok).join('[redacted]');
+        });
+        return body.then(function(bt){ slot.body = bt; window.__chewOffice[key] = slot; });
+      })
+      .catch(function(e){ window.__chewOffice[key] = {status: 0, error: String(e).split(tok).join('[redacted]')}; });
+  })(found);
+  found = null;
+  return JSON.stringify({started: key, page: location.href, origin: location.origin});
+})()
+"""
+
+POLL_JS = r"""
+(function(){
+  %(guard)s
+  var k = %(key)s, s = window.__chewOffice && window.__chewOffice[k];
+  if (!s) return JSON.stringify({pending: true, origin: location.origin});
+  delete window.__chewOffice[k];
+  s.origin = location.origin;
+  return JSON.stringify(s);
+})()
+"""
+
+
+def parse(out):
+    try:
+        return json.loads(out)
+    except ValueError:
+        if out.startswith("NO_TAB_MATCHING"):
+            die("the Office tab closed mid-command.")
+        die(f"unexpected answer from Chrome: {out[:200]}")
+
+
+def in_tab(script):
+    """Run a script in exactly the chosen tab and refuse any answer that does
+    not come from an allowed origin. Office rewrites its URL as you move around,
+    so a vanished exact URL is re-resolved once; the script never ran, so this
+    repeats no request."""
+    for attempt in (1, 2):
+        out = chrome_js("--url", TAB, script=script)
+        if not out.startswith("NO_TAB_MATCHING") or attempt == 2:
+            break
+        ensure_tab()
+    res = parse(out)
+    if res.get("origin") not in ALLOWED_ORIGINS:
+        die(f"refused: the tab answered from {res.get('origin')!r}, not an Office origin.", 5)
+    return res
+
+
+class Graph:
+    def __init__(self):
+        self.last = 0.0
+        self.calls = 0
+
+    def get(self, path, tmpl_re, binary=False):
+        """GET GRAPH + path. Returns the parsed JSON doc (or raw bytes for a
+        binary path), with `_oversize` set if the response was too large to
+        ship. Validates the path against its template here too, then lets the
+        page validate the final URL again with fetch's own parser."""
+        pathname = "/v1.0" + path.split("?", 1)[0]
+        if not re.fullmatch(tmpl_re, pathname):
+            die("refused: not a read path")
+        dec = urllib.parse.unquote(pathname)
+        if ".." in dec or "\\" in dec or "//" in pathname[1:]:
+            die("refused: path traversal")
+        wait = self.last + PAUSE - time.monotonic()
+        if self.last and wait > 0:
+            time.sleep(wait)
+        self.calls += 1
+        key = f"o{os.getpid()}_{self.calls}"
+        started = in_tab(START_JS % {
+            "guard": GUARD, "graph": json.dumps(GRAPH), "graph_origin": json.dumps(GRAPH_ORIGIN),
+            "path": json.dumps(path), "key": json.dumps(key), "tmpl": json.dumps(tmpl_re),
+            "binary": "true" if binary else "false", "maxbody": str(MAX_BODY)})
+        # Measured from launch in the page, so a slow Chrome round trip can
+        # never squeeze two requests under the pause.
+        self.last = time.monotonic()
+        err = started.get("error")
+        if err == "no-graph-token":
+            raise Stop("no Microsoft Graph token is present in this Office tab. BLOCKED: open "
+                       "outlook.office.com (or office.com) in Chrome, sign in, then rerun.")
+        if err == "graph-token-encrypted":
+            raise Stop("the Graph token in this Office tab is in an encrypted MSAL cache, so no "
+                       "usable token can be read without an interactive sign-in. BLOCKED: this "
+                       "needs Microsoft to hand the tab a fresh token. We never decrypt the cache "
+                       "or mint a token from a refresh token.")
+        if err:
+            die(err)
+        check_url(started.get("page"))
+        deadline = time.monotonic() + POLL_LIMIT
+        while True:
+            time.sleep(POLL_EVERY)
+            res = in_tab(POLL_JS % {"guard": GUARD, "key": json.dumps(key)})
+            if not res.get("pending"):
+                break
+            if time.monotonic() > deadline:
+                die(f"Graph did not answer within {int(POLL_LIMIT)} s.")
+        status = res.get("status")
+        url = res.get("url") or ""
+        if url:
+            sp = host_of(url)
+            check_url(url)
+            if sp and sp.hostname and sp.hostname.lower() != GRAPH_HOST:
+                raise Stop("the request was redirected off graph.microsoft.com. Stopped.")
+        if status == 401:
+            raise Stop("Graph answered 401: the Office session in Chrome is signed out or the "
+                       "token expired. BLOCKED: sign in once at outlook.office.com, then rerun.")
+        if status == 403:
+            raise Stop("Graph answered 403: this token's scope does not cover that read. Stopped.")
+        if status == 429:
+            raise Stop("Graph answered 429 (rate limit). Stopped; wait before trying again.")
+        if status == 0:
+            die(f"the in-page request failed: {res.get('error', '')[:200]}")
+        if res.get("oversize"):
+            die(f"Graph response was {res['oversize']} bytes, over the {MAX_BODY}-byte cap; "
+                f"narrow it with --limit, --search or a smaller file.")
+        body = res.get("body") or ""
+        if binary:
+            if status != 200:
+                die(f"Graph answered {status} for {path.split('?')[0]}")
+            if not body.startswith("base64:"):
+                die("Graph did not return file bytes.")
+            import base64
+            return base64.b64decode(body[len("base64:"):])
+        if status not in (200, 206):
+            try:
+                e = json.loads(body).get("error", {})
+                die(f"Graph answered {status} for {path.split('?')[0]}: "
+                    f"{e.get('code', '')} {e.get('message', '')}"[:200])
+            except (ValueError, AttributeError):
+                die(f"Graph answered {status} for {path.split('?')[0]}")
+        try:
+            return json.loads(body) if body else {}
+        except ValueError:
+            die("Graph sent something other than JSON.")
+
+
+# ── shaping ──────────────────────────────────────────────────────────────────
+
+def when(iso):
+    """A Graph UTC ISO timestamp as local 'YYYY-MM-DD HH:MM'."""
+    if not iso:
+        return ""
+    try:
+        s = iso.replace("Z", "+00:00")
+        dt = datetime.datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt.astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return iso
+
+
+def html_to_text(html):
+    """Good-enough plain text from an HTML mail body or a converted doc."""
+    html = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", "", html)
+    html = re.sub(r"(?i)<br\s*/?>", "\n", html)
+    html = re.sub(r"(?i)</(p|div|tr|h[1-6]|li)>", "\n", html)
+    text = re.sub(r"<[^>]+>", "", html)
+    text = (text.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<")
+            .replace("&gt;", ">").replace("&quot;", '"').replace("&#39;", "'"))
+    text = re.sub(r"\n[ \t]+\n", "\n\n", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def addr(obj):
+    ea = (obj or {}).get("emailAddress") or {}
+    return ea.get("name") or ea.get("address") or ""
+
+
+def mail_row(m):
+    return {"id": m.get("id", ""), "from": addr(m.get("from") or m.get("sender")),
+            "subject": m.get("subject") or "(no subject)",
+            "received": when(m.get("receivedDateTime")),
+            "unread": not m.get("isRead", True),
+            "has_attachments": bool(m.get("hasAttachments")),
+            "preview": (m.get("bodyPreview") or "").strip()}
+
+
+def event_row(e):
+    return {"subject": e.get("subject") or "(no subject)",
+            "start": when((e.get("start") or {}).get("dateTime")),
+            "end": when((e.get("end") or {}).get("dateTime")),
+            "location": ((e.get("location") or {}).get("displayName") or ""),
+            "organizer": addr(e.get("organizer"))}
+
+
+def file_row(d):
+    kind = "folder" if d.get("folder") else ((d.get("file") or {}).get("mimeType") or "file")
+    item = d.get("remoteItem") or d
+    return {"name": d.get("name") or item.get("name") or "",
+            "type": kind, "modified": when(d.get("lastModifiedDateTime")),
+            "size": d.get("size"), "id": d.get("id") or item.get("id") or "",
+            "webUrl": d.get("webUrl") or item.get("webUrl") or ""}
+
+
+def chat_row(c):
+    last = c.get("lastMessagePreview") or {}
+    body = (last.get("body") or {}).get("content") or ""
+    sender = (((last.get("from") or {}).get("user") or {}).get("displayName")) or ""
+    topic = c.get("topic")
+    if not topic:
+        members = [m.get("displayName") or "" for m in (c.get("members") or [])]
+        topic = ", ".join(m for m in members if m) or (c.get("chatType") or "chat")
+    return {"id": c.get("id", ""), "topic": topic, "chat_type": c.get("chatType") or "",
+            "last_message": when(last.get("createdDateTime") or c.get("lastUpdatedDateTime")),
+            "preview": (f"{sender}: " if sender else "") + html_to_text(body)[:200]}
+
+
+# ── commands ───────────────────────────────────────────────────────────────────
+
+def q(params):
+    return "?" + urllib.parse.urlencode(params, quote_via=urllib.parse.quote)
+
+
+def page_list(g, key, query, limit, **ids):
+    """Follow Graph @odata.nextLink up to MAX_PAGES. Each nextLink is parsed and
+    must match the same template; a cycle (a nextLink already seen) or an
+    off-template link stops the walk. Returns (items, truncated)."""
+    path, tmpl_re = build(key, **ids)
+    full = path + query
+    out, pages, seen, truncated = [], 0, set(), False
+    while True:
+        doc = g.get(full, tmpl_re)
+        out += (doc.get("value") or [])
+        pages += 1
+        nxt = doc.get("@odata.nextLink")
+        if len(out) >= limit:
+            break
+        if pages >= MAX_PAGES:
+            truncated = bool(nxt)
+            break
+        if not nxt:
+            break
+        np = nextlink_path(nxt, tmpl_re)
+        if not np:
+            truncated = True   # a nextLink off-template or off-origin: stop here
+            break
+        if np in seen:
+            truncated = True   # a cycle: stop here
+            break
+        seen.add(np)
+        full = np
+    return out[:limit], truncated
+
+
+def cmd_mail(g, a):
+    sel = "id,subject,from,sender,receivedDateTime,isRead,hasAttachments,bodyPreview"
+    filt = []
+    if a.unread:
+        filt.append("isRead eq false")
+    if getattr(a, "frm", None):
+        safe = a.frm.replace("'", "''")
+        filt.append(f"from/emailAddress/address eq '{safe}'")
+    params = {"$select": sel, "$top": str(min(a.limit or 25, 50)),
+              "$orderby": "receivedDateTime desc"}
+    if filt:
+        params["$filter"] = " and ".join(filt)
+    rows, trunc = page_list(g, "messages", q(params), a.limit or 25)
+    return [mail_row(m) for m in rows], trunc
+
+
+def cmd_read(g, a):
+    if not a.rest:
+        die("read needs a message id (from `chewbacca office mail`)")
+    path, tmpl_re = build("message", id=a.rest[0])
+    # GET of a single message. A GET never sets isRead; only a PATCH would, and
+    # this tool issues no PATCH. $select avoids pulling attachments' bytes.
+    doc = g.get(path + q({"$select": "subject,from,sender,toRecipients,receivedDateTime,body,bodyPreview,isRead"}),
+                tmpl_re)
+    body = doc.get("body") or {}
+    content = body.get("content") or doc.get("bodyPreview") or ""
+    text = html_to_text(content) if (body.get("contentType") == "html") else content.strip()
+    to = ", ".join(addr(r) for r in (doc.get("toRecipients") or []))
+    return {"subject": doc.get("subject") or "(no subject)", "from": addr(doc.get("from") or doc.get("sender")),
+            "to": to, "received": when(doc.get("receivedDateTime")),
+            "was_unread": not doc.get("isRead", True), "text": text[:MAX_DOC_CHARS]}
+
+
+def cmd_calendar(g, a):
+    days = a.days or 7
+    now = datetime.datetime.now(datetime.timezone.utc)
+    end = now + datetime.timedelta(days=days)
+    params = {"startDateTime": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "endDateTime": end.strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "$select": "subject,start,end,location,organizer",
+              "$orderby": "start/dateTime", "$top": "50"}
+    rows, trunc = page_list(g, "calendarView", q(params), a.limit or 50)
+    return [event_row(e) for e in rows], trunc
+
+
+def cmd_files(g, a):
+    sel = "name,file,folder,lastModifiedDateTime,size,id,webUrl,remoteItem"
+    if a.search is not None:
+        if not VALIDATORS["q"].fullmatch(a.search):
+            die("--search takes plain words (letters, digits, spaces, . _ -)")
+        rows, trunc = page_list(g, "drive_search", q({"$select": sel, "$top": "50"}),
+                                a.limit or 25, q=a.search)
+    else:
+        # recent is the default view: files touched lately, across drives.
+        rows, trunc = page_list(g, "drive_recent", q({"$top": "50"}), a.limit or 25)
+    return [file_row(d) for d in rows], trunc
+
+
+def resolve_item_id(ref):
+    """A drive-item id as given, or extracted from a OneDrive/SharePoint URL."""
+    ref = ref.strip()
+    sp = host_of(ref)
+    if sp and sp.scheme in ("http", "https"):
+        qs = dict(urllib.parse.parse_qsl(sp.query))
+        for kk in ("id", "sourcedoc", "resid"):
+            if qs.get(kk):
+                return qs[kk].strip("{}")
+        die("could not find a file id in that URL. Pass the id from `chewbacca office files`.")
+    return ref
+
+
+def cmd_doc(g, a):
+    if not a.rest:
+        die("doc needs a file id or a OneDrive/SharePoint URL")
+    item_id = resolve_item_id(a.rest[0])
+    mpath, mtmpl = build("item", id=item_id)
+    meta = g.get(mpath + q({"$select": "name,file,size"}), mtmpl)
+    name = meta.get("name") or ""
+    mime = (meta.get("file") or {}).get("mimeType") or ""
+    ext = name.lower().rsplit(".", 1)[-1] if "." in name else ""
+    if ext in ("xlsx", "xlsm", "xlsb") or "spreadsheet" in mime:
+        return {"name": name, "type": "excel", "sheets": excel_sheets(g, item_id)}
+    cpath, ctmpl = build("item_content", id=item_id)
+    data = g.get(cpath, ctmpl, binary=True)
+    return {"name": name, "type": ext or mime or "file", "text": office_text(data, ext)}
+
+
+def excel_sheets(g, item_id):
+    sheets, _ = page_list(g, "worksheets", q({"$select": "id,name,position"}), 50, id=item_id)
+    out = []
+    for s in sorted(sheets, key=lambda x: x.get("position", 0)):
+        rpath, rtmpl = build("usedRange", id=item_id, sid=str(s.get("id")))
+        rng = g.get(rpath + q({"$select": "text"}), rtmpl)
+        grid = rng.get("text") or []
+        lines = ["\t".join("" if c is None else str(c) for c in row) for row in grid]
+        text = "\n".join(lines)
+        out.append({"name": s.get("name") or "", "rows": len(grid),
+                    "text": text[:MAX_SHEET_CHARS]})
+    return out
+
+
+def office_text(data, ext):
+    """Plain text from a Word (.docx) or PowerPoint (.pptx) OOXML file, which is
+    a zip of XML. Done here, from bytes Graph returned, so no extra call."""
+    import io
+    import zipfile
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile:
+        # An older .doc/.ppt (OLE) or an unexpected type: return any printable
+        # runs rather than nothing, so the command still says something useful.
+        txt = data.decode("latin-1", "ignore")
+        return re.sub(r"[^\x09\x0a\x0d\x20-\x7e]{1,}", " ", txt)[:MAX_DOC_CHARS].strip()
+    names = zf.namelist()
+    if ext == "pptx" or any(n.startswith("ppt/slides/slide") for n in names):
+        parts = sorted(n for n in names if re.match(r"ppt/slides/slide\d+\.xml$", n))
+    elif any(n == "word/document.xml" for n in names):
+        parts = ["word/document.xml"]
+    else:
+        parts = [n for n in names if n.endswith(".xml") and ("document" in n or "slide" in n)]
+    chunks, total = [], 0
+    for n in parts:
+        try:
+            xml = zf.read(n).decode("utf-8", "ignore")
+        except KeyError:
+            continue
+        xml = re.sub(r"(?i)</w:p>|</a:p>|<w:br/?>|<a:br/?>", "\n", xml)
+        xml = re.sub(r"<[^>]+>", "", xml)
+        xml = (xml.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+               .replace("&quot;", '"').replace("&#39;", "'"))
+        if xml.strip():
+            chunks.append(xml)
+            total += len(xml)
+        if total >= MAX_DOC_CHARS:
+            break
+    return re.sub(r"\n{3,}", "\n\n", "\n\n".join(chunks)).strip()[:MAX_DOC_CHARS]
+
+
+def cmd_teams(g, a):
+    params = {"$top": "50", "$expand": "lastMessagePreview"}
+    rows, trunc = page_list(g, "chats", q(params), a.limit or 50)
+    return [chat_row(c) for c in rows], trunc
+
+
+# ── output ───────────────────────────────────────────────────────────────────
+
+def show(cmd, data):
+    if cmd == "read":
+        say(f"From:     {data['from']}")
+        say(f"To:       {data['to']}")
+        say(f"Subject:  {data['subject']}")
+        say(f"Received: {data['received']}")
+        say("")
+        say(data["text"] or "(empty body)")
+        return
+    if cmd == "doc":
+        say(f"{data['name']}  ({data['type']})")
+        if data.get("type") == "excel":
+            for sh in data["sheets"]:
+                say(f"\n== {sh['name']}  ({sh['rows']} rows)")
+                say(sh["text"] or "(empty)")
+        else:
+            say("")
+            say(data.get("text") or "(no text)")
+        return
+    if not data:
+        say("(nothing)")
+        return
+    for r in data:
+        if cmd == "mail":
+            flags = ("  [unread]" if r["unread"] else "") + ("  [attach]" if r["has_attachments"] else "")
+            say(f"{r['received']}  {r['from']}{flags}")
+            say(f"    {r['subject']}")
+            if r["preview"]:
+                say(f"    {r['preview'][:140]}")
+            say(f"    id {r['id']}")
+        elif cmd == "calendar":
+            where = f"  @ {r['location']}" if r["location"] else ""
+            say(f"{r['start']} - {r['end']}  {r['subject']}{where}")
+            if r["organizer"]:
+                say(f"    organizer: {r['organizer']}")
+        elif cmd == "files":
+            size = f"  {r['size']} B" if r.get("size") else ""
+            say(f"{r['modified']}  {r['name']}  ({r['type']}){size}")
+            if r["webUrl"]:
+                say(f"    {r['webUrl']}")
+            say(f"    id {r['id']}")
+        elif cmd == "teams":
+            say(f"{r['last_message']}  {r['topic']}  ({r['chat_type']})")
+            if r["preview"]:
+                say(f"    {r['preview'][:160]}")
+
+
+COMMANDS = {"mail": cmd_mail, "read": cmd_read, "calendar": cmd_calendar,
+            "files": cmd_files, "doc": cmd_doc, "teams": cmd_teams}
+LIST_COMMANDS = {"mail", "calendar", "files", "teams"}
+
+
+class Args:
+    def __init__(self, argv):
+        self.json = self.unread = self.recent = False
+        self.frm = self.search = None
+        self.days = self.limit = None
+        self.rest = []
+        it = iter(argv)
+        for x in it:
+            if x == "--json":
+                self.json = True
+            elif x == "--unread":
+                self.unread = True
+            elif x == "--recent":
+                self.recent = True
+            elif x == "--from":
+                self.frm = next(it, None) or die("--from needs an address")
+            elif x == "--search":
+                self.search = next(it, None)
+                if self.search is None:
+                    die("--search needs words")
+            elif x == "--days":
+                try:
+                    self.days = max(1, int(next(it, "")))
+                except ValueError:
+                    die("--days needs a number")
+            elif x == "--limit":
+                try:
+                    self.limit = max(1, int(next(it, "")))
+                except ValueError:
+                    die("--limit needs a number")
+            else:
+                self.rest.append(x)
+
+
+def main(argv):
+    if not argv or argv[0] in ("-h", "--help", "help"):
+        print(__doc__.split("\n\n")[0] + "\n" + __doc__.split("\n\n")[1])
+        return 0
+    cmd = argv[0]
+    if cmd not in COMMANDS:
+        die(f"unknown command '{cmd}'. Try: chewbacca office help", 2)
+    a = Args(argv[1:])
+    g = Graph()
+    truncated = False
+    try:
+        ensure_tab()
+        data = COMMANDS[cmd](g, a)
+        if cmd in LIST_COMMANDS:
+            data, truncated = data
+    except Stop as e:
+        die(f"STOPPED: {e}", 4)
+    if a.json:
+        out = {"items": data, "truncated": truncated} if cmd in LIST_COMMANDS else data
+        print(json.dumps(out, indent=2, ensure_ascii=False))
+    else:
+        show(cmd, data)
+        if truncated:
+            say("... (truncated: more results exist; narrow with --limit, --search or --from)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

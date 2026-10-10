@@ -245,7 +245,7 @@ needs to say so once. Assistant-bound sentences show nothing new.
 | `tests/test_route.py`              | the routing table                                                                                                                       |
 | `tests/test_memory.py`             | round-trip and rotation                                                                                                                 |
 | `tests/test_terminal.py`           | tab discovery and tab choice against a fixture; paste, submit and clear are manual and opt-in because they open a window                |
-| `docs/VOICE-DESIGN.md`             | a section on routing, with the thresholds and why                                                                                       |
+| `docs/reference/VOICE-DESIGN.md`             | a section on routing, with the thresholds and why                                                                                       |
 
 ## Error handling
 

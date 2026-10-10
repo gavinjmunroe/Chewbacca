@@ -212,7 +212,7 @@ fi
 export DIRTY_COUNT AHEAD_COUNT NO_UPSTREAM MINE_COUNT OTHERS_COUNT
 export BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
 
-python3 <<'PY'
+python3 -I <<'PY'
 import json, os
 
 dirty = int(os.environ.get("DIRTY_COUNT", "0"))

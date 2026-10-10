@@ -1,6 +1,6 @@
 """Tests for tools/inventory.py frontmatter parsing and house-style normalising.
 
-Both cases here are bugs that shipped into docs/REFERENCE.md, which is a public
+Both cases here are bugs that shipped into docs/reference/REFERENCE.md, which is a public
 file, on 2026-09-16 when Cap's two skills were installed.
 
     python3 tests/test_inventory.py
@@ -39,7 +39,7 @@ def frontmatter(text):
 #
 # The parser handled a bare "|" and ">" and nothing else. Cap writes
 # `description: >-`, so the marker became the value and the folded lines were
-# appended behind it. docs/REFERENCE.md published ">- Always use Cap's CLI...".
+# appended behind it. docs/reference/REFERENCE.md published ">- Always use Cap's CLI...".
 
 for marker in ("|", ">", "|-", ">-", "|+", ">+", "|2", ">2"):
     fm = frontmatter(f"---\nname: x\ndescription: {marker}\n  the real text here\n---\n\nbody\n")
@@ -67,7 +67,7 @@ check(
 
 # ── house style on vendored text ─────────────────────────────────────────────
 #
-# Vendored descriptions ship verbatim into README.md and docs/REFERENCE.md,
+# Vendored descriptions ship verbatim into README.md and docs/reference/REFERENCE.md,
 # where this repo's writing rules ban em dashes outright. Cap's cap-demo
 # description put one straight into the generated table.
 
@@ -143,7 +143,7 @@ check("a pinned pack warns when an existing clone is elsewhere", "not at the vet
 
 # ── the generated files themselves ───────────────────────────────────────────
 
-for rel in ("docs/REFERENCE.md", "README.md", "config/settings/toolkit.json"):
+for rel in ("docs/reference/REFERENCE.md", "README.md", "config/settings/toolkit.json"):
     p = ROOT / rel
     if not p.is_file():
         continue

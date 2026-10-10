@@ -33,7 +33,7 @@ SKILL_ROUTE_PAYLOAD=$(cat)
 export SKILL_ROUTE_PAYLOAD
 export SKILL_ROUTE_SELF="${BASH_SOURCE[0]}"
 
-exec python3 <<'PY'
+exec python3 -I <<'PY'
 import atexit, json, os, re, sys
 
 

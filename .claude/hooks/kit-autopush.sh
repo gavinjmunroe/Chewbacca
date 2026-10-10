@@ -168,7 +168,7 @@ done < <(git diff --name-only '@{u}..HEAD' 2>/dev/null)
 
 if [ -n "$FAILED" ]; then
   note "BLOCKED $AHEAD commit(s), failed:$FAILED"
-  REASONS="$FAILED" AHEAD="$AHEAD" python3 <<'PY' | say_once "blocked|$(git rev-parse HEAD 2>/dev/null)|$FAILED"
+  REASONS="$FAILED" AHEAD="$AHEAD" python3 -I <<'PY' | say_once "blocked|$(git rev-parse HEAD 2>/dev/null)|$FAILED"
 import json, os
 reasons = os.environ.get("REASONS", "").split()
 ahead = os.environ.get("AHEAD", "?")
@@ -215,7 +215,7 @@ rm -rf "$LOCK" 2>/dev/null
 
 if [ "$PUSH_RC" -eq 0 ]; then
   note "pushed $AHEAD commit(s) from $BRANCH"
-  AHEAD="$AHEAD" python3 <<'PY'
+  AHEAD="$AHEAD" python3 -I <<'PY'
 import json, os
 n = os.environ.get("AHEAD", "?")
 s = "" if n == "1" else "s"
@@ -241,7 +241,7 @@ case "$PUSH_ERR" in
       exit 0
     fi
     : > "$DENIED_STAMP" 2>/dev/null || true
-    python3 <<'PY2'
+    python3 -I <<'PY2'
 import json
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": (
     "Kit auto-push is on by default, and this checkout has no push access to its "
@@ -255,7 +255,7 @@ PY2
     exit 0
     ;;
 esac
-PUSH_ERR="$PUSH_ERR" AHEAD="$AHEAD" python3 <<'PY' | say_once "failed|$(git rev-parse HEAD 2>/dev/null)"
+PUSH_ERR="$PUSH_ERR" AHEAD="$AHEAD" python3 -I <<'PY' | say_once "failed|$(git rev-parse HEAD 2>/dev/null)"
 import json, os
 err = " ".join(os.environ.get("PUSH_ERR", "").split())[:300]
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "Stop", "additionalContext": (

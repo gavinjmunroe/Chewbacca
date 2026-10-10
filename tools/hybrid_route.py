@@ -22,7 +22,7 @@ Every stage is written to a checkpoint keyed by the prompt, catalog and policy,
 so a run killed after Jev resumes at the model stage without paying Jev again.
 
 The threshold is not a calibrated probability of being right. It is fit on a
-calibration set and checked on a sealed one; see docs/HYBRID-ROUTE.md.
+calibration set and checked on a sealed one; see docs/reference/HYBRID-ROUTE.md.
 """
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ POLICY_VERSION = "hybrid-route-1"
 # Fit on a 40-case calibration set written blind to every router, 2026-09-26,
 # by the rule "highest calibration accuracy, then lowest cost". Checked on a
 # separately authored sealed set. Measured results stay private (TypeSafe
-# agreement 2.3(f)); the method is in docs/HYBRID-ROUTE.md.
+# agreement 2.3(f)); the method is in docs/reference/HYBRID-ROUTE.md.
 DEFAULT_THRESHOLD = 0.48
 # Budgets for the whole graph, retries and fallback included.
 # Four times the dearest calibration model call: room for one call, never a

@@ -10,7 +10,7 @@ different carry the measurement that set them.
 No network calls leave localhost. No vector database. No API keys.
 """
 import os, re, sys, json, math, time, glob, sqlite3, hashlib, argparse
-import urllib.request, urllib.error, collections, subprocess
+import urllib.request, urllib.error, urllib.parse, collections, subprocess
 import numpy as np
 
 BRAIN = os.environ.get("BRAIN_DIR", os.path.expanduser("~/second-brain"))
@@ -48,9 +48,21 @@ KEEP_ALIVE = "2h"       # how long Ollama keeps the model resident after a call.
 WARM_TIMEOUT = 60       # seconds the detached warm-up waits for a load. A load
                         # measured 280ms on 2026-10-09 at load average 25; the
                         # minute is for a Mac at load 100, not the normal case.
-OLLAMA = os.environ.get("OLLAMA_HOST", "http://localhost:11434").rstrip("/")
-if "://" not in OLLAMA:
-    OLLAMA = "http://" + OLLAMA
+def ollama_url():
+    """Ollama's address, loopback only. Every prompt the recall hook sees is
+    sent here to be embedded, so an OLLAMA_HOST pointing off the machine would
+    ship each typed prompt to that host. Anything not loopback is ignored."""
+    default = "http://localhost:11434"
+    raw = os.environ.get("OLLAMA_HOST", default).strip().rstrip("/")
+    if "://" not in raw:
+        raw = "http://" + raw
+    try:
+        host = urllib.parse.urlsplit(raw).hostname or ""
+    except ValueError:
+        return default
+    return raw if host in ("localhost", "127.0.0.1", "::1") else default
+
+OLLAMA = ollama_url()
 
 def die(m, code=2):
     print(f"brain: {m}", file=sys.stderr); sys.exit(code)

@@ -14,6 +14,7 @@ const { db, nowISO, syncState, DIR } = require("./db");
 const { findPerson, nameTokens, normHandle } = require("./lookup");
 const { recomputeScores } = require("./scoring");
 const { cmdIdentities } = require("./identities");
+const { APPS: ALL_APPS, BRIDGED } = require("./apps");
 
 // ------------------------------------------------------------------- messages
 
@@ -117,7 +118,37 @@ const CHANNELS = [
     // sucks"). The reader fetches and caches itself; human mail only.
     refresh: [],
   },
+  {
+    // Signal, Telegram, Discord, Instagram, Messenger, X, Google Messages,
+    // Google Chat, Google Voice, LinkedIn and Bluesky, through the bridges
+    // `chewbacca chat up` runs. One reader, many apps: each row carries its
+    // own network as `source`. Prints [] when the homeserver isn't set up.
+    source: "matrix",
+    reader: "matrix.py",
+    label: "bridged chats",
+    multi: true,
+    refresh: [],
+  },
 ];
+
+// A Google Messages row that repeats an iMessage row is the same SMS seen
+// twice: an Android contact's text relayed to the Mac through the iPhone and
+// through the gmessages bridge. Same number, same words, within two minutes
+// (guessed, never measured: relay lag on this Mac is seconds) is one message.
+function smsTwin(d, r) {
+  const digits = String(r.handle || "").replace(/\D/g, "").slice(-10);
+  if (digits.length < 10) return false;
+  const at = String(r.at).replace("T", " ");
+  return Boolean(
+    d
+      .prepare(
+        `SELECT 1 FROM messages WHERE source = 'imessage' AND body = ?
+           AND sent_at BETWEEN datetime(?, '-120 seconds') AND datetime(?, '+120 seconds')
+           AND replace(replace(replace(coalesce(handle,''),'+',''),'-',''),' ','') LIKE ? LIMIT 1`,
+      )
+      .get(String(r.text || "").trim(), at, at, "%" + digits),
+  );
+}
 
 function refreshChannel(ch) {
   for (const [cmd, args] of ch.refresh || []) {
@@ -188,6 +219,21 @@ function syncChannel(d, ch, flags) {
         ),
       );
     return 0;
+  }
+  if (ch.multi) {
+    // Group by the network each row names; a row naming anything else is
+    // dropped rather than filed under an app send can't reach.
+    const by = new Map();
+    for (const r of rows) {
+      if (!BRIDGED.includes(r.source)) continue;
+      if (r.source === "gmessages" && smsTwin(d, r)) continue;
+      if (!by.has(r.source)) by.set(r.source, []);
+      by.get(r.source).push(r);
+    }
+    let total = 0;
+    for (const [src, list] of by) total += ingestRows(d, list, src, 0).added;
+    syncState(key, nowISO());
+    return total;
   }
   const { added } = ingestRows(d, rows, ch.source, 0);
   syncState(key, nowISO());
@@ -509,6 +555,14 @@ function cmdTexts(argv) {
       if (n) channelAdded[ch.source] = n;
       added += n;
     }
+    // Calls ride the same sync: phone and FaceTime from the Mac's call
+    // history, filed as interactions on whoever owns the number. Read-only.
+    try {
+      const calls = require("./calls").syncCalls(Number(flags.days ?? 30));
+      if (calls.added && !flags.quiet) say(c.dim(`  ${calls.added} calls filed on person cards`));
+    } catch (e) {
+      if (!flags.quiet) say(c.dim(`  calls skipped: ${String((e && e.message) || e).split("\n")[0]}`));
+    }
     // Link the backlog too. Insert-time linking alone means any message that
     // arrived before its contact existed stays orphaned forever, which is the
     // normal case: the session hook syncs texts before anyone runs an import.
@@ -691,9 +745,10 @@ function cmdTexts(argv) {
     // One indexed range read of the window, then grouping in JS. The first
     // version joined on coalesce(room, who) with a correlated subquery per
     // thread, which no index covers: 94s wall on the real 640k-row store.
-    // Every app people send can reply through. LinkedIn is a one-time export
-    // with no sender, so it can never be owed anything.
-    const APPS = ["imessage", "whatsapp", "slack", "email"];
+    // Every app people send can reply through. The LinkedIn export (msg_id
+    // under 6e12) has no sender, so it can never be owed anything; LinkedIn
+    // rows from the bridge (6e12 and up, mac/lib/matrix.py) can.
+    const APPS = ALL_APPS;
     const via = flags.via ? String(flags.via).toLowerCase() : null;
     if (via && !APPS.includes(via)) die(`--via is one of: ${APPS.join(", ")}`);
     const apps = via ? [via] : APPS;
@@ -701,6 +756,7 @@ function cmdTexts(argv) {
       .prepare(
         `SELECT who, handle, room, from_me, person_id, body, sent_at, source FROM messages
           WHERE sent_at >= datetime('now', ?) AND source IN (${apps.map(() => "?").join(",")})
+            AND NOT (source = 'linkedin' AND msg_id < 6000000000000)
           ORDER BY sent_at DESC`,
       )
       .all(`-${days} days`, ...apps);
@@ -1074,10 +1130,12 @@ function cmdTexts(argv) {
 }
 
 module.exports = {
+  syncChannel,
   cmdTexts,
   textPartner,
   textsReader,
   resolvePerson,
   printable,
   CHANNELS,
+  smsTwin,
 };

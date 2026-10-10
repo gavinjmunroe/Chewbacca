@@ -236,6 +236,10 @@ if group "people"; then
 
     check "send resolves strictly and replies in the thread's own app" \
       bash "$ROOT/tests/people_send.sh" "${P[@]}"
+    # 2026-10-10: one inbox for every network. Bridged rows land one person
+    # per address, reply in their own room, and nothing leaves in a test.
+    check "chewbacca chat files bridged threads by address, sends only to their room, and never sends in a test" \
+      bash "$ROOT/tests/chewbacca_chat.sh" "$ROOT"
     check "texts owed lists who is waiting and drafts wait for a number" \
       bash "$ROOT/tests/texts_owed.sh" "${P[@]}"
     check "people store write transactions wait for a lock instead of failing" \

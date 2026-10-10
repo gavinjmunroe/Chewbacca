@@ -41,6 +41,18 @@ WhatsApp line prints with `[whatsapp]` in front. Slack and email join through
 the same `CHANNELS` list in `bin/lib/people/texts.js` once their readers exist
 in `mac/lib/`.
 
+Signal, Telegram, Discord, Instagram, Messenger, X DMs, Google Messages,
+Google Chat, Google Voice, LinkedIn and Bluesky land the same way, through the
+mautrix bridges `chewbacca chat up` runs on a homeserver bound to 127.0.0.1
+(`mac/lib/matrix.py` reads them, `[signal]` and so on marks the line).
+`chewbacca chat status` lists every network with its verdict and state;
+`chewbacca chat link signal` opens the QR or relays the bridge's questions,
+and the login itself is his hands. A bridged sender is filed by the number
+the network verified or by its bridge id, never by a display name, and
+`people send maggie "..." --via signal` answers in that thread's own room.
+A Google Messages SMS that chat.db already holds is dropped on ingest, and
+calls from the Mac's call history land on the person card (`people calls`).
+
 `sync` runs on its own at session start, so the log is usually current. Run it by
 hand when the user says something just came in.
 

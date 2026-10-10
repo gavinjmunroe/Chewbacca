@@ -29,7 +29,9 @@ CMD=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty')
 SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty')
 CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty')
 [ -n "$CMD" ] || exit 0
-case "$CMD" in *DESTRUCTIVE_OK=1*) exit 0 ;; esac
+# Only as a leading assignment: a substring check let "echo DESTRUCTIVE_OK=1;
+# git reset --hard" through (security review, 2026-10-10).
+printf '%s' "$CMD" | grep -qE '^[[:space:]]*DESTRUCTIVE_OK=1[[:space:]]' && exit 0
 
 REASON=$(DG_CMD="$CMD" DG_SID="$SID" DG_CWD="${CWD:-$PWD}" python3 - <<'PY'
 import os, re, shlex, subprocess
@@ -40,14 +42,26 @@ body = re.sub(r"<<-?\s*['\"]?(\w+)['\"]?.*?\n\1\s*$", "", cmd, flags=re.S | re.M
 segments = re.split(r"&&|\|\||;|\n|\|", body)
 
 def repo_dirty(where):
+    # `where` comes from the command being checked, so the repo is untrusted:
+    # git status runs core.fsmonitor from repo config, which is arbitrary code.
+    # Turn it and hooks off. If git can't answer, assume there's work to lose
+    # (fail closed), since that's the case this guard exists for.
     try:
-        out = subprocess.run(["git", "-C", where, "status", "--porcelain"],
-                             capture_output=True, text=True, timeout=4).stdout
+        r = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
+                            "-C", where, "status", "--porcelain"],
+                           capture_output=True, text=True, timeout=4,
+                           env=dict(os.environ, GIT_OPTIONAL_LOCKS="0"))
     except Exception:
-        return False
-    return any(l and not l.startswith("??") for l in out.splitlines())
+        return True
+    if r.returncode != 0:
+        return "not a git repository" not in r.stderr
+    return any(l and not l.startswith("??") for l in r.stdout.splitlines())
 
 where = cwd
+nested = re.search(r"\b(?:sh|bash|zsh)\s+-c\s+.*\bgit\b[^;|&]*\b(reset\s+--hard|checkout\s+(--|\.)|clean\s+-\w*f|restore\s+(?!--staged)|stash(\s+(drop|clear))?\s*['\"]?$)", body)
+if nested and repo_dirty(where):
+    print(f"a shell string runs `git {nested.group(1)}`, which would throw away uncommitted work in {where}.")
+    raise SystemExit
 for seg in segments:
     try:
         w = shlex.split(seg)
@@ -60,11 +74,22 @@ for seg in segments:
     if w[0] == "cd" and len(w) > 1:
         where = os.path.expanduser(w[1]) if os.path.isabs(os.path.expanduser(w[1])) else os.path.join(where, w[1])
         continue
-    if w[0] != "git":
+    # `command git`, `exec git`, `/usr/bin/git`, `xargs git` all run git.
+    while w and w[0] in ("command", "exec", "xargs", "sudo", "time"):
+        w = w[1:]
+    if not w or os.path.basename(w[0]) != "git":
         continue
     a = w[1:]
-    if a[:1] == ["-C"] and len(a) > 1:
-        where, a = os.path.expanduser(a[1]), a[2:]
+    # Global options before the verb: -C <dir>, -c k=v, --git-dir=, --work-tree=
+    while a and a[0].startswith("-"):
+        if a[0] == "-C" and len(a) > 1:
+            where, a = os.path.expanduser(a[1]), a[2:]
+        elif a[0] == "-c" and len(a) > 1:
+            a = a[2:]
+        elif a[0].startswith("--work-tree="):
+            where, a = os.path.expanduser(a[0].split("=", 1)[1]), a[1:]
+        else:
+            a = a[1:]
     if not a:
         continue
     verb = a[0]

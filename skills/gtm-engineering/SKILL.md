@@ -101,6 +101,23 @@ day on Zeutara. Clients, offers and label files live in `~/.chewbacca/gtm/client
 
 Start with the business outcome, its denominator, maturity window, and budget. Read existing client instructions and approved ICP before designing a workflow. Keep customer data and research corpora private.
 
+## Three corrections from 2026-10-10, never again
+
+- **The Monday build covers the whole week.** Caleb: "every monday should cover
+  the whole week!!!! Always remember this I shouldn't have to tell you". One
+  build: strongest fits start Monday, the rest start Wednesday through the
+  campaign's scheduleStartDate. Never plan a separate midweek wave. Zeutara's
+  builder is `scripts/monday_wave.py` (ruling `monday-covers-the-week`).
+- **Numbers and reply text come from the API, never a Clay window.** `chewbacca
+clay campaign-stats`, `chewbacca gtm sync` then `gtm replies --all` answer in
+  seconds. A script that drives Clay in Chrome (Zeutara's `scripts/replies.py`)
+  steals his screen. Caleb: "I thought we had reverse engineered a clay api so
+  you don't hv to go back to clay?"
+- **Never hand him the Clay writes as a command.** Caleb: "Bro fuck the guard
+  fix chewbs do it urself". His "do it yourself" in chat is the approval
+  (`chat-approval.sh`, 2 hours): run the writes through `chewbacca clay`, and
+  the gate still has to pass before any Start.
+
 ## Grading a campaign before it goes out
 
 Run the five gates in [the playbook's grading section](references/demand-gen-playbooks.md#grading-a-campaign-before-it-goes-out)

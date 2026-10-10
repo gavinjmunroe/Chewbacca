@@ -67,10 +67,16 @@ import notes_surface  # noqa: E402
 import docs_surface  # noqa: E402
 import hud_events  # noqa: E402
 import glass_search  # noqa: E402
+import call_pill  # noqa: E402
 import hud_accounts  # noqa: E402
 # HUD_REPO_CARDS=off: "show me owner/repo" and a pasted github.com URL go to
 # the model instead of drawing a repo card (bin/lib/repo_card.py).
 REPO_CARDS = os.environ.get("HUD_REPO_CARDS", "on") != "off"
+# HUD_CALLS=off: "call Mark", "hang up" and "mute the call" go to the model
+# instead of bin/call-pill, and the call watcher is not started with the
+# listener (CHW-190, docs/plans/NO-APPS.md "3. Call pill").
+CALLS = os.environ.get("HUD_CALLS", "on") != "off"
+CALL_PILL = Path(__file__).resolve().parent / "call-pill"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import hud_runtime  # noqa: E402
 
@@ -1302,6 +1308,7 @@ FAST_PATHS = {
     "accounts_request": "accounts",
     "quick_answer": "quick",
     "repo_request": "repo",
+    "call_request": "call",
     "docs_request": "docs",
     "notes_request": "notes",
     "surface_request": "surface",
@@ -1357,6 +1364,12 @@ def fast_path(said: str) -> str | None:
         try:
             if repo_card.parse(said) is not None:
                 return "repo"
+        except Exception:  # noqa: BLE001
+            pass
+    if CALLS:
+        try:
+            if call_pill.parse(said) is not None:
+                return "call"
         except Exception:  # noqa: BLE001
             pass
     if SURFACES:
@@ -1738,6 +1751,10 @@ class Listener:
             # read to the app that launched the process). `start` is a no-op
             # when it is already running.
             threading.Thread(target=self.start_surfaces, daemon=True).start()
+        if CALLS:
+            # The call watcher, for the same reason: a child of Kyber's tree
+            # reads FaceTime's accessibility tree under Kyber's grant.
+            threading.Thread(target=self.start_calls, daemon=True).start()
 
         delay = 0.5
         announced = False
@@ -2825,6 +2842,10 @@ class Listener:
             return
         if REPO_CARDS and not relayed and not pointing and self.repo_request(said, typed):
             return
+        # "Call Mark", "hang up", "mute the call": FaceTime from the glass,
+        # before the surface words so "show the call" is the pill (CHW-190).
+        if CALLS and not relayed and not pointing and self.call_request(said, typed):
+            return
         # A surface before music: "what's playing" opens the player panel and
         # says the song, where the music path only said it.
         # "Add milk to my groceries note", "new note Trip": before the surface
@@ -3273,6 +3294,58 @@ class Listener:
             subprocess.run([str(KYBER_SURFACES), "start"], capture_output=True, text=True, timeout=15)
         except (OSError, subprocess.TimeoutExpired) as err:
             self.log("surfaces daemon did not start:", err)
+
+    def start_calls(self) -> None:
+        try:
+            subprocess.run([str(CALL_PILL), "start"], capture_output=True, text=True, timeout=15)
+        except (OSError, subprocess.TimeoutExpired) as err:
+            self.log("call watcher did not start:", err)
+
+    # Resolving a name and opening a URL took well under a second in the
+    # fake-display run; FaceTime coming forward is waited on for 4 s inside
+    # call-pill. Past this the voice says it didn't go.
+    CALL_TIMEOUT_S = 20.0
+
+    def call_request(self, said: str, typed: bool) -> bool:
+        """"Call Mark", "hang up", "mute the call", "answer the call", with no
+        model turn. bin/lib/call_pill.py says which sentences count; the
+        person is resolved through the people store, and two matches are a
+        question on the glass, never a pick. A control is shown, not spoken,
+        because during a call the voice would be heard on the line."""
+        if self.in_flight():
+            return False
+        try:
+            ask = call_pill.parse(said)
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("call failed:", err)
+            return False
+        if ask is None:
+            return False
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+        if ask.verb == "dial":
+            argv = [str(CALL_PILL), "call", ask.who, "--json"] + (["--phone"] if ask.via == "phone" else [])
+        else:
+            argv = [str(CALL_PILL), "press", ask.verb, "--json"]
+
+        def work() -> None:
+            started = time.monotonic()
+            ok, answer = False, "That call didn't go."
+            try:
+                done = subprocess.run(argv, capture_output=True, text=True, timeout=self.CALL_TIMEOUT_S)
+                got = json.loads(done.stdout.strip().splitlines()[-1]) if done.stdout.strip() else {}
+                ok, answer = bool(got.get("ok")), str(got.get("line") or answer)
+            except (OSError, subprocess.TimeoutExpired, ValueError, IndexError) as err:
+                self.log("call failed:", err)
+            self.log(f"call: {ask.verb} in {(time.monotonic() - started) * 1000:.0f}ms:", answer)
+            self.remember(req, answer, ok, "done" if ok else "failed")
+            self.send("s " + json.dumps(answer))
+            self.send("w " + json.dumps(answer) + " done=true")
+            if not typed and ask.verb == "dial":
+                self.speak(answer)
+            self.settle_unless_running("done" if ok else "failed", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
 
     def genui_request(self, said: str, typed: bool) -> bool:
         """Draw a generated panel for a request shaped like one (docs/reference/GENUI.md,

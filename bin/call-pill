@@ -1,0 +1,511 @@
+#!/usr/bin/env python3
+"""Place, take and run FaceTime audio calls from the glass (CHW-190).
+
+    call-pill call <name> [--phone] [--dry-run] [--json]
+                                  resolve through the people store and dial
+                                  facetime-audio:// (tel: with --phone); two
+                                  matches asks on the glass. --dry-run prints
+                                  the URL and opens nothing.
+    call-pill press <end|mute|unmute|accept|decline|show|hide> [--json]
+                                  press FaceTime's own control (show and hide
+                                  only touch the pill)
+    call-pill status [--json]     what FaceTime's accessibility tree shows now
+    call-pill observe             the raw read behind `status`, read only
+    call-pill run                 the watcher, in the foreground
+    call-pill start | stop        the watcher, in the background (hud-listen starts it)
+
+The watcher polls FaceTime's tree (mac/appctl through `chewie app`) and keeps
+a pill on the glass while a call is ringing, being placed or live: who, a
+timer, Mute and End, or Accept and Decline. Escape and the X hide the pill and
+never end the call. Rules and evidence: bin/lib/call_pill.py and
+docs/plans/NO-APPS.md, "3. Call pill".
+"""
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import signal
+import socket
+import subprocess
+import sys
+import threading
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE / "lib"))
+import call_pill as cp  # noqa: E402
+import hud_events  # noqa: E402
+
+# While a call is up the timer ticks once a second, so the tree is read once
+# a second. Idle, every two: an incoming banner on screen for two seconds
+# before the pill shows is still well inside the ring. Guessed, never measured.
+LIVE_POLL_S = 1.0
+IDLE_POLL_S = 2.0
+# The tree going unreadable mid-call (Accessibility revoked, FaceTime hung)
+# keeps the last pill and says so; past this long, CallHistory decides.
+UNREADABLE_GRACE_S = 10.0
+# With no display socket for this long the watcher exits rather than poll
+# FaceTime for a glass that isn't there. Guessed.
+NO_DISPLAY_EXIT_S = 120.0
+
+
+def log(*parts: object) -> None:
+    print(time.strftime("%H:%M:%S"), *parts, file=sys.stderr, flush=True)
+
+
+def socket_path() -> str:
+    return os.environ.get("BOB_HUD_SOCKET", str(Path.home() / ".bob" / "hud.sock"))
+
+
+class Link:
+    """One connection to Kyber, held only while something of ours is on the
+    glass (call-watch's reason: a subscriber held all day hides a dead voice
+    listener). It draws and hears on the same connection, because Kyber sends
+    `e closed` only to the client that drew the surface."""
+
+    def __init__(self) -> None:
+        self.sock: socket.socket | None = None
+        self.events: list[str] = []
+        self.lock = threading.Lock()
+        # Bumped on every new connection. A Kyber restart drops everything
+        # drawn, so a watcher that drew on an older connection draws again.
+        self.generation = 0
+
+    def up(self) -> bool:
+        if self.sock is not None:
+            return True
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.connect(socket_path())
+            sock.sendall((hud_events.listen_line(socket_path()) + "\n").encode("utf-8"))
+        except OSError:
+            return False
+        self.sock = sock
+        self.generation += 1
+        threading.Thread(target=self._read, args=(sock,), daemon=True).start()
+        return True
+
+    def _read(self, sock: socket.socket) -> None:
+        buffer = b""
+        while True:
+            try:
+                chunk = sock.recv(4096)
+            except OSError:
+                break
+            if not chunk:
+                break
+            buffer += chunk
+            while b"\n" in buffer:
+                raw, buffer = buffer.split(b"\n", 1)
+                line = raw.decode("utf-8", "replace").strip()
+                if line == "x" or line.startswith("e "):
+                    with self.lock:
+                        self.events.append(line)
+        if self.sock is sock:
+            self.sock = None
+
+    def send(self, lines: list[str]) -> bool:
+        if not lines or not self.up():
+            return False
+        try:
+            assert self.sock is not None
+            self.sock.sendall(("\n".join(lines) + "\n").encode("utf-8"))
+            return True
+        except OSError:
+            self.down()
+            return False
+
+    def take(self) -> list[str]:
+        with self.lock:
+            out, self.events = self.events, []
+        return out
+
+    def down(self) -> None:
+        sock, self.sock = self.sock, None
+        if sock is not None:
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+
+class Watcher:
+    """The pill's owner. One tick reads the tree, acts on presses, and sends
+    only what changed."""
+
+    def __init__(self, ax: cp.Ax | None = None, link: Link | None = None, clock=time.time) -> None:
+        self.ax = ax or cp.Ax()
+        self.link = link or Link()
+        self.clock = clock
+        self.state = cp.CallState()
+        self.call_started: float | None = None
+        self.live_since: float | None = None
+        self.who = ""
+        self.hidden = False
+        self.shown_shape: tuple | None = None
+        self.shown_data: list[str] = []
+        self.shown_on = 0
+        self.note = ""
+        self.note_until = 0.0
+        self.unreadable_since: float | None = None
+        self.ask: dict | None = None
+        self.ask_shown_at = 0.0
+
+    # -- the dial that started this call, if one did
+
+    def dialed(self, now: float) -> dict | None:
+        d = cp.read_json(cp.dialed_path())
+        # A few seconds of slack the other way: `at` is written by another
+        # process, and a dial from the future is a clock that moved.
+        if d and -5.0 <= now - float(d.get("at", 0)) <= cp.DIAL_MATCH_S:
+            return d
+        return None
+
+    # -- events
+
+    def handle(self, line: str, now: float) -> None:
+        if line == "x":
+            # Escape cleared the glass: the pill is gone and stays gone for
+            # this call. The call is untouched.
+            if self.shown_shape is not None:
+                self.hidden = True
+                self.shown_shape, self.shown_data = None, []
+            self.ask = None
+            return
+        ev = hud_events.event(line)
+        if ev is None:
+            return
+        name, component = ev["name"], ev["component"]
+        if name == "closed" and component == cp.SURFACE:
+            self.hidden = True
+            self.shown_shape, self.shown_data = None, []
+            return
+        if name == "closed" and component == cp.ASK_SURFACE:
+            self.ask = None
+            return
+        if not name.startswith(cp.ACTION_PREFIX):
+            return
+        verb = name[len(cp.ACTION_PREFIX):]
+        if verb == "pick":
+            self.pick(component, now)
+            return
+        if verb in ("mute", "end", "accept", "decline", "call", "cancel"):
+            self.press(verb, now)
+
+    def pick(self, component: str, now: float) -> None:
+        ask, self.ask = self.ask, None
+        self.link.send([f"- {cp.ASK_SURFACE}"])
+        if not ask or not component.startswith("p") or not component[1:].isdigit():
+            return
+        options = ask.get("options") or []
+        i = int(component[1:])
+        if i >= len(options):
+            return
+        o = options[i]
+        callee = cp.Callee(o["person_id"], o["name"], o["handle"], o["kind"], o.get("company", ""))
+        try:
+            out = cp.dial(callee, ask.get("via", "facetime"), dry_run=bool(ask.get("dry_run")))
+        except ValueError as err:
+            log("pick:", err)
+            return
+        log("dialed from the ask:", out["url"] if out.get("dry_run") else ("ok" if out["opened"] else "failed"))
+
+    def press(self, verb: str, now: float) -> None:
+        state = self.read(now)
+        ok, why = cp.press(self.ax, state, verb)
+        log("press", verb, "ok" if ok else why)
+        if not ok:
+            self.note, self.note_until = why, now + 4.0
+
+    # -- reading
+
+    def read(self, now: float) -> cp.CallState:
+        d = self.dialed(now)
+        name = self.who if self.call_started is not None and self.who else (d or {}).get("name", "")
+        return cp.read_state(self.ax, dialed_name=name, dialing=d is not None)
+
+    def tick(self, now: float | None = None) -> None:
+        now = self.clock() if now is None else now
+        for line in self.link.take():
+            self.handle(line, now)
+        self.tick_ask(now)
+        if cp.show_flag().exists():
+            cp.show_flag().unlink(missing_ok=True)
+            self.hidden = False
+        state = self.read(now)
+        if not state.readable and self.state.kind != "none":
+            # Keep the last pill and say why (rule 7); CallHistory decides
+            # whether the call is over once the tree has been gone a while.
+            self.unreadable_since = self.unreadable_since or now
+            over = None
+            if now - self.unreadable_since >= UNREADABLE_GRACE_S and self.call_started is not None:
+                over = cp.ended_in_history(self.call_started)
+            if not over:
+                self.note, self.note_until = "Can't read FaceTime right now", now + LIVE_POLL_S * 2
+                self.draw(self.state, now)
+                return
+            state = cp.CallState()
+        self.unreadable_since = None
+        was = self.state.kind
+        if was == "none" and state.kind != "none":
+            self.call_started = now
+            self.hidden = False
+            d = self.dialed(now)
+            self.who = state.who or (d or {}).get("name", "")
+            log("call:", state.kind, "|", "; ".join(state.evidence))
+        elif state.kind != "none" and state.who and not self.who:
+            self.who = state.who
+        if state.kind == "live" and was != "live":
+            self.live_since = now
+        if state.kind == "none" and was != "none":
+            log("call over")
+            self.call_started = self.live_since = None
+            self.who = ""
+            self.hidden = False
+            cp.dialed_path().unlink(missing_ok=True)
+        self.state = state
+        self.draw(state, now)
+
+    def tick_ask(self, now: float) -> None:
+        path = cp.ask_path()
+        fresh = cp.read_json(path)
+        if fresh is not None:
+            path.unlink(missing_ok=True)
+            if now - float(fresh.get("at", now)) <= cp.ASK_LIFE_S and fresh.get("options"):
+                self.ask = fresh
+                options = [cp.Callee(o["person_id"], o["name"], o["handle"], o["kind"], o.get("company", ""))
+                           for o in fresh["options"]]
+                if self.link.send(cp.ask_lines(options, fresh.get("line", "Who?"))):
+                    self.ask_shown_at = now
+        if self.ask is not None and now - self.ask_shown_at > cp.ASK_LIFE_S:
+            self.ask = None
+            self.link.send([f"- {cp.ASK_SURFACE}"])
+
+    # -- drawing
+
+    def draw(self, state: cp.CallState, now: float) -> None:
+        if state.kind == "none" or self.hidden:
+            if self.shown_shape is not None:
+                self.link.send([f"- {cp.SURFACE}"])
+                self.shown_shape, self.shown_data = None, []
+            if self.ask is None:
+                self.link.down()
+            return
+        live_for = now - self.live_since if self.live_since is not None else None
+        note = self.note if now < self.note_until else ""
+        status = cp.status_line(state, live_for, note)
+        who = self.who or state.who
+        shape = (state.kind, tuple(cp.buttons(state)))
+        self.link.up()
+        if shape != self.shown_shape or self.shown_on != self.link.generation:
+            if self.link.send(cp.pill_lines(state, who, status)):
+                self.shown_shape, self.shown_data = shape, cp.data_lines(who, status)
+                self.shown_on = self.link.generation
+            return
+        data = cp.data_lines(who, status)
+        changed = [line for line, old in zip(data, self.shown_data) if line != old]
+        if changed and self.link.send(changed):
+            self.shown_data = data
+
+    def busy(self) -> bool:
+        return self.state.kind != "none" or self.ask is not None
+
+
+# ---------------------------------------------------------------- the daemon
+
+def lock_path() -> Path:
+    return cp.calls_dir() / "call-pill.lock"
+
+
+def holds_lock() -> bool:
+    """Whether a watcher is running, by trying the lock it holds."""
+    try:
+        with open(lock_path(), "a") as f:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(f, fcntl.LOCK_UN)
+            return False
+    except BlockingIOError:
+        return True
+    except OSError:
+        return False
+
+
+def cmd_run() -> int:
+    lock = open(lock_path(), "a")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("call-pill is already running", file=sys.stderr)
+        return 0
+    lock.truncate(0)
+    lock.write(str(os.getpid()))
+    lock.flush()
+    watcher = Watcher()
+    gone_since: float | None = None
+    log("watching FaceTime")
+    while True:
+        try:
+            watcher.tick()
+        except Exception as err:  # noqa: BLE001  one bad read never takes the pill's owner down
+            log("tick failed:", err)
+        if Path(socket_path()).exists():
+            gone_since = None
+        else:
+            gone_since = gone_since or time.monotonic()
+            if time.monotonic() - gone_since > NO_DISPLAY_EXIT_S:
+                log("no display for", NO_DISPLAY_EXIT_S, "s; exiting")
+                return 0
+        time.sleep(LIVE_POLL_S if watcher.busy() else IDLE_POLL_S)
+
+
+def cmd_start() -> int:
+    if os.environ.get("CALL_PILL_NO_DAEMON"):
+        return 0
+    if holds_lock():
+        return 0
+    out = open(cp.calls_dir() / "call-pill.log", "a")
+    subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "run"], stdin=subprocess.DEVNULL,
+                     stdout=out, stderr=out, start_new_session=True)
+    return 0
+
+
+def cmd_stop() -> int:
+    try:
+        pid = int(lock_path().read_text().strip() or 0)
+    except (OSError, ValueError):
+        pid = 0
+    if pid and holds_lock():
+        os.kill(pid, signal.SIGTERM)
+        print(f"stopped {pid}")
+    return 0
+
+
+def reply(ok: bool, line: str, as_json: bool, **extra) -> int:
+    if as_json:
+        print(json.dumps({"ok": ok, "line": line, **extra}))
+    else:
+        print(line)
+        for k, v in extra.items():
+            print(f"  {k}: {v}")
+    return 0 if ok else 1
+
+
+def cmd_call(name: str, phone: bool, dry_run: bool, as_json: bool) -> int:
+    via = "phone" if phone else "facetime"
+    res = cp.resolve(name)
+    if res.options:
+        cp.write_json(cp.ask_path(), {
+            "at": time.time(), "via": via, "line": res.line, "dry_run": dry_run,
+            "options": [o.__dict__ for o in res.options],
+        })
+        if not dry_run:
+            cmd_start()
+        return reply(True, res.line, as_json, options=[o.label() for o in res.options])
+    if res.callee is None:
+        return reply(False, res.line, as_json)
+    try:
+        out = cp.dial(res.callee, via, dry_run=dry_run)
+    except ValueError as err:
+        return reply(False, str(err) + ".", as_json)
+    if dry_run:
+        return reply(True, f"Would call {res.callee.name}.", as_json, url=out["url"], opened=False)
+    if not out["opened"]:
+        return reply(False, f"FaceTime didn't open for {res.callee.name}.", as_json, url=out["url"])
+    cmd_start()
+    return reply(True, f"Calling {res.callee.name}.", as_json, url=out["url"], front=out.get("front", ""))
+
+
+def cmd_press(verb: str, as_json: bool) -> int:
+    if verb == "show":
+        cp.show_flag().touch()
+        return reply(True, "The call's back on the glass.", as_json)
+    if verb == "hide":
+        cp.show_flag().unlink(missing_ok=True)
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
+                s.connect(socket_path())
+                s.sendall(f"- {cp.SURFACE}\n".encode("utf-8"))
+        except OSError:
+            pass
+        return reply(True, "Hidden. The call is still on.", as_json)
+    ax = cp.Ax()
+    state = cp.read_state(ax)
+    if state.kind == "none":
+        return reply(False, "There's no call on.", as_json)
+    if verb in ("mute", "unmute"):
+        if state.muted is (verb == "mute"):
+            return reply(True, "Already muted." if verb == "mute" else "Already unmuted.", as_json)
+        verb_ctl = "mute"
+    else:
+        verb_ctl = verb
+    ok, why = cp.press(ax, state, verb_ctl)
+    if not ok:
+        return reply(False, why, as_json)
+    words = {"end": "Hung up.", "mute": "Muted.", "unmute": "Unmuted.", "accept": "Answered.", "decline": "Declined."}
+    return reply(True, words.get(verb, "Done."), as_json)
+
+
+def cmd_status(as_json: bool) -> int:
+    ax = cp.Ax()
+    state = cp.read_state(ax)
+    out = {"kind": state.kind, "who": state.who, "timer": state.timer, "status": state.status,
+           "muted": state.muted, "controls": sorted(state.controls), "evidence": state.evidence,
+           "errors": ax.errors}
+    if as_json:
+        print(json.dumps(out))
+    else:
+        for k, v in out.items():
+            print(f"{k:>9}: {v}")
+    return 0
+
+
+def cmd_observe() -> int:
+    """Everything `status` reads, raw, so a person can see what the tree shows."""
+    ax = cp.Ax()
+    running = ax.running(cp.FACETIME)
+    out: dict = {"facetime_running": running, "apps": {}}
+    for app in ([cp.FACETIME] if running else []) + [cp.NOTIFICATIONS]:
+        wins = ax.windows(app)
+        detail = []
+        for w in wins:
+            wid = int(w.get("window") or 0)
+            elements = [e for e in (ax.see(app, wid) if wid else []) if not e.get("role", "").startswith("AXMenu")]
+            detail.append({**w, "elements": elements})
+        out["apps"][app] = detail
+    if running:
+        out["video_menu"] = ax.menu(cp.FACETIME, "Video")
+    out["errors"] = ax.errors
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(prog="call-pill", description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("call")
+    c.add_argument("name", nargs="+")
+    c.add_argument("--phone", action="store_true", help="tel: through the iPhone instead of FaceTime audio")
+    c.add_argument("--dry-run", action="store_true", help="print the URL; open nothing")
+    c.add_argument("--json", action="store_true")
+    p = sub.add_parser("press")
+    p.add_argument("verb", choices=["end", "mute", "unmute", "accept", "decline", "show", "hide"])
+    p.add_argument("--json", action="store_true")
+    s = sub.add_parser("status")
+    s.add_argument("--json", action="store_true")
+    for name in ("observe", "run", "start", "stop"):
+        sub.add_parser(name)
+    a = ap.parse_args(argv)
+    if a.cmd == "call":
+        return cmd_call(" ".join(a.name), a.phone, a.dry_run, a.json)
+    if a.cmd == "press":
+        return cmd_press(a.verb, a.json)
+    if a.cmd == "status":
+        return cmd_status(a.json)
+    return {"observe": cmd_observe, "run": cmd_run, "start": cmd_start, "stop": cmd_stop}[a.cmd]()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

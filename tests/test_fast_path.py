@@ -117,6 +117,18 @@ TABLE = [
     ("What am I missing?", "surface"),
     ("Is there anything I'm missing for this week?", "surface"),
     ("what am I missing in this essay", None),
+    # CHW-190: FaceTime from the glass. A name goes through the people store;
+    # a word that isn't somebody goes to the model.
+    ("call Mark", "call"),
+    ("Call my mom", "call"),
+    ("facetime Tyler Larsen", "call"),
+    ("call Mark on my phone", "call"),
+    ("hang up", "call"),
+    ("mute the call", "call"),
+    ("show the call", "call"),
+    ("call it a day", None),
+    ("call me back later", None),
+    ("call Mark and tell him I'm running late", None),
 ]
 
 

@@ -197,6 +197,8 @@ They are on the team board as CHW-188 to CHW-195, in rank order.
   Mute and End working through FaceTime's own accessibility tree (the AX
   path `mac-see` already uses), and "call Mom" from the hyper bar dialing with
   `facetime-audio://` and then pushing the FaceTime window behind the glass.
+- **Built 2026-10-10:** `bin/call-pill` and `bin/lib/call_pill.py`; see
+  hud/CLAUDE.md, "Calls". Not yet read against a live call's AX tree.
 - **Falsifier:** FaceTime foreground minutes per call. Baseline: 4.07 h in
   front over 35 FaceTime audio calls in the last 14 days (5.21 h on the
   line), about 7 minutes per call. If that doesn't drop under 3 minutes while

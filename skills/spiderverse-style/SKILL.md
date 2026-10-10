@@ -507,6 +507,53 @@ strip. `[ACR-Q]`
 - A dozen comic SFX words on one page.
 - Every section the same palette and the same treatment.
 
+## Tested in Blender (measured, Wave 1 of the replica study)
+
+From `~/code/work/spiderverse-replica` (private): eight structurally different
+shots rebuilt in Nalana's Blender 5.1 (EEVEE) and scored against the reference
+frames on 11 axes, with every result checked against a control (the same render
+scored against five other shots). All figures are original plain mannequins.
+**tested** means a single change moved a measured axis; **hypothesis** means
+reasoned, not yet measured. Numbers are 0 to 1, 1 identical.
+
+- **tested: the world background must not light a toon scene.** Diffuse to
+  Shader to RGB to a constant ramp, under a world at strength 1, sat in the
+  light band whatever the sun did (mean 0.84 at 30 degrees, 0.90 at 85). World
+  at 0: the sun drove the bands (0.227 against 0.452). Make the sky
+  camera-ray only (Light Path, Is Camera Ray, mixing a dim ambient Background
+  with the visible one) and set ambient as its own number.
+- **tested: a three-band toon goes bimodal once it's lit right.** With the
+  world fixed, a crowd shot went from 3% darks to 74% darks with 2% mids; the
+  film's frame was 42% darks and 43% mids. The mid band is the film's widest,
+  so build a ramp whose middle band carries that share instead of tuning the
+  light.
+- **tested: solve the camera from the reference, never guess it.** Pitch
+  for a horizon row: tan(pitch) = (row - 0.5) x (sensor / aspect) / focal.
+  Distance for a subject: height x focal / (frame share x sensor / aspect).
+  Guessed cameras put one city shot inside the buildings with no horizon and
+  drew a figure at a fifth of its size; layout axes stay near zero until the
+  camera is solved, which cost every built-layout shot 0.1 to 0.2.
+- **tested: in a void shot the darkest band is the subject.** Holding the
+  bottom fifth near black moved subject position 0.203 to 0.763 and the shot
+  0.782 to 0.832. A small light's halo edge comes from core size: radius
+  0.055 to 0.09 moved edge density 0.374 to 0.507 (shot 0.867).
+- **tested: ink coverage is blot size, not blot count.** Scaling blots 1.5x
+  moved the value split 0.262 to 0.489; raising the count 150 to 220 instead
+  lowered the shot. Blots read as ink with a soft grey bleed under a hard
+  core plus a ring of spray specks.
+- **tested, negative: Kuwahara alone adds no paint texture.** On a painted
+  interior, edge density stayed 0.065 to 0.074 and high-frequency energy 0.010
+  to 0.011 with and without the anisotropic Kuwahara node, against 0.120 and
+  0.020 in the film. It removes CG edges and adds no marks. **hypothesis:** the
+  texture needs a painted stroke plate or a stroke layer on top.
+- **tested, pipeline: Blender 5.x compositing needs `render.use_compositing =
+  True`.** The node group attaches and silently never runs without it: a bloom
+  that should have given a ~31px halo rendered a 16px pip.
+- **tested, process: one change per version.** Changing four or five things at
+  once moved every targeted axis and dropped four shot scores, with nothing
+  attributable. An axis that reads the same to three decimals after a change
+  means the render didn't change: pixel-diff it before tuning further.
+
 ## Tools worth reaching for
 
 The full ranked list, with licenses and the file each one plugs into, is

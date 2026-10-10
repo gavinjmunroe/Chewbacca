@@ -1,13 +1,18 @@
 """The send path and the shell guard, after the 2026-10-10 redesign.
 
-1. `chewbacca clay` refuses a campaign START or add-leads, in code and after a
-   person approves, unless `gtme-grade --verify` passes for that request's own
-   workspace, campaign and action (and a full pre-send receipt exists). These
+1. `chewbacca clay` never sends a campaign START (launch or resume): with or
+   without a grade receipt, with or without a person at the terminal, as a dry
+   run, and with either of its two refusals (registry, code) removed. Starting
+   is a click Caleb makes in Clay after he runs gtme-grade.
+2. add-leads, the one write that changes who a live campaign emails, is refused
+   in code after the person approves unless `gtme-grade --verify` passes for
+   add-leads on that campaign and the audience is its own base segment. These
    cases call bin/chewbacca-clay directly, so they hold with the hook bypassed.
-2. launch-guard.sh is an allowlist: a Bash command that mentions Clay runs only
-   if it is exactly a known read with no shell syntax. Every bypass shape from
-   three security reviews is refused here.
-3. A browser or screen click on a Clay page is refused.
+3. launch-guard.sh is an allowlist: a Bash command that mentions Clay runs only
+   if it is a known command with no shell syntax (the kit's front door, reads,
+   git, local inspect tools, test runners, the kit's own checks). Every bypass
+   shape from three security reviews is refused.
+4. A browser or screen click on a Clay page is refused.
 
 Hermetic: fixture mode for chewbacca clay, synthetic ids, temp HOME and key.
 Run: python3 tests/test_launch_guard_grade.py
@@ -108,14 +113,15 @@ class Env:
         env = dict(self.env)
         if path is not None:
             env["PATH"] = path
-        payload = raw if raw is not None else json.dumps({"tool_name": tool, "tool_input": tool_input})
+        payload = raw if raw is not None else json.dumps({"tool_name": tool, "tool_input": tool_input,
+                                                          "cwd": ROOT})
         p = subprocess.run(["/bin/bash", HOOK], input=payload, capture_output=True, text=True, env=env, timeout=30)
         return p.returncode, p.stderr
 
 
-# 1. The send path checks the grade in code.
+# 1. A campaign START is never sent from here.
 
-START = ["campaign-status", "campaign=cam_alpha", "status=START", "--allow-writes"]
+START = ["campaign-status", "campaign=cam_alpha", "status=START"]
 
 
 def sends(code, out):
@@ -126,49 +132,51 @@ def refused(code, out, needle):
     return code != 0 and out.get("ok") is False and needle.lower() in json.dumps(out).lower()
 
 
+for graded in (False, True):
+    for person in (False, True):
+        e = Env()
+        e.presend()
+        e.campaign("cam_alpha")
+        if graded:
+            e.grade("cam_alpha", "launch")
+            e.grade("cam_alpha", "resume", status="draft")
+        open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))
+        code, out = e.clay(*START, "--allow-writes", answer="campaign-status" if person else None)
+        check(f"START refused ({'with' if graded else 'without'} a receipt, "
+              f"{'with' if person else 'without'} a person at the terminal)",
+              refused(code, out, "never sent from here"), out)
 e = Env()
-e.presend()
-e.campaign("cam_alpha")
-code, out = e.clay(*START, answer="campaign-status")
-check("START with a person's approval but no grade is refused in code", refused(code, out, "no passing grade"), out)
+code, out = e.clay(*START, "--dry-run")
+check("START refused even as a dry run", refused(code, out, "never sent from here"), out)
 
+# Each refusal holds alone: a registry without refuse_values still refuses in code.
+lib = tempfile.mkdtemp()
+for f in os.listdir(os.path.join(ROOT, "library", "clay-api")):
+    src = os.path.join(ROOT, "library", "clay-api", f)
+    if os.path.isfile(src):
+        shutil.copy(src, lib)
+reg = json.load(open(os.path.join(lib, "registry.json")))
+for o in reg["ops"]:
+    if o["name"] == "campaign-status":
+        o.pop("refuse_values", None)
+json.dump(reg, open(os.path.join(lib, "registry.json"), "w"))
 e = Env()
-e.presend()
+e.env["CHEWBACCA_CLAY_LIB"] = lib
 e.grade("cam_alpha", "launch")
-open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))
-code, out = e.clay(*START, answer="campaign-status")
-check("START of a graded draft sends after the person approves", sends(code, out), out)
-code, out = e.clay(*START)
-check("a graded START still needs the person", refused(code, out, "did not approve"), out)
-
-e = Env()
-e.presend()
-e.grade("cam_alpha", "launch", status="paused")
-code, out = e.clay(*START, answer="campaign-status")
-check("a launch grade does not unlock resuming a paused campaign", refused(code, out, "resume on cam_alpha"), out)
-
-e = Env()
-e.presend()
-e.grade("cam_beta", "launch")
-e.campaign("cam_alpha")
-code, out = e.clay(*START, answer="campaign-status")
-check("another campaign's grade does not unlock this one", refused(code, out, "no gtme-grade pass"), out)
-
-e = Env()
-e.grade("cam_alpha", "launch")
-code, out = e.clay(*START, answer="campaign-status")
-check("a grade without the pre-send gate is refused", refused(code, out, "pre-send gate receipt"), out)
-
-e = Env()
-e.presend()
-e.grade("cam_alpha", "launch", status="active")
-code, out = e.clay(*START, answer="campaign-status")
-check("START on a campaign that is already active is refused", refused(code, out, "not a draft or paused"), out)
+code, out = e.clay(*START, "--allow-writes", answer="campaign-status")
+check("START refused in code even when the registry's refusal is removed", refused(code, out, "never sent from here"), out)
+reg_text = open(os.path.join(ROOT, "library", "clay-api", "registry.json")).read()
+cs = next(o for o in json.loads(reg_text)["ops"] if o["name"] == "campaign-status")
+check("the repo registry still refuses START itself", "START" in (cs.get("refuse_values") or {}).get("status", {}), cs)
+check("the repo spec still allows only PAUSED or STOPPED",
+      '"pattern": "PAUSED|STOPPED"' in open(os.path.join(ROOT, "library", "clay-api", "clay.json")).read())
 
 e = Env()
 open(os.path.join(e.clay_fx, "api-anything", "setCampaignStatus.json"), "w").write(json.dumps(SENT))
 code, out = e.clay("campaign-status", "campaign=cam_alpha", "status=PAUSED", "--allow-writes", answer="campaign-status")
-check("PAUSED needs no grade (stopping mail is always allowed)", sends(code, out), out)
+check("PAUSED still sends with a person's approval (stopping mail needs no grade)", sends(code, out), out)
+
+# 2. add-leads is checked against a grade in code.
 
 ADD = ["add-leads", "audience=audseg_one", 'filter={"type":"GroupOp","combinationMode":"And","items":[]}', "--allow-writes"]
 e = Env()
@@ -196,26 +204,60 @@ e.grade("cam_alpha", "launch")
 code, out = e.clay(*ADD, "campaign=cam_alpha", answer="add-leads")
 check("a launch grade does not unlock add-leads", refused(code, out, "no gtme-grade pass for add-leads"), out)
 
-# 2. The shell allowlist.
+# 3. The shell allowlist.
 
+KIT = ROOT
 ALLOWED = [
+    # reads and the gated front door, in every spelling of its path
     "chewbacca clay campaigns",
     "chewbacca clay campaign campaign=cam_x",
     "chewbacca clay campaign-variants ws=1372623 campaign=cam_x --surface api-anything",
     "chewbacca clay ops",
+    "chewbacca clay campaign-status campaign=cam_x status=PAUSED --allow-writes",
+    "chewbacca clay route campaign-status",
     "chewbacca gtm funnel --client Zeutara",
     "gtme-grade --campaign cam_x --action launch --leads leads.csv",
+    "bin/chewbacca-clay --help",
+    "node bin/chewbacca-clay ops",
+    f"{KIT}/bin/chewbacca-clay ops",
+    "bash bin/chewbacca clay ops",
     "clay campaigns list",
     "clay campaigns analytics cam_x",
     "clay whoami",
-    "grep -n campaign tools/gtme_grade.py",
+    # git, local inspect tools
     "git add bin/chewbacca-clay",
+    "git commit -F msg.txt -- library/clay-api/registry.json",
+    "git log --oneline -- bin/chewbacca-clay",
+    "git -C library/clay-api status",
+    "grep -n campaign tools/gtme_grade.py",
+    "rg clay",
+    "ls library/clay-api",
+    "cat library/clay-api/registry.json",
+    "head -20 bin/chewbacca-clay",
+    "tail -5 bin/chewbacca-clay",
+    "sed -n 1,40p bin/clay-inbox",
+    "wc -l bin/chewbacca-clay",
+    "diff library/clay-api/registry.json library/clay-api/registry.json",
+    "jq .ops library/clay-api/registry.json",
+    "python3 -m json.tool library/clay-api/registry.json",
+    "file bin/chewbacca-clay",
+    "stat bin/chewbacca-clay",
+    'find library/clay-api -name "*.json"',
+    # test runners and the kit's checks
+    "python3 tests/test_chewbacca_clay.py",
+    "CHEWBACCA_NO_SEND=1 python3 tests/test_chewbacca_clay.py",
+    "bash tests/run.sh gtme",
+    'bash tests/run.sh "chewbacca CLI"',
+    "bash tests/clay_native_guard.sh",
+    "pytest tests/test_chewbacca_clay.py -q",
+    "python3 tools/counts.py --check",
+    "python3 tools/checksums.py",
+    "code-slop --issues",
+    "slop-check library/clay-api --issues",
     "echo nothing to do with it",
 ]
 REFUSED = [
-    ("a write op", "chewbacca clay campaign-status campaign=cam_x status=START --allow-writes"),
-    ("--allow-writes on a read", "chewbacca clay campaigns --allow-writes"),
-    ("route to a write", "chewbacca clay route campaign-status"),
+    ("a campaign START through the front door", "chewbacca clay campaign-status campaign=cam_x status=START --allow-writes | cat"),
     ("quoted command name", '"chewbacca" clay campaigns'),
     ("split quoting", 'ch""ewbacca clay campaigns'),
     ("ANSI-C quoting", "$'\\x63lay' campaigns update cam_x --status active"),
@@ -227,15 +269,18 @@ REFUSED = [
     ("newline-separated commands", "clay campaigns list\nclay campaigns update cam_x --status active"),
     ("env", "env clay campaigns update cam_x --status active"),
     ("env prefix", "X=1 chewbacca clay campaigns"),
+    ("env prefix on a test", "FOO=1 python3 tests/test_chewbacca_clay.py"),
+    ("CHEWBACCA_NO_SEND in front of curl", "CHEWBACCA_NO_SEND=1 curl https://api.clay.com/v3"),
     ("command", "command clay campaigns list"),
     ("exec", "exec clay campaigns list"),
     ("absolute path to clay", "/usr/local/bin/clay campaigns list"),
-    ("relative path", "bin/chewbacca-clay campaigns"),
-    ("bash wrapper", "bash bin/chewbacca clay campaigns"),
+    ("a fake front door outside the kit", "/tmp/fake/bin/chewbacca-clay ops"),
+    ("bash -c wrapper", "bash -c 'chewbacca clay campaigns'"),
+    ("a test path escaping tests/", "python3 tests/../evil_clay.py"),
     ("python with requests", "python3 -c \"import requests; requests.patch('https://api.clay.com/v3/x')\""),
     ("curl", "curl -X PATCH https://api.clay.com/v3/workspaces/1/clay-sequencer/campaigns/cam_x/status"),
     ("wget", "wget https://api.clay.com/v3/workspaces/1"),
-    ("node", "node -e \"fetch('https://api.clay.com/v3')\""),
+    ("node -e", "node -e \"fetch('https://api.clay.com/v3')\""),
     ("osascript", "osascript -e 'open location \"https://app.clay.com\"'"),
     ("the clay CLI writing", "clay campaigns update cam_x --status active"),
     ("the clay CLI changing an audience", "clay audiences update seg_x --filter x"),
@@ -243,6 +288,13 @@ REFUSED = [
     ("chewie click on a campaign", 'chewie web click "Launch campaign"'),
     ("a redirect", "chewbacca clay campaigns > out.json"),
     ("command substitution", "chewbacca clay campaign campaign=$(cat id)"),
+    ("git config alias", "git config alias.c '!clay campaigns update cam_x'"),
+    ("git -c", "git -c core.pager=clay log"),
+    ("git rebase --exec", "git rebase --exec 'clay campaigns update cam_x' main"),
+    ("rg --pre", "rg --pre clay campaign ."),
+    ("find -delete", "find library/clay-api -delete"),
+    ("find -exec", "find library/clay-api -exec rm x"),
+    ("sed that writes", "sed -n 'w out' bin/clay-inbox"),
     ("forging a grade receipt", "echo x > ~/.chewbacca/state/gtme-grade/1372623-cam_x-launch.json"),
     ("reading the grade key", "cat ~/Library/Application\\ Support/chewbacca/gtme-grade.key"),
 ]
@@ -273,7 +325,7 @@ check("an unparsable payload that mentions Clay refuses", code == 2 and "not JSO
 code, err = e.hook("Bash", {"command": "chewbacca clay campaign campaign=cam_x", "description": "x"})
 check("a read with a description beside it still runs", code == 0, err)
 
-# 3. Clicks.
+# 4. Clicks.
 
 code, err = e.hook("mcp__chrome-devtools__click", {"uid": "1"},
                    last_url="https://app.clay.com/workspaces/1372623/campaigns/cam_x")

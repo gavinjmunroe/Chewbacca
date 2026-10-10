@@ -68,6 +68,7 @@ import json, os, re, shlex, sys
 
 cmd = sys.stdin.read()
 kit = sys.argv[1]
+cwd = sys.argv[2] if len(sys.argv) > 2 else ""
 MENTION = re.compile(r"clay|sequencer|campaign")
 
 
@@ -79,9 +80,40 @@ def out(verdict, why=""):
 # Quotes and backslashes removed, so "c\lay" and 'cl''ay' still count as Clay.
 if not MENTION.search(re.sub(r"[\"'\\]", "", cmd).lower()):
     out("skip")
-# No shell syntax at all: operators, substitutions, redirects, globs, escapes,
-# history, comments, newlines. A quoted value can carry spaces, nothing else.
-if re.search(r"[;&|`$<>(){}\[\]*?~!#\\\n\r\t\x00-\x08\x0b-\x1f\x7f]", cmd):
+
+
+def shell_syntax(s):
+    """True when the shell would do anything beyond splitting words: operators,
+    substitution, redirection, globbing, escapes, history, comments. Single
+    quotes make their contents literal; inside double quotes $ ` \\ ! stay live."""
+    if re.search(r"[\n\r\x00-\x08\x0b-\x1f\x7f]", s):
+        return True
+    i, n = 0, len(s)
+    while i < n:
+        c = s[i]
+        if c == "'":
+            j = s.find("'", i + 1)
+            if j < 0:
+                return True
+            i = j + 1
+            continue
+        if c == '"':
+            j = i + 1
+            while j < n and s[j] != '"':
+                if s[j] in "$`\\!":
+                    return True
+                j += 1
+            if j >= n:
+                return True
+            i = j + 1
+            continue
+        if c in ";&|`$<>(){}[]*?~!#\\":
+            return True
+        i += 1
+    return False
+
+
+if shell_syntax(cmd):
     out("refuse", "it uses shell syntax (operators, substitution, redirection, globs, escapes or newlines)")
 try:
     argv = shlex.split(cmd, posix=True)
@@ -89,9 +121,17 @@ except ValueError:
     out("refuse", "its quoting does not parse")
 if not argv:
     out("refuse", "it is empty")
-# The command name must be spelled plainly, first, with nothing in front.
-if not re.fullmatch(r"[a-z][a-z0-9-]*", argv[0]) or not re.match(re.escape(argv[0]) + r"(\s|$)", cmd.lstrip()):
-    out("refuse", "the command name is a path, quoted, escaped or behind an env prefix")
+# One env prefix is allowed, and only in front of a test runner.
+no_send = False
+if argv[0] == "CHEWBACCA_NO_SEND=1":
+    no_send, argv = True, argv[1:]
+    cmd = cmd.lstrip()[len("CHEWBACCA_NO_SEND=1"):]
+    if not argv:
+        out("refuse", "nothing after CHEWBACCA_NO_SEND=1")
+# The command word must be spelled plainly, first: not quoted, escaped or
+# assembled, and no other env prefix in front.
+if "=" in argv[0] or not re.match(re.escape(argv[0]) + r"(\s|$)", cmd.lstrip()):
+    out("refuse", "the command name is quoted, escaped or behind an env prefix")
 
 try:
     reg = json.load(open(os.path.join(kit, "library", "clay-api", "registry.json")))
@@ -99,34 +139,74 @@ try:
 except (OSError, ValueError, KeyError):
     out("refuse", "the clay op registry can't be read, so no read can be confirmed")
 
-KV = re.compile(r"[a-z_]+=[^\s]*")
+
+def resolve(p):
+    """A path as the shell will run it, from the tool call's working directory."""
+    if not os.path.isabs(p):
+        if not cwd or not os.path.isabs(cwd):
+            return None
+        p = os.path.join(cwd, p)
+    return os.path.realpath(p)
 
 
-def clay_read(args):
-    """chewbacca clay <read-op> k=v... [--surface S] [--json]"""
-    if not args:
-        out("refuse", "chewbacca clay with no op")
-    op, rest = args[0], args[1:]
-    if op in ("ops", "doctor", "--help", "-h") and not rest:
+def kit_file(p, rel):
+    """True when p is rel inside a Chewbacca checkout (this kit, or a worktree of
+    it): the file exists there, beside the Clay op registry and a git marker."""
+    r = resolve(p)
+    if not r or not r.endswith(os.sep + rel) or not os.path.isfile(r):
+        return False
+    root = r[: -len(rel) - 1]
+    return (os.path.isfile(os.path.join(root, "library", "clay-api", "registry.json"))
+            and os.path.exists(os.path.join(root, ".git")))
+
+
+def test_runner(argv):
+    name, args = argv[0], argv[1:]
+    if name == "python3" and len(args) == 1 and re.fullmatch(r"tests/[A-Za-z0-9_.-]+\.py", args[0]):
+        return True
+    if name == "bash" and args and args[0] == "tests/run.sh" and len(args) <= 2:
+        return len(args) == 1 or re.fullmatch(r"[A-Za-z0-9 ._.-]+", args[1]) is not None
+    if name == "bash" and len(args) == 1 and re.fullmatch(r"tests/[A-Za-z0-9_.-]+\.sh", args[0]):
+        return True
+    if name == "pytest" and args and all(re.fullmatch(r"tests/[A-Za-z0-9_./:-]+|-[qxvs]+", a) for a in args):
+        return True
+    return False
+
+
+if no_send:
+    if test_runner(argv):
         out("allow")
-    if op in ("route", "measure"):
-        if not rest or rest[0] not in READ_OPS:
-            out("refuse", f"{op} names something other than a read op")
-        op, rest = rest[0], rest[1:]
-    if op not in READ_OPS:
-        out("refuse", f"'{op}' is not a read op; writes need a person at a terminal running chewbacca clay")
-    i = 0
-    while i < len(rest):
-        a = rest[i]
-        if a == "--surface" and i + 1 < len(rest) and rest[i + 1] in ("cli", "api-anything", "bin"):
-            i += 2
-            continue
-        if a == "--json" or KV.fullmatch(a):
-            i += 1
-            continue
-        out("refuse", f"'{a}' is not an argument a read takes")
+    out("refuse", "CHEWBACCA_NO_SEND=1 is allowed only in front of a test runner")
+if test_runner(argv):
     out("allow")
 
+name, args = argv[0], argv[1:]
+base = os.path.basename(name)
+
+# The kit's own front door, in any spelling of its path. Writes there are gated
+# in code (a person at a terminal, and a passing grade for a START or add-leads),
+# so every op is allowed; the point is that the path is the real one.
+if name in ("chewbacca-clay",) or (base == "chewbacca-clay" and kit_file(name, "bin/chewbacca-clay")):
+    out("allow")
+if name == "node" and args and os.path.basename(args[0]) == "chewbacca-clay" and kit_file(args[0], "bin/chewbacca-clay"):
+    out("allow")
+if name == "bash" and args and os.path.basename(args[0]) == "chewbacca" and kit_file(args[0], "bin/chewbacca"):
+    name, args, base = "chewbacca", args[1:], "chewbacca"
+if name == "chewbacca" or (base == "chewbacca" and kit_file(name, "bin/chewbacca")):
+    if not args:
+        out("refuse", "chewbacca with no subcommand")
+    if args[0] in ("clay", "gtm", "gtme", "gtme-grade"):
+        out("allow")
+    out("refuse", f"chewbacca {args[0]} is not a known Clay read")
+if "/" in name or not re.fullmatch(r"[a-z][a-z0-9.-]*", name):
+    out("refuse", "the command is a path the kit doesn't know")
+
+if name in ("gtm", "gtme", "gtme-grade", "code-slop", "slop-check"):
+    out("allow")
+if name == "python3" and args[:1] in (["tools/counts.py"], ["tools/checksums.py"]) and set(args[1:]) <= {"--check", "--json"}:
+    out("allow")
+if name == "python3" and args[:2] == ["-m", "json.tool"] and len(args) <= 3:
+    out("allow")
 
 # The clay CLI's read subcommands, as argv prefixes.
 CLAY_READS = [("whoami",), ("credits", "balance"), ("campaigns", "list"), ("campaigns", "get"),
@@ -135,33 +215,62 @@ CLAY_READS = [("whoami",), ("credits", "balance"), ("campaigns", "list"), ("camp
               ("audiences", "list"), ("audiences", "get"), ("audiences", "records", "get"),
               ("audiences", "records", "search-ids"), ("workbooks", "list"), ("folders", "list"),
               ("signals", "list"), ("workflows", "list")]
-LOCAL_READS = {"grep", "ls", "cat", "head", "tail", "wc", "diff", "stat"}
-GIT_READS = {"status", "diff", "log", "show", "add", "commit", "ls-files", "grep", "blame"}
-
-name, args = argv[0], argv[1:]
-if name == "chewbacca":
-    if not args:
-        out("refuse", "chewbacca with no subcommand")
-    sub, args = args[0], args[1:]
-    if sub == "clay":
-        clay_read(args)
-    if sub in ("gtm", "gtme", "gtme-grade"):
-        out("allow")
-    out("refuse", f"chewbacca {sub} is not a known Clay read")
-if name in ("gtm", "gtme", "gtme-grade"):
-    out("allow")
 if name == "clay":
-    if any(tuple(args[:len(p)]) == p for p in CLAY_READS) and "--help" not in args[:1]:
+    if any(tuple(args[:len(p)]) == p for p in CLAY_READS):
         out("allow")
     out("refuse", "that clay subcommand is not a known read")
-if name in LOCAL_READS:
+
+# Read and inspect tools on local files, minus the flags that run a program.
+if name in ("cat", "head", "tail", "ls", "wc", "diff", "jq", "file", "stat"):
     out("allow")
-# Opening a page is a read; clicks on it are judged above, before this runs.
-if name == "chewie" and args[:2] == ["web", "goto"] and len(args) == 3 and re.fullmatch(r"https://[^\s]+", args[2]):
+if name == "grep":
     out("allow")
-if name == "git" and args and args[0] in GIT_READS:
+if name == "rg":
+    if any(a.startswith(("--pre", "-z", "--search-zip")) for a in args):
+        out("refuse", "rg --pre and --search-zip run other programs")
     out("allow")
-out("refuse", f"{name} is not a known Clay read (curl, python, node, osascript and the like are never allowed near Clay)")
+if name == "ugrep":
+    if any(a.startswith(("--filter", "-z", "--decompress")) for a in args):
+        out("refuse", "ugrep --filter and --decompress run other programs")
+    out("allow")
+if name == "find":
+    if any(a in ("-exec", "-execdir", "-ok", "-okdir", "-delete") or a.startswith(("-fprint", "-fls")) for a in args):
+        out("refuse", "find with -exec, -ok, -delete or -fprint changes or runs things")
+    out("allow")
+if name == "sed":
+    # Only `sed -n <lines>p file...`: no script that writes (w) or executes (e).
+    if len(args) >= 2 and args[0] == "-n" and re.fullmatch(r"[0-9]+(,[0-9]+)?p", args[1]) and \
+            all(not a.startswith("-") for a in args[2:]):
+        out("allow")
+    out("refuse", "only sed -n <from>,<to>p <files> is allowed")
+
+# git, any built-in subcommand except changing config, aliases or hooks.
+GIT_SUBS = {"add", "am", "apply", "blame", "branch", "checkout", "cherry-pick", "commit", "describe", "diff",
+            "fetch", "format-patch", "grep", "log", "ls-files", "merge", "mv", "pull", "push", "rebase", "reflog",
+            "reset", "restore", "rev-parse", "revert", "rm", "shortlog", "show", "show-ref", "stash", "status",
+            "switch", "tag", "worktree", "merge-base", "cat-file", "ls-tree", "rev-list", "name-rev"}
+if name == "git":
+    i = 0
+    while i < len(args) and args[i].startswith("-"):
+        if args[i] == "-C" and i + 1 < len(args):
+            i += 2
+            continue
+        if args[i] in ("--no-pager", "--no-optional-locks"):
+            i += 1
+            continue
+        out("refuse", f"git {args[i]} can change config or run a program")
+    sub, rest = (args[i], args[i + 1:]) if i < len(args) else ("", [])
+    if sub not in GIT_SUBS:
+        out("refuse", f"git {sub or '(none)'} is not an allowed subcommand (config, aliases and hooks stay out)")
+    if any(a in ("-x", "--exec", "-O", "--open-files-in-pager", "--ext-diff", "--upload-pack", "--receive-pack")
+           or a.startswith(("--exec=", "--open-files-in-pager=", "--upload-pack=", "--receive-pack=", "--template"))
+           for a in rest):
+        out("refuse", "that git flag runs another program")
+    out("allow")
+
+if name == "chewie" and args[:2] == ["web", "goto"] and len(args) == 3 and re.fullmatch(r"https://\S+", args[2]):
+    out("allow")
+out("refuse", f"{name} is not a known Clay read (curl, wget, python -c, node -e, osascript and the like are never allowed near Clay)")
 PY
 
 case "$tool" in
@@ -192,7 +301,8 @@ case "$tool" in
       [ -n "$cand" ] && [ -f "$cand/library/clay-api/registry.json" ] && { kit="$cand"; break; }
     done
     command -v python3 >/dev/null 2>&1 || refuse "python3 is missing, so a command that mentions Clay can't be classified."
-    verdict="$(printf '%s' "$cmd" | python3 -I -c "$CLASSIFY" "${kit:-/nonexistent}" 2>/dev/null)" ||
+    cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)"
+    verdict="$(printf '%s' "$cmd" | python3 -I -c "$CLASSIFY" "${kit:-/nonexistent}" "$cwd" 2>/dev/null)" ||
       refuse "the command classifier failed, so a command that mentions Clay is refused."
     case "$verdict" in
       allow*|skip*) exit 0 ;;
@@ -201,11 +311,14 @@ case "$tool" in
     cat >&2 <<MSG
 launch-guard: refusing a shell command that mentions Clay: ${why:-it could not be classified}.
 
-Only exact reads run from a shell: chewbacca clay <read-op> k=v..., chewbacca gtm,
-gtme, gtme-grade, or a read subcommand of the clay CLI, with no shell syntax.
-Anything that writes goes through chewbacca clay, which needs a person at a
-terminal; a campaign START or add-leads also needs a passing gtme-grade for that
-campaign and a full pre-send gate receipt, checked in code before it sends.
+Near Clay a shell runs only known commands with no shell syntax: the kit's front
+door (chewbacca clay <op>, bin/chewbacca-clay <op>, node bin/chewbacca-clay <op>),
+chewbacca gtm/gtme/gtme-grade, clay CLI reads, git (not config), local read tools,
+counts.py/checksums.py, code-slop, slop-check, and test runners (python3 tests/x.py,
+bash tests/run.sh [group], pytest tests/...; prefix CHEWBACCA_NO_SEND=1 so nothing
+sends). Writes go through chewbacca clay, which needs a person at a terminal; a
+campaign START or add-leads also needs a passing gtme-grade and a full pre-send
+gate receipt, checked in code before it sends.
 MSG
     exit 2
     ;;

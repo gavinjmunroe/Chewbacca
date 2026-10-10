@@ -111,7 +111,7 @@ against real leads with no blocking finding, and the four-item start card
 (verified count, sequence, ramp, each domain's health). A failed gate goes
 back to its own step. Grading never authorizes the send.
 
-Run `gtme-grade --action launch|resume|add-leads` on every campaign before any send, resume or add-leads (`chewbacca clay` refuses a START or add-leads without its fresh, signed pass, and launch-guard lets only exact reads near Clay from a shell), and apply the playbook to the client's live data with it before proposing new research.
+Run `gtme-grade --action launch|resume|add-leads` on every campaign before any send, resume or add-leads: Caleb reads its verdict before he presses Start in Clay himself (the kit never sends a START), `chewbacca clay` refuses add-leads without its fresh, signed pass, and launch-guard lets only known commands near Clay from a shell. Apply the playbook to the client's live data with it before proposing new research.
 
 ## Reuse before building
 

@@ -356,17 +356,12 @@ def test_derived_writes_stay_gated():
         ok(code == 3 and "did not approve" in out["reason"], f"{name} ran with nobody typing its name")
         code, out, _ = run({}, {}, name, *argv, "--allow-writes", env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": name, "CHEWBACCA_NO_SEND": "1"})
         ok(code == 3 and "NO_SEND" in out["reason"], f"{name} ran under CHEWBACCA_NO_SEND=1")
-    # A campaign START is sent only after the person approves AND gtme-grade
-    # passes for it (tests/test_launch_guard_grade.py covers the passing side).
-    with tempfile.TemporaryDirectory() as home:
-        code, out, _ = run({"api-anything/setCampaignStatus.json": SENT}, {}, "campaign-status", "campaign=cam_ex1",
-                           "status=START", "--allow-writes",
-                           env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "campaign-status", "HOME": home,
-                                      "GTME_GRADE_KEY_FILE": os.path.join(home, "k")})
-        ok(code == 3 and out["class"] == "refused" and "no passing grade" in out["reason"],
-           "an approved campaign START without a grade was let through")
+    # A campaign start is never sent from here, approved or not.
+    code, out, _ = run({}, {}, "campaign-status", "campaign=cam_ex1", "status=START", "--allow-writes",
+                       env_extra={"CHEWBACCA_CLAY_TTY_ANSWER": "campaign-status"})
+    ok(code == 3 and out["class"] == "refused" and "never sent from here" in out["reason"], "a campaign START was let through")
     code, out, _ = run({}, {}, "campaign-status", "campaign=cam_ex1", "status=START", "--dry-run")
-    ok(code == 0 and out["sent"] is False, "a START dry run should print the request and send nothing")
+    ok(code == 3, "a campaign START is refused even as a dry run")
 
 
 def test_new_args_are_shape_checked():

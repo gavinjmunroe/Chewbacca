@@ -2497,8 +2497,8 @@
      "type": "string",
      "required": true,
      "example": "PAUSED",
-     "pattern": "START|PAUSED|STOPPED",
-     "hint": "PAUSED or STOPPED; START only with a person at a terminal and a passing gtme-grade"
+     "pattern": "PAUSED|STOPPED",
+     "hint": "PAUSED or STOPPED"
     }
    ],
    "readOnly": false,

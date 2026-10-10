@@ -7,8 +7,8 @@ it had touched a live campaign. Applied to Zeutara on 2026-10-10 it found, among
 other things, 362 of 1,778 messages sent from 30 inboxes the pre-send gate had
 never seen (two of them on domains the client refused on 10-04), because the
 gate read a sender file and the campaigns carried their own sender list. A rule
-that is only written down does not run. This runs them, and `chewbacca clay`
-refuses a campaign START or add-leads without a pass from here.
+that is only written down does not run. This runs them before Caleb presses
+Start in Clay, and `chewbacca clay` refuses add-leads without a pass from here.
 
     gtme-grade --campaign cam_x --action launch --leads send.csv --suppress sent.csv \\
                --senders sender-accounts.json --warmup-start 2026-10-02 \\
@@ -43,10 +43,10 @@ and of the campaign's own state (sequence, variants, settings, senders), all
 signed with an HMAC key kept 0600 outside the repo and outside ~/.chewbacca
 (~/Library/Application Support/chewbacca/gtme-grade.key, made on first use).
 `--verify` re-checks one receipt against the current files and a fresh read of
-the campaign; `chewbacca clay` calls it on a START or add-leads request's own
-workspace, campaign and action, after the person approves and before it sends,
-and refuses on any mismatch or error. `--action start` asks for a launch grade
-on a draft and a resume grade on a paused campaign, decided from a fresh read.
+the campaign. `chewbacca clay` calls it on an add-leads request's own
+workspace, campaign and audience, after the person approves and before it
+sends, and refuses on any mismatch or error. A campaign START is never sent by
+the kit: Caleb runs this, reads the verdict, and presses Start in Clay himself.
 Local --copy grades never write a receipt, since nothing ties them to a Clay
 campaign. Nothing else is written. This never sends, never edits a
 campaign and never spends a credit: Clay is only read through `chewbacca clay`.
@@ -1151,10 +1151,11 @@ def presend_ok():
 
 
 def verify_request(ws, cid, action, audience=None):
-    """What the send path asks. `start` is a launch for a draft and a resume for
-    a paused campaign, decided from a fresh read; add-leads also needs the
-    audience to be this campaign's own base segment."""
-    if action not in ACTIONS + ("start",):
+    """What a check asks: a grade for this action, plus the pre-send gate; for
+    add-leads (the one write chewbacca clay gates on a grade) the audience must
+    also be this campaign's own base segment. There is no `start`: Clay decides
+    launch vs resume at send time, so a START is never sent by the kit."""
+    if action not in ACTIONS:
         return f"unknown action {action!r}"
     try:
         receipt_file(ws, cid, ACTIONS[0])  # validates ws and cid
@@ -1163,20 +1164,11 @@ def verify_request(ws, cid, action, audience=None):
     why = presend_ok()
     if why:
         return why
-    if action == "start" or audience is not None:
+    if action == "add-leads":
         try:
             doc = fetch_state(ws, cid)
         except Exception as exc:  # a read that fails refuses
             return f"could not read the campaign from Clay: {exc}"
-    if action == "start":
-        status = str(doc.get("status", "")).lower()
-        if status == "draft":
-            action = "launch"
-        elif status == "paused":
-            action = "resume"
-        else:
-            return f"the campaign is {status or 'in an unknown state'}, not a draft or paused, so START is refused"
-    if action == "add-leads":
         if audience is None:
             return "add-leads needs the audience it changes"
         base = doc.get("leadBaseSegmentId") or (doc.get("audience") or {}).get("id")
@@ -1215,7 +1207,7 @@ def main(argv=None):
     ap.add_argument("--review", help="JSON recording the recipient read: campaign, reviewer, "
                                      "reviewed_at, unresolved[]")
     ap.add_argument("--audience", help="with --verify --action add-leads: the audience the write changes")
-    ap.add_argument("--action", choices=ACTIONS + ("start",),
+    ap.add_argument("--action", choices=ACTIONS,
                     help="what this grade unlocks for the campaign (one of the three actions). "
                          "A receipt is written only with an action and a Clay campaign id")
     ap.add_argument("--verify", action="store_true",
@@ -1233,9 +1225,6 @@ def main(argv=None):
             return 2
         print(f"gtme-grade: verified {args.action} on {args.campaign} in {args.ws}")
         return 0
-    if args.action == "start":
-        print("gtme-grade: grade for launch or resume; start is only a --verify question", file=sys.stderr)
-        return 2
     try:
         camp, gates, passed, inputs = grade(args)
     except (OSError, ValueError) as exc:

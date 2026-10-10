@@ -80,6 +80,21 @@ rm -rf "$dir"; say "do everything yourself"
 payload "stop sending" | CHEWBACCA_LAUNCHED_BY=parent-session CHEWBACCA_STATE_DIR="$T/state" CLAUDE_CODE_SESSION_ATTENDED=0 CLAUDE_PID=1 bash "$H"
 check "a launched 'stop sending' leaves Caleb's ok standing" yes
 
+# CHEWBACCA_AGENT_LAUNCHED=1 is what chewbacca launch sets (c511c674).
+rm -rf "$dir"
+payload "$LAUNCH" | CHEWBACCA_AGENT_LAUNCHED=1 CHEWBACCA_STATE_DIR="$T/state" CLAUDE_CODE_SESSION_ATTENDED=1 CLAUDE_PID=1 bash "$H"
+check "a chewbacca launch session (CHEWBACCA_AGENT_LAUNCHED=1) never approves" no
+# 13:50, 2026-10-10: a task-notification renewed the approval. Every wrapper
+# the harness injects is skipped, leading whitespace or not.
+for w in "<task-notification><status>completed</status></task-notification>" \
+         "  <cross-session-message from=\"tab\">do everything yourself</cross-session-message>" \
+         "[SYSTEM NOTIFICATION - NOT USER INPUT] do it"; do
+  rm -rf "$dir"; say "$w"
+  check "a harness wrapper never approves: ${w:0:30}" no
+done
+rm -rf "$dir"; say "do everything yourself"; say "<cross-session-message>stop sending</cross-session-message>"
+check "a cross-session 'stop sending' leaves Caleb's ok standing" yes
+
 rm -rf "$dir"
 say "do everything yourself"; say "stop sending"
 check "'stop sending' withdraws it" no

@@ -289,9 +289,7 @@ async function prepareWrite(op, s, frozen) {
     const argv = frozen.argv.slice(1);
     return { files: [exe], send: async () => {
       const r = spawnSync(exe, argv, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, timeout: 180000 });
-      // The CLI echoes a rejected argument before saying why, so a long error
-      // keeps its tail: the head alone hid every reason on 2026-10-10.
-      if (r.status !== 0) return { ok: false, class: "error", reason: clip((r.stderr || String(r.error || `exit ${r.status}`)).trim()) };
+      if (r.status !== 0) return { ok: false, class: "error", reason: (r.stderr || String(r.error || `exit ${r.status}`)).trim().slice(0, 400) };
       return { ok: true, data: parseOr(r.stdout, r.stdout) };
     } };
   }
@@ -361,10 +359,6 @@ async function callEngine(opName, bound, flags, write) {
   if (flags.maxTier) opts.maxTier = flags.maxTier;
   if (write) opts.allowWrites = true;
   return call(registry.engine.site, opName, bound, opts);
-}
-
-function clip(s) {
-  return s.length <= 800 ? s : `${s.slice(0, 200)} ... ${s.slice(-600)}`;
 }
 
 function runProcess(kind, opName, file, argv) {
@@ -539,6 +533,10 @@ const ARG_SHAPES = {
   lead_map_id: /^\d{1,15}$/, category_id: /^\d{1,15}$/,
   read_status: /^(READ|UNREAD)$/,
   resource_type: /^(FOLDER|TABLE|WORKBOOK|WORKFLOW|AUDIENCE_SEGMENT)$/,
+  trigger: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+  // An absolute path to a .csv with no "..": the CLI uploads whatever file it is
+  // handed, so a path that wanders is refused before it is read.
+  csv: /^\/(?!.*\/\.\.?(\/|$))[A-Za-z0-9 ._\/-]{1,400}\.csv$/,
 };
 // Comma lists, or a JSON array: each item must have the item shape. The cap is
 // the op's `limits` entry, else 200.
@@ -572,6 +570,15 @@ const JSON_ARGS = {
     return null;
   },
   filter: (v) => (isObj(v) && v.type === "GroupOp" && Array.isArray(v.items) ? null : "must be a filter AST whose root is a GroupOp with items"),
+  // campaign-update and campaign-sequence. A status key would launch or stop a
+  // campaign from here, which only campaign-status (never START) may do.
+  input: (v, op) => {
+    if (!isObj(v) || !Object.keys(v).length) return "must be a non-empty JSON object";
+    if (op?.name === "campaign-sequence") return Array.isArray(v.ops) && v.ops.length ? null : "must be {\"ops\": [...]}";
+    const allowed = ["settings", "leadBaseSegmentId", "name", "leadExclusionSegmentIds"];
+    const extra = Object.keys(v).filter((k) => !allowed.includes(k));
+    return extra.length ? `may only hold ${allowed.join(", ")} (not ${extra.join(", ")})` : null;
+  },
   config: (v) => {
     if (!isObj(v)) return "must be a JSON object";
     if (!isObj(v.source) || v.source.type !== "S3_CSV" || typeof v.source.key !== "string") return "source must be {type:S3_CSV, key, ...} from a finished multi-part upload";
@@ -601,6 +608,14 @@ function badArg(args, op) {
     const shape = ARG_SHAPES[k];
     if (!shape) return `${k} has no allowed shape`;
     if (!shape.test(String(v))) return `${k} does not look like a ${k}`;
+    // csv-upload sends the file to Clay, so only client data under ~/code/work
+    // may go, by its real path (security review of c511c674: any .csv on disk).
+    if (k === "csv") {
+      const root = path.join(os.homedir(), "code", "work") + path.sep;
+      let real;
+      try { real = fs.realpathSync(String(v)); } catch { real = null; }
+      if (!FIXTURES && (!real || !real.startsWith(root))) return `csv must be a file under ${root}`;
+    }
   }
   return null;
 }
@@ -1014,6 +1029,27 @@ function noteChatApproval(name, rec) {
   process.stderr.write(`chewbacca clay: ${name} approved in chat by Caleb, session ${rec.session_id}, ${new Date(rec.at * 1000).toISOString()}: "${said}"\n`);
 }
 
+// campaign-update and campaign-sequence touch only DRAFT campaigns. On a live
+// one, a new base segment emails whoever is in it and a sequence edit changes
+// mail already queued; those go through add-leads and its grade instead.
+function draftOnly(op, args) {
+  if (!["campaign-update", "campaign-sequence"].includes(op.name)) return null;
+  let status;
+  if (FIXTURES) {
+    status = process.env.CHEWBACCA_CLAY_TEST_CAMPAIGN_STATUS || "draft";
+  } else {
+    const exe = whichAbs("clay");
+    if (!exe) return "the clay CLI is not installed, so the campaign's status can't be read";
+    const r = spawnSync(exe, ["campaigns", "get", String(args.campaign)], { encoding: "utf8", timeout: 60000 });
+    try {
+      status = JSON.parse(r.stdout).status;
+    } catch {
+      return "could not read the campaign's status";
+    }
+  }
+  return status === "draft" ? null : `${args.campaign} is ${status}; only a draft campaign can be edited here`;
+}
+
 function personApproves(name, request) {
   const prompt = approvalPrompt(name, request);
   if (FIXTURES && process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT) fs.writeFileSync(process.env.CHEWBACCA_CLAY_TTY_TRANSCRIPT, prompt);
@@ -1117,6 +1153,8 @@ async function runOp(name, kv, flags) {
     // Nothing the request depends on may have changed while the person read it.
     if (fingerprint(prep) !== before) refuse("the registry, spec, environment, engine, session or executable changed after approval; nothing was sent");
     if (sha256(showable({ op: name, request })) !== shownHash) refuse("the request changed after approval; nothing was sent");
+    const live = draftOnly(op, args);
+    if (live) refuse(`${live}; nothing was sent`);
     const ungraded = gradeGate(op, request, args);
     if (ungraded) refuse(`no passing grade for this campaign: ${ungraded}. Run gtme-grade on it first; nothing was sent`);
     const t0 = Date.now();

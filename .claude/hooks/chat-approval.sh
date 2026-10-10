@@ -20,12 +20,15 @@
 # not Caleb's when:
 #   - CLAUDE_CODE_SESSION_ATTENDED=0. `claude -p` and `claude --bg` both set it,
 #     overriding the 1 they inherit from a desktop tab; a desktop tab has 1.
-#   - CHEWBACCA_LAUNCHED_BY is set. The kit's launchers set it.
+#   - CHEWBACCA_AGENT_LAUNCHED or CHEWBACCA_LAUNCHED_BY is set. `chewbacca
+#     launch` sets the first (c511c674).
 #   - the session's claude process has another claude process above it: it was
 #     started from inside a Claude Code session. A desktop tab's chain is
 #     claude <- Claude.app/Helpers/disclaimer <- Claude.app.
-#   - the prompt is a harness wrapper (<task-notification>, a system
-#     notification, Stop hook feedback), which no person typed.
+#   - the prompt is a harness wrapper (<task-notification>, a
+#     <cross-session-message> from another tab, a system notification, Stop
+#     hook feedback), which no person typed. At 13:50 a task-notification
+#     renewed the approval.
 # The hook payload itself carries no such marker: it has session_id, cwd,
 # transcript_path, permission_mode and the prompt for both kinds of session.
 # CLAUDE_CODE_ENTRYPOINT is useless here, a child inherits "claude-desktop".
@@ -35,6 +38,11 @@
 # session and prints which one and what he typed. launch-guard refuses any
 # tool call that names the records.
 set -uo pipefail
+# A session an agent launched is typed into by that agent, not by Caleb. At
+# 13:17 on 2026-10-10 a launcher's test prompt ("Reply with exactly: launch test
+# ok") wrote an approval. Launchers set CHEWBACCA_AGENT_LAUNCHED=1, and hooks
+# inherit the session's environment.
+[ "${CHEWBACCA_AGENT_LAUNCHED:-}" = 1 ] && exit 0
 STATE="${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}"
 PAYLOAD="$(cat 2>/dev/null)"
 [ -n "$PAYLOAD" ] || exit 0
@@ -63,7 +71,7 @@ def remove(p):
 remove(os.path.join(state, "clay-chat-approval.json"))
 
 INJECTED = re.compile(
-    r"^\s*(<task-notification>|<system-reminder>|\[SYSTEM NOTIFICATION|Stop hook feedback:"
+    r"^\s*(<task-notification|<cross-session-message|<system-reminder>|\[SYSTEM NOTIFICATION|Stop hook feedback:"
     r"|<local-command-stdout>|<local-command-stderr>|<teammate-message)", re.I)
 
 
@@ -121,7 +129,7 @@ def nested():
 def why_not_caleb():
     if INJECTED.search(prompt):
         return "injected"
-    if os.environ.get("CHEWBACCA_LAUNCHED_BY"):
+    if os.environ.get("CHEWBACCA_LAUNCHED_BY") or os.environ.get("CHEWBACCA_AGENT_LAUNCHED"):
         return "launched"
     if os.environ.get("CLAUDE_CODE_SESSION_ATTENDED") == "0":
         return "unattended"

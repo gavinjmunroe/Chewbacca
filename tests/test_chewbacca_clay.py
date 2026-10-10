@@ -311,6 +311,25 @@ def test_chat_approval_stands_in_for_the_terminal():
     ok(code == 3 and out["class"] == "refused", "a START is still never sent from here")
 
 
+def test_campaign_build_ops_touch_drafts_only():
+    # 2026-10-10: the Monday build needed CSV loads, segments and draft campaigns
+    # through the front door. None of them may launch or edit a live campaign.
+    import json as _json
+    import tempfile
+    import time as _time
+    code, out, _ = run({}, {}, "campaign-update", "campaign=cam_x", 'input={"status":"active"}', "--allow-writes")
+    ok(code == 2 and "status" in out["reason"], "campaign-update refuses a status key")
+    code, out, _ = run({}, {}, "csv-upload", "trigger=15a2668a-07fd-4844-be50-37981ebb971a", "csv=/tmp/../etc/x.csv")
+    ok(code == 2, "csv-upload refuses a path with ..")
+    with tempfile.TemporaryDirectory() as d:
+        with open(os.path.join(d, "s-caleb.json"), "w") as f:
+            _json.dump({"v": 2, "interactive": True, "session_id": "s-caleb", "at": int(_time.time())}, f)
+        approve = {"CHEWBACCA_CLAY_CHAT_APPROVAL_DIR": d, "CHEWBACCA_CLAY_TEST_CAMPAIGN_STATUS": "active"}
+        code, out, _ = run({}, {}, "campaign-sequence", "campaign=cam_x", 'input={"ops":[{"op":"deleteStep"}]}',
+                           "--allow-writes", env_extra=approve)
+        ok(code == 3 and "only a draft" in out["reason"], "campaign-sequence refuses a live campaign")
+
+
 def test_a_relabelled_write_is_still_gated():
     # Review of b68d5645: a registry that calls blocklist-add a read, or an env var
     # pointing at such a registry, must not get past the person-at-a-terminal gate.
@@ -560,6 +579,7 @@ SAMPLES = {
     "status": "PAUSED", "lead_map_id": "1", "category_id": "1", "read_status": "READ", "entry": "9",
     "emails": "a@example.com", "resource": "t_ex1", "resource_type": "TABLE", "name": "x", "data_type": "text",
     "workflow": "wf_ex1", "run": "wfr_ex1", "detail": "summary",
+    "trigger": "15a2668a-07fd-4844-be50-37981ebb971a", "csv": "/tmp/leads.csv", "input": '{"name":"x"}',
 }
 CLI_READ_LEAVES = {"list", "get", "analytics", "balance", "search-ids", "search-count", "query", "query-live", "query-usage",
                    "audience", "summary", "activities", "list-values", "steps", "reference", "traffic", "aggregate", "search",
@@ -588,7 +608,8 @@ def walk_gate(reg_path=None):
     extra = {"CHEWBACCA_CLAY_LIB": str(Path(reg_path).parent)} if reg_path else {}
     walked = 0
     for op in reg["ops"]:
-        own = {"update-rows": {"records": json.dumps(REC_UPD)}}.get(op["name"], {})
+        own = {"update-rows": {"records": json.dumps(REC_UPD)},
+               "campaign-sequence": {"input": '{"ops":[{"op":"deleteStep"}]}'}}.get(op["name"], {})
         argv = [f"{a.rstrip('?')}={own.get(a.rstrip('?'), SAMPLES[a.rstrip('?')])}" for a in op["args"]]
         for s in op["surfaces"]:
             if s.get("unless"):
@@ -832,7 +853,7 @@ def main():
                test_approved_request_is_the_sent_request, test_control_bytes_cannot_fake_the_prompt,
                test_every_mutating_surface_is_gated, test_nothing_changes_between_approval_and_send,
                test_values_that_change_when_decoded_are_refused, test_workspace_has_no_built_in_default,
-               test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape,
+               test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_campaign_build_ops_touch_drafts_only, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape,
                test_query_slot_reads_build, test_new_reads_are_reads_with_a_measured_surface, test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")

@@ -819,6 +819,9 @@ if group "installer"; then
   check  "design-context fires on design work only" \
     bash "$ROOT/tests/design_context.sh" "$ROOT"
 
+  check  "design-gate refuses a page that errors in a real browser and keeps a receipt" \
+    bash "$ROOT/tests/design_gate_proof.sh"
+
   check  "brain-sync commits one turn's writes once, and only this session's" \
     bash "$ROOT/tests/brain_sync.sh"
 

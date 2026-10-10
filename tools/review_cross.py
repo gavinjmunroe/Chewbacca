@@ -21,6 +21,7 @@ severity, message, scenario}]}. Exit 0 means no findings, 1 means findings to
 act on or arbitrate, 2 means the review could not run.
 """
 import argparse
+import importlib.machinery
 import importlib.util
 import json
 import os
@@ -37,8 +38,21 @@ _spec = importlib.util.spec_from_file_location("review_gate", HERE / "review_gat
 gate = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gate)
 
-# Runtimes in preference order. CHEWBACCA_REVIEWERS reorders or narrows it.
-KNOWN_RUNTIMES = ("codex", "claude")
+# Runtimes this tool will start on an untrusted diff. Only one that can run
+# with zero tools qualifies: claude does (--tools ""). codex 0.155 has no zero
+# tool mode; --sandbox read-only still lets its shell read ~/.ssh or chat.db,
+# and disabling features one by one (shell_tool, unified_exec, browser_use,
+# computer_use, apps, plugins, code_mode_host, ...) is a denylist an alpha CLI
+# outgrows. So codex never receives a diff from here. Its findings still count
+# as reviewer A through --a-report, which reuses what review-gate produced.
+KNOWN_RUNTIMES = ("claude",)
+REPORT_ONLY_RUNTIMES = ("codex",)
+CODEX_EXCLUDED = "codex is never run on an untrusted diff here: it has no zero-tool mode"
+
+_history_loader = importlib.machinery.SourceFileLoader("agent_history", str(HERE.parent / "bin" / "agent-history"))
+_history_spec = importlib.util.spec_from_loader("agent_history", _history_loader)
+history = importlib.util.module_from_spec(_history_spec)
+_history_loader.exec_module(history)
 
 # Two findings on the same file match when their lines are close and their
 # words overlap, or when their lines are further apart and their words overlap a
@@ -196,9 +210,7 @@ def exit_code(result):
 # ------------------------------------------------------------ reviewers (I/O)
 
 def available_runtimes():
-    order = os.environ.get("CHEWBACCA_REVIEWERS")
-    names = [name.strip() for name in order.split(",")] if order else list(KNOWN_RUNTIMES)
-    return [name for name in names if name in KNOWN_RUNTIMES and shutil.which(name)]
+    return [name for name in KNOWN_RUNTIMES if shutil.which(name)]
 
 
 # A model name is an argv element, so it must never look like a flag or carry
@@ -224,42 +236,33 @@ def plan_reviewers(a_runtime=None):
     Each reviewer is {"runtime", "model", "label"}; model None means the
     runtime's own configured default, so no model id is hardcoded here.
     """
-    found = available_runtimes()
+    has_claude = "claude" in available_runtimes()
 
-    def spec(runtime, slot):
-        model = _model(runtime, slot)
-        return {"runtime": runtime, "model": model, "label": runtime + (" (%s)" % model if model else "")}
+    def claude(model):
+        return {"runtime": "claude", "model": model, "label": "claude" + (" (%s)" % model if model else "")}
 
     if a_runtime is not None:
+        if a_runtime not in KNOWN_RUNTIMES + REPORT_ONLY_RUNTIMES:
+            raise ValueError("unknown reviewer runtime for --a-report")
         first = {"runtime": a_runtime, "model": None, "label": a_runtime}
-        others = [name for name in found if name != a_runtime]
-        if others:
-            return first, spec(others[0], "B"), None
-        second = _same_runtime_second(a_runtime, found)
-        return (first, second, None) if second else (first, None, "no second model available")
-    if not found:
-        return None, None, "no reviewer runtime available (looked for %s)" % ", ".join(KNOWN_RUNTIMES)
-    if len(found) >= 2:
-        return spec(found[0], "A"), spec(found[1], "B"), None
-    only = found[0]
-    if only == "claude":
-        # One runtime, two models. The aliases resolve to the account's current
-        # versions, so this names a model family rather than pinning an id.
-        model_a = _model("claude", "A") or "opus"
-        model_b = _model("claude", "B") or "sonnet"
-        if model_a != model_b:
-            return ({"runtime": "claude", "model": model_a, "label": "claude (%s)" % model_a},
-                    {"runtime": "claude", "model": model_b, "label": "claude (%s)" % model_b}, None)
-    first = spec(only, "A")
-    second = _same_runtime_second(only, found, first["model"])
-    return (first, second, None) if second else (first, None, "only %s is installed" % only)
-
-
-def _same_runtime_second(runtime, found, model_a=None):
-    model_b = _model(runtime, "B")
-    if runtime in found and model_b and model_b != model_a:
-        return {"runtime": runtime, "model": model_b, "label": "%s (%s)" % (runtime, model_b)}
-    return None
+        if not has_claude:
+            return first, None, "claude is not installed, so no second model is available"
+        if a_runtime != "claude":
+            # A different runtime already: claude on its own default model.
+            return first, claude(_model("claude", "B")), None
+        model_b = _model("claude", "B")
+        if model_b:
+            return first, claude(model_b), None
+        return first, None, "reviewer A was claude and CHEWBACCA_REVIEW_CLAUDE_MODEL_B names no other model"
+    if not has_claude:
+        return None, None, "claude is not installed; " + CODEX_EXCLUDED
+    # One runtime, two models. The aliases resolve to the account's current
+    # versions, so this names a model family rather than pinning an id.
+    model_a = _model("claude", "A") or "opus"
+    model_b = _model("claude", "B") or "sonnet"
+    if model_a == model_b:
+        return claude(model_a), None, "CHEWBACCA_REVIEW_CLAUDE_MODEL_A and _B name the same model"
+    return claude(model_a), claude(model_b), None
 
 
 # The change handed to a reviewer is capped so a huge diff cannot overflow its
@@ -316,24 +319,19 @@ def review_prompt(change, truncated):
         "\n----- BEGIN CHANGE -----\n" + change + "\n----- END CHANGE -----\n")
 
 
-# Fixed argv templates, one per runtime. Nothing here comes from the repository
-# or from reviewer output: the variable parts are paths this code created and a
-# model name that passed safe_model. The prompt and the change go on stdin.
-def reviewer_command(reviewer, workdir, schema_path, output_path):
+# One fixed argv template. Nothing here comes from the repository or from
+# reviewer output: the only variable part is a model name that passed
+# safe_model. The prompt and the change go on stdin.
+def reviewer_command(reviewer):
     runtime = reviewer["runtime"]
     model = safe_model(reviewer["model"])
+    if runtime in REPORT_ONLY_RUNTIMES:
+        raise ValueError(CODEX_EXCLUDED)
     if runtime not in KNOWN_RUNTIMES:
         raise ValueError("unknown reviewer runtime")
     executable = shutil.which(runtime)
     if not executable:
         raise ValueError("%s executable unavailable" % runtime)
-    if runtime == "codex":
-        command = [executable, "exec", "--sandbox", "read-only", "--ephemeral", "--skip-git-repo-check",
-                   "--output-schema", str(schema_path), "--output-last-message", str(output_path),
-                   "--cd", str(workdir)]
-        if model:
-            command += ["-m", model]
-        return command + ["-"]
     # claude: no tools at all, user settings only (a repository's
     # .claude/settings.json hooks never load), no MCP servers, no bypass mode.
     command = [executable, "-p", "--output-format", "json", "--no-session-persistence",
@@ -361,32 +359,51 @@ def _first_json_object(text):
     raise ValueError("no JSON object in reviewer output")
 
 
-def parse_reviewer_output(runtime, stdout, output_path):
-    if runtime == "codex":
-        return gate.validate_report(json.loads(Path(output_path).read_text()))
+def redact_report(report):
+    """Every string a reviewer wrote passes agent-history's redaction before it
+    is printed or saved, so a secret an injected diff talked a model into
+    quoting comes out as [LABEL]. Line numbers and enums are not text."""
+    report = gate.validate_report(report)
+    findings = [dict(item, **{key: history.redact(item[key]) for key in ("file", "message", "scenario")})
+                for item in report["findings"]]
+    return dict(report, summary=history.redact(report["summary"]), findings=findings)
+
+
+def parse_reviewer_output(stdout):
     envelope = _first_json_object(stdout)
     if isinstance(envelope.get("structured_output"), dict):
-        return gate.validate_report(envelope["structured_output"])
+        return redact_report(envelope["structured_output"])
     if isinstance(envelope.get("result"), str):
-        return gate.validate_report(_first_json_object(envelope["result"]))
-    return gate.validate_report(envelope)
+        return redact_report(_first_json_object(envelope["result"]))
+    return redact_report(envelope)
+
+
+# The reviewer's environment is built from this list, never copied from ours,
+# so tokens like GITHUB_TOKEN, AWS_* or OPENAI_API_KEY are not there to leak.
+# HOME and USER stay because claude finds its login in the keychain through
+# them; the ANTHROPIC and CLAUDE names are its own documented auth settings.
+ENV_ALLOWLIST = ("PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR",
+                 "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN", "CLAUDE_CONFIG_DIR",
+                 "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX")
+
+
+def reviewer_env():
+    env = {name: os.environ[name] for name in ENV_ALLOWLIST if name in os.environ}
+    env["CHEWBACCA_HUD_CHILD"] = "1"
+    return env
 
 
 def run_reviewer(reviewer, root, base, timeout):
     change, truncated = review_input(root, base)
+    command = reviewer_command(reviewer)
     with tempfile.TemporaryDirectory(prefix="review-cross-") as directory:
-        folder = Path(directory)
         # The reviewer runs from an empty directory outside the repository, so
-        # project config (.codex/, .claude/settings.json, AGENTS.md, .mcp.json)
-        # is never in its working directory to be loaded.
-        workdir = folder / "work"
-        workdir.mkdir()
-        schema_path, output_path = folder / "schema.json", folder / "report.json"
-        schema_path.write_text(json.dumps(gate.report_schema()))
-        command = reviewer_command(reviewer, workdir, schema_path, output_path)
+        # project config (.claude/settings.json, AGENTS.md, .mcp.json) is never
+        # in its working directory to be loaded.
+        workdir = Path(directory)
         with subprocess.Popen(command, cwd=str(workdir), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, text=True, start_new_session=True,
-                              env=dict(os.environ, CHEWBACCA_HUD_CHILD="1")) as process:
+                              env=reviewer_env()) as process:
             try:
                 stdout, _ = process.communicate(review_prompt(change, truncated), timeout=timeout)
             except subprocess.TimeoutExpired:
@@ -395,7 +412,7 @@ def run_reviewer(reviewer, root, base, timeout):
                 raise
         if process.returncode:
             raise ValueError("%s reviewer exited %d" % (reviewer["runtime"], process.returncode))
-        report = parse_reviewer_output(reviewer["runtime"], stdout, output_path)
+        report = parse_reviewer_output(stdout)
         return dict(report, status="incomplete") if truncated else report
 
 
@@ -404,7 +421,7 @@ def load_report(path):
     # A review-gate receipt or failure record carries the report one level down.
     if isinstance(value, dict) and isinstance(value.get("report"), dict):
         value = value["report"]
-    return gate.validate_report(value)
+    return redact_report(value)
 
 
 def run(repo, base=None, timeout=300, a_report=None, a_runtime=None):
@@ -450,8 +467,13 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.command == "detect":
-        first, second, reason = plan_reviewers()
-        print(json.dumps({"available": available_runtimes(), "a": first, "b": second,
+        try:
+            first, second, reason = plan_reviewers()
+        except ValueError as error:
+            print("review-cross: " + str(error), file=sys.stderr)
+            return 2
+        excluded = {name: CODEX_EXCLUDED for name in REPORT_ONLY_RUNTIMES if shutil.which(name)}
+        print(json.dumps({"available": available_runtimes(), "excluded": excluded, "a": first, "b": second,
                           "mode": "cross-model" if second else "single-model" if first else "none",
                           "reason": reason}, indent=2))
         return 0 if first else 2

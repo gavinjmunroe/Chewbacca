@@ -80,23 +80,27 @@ review-cross run --repo PATH --a-report <review-gate receipt or failure JSON>
 review-cross merge a.json b.json          # merge two saved reports, no model call
 ```
 
-`detect` picks reviewer A and B from what is installed (`codex`, `claude`, in
-that order; `CHEWBACCA_REVIEWERS=claude,codex` reorders). With two runtimes
-installed, each reviewer runs on its own default model. Only `claude` means two models on it (`opus` and
-`sonnet` by default, `CHEWBACCA_REVIEW_CLAUDE_MODEL_A` and `_B` override). Only
-`codex` runs single-model unless `CHEWBACCA_REVIEW_CODEX_MODEL_B` names a second.
-`--a-report` reuses the review-gate's codex findings as A instead of paying for
-them twice.
+Only `claude` is ever started on a diff, because it can run with zero tools.
+codex has no zero-tool mode: `--sandbox read-only` still lets its shell read
+`~/.ssh` or `chat.db`, and an injected diff can ask it to quote them back as a
+finding. So codex counts only as reviewer A through `--a-report`, which reuses
+the findings review-gate already produced, and claude is reviewer B on its own
+default model. Without a report, claude runs as two models (`opus` and `sonnet`
+by default, `CHEWBACCA_REVIEW_CLAUDE_MODEL_A` and `_B` override). `detect` lists
+codex under `excluded` when it is installed.
 
-A diff is attacker-controllable text, so the reviewers get no way to act on it.
+A diff is attacker-controllable text, so the reviewer gets no way to act on it.
 `review-cross` builds the change itself (git with external diff, textconv and
-fsmonitor off) and sends it on stdin to a reviewer started in an empty temp
-directory, so a repository's `.claude/settings.json` hooks, `.codex/` config,
-`AGENTS.md` and `.mcp.json` are never in reach. `claude` runs with no tools,
-user settings only and no MCP servers. `codex` runs with a read-only sandbox.
-The argv comes from two fixed templates, never from a config file, and a model
-name that could pass for a flag is refused. Reviewer output is parsed as JSON
-data and printed, never executed.
+fsmonitor off) and sends it on stdin to claude started in an empty temp
+directory, so a repository's `.claude/settings.json` hooks, `AGENTS.md` and
+`.mcp.json` are never in reach. claude runs with no tools, user settings only,
+no MCP servers and an environment built from an allowlist (PATH, HOME, locale,
+its own auth variables), so tokens in the caller's environment are not there.
+The argv is one fixed template, never read from a config file, and a model name
+that could pass for a flag is refused. Every string a reviewer returns, and any
+`--a-report`, passes agent-history's redaction before it is printed, so a key
+that did get quoted prints as `[GITHUB_TOKEN]` or `[PRIVATE_KEY]`. Output is
+parsed as JSON data and printed, never executed.
 
 The merge matches findings on the same file by line proximity and word overlap
 of message plus scenario, one to one, best match first. Output has three parts:

@@ -2,7 +2,7 @@ bdcc9cb9e2c7374d15edcd51f53ade53c7985b6e9c7a9ed09e0350816aba3bae  .claude/hooks/
 f2322dc065f50396af938b1b2a217cf68594aec22b811b7378ba99bbc22d19ba  .claude/hooks/ask-capture.sh
 755609b0d6cee26710056a8e13224d7d43ada0b687f7e7f3dc1f8e1bf2d4b477  .claude/hooks/assumption-guard.sh
 5befb13c6a377810d4fd502103207909db1b9eb16631f1ead0d576a9a6a5b85a  .claude/hooks/auto-push.sh
-5f366279becea61fe639d4e4798a48cc8767350ad95f97d3c47afd23ef6d5ad9  .claude/hooks/brain-recall.sh
+820907edbbf478c8c9800c67e6c55bdf0fedcdf56f2901dfe87f4c182115dd43  .claude/hooks/brain-recall.sh
 238016106b8e49fd363cb6be5ff2c54a0a276455b2ca5dfb5183412d7247a3c3  .claude/hooks/brain-sync.sh
 530d0354c0e461033302e8e7338f0187a235618a42c0eb0d26b2bb4407af7ba9  .claude/hooks/browser-ux-guard.sh
 b2e94053791b3748e4521b0a958001dbd2a5a35a6234d6f2f9847b0a879ad543  .claude/hooks/chatdb-guard.sh

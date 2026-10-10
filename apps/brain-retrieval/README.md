@@ -67,10 +67,21 @@ rebuildable from scratch in 85 seconds.
 
 ```
 ollama pull nomic-embed-text
-BRAIN_DIR=~/second-brain python3 src/brain.py index
+BRAIN_DIR=~/second-brain python3 src/brain.py index          # only changed files; --full for all
 BRAIN_DIR=~/second-brain python3 src/brain.py ask "what did my mentor say about loneliness"
 BRAIN_DIR=~/second-brain python3 src/brain.py status
 ```
+
+`index` re-embeds only files whose bytes changed, so it can run every few
+minutes. On this machine `~/.local/bin/brain` links here and a launchd job
+(`com.calebnewton.brain-index`) runs `brain index --quiet` every 10 minutes.
+
+The kit's own `team/memory` is indexed beside the brain and named by its `~/`
+path. `BRAIN_EXTRA_DIRS` (colon-separated) replaces that list; empty turns it off.
+
+When the model is not loaded, an ask answers lexically and starts one detached
+`brain warm`, so the next ask is hybrid. Without it the 120ms ask timeout
+aborted every model load (findings/RESULTS.md, 2026-10-09).
 
 ## Layout
 

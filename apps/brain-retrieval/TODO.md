@@ -34,7 +34,11 @@ session whether used or not; a CLI behind a skill costs ~60 tokens standing.
 - **Accept:** measured startup token count under 10k, and a held-out set of 20
   questions previously answered from eager context still answered correctly.
 
-### 3. Incremental indexing
+### 3. Incremental indexing. DONE 2026-10-09
+`brain index` now re-embeds only changed files (4.7s for 20 changed, 175
+removed) and launchd runs it every 10 minutes. Renames still re-embed, because
+the path is part of the embedded text. The spec below is kept for history.
+
 Full rebuild is 85s. A one-file change should be ~175ms. Design measured and
 specced: hash with blake2b-128, prefilter on (mtime, bytes), rechunk and
 re-embed only changed files, rematerialize `emb.npy` in ~20ms.
@@ -45,7 +49,10 @@ re-embed only changed files, rematerialize `emb.npy` in ~20ms.
 - **Accept:** `brain index --file X` completes under 300ms for a median file and
   `brain status` reports zero stale.
 
-### 4. Query cache plus keep_alive
+### 4. Query cache plus keep_alive. PARTLY DONE 2026-10-09
+keep_alive is 2h, and a timed-out ask starts a detached warm-up instead of
+aborting the load forever (findings/RESULTS.md). No query cache yet.
+
 Query embedding is the only unreliable cost: warm p50 12ms, cold ~90ms,
 model-not-resident 460ms. Cache query vectors keyed on the normalized string.
 `keep_alive: 30m` is already set in `src/brain.py`; verify it holds.
@@ -148,3 +155,15 @@ Index lines must **lead with the new name and keep the old one** so both resolve
   is a to-do and is correct. This would fire on the most common good action.
 - **"Number with no source" checks.** Most numbers in `core/` are his own.
   Sounds strongest, would be the loudest false positive.
+
+---
+
+## Found 2026-10-09
+
+### Hub files win unrelated queries
+Live sealed recall@5 is 50.8% on 701 files, against 68% on 476 in September.
+Most misses lose to two long folders under `domains/`,
+long files that rank top 3 for questions they do not answer.
+- Try on dev only: chunk-count normalisation under mean aggregation, a per-folder
+  cap in the top 5, and a BM25 length penalty.
+- **Accept:** beats 50.8% on the sealed set, run once.

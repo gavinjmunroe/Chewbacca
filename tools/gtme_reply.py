@@ -6,8 +6,14 @@ whether a drafted answer may go out with nobody pressing anything.
   gtme-reply clean    < reply.html    the text a person typed, then the card view
   gtme-reply autosend < verdict.json  {ok, reasons} for one drafted answer
   gtme-reply campaign "Zeutara | Ivy | Pre-seed" --client Zeutara
+  gtme-reply name "Gary Zimmermane" --email gary.zimmerman@firm.example
+  gtme-reply names < names.txt    does this feeder append "e" to every name
+  gtme-reply ooo < reply.txt      is this an out-of-office auto-reply
 
-Synced from togari-platform 9faffef, src/agents/smartlead-responder/*:
+Lead names and auto-replies are synced from src/replies/lead-name.ts and
+card-copy.ts (cleanLeadName, feederAppendsE, isAutoReply).
+
+Synced from togari-platform 8d7ad77 (these four unchanged since 9faffef), src/agents/smartlead-responder/*:
   reply-intent.ts   replyIntent, AUTO_HANDLED
   reply-text.ts     cleanReplyText, stripEmDashes
   fit-review.ts     readableReply, splitCampaign
@@ -700,6 +706,64 @@ def auto_sendable(verdict):
     return {"ok": not reasons, "reasons": reasons, "intent": intent["kind"]}
 
 
+# --- lead-name.ts, card-copy.ts --------------------------------------------
+
+# A list feeder sent every Zeutara name from 10/6 to 10/9 with one stray "e"
+# on the end ("Gary Zimmermane" for gary.zimmerman@, 25 of 25 rows), and the
+# client read those names on his cards. Strip the "e" only where the evidence
+# says it was added: the email spells the name without it, the name ends ".e",
+# or the whole feeder is known to add it and the email doesn't show it's theirs.
+TRAILING_E = re.compile(r"e$")
+NON_ALPHA = re.compile(r"[^a-z]")
+WORD_SPLIT = re.compile("[" + WS + "]+")
+
+
+def clean_lead_name(name, email=None, feeder_adds_e=False):
+    """cleanLeadName(): drop a stray trailing "e" a feeder added, nothing else."""
+    if not name:
+        return name if name is not None else None
+    s = js_trim(to_js(name))
+    if not TRAILING_E.search(s):
+        return from_js(s)
+    if s.endswith(".e"):
+        return from_js(s[:-1])
+    words = WORD_SPLIT.split(s)
+    last = words[-1]
+    trimmed = last[:-1]
+    local = NON_ALPHA.sub("", (email or "").lower().split("@")[0])
+    if len(trimmed) >= 3 and trimmed.lower() in local and last.lower() not in local:
+        return from_js(" ".join(words[:-1] + [trimmed]))
+    if feeder_adds_e and last.lower() not in local:
+        return from_js(" ".join(words[:-1] + [trimmed]))
+    return from_js(s)
+
+
+# Real surnames end in "e" about a fifth of the time, so 90% of a batch means
+# the feeder added it. Under 8 names is too few to tell. Both from upstream.
+FEEDER_E_MIN_NAMES = 8
+FEEDER_E_SHARE = 0.9
+
+
+def feeder_appends_e(recent_names):
+    """feederAppendsE(): does nearly every recent name end in "e"."""
+    named = [n for n in recent_names if n]
+    if len(named) < FEEDER_E_MIN_NAMES:
+        return False
+    with_e = sum(1 for n in named if TRAILING_E.search(js_trim(to_js(n))))
+    return with_e / len(named) >= FEEDER_E_SHARE
+
+
+AUTO_REPLY = js_regex(
+    r"(out of (the )?office|automatic reply|auto-?reply|autoreply|currently out|limited access to "
+    r"(my )?e-?mail|on (annual |parental )?leave|away from (my desk|the office)|will (respond|reply|"
+    r"get back to you) (when|upon|after) (i|my) return)", "i")
+
+
+def is_auto_reply(text):
+    """isAutoReply(): an out-of-office notice, which never posts as a win."""
+    return bool(AUTO_REPLY.search(to_js(text or "")[:MAX_INPUT]))
+
+
 # --- CLI -------------------------------------------------------------------
 
 def _read_text(path):
@@ -757,6 +821,25 @@ def main(argv=None):
     campaign.add_argument("name")
     campaign.add_argument("--client", required=True, help="the client the name should start with")
 
+    name = commands.add_parser(
+        "name", help="drop a stray trailing 'e' a list feeder added to a lead name",
+        description="cleanLeadName. Prints {name, changed}.")
+    name.add_argument("name")
+    name.add_argument("--email", help="the lead's address, the evidence for the strip")
+    name.add_argument("--feeder-adds-e", action="store_true",
+                      help="this feeder is known to append 'e' (see the names command)")
+
+    names = commands.add_parser(
+        "names", help="does this batch of names show a feeder appending 'e'",
+        description="feederAppendsE over one name per line from stdin or --file. "
+                    "Prints {feederAddsE, count}.")
+    names.add_argument("--file", help="read names from this file (- for stdin)")
+
+    ooo = commands.add_parser(
+        "ooo", help="is this reply an out-of-office auto-reply",
+        description="isAutoReply. Reads stdin unless --file is given. Prints {autoReply}.")
+    ooo.add_argument("--file", help="read the reply from this file (- for stdin)")
+
     args = parser.parse_args(argv)
     try:
         if args.command == "intent":
@@ -774,6 +857,14 @@ def main(argv=None):
             if not isinstance(verdict, dict):
                 raise ValueError("input must be a JSON object")
             result = auto_sendable(verdict)
+        elif args.command == "name":
+            cleaned = clean_lead_name(args.name, args.email, args.feeder_adds_e)
+            result = {"name": cleaned, "changed": cleaned != args.name.strip()}
+        elif args.command == "names":
+            batch = [line for line in _read_text(args.file).splitlines() if line.strip()]
+            result = {"feederAddsE": feeder_appends_e(batch), "count": len(batch)}
+        elif args.command == "ooo":
+            result = {"autoReply": is_auto_reply(_read_text(args.file))}
         else:
             result = split_campaign(args.name, args.client)
         _print(result)

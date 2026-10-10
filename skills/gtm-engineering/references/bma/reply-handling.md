@@ -92,6 +92,35 @@ behind the user's yes regardless; this list is the bar a fully automated
 sender has to clear, and the minimum Chewbacca checks before even suggesting
 "send as is".
 
+## What the client sees
+
+These came out of the Zeutara card work on 2026-10-09 and 10-10, after the
+client read cards built the other way.
+
+- Show the client only replies that need them. Unsubscribes, forwards and
+  out-of-office notices get handled without a card.
+- Good news handled automatically still gets one line in the client's channel:
+  a referral forwarded, or a real person saying "later". An out-of-office never
+  does. `gtme-reply ooo` tells the two apart.
+- One primary button per card, plus one way out. A three-button card drew
+  "WTF IS THIS SHIT???" from the client.
+- Write the primary button for that card: it says send, names the company, and
+  says upload when no file is on hand ("Upload and send the Acme deck"). Keep a
+  fixed fallback label for when the generated one fails those checks. The way
+  out is "Already sent".
+- A deck request takes a PDF upload or a link, saved per company so the next
+  ask for that company's deck is one tap.
+- Clean lead names before they reach a card. A list feeder sent every name
+  with a stray trailing "e" for three days ("Gary Zimmermane"), and the client
+  read them. `gtme-reply name` strips it only when the email or the batch
+  proves it was added, and `gtme-reply names` checks a whole batch.
+- An assistant the client talks to only proposes. Every action is a card that
+  shows the frozen plan: the exact thread, recipient, full email and link. It
+  runs once, from that card, on an approver's tap. If the plan doesn't fit on
+  the card, it's refused. Four security reviews broke every shortcut that let
+  it act straight from chat or match a name loosely, so never build one that
+  does.
+
 ## Mailboxes and plumbing
 
 The reply goes out of the same mailbox the lead wrote to, through Clay's

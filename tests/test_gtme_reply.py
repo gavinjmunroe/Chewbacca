@@ -237,6 +237,49 @@ class Cli(unittest.TestCase):
             self.assertEqual(run_bin(sub, "--help").returncode, 0)
 
 
+class LeadNames(unittest.TestCase):
+    # Synced with src/replies/lead-name.ts and card-copy.ts at 8d7ad77; all
+    # 36 parity inputs matched the TypeScript on 2026-10-10.
+    def test_email_proves_the_e_was_added(self):
+        self.assertEqual(reply.clean_lead_name("Gary Zimmermane", "gary.zimmerman@firm.example"),
+                         "Gary Zimmerman")
+        self.assertEqual(reply.clean_lead_name("Eric Chine", "echin@firm.example"), "Eric Chin")
+
+    def test_initial_with_e(self):
+        self.assertEqual(reply.clean_lead_name("B. P.e"), "B. P.")
+
+    def test_real_e_survives(self):
+        self.assertEqual(reply.clean_lead_name("Grace Moore", "gmoore@firm.example"), "Grace Moore")
+        self.assertEqual(reply.clean_lead_name("Philipp Rose", "philipp.rose@firm.example", True),
+                         "Philipp Rose")
+
+    def test_known_feeder_strips_without_email_evidence(self):
+        # The email doesn't spell "rose", so a known feeder's "e" goes.
+        self.assertEqual(reply.clean_lead_name("Joe Smithe", "joe@firm.example", True), "Joe Smith")
+        # "prose" does contain "rose", so the "e" is theirs.
+        self.assertEqual(reply.clean_lead_name("Philipp Rose", "prose@firm.example", True), "Philipp Rose")
+        self.assertEqual(reply.clean_lead_name("Grace Mooree", "gmoore@firm.example"), "Grace Moore")
+
+    def test_feeder_batch_needs_eight_and_ninety_percent(self):
+        eight = ["A Be", "C De", "E Fe", "G He", "I Je", "K Le", "M Ne", "O Pe"]
+        self.assertTrue(reply.feeder_appends_e(eight))
+        self.assertFalse(reply.feeder_appends_e(eight[:7]))
+        self.assertFalse(reply.feeder_appends_e(eight + ["Q R", "S T"]))
+
+    def test_out_of_office(self):
+        self.assertTrue(reply.is_auto_reply("I am currently out of the office until 10/20."))
+        self.assertTrue(reply.is_auto_reply("I'm on parental leave and will reply upon my return"))
+        self.assertFalse(reply.is_auto_reply("Thanks, please send the deck"))
+
+    def test_cli(self):
+        out = json.loads(run_bin("name", "Gary Zimmermane", "--email",
+                                 "gary.zimmerman@firm.example").stdout)
+        self.assertEqual(out, {"name": "Gary Zimmerman", "changed": True})
+        out = json.loads(run_bin("names", stdin="A Be\nC De\nE Fe\nG He\nI Je\nK Le\nM Ne\nO Pe\n").stdout)
+        self.assertEqual(out, {"feederAddsE": True, "count": 8})
+        self.assertTrue(json.loads(run_bin("ooo", stdin="Automatic reply: back Monday").stdout)["autoReply"])
+
+
 class HostileInput(unittest.TestCase):
     # Security review 2026-10-09: 200,000 spaces then "x" held readable_reply
     # for 192s, and a NaN confidence compared False against the threshold so

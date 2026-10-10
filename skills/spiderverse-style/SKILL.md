@@ -507,7 +507,7 @@ strip. `[ACR-Q]`
 - A dozen comic SFX words on one page.
 - Every section the same palette and the same treatment.
 
-## Tested in Blender (measured, Waves 1 to 5 of the replica study)
+## Tested in Blender (measured, Waves 1 to 7 of the replica study)
 
 From `~/code/work/spiderverse-replica` (private): eight structurally different
 shots rebuilt in Nalana's Blender 5.1 (EEVEE) and scored against the reference
@@ -627,6 +627,22 @@ Wave 5 (portals, crowds, environment-only rebuilds):
   varied silhouettes and poses.
 - **tested: add a texture plate or bloom, rarely both.** The plate moved
   bloomed frames by -0.002 to +0.010 and unbloomed frames by +0.023 to +0.035.
+
+Waves 6 and 7 (streets, interiors, and character shots recreated with an
+original lead of our own design, never a film character):
+
+- **tested: relight a figure into the frame's light.** Shifting a figure's
+  costume colours toward the shot's light (a dark-blue relight, dark
+  palettes against a lit window) scored 0.45 to 0.52; the same figure left
+  in its daylight colours on a coloured field scored 0.20 to 0.30.
+- **tested: back a close-up with one soft glow.** A single soft emissive disc
+  behind the head beat scattered background shapes on every close-up tried.
+- **tested: one value contrast can carry a frame.** A single bright plain
+  shape in a dark rain field scored 0.627, the best street.
+- **tested: window grids carry flat facades.** A grid of window cells added
+  +0.078 over the bare colour field on a facade shot.
+- **hypothesis: a flat figure can't carry a face close-up.** Face close-ups
+  were the lowest group (0.31); the film's faces carry line and hatching.
 
 ## Tools worth reaching for
 

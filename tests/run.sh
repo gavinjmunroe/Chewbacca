@@ -922,6 +922,10 @@ if group "installer"; then
   check  "chewbacca land pushes only your files, survives a lost race, fixes the manifest" \
     bash "$ROOT/tests/land.sh" "$ROOT"
 
+  # Caleb, 2026-10-10: "Build a tool so you can launch your own session!"
+  check  "chewbacca launch seeds a named session, marks it launched, opens it in the desktop app" \
+    python3 "$ROOT/tests/test_chewbacca_launch.py"
+
   # The guard that keeps a Claude session's environment out of a person's
   # Terminal window. Its first version only fired when the parent was login,
   # which left every already-open shell broken.

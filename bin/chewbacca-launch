@@ -1,0 +1,107 @@
+#!/usr/bin/env python3
+"""chewbacca launch: open a new Claude session in the desktop app, briefed and named.
+
+    chewbacca launch --name "Kit core" --prompt-file brief.md [--cwd DIR]
+    chewbacca launch --name "TTS" --prompt "You're the TTS lane..."
+
+Prints JSON: {"session_id", "desktop_id", "name", "kickoff"}.
+
+The desktop app has no "new session with this prompt" door: `claude --desktop`
+refuses a prompt ("doesn't take a prompt yet", CLI 2.1.289, 2026-10-10), and a
+`claude --bg` session can't be handed over while it runs. What works, measured
+the same day: create the session headlessly with a fixed --session-id, then
+`claude --desktop --resume <id>` puts it in the sidebar as local_<id>, with
+the transcript intact. --desktop insists on a TTY, so it runs under script(1).
+
+The seed turn only reads the brief and says what it will do first. The work
+starts on the kickoff message, which the caller sends to `desktop_id` (an agent
+in the app uses SendMessage / send_message; a person just types "go"). That
+keeps a long job out of the headless seed, where nobody could watch it.
+
+Every launched prompt carries CHEWBACCA_LAUNCHED_BY so hooks can tell it apart
+from something Caleb typed: on 10/10 a test launch's prompt was recorded by the
+chat-approval hook as Caleb's ok for Clay writes.
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import uuid
+
+CLAUDE = os.environ.get("CHEWBACCA_CLAUDE_BIN", "claude")
+
+SEED = (
+    "{brief}\n\n"
+    "---\n"
+    "This is your brief. Don't start the work yet. Read what it tells you to read, "
+    "then reply in two or three lines: what you own and the first thing you'll do. "
+    "Then stop. The work starts on the next message."
+)
+
+
+def parent_id():
+    return (
+        os.environ.get("CLAUDE_SESSION_ID")
+        or os.environ.get("CLAUDE_CODE_SESSION_ID")
+        or "unknown"
+    )
+
+
+def run(argv, env, cwd, timeout):
+    return subprocess.run(
+        argv, env=env, cwd=cwd, capture_output=True, text=True, timeout=timeout
+    )
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="chewbacca launch", description=__doc__.split("\n\n")[0])
+    ap.add_argument("--name", required=True, help="sidebar title")
+    src = ap.add_mutually_exclusive_group(required=True)
+    src.add_argument("--prompt")
+    src.add_argument("--prompt-file")
+    ap.add_argument("--cwd", default=os.getcwd())
+    ap.add_argument("--no-open", action="store_true", help="seed only, skip the desktop handoff")
+    args = ap.parse_args()
+
+    brief = args.prompt if args.prompt is not None else open(args.prompt_file).read()
+    if not brief.strip():
+        sys.exit("chewbacca launch: the brief is empty")
+    cwd = os.path.abspath(os.path.expanduser(args.cwd))
+    if not os.path.isdir(cwd):
+        sys.exit(f"chewbacca launch: no such folder {cwd}")
+
+    sid = str(uuid.uuid4())
+    env = dict(os.environ, CHEWBACCA_LAUNCHED_BY=parent_id())
+
+    # Seed timeout: a seed that reads a few files took ~40s at load 50 on 10/10;
+    # 10 minutes leaves room for a loaded Mac without hanging forever.
+    seed = run(
+        [CLAUDE, "-p", "--session-id", sid, "--name", args.name, SEED.format(brief=brief)],
+        env, cwd, 600,
+    )
+    if seed.returncode != 0:
+        sys.exit(f"chewbacca launch: seeding failed: {(seed.stderr or seed.stdout).strip()[-400:]}")
+
+    if not args.no_open:
+        # script(1) gives --desktop the TTY it insists on. BSD syntax: file, then argv.
+        opened = run(
+            ["script", "-q", "/dev/null", CLAUDE, "--desktop", "--resume", sid],
+            env, cwd, 60,
+        )
+        out = (opened.stdout or "") + (opened.stderr or "")
+        if "Opening session" not in out:
+            sys.exit(f"chewbacca launch: the desktop app didn't take {sid}: {out.strip()[-400:]}")
+
+    print(json.dumps({
+        "session_id": sid,
+        "desktop_id": f"local_{sid}",
+        "name": args.name,
+        "seed_reply": seed.stdout.strip()[-600:],
+        "kickoff": f"send 'go' (or the first task) to local_{sid}",
+    }, indent=2))
+
+
+if __name__ == "__main__":
+    main()

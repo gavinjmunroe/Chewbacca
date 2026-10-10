@@ -219,6 +219,16 @@ Read them before drafting any club or startup landing page.
   sequence on canvas, or all-intra video), one smoothed scroll value, and
   real camera motion through depth. Measure fps and held frames live
   before calling it done.
+- "Ours is so lame the clay one is YAYYYYYY" (usctts.com vs clay.com,
+  2026-10-10): a pale, flat-lit render floating small in an empty frame
+  on a white page reads as dead. Clay's joy comes from saturated clay
+  materials with grain, one soft key light with strong contact shadows,
+  one hero object filling a tinted rounded frame per section, a colored
+  pill kicker and a two-tone headline. Build that in your own palette.
+- "Why are we repeating the same thing 3x???" (2026-10-10): the same render
+  reused as the about image, a card and the film still repeats, even when
+  each crop differs. One scene, one place. List every image and video with
+  its source file before shipping, and check that none appears twice.
 - Bring the best of earlier versions forward. Before a rebuild, inventory
   what past commits built and what he praised (`git log --diff-filter=D`,
   plus the verdicts in docs/). A rebuild that drops the parts he loved

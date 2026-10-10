@@ -1508,6 +1508,10 @@ if group "hud"; then
     python3 "$ROOT/tests/test_osgraph.py"
   check  "surfaces draw valid ops, refresh with d only, and send only on a press" \
     python3 "$ROOT/tests/test_kyber_surfaces.py"
+  # CHW-203. Scripted Jev and a scripted model, recorded query answers: no
+  # network, no display. It was never wired in before the tiers landed.
+  check  "generated surfaces: tiers answer before the model, math picks components, every layout validates" \
+    python3 "$ROOT/tests/test_kyber_genui.py"
   check  "kyber-sessions types into an idle open session through its inbox, refuses a hold, forks on a press" \
     python3 "$ROOT/tests/test_kyber_sessions.py"
   check  "the agent engine client proves the server is ours, gates writes and exec, and flags a write that may have run" \

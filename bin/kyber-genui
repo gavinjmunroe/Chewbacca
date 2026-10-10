@@ -29,6 +29,14 @@ Usage:
     kyber-genui queries                       the query vocabulary the model may bind to
     kyber-genui event <action> <component>    handle a press on a generated surface
     kyber-genui bench [--requests FILE] [--out FILE] [--only N,..]
+    kyber-genui keep [NAME]                   the last model-written surface becomes a framework candidate
+    kyber-genui candidates                    candidates held back, and the promoted ones
+    kyber-genui promote NAME                  check a candidate against the sealed requests, then use it
+
+Before the model there are two tiers (bin/lib/genui_tiers.py): Tier 0 redraws
+an exemplar, preset or promoted framework the request matches near-exactly,
+and Tier 1 has Jev pick an archetype and a source, then lays the panel out
+from the shape of the data that came back. GENUI_TIERS=0,1,2 picks which run.
 
 Design and sources: docs/reference/GENUI.md.
 """
@@ -53,10 +61,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "bin" / "lib"))
+import genui_tiers as tiers  # noqa: E402
+
 GENUI = ROOT / "config" / "genui"
 CATALOG_PATH = GENUI / "catalog.json"
 POLICY_PATH = GENUI / "policy.json"
 EXEMPLARS_PATH = GENUI / "exemplars.json"
+FRAMEWORKS_PATH = GENUI / "frameworks.json"
 HUD_DOC = ROOT / "hud" / "CLAUDE.md"
 RENDERER = ROOT / "hud" / "Sources" / "KyberKit" / "SurfaceView.swift"
 SOCKET = os.environ.get("BOB_HUD_SOCKET", str(Path.home() / ".bob" / "hud.sock"))
@@ -81,6 +93,7 @@ def load_json(path: Path) -> dict:
 
 CATALOG = load_json(CATALOG_PATH)
 POLICY = load_json(POLICY_PATH)
+FRAMEWORKS = load_json(FRAMEWORKS_PATH)
 LIMITS = POLICY["limits"]
 
 
@@ -1138,6 +1151,11 @@ def exemplars_prompt() -> str:
     return "\n\n".join(out)
 
 
+def frameworks_prompt() -> str:
+    return "\n".join(f"  {name}: {spec['jev']}. Usually {spec['components']}."
+                     for name, spec in FRAMEWORKS["archetypes"].items() if name != "none")
+
+
 def system_prompt(queries: dict[str, Query]) -> str:
     rules = RULES.format(
         components=LIMITS["components"], rows_surface=LIMITS["rows_per_surface"],
@@ -1145,7 +1163,8 @@ def system_prompt(queries: dict[str, Query]) -> str:
         buttons=LIMITS["buttons"], actions=", ".join(POLICY["actions"]),
         texts=LIMITS["text_components"], text_chars=LIMITS["text_chars"])
     return (f"{rules}\nToday is {date.today():%A %Y-%m-%d}.\n\nCATALOG\n{catalog_prompt()}\n\n"
-            f"QUERIES\n{queries_prompt(queries)}\n\nEXAMPLES\n\n{exemplars_prompt()}\n")
+            f"QUERIES\n{queries_prompt(queries)}\n\nFRAMEWORKS (the shapes a panel usually takes; "
+            f"start from the one that fits)\n{frameworks_prompt()}\n\nEXAMPLES\n\n{exemplars_prompt()}\n")
 
 
 # The model. The same Claude Code the voice uses, made lean the way hud-listen
@@ -1154,7 +1173,28 @@ def system_prompt(queries: dict[str, Query]) -> str:
 # and a model with no tools cannot act on anything it was shown.
 
 def model_command() -> list[str]:
-    raw = os.environ.get("GENUI_MODEL_CMD") or os.environ.get("BOB_MODEL_CMD") or "claude -p"
+    raw = os.environ.get("GENUI_MODEL_CMD") or os.environ.get("BOB_MODEL_CMD")
+    if not raw:
+        # Whatever the HUD answers with (`hud-accounts list`), so a Claude
+        # account at its weekly limit does not take generated surfaces with it.
+        # The pick lives in ~/.bob/hud-accounts.json (bin/lib/hud_accounts.py);
+        # tools/hud_runtime.py alone said claude on 2026-10-10 while the HUD
+        # answered with Codex, and every request got "You've hit your limit".
+        try:
+            sys.path.insert(0, str(ROOT / "tools"))
+            import hud_accounts  # noqa: PLC0415  (bin/lib)
+            import hud_runtime  # noqa: PLC0415
+            try:
+                auto = hud_runtime.current()
+            except ValueError:
+                auto = "claude"
+            target, _picked = hud_accounts.effective(hud_accounts.load(), hud_accounts.discover_accounts(), auto)
+            if target is None or target.runtime == "claude":
+                raw = "claude -p"
+            else:
+                raw = hud_accounts.runtime_command(target.runtime, target.model)
+        except (ImportError, ValueError, OSError, KeyError):
+            raw = "claude -p"
     return shlex.split(raw)
 
 
@@ -1203,6 +1243,10 @@ def stream_model(request: str, system: str, on_line: Callable[[str], None], time
         stdin_text = request
     else:
         stdin_text = f"{system}\n\nRequest: {request}\n"
+        # bin/hud-codex resumes the conversation in HUD_CODEX_STATE. A layout
+        # must start clean, or one request's layout leaks into the next.
+        codex_state = tempfile.mkdtemp(prefix="genui-codex-")
+        env["HUD_CODEX_STATE"] = str(Path(codex_state) / "session.json")
     # A file, not a pipe: nobody reads stderr while the model streams, and a
     # full pipe would block the child until the timer killed it.
     errfile = tempfile.TemporaryFile()
@@ -1350,6 +1394,11 @@ class Run:
     attempts: int = 0
     display_problems: list[str] = field(default_factory=list)
     queries: list[str] = field(default_factory=list)
+    tier: int = 2
+    tier_notes: list[str] = field(default_factory=list)
+    jev_ms: float | None = None
+    choice: dict = field(default_factory=dict)
+    why: dict = field(default_factory=dict)
 
 
 class Resolver:
@@ -1379,6 +1428,16 @@ class Resolver:
             data = shape(key.split(":")[0], {"rows": [], "note": f"Could not shape {key}: {clean(err, 60)}"})
         with self.lock:
             self.results[key] = data
+        self.sink.send(f"d /q/{key} {json.dumps(data, separators=(',', ':'), ensure_ascii=False)}")
+
+    def provide(self, key: str, data: dict) -> None:
+        """An answer already in hand (Tier 1 resolved it to choose the layout): send it, run nothing."""
+        with self.lock:
+            self.results[key] = data
+        if key not in self.started:
+            done = threading.Thread(target=lambda: None)
+            done.start()
+            self.started[key] = done
         self.sink.send(f"d /q/{key} {json.dumps(data, separators=(',', ':'), ensure_ascii=False)}")
 
     def snapshot(self) -> dict[str, dict]:
@@ -1435,23 +1494,175 @@ def note_lines(resolver: Resolver, children: list[str], lines: list[str], keys: 
     return lines + [f"> s {' '.join(children + ids)}"]
 
 
+# The tiers in front of the model (bin/lib/genui_tiers.py). Each one answers
+# only when the cheaper one could not, and every layout it makes is checked by
+# the same validator as a model's.
+
+# Jev answered in 130 to 300 ms from this Mac on 2026-10-10 (three calls,
+# two questions each). 1.5 s keeps a slow call from eating the whole budget a
+# model fallback would then need; past it the request goes to the model.
+JEV_TIMEOUT_S = 1.5
+
+
+def enabled_tiers() -> set[int]:
+    raw = os.environ.get("GENUI_TIERS", "0,1,2")
+    return {int(t) for t in raw.split(",") if t.strip().isdigit()}
+
+
+def tier0_entries() -> list[tiers.Entry]:
+    return tiers.load_entries(EXEMPLARS_PATH, STATE / "presets", STATE / "promoted")
+
+
+def default_classifier() -> Callable[..., dict | None] | None:
+    try:
+        import jev  # noqa: PLC0415  (bin/lib, on sys.path above)
+    except ImportError:
+        return None
+    if not jev.allowed() or not jev.api_key():
+        return None
+    return lambda state, questions: jev.ask_result(state, questions, timeout=JEV_TIMEOUT_S,
+                                                   decision="genui-tier1")
+
+
+def resolve_many(queries: dict[str, Query], keys: list[str]) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+
+    def one(key: str) -> None:
+        try:
+            out[key] = resolve(queries, key)
+        except Exception as err:  # noqa: BLE001  (same reason as Resolver._run)
+            out[key] = shape(key.split(":")[0], {"rows": [], "note": f"Could not shape {key}: {clean(err, 60)}"})
+    threads = [threading.Thread(target=one, args=(k,), daemon=True) for k in dict.fromkeys(keys)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(45)
+    return out
+
+
+def send_layout(surface: Surface, resolver: Resolver, data: dict[str, dict] | None = None) -> None:
+    resolver.sink.send(*surface.accepted)
+    for key in sorted(surface.queries):
+        if data and key in data:
+            resolver.provide(key, data[key])
+        else:
+            resolver.want(key)
+
+
+def fast_path(request: str, run: Run, queries: dict[str, Query], resolver: Resolver,
+              ms: Callable[[], float], enabled: set[int],
+              classifier: Callable[..., dict | None] | None) -> Surface | None:
+    """Tier 0 then Tier 1. A Surface on the glass, or None and a note on `run` saying why not."""
+    if 0 in enabled:
+        hit = tiers.tier0(request, tier0_entries())
+        if hit:
+            entry, lines, score = hit
+            surface, problems = validate("\n".join(lines), queries)
+            if not problems:
+                run.tier = 0
+                run.choice = {"entry": entry.name, "kind": entry.kind, "score": round(score, 2)}
+                send_layout(surface, resolver)
+                run.first_component_ms = ms()
+                return surface
+            run.tier_notes.append(f"tier 0: {entry.name} no longer validates: {problems[0]}")
+    if 1 not in enabled:
+        return None
+    ask = classifier or default_classifier()
+    if ask is None:
+        run.tier_notes.append("tier 1: no Jev key or no consent")
+        return None
+    slots = tiers.extract_slots(request)
+    # Head start: the provider walks take 480 to 750 ms (2026-10-10), as long
+    # as Jev itself, so the likeliest source runs while Jev decides.
+    head: dict[str, dict] = {}
+    head_keys: list[str] = []
+    head_thread = None
+    guess = tiers.guess_source(request, FRAMEWORKS)
+    if guess:
+        guess_plan, _ = tiers.plan(tiers.Choice("timeline", 1.0, guess, 1.0, 0.0), slots, FRAMEWORKS, queries)
+        if guess_plan:
+            head_keys = [guess_plan.key] + guess_plan.companions
+            head_thread = threading.Thread(target=lambda: head.update(resolve_many(queries, head_keys)),
+                                           daemon=True)
+            head_thread.start()
+    choice = tiers.classify(request, FRAMEWORKS, ask)
+    if choice is None:
+        run.tier_notes.append("tier 1: Jev gave no judgment")
+        return None
+    run.jev_ms = choice.ms
+    run.choice = {"archetype": choice.archetype, "archetype_p": round(choice.archetype_p, 2),
+                  "source": choice.source, "source_p": round(choice.source_p, 2), "head_start": guess}
+    plan, reason = tiers.plan(choice, slots, FRAMEWORKS, queries)
+    if plan is None:
+        run.tier_notes.append(f"tier 1: {reason}")
+        return None
+    keys = [plan.key] + plan.companions
+    data = resolve_many(queries, [k for k in keys if k not in head_keys])
+    if head_thread and any(k in head_keys for k in keys):
+        head_thread.join(45)
+        data.update({k: head[k] for k in keys if k in head})
+    lines, why = tiers.compose(plan, data, FRAMEWORKS, queries)
+    surface, problems = validate("\n".join(lines), queries)
+    if problems:
+        run.tier_notes.append(f"tier 1: composed layout refused: {problems[0]}")
+        return None
+    run.tier = 1
+    run.why = {"plan": {"key": plan.key, "companions": plan.companions, "archetype": plan.archetype},
+               "slots": slots.as_dict(), **why}
+    send_layout(surface, resolver, data)
+    run.first_component_ms = ms()
+    return surface
+
+
 def generate(request: str, *, dry: bool = False, at: str | None = None, surface_name: str = SURFACE,
              model: Callable[[str, str, Callable[[str], None]], str] | None = None,
-             sink: Sink | None = None) -> Run:
+             sink: Sink | None = None, classifier: Callable[..., dict | None] | None = None,
+             tiers_on: set[int] | None = None) -> Run:
     started = time.monotonic()
     ms = lambda: round((time.monotonic() - started) * 1000, 1)  # noqa: E731
     run = Run(request)
     queries = all_queries()
     sink = sink or Sink(dry, surface_name)
     model = model or stream_model
-    system = system_prompt(queries)
     region = at or "topRight"
 
-    sink.send(f"- {surface_name}", f"@ {surface_name} at={region} w=400",
+    # `glance`: a generated surface answers one question, so a click off the
+    # cards takes it down (skills/hud/SKILL.md). A pinned preset is drawn by
+    # draw_layout, without it, because a pin is meant to stay.
+    sink.send(f"- {surface_name}", f"@ {surface_name} at={region} w=400", f"glance {surface_name}",
               f"c s Screen title={json.dumps(title_guess(request))}",
               'c sk Text value="Building this view" tone=muted', "> s sk", "r s")
     run.skeleton_ms = ms()
     resolver = Resolver(queries, sink)
+
+    enabled = tiers_on if tiers_on is not None else enabled_tiers()
+    known = fast_path(request, run, queries, resolver, ms, enabled, classifier)
+    if known is not None:
+        run.first_try_valid = run.final_valid = True
+        run.lines = list(known.accepted)
+        run.queries = sorted(known.queries)
+        run.model_done_ms = ms()
+        resolver.wait()
+        extra = note_lines(resolver, known.children.get("s", []), known.accepted, known.queries)
+        if extra:
+            sink.send(*extra)
+        run.complete_ms = ms()
+        if not dry:
+            sink.close()
+            run.display_problems = list(sink.problems)
+        remember(surface_name, run, known)
+        return run
+    if 2 not in enabled:
+        run.fallback = True
+        run.tier = -1
+        run.lines = fallback_lines(request, "; ".join(run.tier_notes) or "no tier answered")
+        sink.send(*run.lines)
+        run.complete_ms = ms()
+        if not dry:
+            sink.close()
+        remember(surface_name, run, Surface())
+        return run
+    system = system_prompt(queries)
 
     def attempt(prompt: str, live: bool) -> tuple[str, Surface, list[Problem]]:
         surface = Surface()
@@ -1529,7 +1740,7 @@ def remember(surface_name: str, run: Run, surface: Surface) -> None:
     STATE.mkdir(parents=True, exist_ok=True)
     record = json.dumps({
         "surface": surface_name, "request": run.request, "lines": run.lines,
-        "at": surface.at, "width": surface.width, "valid": run.final_valid,
+        "at": surface.at, "width": surface.width, "valid": run.final_valid, "tier": run.tier,
     }, indent=2)
     (STATE / "last.json").write_text(record, encoding="utf-8")
     # Refresh acts on the surface that was pressed, so each surface keeps its
@@ -1685,17 +1896,54 @@ def run_eval(path: Path, out: Path | None, only: set[int] | None, live: bool) ->
             "skeleton_ms": run.skeleton_ms, "first_component_ms": run.first_component_ms,
             "model_done_ms": run.model_done_ms, "complete_ms": run.complete_ms,
             "queries": run.queries, "problems": run.problems[:6], "lines": run.lines,
-            "display_problems": run.display_problems,
+            "display_problems": run.display_problems, "tier": run.tier, "tier_notes": run.tier_notes,
+            "jev_ms": run.jev_ms, "choice": run.choice, "why": run.why,
+            "model_calls": run.attempts,
         }
         rows.append(row)
-        print(json.dumps({k: row[k] for k in ("n", "first_try_valid", "valid_after_repair", "first_component_ms",
-                                               "complete_ms", "queries")}), flush=True)
+        print(json.dumps({k: row[k] for k in ("n", "tier", "valid_after_repair", "fallback", "complete_ms",
+                                               "queries", "choice")}), flush=True)
         if out:
             out.write_text(json.dumps({"rows": rows}, indent=2), encoding="utf-8")
-    first = sum(r["first_try_valid"] for r in rows)
-    after = sum(r["valid_after_repair"] for r in rows)
-    print(f"first try {first}/{len(rows)}, after repair {after}/{len(rows)}")
+    summary = bench_summary(rows)
+    if out:
+        out.write_text(json.dumps({"summary": summary, "rows": rows}, indent=2), encoding="utf-8")
+    print(json.dumps(summary, indent=2))
     return 0
+
+
+def percentile(values: list[float], q: float) -> float | None:
+    """Nearest-rank percentile: with 20 or 30 samples an interpolated p90 claims precision it lacks."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    return ordered[max(0, min(len(ordered) - 1, -(-len(ordered) * q // 100) - 1))]
+
+
+def bench_summary(rows: list[dict]) -> dict:
+    n = len(rows)
+    out: dict[str, Any] = {
+        "requests": n,
+        "valid": sum(r["valid_after_repair"] for r in rows),
+        "valid_first_try": sum(r["first_try_valid"] for r in rows),
+        "fallbacks": sum(r["fallback"] for r in rows),
+        "model_calls": sum(r.get("model_calls", 0) for r in rows),
+        "no_model_under_1s": sum(1 for r in rows if r["tier"] in (0, 1) and r["valid_after_repair"]
+                                 and r["complete_ms"] < 1000),
+        "tiers": {},
+    }
+    for tier in sorted({r["tier"] for r in rows}):
+        sub = [r for r in rows if r["tier"] == tier]
+        times = [r["complete_ms"] for r in sub]
+        out["tiers"][str(tier)] = {
+            "answered": len(sub), "valid": sum(r["valid_after_repair"] for r in sub),
+            "complete_ms": {"median": percentile(times, 50), "p90": percentile(times, 90), "max": max(times)},
+        }
+        jev = [r["jev_ms"] for r in sub if r.get("jev_ms") is not None]
+        if jev:
+            out["tiers"][str(tier)]["jev_ms"] = {"median": percentile(jev, 50), "p90": percentile(jev, 90),
+                                                 "max": max(jev)}
+    return out
 
 
 class DevNull(Sink):
@@ -1713,7 +1961,8 @@ class DevNull(Sink):
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    commands = {"preset", "presets", "fixed", "validate", "catalog", "queries", "event", "bench"}
+    commands = {"preset", "presets", "fixed", "validate", "catalog", "queries", "event", "bench",
+                "keep", "candidates", "promote"}
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__.strip())
         return 0
@@ -1750,7 +1999,24 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out")
     p.add_argument("--only")
     p.add_argument("--live", action="store_true", help="draw each one on the display")
+    p = sub.add_parser("keep")
+    p.add_argument("name", nargs="?")
+    sub.add_parser("candidates")
+    p = sub.add_parser("promote")
+    p.add_argument("name")
+    p.add_argument("--requests", help="default: every config/genui/bench/sealed-*.json")
     args = parser.parse_args(argv)
+
+    if args.cmd == "keep":
+        return 0 if keep(args.name) else 1
+    if args.cmd == "candidates":
+        for folder in ("candidates", "promoted"):
+            for path in sorted((STATE / folder).glob("*.json")):
+                print(f"{folder[:-1] if folder == 'candidates' else folder:10} {path.stem:30} "
+                      f"{load_json(path).get('request', '')}")
+        return 0
+    if args.cmd == "promote":
+        return promote(args.name, args.requests)
 
     if args.cmd == "draw":
         if not args.dry_run and not Path(SOCKET).exists():
@@ -1759,7 +2025,8 @@ def main(argv: list[str] | None = None) -> int:
         run = generate(args.request, dry=args.dry_run, at=args.at, surface_name=args.surface)
         report = {k: getattr(run, k) for k in ("first_try_valid", "repaired", "fallback", "skeleton_ms",
                                                 "first_component_ms", "complete_ms", "problems",
-                                                "display_problems", "queries")}
+                                                "display_problems", "queries", "tier", "tier_notes",
+                                                "jev_ms", "choice", "why")}
         print(json.dumps(report, indent=2) if args.json else
               f"{'valid' if run.final_valid else 'fallback'}"
               f"{' after repair' if run.repaired else ''}: first component {run.first_component_ms} ms, "
@@ -1770,6 +2037,8 @@ def main(argv: list[str] | None = None) -> int:
                 print("not pinned: the surface did not validate", file=sys.stderr)
                 return 1
             pin(args.pin, run)
+            if run.tier == 2:
+                keep(args.pin)
         return 0 if run.final_valid else 2
     if args.cmd in ("preset", "fixed"):
         if args.cmd == "fixed":
@@ -1832,6 +2101,86 @@ def pin(name: str, run: Run) -> None:
                                 "width": last.get("width"), "pinned": datetime.now().isoformat(timespec="seconds")},
                                indent=2), encoding="utf-8")
     print(f"pinned as {name}: kyber-genui preset {name}", file=sys.stderr)
+
+
+# The learning loop. A Tier 2 layout somebody kept becomes a candidate with its
+# literal arguments turned into slots, and Tier 0 only reads it once `promote`
+# has checked it against the sealed requests.
+
+def slug(text: str) -> str:
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", text.lower())).strip("-")[:40] or "kept"
+
+
+def keep(name: str | None, record: dict | None = None) -> Path | None:
+    record = record or load_json(STATE / "last.json")
+    if not record.get("valid") or record.get("tier") != 2:
+        print("not kept: only a valid layout the model wrote becomes a candidate; "
+              "Tier 0 and 1 already answer the others without it", file=sys.stderr)
+        return None
+    found = tiers.distill(record["request"], record["lines"])
+    if not found:
+        return None
+    path = STATE / "candidates" / f"{slug(name or record['request'])}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    found["kept"] = datetime.now().isoformat(timespec="seconds")
+    path.write_text(json.dumps(found, indent=2), encoding="utf-8")
+    print(f"candidate {path.stem}: held back until `kyber-genui promote {path.stem}` passes", file=sys.stderr)
+    return path
+
+
+def sealed_requests() -> list[str]:
+    out = []
+    for path in sorted((GENUI / "bench").glob("sealed-*.json")):
+        out += [r["request"] for r in load_json(path)["requests"]]
+    return out
+
+
+def promotion_check(name: str, data: dict, requests: list[str]) -> tuple[bool, list[str]]:
+    """Pass iff the candidate redraws its own request and every sealed request it would take validates."""
+    queries = all_queries()
+    cand = tiers.candidate_entry(name, data)
+    base = tier0_entries()
+    report = []
+    own = tiers.tier0(data["request"], [cand])
+    if not own:
+        return False, ["it does not match its own request, so it would never answer anything"]
+    _s, problems = validate("\n".join(own[1]), queries)
+    if problems:
+        return False, [f"its own layout no longer validates: {problems[0]}"]
+    ok = True
+    for request in requests:
+        before = tiers.tier0(request, base)
+        after = tiers.tier0(request, base + [cand])
+        if not after or after[0] is not cand or (before and before[2] >= after[2]):
+            continue
+        _s, problems = validate("\n".join(after[1]), queries)
+        verdict = "valid" if not problems else f"REFUSED: {problems[0]}"
+        ok = ok and not problems
+        report.append(f"would take {request!r}: {verdict}")
+    return ok, report or ["takes no sealed request; it answers only requests like its own"]
+
+
+def promote(name: str, requests_file: str | None) -> int:
+    path = STATE / "candidates" / f"{slug(name)}.json"
+    if not path.is_file():
+        print(f"no candidate {name}", file=sys.stderr)
+        return 1
+    data = load_json(path)
+    requests = [r["request"] for r in load_json(Path(requests_file))["requests"]] if requests_file \
+        else sealed_requests()
+    ok, report = promotion_check(path.stem, data, requests)
+    for line in report:
+        print(f"  {line}")
+    if not ok:
+        print(f"held back: {path.stem}", file=sys.stderr)
+        return 1
+    dest = STATE / "promoted" / path.name
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    data["promoted"] = datetime.now().isoformat(timespec="seconds")
+    dest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    path.unlink()
+    print(f"promoted {path.stem}: Tier 0 answers requests like it now", file=sys.stderr)
+    return 0
 
 
 def handle_event(action: str, component: str, surface: str | None = None) -> int:

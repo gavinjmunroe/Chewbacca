@@ -445,7 +445,7 @@ if group "gtme"; then
     python3 "$ROOT/tests/test_gtme_grade.py"
   check "gtme-grade dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme-grade --help
   check "launch-guard refuses a launch without the pre-send gate" python3 "$ROOT/tests/launch-guard-test.py"
-  check "launch-guard refuses a launch without a fresh gtme-grade pass for that campaign" \
+  check "launch-guard refuses without a signed, fresh gtme-grade bound to that action, campaign and inputs" \
     python3 "$ROOT/tests/test_launch_guard_grade.py"
   # Every case from the upstream TypeScript tests; offline, nothing sends.
   check "gtme-reply labels real replies, cleans HTML, refuses risky auto-sends" python3 "$ROOT/tests/test_gtme_reply.py"

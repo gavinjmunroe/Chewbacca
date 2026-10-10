@@ -10,7 +10,7 @@ gate read a sender file and the campaigns carried their own sender list. A rule
 that is only written down does not run. This runs them, and launch-guard.sh
 refuses a launch, resume or add-leads without a pass from here.
 
-    gtme-grade --campaign cam_x --leads send.csv --suppress sent.csv \\
+    gtme-grade --campaign cam_x --action launch --leads send.csv --suppress sent.csv \\
                --senders sender-accounts.json --warmup-start 2026-10-02 \\
                --icp-titles partner,principal --review review.json
     gtme-grade --campaign-json saved.json ...      a saved `chewbacca clay campaign` answer
@@ -34,9 +34,18 @@ campaign before it goes out"):
 
 Every check that could not run prints NOT CHECKED and fails its gate, because a
 skipped rule never counts as a pass (lastlook, same section). Exit 0 only when
-all five gates pass, 1 when any fails, 2 on bad arguments. A pass writes
-~/.chewbacca/state/gtme-grade/<campaign>.json with the time and a sha256 of
-every input file; nothing else is written. This never sends, never edits a
+all five gates pass, 1 when any fails, 2 on bad arguments.
+
+A pass with --action (launch, resume or add-leads) on a Clay campaign writes
+~/.chewbacca/state/gtme-grade/<workspace>-<campaign>-<action>.json, 0600: the
+workspace, campaign and action, a 12-hour expiry, a sha256 of every input file
+and of the campaign's own state (sequence, variants, settings, senders), all
+signed with an HMAC key kept 0600 outside the repo and outside ~/.chewbacca
+(~/Library/Application Support/chewbacca/gtme-grade.key, made on first use).
+`--verify` re-checks one receipt against the current files and a fresh read of
+the campaign; launch-guard.sh calls it and refuses on any mismatch or error.
+Local --copy grades never write a receipt, since nothing ties them to a Clay
+campaign. Nothing else is written. This never sends, never edits a
 campaign and never spends a credit: Clay is only read through `chewbacca clay`.
 """
 import argparse
@@ -798,13 +807,6 @@ def sha(path):
     return h.hexdigest()
 
 
-def receipt_key(camp, args):
-    key = camp.get("id") or args.name
-    if not key:
-        return None
-    return re.sub(r"[^A-Za-z0-9_.-]", "_", key)
-
-
 def load_client(name):
     if not name:
         return None
@@ -825,9 +827,12 @@ def grade(args):
     if args.campaign_json:
         doc = json.loads(Path(args.campaign_json).read_text())
         camp = campaign_from_clay(doc.get("data", doc))
+        camp["raw"] = doc.get("data", doc)
         inputs.append(args.campaign_json)
     elif args.campaign:
-        camp = campaign_from_clay(clay("campaign", ws=args.ws, campaign=args.campaign))
+        raw = clay("campaign", ws=args.ws, campaign=args.campaign)
+        camp = campaign_from_clay(raw)
+        camp["raw"] = raw
         try:
             analytics = clay("campaign-analytics", campaign=args.campaign)
         except SystemExit:
@@ -890,15 +895,144 @@ def grade(args):
     return camp, gates, passed, inputs
 
 
-def write_receipt(key, camp, gates, inputs):
-    STATE.mkdir(parents=True, exist_ok=True)
-    body = {"campaign": key, "name": camp.get("name"), "time": int(time.time()), "pass": True,
+ACTIONS = ("launch", "resume", "add-leads")
+# 12 hours: lists and copy change overnight, and Monday's launch should not ride
+# on Saturday's grade. Same window as the pre-send gate receipt.
+RECEIPT_TTL_S = 12 * 3600
+# Bounded so the PreToolUse hook (10 s budget) still answers; a slower Clay read
+# refuses rather than waits. chewbacca clay campaign measured 0.6-4.5 s on 10-09.
+VERIFY_FETCH_TIMEOUT_S = 7
+# Fields that change without the copy, list or senders changing: launching flips
+# status, and Clay touches updatedAt on any save.
+VOLATILE = {"status", "updatedAt", "createdAt", "analytics"}
+
+
+def key_path():
+    """The HMAC key lives outside the repo and outside ~/.chewbacca (which is
+    mirrored into the second-brain repo), readable by this user only."""
+    return Path(os.environ.get("GTME_GRADE_KEY_FILE") or
+                os.path.expanduser("~/Library/Application Support/chewbacca/gtme-grade.key"))
+
+
+def load_key(create):
+    p = key_path()
+    if not p.exists():
+        if not create:
+            raise PermissionError(f"no grade key at {p}; run gtme-grade once to make it")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as fh:
+            fh.write(os.urandom(32).hex())
+    mode = p.stat().st_mode & 0o777
+    if mode & 0o077:
+        raise PermissionError(f"grade key {p} is mode {oct(mode)}, not 0600; refusing to trust it")
+    k = p.read_text().strip()
+    if len(k) < 32:
+        raise PermissionError(f"grade key {p} is too short")
+    return k.encode()
+
+
+def canonical_state(raw):
+    """sha256 of the campaign as Clay holds it: sequence, variants, settings and
+    sender ids, without the fields a launch or a save touches by themselves."""
+    body = {k: v for k, v in (raw or {}).items() if k not in VOLATILE}
+    return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def fetch_state(ws, cid):
+    """Live campaign state for verification. GTME_GRADE_CLAY_FIXTURE_DIR is a test
+    seam read from the hook's own environment, which a tool call cannot set."""
+    fixtures = os.environ.get("GTME_GRADE_CLAY_FIXTURE_DIR")
+    if fixtures:
+        doc = json.loads((Path(fixtures) / f"{cid}.json").read_text())
+        return doc.get("data", doc)
+    cmd = ["bash", str(REPO / "bin/chewbacca"), "clay", "campaign", f"ws={ws}", f"campaign={cid}"]
+    out = subprocess.run(cmd, capture_output=True, text=True, timeout=VERIFY_FETCH_TIMEOUT_S)
+    doc = json.loads(out.stdout)
+    if not doc.get("ok"):
+        raise RuntimeError(f"Clay read failed: {str(doc.get('reason', ''))[:120]}")
+    return doc["data"]
+
+
+def receipt_file(ws, cid, action):
+    safe = re.sub(r"[^A-Za-z0-9_-]", "_", f"{ws}-{cid}-{action}")
+    return STATE / f"{safe}.json"
+
+
+def sign(body, key):
+    import hmac
+    msg = json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+    return hmac.new(key, msg, hashlib.sha256).hexdigest()
+
+
+def write_receipt(ws, cid, action, camp, gates, inputs):
+    """Bound to one workspace, one campaign, one action and these exact inputs,
+    and signed, so a pass for one target never unlocks another."""
+    key = load_key(create=True)
+    now = int(time.time())
+    body = {"v": 2, "workspace": str(ws), "campaign": cid, "action": action,
+            "name": camp.get("name"), "time": now, "expires": now + RECEIPT_TTL_S, "pass": True,
             "gates": [g.n for g in gates if g.passed],
-            "hashes": {os.path.abspath(p): sha(p) for p in inputs}}
-    tmp = STATE / f".{key}.tmp"
+            "inputs": {os.path.abspath(p): sha(p) for p in inputs},
+            "campaign_state": canonical_state(camp.get("raw"))}
+    body["mac"] = sign(body, key)
+    STATE.mkdir(parents=True, exist_ok=True)
+    dest = receipt_file(ws, cid, action)
+    tmp = dest.with_name(f".{dest.name}.tmp")
     tmp.write_text(json.dumps(body, indent=1))
-    tmp.replace(STATE / f"{key}.json")
-    return STATE / f"{key}.json"
+    os.chmod(tmp, 0o600)
+    tmp.replace(dest)
+    return dest
+
+
+def verify(ws, cid, action):
+    """'' when a signed, fresh, passing grade for exactly this workspace,
+    campaign and action exists and nothing it graded has changed; else why not.
+    Every error is a refusal."""
+    import hmac
+    if action not in ACTIONS:
+        return f"unknown action {action!r}"
+    if not re.fullmatch(r"cam_[A-Za-z0-9]+", cid or ""):
+        return f"not a campaign id: {cid!r}"
+    path = receipt_file(ws, cid, action)
+    try:
+        body = json.loads(path.read_text())
+        key = load_key(create=False)
+    except FileNotFoundError:
+        return f"no gtme-grade pass for {action} on {cid} in workspace {ws}"
+    except (OSError, ValueError, PermissionError) as exc:
+        return f"grade receipt unreadable: {exc}"
+    if not isinstance(body, dict) or not isinstance(body.get("mac"), str):
+        return "grade receipt carries no signature"
+    mac = body.pop("mac")
+    if not hmac.compare_digest(mac, sign(body, key)):
+        return "grade receipt signature does not verify (written by something other than gtme-grade)"
+    if (body.get("workspace"), body.get("campaign"), body.get("action")) != (str(ws), cid, action):
+        return (f"grade receipt is for {body.get('action')} on {body.get('campaign')} in "
+                f"{body.get('workspace')}, not {action} on {cid} in {ws}")
+    if body.get("pass") is not True:
+        return "the recorded grade is not a pass"
+    now = time.time()
+    t, exp = body.get("time", 0), body.get("expires", 0)
+    if not (t <= now < exp) or now - t >= RECEIPT_TTL_S:
+        return "the gtme-grade pass is over 12 hours old or not yet valid"
+    inputs = body.get("inputs") or {}
+    if not inputs:
+        return "the grade receipt names no input files"
+    for p, want in inputs.items():
+        try:
+            got = sha(p)
+        except OSError:
+            return f"{os.path.basename(p)} vanished after gtme-grade passed"
+        if got != want:
+            return f"{os.path.basename(p)} changed after gtme-grade passed"
+    try:
+        live = canonical_state(fetch_state(ws, cid))
+    except Exception as exc:  # any failure to re-read the campaign refuses
+        return f"could not re-read the campaign from Clay to compare: {exc}"
+    if live != body.get("campaign_state"):
+        return "the campaign's copy, variants, settings or senders changed after gtme-grade passed"
+    return ""
 
 
 def main(argv=None):
@@ -930,17 +1064,33 @@ def main(argv=None):
     ap.add_argument("--icp-fit-column", help="column holding a yes/no ICP fit per row")
     ap.add_argument("--review", help="JSON recording the recipient read: campaign, reviewer, "
                                      "reviewed_at, unresolved[]")
+    ap.add_argument("--action", choices=ACTIONS,
+                    help="what this grade unlocks for the campaign (one of the three actions). "
+                         "A receipt is written only with an action and a Clay campaign id")
+    ap.add_argument("--verify", action="store_true",
+                    help="check a stored grade for --campaign, --ws and --action against the "
+                         "current inputs and the live campaign; exit 0 or 2 (the guard hook uses this)")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args(argv)
+    if args.verify:
+        if not (args.campaign and args.action):
+            print("gtme-grade --verify: needs --campaign and --action", file=sys.stderr)
+            return 2
+        why = verify(args.ws, args.campaign, args.action)
+        if why:
+            print(f"gtme-grade: {why}", file=sys.stderr)
+            return 2
+        print(f"gtme-grade: verified {args.action} on {args.campaign} in {args.ws}")
+        return 0
     try:
         camp, gates, passed, inputs = grade(args)
     except (OSError, ValueError) as exc:
         print(f"gtme-grade: {exc}", file=sys.stderr)
         return 2
-    key = receipt_key(camp, args)
+    key = camp.get("id") or args.name
     receipt = None
-    if passed and key:
-        receipt = str(write_receipt(key, camp, gates, inputs))
+    if passed and args.action and camp.get("raw") is not None and camp.get("id"):
+        receipt = str(write_receipt(args.ws, camp["id"], args.action, camp, gates, inputs))
     if args.json:
         print(json.dumps({"campaign": key, "name": camp.get("name"), "pass": passed,
                           "receipt": receipt, "gates": [g.as_dict() for g in gates]}, indent=1))
@@ -958,10 +1108,11 @@ def main(argv=None):
             for m in g.notes:
                 print(f"    note  {m}")
         print("\n  " + (f"PASS, receipt {receipt}" if passed and receipt else
-                        "PASS, but no campaign id or --name, so no receipt" if passed else
+                        "PASS, but no receipt: a receipt needs --action and a Clay campaign "
+                        "(--campaign or --campaign-json)" if passed else
                         "REFUSED. Fix each FAIL and NOT CHECKED line, then grade again."))
         print("  Grading never authorizes the send.")
-    return 0 if passed and receipt else 1
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

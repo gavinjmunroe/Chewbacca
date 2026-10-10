@@ -6,6 +6,7 @@ Nothing reads Clay. Run: python3 tests/test_gtme_grade.py
 import csv
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -70,6 +71,32 @@ def write_csv(path, rows):
         csv.writer(fh).writerows(rows)
 
 
+def clay_doc(copy_path, settings):
+    """The fixture copy in the shape `chewbacca clay campaign` returns."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import gtme_grade
+    camp = gtme_grade.campaign_from_copy(copy_path)
+
+    def para(line):
+        nodes = []
+        for part in re.split(r"(\{\{\w+\}\})", line):
+            m = re.fullmatch(r"\{\{(\w+)\}\}", part)
+            if m:
+                nodes.append({"type": "leadField", "attrs": {"fieldId": m.group(1), "required": True}})
+            elif part:
+                nodes.append({"type": "text", "text": part})
+        return {"type": "paragraph", "content": nodes} if nodes else {"type": "paragraph"}
+
+    seq = []
+    for i, st in enumerate(camp["variants"][0]["steps"]):
+        seq.append({"order": i, "delayDays": st["delay"],
+                    "emailType": "REPLY_TO_THREAD" if st["thread"] else "NEW_EMAIL_THREAD",
+                    "subject": {"type": "doc", "content": [para(st["subject"])]},
+                    "body": {"type": "doc", "content": [para(ln) for ln in st["body"].rstrip("\n").split("\n")]}})
+    return {"id": "cam_test1", "name": "test", "status": "draft", "sequence": seq,
+            "settings": dict(settings, senderAccountIds=[])}
+
+
 class Case:
     def __init__(self):
         self.dir = Path(tempfile.mkdtemp())
@@ -86,24 +113,29 @@ class Case:
         self.extra = []
         self.drop = set()
 
-    def run(self):
+    def run(self, mode="clay"):
         d = self.dir
         (d / "copy.txt").write_text(self.copy)
+        (d / "campaign.json").write_text(json.dumps(clay_doc(d / "copy.txt", self.settings)))
         write_csv(d / "leads.csv", self.leads)
         write_csv(d / "senders.csv", self.senders)
         write_csv(d / "suppress.csv", self.suppress)
         (d / "settings.json").write_text(json.dumps(self.settings))
         (d / "review.json").write_text(json.dumps(self.review))
-        args = {"--copy": d / "copy.txt", "--name": "test-campaign", "--leads": d / "leads.csv",
+        src = ({"--campaign-json": d / "campaign.json", "--action": "launch"} if mode == "clay" else
+               {"--copy": d / "copy.txt", "--name": "test-campaign", "--settings": d / "settings.json"})
+        args = {**src, "--leads": d / "leads.csv",
                 "--senders": d / "senders.csv", "--suppress": d / "suppress.csv",
-                "--settings": d / "settings.json", "--review": d / "review.json",
+                "--review": d / "review.json",
                 "--icp-titles": "partner,principal"}
         argv = [sys.executable, str(TOOL), "--json"]
         for k, v in args.items():
             if k not in self.drop:
                 argv += [k, str(v)]
         argv += self.extra
-        env = dict(os.environ, HOME=str(self.home), GTME_CLIENTS=str(d / "clients.json"))
+        env = dict(os.environ, HOME=str(self.home), GTME_CLIENTS=str(d / "clients.json"),
+                   GTME_GRADE_KEY_FILE=str(self.home / "keys" / "gtme-grade.key"))
+        self.env = env
         p = subprocess.run(argv, capture_output=True, text=True, env=env, timeout=60)
         try:
             out = json.loads(p.stdout)
@@ -124,16 +156,50 @@ def check(name, cond, detail=""):
     print(f"{'ok  ' if cond else 'FAIL'} {name}" + ("" if cond else f"  {detail}"))
 
 
-# 1. a clean campaign passes all five gates and writes a receipt with hashes
+# 1. a clean campaign passes all five gates and writes a signed receipt bound to
+#    the workspace, the campaign, the action, every input and the campaign state
 c = Case()
 rc, out = c.run()
-receipt = c.home / ".chewbacca" / "state" / "gtme-grade" / "test-campaign.json"
+gdir = c.home / ".chewbacca" / "state" / "gtme-grade"
+receipt = gdir / "1372623-cam_test1-launch.json"
 detail = json.dumps([g for g in out.get("gates", []) if not g["pass"]], indent=1)[:1500] or out
 check("clean campaign passes every gate", rc == 0 and out.get("pass") is True, detail)
-check("a pass writes a receipt", receipt.is_file())
+check("a pass writes a receipt named for workspace, campaign and action", receipt.is_file(),
+      list(gdir.glob("*")) if gdir.exists() else "no dir")
 if receipt.is_file():
     r = json.loads(receipt.read_text())
-    check("the receipt hashes every input", len(r["hashes"]) >= 6 and r["pass"] is True, r)
+    check("the receipt binds action, campaign, workspace, inputs, state and a signature",
+          r["action"] == "launch" and r["campaign"] == "cam_test1" and r["workspace"] == "1372623"
+          and {Path(p).name for p in r["inputs"]} >= {"campaign.json", "leads.csv", "senders.csv",
+                                                        "suppress.csv", "review.json"}
+          and len(r["campaign_state"]) == 64 and len(r["mac"]) == 64
+          and r["expires"] - r["time"] == 12 * 3600, r)
+    check("the receipt is readable by its owner only", receipt.stat().st_mode & 0o077 == 0)
+    key = c.home / "keys" / "gtme-grade.key"
+    check("the key is created 0600, outside the repo", key.is_file() and key.stat().st_mode & 0o777 == 0o600)
+    fx = c.dir / "fixtures"
+    fx.mkdir()
+    (fx / "cam_test1.json").write_text((c.dir / "campaign.json").read_text())
+    venv = dict(c.env, GTME_GRADE_CLAY_FIXTURE_DIR=str(fx))
+
+    def verify(action="launch", campaign="cam_test1", ws="1372623"):
+        return subprocess.run([sys.executable, str(TOOL), "--verify", "--ws", ws, "--campaign", campaign,
+                               "--action", action], capture_output=True, text=True, env=venv, timeout=60)
+
+    v = verify()
+    check("--verify passes the exact action, campaign and workspace", v.returncode == 0, v.stderr)
+    check("--verify refuses another action", verify(action="resume").returncode == 2)
+    check("--verify refuses another workspace", verify(ws="42").returncode == 2)
+    with open(c.dir / "leads.csv", "a") as fh:
+        fh.write("dan@fundfour.example.test,Dan,Fund Four,Partner,valid,x,https://x.example.test\n")
+    v = verify()
+    check("--verify refuses once a graded input changes", v.returncode == 2 and "changed" in v.stderr, v.stderr)
+
+c = Case()
+rc, out = c.run(mode="copy")
+check("local copy can pass but never writes a receipt that could unlock a Clay campaign",
+      rc == 0 and out.get("pass") is True and not out.get("receipt")
+      and not (c.home / ".chewbacca" / "state" / "gtme-grade").exists(), out.get("receipt"))
 
 
 def expect_fail(name, gate_no, mutate, needle):
@@ -145,9 +211,9 @@ def expect_fail(name, gate_no, mutate, needle):
         return
     g = gate(out, gate_no)
     text = " ".join(g["fails"] + g["not_checked"])
-    receipt = c.home / ".chewbacca" / "state" / "gtme-grade" / "test-campaign.json"
+    gdir = c.home / ".chewbacca" / "state" / "gtme-grade"
     check(name, rc == 1 and not g["pass"] and needle.lower() in text.lower()
-          and not receipt.exists(), text[:300])
+          and not (gdir.exists() and any(gdir.iterdir())), text[:300])
 
 
 # Gate 1, the list

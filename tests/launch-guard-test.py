@@ -6,12 +6,24 @@ import hashlib
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import time
 
 # The repo's hook, not the installed copy: the installed one lags a commit.
-H = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".claude", "hooks",
-                 "launch-guard.sh")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+H = os.path.join(ROOT, ".claude", "hooks", "launch-guard.sh")
+# A real signed launch grade for cam_x, so only the pre-send half decides here.
+SIGN = r"""
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import gtme_grade as G
+class Passed:
+    n = 1
+    passed = True
+G.write_receipt("1372623", "cam_x", "launch", {"name": "t", "raw": json.load(open(sys.argv[3]))},
+                [Passed()], [sys.argv[2]])
+"""
 
 
 def run(tool, tool_input, receipt=None, files=None, last_url=None):
@@ -36,15 +48,17 @@ def run(tool, tool_input, receipt=None, files=None, last_url=None):
     # These cases test the pre-send half; a passing gtme-grade receipt is always
     # present so only that half decides. tests/test_launch_guard_grade.py covers
     # the grade half.
-    gdir = os.path.join(state, "gtme-grade")
-    os.makedirs(gdir)
     gin = os.path.join(home, "graded.csv")
     with open(gin, "w") as fh:
         fh.write("email\n")
-    with open(os.path.join(gdir, "cam_x.json"), "w") as fh:
-        json.dump({"campaign": "cam_x", "time": int(time.time()), "pass": True,
-                   "hashes": {gin: hashlib.sha256(b"email\n").hexdigest()}}, fh)
-    env = dict(os.environ, HOME=home)
+    fixtures = os.path.join(home, "clay")
+    os.makedirs(fixtures)
+    with open(os.path.join(fixtures, "cam_x.json"), "w") as fh:
+        json.dump({"id": "cam_x", "sequence": []}, fh)
+    env = dict(os.environ, HOME=home, GTME_GRADE_KEY_FILE=os.path.join(home, "k", "grade.key"),
+               GTME_GRADE_CLAY_FIXTURE_DIR=fixtures, CHEWBACCA_ROOT=ROOT)
+    subprocess.run([sys.executable, "-c", SIGN, os.path.join(ROOT, "tools"), gin,
+                    os.path.join(fixtures, "cam_x.json")], env=env, check=True, timeout=30)
     p = subprocess.run([H], input=json.dumps({"tool_name": tool, "tool_input": tool_input}),
                        capture_output=True, text=True, env=env, timeout=20)
     return p.returncode
@@ -55,7 +69,7 @@ FULL = {"time": now, "full": True}
 SAME = {"list.csv": ("a,b\n", "a,b\n")}
 EDITED = {"list.csv": ("a,b\nextra\n", "a,b\n")}
 CLAY = "https://app.clay.com/workspaces/1/campaigns/cam_x"
-L = 'chewie web click "Launch"'
+L = 'chewie web click "Launch"  # cam_x'
 cases = [
     # must PASS (0): reads, navigation, unrelated clicks
     ("read analytics", "Bash", {"command": "clay campaigns analytics cam_x"}, None, None, None, 0),

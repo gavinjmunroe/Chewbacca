@@ -3,6 +3,10 @@
 # shellcheck source=/dev/null
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh" 2>/dev/null || true
 type hook_init >/dev/null 2>&1 && hook_init launch-guard.sh 10
+# lib.sh's watchdog ends a slow hook with exit 0, which for this hook would let
+# a launch through whenever the grade check is slow (security review,
+# 2026-10-10). A guard that times out refuses instead.
+trap 'echo "launch-guard: timed out verifying the gate, refusing" >&2; exit 2' TERM
 # PreToolUse: HARD BLOCK on launching, resuming or enrolling an outbound
 # campaign unless the pre-send gate passed in full within the last 12 hours,
 # on files that have not changed since, AND gtme-grade passed all five
@@ -29,16 +33,18 @@ type hook_init >/dev/null 2>&1 && hook_init launch-guard.sh 10
 set -uo pipefail
 
 payload="$(cat)"
-if command -v jq >/dev/null 2>&1; then
-  tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)"
-  blob="$(printf '%s' "$payload" | jq -r '.tool_input // {} | tostring' 2>/dev/null)"
-else
-  # No jq means no receipt check either, so fail closed on anything launch-like.
+# No jq, or a payload jq cannot parse, means no receipt check either, so fail
+# closed on anything launch-like (security review, 2026-10-10: an unparsable
+# payload used to fall through to exit 0).
+blind() {
   printf '%s' "$payload" | tr '[:upper:]' '[:lower:]' |
-    grep -qE 'launch|resume|unpause|enroll|send-gate-receipt' &&
-    { echo "launch-guard: jq is missing, cannot verify a gate pass" >&2; exit 2; }
+    grep -qE 'launch|resume|unpause|enroll|add.leads|activ|start|send-gate-receipt|gtme-grade' &&
+    { echo "launch-guard: $1, cannot verify a gate pass" >&2; exit 2; }
   exit 0
-fi
+}
+command -v jq >/dev/null 2>&1 || blind "jq is missing"
+tool="$(printf '%s' "$payload" | jq -r '.tool_name // empty' 2>/dev/null)" || blind "the hook payload is not JSON"
+blob="$(printf '%s' "$payload" | jq -r '.tool_input // {} | tostring' 2>/dev/null)" || blind "the hook payload is not JSON"
 [ -n "$blob" ] || exit 0
 
 state="$HOME/.chewbacca/state"
@@ -65,8 +71,10 @@ case "$tool" in
       refuse "only scripts/pre_send_gate.py may write the send-gate receipt."
     fi
     # Same for the grade receipts, which only tools/gtme_grade.py writes.
-    if printf '%s' "$lower" | grep -qE 'state/gtme-grade|state" *[,/+] *"?gtme-grade'; then
-      refuse "only gtme-grade may write a grade receipt."
+    # The receipts are signed, so a forged one fails --verify anyway; the key is
+    # what must never be read or written from a shell.
+    if printf '%s' "$lower" | grep -qE 'state/gtme-grade|state" *[,/+] *"?gtme-grade|gtme-grade\.key|gtme_grade_key'; then
+      refuse "only gtme-grade may touch a grade receipt or its key."
     fi
     if printf '%s' "$lower" | grep -q 'chewie' &&
        printf '%s' "$lower" | grep -qE 'click|eval' &&
@@ -138,49 +146,79 @@ fi
 
 
 # The playbook's five gates (tools/gtme_grade.py) must also have passed for
-# this campaign within 12 hours, on inputs that have not changed since. Added
-# 2026-10-10: the kit had a hundred sourced rules and a five-gate grading
-# section, and no campaign had ever been graded against them. Applied to
-# Zeutara the same day, they found 362 messages sent from inboxes the
-# pre-send gate never saw. The campaign is named by its cam_ id in the command
-# or in the last Clay URL; with no id anywhere, the newest grade receipt must
-# pass, and the refusal says to name the campaign.
-grade_dir="$state/gtme-grade"
-grade_ok() {  # $1 receipt path; prints why it fails, nothing on a pass
-  local r="$1"
-  [ -f "$r" ] || { echo "no gtme-grade pass for $(basename "$r" .json)."; return; }
-  local gt gp
-  gt=$(jq -r '.time // 0' "$r" 2>/dev/null || echo 0)
-  gp=$(jq -r '.pass // false' "$r" 2>/dev/null || echo false)
-  [ "$gp" = "true" ] || { echo "the gtme-grade receipt for $(basename "$r" .json) is not a pass."; return; }
-  [ $((now - gt)) -lt 43200 ] || { echo "the gtme-grade pass for $(basename "$r" .json) is over 12 hours old."; return; }
-  [ "$(jq -r '.hashes // {} | length' "$r" 2>/dev/null)" != "0" ] ||
-    { echo "the gtme-grade receipt names no input files."; return; }
-  while IFS=$'\t' read -r path want; do
-    [ -n "$path" ] || continue
-    got=$(shasum -a 256 "$path" 2>/dev/null | awk '{print $1}')
-    [ "$got" = "$want" ] || { echo "$(basename "$path") changed or vanished after gtme-grade passed."; return; }
-  done < <(jq -r '.hashes // {} | to_entries[] | "\(.key)\t\(.value)"' "$r" 2>/dev/null)
-}
+# exactly this action on exactly this campaign in this workspace, within 12
+# hours, on inputs and live campaign state that have not changed since, in a
+# receipt signed with a key only gtme-grade holds. Added 2026-10-10: the kit had
+# a hundred sourced rules and a five-gate grading section, and no campaign had
+# ever been graded against them. Applied to Zeutara the same day, they found
+# 362 messages sent from inboxes the pre-send gate never saw.
+#
+# The check itself is `gtme-grade --verify`, which owns the signature, the
+# binding and the re-hashing. Every way this can fail refuses: no action
+# named, no campaign named, no tool, no python, a verifier error or timeout.
+# No receipt is chosen by "newest": a pass for one campaign never stands in for
+# another (security review, 2026-10-10).
 if [ -z "$why" ]; then
+  actions=""
+  printf '%s' "$lower" | grep -qE 'resume|unpause' && actions="$actions resume"
+  printf '%s' "$lower" | grep -qE 'add leads|add-leads|enroll' && actions="$actions add-leads"
+  printf '%s' "$lower" | grep -qE 'launch|activate|start campaign|start sending|"?status"? *[:= ] *"?active|\bstart\b' &&
+    actions="$actions launch"
   ids="$( { printf '%s\n' "$blob"; cat "$lasturl" 2>/dev/null; } | grep -oE 'cam_[A-Za-z0-9]+' | sort -u)"
-  if [ -n "$ids" ]; then
-    while read -r id; do
-      [ -n "$id" ] || continue
-      why="$(grade_ok "$grade_dir/$id.json")"
-      [ -n "$why" ] && break
-    done <<< "$ids"
+  ws="$( { printf '%s\n' "$blob"; cat "$lasturl" 2>/dev/null; } |
+         grep -oE 'workspaces/[0-9]+|ws=[0-9]+|--ws[ =][0-9]+' | grep -oE '[0-9]+' | sort -u)"
+  [ -n "$ws" ] || ws="${CLAY_WORKSPACE_ID:-1372623}"
+  kit="${CHEWBACCA_ROOT:-}"
+  if [ -z "$kit" ] && [ -f "$HOME/.chewbacca/install-manifest.json" ]; then
+    kit="$(sed -n 's/.*"repo"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$HOME/.chewbacca/install-manifest.json" | head -1)"
+  fi
+  grader=""
+  for cand in "$(dirname "${BASH_SOURCE[0]}")/../../tools/gtme_grade.py" "${kit:-$HOME/code/chewbacca}/tools/gtme_grade.py"; do
+    [ -f "$cand" ] && { grader="$cand"; break; }
+  done
+  if [ -z "$actions" ]; then
+    why="cannot tell whether this is a launch, a resume or an add-leads; name the action in the command (an unlabeled click on a Clay page is refused)."
+  elif [ -z "$ids" ]; then
+    why="no cam_ id in the command or the last Clay URL, so no grade can be matched to it."
+  elif [ "$(printf '%s\n' "$ws" | wc -l | tr -d ' ')" != "1" ]; then
+    why="the command names more than one workspace."
+  elif [ -z "$grader" ] || ! command -v python3 >/dev/null 2>&1; then
+    why="gtme-grade or python3 is missing, so no grade can be verified."
   else
-    newest="$(ls -t "$grade_dir"/*.json 2>/dev/null | head -1)"
-    if [ -z "$newest" ]; then
-      why="no gtme-grade pass at all, and no cam_ id in the command or the last Clay URL to say which campaign."
-    else
-      why="$(grade_ok "$newest")"
-    fi
+    # The verifier gets 8 of the hook's 10 seconds and is killed past that: a
+    # child blocked in a read never lets the TERM trap run, and lib.sh's last
+    # resort is kill -9, which the host treats as a non-blocking error.
+    vout="$(mktemp "${TMPDIR:-/tmp}/launch-guard.XXXXXX")" || vout=/dev/null
+    bounded() {
+      local secs="$1" n=0 pid; shift
+      "$@" >"$vout" 2>&1 &
+      pid=$!
+      while kill -0 "$pid" 2>/dev/null; do
+        if [ "$n" -ge $((secs * 10)) ]; then
+          kill -9 "$pid" 2>/dev/null
+          echo "gtme-grade --verify did not answer within ${secs}s" >"$vout"
+          return 124
+        fi
+        sleep 0.1
+        n=$((n + 1))
+      done
+      wait "$pid"
+    }
+    for action in $actions; do
+      while read -r id; do
+        [ -n "$id" ] || continue
+        if ! bounded 8 python3 -I "$grader" --verify --ws "$ws" --campaign "$id" --action "$action"; then
+          why="$(cat "$vout" 2>/dev/null)"
+          why="${why:-gtme-grade --verify failed with no message} ($action, $id)"
+          break 2
+        fi
+      done <<< "$ids"
+    done
+    [ "$vout" = /dev/null ] || rm -f "$vout"
   fi
   [ -n "$why" ] && why="$why
-Grade it: gtme-grade --campaign <cam_id> --leads <list>.csv --suppress <sent>.csv \\
-    --senders <sender-accounts>.json --client <name> --review <read>.json"
+Grade it: gtme-grade --campaign <cam_id> --action <launch|resume|add-leads> --leads <list>.csv \\
+    --suppress <sent>.csv --senders <sender-accounts>.json --client <name> --review <read>.json"
 fi
 
 [ -n "$why" ] || exit 0

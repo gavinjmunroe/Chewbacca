@@ -26,6 +26,10 @@ TOOL=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty')
 if [ "$TOOL" = "Skill" ]; then
   ASKED=$(printf '%s' "$INPUT" | jq -r '.tool_input.skill // empty')
   [ -n "$ASKED" ] && mkdir -p "$STATE" && echo "${ASKED##*:}" >> "$STATE/skill-loaded-$SID"
+  # Its own stamp: the list above is appended on every load, so its mtime
+  # said "a skill loaded recently", and any unrelated skill load then switched
+  # this gate off for ten minutes (caught by tests/skill_gate.sh, 2026-10-10).
+  [ "${ASKED##*:}" = graph-engineering ] && touch "$STATE/graph-loaded-$SID"
 fi
 
 # BEHAVIOR backstop: the prompt classifier misses some big work (2026-10-06,
@@ -88,9 +92,7 @@ rm -f "$CLAIM"
 # A load in the last 10 minutes is this turn's graph. 2026-10-09: a mid-turn
 # message re-armed the marker a minute after the skill loaded, so the same turn
 # got refused twice and Caleb saw "commands that fail".
-LOADED="$STATE/skill-loaded-$SID"
-if grep -qxF graph-engineering "$LOADED" 2>/dev/null \
-   && [ -n "$(find "$LOADED" -mmin -10 2>/dev/null)" ]; then
+if [ -n "$(find "$STATE/graph-loaded-$SID" -mmin -10 2>/dev/null)" ]; then
   exit 0
 fi
 if grep -qxF graph-engineering "$STATE/skill-loaded-$SID" 2>/dev/null; then

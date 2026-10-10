@@ -36,13 +36,25 @@ comes back, with `surface`, `ms` and every surface `tried`.
   audiences, audience-record-ids, audience-records, campaigns, campaign-stats,
   campaign, campaign-analytics, campaign-variants, campaign-leads, inbox,
   thread, credits, credit-usage, signals, workflows, blocklist.
-- Writes: `reply`, `forward` and `blocklist-add` exist and refuse unless called
-  with `--allow-writes` and a person typing the op name at a real terminal.
-  Agent shells have no terminal, so an agent can't send one: hand Caleb the
-  exact command instead. Every other write (add column, update column, run cells, add rows,
-  import, add leads, campaign status) is listed as untaught: teaching one means
-  making the page send it in a client workspace. They need a sandbox workspace
-  with throwaway rows first.
+- Writes: `reply`, `forward`, `blocklist-add`, and 16 more built from Clay's
+  own frontend code without ever sending one: `add-column`, `update-column`,
+  `table-auto-run`, `run-cells` (five rows at most), `cancel-run`,
+  `add-rows`, `update-rows`, `delete-rows`, `import`, `add-leads` (the CLI's
+  `audiences update --filter`), `campaign-status` (PAUSED or STOPPED only;
+  a start never goes out from here), `lead-category`, `mark-read`,
+  `blocklist-remove`, `blocklist-add-bulk`, `page-view-activity`. Every write
+  refuses unless called with `--allow-writes` and a person typing the op name
+  at a real terminal. Agent shells have no terminal, so an agent can't send
+  one: run it with `--dry-run` to print the exact request (method, URL, body,
+  no cookie), then hand Caleb the command.
+- The 16 carry `verified: false` in `registry.json` with their evidence: the
+  bundle file, its sha256, the ts-rest contract and offset, the zod body
+  schema and the UI call that builds the body. Until a person flips it, every
+  live call reads the change back (`readback` in the output) or names the
+  read to run. To re-derive one after Clay ships a new bundle: fetch
+  `app.clay.com`'s `/assets/*.js`, find `<contractName>:{method:` for the
+  path and body schema, then the `.<contractName>.` call site for the body
+  the page sends.
 - UI-only jobs (find people, run empty rows, configure a column, start a
   campaign) print the exact `clay-go` route instead of doing anything.
 - `chewbacca clay doctor` checks the api-anything pin, the build and the
@@ -62,10 +74,10 @@ slow path, and so is fighting the API for something one UI click does.
 
 | Job                                                       | Route                                                                                                                                                                                                                                                                                                                                                                        | Measured                                                                                                                                                                            |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Any read in `chewbacca clay ops`                      | `chewbacca clay <op> k=v`: the CLI or api-anything over `api.clay.com/v3`, whichever measured faster, falling through on a failure or a cut result            | about 1 s end to end each on 10-09, under a load average of 60 to 125                 |
-| A table's auto-run state (AUTO_RUN_ON, AUTO_RUN_MODE) | `chewbacca clay table table=t_...`: GET `/v3/tables/{id}`. The CLI's `tables get` leaves it out                                                               | one call                                                                              |
-| One lead's thread without marking it read             | `chewbacca clay thread campaign_id=N lead_id=N`: POST `master-inbox/message-history`. Opening the thread in the UI fires `lead-read-status`                   | one call                                                                              |
-| Leads enrolled in a campaign                          | `chewbacca clay campaign-leads campaign=cam_...`: GET `audiences/campaigns/{id}/enrolled-leads`, cursor paged. The CLI has no equivalent                      | one call                                                                              |
+| Any read in `chewbacca clay ops`                          | `chewbacca clay <op> k=v`: the CLI or api-anything over `api.clay.com/v3`, whichever measured faster, falling through on a failure or a cut result                                                                                                                                                                                                                           | about 1 s end to end each on 10-09, under a load average of 60 to 125                                                                                                               |
+| A table's auto-run state (AUTO_RUN_ON, AUTO_RUN_MODE)     | `chewbacca clay table table=t_...`: GET `/v3/tables/{id}`. The CLI's `tables get` leaves it out                                                                                                                                                                                                                                                                              | one call                                                                                                                                                                            |
+| One lead's thread without marking it read                 | `chewbacca clay thread campaign_id=N lead_id=N`: POST `master-inbox/message-history`. Opening the thread in the UI fires `lead-read-status`                                                                                                                                                                                                                                  | one call                                                                                                                                                                            |
+| Leads enrolled in a campaign                              | `chewbacca clay campaign-leads campaign=cam_...`: GET `audiences/campaigns/{id}/enrolled-leads`, cursor paged. The CLI has no equivalent                                                                                                                                                                                                                                     | one call                                                                                                                                                                            |
 | Every reply with its full thread                          | `bin/clay-inbox [--campaign X]`: POST `clay-sequencer/master-inbox/replies`, then `message-history` per lead, from inside the signed-in tab                                                                                                                                                                                                                                  | 65 replies and threads in ~3s; the page route took ~10s a campaign and saw one thread                                                                                               |
 | Resend to a new address or referral                       | POST `master-inbox/forward` `{campaign_id, forward_data:{message_id, stats_id, to_emails, forward_email_body?}}` with the REPLY's ids (our SENT message 500s)                                                                                                                                                                                                                | verified 10-09: FORWARD shows in the thread                                                                                                                                         |
 | Reply in a thread (follow-up)                             | POST `master-inbox/reply` `{campaign_id, reply_data:{email_stats_id, email_body, reply_message_id, reply_email_time, reply_email_body}}`                                                                                                                                                                                                                                     | verified 10-09                                                                                                                                                                      |

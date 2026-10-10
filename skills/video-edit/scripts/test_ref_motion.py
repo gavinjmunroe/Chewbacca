@@ -7,8 +7,16 @@ borrow_camera's base zoom keeps every frame's edges inside the source.
 import sys
 import tempfile
 from pathlib import Path
-import cv2
-import numpy as np
+try:
+    import cv2
+    import numpy as np
+except ImportError:
+    # The pytest group collects every test_*.py; a Mac without opencv errored
+    # the whole collection. Run as the docstring says for the real check.
+    if "pytest" in sys.modules:
+        import pytest
+        pytest.skip("needs opencv-python-headless and numpy", allow_module_level=True)
+    raise
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from ref_motion import measure

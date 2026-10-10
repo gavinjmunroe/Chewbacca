@@ -263,6 +263,26 @@ class Bounces(unittest.TestCase):
                                                "matters to us.")["kind"], "bounce")
 
 
+class RemovalAsks(unittest.TestCase):
+    # "Remove Daniel" was a partner's whole reply (2026-10-10) and came out
+    # "unclear"; the GTM tab kept it as an expected failure until this landed.
+    def test_naming_someone_else_is_an_opt_out(self):
+        for text in ("Remove Daniel", "Please remove", "Not a fit. Remove us.",
+                     "Please remove him from your list", "Remove Dan Smith from your list please"):
+            self.assertEqual(reply.reply_intent(text)["kind"], "unsubscribe", text)
+
+    def test_remove_in_passing_is_not(self):
+        self.assertEqual(reply.reply_intent("We will remove the cap next round, send the deck")["kind"], "deck")
+        self.assertEqual(reply.reply_intent("Can you remove the deck password?")["kind"], "deck")
+
+    def test_unclosed_tags_stay_linear(self):
+        # "<br" with no ">" scanned to the end from every "<": 50k chars took 2.6 s.
+        for text in ("<br" * 17000, "<html>" + "<style" * 10000, "<p" * 17000):
+            started = time.time()
+            reply.clean_reply_text(text)
+            self.assertLess(time.time() - started, 1, text[:12])
+
+
 class LeadNames(unittest.TestCase):
     # Synced with src/replies/lead-name.ts and card-copy.ts at 8d7ad77; all
     # 36 parity inputs matched the TypeScript on 2026-10-10.

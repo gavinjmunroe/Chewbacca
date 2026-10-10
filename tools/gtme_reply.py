@@ -301,6 +301,13 @@ SIGN_OFF = js_regex(
     r"|confidential|disclaimer|sent (from|via) )", "i")
 UNSUBSCRIBE = js_regex(
     r"\b(unsubscribe|remove me|take me off|stop emailing|do not contact|don'?t contact)\b", "i")
+# A removal ask that names someone else: "Remove Daniel" was the whole reply
+# from a partner at one firm (2026-10-10), and it came out "unclear". Only a
+# reply that OPENS with remove, or asks to remove someone from a list, counts,
+# so "we'll remove the cap next round" is still read for what it is.
+REMOVE_ASK = js_regex(
+    r"^\s*(please\s+)?remove\b(?![^.!?\n]*\?)|\bremove\s+(him|her|them|us|this (person|contact|address))\b"
+    r"|\bremove\s+[^.!?\n]{1,60}\bfrom (your|the|this) (list|database|mailing|distribution|outreach)", "i")
 # Mail we must not answer: spam-filter challenges, and a firm's notice that
 # its partner died (one firm, 2026-10-06). Redirecting a pitch off a
 # death notice is not something to automate.
@@ -415,7 +422,7 @@ def _reply_intent(reply_text, lead_email, sending_email, company_name):
 
     # An opt-out wins over every other reading: "remove me, my mailbox is full
     # of these" must be blocklisted, not filed as a bounce (togari-platform #78).
-    if UNSUBSCRIBE.search(text):
+    if UNSUBSCRIBE.search(text) or REMOVE_ASK.search(text):
         return {"kind": "unsubscribe", "label": "Asked to unsubscribe",
                 "nextStep": "Blocklisted. Never email them again."}
 
@@ -503,17 +510,22 @@ NAMED_ENTITIES = {
     "lsquo": "'", "rsquo": "'", "middot": "\u00b7", "bull": "\u00b7",
 }
 ENTITY = js_regex(r"&(#x?[0-9a-f]+|[a-z]+);", "gi")
-LOOKS_HTML = js_regex(r"<(html|body|div|p|br|table|span|blockquote|a|meta)\b[^>]*>", "i")
+# Tag bodies are [^<>], not upstream's [^>]: with [^>] every "<" in a run of
+# "<br<br<br..." scanned to the end of the text looking for ">", so 20k chars
+# took 106 ms and 50k took 2.6 s (GTM tab, 2026-10-10). A "<" inside a tag is
+# malformed HTML, so stopping there changes nothing a real email sends.
+LOOKS_HTML = js_regex(r"<(html|body|div|p|br|table|span|blockquote|a|meta)\b[^<>]*>", "i")
 # <style>/<script>/<head> carry no reply text, only noise. Upstream writes this
 # as one pattern with a backreference; JS folds case on a backreference under
-# /i and Python does not, so each tag gets its own branch.
-NOISE_TAGS = re.compile("|".join(
-    js_regex(fr"<{tag}\b[^>]*>[\s\S]*?<\/{tag}>", "i").pattern for tag in ("style", "script", "head")))
+# /i and Python does not, so each tag gets its own pattern. Each runs only when
+# its closing tag is present, or every unclosed opener would scan to the end.
+NOISE_TAGS = tuple((tag, js_regex(fr"<{tag}\b[^<>]*>[\s\S]*?<\/{tag}>", "i"))
+                   for tag in ("style", "script", "head"))
 BLOCKQUOTE_TAIL = js_regex(r"<blockquote\b[\s\S]*$", "i")
-BR = js_regex(r"<br\b[^>]*>", "gi")
+BR = js_regex(r"<br\b[^<>]*>", "gi")
 CLOSE_BLOCK = js_regex(r"<\/(p|div|tr|li|h[1-6]|blockquote)\s*>", "gi")
-OPEN_BLOCK = js_regex(r"<(p|div|tr|li|h[1-6])\b[^>]*>", "gi")
-ANY_TAG = js_regex(r"<[^>]+>", "g")
+OPEN_BLOCK = js_regex(r"<(p|div|tr|li|h[1-6])\b[^<>]*>", "gi")
+ANY_TAG = js_regex(r"<[^<>]+>", "g")
 THREAD_MARKERS = (
     # "On Sep 2, 2026, at 2:23 PM, Sagar Tiwari <sagar@...> wrote:"
     js_regex(r"^\s*On\s.{0,120}?\s(?:wrote|schrieb):", "im"),
@@ -583,7 +595,10 @@ def clean_reply_text(raw):
         return ""
     text = to_js(str(raw))[:MAX_CLEAN_INPUT]
     if LOOKS_HTML.search(text):
-        text = NOISE_TAGS.sub(" ", text)
+        lowered = text.lower()
+        for tag, pattern in NOISE_TAGS:
+            if f"</{tag}" in lowered:
+                text = pattern.sub(" ", text)
         # A quoted thread inside a <blockquote> is the common Apple Mail shape.
         text = BLOCKQUOTE_TAIL.sub(" ", text, count=1)
         # Structural tags become line breaks so paragraphs survive.

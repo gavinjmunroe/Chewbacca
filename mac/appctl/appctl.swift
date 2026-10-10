@@ -251,6 +251,7 @@ func resolveElement(_ app: NSRunningApplication, _ ref: String, window: CGWindow
         guard idx < kids.count else { fail("element \(ref) is gone; the window changed", fix: "run `see` again") }
         el = kids[idx]
         if lastDialog == nil && isDialog(el) { lastDialog = el }
+        if str(el, kAXRoleAttribute) == "AXScrollArea" { lastScrollArea = el }
     }
     let role = str(el, kAXRoleAttribute) ?? "?"
     if role != (e["role"] as? String) || label(el) != (e["label"] as? String) {
@@ -287,6 +288,7 @@ func texts(_ el: AXUIElement) -> [String] {
 let safeInDialog: Set<String> = ["cancel", "not now", "later", "back", "no thanks", "dismiss"]
 
 var lastDialog: AXUIElement?
+var lastScrollArea: AXUIElement?
 
 // Calculator's one and only window has subrole AXDialog, so a window's
 // subrole alone made every digit "inside a dialog" (2026-10-09). A top-level
@@ -366,7 +368,7 @@ func keyCommits(_ combo: String) -> Bool {
 
 // MARK: screenshot by window id (works when hidden, minimized or off-Space)
 
-func capture(_ wid: CGWindowID, to path: String, scale: Double) {
+func capture(_ wid: CGWindowID, to path: String, scale: Double, region: CGRect? = nil) {
     let sem = DispatchSemaphore(value: 0)
     var problem: String?
     Task {
@@ -381,7 +383,15 @@ func capture(_ wid: CGWindowID, to path: String, scale: Double) {
             cfg.width = max(1, Int(w.frame.width * px))
             cfg.height = max(1, Int(w.frame.height * px))
             cfg.showsCursor = false
-            let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
+            var image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: cfg)
+            if let r = region {
+                // region is in window points, the same frame `see` reports
+                let crop = CGRect(x: r.minX * px, y: r.minY * px, width: r.width * px, height: r.height * px)
+                guard let cut = image.cropping(to: crop.integral) else {
+                    problem = "region is outside the window"; sem.signal(); return
+                }
+                image = cut
+            }
             let rep = NSBitmapImageRep(cgImage: image)
             try rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
         } catch {
@@ -462,6 +472,38 @@ func walkMenu(_ app: NSRunningApplication, _ path: [String]) -> AXUIElement {
     return el
 }
 
+
+// MARK: scrolling, reading, cropping
+
+func firstScrollArea(_ el: AXUIElement, depth: Int = 0) -> AXUIElement? {
+    if depth > 30 { return nil }
+    if str(el, kAXRoleAttribute) == "AXScrollArea" { return el }
+    for c in children(el) { if let hit = firstScrollArea(c, depth: depth + 1) { return hit } }
+    return nil
+}
+
+// Moves the scroll bar's value, which is what dragging the bar does; no wheel
+// event, so nothing reaches the frontmost app. dy is in tenths of the range.
+func scroll(_ area: AXUIElement, dy: Double, horizontal: Bool) -> (Double, Double)? {
+    let barAttr = horizontal ? kAXHorizontalScrollBarAttribute : kAXVerticalScrollBarAttribute
+    guard let barObj = attr(area, barAttr) else { return nil }
+    let bar = barObj as! AXUIElement
+    let before = (attr(bar, kAXValueAttribute) as? NSNumber)?.doubleValue ?? 0
+    let after = min(1, max(0, before + dy / 10))
+    AXUIElementSetAttributeValue(bar, kAXValueAttribute as CFString, NSNumber(value: after))
+    let now = (attr(bar, kAXValueAttribute) as? NSNumber)?.doubleValue ?? after
+    return (before, now)
+}
+
+func allText(_ el: AXUIElement, into out: inout [String], depth: Int = 0) {
+    if depth > 40 || out.count > 2000 { return }
+    let role = str(el, kAXRoleAttribute) ?? ""
+    if role == "AXStaticText" || role == "AXTextArea" || role == "AXTextField" || role == "AXHeading" || role == "AXLink" {
+        if let t = str(el, kAXValueAttribute) ?? label(el) { out.append(t) }
+    }
+    for c in children(el) { allText(c, into: &out, depth: depth + 1) }
+}
+
 // MARK: commands
 
 // ScreenCaptureKit asserts in CGS_REQUIRE_INIT from a bare CLI unless the
@@ -483,6 +525,11 @@ let windowOpt = option("--window").flatMap { UInt32($0) }.map { CGWindowID($0) }
 let shotOpt = option("--shot")
 let scaleOpt = option("--scale").flatMap(Double.init) ?? 1.0
 let limitOpt = option("--limit").flatMap(Int.init) ?? 400
+let regionOpt: CGRect? = option("--region").flatMap { v in
+    let n = v.split(separator: ",").compactMap { Double($0) }
+    return n.count == 4 ? CGRect(x: n[0], y: n[1], width: n[2] - n[0], height: n[3] - n[1]) : nil
+}
+let horizontal = flag("--horizontal")
 
 guard let cmd = args.first else {
     print("""
@@ -501,6 +548,11 @@ guard let cmd = args.first else {
       shot <app> [--window ID] --out PNG [--scale S]
                                         capture a window even if hidden or off-Space
       raise <app> [--window ID]         unminimize/unhide (only when asked)
+      scroll <app> [N|label] <dy> [--horizontal]
+                                        move the scroll bar holding N (or the first one) by dy
+                                        tenths of its range; + is down/right
+      read <app> [--window ID]          every visible text in reading order, for content
+      shot ... --region x0,y0,x1,y1     crop to a region in window points (zoom)
     """)
     exit(0)
 }
@@ -608,8 +660,35 @@ case "shot":
     guard let q = args.first, let out = option("--out") ?? shotOpt else { fail("shot needs an app and --out PNG") }
     let app = resolveApp(q)
     let win = pickWindow(app, windowOpt)
-    capture(win.id, to: out, scale: scaleOpt)
+    capture(win.id, to: out, scale: scaleOpt, region: regionOpt)
     emit(["shot": out, "window": Int(win.id)])
+
+case "scroll":
+    guard args.count >= 2 else { fail("scroll needs an app and dy") }
+    let app = resolveApp(args[0])
+    guard let dy = Double(args.last!) else { fail("scroll's last argument is dy, a number") }
+    var area: AXUIElement?
+    if args.count >= 3 {
+        let (el, _) = resolveElement(app, args[1], window: windowOpt)
+        area = str(el, kAXRoleAttribute) == "AXScrollArea" ? el : lastScrollArea
+    } else {
+        area = firstScrollArea(pickWindow(app, windowOpt).element)
+    }
+    guard let a = area else { fail("no scroll area there", fix: "use `key <app> pagedown` after focusing the list") }
+    guard let (before, after) = scroll(a, dy: dy, horizontal: horizontal) else {
+        let r = AXUIElementPerformAction(a, (dy > 0 ? "AXScrollDownByPage" : "AXScrollUpByPage") as CFString)
+        if r != .success { fail("scroll area has no scroll bar and refused paging (AXError \(r.rawValue))") }
+        emit(["scrolled": "by page", "direction": dy > 0 ? "down" : "up"]); exit(0)
+    }
+    emit(["scrolled": ["from": before, "to": after], "moved": abs(after - before) > 0.0001])
+
+case "read":
+    guard let q = args.first else { fail("read needs an app") }
+    let app = resolveApp(q)
+    let win = pickWindow(app, windowOpt)
+    var out: [String] = []
+    allText(win.element, into: &out)
+    emit(["app": app.localizedName ?? "", "window": Int(win.id), "title": win.title ?? "", "text": out])
 
 case "raise":
     guard let q = args.first else { fail("raise needs an app") }

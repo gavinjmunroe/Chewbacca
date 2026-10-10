@@ -326,6 +326,10 @@ appctl_bin() {
 cmd_app() {
   local bin; bin=$(appctl_bin) || exit 1
   case "${1:-}" in
+    batch)
+      shift
+      [ "$DRY" = 1 ] && { echo "[dry-run] app batch $*"; return 0; }
+      python3 "$LIB/app_batch.py" "$bin" "$@" ;;
     find|do)
       local mode="$1"; shift
       [ "$DRY" = 1 ] && { echo "[dry-run] app $mode $*"; return 0; }
@@ -336,6 +340,7 @@ cmd_app() {
       do <app> "<what you want>" [--text T]
                                         find, then press it (or set T); a gated pick is never
                                         pressed, it comes back to confirm by index
+      batch <app> <steps.json|->        several steps in one call, stops at the first failure
 MORE
       ;;
     press|set|key|menu|raise)

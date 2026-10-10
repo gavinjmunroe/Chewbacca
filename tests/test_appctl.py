@@ -81,6 +81,38 @@ sys.exit(4)
     check("a gated do exits 4 and names the exact confirm command",
           run.returncode == 4 and "press Photos 2 --yes" in run.stdout)
 
+# batch: a label step takes a fresh see first, a gated step stops the run,
+# and --yes reaches appctl only on the step that carries "yes": true.
+with tempfile.TemporaryDirectory() as tmp:
+    log = Path(tmp) / "argv.log"
+    fake_bin = Path(tmp) / "appctl"
+    fake_bin.write_text(f"""#!/usr/bin/env python3
+import json, sys
+open({str(log)!r}, "a").write(json.dumps(sys.argv[1:]) + "\\n")
+if sys.argv[1] == "see":
+    print("{{}}"); sys.exit(0)
+if "label:Delete" in sys.argv and "--yes" not in sys.argv:
+    sys.stderr.write("refused"); sys.exit(4)
+print("{{}}")
+""")
+    fake_bin.chmod(0o755)
+    steps = Path(tmp) / "steps.json"
+    steps.write_text(json.dumps([{"do": "press", "label": "Add"}, {"do": "key", "combo": "tab"},
+                                 {"do": "press", "label": "Delete"}, {"do": "press", "i": 3}]))
+    run = subprocess.run([sys.executable, str(ROOT / "mac/lib/app_batch.py"), str(fake_bin), "Calc", str(steps)],
+                         capture_output=True, text=True)
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    check("a batch stops at the gated step with exit 4", run.returncode == 4
+          and json.loads(run.stdout)["stopped_at"] == 2 and ["press", "Calc", "3"] not in calls)
+    check("a label step takes a fresh see first", calls[0] == ["see", "Calc"] and calls[1] == ["press", "Calc", "label:Add"])
+    check("no step gets --yes unless it says so", all("--yes" not in c for c in calls))
+    log.unlink()
+    steps.write_text(json.dumps([{"do": "press", "label": "Delete", "yes": True}]))
+    run = subprocess.run([sys.executable, str(ROOT / "mac/lib/app_batch.py"), str(fake_bin), "Calc", str(steps)],
+                         capture_output=True, text=True)
+    check("yes on one step passes that step only", run.returncode == 0
+          and json.loads(log.read_text().splitlines()[-1])[-1] == "--yes")
+
 # The compiled driver, macOS only.
 if platform.system() == "Darwin" and shutil.which("swiftc"):
     with tempfile.TemporaryDirectory() as tmp:

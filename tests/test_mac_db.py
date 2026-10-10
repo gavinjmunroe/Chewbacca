@@ -175,6 +175,17 @@ def test_biome_clear_keeps_a_backup(tmp_path):
     assert any((home / ".chewbacca/mac-db/backups").glob("biome-App.InFocus-*"))
 
 
+def test_backups_are_owner_only(tmp_path):
+    home = _home(tmp_path)
+    run(home, "biome", "App.InFocus", "--clear")
+    root = home / ".chewbacca/mac-db/backups"
+    snap = next(root.glob("biome-App.InFocus-*"))
+    assert root.stat().st_mode & 0o777 == 0o700
+    assert snap.stat().st_mode & 0o777 == 0o700
+    files = list(snap.iterdir())
+    assert files and all(f.stat().st_mode & 0o777 == 0o600 for f in files)
+
+
 def test_stores_report_missing_and_present(tmp_path):
     report = {r["store"]: r for r in j(_home(tmp_path), "stores")}
     assert report["calls"]["readable"] and report["calls"]["rows"] == 2

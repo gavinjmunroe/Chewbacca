@@ -576,7 +576,10 @@ APP_VERBS = {
 
 def backup_files(store: str, files: list[Path]) -> Path:
     size = sum(f.stat().st_size for f in files if f.exists())
-    BACKUPS.mkdir(parents=True, exist_ok=True)
+    # Snapshots are copies of TCC-protected stores (chat.db, Notes, Biome), so
+    # they get owner-only modes or any process could read what macOS gates.
+    BACKUPS.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(BACKUPS, 0o700)
     free = shutil.disk_usage(BACKUPS).free
     if free < size * 2 + 2 * 1024 ** 3:
         raise Unreadable(f"not enough free disk to snapshot {store} first ({size // 2**20} MB needed, "
@@ -586,7 +589,8 @@ def backup_files(store: str, files: list[Path]) -> Path:
     while dest.exists():
         n += 1
         dest = BACKUPS / f"{store}-{time.strftime('%Y%m%d-%H%M%S')}-{n}"
-    dest.mkdir(parents=True)
+    dest.mkdir(mode=0o700, parents=True)
+    os.chmod(dest, 0o700)
     manifest = []
     for i, f in enumerate(files):
         for suffix in ("", "-wal", "-shm", "-journal"):
@@ -594,8 +598,11 @@ def backup_files(store: str, files: list[Path]) -> Path:
             if src.exists():
                 name = f"{i}-{src.name}"
                 shutil.copy2(src, dest / name)
+                os.chmod(dest / name, 0o600)
                 manifest.append({"from": str(src), "file": name})
-    (dest / "manifest.json").write_text(json.dumps({"store": store, "files": manifest}, indent=2))
+    fd = os.open(dest / "manifest.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as out:
+        out.write(json.dumps({"store": store, "files": manifest}, indent=2))
     old = sorted(BACKUPS.glob(f"{store}-*"), key=lambda p: p.stat().st_mtime)
     for stale in old[:-KEEP_BACKUPS]:
         shutil.rmtree(stale, ignore_errors=True)

@@ -85,6 +85,14 @@ CLAIM="$MARK.$$"
 mv "$MARK" "$CLAIM" 2>/dev/null || exit 0
 NEED=$(tr '\n' ' ' < "$CLAIM")
 rm -f "$CLAIM"
+# A load in the last 10 minutes is this turn's graph. 2026-10-09: a mid-turn
+# message re-armed the marker a minute after the skill loaded, so the same turn
+# got refused twice and Caleb saw "commands that fail".
+LOADED="$STATE/skill-loaded-$SID"
+if grep -qxF graph-engineering "$LOADED" 2>/dev/null \
+   && [ -n "$(find "$LOADED" -mmin -10 2>/dev/null)" ]; then
+  exit 0
+fi
 if grep -qxF graph-engineering "$STATE/skill-loaded-$SID" 2>/dev/null; then
   echo "skill-gate: this prompt is big work. graph-engineering was loaded earlier in the session, but loaded is not applied: draw THIS turn's task graph before acting. Re-load the skill, or fan the independent jobs out with Agent, and say in one line what runs in parallel, what verifies from ground truth, or why it is one sequential chain. Refused once; the next call goes through. Never mention skills to the user." >&2
 else

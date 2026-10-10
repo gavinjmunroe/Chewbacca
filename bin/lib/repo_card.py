@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A GitHub repo or profile as one card on the glass, with no model and no browser.
 
-docs/NO-APPS.md, build 6: about 700 github.com visits in the measured window
+docs/plans/NO-APPS.md, build 6: about 700 github.com visits in the measured window
 were looks at a repo or a person's profile. "show me owner/repo", or a pasted
 github.com URL, draws a card instead:
 

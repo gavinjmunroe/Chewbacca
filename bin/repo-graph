@@ -49,13 +49,13 @@ DEFAULT_LISTS = [
     ("REPO-ATLAS", KIT / "skills/gtm-engineering/references/REPO-ATLAS.md"),
     ("oss-apps", KIT / "config/data/oss-apps/apps.json"),
     ("amber-repos", AMBER / "research/repos.md"),
-    ("STARRED-AUDIT", KIT / "docs/STARRED-AUDIT.md"),
-    ("LINKS-FROM-CALEB", KIT / "docs/LINKS-FROM-CALEB.md"),
+    ("STARRED-AUDIT", KIT / "docs/plans/STARRED-AUDIT.md"),
+    ("LINKS-FROM-CALEB", KIT / "docs/plans/LINKS-FROM-CALEB.md"),
     ("non-majority", BRAIN / "claude/skills/maintainer-orchestrator/references/non-majority-repositories.md"),
     ("mac-LANDSCAPE", KIT / "docs/mac/LANDSCAPE.md"),
     ("mac-tools.json", KIT / "mac/data/tools.json"),
     ("asks.jsonl", BRAIN / "chewbacca/asks.jsonl"),
-    ("REFERENCE", KIT / "docs/REFERENCE.md"),
+    ("REFERENCE", KIT / "docs/reference/REFERENCE.md"),
     ("amber-resources", AMBER / "06-RESOURCE-LIBRARY.md"),
 ]
 
@@ -378,7 +378,7 @@ def build(lists, root, out, cache_path, refresh, network=True):
                       "line": v["line"], "evidence": v["evidence"], "via": v["via"]})
 
     exclude = {Path(p).expanduser().resolve() for _, p in lists}
-    exclude |= {Path(out).resolve(), (KIT / "docs/REPO-GRAPH.md").resolve(),
+    exclude |= {Path(out).resolve(), (KIT / "docs/plans/REPO-GRAPH.md").resolve(),
                 (KIT / "skills/gtm-engineering/references/repo-atlas.json").resolve()}
     pair_hits, name_hits = scan_usage(root, exclude)
     for cid, n in nodes.items():

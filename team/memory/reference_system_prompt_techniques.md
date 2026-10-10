@@ -12,7 +12,7 @@ Cluely general, Cluely `enterprise.md` live-meeting copilot, Claude 4 Opus,
 Meta.ai / Llama 4, plus Google Assistant.
 
 Eleven wiki pages under "Prompting and system prompts" in `wiki/index.md`.
-Public write-up: `docs/SYSTEM-PROMPTS.md` in `calebnewtonusc/Chewbacca`.
+Public write-up: `docs/reference/SYSTEM-PROMPTS.md` in `calebnewtonusc/Chewbacca`.
 Full corpus in `raw/processed/2026-09-02-whatstheprompt-*`.
 
 The headline finding: production system prompts spend most of their length on

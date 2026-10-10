@@ -1,6 +1,6 @@
 """Can Jev point at the right control, fast, and know when it can't?
 
-The idea under test (docs/SITE-LEARNING.md): "where do I click" answered as a
+The idea under test (docs/plans/SITE-LEARNING.md): "where do I click" answered as a
 Jev choice over the page's controls, with the interface shaped by confidence.
 One clear winner gets the bubble, two close ones both get a ring, and anything
 lower gets a question. That only works if two things hold, so both are measured:

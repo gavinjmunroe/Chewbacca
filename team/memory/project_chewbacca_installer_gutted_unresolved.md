@@ -12,7 +12,7 @@ own, timestamped 21:31-21:33, with no one having asked:
 
 - `settings/toolkit.json` lost five tools: **bd, cap, mac, mac-use, yt-transcript**
 - `setup.sh` lost **116 lines**, the install blocks for exactly those tools
-- `docs/REFERENCE.md` went from "9 installed alongside the kit" to "4"
+- `docs/reference/REFERENCE.md` went from "9 installed alongside the kit" to "4"
 - `SHA256SUMS.txt` was auto-regenerated to bless the smaller setup.sh
 
 All nine tools are installed on this Mac, so it was not pruning by what is
@@ -42,7 +42,7 @@ what went missing. Both proven: with `PATH=/usr/bin:/bin` all nine tools are
 still found, and forcing a real loss makes the generator refuse and list the
 seven it could not see.
 
-**How to apply:** if `setup.sh`, `settings/toolkit.json` or `docs/REFERENCE.md`
+**How to apply:** if `setup.sh`, `settings/toolkit.json` or `docs/reference/REFERENCE.md`
 show up modified without being asked for, do not commit them and do not let a
 checksum regeneration bless them. Diff `toolkit.json` first and count the tools.
 This is the second time the installer has been broken on main, after

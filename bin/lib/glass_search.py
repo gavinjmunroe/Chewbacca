@@ -3,7 +3,7 @@
 
 "Search who won the Dodgers game" used to open Chrome on a Google results
 page (bin/lib/route.py, SEARCH_OPENERS), and google.com was the single biggest
-app on the machine: 5.06 h in 14 days (docs/NO-APPS.md, build 1). This draws
+app on the machine: 5.06 h in 14 days (docs/plans/NO-APPS.md, build 1). This draws
 the answer as a panel instead. Each source row shows its title and host
 (skills/kyber-surfaces rule 12) and opens that one page only on a press.
 

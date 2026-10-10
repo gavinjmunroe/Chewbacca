@@ -17,7 +17,7 @@ DeletedForMe). Both arrive inside {"success", "data", "error"}, and an empty
 list comes back as `null`, not [].
 
 IDENTITY. A chat's name and a sender's name in wacli can be the push name the
-sender chose, so neither ever labels a person (docs/KYBER-SURFACES.md,
+sender chose, so neither ever labels a person (docs/reference/KYBER-SURFACES.md,
 Identity). A phone JID becomes a person only through the people store; until
 then it shows as the raw number. A group shows its subject, marked as a group,
 and is never a place a reply can go.

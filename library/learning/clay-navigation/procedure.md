@@ -117,7 +117,7 @@ do not automatically publish private evidence or re-enable lifecycle hooks.
 
 ## Reuse the existing learning-to-act design
 
-Read [Learning to act](../../../docs/LEARNING-TO-ACT.md), which predates this map.
+Read [Learning to act](../../../docs/plans/LEARNING-TO-ACT.md), which predates this map.
 Retain the four outputs separately:
 
 - Procedure: the direct-column sequence above; currently a supervised recipe.

@@ -28,11 +28,11 @@ and preserves existing accounts, model settings, notes and permission policies.
 Tell your agent what you want help with today, in the language and format you
 prefer. Personal data imports, prayer or other session openers, and permission
 bypass are separate choices. Setup does not authorize scanning your contacts or
-messages. [What data may leave your machine](docs/PRIVACY.md).
+messages. [What data may leave your machine](docs/guide/PRIVACY.md).
 
 macOS and Linux/WSL have native Claude/Codex adapters. Other hosts and native
 Windows can use public instruction exports; Mac automation requires macOS.
-[Runtime and platform details](docs/RUNTIMES.md) include prerequisites and removal.
+[Runtime and platform details](docs/reference/RUNTIMES.md) include prerequisites and removal.
 The larger Mac installation remains available through `start.sh`; inspect
 `bash start.sh --dry-run` before installing its packages and integrations.
 
@@ -54,7 +54,7 @@ publication. Use `skills/setup/SKILL.md` for a requested setup.
 <!-- BEGIN GENERATED: badges -->
   <a href=".claude/commands"><img src="https://img.shields.io/badge/slash_commands-57-indigo" alt="Commands"></a>
   <a href=".claude/rules"><img src="https://img.shields.io/badge/always_on_rules-14-green" alt="Rules"></a>
-  <a href="docs/EXTENSIONS.md"><img src="https://img.shields.io/badge/plugins-20-orange" alt="Plugins"></a>
+  <a href="docs/reference/EXTENSIONS.md"><img src="https://img.shields.io/badge/plugins-20-orange" alt="Plugins"></a>
 <!-- END GENERATED: badges -->
 </p>
 
@@ -69,10 +69,10 @@ One command installs **57 slash commands, 186 skills (65 written here, 8 cloned 
 Then you stop typing commands entirely and just talk.
 
 Choose Claude Code, Codex, or both with `chewbacca setup --runtime NAME`.
-Perplexity Computer imports the same skills and reads the same brain; see [Perplexity](docs/PERPLEXITY.md).
+Perplexity Computer imports the same skills and reads the same brain; see [Perplexity](docs/guide/PERPLEXITY.md).
 The adapters share one private brain and skill library, while preserving each
 host's hooks, model settings and permissions. Other apps can receive public
-instruction exports. [Runtime and platform setup](docs/RUNTIMES.md).
+instruction exports. [Runtime and platform setup](docs/reference/RUNTIMES.md).
 
 ## What that actually buys you
 
@@ -158,11 +158,11 @@ that use protected local sources.
 
 Other hosts and native Windows can use instruction exports. The historical
 Windows installer also supplies Claude's portable configuration. Mac automation
-is available only on macOS. Check [runtime support](docs/RUNTIMES.md) before
+is available only on macOS. Check [runtime support](docs/reference/RUNTIMES.md) before
 assuming a skill's tools are available in your app.
 
-Read [the data inventory](docs/PRIVACY.md) and
-[the threat model](docs/THREAT-MODEL.md) for the boundaries of that access.
+Read [the data inventory](docs/guide/PRIVACY.md) and
+[the threat model](docs/reference/THREAT-MODEL.md) for the boundaries of that access.
 
 ## Install
 
@@ -266,18 +266,18 @@ with a cost ceiling.
 
 | Where                                              | For                                          |
 | -------------------------------------------------- | -------------------------------------------- |
-| [docs/REFERENCE.md](docs/REFERENCE.md)             | Every skill, hook, command and plugin        |
-| [docs/MACOS-TOOLS.md](docs/MACOS-TOOLS.md)         | Screen, apps, permissions, failure modes     |
-| [docs/SCHOOL.md](docs/SCHOOL.md)                   | The coursework ledger and its AI policy gate |
-| [docs/METHODOLOGY.md](docs/METHODOLOGY.md)         | Why it is built this way                     |
-| [docs/ADVISING.md](docs/ADVISING.md)               | Helping someone reach a goal, not write code |
+| [docs/reference/REFERENCE.md](docs/reference/REFERENCE.md)             | Every skill, hook, command and plugin        |
+| [docs/reference/MACOS-TOOLS.md](docs/reference/MACOS-TOOLS.md)         | Screen, apps, permissions, failure modes     |
+| [docs/guide/SCHOOL.md](docs/guide/SCHOOL.md)                   | The coursework ledger and its AI policy gate |
+| [docs/guide/METHODOLOGY.md](docs/guide/METHODOLOGY.md)         | Why it is built this way                     |
+| [docs/reference/ADVISING.md](docs/reference/ADVISING.md)               | Helping someone reach a goal, not write code |
 | [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) | Adding a skill or a tool                     |
 | [docs/](docs/README.md)                            | Index of everything below                    |
-| [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | When something is broken, by symptom         |
-| [docs/FAQ.md](docs/FAQ.md)                         | The short answers                            |
-| [docs/CODEBASE.md](docs/CODEBASE.md)               | The whole codebase, explained for a newcomer |
-| [docs/1000.md](docs/1000.md)                       | Every known gap, numbered                    |
-| [docs/ROADMAP.md](docs/ROADMAP.md)                 | Which of those are next                      |
+| [docs/guide/TROUBLESHOOTING.md](docs/guide/TROUBLESHOOTING.md) | When something is broken, by symptom         |
+| [docs/guide/FAQ.md](docs/guide/FAQ.md)                         | The short answers                            |
+| [docs/reference/CODEBASE.md](docs/reference/CODEBASE.md)               | The whole codebase, explained for a newcomer |
+| [docs/plans/1000.md](docs/plans/1000.md)                       | Every known gap, numbered                    |
+| [ROADMAP.md](ROADMAP.md)                           | Which of those are next                      |
 
 ---
 

@@ -80,7 +80,7 @@ messages, credentials, or background prompts into evaluation calls.
 
 ## Orchestrate and measure
 
-Read [the orchestration playbook](../../docs/JEV-ORCHESTRATION.md) before designing
+Read [the orchestration playbook](../../docs/reference/JEV-ORCHESTRATION.md) before designing
 new decision points. These practices apply across user-selected models and hosts;
 they do not establish that every host or integration has been tested. Preserve the
 selected runtime/model and disabled lifecycle hooks. This CLI's pinned default is

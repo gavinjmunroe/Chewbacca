@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/calebnewtonusc/Chewbacca/main/start.sh | bash
 #
 # The first line only prints the plan. There is no short domain yet, see
-# docs/ONBOARDING.md, so the raw GitHub URL is the one that works.
+# docs/plans/ONBOARDING.md, so the raw GitHub URL is the one that works.
 #
 # Written for someone who just put Claude on a laptop, has no GitHub account,
 # has never opened Terminal before today, and should not have to care about any
@@ -215,7 +215,7 @@ if [ "$(uname -s)" != "Darwin" ]; then
   echo "    cd Chewbacca && ./setup.sh --profile portable"
   echo
   echo "  That writes ~/.claude and nothing else. No Homebrew, no Mac tools, no"
-  echo "  permissions. Tracked as items 671-675 in docs/1000.md."
+  echo "  permissions. Tracked as items 671-675 in docs/plans/1000.md."
   exit 1
 fi
 ok "macOS $(sw_vers -productVersion)"
@@ -330,7 +330,7 @@ chmod +x "$HOME_DIR"/*.sh "$HOME_DIR"/bin/* 2>/dev/null || true
 # It does not defend against a compromised repo, and it is not pretending to:
 # it catches a truncated download, a proxy that rewrote something, and a
 # mirror that is not what it claims. What it actually buys is written down in
-# docs/THREAT-MODEL.md.
+# docs/reference/THREAT-MODEL.md.
 if [ -f "$HOME_DIR/SHA256SUMS.txt" ] && command -v shasum >/dev/null 2>&1; then
   MISMATCH=0
   VERIFIED=0

@@ -535,7 +535,7 @@ def one_person_every_network(tmp: Path) -> None:
 
 
 def genui_wiring(tmp: Path) -> None:
-    """docs/GENUI.md steps 1, 3 and 4, against fixture data and stubs."""
+    """docs/reference/GENUI.md steps 1, 3 and 4, against fixture data and stubs."""
     from unittest.mock import Mock, patch
     g, ctx, run, _ = fx.world(tmp)
     rows = ks.walk_data("unreplied", "", ctx)["rows"]

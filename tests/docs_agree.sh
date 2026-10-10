@@ -1,5 +1,5 @@
 #!/bin/bash
-# README and docs/REFERENCE.md are written by DIFFERENT generators, and on
+# README and docs/reference/REFERENCE.md are written by DIFFERENT generators, and on
 # 2026-09-20 they disagreed by 12 skills without anything noticing: README
 # said 87 (32 here), REFERENCE said 75 (20 here). The cause was two
 # generators reading two directories, tools/counts.py the repo's skills/ and
@@ -15,7 +15,7 @@ import pathlib, re, sys
 root = pathlib.Path(sys.argv[1])
 truth = len(list((root / "skills").glob("*/SKILL.md")))
 rd = re.search(r"(\d+) skills \((\d+) written here", (root / "README.md").read_text())
-rf = re.search(r"(\d+) skills \((\d+) shipped here", (root / "docs/REFERENCE.md").read_text())
+rf = re.search(r"(\d+) skills \((\d+) shipped here", (root / "docs/reference/REFERENCE.md").read_text())
 if not rd or not rf:
     print("  FAIL could not parse the skill counts out of README or REFERENCE"); sys.exit(1)
 if rd.groups() != rf.groups():

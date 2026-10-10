@@ -1,6 +1,6 @@
 """The tree beside a session card: what the session touched, plus one level.
 
-docs/NO-APPS.md, "The HUD IDE": the tree is the session's folder "collapsed
+docs/plans/NO-APPS.md, "The HUD IDE": the tree is the session's folder "collapsed
 to what the session touched plus one level of context, never the whole repo
 by default". So the rows are:
 

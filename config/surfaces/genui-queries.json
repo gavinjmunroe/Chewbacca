@@ -1,5 +1,5 @@
 {
-  "about": "Graph walks kyber-genui may bind to (docs/GENUI.md, step 4). Each runs bin/kyber-surfaces with no shell and prints {\"rows\": [...]}: labels, networks, ages and node ids, never a message body.",
+  "about": "Graph walks kyber-genui may bind to (docs/reference/GENUI.md, step 4). Each runs bin/kyber-surfaces with no shell and prints {\"rows\": [...]}: labels, networks, ages and node ids, never a message body.",
   "queries": [
     {
       "name": "unreplied",

@@ -16,7 +16,7 @@ updated: 2026-10-04
 
 Backlog status: open.
 Acceptance: Two cards clicked on a local page plus "swap these" carries both selectors and crops
-Evidence: Phase 1 of [docs/KYBER-EVERYTHING.md](docs/KYBER-EVERYTHING.md); only Option+Command+drag pointing exists today
+Evidence: Phase 1 of [docs/plans/KYBER-EVERYTHING.md](docs/plans/KYBER-EVERYTHING.md); only Option+Command+drag pointing exists today
 
 ## Activity
 - 2026-10-04 Caleb: imported from BACKLOG.md CB-117

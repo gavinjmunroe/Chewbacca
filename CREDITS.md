@@ -65,7 +65,7 @@ most-engaged entries did not survive that check.
 
 Read, learned from, and deliberately not installed. The full verdicts are in
 [docs/mac/LANDSCAPE.md](docs/mac/LANDSCAPE.md) (every tool in the space with
-stars, license, and a reason) and [docs/STARRED-AUDIT.md](docs/STARRED-AUDIT.md)
+stars, license, and a reason) and [docs/plans/STARRED-AUDIT.md](docs/plans/STARRED-AUDIT.md)
 (115 starred repos, 17 installed, and a stated reason for each of the other 98).
 
 The three worth reading even if you never install them:
@@ -145,7 +145,7 @@ read-receipt and secure-input taxonomy, ported),
 never copied), WhisperKit, parakeet-mlx, and Apple's WWDC25 session 277 plus
 TN2150.
 
-Ecosystem and method reading, in [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md):
+Ecosystem and method reading, in [docs/reference/ECOSYSTEM.md](docs/reference/ECOSYSTEM.md):
 [cloudflare/vibesdk](https://github.com/cloudflare/vibesdk),
 [coleam00/context-engineering-intro](https://github.com/coleam00/context-engineering-intro),
 [sha256/local-d1](https://github.com/sha256/local-d1),
@@ -317,8 +317,8 @@ with the session. A guide is one HTML file plus a JSON sidecar of per-topic
 results, so the next session opens on the three things that were missed instead
 of asking what to review.
 
-**The thousand-things list.** [docs/1000.md](docs/1000.md) is a thousand
-specific ways this kit is incomplete, and [docs/1000-STATUS.md](docs/1000-STATUS.md)
+**The thousand-things list.** [docs/plans/1000.md](docs/plans/1000.md) is a thousand
+specific ways this kit is incomplete, and [docs/plans/1000-STATUS.md](docs/plans/1000-STATUS.md)
 is generated from the commit log rather than written by hand: a commit closes an
 item by naming it. It also records the 14 items that were simply wrong when
 written. This page is item 814.

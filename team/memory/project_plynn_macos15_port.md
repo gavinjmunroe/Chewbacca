@@ -11,7 +11,7 @@ Caleb cloned [31Carlton7/plynn](https://github.com/31Carlton7/plynn) on 2026-09-
 
 Ported on branch `macos15` at `~/code/plynn`, commit `d9e04fd`. **135 tests pass, up from 0** (the bundle previously could not `dlopen`). App launches and holds a stable PID on Sequoia.
 
-**The mechanism to remember, good for any Swift app with a too-high floor:** lowering the deployment target below a framework's availability makes the linker weak-link it, so missing symbols resolve to null instead of aborting the load, and `@available` gates keep you off them. Verify with `otool -L` (want "weak") and `otool -l | grep -A4 LC_BUILD_VERSION` (want `minos` below `sdk`). Generalized writeup shipped publicly as `docs/SWIFT-MACOS-PORTING.md` in Chewbacca.
+**The mechanism to remember, good for any Swift app with a too-high floor:** lowering the deployment target below a framework's availability makes the linker weak-link it, so missing symbols resolve to null instead of aborting the load, and `@available` gates keep you off them. Verify with `otool -L` (want "weak") and `otool -l | grep -A4 LC_BUILD_VERSION` (want `minos` below `sdk`). Generalized writeup shipped publicly as `docs/guide/SWIFT-MACOS-PORTING.md` in Chewbacca.
 
 **Two traps worth carrying forward:**
 - Sign local builds of someone else's app with a real Apple Development certificate, not ad-hoc. macOS keys accessibility and mic grants to the signature, and ad-hoc is identified by hash, so every rebuild resets permissions.

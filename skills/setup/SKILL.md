@@ -11,7 +11,7 @@ existing instructions and personal choices.
 
 ## Start with the requested outcome and installed runtime
 
-Read `docs/RUNTIMES.md`. From the checkout, inspect without changing anything:
+Read `docs/reference/RUNTIMES.md`. From the checkout, inspect without changing anything:
 
 ```sh
 python3 tools/agent_runtime.py plan --runtime auto
@@ -97,7 +97,7 @@ sending messages, reading unrelated private sources or publishing work.
 
 ## Connect one authorized source at a time
 
-Read `skills/your-data/SKILL.md` and `docs/PRIVACY.md` before importing personal
+Read `skills/your-data/SKILL.md` and `docs/guide/PRIVACY.md` before importing personal
 sources. Ask which source is useful for the current goal unless already stated.
 Existing OS permission is capability, not consent to import everything.
 

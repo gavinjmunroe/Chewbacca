@@ -1,49 +1,121 @@
 # Docs
 
-Without an index, everyone started at the longest file. Find what you actually
-want here.
+1. Install: [guide/SETUP.md](guide/SETUP.md), or preview first with the `--dry-run` command at the top of the [README](../README.md).
+2. First thing to try: run `chewbacca doctor`, then tell your agent what you want help with today. [guide/FAQ.md](guide/FAQ.md) says what it reads and what it costs.
+3. Stuck: [guide/TROUBLESHOOTING.md](guide/TROUBLESHOOTING.md) is organized by the symptom you noticed.
 
-## Start here
+Every doc in this folder, one line each, in three folders sorted by what you do
+with the file:
 
-| You want | Read |
-| --- | --- |
-| To install it | [SETUP.md](SETUP.md), or just run the command in the [README](../README.md) |
-| To know what it does to your machine first | [PRIVACY.md](PRIVACY.md) and [THREAT-MODEL.md](THREAT-MODEL.md) |
-| Something is broken | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |
-| A question, quickly | [FAQ.md](FAQ.md) |
-| A word you do not recognize | [GLOSSARY.md](GLOSSARY.md) |
-| The whole codebase, for a newcomer | [CODEBASE.md](CODEBASE.md) |
-| Everything, in order | [REFERENCE.md](REFERENCE.md) |
+- **guide/** you read it to get something done: install, fix, connect, use.
+- **reference/** how the kit works: specs, formats, standards, maps of the code.
+- **plans/** a moment in time: dated plans, status snapshots, research dumps and
+  audits. True when written, possibly stale now. Check the date in the file.
 
-## By subject
+New docs go in one of the three. `tests/docs_layout.sh` fails if a markdown
+file lands directly in `docs/`, if a doc is missing from this index, or if a
+relative link in here points nowhere.
 
-**Setup and operation**
-[SETUP.md](SETUP.md) install, [EXTENSIONS.md](EXTENSIONS.md) what gets
-installed, [INTERNALS.md](INTERNALS.md) how the installer works,
-[TROUBLESHOOTING.md](TROUBLESHOOTING.md) when it does not.
+## Guide
 
-**The Mac layer**
-[MACOS-TOOLS.md](MACOS-TOOLS.md) the tools, [MACOS-APP-CONTROL.md](MACOS-APP-CONTROL.md)
-driving apps, [mac/](mac/) the layer model.
+| Doc                                                    | For                                                                         |
+| ------------------------------------------------------ | --------------------------------------------------------------------------- |
+| [SETUP.md](guide/SETUP.md)                             | Installing the kit, one command or by hand, plus Codex and browser backends |
+| [TROUBLESHOOTING.md](guide/TROUBLESHOOTING.md)         | Fixes organized by the symptom you noticed                                  |
+| [FAQ.md](guide/FAQ.md)                                 | Short answers: what it is, what it runs, what it costs                      |
+| [PRIVACY.md](guide/PRIVACY.md)                         | What the kit reads, stores and sends off the Mac, and how to turn it off    |
+| [PHONE.md](guide/PHONE.md)                             | Three ways to reach Chewbacca from your phone                               |
+| [NO-TERMINAL.md](guide/NO-TERMINAL.md)                 | Using the kit from a browser chat client with no shell                      |
+| [PERPLEXITY.md](guide/PERPLEXITY.md)                   | Exporting skills and the brain to Perplexity Computer                       |
+| [CODEX-HOOKS.md](guide/CODEX-HOOKS.md)                 | Installing Chewbacca's lifecycle hooks into Codex                           |
+| [SCHOOL.md](guide/SCHOOL.md)                           | Running a semester through the coursework ledger and CLI                    |
+| [CLAUDE-QUICK.md](guide/CLAUDE-QUICK.md)               | A short CLAUDE.md to drop into any project                                  |
+| [PROMPTS.md](guide/PROMPTS.md)                         | Example prompts that work with the standards loaded                         |
+| [METHODOLOGY.md](guide/METHODOLOGY.md)                 | The vibe coding workflow this kit was built around                          |
+| [SWIFT-MACOS-PORTING.md](guide/SWIFT-MACOS-PORTING.md) | Running a Swift app whose manifest asks for a newer macOS                   |
 
-**Working inside it**
-[CLAUDE-QUICK.md](CLAUDE-QUICK.md) the short version of the standards,
-[CLAUDE-PERSONAL.md](CLAUDE-PERSONAL.md) making them yours,
-[SKILLS.md](SKILLS.md) what a skill is, [PROMPTS.md](PROMPTS.md) things to say,
-[METHODOLOGY.md](METHODOLOGY.md) how the kit is built,
-[ADVISING.md](ADVISING.md) helping someone reach a goal rather than write code.
+## Reference
 
-**Specialized**
-[SCHOOL.md](SCHOOL.md) the semester ledger,
-[SYSTEM-PROMPTS.md](SYSTEM-PROMPTS.md) what production prompts do,
-[SWIFT-MACOS-PORTING.md](SWIFT-MACOS-PORTING.md),
-[CLOUDFLARE.md](CLOUDFLARE.md), [ECOSYSTEM.md](ECOSYSTEM.md),
-[STARRED-AUDIT.md](STARRED-AUDIT.md).
+| Doc                                                                | For                                                                                   |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [REFERENCE.md](reference/REFERENCE.md)                             | The long version of the README; its tool tables are generated by `tools/inventory.py` |
+| [CODEBASE.md](reference/CODEBASE.md)                               | A map of the whole repository for a newcomer                                          |
+| [GLOSSARY.md](reference/GLOSSARY.md)                               | Words this kit uses in a specific way                                                 |
+| [INTERNALS.md](reference/INTERNALS.md)                             | How Claude Code loads CLAUDE.md, rules, hooks, skills and permissions                 |
+| [EXTENSIONS.md](reference/EXTENSIONS.md)                           | Rules, commands, skills, plugins and MCP: what each layer is and what setup installs  |
+| [SKILLS.md](reference/SKILLS.md)                                   | What a skill is, what ships here, where to find more, licensing                       |
+| [RUNTIMES.md](reference/RUNTIMES.md)                               | Running the same brain and skills under Claude Code, Codex and other hosts            |
+| [MACOS-TOOLS.md](reference/MACOS-TOOLS.md)                         | The Mac tools setup installs (peekaboo, summarize, mac-use, mac, Maccy)               |
+| [MACOS-APP-CONTROL.md](reference/MACOS-APP-CONTROL.md)             | mac-cli: the JSON contract, permissions and weak spots for driving native apps        |
+| [THREAT-MODEL.md](reference/THREAT-MODEL.md)                       | What the kit exposes, who could attack it, what is not protected                      |
+| [CLAUDE-PERSONAL.md](reference/CLAUDE-PERSONAL.md)                 | The standards file `setup.sh --profile personal` installs                             |
+| [ADVISING.md](reference/ADVISING.md)                               | Rules for helping someone reach a goal rather than write code                         |
+| [SYSTEM-PROMPTS.md](reference/SYSTEM-PROMPTS.md)                   | Eight techniques from production system prompts                                       |
+| [DECISION-STANDARDS.md](reference/DECISION-STANDARDS.md)           | The mathematical, creative, proprietary and coachable decision standards              |
+| [DECISION-LAB.md](reference/DECISION-LAB.md)                       | `bin/decision-lab`: bounded Jev-versus-baseline comparisons                           |
+| [MATH-GRAPH-CAPABILITIES.md](reference/MATH-GRAPH-CAPABILITIES.md) | The offline math, graph and evidence CLIs                                             |
+| [UX-LEARNING-FORMAT.md](reference/UX-LEARNING-FORMAT.md)           | The portable UX navigation map format, version 1                                      |
+| [UX-POLICY.md](reference/UX-POLICY.md)                             | `bin/ux-policy`: graph planner and bandit replay over UX maps                         |
+| [UX-DECISION.md](reference/UX-DECISION.md)                         | `chewbacca ux-decision`: picking a control from a map plus a fresh observation        |
+| [JEV.md](reference/JEV.md)                                         | `chewbacca jev`: the TypeSafe Choice, Score and Noul client                           |
+| [JEV-BROWSE.md](reference/JEV-BROWSE.md)                           | `jev-browse`: Jev-driven tasks in your own Chrome                                     |
+| [JEV-ORCHESTRATION.md](reference/JEV-ORCHESTRATION.md)             | Where shared Jev decision code sits across runtimes                                   |
+| [HYBRID-ROUTE.md](reference/HYBRID-ROUTE.md)                       | Skill routing through code, then Jev, then a model, and how it was scored             |
+| [CLAY-REVIEW.md](reference/CLAY-REVIEW.md)                         | `chewbacca clay-review`: read-only replay of Clay export snapshots                    |
+| [GTM-MEMORY.md](reference/GTM-MEMORY.md)                           | The GTM memory store modeled on the people store                                      |
+| [KYBER-SURFACES.md](reference/KYBER-SURFACES.md)                   | The surfaces daemon: ontology, wire format, what each panel does                      |
+| [GENUI.md](reference/GENUI.md)                                     | `kyber-genui`: model-composed HUD panels and their limits                             |
+| [VOICE-DESIGN.md](reference/VOICE-DESIGN.md)                       | How the voice answers and the reasoning behind each rule                              |
+| [CLOUDFLARE.md](reference/CLOUDFLARE.md)                           | Workers, D1, KV, R2 and Queues patterns                                               |
+| [ECOSYSTEM.md](reference/ECOSYSTEM.md)                             | A curated map of vibe coding tools and repos                                          |
 
-**Honest about itself**
-[1000.md](1000.md) every known gap, [ROADMAP.md](ROADMAP.md) which of them are
-next, [../CHANGELOG.md](../CHANGELOG.md) what has already changed.
-[SELF-LEARNING.md](SELF-LEARNING.md) how the kit would grow from its own
-log instead of being taught, and what in it is actually hard to copy.
-[LEARNING-TO-ACT.md](LEARNING-TO-ACT.md) how it would learn a site or an app
-by doing a task in it once, and the registry that makes that a product.
+## Plans
+
+| Doc                                                    | For                                                                                 |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| [1000.md](plans/1000.md)                               | 1000 numbered things wrong with the kit, written 2026-09-04                         |
+| [1000-STATUS.md](plans/1000-STATUS.md)                 | Which of the 1000 are fixed, generated by `tools/fixed.py` from commits             |
+| [BACKLOG-EVIDENCE.md](plans/BACKLOG-EVIDENCE.md)       | Evidence behind the 2026-10-02 backlog reconciliation                               |
+| [ONBOARDING.md](plans/ONBOARDING.md)                   | What the best installers do and the plan for ours, 2026-09-23                       |
+| [EVERY-MAC.md](plans/EVERY-MAC.md)                     | Plan for bugs that stay silent on every Mac but the author's                        |
+| [LEARNING.md](plans/LEARNING.md)                       | Why the learning loop had never closed, 2026-09-21, and what closed later           |
+| [SELF-LEARNING.md](plans/SELF-LEARNING.md)             | How the kit would grow from its own log instead of being taught                     |
+| [LEARNING-TO-ACT.md](plans/LEARNING-TO-ACT.md)         | Learning an app by doing a task once: procedures, maps, the registry                |
+| [SITE-LEARNING.md](plans/SITE-LEARNING.md)             | How leading web agents read a page, and what Chewbacca takes                        |
+| [WEB-AGENT.md](plans/WEB-AGENT.md)                     | Compiling web tasks instead of interpreting them each time                          |
+| [RELIANCE.md](plans/RELIANCE.md)                       | The earned-autonomy ledger as the path to safe reliance                             |
+| [ANYTHING.md](plans/ANYTHING.md)                       | What stands between this Mac and doing anything from Chewbacca, measured 2026-09-20 |
+| [SPATIAL-OS.md](plans/SPATIAL-OS.md)                   | Status of the hands, voice and glass layer built 2026-09-20                         |
+| [KYBER-EVERYTHING.md](plans/KYBER-EVERYTHING.md)       | The four-phase build list for doing everything with three inputs                    |
+| [JEV-HUD.md](plans/JEV-HUD.md)                         | Jev inside the HUD, step by step, started 2026-09-23                                |
+| [JEV-EVERYWHERE.md](plans/JEV-EVERYWHERE.md)           | The wider Jev plan: onboarding, development, the HUD and the brain                  |
+| [OS-COVERAGE.md](plans/OS-COVERAGE.md)                 | Which app the OS replaces next, by measured hours, 2026-10-04                       |
+| [NO-APPS.md](plans/NO-APPS.md)                         | The build order for never opening an app, 2026-10-09                                |
+| [ENGINE-CANDIDATES.md](plans/ENGINE-CANDIDATES.md)     | Open source engines that could put an app's task on the glass                       |
+| [AFTER-PANES.md](plans/AFTER-PANES.md)                 | What comes after windows: the recommended interface, 2026-10-05                     |
+| [AFTER-PANES-MOTION.md](plans/AFTER-PANES-MOTION.md)   | The motion and material layer for AFTER-PANES                                       |
+| [COMPETITORS.md](plans/COMPETITORS.md)                 | Ghost, Instinct and the rest, checked 2026-10-05 and 2026-10-07                     |
+| [FIRST-COHORT.md](plans/FIRST-COHORT.md)               | The first B2B cohort plan from the 2026-10-06 call                                  |
+| [CLAY-MASTERY.md](plans/CLAY-MASTERY.md)               | Research on becoming the best Clay operator, 2026-09-23                             |
+| [CLAY-HUD.md](plans/CLAY-HUD.md)                       | Design spec for a Kyber layer drawn over Clay, 2026-10-09                           |
+| [CLAY-HUD-PLAN.md](plans/CLAY-HUD-PLAN.md)             | Task-by-task implementation plan for CLAY-HUD                                       |
+| [HUMOR-EXPERIMENTS.md](plans/HUMOR-EXPERIMENTS.md)     | Five humor experiments the literature never ran                                     |
+| [STARRED-AUDIT.md](plans/STARRED-AUDIT.md)             | Every starred repo checked against what setup installs                              |
+| [LINKS-FROM-CALEB.md](plans/LINKS-FROM-CALEB.md)       | Every link Caleb sent on 2026-10-08 and what happened to each                       |
+| [ANIMATION-ART-REPOS.md](plans/ANIMATION-ART-REPOS.md) | Animation and art tooling catalog, 2026-10-09                                       |
+| [REPO-GRAPH.md](plans/REPO-GRAPH.md)                   | Counts and triage from `bin/repo-graph`, built 2026-10-09                           |
+
+The roadmap and backlog live at the repo root: [ROADMAP.md](../ROADMAP.md)
+orders the next work and keeps the earlier product priorities that used to sit
+in `docs/ROADMAP.md`; [BACKLOG.md](../BACKLOG.md) holds status;
+[CHANGELOG.md](../CHANGELOG.md) is what already changed.
+
+## Folders
+
+| Folder                                   | For                                                                                          |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| [mac/](mac/00-THE-MAP.md)                | The seven layers for controlling a Mac, benchmarks, permissions and workarounds              |
+| [superpowers/](superpowers/)             | Dated design specs and implementation plans (terminal loop, voice routing, dictation bubble) |
+| [handoffs/](handoffs/)                   | Session handoff notes from 2026-09-21 and 2026-09-22                                         |
+| [mined/](mined/goodnight000-verdicts.md) | Verdicts on mined repos, 2026-10-09                                                          |
+| [screens/](screens/)                     | Screenshots referenced by docs                                                               |

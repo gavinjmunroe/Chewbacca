@@ -19,7 +19,7 @@ keep pending outcomes separate from matured trials. Report uncertainty when the
 sample supports an estimate, and say when it does not. An arbitrary score or
 unvalidated probability is not a calibrated prediction. Use `gtme-math` for its
 supported arithmetic and `gtme-learning` for a fixed paired experiment; read their
-limits in `docs/MATH-GRAPH-CAPABILITIES.md`. Do not force a statistical test onto
+limits in `docs/reference/MATH-GRAPH-CAPABILITIES.md`. Do not force a statistical test onto
 an anecdote or treat repeated attempts on one task as independent samples.
 
 Use the graph that represents the question:

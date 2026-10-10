@@ -71,7 +71,7 @@ import hud_runtime  # noqa: E402
 
 # HUD_SEARCH=off: "search X", "google X" and "look up X" open a Google results
 # page in Chrome again instead of being answered on the glass
-# (bin/lib/glass_search.py, docs/NO-APPS.md build 1).
+# (bin/lib/glass_search.py, docs/plans/NO-APPS.md build 1).
 SEARCH = os.environ.get("HUD_SEARCH", "on") != "off"
 # HUD_QUICK=off: math, time, date, conversions and weather go to the model
 # like everything else, instead of being computed (bin/lib/quick.py).
@@ -85,10 +85,10 @@ OPEN = os.environ.get("HUD_OPEN", "on") != "off"
 SURFACES = os.environ.get("HUD_SURFACES", "on") != "off"
 KYBER_SURFACES = Path(__file__).resolve().parent / "kyber-surfaces"
 # HUD_GENUI=off: a request shaped like a panel ("compare my three classes'
-# grades") goes to the model in words instead of to kyber-genui (docs/GENUI.md).
+# grades") goes to the model in words instead of to kyber-genui (docs/reference/GENUI.md).
 GENUI = os.environ.get("HUD_GENUI", "on") != "off"
 # HUD_CLAY=off: "find me 50 fintech VC partners in Clay" goes to the model
-# instead of starting clay-build (bin/lib/clay_route.py, docs/CLAY-HUD.md).
+# instead of starting clay-build (bin/lib/clay_route.py, docs/plans/CLAY-HUD.md).
 CLAY = os.environ.get("HUD_CLAY", "on") != "off"
 KYBER_GENUI = Path(__file__).resolve().parent / "kyber-genui"
 # kyber-genui paints its skeleton in under a millisecond and finished in 3.2
@@ -2900,7 +2900,7 @@ class Listener:
             self.log("surfaces daemon did not start:", err)
 
     def genui_request(self, said: str, typed: bool) -> bool:
-        """Draw a generated panel for a request shaped like one (docs/GENUI.md,
+        """Draw a generated panel for a request shaped like one (docs/reference/GENUI.md,
         step 1). Exit 0 means a valid panel is on the glass and the voice says
         one line; anything else means it fell back, and the request goes to the
         model in words, as if this had not been tried."""

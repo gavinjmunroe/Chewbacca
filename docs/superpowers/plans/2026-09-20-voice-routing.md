@@ -36,7 +36,7 @@
 | `tests/test_hud_listen.py` (modify) | Routing in the prompt, the browser path, the draft words, end to end against the fake display. |
 | `tests/live/terminal.sh` (new) | The hand check: paste, Return, Control-U on a throwaway tab. |
 | `tests/run.sh` (modify) | Register the three new test scripts. |
-| `docs/VOICE-DESIGN.md` (modify) | The routing section. |
+| `docs/reference/VOICE-DESIGN.md` (modify) | The routing section. |
 
 ---
 
@@ -1869,7 +1869,7 @@ git commit -m "feat: send it, scrap that and no to you act on the outstanding dr
 
 **Files:**
 - Modify: `bin/hud-agent.md`
-- Modify: `docs/VOICE-DESIGN.md`
+- Modify: `docs/reference/VOICE-DESIGN.md`
 - Modify: `docs/superpowers/specs/2026-09-20-voice-routing-design.md` (two stale lines)
 
 - [ ] **Step 1: Add the drafting section to `bin/hud-agent.md`**
@@ -1891,7 +1891,7 @@ Some sentences arrive tagged for the terminal, where Claude Code is running in T
 When a sentence is not tagged for the terminal, do not put anything in the terminal.
 ```
 
-- [ ] **Step 2: Add the routing section to `docs/VOICE-DESIGN.md`**
+- [ ] **Step 2: Add the routing section to `docs/reference/VOICE-DESIGN.md`**
 
 Before `## Measuring it`:
 
@@ -1957,14 +1957,14 @@ with this, because `do script` is the only path that is not a keystroke:
 
 - [ ] **Step 4: Scan and commit**
 
-Run: `slop-check bin/hud-agent.md docs/VOICE-DESIGN.md docs/superpowers/specs/2026-09-20-voice-routing-design.md --issues`
+Run: `slop-check bin/hud-agent.md docs/reference/VOICE-DESIGN.md docs/superpowers/specs/2026-09-20-voice-routing-design.md --issues`
 Expected: every file under 10. Rewrite anything flagged.
 
-Run: `grep -n -- "--" bin/hud-agent.md docs/VOICE-DESIGN.md | grep -v "\`--\|--cwd\|--json\|--tty\|--model\|--output\|--from\|--to\|--at\|--due\|--list\|--notes\|--priority\|--subject\|--body\|--account\|--limit\|--scan\|--all-day\|--duration\|--calendar\|--location\|--include\|--due-before\|--folder\|--secure"`
+Run: `grep -n -- "--" bin/hud-agent.md docs/reference/VOICE-DESIGN.md | grep -v "\`--\|--cwd\|--json\|--tty\|--model\|--output\|--from\|--to\|--at\|--due\|--list\|--notes\|--priority\|--subject\|--body\|--account\|--limit\|--scan\|--all-day\|--duration\|--calendar\|--location\|--include\|--due-before\|--folder\|--secure"`
 Expected: no em-dash pairs outside flags.
 
 ```bash
-git add bin/hud-agent.md docs/VOICE-DESIGN.md docs/superpowers/specs/2026-09-20-voice-routing-design.md
+git add bin/hud-agent.md docs/reference/VOICE-DESIGN.md docs/superpowers/specs/2026-09-20-voice-routing-design.md
 git commit -m "docs: the terminal drafting rules and the routing section"
 ```
 

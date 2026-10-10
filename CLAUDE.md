@@ -54,7 +54,7 @@ design, performance, state, accessibility, scroll-effects, testing, ux-laws,
 audit) are **not** imported here. They live in the `stack-rules` skill and load
 only when the work touches them. Importing all eighteen would cost roughly
 16,000 tokens on every session, including sessions that never render a
-component. See [docs/EXTENSIONS.md](docs/EXTENSIONS.md).
+component. See [docs/reference/EXTENSIONS.md](docs/reference/EXTENSIONS.md).
 
 ## Task-specific rules (load automatically, not always in context)
 
@@ -150,7 +150,7 @@ This applies to: new repos, updated READMEs, any markdown file that functions as
 
 Config lives at the project root `.mcp.json` or `~/.claude/.mcp.json`. Prefer a
 CLI on PATH over an MCP server when both exist; the recommended servers and why
-are in [docs/EXTENSIONS.md](docs/EXTENSIONS.md).
+are in [docs/reference/EXTENSIONS.md](docs/reference/EXTENSIONS.md).
 
 ---
 
@@ -193,8 +193,8 @@ Rules that matter:
 - If a tool is missing, `./doctor.sh` says which and how to install it. Do not
   work around a missing tool silently.
 
-Full setup, permissions, and failure modes: [docs/MACOS-TOOLS.md](docs/MACOS-TOOLS.md).
-The `mac` JSON contract and its limits: [docs/MACOS-APP-CONTROL.md](docs/MACOS-APP-CONTROL.md).
+Full setup, permissions, and failure modes: [docs/reference/MACOS-TOOLS.md](docs/reference/MACOS-TOOLS.md).
+The `mac` JSON contract and its limits: [docs/reference/MACOS-APP-CONTROL.md](docs/reference/MACOS-APP-CONTROL.md).
 
 ---
 
@@ -254,7 +254,7 @@ Rules that apply to every session, not just school ones:
   on Tuesday and then feels like a character flaw. Count the fixed hours first.
 
 Load the `coursework`, `study-system`, and `life-ops` skills for the detail.
-Full walkthrough: [docs/SCHOOL.md](docs/SCHOOL.md).
+Full walkthrough: [docs/guide/SCHOOL.md](docs/guide/SCHOOL.md).
 
 ---
 

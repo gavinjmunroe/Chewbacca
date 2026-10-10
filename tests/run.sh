@@ -375,6 +375,10 @@ if group "doctor"; then
   # built and asked to describe, never to draw, so no grant is read or changed.
   check "permissions plan reads every grant and the guide helper builds" \
     python3 "$ROOT/tests/test_permission_guide.py"
+  # The walk on Kyber's glass: fake pane opener, tree, detector and display,
+  # so a three-grant walk advances on detection without touching Settings.
+  check "permissions walk rings each switch, advances on detection, and never presses" \
+    python3 "$ROOT/tests/test_permission_walk.py"
   check "the launchd runtime is a signed Chewbacca.app, rebuilt only on a node major" \
     bash "$ROOT/tests/chewbacca_node.sh"
 fi

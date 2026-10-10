@@ -8,6 +8,9 @@ commands:
   status    print whether the grant exists, as JSON, and change nothing
   describe  print what guide would open and draw, as JSON, without drawing
   list      print every permission this helper knows, as JSON
+  snapshot  print System Settings' front window as an accessibility ui map,
+            read only, in the shape bin/hud-guide reads (--out PATH to save,
+            --bundle-id ID to read another app's windows instead)
 
 options (guide, status, describe):
   --app PATH                the .app being granted (required)
@@ -54,6 +57,8 @@ struct Options {
     // short enough that a forgotten card does not sit over Settings all day.
     // Guessed, never measured.
     var timeout: TimeInterval = 600
+    var outPath: String?
+    var bundleID = "com.apple.systempreferences"
 
     static func parse(_ arguments: [String]) -> Options {
         var options = Options()
@@ -63,7 +68,7 @@ struct Options {
             print(usage)
             exit(0)
         }
-        guard ["guide", "status", "describe", "list"].contains(command) else {
+        guard ["guide", "status", "describe", "list", "snapshot"].contains(command) else {
             Output.fail("unknown command \(command)\n\(usage)", code: 2)
         }
         options.command = command
@@ -81,6 +86,8 @@ struct Options {
             case "--automation-target": options.automationTarget = value(flag)
             case "--self": options.isSelf = true
             case "--hold": options.hold = true
+            case "--out": options.outPath = value(flag)
+            case "--bundle-id": options.bundleID = value(flag)
             case "--timeout":
                 let raw = value(flag)
                 guard let seconds = TimeInterval(raw), seconds > 0, seconds.isFinite else {
@@ -105,6 +112,23 @@ if options.command == "list" {
         ["id": $0.id, "pane": $0.paneTitle, "anchor": $0.anchor, "service": $0.tccService,
          "mode": $0.mode.rawValue]
     }])
+    exit(0)
+}
+
+if options.command == "snapshot" {
+    let snapshot = AXSnapshot.capture(bundleID: options.bundleID)
+    guard let data = try? JSONSerialization.data(withJSONObject: snapshot, options: [.sortedKeys]) else {
+        Output.fail("the snapshot would not encode as JSON", code: 1)
+    }
+    if let path = options.outPath {
+        do { try data.write(to: URL(fileURLWithPath: path), options: .atomic) } catch {
+            Output.fail("could not write \(path): \(error)", code: 1)
+        }
+        Output.json(["path": path, "readable": snapshot["readable"] ?? false,
+                     "elements": (snapshot["uiMap"] as? [String: Any])?.count ?? 0])
+    } else {
+        print(String(decoding: data, as: UTF8.self))
+    }
     exit(0)
 }
 

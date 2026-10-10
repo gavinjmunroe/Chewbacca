@@ -10,6 +10,7 @@ best chunks) to a model through src/rerank.py and reorders them.
     BRAIN_INDEX=/frozen/.brain python3 bench/rerank.py dev  '{"n":30}'
     BRAIN_INDEX=/frozen/.brain python3 bench/rerank.py dev-api '{"timeout":3}'   # HTTPS path, dev only
     BRAIN_INDEX=/frozen/.brain python3 bench/rerank.py sealed FROZEN.json   # ONCE per frozen file
+    BRAIN_INDEX=/frozen/.brain python3 bench/rerank.py replay FROZEN.json   # reproduce it from the cache
 
 The sealed command refuses a config file that is not frozen (no "frozen_at"),
 and refuses to run one twice: it appends to a run log beside the frozen file.
@@ -166,6 +167,36 @@ def cmd_sealed(db, rows, E, path):
     print(out)
 
 
+def cmd_replay(db, rows, E, path):
+    """Re-score a sealed run from the cached rankings, with no model call.
+
+    The cache keys on the exact prompt, so the same index, gold set and
+    rerank.py rebuild the same keys and the sealed number comes back. A miss
+    means one of those changed: it counts as a fallback and the replay says
+    it is not a reproduction, rather than quietly asking the model again.
+    """
+    frozen = json.load(open(path))
+    want = open(path + ".sealed-run").read() if os.path.exists(path + ".sealed-run") else ""
+    rerank.CLAUDE = "false"
+    qs = [q for q in goldset.load("queries_independent.json") if q.get("hops") != "trap"]
+    pp = prepare(qs, db, rows, E)
+    r0, h0, m0 = score(pp, [n for _, _, n, _ in pp])
+    misses = 0
+    ranked = []
+    for q, gold, names, dense in pp:
+        res = rerank.rerank(q["q"], names, rows, dense, **dict(frozen["cfg"], timeout=5))
+        misses += not res.cached
+        ranked.append(res.files)
+    r, h, m = score(pp, ranked)
+    print(f"REPLAY n={len(pp)} index={IDX}\n"
+          f"  shipped            r@5 {r0:5.1f}% +/-{h0:4.1f}  MRR {m0:.3f}\n"
+          f"  {path}  r@5 {r:5.1f}% +/-{h:4.1f}  MRR {m:.3f}  cache misses {misses}")
+    if want:
+        print("sealed said:\n" + want.rstrip())
+    if misses:
+        raise SystemExit(f"not a reproduction: {misses} of {len(pp)} rankings were not in the cache")
+
+
 def main():
     cmd = sys.argv[1]
     db, rows, E = load_index()
@@ -181,6 +212,8 @@ def main():
         cmd_dev(db, rows, E, json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}, rerank_api.rerank)
     elif cmd == "sealed":
         cmd_sealed(db, rows, E, sys.argv[2])
+    elif cmd == "replay":
+        cmd_replay(db, rows, E, sys.argv[2])
 
 
 if __name__ == "__main__":

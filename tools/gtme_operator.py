@@ -34,6 +34,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -882,7 +883,17 @@ def strip_html(text: str) -> str:
 # Mailer-daemon notices arrive in the reply inbox looking like replies. These
 # phrases are the ones Gmail and Outlook put in the first lines of one.
 BOUNCE_NOTICE = re.compile(r"delivery status notification|error icon|undeliverable|address not found|"
-                           r"mailer-daemon|message not delivered|delivery has failed", re.IGNORECASE)
+                           r"mailer-daemon|message not delivered|delivery has failed|message blocked|"
+                           r"has been blocked", re.IGNORECASE)
+# A reply whose first words ask to be taken off the list. Clay left one
+# unclassified on 2026-10-09 ("Remove <name>"); it is an unsubscribe, and
+# answering it with a pitch is the worst possible reply.
+UNSUBSCRIBE_ASK = re.compile(r"^\W*(please\s+)?(remove|unsubscribe|take me off|stop emailing|do not contact|"
+                             r"opt\s*out)\b", re.IGNORECASE)
+
+
+def is_unsubscribe_ask(r: dict) -> bool:
+    return bool(UNSUBSCRIBE_ASK.search(strip_html(r.get("snippet") or "")))
 
 
 def is_bounce_notice(r: dict) -> bool:
@@ -951,6 +962,26 @@ def history_alarm(client: str, sent: int, replies: int, as_of: str | None) -> di
     return None
 
 
+def gtm_memory(client: str, *args: str) -> dict | None:
+    """One `chewbacca gtm-memory` answer as JSON, or None when the store or
+    the tool is missing. It owns commitments (refills, verdicts owed) and
+    credits by table, so gtme reads them instead of recomputing them."""
+    fx = os.environ.get("GTME_FIXTURES")
+    if fx:
+        body = read_json(Path(fx) / f"memory-{'-'.join(a.lstrip('-') for a in args)}.json", None)
+        return body if isinstance(body, dict) else None
+    tool = ROOT / "bin" / "gtm-memory"
+    if not tool.exists():
+        return None
+    try:
+        p = subprocess.run([sys.executable, str(tool), "--client", client, *args, "--json"],
+                           capture_output=True, text=True, timeout=30)
+        body = json.loads(p.stdout or "null")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+    return body if isinstance(body, dict) and p.returncode == 0 else None
+
+
 def client_state(q, db, c: dict) -> dict:
     """Everything the brief, next and report need about one client."""
     detail = q.client(db, c["name"])
@@ -964,7 +995,8 @@ def client_state(q, db, c: dict) -> dict:
     except LookupError:
         waiting = []
     bounced = [r for r in waiting if is_bounce_notice(r)]
-    unanswered = sorted((r for r in waiting if not is_bounce_notice(r)),
+    unsubscribes = [r for r in waiting if not is_bounce_notice(r) and is_unsubscribe_ask(r)]
+    unanswered = sorted((r for r in waiting if not is_bounce_notice(r) and not is_unsubscribe_ask(r)),
                         key=lambda r: (r.get("class") != "positive",
                                        -(parse_time(r.get("time")) or utc_now()).timestamp()))
     ws = detail["workspaces"]
@@ -974,12 +1006,52 @@ def client_state(q, db, c: dict) -> dict:
         "sent": sent, "replies": replies, "bounces": bounces, "as_of": clay.get("as_of"),
         "positive": (f.get("people_positive") or {}).get("n", 0),
         "meetings": (f.get("meetings") or {}).get("n", 0),
-        "unanswered": unanswered, "bounce_notices": len(bounced), "credits": credit_view(ws), "sync": sync,
+        "unanswered": unanswered, "bounce_notices": len(bounced),
+        "unsubscribe_asks": [r.get("email") for r in unsubscribes if r.get("email")], "credits": credit_view(ws), "sync": sync,
         "drop": history_alarm(c["name"], sent, replies, clay.get("as_of")),
+        "memory": {"overdue": gtm_memory(c["name"], "overdue"),
+                   "by_table": gtm_memory(c["name"], "credits", "--by", "table")},
     }
 
 
 # ── the to-do list: one ranking for brief and next ────────────────────────
+
+
+def memory_actions(name: str, overdue: dict) -> list[dict]:
+    """gtm-memory's late commitments, grouped by kind so 30 refills read as
+    one job with a count instead of 30 lines."""
+    late = [x for x in overdue.get("late") or [] if isinstance(x, dict)]
+    fresh = (overdue.get("freshness") or {}).get("last_ingest") or "unknown"
+    groups: dict[tuple, list] = {}
+    for x in late:
+        groups.setdefault((x.get("kind"), x.get("owed_by")), []).append(x)
+    out = []
+    for (kind, owed_by), items in groups.items():
+        items.sort(key=lambda x: -(x.get("late_by_hours") or 0))
+        oldest = items[0]
+        days = (oldest.get("late_by_hours") or 0) / 24
+        if kind == "refill":
+            do = (f"Refill {len(items)} campaigns that have put every lead through step 1 "
+                  f"(oldest: \"{oldest.get('campaign')}\", {days:.0f} days late)")
+            gate, score, lesson = "read, then needs your approval to add leads", 40, "dry"
+            cmd = f"chewbacca gtm suppress --client \"{name}\" --csv  then  chewbacca clay route find-people"
+        elif kind == "approval_owed":
+            who = "the client" if owed_by == "client" else "you"
+            do = (f"Get {len(items)} reply verdicts from {who} (oldest: {oldest.get('title')}, {days:.0f} days late)")
+            gate, score, lesson = f"{who}: a yes/no per reply, nothing sends", 45, None
+            cmd = f"chewbacca gtm-memory --client \"{name}\" overdue"
+        else:
+            do = f"{len(items)} overdue: {oldest.get('title')} ({days:.0f} days late)"
+            gate, score, lesson = f"owed by {owed_by or 'us'}", 35, None
+            cmd = f"chewbacca gtm-memory --client \"{name}\" overdue"
+        item = {"score": score, "client": name, "kind": "owed" if kind != "refill" else "dry", "do": do,
+                "command": cmd, "gate": gate,
+                "why": f"gtm-memory overdue, ingested {fresh}; due dates are derived from the campaign and reply "
+                       "records there."}
+        if lesson:
+            item["lesson"] = lesson
+        out.append(item)
+    return out
 
 
 def actions_for(s: dict) -> list[dict]:
@@ -990,6 +1062,7 @@ def actions_for(s: dict) -> list[dict]:
     burning domain, which outranks running out of credits."""
     out = []
     name, ws = s["name"], (s["workspaces"] or [""])[0]
+    memory_overdue = (s.get("memory") or {}).get("overdue")
     for r in s["unanswered"]:
         cls = r.get("class")
         hours = (utc_now() - parse_time(r["time"])).total_seconds() / 3600 if parse_time(r.get("time")) else 0
@@ -1036,7 +1109,7 @@ def actions_for(s: dict) -> list[dict]:
                        "offer, then the subject (playbook lines 34, 131).",
                 "lesson": "floor",
             })
-        if c["leads_left"] is not None and c["leads_left"] < RUN_DRY_LEADS:
+        if memory_overdue is None and c["leads_left"] is not None and c["leads_left"] < RUN_DRY_LEADS:
             out.append({
                 "score": 40, "client": name, "kind": "dry",
                 "do": f"Refill \"{c['name']}\": {c['leads_left']} emails left in its queue ({c['leads']} leads)",
@@ -1046,6 +1119,17 @@ def actions_for(s: dict) -> list[dict]:
                        "queued emails runs out in about two sending days.",
                 "lesson": "dry",
             })
+    for email in s.get("unsubscribe_asks") or []:
+        out.append({
+            "score": 75, "client": name, "kind": "unsubscribe",
+            "do": f"Blocklist {email}: their reply asks to be removed",
+            "command": f"chewbacca clay blocklist-add ws={ws} emailOrDomain={email} --allow-writes",
+            "gate": "needs your approval (changes the suppression list)",
+            "why": "Clay inbox reply text. Answering a removal ask with anything but the removal costs "
+                   "deliverability; the playbook treats unsubscribes above 2% as a reason to pause.",
+        })
+    if memory_overdue is not None:
+        out += memory_actions(name, memory_overdue)
     if s["drop"]:
         d = s["drop"]
         out.append({
@@ -1110,6 +1194,34 @@ LESSONS = {
     "speed": "The fastest way to lose a meeting is to answer a good reply tomorrow. Interested people go cold "
              "within a day, so positive replies come first every morning.",
 }
+
+
+# Each lesson's "go deeper" entries in library/learning/clay-navigation/
+# WALKTHROUGHS.md, sourced Clay procedures. Titles are read from the file at
+# run time so a renamed entry never prints a stale title.
+LESSON_WALKTHROUGHS = {
+    "bounce": ["W-173", "W-122", "W-131"],
+    "floor": ["W-076", "W-074"],
+    "dry": ["W-111", "W-202"],
+    "drop": ["W-080", "W-173"],
+    "credits": ["W-102", "W-103", "W-001"],
+    "small-sample": ["W-174"],
+    "speed": ["W-077"],
+}
+WALKTHROUGHS = ROOT / "library" / "learning" / "clay-navigation" / "WALKTHROUGHS.md"
+
+
+def walkthrough_titles(ids: list[str]) -> list[str]:
+    try:
+        text = WALKTHROUGHS.read_text()
+    except OSError:
+        return []
+    out = []
+    for wid in ids:
+        m = re.search(rf"^### ({re.escape(wid)} .+)$", text, re.MULTILINE)
+        if m:
+            out.append(m.group(1).strip())
+    return out
 
 
 def pick_lesson(t: Teacher, actions: list[dict], states: list[dict]) -> tuple[str, str]:
@@ -1200,15 +1312,27 @@ def cmd_brief(a, t: Teacher) -> int:
                   f"({cr['source']}, as of {cr['as_of']})")
         else:
             t.say("  Credits: not read yet (`chewbacca gtme sync` records them)")
+        by_table = (s.get("memory") or {}).get("by_table") or {}
+        top = sorted((r for r in by_table.get("rows") or [] if isinstance(r, dict) and r.get("credits")),
+                     key=lambda r: -r["credits"])[:1]
+        if top:
+            t.say(f"  Biggest spender: \"{top[0].get('table')}\", {top[0]['credits']:.0f} of "
+                  f"{by_table.get('total', 0):.0f} credits in {by_table.get('window_days', '?')} days "
+                  f"(gtm-memory credits, as of {by_table.get('as_of')})")
         need = [r for r in s["unanswered"]]
         t.say(f"  Replies waiting on you: {len(need)} (Clay inbox; left out: negative, unsubscribe, out-of-office, "
-              f"and {s['bounce_notices']} bounce notices)")
+              f"{s['bounce_notices']} bounce notices and {len(s['unsubscribe_asks'])} removal asks)")
         for r in need[:5]:
             t.say(f"    {r.get('email')}  {r.get('class') or 'unclassified'}  {age(r.get('time'))}: "
                   f"\"{strip_html(r.get('snippet') or '')[:110]}\"")
             t.say(f"      next: {REPLY_NEXT.get(r.get('class'), REPLY_NEXT[None])}")
         dry = [c for c in active if c["leads_left"] is not None and c["leads_left"] < RUN_DRY_LEADS]
-        if dry:
+        refills = [x for x in ((s.get("memory") or {}).get("overdue") or {}).get("late") or []
+                   if isinstance(x, dict) and x.get("kind") == "refill"]
+        if refills:
+            t.say(f"  Running dry: {len(refills)} campaigns have put every lead through step 1 "
+                  "(gtm-memory overdue)")
+        elif dry:
             t.say(f"  Running dry: " + "; ".join(f"\"{c['name']}\" {c['leads_left']} emails queued" for c in dry[:4]))
         if s["drop"]:
             t.say(f"  Alarm: reply rate fell to {s['drop']['recent']:.1%} over the last {s['drop']['new_sends']} sends")
@@ -1227,6 +1351,9 @@ def cmd_brief(a, t: Teacher) -> int:
         t.say("")
         t.say(f"Level up: {context}.")
         t.say(f"  {LESSONS[key]}")
+        deeper = walkthrough_titles(LESSON_WALKTHROUGHS.get(key, []))
+        if deeper:
+            t.say(f"  Go deeper ({WALKTHROUGHS.relative_to(ROOT)}): " + "; ".join(deeper))
         t.lesson_done(key)
     if actions:
         remember_why("brief", actions[0]["do"], [actions[0]["why"]])
@@ -1311,7 +1438,7 @@ def render_report(s: dict, this: dict, last: dict, start: date, end: date, actio
              "## This week", "",
              "| | This week | All time |", "|---|---:|---:|",
              f"| Emails sent | {this.get('sends', 0)}{delta('sends')} | {s['sent']} |",
-             f"| People who replied | {this.get('replies', 0)}{delta('replies')} | "
+             f"| People who replied (any reply, out-of-office included) | {this.get('replies', 0)}{delta('replies')} | "
              f"{(s['funnel'].get('people_replied') or {}).get('n', 0)} |",
              f"| Interested replies | {this.get('positive', 0)}{delta('positive')} | {s['positive']} |",
              f"| Meetings booked | {this.get('meetings', 0)}{delta('meetings')} | {s['meetings']} |", "",
@@ -1342,18 +1469,26 @@ def render_report(s: dict, this: dict, last: dict, start: date, end: date, actio
         plan_items.append(f"Plan step: {md(nxt['do'])}.")
     if s["unanswered"]:
         pos = sum(1 for r in s["unanswered"] if r.get("class") == "positive")
-        plan_items.insert(0, f"Answer the {len(s['unanswered'])} replies still waiting, the {pos} interested "
-                             "ones first.")
+        plan_items.insert(0, f"Answer the {len(s['unanswered'])} replies still waiting ({pos} of them "
+                             "interested, those first).")
     lines += [f"{n}. {x}" for n, x in enumerate(plan_items, 1)] or ["1. Keep the running campaigns going."]
     return "\n".join(lines) + "\n"
 
 
+def unmd(text: str) -> str:
+    """Undo md()'s backslash escapes for the PDF, where html.escape is the
+    guard instead. The first PDF showed every pipe as a backslash and split
+    campaign names across columns."""
+    return re.sub(r"\\(.)", r"\1", text)
+
+
 def md_to_html(md: str, title: str) -> str:
     body, in_table, in_list = [], False, False
-    for line in md.splitlines():
+    for raw in md.splitlines():
+        line = raw if raw.startswith("|") else unmd(raw)
         esc = html.escape(line)
         if line.startswith("|"):
-            cells = [c.strip() for c in line.strip("|").split("|")]
+            cells = [unmd(c.strip()) for c in re.split(r"(?<!\\)\|", line.strip().strip("|"))]
             if all(re.fullmatch(r"-+:?|:?-+", c) for c in cells if c):
                 continue
             if not in_table:
@@ -1409,10 +1544,32 @@ def to_pdf(md: str, title: str, dest: Path) -> str:
         # first live run printed straight into ~/Downloads and got nothing.
         printed = Path(tmp) / "report.pdf"
         if Path(chrome).exists():
+            # Output goes to /dev/null, never a pipe: Chrome's helper processes
+            # inherit the pipe and hold it open, so capture_output waited the
+            # full timeout every time (measured 2026-10-10: 90 s, then the
+            # cupsfilter fallback). Its own process group is killed after.
             try:
-                subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-pdf-header-footer",
-                                f"--user-data-dir={Path(tmp) / 'profile'}", f"--print-to-pdf={printed}",
-                                page.as_uri()], capture_output=True, timeout=90)
+                proc = subprocess.Popen([chrome, "--headless=new", "--disable-gpu", "--no-pdf-header-footer",
+                                         f"--user-data-dir={Path(tmp) / 'profile'}", f"--print-to-pdf={printed}",
+                                         page.as_uri()], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                        start_new_session=True)
+                # Headless Chrome on this Mac writes the PDF in about 5 s and then
+                # stays alive, so the wait ends when the file stops growing.
+                try:
+                    last = -1
+                    for _ in range(120):
+                        if proc.poll() is not None:
+                            break
+                        size = printed.stat().st_size if printed.exists() else 0
+                        if size and size == last:
+                            break
+                        last = size
+                        time.sleep(0.5)
+                finally:
+                    try:
+                        os.killpg(proc.pid, 9)
+                    except OSError:
+                        pass
                 if printed.exists() and printed.stat().st_size > 0:
                     shutil.copyfile(printed, dest)
                     return "chrome"

@@ -103,6 +103,10 @@ def make_graph(path: Path, poison: str = "") -> None:
                                     "latest": True, "answered": False, "forwarded": False,
                                     "snippet": "Delivery Status Notification (Failure)"})
     edge("reply:3", "IN_CAMPAIGN", "campaign:clay:cam_floor")
+    node("reply:4", "Reply", "r4", {"lead_email": "stop@delta.example", "time": "2026-03-19T12:00:00Z",
+                                    "latest": True, "answered": False, "forwarded": False,
+                                    "snippet": "Remove me from this list"})
+    edge("reply:4", "IN_CAMPAIGN", "campaign:clay:cam_floor")
     for src, kind in (("gtm-clay:9001", "clay"), ("gtm-inbox:9001", "inbox"), ("gtm-calendar", "calendar")):
         db.execute("INSERT INTO gtm_sync VALUES (?,?,?,?,?,?,?,?)",
                    (src, kind, "9001" if kind != "calendar" else "", "", "2026-03-20T09:00:00+00:00",
@@ -141,11 +145,38 @@ class GraphCommands(unittest.TestCase):
         r = run(self.env, "next", "--json")
         items = json.loads(r.stdout)
         kinds = [x["kind"] for x in items]
+        unsub = [x for x in items if x["kind"] == "unsubscribe"]
+        self.assertEqual(len(unsub), 1)
+        self.assertIn("stop@delta.example", unsub[0]["command"])
+        self.assertIn("needs your approval", unsub[0]["gate"])
+        self.assertFalse(any("stop@delta.example" in x["do"] for x in items if x["kind"] == "reply"))
         for k in ("reply", "bounce", "floor", "dry", "credits"):
             self.assertIn(k, kinds)
         for x in items:
             self.assertTrue(x["command"] and x["gate"] and x["why"], x)
         self.assertEqual(items[0]["kind"], "reply")
+
+    def test_gtm_memory_commitments_replace_recomputed_refills(self):
+        late = [{"kind": "refill", "owed_by": "us", "title": f"Refill c{n}", "campaign": f"c{n}",
+                 "late_by_hours": 24 * n} for n in range(1, 4)]
+        late += [{"kind": "approval_owed", "owed_by": "client", "title": f"Verdict on reply {n}",
+                  "late_by_hours": 10} for n in range(2)]
+        fixture(self.tmp, "memory-overdue", {"late": late, "freshness": {"last_ingest": "2026-03-20T08:00:00Z"}})
+        fixture(self.tmp, "memory-credits-by-table", {"total": 90, "window_days": 30, "as_of": "2026-03-20",
+                                                      "rows": [{"table": "Leads A", "credits": 80}]})
+        items = json.loads(run(self.env, "next", "--json").stdout)
+        dry = [x for x in items if x["kind"] == "dry"]
+        self.assertEqual(len(dry), 1)
+        self.assertIn("Refill 3 campaigns", dry[0]["do"])
+        self.assertIn("gtm-memory", dry[0]["why"])
+        owed = [x for x in items if x["kind"] == "owed"]
+        self.assertIn("2 reply verdicts from the client", owed[0]["do"])
+        brief = run(self.env, "brief").stdout
+        self.assertIn("Biggest spender: \"Leads A\", 80 of 90 credits", brief)
+
+    def test_lesson_cites_a_sourced_walkthrough(self):
+        r = run(self.env, "brief")
+        self.assertRegex(r.stdout, r"Go deeper \(library/learning/clay-navigation/WALKTHROUGHS.md\): W-\d+ ")
 
     def test_report_week_counts_and_markdown(self):
         out = self.tmp / "dl"

@@ -178,17 +178,14 @@ def see(app: str | None) -> dict:
     if SNAPSHOT_OVERRIDE:
         return look_from(SNAPSHOT_OVERRIDE, app or "", "")
     app = app or front_app()
-    command = ["peekaboo", "see", "--json", "--timeout", f"{SEE_TIMEOUT}s"]
-    if app:
-        command += ["--app", app]
-    try:
-        result = subprocess.run(
-            command, capture_output=True, text=True, timeout=SEE_TIMEOUT + 10
-        )
-    except FileNotFoundError:
-        raise LookError("peekaboo is not installed, so the screen cannot be read") from None
-    except subprocess.TimeoutExpired:
-        raise LookError("reading the screen took too long; try again") from None
+    target = ["--app", app] if app else []
+    result = run_see(["--timeout", f"{SEE_TIMEOUT}s"], target)
+    # peekaboo 3 (3.0.0-beta3, still what brew installs on this Mac on
+    # 2026-10-10) refuses `--timeout` with "Unknown option --timeout", and
+    # every look failed before reading anything. It spells it
+    # `--timeout-seconds` with a bare number.
+    if "Unknown option --timeout" in (result.stdout + result.stderr):
+        result = run_see(["--timeout-seconds", str(SEE_TIMEOUT)], target)
     raw = result.stdout
     start = raw.find("{")
     if start < 0:
@@ -214,6 +211,16 @@ def see(app: str | None) -> dict:
         str(data.get("application_name") or app or ""),
         str(data.get("window_title") or ""),
     )
+
+
+def run_see(timeout: list[str], target: list[str]) -> subprocess.CompletedProcess:
+    command = ["peekaboo", "see", "--json", *timeout, *target]
+    try:
+        return subprocess.run(command, capture_output=True, text=True, timeout=SEE_TIMEOUT + 10)
+    except FileNotFoundError:
+        raise LookError("peekaboo is not installed, so the screen cannot be read") from None
+    except subprocess.TimeoutExpired:
+        raise LookError("reading the screen took too long; try again") from None
 
 
 def save_inline(data: dict) -> str:

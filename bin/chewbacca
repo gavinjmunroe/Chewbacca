@@ -173,11 +173,13 @@ welcome|onboard|hello)
   exec python3 "$ROOT/bin/chewbacca-welcome" "$@"
   ;;
 permissions|permission|perms)
-  # Every macOS grant Chewbacca needs, walked one card at a time over System
-  # Settings, each closing itself once detected. No args = the guide, because
-  # "make it SUPER EZ" (Caleb, 2026-10-10) means one command, not a menu.
+  # Every macOS grant Chewbacca needs, walked one at a time over System
+  # Settings, each step moving on once detected. No args = the walk (a ring on
+  # each switch, on Kyber's glass), because "make it SUPER EZ" (Caleb,
+  # 2026-10-10) means one command, not a menu; without Kyber running the walk
+  # falls back to the cards (`guide`) by itself.
   shift
-  [ $# -eq 0 ] && set -- guide
+  [ $# -eq 0 ] && set -- walk
   exec python3 "$ROOT/bin/chewbacca-permissions" "$@"
   ;;
 jobs)

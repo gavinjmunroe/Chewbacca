@@ -150,6 +150,15 @@ FILES = re.compile(
 FILES_CLOSE = re.compile(
     r"^(?:close|hide|take down|dismiss|get rid of) (?:my |the )?(?:files|file manager|file browser|finder)$")
 HUD = Path(__file__).resolve().parent.parent / "hud"
+# "Set up my permissions", "fix my permissions": the on-screen walkthrough
+# (bin/lib/permission_walk.py), a ring on each switch in System Settings. It
+# runs for minutes while the person flips switches, so it is started and left
+# running, never waited on.
+PERMISSIONS = re.compile(
+    r"^(?:set up|setup|fix|sort out|turn on|walk me through|help me (?:set up|with)|go through|check)"
+    r" (?:my |the |all (?:my |the )?)?(?:mac |macos |chewbacca |kyber )?permissions?(?: for me)?(?: (?:right )?now)?$")
+PERMISSIONS_CLI = Path(__file__).resolve().parent.parent / "chewbacca-permissions"
+WALK_LOG = Path(os.environ.get("BOB_DIR", str(Path.home() / ".bob"))) / "perm-walk.log"
 NOT_PEOPLE = {"google", "chrome", "terminal", "safari", "sheets", "finder", "spotify", "notion", "slack",
               "messages", "mail", "calendar", "kyber", "chewbacca", "amber", "youtube", "claude", "gmail",
               "github", "notes", "granola", "anarlog"}
@@ -175,6 +184,8 @@ def parse(said: str, resolve_person=find_person) -> Command | None:
     s = _norm(said)
     if not s:
         return None
+    if PERMISSIONS.match(s):
+        return Command("walk", "permissions")
     if FILES_CLOSE.match(s):
         return Command("panel", "files", "off")
     if FILES.match(s):
@@ -242,7 +253,23 @@ def _ask(body: dict) -> dict | None:
         return None
 
 
-def perform(command: Command, run=subprocess.run, ask=None) -> Outcome:
+def start_walk(spawn=subprocess.Popen) -> bool:
+    """Start the walkthrough detached, so it outlives this request."""
+    try:
+        WALK_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with open(WALK_LOG, "a", encoding="utf-8") as log:
+            spawn([str(PERMISSIONS_CLI), "walk"], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                  start_new_session=True)
+        return True
+    except OSError:
+        return False
+
+
+def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Popen) -> Outcome:
+    if command.verb == "walk":
+        if start_walk(spawn):
+            return Outcome(True, "Opening Settings. Follow the ring.")
+        return Outcome(False, "The permission walkthrough didn't start.")
     if command.verb == "panel":
         argv = [str(HUD), command.name] + ([command.arg] if command.arg else [])
         try:

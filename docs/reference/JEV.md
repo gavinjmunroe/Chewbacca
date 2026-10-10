@@ -40,7 +40,7 @@ Local verification on 2026-09-23: nine offline Jev tests and eleven CLI checks
 passed, followed by an independent read-only review with no remaining findings.
 A live synthetic call exercised all three primitives (348 input tokens, 360 ms).
 Three skill-routing examples selected coursework, debugging, and no skill for
-a greeting, respectively (10,747–10,750 input tokens, 212–262 ms). A separate
+a greeting, respectively (10,747 to 10,750 input tokens, 212 to 262 ms). A separate
 invocation through the installed executable also returned no skill for the
 greeting. These are connectivity and behavior checks, not an accuracy benchmark
 or evidence of savings against a generative-model baseline.

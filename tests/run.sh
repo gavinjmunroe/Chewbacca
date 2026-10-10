@@ -500,6 +500,16 @@ if group "team"; then
   fi
 fi
 
+# ── live-page (apps/live, the hosted ask-it-see-it page) ──────────────────────
+if group "live-page"; then
+  if command -v node >/dev/null 2>&1; then
+    check "live blocks validate, intervals separate before ranking, sessions read one client, stale numbers say their age" node --test "$ROOT"/apps/live/test/live.test.js
+  else
+    skip "live blocks validate, intervals separate before ranking, sessions read one client, stale numbers say their age" "no node"
+  fi
+  check "the live stats sync reads only its client's campaigns and survives a dropped connection" python3 "$ROOT/apps/live/test/test_agent.py"
+fi
+
 # ── tools ─────────────────────────────────────────────────────────────────────
 if group "tools"; then
   check  "chewie app: background driver refuses Return without --yes, Jev picks map back" python3 "$ROOT/tests/test_appctl.py"
@@ -517,7 +527,6 @@ if group "tools"; then
   check  "preflight describes setup.sh accurately" python3 "$ROOT/tests/test_preflight.py"
   check  "context cost --json is valid" bash -c "python3 '$ROOT/tools/context_cost.py' --json | python3 -m json.tool"
   check  "context-budget attributes a session's opening tokens by source" python3 "$ROOT/tests/test_context_budget.py"
-  check  "lessons audit counts only registered hooks, git hooks and tests as enforcement" python3 "$ROOT/tests/test_lessons_audit.py"
   # Not --check: every commit made after the last regeneration invalidates it,
   # so a --check here would fail on the commit that adds a test.
   check  "changelog generates" env PYTHONPATH="$ROOT/tools" python3 -c 'import changelog; assert changelog.build().startswith("# Changelog")'

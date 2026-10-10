@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Live</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+    <link rel="stylesheet" href="/assets/app.css" />
+  </head>
+  <body>
+    <header class="top">
+      <div class="brand">
+        <span class="mark" aria-hidden="true"></span>
+        <span id="client-name">Loading</span>
+        <span class="tag">Live</span>
+      </div>
+      <div id="sync" class="sync" title="Campaign numbers come straight from your campaigns"><span class="dot" aria-hidden="true"></span><span>Connecting</span></div>
+    </header>
+    <main class="wrap">
+      <form id="ask" class="ask" autocomplete="off">
+        <label for="q" class="sr">Ask about your outreach</label>
+        <input id="q" name="q" maxlength="500" placeholder="Ask anything about your outreach" />
+        <button type="submit" class="go">Ask</button>
+      </form>
+      <div id="chips" class="chips" aria-label="Suggested questions"></div>
+      <div id="empty" class="empty" hidden>
+        <p class="empty-title">Ask a question and watch the answer build.</p>
+        <p>Every number comes straight from your campaigns and the replies Togari has read, with how fresh it is underneath.</p>
+      </div>
+      <div id="feed" class="feed" aria-live="polite"></div>
+    </main>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>

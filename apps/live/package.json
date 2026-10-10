@@ -1,0 +1,11 @@
+{
+  "name": "chewbacca-live",
+  "private": true,
+  "type": "module",
+  "description": "Chewbacca Live: a client asks about their outreach and watches the answer build from typed blocks.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test test/*.test.js"
+  }
+}

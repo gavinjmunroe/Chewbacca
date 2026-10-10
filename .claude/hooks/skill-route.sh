@@ -471,6 +471,34 @@ if not best:
     raise SystemExit(0)
 
 top = best[:2]
+
+# Third-party packs are parts of a kit skill, never a replacement for it.
+#
+# On 2026-10-10 tests/live/gtm-route.sh failed 4 of 10 after two outside packs
+# were linked into ~/.claude/skills on 10/9: "build a demand gen playbook for
+# jonahs offer" went to playbook-ai-specificity, "book more meetings from cold
+# email" to cold-email, "set up an outbound campaign for a new client" to
+# campaign-strategy. Each is a narrow recipe; the request belongs to the
+# growth engineer, which runs the whole outbound job and reaches for those
+# recipes as references. Rewording gtm-engineering's description to outscore 30
+# narrower skills on their own words never converges, so a match inside a pack
+# routes to the owning skill first and keeps the recipe as the second line.
+PACK_PARENTS = (
+    # (parent skill, path fragments of the pack, single skills that belong)
+    ("gtm-engineering", ("/coldoutboundskills/",), {"cold-email"}),
+)
+if top:
+    _s0, name0, path0, why0 = top[0]
+    real0 = os.path.realpath(path0)
+    for parent, frags, names in PACK_PARENTS:
+        if name0 == parent or not (name0 in names or any(f in real0 for f in frags)):
+            continue
+        hit = next(((n, p) for n, _d, p in skills if n == parent), None)
+        if hit:
+            top = [(_s0, hit[0], hit[1], [f"owns {name0}"] + list(why0)[:1]), top[0]]
+            SHADOW["pack_parent"] = {"child": name0, "parent": parent}
+        break
+
 SHADOW["shown"] = [name for _s, name, _p, _w in top]
 
 lines = []

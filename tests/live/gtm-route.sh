@@ -53,10 +53,12 @@ we gotta make chewbs a gtm monster
 get money in the door with a growth engine
 Q
 
-ok "control: a keynote still goes to speaking" routes_to speaking "help me prep a keynote talk for a conference"
+# speaking was an outside skill and is gone from this Mac (10/10); coursework is
+# in the kit, so this control cannot go stale the same way.
+ok "control: class deadlines still go to coursework" routes_to coursework "what is due this week for my classes"
 ok "control: the team board keeps its own"      routes_to team "what is gavin working on this week"
 ok "control: small talk routes nowhere"         routes_to - "whats the weather"
 
-mutant "a GTM prompt is not routed to speaking" routes_to speaking "book more meetings from cold email"
+mutant "a GTM prompt is not routed to coursework" routes_to coursework "book more meetings from cold email"
 
 finish

@@ -147,27 +147,28 @@ class Client:
             raise Forbidden(path)
 
     def refresh(self):
-        # -g keeps the renewal tab behind whatever Caleb is using. A silent SSO
-        # renewal needs nobody, and a tab jumping to the front mid-task puts his
-        # typing into the page an agent is driving (2026-10-10).
-        print("brightspace: session expired, reopening it in Chrome", file=sys.stderr)
-        subprocess.run(
-            ["open", "-g", "-na", "Google Chrome", "--args", f"--profile-directory={PROFILE}",
-             HOST + "/d2l/home"],
-            check=False,
-        )
-        # A fresh SSO redirect took under 5s on 2026-10-03; 30s covers a slow
-        # Okta hop without hanging forever on a signed-out profile.
-        for _ in range(6):
-            time.sleep(5)
+        # No tab is opened to renew. This used to open Brightspace in Chrome,
+        # first in front, then with `open -g -na`, and on 2026-10-10 Caleb saw
+        # the -g window anyway ("Bro it opened a tab and I saw it"). A page he
+        # has nothing to do on must never appear, so this only rereads the
+        # cookie file, which Chrome rewrites within seconds of any page he
+        # already has open renewing the session.
+        print("brightspace: session expired, rereading Chrome's cookies", file=sys.stderr)
+        for _ in range(3):
+            time.sleep(3)
             self.cookies = chrome_cookies()
             try:
                 fetch("/lp/1.63/users/whoami", self.cookies)
                 return
             except Expired:
                 continue
-        sys.exit(stale_cookie_message() or
-                 "BLOCKED: Brightspace is signed out in Chrome %s. Sign in there once." % PROFILE)
+        stale = stale_cookie_message()
+        if stale:
+            sys.exit(stale)
+        # Signed out for real: now it needs his hands, so take him to the page.
+        subprocess.run(["open", "-na", "Google Chrome", "--args",
+                        f"--profile-directory={PROFILE}", HOST + "/d2l/home"], check=False)
+        sys.exit("BLOCKED: Brightspace is signed out in Chrome %s. It's open there, sign in once." % PROFILE)
 
 
 def stale_cookie_message():

@@ -131,8 +131,8 @@ same turn it happens, never only a new line of prose.
   Hustle Fund's apply-form redirect). Rule: read the text with `bin/clay-inbox`
   before saying anyone replied with interest.
 - Reading an async search as empty (2026-09-22: an hour lost). A fresh
-  `query-mode run` returns an empty page until it populates. Guard:
-  `scripts/clay_run.py` polls and reports a timeout as a timeout.
+  query-mode search run returns an empty page until it populates. Guard:
+  `zeutara-gtme/scripts/clay_run.py` polls and reports a timeout as a timeout.
 - Resuming an old campaign after its audience records were deleted
   (2026-10-03: every enrolled lead became "Unknown lead"). Rule: check enrolled
   leads resolve before any resume; launch-guard also blocks resume without a pass.
@@ -142,8 +142,8 @@ same turn it happens, never only a new line of prose.
 - A campaign segment that filters on "last sent is empty" (2026-10-07). Campaigns
   auto-pause a lead that exits its segment, so stamping leads as sent right after
   the start would pause every one. Caught before a send. Rule: use that filter only
-  to build the email list, never on the segment a live campaign reads. zeutara-gtme
-  `scripts/midweek_drafts.py` no longer writes it.
+  to build the email list, never on the segment a live campaign reads.
+  `zeutara-gtme/scripts/midweek_drafts.py` no longer writes it.
 - Fighting the CLI or writing a script when the Clay UI does it in one step
   (2026-10-05 and again 10-07). Rule: the first time the CLI refuses a shape,
   drive the UI in his real Chrome. Find People to a table with the Work email

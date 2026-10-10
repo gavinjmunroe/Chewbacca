@@ -204,6 +204,14 @@ def main():
                 if p.returncode != 0:
                     raise SystemExit(f"land: commit failed: {(p.stderr or p.stdout).strip()}")
             else:
+                # On 2026-10-10 an amend meant to replace a "wip:" commit was
+                # refused by pre-commit, the next command in the chain landed
+                # the commit anyway, and main got a paused WIP (930f716c).
+                for c in a.commits:
+                    subj = run(["git", "log", "-1", "--format=%s", c], src).stdout.strip()
+                    if subj.lower().startswith(("wip", "fixup!", "squash!")) and not os.environ.get("LAND_WIP_OK"):
+                        raise SystemExit(f"land: {c[:8]} is \"{subj}\"; reword it before landing "
+                                         f"(LAND_WIP_OK=1 if it really is finished)")
                 for c in a.commits:
                     p = run(["git", "cherry-pick", "--allow-empty", c], wt, check=False)
                     if p.returncode != 0:

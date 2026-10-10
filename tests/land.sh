@@ -113,4 +113,9 @@ out=$(cd "$T/tabB" && python3 -I "$LAND" "$(git rev-parse HEAD)" 2>&1) || fail "
 cd "$T/check" && git pull -q
 grep -q '^- d: tab A' team/memory/MEMORY.md && grep -q '^- e: tab B' team/memory/MEMORY.md || fail "a back-to-back index line went missing"
 python3 tools/checksums.py && git diff --quiet SHA256SUMS.txt || fail "manifest stale after back-to-back lands"
+
+# A wip commit is refused (930f716c reached main that way on 2026-10-10).
+cd "$T/tabA" && sync && echo w > w.txt && git add w.txt && git commit -qm "wip: half done"
+out=$(python3 -I "$LAND" "$(git rev-parse HEAD)" 2>&1) && fail "a wip commit landed: $out"
+echo "$out" | grep -q "reword it" || fail "wip refusal said: $out"
 echo ok

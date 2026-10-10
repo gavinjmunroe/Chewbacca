@@ -51,8 +51,12 @@ import opener  # noqa: E402
 import clay_route  # noqa: E402
 import agenda  # noqa: E402
 import surface_intent  # noqa: E402
+import repo_card  # noqa: E402
 import hud_events  # noqa: E402
 import glass_search  # noqa: E402
+# HUD_REPO_CARDS=off: "show me owner/repo" and a pasted github.com URL go to
+# the model instead of drawing a repo card (bin/lib/repo_card.py).
+REPO_CARDS = os.environ.get("HUD_REPO_CARDS", "on") != "off"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 import hud_runtime  # noqa: E402
 
@@ -1281,6 +1285,7 @@ FAST_PATHS = {
     "connection_check": "connection",
     "pleasantry": "pleasantry",
     "quick_answer": "quick",
+    "repo_request": "repo",
     "surface_request": "surface",
     "music_request": "music",
     "open_request": "open",
@@ -1321,6 +1326,12 @@ def fast_path(said: str) -> str | None:
             if quick.answer(said):
                 return "quick"
         except Exception:  # noqa: BLE001  the bridge falls through on the same error
+            pass
+    if REPO_CARDS:
+        try:
+            if repo_card.parse(said) is not None:
+                return "repo"
+        except Exception:  # noqa: BLE001
             pass
     if SURFACES:
         try:
@@ -1783,6 +1794,7 @@ class Listener:
             self.shown = "p dormant"
             # Escape took the glass down, the search panel with it.
             self.search_closed()
+            repo_card.BOARD.forget()
         elif line.startswith("g "):
             parts = line.split()
             if len(parts) == 5:
@@ -1882,6 +1894,11 @@ class Listener:
                 # buttons, and call-watch acts on them. Asked here as well,
                 # one press would start the coach and a model turn.
                 pass
+            elif repo_card.Board.owns(action, component.split()[0]):
+                # The repo card's button, its pinned rows and its X: acted on
+                # here against the card this listener drew, never asked.
+                threading.Thread(target=lambda: self.log("repo:", repo_card.BOARD.event(line, self.send)),
+                                 daemon=True).start()
             else:
                 # A control was used. Same path: the press is a request in words.
                 self.ask(
@@ -2424,6 +2441,8 @@ class Listener:
         pointing = bool(self.pointed_marks())
         if QUICK and not relayed and not pointing and self.quick_answer(said, typed):
             return
+        if REPO_CARDS and not relayed and not pointing and self.repo_request(said, typed):
+            return
         # A surface before music: "what's playing" opens the player panel and
         # says the song, where the music path only said it.
         if SURFACES and not relayed and not pointing and self.surface_request(said, typed):
@@ -2924,6 +2943,40 @@ class Listener:
             self.send("w " + json.dumps(answer) + " done=true")
             if not typed:
                 self.speak(answer)
+            self.settle_unless_running("done", self.LEAVE_AFTER)
+
+        threading.Thread(target=work, daemon=True).start()
+        return True
+
+    def repo_request(self, said: str, typed: bool) -> bool:
+        """"show me owner/repo", a pasted github.com URL, or a profile URL:
+        one card on the glass from `gh api`, no model turn. "close the repo
+        card", and "close it" while it is up, take it down. See
+        bin/lib/repo_card.py for which sentences count and what a press does."""
+        if self.in_flight():
+            return False
+        try:
+            ask = repo_card.parse(said, card_open=repo_card.BOARD.is_open())
+        except Exception as err:  # a fast path must never cost the person their answer
+            self.log("repo card failed:", err)
+            return False
+        if ask is None:
+            return False
+        req = Request(said=said, spoken_at=self.arrival(), pointed=None, typed=typed)
+
+        def work() -> None:
+            started = time.monotonic()
+            try:
+                outcome = repo_card.BOARD.answer(ask, self.send)
+            except Exception as err:  # noqa: BLE001
+                self.log("repo card failed:", err)
+                outcome = repo_card.Outcome(False, "That repo card didn't draw.")
+            self.log(f"repo: {ask.kind} {ask.slug} in {(time.monotonic() - started) * 1000:.0f}ms:", outcome.line)
+            self.remember(req, outcome.line, outcome.ok, "done" if outcome.ok else "failed")
+            self.send("s " + json.dumps(outcome.line))
+            self.send("w " + json.dumps(outcome.line) + " done=true")
+            if not typed:
+                self.speak(outcome.line)
             self.settle_unless_running("done", self.LEAVE_AFTER)
 
         threading.Thread(target=work, daemon=True).start()

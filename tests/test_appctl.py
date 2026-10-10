@@ -102,6 +102,30 @@ if platform.system() == "Darwin" and shutil.which("swiftc"):
                 print("skip menu gate check: accessibility not granted to this process")
             else:
                 check("a Move to Trash menu item is refused without --yes", menu.returncode == 4)
+            # The security review's case: "OK" under a destructive alert.
+            # osascript's own alert gives a real dialog with no app to set up.
+            import time
+            alert = subprocess.Popen(["osascript", "-e", 'display dialog "Permanently delete all 172,703 items?" '
+                                      'buttons {"Cancel", "OK"} default button "OK"'],
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                seen = None
+                for _ in range(20):
+                    time.sleep(0.25)
+                    seen = subprocess.run([str(out), "see", "osascript"], capture_output=True, text=True)
+                    if seen.returncode == 0 and '"OK"' in seen.stdout:
+                        break
+                if seen is None or seen.returncode != 0:
+                    print("skip alert gate check: alert not readable (accessibility?)")
+                else:
+                    ok = subprocess.run([str(out), "press", "osascript", "OK"], capture_output=True, text=True)
+                    check("OK under a destructive alert is refused and quotes the alert",
+                          ok.returncode == 4 and "Permanently delete" in ok.stderr)
+                    subprocess.run([str(out), "see", "osascript"], capture_output=True)
+                    cancel = subprocess.run([str(out), "press", "osascript", "Cancel"], capture_output=True, text=True)
+                    check("Cancel in the same alert passes without --yes", cancel.returncode == 0)
+            finally:
+                alert.kill()
             missing = subprocess.run([str(out), "see", "no-such-app-zz"], capture_output=True, text=True)
             check("an unknown app fails with a fix", missing.returncode == 1 and "fix" in missing.stderr)
 else:

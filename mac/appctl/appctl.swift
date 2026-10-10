@@ -241,10 +241,16 @@ func resolveElement(_ app: NSRunningApplication, _ ref: String, window: CGWindow
     }
     let win = pickWindow(app, CGWindowID(wid))
     var el = win.element
+    // Dialog membership is read on the way DOWN the snapshot path. A save
+    // sheet's buttons report no usable AXParent chain, so walking up from the
+    // button found no sheet and "Save" was pressed under "Do you want to keep
+    // this new document?" in the first live test, 2026-10-09.
+    lastDialog = isDialog(el, top: true) ? el : nil
     for idx in path {
         let kids = children(el)
         guard idx < kids.count else { fail("element \(ref) is gone; the window changed", fix: "run `see` again") }
         el = kids[idx]
+        if lastDialog == nil && isDialog(el) { lastDialog = el }
     }
     let role = str(el, kAXRoleAttribute) ?? "?"
     if role != (e["role"] as? String) || label(el) != (e["label"] as? String) {
@@ -274,8 +280,58 @@ func texts(_ el: AXUIElement) -> [String] {
         .compactMap { str(el, $0) }
 }
 
+// A press inside a sheet or dialog is judged by the dialog, not the button:
+// "OK" under "Permanently delete 172,703 items?" reads as harmless on its own.
+// Security review of b5067ff0, 2026-10-09. So inside one, only a known way out
+// passes without --yes, and the refusal quotes the dialog's own text.
+let safeInDialog: Set<String> = ["cancel", "not now", "later", "back", "no thanks", "dismiss"]
+
+var lastDialog: AXUIElement?
+
+// Calculator's one and only window has subrole AXDialog, so a window's
+// subrole alone made every digit "inside a dialog" (2026-10-09). A top-level
+// window counts only when it carries a default or cancel button, which alerts
+// and confirmations have and app windows like Calculator don't.
+func isDialog(_ c: AXUIElement, top: Bool = false) -> Bool {
+    let role = str(c, kAXRoleAttribute) ?? ""
+    let sub = str(c, kAXSubroleAttribute) ?? ""
+    if role == "AXSheet" || role == "AXDialog" || sub == "AXSystemDialog" { return true }
+    guard sub == "AXDialog" else { return false }
+    if !top { return true }
+    return attr(c, kAXDefaultButtonAttribute) != nil || attr(c, kAXCancelButtonAttribute) != nil
+}
+
+func dialogAncestor(_ el: AXUIElement) -> AXUIElement? {
+    if let d = lastDialog { return d }
+    var cur: AXUIElement? = el
+    for _ in 0..<25 {
+        guard let c = cur else { return nil }
+        if isDialog(c, top: str(c, kAXRoleAttribute) == "AXWindow") { return c }
+        guard let parent = attr(c, kAXParentAttribute) else { return nil }
+        cur = (parent as! AXUIElement)
+    }
+    return nil
+}
+
+func dialogText(_ el: AXUIElement) -> String {
+    var out: [String] = []
+    func collect(_ e: AXUIElement, _ depth: Int) {
+        if depth > 12 || out.count > 20 { return }
+        if str(e, kAXRoleAttribute) == "AXStaticText", let t = str(e, kAXValueAttribute) ?? label(e) { out.append(t) }
+        for c in children(e) { collect(c, depth + 1) }
+    }
+    collect(el, 0)
+    return out.joined(separator: " ")
+}
+
 func gate(_ el: AXUIElement, what: String, yes: Bool) {
     if yes { return }
+    let own = (label(el) ?? "").lowercased().trimmingCharacters(in: .whitespaces)
+    if let dialog = dialogAncestor(el), !safeInDialog.contains(own) {
+        let said = String(dialogText(dialog).prefix(200))
+        fail("\(what) (\(label(el) ?? "unlabeled")) is inside a dialog that says: \"\(said)\"; refused without --yes",
+             code: 4, fix: "read the dialog to the person, confirm, then repeat with --yes")
+    }
     let role = str(el, kAXRoleAttribute) ?? ""
     let all = texts(el).filter { $0 != (str(el, kAXRoleDescriptionAttribute) ?? "\u{0}") }
     if all.isEmpty && ["AXButton", "AXMenuItem", "AXMenuButton", "AXLink"].contains(role) {

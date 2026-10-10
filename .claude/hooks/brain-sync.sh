@@ -25,7 +25,7 @@ BRAIN_SYNC_PAYLOAD="$(cat)"
 export BRAIN_SYNC_PAYLOAD PERSONAL_CONTEXT_DIR="${PERSONAL_CONTEXT_DIR:-}" PUBLIC_CONTEXT_DIR="${PUBLIC_CONTEXT_DIR:-}"
 export CHEWBACCA_WRITE_LOG="${CHEWBACCA_WRITE_LOG:-$HOME/.chewbacca/write-log.tsv}"
 
-python3 <<'PY'
+python3 -I <<'PY'
 import json, os, subprocess, sys
 
 try:

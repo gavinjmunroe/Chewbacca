@@ -18,7 +18,7 @@ type hook_init >/dev/null 2>&1 && hook_init kit-route.sh 5
 KIT_ROUTE_PAYLOAD=$(cat)
 export KIT_ROUTE_PAYLOAD
 
-exec python3 <<'PY'
+exec python3 -I <<'PY'
 import json, os, re, subprocess, sys
 
 try:

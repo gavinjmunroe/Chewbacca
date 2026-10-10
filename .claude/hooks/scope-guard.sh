@@ -34,7 +34,7 @@ MSG=$(printf '%s' "$INPUT" | jq -r '.last_assistant_message // empty')
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
 [ -n "$MSG" ] && [ -f "$TRANSCRIPT" ] || exit 0
 
-VERDICT=$(SG_MSG="$MSG" SG_TRANSCRIPT="$TRANSCRIPT" python3 - <<'PY'
+VERDICT=$(SG_MSG="$MSG" SG_TRANSCRIPT="$TRANSCRIPT" python3 -I - <<'PY'
 import json, os, re
 
 msg = os.environ["SG_MSG"]

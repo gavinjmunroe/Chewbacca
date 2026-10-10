@@ -59,7 +59,7 @@ NEW=$(printf '%s' "$INPUT" | jq -r '
   ((.tool_input.edits // []) | map(.new_string // "") | join("\n"))')
 [ -n "${NEW// /}" ] || exit 0
 
-REPORT=$(FG_NEW="$NEW" FG_FILE="$FILE" python3 <<'PY'
+REPORT=$(FG_NEW="$NEW" FG_FILE="$FILE" python3 -I <<'PY'
 import os, re, sys
 from pathlib import Path
 

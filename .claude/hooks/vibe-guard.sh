@@ -126,7 +126,7 @@ evidence() {
     # the last thing that was WRITTEN? A build, a test, a screenshot, a grep
     # of the shipped bundle all count. An edit followed only by prose does
     # not, and that ordering is the signature of every wrong claim above.
-    EV=$(python3 - "$TRANSCRIPT" <<'PY'
+    EV=$(python3 -I - "$TRANSCRIPT" <<'PY'
 import json, re, sys
 # Evidence is a check that PASSED after the last write. 2026-10-10, from the
 # creator distill (Riqor's stale-evidence gate, the most agreed idea across

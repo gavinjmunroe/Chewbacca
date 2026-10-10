@@ -20,7 +20,7 @@ case "$(basename "$f")" in
     case "$(basename "$f")" in
       .env.example | .env.sample | .env.template) exit 0 ;;
     esac
-    python3 <<'PY'
+    python3 -I <<'PY'
 import json
 print(json.dumps({
     "hookSpecificOutput": {

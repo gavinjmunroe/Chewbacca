@@ -7,6 +7,8 @@ metadata:
 
 Chewbacca's next big refactor is deferred until the team picks B2B or B2C. Caleb, 2026-10-09: "we're gonna refactor when the time comes based on b2b or b2c."
 
+B2B comes first. Caleb, 2026-10-09 late: "For now we keep it repo bc it's gonna be a lot of b2b before we can do b2c." So the install stays a private repo that teammates and client teams clone; a double-click Mac app or public one-line install is B2C work and waits. The in-chat onboarding (`chewbacca welcome`, five tappable questions after install, skills/welcome) shipped the same night and serves both audiences, so it is not part of the deferred refactor.
+
 The refactor covers three things that were found while sorting docs/ on 2026-10-09:
 - The repo is PRIVATE (confirmed with gh), so a stranger can't run the install at all.
 - Caleb's personal material is still in shared docs: docs/plans/LINKS-FROM-CALEB, OS-COVERAGE, NO-APPS, HUMOR-EXPERIMENTS, AFTER-PANES, 1000.md, and docs/reference/GTM-MEMORY and docs/plans/FIRST-COHORT (client and pricing detail).

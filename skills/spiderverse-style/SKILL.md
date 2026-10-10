@@ -507,7 +507,7 @@ strip. `[ACR-Q]`
 - A dozen comic SFX words on one page.
 - Every section the same palette and the same treatment.
 
-## Tested in Blender (measured, Waves 1 and 2 of the replica study)
+## Tested in Blender (measured, Waves 1 to 3 of the replica study)
 
 From `~/code/work/spiderverse-replica` (private): eight structurally different
 shots rebuilt in Nalana's Blender 5.1 (EEVEE) and scored against the reference
@@ -579,6 +579,27 @@ mannequin):
 - **hypothesis: test a value ramp on a front-lit scene.** In a backlit set
   everything facing camera is meant to be in shadow, so a ramp's middle
   bands never get reached and the test says nothing.
+
+Wave 3 (13 city shots through one parameterised template):
+
+- **tested: probe a procedural texture on a plane before trusting it.** A
+  Brick texture with Mortar Size 0.55 (texture units, UI max 0.125) is all
+  mortar: windows rendered flat in every city scene until a one-plane probe
+  showed the same pixel std at every scale. Fixed, canyon edge density went
+  0.025 to 0.085.
+- **tested: size procedural cells by where they land on screen.** Window
+  cells of ~4 m in a street canyon and ~10 m on a skyline; half-metre cells
+  are sub-pixel at city distance and average to flat colour.
+- **tested: keep a distance ramp's middle stop near the camera.** At 15% of
+  the depth range instead of 50%, the city steps back in value instead of
+  sitting in its near colour.
+- **tested: the darkest dominant colour is often a ledge or a figure, not the
+  city.** Choose per shot which colour the scene is built from.
+- **tested: a texture plate helps frames short of marks and hurts frames
+  that already have them.** Decide it per shot from the measured edge gap.
+- **tested: one template per family carries palette and texture, not
+  layout.** Shots defined by one specific geometry (a diagonal tower, a dome
+  in front of a wall of towers) need their own layout.
 
 ## Tools worth reaching for
 

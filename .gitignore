@@ -60,3 +60,5 @@ mac/room-capture/.build/
 tests/.circle-under-test.mjs
 tests/.smooth-under-test.mjs
 tests/.portal-state-under-test.mjs
+# Personal gold sets; they live in the private brain (apps/brain-retrieval/bench/goldset.py).
+apps/brain-retrieval/bench/queries*.json

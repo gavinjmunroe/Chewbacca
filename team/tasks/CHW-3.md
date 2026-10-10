@@ -3,6 +3,7 @@ id: CHW-3
 title: Write up one implementation you've already shipped: what it does, who it's for, setup hours
 status: todo
 area: business
+parent: 
 owner: Jake
 priority: medium
 due: 2026-10-09
@@ -11,9 +12,10 @@ done_when: Caleb can tell what the first agency offer would be. Internal only, s
 proof: 
 source: 
 created: 2026-10-04
-updated: 2026-10-04
+updated: 2026-10-09
 ---
 
 ## Activity
 - 2026-10-04 Caleb: created
 - 2026-10-04 Caleb: filed under business
+- 2026-10-09 Amber check: can't tell from the code. There are no commits or PRs linked to this task, so there is no code or document to read. Whether Caleb can tell what the first agency offer would be is something a person has to confirm.

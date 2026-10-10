@@ -10,3 +10,5 @@ Caleb, 2026-10-08: "Bro never ask for permission of course I want you to always 
 **Why:** a "still needs you" list is supposed to hold only what truly needs his hands: a sign-in click, a phone code, a 2FA prompt. Padding it with fixable items makes him do triage, and it reads like I stopped early.
 
 **How to apply:** before writing any "needs you" or "your call" line, ask whether I could do it myself. If I can, do it. Capability he obviously wants (Slack sending, saving a client's contact) isn't a decision for him. For the things that truly need him, open the window or page and pre-fill it first, then name the one click. Related: a private note, a private note.
+
+**A lookup counts too (2026-10-09).** A reply ended "Check the $500 edu price on apple.com before u send it". Caleb: "never tell me to do smth you can do fix chewb". The price was a guess and wrong: Apple's edu Mac mini is $799. handoff-check now refuses a sentence that opens on check/verify/confirm and points at a send (b46dedf1).

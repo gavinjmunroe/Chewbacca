@@ -76,7 +76,9 @@ BRAIN_DIR=~/second-brain python3 src/brain.py status
 
 ```
 src/brain.py          the working retriever. Every constant carries the measurement that set it.
-bench/                the benchmark. queries.json is dev (25), queries_independent.json is the sealed test (73).
+bench/                the benchmark. The gold sets (queries.json dev, queries_independent.json sealed test) are
+                      written against one person's brain, so they live in that brain at
+                      ~/second-brain/.bench/brain-retrieval/, never in this repo. bench/goldset.py loads them.
 findings/RESULTS.md   every number, how it was produced, and what it rules out.
 TODO.md               what to build next, ordered, with acceptance criteria.
 RESEARCH.md           the open questions, with what is already known about each.

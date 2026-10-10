@@ -1,9 +1,10 @@
+import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import goldset
 import json,os,collections
 import numpy as np
 exec(open('tune.py').read().split('print(f"{\'agg\'')[0])
 cfg=json.load(open('best_cfg.json'))
 G=json.load(open('graph0.json'))
-test=json.load(open('queries_independent.json'))
+test=goldset.load("queries_independent.json")
 real=[q for q in test if q.get("hops")!="trap"]
 
 # directed transition matrix over FILES

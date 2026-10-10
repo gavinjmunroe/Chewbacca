@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Tune fusion on the DEV set (queries.json) only. Test set stays sealed."""
+import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import goldset
 import os,re,json,math,collections,urllib.request,itertools
 import numpy as np
 HERE=os.path.dirname(os.path.abspath(__file__))
 chunks=json.load(open(f"{HERE}/chunks.json")); E=np.load(f"{HERE}/emb.npy")
-dev=json.load(open(f"{HERE}/queries.json"))
+dev=goldset.load("queries.json")
 files=[c["file"] for c in chunks]
 STOP=set("what who why how when where which the a an is are was were do does did i my me about that this it to of in on for and or but if my mine should could would can keep keeps just like so not no yes im its".split())
 def terms(q): return [w for w in re.findall(r"[a-z]+",q.lower()) if w not in STOP and len(w)>2]

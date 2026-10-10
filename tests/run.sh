@@ -428,6 +428,9 @@ if group "gtme"; then
   check "gtm keeps one person per email, suppresses from sends, answers every query under 100 ms" \
     python3 "$ROOT/tests/test_gtm.py"
   check "gtm dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtm --help
+  # Synthetic graph, Clay answers and people.db; nothing reads a real store.
+  check "gtm-memory keeps clients apart, never merges on a name, keeps job and fact history, answers under 100 ms" \
+    python3 "$ROOT/tests/test_gtm_memory.py"
   expect "gtm appears in help" "chewbacca gtm" bash "$ROOT/bin/chewbacca" --help
   # Recorded, synthetic surface answers; nothing reads Clay, the clay CLI or Chrome.
   if command -v node >/dev/null 2>&1; then
@@ -668,6 +671,8 @@ if group "installer"; then
   # signed-out site must not take the other sections down.
   check  "chewbacca usc shows this term's due items, dining and events, and survives a signed-out site" \
     bash "$ROOT/tests/chewbacca_usc.sh" "$ROOT"
+  check  "chewbacca linkedin parses Voyager reads in the real Chrome tab, throttles, and stops on pushback" \
+    bash "$ROOT/tests/chewbacca_linkedin.sh" "$ROOT"
 
   check  "chewbacca google reads a Doc by URL, every Sheet tab, and refuses other files" \
     bash "$ROOT/tests/chewbacca_google.sh" "$ROOT"
@@ -953,6 +958,7 @@ if group "installer"; then
   check  "lemma-replica ships inside the kit" bash "$ROOT/tests/chewbacca_apps.sh" "$ROOT" real
   check  "no hook or setup path depends on a folder only one Mac has" bash "$ROOT/tests/same_experience.sh" "$ROOT"
   check  "team memory index matches its files and carries no secrets" bash "$ROOT/tests/team_memory.sh" "$ROOT"
+  check  "apps/ carries nothing from a private brain" bash "$ROOT/tests/no_personal_in_apps.sh" "$ROOT"
 
   # A store nobody reads is the failure this whole file keeps finding.
   check  "SessionStart injects the backlog" \

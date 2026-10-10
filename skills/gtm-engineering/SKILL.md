@@ -211,6 +211,17 @@ takes an exact name or id, never a substring.
 
 ## Client Slack access, corrected 2026-10-09
 
+A person moved between Slack workspaces keeps two user ids: the Slack Connect
+copy from the old workspace and their own account in the new one. Tag and
+approve by the id `users.lookupByEmail` returns in the workspace the channel
+lives in. On 2026-10-10 every Zeutara card tagged Jonah's retired-workspace
+copy (U0C0PL92WTC) and he never got pinged; Caleb: "it needs to tag the one
+that is signed into the workspace". His real id is U0C7RCPJPM5.
+
+Check the names a feeder sends before they reach a client card. Every Zeutara
+lead name arrived with a stray trailing "e" ("Gary Zimmermane"); Togari strips
+it now (leadNameTrailingE), but the fix belongs in the feeder column.
+
 When a client can't be added to a client channel ("This user can't be added"),
 check which workspace their Slack account is signed in through before guessing.
 On 2026-10-09 Jonah couldn't be added to #zeutara-cold-replies in the Amber

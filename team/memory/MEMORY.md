@@ -217,6 +217,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_ported_knowledge_must_stand_alone: Ported private-repo knowledge is written out in full (no pointers strangers can't open) and fixtures are anonymized; 27 real investor replies nearly shipped (10/9)
 - feedback_scan_before_import: Scan files and history for personal content before importing a repo into the kit
 - feedback_say_what_you_found_before_digging: On a "the system is cooked" vent, measure once and reply with the diagnosis first; silent digging drew "???" (2026-10-09)
+- feedback_gap_fill_plan_first: "Build what the other tabs aren't" = picks in chat within a minute, claim in ledger, 2 workers max; silence drew "Wtf taking so long?" x2 (10/10)
 - feedback_shared_checkout_mid_merge: The shared checkout can be mid-merge by another tab; never stage there to fix a gate, build the fix in a detached worktree of HEAD
 - feedback_google_signin_calendar_write: Google sign-in asks for calendar write; never improvise gws auth login, clear token_cache.json after re-login
 - project_chewbacca_refactor_waits_on_b2b_b2c: Audience refactor (private repo, personal docs in docs/plans, first-run surface) waits on the B2B vs B2C call; checklist inside

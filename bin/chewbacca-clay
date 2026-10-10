@@ -608,6 +608,14 @@ function badArg(args, op) {
     const shape = ARG_SHAPES[k];
     if (!shape) return `${k} has no allowed shape`;
     if (!shape.test(String(v))) return `${k} does not look like a ${k}`;
+    // csv-upload sends the file to Clay, so only client data under ~/code/work
+    // may go, by its real path (security review of c511c674: any .csv on disk).
+    if (k === "csv") {
+      const root = path.join(os.homedir(), "code", "work") + path.sep;
+      let real;
+      try { real = fs.realpathSync(String(v)); } catch { real = null; }
+      if (!FIXTURES && (!real || !real.startsWith(root))) return `csv must be a file under ${root}`;
+    }
   }
   return null;
 }

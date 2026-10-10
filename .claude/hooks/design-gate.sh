@@ -135,4 +135,26 @@ if [ $STATUS -ne 0 ]; then
     "$URL" "$OUT" >&2
   exit 2
 fi
+
+# The render above judges layout. ui-proof adds what it does not see: console
+# errors, uncaught exceptions, a 4xx/5xx answer and the 375px width, and it
+# leaves a receipt on disk so "I looked at it" is evidence rather than a claim.
+# Overnight 2026-10-10 the kit could screenshot a page but kept no record, so
+# nothing could check that a UI turn was ever looked at after its last edit.
+# Receipts go outside the project so they never get staged into someone's repo.
+PROOF=$(command -v ui-proof 2>/dev/null || true)
+[ -n "$PROOF" ] || PROOF="${_kit:-$HOME/code/chewbacca}/bin/ui-proof"
+if [ -x "$PROOF" ]; then
+  SLUG=$(printf '%s' "$ROOT" | shasum | cut -c1-12)
+  RECEIPTS="${UI_PROOF_RECEIPTS:-$HOME/.chewbacca/ui-proof}/$SLUG"
+  POUT=$("$PROOF" capture "$URL" --out "$RECEIPTS" --timeout 20 2>&1)
+  PSTATUS=$?
+  case $PSTATUS in
+    0) ;;
+    3) printf 'design-gate: no headless browser could start, so console errors and the 375px\nwidth were not checked (unverified, not passed).\n' >&2 ;;
+    *) printf 'design-gate REFUSED %s: the page errored in a real browser.\n\n%s\n\nReceipt: %s\n' \
+         "$URL" "$POUT" "$RECEIPTS" >&2
+       exit 2 ;;
+  esac
+fi
 exit 0

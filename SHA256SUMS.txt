@@ -11,7 +11,7 @@ a4d37c82649e07e58df2332c165b5b24593e43a36208bb604267b5284bd3e367  .claude/hooks/
 c5d7b0db396449034ca4b4010f04aa5644dd19268abb83d3ccb4230bb004bddb  .claude/hooks/client-rulings.sh
 2825e85717cf4f65ee014185791aef51ccaa4550a1d29e9f13e808d6575b40dd  .claude/hooks/coursework-context.sh
 86f870318c9bbd7a51448f1bc4cc52fd03a7dc20f707fc72da330641f00a05da  .claude/hooks/design-context.sh
-0fffd87f84014bb3b3706e0dba65249564b7c7ef5fc80f2eaf86eb36d358c26e  .claude/hooks/design-gate.sh
+5d9c8a6702ee81b603028f0a5643fc6fa14e956342a26dad8c2a6742e0777022  .claude/hooks/design-gate.sh
 6412808bf947d3467ab50988cbf60a6ad1ff9ca219850235eb4960e1b96910e2  .claude/hooks/destructive-guard.sh
 1d2da635f526852fe038ad9d0011d5a949e12683f93c834c970aa0c6fe06d38f  .claude/hooks/disk-guard.sh
 a5f2a11cce5427579aa9df1b60ec64373494b4699e1056f7c5aa012187c02fc0  .claude/hooks/durable-guard.sh
@@ -35,7 +35,7 @@ c7594c3df7370c62ba76e046daf1e17843dbf24972438206496b28098c4128ee  .claude/hooks/
 8009c976f2122796c1b0a206e891e6a22a02c0ba9bad9d00fac598c8be2f13a0  .claude/hooks/prayer-remind.sh
 baff09b097b67758927ae5ea8ed991dc855687ccd34face005381a4fb432ab42  .claude/hooks/prose-guard.sh
 cc50c2a07f59b11f165690ad20f5103c45f3150f6faa47bec4663f3027666e71  .claude/hooks/repo-overlap-guard.sh
-1a4de1278020888e4e9ec0e1d69325238f9c013b10fa62f66676b6070636ee47  .claude/hooks/scope-guard.sh
+08907294967c936a2663c3a86763bf534fa067ee13186cfc2f2ba4f4e3bab892  .claude/hooks/scope-guard.sh
 0b46d4cef77c6c183c6aa286cf8ffe1c060068da6ded85775333e3ccb9527c1e  .claude/hooks/session-context.sh
 d231faf641f77bbff09fcfc7752c2f360c8e47e7e6d449a38d23609acbf33a40  .claude/hooks/skill-gate.sh
 a176571c1fc0376648f87d4e84c994142242275bf1fbbd53c0358609a3375137  .claude/hooks/skill-route-shadow.sh

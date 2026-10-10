@@ -30,7 +30,11 @@ probe "the 2026-10-09 reply" 2 \
 probe "scope set two prompts back" 2 \
   "Capped at the 10 newest videos per channel." "$ASK" "Continue"
 probe "top N" 2 "Ingesting the top 20 creators by fit." "scrape every creator you found"
+probe "top N of the work, beside a ranking word elsewhere" 2 \
+  "Reranking is done. Ingesting the top 20 creators by fit." "scrape every creator you found"
 echo "lets through:"
+probe "top N as a ranking parameter" 0 \
+  "A haiku reranker re-sorts the top 30 candidate files for every question." "get this to 100, do all of it"
 probe "a named hard blocker" 0 \
   "Instagram is on hold. BLOCKED: Instagram 429s his session; needs a second account." "$ASK"
 probe "full scope, no cut" 0 "All 238 creators are queued across every platform." "$ASK"

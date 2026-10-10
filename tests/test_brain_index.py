@@ -218,6 +218,17 @@ def main():
           "degraded=ollama_down" in r.stdout, r.stdout + r.stderr)
     check("ollama_down starts no warm-up", not os.path.exists(lock))
 
+    # The address prompts are sent to must stay on this machine.
+    probe = ("import os,sys; sys.argv=['brain']; sys.path.insert(0, os.path.dirname(sys.argv[0] or '.'));"
+             "import importlib.util as u; s=u.spec_from_file_location('b', os.environ['BRAIN_PY_PATH']);"
+             "m=u.module_from_spec(s); s.loader.exec_module(m); print(m.OLLAMA)")
+    for host, want in [("http://evil.example.com:11434", "http://localhost:11434"),
+                       ("10.0.0.5:11434", "http://localhost:11434"),
+                       ("127.0.0.1:9999", "http://127.0.0.1:9999")]:
+        got = subprocess.run([sys.executable, "-I", "-c", probe], capture_output=True, text=True,
+                             env=dict(env, OLLAMA_HOST=host, BRAIN_PY_PATH=BRAIN)).stdout.strip()
+        check(f"OLLAMA_HOST={host} resolves to {want}", got == want, got)
+
     print(f"\n{passed} passed, {failed} failed")
     sys.exit(1 if failed else 0)
 

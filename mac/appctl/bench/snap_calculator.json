@@ -1,0 +1,477 @@
+{
+  "app" : "Calculator",
+  "bundle" : "com.apple.calculator",
+  "elements" : [
+    {
+      "frame" : [
+        170,
+        73,
+        17,
+        36
+      ],
+      "i" : 0,
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "‎7"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        10,
+        117,
+        40,
+        40
+      ],
+      "i" : 1,
+      "label" : "Delete",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        1
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        56,
+        117,
+        40,
+        40
+      ],
+      "i" : 2,
+      "label" : "Change Sign",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        2
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        102,
+        117,
+        40,
+        40
+      ],
+      "i" : 3,
+      "label" : "Percent",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        3
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        148,
+        117,
+        40,
+        40
+      ],
+      "i" : 4,
+      "label" : "Divide",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        4
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        10,
+        163,
+        40,
+        40
+      ],
+      "i" : 5,
+      "label" : "7",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        5
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        56,
+        163,
+        40,
+        40
+      ],
+      "i" : 6,
+      "label" : "8",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        6
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        102,
+        163,
+        40,
+        40
+      ],
+      "i" : 7,
+      "label" : "9",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        7
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        148,
+        163,
+        40,
+        40
+      ],
+      "i" : 8,
+      "label" : "Multiply",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        8
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        10,
+        209,
+        40,
+        40
+      ],
+      "i" : 9,
+      "label" : "4",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        9
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        56,
+        209,
+        40,
+        40
+      ],
+      "i" : 10,
+      "label" : "5",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        10
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        102,
+        209,
+        40,
+        40
+      ],
+      "i" : 11,
+      "label" : "6",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        11
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        148,
+        209,
+        40,
+        40
+      ],
+      "i" : 12,
+      "label" : "Subtract",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        12
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        10,
+        255,
+        40,
+        40
+      ],
+      "i" : 13,
+      "label" : "1",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        13
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        56,
+        255,
+        40,
+        40
+      ],
+      "i" : 14,
+      "label" : "2",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        14
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        102,
+        255,
+        40,
+        40
+      ],
+      "i" : 15,
+      "label" : "3",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        15
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        148,
+        255,
+        40,
+        40
+      ],
+      "i" : 16,
+      "label" : "Add",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        16
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        56,
+        301,
+        40,
+        40
+      ],
+      "i" : 17,
+      "label" : "0",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        17
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        102,
+        301,
+        40,
+        40
+      ],
+      "i" : 18,
+      "label" : "Point",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        18
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        148,
+        301,
+        40,
+        40
+      ],
+      "i" : 19,
+      "label" : "Equals",
+      "path" : [
+        0,
+        0,
+        1,
+        0,
+        19
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        11,
+        11,
+        16,
+        16
+      ],
+      "i" : 20,
+      "path" : [
+        2
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress",
+        "AXShowMenu"
+      ],
+      "frame" : [
+        51,
+        11,
+        16,
+        16
+      ],
+      "i" : 21,
+      "path" : [
+        3
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        31,
+        11,
+        16,
+        16
+      ],
+      "i" : 22,
+      "path" : [
+        4
+      ],
+      "role" : "AXButton"
+    }
+  ],
+  "frame_origin" : "window top-left, points",
+  "title" : "Calculator",
+  "window" : 49472
+}

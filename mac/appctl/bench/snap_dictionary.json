@@ -1,0 +1,314 @@
+{
+  "app" : "Dictionary",
+  "bundle" : "com.apple.Dictionary",
+  "elements" : [
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        234,
+        117,
+        222,
+        21
+      ],
+      "i" : 0,
+      "path" : [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "Type a word to look up in…"
+    },
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "frame" : [
+        193,
+        168,
+        304,
+        24
+      ],
+      "i" : 1,
+      "path" : [
+        0,
+        1,
+        0,
+        0,
+        1,
+        0
+      ],
+      "role" : "AXStaticText",
+      "value" : "New Oxford American Dictionary"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        85,
+        6,
+        40,
+        40
+      ],
+      "i" : 2,
+      "label" : "Back",
+      "path" : [
+        1,
+        0,
+        0,
+        0
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        125,
+        6,
+        39,
+        40
+      ],
+      "i" : 3,
+      "label" : "Forward",
+      "path" : [
+        1,
+        0,
+        0,
+        1
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        332,
+        6,
+        40,
+        40
+      ],
+      "i" : 4,
+      "label" : "Smaller Text",
+      "path" : [
+        1,
+        1,
+        0,
+        0
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        372,
+        6,
+        39,
+        40
+      ],
+      "i" : 5,
+      "label" : "Bigger Text",
+      "path" : [
+        1,
+        1,
+        0,
+        1
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXShowMenu",
+        "AXConfirm"
+      ],
+      "editable" : true,
+      "frame" : [
+        421,
+        12,
+        257,
+        30
+      ],
+      "i" : 6,
+      "path" : [
+        1,
+        2,
+        0
+      ],
+      "role" : "AXTextField"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        423,
+        16,
+        25,
+        22
+      ],
+      "i" : 7,
+      "label" : "Search",
+      "path" : [
+        1,
+        2,
+        0,
+        0
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        7,
+        57,
+        31,
+        18
+      ],
+      "i" : 8,
+      "label" : "All",
+      "path" : [
+        2,
+        0
+      ],
+      "role" : "AXRadioButton",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        38,
+        57,
+        74,
+        18
+      ],
+      "i" : 9,
+      "label" : "Dictionary",
+      "path" : [
+        2,
+        1
+      ],
+      "role" : "AXRadioButton",
+      "value" : "1"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        112,
+        57,
+        76,
+        18
+      ],
+      "i" : 10,
+      "label" : "Thesaurus",
+      "path" : [
+        2,
+        2
+      ],
+      "role" : "AXRadioButton",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        188,
+        57,
+        49,
+        18
+      ],
+      "i" : 11,
+      "label" : "Apple",
+      "path" : [
+        2,
+        3
+      ],
+      "role" : "AXRadioButton",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        18,
+        18,
+        16,
+        16
+      ],
+      "i" : 12,
+      "path" : [
+        3
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress",
+        "AXZoomWindow",
+        "AXShowMenu"
+      ],
+      "frame" : [
+        58,
+        18,
+        16,
+        16
+      ],
+      "i" : 13,
+      "label" : "this button also has an action to zoom the window",
+      "path" : [
+        4
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        38,
+        18,
+        16,
+        16
+      ],
+      "i" : 14,
+      "path" : [
+        5
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "frame" : [
+        162,
+        0,
+        172,
+        52
+      ],
+      "i" : 15,
+      "path" : [
+        6
+      ],
+      "role" : "AXStaticText",
+      "value" : "Dictionary"
+    }
+  ],
+  "frame_origin" : "window top-left, points",
+  "title" : "Dictionary",
+  "window" : 56575
+}

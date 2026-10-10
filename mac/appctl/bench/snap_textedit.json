@@ -1,0 +1,442 @@
+{
+  "app" : "TextEdit",
+  "bundle" : "com.apple.TextEdit",
+  "elements" : [
+    {
+      "actions" : [
+        "AXShowMenu"
+      ],
+      "editable" : true,
+      "frame" : [
+        0,
+        88,
+        586,
+        388
+      ],
+      "i" : 0,
+      "path" : [
+        0,
+        0
+      ],
+      "role" : "AXTextArea"
+    },
+    {
+      "actions" : [
+        "AXShowMenu",
+        "AXPress"
+      ],
+      "frame" : [
+        7,
+        32,
+        100,
+        20
+      ],
+      "i" : 1,
+      "label" : "typeface",
+      "path" : [
+        1,
+        0
+      ],
+      "role" : "AXPopUpButton",
+      "value" : "Helvetica"
+    },
+    {
+      "actions" : [
+        "AXShowMenu",
+        "AXPress"
+      ],
+      "frame" : [
+        112,
+        32,
+        100,
+        20
+      ],
+      "i" : 2,
+      "label" : "style",
+      "path" : [
+        1,
+        1
+      ],
+      "role" : "AXPopUpButton",
+      "value" : "Regular"
+    },
+    {
+      "actions" : [
+        "AXShowMenu",
+        "AXConfirm"
+      ],
+      "editable" : true,
+      "frame" : [
+        217,
+        32,
+        45,
+        20
+      ],
+      "i" : 3,
+      "label" : "font size",
+      "path" : [
+        1,
+        2
+      ],
+      "role" : "AXComboBox",
+      "value" : "12"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        243,
+        32,
+        21,
+        21
+      ],
+      "i" : 4,
+      "path" : [
+        1,
+        2,
+        0
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        269,
+        32,
+        22,
+        20
+      ],
+      "i" : 5,
+      "label" : "text color",
+      "path" : [
+        1,
+        3
+      ],
+      "role" : "AXColorWell",
+      "value" : "rgb 0 0 0 1"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        269,
+        32,
+        22,
+        20
+      ],
+      "i" : 6,
+      "path" : [
+        1,
+        3,
+        0
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        296,
+        32,
+        22,
+        20
+      ],
+      "i" : 7,
+      "label" : "text background color",
+      "path" : [
+        1,
+        4
+      ],
+      "role" : "AXColorWell",
+      "value" : "Clear color"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        296,
+        32,
+        22,
+        20
+      ],
+      "i" : 8,
+      "path" : [
+        1,
+        4,
+        0
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        325,
+        32,
+        22,
+        21
+      ],
+      "i" : 9,
+      "label" : "bold",
+      "path" : [
+        1,
+        5,
+        0
+      ],
+      "role" : "AXCheckBox",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        347,
+        32,
+        21,
+        21
+      ],
+      "i" : 10,
+      "label" : "italic",
+      "path" : [
+        1,
+        5,
+        1
+      ],
+      "role" : "AXCheckBox",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        368,
+        32,
+        21,
+        21
+      ],
+      "i" : 11,
+      "label" : "underline",
+      "path" : [
+        1,
+        5,
+        2
+      ],
+      "role" : "AXCheckBox",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        396,
+        32,
+        22,
+        21
+      ],
+      "i" : 12,
+      "label" : "align left",
+      "path" : [
+        1,
+        6,
+        0
+      ],
+      "role" : "AXRadioButton",
+      "value" : "1"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        418,
+        32,
+        21,
+        21
+      ],
+      "i" : 13,
+      "label" : "align center",
+      "path" : [
+        1,
+        6,
+        1
+      ],
+      "role" : "AXRadioButton",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        439,
+        32,
+        21,
+        21
+      ],
+      "i" : 14,
+      "label" : "align right",
+      "path" : [
+        1,
+        6,
+        2
+      ],
+      "role" : "AXRadioButton",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        460,
+        32,
+        21,
+        21
+      ],
+      "i" : 15,
+      "label" : "fully justify",
+      "path" : [
+        1,
+        6,
+        3
+      ],
+      "role" : "AXRadioButton",
+      "value" : "0"
+    },
+    {
+      "actions" : [
+        "AXShowMenu",
+        "AXPress"
+      ],
+      "frame" : [
+        488,
+        32,
+        41,
+        20
+      ],
+      "i" : 16,
+      "label" : "line spacing",
+      "path" : [
+        1,
+        7
+      ],
+      "role" : "AXPopUpButton",
+      "value" : "1.0"
+    },
+    {
+      "actions" : [
+        "AXShowMenu",
+        "AXPress"
+      ],
+      "frame" : [
+        534,
+        32,
+        41,
+        20
+      ],
+      "i" : 17,
+      "label" : "list style",
+      "path" : [
+        1,
+        8
+      ],
+      "role" : "AXMenuButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        6,
+        6,
+        16,
+        16
+      ],
+      "i" : 18,
+      "path" : [
+        2
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress",
+        "AXZoomWindow",
+        "AXShowMenu"
+      ],
+      "frame" : [
+        46,
+        6,
+        16,
+        16
+      ],
+      "i" : 19,
+      "label" : "this button also has an action to zoom the window",
+      "path" : [
+        3
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress"
+      ],
+      "frame" : [
+        26,
+        6,
+        16,
+        16
+      ],
+      "i" : 20,
+      "path" : [
+        4
+      ],
+      "role" : "AXButton"
+    },
+    {
+      "actions" : [
+        "AXPress",
+        "AXShowMenu"
+      ],
+      "frame" : [
+        320,
+        4,
+        12,
+        18
+      ],
+      "i" : 21,
+      "label" : "document actions",
+      "path" : [
+        5
+      ],
+      "role" : "AXMenuButton"
+    },
+    {
+      "frame" : [
+        265,
+        5,
+        56,
+        16
+      ],
+      "i" : 22,
+      "path" : [
+        6
+      ],
+      "role" : "AXStaticText",
+      "value" : "Untitled"
+    }
+  ],
+  "frame_origin" : "window top-left, points",
+  "title" : "Untitled",
+  "window" : 56585
+}

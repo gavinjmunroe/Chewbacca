@@ -1,4 +1,9 @@
 #!/bin/bash
+# Settle generated files a merge driver deferred, when a merge that stopped on
+# a real conflict is concluded by a plain commit (tools/merge_regen.py).
+# shellcheck source=/dev/null
+. "$(dirname "$0")/lib-regen.sh" 2>/dev/null && chewbacca_settle post-commit
+
 # Install any skill the repo gained since setup last ran. See
 # bin/lib/link-skills.sh for the night 8 skills sat uninstalled.
 #

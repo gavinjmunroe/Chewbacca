@@ -1190,6 +1190,19 @@ CHEWBACCA_REPO_DIR="$SCRIPT_DIR"
 D1CONFIG
 log "Hook config written to ~/.claude/d1-config.sh"
 
+# Merge drivers for SHA256SUMS.txt and the README counts block. On 2026-10-09
+# about ten tabs pushed main and nearly every merge stopped on those two
+# generated files. .gitattributes names the drivers; git config holds the
+# commands, which git never clones, so every checkout registers them here.
+# Idempotent; the kit-autopull session hook repeats it for clones that
+# predate this line.
+# Not under the suite: its sandboxed setup runs must not write this checkout's
+# real git config.
+if [ -z "${CHEWBACCA_SUITE:-}" ] && [ -e "$SCRIPT_DIR/.git" ] && [ -f "$SCRIPT_DIR/tools/merge_regen.py" ]; then
+  python3 "$SCRIPT_DIR/tools/merge_regen.py" install --repo "$SCRIPT_DIR" >/dev/null 2>&1 &&
+    log "Git merge drivers registered for SHA256SUMS.txt and README counts"
+fi
+
 # ── What this run turns on ────────────────────────────────────────────────────
 # Both of these used to be on with no way to say no, announced in a wall of
 # text after they had already been written. Each is a flag now, each defaults

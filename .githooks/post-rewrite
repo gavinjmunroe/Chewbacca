@@ -1,0 +1,6 @@
+#!/bin/bash
+# After a rebase (or an amend), settle generated files a merge driver deferred
+# while replaying. Only the finished tip is regenerated: pre-push checks HEAD.
+# shellcheck source=/dev/null
+. "$(dirname "$0")/lib-regen.sh" 2>/dev/null && chewbacca_settle "post-rewrite-$1"
+exit 0

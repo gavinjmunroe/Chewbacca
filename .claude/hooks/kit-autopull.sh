@@ -113,6 +113,18 @@ if git -c core.fsmonitor=false cat-file -e origin/main:tools/tools_link.py 2>/de
   [ -n "$_tl" ] && rm -rf "$_tl"
 fi
 
+# ── Merge drivers ─────────────────────────────────────────────────────────────
+# SHA256SUMS.txt and README's counts block merge through drivers named in
+# .gitattributes (tools/merge_regen.py). Git config is never cloned, so a
+# checkout set up before the drivers existed would fall back to conflicting
+# on both, which is what every tab hit on 2026-10-09. Local, idempotent, and
+# from the ref like hooks_sync above, so it works on a dirty checkout.
+if git -c core.fsmonitor=false cat-file -e origin/main:tools/merge_regen.py 2>/dev/null &&
+   [ -f "$REPO/tools/merge_regen.py" ]; then
+  python3 -I "$REPO/tools/merge_regen.py" install --repo "$REPO" >/dev/null 2>&1 ||
+    note "merge drivers: install failed"
+fi
+
 # ── Throttle ──────────────────────────────────────────────────────────────────
 # A fetch is a network round trip and SessionStart runs on every new session.
 # Once an hour keeps a long day current without paying for it on every window.

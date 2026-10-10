@@ -895,6 +895,12 @@ if group "installer"; then
   check  "both checksum tools cover the same patterns" \
     bash "$ROOT/tests/checksum_patterns.sh" "$ROOT"
 
+  # 2026-10-09: ten tabs on main, nearly every merge stopped on SHA256SUMS.txt
+  # and the README counts block. A merge and a rebase of two branches must
+  # finish clean with generated files that match the merged tree.
+  check  "merges and rebases never conflict on generated files, and HEAD's stay current" \
+    bash "$ROOT/tests/merge_drivers.sh" "$ROOT"
+
   # `chewbacca update` pulled and then exited 2 at the install step, every time
   # on every machine, so nothing it fetched was ever installed.
   check  "setup.sh re-runs with no arguments on an existing install" \

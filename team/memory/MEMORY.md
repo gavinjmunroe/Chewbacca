@@ -206,3 +206,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_scan_before_import: Scan files and history for personal content before importing a repo into the kit
 - feedback_say_what_you_found_before_digging: On a "the system is cooked" vent, measure once and reply with the diagnosis first; silent digging drew "???" (2026-10-09)
 - feedback_google_signin_calendar_write: Google sign-in asks for calendar write; never improvise gws auth login, clear token_cache.json after re-login
+- project_chewbacca_refactor_waits_on_b2b_b2c: Audience refactor (private repo, personal docs in docs/plans, first-run surface) waits on the B2B vs B2C call; checklist inside

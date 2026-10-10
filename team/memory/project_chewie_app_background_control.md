@@ -21,4 +21,11 @@ AX quirks paid for, each now handled in code with a comment:
 
 Gate: three security reviews in one night kept finding the next miss in the irreversible-word list. It now fails closed (every AX text, unlabeled buttons, commit keys, menus, and anything inside a dialog except Cancel-style exits needs `--yes`), and `do`/batch never forward consent to a Jev pick. It is a backstop over app-supplied labels, which can lie; the real boundary is that `--yes` only follows the person's yes. See [[feedback_denylist_gate_is_a_backstop]].
 
-Queued (work-ledger, source key chewie-app-hud-2026-10-10): Kyber voice drives apps this way, with Gavin's Mark marker from the clay-build HUD on the control before each press; then drag and clipboard.
+Added 2026-10-10 morning (a1c68f98, 5ab0378f): `ask` (voice "press X in App" or "in App, do X" via `bin/lib/app_route.py` in hud-listen; brackets the control on the glass with a Press it card, presses only on that tap, pinned with `--expect` to the role, label and path it showed), `paste`, `where`, `clip`, `drag`, `press --check`. More quirks paid for:
+- A hidden window has no first responder, so Edit > Paste is disabled and a cmd+V posted to the pid never lands. `paste` writes AXSelectedText after placing the caret, which works hidden and leaves the clipboard alone. Borrowing the clipboard once overwrote Caleb's copied text.
+- Mouse events posted to a pid are ignored by AppKit text views in the background, so `drag` mostly needs the real cursor; use `set` for sliders.
+- Under load 11, Calculator's walk returned only its 3 title-bar buttons; `see` now walks until two walks agree on the count.
+- TextEdit answers cannotComplete while applying a large AXValue and the value lands anyway; read-back is the check.
+- Kyber can't be screenshotted, see [[reference_kyber_invisible_to_screenshots]].
+
+Previously queued (done 2026-10-10): Kyber voice drives apps this way, with Gavin's Mark marker from the clay-build HUD on the control before each press; then drag and clipboard.

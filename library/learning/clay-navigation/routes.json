@@ -1,0 +1,5645 @@
+{
+ "schema": "clay-routes/1",
+ "revision": "2026-10-09.1",
+ "observed": "2026-10-09 in a signed-in Chrome over Browser Harness, read-only, on a Growth-plan workspace. Labels are Clay's accessible names; ids are placeholders.",
+ "notes": "Every url is relative to https://app.clay.com and is pushed through Clay's own router (history.pushState + popstate), which re-renders the page without a document load. arrive is the cheap arrival check: the path prefix plus one stable element. api names the faster read when one exists. Click steps never press a control whose label matches gate_words; gate controls are listed per state and live in package.json as forbidden edges. A step marked kind menu, tab or nav opens a menu or applies a read-only filter and carries user data in its label (a column, view or sequence name), so its label skips the gate-word check; every such step was opened and closed live on 2026-10-09.",
+ "gate_words": "run|save|send|add|import|delete|activate|launch|start|enrich|duplicate|publish|create|confirm|pause|resume|complete|remove|archive|restore|upload|submit|review changes|sign out|leave|manage plan|buy|top.?up|copy|verify|stop|sandbox|sculptor|test data|generate|share|exit|new|reply|forward|export|download|invite|pin|hide|sort|dedupe|insert|rename|test",
+ "states": {
+  "home": {
+   "url": "/workspaces/{ws}/home",
+   "arrive": [
+    {
+     "text": "What can we build today?"
+    }
+   ],
+   "api": "clay folders list; clay workbooks list (one call each)",
+   "gates": [
+    "Send (Search with AI box)",
+    "Import data",
+    "Build a segment",
+    "Create a sequence",
+    "Start from template",
+    "New",
+    "row Actions menu"
+   ]
+  },
+  "folder": {
+   "url": "/workspaces/{ws}/home/{folder}",
+   "arrive": [
+    {
+     "css": "input[placeholder=Search]"
+    }
+   ],
+   "api": "clay folders list {folder}",
+   "status": "documented",
+   "gates": [
+    "New",
+    "Edit",
+    "..."
+   ]
+  },
+  "tables-list": {
+   "url": "/workspaces/{ws}/workbooks-and-tables",
+   "arrive": [
+    {
+     "text": "Last opened by me",
+     "role": "button"
+    }
+   ],
+   "api": "clay tables list; clay workbooks list",
+   "gates": [
+    "New",
+    "row Edit",
+    "row menu"
+   ]
+  },
+  "workbook": {
+   "url": "/workspaces/{ws}/workbooks/{wb}",
+   "arrive": [
+    {
+     "text": "Fit View",
+     "role": "button"
+    }
+   ],
+   "api": "clay workbooks get {wb}",
+   "gates": [
+    "Find people",
+    "Find companies",
+    "Find jobs",
+    "Find with topic intent",
+    "Find local businesses",
+    "Import from CSV",
+    "Import from CRM",
+    "Blank table",
+    "signal source buttons",
+    "+ New tag",
+    "Add"
+   ]
+  },
+  "workbook-overview": {
+   "url": "/workspaces/{ws}/workbooks/{wb}/all-tables",
+   "arrive": [
+    {
+     "css": "a[href*='/tables/t_']"
+    }
+   ],
+   "api": "clay tables list (filter by workbook.id)"
+  },
+  "table": {
+   "url": "/workspaces/{ws}/workbooks/{wb}/tables/{t}",
+   "arrive": [
+    {
+     "css": "[data-testid^=table-header-field]"
+    }
+   ],
+   "api": "clay tables get {t}; clay tables columns; clay tables rows",
+   "note": "Redirects to .../tables/{t}/views/{gv}; the default view id comes back in the URL.",
+   "gates": [
+    "Manual/Auto-run toggle",
+    "Sandbox Mode (creates a sandbox copy, observed 2026-10-09)",
+    "Sculptor",
+    "Stop",
+    "Add (new row)",
+    "add-new-row-button"
+   ]
+  },
+  "table-view": {
+   "url": "/workspaces/{ws}/workbooks/{wb}/tables/{t}/views/{gv}",
+   "arrive": [
+    {
+     "css": "[data-testid^=table-header-field]"
+    }
+   ],
+   "api": "clay tables rows",
+   "status": "documented"
+  },
+  "view-menu": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "{view}",
+      "match": "exact",
+      "default_view": "Default view",
+      "kind": "menu"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Graph view",
+     "role": "button"
+    }
+   ],
+   "gates": [
+    "Rename view",
+    "Edit description",
+    "Duplicate view",
+    "Delete view"
+   ]
+  },
+  "columns-panel": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "columns",
+      "match": "suffix"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "css": "input[placeholder='Search for a column']"
+    }
+   ],
+   "gates": [
+    "Toggle field visible",
+    "Sort columns",
+    "Show/Hide columns by color"
+   ]
+  },
+  "row-limit": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "rows",
+      "match": "suffix"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Show all rows",
+     "role": "button"
+    }
+   ],
+   "gates": [
+    "Show all rows",
+    "Save changes"
+   ]
+  },
+  "run-mode": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "Manual",
+      "match": "exact"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Auto-run",
+     "role": "label"
+    }
+   ],
+   "note": "The toolbar button reads Manual or Auto. The dialog holds the table Auto-run switch: read it, never flip it.",
+   "gates": [
+    "Auto-run switch",
+    "Manage settings"
+   ]
+  },
+  "column-menu": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "[data-testid^=table-header-field]",
+      "name": "{column}",
+      "match": "exact",
+      "kind": "menu"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Edit column",
+     "role": "menuitem"
+    }
+   ],
+   "api": "clay tables columns {t}",
+   "gates": [
+    "Rename column",
+    "Insert 1 column left",
+    "Insert 1 column right",
+    "Edit description",
+    "Change color",
+    "Duplicate",
+    "Save as function",
+    "Text to columns",
+    "Sort A -> Z",
+    "Sort Z -> A",
+    "Dedupe",
+    "Filter on this column",
+    "Pin",
+    "Hide",
+    "Delete",
+    "Run column (enrichment columns)"
+   ]
+  },
+  "column-settings": {
+   "parent": "column-menu",
+   "steps": [
+    {
+     "click": {
+      "css": "[role=menuitem]",
+      "name": "Edit column",
+      "match": "exact"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Save and don't run enrichments",
+     "role": "button"
+    }
+   ],
+   "api": "clay tables columns {t} (saved config, prompt tokens, auto-run)",
+   "gates": [
+    "Save and don't run enrichments",
+    "Save",
+    "Save and run"
+   ]
+  },
+  "add-column-menu": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "[data-testid=new-column-button]",
+      "name": "",
+      "match": "any",
+      "kind": "menu"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Use AI",
+     "role": "menuitem"
+    }
+   ],
+   "gates": [
+    "every item creates a column draft; the column exists only after Save"
+   ]
+  },
+  "enrichment-panel": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "Open Sidebar",
+      "match": "exact"
+     }
+    },
+    {
+     "click": {
+      "css": "[role=tab]",
+      "name": "Enrich",
+      "match": "exact",
+      "kind": "tab"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Most popular in Clay"
+    }
+   ],
+   "note": "Cmd+E is documented to open the same panel.",
+   "gates": [
+    "every enrichment card (adds a column)",
+    "Add to favorites"
+   ]
+  },
+  "sources-panel": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "Open Sidebar",
+      "match": "exact"
+     }
+    },
+    {
+     "click": {
+      "css": "[role=tab]",
+      "name": "Import",
+      "match": "exact",
+      "kind": "tab"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "View all sources",
+     "role": "button"
+    }
+   ],
+   "gates": [
+    "Find people at these companies",
+    "Find jobs at these companies",
+    "Import from CSV",
+    "Webhook source"
+   ]
+  },
+  "export-panel": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "Open Sidebar",
+      "match": "exact"
+     }
+    },
+    {
+     "click": {
+      "css": "[role=tab]",
+      "name": "Export",
+      "match": "exact",
+      "kind": "tab"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "View all export options",
+     "role": "button"
+    }
+   ],
+   "api": "clay tables rows (read without exporting)",
+   "gates": [
+    "Download CSV",
+    "Send table data",
+    "Invoke workflow",
+    "Export to CRMs",
+    "Create Clay email sequence",
+    "Send to external sequencer",
+    "Export to Databases"
+   ]
+  },
+  "row-selected": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "span[role=checkbox]",
+      "index": 1
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Actions",
+     "role": "button"
+    }
+   ],
+   "note": "Selection is local UI state; click the same checkbox again to clear it.",
+   "gates": [
+    "Actions menu (run, delete rows)"
+   ]
+  },
+  "row-detail": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "[data-testid=table-cell-button-Maximize]",
+      "index": 0
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Close",
+     "role": "button"
+    }
+   ],
+   "api": "clay tables rows {t}",
+   "gates": []
+  },
+  "table-settings": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "[data-testid=title-bar-table-settings]",
+      "index": 0
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "css": "input[placeholder='Name of the table']"
+    }
+   ],
+   "gates": [
+    "Generate description",
+    "Run settings",
+    "Deduplication",
+    "Share as template",
+    "Save changes"
+   ]
+  },
+  "table-history": {
+   "parent": "table",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "History",
+      "match": "exact"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Change log",
+     "role": "menuitem"
+    }
+   ],
+   "gates": [
+    "Save table configuration",
+    "Row deduplication"
+   ]
+  },
+  "find-leads-menu": {
+   "parent": "home",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "Find leads",
+      "match": "exact"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Company lookalikes",
+     "role": "button"
+    }
+   ],
+   "api": "clay searches (people and companies, no chat session)",
+   "gates": [
+    "People",
+    "Companies",
+    "Jobs",
+    "Local businesses",
+    "Company lookalikes (each opens a new /chats/{cc} session)"
+   ]
+  },
+  "people": {
+   "url": "/workspaces/{ws}/people",
+   "arrive": [
+    {
+     "text": "Records",
+     "role": "tab"
+    }
+   ],
+   "api": "clay audiences records",
+   "note": "Redirects to /people/all/records.",
+   "gates": [
+    "Send",
+    "Signals",
+    "Enrich",
+    "Create segment",
+    "Add filter",
+    "Stop"
+   ]
+  },
+  "people-segments": {
+   "url": "/workspaces/{ws}/people/audiences",
+   "arrive": [
+    {
+     "text": "Created by me",
+     "role": "tab"
+    }
+   ],
+   "api": "clay audiences list",
+   "gates": [
+    "New segment",
+    "Add orchestration",
+    "Add"
+   ]
+  },
+  "people-segment": {
+   "url": "/workspaces/{ws}/people/audience/{audseg}",
+   "arrive": [
+    {
+     "text": "Records",
+     "role": "tab"
+    }
+   ],
+   "api": "clay audiences get {audseg}",
+   "status": "documented"
+  },
+  "people-datahub": {
+   "url": "/workspaces/{ws}/people/data-hub/fields",
+   "arrive": [
+    {
+     "text": "Fill rate",
+     "role": "button"
+    }
+   ],
+   "api": "clay audiences fields",
+   "gates": [
+    "Add field",
+    "Add enrichment",
+    "Add signal"
+   ]
+  },
+  "companies": {
+   "url": "/workspaces/{ws}/companies",
+   "arrive": [
+    {
+     "text": "Create segment",
+     "role": "button"
+    }
+   ],
+   "api": "clay audiences list --entity company",
+   "gates": [
+    "Create segment"
+   ]
+  },
+  "sequencer": {
+   "url": "/workspaces/{ws}/campaigns",
+   "arrive": [
+    {
+     "text": "Reply rate",
+     "role": "button"
+    }
+   ],
+   "api": "clay campaigns list --with-analytics",
+   "gates": [
+    "New sequence",
+    "Sequence actions"
+   ]
+  },
+  "email-accounts": {
+   "url": "/workspaces/{ws}/campaigns?tab=email-accounts",
+   "arrive": [
+    {
+     "text": "Daily sends",
+     "role": "button"
+    }
+   ],
+   "gates": [
+    "Add email account"
+   ]
+  },
+  "sender-variables": {
+   "url": "/workspaces/{ws}/campaigns?tab=sender-variables",
+   "arrive": [
+    {
+     "text": "New sender variable",
+     "role": "button"
+    }
+   ],
+   "gates": [
+    "New sender variable"
+   ]
+  },
+  "account-orders": {
+   "url": "/workspaces/{ws}/campaigns?tab=account-orders",
+   "arrive": [
+    {
+     "text": "Lifetime payments",
+     "role": "button"
+    }
+   ],
+   "gates": [
+    "Buy email accounts",
+    "Order actions"
+   ]
+  },
+  "blocklist": {
+   "url": "/workspaces/{ws}/campaigns?tab=global-blocklist",
+   "arrive": [
+    {
+     "text": "Email or domain",
+     "role": "button"
+    }
+   ],
+   "api": "POST global-blocklist/add is the write; reading is this page",
+   "gates": [
+    "Add to blocklist",
+    "Blocklist entry actions"
+   ]
+  },
+  "sequencer-analytics": {
+   "url": "/workspaces/{ws}/campaigns/analytics",
+   "arrive": [
+    {
+     "text": "Show Replied",
+     "role": "button"
+    }
+   ],
+   "api": "clay campaigns analytics {cam}",
+   "gates": [
+    "Export CSV"
+   ]
+  },
+  "sequencer-events": {
+   "parent": "sequencer",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "Events",
+      "match": "exact"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "css": "[data-testid^=table-header-field]"
+    }
+   ],
+   "note": "Opens the workspace's sequencer events table, a normal workbook table; cache its URL after the first visit.",
+   "gates": [
+    "same as table"
+   ]
+  },
+  "master-inbox": {
+   "url": "/workspaces/{ws}/campaigns/inbox",
+   "arrive": [
+    {
+     "text": "Load more",
+     "role": "button"
+    },
+    {
+     "css": "input[placeholder='Search leads...']"
+    }
+   ],
+   "api": "bin/clay-inbox (65 replies with threads in ~3 s)",
+   "note": "No URL state for the selected sequence or thread. Opening the inbox selects a thread itself.",
+   "gates": [
+    "Reply",
+    "Forward",
+    "Reply to email",
+    "Forward email",
+    "More actions"
+   ]
+  },
+  "inbox-campaign": {
+   "parent": "master-inbox",
+   "steps": [
+    {
+     "click": {
+      "css": "button[data-sidebar=menu-button]",
+      "name": "{campaign_group}",
+      "match": "exact",
+      "optional": true,
+      "kind": "nav"
+     }
+    },
+    {
+     "click": {
+      "css": "button[data-sidebar=menu-button]",
+      "name": "{campaign}",
+      "match": "exact",
+      "kind": "nav"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "css": "button[data-sidebar=menu-button][aria-current=true]",
+     "name": "{campaign}"
+    }
+   ],
+   "api": "bin/clay-inbox --campaign {campaign}",
+   "note": "Sequences are grouped by the first three name segments; click the group, then the sequence."
+  },
+  "inbox-thread": {
+   "parent": "master-inbox",
+   "steps": [
+    {
+     "click": {
+      "css": "div.w-96 div",
+      "pointer_row": 0
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "text": "Reply to email",
+     "role": "button"
+    }
+   ],
+   "api": "bin/clay-inbox (message-history per lead)",
+   "note": "Thread rows are cursor-pointer divs in the middle column (Tailwind w-96); there is no role or test id, so this locator is the most fragile in the map.",
+   "gates": [
+    "Reply to email",
+    "Forward email",
+    "Reply",
+    "Forward",
+    "More actions"
+   ]
+  },
+  "campaign": {
+   "url": "/workspaces/{ws}/campaigns/{cam}?tab=sequence",
+   "arrive": [
+    {
+     "text": "Lead setup",
+     "role": "button"
+    }
+   ],
+   "api": "clay campaigns get {cam}; clay campaigns sequence",
+   "note": "This is the sequence editor. Its message bodies are editable in place; never type into them.",
+   "gates": [
+    "Save",
+    "Launch sequence",
+    "Pause",
+    "Complete",
+    "Add message",
+    "A/B test",
+    "Message actions",
+    "Configure exclusions",
+    "Add context",
+    "Lead list actions",
+    "Send (AI chat)"
+   ]
+  },
+  "campaign-senders": {
+   "url": "/workspaces/{ws}/campaigns/{cam}?tab=sender-accounts",
+   "arrive": [
+    {
+     "text": "Daily sends",
+     "role": "button"
+    }
+   ],
+   "gates": [
+    "Select accounts",
+    "More actions for <account>"
+   ]
+  },
+  "campaign-analytics": {
+   "url": "/workspaces/{ws}/campaigns/{cam}?tab=analytics",
+   "arrive": [
+    {
+     "text": "Analytics",
+     "role": "tab"
+    }
+   ],
+   "api": "clay campaigns analytics {cam}"
+  },
+  "campaign-activity": {
+   "url": "/workspaces/{ws}/campaigns/{cam}?tab=activity",
+   "arrive": [
+    {
+     "text": "Lead status",
+     "role": "button"
+    }
+   ],
+   "gates": []
+  },
+  "campaign-replies": {
+   "url": "/workspaces/{ws}/campaigns/{cam}?tab=replies",
+   "arrive": [
+    {
+     "text": "Replies",
+     "role": "tab"
+    }
+   ],
+   "api": "bin/clay-inbox --campaign {campaign}",
+   "note": "Selects a thread on open, like the master inbox.",
+   "gates": [
+    "Reply to email",
+    "Forward email",
+    "Reply",
+    "Forward"
+   ]
+  },
+  "campaign-leads": {
+   "parent": "campaign",
+   "steps": [
+    {
+     "click": {
+      "css": "button",
+      "name": "Lead setup",
+      "match": "exact"
+     }
+    }
+   ],
+   "arrive": [
+    {
+     "css": "[role=dialog]"
+    }
+   ],
+   "api": "clay campaigns audience {cam}",
+   "status": "documented",
+   "gates": [
+    "Lead list actions",
+    "Configure exclusions",
+    "anything that adds leads"
+   ]
+  },
+  "signals": {
+   "url": "/workspaces/{ws}/signals",
+   "arrive": [
+    {
+     "text": "New signal",
+     "role": "button"
+    }
+   ],
+   "api": "clay signals list; clay signals get",
+   "gates": [
+    "New signal",
+    "Topic intent",
+    "Job change",
+    "New hire",
+    "Job posting",
+    "Promotion",
+    "News & fundraising",
+    "Web intent",
+    "Custom"
+   ]
+  },
+  "workflows": {
+   "url": "/workspaces/{ws}/terracotta",
+   "arrive": [
+    {
+     "css": "input[placeholder='Search workflows']"
+    }
+   ],
+   "api": "clay workflows list",
+   "gates": [
+    "New",
+    "row Actions"
+   ]
+  },
+  "workflow": {
+   "url": "/workspaces/{ws}/terracotta/tc-workflows/{wf}",
+   "arrive": [
+    {
+     "text": "Workflow versions",
+     "role": "button"
+    }
+   ],
+   "api": "clay workflows get {wf}; clay workflows runs",
+   "gates": [
+    "Test",
+    "Run",
+    "Delete connection",
+    "every node palette item",
+    "Ask Clay"
+   ]
+  },
+  "claygents": {
+   "url": "/workspaces/{ws}/claygents",
+   "arrive": [
+    {
+     "css": "input[placeholder='Search agents']"
+    }
+   ],
+   "api": "clay claygents",
+   "gates": [
+    "Build agent",
+    "New (opens /claygents/new)",
+    "Upload files",
+    "template cards"
+   ]
+  },
+  "functions": {
+   "url": "/workspaces/{ws}/functions",
+   "arrive": [
+    {
+     "text": "New function",
+     "role": "button"
+    }
+   ],
+   "api": "clay functions",
+   "gates": [
+    "New",
+    "New function"
+   ]
+  },
+  "ads": {
+   "url": "/workspaces/{ws}/ads",
+   "arrive": [
+    {
+     "css": "input[placeholder='Search ad syncs']"
+    }
+   ],
+   "api": "clay ad-syncs",
+   "gates": [
+    "Create ad sync",
+    "provider connect cards"
+   ]
+  },
+  "api-and-cli": {
+   "url": "/workspaces/{ws}/api-and-cli",
+   "arrive": [
+    {
+     "text": "Routine runs",
+     "role": "tab"
+    }
+   ],
+   "api": "clay routines",
+   "gates": [
+    "API keys tab: anything that creates or shows a key",
+    "Copy"
+   ]
+  },
+  "exports": {
+   "url": "/workspaces/{ws}/exports",
+   "arrive": [
+    {
+     "css": "input[placeholder=Search]"
+    }
+   ],
+   "gates": [
+    "download links"
+   ]
+  },
+  "trash": {
+   "url": "/workspaces/{ws}/trash",
+   "arrive": [
+    {
+     "text": "Deleted at",
+     "role": "button"
+    }
+   ],
+   "gates": [
+    "Actions (restore, delete forever)"
+   ]
+  },
+  "credits": {
+   "url": "/workspaces/{ws}/settings/credit-usage",
+   "arrive": [
+    {
+     "text": "Overview",
+     "role": "tab"
+    }
+   ],
+   "api": "bin/clay-balance or clay credits balance (one call)",
+   "gates": [
+    "Add one-time data credits",
+    "Manage plan",
+    "Billing menu"
+   ]
+  },
+  "plan-selector": {
+   "url": "/workspaces/{ws}/billing/plan-selector",
+   "arrive": [
+    {
+     "text": "Plan selection"
+    }
+   ],
+   "gates": [
+    "plan cards",
+    "Review changes"
+   ]
+  },
+  "settings": {
+   "url": "/workspaces/{ws}/settings/team",
+   "arrive": [
+    {
+     "css": "input[placeholder='Search members']"
+    }
+   ],
+   "api": "clay users",
+   "note": "/settings redirects here.",
+   "gates": [
+    "Role for <member>",
+    "Leave workspace",
+    "Sign out"
+   ]
+  },
+  "connections": {
+   "url": "/workspaces/{ws}/settings/accounts",
+   "arrive": [
+    {
+     "css": "input[placeholder='Search connections']"
+    }
+   ],
+   "api": "clay app-accounts",
+   "gates": [
+    "Create",
+    "View resources",
+    "Verify",
+    "any key field"
+   ]
+  },
+  "web-intent": {
+   "url": "/workspaces/{ws}/settings/website-tracking",
+   "arrive": [
+    {
+     "text": "Add connection",
+     "role": "button"
+    }
+   ],
+   "gates": [
+    "Add connection"
+   ]
+  },
+  "webhooks": {
+   "url": "/workspaces/{ws}/settings/webhooks",
+   "arrive": [
+    {
+     "text": "Create webhook",
+     "role": "button"
+    }
+   ],
+   "api": "clay webhooks",
+   "gates": [
+    "Create webhook"
+   ]
+  },
+  "referrals": {
+   "url": "/workspaces/{ws}/settings/referrals",
+   "arrive": [
+    {
+     "text": "Referral type",
+     "role": "button"
+    }
+   ],
+   "gates": [
+    "Copy"
+   ]
+  },
+  "account-settings": {
+   "url": "/workspaces/{ws}/settings/account",
+   "arrive": [
+    {
+     "text": "Your details",
+     "role": "tab"
+    }
+   ],
+   "api": "clay whoami",
+   "gates": [
+    "Upload new picture",
+    "Delete",
+    "Save",
+    "Delete account",
+    "Security and API key (legacy) tabs"
+   ]
+  },
+  "appearance": {
+   "url": "/workspaces/{ws}/settings/appearance",
+   "arrive": [
+    {
+     "css": "input[type=radio]"
+    }
+   ],
+   "gates": [
+    "theme radios (saves on click)"
+   ]
+  }
+ },
+ "endpoints": {
+  "GET /v3/api-keys": {
+   "method": "GET",
+   "path": "/v3/api-keys",
+   "query": [
+    "limit",
+    "resourceId",
+    "resourceType",
+    "workspaceId"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 169,
+   "fired_by": [
+    "api-and-cli :: tab:API keys",
+    "api-and-cli-tab-api-keys (page load)",
+    "api-and-cli-tab-api-keys.moichd (page load)",
+    "api-and-cli-tab-api-keys.naopji (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/app-accounts/type/bing-ad-audience": {
+   "method": "GET",
+   "path": "/v3/app-accounts/type/bing-ad-audience",
+   "query": [
+    "workspaceId"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 323,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/app-accounts/type/custom-mcp": {
+   "method": "GET",
+   "path": "/v3/app-accounts/type/custom-mcp",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 150,
+   "fired_by": [
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/app-accounts/type/google-ad-audience": {
+   "method": "GET",
+   "path": "/v3/app-accounts/type/google-ad-audience",
+   "query": [
+    "workspaceId"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 208,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/app-accounts/type/meta-ad-audience": {
+   "method": "GET",
+   "path": "/v3/app-accounts/type/meta-ad-audience",
+   "query": [
+    "workspaceId"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 180,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/app-accounts/type/reddit-ad-audience": {
+   "method": "GET",
+   "path": "/v3/app-accounts/type/reddit-ad-audience",
+   "query": [
+    "workspaceId"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 198,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/app-accounts/type/vibe-ad-audience": {
+   "method": "GET",
+   "path": "/v3/app-accounts/type/vibe-ad-audience",
+   "query": [
+    "workspaceId"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 329,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/app-accounts/type/{x}": {
+   "method": "GET",
+   "path": "/v3/app-accounts/type/{x}",
+   "query": [
+    "workspaceId"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 183,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/app-accounts/types": {
+   "method": "GET",
+   "path": "/v3/app-accounts/types",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 166,
+   "fired_by": [
+    "campaigns-cam.gengdo (page load)",
+    "claygents (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/credit-reporting/{n}/balanceTimeSeries": {
+   "method": "GET",
+   "path": "/v3/credit-reporting/{n}/balanceTimeSeries",
+   "query": [
+    "interval",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 343,
+   "fired_by": [
+    "settings-credit-usage (page load)",
+    "settings-credit-usage.bmbkhp (page load)",
+    "settings-credit-usage.cpmhah (page load)",
+    "settings-credit-usage.jnaogn (page load)",
+    "settings-credit-usage.mgdjac (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/credit-reporting/{n}/spikeEvents": {
+   "method": "GET",
+   "path": "/v3/credit-reporting/{n}/spikeEvents",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 287,
+   "fired_by": [
+    "settings-credit-usage (page load)",
+    "settings-credit-usage.bmbkhp (page load)",
+    "settings-credit-usage.cpmhah (page load)",
+    "settings-credit-usage.jnaogn (page load)",
+    "settings-credit-usage.mgdjac (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/enrichment-search/{n}/{x}": {
+   "method": "GET",
+   "path": "/v3/enrichment-search/{n}/{x}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 416,
+   "fired_by": [
+    "workbooks-wb-tables-t-views-gv.kgbbci :: menuitem:Edit group",
+    "workbooks-wb.kgbbci :: menuitem:Edit group"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/me/api-token": {
+   "method": "GET",
+   "path": "/v3/me/api-token",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 174,
+   "fired_by": [
+    "settings-account :: tab:API key (legacy)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/user/affiliate": {
+   "method": "GET",
+   "path": "/v3/user/affiliate",
+   "query": [
+    "workspaceId"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 251,
+   "fired_by": [
+    "settings-referrals (page load)",
+    "settings-referrals.kgogap (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/user/referrals": {
+   "method": "GET",
+   "path": "/v3/user/referrals",
+   "query": [
+    "limit",
+    "page",
+    "workspaceId",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 252,
+   "fired_by": [
+    "settings-referrals (page load)",
+    "settings-referrals.kgogap (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/users/{n}/active-session-count": {
+   "method": "GET",
+   "path": "/v3/users/{n}/active-session-count",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 185,
+   "fired_by": [
+    "settings-account :: tab:Security"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 274,
+   "fired_by": [
+    "settings-team.kiidie :: menuitem:<per-row>",
+    "settings.kiidie :: menuitem:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/actions": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/actions",
+   "query": [
+    "workspaceId"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 1420,
+   "fired_by": [
+    "settings-team.kiidie :: menuitem:<per-row>",
+    "settings.kiidie :: menuitem:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/ad-audiences": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/ad-audiences",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 195,
+   "fired_by": [
+    "people-audiences (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/ad-audiences/credit-spend-by-audience": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/ad-audiences/credit-spend-by-audience",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 219,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/ad-audiences/expiring-accounts": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/ad-audiences/expiring-accounts",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 116,
+   "fired_by": [
+    "ads (page load)",
+    "ads :: button:<per-row>",
+    "ads.ahclbp (page load)",
+    "ads.ljfbpb (page load)",
+    "ads.lkpjbe (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/ad-audiences/segment/{audseg}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/ad-audiences/segment/{audseg}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 391,
+   "fired_by": [
+    "people-audience-audseg (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg.pidcfj (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/ad-audiences/sync-limit-status": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/ad-audiences/sync-limit-status",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 164,
+   "fired_by": [
+    "ads (page load)",
+    "ads.ahclbp (page load)",
+    "ads.ljfbpb (page load)",
+    "ads.lkpjbe (page load)",
+    "campaigns-inbox.cboegk (page load)",
+    "companies-audiences (page load)",
+    "home.dapncm (page load)",
+    "home.jfcaei (page load)",
+    "home.ljfbpb (page load)",
+    "people-audiences (page load)",
+    "settings :: button:Go back",
+    "settings-team :: button:Go back",
+    "terracotta-tc-workflows-wf.bdofjf (page load)",
+    "terracotta-tc-workflows-wf.cejmcn (page load)",
+    "terracotta-tc-workflows-wf.fpkkll (page load)",
+    "terracotta-tc-workflows-wf.oenaob (page load)",
+    "terracotta.ijnnll (page load)",
+    "w-track-company-topic-intent :: button:Close",
+    "w-track-job-changes :: button:Close",
+    "workbooks-and-tables.gikpfg (page load)",
+    "workbooks-wb-all-tables.fbfhig (page load)",
+    "workbooks-wb-all-tables.jfialc (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.cmlfdd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.jbllpd (page load)",
+    "workbooks-wb-tables-t-views-gv.anbafa (page load)",
+    "workbooks-wb-tables-t-views-gv.fikcob (page load)",
+    "workbooks-wb-tables-t-views-gv.igpkoo (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/ad-syncs/": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/ad-syncs/",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 215,
+   "fired_by": [
+    "people-audiences (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/ad-syncs/credit-spend": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/ad-syncs/credit-spend",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 199,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/ad-syncs/summaries": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/ad-syncs/summaries",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 113,
+   "fired_by": [
+    "ads (page load)",
+    "ads.ahclbp (page load)",
+    "ads.ljfbpb (page load)",
+    "ads.lkpjbe (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/agent-configs": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/agent-configs",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 264,
+   "fired_by": [
+    "companies-data-hub-account-agents (page load)",
+    "companies-data-hub-enrichments :: tab:Account Agents",
+    "companies-data-hub-fields :: tab:Account Agents"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/agent-skills": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/agent-skills",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 191,
+   "fired_by": [
+    "campaigns-cam.gengdo (page load)",
+    "people-audiences :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/ai-generation/chat-conversations/claygents/{c}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/ai-generation/chat-conversations/claygents/{c}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 248,
+   "fired_by": [
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/ai-quickstart/gtm-rules": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/ai-quickstart/gtm-rules",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 175,
+   "fired_by": [
+    "campaigns-cam (page load)",
+    "campaigns-cam-tab-sender-accounts :: tab:Sequence",
+    "campaigns-cam-tab-sequence (page load)",
+    "campaigns-cam-tab-sequence.cfflmc (page load)",
+    "campaigns-cam-tab-sequence.gengdo (page load)",
+    "campaigns-cam-tab-sequence.hhoohk (page load)",
+    "campaigns-cam-tab-sequence.nidjad (page load)",
+    "campaigns-cam-tab-sequence.omkkng (page load)",
+    "campaigns-cam.cfflmc (page load)",
+    "campaigns-cam.gengdo (page load)",
+    "campaigns-cam.hhoohk (page load)",
+    "campaigns-cam.mjalcj (page load)",
+    "campaigns-cam.ndjfac (page load)",
+    "campaigns-cam.nidjad (page load)",
+    "campaigns-cam.njdloo (page load)",
+    "campaigns-cam.omkkng (page load)",
+    "claygents (page load)",
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)",
+    "claygents.ckemmg (page load)",
+    "claygents.micclh (page load)",
+    "claygents.odhlfp (page load)",
+    "claygents.pmcidg (page load)",
+    "claygents.pmcidg :: pointer:<per-row>",
+    "people-audiences :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/all-campaigns": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/all-campaigns",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 260,
+   "fired_by": [
+    "campaigns (page load)",
+    "people-audience-audseg-n-activity (page load)"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "campaigns"
+   ]
+  },
+  "GET /v3/workspaces/{n}/announcements/dismissed": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/announcements/dismissed",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 210,
+   "fired_by": [
+    "people-all-records (page load)",
+    "terracotta (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts",
+   "query": [
+    "includeCanManage"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 266,
+   "fired_by": [
+    "ads.ljfbpb :: button:Manage",
+    "settings-accounts.oghkgp (page load)",
+    "signals :: button:Topic intent"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/anthropic": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/anthropic",
+   "query": [
+    "resourceId",
+    "resourceType"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 306,
+   "fired_by": [
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/bing-ad-audience": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/bing-ad-audience",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 344,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/custom-mcp": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/custom-mcp",
+   "query": [
+    "resourceId",
+    "resourceType"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 174,
+   "fired_by": [
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/delivr": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/delivr",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 396,
+   "fired_by": [
+    "signals :: button:Topic intent"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/google-ad-audience": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/google-ad-audience",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 204,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/google-docs": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/google-docs",
+   "query": [
+    "resourceId",
+    "resourceType"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 218,
+   "fired_by": [
+    "claygents (page load)",
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)",
+    "claygents.ckemmg (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/meta-ad-audience": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/meta-ad-audience",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 188,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/notion": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/notion",
+   "query": [
+    "resourceId",
+    "resourceType"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 186,
+   "fired_by": [
+    "claygents (page load)",
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)",
+    "claygents.ckemmg (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/reddit-ad-audience": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/reddit-ad-audience",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 345,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/vibe-ad-audience": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/vibe-ad-audience",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 346,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/type/{x}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/type/{x}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 208,
+   "fired_by": [
+    "ads (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/accounts/{aa}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/accounts/{aa}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 228,
+   "fired_by": [
+    "workbooks-wb (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/app-accounts/resource-counts": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/app-accounts/resource-counts",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 213,
+   "fired_by": [
+    "ads.ljfbpb :: button:Manage",
+    "settings-accounts.oghkgp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/ACCOUNT/bulk-enrichment-mapped-fields": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/ACCOUNT/bulk-enrichment-mapped-fields",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 302,
+   "fired_by": [
+    "companies-data-hub-fields (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/ACCOUNT/bulk-enrichment-tables": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/ACCOUNT/bulk-enrichment-tables",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 507,
+   "fired_by": [
+    "companies-audiences (page load)",
+    "companies-data-hub-enrichments (page load)",
+    "companies-data-hub-fields :: tab:Enrichments"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/ACCOUNT/signal-event-counts": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/ACCOUNT/signal-event-counts",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 499,
+   "fired_by": [
+    "companies-data-hub-fields :: tab:Signals",
+    "companies-data-hub-signals (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/ACCOUNT/signals-list": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/ACCOUNT/signals-list",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 209,
+   "fired_by": [
+    "companies-audiences (page load)",
+    "companies-data-hub-fields :: tab:Signals",
+    "companies-data-hub-signals (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/CONTACT/audiences-exports": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/CONTACT/audiences-exports",
+   "query": [
+    "limit"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 233,
+   "fired_by": [
+    "people-audiences (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/CONTACT/bulk-enrichment-mapped-fields": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/CONTACT/bulk-enrichment-mapped-fields",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 193,
+   "fired_by": [
+    "people-data-hub-fields (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/CONTACT/bulk-enrichment-stats": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/CONTACT/bulk-enrichment-stats",
+   "query": [
+    "segmentId",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 528,
+   "fired_by": [
+    "people-all-exports :: tab:Records",
+    "people-all-sources :: tab:Records",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-n (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/CONTACT/bulk-enrichment-stats-by-status-v2": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/CONTACT/bulk-enrichment-stats-by-status-v2",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 464,
+   "fired_by": [
+    "people-audience-audseg :: button:Signals",
+    "people-audience-audseg-n :: button:Signals"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/CONTACT/bulk-enrichment-tables": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/CONTACT/bulk-enrichment-tables",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 405,
+   "fired_by": [
+    "people-audiences (page load)",
+    "people-data-hub-enrichments (page load)",
+    "people-data-hub-fields :: tab:Enrichments"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/CONTACT/signal-event-counts": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/CONTACT/signal-event-counts",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 270,
+   "fired_by": [
+    "people-data-hub-fields :: tab:Signals",
+    "people-data-hub-signals (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/CONTACT/signals-by-status-v2": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/CONTACT/signals-by-status-v2",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 200,
+   "fired_by": [
+    "people-audience-audseg :: button:Signals",
+    "people-audience-audseg-n :: button:Signals"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/CONTACT/signals-list": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/CONTACT/signals-list",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 271,
+   "fired_by": [
+    "people-audiences (page load)",
+    "people-data-hub-fields :: tab:Signals",
+    "people-data-hub-signals (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/accounts/columns": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/accounts/columns",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 260,
+   "fired_by": [
+    "companies-archived (page load)",
+    "companies-data-hub-enrichments (page load)",
+    "companies-data-hub-fields (page load)",
+    "companies-data-hub-fields :: pointer:<per-row>",
+    "companies-data-hub-fields.opdpfk (page load)",
+    "companies-overview (page load)",
+    "people (page load)",
+    "people-all-exports :: tab:Records",
+    "people-all-records (page load)",
+    "people-all-sources :: tab:Records",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg-n :: button:View segment history",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg-n.pidcfj :: menuitem:View history",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-audience-audseg.pidcfj :: menuitem:View history",
+    "people-n (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/activity-filter-options": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/activity-filter-options",
+   "query": [
+    "types"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 300,
+   "fired_by": [
+    "companies-archived (page load)",
+    "people-all-exports :: tab:Records",
+    "people-all-sources :: tab:Records",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg :: button:View segment history",
+    "people-audience-audseg-n :: button:View segment history",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg-n.pidcfj :: menuitem:View history",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-audience-audseg.pidcfj :: menuitem:View history",
+    "people-n (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/activity-imports": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/activity-imports",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 210,
+   "fired_by": [
+    "companies-overview (page load)",
+    "people-all-exports (page load)",
+    "people-all-exports :: tab:Sources",
+    "people-all-sources (page load)",
+    "people-all-sources.ppebpj (page load)",
+    "people-overview (page load)",
+    "people-overview.jmglge (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/bulk-enrichment-eligibility": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/bulk-enrichment-eligibility",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 252,
+   "fired_by": [
+    "terracotta-tc-workflows-wf (page load)",
+    "terracotta-tc-workflows-wf.bdofjf (page load)",
+    "terracotta-tc-workflows-wf.ghdplp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/campaigns/{cam}/activities": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/campaigns/{cam}/activities",
+   "query": [
+    "limit",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 444,
+   "fired_by": [
+    "campaigns-cam :: tab:Activity",
+    "campaigns-cam-tab-activity (page load)",
+    "campaigns-cam-tab-activity :: button:<per-row>",
+    "campaigns-cam-tab-activity.fabgfk (page load)",
+    "campaigns-cam-tab-activity.ofnana (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/campaigns/{cam}/{x}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/campaigns/{cam}/{x}",
+   "query": [
+    "limit"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 419,
+   "fired_by": [
+    "campaigns-cam :: tab:Activity",
+    "campaigns-cam-tab-activity (page load)",
+    "campaigns-cam-tab-activity.fabgfk (page load)",
+    "campaigns-cam-tab-activity.ofnana (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/contacts/columns": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/contacts/columns",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 217,
+   "fired_by": [
+    "companies-archived (page load)",
+    "people (page load)",
+    "people-all-exports :: tab:Records",
+    "people-all-records (page load)",
+    "people-all-sources :: tab:Records",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg :: button:<per-row>",
+    "people-audience-audseg :: button:View segment history",
+    "people-audience-audseg-n (page load)",
+    "people-audience-audseg-n :: button:View segment history",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg-n.pidcfj :: menuitem:View history",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-audience-audseg.pidcfj :: menuitem:View history",
+    "people-data-hub-enrichments (page load)",
+    "people-data-hub-fields (page load)",
+    "people-data-hub-fields :: pointer:<per-row>",
+    "people-data-hub-fields :: pointer:<data>",
+    "people-data-hub-fields.alaeck (page load)",
+    "people-data-hub-fields.opdpfk (page load)",
+    "people-data-hub-fields.pcchbj (page load)",
+    "people-n (page load)",
+    "people-overview (page load)",
+    "people-overview.jmglge (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/contacts/{n}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/contacts/{n}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 437,
+   "fired_by": [
+    "people-audience-audseg :: button:<per-row>",
+    "people-audience-audseg-n (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-n (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/contacts/{n}/custom-objects": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/contacts/{n}/custom-objects",
+   "query": [
+    "limit",
+    "objectType",
+    "offset",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 359,
+   "fired_by": [
+    "people-audience-audseg :: button:<per-row>",
+    "people-audience-audseg-n (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/custom-objects/columns": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/custom-objects/columns",
+   "query": [
+    "objectType",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 278,
+   "fired_by": [
+    "companies-archived (page load)",
+    "people (page load)",
+    "people-all-exports :: tab:Records",
+    "people-all-sources :: tab:Records",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg :: button:<per-row>",
+    "people-audience-audseg :: button:View segment history",
+    "people-audience-audseg-n (page load)",
+    "people-audience-audseg-n :: button:View segment history",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg-n.pidcfj :: menuitem:View history",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-audience-audseg.pidcfj :: menuitem:View history",
+    "people-n (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/entities/{n}/activities": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/entities/{n}/activities",
+   "query": [
+    "entityType",
+    "limit",
+    "offset",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 527,
+   "fired_by": [
+    "people-audience-audseg :: button:<per-row>",
+    "people-audience-audseg-n (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/entities/{n}/signal-events": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/entities/{n}/signal-events",
+   "query": [
+    "entityType",
+    "limit",
+    "offset",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 311,
+   "fired_by": [
+    "people-audience-audseg :: button:<per-row>",
+    "people-audience-audseg-n (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/fields/{x}/segments": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/fields/{x}/segments",
+   "query": [
+    "entityType"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 197,
+   "fired_by": [
+    "people-data-hub-fields :: pointer:<data>",
+    "companies-data-hub-fields :: pointer:<per-row>",
+    "people-data-hub-fields :: pointer:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/import-connections": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/import-connections",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 213,
+   "fired_by": [
+    "companies-overview (page load)",
+    "people-all-exports (page load)",
+    "people-all-exports :: tab:Sources",
+    "people-all-sources (page load)",
+    "people-all-sources.ppebpj (page load)",
+    "people-overview (page load)",
+    "people-overview.jmglge (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/imports": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/imports",
+   "query": [
+    "entityType"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 209,
+   "fired_by": [
+    "companies (page load)",
+    "companies-all-sources (page load)",
+    "companies-archived (page load)",
+    "companies-data-hub-fields :: pointer:<per-row>",
+    "companies-overview (page load)",
+    "people (page load)",
+    "people-all-exports (page load)",
+    "people-all-exports :: tab:Records",
+    "people-all-exports :: tab:Sources",
+    "people-all-records (page load)",
+    "people-all-sources (page load)",
+    "people-all-sources :: tab:Records",
+    "people-all-sources.ppebpj (page load)",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg :: button:<per-row>",
+    "people-audience-audseg-n (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-data-hub-fields :: pointer:<per-row>",
+    "people-data-hub-fields :: pointer:<data>",
+    "people-n (page load)",
+    "people-overview (page load)",
+    "people-overview.jmglge (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/imports/by-source-id/{audseg}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/imports/by-source-id/{audseg}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 344,
+   "fired_by": [
+    "people-audience-audseg (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg.pidcfj (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/imports/external-source-import-history/ACCOUNT": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/imports/external-source-import-history/ACCOUNT",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 223,
+   "fired_by": [
+    "companies-archived (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/imports/external-source-import-history/CONTACT": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/imports/external-source-import-history/CONTACT",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 244,
+   "fired_by": [
+    "people-all-exports :: tab:Records",
+    "people-all-exports :: tab:Sources",
+    "people-all-sources (page load)",
+    "people-all-sources :: tab:Records",
+    "people-all-sources.ppebpj (page load)",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-n (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/imports/external-source-import-history/CUSTOM": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/imports/external-source-import-history/CUSTOM",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 218,
+   "fired_by": [
+    "people-all-exports :: tab:Sources",
+    "people-all-sources (page load)",
+    "people-all-sources.ppebpj (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/records/{n}/segment-membership": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/records/{n}/segment-membership",
+   "query": [
+    "entityType"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 860,
+   "fired_by": [
+    "people-audience-audseg :: button:<per-row>",
+    "people-audience-audseg-n (page load)",
+    "people-audience-audseg-n :: button:<per-row>",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/roi/attribution-counts": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/roi/attribution-counts",
+   "query": [
+    "entityType",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 248,
+   "fired_by": [
+    "companies-data-hub-fields (page load)",
+    "companies-overview (page load)",
+    "people-data-hub-fields (page load)",
+    "people-overview (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/roi/fill-rate": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/roi/fill-rate",
+   "query": [
+    "entityType"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 254,
+   "fired_by": [
+    "companies-data-hub-fields (page load)",
+    "people-data-hub-fields (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/roi/opportunities-revenue": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/roi/opportunities-revenue",
+   "query": [
+    "days"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 193,
+   "fired_by": [
+    "people-overview (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/roi/signal-counts": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/roi/signal-counts",
+   "query": [
+    "entityType"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 256,
+   "fired_by": [
+    "companies-data-hub-fields (page load)",
+    "people-data-hub-fields (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/roi/time-series": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/roi/time-series",
+   "query": [
+    "days",
+    "entityType",
+    "metric"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 184,
+   "fired_by": [
+    "people-overview :: button:<data>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/scheduled-searches": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/scheduled-searches",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 181,
+   "fired_by": [
+    "companies-archived (page load)",
+    "people (page load)",
+    "people-all-records (page load)",
+    "people-all-sources (page load)",
+    "people-all-sources.ppebpj (page load)",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-audiences (page load)",
+    "people-data-hub-enrichments (page load)",
+    "people-data-hub-fields (page load)",
+    "people-data-hub-fields.alaeck (page load)",
+    "people-data-hub-fields.pcchbj (page load)",
+    "people-n (page load)",
+    "people-overview (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/segments": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/segments",
+   "query": [
+    "entityType",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 217,
+   "fired_by": [
+    "campaigns-cam :: button:View exclusions",
+    "campaigns-cam-tab-sequence :: button:View exclusions",
+    "companies (page load)",
+    "companies-all-sources (page load)",
+    "companies-archived (page load)",
+    "companies-audiences (page load)",
+    "companies-data-hub-account-agents (page load)",
+    "companies-data-hub-enrichments (page load)",
+    "companies-data-hub-enrichments :: tab:Account Agents",
+    "companies-data-hub-fields :: tab:Account Agents",
+    "companies-data-hub-fields :: tab:Enrichments",
+    "companies-overview (page load)",
+    "people (page load)",
+    "people-all-exports (page load)",
+    "people-all-exports :: tab:Sources",
+    "people-all-records (page load)",
+    "people-all-sources (page load)",
+    "people-all-sources :: tab:Exports",
+    "people-all-sources.ppebpj (page load)",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg :: button:Signals",
+    "people-audience-audseg-n :: button:Signals",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-audiences (page load)",
+    "people-data-hub-enrichments (page load)"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "audiences"
+   ]
+  },
+  "GET /v3/workspaces/{n}/audiences/segments/{audseg}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/segments/{audseg}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 188,
+   "fired_by": [
+    "people (page load)",
+    "people-all-records (page load)",
+    "people-all-sources (page load)",
+    "people-all-sources.ppebpj (page load)",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg :: button:<per-row>",
+    "people-audience-audseg :: button:Signals",
+    "people-audience-audseg :: button:View segment history",
+    "people-audience-audseg-n (page load)",
+    "people-audience-audseg-n :: button:Signals",
+    "people-audience-audseg-n :: button:View segment history",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg-n.pidcfj :: menuitem:View history",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-audience-audseg.pidcfj :: menuitem:View history",
+    "people-audiences (page load)",
+    "people-data-hub-enrichments (page load)",
+    "people-data-hub-fields (page load)",
+    "people-data-hub-fields.alaeck (page load)",
+    "people-data-hub-fields.pcchbj (page load)",
+    "people-n (page load)",
+    "people-overview (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/segments/{audseg}/history": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/segments/{audseg}/history",
+   "query": [
+    "limit"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 334,
+   "fired_by": [
+    "people-audience-audseg (page load)",
+    "people-audience-audseg :: button:View segment history",
+    "people-audience-audseg-n :: button:View segment history",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg-n.pidcfj :: menuitem:View history",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-audience-audseg.pidcfj :: menuitem:View history"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/audiences/{x}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/audiences/{x}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 292,
+   "fired_by": [
+    "people (page load)",
+    "people-all-records (page load)",
+    "companies (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/billingplans": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/billingplans",
+   "query": [
+    "source"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 463,
+   "fired_by": [
+    "ads (page load)",
+    "ads.ahclbp (page load)",
+    "ads.ljfbpb (page load)",
+    "ads.ljfbpb :: button:Manage",
+    "ads.lkpjbe (page load)",
+    "api-and-cli (page load)",
+    "api-and-cli-tab-api-keys (page load)",
+    "api-and-cli-tab-runs (page load)",
+    "api-and-cli-tab-runs.dkfalf (page load)",
+    "api-and-cli-tab-runs.obclml (page load)",
+    "api-and-cli.obclml (page load)",
+    "campaigns (page load)",
+    "campaigns :: button:Analytics",
+    "campaigns :: button:Inbox",
+    "campaigns-analytics (page load)",
+    "campaigns-analytics.kmiagc (page load)",
+    "campaigns-analytics.oeedhd (page load)",
+    "campaigns-cam (page load)",
+    "campaigns-cam-tab-activity.ofnana (page load)",
+    "campaigns-cam-tab-sender-accounts.gploeb (page load)",
+    "campaigns-cam-tab-sender-accounts.mjalcj (page load)",
+    "campaigns-cam-tab-sender-accounts.ofkdhk (page load)",
+    "campaigns-cam-tab-sender-accounts.ppokhd (page load)",
+    "campaigns-cam-tab-sequence.cfflmc (page load)",
+    "campaigns-cam-tab-sequence.gengdo (page load)",
+    "campaigns-cam-tab-sequence.hhoohk (page load)",
+    "campaigns-cam-tab-sequence.omkkng (page load)",
+    "campaigns-cam.gengdo (page load)",
+    "campaigns-cam.hhoohk (page load)",
+    "campaigns-cam.mjalcj (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/campaigns": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/campaigns",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 365,
+   "fired_by": [
+    "campaigns (page load)",
+    "campaigns-tab-sequences.nhknfi (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/campaigns/analytics-summaries": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/campaigns/analytics-summaries",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 263,
+   "fired_by": [
+    "campaigns (page load)",
+    "campaigns-tab-email-accounts :: tab:Sequences",
+    "campaigns-tab-sequences (page load)",
+    "campaigns-tab-sequences.nhknfi (page load)",
+    "campaigns.bfaldj (page load)",
+    "campaigns.nhknfi (page load)"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "campaign-stats"
+   ]
+  },
+  "GET /v3/workspaces/{n}/campaigns/audience-segment-snapshot/{audseg}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/campaigns/audience-segment-snapshot/{audseg}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 689,
+   "fired_by": [
+    "campaigns-cam (page load)",
+    "campaigns-cam-tab-activity.ofnana (page load)",
+    "campaigns-cam-tab-sender-accounts.gploeb (page load)",
+    "campaigns-cam-tab-sender-accounts.mjalcj (page load)",
+    "campaigns-cam-tab-sender-accounts.ofkdhk (page load)",
+    "campaigns-cam-tab-sender-accounts.ppokhd (page load)",
+    "campaigns-cam-tab-sequence.cfflmc (page load)",
+    "campaigns-cam-tab-sequence.gengdo (page load)",
+    "campaigns-cam-tab-sequence.hhoohk (page load)",
+    "campaigns-cam-tab-sequence.omkkng (page load)",
+    "campaigns-cam.gengdo (page load)",
+    "campaigns-cam.hhoohk (page load)",
+    "campaigns-cam.mjalcj (page load)",
+    "campaigns-cam.ndjfac (page load)",
+    "campaigns-cam.nidjad (page load)",
+    "campaigns-cam.njdloo (page load)",
+    "campaigns-cam.omkkng (page load)",
+    "people-audiences :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/campaigns/events-table": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/campaigns/events-table",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 278,
+   "fired_by": [
+    "campaigns (page load)",
+    "campaigns-tab-sequences.nhknfi (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/campaigns/sender-variables": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/campaigns/sender-variables",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 193,
+   "fired_by": [
+    "campaigns :: tab:<per-row>",
+    "campaigns-cam.gengdo (page load)",
+    "campaigns-tab-sender-variables (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/campaigns/{cam}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/campaigns/{cam}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 252,
+   "fired_by": [
+    "campaigns-cam (page load)",
+    "campaigns-cam-tab-activity.ofnana (page load)",
+    "campaigns-cam-tab-sender-accounts.gploeb (page load)",
+    "campaigns-cam-tab-sender-accounts.mjalcj (page load)",
+    "campaigns-cam-tab-sender-accounts.ofkdhk (page load)",
+    "campaigns-cam-tab-sender-accounts.ppokhd (page load)",
+    "campaigns-cam-tab-sequence.cfflmc (page load)",
+    "campaigns-cam-tab-sequence.gengdo (page load)",
+    "campaigns-cam-tab-sequence.hhoohk (page load)",
+    "campaigns-cam-tab-sequence.omkkng (page load)",
+    "campaigns-cam.gengdo (page load)",
+    "campaigns-cam.hhoohk (page load)",
+    "campaigns-cam.mjalcj (page load)",
+    "campaigns-cam.ndjfac (page load)",
+    "campaigns-cam.nidjad (page load)",
+    "campaigns-cam.njdloo (page load)",
+    "campaigns-cam.omkkng (page load)",
+    "people-audiences :: button:<per-row>"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "campaign"
+   ]
+  },
+  "GET /v3/workspaces/{n}/campaigns/{cam}/analytics": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/campaigns/{cam}/analytics",
+   "query": [
+    "timezone"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 478,
+   "fired_by": [
+    "campaigns-cam :: tab:Analytics",
+    "campaigns-cam-tab-analytics (page load)",
+    "campaigns-cam-tab-sender-accounts :: tab:Analytics",
+    "campaigns-cam-tab-sender-accounts.oekcpe :: tab:Analytics"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/campaigns/{cam}/bounce-health": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/campaigns/{cam}/bounce-health",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 251,
+   "fired_by": [
+    "campaigns-cam (page load)",
+    "campaigns-cam.gengdo (page load)",
+    "people-audiences :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/campaigns/{cam}/enrollment-exclusion-counts": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/campaigns/{cam}/enrollment-exclusion-counts",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    "pending"
+   ],
+   "ms_p50": null,
+   "fired_by": [
+    "campaigns-cam (page load)",
+    "campaigns-cam.gengdo (page load)",
+    "people-audiences :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/campaigns/{cam}/variant-analytics": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/campaigns/{cam}/variant-analytics",
+   "query": [
+    "timezone"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 992,
+   "fired_by": [
+    "campaigns-cam :: tab:Analytics",
+    "campaigns-cam-tab-analytics (page load)",
+    "campaigns-cam-tab-sender-accounts :: tab:Analytics",
+    "campaigns-cam-tab-sender-accounts.oekcpe :: tab:Analytics"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "campaign-variants"
+   ]
+  },
+  "GET /v3/workspaces/{n}/clay-sequencer-email-accounts": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/clay-sequencer-email-accounts",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 217,
+   "fired_by": [
+    "campaigns (page load)",
+    "campaigns :: tab:<data>",
+    "campaigns-cam (page load)",
+    "campaigns-cam :: tab:Analytics",
+    "campaigns-cam :: tab:Sender accounts",
+    "campaigns-cam-tab-activity.ofnana (page load)",
+    "campaigns-cam-tab-analytics (page load)",
+    "campaigns-cam-tab-sender-accounts (page load)",
+    "campaigns-cam-tab-sender-accounts :: tab:Analytics",
+    "campaigns-cam-tab-sender-accounts.gploeb (page load)",
+    "campaigns-cam-tab-sender-accounts.knldkj (page load)",
+    "campaigns-cam-tab-sender-accounts.mjalcj (page load)",
+    "campaigns-cam-tab-sender-accounts.ndjfac (page load)",
+    "campaigns-cam-tab-sender-accounts.ndjfac :: menuitem:Settings",
+    "campaigns-cam-tab-sender-accounts.oekcpe (page load)",
+    "campaigns-cam-tab-sender-accounts.oekcpe :: tab:Analytics",
+    "campaigns-cam-tab-sender-accounts.ofkdhk (page load)",
+    "campaigns-cam-tab-sender-accounts.ppokhd (page load)",
+    "campaigns-cam-tab-sequence.cfflmc (page load)",
+    "campaigns-cam-tab-sequence.gengdo (page load)",
+    "campaigns-cam-tab-sequence.hhoohk (page load)",
+    "campaigns-cam-tab-sequence.omkkng (page load)",
+    "campaigns-cam.gengdo (page load)",
+    "campaigns-cam.hhoohk (page load)",
+    "campaigns-cam.mjalcj (page load)",
+    "campaigns-cam.ndjfac (page load)",
+    "campaigns-cam.ndjfac :: menuitem:Settings",
+    "campaigns-cam.nidjad (page load)",
+    "campaigns-cam.njdloo (page load)",
+    "campaigns-cam.omkkng (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/clay-sequencer/campaigns": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/clay-sequencer/campaigns",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 550,
+   "fired_by": [
+    "campaigns :: button:Inbox",
+    "campaigns-cam (page load)",
+    "campaigns-cam-tab-replies (page load)",
+    "campaigns-cam-tab-sender-accounts :: tab:Replies",
+    "campaigns-cam-tab-sender-accounts :: tab:Sequence",
+    "campaigns-cam-tab-sequence (page load)",
+    "campaigns-cam-tab-sequence.cfflmc (page load)",
+    "campaigns-cam-tab-sequence.gengdo (page load)",
+    "campaigns-cam-tab-sequence.hhoohk (page load)",
+    "campaigns-cam-tab-sequence.nidjad (page load)",
+    "campaigns-cam-tab-sequence.omkkng (page load)",
+    "campaigns-cam.cfflmc (page load)",
+    "campaigns-cam.gengdo (page load)",
+    "campaigns-cam.hhoohk (page load)",
+    "campaigns-cam.mjalcj (page load)",
+    "campaigns-cam.ndjfac (page load)",
+    "campaigns-cam.nidjad (page load)",
+    "campaigns-cam.njdloo (page load)",
+    "campaigns-cam.omkkng (page load)",
+    "campaigns-inbox (page load)",
+    "campaigns-inbox.cboegk (page load)",
+    "campaigns-inbox.efbgbe (page load)",
+    "campaigns-inbox.fkcgeb (page load)",
+    "campaigns-inbox.mpcggn (page load)",
+    "campaigns-inbox.pmlmif (page load)",
+    "campaigns-tab-email-accounts :: button:Inbox",
+    "people-audiences :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/clay-sequencer/global-blocklist": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/clay-sequencer/global-blocklist",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 529,
+   "fired_by": [
+    "campaigns-tab-global-blocklist (page load)",
+    "campaigns-tab-global-blocklist.nklgmh (page load)"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "blocklist"
+   ]
+  },
+  "GET /v3/workspaces/{n}/claygents": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/claygents",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 184,
+   "fired_by": [
+    "claygents (page load)",
+    "claygents.ckemmg (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/claygents/by-agent-type": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/claygents/by-agent-type",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 208,
+   "fired_by": [
+    "claygents (page load)",
+    "claygents.ckemmg (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/claygents/{c}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/claygents/{c}",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 205,
+   "fired_by": [
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/claygents/{c}/column-mappings": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/claygents/{c}/column-mappings",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 258,
+   "fired_by": [
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/claygents/{c}/workflow-usage": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/claygents/{c}/workflow-usage",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 302,
+   "fired_by": [
+    "claygents.micclh :: menuitem:View usage"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/claygents/{c}/{x}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/claygents/{c}/{x}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 238,
+   "fired_by": [
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/clayql-sync-usage": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/clayql-sync-usage",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 189,
+   "fired_by": [
+    "workbooks-wb :: button:Table settings",
+    "workbooks-wb-all-tables.ahbpol :: menuitem:Edit table settings",
+    "workbooks-wb-tables-t-views-gv-versions.mhkfno :: button:Manage settings"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/credit-accrual": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/credit-accrual",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 181,
+   "fired_by": [
+    "signals :: button:Topic intent"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/credit-reporting/creditReportType/function": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/credit-reporting/creditReportType/function",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 233,
+   "fired_by": [
+    "settings-credit-usage :: tab:Functions"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/credit-reporting/creditReportType/signal": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/credit-reporting/creditReportType/signal",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 270,
+   "fired_by": [
+    "companies-data-hub-fields :: tab:Signals",
+    "companies-data-hub-signals (page load)",
+    "people-data-hub-fields :: tab:Signals",
+    "people-data-hub-signals (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/credit-reporting/creditReportType/triggerDefinition": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/credit-reporting/creditReportType/triggerDefinition",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 226,
+   "fired_by": [
+    "companies-data-hub-fields :: tab:Signals",
+    "companies-data-hub-signals (page load)",
+    "people-data-hub-fields :: tab:Signals",
+    "people-data-hub-signals (page load)",
+    "signals (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/credit-reporting/creditReportType/workspace": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/credit-reporting/creditReportType/workspace",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 322,
+   "fired_by": [
+    "companies-data-hub-enrichments (page load)",
+    "companies-data-hub-fields :: tab:Enrichments",
+    "people-data-hub-enrichments (page load)",
+    "people-data-hub-fields :: tab:Enrichments",
+    "settings-credit-usage :: tab:Workbooks"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/deleted-resources/": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/deleted-resources/",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 211,
+   "fired_by": [
+    "trash (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/documents": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/documents",
+   "query": [
+    "context"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 180,
+   "fired_by": [
+    "campaigns-cam.gengdo (page load)",
+    "claygents (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/editor-access-banner": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/editor-access-banner",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 187,
+   "fired_by": [
+    "settings-team.kiidie :: menuitem:<per-row>",
+    "settings.kiidie :: menuitem:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/exports/my-active-exports": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/exports/my-active-exports",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 232,
+   "fired_by": [
+    "exports (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/folders/{f}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/folders/{f}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 214,
+   "fired_by": [
+    "workbooks-wb-all-tables.ddljhb :: button:<data>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/gtm-agent/tasks": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/gtm-agent/tasks",
+   "query": [
+    "campaignId",
+    "workflowId",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 258,
+   "fired_by": [
+    "campaigns-cam (page load)",
+    "campaigns-cam-tab-activity.ofnana (page load)",
+    "campaigns-cam-tab-sender-accounts.gploeb (page load)",
+    "campaigns-cam-tab-sender-accounts.mjalcj (page load)",
+    "campaigns-cam-tab-sender-accounts.ofkdhk (page load)",
+    "campaigns-cam-tab-sender-accounts.ppokhd (page load)",
+    "campaigns-cam-tab-sequence.cfflmc (page load)",
+    "campaigns-cam-tab-sequence.gengdo (page load)",
+    "campaigns-cam-tab-sequence.hhoohk (page load)",
+    "campaigns-cam-tab-sequence.omkkng (page load)",
+    "campaigns-cam.gengdo (page load)",
+    "campaigns-cam.hhoohk (page load)",
+    "campaigns-cam.mjalcj (page load)",
+    "campaigns-cam.ndjfac (page load)",
+    "campaigns-cam.nidjad (page load)",
+    "campaigns-cam.njdloo (page load)",
+    "campaigns-cam.omkkng (page load)",
+    "people-audiences :: button:<per-row>",
+    "terracotta-tc-workflows-wf :: button:Tasks",
+    "terracotta-tc-workflows-wf.adponp (page load)",
+    "terracotta-tc-workflows-wf.aoipjd (page load)",
+    "terracotta-tc-workflows-wf.bdfema (page load)",
+    "terracotta-tc-workflows-wf.bdofjf (page load)",
+    "terracotta-tc-workflows-wf.bffijh (page load)",
+    "terracotta-tc-workflows-wf.bijbjl (page load)",
+    "terracotta-tc-workflows-wf.cejmcn (page load)",
+    "terracotta-tc-workflows-wf.cfgllc (page load)",
+    "terracotta-tc-workflows-wf.cloann (page load)",
+    "terracotta-tc-workflows-wf.ecbbfa (page load)",
+    "terracotta-tc-workflows-wf.efhoai (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/managed-subroutines": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/managed-subroutines",
+   "query": [],
+   "body": [],
+   "statuses": [
+    "pending"
+   ],
+   "ms_p50": null,
+   "fired_by": [
+    "workbooks-wb (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/model-pricing/base-costs": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/model-pricing/base-costs",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 176,
+   "fired_by": [
+    "campaigns-cam.gengdo (page load)",
+    "claygents (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/permissions": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/permissions",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 190,
+   "fired_by": [
+    "campaigns :: button:Inbox",
+    "campaigns-inbox (page load)",
+    "campaigns-inbox.cboegk (page load)",
+    "campaigns-inbox.efbgbe (page load)",
+    "campaigns-inbox.fkcgeb (page load)",
+    "campaigns-inbox.mpcggn (page load)",
+    "campaigns-inbox.pmlmif (page load)",
+    "campaigns-tab-email-accounts :: button:Inbox",
+    "home.jfcaei :: menuitem:Settings...",
+    "settings (page load)",
+    "settings-team (page load)",
+    "settings-team.kiidie (page load)",
+    "settings-team.kiidie :: menuitem:<per-row>",
+    "settings.bljdmj (page load)",
+    "settings.kiidie (page load)",
+    "settings.kiidie :: menuitem:<per-row>",
+    "terracotta-tc-workflows-wf.bijbjl :: menuitem:Settings...",
+    "terracotta.jfcaei :: menuitem:Settings...",
+    "workbooks-and-tables.kmkbml :: menuitem:Settings...",
+    "workbooks-wb-all-tables.jepofp :: menuitem:Settings...",
+    "workbooks-wb-all-tables.lmmgla :: menuitem:Settings...",
+    "workbooks-wb-tables-t-views-gv-versions.adnnia :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv-versions.bhkmbf :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv-versions.geaddh :: menuitem:Settings...",
+    "workbooks-wb-tables-t-views-gv-versions.idhfmc :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv-versions.jcjpnk :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv-versions.kddgll :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv-versions.lmbbic :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv-versions.lolbbl :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv-versions.ompebk :: menuitem:View column"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/presets/filtered": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/presets/filtered",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 343,
+   "fired_by": [
+    "claygents :: button:Templates"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/realtime-credit-usage/table/{t}/time": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/realtime-credit-usage/table/{t}/time",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 342,
+   "fired_by": [
+    "workbooks-wb-tables-t-views-gv.iiaeaj :: menuitem:Row deduplication",
+    "workbooks-wb-tables-t-views-gv.iiaeaj :: menuitem:Usage history",
+    "workbooks-wb-tables-t-views-gv.maljbg :: menuitem:Row deduplication",
+    "workbooks-wb-tables-t-views-gv.maljbg :: menuitem:Usage history",
+    "workbooks-wb.maljbg :: menuitem:Row deduplication",
+    "workbooks-wb.maljbg :: menuitem:Usage history"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/resources/starred": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/resources/starred",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 184,
+   "fired_by": [
+    "claygents (page load)",
+    "claygents.ckemmg (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/resources/{c}/star": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/resources/{c}/star",
+   "query": [
+    "resourceType"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 156,
+   "fired_by": [
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/resources/{f}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/resources/{f}",
+   "query": [
+    "resourceType"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 415,
+   "fired_by": [
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<data>",
+    "workbooks-wb.jahdbo :: button:<data>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/resources/{wb}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/resources/{wb}",
+   "query": [
+    "resourceType"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 217,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb.ddljhb (page load)",
+    "workbooks-wb.jahdbo :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/shared-tables/by-table-id/{t}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/shared-tables/by-table-id/{t}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 183,
+   "fired_by": [
+    "workbooks-wb :: button:Table settings",
+    "workbooks-wb-all-tables.ahbpol :: menuitem:Edit table settings",
+    "workbooks-wb-tables-t-views-gv-versions.mhkfno :: button:Manage settings"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/shared-workbooks/by-workbook-id/{wb}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/shared-workbooks/by-workbook-id/{wb}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 228,
+   "fired_by": [
+    "workbooks-wb-all-tables :: button:Workbook settings",
+    "workbooks-wb-all-tables.bcejnf :: menuitem:Edit workbook settings"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/signals": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/signals",
+   "query": [
+    "type"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 239,
+   "fired_by": [
+    "settings-website-tracking (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/sources": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/sources",
+   "query": [
+    "tableId"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 200,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb.jahdbo :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/sources/{s}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/sources/{s}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 245,
+   "fired_by": [
+    "terracotta-tc-workflows-wf :: pointer:<data>",
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables.ifbokn :: button:Billing menu",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl :: button:",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl :: button:#",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl :: button:<data>",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.flgdhm :: menuitem:Theme",
+    "workbooks-wb-tables-t-views-gv-versions.hhmfjj :: button:People",
+    "workbooks-wb.jahdbo :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/sources/{s}/runs": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/sources/{s}/runs",
+   "query": [
+    "limit"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 1604,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl :: button:",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl :: button:#",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl :: button:<data>",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.flgdhm :: menuitem:Theme",
+    "workbooks-wb-tables-t-views-gv-versions.hhmfjj :: button:People"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/subroutines": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/subroutines",
+   "query": [
+    "subroutineType",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 209,
+   "fired_by": [
+    "functions (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/subscriptions": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/subscriptions",
+   "query": [
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 394,
+   "fired_by": [
+    "settings-team.kiidie :: menuitem:<per-row>",
+    "settings.kiidie :: menuitem:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/change-logs": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/change-logs",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 479,
+   "fired_by": [
+    "workbooks-wb-tables-t-views-gv.maljbg :: menuitem:Change log"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/count": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/count",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 268,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb :: pointer:",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.adnnia (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.alknkd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.aolddl (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.bhkmbf (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.bljnmc (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.cmlfdd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.dhboeo (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.enlgcd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.ggffca (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.gkkpbg (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.gkkpbg :: button:Back",
+    "workbooks-wb-tables-t-views-gv-versions.gonnol (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.idhfmc (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.ikcock (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.jbllpd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.jcjpnk (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.joneap (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.kabagc (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.kdfceg (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.lamjci (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.ldmnlm (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.lmbbic (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/deduped-records": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/deduped-records",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 307,
+   "fired_by": [
+    "workbooks-wb-tables-t-views-gv.iiaeaj :: menuitem:Row deduplication",
+    "workbooks-wb-tables-t-views-gv.maljbg :: menuitem:Row deduplication",
+    "workbooks-wb.maljbg :: menuitem:Row deduplication"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/details": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/details",
+   "query": [
+    "snapshot",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 870,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-all-tables.knjedo :: button:<per-row>",
+    "workbooks-wb-all-tables.mhemni :: button:<per-row>",
+    "workbooks-wb-tables-t (page load)",
+    "workbooks-wb-tables-t-views-gv (page load)",
+    "workbooks-wb-tables-t-views-gv-versions (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.adnnia (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.alknkd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.aolddl (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.bhkmbf (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.bljnmc (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.cmlfdd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.dhboeo (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.enlgcd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.flgdhm (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.geaddh (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.ggffca (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.gkkpbg (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.gkkpbg :: button:Back",
+    "workbooks-wb-tables-t-views-gv-versions.gonnol (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.hhmfjj (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.idhfmc (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.ikcock (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.jbllpd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.jcjpnk (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/fieldrun": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/fieldrun",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 206,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb.ddljhb (page load)",
+    "workbooks-wb.jahdbo :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/fields/runstatus": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/fields/runstatus",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 228,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb.jahdbo :: button:<per-row>"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "table-status"
+   ]
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/records/{r}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/records/{r}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 302,
+   "fired_by": [
+    "workbooks-wb :: pointer:",
+    "workbooks-wb-tables-t-views-gv :: pointer:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl :: pointer:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.gkkpbg :: pointer:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.nmbflo :: pointer:<per-row>",
+    "workbooks-wb-tables-t-views-gv.ekgkad :: pointer:<per-row>",
+    "workbooks-wb-tables-t-views-gv.lkgaen :: pointer:<per-row>",
+    "workbooks-wb-tables-t-views-gv.mhbdnk :: pointer:<per-row>",
+    "workbooks-wb-tables-t-views-gv.mhjkil :: pointer:<per-row>",
+    "workbooks-wb-tables-t-views-gv.nkagdh :: pointer:<per-row>",
+    "workbooks-wb-tables-t-views-gv.obband :: pointer:<per-row>",
+    "workbooks-wb.mhbdnk :: pointer:<per-row>",
+    "workbooks-wb.obband :: pointer:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/snapshots": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/snapshots",
+   "query": [],
+   "body": [],
+   "statuses": [
+    "pending"
+   ],
+   "ms_p50": null,
+   "fired_by": [
+    "workbooks-wb.maljbg :: menuitem:All configuration versions"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/views/{gv}/ad-audiences": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/views/{gv}/ad-audiences",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 227,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb.jahdbo :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/views/{gv}/fields/{f}/runstatus": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/views/{gv}/fields/{f}/runstatus",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 400,
+   "fired_by": [
+    "workbooks-wb :: menuitem:",
+    "workbooks-wb-tables-t-views-gv :: menuitem:",
+    "workbooks-wb-tables-t-views-gv.ekgkad :: menuitem:",
+    "workbooks-wb-tables-t-views-gv.mhjkil :: menuitem:",
+    "workbooks-wb-tables-t-views-gv.obband :: menuitem:",
+    "workbooks-wb.obband :: menuitem:"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/views/{gv}/records/ids": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/views/{gv}/records/ids",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 291,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb.jahdbo :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tables/{t}/views/{gv}/table-schema-v2": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tables/{t}/views/{gv}/table-schema-v2",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 750,
+   "fired_by": [
+    "workbooks-wb-tables-t-views-gv-versions.jcjpnk :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv-versions.joneap :: button:<data>",
+    "workbooks-wb-tables-t-views-gv-versions.kddgll :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv-versions.lmbbic :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv-versions.lolbbl :: menuitem:View column",
+    "workbooks-wb-tables-t-views-gv.bighnf :: menuitem:Edit group",
+    "workbooks-wb-tables-t-views-gv.dkfpie :: menuitem:Edit group",
+    "workbooks-wb-tables-t-views-gv.iggaca :: menuitem:Edit group",
+    "workbooks-wb-tables-t-views-gv.kgbbci :: menuitem:Edit group",
+    "workbooks-wb.bighnf :: menuitem:Edit group",
+    "workbooks-wb.kgbbci :: menuitem:Edit group"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-run-analytics/dashboard": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-run-analytics/dashboard",
+   "query": [
+    "bucket",
+    "triggerId",
+    "workflowId",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 192,
+   "fired_by": [
+    "terracotta-tc-workflows-wf :: pointer:<data>",
+    "terracotta-tc-workflows-wf.cejmcn :: button:Cancel",
+    "terracotta-tc-workflows-wf.cejmcn :: pointer:<data>",
+    "terracotta-tc-workflows-wf.oepdcm :: button:Node actions"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-triggers": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-triggers",
+   "query": [
+    "scope",
+    "workflowId"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 203,
+   "fired_by": [
+    "people-audiences (page load)",
+    "terracotta-tc-workflows-wf (page load)",
+    "terracotta-tc-workflows-wf.adponp (page load)",
+    "terracotta-tc-workflows-wf.aoipjd (page load)",
+    "terracotta-tc-workflows-wf.aoipjd :: button:<data>",
+    "terracotta-tc-workflows-wf.bdfema (page load)",
+    "terracotta-tc-workflows-wf.bdofjf (page load)",
+    "terracotta-tc-workflows-wf.bffijh (page load)",
+    "terracotta-tc-workflows-wf.bijbjl (page load)",
+    "terracotta-tc-workflows-wf.cejmcn (page load)",
+    "terracotta-tc-workflows-wf.cfgllc (page load)",
+    "terracotta-tc-workflows-wf.cloann (page load)",
+    "terracotta-tc-workflows-wf.ecbbfa (page load)",
+    "terracotta-tc-workflows-wf.efhoai (page load)",
+    "terracotta-tc-workflows-wf.efppea (page load)",
+    "terracotta-tc-workflows-wf.fpkkll (page load)",
+    "terracotta-tc-workflows-wf.ghdplp (page load)",
+    "terracotta-tc-workflows-wf.hobmkc (page load)",
+    "terracotta-tc-workflows-wf.imkbno (page load)",
+    "terracotta-tc-workflows-wf.ipeopk (page load)",
+    "terracotta-tc-workflows-wf.jamgna (page load)",
+    "terracotta-tc-workflows-wf.jcpedc (page load)",
+    "terracotta-tc-workflows-wf.jenffc (page load)",
+    "terracotta-tc-workflows-wf.jgalmg (page load)",
+    "terracotta-tc-workflows-wf.kfdfia (page load)",
+    "terracotta-tc-workflows-wf.kfgpab (page load)",
+    "terracotta-tc-workflows-wf.lbjigl (page load)",
+    "terracotta-tc-workflows-wf.mflfpf (page load)",
+    "terracotta-tc-workflows-wf.nehdlo (page load)",
+    "terracotta-tc-workflows-wf.odkpnj (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflow-analysis/{wf}/traffic": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflow-analysis/{wf}/traffic",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 632,
+   "fired_by": [
+    "terracotta-tc-workflows-wf :: button:Analytics",
+    "terracotta-tc-workflows-wf.cejmcn :: button:Analytics"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 211,
+   "fired_by": [
+    "companies-archived (page load)",
+    "people-all-exports (page load)",
+    "people-all-exports :: tab:Records",
+    "people-all-sources :: tab:Exports",
+    "people-all-sources :: tab:Records",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg :: button:<per-row>",
+    "people-audience-audseg :: button:View segment history",
+    "people-audience-audseg-n (page load)",
+    "people-audience-audseg-n :: button:View segment history",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg-n.pidcfj :: menuitem:View history",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-audience-audseg.pidcfj :: menuitem:View history",
+    "people-audiences (page load)",
+    "people-n (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows-paginated": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows-paginated",
+   "query": [
+    "orderBy",
+    "view",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 225,
+   "fired_by": [
+    "terracotta (page load)",
+    "terracotta :: button:<data>",
+    "terracotta.dapncm (page load)",
+    "terracotta.ijnnll (page load)",
+    "terracotta.jfcaei (page load)"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "workflows"
+   ]
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/account-agents": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/account-agents",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 264,
+   "fired_by": [
+    "companies-data-hub-account-agents (page load)",
+    "companies-data-hub-enrichments :: tab:Account Agents",
+    "companies-data-hub-fields :: tab:Account Agents"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/audience-enrichment": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/audience-enrichment",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 196,
+   "fired_by": [
+    "companies-data-hub-enrichments (page load)",
+    "companies-data-hub-fields (page load)",
+    "companies-data-hub-fields :: pointer:<per-row>",
+    "companies-data-hub-fields :: tab:Enrichments",
+    "companies-data-hub-fields.opdpfk (page load)",
+    "people-audience-audseg :: button:Signals",
+    "people-audience-audseg-n :: button:Signals",
+    "people-data-hub-enrichments (page load)",
+    "people-data-hub-fields (page load)",
+    "people-data-hub-fields :: pointer:<per-row>",
+    "people-data-hub-fields :: pointer:<data>",
+    "people-data-hub-fields :: tab:Enrichments",
+    "people-data-hub-fields.alaeck (page load)",
+    "people-data-hub-fields.opdpfk (page load)",
+    "people-data-hub-fields.pcchbj (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/audiences-exports": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/audiences-exports",
+   "query": [
+    "entityType",
+    "limit"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 287,
+   "fired_by": [
+    "people-all-exports (page load)",
+    "people-all-sources :: tab:Exports"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/{wf}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/{wf}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 264,
+   "fired_by": [
+    "terracotta-tc-workflows-wf (page load)",
+    "terracotta-tc-workflows-wf.adponp (page load)",
+    "terracotta-tc-workflows-wf.aoipjd (page load)",
+    "terracotta-tc-workflows-wf.bdfema (page load)",
+    "terracotta-tc-workflows-wf.bdofjf (page load)",
+    "terracotta-tc-workflows-wf.bffijh (page load)",
+    "terracotta-tc-workflows-wf.bijbjl (page load)",
+    "terracotta-tc-workflows-wf.cejmcn (page load)",
+    "terracotta-tc-workflows-wf.cfgllc (page load)",
+    "terracotta-tc-workflows-wf.cloann (page load)",
+    "terracotta-tc-workflows-wf.ecbbfa (page load)",
+    "terracotta-tc-workflows-wf.efhoai (page load)",
+    "terracotta-tc-workflows-wf.efppea (page load)",
+    "terracotta-tc-workflows-wf.fpkkll (page load)",
+    "terracotta-tc-workflows-wf.ghdplp (page load)",
+    "terracotta-tc-workflows-wf.hobmkc (page load)",
+    "terracotta-tc-workflows-wf.imkbno (page load)",
+    "terracotta-tc-workflows-wf.ipeopk (page load)",
+    "terracotta-tc-workflows-wf.jamgna (page load)",
+    "terracotta-tc-workflows-wf.jcpedc (page load)",
+    "terracotta-tc-workflows-wf.jenffc (page load)",
+    "terracotta-tc-workflows-wf.jgalmg (page load)",
+    "terracotta-tc-workflows-wf.kfdfia (page load)",
+    "terracotta-tc-workflows-wf.kfgpab (page load)",
+    "terracotta-tc-workflows-wf.lbjigl (page load)",
+    "terracotta-tc-workflows-wf.lldpjo (page load)",
+    "terracotta-tc-workflows-wf.mflfpf (page load)",
+    "terracotta-tc-workflows-wf.nehdlo (page load)",
+    "terracotta-tc-workflows-wf.odkpnj (page load)",
+    "terracotta-tc-workflows-wf.oenaob (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/{wf}/credit-estimate": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/{wf}/credit-estimate",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 300,
+   "fired_by": [
+    "terracotta-tc-workflows-wf :: button:Workflow settings",
+    "terracotta-tc-workflows-wf.cejmcn :: button:Workflow settings"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/{wf}/graph": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/{wf}/graph",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 312,
+   "fired_by": [
+    "terracotta-tc-workflows-wf (page load)",
+    "terracotta-tc-workflows-wf :: pointer:<data>",
+    "terracotta-tc-workflows-wf.adponp (page load)",
+    "terracotta-tc-workflows-wf.aoipjd (page load)",
+    "terracotta-tc-workflows-wf.bdfema (page load)",
+    "terracotta-tc-workflows-wf.bdofjf (page load)",
+    "terracotta-tc-workflows-wf.bffijh (page load)",
+    "terracotta-tc-workflows-wf.bijbjl (page load)",
+    "terracotta-tc-workflows-wf.cejmcn (page load)",
+    "terracotta-tc-workflows-wf.cejmcn :: button:Cancel",
+    "terracotta-tc-workflows-wf.cejmcn :: pointer:<data>",
+    "terracotta-tc-workflows-wf.cfgllc (page load)",
+    "terracotta-tc-workflows-wf.cloann (page load)",
+    "terracotta-tc-workflows-wf.ecbbfa (page load)",
+    "terracotta-tc-workflows-wf.efhoai (page load)",
+    "terracotta-tc-workflows-wf.efppea (page load)",
+    "terracotta-tc-workflows-wf.fpkkll (page load)",
+    "terracotta-tc-workflows-wf.ghdplp (page load)",
+    "terracotta-tc-workflows-wf.hobmkc (page load)",
+    "terracotta-tc-workflows-wf.imkbno (page load)",
+    "terracotta-tc-workflows-wf.ipeopk (page load)",
+    "terracotta-tc-workflows-wf.jamgna (page load)",
+    "terracotta-tc-workflows-wf.jcpedc (page load)",
+    "terracotta-tc-workflows-wf.jenffc (page load)",
+    "terracotta-tc-workflows-wf.jgalmg (page load)",
+    "terracotta-tc-workflows-wf.kfdfia (page load)",
+    "terracotta-tc-workflows-wf.kfgpab (page load)",
+    "terracotta-tc-workflows-wf.lbjigl (page load)",
+    "terracotta-tc-workflows-wf.lldpjo (page load)",
+    "terracotta-tc-workflows-wf.mflfpf (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/{wf}/published_snapshot_versions": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/{wf}/published_snapshot_versions",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 264,
+   "fired_by": [
+    "terracotta-tc-workflows-wf (page load)",
+    "terracotta-tc-workflows-wf.bdofjf (page load)",
+    "terracotta-tc-workflows-wf.ghdplp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/{wf}/snapshots": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/{wf}/snapshots",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 193,
+   "fired_by": [
+    "terracotta-tc-workflows-wf.oepdcm :: button:History",
+    "terracotta-tc-workflows-wf.onpfhn :: button:History"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/{wf}/snapshots/{wfs}/graph": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/{wf}/snapshots/{wfs}/graph",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 245,
+   "fired_by": [
+    "terracotta-tc-workflows-wf.aoipjd :: button:<data>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/{wf}/test-samples": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/{wf}/test-samples",
+   "query": [
+    "triggerId"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 244,
+   "fired_by": [
+    "terracotta-tc-workflows-wf (page load)",
+    "terracotta-tc-workflows-wf.adponp (page load)",
+    "terracotta-tc-workflows-wf.aoipjd (page load)",
+    "terracotta-tc-workflows-wf.bdfema (page load)",
+    "terracotta-tc-workflows-wf.bdofjf (page load)",
+    "terracotta-tc-workflows-wf.bffijh (page load)",
+    "terracotta-tc-workflows-wf.bijbjl (page load)",
+    "terracotta-tc-workflows-wf.cejmcn (page load)",
+    "terracotta-tc-workflows-wf.cfgllc (page load)",
+    "terracotta-tc-workflows-wf.cloann (page load)",
+    "terracotta-tc-workflows-wf.ecbbfa (page load)",
+    "terracotta-tc-workflows-wf.efhoai (page load)",
+    "terracotta-tc-workflows-wf.efppea (page load)",
+    "terracotta-tc-workflows-wf.fpkkll (page load)",
+    "terracotta-tc-workflows-wf.hobmkc (page load)",
+    "terracotta-tc-workflows-wf.imkbno (page load)",
+    "terracotta-tc-workflows-wf.ipeopk (page load)",
+    "terracotta-tc-workflows-wf.jamgna (page load)",
+    "terracotta-tc-workflows-wf.jcpedc (page load)",
+    "terracotta-tc-workflows-wf.jenffc (page load)",
+    "terracotta-tc-workflows-wf.jgalmg (page load)",
+    "terracotta-tc-workflows-wf.kfdfia (page load)",
+    "terracotta-tc-workflows-wf.kfgpab (page load)",
+    "terracotta-tc-workflows-wf.lbjigl (page load)",
+    "terracotta-tc-workflows-wf.mflfpf (page load)",
+    "terracotta-tc-workflows-wf.nehdlo (page load)",
+    "terracotta-tc-workflows-wf.nfedbe (page load)",
+    "terracotta-tc-workflows-wf.odkpnj (page load)",
+    "terracotta-tc-workflows-wf.oenaob (page load)",
+    "terracotta-tc-workflows-wf.oepdcm (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tc-workflows/{wf}/{current}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tc-workflows/{wf}/{current}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 190,
+   "fired_by": [
+    "terracotta-tc-workflows-wf (page load)",
+    "terracotta-tc-workflows-wf :: button:Undock",
+    "terracotta-tc-workflows-wf :: button:Zoom to fit",
+    "terracotta-tc-workflows-wf :: pointer:<data>",
+    "terracotta-tc-workflows-wf.adponp (page load)",
+    "terracotta-tc-workflows-wf.aoipjd (page load)",
+    "terracotta-tc-workflows-wf.aoipjd :: button:<per-row>",
+    "terracotta-tc-workflows-wf.aoipjd :: button:<data>",
+    "terracotta-tc-workflows-wf.bdfema (page load)",
+    "terracotta-tc-workflows-wf.bdfema :: button:Code",
+    "terracotta-tc-workflows-wf.bdfema :: button:Dock",
+    "terracotta-tc-workflows-wf.bdfema :: button:Flow",
+    "terracotta-tc-workflows-wf.bdfema :: button:Trigger",
+    "terracotta-tc-workflows-wf.bdfema :: pointer:<data>",
+    "terracotta-tc-workflows-wf.bdofjf (page load)",
+    "terracotta-tc-workflows-wf.bdofjf :: button:Code",
+    "terracotta-tc-workflows-wf.bdofjf :: button:Flow",
+    "terracotta-tc-workflows-wf.bdofjf :: button:People and Companies",
+    "terracotta-tc-workflows-wf.bdofjf :: button:Trigger",
+    "terracotta-tc-workflows-wf.bffijh (page load)",
+    "terracotta-tc-workflows-wf.bijbjl (page load)",
+    "terracotta-tc-workflows-wf.cejmcn (page load)",
+    "terracotta-tc-workflows-wf.cejmcn :: button:Dock",
+    "terracotta-tc-workflows-wf.cejmcn :: button:Profile menu",
+    "terracotta-tc-workflows-wf.cfgllc (page load)",
+    "terracotta-tc-workflows-wf.cloann (page load)",
+    "terracotta-tc-workflows-wf.ecbbfa (page load)",
+    "terracotta-tc-workflows-wf.ecbbfa :: button:<per-row>",
+    "terracotta-tc-workflows-wf.ecbbfa :: button:Dock",
+    "terracotta-tc-workflows-wf.ecbbfa :: button:Flow"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tools": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tools",
+   "query": [
+    "integration",
+    "limit",
+    "toolType"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 183,
+   "fired_by": [
+    "api-and-cli (page load)",
+    "api-and-cli-tab-api-keys :: tab:Routine runs",
+    "api-and-cli-tab-runs (page load)",
+    "api-and-cli-tab-runs.dkfalf (page load)",
+    "api-and-cli-tab-runs.obclml (page load)",
+    "api-and-cli.dkfalf (page load)",
+    "api-and-cli.obclml (page load)",
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tools/enrichment-actions": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tools/enrichment-actions",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 204,
+   "fired_by": [
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tools/routine-runs": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tools/routine-runs",
+   "query": [
+    "limit",
+    "{x}"
+   ],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 227,
+   "fired_by": [
+    "api-and-cli (page load)",
+    "api-and-cli-tab-api-keys :: tab:Routine runs",
+    "api-and-cli-tab-runs (page load)",
+    "api-and-cli-tab-runs.dkfalf (page load)",
+    "api-and-cli-tab-runs.obclml (page load)",
+    "api-and-cli.dkfalf (page load)",
+    "api-and-cli.obclml (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/tools/{x}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/tools/{x}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    404
+   ],
+   "ms_p50": 225,
+   "fired_by": [
+    "terracotta-tc-workflows-wf :: button:Workflow settings",
+    "terracotta-tc-workflows-wf.cejmcn :: button:Workflow settings"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/trigger-definitions-with-schedule": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/trigger-definitions-with-schedule",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 207,
+   "fired_by": [
+    "signals (page load)"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "signals"
+   ]
+  },
+  "GET /v3/workspaces/{n}/users": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/users",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 268,
+   "fired_by": [
+    "claygents.ckemmg (page load)",
+    "terracotta (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/webhooks": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/webhooks",
+   "query": [
+    "limit"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 170,
+   "fired_by": [
+    "settings-webhooks (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/workbooks/{wb}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/workbooks/{wb}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 244,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb.ddljhb (page load)",
+    "workbooks-wb.jahdbo (page load)",
+    "workbooks-wb.jahdbo :: button:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/workbooks/{wb}/overview": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/workbooks/{wb}/overview",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 185,
+   "fired_by": [
+    "workbooks-wb-all-tables (page load)",
+    "workbooks-wb-all-tables.ahbpol (page load)",
+    "workbooks-wb-all-tables.ajhikd (page load)",
+    "workbooks-wb-all-tables.daakao (page load)",
+    "workbooks-wb-all-tables.dbeneg (page load)",
+    "workbooks-wb-all-tables.ddljhb (page load)",
+    "workbooks-wb-all-tables.ehkbhj (page load)",
+    "workbooks-wb-all-tables.ekahde (page load)",
+    "workbooks-wb-all-tables.fbfhig (page load)",
+    "workbooks-wb-all-tables.fglkoo (page load)",
+    "workbooks-wb-all-tables.fjpjde (page load)",
+    "workbooks-wb-all-tables.fmjnob (page load)",
+    "workbooks-wb-all-tables.gmalba (page load)",
+    "workbooks-wb-all-tables.hgcphd (page load)",
+    "workbooks-wb-all-tables.hjhmeo (page load)",
+    "workbooks-wb-all-tables.ifbokn (page load)",
+    "workbooks-wb-all-tables.ijjhbo (page load)",
+    "workbooks-wb-all-tables.jahdbo (page load)",
+    "workbooks-wb-all-tables.jepofp (page load)",
+    "workbooks-wb-all-tables.jfialc (page load)",
+    "workbooks-wb-all-tables.knjedo (page load)",
+    "workbooks-wb-all-tables.lmmgla (page load)",
+    "workbooks-wb-all-tables.mdmejk (page load)",
+    "workbooks-wb-all-tables.mhemni (page load)",
+    "workbooks-wb-all-tables.pfdcnh (page load)",
+    "workbooks-wb-all-tables.pigeha (page load)",
+    "workbooks-wb-all-tables.pkpfdm (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/{x}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/{x}",
+   "query": [
+    "billingSchedule"
+   ],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 176,
+   "fired_by": [
+    "settings-team.kiidie :: menuitem:<per-row>",
+    "settings.kiidie :: menuitem:<per-row>"
+   ],
+   "blocked_by_guard": false
+  },
+  "GET /v3/workspaces/{n}/{x}/{x}": {
+   "method": "GET",
+   "path": "/v3/workspaces/{n}/{x}/{x}",
+   "query": [],
+   "body": [],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 228,
+   "fired_by": [
+    "api-and-cli (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "PATCH /v3/workspaces/{n}/clay-sequencer/email-accounts/{n}": {
+   "method": "PATCH",
+   "path": "/v3/workspaces/{n}/clay-sequencer/email-accounts/{n}",
+   "query": [],
+   "body": [
+    "from_name",
+    "signature",
+    "{x}"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "campaigns-cam-tab-sender-accounts.oekcpe :: button:Update sender variables"
+   ],
+   "blocked_by_guard": true
+  },
+  "PATCH /v3/workspaces/{n}/tables/{t}/views/{gv}": {
+   "method": "PATCH",
+   "path": "/v3/workspaces/{n}/tables/{t}/views/{gv}",
+   "query": [],
+   "body": [
+    "limit",
+    "offset"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "workbooks-wb-tables-t-views-gv.dkejkk :: button:Show all rows",
+    "workbooks-wb-tables-t-views-gv.dncocd :: button:Show all rows"
+   ],
+   "blocked_by_guard": true
+  },
+  "PATCH /v3/workspaces/{n}/tables/{t}/views/{gv}/fields": {
+   "method": "PATCH",
+   "path": "/v3/workspaces/{n}/tables/{t}/views/{gv}/fields",
+   "query": [],
+   "body": [
+    "{x}"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "workbooks-wb :: button:",
+    "workbooks-wb-tables-t-views-gv :: button:",
+    "workbooks-wb-tables-t-views-gv.ekgkad :: button:",
+    "workbooks-wb-tables-t-views-gv.mhjkil :: button:",
+    "workbooks-wb-tables-t-views-gv.obband :: button:",
+    "workbooks-wb.obband :: button:"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/auth/login-change/start": {
+   "method": "POST",
+   "path": "/v3/auth/login-change/start",
+   "query": [],
+   "body": [],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "settings-account.pfepjm :: button:Continue"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/ai-generation/chat-conversation": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/ai-generation/chat-conversation",
+   "query": [],
+   "body": [
+    "claygentId",
+    "conversationType",
+    "{x}"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "claygents-c-edit (page load)",
+    "claygents-c-edit.jdcnjp (page load)",
+    "companies-overview :: button:Find companies",
+    "home.ljfbpb :: menuitem:Companies",
+    "home.ljfbpb :: menuitem:People",
+    "home.ppadbi :: button:Companies",
+    "home.ppadbi :: button:People",
+    "people-overview :: button:Find people",
+    "workbooks-and-tables.imeolh :: button:Companies",
+    "workbooks-and-tables.imeolh :: button:People",
+    "workbooks-wb :: button:",
+    "workbooks-wb-all-tables :: button:Find companies",
+    "workbooks-wb-all-tables :: button:Find people",
+    "workbooks-wb-all-tables.ehkbhj :: button:Companies",
+    "workbooks-wb-all-tables.ehkbhj :: button:People",
+    "workbooks-wb-all-tables.fjpjde :: button:Companies",
+    "workbooks-wb-all-tables.fjpjde :: button:People",
+    "workbooks-wb-all-tables.ifbokn :: button:Find companies",
+    "workbooks-wb-all-tables.ifbokn :: button:Find people",
+    "workbooks-wb-all-tables.pfdcnh :: button:Find companies",
+    "workbooks-wb-all-tables.pfdcnh :: button:Find people",
+    "workbooks-wb-tables-t-views-gv :: button:",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl :: button:Edit inputs",
+    "workbooks-wb-tables-t-views-gv-versions.hhmfjj :: button:Companies",
+    "workbooks-wb-tables-t-views-gv-versions.hhmfjj :: button:People",
+    "workbooks-wb-tables-t-views-gv-versions.lplhik :: button:Companies",
+    "workbooks-wb-tables-t-views-gv-versions.lplhik :: button:People",
+    "workbooks-wb-tables-t-views-gv-versions.nihked :: button:Companies",
+    "workbooks-wb-tables-t-views-gv-versions.nihked :: button:People",
+    "workbooks-wb-tables-t-views-gv.bifhaj :: button:Companies"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/audiences/CONTACT/signals": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/audiences/CONTACT/signals",
+   "query": [],
+   "body": [
+    "segmentId"
+   ],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 308,
+   "fired_by": [
+    "people-all-exports :: tab:Records",
+    "people-all-sources :: tab:Records",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-n (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "POST /v3/workspaces/{n}/audiences/accounts": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/audiences/accounts",
+   "query": [],
+   "body": [
+    "limit",
+    "offset",
+    "searchQuery",
+    "{x}"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "companies-archived (page load)"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/audiences/contacts": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/audiences/contacts",
+   "query": [],
+   "body": [
+    "filters",
+    "limit",
+    "offset",
+    "searchQuery",
+    "segmentId",
+    "{x}"
+   ],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 570,
+   "fired_by": [
+    "people-all-exports :: tab:Records",
+    "people-all-sources :: tab:Records",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-n (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "POST /v3/workspaces/{n}/audiences/count": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/audiences/count",
+   "query": [],
+   "body": [
+    "entityType",
+    "filters",
+    "objectType",
+    "segmentId",
+    "{x}"
+   ],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 308,
+   "fired_by": [
+    "companies (page load)",
+    "companies-all-sources (page load)",
+    "companies-archived (page load)",
+    "people (page load)",
+    "people-all-exports :: tab:Records",
+    "people-all-records (page load)",
+    "people-all-sources (page load)",
+    "people-all-sources :: tab:Records",
+    "people-all-sources.ppebpj (page load)",
+    "people-archived (page load)",
+    "people-archived.igibhi (page load)",
+    "people-audience-audseg (page load)",
+    "people-audience-audseg :: button:View segment history",
+    "people-audience-audseg-n :: button:View segment history",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg-n.pidcfj :: menuitem:View history",
+    "people-audience-audseg.pidcfj (page load)",
+    "people-audience-audseg.pidcfj :: menuitem:View history",
+    "people-n (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "POST /v3/workspaces/{n}/audiences/entities/signals": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/audiences/entities/signals",
+   "query": [],
+   "body": [
+    "entityIds",
+    "entityType",
+    "filters",
+    "{x}"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "people-audience-audseg (page load)",
+    "people-audience-audseg-n :: button:View segment history",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg.pidcfj (page load)"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/campaigns/events-table": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/campaigns/events-table",
+   "query": [],
+   "body": [],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "campaigns :: button:Events"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/campaigns/{cam}/events-view": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/campaigns/{cam}/events-view",
+   "query": [],
+   "body": [],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "campaigns-cam-tab-sender-accounts.ndjfac :: menuitem:View events",
+    "campaigns-cam.ndjfac :: menuitem:View events"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/clay-sequencer/analytics/day-wise": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/clay-sequencer/analytics/day-wise",
+   "query": [],
+   "body": [
+    "request"
+   ],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 636,
+   "fired_by": [
+    "campaigns :: button:Analytics",
+    "campaigns-analytics (page load)",
+    "campaigns-analytics.kmiagc (page load)",
+    "campaigns-analytics.oeedhd (page load)",
+    "campaigns-tab-email-accounts :: button:Analytics"
+   ],
+   "blocked_by_guard": false
+  },
+  "POST /v3/workspaces/{n}/clay-sequencer/analytics/global/campaign-stats": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/clay-sequencer/analytics/global/campaign-stats",
+   "query": [],
+   "body": [
+    "end_date",
+    "start_date",
+    "{x}"
+   ],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 596,
+   "fired_by": [
+    "campaigns (page load)",
+    "campaigns :: button:Analytics",
+    "campaigns-analytics (page load)",
+    "campaigns-analytics.kmiagc (page load)",
+    "campaigns-analytics.oeedhd (page load)",
+    "campaigns-tab-email-accounts :: button:Analytics",
+    "campaigns-tab-email-accounts :: tab:Sequences",
+    "campaigns-tab-sequences (page load)",
+    "campaigns-tab-sequences.nhknfi (page load)",
+    "campaigns.bfaldj (page load)",
+    "campaigns.nhknfi (page load)"
+   ],
+   "blocked_by_guard": false
+  },
+  "POST /v3/workspaces/{n}/clay-sequencer/analytics/global/lead-category-stats": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/clay-sequencer/analytics/global/lead-category-stats",
+   "query": [],
+   "body": [
+    "end_date",
+    "start_date",
+    "{x}"
+   ],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 456,
+   "fired_by": [
+    "campaigns :: button:Analytics",
+    "campaigns-analytics (page load)",
+    "campaigns-analytics.kmiagc (page load)",
+    "campaigns-analytics.oeedhd (page load)",
+    "campaigns-tab-email-accounts :: button:Analytics"
+   ],
+   "blocked_by_guard": false
+  },
+  "POST /v3/workspaces/{n}/clay-sequencer/analytics/global/lead-stats": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/clay-sequencer/analytics/global/lead-stats",
+   "query": [],
+   "body": [
+    "end_date",
+    "start_date",
+    "{x}"
+   ],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 654,
+   "fired_by": [
+    "campaigns :: button:Analytics",
+    "campaigns-analytics (page load)",
+    "campaigns-analytics.kmiagc (page load)",
+    "campaigns-analytics.oeedhd (page load)",
+    "campaigns-tab-email-accounts :: button:Analytics"
+   ],
+   "blocked_by_guard": false
+  },
+  "POST /v3/workspaces/{n}/clay-sequencer/analytics/global/mailbox-metrics": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/clay-sequencer/analytics/global/mailbox-metrics",
+   "query": [],
+   "body": [
+    "end_date",
+    "start_date",
+    "{x}"
+   ],
+   "statuses": [
+    "pending"
+   ],
+   "ms_p50": null,
+   "fired_by": [
+    "campaigns :: button:Analytics",
+    "campaigns-analytics (page load)",
+    "campaigns-analytics.kmiagc (page load)",
+    "campaigns-analytics.oeedhd (page load)",
+    "campaigns-tab-email-accounts :: button:Analytics"
+   ],
+   "blocked_by_guard": false
+  },
+  "POST /v3/workspaces/{n}/clay-sequencer/analytics/global/overall-stats": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/clay-sequencer/analytics/global/overall-stats",
+   "query": [],
+   "body": [
+    "end_date",
+    "start_date",
+    "{x}"
+   ],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 588,
+   "fired_by": [
+    "campaigns :: button:Analytics",
+    "campaigns-analytics (page load)",
+    "campaigns-analytics.kmiagc (page load)",
+    "campaigns-analytics.oeedhd (page load)",
+    "campaigns-tab-email-accounts :: button:Analytics"
+   ],
+   "blocked_by_guard": false
+  },
+  "POST /v3/workspaces/{n}/clay-sequencer/master-inbox/message-history": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/clay-sequencer/master-inbox/message-history",
+   "query": [],
+   "body": [
+    "{x}"
+   ],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 484,
+   "fired_by": [
+    "campaigns :: button:Inbox",
+    "campaigns-inbox (page load)",
+    "campaigns-inbox :: button:<per-row>",
+    "campaigns-inbox.cboegk (page load)",
+    "campaigns-inbox.efbgbe (page load)",
+    "campaigns-inbox.fkcgeb (page load)",
+    "campaigns-inbox.mpcggn (page load)",
+    "campaigns-inbox.pmlmif (page load)",
+    "campaigns-tab-email-accounts :: button:Inbox"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "thread"
+   ]
+  },
+  "POST /v3/workspaces/{n}/clay-sequencer/master-inbox/replies": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/clay-sequencer/master-inbox/replies",
+   "query": [],
+   "body": [
+    "offset",
+    "{x}"
+   ],
+   "statuses": [
+    200,
+    "pending"
+   ],
+   "ms_p50": 592,
+   "fired_by": [
+    "campaigns :: button:Inbox",
+    "campaigns-cam :: tab:Replies",
+    "campaigns-cam-tab-replies (page load)",
+    "campaigns-cam-tab-sender-accounts :: tab:Replies",
+    "campaigns-inbox (page load)",
+    "campaigns-inbox :: button:<per-row>",
+    "campaigns-inbox :: button:Load more",
+    "campaigns-inbox.cboegk (page load)",
+    "campaigns-inbox.efbgbe (page load)",
+    "campaigns-inbox.fkcgeb (page load)",
+    "campaigns-inbox.mpcggn (page load)",
+    "campaigns-inbox.pmlmif (page load)",
+    "campaigns-tab-email-accounts :: button:Inbox"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "inbox"
+   ]
+  },
+  "POST /v3/workspaces/{n}/enrichment-cache-metrics/held-entries": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/enrichment-cache-metrics/held-entries",
+   "query": [],
+   "body": [
+    "actions"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "workbooks-wb-tables-t-views-gv.kgbbci :: menuitem:Edit group",
+    "workbooks-wb.kgbbci :: menuitem:Edit group"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/enrichment-cache-policies/list": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/enrichment-cache-policies/list",
+   "query": [],
+   "body": [
+    "scopes"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "workbooks-wb-tables-t-views-gv.kgbbci :: menuitem:Edit group",
+    "workbooks-wb.kgbbci :: menuitem:Edit group"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/gtm-agent/tasks": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/gtm-agent/tasks",
+   "query": [],
+   "body": [
+    "scope",
+    "surfaces",
+    "{x}"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "terracotta-tc-workflows-wf :: button:Route inbound leads",
+    "terracotta-tc-workflows-wf.cejmcn :: button:Route inbound leads"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/resources/star/": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/resources/star/",
+   "query": [],
+   "body": [
+    "{x}"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "workbooks-and-tables :: button:",
+    "workbooks-and-tables.cfhmdb :: button:"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/resources/{audseg}/activity": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/resources/{audseg}/activity",
+   "query": [],
+   "body": [
+    "activityType",
+    "resourceType"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "people-audience-audseg (page load)",
+    "people-audience-audseg-n-activity.khnobm (page load)",
+    "people-audience-audseg-n.khnobm (page load)",
+    "people-audience-audseg-n.pidcfj (page load)",
+    "people-audience-audseg.pidcfj (page load)"
+   ],
+   "blocked_by_guard": true,
+   "registry_ops": [
+    "page-view-activity"
+   ]
+  },
+  "POST /v3/workspaces/{n}/resources/{f}/activity": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/resources/{f}/activity",
+   "query": [],
+   "body": [
+    "activityType",
+    "resourceType"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "workbooks-wb-all-tables.ddljhb :: button:<data>"
+   ],
+   "blocked_by_guard": true,
+   "registry_ops": [
+    "page-view-activity"
+   ]
+  },
+  "POST /v3/workspaces/{n}/resources/{t}/activity": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/resources/{t}/activity",
+   "query": [],
+   "body": [
+    "activityType",
+    "resourceType"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-all-tables.knjedo :: button:<per-row>",
+    "workbooks-wb-all-tables.mhemni :: button:<per-row>",
+    "workbooks-wb-tables-t (page load)",
+    "workbooks-wb-tables-t-views-gv (page load)",
+    "workbooks-wb-tables-t-views-gv-versions (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.adnnia (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.alknkd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.aolddl (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.bhkmbf (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.bljnmc (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.cmlfdd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.dhboeo (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<per-row>",
+    "workbooks-wb-tables-t-views-gv-versions.enlgcd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.felhnl (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.flgdhm (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.geaddh (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.ggffca (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.gkkpbg (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.gkkpbg :: button:Back",
+    "workbooks-wb-tables-t-views-gv-versions.gonnol (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.hhmfjj (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.idhfmc (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.ikcock (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.jbllpd (page load)",
+    "workbooks-wb-tables-t-views-gv-versions.jcjpnk (page load)"
+   ],
+   "blocked_by_guard": true,
+   "registry_ops": [
+    "page-view-activity"
+   ]
+  },
+  "POST /v3/workspaces/{n}/resources/{wb}/activity": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/resources/{wb}/activity",
+   "query": [],
+   "body": [
+    "activityType",
+    "resourceType"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb-all-tables (page load)",
+    "workbooks-wb-all-tables.ahbpol (page load)",
+    "workbooks-wb-all-tables.ajhikd (page load)",
+    "workbooks-wb-all-tables.ajhikd :: button:<per-row>",
+    "workbooks-wb-all-tables.bcejnf (page load)",
+    "workbooks-wb-all-tables.daakao (page load)",
+    "workbooks-wb-all-tables.dbeneg (page load)",
+    "workbooks-wb-all-tables.ddljhb (page load)",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>",
+    "workbooks-wb-all-tables.ehkbhj (page load)",
+    "workbooks-wb-all-tables.ekahde (page load)",
+    "workbooks-wb-all-tables.fbfhig (page load)",
+    "workbooks-wb-all-tables.fglkoo (page load)",
+    "workbooks-wb-all-tables.fjpjde (page load)",
+    "workbooks-wb-all-tables.fmjnob (page load)",
+    "workbooks-wb-all-tables.gmalba (page load)",
+    "workbooks-wb-all-tables.hgcphd (page load)",
+    "workbooks-wb-all-tables.hjhmeo (page load)",
+    "workbooks-wb-all-tables.ifbokn (page load)",
+    "workbooks-wb-all-tables.ijjhbo (page load)",
+    "workbooks-wb-all-tables.jahdbo (page load)",
+    "workbooks-wb-all-tables.jahdbo :: button:<per-row>",
+    "workbooks-wb-all-tables.jepofp (page load)",
+    "workbooks-wb-all-tables.jfialc (page load)",
+    "workbooks-wb-all-tables.knjedo (page load)",
+    "workbooks-wb-all-tables.knjedo :: button:<per-row>",
+    "workbooks-wb-all-tables.lmmgla (page load)",
+    "workbooks-wb-all-tables.mdmejk (page load)",
+    "workbooks-wb-all-tables.mhemni (page load)"
+   ],
+   "blocked_by_guard": true,
+   "registry_ops": [
+    "page-view-activity"
+   ]
+  },
+  "POST /v3/workspaces/{n}/resources/{wf}/activity": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/resources/{wf}/activity",
+   "query": [],
+   "body": [
+    "activityType",
+    "resourceType"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "terracotta-tc-workflows-wf (page load)",
+    "terracotta-tc-workflows-wf.adponp (page load)",
+    "terracotta-tc-workflows-wf.aoipjd (page load)",
+    "terracotta-tc-workflows-wf.bdfema (page load)",
+    "terracotta-tc-workflows-wf.bdofjf (page load)",
+    "terracotta-tc-workflows-wf.bffijh (page load)",
+    "terracotta-tc-workflows-wf.bijbjl (page load)",
+    "terracotta-tc-workflows-wf.cejmcn (page load)",
+    "terracotta-tc-workflows-wf.cfgllc (page load)",
+    "terracotta-tc-workflows-wf.cloann (page load)",
+    "terracotta-tc-workflows-wf.ecbbfa (page load)",
+    "terracotta-tc-workflows-wf.efhoai (page load)",
+    "terracotta-tc-workflows-wf.efppea (page load)",
+    "terracotta-tc-workflows-wf.fpkkll (page load)",
+    "terracotta-tc-workflows-wf.hobmkc (page load)",
+    "terracotta-tc-workflows-wf.imkbno (page load)",
+    "terracotta-tc-workflows-wf.ipeopk (page load)",
+    "terracotta-tc-workflows-wf.jamgna (page load)",
+    "terracotta-tc-workflows-wf.jcpedc (page load)",
+    "terracotta-tc-workflows-wf.jenffc (page load)",
+    "terracotta-tc-workflows-wf.jgalmg (page load)",
+    "terracotta-tc-workflows-wf.kfdfia (page load)",
+    "terracotta-tc-workflows-wf.kfgpab (page load)",
+    "terracotta-tc-workflows-wf.lbjigl (page load)",
+    "terracotta-tc-workflows-wf.mflfpf (page load)",
+    "terracotta-tc-workflows-wf.nehdlo (page load)",
+    "terracotta-tc-workflows-wf.nfedbe (page load)",
+    "terracotta-tc-workflows-wf.odkpnj (page load)",
+    "terracotta-tc-workflows-wf.oenaob (page load)",
+    "terracotta-tc-workflows-wf.oepdcm (page load)"
+   ],
+   "blocked_by_guard": true,
+   "registry_ops": [
+    "page-view-activity"
+   ]
+  },
+  "POST /v3/workspaces/{n}/resources_v2/": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/resources_v2/",
+   "query": [],
+   "body": [
+    "filters",
+    "{x}"
+   ],
+   "statuses": [
+    200
+   ],
+   "ms_p50": 143,
+   "fired_by": [
+    "workbooks-and-tables (page load)",
+    "workbooks-and-tables.imeolh (page load)",
+    "workbooks-wb :: button:Home",
+    "workbooks-wb-all-tables.ddljhb :: button:<data>",
+    "workbooks-wb-tables-t-views-gv-versions.dikdcm :: button:<data>",
+    "workbooks-wb.jahdbo :: button:<data>"
+   ],
+   "blocked_by_guard": false,
+   "registry_ops": [
+    "resources",
+    "tables",
+    "workbooks",
+    "folders"
+   ]
+  },
+  "POST /v3/workspaces/{n}/tables/{t}/bulk-fetch-records": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/tables/{t}/bulk-fetch-records",
+   "query": [],
+   "body": [
+    "recordIds",
+    "{x}"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "workbooks-wb (page load)",
+    "workbooks-wb :: pointer:",
+    "workbooks-wb-all-tables.ddljhb :: button:<per-row>"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/tc-workflows/{wf}/nodes": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/tc-workflows/{wf}/nodes",
+   "query": [],
+   "body": [
+    "nodeType",
+    "position",
+    "{x}"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "terracotta-tc-workflows-wf :: button:Code",
+    "terracotta-tc-workflows-wf :: button:Trigger",
+    "terracotta-tc-workflows-wf.aoipjd :: button:Code",
+    "terracotta-tc-workflows-wf.aoipjd :: button:Trigger",
+    "terracotta-tc-workflows-wf.bdfema :: button:Code",
+    "terracotta-tc-workflows-wf.bdfema :: button:Trigger",
+    "terracotta-tc-workflows-wf.bdofjf :: button:Code",
+    "terracotta-tc-workflows-wf.bdofjf :: button:Trigger",
+    "terracotta-tc-workflows-wf.cejmcn :: button:Code",
+    "terracotta-tc-workflows-wf.cejmcn :: button:Trigger",
+    "terracotta-tc-workflows-wf.ecbbfa :: button:Code",
+    "terracotta-tc-workflows-wf.ecbbfa :: button:Trigger",
+    "terracotta-tc-workflows-wf.imkbno :: button:Code",
+    "terracotta-tc-workflows-wf.imkbno :: button:Trigger",
+    "terracotta-tc-workflows-wf.lbjigl :: button:Code",
+    "terracotta-tc-workflows-wf.lbjigl :: button:Trigger",
+    "terracotta-tc-workflows-wf.oenaob :: button:Find companies",
+    "terracotta-tc-workflows-wf.oenaob :: button:Find people",
+    "terracotta-tc-workflows-wf.oenaob :: button:Lookup in Audiences",
+    "terracotta-tc-workflows-wf.pindmg :: button:Code",
+    "terracotta-tc-workflows-wf.pindmg :: button:Trigger",
+    "terracotta-tc-workflows-wf.plibal :: button:Code",
+    "terracotta-tc-workflows-wf.plibal :: button:Trigger"
+   ],
+   "blocked_by_guard": true
+  },
+  "POST /v3/workspaces/{n}/wizard/discard-wizard-progress-from-outputs": {
+   "method": "POST",
+   "path": "/v3/workspaces/{n}/wizard/discard-wizard-progress-from-outputs",
+   "query": [],
+   "body": [
+    "outputs",
+    "{x}"
+   ],
+   "statuses": [
+    "blocked"
+   ],
+   "ms_p50": 0,
+   "fired_by": [
+    "w-track-company-topic-intent :: button:Close",
+    "w-track-job-changes :: button:Close"
+   ],
+   "blocked_by_guard": true
+  }
+ }
+}

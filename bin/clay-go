@@ -1,0 +1,403 @@
+#!/usr/bin/env python3
+"""clay-go: move Caleb's signed-in Clay tab to a named screen, by heart.
+
+    clay-go credits                               the Usage page
+    clay-go table --table "Ivy - Investor"        a table, by name or t_ id
+    clay-go column-settings --table Ivy --column campaign
+    clay-go inbox-campaign --campaign "Wave 2"    master inbox, one sequence
+    clay-go campaign-replies --campaign cam_...   one campaign's replies tab
+    clay-go --list                                every state and its URL
+    clay-go credits table --table Ivy --runs 3    several hops, timed
+
+The map is library/learning/clay-navigation/routes.json. A hop is one
+in-page call over the Browser Harness daemon's existing CDP connection: the
+URL goes through Clay's own router (history.pushState + popstate), clicks are
+pointer events on stable locators, and arrival is the path plus one element,
+watched by a MutationObserver inside the page. No model call, no accessibility
+tree read, no new browser. Ids come from a cache built from the clay CLI, so
+building a URL never reads the page.
+
+Read-only by construction: a click whose label matches the map's gate words
+is refused before it is sent, and gate controls are never in a route. Prints
+one JSON line per hop: ours_ms (this process plus the CDP round trip) and
+clay_ms (Clay's router and render until the arrival element exists).
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import statistics
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+ROUTES = HERE.parent / "library/learning/clay-navigation/routes.json"
+JEV_DIR = Path(os.environ.get("JEV_ULTRAFAST_DIR", Path.home() / ".chewbacca/jev-ultrafast"))
+# Workspace ids, page labels and the crawl log stay in a cache nothing
+# mirrors: ~/.chewbacca/cache is copied into the second-brain repo.
+CACHE_DIR = Path(os.environ.get("CLAY_PRIVATE_DIR", Path.home() / "Library/Caches/chewbacca-clay"))
+# Ids change only when someone makes a table or campaign. A day keeps the
+# cache from going stale through a working session without re-listing on
+# every hop; a name that misses refreshes it at once.
+CACHE_TTL_S = 24 * 3600
+# Clay's slowest client-side render on 2026-10-09 was the people records grid
+# at ~2.5 s to settle; 8 s leaves room for a cold API before calling it lost.
+ARRIVE_TIMEOUT_MS = 8000
+
+
+def default_workspace():
+    """$CLAY_WORKSPACE_ID, else the one workspace the GTM client config names,
+    else None. The same rule as clay-inbox: no client workspace is built in."""
+    if os.environ.get("CLAY_WORKSPACE_ID"):
+        return os.environ["CLAY_WORKSPACE_ID"]
+    cfg = os.environ.get("GTM_CONFIG") or os.path.expanduser("~/.chewbacca/gtm/clients.json")
+    try:
+        with open(cfg) as f:
+            clients = json.load(f).get("clients", [])
+    except (OSError, ValueError, AttributeError):
+        clients = []
+    found = {str(w) for c in clients if isinstance(c, dict) for w in (c.get("workspaces") or [])}
+    return found.pop() if len(found) == 1 else None
+
+
+def _reexec_in_harness_env() -> None:
+    try:
+        import browser_harness  # noqa: F401
+    except ImportError:
+        py = JEV_DIR / ".venv/bin/python"
+        if not py.exists():
+            sys.exit("clay-go: Browser Harness is not installed. run: jev-browse install")
+        os.execv(str(py), [str(py), __file__, *sys.argv[1:]])
+
+
+# One evaluate per hop. Route, click and wait all happen in the page, so the
+# only process boundary crossed is the single CDP round trip.
+HOP_JS = r"""(async (spec) => {
+  const t0 = performance.now();
+  const vis = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const label = e => (e.getAttribute('aria-label') || e.innerText || e.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ');
+  const gate = new RegExp('\\b(' + spec.gate + ')\\b', 'i');
+  const roleSel = {button: 'button,[role=button]', tab: '[role=tab]', menuitem: '[role=menuitem]', label: 'label', heading: 'h1,h2,h3,h4,[role=heading]'};
+  const findText = (t, role) => [...document.querySelectorAll(roleSel[role] || 'h1,h2,h3,h4,button,[role=tab],[role=heading],label,span,p,div')]
+    .find(e => vis(e) && e.childElementCount < 4 && label(e) === t);
+  const found = (a) => a.text ? findText(a.text, a.role) : [...document.querySelectorAll(a.css)].find(e => vis(e) && (!a.name || label(e) === a.name));
+  const pathOk = () => !spec.path || (spec.path.includes('?') ? (location.pathname + location.search).startsWith(spec.path) : location.pathname.startsWith(spec.path));
+  const arrived = () => pathOk() && spec.arrive.some(a => found(a));
+  const waitFor = (pred, ms) => new Promise(res => {
+    if (pred()) return res(true);
+    const end = performance.now() + ms, ch = new MessageChannel();
+    const mo = new MutationObserver(() => { if (pred()) { mo.disconnect(); res(true); } });
+    mo.observe(document.documentElement, {subtree: true, childList: true, attributes: true});
+    ch.port1.onmessage = () => { if (pred()) { mo.disconnect(); res(true); } else if (performance.now() > end) { mo.disconnect(); res(false); } else setTimeout(() => ch.port2.postMessage(0), 16); };
+    ch.port2.postMessage(0);
+  });
+  const press = e => ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach(t => e.dispatchEvent(t.startsWith('pointer')
+    ? new PointerEvent(t, {bubbles: true, cancelable: true, view: window, pointerType: 'mouse', button: 0, isPrimary: true})
+    : new MouseEvent(t, {bubbles: true, cancelable: true, view: window, button: 0})));
+  if (spec.url && (location.pathname + location.search) !== spec.url) {
+    history.pushState({}, '', spec.url);
+    dispatchEvent(new PopStateEvent('popstate', {state: {}}));
+  }
+  const clicked = [];
+  for (const c of spec.clicks) {
+    let el = null;
+    const pick = () => {
+      let els = [...document.querySelectorAll(c.css)].filter(vis);
+      if (c.pointer_row !== undefined) els = els.filter(e => getComputedStyle(e).cursor === 'pointer' && e.getBoundingClientRect().height > 40);
+      if (c.name !== undefined && c.match !== 'any') els = els.filter(e => { const l = label(e);
+        return c.match === 'suffix' ? l.endsWith(c.name) : c.match === 'prefix' ? l.startsWith(c.name) : l === c.name; });
+      el = els[c.index || c.pointer_row || 0] || null; return !!el; };
+    const ok = await waitFor(pick, 5000);
+    if (!ok) { if (c.optional) continue; return JSON.stringify({ok: false, err: 'control not found', control: c.name || c.css, at: location.pathname, clay_ms: Math.round(performance.now() - t0)}); }
+    const l = label(el);
+    if (!c.kind && gate.test(l)) return JSON.stringify({ok: false, err: 'gate refused'});
+    press(el); clicked.push(l.slice(0, 40));
+  }
+  const ok = await waitFor(arrived, spec.timeout);
+  const t1 = performance.now();
+  return JSON.stringify({ok, at: location.pathname + location.search, clicked, clay_ms: Math.round(t1 - t0),
+    start_epoch: performance.timeOrigin + t0, end_epoch: performance.timeOrigin + t1});
+})(%s)"""
+
+
+def load_routes() -> dict:
+    return json.loads(ROUTES.read_text())
+
+
+def chain(states: dict, sid: str) -> list[str]:
+    """The URL-addressed ancestor first, then each click state down to sid."""
+    out = [sid]
+    while "url" not in states[out[0]]:
+        parent = states[out[0]].get("parent")
+        if not parent:
+            sys.exit(f"clay-go: state {out[0]} has neither url nor parent")
+        out.insert(0, parent)
+    return out
+
+
+class Ids:
+    """Name or id to id, from the clay CLI, cached per workspace."""
+
+    def __init__(self, ws: str, refresh: bool = False):
+        self.ws = ws
+        self.path = CACHE_DIR / f"clay-ids-{ws}.json"
+        fresh = self.path.exists() and time.time() - self.path.stat().st_mtime < CACHE_TTL_S
+        self.data = json.loads(self.path.read_text()) if fresh and not refresh else None
+        if self.data is None:
+            self.refresh()
+
+    def refresh(self) -> None:
+        def cli(*args):
+            out = subprocess.run(["clay", *args], capture_output=True, text=True, timeout=60)
+            try:
+                return json.loads(out.stdout).get("data", [])
+            except ValueError:
+                return []
+        self.data = {
+            "tables": [{"id": t["id"], "name": t["name"], "wb": (t.get("workbook") or {}).get("id")} for t in cli("tables", "list")],
+            "campaigns": [{"id": c["id"], "name": c["name"]} for c in cli("campaigns", "list")],
+            "workflows": [{"id": w["id"], "name": w.get("name") or ""} for w in cli("workflows", "list")],
+            "workbooks": [{"id": w["id"], "name": w["name"]} for w in cli("workbooks", "list")],
+        }
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(self.data))
+
+    def find(self, kind: str, want: str, _retried: bool = False) -> dict:
+        rows = self.data.get(kind, [])
+        hits = [r for r in rows if r["id"] == want] or [r for r in rows if r["name"].lower() == want.lower()] \
+            or [r for r in rows if want.lower() in r["name"].lower()]
+        if len(hits) == 1:
+            return hits[0]
+        if not hits and not _retried:
+            self.refresh()
+            return self.find(kind, want, True)
+        names = ", ".join(r["name"] for r in hits[:6])
+        sys.exit(f"clay-go: {kind} {want!r} matched {len(hits)}" + (f": {names}" if hits else ""))
+
+
+def fill(text: str, params: dict) -> str:
+    def sub(m):
+        key = m.group(1)
+        if key not in params:
+            sys.exit(f"clay-go: this state needs --{key.replace('_', '-')}")
+        return params[key]
+    return re.sub(r"\{(\w+)\}", sub, text)
+
+
+def build_hops(states: dict, target: str, params: dict, gate: str) -> list[dict]:
+    hops = []
+    for sid in chain(states, target):
+        st = states[sid]
+        clicks = []
+        for step in st.get("steps", []):
+            c = dict(step["click"])
+            if "name" in c and c["name"]:
+                if c["name"] == "{view}" and "view" not in params:
+                    c["name"] = c.get("default_view", "Default view")
+                elif c["name"] == "{campaign_group}":
+                    c["name"] = " | ".join(params["campaign"].split(" | ")[:3])
+                else:
+                    c["name"] = fill(c["name"], params)
+            clicks.append(c)
+        arrive = [{k: (fill(v, params) if isinstance(v, str) else v) for k, v in a.items()} for a in st["arrive"]]
+        url = fill(st["url"], params) if "url" in st else None
+        hops.append({"state": sid, "spec": {"url": url, "path": url, "clicks": clicks, "arrive": arrive,
+                                             "gate": gate, "timeout": ARRIVE_TIMEOUT_MS}})
+    return hops
+
+
+def clay_tab(ws: str) -> str:
+    """The kit's own background Clay tab, shared with clay-map: one full load
+    the first time, router hops after. Never a tab someone else opened."""
+    sys.path.insert(0, str(HERE / "lib"))
+    from clay_crawl import own_tab
+    return own_tab(ws)
+
+
+def run_hop(session: str, spec: dict, clock: dict | None = None) -> dict:
+    """One hop, timed three ways.
+
+    page_wait_ms: from our send until the page starts the hop, less the idle
+    transport. Anything here is Clay's main thread still busy with earlier work.
+    clay_ms: Clay's router and render until the arrival element exists.
+    ours_ms: the CDP legs plus this process, which is the part we control.
+    The page clock is mapped onto ours with an offset taken at setup.
+    """
+    from browser_harness.helpers import cdp
+    clock = clock or {"offset": 0.0, "transport": 1.0}
+    send = time.time() * 1000
+    t = time.perf_counter()
+    # The hop only runs while the page is exactly https://app.clay.com.
+    expr = "(location.origin === 'https://app.clay.com') ? (" + HOP_JS % json.dumps(spec) + \
+        ") : JSON.stringify({ok: false, err: 'tab is not on app.clay.com'})"
+    r = cdp("Runtime.evaluate", session_id=session, expression=expr,
+            awaitPromise=True, returnByValue=True, _response_timeout=spec["timeout"] / 1000 + 10)
+    wall = (time.perf_counter() - t) * 1000
+    recv = time.time() * 1000
+    value = (r.get("result") or {}).get("value")
+    out = json.loads(value) if isinstance(value, str) else {"ok": False, "err": json.dumps(r)[:200]}
+    out["wall_ms"] = round(wall, 1)
+    start, end = out.pop("start_epoch", None), out.pop("end_epoch", None)
+    if start and end:
+        start, end = start - clock["offset"], end - clock["offset"]
+        leg_in = max(0.0, start - send)
+        leg_out = max(0.0, recv - end)
+        busy = max(0.0, leg_in - clock["transport"])
+        out["page_wait_ms"] = round(busy, 1)
+        out["ours_ms"] = round(max(0.0, wall - out.get("clay_ms", 0) - busy), 1)
+    else:
+        out["ours_ms"] = round(wall - out.get("clay_ms", 0), 1)
+    return out
+
+
+def calibrate(session: str) -> dict:
+    """Transport cost and page-clock offset, from the quickest of a few probes.
+
+    Browser.getVersion is answered by the browser process, so it times the
+    daemon and CDP path without waiting on Clay's main thread.
+    """
+    from browser_harness.helpers import cdp
+    transport = 1e9
+    for _ in range(5):
+        t = time.perf_counter()
+        cdp("Browser.getVersion")
+        transport = min(transport, (time.perf_counter() - t) * 1000)
+    best = (1e9, 0.0)
+    for _ in range(5):
+        a = time.time() * 1000
+        r = cdp("Runtime.evaluate", session_id=session, expression="performance.timeOrigin + performance.now()", returnByValue=True)
+        b = time.time() * 1000
+        page = (r.get("result") or {}).get("value") or 0
+        if b - a < best[0]:
+            best = (b - a, page - (a + b) / 2)
+    return {"transport": transport / 2, "offset": best[1], "probe_rtt": best[0]}
+
+
+def full_load(session: str, url: str, spec: dict) -> dict:
+    """Fallback when the router did not take a pushed URL: a document load."""
+    from browser_harness.helpers import cdp
+    t = time.perf_counter()
+    cdp("Page.navigate", session_id=session, url="https://app.clay.com" + url, _response_timeout=30)
+    res = run_hop(session, {**spec, "url": None})
+    res["wall_ms"] = round((time.perf_counter() - t) * 1000, 1)
+    res["mode"] = "full-load"
+    return res
+
+
+def say(res: dict) -> None:
+    """Print one hop. The path is reduced to its pattern and every line goes
+    through the map's log sanitizer: no ids, emails or page text in output
+    that a job log or a transcript keeps."""
+    sys.path.insert(0, str(HERE / "lib"))
+    from clay_crawl import pattern
+    from clay_sanitize import log_line
+    res = dict(res)
+    if res.get("at"):
+        res["at"] = pattern(res["at"])
+    res.pop("clicked", None)
+    print(log_line(json.dumps(res)))
+
+
+def main(argv=None) -> int:
+    _reexec_in_harness_env()
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("states", nargs="*")
+    ap.add_argument("--ws", default=None)
+    for k in ("table", "campaign", "workflow", "workbook", "column", "view", "folder", "audseg"):
+        ap.add_argument(f"--{k}")
+    ap.add_argument("--runs", type=int, default=1, help="repeat the whole sequence, report p50 and worst")
+    ap.add_argument("--list", action="store_true")
+    ap.add_argument("--refresh-ids", action="store_true")
+    a = ap.parse_args(argv)
+    if hasattr(a, "ws") and not a.ws:
+        a.ws = default_workspace()
+        if not a.ws and not a.list:
+            sys.exit("no Clay workspace: pass --ws <id> or set CLAY_WORKSPACE_ID")
+    routes = load_routes()
+    states = routes["states"]
+    if a.list:
+        for sid, st in states.items():
+            where = st.get("url") or f"{st['parent']} + click"
+            print(f"{sid:22} {where}")
+        return 0
+    if not a.states:
+        ap.error("name at least one state (see --list)")
+    for s in a.states:
+        if s not in states:
+            sys.exit(f"clay-go: unknown state {s!r} (see --list)")
+
+    t_setup = time.perf_counter()
+    params = {"ws": a.ws}
+    ids = Ids(a.ws, a.refresh_ids) if any((a.table, a.campaign, a.workflow, a.workbook, a.refresh_ids)) else None
+    if a.table:
+        t = ids.find("tables", a.table)
+        params.update(t=t["id"], wb=t["wb"])
+    if a.workbook:
+        params["wb"] = ids.find("workbooks", a.workbook)["id"]
+    if a.campaign:
+        c = ids.find("campaigns", a.campaign)
+        params.update(cam=c["id"], campaign=c["name"])
+    if a.workflow:
+        params["wf"] = ids.find("workflows", a.workflow)["id"]
+    for k in ("column", "view", "folder", "audseg"):
+        if getattr(a, k):
+            params[k] = getattr(a, k)
+
+    from browser_harness.admin import ensure_daemon
+    from browser_harness.helpers import cdp
+    ensure_daemon()
+    target = clay_tab(a.ws)
+    session = cdp("Target.attachToTarget", targetId=target, flatten=True)["sessionId"]
+    setup_ms = round((time.perf_counter() - t_setup) * 1000)
+    clock = calibrate(session)
+
+    plan = [(s, build_hops(states, s, params, routes["gate_words"])) for s in a.states]
+    results: dict[str, list[dict]] = {}
+    failed = False
+    try:
+        for run in range(a.runs):
+            for target_state, hops in plan:
+                for hop in hops:
+                    # A parent already on screen costs nothing to reach again.
+                    res = run_hop(session, hop["spec"], clock)
+                    if not res.get("ok") and hop["spec"]["url"] and res.get("err") is None:
+                        res = full_load(session, hop["spec"]["url"], hop["spec"])
+                    res.setdefault("mode", "router" if hop["spec"]["url"] else "click")
+                    res.update(state=hop["state"], run=run + 1)
+                    results.setdefault(target_state, []).append(res)
+                    say(res)
+                    if not res.get("ok"):
+                        failed = True
+                        break
+                # Close menus and panels so the next run starts clean.
+                for _ in range(2):
+                    cdp("Input.dispatchKeyEvent", session_id=session, type="keyDown", key="Escape", code="Escape", windowsVirtualKeyCode=27)
+                    cdp("Input.dispatchKeyEvent", session_id=session, type="keyUp", key="Escape", code="Escape", windowsVirtualKeyCode=27)
+    finally:
+        cdp("Target.detachFromTarget", sessionId=session)
+    if a.runs > 1:
+        for s, rs in results.items():
+            per_run = {}
+            for r in rs:
+                d = per_run.setdefault(r["run"], {"ours": 0.0, "clay": 0, "wall": 0.0, "wait": 0.0})
+                d["ours"] += r.get("ours_ms", 0); d["clay"] += r.get("clay_ms", 0); d["wall"] += r.get("wall_ms", 0)
+                d["wait"] += r.get("page_wait_ms", 0)
+            walls = [d["wall"] for d in per_run.values()]
+            print(json.dumps({"summary": s, "runs": len(walls),
+                              "wall_p50_ms": round(statistics.median(walls)), "wall_worst_ms": round(max(walls)),
+                              "ours_p50_ms": round(statistics.median(d["ours"] for d in per_run.values()), 1),
+                              "ours_worst_ms": round(max(d["ours"] for d in per_run.values()), 1),
+                              "clay_p50_ms": round(statistics.median(d["clay"] for d in per_run.values())),
+                              "clay_worst_ms": max(d["clay"] for d in per_run.values()),
+                              "page_wait_p50_ms": round(statistics.median(d["wait"] for d in per_run.values()), 1),
+                              "ok": all(r.get("ok") for r in rs), "transport_ms": round(clock["transport"], 2), "probe_rtt_ms": round(clock["probe_rtt"], 1),
+                              "setup_ms": setup_ms}))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

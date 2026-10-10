@@ -395,6 +395,7 @@ if group "ux-learning"; then
   check "UX learning resolves installed symlink" "$TMP/ux-learning" --help
   check "UX learning evidence and routing" python3 "$ROOT/tests/test_ux_learning.py"
   check "Clay map validates" python3 "$ROOT/bin/ux-learning" validate "$ROOT/library/learning/clay-navigation/package.json"
+  check "clay-map queries, clay-go hops, no customer data in the map" python3 "$ROOT/tests/test_clay_map.py"
   check "shared instruction export is current" python3 "$ROOT/tools/agents_md.py" --check
 fi
 

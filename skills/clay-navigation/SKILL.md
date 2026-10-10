@@ -99,6 +99,42 @@ came back empty. Schemas: POST an empty body and Clay's 400 names the required f
 from the same tab (Clay's 400s name the missing body fields), then add a row
 here, and a `bin/` tool if it will be reused.
 
+## Where things live in Clay
+
+Move by heart: `bin/clay-go <state> [--table|--campaign|--workflow NAME] [--column C]`
+pushes the URL through Clay's own router in the existing Clay tab (no page
+load, no model call, ids from a cached `clay` CLI listing) and checks arrival
+with one element. `bin/clay-map where|unlocks|path` answers "where does this
+control go", "what opens this screen" and "fastest route in ms" from the
+crawled map, without the browser. `clay-go --list` prints every state. The
+full map is `library/learning/clay-navigation/routes.json` (curated screens and
+the API endpoint each control fires) and `elements.json` (every element on
+every crawled state).
+
+| Screen                    | URL under `/workspaces/{ws}/`                                                                     | Arrived when                                   | Faster read                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------- |
+| Home                      | `home`                                                                                            | "What can we build today?"                     | `clay folders list`                    |
+| Tables & workbooks        | `workbooks-and-tables`                                                                            | button "Last opened by me"                     | `clay tables list`                     |
+| Workbook canvas           | `workbooks/{wb}`                                                                                  | button "Fit View"                              | `clay workbooks get`                   |
+| Table (redirects to view) | `workbooks/{wb}/tables/{t}`                                                                       | `[data-testid^=table-header-field]`            | `clay tables rows/columns`             |
+| Column menu, settings     | table, header button, then menuitem "Edit column"                                                 | "Save and don't run enrichments" (never press) | `clay tables columns`                  |
+| Enrich / Import / Export  | table, "Open Sidebar", tab Enrich/Import/Export                                                   | "Most popular in Clay"                         |                                        |
+| Row detail                | table, `[data-testid=table-cell-button-Maximize]`                                                 | button "Close"                                 | `clay tables rows`                     |
+| People, segments          | `people` (to `people/all/records`), `people/audiences`                                            | tab "Records"                                  | `clay audiences records/list`          |
+| Sequencer list            | `campaigns` (`?tab=email-accounts`, `sender-variables`, `account-orders`, `global-blocklist`)     | button "Reply rate"                            | `clay campaigns list --with-analytics` |
+| Campaign sequence editor  | `campaigns/{cam}?tab=sequence`                                                                    | button "Lead setup"                            | `clay campaigns get/sequence`          |
+| Campaign tabs             | `campaigns/{cam}?tab=sender-accounts\|analytics\|activity\|replies`                               | that tab                                       | `clay campaigns analytics`             |
+| Master inbox              | `campaigns/inbox`, then sequence button, then a row                                               | button "Reply to email" (never press)          | `bin/clay-inbox`                       |
+| Sequencer analytics       | `campaigns/analytics`                                                                             | button "Show Replied"                          | `clay campaigns analytics`             |
+| Signals                   | `signals`                                                                                         | button "New signal" (never press)              | `clay signals list`                    |
+| Workflows, one workflow   | `terracotta`, `terracotta/tc-workflows/{wf}`                                                      | "Workflow versions"                            | `clay workflows get/runs`              |
+| Credits and usage         | `settings/credit-usage`                                                                           | tab "Overview"                                 | `bin/clay-balance`                     |
+| Settings                  | `settings/team`, `accounts`, `account`, `webhooks`, `website-tracking`, `referrals`, `appearance` | the page's search box or tab                   | `clay users`, `clay app-accounts`      |
+
+Find leads > People/Companies opens a new `/chats/{cc}` session, Sandbox Mode
+makes a sandbox copy of the table, and the star on a row writes a favorite:
+all three are gates even though their labels don't say save or run.
+
 ## Standing user corrections, 2026-09-23
 
 - Never use Sculptor. Configure columns directly in Clay's native UI.

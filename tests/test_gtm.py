@@ -870,6 +870,36 @@ def test_bounce_notices_and_removal_asks(tmp: Path):
     ok(gi.auto_class({"email_body": "x " * 150 + "please remove me"}) is None, "a long message must lead with it")
 
 
+def test_replies_carry_the_ids_clay_reply_needs(tmp: Path):
+    """`gtme next` printed `campaign_id=... lead_id=...` because no Reply kept
+    Clay's ids. Every Reply now stores the sequencer campaign, lead, stats id
+    and message id; an id that is not a plain token is dropped, never cut."""
+    graph = osgraph.Graph(tmp / "ids.sqlite")
+    (tmp / "ip").mkdir(exist_ok=True)
+    ids = osgraph.Identities(people_store(tmp / "ip"))
+    gi.sync(graph, ["clay"], CFG, ids, cli(world_a()))
+    seed = "Acme | Widget | Seed"
+    a = thread("a@fund.example", seed, [
+        {"type": "SENT", "time": "2026-10-05T15:00:00Z", "stats_id": "st-sent-1", "email_body": "hi"},
+        {"type": "REPLY", "time": "2026-10-06T09:00:00Z", "email_body": "Send the deck?"}], "77")
+    a["email_lead_id"] = 4242
+    a["history"]["history"][1]["message_id"] = "<CAx1@mail.example>"
+    b = thread("shared@vc.example", seed, [
+        {"type": "REPLY", "time": "2026-10-06T10:00:00Z", "stats_id": "st-reply\x1b", "email_body": "Pricing?"}], "78")
+    b["history"]["history"][0]["message_id"] = "bad-id\nnewline"
+    res = gi.sync(graph, ["inbox"], CFG, ids, cli(world_a()), inbox_fn=lambda ws: [a, b] if ws == "111" else [])
+    ok(all(r["ok"] for r in res), res)
+    graph.db.close()
+    db = gq.connect(tmp / "ids.sqlite")
+    rows = {r["email"]: r for r in gq.replies(db, "Acme Capital", unanswered=True)["replies"]}
+    got = rows["a@fund.example"]
+    ok((got["workspace_id"], got["campaign_id"], got["lead_id"], got["lead_map_id"]) == ("111", "9", "4242", "77"), got)
+    ok(got["stats_id"] == "st-sent-1" and got["message_id"] == "<CAx1@mail.example>", got)
+    bad = rows["shared@vc.example"]
+    ok(bad["stats_id"] == "" and bad["message_id"] == "", "an id with whitespace or a control is dropped")
+    db.close()
+
+
 # Security review 2026-10-09: TAG, BREAK and QUOTE_HTML were quadratic on a
 # body of "<" characters and never finished on 100k of them. Every pattern
 # now finishes each shape in under 17 ms on this Mac; 50 ms is the bar.
@@ -1002,6 +1032,7 @@ def main():
         test_gws_is_read_only()
         test_booking_signals_from_threads(Path(d))
         test_bounce_notices_and_removal_asks(Path(d))
+        test_replies_carry_the_ids_clay_reply_needs(Path(d))
         speed = test_speed(Path(d))
     print(f"gtm: {CHECKS} checks passed; {speed['leads']} leads, ms: "
           + ", ".join(f"{k} {v:.1f}" for k, v in speed["ms"].items()))

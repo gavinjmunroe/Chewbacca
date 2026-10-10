@@ -451,7 +451,10 @@ def replies(db, client_name: str | None = None, unanswered: bool = False, includ
         out.append({"time": r.get("time"), "email": r.get("lead_email"), "campaign": names.get(r["campaign"]) or
                     r.get("campaign_name"), "class": cls, "classified_by": verdict.get("by"),
                     "answered": r.get("answered"), "forwarded": r.get("forwarded"), "snippet": r.get("snippet"),
-                    "screen_flag": r.get("screen_flag")})
+                    "screen_flag": r.get("screen_flag"), "workspace_id": r.get("workspace_id"),
+                    "campaign_id": r.get("campaign_id"), "lead_id": r.get("lead_id"),
+                    "lead_map_id": r.get("lead_map_id"), "stats_id": r.get("stats_id"),
+                    "message_id": r.get("message_id")})
     out.sort(key=lambda r: r["time"] or "", reverse=True)
     return {"client": client_name, "unanswered": unanswered, "replies": out, "skipped_closed": skipped,
             "skipped_forwarded": forwarded, "sync": sync_state(db, ws)}

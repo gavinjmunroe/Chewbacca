@@ -1050,6 +1050,20 @@ def auto_class(msg: dict) -> tuple[str, str] | None:
     return None
 
 
+# The ids `chewbacca clay reply` needs, read off the thread. They come from
+# Clay's own API but pass through email headers (a message id is
+# "<...@mail.gmail.com>"), so one is kept only whole: no controls, no
+# whitespace, nothing clipped. A Gmail message id runs about 50 characters.
+REPLY_ID_MAX = 300
+REPLY_ID = re.compile(r"^[!-~]{1,%d}$" % REPLY_ID_MAX)
+
+
+def reply_id(value) -> str:
+    """A Clay id as text, or "" when it is missing or not a plain token."""
+    text = str(value) if isinstance(value, (str, int)) and not isinstance(value, bool) else ""
+    return text if REPLY_ID.match(text) else ""
+
+
 def client_lead_emails(graph: Graph, client_id_: str) -> set[str]:
     """Every address enrolled in one of this client's campaigns."""
     return {r["email"] for r in graph.query(
@@ -1139,6 +1153,7 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
         for n, msg in enumerate(reply_msgs):
             when = clip(msg.get("time"), 40)
             later = [m for m in history if str(m.get("time") or "") > when]
+            before = [m for m in history if m.get("type") == "SENT" and str(m.get("time") or "") <= when]
             text = msg.get("email_body") or ""
             flag = screen_fn(text)
             report["flagged"] += bool(flag) and flag != UNSCREENED
@@ -1153,6 +1168,15 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
                 # exactly one client (and still suppresses its sender there).
                 "workspace_id": str(workspace_id), "client_id": cid,
                 "smartlead_campaign_id": clip(item.get("email_campaign_id"), 40),
+                # What `chewbacca clay reply` takes: the sequencer campaign,
+                # and the stats id and message id of the message answered
+                # (the reply's own stats id, else the send it answered, the
+                # way zeutara-gtme's autopilot builds reply_data).
+                "campaign_id": reply_id(item.get("email_campaign_id")),
+                "lead_id": reply_id(item.get("email_lead_id")),
+                "lead_map_id": reply_id(item.get("email_lead_map_id")),
+                "message_id": reply_id(msg.get("message_id")),
+                "stats_id": reply_id(msg.get("stats_id")) or (reply_id(before[-1].get("stats_id")) if before else ""),
                 "lead_status": clip(item.get("lead_status"), 40), "subject": clip(msg.get("subject"), 160),
                 "snippet": clip(text, SNIPPET), "screen_flag": flag,
                 "answered": any(m.get("type") == "SENT" for m in later),

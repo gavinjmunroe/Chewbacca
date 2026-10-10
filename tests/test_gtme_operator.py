@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -155,6 +156,34 @@ class GraphCommands(unittest.TestCase):
         for x in items:
             self.assertTrue(x["command"] and x["gate"] and x["why"], x)
         self.assertEqual(items[0]["kind"], "reply")
+
+    def test_reply_command_has_real_ids_and_chewbacca_clay_accepts_it(self):
+        # gtme next printed "campaign_id=... lead_id=... reply_data=..." until
+        # 2026-10-10, which chewbacca clay refuses (lead_id is not a reply arg).
+        db = sqlite3.connect(self.tmp / "graph.sqlite")
+        row = db.execute("SELECT props FROM nodes WHERE id = 'reply:1'").fetchone()
+        props = dict(json.loads(row[0]), workspace_id="9001", campaign_id="4411", lead_id="77",
+                     stats_id="st-9f2", message_id="<CAx1@mail.example>")
+        db.execute("UPDATE nodes SET props = ? WHERE id = 'reply:1'", (json.dumps(props),))
+        db.commit()
+        db.close()
+        items = json.loads(run(self.env, "next", "--json").stdout)
+        cmds = {x["do"].split()[1]: x["command"] for x in items if x["kind"] == "reply"}
+        cmd = next(v for k, v in cmds.items() if k.startswith("lead"))
+        self.assertNotIn("...", cmd)
+        self.assertIn("campaign_id=4411", cmd)
+        clay = shlex.split(cmd.split("  then  ")[1])
+        self.assertEqual(clay[:3], ["chewbacca", "clay", "reply"])
+        data = json.loads(next(a for a in clay if a.startswith("reply_data="))[len("reply_data="):])
+        self.assertEqual((data["email_stats_id"], data["reply_message_id"]), ("st-9f2", "<CAx1@mail.example>"))
+        env = dict(os.environ, CHEWBACCA_CLAY_FIXTURES=str(self.tmp / "fx"), CLAY_WORKSPACE_ID="9001",
+                   CHEWBACCA_CLAY_MEASURED=str(self.tmp / "measured.json"), GTM_CONFIG=str(self.tmp / "none.json"))
+        (self.tmp / "measured.json").write_text("{}")
+        p = subprocess.run(["node", str(ROOT / "bin" / "chewbacca-clay"), *clay[2:], "--dry-run"],
+                           capture_output=True, text=True, env=env, timeout=60)
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        # A reply the sync stored no ids for says to sync, never prints a guess.
+        self.assertIn("gtm sync --source inbox", cmds["q@beta.example"])
 
     def test_classes_the_sync_gave_sort_bounces_and_removals(self):
         # 2026-10-10: the sync now classifies bounce notices and removal asks

@@ -30,6 +30,7 @@ import html
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -1066,6 +1067,28 @@ def memory_actions(name: str, overdue: dict) -> list[dict]:
     return out
 
 
+# What a reply command may carry as ws= and campaign_id=: chewbacca clay's own
+# ID shape, so the printed command is one it accepts.
+CLAY_ARG_ID = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+REPLY_BODY_PLACEHOLDER = "<p>WRITE YOUR ANSWER HERE</p>"
+
+
+def reply_command(r: dict, ws_fallback: str) -> str:
+    """`chewbacca gtm lead`, then the whole `chewbacca clay reply` with the
+    thread's real ids, the body left for the person to write. It is a write
+    that sends email, so chewbacca clay still asks a person at a terminal.
+    Ids the sync never stored name the sync to run instead of a guess."""
+    ws = str(r.get("workspace_id") or ws_fallback or "")
+    cid = str(r.get("campaign_id") or "")
+    lead = f"chewbacca gtm lead {shlex.quote(str(r.get('email') or ''))}"
+    if not (CLAY_ARG_ID.match(ws) and CLAY_ARG_ID.match(cid) and r.get("stats_id") and r.get("message_id")):
+        return f"{lead}  then  chewbacca gtm sync --source inbox (this reply has no Clay ids stored yet)"
+    data = {"email_stats_id": r["stats_id"], "reply_message_id": r["message_id"],
+            "reply_email_time": r.get("time") or "", "email_body": REPLY_BODY_PLACEHOLDER}
+    return (f"{lead}  then  chewbacca clay reply ws={ws} campaign_id={cid} "
+            f"reply_data={shlex.quote(json.dumps(data, separators=(',', ':')))} --allow-writes")
+
+
 def actions_for(s: dict) -> list[dict]:
     """Every action for one client, with a score, the command, the gate and
     the reason (rule + numbers). Higher score first. The scores order kinds
@@ -1084,8 +1107,7 @@ def actions_for(s: dict) -> list[dict]:
             "do": f"Answer {r.get('email')} ({cls or 'unclassified'} reply, {age(r.get('time'))}): "
                   f"{REPLY_NEXT.get(cls, REPLY_NEXT[None])}",
             "quote": strip_html(r.get("snippet") or "")[:160],
-            "command": f"chewbacca gtm lead {r.get('email')}  then  chewbacca clay reply ws={ws} "
-                       "campaign_id=... lead_id=... reply_data=... --allow-writes",
+            "command": reply_command(r, ws),
             "gate": "read, then needs your approval to send",
             "why": f"Clay inbox, synced {age(s['as_of'])}. " + (
                 f"Rule: answer positive replies within {POSITIVE_ANSWER_MINUTES} minutes; a day's wait loses "

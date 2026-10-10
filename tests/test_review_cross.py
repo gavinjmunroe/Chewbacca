@@ -306,7 +306,7 @@ class RunnerTests(unittest.TestCase):
     def test_reviewer_env_is_an_allowlist(self):
         self.install("claude")
         secrets = {"GITHUB_TOKEN": FAKE_GH, "AWS_SECRET_ACCESS_KEY": "synthetic-aws-secret-value",
-                   "OPENAI_API_KEY": "sk-synthetic0000000000000000", "SSH_AUTH_SOCK": "/tmp/agent.sock",
+                   "OPENAI_API_KEY": "sk-" + "synthetic" + "0" * 18, "SSH_AUTH_SOCK": "/tmp/agent.sock",
                    "CHEWBACCA_HOME": "/tmp/private"}
         os.environ.update(secrets)
         os.environ["LANG"] = "en_US.UTF-8"

@@ -672,6 +672,24 @@ margin over the control):
   point rarely helps.** 4 of 55 nudges kept; the remaining gap was the value
   structure inside the frame, not placement.
 
+Structure pass (by hand, kept only when both the score and the light/dark
+layout match rose):
+
+- **tested: add the one dominant light mass the frame is built on.** A lit
+  facade, a light column, a bright horizon band each raised layout match by
+  +0.17 to +0.57 with the score rising too. Removing shapes to clear the
+  layout usually cost more score than it gained.
+- **tested: place a figure by the part the frame is about.** In a close-up,
+  anchor by the head (measure where the head lands after posing, then move
+  the figure); placed by its body centre, the figure showed only its legs.
+- **tested: check figure orientation under an orthographic top-down camera.**
+  +90 degrees about X turns a standing figure upside down there; -90 is
+  upright. One render caught what weeks of scores missed.
+- **tested: an original character caps a close-up's layout match.** A figure
+  of your own design puts light and dark in different places from the
+  film's; relight it to the frame's values, and stop before reshaping it
+  toward anyone else's design.
+
 ## Tools worth reaching for
 
 The full ranked list, with licenses and the file each one plugs into, is

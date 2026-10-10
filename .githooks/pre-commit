@@ -76,6 +76,13 @@ if [ -z "${SKIP_MANIFEST_GUARD:-}" ] && [ -f tools/manifest_guard.py ]; then
   python3 tools/manifest_guard.py || exit 1
 fi
 
+# A malformed SKILL.md is silently unregistered. Checked here, against the
+# staged bytes, so it's refused in the tab that wrote it instead of blocking
+# every tab's autopush once it reaches main (screen-time, 2026-10-09).
+if [ -f tools/frontmatter.py ] && printf '%s\n' "$STAGED" | grep -q 'SKILL\.md$'; then
+  python3 tools/frontmatter.py --staged || exit 1
+fi
+
 # ── Concurrent sessions ──────────────────────────────────────────────────────
 #
 # The mtime heuristic below CANNOT catch the case that keeps happening, and it

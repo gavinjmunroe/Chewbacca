@@ -103,7 +103,11 @@ struct FileView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
         case .text(let body):
-            TextPane(text: body, editable: editable, onSave: onSave)
+            TextPane(
+                text: body, editable: editable,
+                language: Syntax.language(forPath: url.path)
+                    ?? Syntax.language(forShebang: String(body.prefix(200).split(separator: "\n").first ?? "")),
+                onSave: onSave)
 
         case .opaque(let type):
             Text(type)
@@ -157,7 +161,7 @@ struct FileView: View {
     }
 }
 
-/// Text, read-only or editable.
+/// Text, read-only or editable, syntax colored when its language is known.
 ///
 /// Editing writes back to the same path on save and nowhere else. That is a real
 /// capability and it is bounded on purpose: the panel can only ever overwrite
@@ -166,7 +170,13 @@ struct FileView: View {
 private struct TextPane: View {
     let text: String
     let editable: Bool
+    let language: Syntax.Language?
     let onSave: (String) -> Void
+
+    /// Past this many UTF-16 units the read-only view is drawn plain:
+    /// coloring a whole generated file to show its first screen stalls the
+    /// glass. Guessed, never measured.
+    static let colorLimit = 200_000
 
     @State private var draft: String = ""
     @State private var loaded = false
@@ -175,11 +185,9 @@ private struct TextPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if editable {
-                TextEditor(text: $draft)
-                    .font(.system(size: 11.5, design: .monospaced))
-                    .foregroundStyle(HUD.ink)
-                    .scrollContentBackground(.hidden)
+                CodeEditor(text: $draft, language: language)
                     .background(.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 8))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                     .frame(height: 300)
                 HStack(spacing: 8) {
                     Button("Save") {
@@ -189,6 +197,7 @@ private struct TextPane: View {
                     .buttonStyle(.plain)
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(HUD.accent)
+                    .keyboardShortcut("s", modifiers: .command)
                     if saved {
                         Text("saved")
                             .font(.system(size: 10))
@@ -202,11 +211,16 @@ private struct TextPane: View {
                 }
             } else {
                 ScrollView(.vertical, showsIndicators: false) {
-                    Text(text)
-                        .font(.system(size: 11.5, design: .monospaced))
-                        .foregroundStyle(HUD.ink.opacity(0.9))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Group {
+                        if let language, text.utf16.count <= Self.colorLimit {
+                            Text(Self.colored(text, language))
+                        } else {
+                            Text(text).foregroundStyle(HUD.ink.opacity(0.9))
+                        }
+                    }
+                    .font(.system(size: 11.5, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 340)
             }
@@ -217,6 +231,82 @@ private struct TextPane: View {
             loaded = true
         }
         .onChange(of: draft) { _, _ in saved = false }
+    }
+
+    static func colored(_ text: String, _ language: Syntax.Language) -> AttributedString {
+        var state = Syntax.State()
+        var out = AttributedString()
+        var first = true
+        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            if !first { out += AttributedString("\n") }
+            first = false
+            out += Syntax.attributed(Syntax.tokens(String(line), language, state: &state))
+        }
+        return out
+    }
+}
+
+/// The File surface's editor: an AppKit text view, because SwiftUI's
+/// TextEditor takes no attributed text before macOS 26 and the HUD runs on 14.
+/// It is plain text in and out; the color is repainted on every edit and never
+/// saved. Smart quotes, dashes and spelling fixes are off, because they
+/// rewrite code.
+struct CodeEditor: NSViewRepresentable {
+    @Binding var text: String
+    let language: Syntax.Language?
+
+    static let font = NSFont.monospacedSystemFont(ofSize: 11.5, weight: .regular)
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSTextView.scrollableTextView()
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.autohidesScrollers = true
+        guard let view = scroll.documentView as? NSTextView else { return scroll }
+        view.isRichText = false
+        view.allowsUndo = true
+        view.drawsBackground = false
+        view.font = Self.font
+        view.textColor = NSColor(HUD.ink)
+        view.insertionPointColor = NSColor(HUD.accent)
+        view.isAutomaticQuoteSubstitutionEnabled = false
+        view.isAutomaticDashSubstitutionEnabled = false
+        view.isAutomaticTextReplacementEnabled = false
+        view.isAutomaticSpellingCorrectionEnabled = false
+        view.isContinuousSpellCheckingEnabled = false
+        view.textContainerInset = NSSize(width: 4, height: 6)
+        view.delegate = context.coordinator
+        view.string = text
+        if let storage = view.textStorage { Syntax.paint(storage, language, font: Self.font) }
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        guard let view = scroll.documentView as? NSTextView, view.string != text else { return }
+        view.string = text
+        if let storage = view.textStorage { Syntax.paint(storage, language, font: Self.font) }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: CodeEditor
+
+        init(_ parent: CodeEditor) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard let view = notification.object as? NSTextView else { return }
+            parent.text = view.string
+            if let storage = view.textStorage {
+                // Repainting moves no characters, so the caret and the
+                // selection stay where the person left them.
+                let selected = view.selectedRanges
+                Syntax.paint(storage, parent.language, font: CodeEditor.font)
+                view.selectedRanges = selected
+            }
+        }
     }
 }
 

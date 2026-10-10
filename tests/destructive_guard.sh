@@ -38,6 +38,14 @@ git -C "$T/dirty" config core.fsmonitor "touch $T/pwned; false"
 t "fsmonitor repo still refused" 2 "$T/dirty" "git reset --hard"
 [ ! -e "$T/pwned" ] && echo "  ok    fsmonitor never ran" || { echo "  FAIL  fsmonitor ran"; fail=$((fail+1)); }
 git -C "$T/dirty" config --unset core.fsmonitor
+# A clean filter is repo config too, and git status runs it to compare a
+# same-size, racily-timed file: shown running on 2026-10-09.
+echo 'f filter=evil' > "$T/dirty/.gitattributes"
+git -C "$T/dirty" config filter.evil.clean "touch $T/pwned-filter; cat"
+touch -t 202001010000 "$T/dirty/f"
+t "filter-driver repo still refused" 2 "$T/dirty" "git reset --hard"
+[ ! -e "$T/pwned-filter" ] && echo "  ok    filter driver never ran" || { echo "  FAIL  filter driver ran"; fail=$((fail+1)); }
+git -C "$T/dirty" config --unset filter.evil.clean; rm -f "$T/dirty/.gitattributes"
 echo "lets through:"
 t "same commands, clean repo" 0 "$T/clean" "git reset --hard HEAD"
 t "restore --staged, dirty"   0 "$T/dirty" "git restore --staged f"

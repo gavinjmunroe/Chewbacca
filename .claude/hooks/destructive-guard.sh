@@ -50,7 +50,10 @@ def repo_dirty(where):
         r = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
                             "-C", where, "status", "--porcelain"],
                            capture_output=True, text=True, timeout=4,
-                           env=dict(os.environ, GIT_OPTIONAL_LOCKS="0"))
+                           # Attributes from the empty tree: no filter driver
+                           # applies, so a repo's filter.*.clean can't run either.
+                           env=dict(os.environ, GIT_OPTIONAL_LOCKS="0",
+                                    GIT_ATTR_SOURCE="4b825dc642cb6eb9a060e54bf8d69288fbee4904"))
     except Exception:
         return True
     if r.returncode != 0:

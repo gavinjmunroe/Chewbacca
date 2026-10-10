@@ -40,7 +40,10 @@ READ_TOOLS = frozenset({"Read"})
 EDIT_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 
 GIT = ["git", "--no-pager", "--no-optional-locks", "--literal-pathspecs",
-       "-c", "core.fsmonitor=false", "-c", "color.ui=never"]
+       "-c", "core.fsmonitor=false", "-c", "color.ui=never",
+       # Attributes from the empty tree: a repo's filter.*.clean runs on a
+       # status otherwise (shown 2026-10-09, tests/destructive_guard.sh).
+       "--attr-source=4b825dc642cb6eb9a060e54bf8d69288fbee4904"]
 
 
 def clean(text: str) -> str:

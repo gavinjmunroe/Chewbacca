@@ -160,6 +160,7 @@ VENDORED = {
     "study-system": "Retrieval practice over rereading, exam run-ups, and the four-cause postmortem",
     "life-ops": "The weekly review, life admin with real deadlines, and what to cut",
     "life-context": "Learning about someone without handing them a blank page",
+    "welcome": "The first conversation after install: five taps, then a personalized assistant",
     # Full Mac control, absorbed from calebnewtonusc/Nova. Seven layers, a
     # plan/execute/verify/log runtime, and the morning brief.
     "mac-control": "Routes a Mac task to the cheapest control layer that can do it",

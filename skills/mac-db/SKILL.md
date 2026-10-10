@@ -1,6 +1,6 @@
 ---
 name: mac-db
-description: Read any database macOS keeps on this Mac, directly and read-only, with one command. Messages, call history, contacts, Mail, Notes with full text, Calendar, Reminders, Safari and Chrome history, Photos, Voice Memos, Podcasts, downloads, CoreDuet interactions, Screen Time, knowledgeC and Biome streams. Use when asked who called, what he browsed, what he downloaded, what a note says, what's on the calendar, who he talks to most, what he did on the Mac at some time, or to answer any question the Mac already logged. Also fires on: call history, browser history, chrome history, safari history, my notes, voice memos, photos from, downloads, biome, knowledgeC, interactionC, what was I doing, when did I, sqlite on the mac.
+description: "Read any database macOS keeps on this Mac, directly and read-only, with one command. Messages, call history, contacts, Mail, Notes with full text, Calendar, Reminders, Safari and Chrome history, Photos, Voice Memos, Podcasts, downloads, CoreDuet interactions, Screen Time, knowledgeC and Biome streams. Use when asked who called, what he browsed, what he downloaded, what a note says, what's on the calendar, who he talks to most, what he did on the Mac at some time, or to answer any question the Mac already logged. Also fires on: call history, browser history, chrome history, safari history, my notes, voice memos, photos from, downloads, biome, knowledgeC, interactionC, what was I doing, when did I, sqlite on the mac."
 ---
 
 # mac-db

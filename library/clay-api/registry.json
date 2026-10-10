@@ -1554,6 +1554,226 @@
       "verified": false
     },
     {
+      "name": "csv-upload",
+      "kind": "write",
+      "gate": "write:table-data",
+      "args": [
+        "trigger",
+        "csv"
+      ],
+      "summary": "Link a CSV to a workflow's csv_upload trigger (does not run it). Loading leads into Audiences goes through 'Zeutara - Load Wave 1 investors into Audiences'.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "workflows",
+            "triggers",
+            "csv",
+            "upload",
+            "{trigger}",
+            "--file",
+            "{csv}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay workflows triggers csv upload <triggerId> --file <csv>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.31.0 skills/workflows/csv-triggers.md"
+      },
+      "readback": {
+        "op": "workflows",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high: documented in the Clay plugin's csv-triggers reference",
+      "verified": false
+    },
+    {
+      "name": "csv-run",
+      "kind": "write",
+      "gate": "write:spends-credits",
+      "args": [
+        "trigger",
+        "limit"
+      ],
+      "summary": "Run a workflow once per row of the CSV linked to its trigger, first limit= rows. Not idempotent: a retry runs every row again, so read the workflow's runs before rerunning.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "workflows",
+            "triggers",
+            "csv",
+            "run",
+            "{trigger}",
+            "--limit",
+            "{limit}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay workflows triggers csv run <triggerId> --limit <n>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.31.0 skills/workflows/csv-triggers.md"
+      },
+      "readback": {
+        "op": "workflows",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high: documented in the Clay plugin's csv-triggers reference",
+      "verified": false
+    },
+    {
+      "name": "audience-create",
+      "kind": "write",
+      "gate": "write:audience",
+      "args": [
+        "name",
+        "filter"
+      ],
+      "summary": "Create a people audience (segment) from a filter AST, to be a draft campaign's base segment.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "audiences",
+            "create",
+            "--entity-type",
+            "people",
+            "--name",
+            "{name}",
+            "--filter",
+            "{filter}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay audiences create --entity-type people --name <name> --filter <json>",
+        "cli_version": "1.9.1",
+        "help": "used by zeutara-gtme scripts/midweek_drafts.py on 2026-10-07"
+      },
+      "readback": {
+        "op": "audiences",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high: built the 2026-10-07 midweek segments",
+      "verified": false
+    },
+    {
+      "name": "campaign-create",
+      "kind": "write",
+      "gate": "write:campaign-draft",
+      "args": [
+        "name"
+      ],
+      "summary": "Create an empty DRAFT campaign. It sends nothing until it has a segment, a sequence and a Start.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "campaigns",
+            "create",
+            "--name",
+            "{name}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay campaigns create --name <name>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.31.0 skills/campaigns/SKILL.md"
+      },
+      "readback": {
+        "op": "campaigns",
+        "args": {},
+        "expect": "manual"
+      },
+      "confidence": "high: documented, and built the 2026-10-07 midweek drafts",
+      "verified": false
+    },
+    {
+      "name": "campaign-update",
+      "kind": "write",
+      "gate": "write:campaign-draft",
+      "args": [
+        "campaign",
+        "input"
+      ],
+      "summary": "Set a DRAFT campaign's settings, base segment, exclusions or name (input={settings?, leadBaseSegmentId?, leadExclusionSegmentIds?, name?}). Refused on any campaign that is not a draft, and a status key is never accepted.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "campaigns",
+            "update",
+            "{campaign}",
+            "--input",
+            "{input}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay campaigns update <campaignId> --input <json>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.31.0 skills/campaigns/SKILL.md"
+      },
+      "readback": {
+        "op": "campaign",
+        "args": {
+          "campaign": "campaign"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: documented, and set the 2026-10-07 midweek drafts",
+      "verified": false
+    },
+    {
+      "name": "campaign-sequence",
+      "kind": "write",
+      "gate": "write:campaign-draft",
+      "args": [
+        "campaign",
+        "input"
+      ],
+      "summary": "Edit a DRAFT campaign's sequence (input={ops:[addStep|updateStep|deleteStep...]}). Refused on any campaign that is not a draft.",
+      "surfaces": [
+        {
+          "type": "cli",
+          "argv": [
+            "campaigns",
+            "sequence",
+            "edit",
+            "{campaign}",
+            "--input",
+            "{input}"
+          ]
+        }
+      ],
+      "evidence": {
+        "source": "cli",
+        "command": "clay campaigns sequence edit <campaignId> --input <json>",
+        "cli_version": "1.9.1",
+        "help": "clay plugin 2.31.0 skills/campaigns/SKILL.md"
+      },
+      "readback": {
+        "op": "campaign",
+        "args": {
+          "campaign": "campaign"
+        },
+        "expect": "manual"
+      },
+      "confidence": "high: documented, and wrote the 2026-10-07 midweek sequences",
+      "verified": false
+    },
+    {
       "name": "campaign-status",
       "kind": "write",
       "gate": "write:campaign-state",

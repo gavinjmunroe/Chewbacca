@@ -20,6 +20,11 @@
 # which see a session id, and the latest one (clay-chat-approval.json) for
 # `chewbacca clay`, whose shell has none.
 set -uo pipefail
+# A session an agent launched is typed into by that agent, not by Caleb. At
+# 13:17 on 2026-10-10 a launcher's test prompt ("Reply with exactly: launch test
+# ok") wrote an approval. Launchers set CHEWBACCA_AGENT_LAUNCHED=1, and hooks
+# inherit the session's environment.
+[ "${CHEWBACCA_AGENT_LAUNCHED:-}" = 1 ] && exit 0
 STATE="${CHEWBACCA_STATE_DIR:-$HOME/.chewbacca/state}"
 PAYLOAD="$(cat 2>/dev/null)"
 [ -n "$PAYLOAD" ] || exit 0

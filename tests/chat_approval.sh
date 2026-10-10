@@ -37,6 +37,11 @@ expect "don't send yet" no
 expect "pause the campaigns" no
 expect "hold off on the waves till Sagar looks" no
 
+rm -rf "$latest" "$T/clay-chat-approval"
+python3 -c 'import json; print(json.dumps({"prompt":"Reply with exactly: launch test ok","session_id":"s1"}))' |
+  CHEWBACCA_AGENT_LAUNCHED=1 CHEWBACCA_STATE_DIR="$T" bash "$H"
+if [ -f "$latest" ]; then echo "FAIL  an agent-launched session wrote an approval"; fail=1; else echo "ok    an agent-launched session writes none"; fi
+
 rm -rf "$T/clay-chat-approval"
 say "do everything yourself"; say "stop sending"
 if [ -f "$latest" ] || [ -f "$mine" ]; then echo "FAIL  'stop sending' left the ok standing"; fail=1; else echo "ok    'stop sending' withdraws it"; fi

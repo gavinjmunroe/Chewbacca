@@ -12,3 +12,5 @@ Safe, and they rebuild themselves: `uv cache prune --force` (16.6 GB; without `-
 Never ours to delete: `~/Library/Messages` (213 GB of attachments; shortening history deletes old texts, his call), the iMovie library (51 GB), and the Trash (emptying is permanent, he does it).
 
 Measure with `df -h /System/Volumes/Data`, not `/`: the root volume reads mostly empty on APFS. Related: [[feedback_high_load_reads_as_bugs]], [[feedback_slow_means_broken]].
+
+Second time, 2026-10-09 21:35: down to 1.1 GB free, so every shell call failed with ENOSPC and two HUD tests failed that pass on their own. uv had nothing to prune; ShipIt update caches (Mirror, Loom) and pip freed about 9 GB, and removing seven merged agent worktrees under .claude/worktrees freed another 2.5 GB (they hold Swift .build dirs, 300 to 600 MB each). Remove a worktree only when its branch is on origin and `git status` in it is clean, by exact path.

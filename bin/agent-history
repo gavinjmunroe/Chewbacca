@@ -49,33 +49,112 @@ HOME = Path.home()
 
 # ---------------------------------------------------------------- redaction
 
+# Every pattern here runs on text anyone could have planted in a transcript,
+# so each one is linear. The rule that keeps them so: a pattern whose leading
+# run can fail after scanning gets a lookbehind that lets it start only at the
+# beginning of that run, every other repeat is bounded, and nothing nests.
+# A plain run with nothing required after it ([..]{16,}) is left unbounded:
+# it cannot fail once it has scanned, and bounding it would print the tail of
+# a long key. On 2026-10-10 "a." * 500_000 made the old email rule run for
+# minutes and "a-" * 500_000 did the same to the key=value rule; the timing
+# tests in tests/test_agent_history.py hold every pattern to under 1 s on 1 MB.
+#
 # Order matters: a whole private key block or a bearer header is claimed before
 # the generic blob rules see its pieces, and the specific vendor prefixes go
 # before the hex and base64 catch-alls so the label says what leaked.
 _SECRET_RULES = [
-    # scheme://user:password@host, and scheme://longtoken@host. First, so the
-    # email rule never claims "password@host" and leaves the user name beside it.
-    ("URL_USERINFO", re.compile(
-        r"(?i)\b([a-z][a-z0-9+.-]*://)(?:[^\s/@:'\"<>]+:[^\s/'\"<>]*|[^\s/@:'\"<>]{16,})@")),
     ("PRIVATE_KEY", re.compile(
-        r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.S)),
-    ("BEARER", re.compile(r"(?i)\b(bearer|basic)(\s+)[A-Za-z0-9._~+/=-]{12,}")),
-    ("AUTH", re.compile(r"(?i)(authorization\s*[:=]\s*)[\"']?[^\s\"',}]{6,}")),
+        r"-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----.*?(?:-----END [A-Z ]{0,40}PRIVATE KEY-----|\Z)", re.S)),
+    ("BEARER", re.compile(r"(?i)\b(bearer|basic)(\s{1,10})[A-Za-z0-9._~+/=-]{12,}")),
+    ("AUTH", re.compile(r"(?i)\b(authorization\s{0,10}[:=]\s{0,10})[\"']?[^\s\"',}]{6,}")),
     ("API_KEY", re.compile(r"\bsk-(?:ant-|proj-|live-|test-)?[A-Za-z0-9_-]{16,}")),
     ("GITHUB_TOKEN", re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})")),
-    ("AWS_KEY", re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b")),
+    ("AWS_KEY", re.compile(r"(?<![A-Za-z0-9])(?:AKIA|ASIA)[0-9A-Z]{16}(?![A-Za-z0-9])")),
     ("SLACK_TOKEN", re.compile(r"\bxox[abprs]-[A-Za-z0-9-]{10,}")),
     ("GOOGLE_KEY", re.compile(r"\bAIza[0-9A-Za-z_-]{30,}")),
     ("STRIPE_KEY", re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[A-Za-z0-9]{16,}")),
-    ("JWT", re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")),
     ("SECRET", re.compile(
-        r"(?i)\b([\w-]*(?:api[_-]?key|secret|token|passwd|password|pwd|access[_-]?key)[\w-]*)"
-        r"(\"?\s*[:=]\s*[\"']?)(?!\[)([^\s\"',;}]{6,})")),
-    ("EMAIL", re.compile(r"\b[\w.+-]+@[\w-]+(?:\.[\w-]+)+\b")),
-    ("HEX", re.compile(r"\b[0-9a-fA-F]{32,}\b")),
+        r"(?i)(?<![\w-])([\w-]{0,64}?(?:api[_-]?key|secret|token|passwd|password|pwd|access[_-]?key)[\w-]{0,64})"
+        r"(\"?\s{0,8}[:=]\s{0,8}[\"']?)(?!\[)([^\s\"',;}]{6,})")),
+    ("HEX", re.compile(r"(?<![0-9A-Za-z_])[0-9a-fA-F]{32,}(?![0-9A-Za-z_])")),
     ("PHONE", re.compile(r"(?<![\w.-])(?:\+?\d{1,3}[ .-]?)?(?:\(\d{3}\)|\d{3})[ .-]?\d{3}[ .-]?\d{4}(?![\w-])")),
 ]
-_BLOB = re.compile(r"[A-Za-z0-9+/_-]{40,}={0,2}")
+_BLOB = re.compile(r"(?<![A-Za-z0-9+/_-])[A-Za-z0-9+/_-]{40,}={0,2}")
+
+# Emails are found from their one fixed character, the "@", and finished in
+# Python, because a regex that has to scan back over a run to find where the
+# address starts is the quadratic shape.
+# The userinfo repeat cannot backtrack into itself: each round ends on an '@'
+# its class excludes, so the rounds are unambiguous, and there are at most 16.
+_URL_CRED = re.compile(r"(?i)(?<![a-z0-9+.-])([a-z][a-z0-9+.-]{0,30}://)((?:[^\s/'\"<>@]{0,256}@){1,16})")
+_EMAIL_DOMAIN = re.compile(r"@[\w-]{1,63}(?:\.[\w-]{1,63}){1,8}(?![\w-])")
+_EMAIL_LOCAL = frozenset("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.+-")
+_TOKEN_CH = re.compile(r"[A-Za-z0-9_+/=.@-]")
+MAX_REDACT = 1 << 20  # characters; past this the rest is cut, never scanned
+_JWT = re.compile(r"eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}")
+_JWT_SEG = re.compile(r"eyJ[A-Za-z0-9_-]*")
+
+
+def _jwts(text: str) -> str:
+    """A JWT may follow a dash ("token-eyJ..."), so it cannot be anchored to
+    the start of a run, and "eyJ-" * N would then rescan the run from every
+    eyJ. A start that fails fails for every later eyJ in the same first
+    segment too, since that segment ends at the same place, so the search
+    skips to the segment's end."""
+    out, last = [], 0
+    pos = text.find("eyJ")
+    while pos != -1:
+        prev = text[pos - 1] if pos else ""
+        if not (prev.isalnum() or prev == "_"):
+            m = _JWT.match(text, pos)
+            if m:
+                out.append(text[last:pos])
+                out.append("[JWT]")
+                last = m.end()
+                pos = text.find("eyJ", last)
+                continue
+            pos = _JWT_SEG.match(text, pos).end()
+        else:
+            pos += 3
+        pos = text.find("eyJ", pos)
+    if not out:
+        return text
+    out.append(text[last:])
+    return "".join(out)
+
+
+def _url_cred_sub(m: re.Match) -> str:
+    user = m.group(2)[:-1]
+    colon = user.find(":")
+    if colon > 0 or (colon < 0 and "@" not in user and len(user) >= 16):
+        return m.group(1) + "[REDACTED]@"
+    return m.group(0)
+
+
+def _url_userinfo(text: str) -> str:
+    """scheme://user:password@host and scheme://longtoken@host become
+    scheme://[REDACTED]@host. A password may hold '@'; the last '@' before the
+    host wins."""
+    return _URL_CRED.sub(_url_cred_sub, text)
+
+
+def _emails(text: str) -> str:
+    out, last = [], 0
+    for m in _EMAIL_DOMAIN.finditer(text):
+        at = m.start()
+        lo = at
+        # Unbounded but linear: the walk never crosses the previous match.
+        while lo > last and text[lo - 1] in _EMAIL_LOCAL:
+            lo -= 1
+        if lo == at:
+            continue
+        out.append(text[last:lo])
+        out.append("[EMAIL]")
+        last = m.end()
+    if not out:
+        return text
+    out.append(text[last:])
+    return "".join(out)
 
 
 def _blob_sub(m: re.Match) -> str:
@@ -95,10 +174,10 @@ def _blob_sub(m: re.Match) -> str:
 
 
 def _apply_rules(text: str) -> str:
+    text = _url_userinfo(text)
+    text = _jwts(text)
     for label, rx in _SECRET_RULES:
-        if label == "URL_USERINFO":
-            text = rx.sub(lambda m: f"{m.group(1)}[REDACTED]@", text)
-        elif label == "BEARER":
+        if label == "BEARER":
             text = rx.sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", text)
         elif label == "AUTH":
             text = rx.sub(lambda m: f"{m.group(1)}[REDACTED]", text)
@@ -106,11 +185,15 @@ def _apply_rules(text: str) -> str:
             text = rx.sub(lambda m: f"{m.group(1)}{m.group(2)}[REDACTED]", text)
         else:
             text = rx.sub(f"[{label}]", text)
+        if label == "SECRET":
+            # Emails after the key=value rule, as before: an address in a
+            # password= value is claimed whole by SECRET first.
+            text = _emails(text)
     return _BLOB.sub(_blob_sub, text)
 
 
 _U_ESC = re.compile(r"\\u([0-9a-fA-F]{4})")
-_C_ESC = re.compile(r"\\+([\"'/nrt])")
+_C_ESC = re.compile(r"(?<!\\)\\+([\"'/nrt])")
 _PCT = re.compile(r"%[0-9A-Fa-f]{2}")
 _B64 = re.compile(r"(?<![A-Za-z0-9+/_-])[A-Za-z0-9+/_-]{16,}={0,2}(?![A-Za-z0-9+/=_-])")
 
@@ -146,13 +229,25 @@ def _b64_sub(m: re.Match) -> str:
     return tok
 
 
+def _cap(text: str) -> str:
+    """Cut text past MAX_REDACT, dropping a token the cut would split so no
+    secret is printed in part."""
+    if len(text) <= MAX_REDACT:
+        return text
+    head = text[:MAX_REDACT]
+    j = len(head)
+    while j > 0 and _TOKEN_CH.match(head[j - 1]):
+        j -= 1
+    return head[:j] + f" [TRUNCATED {len(text) - j} chars]"
+
+
 def redact(text: str) -> str:
     """Replace secrets and personal identifiers with [LABEL] placeholders."""
     if not text:
         return text
-    text = _normalize(text)
+    text = _normalize(_cap(text))
     text = _B64.sub(_b64_sub, text)
-    return _apply_rules(text)
+    return _apply_rules(_cap(text))
 
 
 def _redact_obj(obj):
@@ -165,16 +260,33 @@ def _redact_obj(obj):
     return obj
 
 
+# C0 controls but tab and newline, DEL, C1 (0x9b is a one-byte CSI on some
+# terminals) and the bidi overrides that reorder what a line appears to say.
+_CONTROL = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f‪-‮⁦-⁩]")
+_CONTROL_JSON = re.compile("[\x7f-\x9f‪-‮⁦-⁩]")
+
+
+def _visible(m: re.Match) -> str:
+    c = ord(m.group(0))
+    return f"\\x{c:02x}" if c <= 0xFF else f"\\u{c:04x}"
+
+
 def emit(line, stream=None) -> None:
     """The one door to stdout and stderr. Every byte this tool prints passes
     here and is redacted as the final string: a dict is redacted key by key and
     value by value and then serialized, so the JSON stays valid; anything else
-    is redacted whole, after every f-string, truncation and join is done."""
+    is redacted whole, after every f-string, truncation and join is done.
+
+    Then no terminal control sequence survives. Text output shows each control
+    character as a visible \\xNN; JSON output relies on json.dumps for C0 and
+    escapes DEL, C1 and bidi overrides itself, which json.dumps with
+    ensure_ascii=False would otherwise print raw."""
     stream = stream if stream is not None else sys.stdout
     if isinstance(line, (dict, list)):
         out = json.dumps(_redact_obj(line), ensure_ascii=False)
+        out = _CONTROL_JSON.sub(lambda m: f"\\u{ord(m.group(0)):04x}", out)
     else:
-        out = redact(str(line))
+        out = _CONTROL.sub(_visible, redact(str(line)))
     stream.write(out + "\n")
 
 
@@ -375,7 +487,6 @@ def parse_ts(s) -> float | None:
         return None
 
 
-_TOKEN_CH = re.compile(r"[A-Za-z0-9_+/=.@-]")
 
 
 def snippet(text: str, pos: int, width: int, term: str = "") -> str:
@@ -588,7 +699,8 @@ def main(argv: list[str]) -> int:
     if a.cmd == "search":
         return cmd_search(a)
     if a.cmd == "redact":
-        emit(sys.stdin.read().rstrip("\n"))
+        for text_line in sys.stdin:
+            emit(text_line.rstrip("\n"))
         return 0
     ap.print_help()
     return 2

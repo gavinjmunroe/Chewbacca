@@ -30,6 +30,11 @@ Exit 1 means no match.
   emails, phone numbers, and hex or base64 blobs of 32+ characters. A token
   cut by the snippet edge is dropped, never printed in part. It over-redacts
   on purpose: a 10-digit app id comes out as `[PHONE]`.
+- Everything printed, stdout and stderr, goes through one `emit()`. Text a
+  transcript planted can't steer the terminal: escape sequences, other control
+  characters and bidi overrides print as visible `\xNN`. It can't stall the
+  redactor either: every pattern runs in linear time, and a 1 MB crafted
+  string redacts in under 1 s (tested per pattern).
 - Thinking blocks, Codex reasoning, system and developer prompts and Codex
   `event_msg` duplicates are skipped.
 - It writes nothing: every search reads the transcripts fresh and keeps

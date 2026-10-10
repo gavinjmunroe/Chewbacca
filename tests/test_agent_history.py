@@ -160,6 +160,77 @@ except ValueError:
 check("emit redacts a dict's keys and values and keeps it valid JSON",
       valid and FAKE["openai"] not in line and FAKE["aws"] not in line and "FakeJsonPw555" not in line, line)
 
+# Linear time: text planted in a transcript must not be able to stall the
+# redactor. Each 1 MB input targets one pattern's worst case; each runs in a
+# child process with a hard timeout so a regression fails instead of hanging.
+MB = 1_000_000
+ADVERSARIAL = {
+    "URL scheme over a long letter run": "a" * MB,
+    "URL userinfo, :// with no host": "a://" * (MB // 4),
+    "URL userinfo, colons and no @": "x://" + "a:" * (MB // 2),
+    "URL userinfo, @ inside a password run": "x://u:" + "p@" * (MB // 2),
+    "URL userinfo, no @ at all": "x://" + "a" * MB,
+    "email, a@a@a@": "a@" * (MB // 2),
+    "email, dotted local part": "a." * (MB // 2),
+    "email, domain labels with no end": "a@" + "b." * (MB // 2),
+    "secret keyword, kebab run": "a-" * (MB // 2),
+    "secret keyword, password then spaces": "password" + " " * MB,
+    "secret keyword, repeated password=": "password=" * (MB // 9),
+    "private key header with no end": "-----BEGIN " + "A" * MB,
+    "bearer then whitespace": "bearer" + " " * MB,
+    "bearer repeated": "bearer " * (MB // 7),
+    "authorization then spaces": "authorization" + " " * MB,
+    "JWT prefix then a run": "eyJ" + "a" * MB,
+    "JWT prefix after every dash": "eyJ-" * (MB // 4),
+    "JWT with two segments, repeated": "eyJaaaaaaaaa.bbbbbbbbbb-" * (MB // 24),
+    "email with a megabyte local part": "a" * MB + "@b.example",
+    "email, many addresses in a run": "a@b.cc" * (MB // 6),
+    "API key prefix repeated": "sk-" * (MB // 3),
+    "hex run with a bad end": "0" * MB + "g",
+    "phone digits": "1" * MB,
+    "base64 blob": "A1b" * (MB // 3),
+    "base64 short tokens": ("Ab1+" * 5 + " ") * (MB // 21),
+    "JSON escapes, backslash run": "\\" * MB,
+    "unicode escapes": "\\u0041" * (MB // 6),
+    "percent escapes": "%41" * (MB // 3),
+}
+TIMING = (
+    "import importlib.machinery,sys,time\n"
+    "sys.dont_write_bytecode=True\n"
+    f"ah=importlib.machinery.SourceFileLoader('a',{str(TOOL)!r}).load_module()\n"
+    "s=sys.stdin.read();t=time.monotonic();ah.redact(s);print(time.monotonic()-t)\n"
+)
+for name, text in ADVERSARIAL.items():
+    try:
+        p = subprocess.run([sys.executable, "-c", TIMING], input=text, capture_output=True, text=True, timeout=5)
+        took = float(p.stdout.strip() or "99")
+    except subprocess.TimeoutExpired:
+        took = 99.0
+    check(f"1 MB adversarial input redacts in under 1s: {name}", took < 1.0, f"{took:.2f}s")
+
+jwt_after_dash = ah.redact("token-" + FAKE["jwt"] + " and dir-" + FAKE["openai"])
+check("a JWT or key right after a dash is still redacted",
+      FAKE["jwt"] not in jwt_after_dash and FAKE["openai"] not in jwt_after_dash, jwt_after_dash)
+long_local = ah.redact("x" * 200 + "@mail.example.com")
+check("a long email local part is redacted whole", "x" not in long_local, long_local)
+big = ah.redact("x" * (3 * MB) + " " + FAKE["openai"])
+check("redact caps its input instead of scanning without limit", len(big) < 2 * MB, len(big))
+
+# Terminal control sequences: printed escaped, never raw.
+nasty = "ok \x1b[31mred\x1b[0m \x1b]0;pwned title\x07 \x9b2J \x00\x08\x7f \u202e evil \x85 end\tTAB\nNL"
+buf = io.StringIO()
+ah.emit(nasty, buf)
+out_txt = buf.getvalue()
+raw_ctrl = [c for c in out_txt if (ord(c) < 32 and c not in "\n\t") or 0x7f <= ord(c) <= 0x9f or c == "\u202e"]
+check("text emit prints no raw C0/C1 control, DEL or bidi override", not raw_ctrl, repr(out_txt))
+check("text emit shows the escapes visibly and keeps tab and newline", "\\x1b" in out_txt and "\t" in out_txt and "\n" in out_txt, repr(out_txt))
+buf = io.StringIO()
+ah.emit({"snippet": nasty, nasty: "key"}, buf)
+out_js = buf.getvalue()
+raw_ctrl = [c for c in out_js.rstrip("\n") if ord(c) < 32 or 0x7f <= ord(c) <= 0x9f or c == "\u202e"]
+check("JSON emit has no raw control characters, C1 included", not raw_ctrl, repr(out_js))
+check("JSON emit stays valid and round-trips the text", json.loads(out_js)["snippet"].startswith("ok "), out_js)
+
 # ------------------------------------------------------------- fixtures
 
 tmp = Path(tempfile.mkdtemp(prefix="agent-history-test-"))

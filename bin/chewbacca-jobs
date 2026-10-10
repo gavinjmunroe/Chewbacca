@@ -34,6 +34,12 @@ THE BUDGET.
          room check as heavy, nice 10, and a running heavy job is held
          paused until the build ends, so a build never waits hours behind a
          long transcription and the Mac still runs one heavy thing at a time.
+         Heavy jobs take turns: once the running one has had a 15-minute
+         turn, a waiting heavy job that has run less goes next, and the long
+         one is held paused until it's the least-run job again. So a short
+         heavy job waits at most one turn behind a long one, never its whole
+         run (2026-10-09: a 10-minute site encode sat queued for an hour
+         behind a transcription of 238 creators that held the one slot).
   net    downloads, API crawls: up to 4 at once, nice 10.
   light  everything else: no limit.
 
@@ -55,6 +61,10 @@ import uuid
 DIR = pathlib.Path(os.environ.get("JOBS_DIR", pathlib.Path.home() / ".chewbacca" / "jobs"))
 CORES = int(os.environ.get("JOBS_CORES") or os.cpu_count() or 8)
 MAX_NET = 4
+# A heavy job's turn before a waiting heavy job that has run less goes next.
+# Guessed, never measured: long enough that a 10-minute encode finishes in one
+# turn and turns don't thrash, short enough that it never waits an hour.
+SLICE = float(os.environ.get("JOBS_SLICE") or 15 * 60)
 NICE = {"heavy": 19, "build": 10, "net": 10, "light": 0}
 
 
@@ -156,7 +166,28 @@ def start(j):
     p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "_run", j["id"]],
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          start_new_session=True, cwd=j["cwd"] if os.path.isdir(j["cwd"]) else None)
-    j.update(status="running", pid=p.pid, started=time.time())
+    j.update(status="running", pid=p.pid, started=time.time(), turn=time.time(), ran=0)
+    save(j)
+
+
+def ran(j, now):
+    # Seconds a job has actually run. Jobs started before turns existed carry
+    # no count, so their wall time since start stands in for it.
+    base = j["ran"] if "ran" in j else now - (j.get("started") or now)
+    if j["status"] == "running" and j.get("turn"):
+        base += now - j["turn"]
+    return base
+
+
+def hold(j, note, now):
+    signal_group(j, signal.SIGSTOP)
+    j.update(ran=ran(j, now), turn=None, status="paused", note=note)
+    save(j)
+
+
+def resume(j, now):
+    signal_group(j, signal.SIGCONT)
+    j.update(ran=ran(j, now), turn=now, status="running", note=None)
     save(j)
 
 
@@ -201,30 +232,36 @@ def _tick():
             break
         start(j)
         building = [j]
-    heavy = [j for j in all_jobs if j["class"] == "heavy" and j["status"] in ("running", "paused")]
-    # Pause or resume the heavy job against the machine and any running
-    # build, before admitting more.
-    for j in heavy:
-        if j["status"] == "running" and (building or must_pause()):
-            signal_group(j, signal.SIGSTOP)
-            j["status"] = "paused"
-            j["note"] = "yielded to a build" if building else None
-            save(j)
-        elif j["status"] == "paused" and not building and room_for_heavy():
-            signal_group(j, signal.SIGCONT)
-            j["status"] = "running"
-            j["note"] = None
-            save(j)
+    # Heavy jobs: one runs at a time, and they take turns. Pause everything
+    # for a running build or a swamped Mac; otherwise, once the running job's
+    # turn is up, the least-run waiting job goes next.
+    now = time.time()
+    running = [j for j in all_jobs if j["class"] == "heavy" and j["status"] == "running"]
+    # A job cut off mid-turn by a build or a swamped Mac finishes that turn
+    # first; after that, the least-run job goes next.
+    cut_off = ("yielded to a build", "machine busy")
+    waiting = sorted((j for j in all_jobs if j["class"] == "heavy" and j["status"] in ("paused", "queued")),
+                     key=lambda j: (j.get("note") not in cut_off, ran(j, now), j["created"]))
+    if building or must_pause():
+        for j in running:
+            hold(j, "yielded to a build" if building else "machine busy", now)
+    elif room_for_heavy():
+        current = running[0] if running else None
+        nxt = waiting[0] if waiting else None
+        if current and nxt and now - (current.get("turn") or current.get("started") or now) >= SLICE \
+                and ran(nxt, now) < ran(current, now):
+            hold(current, f"taking turns with {nxt['id']}", now)
+            current = None
+        if not current and nxt:
+            if nxt["status"] == "paused":
+                resume(nxt, now)
+            else:
+                start(nxt)
     running_net = sum(1 for j in all_jobs if j["class"] == "net" and j["status"] == "running")
     for j in sorted((j for j in all_jobs if j["status"] == "queued"), key=lambda j: j["created"]):
-        if j["class"] == "build":
+        if j["class"] in ("build", "heavy"):
             continue
-        if j["class"] == "heavy":
-            if heavy or building or not room_for_heavy():
-                continue
-            start(j)
-            heavy = [j]
-        elif j["class"] == "net":
+        if j["class"] == "net":
             if running_net >= MAX_NET:
                 continue
             start(j)

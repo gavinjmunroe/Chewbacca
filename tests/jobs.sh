@@ -58,5 +58,28 @@ idb2=$(JOBS_LOAD=25 "$J" submit --build -- true | cut -d' ' -f1)
 check "a build waits on a busy Mac" "$(JOBS_LOAD=25 status "$idb2")" queued
 "$J" kill "$idh" >/dev/null
 
+# Heavy jobs take turns, so a short one never waits out a long one's whole run.
+# 2026-10-09: a 10-minute encode sat queued for an hour behind a paused
+# transcription of 238 creators that held the only heavy slot.
+idl=$("$J" submit --heavy --title long -- sleep 60 | cut -d' ' -f1)
+settle "$idl" running
+ids=$("$J" submit --heavy --title short -- sleep 60 | cut -d' ' -f1)
+"$J" tick >/dev/null
+check "a fresh heavy job doesn't cut in mid-turn" "$(status "$ids")" queued
+JOBS_SLICE=0 "$J" tick >/dev/null
+check "once its turn is up the long job is held" "$(status "$idl")" paused
+settle "$ids" running
+check "and the short job runs" "$(status "$ids")" running
+JOBS_SLICE=0 "$J" tick >/dev/null
+check "the short job keeps the slot because it has run less" "$(status "$ids")" running
+"$J" kill "$ids" >/dev/null
+"$J" tick >/dev/null
+settle "$idl" running
+check "the long job resumes when the short one ends" "$(status "$idl")" running
+JOBS_LOAD=40 "$J" tick >/dev/null
+JOBS_SLICE=0 "$J" tick >/dev/null
+check "one heavy job runs after a load pause, not two" "$(python3 -c "import json,glob,sys;print(sum(json.load(open(f))['status']=='running' and json.load(open(f))['class']=='heavy' for f in glob.glob(sys.argv[1]+'/*/job.json')))" "$JOBS_DIR")" 1
+"$J" kill "$idl" >/dev/null
+
 [ "$fail" = 0 ] && echo "jobs ok"
 exit "$fail"

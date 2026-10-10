@@ -398,3 +398,11 @@ number from a case study with a footnote naming the engagement, and the
 testimonial moved into the final beat so the big number appears once.
 `src/story.jsx` in bluemodernadvisory/bma-website, branch Caleb-Rework, is the
 reference build.
+
+**Neighbouring sections never read as one (BMA, 2026-10-10).** The team row
+and the FAQ sat on the same ground with the same heading-left split, and the
+page read as one block that ran on. Caleb: "Never make sections that read as
+the same section connected" and "Each section feels like 1 connected blob".
+Each neighbour changes at least one of ground (paper, tint, navy) or layout
+(split, centred, full-bleed figure). `site-gate check` now fails "twin
+sections" mechanically.

@@ -194,7 +194,8 @@ if group "site-gate"; then
     for needle in "horizontal scroll" 'href="#"' "missing #nowhere" "gone.html answered 404" \
                   "no hover and no focus state: BUTTON Inert" "no accessible name" "planted failure" \
                   "runs under reduced motion" '"Ghost" text is invisible' 'heading-plus-line grid of 6 cards' \
-                  'heading paints nothing (covered or invisible): Covered people'; do
+                  'heading paints nothing (covered or invisible): Covered people' \
+                  'twin sections: "Team twin" and "Questions twin"'; do
       check "bad page flags: $needle" grep -qF -- "$needle" "$TMP/sg.out"
     done
     exits  "clean page passes" 0 "$ROOT/bin/site-gate" check "$SG/good.html"

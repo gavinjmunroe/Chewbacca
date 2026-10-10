@@ -114,6 +114,28 @@ CONTROLS = r"""(max) => {
       break;
     }
   }
+  // Twin sections: two neighbours on the same ground with the same
+  // heading-left split read as one section that runs on. Caleb, 2026-10-10,
+  // on BMA's team block flowing into its FAQ: "Never make sections that read
+  // as the same section connected." Change the ground, the layout, or both.
+  const secs = [...document.querySelectorAll('main section')]
+    .filter(s => vis(s) && !s.querySelector('section') && !s.closest('nav, footer, header'));
+  const sig = s => {
+    const g = [s, ...s.querySelectorAll('*')].find(n => {
+      const c = getComputedStyle(n);
+      return c.display === 'grid' && c.gridTemplateColumns.trim().split(/\s+/).length === 2;
+    });
+    if (!g || !g.children.length) return null;
+    const cols = getComputedStyle(g).gridTemplateColumns.trim().split(/\s+/).map(parseFloat);
+    return { bg: bgOf(s).join(','), split: Math.round(cols[0] / (cols[0] + cols[1]) * 10),
+             lead: !!(g.children[0].matches('h1, h2, h3') || g.children[0].querySelector('h1, h2, h3')),
+             name: ((s.querySelector('h1, h2, h3') || s).textContent || '').trim().slice(0, 30) };
+  };
+  for (let i = 0; i + 1 < secs.length; i++) {
+    const a = sig(secs[i]), b = sig(secs[i + 1]);
+    if (a && b && a.lead && b.lead && a.bg === b.bg && a.split === b.split)
+      dead.push('twin sections: "' + a.name + '" and "' + b.name + '" share a ground and a heading-left layout, so they read as one section (change the ground or the layout)');
+  }
   const links = [...new Set(all.filter(e => e.tagName === 'A' && e.href && !e.getAttribute('href').startsWith('#')).map(e => e.href))];
   const probe = all.filter(vis).filter(e => !e.disabled).slice(0, max);
   probe.forEach((e, i) => e.setAttribute('data-sg', i));

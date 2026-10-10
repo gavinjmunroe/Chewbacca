@@ -808,6 +808,68 @@ def test_booking_signals_from_threads(tmp: Path):
     ok(gi.message_text({"email_body": outlook}).strip() == "No thanks", gi.message_text({"email_body": outlook}))
 
 
+def test_bounce_notices_and_removal_asks(tmp: Path):
+    """Zeutara's brief, 2026-10-10: two mailer-daemon notices and a "Remove
+    <name>" sat in "replies to answer". The sync classifies them from the
+    reply's own sender, subject and text; a person's later reply overrides."""
+    graph = osgraph.Graph(tmp / "bounce.sqlite")
+    (tmp / "bn").mkdir(exist_ok=True)
+    ids = osgraph.Identities(people_store(tmp / "bn"))
+    gi.sync(graph, ["clay"], CFG, ids, cli(world_a()))
+    seed = "Acme | Widget | Seed"
+    sent = {"type": "SENT", "time": "2026-10-05T15:00:00Z", "email_body": "hi", "from": "jonah@z.example"}
+    long_yes = ("Hi Jonah, thanks for the note. " * 8) + "We would remove the second slide, but send the deck."
+
+    def one(email, mid, reply):
+        return thread(email, seed, [sent, dict({"type": "REPLY", "time": "2026-10-06T09:00:00Z"}, **reply)], mid)
+
+    inbox = [
+        one("dsn@one.example", "b1", {"subject": "Delivery Status Notification (Failure)",
+                                      "email_body": "Address not found Your message wasn't delivered to x@y.example"}),
+        one("blocked@one.example", "b2", {"email_body": "Message blocked Your message to a@b.example has been blocked."}),
+        one("daemon@one.example", "b3", {"from": "Mail Delivery Subsystem <MAILER-DAEMON@googlemail.com>",
+                                         "subject": "Re: hello", "email_body": "see below"}),
+        one("outlook@one.example", "b4", {"subject": "Undeliverable: hello", "email_body": "Delivery has failed."}),
+        one("remove@one.example", "u1", {"email_body": '<div dir="auto"> Remove </div><div>Andrew L. Krowne</div>'}),
+        one("caps@one.example", "u2", {"email_body": "<p>UNSUBSCRIBE</p><p>Thanks, Dennis</p><p>-----Original Message"
+                                                     "-----<br />From: Jonah<br />Sent: Tuesday<br />To: D</p>"}),
+        one("takeoff@one.example", "u3", {"email_body": "Please take me off your list."}),
+        one("stop@one.example", "u4", {"email_body": "Not a fit for us. Stop emailing me."}),
+        one("dnc@one.example", "u5", {"email_body": "Do not contact me again"}),
+        one("keen@one.example", "k1", {"email_body": long_yes}),
+        thread("changed@one.example", seed, [
+            sent, {"type": "REPLY", "time": "2026-10-06T09:00:00Z", "email_body": "Remove"},
+            {"type": "REPLY", "time": "2026-10-07T09:00:00Z", "email_body": "Actually, wait. Send me the deck."}], "o1"),
+        thread("quiet@one.example", seed, [
+            sent, {"type": "REPLY", "time": "2026-10-06T09:00:00Z", "email_body": "Send the deck?"},
+            {"type": "REPLY", "time": "2026-10-06T09:05:00Z", "subject": "Delivery Status Notification (Failure)",
+             "from": "mailer-daemon@googlemail.com", "email_body": "Address not found"}], "o2"),
+    ]
+    res = gi.sync(graph, ["inbox"], CFG, ids, cli(world_a()), inbox_fn=lambda ws: inbox if ws == "111" else [])
+    ok(all(r["ok"] for r in res), res)
+    graph.db.close()
+    db = gq.connect(tmp / "bounce.sqlite")
+    un = gq.replies(db, "Acme Capital", unanswered=True)
+    waiting = {r["email"]: r for r in un["replies"]}
+    ok(set(waiting) == {"keen@one.example", "changed@one.example", "quiet@one.example"}, sorted(waiting))
+    ok(waiting["changed@one.example"]["class"] is None, "a person's later reply overrides the removal rule")
+    ok(waiting["quiet@one.example"]["class"] is None and "deck" in waiting["quiet@one.example"]["snippet"],
+       "a bounce notice after the lead's reply never stands in for it")
+    every = {r["email"]: r for r in gq.replies(db, "Acme Capital", unanswered=True, include_all=True)["replies"]}
+    for e in ("dsn", "blocked", "daemon", "outlook"):
+        ok(every[f"{e}@one.example"]["class"] == "bounce" and every[f"{e}@one.example"]["classified_by"] == gi.RULE_BY,
+           every[f"{e}@one.example"])
+    for e in ("remove", "caps", "takeoff", "stop", "dnc"):
+        ok(every[f"{e}@one.example"]["class"] == "unsubscribe", every[f"{e}@one.example"])
+    sup = {r["email"]: r["reasons"] for r in gq.suppress(db, "Acme Capital")["emails"]}
+    ok("bounced" in sup["dsn@one.example"] and "unsubscribed" in sup["remove@one.example"], sup)
+    ok("unsubscribed" not in sup["changed@one.example"], "the overridden rule does not suppress as unsubscribed")
+    db.close()
+    ok(gq.rank("clay") < gq.rank(gi.RULE_BY) < gq.rank("model:reply-intent") < gq.rank("Jonah"))
+    ok(gi.auto_class({"email_body": "Can we talk Tuesday?"}) is None)
+    ok(gi.auto_class({"email_body": "x " * 150 + "please remove me"}) is None, "a long message must lead with it")
+
+
 # Security review 2026-10-09: TAG, BREAK and QUOTE_HTML were quadratic on a
 # body of "<" characters and never finished on 100k of them. Every pattern
 # now finishes each shape in under 17 ms on this Mac; 50 ms is the bar.
@@ -822,10 +884,11 @@ def test_booking_patterns_are_linear():
     shapes = {"lt": "<" * n, "ltbr": "<br" * (n // 3), "div": "<div class=" * (n // 11), "on": "On " * (n // 3),
               "on_nl": ("On " + "x" * 150 + "\n") * (n // 155), "dash": "-" * n, "digits": "1 " * (n // 2),
               "jan": "jan " * (n // 4), "at": "at " * (n // 3), "would": "would " * (n // 6),
-              "from": "From: x\n" * (n // 8), "spaces": "1" + " " * n, "q": "?" * n, "a": "a" * n, "wrote": "wrote: " * (n // 7)}
+              "from": "From: x\n" * (n // 8), "remove": "remove " * (n // 7), "nonword": "-_ " * (n // 3), "spaces": "1" + " " * n, "q": "?" * n, "a": "a" * n, "wrote": "wrote: " * (n // 7)}
     names = ("QUOTE_HTML", "WROTE", "QUOTE_TEXT", "TAG", "BREAK", "ICS", "INVITE_SUBJECT", "ACCEPT_SUBJECT",
              "ACCEPT_BODY", "DECLINE_SUBJECT", "SCHEDULER", "SCHEDULER_DONE", "OOO", "DAY", "CLOCK", "PROPOSE",
-             "CONFIRM", "SENTENCE", "CONTROL")
+             "CONFIRM", "SENTENCE", "CONTROL", "BOUNCE_FROM", "BOUNCE_SUBJECT", "BOUNCE_TEXT", "REMOVAL_START",
+             "REMOVAL_ANY")
     for name in names:
         rx = getattr(gi, name)
         for shape, text in shapes.items():
@@ -835,6 +898,8 @@ def test_booking_patterns_are_linear():
         best = min(_cpu(lambda: gi.detect_booking({"type": "REPLY", "email_body": text, "subject": text}))
                    for _ in range(3))
         ok(best < PATTERN_BUDGET_MS, f"detect_booking took {best:.1f} ms on {shape}")
+        best = min(_cpu(lambda: gi.auto_class({"email_body": text, "subject": text, "from": text})) for _ in range(3))
+        ok(best < PATTERN_BUDGET_MS, f"auto_class took {best:.1f} ms on {shape}")
     # The linear rewrite still cuts quoted history at the attribution line.
     body = "Sounds good.<br><br>On Tue, Oct 6, 2026 at 3:00 PM Jonah &lt;j@z.example&gt;\nwrote:<br>Tuesday 2pm?"
     ok(gi.message_text({"email_body": body}).strip() == "Sounds good.", gi.message_text({"email_body": body}))
@@ -936,6 +1001,7 @@ def main():
         test_google_calendar_union(Path(d))
         test_gws_is_read_only()
         test_booking_signals_from_threads(Path(d))
+        test_bounce_notices_and_removal_asks(Path(d))
         speed = test_speed(Path(d))
     print(f"gtm: {CHECKS} checks passed; {speed['leads']} leads, ms: "
           + ", ".join(f"{k} {v:.1f}" for k, v in speed["ms"].items()))

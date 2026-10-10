@@ -1172,6 +1172,8 @@ def _props(row) -> dict:
 
 
 VERDICT_RANK = {"clay": 0}
+# by_rank's value for a named person: only a person's verdict is a client verdict.
+PERSON_RANK = 3
 
 
 def by_rank(by: str) -> int:
@@ -1181,9 +1183,13 @@ def by_rank(by: str) -> int:
         return -1
     if b == "clay":
         return 0
-    if b.startswith("model"):
+    # A pattern on the reply's own text (gtm_ingest.auto_class) beats Clay's
+    # category, which left a "Remove <name>" uncategorised on 2026-10-09.
+    if b.startswith("rule"):
         return 1
-    return 2
+    if b.startswith("model"):
+        return 2
+    return PERSON_RANK
 
 
 def ingest_graph(db, graph: sqlite3.Connection, run_id: str) -> dict:
@@ -1311,7 +1317,7 @@ def ingest_graph(db, graph: sqlite3.Connection, run_id: str) -> dict:
         if cls == "unsubscribe":
             interact(db, client, "unsubscribe", p.get("time") or r["observed_at"], "clay-inbox", r["id"] + ":unsub",
                      cid, acct, cam, origin=run_id)
-        if by and by_rank(by) == 2:
+        if by and by_rank(by) == PERSON_RANK:
             interact(db, client, "client_verdict", p.get("time") or r["observed_at"], "clay-inbox",
                      r["id"] + ":verdict", cid, acct, cam, classified_by=by,
                      detail={"verdict": "good_fit" if cls == "positive" else "not_fit" if cls == "negative" else cls},

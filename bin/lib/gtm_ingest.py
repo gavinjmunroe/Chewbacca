@@ -1004,6 +1004,52 @@ def thread_bookings(history: list[dict]) -> list[tuple[dict, dict]]:
     return out
 
 
+# ── bounce notices and removal asks, read off the reply itself ───────────────
+
+# Who decided a class by these patterns. gtm_query.rank puts it above Clay's
+# category and below a model or a person.
+RULE_BY = "rule:reply-text"
+# On 2026-10-10 Zeutara's "replies to answer" carried two bounce notices
+# ("Delivery Status Notification (Failure)", "Message blocked") and a
+# "Remove <name>" that Clay had left uncategorised. Mailer-daemon notices
+# arrive as REPLY rows under the lead's address; the sender, subject or first
+# lines give them away. Same rules as the booking patterns: bounded, no nested
+# quantifiers, cut before matching.
+BOUNCE_FROM = re.compile(r"mailer-daemon|postmaster@|mail delivery (?:subsystem|system)", re.I)
+BOUNCE_SUBJECT = re.compile(r"delivery status notification|undeliverable|undelivered mail|delivery failure"
+                            r"|mail delivery failed|returned mail|failure notice|message blocked", re.I)
+BOUNCE_TEXT = re.compile(r"address not found|message blocked|message not delivered|delivery has failed"
+                         r"|delivery status notification|undeliverable|has been blocked"
+                         r"|wasn'?t delivered|was not delivered|could ?n[o']t be delivered", re.I)
+# A bounce notice says what it is in its first lines; a person quoting one
+# further down is not one.
+BOUNCE_HEAD = 300
+REMOVAL_WORDS = (r"(?:remove|unsubscribe|take me off|stop emailing|do not contact|don'?t contact"
+                 r"|opt[ \t-]{0,2}out)\b")
+REMOVAL_START = re.compile(r"^[\W_]{0,20}(?:please[ \t\xa0,]{1,5})?" + REMOVAL_WORDS, re.I)
+REMOVAL_ANY = re.compile(r"\b" + REMOVAL_WORDS, re.I)
+# A removal word anywhere counts only in a short message ("Thanks but not a
+# fit. Please unsubscribe."); in a long one it has to lead. Guessed from the
+# four removal asks in Zeutara's 86 replies (2026-10-10, all under 60
+# characters of their own words), never measured on more.
+REMOVAL_SHORT = 200
+
+
+def auto_class(msg: dict) -> tuple[str, str] | None:
+    """("bounce" | "unsubscribe", the matched words) for a reply whose own
+    text, sender or subject says what it is, else None."""
+    sender = str(msg.get("from") or "")[:500]
+    subject = clip(msg.get("subject"), 500)
+    text = " ".join(message_text(msg).split())
+    m = BOUNCE_FROM.search(sender) or BOUNCE_SUBJECT.search(subject) or BOUNCE_TEXT.search(text[:BOUNCE_HEAD])
+    if m:
+        return "bounce", clip(m.group(0), 60)
+    m = REMOVAL_START.search(text) or (REMOVAL_ANY.search(text) if len(text) <= REMOVAL_SHORT else None)
+    if m:
+        return "unsubscribe", clip(m.group(0).strip(" \t\xa0,.-_*"), 60)
+    return None
+
+
 def client_lead_emails(graph: Graph, client_id_: str) -> set[str]:
     """Every address enrolled in one of this client's campaigns."""
     return {r["email"] for r in graph.query(
@@ -1084,6 +1130,12 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
         reply_msgs = [m for m in history if m.get("type") == "REPLY"]
         reply_ids: list[tuple[str, str]] = []  # (time, reply node id), oldest first
         cat_name = clip(categories.get(str(item.get("lead_category_id")), ""), 80)
+        autos = [auto_class(m) for m in reply_msgs]
+        # A bounce notice is the mail server talking, not the lead: the
+        # thread's latest reply is the lead's last own message, so a notice
+        # can never stand in for (or hide) what they wrote.
+        own = [i for i, a in enumerate(autos) if not a or a[0] != "bounce"]
+        last = own[-1] if own else len(reply_msgs) - 1
         for n, msg in enumerate(reply_msgs):
             when = clip(msg.get("time"), 40)
             later = [m for m in history if str(m.get("time") or "") > when]
@@ -1105,18 +1157,23 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
                 "snippet": clip(text, SNIPPET), "screen_flag": flag,
                 "answered": any(m.get("type") == "SENT" for m in later),
                 "forwarded": any(m.get("type") == "FORWARD" for m in later),
-                "latest": n == len(reply_msgs) - 1,
+                "latest": n == last,
                 "thread_sent_times": [clip(m.get("time"), 40) for m in history if m.get("type") == "SENT"],
-                "clay_category": cat_name if n == len(reply_msgs) - 1 else "",
+                "clay_category": cat_name if n == last else "",
             })
             report["replies"] += 1
             edges[(person.id, "REPLIED", rid)] = Edge(person.id, "REPLIED", rid, {"time": when})
             if cam:
                 edges[(rid, "IN_CAMPAIGN", cam)] = Edge(rid, "IN_CAMPAIGN", cam, {})
             verdicts = list(labels.get((key, _minute(when)), []))
-            if n == len(reply_msgs) - 1 and cat_name:
+            if n == last and cat_name:
                 cls = CLAY_CATEGORY_CLASS.get(cat_name.lower(), "neutral")
                 verdicts.append((cls, "clay", cat_name))
+            # A person's own reply after this one overrides the rule: "Remove"
+            # followed by "actually, send the deck" is a live lead. A later
+            # bounce notice is not a person, so it overrides nothing.
+            if autos[n] and not any(a is None for a in autos[n + 1:]):
+                verdicts.append((autos[n][0], RULE_BY, autos[n][1]))
             for cls, by, raw_label in verdicts:
                 k = (rid, "CLASSIFIED_AS", f"replyclass:{cls}")
                 e = edges.get(k) or Edge(rid, "CLASSIFIED_AS", f"replyclass:{cls}", {"by": [], "raw": []})

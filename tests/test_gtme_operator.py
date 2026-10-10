@@ -156,6 +156,32 @@ class GraphCommands(unittest.TestCase):
             self.assertTrue(x["command"] and x["gate"] and x["why"], x)
         self.assertEqual(items[0]["kind"], "reply")
 
+    def test_classes_the_sync_gave_sort_bounces_and_removals(self):
+        # 2026-10-10: the sync now classifies bounce notices and removal asks
+        # from sender, subject and text; gtme sorts by that class even when
+        # the snippet alone would not give it away.
+        db = sqlite3.connect(self.tmp / "graph.sqlite")
+        for rid, email, snippet, cls in (("reply:5", "daemon@eps.example", "see the technical details", "bounce"),
+                                         ("reply:6", "off@zeta.example", "Thanks. Please take me off.",
+                                          "unsubscribe")):
+            db.execute("INSERT INTO nodes VALUES (?,?,?,?,0,'gtm-inbox:9001')",
+                       (rid, "Reply", rid, json.dumps({"lead_email": email, "time": "2026-03-19T13:00:00Z",
+                                                       "latest": True, "answered": False, "forwarded": False,
+                                                       "snippet": snippet})))
+            db.execute("INSERT INTO edges VALUES (?,?,?,?,'gtm-inbox:9001')",
+                       (rid, "IN_CAMPAIGN", "campaign:clay:cam_floor", "{}"))
+            db.execute("INSERT INTO edges VALUES (?,?,?,?,'gtm-inbox:9001')",
+                       (rid, "CLASSIFIED_AS", f"replyclass:{cls}", json.dumps({"by": ["rule:reply-text"]})))
+        db.commit()
+        db.close()
+        items = json.loads(run(self.env, "next", "--json").stdout)
+        replies = " ".join(x["do"] for x in items if x["kind"] == "reply")
+        self.assertNotIn("daemon@eps.example", replies)
+        self.assertNotIn("off@zeta.example", replies)
+        unsub = " ".join(x["command"] for x in items if x["kind"] == "unsubscribe")
+        self.assertIn("off@zeta.example", unsub)
+        self.assertIn("2 bounce notices and 2 removal asks", run(self.env, "brief").stdout)
+
     def test_gtm_memory_commitments_replace_recomputed_refills(self):
         late = [{"kind": "refill", "owed_by": "us", "title": f"Refill c{n}", "campaign": f"c{n}",
                  "late_by_hours": 24 * n} for n in range(1, 4)]

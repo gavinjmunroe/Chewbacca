@@ -991,12 +991,24 @@ def client_state(q, db, c: dict) -> dict:
     clay = f.get("clay") or {}
     sent, replies, bounces = clay.get("sent", 0), clay.get("repliesExcludingOoo", 0), clay.get("bounces", 0)
     try:
-        waiting = q.replies(db, c["name"], unanswered=True)["replies"]
+        # Every unanswered thread, closed classes included: an unsubscribe the
+        # sync classified still owes a blocklist entry, so it is sorted here
+        # rather than dropped by the query.
+        waiting = [r for r in q.replies(db, c["name"], unanswered=True, include_all=True)["replies"]
+                   if not r.get("forwarded")]
     except LookupError:
         waiting = []
-    bounced = [r for r in waiting if is_bounce_notice(r)]
-    unsubscribes = [r for r in waiting if not is_bounce_notice(r) and is_unsubscribe_ask(r)]
-    unanswered = sorted((r for r in waiting if not is_bounce_notice(r) and not is_unsubscribe_ask(r)),
+
+    def bounce(r):
+        return r.get("class") == "bounce" or is_bounce_notice(r)
+
+    def removal(r):
+        return not bounce(r) and (r.get("class") == "unsubscribe" or is_unsubscribe_ask(r))
+
+    bounced = [r for r in waiting if bounce(r)]
+    unsubscribes = [r for r in waiting if removal(r)]
+    unanswered = sorted((r for r in waiting if not bounce(r) and not removal(r)
+                         and r.get("class") not in q.SKIP_WHEN_UNANSWERED),
                         key=lambda r: (r.get("class") != "positive",
                                        -(parse_time(r.get("time")) or utc_now()).timestamp()))
     ws = detail["workspaces"]

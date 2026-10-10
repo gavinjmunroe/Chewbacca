@@ -65,9 +65,13 @@ def rank(by: str) -> int:
         return -1
     if by == "clay":
         return 0
-    if by.startswith("model"):
+    # A pattern on the reply's own text (gtm_ingest.auto_class) beats Clay's
+    # category, which left a "Remove <name>" uncategorised on 2026-10-09.
+    if by.startswith("rule"):
         return 1
-    return 2
+    if by.startswith("model"):
+        return 2
+    return 3
 
 
 # ── sync state ────────────────────────────────────────────────────────────

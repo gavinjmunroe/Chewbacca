@@ -62,6 +62,39 @@ def results() -> list[dict]:
     return out
 
 
+# The suite runs whatever was pushed to main, unattended, as this user. A
+# security review of 83ba37ef called that remote code execution, and it is:
+# anyone with push access would get this Mac. So the run is sandboxed. It gets
+# no network beyond loopback, can't read the stores that matter (Messages,
+# Mail, keychains, ssh, browser profiles, the brain, the kit's own secrets),
+# and can't write anywhere that outlives the run or changes what runs later
+# (launch agents, shell startup files, the live hooks, tools on PATH).
+SECRET_PATHS = ["Library/Messages", "Library/Mail", "Library/Keychains", "Library/Cookies",
+                "Library/Application Support/Google/Chrome", "Library/Application Support/com.apple.TCC",
+                "Library/Safari", ".ssh", ".gnupg", "second-brain", ".chewbacca/clay-key", ".chewbacca/gmail",
+                ".chewbacca/email", ".config/gh", ".aws", ".netrc"]
+PERSIST_PATHS = ["Library/LaunchAgents", ".zshrc", ".zprofile", ".bashrc", ".bash_profile", ".claude",
+                 ".local/bin", ".chewbacca/bin", ".gitconfig", ".ssh"]
+
+
+def sandbox_profile(home: Path, worktree: Path) -> str:
+    # Paths resolved, because the sandbox matches real paths: /var/folders is
+    # /private/var/folders, and a profile written with the link matched nothing.
+    home, worktree = home.resolve(), worktree.resolve()
+
+    def sub(rel: str) -> str:
+        return f'(subpath "{home / rel}")'
+    return "\n".join([
+        "(version 1)",
+        "(allow default)",
+        "(deny network-outbound (remote ip))",
+        '(allow network-outbound (remote ip "localhost:*"))',
+        "(deny file-read* " + " ".join(sub(r) for r in SECRET_PATHS) + ")",
+        "(deny file-write* " + " ".join(sub(r) for r in PERSIST_PATHS) + ")",
+        f'(allow file-read* file-write* (subpath "{worktree}"))',
+    ])
+
+
 def last_green(rs: list[dict]) -> dict | None:
     return next((r for r in reversed(rs) if r.get("ok")), None)
 
@@ -121,7 +154,11 @@ def run(sha: str) -> int:
             subprocess.run(["git", "worktree", "remove", "--force", str(wt)], cwd=REPO, check=False)
         git("worktree", "add", "-q", "--detach", str(wt), sha)
         env = dict(os.environ, CHEWBACCA_NO_SEND="1")
-        done = subprocess.run(["bash", "tests/run.sh"], cwd=wt, capture_output=True, text=True, env=env)
+        profile = STATE / f"sandbox-{sha[:12]}.sb"
+        profile.write_text(sandbox_profile(Path.home(), wt))
+        done = subprocess.run(["sandbox-exec", "-f", str(profile), "bash", "tests/run.sh"],
+                              cwd=wt, capture_output=True, text=True, env=env)
+        profile.unlink(missing_ok=True)
         rc, log = done.returncode, done.stdout + done.stderr
     finally:
         # Only this run's own worktree, by exact path (team memory:

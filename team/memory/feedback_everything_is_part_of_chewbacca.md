@@ -13,3 +13,5 @@ Caleb, 2026-10-08: "wacli shouldnt be its own thing it should j be part of chewb
 
 Caleb, 2026-10-09: "everything we make should be in chewbs especially that lemma replica the team needs to be able to ball out". Builds now live in chewbacca `apps/<name>` (lemma-replica imported with history), run with `chewbacca apps run <name>`, and `/new-project` scaffolds there. A standalone repo only when he names one.
 - Shared tooling the kit or team uses (ux-engine, presence, brain-retrieval, chewbacca-usecases) moved into apps/ on 2026-10-09 so every teammate has the same kit; `tests/same_experience.sh` refuses any hook/bin/setup path into ~/code/{tools,work,personal,amber,school,corpora,kits}. Kept out on purpose: deployed sites, client/org repos, coursework, personal repos, and comedy-engine (his texts).
+
+Caleb, 2026-10-09: "everything that we can add to chewbacca let's add to chewbacca, bro brain retrieval is EXACTLY what chewbacca needs". The default is to import, after the scan in [[feedback_scan_before_import]].

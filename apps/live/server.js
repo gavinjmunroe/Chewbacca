@@ -84,8 +84,27 @@ export function accessFor(token, accessJson = env.LIVE_ACCESS) {
   } catch {
     return null;
   }
-  const hit = map[createHash("sha256").update(token).digest("hex")];
-  return hit && typeof hit.client === "string" ? { client: hit.client, who: String(hit.who || "") } : null;
+  const key = createHash("sha256").update(token).digest("hex");
+  const hit = map[key];
+  return hit && typeof hit.client === "string" ? { client: hit.client, who: String(hit.who || ""), key } : null;
+}
+
+/**
+ * A session is only as good as the link that made it. Removing a line from
+ * LIVE_ACCESS has to end the sessions it signed in, not just stop new
+ * sign-ins: before this check a cut link kept working for up to 30 days in
+ * any browser that had already opened it.
+ */
+export function stillGranted(session, accessJson = env.LIVE_ACCESS) {
+  if (!session || typeof session.k !== "string") return null;
+  let map;
+  try {
+    map = JSON.parse(accessJson || "{}");
+  } catch {
+    return null;
+  }
+  const hit = map[session.k];
+  return hit && hit.client === session.c ? session : null;
 }
 
 function bearerOk(req, secret) {
@@ -98,7 +117,7 @@ function bearerOk(req, secret) {
 
 // ---------------------------------------------------------------- app
 
-export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROPIC_API_KEY, syncKey = env.LIVE_SYNC_KEY, access = () => env.LIVE_ACCESS, log = console.error } = {}) {
+export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROPIC_API_KEY, modelFetch = fetch, syncKey = env.LIVE_SYNC_KEY, access = () => env.LIVE_ACCESS, log = console.error } = {}) {
   const asks = new Map();
 
   async function liveClient(clientId) {
@@ -121,13 +140,16 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
     const list = (asks.get(key) || []).filter((t) => now - t < ASK_WINDOW_MS);
     list.push(now);
     asks.set(key, list);
+    // One entry per signed-in person; drop the idle ones so the map cannot grow
+    // without end on a long-running instance.
+    if (asks.size > 1000) for (const [k, v] of asks) if (!v.some((t) => now - t < ASK_WINDOW_MS)) asks.delete(k);
     return list.length > ASK_LIMIT;
   }
 
   async function handle(req, res) {
     const url = new URL(req.url, "http://live.local");
     const path = url.pathname;
-    const session = verify(cookies(req).live);
+    const session = stillGranted(verify(cookies(req).live), access());
 
     if (req.method === "GET" && path === "/health") {
       return json(res, 200, { ok: true, clay_sync_online: hub.agentOnline() });
@@ -139,7 +161,7 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
       const who = accessFor(link[1], access());
       if (!who) return page(res, 404, "signin.html");
       const secure = String(req.headers["x-forwarded-proto"] || "").includes("https");
-      res.setHeader("Set-Cookie", `live=${sign({ c: who.client, w: who.who })}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}${secure ? "; Secure" : ""}`);
+      res.setHeader("Set-Cookie", `live=${sign({ c: who.client, w: who.who, k: who.key })}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_DAYS * 86400}${secure ? "; Secure" : ""}`);
       res.writeHead(302, { Location: `/c/${encodeURIComponent(who.client)}` });
       return res.end();
     }
@@ -180,7 +202,13 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
       if (!client) return json(res, 503, { error: "Togari is not answering right now" });
       res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
       let open = true;
-      req.on("close", () => (open = false));
+      // The browser leaving ends the work too: no more model rounds billed for
+      // an answer nobody will read.
+      const left = new AbortController();
+      res.on("close", () => {
+        open = false;
+        left.abort();
+      });
       const emit = (event, data) => {
         if (open) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
       };
@@ -195,12 +223,13 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
           companies: companiesFor(client.clientId),
           maxAgeMs: STATS_MAX_AGE_MS,
           waitMs: REFRESH_WAIT_MS,
-          model: { apiKey: modelKey },
+          model: { apiKey: modelKey, fetchImpl: modelFetch },
+          signal: left.signal,
           log,
         });
         emit("done", {});
       } catch (err) {
-        log("ask failed", err?.message);
+        if (!left.signal.aborted) log("ask failed", err?.message);
         emit("error", { text: "Something went wrong building that answer. Try asking it another way." });
       } finally {
         clearInterval(ping);
@@ -229,7 +258,12 @@ export function createApp({ hub = new StatsHub(), togari, modelKey = env.ANTHROP
       const bad = checkRows(body, c);
       if (bad) return json(res, 422, { error: bad });
       try {
-        const snap = hub.put(c.clientId, body.window, { as_of: body.as_of, rows: body.rows.map(cleanRow), workspace: String(body.workspace) });
+        const snap = hub.put(c.clientId, body.window, {
+          as_of: body.as_of,
+          rows: body.rows.map(cleanRow),
+          threads: Array.isArray(body.threads) ? body.threads.map(cleanThread) : null,
+          workspace: String(body.workspace),
+        });
         return json(res, 200, { ok: true, as_of: snap.as_of, rows: snap.rows.length });
       } catch (err) {
         return json(res, 422, { error: err.message });
@@ -279,7 +313,21 @@ export function checkRows(body, client) {
     }
     if (r.leads != null && (!Number.isInteger(r.leads) || r.leads < 0)) return "leads must be a whole number or null";
   }
+  if (body.threads !== undefined) {
+    if (body.window !== "7d") return "threads come only with the 7d window";
+    if (!Array.isArray(body.threads) || body.threads.length > 5000) return "threads must be an array of at most 5000";
+    for (const t of body.threads) {
+      if (!t || typeof t.campaign !== "string" || !t.campaign.startsWith(prefix)) return "a thread belongs to another client";
+      if (typeof t.who !== "string" || !/^[0-9a-f]{64}$/.test(t.who)) return "who must be a sha256 hex digest";
+      if (t.category != null && (typeof t.category !== "string" || t.category.length > 60)) return "category must be a short string or null";
+      if (Number.isNaN(Date.parse(t.at))) return "at must be a timestamp";
+    }
+  }
   return null;
+}
+
+function cleanThread(t) {
+  return { campaign: t.campaign.slice(0, 200), who: t.who, category: t.category == null ? null : t.category, at: t.at };
 }
 
 function cleanRow(r) {

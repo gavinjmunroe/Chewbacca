@@ -159,8 +159,9 @@ export function headline(rows, window) {
   const v = verdicts(groups.map((g) => ({ interval: g.r.reply })));
   const ahead = groups.filter((_, i) => v[i] === "ahead").map((g) => g.label);
   const when = window === "all" ? "So far" : "In the last 7 days";
+  const all = Math.max(rows.reduce((a, r) => a + (Number(r.replies) || 0), 0), t.replies);
   const parts = [
-    `${when}, ${t.sent.toLocaleString("en-US")} emails went out and ${t.replies} ${t.replies === 1 ? "reply" : "replies"} came back from real people (${pct(t.reply.rate)} of emails).`,
+    `${when}, ${t.sent.toLocaleString("en-US")} emails went out and ${all.toLocaleString("en-US")} ${all === 1 ? "reply" : "replies"} came back, ${t.replies} of them from real people rather than out of office notices (${pct(t.reply.rate)} of emails).`,
     ahead.length
       ? `${ahead.join(" and ")} ${ahead.length > 1 ? "are" : "is"} getting replies at a clearly higher rate than the rest.`
       : "No company is clearly ahead of another yet, because the counts are still too small to separate them.",
@@ -169,12 +170,21 @@ export function headline(rows, window) {
   return parts.join(" ");
 }
 
+// Cut on a word boundary and say so, instead of stopping mid-word.
+function shorten(s, max) {
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  return `${cut.slice(0, Math.max(cut.lastIndexOf(" "), max - 20)).replace(/[\s,;:]+$/, "")}...`;
+}
+
 export function replyCards(list, m, { id = "replies", title = "Replies" } = {}) {
   const cards = (Array.isArray(list) ? list : []).map((x) => ({
     investor: String(x.investor || x.email || "Unknown"),
     firm: x.firm ? String(x.firm) : "",
     company: x.company ? String(x.company) : "",
-    wrote: String(x.wrote || "").slice(0, 400),
+    // Togari's list read keeps the first 400 characters (SUBSTR in
+    // list_replies), so a 400-long body was cut there and gets an ellipsis.
+    wrote: shorten(cleanReply(x.wrote), 360) + (String(x.wrote || "").length >= 400 && cleanReply(x.wrote).length <= 360 ? "..." : ""),
     did: togariDid(x.togari_did),
     when: x.received ? String(x.received) : "",
   }));
@@ -228,6 +238,100 @@ export function outcomeBars(summary, m) {
     mode: "count",
     ...m,
     items: capItems("bar_list", items).items,
+  };
+}
+
+// Clay's inbox tags, in Jonah's words. A tag is the inbox's guess, never a
+// verdict, so the positive ones are grouped as "needs a read" and never shown
+// as interest (interest-from-text).
+const TAG_GROUP = {
+  "Out Of Office": "Out of office",
+  "Not Interested": "Said no",
+  "Do Not Contact": "Asked not to be emailed",
+  "Wrong Person": "Wrong person",
+};
+
+const DID_PHRASE = {
+  "Sent to you as a card in Slack": ["sent to you in Slack", "sent to you in Slack"],
+  "Follow up scheduled": ["with a follow up scheduled", "with follow ups scheduled"],
+  "Logged as a pass": ["logged as a pass", "logged as passes"],
+  Blocklisted: ["blocklisted", "blocklisted"],
+  Logged: ["logged", "logged"],
+  "Forwarded to their new address": ["forwarded to a new address", "forwarded to new addresses"],
+  "Forwarded to the person they referred": ["forwarded to the person they referred", "forwarded to the people they referred"],
+};
+
+function didPhrase(label, n) {
+  const forms = DID_PHRASE[label];
+  return `${n} ${forms ? forms[n === 1 ? 0 : 1] : label.toLowerCase()}`;
+}
+
+/** A reply as a person would quote it: no link blobs, image tags or legal footers. */
+export function cleanReply(text) {
+  return String(text || "")
+    .replace(/<\s*(https?:|mailto:)[^>]*(>|$)/gi, "")
+    .replace(/\[\s*(https?:|mailto:)[^\]]*\]/gi, "")
+    .replace(/\(\s*https?:[^)]*\)/gi, "")
+    .replace(/\[image:[^\]]*\]/gi, "")
+    .replace(/\b(CONFIDENTIALITY NOTICE|This (e-?mail|message) (and any attachments )?(is|may contain) confidential|Sent from my iPhone|Get Outlook for)[\s\S]*$/i, "")
+    .replace(/\s*ᐧ\s*/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s+([,.!?])/g, "$1")
+    .trim();
+}
+
+/**
+ * One number for the week's replies, with where each one went. Clay's inbox
+ * says who wrote back (one row per person); Togari says which of them it has
+ * read. On 2026-10-10 the page showed 62 replies from Clay beside 27 read by
+ * Togari with nothing joining them: 78 people had written back, 17 of them out
+ * of office, and 51 had never reached Togari at all.
+ */
+export function reconcileReplies(threads, togariRows, m, hashEmail) {
+  const read = new Map();
+  for (const x of Array.isArray(togariRows) ? togariRows : []) {
+    if (x && x.email) read.set(hashEmail(String(x.email).trim().toLowerCase()), x);
+  }
+  const seen = new Set();
+  const people = [];
+  for (const t of threads) {
+    if (seen.has(t.who)) continue; // one person, one row
+    seen.add(t.who);
+    people.push(t);
+  }
+  const handled = people.filter((t) => read.has(t.who));
+  const waiting = people.filter((t) => !read.has(t.who));
+  const did = new Map();
+  for (const t of handled) {
+    const label = togariDid(read.get(t.who).togari_did);
+    did.set(label, (did.get(label) || 0) + 1);
+  }
+  const groups = new Map();
+  for (const t of waiting) {
+    const label = TAG_GROUP[t.category] || "Needs a look";
+    groups.set(label, (groups.get(label) || 0) + 1);
+  }
+  const order = ["Needs a look", "Said no", "Asked not to be emailed", "Wrong person", "Out of office"];
+  const items = [
+    {
+      label: "Read by Togari",
+      value: handled.length,
+      sub: [...did].sort((a, b) => b[1] - a[1]).map(([k, n]) => didPhrase(k, n)).join(", ") || "none yet",
+    },
+    ...order.filter((k) => groups.has(k)).map((k) => ({
+      label: k,
+      value: groups.get(k),
+      sub: k === "Needs a look" ? "Still in the inbox, untagged or tagged as possibly positive. Read these before counting any as interest." : "Still in the inbox, as the inbox tagged it",
+    })),
+  ];
+  return {
+    type: "bar_list",
+    id: "replies-reconciled",
+    title: `${people.length} ${people.length === 1 ? "person" : "people"} wrote back in the last 7 days`,
+    caption: `Togari has read ${handled.length} of them. The other ${waiting.length} are still in the Clay inbox, grouped by the tag the inbox gave them.`,
+    mode: "count",
+    ...m,
+    items,
   };
 }
 

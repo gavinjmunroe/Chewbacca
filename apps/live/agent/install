@@ -11,7 +11,15 @@ if ! security find-generic-password -s chewbacca-live-sync >/dev/null 2>&1; then
   exit 1
 fi
 mkdir -p "$HOME/Library/LaunchAgents" "$HOME/Library/Logs"
-sed -e "s#__AGENT__#$AGENT#g" -e "s#__HOME__#$HOME#g" "$HERE/com.chewbacca.live-stats-sync.plist" >"$DEST"
+# launchd starts jobs with a bare PATH, and api-anything (the inbox reader)
+# lives wherever this shell's node put it, often under ~/.nvm. On 2026-10-10 the
+# first launchd run said "api-anything is not installed" for exactly this.
+EXTRA=""
+for tool in api-anything node; do
+  found="$(command -v "$tool" 2>/dev/null || true)"
+  [ -n "$found" ] && EXTRA="$EXTRA$(dirname "$found"):"
+done
+sed -e "s#__AGENT__#$AGENT#g" -e "s#__EXTRA_PATH__#$EXTRA#g" -e "s#__HOME__#$HOME#g" "$HERE/com.chewbacca.live-stats-sync.plist" >"$DEST"
 plutil -lint "$DEST" >/dev/null
 launchctl bootout "gui/$(id -u)/com.chewbacca.live-stats-sync" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$DEST"

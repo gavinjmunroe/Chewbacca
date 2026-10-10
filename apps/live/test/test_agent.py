@@ -4,6 +4,7 @@ the CLI is replaced by a fake for every test."""
 import http.client
 import importlib.machinery
 import importlib.util
+import json
 import pathlib
 import unittest
 
@@ -54,12 +55,41 @@ def fake_cli(workspace="1372623", campaigns=None):
     return cli
 
 
+INBOX = [
+    {"email_campaign_name": "Zeutara | Ivy | Pre-seed investors | Wave 2", "lead_email": "Ann@Fund.vc", "lead_category_id": 3, "last_reply_time": "2026-10-09T20:00:00.000Z"},
+    {"email_campaign_name": "Zeutara | Ivy | Pre-seed investors | Wave 2", "lead_email": "old@fund.vc", "lead_category_id": 3, "last_reply_time": "2026-09-01T20:00:00.000Z"},
+    {"email_campaign_name": "Serif | Hiring | Wave 1", "lead_email": "x@serif.co", "lead_category_id": 3, "last_reply_time": "2026-10-09T20:00:00.000Z"},
+]
+
+
+def fake_inbox(*args):
+    assert args[0] == "inbox", args
+    offset = int([a for a in args if a.startswith("offset=")][0].split("=")[1])
+    return {"ok": True, "data": INBOX if offset == 0 else []}
+
+
 class AgentTest(unittest.TestCase):
     def setUp(self):
         self.real_cli = agent.cli
+        self.real_inbox = agent.chewbacca_clay
+        agent.chewbacca_clay = fake_inbox
 
     def tearDown(self):
         agent.cli = self.real_cli
+        agent.chewbacca_clay = self.real_inbox
+
+    def test_threads_are_this_clients_this_week_and_hashed(self):
+        import datetime as dt
+        import hashlib
+        since = dt.datetime(2026, 10, 4, 7, tzinfo=dt.timezone.utc)
+        threads = agent.inbox_threads("1372623", "Zeutara |", since, {"3": "Not Interested"})
+        self.assertEqual(threads, [{
+            "campaign": "Zeutara | Ivy | Pre-seed investors | Wave 2",
+            "who": hashlib.sha256(b"ann@fund.vc").hexdigest(),
+            "category": "Not Interested",
+            "at": "2026-10-09T20:00:00Z",
+        }])
+        self.assertNotIn("@", json.dumps(threads).replace("Zeutara |", ""), "no address leaves the machine")
 
     def test_rows_use_totals_and_leads_only_all_time(self):
         c = {"id": "cam_1", "name": "Zeutara | Ivy | x", "status": "active"}
@@ -73,6 +103,7 @@ class AgentTest(unittest.TestCase):
         agent.cli = fake_cli()
         bodies = agent.read_client(ZEUTARA)
         self.assertEqual({b["window"] for b in bodies}, {"all", "7d"})
+        self.assertEqual([("threads" in b) for b in bodies if b["window"] == "all"], [False])
         for b in bodies:
             self.assertEqual([r["campaign_id"] for r in b["rows"]], ["cam_1"])
             self.assertEqual(b["workspace"], "1372623")

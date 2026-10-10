@@ -14,6 +14,7 @@ import { validateBlock } from "./blocks.js";
 import { cleanProse, isCardForClient } from "./rules.js";
 import { staleNote, ageWords } from "./freshness.js";
 import * as C from "./compose.js";
+import { createHash } from "node:crypto";
 
 export const MODEL = process.env.LIVE_MODEL || "claude-sonnet-4-6";
 // Six rounds answered every Slack assistant question in testing (its
@@ -33,6 +34,7 @@ const VIEWS = {
   followups: { title: "Follow ups", needs: "togari" },
   decks: { title: "Decks on file", needs: "togari" },
   togari_outcomes: { title: "What Togari did", needs: "togari" },
+  replies_reconciled: { title: "Who wrote back", needs: "stats" },
   say: { title: "", needs: null },
 };
 export const VIEW_NAMES = Object.keys(VIEWS);
@@ -87,7 +89,7 @@ export function tier0(question, companies = []) {
       { view: "stats_headline", args: { window: "7d", company: co } },
       { view: "stats_kpis", args: { window: "7d", company: co } },
       { view: "stats_rates_company", args: { window: "7d" } },
-      { view: "togari_outcomes", args: { days: 7 } },
+      { view: "replies_reconciled", args: { window: "7d" } },
       { view: "stats_table", args: { window: "7d", company: co } },
     ];
   }
@@ -129,7 +131,7 @@ function only(rows, company) {
   return rows.filter((r) => String(r.company || "").toLowerCase() === c);
 }
 
-function statsBlock(p, snap, m) {
+function statsBlock(p, snap, m, extra = {}) {
   const w = p.args?.window || "7d";
   const rows = only(snap.rows, p.args?.company);
   switch (p.view) {
@@ -138,6 +140,13 @@ function statsBlock(p, snap, m) {
     case "stats_rates_company": return C.replyRateBars(rows, m, w, "company");
     case "stats_rates_campaign": return C.replyRateBars(rows, m, w, "campaign");
     case "stats_table": return C.campaignTable(rows, m, w);
+    case "replies_reconciled": {
+      if (!Array.isArray(snap.threads)) return { ...C.notice("reconciled", "The list of who wrote back this week is still loading. Ask again in a minute."), ...m };
+      if (!extra.togari) return { ...C.notice("reconciled", "Togari did not answer, so this week's replies cannot be matched to what it handled. Ask again in a minute."), ...m };
+      const b = C.reconcileReplies(snap.threads, extra.togari.rows, m, sha256);
+      if (extra.togari.capped) b.caption += ` Togari read ${extra.togari.total} replies this week and only the newest ${extra.togari.rows.length} were matched, so the read count may be low.`;
+      return b;
+    }
     case "stats_completed": {
       const done = rows.filter((r) => r.status === "completed");
       return done.length
@@ -148,13 +157,35 @@ function statsBlock(p, snap, m) {
   return null;
 }
 
+function sha256(s) {
+  return createHash("sha256").update(s).digest("hex");
+}
+
+/** The replies Togari read in the last 7 days, and whether the list was cut short. */
+async function togariWeek(ctx) {
+  try {
+    const [list, summary] = await Promise.all([
+      ctx.togari.read(ctx.clientId, "list_replies", { days: 7 }),
+      ctx.togari.read(ctx.clientId, "summary", { days: 7 }),
+    ]);
+    const rows = Array.isArray(list.data) ? list.data : [];
+    const total = Number(summary.data?.replies_received) || rows.length;
+    return { rows, total, capped: total > rows.length };
+  } catch (err) {
+    ctx.log?.("togari week failed", err?.message);
+    return null;
+  }
+}
+
 /** Stats views for one window: cached first, refreshed when older than the bound. */
 async function statsPhase(window, plan, ctx) {
   const { hub, clientId } = ctx;
   const mine = plan.map((p, at) => ({ p, at })).filter(({ p }) => VIEWS[p.view]?.needs === "stats" && (p.args?.window || "7d") === window);
+  const extra = {};
+  if (mine.some(({ p }) => p.view === "replies_reconciled")) extra.togari = await togariWeek(ctx);
   const draw = (snap, stale) => {
     for (const { p, at } of mine) {
-      const b = statsBlock(p, snap, C.meta("clay", snap.as_of, stale));
+      const b = statsBlock(p, snap, C.meta("clay", snap.as_of, stale), extra);
       if (b) put(ctx, at, b);
     }
   };
@@ -289,14 +320,27 @@ function system(client) {
   ].filter(Boolean).join("\n\n");
 }
 
-async function callModel(body, { apiKey, fetchImpl = fetch }) {
+// The slowest model round in local testing took about 12 s (a 19.9 s answer
+// over two rounds, 2026-10-10); 45 s ends a hung call without cutting a slow one.
+const MODEL_TIMEOUT_MS = 45 * 1000;
+
+async function callModel(body, { apiKey, fetchImpl = fetch, signal }) {
+  const timeout = AbortSignal.timeout(MODEL_TIMEOUT_MS);
   const r = await fetchImpl("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify(body),
+    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   if (!r.ok) throw new Error(`model ${r.status}`);
   return r.json();
+}
+
+const FREE_TEXT = new Set(["wrote", "body", "subject", "note"]);
+
+/** The data as JSON with every field a stranger wrote removed. */
+export function groundingOf(data) {
+  return JSON.stringify(data, (k, v) => (FREE_TEXT.has(k) ? undefined : v));
 }
 
 /** Tier 2. Returns { plan, groundingText, replyText } for runPlan, or throws. */
@@ -306,7 +350,8 @@ export async function modelPlan(question, ctx) {
   const seen = [];
   const replyBodies = [];
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    const res = await callModel({ model: MODEL, max_tokens: 900, system: system(client), tools: TOOLS, messages }, ctx.model);
+    if (ctx.signal?.aborted) throw new Error("the asker left");
+    const res = await callModel({ model: MODEL, max_tokens: 900, system: system(client), tools: TOOLS, messages }, { ...ctx.model, signal: ctx.signal });
     messages.push({ role: "assistant", content: res.content });
     const calls = (res.content || []).filter((b) => b.type === "tool_use");
     const show = calls.find((c) => c.name === "show");
@@ -325,6 +370,12 @@ export async function modelPlan(question, ctx) {
           out = JSON.stringify(r.data);
           const list = Array.isArray(r.data) ? r.data : r.data?.replies || [];
           for (const x of list) if (x && x.wrote) replyBodies.push(String(x.wrote));
+          // Grounding is what our sources counted, never what a stranger
+          // wrote: a reply saying "we closed 40 rounds" must not let "40"
+          // into the page as if it were a number we measured.
+          seen.push(groundingOf(r.data));
+          results.push({ type: "tool_result", tool_use_id: c.id, content: out.slice(0, 12000) });
+          continue;
         }
       } catch (err) {
         out = `Failed: ${err?.message || "error"}`;
@@ -372,7 +423,7 @@ async function repairProse(original, dropped, ctx) {
       system: "Rewrite a short answer for a client so it keeps every sentence that was fine and leaves out what was refused. Return only the rewritten text, at most three sentences, full words, no dashes. Never add a number, a name or a claim that is not in the original.",
       messages: [{ role: "user", content: `Original:\n${original}\n\nRefused sentences and why:\n${reasons}` }],
     },
-    ctx.model,
+    { ...ctx.model, signal: ctx.signal },
   );
   return (res.content || []).filter((b) => b.type === "text").map((b) => b.text).join(" ").trim();
 }
@@ -385,7 +436,7 @@ export async function answer(question, ctx) {
     await runPlan(plan0, ctx);
     return { tier: 0 };
   }
-  ctx.emit("status", { text: "Reading everything Togari has on this" });
+  ctx.emit("status", { text: "Looking through your replies and campaigns" });
   const { plan, grounding, replyText } = await modelPlan(question, ctx);
   const cleaned = [];
   for (const p of plan) {

@@ -7,8 +7,9 @@ public API has no campaign endpoints), so this runs on a machine where the
 long-polls the page for questions that need fresher numbers, and reads every
 live client on its own every SYNC_EVERY seconds regardless.
 
-Read only. It runs `clay whoami`, `clay campaigns list` and `clay campaigns
-analytics`, nothing else, and never starts, pauses or edits a campaign.
+Read only. It runs `clay whoami`, `clay campaigns list`, `clay campaigns
+analytics` and `chewbacca clay inbox`, nothing else, and never starts, pauses
+or edits a campaign. Reply addresses leave this machine only as sha256 hashes.
 
     live-stats-sync                 # loop forever (launchd keeps it alive)
     live-stats-sync --once          # read every client once, push, exit
@@ -20,6 +21,7 @@ login keychain as service "chewbacca-live-sync".
 import argparse
 import concurrent.futures
 import datetime as dt
+import hashlib
 import http.client
 import json
 import os
@@ -125,6 +127,58 @@ def campaigns_for(prefix):
     return [c for c in found if c.get("name", "").startswith(prefix) and c.get("status") != "draft"]
 
 
+def inbox_threads(ws, prefix, since_dt, categories):
+    """Every inbox thread of this client with a reply since since_dt, one per
+    person, the email reduced to its sha256 so the page can match it against
+    the replies Togari read without ever holding an address. Read through the
+    kit's front door (`chewbacca clay inbox`, 20 a page)."""
+    out = []
+    for offset in range(0, 5000, 20):
+        page = chewbacca_clay("inbox", f"ws={ws}", f"offset={offset}").get("data") or []
+        for r in page:
+            name = r.get("email_campaign_name") or ""
+            at = r.get("last_reply_time")
+            if not name.startswith(prefix) or not at:
+                continue
+            when = dt.datetime.fromisoformat(at.replace("Z", "+00:00"))
+            if when < since_dt:
+                continue
+            email = (r.get("lead_email") or "").strip().lower()
+            out.append({
+                "campaign": name,
+                "who": hashlib.sha256(email.encode()).hexdigest(),
+                "category": categories.get(str(r.get("lead_category_id"))),
+                "at": when.astimezone(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            })
+        if len(page) < 20:
+            break
+    return out
+
+
+def chewbacca_clay(*args, sleep=time.sleep):
+    """One kit read, retried on the same schedule as cli(). Pinned to the
+    api-anything surface: the kit's fallback for the inbox is clay-inbox, which
+    drives a Chrome tab, and a background job must never open the browser
+    (first launchd run, 2026-10-10, fell through to it)."""
+    last = None
+    for wait in RETRY_WAITS + (None,):
+        out = subprocess.run(["chewbacca", "clay", *args, "--surface", "api-anything"], capture_output=True, text=True, timeout=CALL_TIMEOUT)
+        try:
+            body = json.loads(out.stdout or "{}")
+        except ValueError:
+            body = {}
+        if out.returncode == 0 and body.get("ok"):
+            return body
+        # Only the surfaces' reasons go to the log: the body carries reply
+        # addresses, and the log is a plain file.
+        reasons = [t.get("reason", "") for t in body.get("tried", []) if isinstance(t, dict)]
+        last = f"inbox read failed: {'; '.join(reasons)[:300] or (out.stderr or '').strip()[:300]}"
+        if wait is None:
+            break
+        sleep(wait)
+    raise RuntimeError(last)
+
+
 def read_client(client):
     """Both windows for one client, as two push bodies. Raises on any failure."""
     who = cli("whoami")
@@ -138,15 +192,28 @@ def read_client(client):
         jobs.append((c, "all", ["campaigns", "analytics", c["id"]]))
         jobs.append((c, "7d", ["campaigns", "analytics", c["id"], "--start-date", since, "--timezone", TZ]))
     out = {"all": [], "7d": []}
+    categories = {}
     started = time.time()
     with concurrent.futures.ThreadPoolExecutor(PARALLEL) as pool:
         futs = {pool.submit(cli, *args): (c, w) for c, w, args in jobs}
         for f in concurrent.futures.as_completed(futs):
             c, w = futs[f]
-            out[w].append(row(c, f.result(), w))
+            a = f.result()
+            out[w].append(row(c, a, w))
+            for k in (a.get("replies") or {}).get("categories", []):
+                if k.get("categoryId") is not None and k.get("categoryName"):
+                    categories[str(k["categoryId"])] = k["categoryName"]
+    since_dt = dt.datetime.combine(dt.date.fromisoformat(since), dt.time(0), ZoneInfo(TZ))
+    threads = inbox_threads(ws, client["campaignPrefix"], since_dt, categories)
     as_of = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
-    log(f"{client['clientId']}: {len(camps)} campaigns, {len(jobs)} reads in {time.time() - started:.1f}s")
-    return [{"clientId": client["clientId"], "window": w, "as_of": as_of, "workspace": ws, "rows": rows} for w, rows in out.items()]
+    log(f"{client['clientId']}: {len(camps)} campaigns, {len(jobs)} reads, {len(threads)} reply threads in {time.time() - started:.1f}s")
+    bodies = []
+    for w, rows in out.items():
+        b = {"clientId": client["clientId"], "window": w, "as_of": as_of, "workspace": ws, "rows": rows}
+        if w == "7d":
+            b["threads"] = threads
+        bodies.append(b)
+    return bodies
 
 
 def sync(live, client, dry):

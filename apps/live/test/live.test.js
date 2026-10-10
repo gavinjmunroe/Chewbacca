@@ -77,6 +77,62 @@ test("bars never rank or call a winner on noise", () => {
   ]);
 });
 
+test("this week's replies reconcile into one number with where each went", async () => {
+  const { createHash } = await import("node:crypto");
+  const h = (s) => createHash("sha256").update(s).digest("hex");
+  const T = (email, category) => ({ campaign: "Zeutara | Ivy | x", who: h(email), category, at: "2026-10-09T10:00:00Z" });
+  const threads = [
+    T("a@x.vc", "Not Interested"),
+    T("b@x.vc", "Out Of Office"),
+    T("c@x.vc", "Interested"),
+    T("d@x.vc", null),
+    T("e@x.vc", "Do Not Contact"),
+    T("f@x.vc", "Wrong Person"),
+    T("a@x.vc", "Not Interested"), // a second thread from the same person counts once
+  ];
+  const togari = [
+    { email: "A@x.vc", togari_did: "logged as a pass" },
+    { email: "f@x.vc", togari_did: "needs_review" },
+  ];
+  const b = C.reconcileReplies(threads, togari, {}, h);
+  assert.deepEqual(validateBlock(b), []);
+  assert.equal(b.title, "6 people wrote back in the last 7 days");
+  assert.match(b.caption, /Togari has read 2 of them\. The other 4 are still in the Clay inbox/);
+  const by = Object.fromEntries(b.items.map((i) => [i.label, i.value]));
+  assert.deepEqual(by, {
+    "Read by Togari": 2,
+    "Needs a look": 2,
+    "Asked not to be emailed": 1,
+    "Out of office": 1,
+  });
+  assert.deepEqual(b.items[0].sub.split(", ").sort(), ["1 logged as a pass", "1 sent to you in Slack"]);
+  const total = b.items.reduce((a, i) => a + i.value, 0);
+  assert.equal(total, 6, "the parts add up to the one number in the title");
+  assert.ok(!JSON.stringify(b).match(/\binterested\b/i), "a Clay tag is never shown as interest");
+});
+
+test("a reply is quoted without link blobs, image tags or legal footers", () => {
+  const raw =
+    "We don't do Safes. Sorry. *John Lowe* [image: amokconsumer.com] <http://amokconsumer.com> CONFIDENTIALITY NOTICE: This email and any attachments may contain confidential information.";
+  assert.equal(C.cleanReply(raw), "We don't do Safes. Sorry. *John Lowe*");
+  assert.equal(C.cleanReply("submit here <https://www.google.com/url?q=x&sa=E> thanks"), "submit here thanks");
+  assert.equal(C.cleanReply("Partner, Slay Ventures <http://us.linkedin.com/in/a"), "Partner, Slay Ventures", "a link Togari cut off mid-way");
+  const cutAt400 = C.replyCards([{ investor: "A", wrote: `${"x".repeat(300)} ${"y".repeat(99)}` }], {}).items[0].wrote;
+  assert.ok(cutAt400.endsWith("..."), "a body Togari truncated says so");
+  const long = C.replyCards([{ investor: "A", wrote: "word ".repeat(200) }], {}).items[0].wrote;
+  assert.ok(long.length <= 363 && long.endsWith("word..."), long.slice(-20));
+});
+
+test("a thread push is refused unless every thread is this client's, hashed, in the week", () => {
+  const z = { clientId: "zeutara", clayWorkspaceId: "1372623", campaignPrefix: "Zeutara |" };
+  const base = { window: "7d", workspace: "1372623", rows: [] };
+  const t = { campaign: "Zeutara | Ivy | x", who: "a".repeat(64), category: "Out Of Office", at: "2026-10-09T10:00:00Z" };
+  assert.equal(checkRows({ ...base, threads: [t] }, z), null);
+  assert.match(checkRows({ ...base, threads: [{ ...t, who: "jonah@zeutara.com" }] }, z), /sha256/);
+  assert.match(checkRows({ ...base, threads: [{ ...t, campaign: "Serif | x" }] }, z), /another client/);
+  assert.match(checkRows({ ...base, window: "all", threads: [t] }, z), /7d window/);
+});
+
 // ---------------------------------------------------------------- blocks
 
 test("the block validator accepts every composed block and names every error", () => {
@@ -250,10 +306,11 @@ async function serve(app) {
 
 test("a zeutara session reads only zeutara, whatever the URL says", async () => {
   const togari = fakeTogari();
-  const app = createApp({ togari, syncKey: "sync-key-for-tests-only-0123456789", modelKey: "unused" });
+  const LINK = "a".repeat(64);
+  const app = createApp({ togari, syncKey: "sync-key-for-tests-only-0123456789", modelKey: "unused", access: () => JSON.stringify({ [LINK]: { client: "zeutara", who: "Jonah" } }) });
   const { srv, base } = await serve(app);
   try {
-    const cookie = `live=${sign({ c: "zeutara", w: "Jonah" })}`;
+    const cookie = `live=${sign({ c: "zeutara", w: "Jonah", k: LINK })}`;
     assert.equal((await fetch(`${base}/c/serif`, { headers: { cookie } })).status, 401);
     assert.equal((await fetch(`${base}/c/zeutara`, { headers: { cookie } })).status, 200);
     const r = await fetch(`${base}/api/ask?q=${encodeURIComponent("Who replied about Ivy?")}&client=serif`, { headers: { cookie } });
@@ -266,7 +323,7 @@ test("a zeutara session reads only zeutara, whatever the URL says", async () => 
     // Flip a character inside the MAC, not the last one: base64url's final
     // character carries padding bits, so two last characters can decode to
     // the same bytes and the "forgery" is the same signature.
-    const real = sign({ c: "zeutara" });
+    const real = sign({ c: "zeutara", k: LINK });
     const i = real.length - 10;
     const forged = `live=${real.slice(0, i)}${real[i] === "A" ? "B" : "A"}${real.slice(i + 1)}`;
     assert.equal((await fetch(`${base}/api/me`, { headers: { cookie: forged } })).status, 401);
@@ -318,9 +375,64 @@ test("only a hashed link token signs anyone in", async () => {
   const { createHash } = await import("node:crypto");
   const token = "tok_abcdefghijklmnopqrstuvwxyz012345";
   const access = JSON.stringify({ [createHash("sha256").update(token).digest("hex")]: { client: "zeutara", who: "Jonah" } });
-  assert.deepEqual(accessFor(token, access), { client: "zeutara", who: "Jonah" });
+  const key = createHash("sha256").update(token).digest("hex");
+  assert.deepEqual(accessFor(token, access), { client: "zeutara", who: "Jonah", key });
   assert.equal(accessFor("tok_wrongwrongwrongwrongwrong0000", access), null);
   assert.equal(accessFor("short", access), null);
+});
+
+test("cutting a link ends the sessions it already signed in", async () => {
+  const togari = fakeTogari();
+  const LINK = "b".repeat(64);
+  let access = JSON.stringify({ [LINK]: { client: "zeutara", who: "Jonah" } });
+  const app = createApp({ togari, syncKey: "x".repeat(32), access: () => access });
+  const { srv, base } = await serve(app);
+  try {
+    const cookie = `live=${sign({ c: "zeutara", w: "Jonah", k: LINK })}`;
+    assert.equal((await fetch(`${base}/api/me`, { headers: { cookie } })).status, 200);
+    access = "{}";
+    assert.equal((await fetch(`${base}/api/me`, { headers: { cookie } })).status, 401, "a removed link stops working at once");
+    access = JSON.stringify({ [LINK]: { client: "serif", who: "Jonah" } });
+    assert.equal((await fetch(`${base}/api/me`, { headers: { cookie } })).status, 401, "a link moved to another client does not carry the old session");
+    const old = `live=${sign({ c: "zeutara", w: "Jonah" })}`;
+    assert.equal((await fetch(`${base}/api/me`, { headers: { cookie: old } })).status, 401, "a session with no link key is refused");
+  } finally {
+    srv.close();
+  }
+});
+
+test("a number an investor wrote never grounds a number on the page", async () => {
+  const { groundingOf } = await import("../lib/answer.js");
+  const data = [{ investor: "Ann Lee", firm: "Fund", wrote: "We closed 40 rounds and have 1,000,000 ready", togari_did: "logged" }];
+  const grounding = groundingOf(data);
+  assert.ok(!grounding.includes("1,000,000") && !grounding.includes("40"));
+  const { text, dropped } = cleanProse("Ann Lee has 1,000,000 ready to invest.", { grounding, replyText: data[0].wrote });
+  assert.equal(text, "");
+  assert.equal(dropped[0].why, "numbers 1000000");
+});
+
+test("a model answer stops when the asker leaves", async () => {
+  const { modelPlan } = await import("../lib/answer.js");
+  const left = new AbortController();
+  let calls = 0;
+  const ctx = {
+    clientId: "zeutara",
+    client: { displayName: "Zeutara", brief: "" },
+    companies: [],
+    togari: fakeTogari(),
+    hub: new StatsHub(),
+    signal: left.signal,
+    model: {
+      apiKey: "k",
+      fetchImpl: async () => {
+        calls++;
+        left.abort(); // the browser closes while the first round runs
+        return { ok: true, json: async () => ({ content: [{ type: "tool_use", id: "t1", name: "followups", input: {} }] }) };
+      },
+    },
+  };
+  await assert.rejects(modelPlan("anything", ctx), /left/);
+  assert.equal(calls, 1, "no second model round is paid for");
 });
 
 test("a stats plan streams the cached block first, then the refreshed one in the same slot", async () => {

@@ -76,11 +76,12 @@ const DRAW = {
     const tr = (row, cls) =>
       h("tr", { class: `${cls} lvl-${row.level || 0}${row.flag ? ` flag-${row.flag}` : ""}` },
         ...b.columns.map((c) => h(c.key === b.columns[0].key ? "th" : "td", { class: c.align === "right" ? "num" : "", scope: c.key === b.columns[0].key ? "row" : undefined }, cell(row, c))));
-    return h("div", { class: "table-wrap" },
+    const hint = b.columns.length > 3 ? h("p", { class: "scroll-hint" }, "Swipe the table sideways to see every column.") : null;
+    return h("div", {}, hint, h("div", { class: "table-wrap" },
       h("table", {},
         h("thead", {}, h("tr", {}, ...b.columns.map((c) => h("th", { class: c.align === "right" ? "num" : "", scope: "col" }, c.label)))),
         h("tbody", {}, ...b.rows.map((r) => tr(r, "row"))),
-        b.total ? h("tfoot", {}, tr(b.total, "total")) : null));
+        b.total ? h("tfoot", {}, tr(b.total, "total")) : null)));
   },
 
   reply_cards: (h, b) =>

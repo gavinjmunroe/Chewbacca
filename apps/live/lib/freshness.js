@@ -53,13 +53,13 @@ export class StatsHub {
   }
 
   /** The agent posts a fresh read. Rows replace the snapshot whole. */
-  put(clientId, window, { as_of, rows, workspace }) {
+  put(clientId, window, { as_of, rows, workspace, threads = null }) {
     if (!["7d", "all"].includes(window)) throw new RangeError(`unknown window ${window}`);
     if (!Array.isArray(rows)) throw new TypeError("rows must be an array");
     if (Number.isNaN(Date.parse(as_of))) throw new TypeError("as_of must be a timestamp");
     const prev = this.get(clientId, window);
     if (prev && Date.parse(prev.as_of) > Date.parse(as_of)) return prev; // an older read lost a race
-    const snap = { as_of, rows, workspace: workspace || null };
+    const snap = { as_of, rows, threads, workspace: workspace || null };
     this.snaps.set(this.key(clientId, window), snap);
     this.errors.delete(clientId);
     this.wantedSet.delete(clientId);

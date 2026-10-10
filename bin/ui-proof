@@ -1,0 +1,251 @@
+#!/usr/bin/env python3
+"""ui-proof: a pixel receipt for UI work, and the check a gate runs on it.
+
+The kit could render a page (site-gate, design-gate) and still had no record
+that anyone looked AFTER the last edit. On 2026-09-21 a visual fix was claimed
+done three times while the next screenshot showed the same bug, because the
+claim was checked against the code, not the running screen. A receipt that
+predates the last edit to a UI file proves nothing, so the check compares the
+two clocks.
+
+    ui-proof capture <url> [--out DIR]   screenshot at 1440x900 and 375x812,
+                                          capture console errors, write
+                                          receipt.json with hashes and time.
+                                          exit 1 if the page errored or 4xx/5xx
+    ui-proof check [--root DIR] [--receipt PATH] [--files F...] [--max-age S]
+                                          exit 0 only if a passing receipt
+                                          exists, is newer than every UI file
+                                          under root (or every --files path),
+                                          and its screenshots still hash right
+    ui-proof probe                        exit 0 if a headless browser launches
+
+Exit 3 means no browser could start: unverified, never green.
+The default receipt directory is <git root or cwd>/.ui-proof.
+"""
+import argparse
+import datetime
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import time
+
+# Desktop is the size site-gate checks. 375 is the iPhone SE / mini width the
+# house rules name for mobile; 390 still hid a 15 px overflow at 375 on the
+# TTS nav (2026-10-04), so the narrower one is the one that proves something.
+SHOTS = [("desktop", 1440, 900), ("mobile", 375, 812)]
+UI_EXT = {".html", ".htm", ".css", ".scss", ".js", ".jsx", ".ts", ".tsx",
+          ".vue", ".svelte", ".astro", ".mdx"}
+SKIP_DIRS = {".git", "node_modules", ".ui-proof", ".next", "dist", "build",
+             ".venv", "__pycache__", ".turbo", ".cache", "coverage"}
+# Late errors: a fetch that rejects or a deferred script that throws lands
+# after "load". 600 ms caught the fixture's setTimeout error every run; it is
+# a floor, not a measurement of real apps.
+SETTLE_MS = 600
+EXIT_NO_BROWSER = 3
+
+
+def project_root(start):
+    try:
+        out = subprocess.run(["git", "-C", start, "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=5)
+        if out.returncode == 0 and out.stdout.strip():
+            return out.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return os.path.abspath(start)
+
+
+def sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def launch(pw):
+    """Chromium, or None with the reason. Never raises for a missing browser."""
+    try:
+        return pw.chromium.launch(headless=True), None
+    except Exception as e:  # playwright raises its own Error for a missing binary
+        return None, str(e).strip().splitlines()[0] if str(e).strip() else repr(e)
+
+
+def no_browser(reason):
+    print(f"ui-proof: no browser available, nothing was looked at ({reason}).\n"
+          "Install one with: python3 -m playwright install chromium", file=sys.stderr)
+    return EXIT_NO_BROWSER
+
+
+def cmd_probe(_args):
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return no_browser("python playwright not installed")
+    with sync_playwright() as pw:
+        browser, why = launch(pw)
+        if browser is None:
+            return no_browser(why)
+        browser.close()
+    print("ui-proof: browser ok")
+    return 0
+
+
+def cmd_capture(args):
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return no_browser("python playwright not installed")
+    out = os.path.abspath(args.out or os.path.join(project_root(os.getcwd()), ".ui-proof"))
+    os.makedirs(out, exist_ok=True)
+    started = time.time()
+    shots, console_errors, page_errors, statuses, overflow = [], [], [], {}, {}
+    with sync_playwright() as pw:
+        browser, why = launch(pw)
+        if browser is None:
+            return no_browser(why)
+        try:
+            for name, width, height in SHOTS:
+                ctx = browser.new_context(viewport={"width": width, "height": height})
+                page = ctx.new_page()
+                page.on("console", lambda m, n=name: console_errors.append(
+                    {"viewport": n, "text": m.text}) if m.type == "error" else None)
+                page.on("pageerror", lambda e, n=name: page_errors.append(
+                    {"viewport": n, "text": str(e)}))
+                try:
+                    resp = page.goto(args.url, wait_until="load", timeout=args.timeout * 1000)
+                    statuses[name] = resp.status if resp else None
+                except Exception as e:
+                    statuses[name] = None
+                    page_errors.append({"viewport": name, "text": f"navigation failed: {e}"})
+                page.wait_for_timeout(SETTLE_MS)
+                path = os.path.join(out, f"{name}.png")
+                page.screenshot(path=path, full_page=args.full)
+                try:
+                    overflow[name] = page.evaluate(
+                        "document.documentElement.scrollWidth > window.innerWidth")
+                except Exception:
+                    overflow[name] = None
+                shots.append({"name": name, "width": width, "height": height,
+                              "file": os.path.basename(path), "sha256": sha256(path),
+                              "bytes": os.path.getsize(path)})
+                ctx.close()
+        finally:
+            browser.close()
+    bad_status = {k: v for k, v in statuses.items() if v is None or v >= 400}
+    ok = not console_errors and not page_errors and not bad_status
+    receipt = {
+        "tool": "ui-proof", "version": 1, "url": args.url,
+        "started_at": started,
+        "created_at": time.time(),
+        "created_iso": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        "shots": shots, "http_status": statuses,
+        "console_errors": console_errors, "page_errors": page_errors,
+        "horizontal_overflow": overflow, "ok": ok,
+    }
+    rpath = os.path.join(out, "receipt.json")
+    with open(rpath, "w") as f:
+        json.dump(receipt, f, indent=2)
+    with open(os.path.join(out, "console.json"), "w") as f:
+        json.dump({"console_errors": console_errors, "page_errors": page_errors}, f, indent=2)
+    for s in shots:
+        print(f"  {s['name']:8} {s['width']}x{s['height']}  {os.path.join(out, s['file'])}")
+    for e in console_errors + page_errors:
+        print(f"  error [{e['viewport']}]: {e['text'][:200]}")
+    for k, v in bad_status.items():
+        print(f"  http [{k}]: {v}")
+    print(f"ui-proof: {'PASS' if ok else 'FAIL'}  receipt {rpath}")
+    return 0 if ok else 1
+
+
+def ui_files(root):
+    found = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+        for fn in filenames:
+            if os.path.splitext(fn)[1].lower() in UI_EXT:
+                found.append(os.path.join(dirpath, fn))
+    return found
+
+
+def cmd_check(args):
+    root = os.path.abspath(args.root or project_root(os.getcwd()))
+    rpath = os.path.abspath(args.receipt or os.path.join(root, ".ui-proof", "receipt.json"))
+    files = [os.path.abspath(f) for f in args.files] if args.files else ui_files(root)
+    files = [f for f in files if os.path.isfile(f)]
+    if not files:
+        print(f"ui-proof: no UI files under {root}, nothing to prove")
+        return 0
+    newest = max(files, key=os.path.getmtime)
+    newest_t = os.path.getmtime(newest)
+    problems = []
+    try:
+        with open(rpath) as f:
+            receipt = json.load(f)
+    except FileNotFoundError:
+        print(f"ui-proof: REFUSED, no receipt at {rpath}.\n"
+              f"  UI changed ({os.path.relpath(newest, root)}) and nothing was rendered.\n"
+              "  Run: ui-proof capture <url of the running page>", file=sys.stderr)
+        return 1
+    except (OSError, json.JSONDecodeError) as e:
+        print(f"ui-proof: REFUSED, unreadable receipt {rpath}: {e}", file=sys.stderr)
+        return 1
+    if not isinstance(receipt, dict) or receipt.get("tool") != "ui-proof":
+        print(f"ui-proof: REFUSED, {rpath} is not a ui-proof receipt", file=sys.stderr)
+        return 1
+    # started_at, not created_at: an edit made while the capture ran is not in
+    # the pixels.
+    taken = float(receipt.get("started_at") or 0)
+    if newest_t > taken:
+        problems.append(f"stale: {os.path.relpath(newest, root)} was edited "
+                        f"{int(newest_t - taken)}s after the receipt was taken")
+    if args.max_age and time.time() - taken > args.max_age:
+        problems.append(f"too old: taken {int(time.time() - taken)}s ago, limit {args.max_age}s")
+    if not receipt.get("ok"):
+        errs = (receipt.get("console_errors") or []) + (receipt.get("page_errors") or [])
+        first = errs[0]["text"][:120] if errs else f"http {receipt.get('http_status')}"
+        problems.append(f"the capture failed: {len(errs)} console/page errors ({first})")
+    widths = {s.get("width") for s in receipt.get("shots", [])}
+    for _, w, _h in SHOTS:
+        if w not in widths:
+            problems.append(f"no screenshot at width {w}")
+    base = os.path.dirname(rpath)
+    for s in receipt.get("shots", []):
+        p = os.path.join(base, s.get("file", ""))
+        if not os.path.isfile(p):
+            problems.append(f"screenshot missing: {p}")
+        elif sha256(p) != s.get("sha256"):
+            problems.append(f"screenshot hash mismatch: {p}")
+    if problems:
+        print(f"ui-proof: REFUSED ({receipt.get('url')})", file=sys.stderr)
+        for p in problems:
+            print(f"  - {p}", file=sys.stderr)
+        print("  Re-run ui-proof capture <url> against the running page.", file=sys.stderr)
+        return 1
+    print(f"ui-proof: ok, {receipt.get('url')} captured {receipt.get('created_iso')}, "
+          f"after the last UI edit ({os.path.relpath(newest, root)})")
+    return 0
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="ui-proof", description=__doc__.split("\n")[0])
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("capture", help="screenshot a running page and write a receipt")
+    c.add_argument("url")
+    c.add_argument("--out", help="receipt directory (default <git root>/.ui-proof)")
+    c.add_argument("--full", action="store_true", help="full-page screenshots")
+    c.add_argument("--timeout", type=int, default=30, help="navigation timeout, seconds")
+    k = sub.add_parser("check", help="verify a fresh passing receipt exists")
+    k.add_argument("--root", help="project root (default git root of cwd)")
+    k.add_argument("--receipt", help="receipt.json path (default <root>/.ui-proof/receipt.json)")
+    k.add_argument("--files", nargs="+", help="the UI files that changed, instead of walking root")
+    k.add_argument("--max-age", type=int, default=0, help="refuse receipts older than this, seconds")
+    sub.add_parser("probe", help="exit 0 if a headless browser launches, 3 if not")
+    args = ap.parse_args()
+    return {"capture": cmd_capture, "check": cmd_check, "probe": cmd_probe}[args.cmd](args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -206,6 +206,17 @@ if group "site-gate"; then
   fi
 fi
 
+# ui-proof: a pixel receipt (1440 and 375 screenshots, console errors, hashes)
+# and the check a gate runs to refuse UI work with no fresh one.
+if group "ui-proof"; then
+  if python3 "$ROOT/bin/ui-proof" probe >/dev/null 2>&1; then
+    check "ui-proof receipt is written and stale, failing, tampered or missing ones are refused" \
+      bash "$ROOT/tests/ui_proof.sh"
+  else
+    skip "ui-proof" "no headless browser (python3 -m playwright install chromium)"
+  fi
+fi
+
 # ── people ────────────────────────────────────────────────────────────────────
 if group "people"; then
   if ! command -v node >/dev/null 2>&1; then

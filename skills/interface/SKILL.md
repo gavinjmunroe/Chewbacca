@@ -50,6 +50,18 @@ where the data comes from. All four of those are written down here, once.
    reducing them to an interpolation. Check held-scroll behavior separately
    so timed loops are not mistaken for scroll-driven transitions.
 
+   **Leave a pixel receipt before calling it done.** After the last edit, run
+   `ui-proof capture <url of the running page>`. It writes 1440x900 and
+   375x812 screenshots, every console error and uncaught exception, and
+   `receipt.json` with their hashes and the capture time to
+   `<git root>/.ui-proof/`, and exits 1 if the page errored or answered 4xx/5xx.
+   Open both screenshots and look at them. `ui-proof check` is what a gate
+   runs: exit 0 only for a passing receipt taken after the newest UI file
+   changed (`--files` narrows that to the files this turn touched), with
+   both widths present and hashes intact. Exit 3 means no browser started,
+   which is unverified, never green. An edit after the capture makes the
+   receipt stale, so capture last.
+
 7. **For a website, run `site-gate check <every page url>` and get exit 0.**
    It refuses console errors, horizontal scroll at 390, dead links, controls
    with no hover or focus state, and loops that run under reduced motion.

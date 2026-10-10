@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ui-proof bad fixture</title>
+  </head>
+  <body>
+    <h1>Broken page</h1>
+    <script>
+      console.error("planted console error");
+      setTimeout(function () {
+        throw new Error("planted late exception");
+      }, 50);
+    </script>
+  </body>
+</html>

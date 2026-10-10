@@ -212,6 +212,8 @@ downloading and answer nothing.
 The toolkit is free. Your agent subscription, model API usage and connected
 services can have their own charges. Context loaded at startup also consumes
 the host's context budget; `chewbacca context` measures the installed imports.
+`chewbacca lessons` counts which recorded corrections a hook or test actually
+enforces and which only sit in context for the agent to read.
 
 ### What it changes on your machine
 

@@ -1,12 +1,13 @@
 """75-word chunks on the SEALED set. Sweeps aggregation because mean-agg was
 tuned at 300w and may dilute over many small chunks. Dev is reported too, so
 the dev-to-test gap is visible rather than hidden."""
+import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import goldset
 import os,re,json,math,collections,urllib.request
 import numpy as np
 HERE=os.path.dirname(os.path.abspath(__file__))
-dev=json.load(open(f"{HERE}/queries.json"))
-test=[q for q in json.load(open(f"{HERE}/queries_independent.json")) if q.get("hops")!="trap"]
-traps=[q for q in json.load(open(f"{HERE}/queries_independent.json")) if q.get("hops")=="trap"]
+dev=goldset.load("queries.json")
+test=[q for q in goldset.load("queries_independent.json") if q.get("hops")!="trap"]
+traps=[q for q in goldset.load("queries_independent.json") if q.get("hops")=="trap"]
 STOP=set("what who why how when where which the a an is are was were do does did i my me about that this it to of in on for and or but if my mine should could would can keep keeps just like so not no yes im its".split())
 def terms(q): return [w for w in re.findall(r"[a-z]+",q.lower()) if w not in STOP and len(w)>2]
 

@@ -1,7 +1,8 @@
+import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import goldset
 import json,os,collections
 exec(open('tune.py').read().split('print(f"{\'agg\'')[0])   # reuse rank/evaluate
 cfg=json.load(open('best_cfg.json'))
-test=json.load(open('queries_independent.json'))
+test=goldset.load("queries_independent.json")
 real=[q for q in test if q.get("hops")!="trap"]
 trap=[q for q in test if q.get("hops")=="trap"]
 

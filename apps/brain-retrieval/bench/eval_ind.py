@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import goldset
 import os, re, json, math, subprocess, urllib.request, collections, time
 import numpy as np
 
@@ -9,7 +10,7 @@ K     = 5
 
 chunks = json.load(open(f"{HERE}/chunks.json"))
 E      = np.load(f"{HERE}/emb.npy")
-queries= json.load(open(f"{HERE}/queries_independent.json"))
+queries= goldset.load("queries_independent.json")
 files  = [c["file"] for c in chunks]
 
 STOP = set("what who why how when where which the a an is are was were do does did i my me "

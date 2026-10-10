@@ -10,6 +10,7 @@ Adds two metrics eval.py does not have:
 
 Run:  python3 graphrank.py
 """
+import os, sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import goldset
 import os, re, json, math, collections, time, urllib.request, itertools
 import numpy as np
 
@@ -19,7 +20,7 @@ K = 5
 
 chunks = json.load(open(f"{HERE}/chunks.json"))
 E = np.load(f"{HERE}/emb.npy")
-queries = json.load(open(f"{HERE}/queries.json"))
+queries = goldset.load("queries.json")
 files = [c["file"] for c in chunks]
 ALL_FILES = sorted(set(files))
 

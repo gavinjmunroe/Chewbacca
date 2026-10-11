@@ -43,6 +43,7 @@ SESSION = Path(os.environ.get(
     "BRIGHTSPACE_SESSION", Path.home() / ".api-anything/sessions" / f"{HOST}.json"))
 STATE = Path(os.environ.get("BRIGHTSPACE_STATE", Path.home() / ".chewbacca/brightspace"))
 TZ = ZoneInfo(os.environ.get("BRIGHTSPACE_TZ", "America/Los_Angeles"))
+DOWNLOADS = str(Path(os.environ.get("COURSEWORK_DIR", "~/coursework")) / "downloads")
 DELAY = tuple(float(x) for x in os.environ.get("BRIGHTSPACE_DELAY", "4,8").split(","))
 
 
@@ -87,12 +88,12 @@ class Client:
         except urllib.error.HTTPError as e:
             if e.code in (401, 403, 429):
                 raise Stop(f"HTTP {e.code} from {urllib.parse.urlparse(url).path}. Stopping. "
-                           f"If 401/403, sign in to {HOST} in Chrome and run: api-anything login {HOST}")
+                           f"If 401/403, sign in to {HOST} in Chrome and run: chewbacca api login brightspace")
             raise
         finally:
             self.last = time.time()
         if "/d2l/login" in resp.geturl() or "shibboleth" in resp.geturl():
-            raise Stop(f"session expired (redirected to sign-in). Sign in to {HOST} in Chrome, then run: api-anything login {HOST}")
+            raise Stop(f"session expired (redirected to sign-in). Sign in to {HOST} in Chrome, then run: chewbacca api login brightspace")
         return resp
 
     def json(self, path):
@@ -101,7 +102,13 @@ class Client:
         return json.load(self.open(f"https://{HOST}/d2l/api{path}"))
 
 
-def courses(client):
+def term_of(name):
+    """USC section names lead with the term: "20263_10212 ACAD-185: ..."."""
+    m = re.match(r"(\d{5})_", name)
+    return m[1] if m else ""
+
+
+def courses(client, all_terms=False):
     items, mark = [], ""
     while True:
         d = client.json("/lp/1.63/enrollments/myenrollments/?orgUnitTypeId=3" + (f"&bookmark={mark}" if mark else ""))
@@ -115,7 +122,14 @@ def courses(client):
             continue
         name = it["OrgUnit"]["Name"]
         m = re.search(r"([A-Z]{2,5})[- ](\d{3}[A-Za-z]?)", name)
-        out.append({"id": it["OrgUnit"]["Id"], "name": name, "code": f"{m[1]}-{m[2]}" if m else name})
+        out.append({"id": it["OrgUnit"]["Id"], "name": name, "code": f"{m[1]}-{m[2]}" if m else name,
+                    "term": term_of(name)})
+    # Past terms stay enrolled and active (a 20253 GESM seminar was still
+    # listed in Fall 2026), so every student's due list and course picker
+    # carried last year's classes. Keep the newest term unless asked.
+    newest = max((c["term"] for c in out), default="")
+    if not all_terms and newest:
+        out = [c for c in out if c["term"] == newest]
     return out
 
 
@@ -124,7 +138,9 @@ def pick(client, key):
     key = key.lower()
     hits = [c for c in all_courses if key in c["code"].lower() or key in c["name"].lower() or key == str(c["id"])]
     if len(hits) != 1:
-        raise Stop(f"'{key}' matched {len(hits)} courses: " + ", ".join(c["code"] for c in all_courses))
+        # A lecture and its lab share a code (BISC-101 twice), so name each by id.
+        raise Stop(f"'{key}' matched {len(hits)} courses; pass the id instead: "
+                   + ", ".join(f"{c['code']} ({c['id']})" for c in (hits or all_courses)))
     return hits[0]
 
 
@@ -317,7 +333,8 @@ def cmd_transcripts(client, a):
 def main():
     ap = argparse.ArgumentParser(prog="brightspace-sync")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("courses")
+    cs = sub.add_parser("courses")
+    cs.add_argument("--all-terms", action="store_true", help="include past terms' courses")
     d = sub.add_parser("due")
     d.add_argument("--days", type=int, default=30)
     d.add_argument("--json", action="store_true")
@@ -331,20 +348,20 @@ def main():
     f.add_argument("--since")
     f.add_argument("--from-chapter", type=int, help="keep files whose title names this chapter or later")
     f.add_argument("--also", action="append", default=[], help="regex on the module path to keep regardless of chapter")
-    f.add_argument("--out", default="~/coursework/downloads")
+    f.add_argument("--out", default=DOWNLOADS)
     f.add_argument("--apply", action="store_true")
     l = sub.add_parser("links")
     l.add_argument("course")
     t = sub.add_parser("transcripts")
     t.add_argument("course")
     t.add_argument("--from-chapter", type=int)
-    t.add_argument("--out", default="~/coursework/downloads")
+    t.add_argument("--out", default=DOWNLOADS)
     t.add_argument("--apply", action="store_true")
     a = ap.parse_args()
     try:
         client = Client()
         if a.cmd == "courses":
-            for c in courses(client):
+            for c in courses(client, all_terms=a.all_terms):
                 print(f"{c['id']}\t{c['code']}\t{c['name']}")
         else:
             {"due": cmd_due, "reminders": cmd_reminders, "files": cmd_files, "links": cmd_links,

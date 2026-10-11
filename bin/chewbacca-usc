@@ -148,7 +148,8 @@ def render(report):
         out.append(f"  {short_time(i['due']):<12} {i['course'] or '':<11} {i['title']}")
     f = report["food"]
     out.append("")
-    out.append(f"{f['meal']} at {f['hall']}")
+    out.append(f"{f['meal']} at {f['hall']}" + ("" if f.get("picked", True) else
+               f" (pick yours: chewbacca usc --hall {'|'.join(HALLS)})"))
     if "error" in f:
         out.append(f"  {f['error']}")
     for s in f.get("stations", []):
@@ -178,6 +179,9 @@ def main():
         cfg["hall"] = a.hall
         save_config(cfg)
     hall = cfg.get("hall", "university-village")
+    # A student who never picked a hall sees the default named as one, so
+    # nobody reads Village's menu thinking it is the hall they eat at.
+    hall_picked = bool(cfg.get("hall"))
     now = dt.datetime.now()
     today = now.date()
     # One sync up front, so the three sections don't each re-check every spec.
@@ -186,6 +190,7 @@ def main():
         jobs = {"due": pool.submit(due, today), "food": pool.submit(food, today, hall, now),
                 "events": pool.submit(events, today)}
         report = {k: v.result() for k, v in jobs.items()}
+    report["food"]["picked"] = hall_picked
     print(json.dumps(report, indent=2) if a.json else render(report))
     return 0
 

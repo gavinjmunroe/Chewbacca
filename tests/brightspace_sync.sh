@@ -17,7 +17,15 @@ now = d.datetime.now(d.timezone.utc)
 iso = lambda days: (now + d.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
 fx = {
     "/lp/1.63/enrollments/myenrollments/": {
-        "Items": [{"OrgUnit": {"Id": 1, "Name": "20263_1 TEST-101: Intro"}, "Access": {"IsActive": True}}],
+        "Items": [
+            {"OrgUnit": {"Id": 1, "Name": "20263_1 TEST-101: Intro"}, "Access": {"IsActive": True}},
+            # A past term stays enrolled and active, the way a 20253 seminar
+            # still showed in Fall 2026, and must not reach due or the picker.
+            {"OrgUnit": {"Id": 2, "Name": "20253_9 OLD-100: Past"}, "Access": {"IsActive": True}},
+            # A lecture and its lab share one code.
+            {"OrgUnit": {"Id": 3, "Name": "20263_2 LAB-200: Bio"}, "Access": {"IsActive": True}},
+            {"OrgUnit": {"Id": 4, "Name": "20263_3 LAB-200: Bio"}, "Access": {"IsActive": True}},
+        ],
         "PagingInfo": {"HasMoreItems": False},
     },
     "/le/1.99/1/calendar/events/myEvents/": {"Objects": [
@@ -25,6 +33,9 @@ fx = {
         {"Title": "HW 1", "StartDateTime": iso(3)},
         {"Title": "Exam prep", "StartDateTime": iso(2)},
     ]},
+    "/le/1.99/2/calendar/events/myEvents/": {"Objects": [{"Title": "Old essay", "StartDateTime": iso(1)}]},
+    "/le/1.99/3/calendar/events/myEvents/": {"Objects": []},
+    "/le/1.99/4/calendar/events/myEvents/": {"Objects": []},
     "/le/1.99/1/content/toc": {"Modules": [
         {"Title": "Notes", "Topics": [
             {"TopicId": 10, "Title": "Chapter 3 Notes", "TypeIdentifier": "File", "Url": "/content/enforced/1/ch3.pdf"},
@@ -42,6 +53,7 @@ PY
 export BRIGHTSPACE_FIXTURE="$T/fixture.json" BRIGHTSPACE_STATE="$T/state"
 
 out=$(python3 "$BS" due --days 5 2>/dev/null) || fail "due exited non-zero"
+due_out="$out"
 [ "$(printf '%s\n' "$out" | grep -c 'HW 1')" = 1 ] || fail "HW 1 should be listed once: $out"
 printf '%s\n' "$out" | grep -q 'TEST-101 .*Exam prep' || fail "Exam prep missing or course code wrong: $out"
 
@@ -56,6 +68,13 @@ printf '%s\n' "$out" | grep -q 'Ch. 5 Lecture.txt' || fail "Ch. 5 recording shou
 [ ! -e "$T/dl" ] || fail "a transcript scan without --apply wrote files"
 
 python3 "$BS" files NOPE-999 >/dev/null 2>&1 && fail "an unknown course should exit non-zero"
+
+printf '%s\n' "$due_out" | grep -q 'Old essay' && fail "a past term's course reached due"
+courses=$(python3 "$BS" courses 2>/dev/null) || fail "courses exited non-zero"
+printf '%s\n' "$courses" | grep -q 'OLD-100' && fail "courses listed a past term by default: $courses"
+python3 "$BS" courses --all-terms 2>/dev/null | grep -q 'OLD-100' || fail "courses --all-terms should list past terms"
+err=$(python3 "$BS" links LAB-200 2>&1 >/dev/null) && fail "a code shared by lecture and lab should not pick one silently"
+printf '%s\n' "$err" | grep -q '(3)' && printf '%s\n' "$err" | grep -q '(4)' || fail "the ambiguity error should name both ids: $err"
 
 # `chewbacca api login brightspace` saves the session as brightspace.json, not
 # under the host name; the tool must find it there.

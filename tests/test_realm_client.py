@@ -683,8 +683,13 @@ def test_security_review_fixes():
     # 2 and 3. The engine builds only a pinned commit and starts behind the
     #    Origin guard.
     src = (ROOT / "bin" / "realm-engine").read_text()
-    pin = re.search(r'"CHEWBACCA_REALM_REF", "([0-9a-f]+)"', src)
-    check("the engine pins a full upstream commit", bool(pin) and len(pin.group(1)) == 40, pin)
+    # Caleb, 2026-10-10: always Carlton's latest ("YES ALWAYS dont ask"). The
+    # invariant that stays is one named commit, never the working tree.
+    pin = re.search(r'"CHEWBACCA_REALM_REF", "([^"]+)"', src)
+    check("the engine follows Carlton's latest main unless a sha is pinned",
+          bool(pin) and pin.group(1) == "latest" and 'rev-parse", "origin/main"' in src, pin)
+    check("and still builds only the one commit it resolved, never the working tree",
+          "if source_stamp(git) != ref:" in src and "refusing to run its build" in src)
     check("the build refuses a checkout that is not at the pin", "refusing to run its build" in src)
     check("the server starts with the origin guard loaded", '"--import", ORIGIN_GUARD.as_uri()' in src)
     guard = (ROOT / "config" / "data" / "realm" / "origin-guard.mjs").read_text()

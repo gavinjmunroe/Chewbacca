@@ -61,6 +61,14 @@ where the data comes from. All four of those are written down here, once.
    both widths present and hashes intact. Exit 3 means no browser started,
    which is unverified, never green. An edit after the capture makes the
    receipt stale, so capture last.
+   Every screenshot browser runs headless: no window, no tab, nothing on
+   his screen. Caleb, 2026-10-11, after the Playwright MCP opened a visible
+   Chrome over his work: "it should do that in the background without it
+   taking over the screen or even pulling up a tab!!!" Both browser MCPs
+   default to headed, so `PLAYWRIGHT_MCP_HEADLESS=true` lives in
+   `~/.claude/settings.json` env and chrome-devtools gets `--headless`. A
+   session started before that keeps a headed server, so use a script with
+   `chromium.launch({ headless: true, channel: "chrome" })` instead.
 
 7. **For a website, run `site-gate check <every page url>` and get exit 0.**
    It refuses console errors, horizontal scroll at 390, dead links, controls
@@ -373,7 +381,7 @@ Read them before drafting any club or startup landing page.
   lines, read as a page.
 - No flashes, no whiplash on a phone ("some of the mobile
   animations/transitions are literal whiplash and flashbangs"). `site-gate
-  flash <url>` must pass. A bar that hides on scroll turns on travel (24px
+flash <url>` must pass. A bar that hides on scroll turns on travel (24px
   down, 64px up) and ignores the rubber band; turning on every 8px delta
   flipped it several times a second under momentum scroll.
 - Interactive Playwright on clay.com trips the outbound send guard, which

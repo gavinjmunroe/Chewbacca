@@ -265,3 +265,4 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - feedback_no_unintentional_animation: Text never fades up beat after beat or replays an entrance on change; one rise per page; site-gate research fails it (10/10)
 - feedback_phone_is_never_lesser: Phone version as rich as desktop, never flashes; site-gate parity + flash enforce it (FF site, 10/10)
 - project_firm_foundation_site: FF site after the 10/10 rebuild: one story, live on firm-foundation.up.railway.app, Vercel domain waits on Gavin
+- feedback_amber_stealth_in_public: Amber is stealth; public copy says "Stealth (PearX W27)", never the name, product or Amber Circles (10/11)

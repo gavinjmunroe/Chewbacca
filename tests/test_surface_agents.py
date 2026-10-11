@@ -81,14 +81,29 @@ class FakeEngine:
         self.hold: dict = {}
         self.after: dict = {}
         self.n = 0
+        # agents.probe's answer, shaped as on this Mac on 2026-10-10: Claude
+        # and Gemini installed with sign-in unknown, Codex installed but not
+        # runnable by the engine, Cursor absent.
+        self.probe = [
+            {"kind": "claude", "available": True, "version": "2.1.289", "loggedIn": None,
+             "reason": "unknown (keychain)"},
+            {"kind": "codex", "available": False, "version": None, "loggedIn": None,
+             "reason": "Command failed: codex --version\n"},
+            {"kind": "acp:cursor", "available": False, "version": None, "loggedIn": None,
+             "reason": "spawn cursor-agent ENOENT"},
+            {"kind": "acp:gemini", "available": True, "version": "0.46.0", "loggedIn": None,
+             "reason": "unknown until a session starts"},
+            {"kind": "fake", "available": True, "version": None, "loggedIn": True, "reason": None},
+            {"kind": "BAD KIND" + BIDI, "available": True, "version": None, "loggedIn": True, "reason": None},
+        ]
 
     def nid(self, prefix):
         self.n += 1
         return f"{prefix}{self.n}"
 
     def add_session(self, sid, status="idle", space="sp1", title="Fix the rail", cwd="/Users/x/code/chewbacca",
-                    updated=NOW_MS, mode="default"):
-        self.sessions[sid] = {"id": sid, "spaceId": space, "projectId": None, "agentKind": "claude",
+                    updated=NOW_MS, mode="default", kind="claude"):
+        self.sessions[sid] = {"id": sid, "spaceId": space, "projectId": None, "agentKind": kind,
                               "permissionMode": mode, "environmentId": f"env-{sid}", "cwd": cwd, "status": status,
                               "title": title, "updatedAt": updated, "createdAt": updated}
 
@@ -100,7 +115,8 @@ class FakeEngine:
 
     @property
     def writes(self):
-        return [(m, p) for m, p, w in self.calls if m not in rc.READ_METHODS]
+        # The probe runs CLIs (EXEC_METHODS) but changes no state.
+        return [(m, p) for m, p, w in self.calls if m not in rc.READ_METHODS and m not in rc.EXEC_METHODS]
 
     def handle(self, method, p):
         if method in self.hold:
@@ -116,6 +132,8 @@ class FakeEngine:
         return result
 
     def answer(self, method, p):
+        if method == "agents.probe":
+            return [dict(x) for x in self.probe]
         if method == "spaces.list":
             return [dict(s) for s in self.spaces]
         if method == "sessions.list":
@@ -151,7 +169,7 @@ class FakeEngine:
             sid = self.nid("s-new")
             proj = next(x for x in self.projects if x["id"] == p["projectId"])
             self.add_session(sid, space=p["spaceId"], title="New session", cwd=proj["rootPath"],
-                             mode=p["permissionMode"])
+                             mode=p["permissionMode"], kind=p["agentKind"])
             return {"session": dict(self.sessions[sid]), "itemId": "item1"}
         if method == "sessions.send":
             self.event(p["id"], "user_message", {"text": p["text"], "attachments": []})
@@ -208,6 +226,8 @@ def world(tmp: Path, engine: FakeEngine | None, built: bool = True):
                   env={"KYBER_CODE_ROOT": str(code), "CHEWBACCA_REALM_HOME": str(tmp / "realm-home")},
                   now=lambda: datetime.fromtimestamp(NOW_MS / 1000 + 120).astimezone())
     a = Agents()
+    # The probe's thread runs inline, so a fetch's answer already holds it.
+    a.spawn = lambda fn: fn()
     if engine is None:
         def refuse(_ctx):
             raise rc.RealmUnavailable(f"engine not started ({tmp}/realm-home/engine.json missing); "
@@ -513,14 +533,20 @@ def new_sessions(tmp: Path) -> None:
     check("recent session folders come first", labels[0].endswith("elsewhere/proj"), labels)
     check("nothing picked, no Start", model["/agents/new"] == [], model["/agents/new"])
     model = a.model(data, None, {"/agents/folder": "~/code/chewbacca"}, ctx)
-    check("a picked folder offers Start, saying what it makes", model["/agents/new"][0]["id"] == "~/code/chewbacca"
+    check("a picked folder offers Start, saying what it makes", model["/agents/new"][0]["id"] == "claude|~/code/chewbacca"
           and "makes one" in model["/agents/new"][0]["text"]
           and "a folder of its own" in model["/agents/new"][0]["text"], model["/agents/new"])
-    r = a.new(ctx, data, {"row": "~/code/chewbacca", "/agents/folder": "~/code/amber/amber-id"})
+    r = a.new(ctx, data, {"row": "claude|~/code/chewbacca", "/agents/folder": "~/code/amber/amber-id", "/agents/agent": "Claude"})
     check("Start for a folder that isn't the one picked refuses", not r.ok and e.writes == [], r)
-    r = a.new(ctx, data, {"row": "/etc", "/agents/folder": "/etc"})
+    r = a.new(ctx, data, {"row": "claude|/etc", "/agents/folder": "/etc", "/agents/agent": "Claude"})
     check("a folder that isn't on the list is never used", not r.ok and e.writes == [], r)
-    r = a.new(ctx, data, {"row": "~/code/chewbacca", "/agents/folder": "~/code/chewbacca"})
+    r = a.new(ctx, data, {"row": "codex|~/code/chewbacca", "/agents/folder": "~/code/chewbacca",
+                          "/agents/agent": "Codex"})
+    check("an agent the engine can't run is never started", not r.ok and e.writes == [], r)
+    r = a.new(ctx, data, {"row": "acp:gemini|~/code/chewbacca", "/agents/folder": "~/code/chewbacca",
+                          "/agents/agent": "Claude"})
+    check("a Start row for another agent than the one picked refuses", not r.ok and e.writes == [], r)
+    r = a.new(ctx, data, {"row": "claude|~/code/chewbacca", "/agents/folder": "~/code/chewbacca", "/agents/agent": "Claude"})
     made = [m for m, _ in e.writes]
     check("Start makes a space, a project at that folder, then a claude session that asks first",
           r.ok and made == ["spaces.create", "projects.create", "sessions.create"]
@@ -529,22 +555,92 @@ def new_sessions(tmp: Path) -> None:
           (r, e.writes))
     check("the new session is pinned", a.pinned.startswith("s-new"), a.pinned)
     data, _ = view(a, ctx)
-    r = a.new(ctx, data, {"row": "~/code/chewbacca", "/agents/folder": "~/code/chewbacca"})
+    r = a.new(ctx, data, {"row": "claude|~/code/chewbacca", "/agents/folder": "~/code/chewbacca", "/agents/agent": "Claude"})
     check("a second session in the same folder reuses its space and project",
           r.ok and [m for m, _ in e.writes[3:]] == ["sessions.create"], e.writes[3:])
 
     e.fail["sessions.create"] = lambda: maybe(rc.RealmTimeout("t"))
     data, _ = view(a, ctx)
-    r = a.new(ctx, data, {"row": "~/code/amber/amber-id", "/agents/folder": "~/code/amber/amber-id"})
+    r = a.new(ctx, data, {"row": "claude|~/code/amber/amber-id", "/agents/folder": "~/code/amber/amber-id", "/agents/agent": "Claude"})
     check("a maybe_applied create says it may have half run and names what was made",
           not r.ok and "may have half run" in r.line and "a space" in r.line and "a project" in r.line, r)
     e.profiles.clear()
     del e.fail["sessions.create"]
     (code / "kits" / "new-kit" / ".git").mkdir(parents=True)
     data, _ = view(a, ctx)
-    r = a.new(ctx, data, {"row": "~/code/kits/new-kit", "/agents/folder": "~/code/kits/new-kit"})
+    r = a.new(ctx, data, {"row": "claude|~/code/kits/new-kit", "/agents/folder": "~/code/kits/new-kit", "/agents/agent": "Claude"})
     check("a fresh engine with no profile gets one before the space", r.ok and "profiles.create" in
           [m for m, _ in e.writes], e.writes)
+
+
+def any_agent(tmp: Path) -> None:
+    """Start offers what the engine reports as installed, never a hardcoded Claude."""
+    e = FakeEngine()
+    a, ctx = world(tmp / "any", e)
+    clock = [1000.0]
+    a.clock = lambda: clock[0]
+    data, model = view(a, ctx)
+    check("the Agent select lists the ready agents in the engine's order",
+          model["/agents/kinds"] == ["Claude", "Gemini"], model["/agents/kinds"])
+    check("with nothing picked, the first ready agent is picked", model.get("/agents/agent") == "Claude",
+          model.get("/agents/agent"))
+    check("what can't start is named in words, with why",
+          model["/agents/missing"] == "Can't start: Codex (installed, but the engine couldn't run it). "
+                                      "Not installed: Cursor.", model["/agents/missing"])
+    check("the scripted dev agent and a malformed kind never reach the glass",
+          "Fake" not in json.dumps(model) and "BAD" not in json.dumps(model) and glass_clean(model))
+    probes = [(w, x) for m, _, w in e.calls if m == "agents.probe" for x in [True]]
+    check("the probe is a read, never sent as a write", probes == [(False, True)], probes)
+    view(a, ctx)
+    check("a second fetch inside PROBE_EVERY does not probe again",
+          sum(m == "agents.probe" for m, _, _ in e.calls) == 1, e.calls)
+    clock[0] += SA.PROBE_EVERY
+    view(a, ctx)
+    check("and one after it does", sum(m == "agents.probe" for m, _, _ in e.calls) == 2)
+
+    model = a.model(data, None, {"/agents/folder": "~/code/chewbacca", "/agents/agent": "Gemini"}, ctx)
+    row = model["/agents/new"][0]
+    check("Start names the agent, and doesn't claim an ACP agent asks first",
+          row["id"] == "acp:gemini|~/code/chewbacca" and "A Gemini session" in row["text"]
+          and "Realm can't set its permission level" in row["text"], row)
+    check("the picked agent is kept", "/agents/agent" not in model, model.get("/agents/agent"))
+    r = a.new(ctx, data, {"row": row["id"], "/agents/folder": "~/code/chewbacca", "/agents/agent": "Gemini"})
+    created = [p for m, p in e.writes if m == "sessions.create"]
+    check("Start makes a session of the picked agent", r.ok and created and created[-1]["agentKind"] == "acp:gemini"
+          and "Gemini" in r.line, (r, created))
+    data, model = view(a, ctx)
+    check("the new session's header names its agent and claims no asking it can't promise",
+          model["/agents/meta"].endswith(" · Gemini · decides when it asks"), model["/agents/meta"])
+
+    e.probe[0]["loggedIn"] = False
+    clock[0] += SA.PROBE_EVERY
+    data, model = view(a, ctx)
+    check("an agent the engine reports signed out is not offered, and says so",
+          model["/agents/kinds"] == ["Gemini"] and "Claude (signed out)" in model["/agents/missing"],
+          (model["/agents/kinds"], model["/agents/missing"]))
+    model = a.model(data, None, {"/agents/agent": "Claude"}, ctx)
+    check("a pick that stopped being ready moves to one that is", model["/agents/agent"] == "Gemini",
+          model.get("/agents/agent"))
+
+    e.probe = []
+    clock[0] += SA.PROBE_EVERY
+    data, model = view(a, ctx)
+    check("no ready agent: no Start, and a line that says so",
+          model["/agents/new"] == [] and model["/agents/missing"].startswith("No agent is ready"),
+          model["/agents/missing"])
+
+    e2 = FakeEngine()
+    e2.fail["agents.probe"] = rc.RealmTimeout("agents.probe was not answered in time")
+    b, bctx = world(tmp / "noprobe", e2)
+    bdata, bmodel = view(b, bctx)
+    check("a probe that fails says so and offers no Start",
+          bmodel["/agents/missing"].startswith("Couldn't ask the engine") and bmodel["/agents/kinds"] == [],
+          bmodel["/agents/missing"])
+    c, cctx = world(tmp / "slowprobe", FakeEngine())
+    c.spawn = lambda fn: None
+    cdata, cmodel = view(c, cctx)
+    check("before the first probe answers, the line says it's checking",
+          cmodel["/agents/missing"] == "Checking which agents are installed…", cmodel["/agents/missing"])
 
 
 def untrusted(tmp: Path) -> None:
@@ -618,7 +714,7 @@ def review_fixes(tmp: Path) -> None:
             break
         threading.Event().wait(0.01)
     model = a.model(data, None, {"/agents/folder": "~/code/amber/amber-id"}, ctx)
-    r = a.new(ctx, data, {"row": "~/code/amber/amber-id", "/agents/folder": "~/code/amber/amber-id"})
+    r = a.new(ctx, data, {"row": "claude|~/code/amber/amber-id", "/agents/folder": "~/code/amber/amber-id", "/agents/agent": "Claude"})
     fresh_pin = a.pinned
     gate.set()
     t.join(5)
@@ -662,12 +758,12 @@ def review_fixes(tmp: Path) -> None:
     c, cctx = world(tmp / "half", half)
     cdata, _ = view(c, cctx)
     half.fail["projects.create"] = rc.RealmRpcError("projects.create", "INTERNAL", "disk full at /secret/path")
-    r = c.new(cctx, cdata, {"row": "~/code/chewbacca", "/agents/folder": "~/code/chewbacca"})
+    r = c.new(cctx, cdata, {"row": "claude|~/code/chewbacca", "/agents/folder": "~/code/chewbacca", "/agents/agent": "Claude"})
     check("a refused step names its code and never the engine's own message",
           not r.ok and "INTERNAL" in r.line and "secret" not in r.line, r.line)
     del half.fail["projects.create"]
     cdata, _ = view(c, cctx)
-    r = c.new(cctx, cdata, {"row": "~/code/chewbacca", "/agents/folder": "~/code/chewbacca"})
+    r = c.new(cctx, cdata, {"row": "claude|~/code/chewbacca", "/agents/folder": "~/code/chewbacca", "/agents/agent": "Claude"})
     made = [m for m, _ in half.writes]
     check("a second press after a half-made Start finishes it in the same space",
           r.ok and made.count("spaces.create") == 1 and made[-2:] == ["projects.create", "sessions.create"], made)
@@ -703,6 +799,7 @@ def main() -> int:
         permissions(tmp)
         interrupt_and_fork(tmp)
         new_sessions(tmp)
+        any_agent(tmp)
         untrusted(tmp)
         through_the_daemon(tmp)
         review_fixes(tmp)

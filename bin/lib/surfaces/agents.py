@@ -1,4 +1,4 @@
-"""agents: Claude sessions on the glass, run by the realm engine, with no editor.
+"""agents: every coding agent's sessions on the glass, run by the realm engine, with no editor.
 
 Replaces opening VS Code to talk to a coding agent. The engine is realm
 (github.com/31Carlton7/realm, Carlton Aikins, run headless by bin/realm-engine
@@ -10,9 +10,19 @@ WHAT IS ON THE PANEL. Every session the engine has, each with its space and
 its state in words (waiting on you, working, failed, idle), what needs you
 first. Open on a row pins that session: its newest turns in a Transcript,
 read by polling sessions.events after the last seq seen, and the verbs that
-apply to it right now. Below that, a Select of folders (git repos under the
-code root, default ~/code, KYBER_CODE_ROOT to move it, plus the folders
-sessions already run in) and Start, which makes a Claude session there.
+apply to it right now. Below that, a Select of the agents the engine reports
+as installed and not signed out (agents.probe: Claude, Codex and every ACP
+agent, Cursor, Gemini, OpenCode, Copilot, goose, Qwen, Grok...), a line naming
+the ones that aren't and why, a Select of folders (git repos under the code
+root, default ~/code, KYBER_CODE_ROOT to move it, plus the folders sessions
+already run in) and Start, which makes a session of that agent there.
+
+ANY AGENT, ANY ACCOUNT. Nothing here names a provider except the label
+table. agents.probe spawns every agent CLI to ask its version (an EXEC
+method in realm_client, about 5 s cold on 2026-10-10), so it runs on its own
+thread, at most every PROBE_EVERY seconds, and never inside a press. The
+account is whatever each CLI is signed in to; the engine reports signed out
+when it can tell, and the panel says "sign-in not checked" when it can't.
 
 EVERY VERB IS A ROW, AND THE ROW IS THE TARGET. Send, Allow once, Deny,
 Interrupt, Fork, Start and Start the engine are row buttons on Events
@@ -52,9 +62,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
+import time
 import unicodedata
 from collections import deque
 from dataclasses import dataclass, field
@@ -111,12 +123,38 @@ BUILD_TIMEOUT = 1200.0
 # One RPC. realm_client's default; sessions.send returns once the message is
 # queued to the agent (claude-adapter.ts send pushes into its input stream).
 CALL_TIMEOUT = 10.0
-AGENT = "claude"
 # "default" is Realm's "Ask each time" (presets.ts PERMISSION_MODES), the one
 # mode where every tool call reaches canUseTool and so this panel. A session
-# made from the glass never starts in a mode that skips asking.
+# made from the glass never starts in a mode that skips asking. The engine
+# starts an agent it can't set a mode on at "default" whatever is sent
+# (sessions/service.ts, AGENT_SUPPORTS_PERMISSION_MODES).
 PERMISSION_MODE = "default"
-PURPOSE = "Claude sessions run by the agent engine: start one, read it, answer it"
+# Agents whose permission level Realm can set, so "asks before each tool" is
+# true of them. presets.ts AGENT_SUPPORTS_PERMISSION_MODES at 0ae5b8b: every
+# ACP agent is false, because ACP mode ids are agent-defined.
+ASKS_FIRST = ("claude", "codex")
+# What each agent kind is called. presets.ts AGENT_META labels at 0ae5b8b; an
+# unknown kind the engine adds later shows as its own id, never hidden.
+AGENT_LABELS = {"claude": "Claude", "codex": "Codex", "acp:gemini": "Gemini", "acp:cursor": "Cursor",
+                "acp:opencode": "OpenCode", "acp:copilot": "Copilot", "acp:goose": "goose", "acp:qwen": "Qwen Code",
+                "acp:grok": "Grok", "acp:fx": "fx", "acp:deepseek": "DeepSeek", "acp:openhands": "OpenHands",
+                "acp:hermes": "Hermes"}
+# The order Start offers what is ready: the agents the engine ships first
+# (presets.ts SELECTABLE_AGENT_KINDS order), anything else after.
+AGENT_ORDER = ("claude", "codex", "acp:cursor", "acp:gemini", "acp:opencode", "acp:copilot", "acp:goose",
+               "acp:qwen", "acp:grok", "acp:fx", "acp:deepseek", "acp:openhands", "acp:hermes")
+# A kind is an id from the engine, so it is checked for shape before it is
+# ever a row id or a word on the glass.
+KIND_SHAPE = re.compile(r"^[a-z0-9][a-z0-9:_-]{0,39}$")
+# Seconds between probes. The engine caches its own for 30 s (probe-cache.ts
+# PROBE_TTL_MS); a cold one took 5.85 s and spawned 13 CLIs on 2026-10-10, so
+# an open panel asks every five minutes, not every refresh. Guessed: a CLI
+# installed meanwhile shows up within five minutes, or on reopening.
+PROBE_EVERY = 300.0
+# One probe's own wait. Each adapter has a 5 s timeout (probe-cache.ts) and
+# they run in parallel; 30 s covers a Mac under load. Guessed.
+PROBE_TIMEOUT = 30.0
+PURPOSE = "Every coding agent's sessions, run by the agent engine: start one, read it, answer it"
 STATE_WORDS = {"waiting_permission": "waiting on you", "running": "working", "error": "failed",
                "idle": "idle", "ended": "idle"}
 # What needs the person first, then what is moving, then the rest.
@@ -256,6 +294,58 @@ def permission_view(tool, args) -> tuple[str, bool]:
     return shown, exact
 
 
+def label_of(kind: str) -> str:
+    """What an agent kind is called on the glass."""
+    kind = str(kind or "")
+    if kind in AGENT_LABELS:
+        return AGENT_LABELS[kind]
+    return clean(kind.removeprefix("acp:"), 24) or "an agent"
+
+
+def agent_rows(probed) -> list[dict]:
+    """agents.probe's answer as {kind, label, ready, why}, in AGENT_ORDER.
+
+    ready means installed and not reported signed out. `why` is words for
+    the ones that aren't, never the engine's own reason string, which is a
+    spawn error with a path in it: "spawn cursor-agent ENOENT" is "not
+    installed", any other failure to run its version command is "the engine
+    couldn't run it" (Codex on 2026-10-10, installed in ~/.local/bin and not
+    on the engine's PATH)."""
+    out = []
+    for item in probed if isinstance(probed, list) else []:
+        if not isinstance(item, dict) or not isinstance(item.get("kind"), str) or not KIND_SHAPE.match(item["kind"]):
+            continue
+        kind = item["kind"]
+        if kind == "fake":
+            continue
+        available = item.get("available") is True
+        signed = item.get("loggedIn")
+        reason = str(item.get("reason") or "")
+        if not available:
+            why = "not installed" if "ENOENT" in reason or "not found" in reason.lower() else \
+                "installed, but the engine couldn't run it"
+        elif signed is False:
+            why = "signed out"
+        else:
+            why = "" if signed is True else "sign-in not checked"
+        out.append({"kind": kind, "label": label_of(kind), "ready": available and signed is not False, "why": why})
+    rank = {k: i for i, k in enumerate(AGENT_ORDER)}
+    out.sort(key=lambda a: (rank.get(a["kind"], len(rank)), a["kind"]))
+    return out
+
+
+def missing_words(agents: list[dict]) -> str:
+    """One line naming every agent that can't start a session, and why."""
+    broken = [f"{a['label']} ({a['why']})" for a in agents if not a["ready"] and a["why"] != "not installed"]
+    absent = [a["label"] for a in agents if not a["ready"] and a["why"] == "not installed"]
+    parts = []
+    if broken:
+        parts.append("Can't start: " + ", ".join(broken) + ".")
+    if absent:
+        parts.append("Not installed: " + ", ".join(absent) + ".")
+    return " ".join(parts)
+
+
 @dataclass
 class Log:
     """What the panel has read of one session's events."""
@@ -359,9 +449,18 @@ class Agents(Provider):
         # daemon drops a press's refetch while a fetch is running.
         self._gen = 0
         self._soon = False
-        # Seams for the tests: a proven connection, and the realm-engine runner.
+        # The last agents.probe, normalised (agent_rows), and when it was
+        # asked. None until the first one answers.
+        self._agents: list[dict] | None = None
+        self._probed_at = 0.0
+        self._probing = False
+        self._probe_error = ""
+        # Seams for the tests: a proven connection, the realm-engine runner,
+        # the probe's thread, and the clock it is timed by.
         self.connect = lambda ctx: realm_client.connect(timeout=5.0, home=realm_home(ctx))
         self.run_engine = self._run_engine
+        self.spawn = lambda fn: threading.Thread(target=fn, daemon=True).start()
+        self.clock = time.monotonic
 
     @property
     def refresh(self) -> float:  # type: ignore[override]  the daemon reads it after every fetch
@@ -426,6 +525,7 @@ class Agents(Provider):
                             self._log = log
         except realm_client.RealmError as err:
             raise SurfaceError(f"The engine stopped answering: {why_words(err)}") from None
+        self._maybe_probe(ctx)
         shown = next((r for r in rows if r["id"] == pinned), None)
         self._busy = bool(shown and shown["status"] in BUSY)
         with self._lock:
@@ -435,7 +535,35 @@ class Agents(Provider):
         # may still be drawing this one.
         return {"rows": rows, "pinned": pinned, "gone": gone, "checkpoint": checkpoint,
                 "folders": self.folders(ctx, listed), "items": list(log.items), "pending": dict(log.pending),
-                "caught_up": log.caught_up}
+                "caught_up": log.caught_up, "agents": self._agents, "probe_error": self._probe_error}
+
+    # ── which agents ─────────────────────────────────────────────────────
+
+    def _maybe_probe(self, ctx: Context) -> None:
+        """Ask the engine which agents are installed, on a thread, when the
+        last answer is older than PROBE_EVERY. A fetch never waits on it."""
+        with self._lock:
+            due = self._agents is None or self.clock() - self._probed_at >= PROBE_EVERY
+            if self._probing or not due:
+                return
+            self._probing = True
+            self._probed_at = self.clock()
+
+        def work() -> None:
+            try:
+                with self.connect(ctx) as conn:
+                    got = conn.call("agents.probe", {"force": False}, timeout=PROBE_TIMEOUT, allow_exec=True)
+                agents, why = agent_rows(got), ""
+            except realm_client.RealmError as err:
+                agents, why = None, why_words(err)
+            with self._lock:
+                if agents is not None:
+                    self._agents = agents
+                self._probe_error = why
+                self._probing = False
+                self._soon = True
+
+        self.spawn(work)
 
     @staticmethod
     def catch_up(conn, log: Log) -> None:
@@ -471,7 +599,8 @@ class Agents(Provider):
                 "space": names.get(s.get("spaceId")) or "a space", "status": status,
                 "state": STATE_WORDS.get(status, clean(status, 20) or "unknown"),
                 "folder": clean(Path(cwd).name, 40) if cwd else "", "cwd": clean(tilde(cwd, Path(ctx.home)), 80),
-                "agent": clean(s.get("agentKind"), 20), "mode": clean(s.get("permissionMode"), 30),
+                "agent": label_of(s.get("agentKind")), "kind": clean(s.get("agentKind"), 40),
+                "mode": clean(s.get("permissionMode"), 30),
                 "environment": s.get("environmentId") if isinstance(s.get("environmentId"), str) else "",
                 "updated": s.get("updatedAt") if isinstance(s.get("updatedAt"), (int, float)) else 0}
 
@@ -521,13 +650,14 @@ class Agents(Provider):
                     else "The agent engine isn't running." if missing
                     else "The agent engine isn't answering.")
         steps = [
-            "The engine is realm, Carlton Aikins' open source agent server. It runs Claude sessions on this "
-            "Mac with no editor or terminal window, and listens only on this Mac (127.0.0.1).",
+            "The engine is realm, Carlton Aikins' open source agent server. It runs Claude, Codex, Cursor, "
+            "Gemini and the other ACP agents on this Mac with no editor or terminal window, and listens only "
+            "on this Mac (127.0.0.1).",
             ("Build and start downloads realm from github.com/31Carlton7/realm and builds it once, a few "
              "minutes, with node and pnpm." if not ready else
              "Start the engine runs it in the background. `realm-engine stop` stops it."),
-            "Then pick a folder, start a session, and type to it here. A session started here asks you "
-            "before every tool it runs.",
+            "Then pick an agent and a folder, start a session, and type to it here. A Claude or Codex "
+            "session started here asks you before every tool it runs.",
         ]
         return {"down": {"headline": headline, "steps": steps, "why": why_words(err), "built": ready}}
 
@@ -536,7 +666,7 @@ class Agents(Provider):
     def layout(self) -> list[str]:
         p, c = self.p, self.cid
         ids = ["s", "purpose", "note", "setup", "engine", "list", "head", "meta", "transcript", "ask", "allow",
-               "deny", "draft", "send", "interrupt", "fork", "folder", "new", "status"]
+               "deny", "draft", "send", "interrupt", "fork", "kind", "missing", "folder", "new", "status"]
         return [
             comp(c("s"), "Screen", title=self.title),
             comp(c("purpose"), "Text", value=PURPOSE, tone="muted"),
@@ -561,6 +691,8 @@ class Agents(Provider):
                  action=f"{ACTION_PREFIX}interrupt", actionLabel="Interrupt"),
             comp(c("fork"), "Events", caption="", items=Bind(p("fork")), action=f"{ACTION_PREFIX}fork",
                  actionLabel="Fork"),
+            comp(c("kind"), "Select", label="Agent", options=Bind(p("kinds")), value=Bind(p("agent"))),
+            comp(c("missing"), "Text", value=Bind(p("missing")), tone="muted"),
             comp(c("folder"), "Select", label="New session in", options=Bind(p("folders")), value=Bind(p("folder"))),
             comp(c("new"), "Events", caption="", items=Bind(p("new")), action=f"{ACTION_PREFIX}new",
                  actionLabel="Start"),
@@ -570,14 +702,15 @@ class Agents(Provider):
         ]
 
     def initial(self) -> dict:
-        return {self.p("draft"): "", self.p("folder"): "", self.p("status"): "Nothing pressed yet.",
-                self.p("level"): "info"}
+        return {self.p("draft"): "", self.p("folder"): "", self.p("agent"): "",
+                self.p("status"): "Nothing pressed yet.", self.p("level"): "info"}
 
     def blank(self) -> dict:
         p = self.p
         return {p("setup"): [], p("engine"): [], p("engineLabel"): "Start the engine", p("caption"): "",
                 p("rows"): [], p("head"): "", p("meta"): "", p("transcript"): [], p("ask"): "", p("allow"): [],
                 p("deny"): [], p("send"): [], p("interrupt"): [], p("fork"): [], p("folders"): [], p("new"): [],
+                p("kinds"): [], p("missing"): "",
                 p("placeholder"): "Typed here, sent only by Send"}
 
     def model(self, data, error, values, ctx) -> dict:
@@ -631,19 +764,39 @@ class Agents(Provider):
             out[p("caption")] += f" · {len(rows) - MAX_SESSIONS} more not shown"
         folders = data.get("folders") or []
         out[p("folders")] = [f["label"] for f in folders]
+        agents = data.get("agents")
+        ready = [a for a in agents or [] if a["ready"]]
+        out[p("kinds")] = [a["label"] for a in ready]
+        if agents is None:
+            out[p("missing")] = (f"Couldn't ask the engine which agents are installed: {data['probe_error']}"
+                                 if data.get("probe_error") else "Checking which agents are installed…")
+        elif not ready:
+            out[p("missing")] = "No agent is ready to start. " + missing_words(agents)
+        else:
+            out[p("missing")] = missing_words(agents)
+        chosen = str(values.get(p("agent")) or "")
+        if ready and chosen not in out[p("kinds")]:
+            # Nothing picked yet, or the pick stopped being ready: the first
+            # ready agent, set here so the Select shows what Start will use.
+            chosen = ready[0]["label"]
+            out[p("agent")] = chosen
+        agent = next((a for a in ready if a["label"] == chosen), None)
         picked = str(values.get(p("folder")) or "")
-        if picked and picked in out[p("folders")]:
-            out[p("new")] = [{"id": picked, "text": clean(
-                f"A Claude session in {picked}, asking before each tool · if the folder has no space yet, "
-                "makes one, and Realm keeps a folder of its own for it under the engine's home · nothing is "
-                "sent until you Send", 260)}]
+        if agent and picked and picked in out[p("folders")]:
+            asks = ("asking before each tool" if agent["kind"] in ASKS_FIRST
+                    else f"{agent['label']} decides when it asks; Realm can't set its permission level")
+            out[p("new")] = [{"id": f"{agent['kind']}|{picked}", "text": clean(
+                f"A {agent['label']} session in {picked}, {asks} · if the folder has no space yet, makes one, "
+                "and Realm keeps a folder of its own for it under the engine's home · nothing is sent until "
+                "you Send", 300)}]
         shown = next((r for r in rows if r["id"] == pinned), None)
         if shown is None:
             out[p("placeholder")] = "Start a session first"
             return out
         pending = data.get("pending") or {}
         out[p("head")] = shown["title"]
-        mode = MODE_WORDS.get(shown["mode"], shown["mode"])
+        mode = (MODE_WORDS.get(shown["mode"], shown["mode"]) if shown["kind"] in ASKS_FIRST
+                else "decides when it asks")
         out[p("meta")] = " · ".join(x for x in (shown["state"], shown["space"], shown["cwd"], shown["agent"], mode) if x)
         out[p("transcript")] = list(data.get("items") or [])
         if not data.get("caught_up"):
@@ -921,8 +1074,12 @@ class Agents(Provider):
                             "is untouched.", updates={self.p("level"): "success", self.p("draft"): ""}, refetch=True)
 
     def new(self, ctx: Context, data, values: dict) -> Result:
-        label = str(values.get("row") or "")
+        kind, _, label = str(values.get("row") or "").partition("|")
         bad = {self.p("level"): "error"}
+        agent = next((a for a in (data or {}).get("agents") or [] if a["kind"] == kind and a["ready"]), None)
+        if agent is None or agent["label"] != str(values.get(self.p("agent")) or ""):
+            return Result(False, "That agent isn't the one picked, or isn't ready any more. Pick it again.",
+                          updates=bad)
         folders = (data or {}).get("folders") or []
         hit = next((f for f in folders if f["label"] == label), None)
         if hit is None or label != str(values.get(self.p("folder")) or ""):
@@ -937,11 +1094,11 @@ class Agents(Provider):
         if not self._claim("new", hit["path"]):
             return Result(False, "Already starting a session there.")
         try:
-            return self._new(ctx, hit)
+            return self._new(ctx, hit, agent)
         finally:
             self._release("new", hit["path"])
 
-    def _new(self, ctx: Context, hit: dict) -> Result:
+    def _new(self, ctx: Context, hit: dict, agent: dict) -> Result:
         name = Path(hit["path"]).name or "folder"
         made: list[str] = []
 
@@ -977,7 +1134,7 @@ class Agents(Provider):
                                                                "rootPath": hit["path"]},
                                            timeout=CALL_TIMEOUT, write=True)["id"]
                     made.append("a project")
-                created = conn.call("sessions.create", {"spaceId": space_id, "agentKind": AGENT,
+                created = conn.call("sessions.create", {"spaceId": space_id, "agentKind": agent["kind"],
                                                         "projectId": project_id, "permissionMode": PERMISSION_MODE},
                                     timeout=CALL_TIMEOUT, write=True)
             except realm_client.RealmError as err:
@@ -991,7 +1148,8 @@ class Agents(Provider):
                           updates={self.p("level"): "warning"}, refetch=True)
         with self._lock:
             self._repin(session["id"])
-        return Result(True, f"Started a Claude session in {name}. It asks before each tool. Type, then Send.",
+        asks = " It asks before each tool." if agent["kind"] in ASKS_FIRST else ""
+        return Result(True, f"Started a {agent['label']} session in {name}.{asks} Type, then Send.",
                       updates={self.p("level"): "success", self.p("draft"): ""}, refetch=True)
 
     @staticmethod

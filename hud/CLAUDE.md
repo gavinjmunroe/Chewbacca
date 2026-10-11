@@ -179,8 +179,13 @@ current is not a panel being read.
 Fields, Selects, row buttons, a folded title and a card's close button all
 take a 44-point click even where the drawing is smaller. The close button
 stays faintly visible without hover and names what it closes, because a
-destructive action names its target (Carlton's design.md). Keyboard focus into the glass is
-not done: the overlay never takes key, by design.
+destructive action names its target (Carlton's design.md). Option-Command-Return takes the
+keyboard into the glass and back out: Tab and Shift-Tab (or the arrows) move
+through every control and row button, surfaces top to bottom then left to
+right and each one's close button last, a ring shows where focus is, Return or
+Space presses it (a Select steps to its next option, a Field takes the keys
+until Tab or Escape), Command-W closes the surface, and Escape hands the keys
+back to the app that had them. Source: `KeyboardFocus.swift`.
 
 ### Row actions
 

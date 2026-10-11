@@ -24,6 +24,8 @@ public struct SurfaceView: View {
     /// A window sets its title in mono caps inside its strip and squares its
     /// diagram nodes; every other chrome keeps the rounded house type.
     @Environment(\.hudChrome) private var chrome
+    @Environment(\.hudKeyboardFocus) private var keyboardFocus
+    @Environment(\.hudEditingField) private var editingField
 
     public init(store: SurfaceStore, pendingTitle: String = "") {
         self.store = store
@@ -58,6 +60,10 @@ public struct SurfaceView: View {
             A11yContract.decorate(
                 element.type, store.resolved(element),
                 render(element, ancestors: ancestors.union([id])))
+                .modifier(KeyboardRing(
+                    active: keyboardFocus?.component == id && keyboardFocus?.row == nil))
+                .environment(\.hudFocusedRow,
+                    keyboardFocus?.component == id ? keyboardFocus?.row : nil)
                 // Identity keyed on the *type*, so a component that becomes a
                 // different kind of component transitions instead of snapping.
                 //
@@ -510,6 +516,7 @@ public struct SurfaceView: View {
                 LabeledControl(label: p["label"]?.display ?? "") {
                     HUDField(
                         placeholder: p["placeholder"]?.display ?? "",
+                        takeFocus: editingField && keyboardFocus?.component == element.id,
                         text: Binding(
                             get: { p["value"]?.display ?? "" },
                             set: { next in
@@ -656,6 +663,8 @@ struct Column: Hashable {
 /// focuses the field rather than only a click on the line of text.
 struct HUDField: View {
     let placeholder: String
+    /// Keyboard mode pressed this field: it takes the keys (bd_2026-Code-yw6).
+    var takeFocus = false
     @Binding var text: String
     @FocusState private var focused: Bool
 
@@ -673,6 +682,7 @@ struct HUDField: View {
             }
             .contentShape(Rectangle())
             .onTapGesture { focused = true }
+            .onChange(of: takeFocus) { _, next in focused = next }
     }
 }
 

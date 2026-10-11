@@ -227,7 +227,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         voice.setMode(.off)
         handTracker.stop()
         let monitors = [
-            hotKeyMonitor, escMonitor, localEscMonitor, mouseMonitor,
+            hotKeyMonitor, escMonitor, localEscMonitor, mouseMonitor, keyboardMonitor, localKeyboardMonitor,
             localMouseMonitor, clickMonitor, localClickMonitor, flagsMonitor,
             localFlagsMonitor, barMonitor,
             reticleDown, reticleDrag, reticleUp,
@@ -297,6 +297,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// system-wide needs Accessibility permission, and a panel you can summon is
     /// not worth a permission prompt on first launch.
     private func setUpKeys() {
+        // Option-Command-Return: the glass by keyboard (bd_2026-Code-yw6).
+        // The global monitor sees it from any app; the local one sees it,
+        // and every key after it, once the glass holds the keyboard.
+        keyboardMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard KeyboardFocus.isEntry(keyCode: event.keyCode, flags: event.modifierFlags) else { return }
+            Task { @MainActor in self?.toggleKeyboard() }
+        }
+        localKeyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self else { return event }
+            if KeyboardFocus.isEntry(keyCode: event.keyCode, flags: event.modifierFlags) {
+                self.toggleKeyboard()
+                return nil
+            }
+            guard self.model.keyboardFocus != nil,
+                  let command = KeyboardFocus.command(
+                    keyCode: event.keyCode, flags: event.modifierFlags,
+                    editing: self.model.editingField)
+            else { return event }
+            switch command {
+            case .next: self.model.moveFocus(by: 1)
+            case .previous: self.model.moveFocus(by: -1)
+            case .activate: self.model.activateFocus()
+            case .close: self.model.closeFocused()
+            case .leave: self.model.escapeKeyboard()
+            }
+            if self.model.keyboardFocus == nil { self.giveKeyboardBack() }
+            return nil
+        }
+
         hotKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) {
             [weak self] event in
             guard event.modifierFlags.contains([.option, .command]),
@@ -612,6 +641,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Summoning the bar activates this app, which is the honest cost of a
     /// window you can type in. Not handing focus back afterwards would be the
     /// dishonest part: the person was in the middle of something.
+    /// Into keyboard mode, or out of it. Into it takes key on the glass,
+    /// which a non-activating panel does without bringing this app forward,
+    /// so the app the person was in stays the active one.
+    private func toggleKeyboard() {
+        guard let overlay else { return }
+        if model.keyboardFocus != nil {
+            model.leaveKeyboard()
+            giveKeyboardBack()
+            return
+        }
+        guard overlay.isVisible, model.enterKeyboard() else { return }
+        keyboardReturn = NSWorkspace.shared.frontmostApplication
+        overlay.makeKey()
+    }
+
+    /// Hand the keys back to the app that had them.
+    private func giveKeyboardBack() {
+        if let app = keyboardReturn, app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            app.activate()
+        }
+        keyboardReturn = nil
+    }
+
+    private var keyboardMonitor: Any?
+    private var localKeyboardMonitor: Any?
+    private var keyboardReturn: NSRunningApplication?
+
     private func restoreFocus() {
         previousApp?.activate()
         previousApp = nil

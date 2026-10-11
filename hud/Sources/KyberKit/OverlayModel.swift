@@ -116,6 +116,12 @@ public final class OverlayModel {
     /// Where events from any surface go.
     public var onEvent: ((OutboundEvent) -> Void)?
 
+    /// What has keyboard focus on the glass, or nil when the keyboard is
+    /// the person's other apps' (see `KeyboardFocus`).
+    public internal(set) var keyboardFocus: FocusTarget?
+    /// The focused Field was pressed and is taking the keys.
+    public internal(set) var editingField = false
+
     /// The window in front, in the glass's own points: the window the
     /// surfaces are most likely about, kept clear of them (see `Occlusion`).
     /// Nil when there is none or it is not known.
@@ -575,6 +581,8 @@ public final class OverlayModel {
         // kept on disk and offered again when that file is next opened.
         for surface in surfaces { surface.store.rescueUnsaved() }
         surfaces = []
+        keyboardFocus = nil
+        editingField = false
         files = nil
         heights = [:]
         fullHeights = [:]
@@ -974,6 +982,12 @@ public final class OverlayModel {
         fullHeights.removeValue(forKey: id)
         if current == id { current = surfaces.last?.id ?? "main" }
         relayout()
+        // Focus on a surface that went moves to what is left, so keyboard
+        // mode never points at nothing.
+        if keyboardFocus?.surface == id {
+            editingField = false
+            keyboardFocus = focusOrder.first
+        }
     }
 
     /// Say who vouches for a surface: the namespace the socket says its

@@ -192,6 +192,9 @@ public struct OverlayView: View {
                             x: centre.x - surface.width / 2, y: centre.y - height / 2,
                             width: surface.width, height: height)
                     }())
+                    .environment(\.hudKeyboardFocus,
+                        model.keyboardFocus?.surface == surface.id ? model.keyboardFocus : nil)
+                    .environment(\.hudEditingField, model.editingField)
                     .frame(width: surface.width)
                     .background {
                         GeometryReader { proxy in
@@ -348,6 +351,7 @@ struct SurfaceCard: View {
     var onUnfold: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.hudKeyboardFocus) private var keyboardFocus
     @State private var hovering = false
     @State private var lit = false
     /// Where the card is on the screen, top-left origin, for measuring the
@@ -469,7 +473,8 @@ struct SurfaceCard: View {
                     CloseButton(
                         action: onDismiss, help: title.isEmpty ? "Close" : "Close \(title)",
                         hit: HitTarget.minimum)
-                        .opacity(hovering ? 1 : 0.35)
+                        .opacity(hovering || keyboardFocus?.isClose == true ? 1 : 0.35)
+                        .modifier(KeyboardRing(active: keyboardFocus?.isClose == true))
                 }
             }
             // The fold is a spring so a click mid-fold reverses from where

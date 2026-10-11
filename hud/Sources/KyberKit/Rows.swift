@@ -69,6 +69,7 @@ struct RowAction {
 struct RowActionButton: View {
     let action: RowAction
     let row: String
+    @Environment(\.hudFocusedRow) private var focusedRow
 
     var body: some View {
         Button {
@@ -83,6 +84,7 @@ struct RowActionButton: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(RowButtonStyle())
+        .modifier(KeyboardRing(active: focusedRow == row))
         .accessibilityLabel("\(action.label), \(row)")
     }
 }

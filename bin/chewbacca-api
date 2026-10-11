@@ -257,9 +257,22 @@ def aes_cbc_decrypt(key, data):
     try:
         from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
     except ImportError:
-        openssl = "/usr/bin/openssl" if os.path.exists("/usr/bin/openssl") else "openssl"
-        return subprocess.run([openssl, "enc", "-d", "-aes-128-cbc", "-K", key.hex(), "-iv", (b" " * 16).hex(), "-nopad"],
-                              input=data, capture_output=True, check=True).stdout
+        # CommonCrypto in libSystem, in process. The first fallback ran
+        # /usr/bin/openssl with the key as -K <hex>, and argv is readable by
+        # every process on the Mac through ps, so the one key that opens all of
+        # Chrome's cookies sat in a process listing (security review, 2026-10-10).
+        import ctypes
+        import ctypes.util
+        lib = ctypes.CDLL(ctypes.util.find_library("System") or "/usr/lib/libSystem.dylib")
+        out = ctypes.create_string_buffer(len(data) + 16)
+        moved = ctypes.c_size_t(0)
+        # CCCrypt(decrypt, AES, no padding, key, iv, in, out): padding is
+        # stripped by the caller, the same as with the cryptography path.
+        status = lib.CCCrypt(1, 0, 0, bytes(key), len(key), b" " * 16, bytes(data), len(data),
+                             out, len(out), ctypes.byref(moved))
+        if status != 0:
+            raise RuntimeError(f"CCCrypt failed with status {status}")
+        return out.raw[:moved.value]
     dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
     return dec.update(data) + dec.finalize()
 hosts, prefix, out, profile = sys.argv[1:5]

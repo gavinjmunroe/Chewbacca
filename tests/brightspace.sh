@@ -75,4 +75,9 @@ echo "$out" | grep -q "^MATH 125" || fail "course not named from the section Nam
 echo "$out" | grep "Lab 4 Post-Lab" | grep -q "NOT IN LEDGER" && fail "BISC 101 should match ledger code BISC 101Lxg: $out"
 echo "$out" | grep "Problem Set 3" | grep -q "NOT IN LEDGER" || fail "another student's course not read: $out"
 echo "$out" | grep -q "GESM" && fail "old-term course listed: $out"
+# The cookie key opens every Chrome cookie, so it never goes into argv, where
+# ps shows it to every process (security review, 2026-10-10: openssl -K <hex>).
+for f in bin/brightspace bin/chewbacca-api; do
+  grep -q '"-K"' "$ROOT/$f" && fail "$f passes the cookie key on a command line"
+done
 echo "  ok"

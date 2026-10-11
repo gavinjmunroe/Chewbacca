@@ -865,6 +865,9 @@ def cmd_reply(a) -> int:
     res = gmail.draft(row["gmail_id"], a.inbox or None, row["from"], gtme_reply.strip_em_dashes(a.text))
     if not res.get("ok"):
         raise Refused(f"Couldn't save the draft: {res.get('error')}")
+    # Clears the reply from the needs-you surface (bin/lib/ingest_gtme.py).
+    append(d / "drafted.jsonl", {"to": row["from"], "gmail_id": row["gmail_id"], "draft": res.get("draft_id"),
+                                 "at": op.stamp()})
     print(f"Saved as a draft in your Gmail, in the thread with {row['from']}. Nothing was sent; open Gmail to "
           f"read it and press send.")
     return 0

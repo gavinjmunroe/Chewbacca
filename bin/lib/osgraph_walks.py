@@ -73,7 +73,7 @@ def row(g: Graph, node: dict, tier: int, when: str, why: str) -> dict:
     app = props.get("app") or {"Task": "Task", "Assignment": "Class", "Event": "Calendar"}.get(node["type"], node["type"])
     if node["type"] == "Task":
         app = {"agent": "Agent", "backlog": props.get("lane") or "Backlog", "request": "Ask",
-               "promise": "Promise"}.get(props.get("kind"), "Task")
+               "promise": "Promise", "gtme": "Outbound"}.get(props.get("kind"), "Task")
     group = {"Thread": "texts", "MailItem": "mail", "Assignment": "class", "Event": "calendar"}.get(
         node["type"], props.get("kind") or "tasks")
     return {"id": node["id"], "type": node["type"], "label": node["label"], "app": app, "group": group, "when": when,
@@ -134,6 +134,9 @@ def _attention(g: Graph, now: datetime, scope: set[str] | None = None) -> list[d
                 rows.append(row(g, node, BLOCKED, props.get("updated", ""), f"{props.get('status')} on you"))
             elif day and day <= horizon:
                 rows.append(row(g, node, DUE, day, "due " + day))
+        elif kind == "gtme":
+            # Outbound: a frozen batch waiting for the ok, or a lead's reply.
+            rows.append(row(g, node, BLOCKED, props.get("at", ""), props.get("why") or "waiting on you"))
         elif kind == "promise" and day and day <= horizon:
             rows.append(row(g, node, DUE, day, "you promised it"))
         # Requests extracted from a text ride on their thread's row, which is

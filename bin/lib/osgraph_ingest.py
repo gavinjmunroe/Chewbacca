@@ -864,10 +864,19 @@ def chats(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
     return ingest_chats.chats(graph, ctx, ids, days=days)
 
 
+def gtme(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
+    """Cold emails waiting for the person's ok and leads waiting on a reply,
+    from chewbacca gtme's own files (ingest_gtme.gtme). No client set up is
+    an empty snapshot, never an error."""
+    import ingest_gtme  # noqa: PLC0415
+
+    return ingest_gtme.gtme(graph, ctx, ids, days=days)
+
+
 INGESTERS = {
     "imessage": imessage, "mail": mail, "coursework": coursework, "calendar": calendar,
     "backlog": backlog, "people": people_tasks, "reminders": reminders, "agents": agents,
-    "whatsapp": whatsapp, "meetings": meetings, "chats": chats,
+    "whatsapp": whatsapp, "meetings": meetings, "chats": chats, "gtme": gtme,
 }
 
 

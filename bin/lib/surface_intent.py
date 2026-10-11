@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 from dataclasses import dataclass
@@ -36,6 +37,19 @@ HUD_MUSIC = Path(__file__).resolve().parent.parent / "hud-music"
 # walk is not waited on. Guessed, never measured: ten seconds only covers a
 # machine under load.
 CLI_TIMEOUT_S = 10.0
+
+
+def tool(path: Path) -> str:
+    """A sibling CLI, or the same name on PATH once that file is gone.
+    hud-listen imports this module once and runs for hours, and the kit
+    runtime replaces the snapshot these paths resolved into. On 2026-10-10
+    "show my agents" answered "The agents panel didn't open." twice because
+    the kyber-sessions beside this file had been pruned; ~/.local/bin links
+    through the stable `current` and always names the newest copy."""
+    if path.exists():
+        return str(path)
+    found = shutil.which(path.name) or str(Path.home() / ".local" / "bin" / path.name)
+    return found
 
 
 @dataclass
@@ -263,7 +277,7 @@ def open_with_preset(name: str, preset: dict, run=subprocess.run, ask=None) -> b
     pass a preset, so this starts the daemon through the CLI and then sends
     the same `open` body the daemon's own pivots use, over its socket."""
     try:
-        started = run([str(KYBER_SURFACES), "start"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+        started = run([tool(KYBER_SURFACES), "start"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
     except (OSError, subprocess.TimeoutExpired):
         return False
     if started.returncode != 0:
@@ -296,7 +310,7 @@ def start_walk(spawn=subprocess.Popen) -> bool:
     try:
         WALK_LOG.parent.mkdir(parents=True, exist_ok=True)
         with open(WALK_LOG, "a", encoding="utf-8") as log:
-            spawn([str(PERMISSIONS_CLI), "walk"], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+            spawn([tool(PERMISSIONS_CLI), "walk"], stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                   start_new_session=True)
         return True
     except OSError:
@@ -309,7 +323,7 @@ def open_sessions(open_id: str = "", spawn=subprocess.Popen) -> bool:
     try:
         SESSIONS_LOG.parent.mkdir(parents=True, exist_ok=True)
         with open(SESSIONS_LOG, "a", encoding="utf-8") as log:
-            spawn([str(KYBER_SESSIONS), "serve"] + (["--open", open_id] if open_id else []),
+            spawn([tool(KYBER_SESSIONS), "serve"] + (["--open", open_id] if open_id else []),
                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=log, start_new_session=True)
         return True
     except OSError:
@@ -327,7 +341,7 @@ def sessions_verb(command: Command, run=subprocess.run, spawn=subprocess.Popen) 
         # New task box; Start on the glass runs it (commit review, 2026-10-10).
         text = f"in {command.arg}: {command.name}" if command.arg else command.name
         try:
-            done = run([str(KYBER_SESSIONS), "draft", text], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+            done = run([tool(KYBER_SESSIONS), "draft", text], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
         except (OSError, subprocess.TimeoutExpired):
             return Outcome(False, "The agents panel didn't answer.")
         if done.returncode != 0 or not open_sessions(spawn=spawn):
@@ -335,7 +349,7 @@ def sessions_verb(command: Command, run=subprocess.run, spawn=subprocess.Popen) 
         return Outcome(True, "It's in the New task box. Press Start to run it.")
     # stop: the one live glass run whose folder or task names it
     try:
-        listed = run([str(KYBER_SESSIONS), "--json"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+        listed = run([tool(KYBER_SESSIONS), "--json"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
         rows = json.loads(listed.stdout or "[]")
     except (OSError, subprocess.TimeoutExpired, ValueError):
         return Outcome(False, "Couldn't read your agents.")
@@ -347,7 +361,7 @@ def sessions_verb(command: Command, run=subprocess.run, spawn=subprocess.Popen) 
     if len(hits) > 1:
         return Outcome(False, f"{len(hits)} running agents match {command.name}. Stop one on its card.")
     try:
-        done = run([str(KYBER_SESSIONS), "stop", str(hits[0]["id"])], capture_output=True, text=True,
+        done = run([tool(KYBER_SESSIONS), "stop", str(hits[0]["id"])], capture_output=True, text=True,
                    timeout=CLI_TIMEOUT_S + 20)
     except (OSError, subprocess.TimeoutExpired):
         return Outcome(False, "The stop didn't answer.")
@@ -363,7 +377,7 @@ def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Pop
             return Outcome(True, "Opening Settings. Follow the ring.")
         return Outcome(False, "The permission walkthrough didn't start.")
     if command.verb == "panel" and command.name != "sessions":
-        argv = [str(HUD), command.name] + ([command.arg] if command.arg else [])
+        argv = [tool(HUD), command.name] + ([command.arg] if command.arg else [])
         try:
             done = run(argv, capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
         except (OSError, subprocess.TimeoutExpired):
@@ -373,7 +387,7 @@ def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Pop
         return Outcome(True, "Closed." if command.arg == "off" else "Your files are up.")
     if command.verb == "panel" and command.name == "sessions":
         try:
-            run([str(HUD), "close", "sessions"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+            run([tool(HUD), "close", "sessions"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
         except (OSError, subprocess.TimeoutExpired):
             return Outcome(False, "The display didn't answer.")
         return Outcome(True, "Closed.")
@@ -381,7 +395,7 @@ def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Pop
         if open_with_preset("oss", {"/oss/q": command.arg}, run=run, ask=ask):
             return Outcome(True, f"Here's what replaces {command.arg}.")
         return Outcome(False, "That surface didn't open.")
-    argv = [str(KYBER_SURFACES), command.verb, command.name] + ([command.arg] if command.arg else [])
+    argv = [tool(KYBER_SURFACES), command.verb, command.name] + ([command.arg] if command.arg else [])
     try:
         done = run(argv, capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
     except (OSError, subprocess.TimeoutExpired):
@@ -394,7 +408,7 @@ def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Pop
         return Outcome(True, f"{command.name.capitalize()} space is up.")
     if command.name == "music":
         try:
-            now = run([str(HUD_MUSIC), "now"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+            now = run([tool(HUD_MUSIC), "now"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
             line = (now.stdout or "").strip()
             if line:
                 return Outcome(True, line)

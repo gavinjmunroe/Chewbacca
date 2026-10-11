@@ -165,6 +165,10 @@ def main() -> int:
     check("a stop that names no run says so", not got.ok and "No running agent" in got.line, got)
     got = si.perform(si.Command("sessions", "open"), run=fake_run, spawn=spawn)
     check("show my agents starts the panel", got.ok and spawned[-1][-1] == "serve", spawned[-1])
+    from pathlib import Path as _P
+    gone = _P("/nonexistent/snapshot/bin/kyber-sessions")
+    check("a pruned sibling falls back to the same tool on PATH",
+          si.tool(gone).endswith("/kyber-sessions") and not si.tool(gone).startswith("/nonexistent"), si.tool(gone))
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0
 

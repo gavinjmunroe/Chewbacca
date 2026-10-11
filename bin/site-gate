@@ -17,6 +17,9 @@ library/crafts/website.md. Prose does not fire, so this is the half that does.
     site-gate flash <url>...           exit 1 if scrolling at phone size flashes:
                                        a frame where over a quarter of the
                                        screen swings brightness hard
+    site-gate repeat <url>...          exit 1 if a sentence of five words or
+                                       more shows on two of the pages given,
+                                       or twice on one, nav and footer aside
     site-gate focus <url>...           exit 1 if a screen has no place for the
                                        eye: the biggest text under 1.6x the
                                        usual size, over 40 lines at one size,
@@ -1078,6 +1081,58 @@ def focus(pw, url):
     return out
 
 
+# Caleb, 2026-10-11, on Firm Foundation: "ur repeating the same stuff nuh uh
+# bro". "AI never does pastoral care" sat on Home's close, on Trust and in
+# Mission's last beat, and the same "Start with your website" box closed both
+# Home and Mission. A line says its thing once; the other pages link to it.
+REPEAT_MIN_WORDS = 5
+
+REPEAT_TEXT = r"""() => {
+  const out = [];
+  for (const e of document.querySelectorAll('h1, h2, h3, p, li, blockquote, figcaption')) {
+    if (e.closest('nav, footer, header, [aria-hidden=true]')) continue;
+    const c = getComputedStyle(e);
+    if (c.display === 'none' || c.visibility === 'hidden') continue;
+    if ([...e.children].some(k => k.matches('p, li, h1, h2, h3'))) continue;
+    const t = (e.innerText || '').trim().replace(/\s+/g, ' ');
+    if (t) out.push(t);
+  }
+  return out;
+}"""
+
+
+def _norm(t: str) -> str:
+    return re.sub(r"[^a-z0-9 ]", "", t.lower().replace("\u2019", "'")).strip()
+
+
+def repeat_fails(pages: dict) -> list[str]:
+    seen: dict = {}
+    for url, texts in pages.items():
+        for t in texts:
+            n = _norm(t)
+            if len(n.split()) < REPEAT_MIN_WORDS:
+                continue
+            seen.setdefault(n, []).append((url, t))
+    fails = []
+    for hits in seen.values():
+        if len(hits) > 1:
+            where = ", ".join(sorted({u for u, _ in hits}))
+            fails.append(f"said {len(hits)} times ({where}): {hits[0][1][:80]!r}")
+    return fails
+
+
+def repeat(pw, urls):
+    pages = {}
+    b = launch(pw)
+    for u in urls:
+        pg = b.new_page(viewport={"width": 1440, "height": 900})
+        pg.goto(u, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(800)
+        pages[u] = pg.evaluate(REPEAT_TEXT)
+        pg.close()
+    b.close()
+    return repeat_fails(pages)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1095,6 +1150,7 @@ def main():
     pa = sub.add_parser("parity"); pa.add_argument("urls", nargs="+")
     dk = sub.add_parser("deck"); dk.add_argument("urls", nargs="+")
     fo = sub.add_parser("focus"); fo.add_argument("urls", nargs="+")
+    rp = sub.add_parser("repeat"); rp.add_argument("urls", nargs="+")
     i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
     i.add_argument("--ys", help="comma separated scroll positions; default every 900px")
     r = sub.add_parser("research", help="exit 1 unless the repo holds the research receipt")
@@ -1129,6 +1185,12 @@ def main():
                 bad += bool(found)
                 print(f"{'FAIL' if found else 'ok  '}  {u}" + (f" {len(found)} flashing frame(s): {found[:6]}" if found else ""))
             sys.exit(1 if bad else 0)
+        if a.cmd == "repeat":
+            fails = repeat(pw, a.urls)
+            print(f"{'FAIL' if fails else 'ok  '}  {len(a.urls)} page(s)")
+            for x in fails:
+                print(f"        {x}")
+            sys.exit(1 if fails else 0)
         if a.cmd == "focus":
             bad = 0
             for u in a.urls:

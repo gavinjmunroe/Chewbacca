@@ -353,6 +353,24 @@ Read them before drafting any club or startup landing page.
 - A promises or mission page is drawn, not listed ("the trust page is 1
   dimensional"): each promise gets a small drawing and a few words, the big
   ones hang across a band's edge, and a why reads as beats on one line.
+- A site is one story, and every section is a part of it that builds on the
+  last (2026-10-11: "Sections should feel like different parts in a story
+  that build on each other! This should be true for everything chewb
+  makes"). Before building, write the parts as a chain where each one names
+  what the part before it left behind: the guest the website brought in is
+  the one Monday's brief is about, and the close returns to where part one
+  began. Number them as parts, carry one object or person through them, and
+  never let a section stand alone as its own slide ("chewbs should never
+  make slide decks when we're trying to make websites").
+- Say each thing once on the whole site ("ur repeating the same stuff nuh uh
+  bro"). A promise lives on the page that owns it and the others link there;
+  two pages never close on the same box. `site-gate repeat <url>...` fails a
+  sentence of five words or more shown twice. It only catches literal
+  repeats, so reread for the same promise reworded.
+- One object changing beats three side by side. A why told as three drawings
+  on a rule, or promises as three cards, read as slides; one drawing whose
+  parts move between beats, or one signed sheet with the promises as its
+  lines, read as a page.
 - No flashes, no whiplash on a phone ("some of the mobile
   animations/transitions are literal whiplash and flashbangs"). `site-gate
   flash <url>` must pass. A bar that hides on scroll turns on travel (24px

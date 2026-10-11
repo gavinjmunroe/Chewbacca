@@ -57,6 +57,10 @@ def main():
     six = {"sizes": [15.0] * 4 + [44.0], "choices": 6}
     check("three paths times before and after is too many choices", any("choices" in f for f in sg.focus_fails(six)))
 
+    pages = {"/": ["AI never does pastoral care.", "Start with your website."], "/trust": ["AI never does pastoral care."]}
+    check("a promise said on two pages is a repeat", any("pastoral" in f for f in sg.repeat_fails(pages)))
+    check("short labels may repeat", sg.repeat_fails({"/": ["Free website audit"], "/a": ["Free website audit"]}) == [])
+
     print(f"site-gate flash and parity: {failures} failure(s)")
     sys.exit(1 if failures else 0)
 

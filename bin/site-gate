@@ -17,6 +17,10 @@ library/crafts/website.md. Prose does not fire, so this is the half that does.
     site-gate flash <url>...           exit 1 if scrolling at phone size flashes:
                                        a frame where over a quarter of the
                                        screen swings brightness hard
+    site-gate deck <url>...            exit 1 if the page reads like a pitch
+                                       deck: three or more sections in a row
+                                       with the same shape, or every section
+                                       edge a flat cut nothing crosses
     site-gate parity <url>...          exit 1 if the phone version is thinner
                                        than desktop: figure share or screens
                                        with motion under 75% of desktop's, or
@@ -913,6 +917,92 @@ def _with_motion_share(summ: dict) -> dict:
     return {**summ, "motion_share": round(summ["screens_with_motion"] / max(1, summ["screens"]), 2)}
 
 
+# Caleb, 2026-10-10, on Firm Foundation: "It reads like a slide deck bro",
+# "so 1 dimensional unlike the lemma site", and then "Chewbacca should never
+# make section to section feel 1 dimensional like a pitch deck!" The deck was
+# eyebrow, giant heading, boxed drawing, a hairline, and again, five times.
+# A section's shape is where its heading sits, how big it is, what ground it is
+# on and whether one framed box carries the rest. Three in a row with one shape
+# is a deck. A page where no figure, sheet or colour crosses any section edge
+# is a stack of slides however different each one is.
+DECK_RUN = 3
+DECK_MIN_SECTIONS = 4
+# Firm Foundation's Home, the night it was called a deck, carried 1 of 5 edges
+# (the CTA's dark ground); Lemma's carries most of its edges with a sheet or a
+# figure. A third is the floor.
+DECK_MIN_CARRIED = 0.34
+
+DECK_SHAPES = r"""() => {
+  // outermost only: a pinned scene's own layers are not sections of their own
+  const all = [...document.querySelectorAll('[data-sg-sec]')];
+  // fixed overlays (grain, a header) are not sections; of two that cover the same
+  // stretch of page, the longer one is the section
+  const span = e => { const r = e.getBoundingClientRect(); return [r.top + scrollY, r.bottom + scrollY]; };
+  const secs = all.filter(s => getComputedStyle(s).position !== 'fixed' && !all.some(o => o !== s && o.contains(s)))
+    .filter((s, _, list) => { const [t, b] = span(s); return !list.some(o => { if (o === s) return false;
+      const [ot, ob] = span(o); return ot <= t + 2 && ob >= b - 2 && ((ob - ot) > (b - t) || ((ob - ot) === (b - t) && list.indexOf(o) < list.indexOf(s))); }); });
+  const shapes = secs.map(s => {
+    const r = s.getBoundingClientRect();
+    const h = s.querySelector('h1, h2, h3');
+    const hr = h ? h.getBoundingClientRect() : null;
+    const fs = h ? parseFloat(getComputedStyle(h).fontSize) : 0;
+    const align = h ? getComputedStyle(h).textAlign : '';
+    let bg = getComputedStyle(s).backgroundColor, p = s;
+    while (bg === 'rgba(0, 0, 0, 0)' && p.parentElement) { p = p.parentElement; bg = getComputedStyle(p).backgroundColor; }
+    // one framed box: a bordered block wider than 70% of the section holding most of its height
+    let boxed = false;
+    for (const e of s.querySelectorAll('div, figure, ol, ul')) {
+      const b = e.getBoundingClientRect(), c = getComputedStyle(e);
+      if (b.width > 0.7 * r.width && b.height > 0.45 * r.height && parseFloat(c.borderTopWidth) > 0 && parseFloat(c.borderLeftWidth) > 0) { boxed = true; break; }
+    }
+    return { name: (h ? h.innerText : '').trim().slice(0, 40), left: hr ? Math.round(hr.left / 16) : -1,
+             size: Math.round(fs / 4), align, bg, boxed, top: r.top + scrollY, bottom: r.bottom + scrollY };
+  });
+  // what crosses each edge between neighbours: anything painted, not a wrapper of both
+  const crossings = [];
+  for (let i = 0; i + 1 < secs.length; i++) {
+    const edge = shapes[i].bottom;
+    let n = 0;
+    for (const e of document.querySelectorAll('body *')) {
+      if (e.contains(secs[i]) || e.contains(secs[i + 1])) continue;
+      const c = getComputedStyle(e);
+      if (c.position === 'fixed' || c.visibility === 'hidden' || c.display === 'none') continue;
+      const b = e.getBoundingClientRect(), top = b.top + scrollY, bot = b.bottom + scrollY;
+      if (b.width < 40 || b.height < 40) continue;
+      if (top < edge - 24 && bot > edge + 24) n++;
+    }
+    const sameGround = shapes[i].bg === shapes[i + 1].bg;
+    crossings.push({ edge: Math.round(edge), crossed: n, sameGround });
+  }
+  return { shapes, crossings };
+}"""
+
+
+def deck_fails(shapes: list, crossings: list) -> list[str]:
+    fails = []
+    key = lambda s: (s["left"], s["size"], s["align"], s["bg"], s["boxed"])
+    run = 1
+    for i in range(1, len(shapes)):
+        run = run + 1 if key(shapes[i]) == key(shapes[i - 1]) and shapes[i]["left"] >= 0 else 1
+        if run == DECK_RUN:
+            names = ", ".join(repr(s["name"]) for s in shapes[i - DECK_RUN + 1 : i + 1])
+            fails.append(f"{DECK_RUN} sections in a row with one shape: {names}")
+    carried = sum(1 for c in crossings if c["crossed"] or not c["sameGround"])
+    if len(shapes) >= DECK_MIN_SECTIONS and crossings and carried / len(crossings) < DECK_MIN_CARRIED:
+        fails.append(f"{carried} of {len(crossings)} section edges carry anything across (a sheet, a figure or a change of ground); "
+                     f"under {DECK_MIN_CARRIED:.0%} reads as slides")
+    return fails
+
+
+def deck(pw, url):
+    b = launch(pw); pg = b.new_page(viewport={"width": 1440, "height": 900})
+    pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(2000)
+    pg.evaluate(SECTION_LIST)
+    got = pg.evaluate(DECK_SHAPES)
+    b.close()
+    return got["shapes"], got["crossings"], deck_fails(got["shapes"], got["crossings"])
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -928,6 +1018,7 @@ def main():
                    help="viewports of runway the longest pinned scene needs")
     f = sub.add_parser("flash"); f.add_argument("urls", nargs="+")
     pa = sub.add_parser("parity"); pa.add_argument("urls", nargs="+")
+    dk = sub.add_parser("deck"); dk.add_argument("urls", nargs="+")
     i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
     i.add_argument("--ys", help="comma separated scroll positions; default every 900px")
     r = sub.add_parser("research", help="exit 1 unless the repo holds the research receipt")
@@ -961,6 +1052,16 @@ def main():
                 found = flash(pw, u)
                 bad += bool(found)
                 print(f"{'FAIL' if found else 'ok  '}  {u}" + (f" {len(found)} flashing frame(s): {found[:6]}" if found else ""))
+            sys.exit(1 if bad else 0)
+        if a.cmd == "deck":
+            bad = 0
+            for u in a.urls:
+                shapes, crossings, fails = deck(pw, u)
+                bad += bool(fails)
+                print(f"{'FAIL' if fails else 'ok  '}  {u}  {len(shapes)} sections, "
+                      f"{sum(1 for c in crossings if c['crossed'] or not c['sameGround'])} of {len(crossings)} edges carried across")
+                for x in fails:
+                    print(f"        {x}")
             sys.exit(1 if bad else 0)
         if a.cmd == "parity":
             bad = 0

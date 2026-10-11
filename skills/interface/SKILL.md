@@ -335,6 +335,12 @@ Read them before drafting any club or startup landing page.
   as one line. Before shipping, `site-gate parity <url>` must pass: phone
   figure share and screens with motion at 75% of desktop's or more, and no
   desktop pinned scene lost.
+- Section to section is never a deck (2026-10-10: "Chewbacca should never
+  make section to section feel 1 dimensional like a pitch deck!"). Never
+  three sections in a row with one shape (same heading spot and size, same
+  ground, one framed box under it), and at least a third of section edges
+  carry something across: a sheet that overlaps, a figure that spans, or a
+  change of ground. `site-gate deck <url>` must pass.
 - No flashes, no whiplash on a phone ("some of the mobile
   animations/transitions are literal whiplash and flashbangs"). `site-gate
   flash <url>` must pass. A bar that hides on scroll turns on travel (24px

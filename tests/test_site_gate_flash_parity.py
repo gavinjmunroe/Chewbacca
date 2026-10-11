@@ -41,6 +41,15 @@ def main():
     unpinned = {"figure_share": 0.5, "motion_share": 0.8, "pinned_scene_screens": 0}
     check("a phone that lost the pinned scene fails", any("pinned" in f for f in sg.parity_fails(desk, unpinned)))
 
+    shape = {"name": "x", "left": 7, "size": 10, "align": "left", "bg": "paper", "boxed": True}
+    deck3 = [dict(shape, name=n) for n in "abc"]
+    flat = [{"crossed": 0, "sameGround": True}] * 4
+    check("three sections with one shape read as a deck", any("in a row" in f for f in sg.deck_fails(deck3, flat[:2])))
+    varied = [dict(shape, left=7 + i * 10) for i in range(5)]
+    check("five varied sections cut flat on one ground still fail", any("edges" in f for f in sg.deck_fails(varied, flat)))
+    carried = [{"crossed": 1, "sameGround": True}, {"crossed": 0, "sameGround": False}, {"crossed": 0, "sameGround": True}, {"crossed": 0, "sameGround": True}]
+    check("varied sections with half their edges carried pass", sg.deck_fails(varied, carried) == [])
+
     print(f"site-gate flash and parity: {failures} failure(s)")
     sys.exit(1 if failures else 0)
 

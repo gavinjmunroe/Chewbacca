@@ -127,7 +127,7 @@ test("bars never rank or call a winner on noise", () => {
     [
       ["Ivy, Wave 2", "early"],
       ["Vertocol, Midweek", "early"],
-      ["Qube Finance, Jonah list", "behind"],
+      ["Qube Finance, Your list", "behind"],
     ],
   );
 });
@@ -227,13 +227,22 @@ test("a company's shared segment is not repeated on every campaign row", () => {
   ];
   assert.deepEqual(
     [...C.shortNames(rows).values()],
-    ["Wave 2", "Pre-seed investors", "Jonah list"],
+    ["Wave 2", "Pre-seed investors", "Your list"],
   );
   const t = C.campaignTable(rows, {}, "all");
   assert.deepEqual(
     t.rows.map((r) => r.name),
-    ["Ivy", "Jonah list", "Wave 2", "Pre-seed investors"],
+    ["Ivy", "Your list", "Wave 2", "Pre-seed investors"],
   );
+  assert.equal(
+    C.plainName("Midweek A/B no line vs line"),
+    "Test: with or without a personal line",
+  );
+  assert.equal(
+    C.plainName("Monday 2026-10-12 tier B"),
+    "Week of 10/12, from Wednesday",
+  );
+  assert.equal(C.plainName("Consumer investors"), "Consumer investors");
 });
 
 test("a thread push is refused unless every thread is this client's, hashed, in the week", () => {

@@ -72,10 +72,33 @@ export function shortNames(rows) {
     const s = String(r.sequence || r.campaign || "");
     out.set(
       r,
-      shared && s.startsWith(`${shared}, `) ? s.slice(shared.length + 2) : s,
+      plainName(
+        shared && s.startsWith(`${shared}, `) ? s.slice(shared.length + 2) : s,
+      ),
     );
   }
   return out;
+}
+
+// Our working names for campaigns, in words the client reads without a key.
+// The page showed "Midweek A/B no line vs line" and "Fit relaunch" to Jonah
+// (2026-10-11). Unknown names pass through unchanged.
+const PLAIN = [
+  [/^Jonah list$/i, "Your list"],
+  [/^Wave (\d+)b$/i, "Wave $1, second batch"],
+  [/^Midweek founder story$/i, "Founder story"],
+  [/^Midweek A\/B story vs line$/i, "Test: founder story or personal line"],
+  [/^Midweek A\/B no line vs line$/i, "Test: with or without a personal line"],
+  [/^Midweek no line$/i, "No personal line"],
+  [/^Fit relaunch$/i, "Best fits, relaunched"],
+  [/^Monday (\d{4})-(\d{2})-(\d{2}) tier A$/i, "Week of $2/$3, strongest fits"],
+  [/^Monday (\d{4})-(\d{2})-(\d{2}) tier B$/i, "Week of $2/$3, from Wednesday"],
+];
+
+export function plainName(name) {
+  const s = String(name || "");
+  for (const [re, to] of PLAIN) if (re.test(s)) return s.replace(re, to);
+  return s;
 }
 
 function group(rows, by) {

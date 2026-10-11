@@ -4,10 +4,17 @@ chewbacca usc: a USC student's day in one screen, for any student on any Mac.
 
   chewbacca usc                 what's due this week, the dining hall, events today
   chewbacca usc setup           sign in from whichever Chrome profile has USC
+  chewbacca usc lockin          "I need to lock in on school": your courses from
+                                your own enrollment, what's due first, the ledger
+                                it would build, and how many lecture files to pull
+  chewbacca usc lockin --apply  build the ledger (new files only) and pull every
+                                lecture file to ~/coursework/slides/<CODE>/
   chewbacca usc --hall evk      pick the dining hall (parkside, evk, university-village)
   chewbacca usc --json          the same, as data
 
-Every section is one plain-HTTP call through `chewbacca api` (no browser), run
+lockin reads Brightspace with the session already in Chrome (bin/brightspace-sync),
+so it needs no api engine and no setup beyond being signed in once. The rest:
+every section is one plain-HTTP call through `chewbacca api` (no browser), run
 side by side, and a section that fails prints one line saying why while the
 rest still show. Nothing here writes to any USC system.
 
@@ -21,6 +28,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(os.environ.get("CHEWBACCA_ROOT") or Path(__file__).resolve().parent.parent)
@@ -166,14 +174,224 @@ def render(report):
     return "\n".join(out)
 
 
+# ── lockin ───────────────────────────────────────────────────────────────────
+# The demo sentence. A stranger who just installed this says "I need to lock in
+# on school" and gets, from their own Brightspace enrollment and nothing typed:
+# their courses, what's due first, a ledger seeded with every dated item, and
+# every lecture file on disk. Built 2026-10-10 after "pull my slides" took
+# minutes of disk hunting on the one Mac that already had everything set up.
+
+LEDGER = Path(os.environ.get("COURSEWORK_DIR") or Path.home() / "coursework").expanduser()
+SIGNIN_STAMP = Path.home() / ".chewbacca" / "usc-signin-opened"
+SEASON = {"1": "Spring", "2": "Summer", "3": "Fall"}
+
+
+def load_tool(name):
+    sys.dont_write_bytecode = True  # never litter the kit snapshot with .pyc
+    import importlib.machinery
+    import importlib.util
+    loader = importlib.machinery.SourceFileLoader(name.replace("-", "_"), str(ROOT / "bin" / name))
+    spec = importlib.util.spec_from_loader(loader.name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    loader.exec_module(mod)
+    return mod
+
+
+def term_name(code):
+    """USC term codes are YYYYT: 20263 is Fall 2026, 20271 Spring 2027."""
+    if len(code) == 5 and code.isdigit() and code[4] in SEASON:
+        return f"{SEASON[code[4]]} {code[:4]}"
+    return code or "this term"
+
+
+def norm(code):
+    return re.sub(r"[^a-z0-9]", "", code.lower())
+
+
+def ledger_codes():
+    out = []
+    for f in sorted((LEDGER / "courses").glob("*.yml")):
+        m = re.search(r'^code:\s*"?([^"\n#]+)', f.read_text(errors="replace"), re.M)
+        if m:
+            out.append(m.group(1).strip())
+    return out
+
+
+def in_ledger(code, have):
+    want = norm(code)
+    # Ledger codes carry suffixes the enrollment lacks ("BISC 101Lxg" for BISC-101).
+    return any(norm(h).startswith(want) or want.startswith(norm(h)) for h in have)
+
+
+def clean(text):
+    return re.sub(r'["\\\n\r]+', " ", str(text)).strip()
+
+
+def course_yaml(code, title, term, ids, items, today):
+    lines = [
+        f"# Seeded by `chewbacca usc lockin` on {today} from your own Brightspace enrollment.",
+        "# Brightspace knows the course and its calendar. It doesn't know the AI policy,",
+        "# meetings or grading: those come from the syllabus, usually in",
+        f"# ~/coursework/slides/{code.replace(' ', '-')}/. Until then the AI policy is unknown,",
+        "# which counts as banned.",
+        f'code: "{clean(code)}"',
+        f'title: "{clean(title)}"',
+        f'term: "{term}"',
+        f"brightspace_ids: [{', '.join(str(i) for i in ids)}]",
+        "deliverables:",
+    ]
+    if not items:
+        lines[-1] = "deliverables: []"
+    for it in items:
+        due = it["due"]
+        lines += [f'  - name: "{clean(it["title"])}"',
+                  f"    due: {due[:10]}"]
+        if len(due) >= 16 and due[11:16] != "00:00":
+            lines.append(f'    at: "{due[11:16]}"')
+        lines += ["    status: todo",
+                  f'    source: "Brightspace calendar, read {today}"']
+    return "\n".join(lines) + "\n"
+
+
+def open_signin():
+    """The one page a signed-out student needs, at most once every ten minutes."""
+    try:
+        if time.time() - SIGNIN_STAMP.stat().st_mtime < 600:
+            return False
+    except OSError:
+        pass
+    if os.environ.get("CHEWBACCA_NO_OPEN"):
+        return False
+    shown = subprocess.run(["open", "-a", "Google Chrome", "https://brightspace.usc.edu/d2l/home"],
+                           check=False).returncode == 0
+    if shown:
+        SIGNIN_STAMP.parent.mkdir(parents=True, exist_ok=True)
+        SIGNIN_STAMP.touch()
+    return shown
+
+
+def blocked(bs, why):
+    """Say the real reason, never "sign in" to someone who is signed in."""
+    try:
+        reader = load_tool("brightspace")
+        has_cookies = reader.has_session_cookies()
+        # Only someone who has signed in can have a session stuck in memory:
+        # an idle profile's file is hours old too, and telling a student who
+        # never signed in to quit Chrome hides the one page they need.
+        stale = reader.stale_cookie_message() if has_cookies else None
+    except Exception:
+        stale, has_cookies = None, False
+    if stale:
+        print(stale)
+        return 3
+    if "no Brightspace session" in why or not has_cookies:
+        opened = open_signin()
+        print("BLOCKED: Brightspace isn't signed in in Chrome yet. "
+              + ("It's open in Chrome now: sign in once with your USC NetID, then rerun."
+                 if opened else "Sign in once at https://brightspace.usc.edu in Chrome, then rerun."))
+        return 3
+    print(f"BLOCKED: {why}")
+    return 3
+
+
+def lockin(apply, out, days):
+    bs = load_tool("brightspace-sync")
+    today = dt.date.today().isoformat()
+    try:
+        client = bs.Client()
+        courses = bs.courses(client)
+    except bs.Stop as e:
+        return blocked(bs, str(e))
+    if not courses:
+        print("Brightspace shows no courses for this term yet.")
+        return 1
+    term = term_name(courses[0].get("term", ""))
+    by_code = {}
+    for c in courses:
+        entry = by_code.setdefault(c["code"], {"ids": [], "title": c["name"].split(": ", 1)[-1]})
+        entry["ids"].append(c["id"])
+    try:
+        due = bs.due_items(client, days)
+    except bs.Stop as e:
+        return blocked(bs, str(e))
+
+    print(f"{term}: {len(by_code)} courses from your Brightspace enrollment")
+    for code, e in by_code.items():
+        print(f"  {code:<10} {e['title']}")
+    print()
+    soon = [r for r in due if r["due"][:10] <= (dt.date.today() + dt.timedelta(days=14)).isoformat()]
+    print("Due first" + ("" if soon else ": nothing in the next 14 days"))
+    for r in soon[:12]:
+        when = dt.datetime.fromisoformat(r["due"])
+        print(f"  {when:%a %b %d %H:%M}  {r['course']:<10} {r['title']}")
+    if soon:
+        print(f"  Start with: {soon[0]['course']} {soon[0]['title']}")
+    print()
+
+    have = ledger_codes()
+    new = {code: e for code, e in by_code.items() if not in_ledger(code.replace("-", " "), have)}
+    print(f"Ledger at {LEDGER}: " + (
+        f"{'adding' if apply else 'would add'} {len(new)} course file(s)" if new else "every course already has a file"))
+    if apply and new:
+        (LEDGER / "courses").mkdir(parents=True, exist_ok=True)
+        semester = LEDGER / "semester.yml"
+        if not semester.exists():
+            semester.write_text(
+                f'term: "{term}"\nschool: USC\nsource: "Brightspace enrollment term code '
+                f'{courses[0].get("term", "")}, read {today}"\n')
+        for code, e in new.items():
+            items, seen = [], set()
+            for r in due:
+                if r["course"] == code and r["title"] not in seen:
+                    seen.add(r["title"])
+                    items.append(r)
+            dest = LEDGER / "courses" / f"{bs.safe(code.lower()).replace(' ', '-')}.yml"
+            if dest.exists():
+                continue
+            dest.write_text(course_yaml(code.replace("-", " "), e["title"], term, e["ids"], items, today))
+            print(f"  wrote {dest.relative_to(LEDGER)} ({len(items)} dated items)")
+    elif new:
+        for code in new:
+            print(f"  courses/{bs.safe(code.lower()).replace(' ', '-')}.yml")
+    print()
+
+    import types
+    total, per_code = 0, {}
+    print(f"Lecture files to {out}/<CODE>/:")
+    for c in courses:
+        ns = types.SimpleNamespace(out=str(out), apply=apply, quiet=not apply, since=None,
+                                   from_chapter=None, also=[])
+        try:
+            n = bs.sync_files(client, c, ns)
+        except bs.Stop as e:
+            return blocked(bs, str(e))
+        total += n
+        # A lecture and its lab share a code and a folder: one line per course.
+        per_code[c["code"]] = per_code.get(c["code"], 0) + n
+    if not apply:
+        for code, n in per_code.items():
+            print(f"  {code:<10} {n} new file(s)")
+    if not apply:
+        print(f"{total} file(s) to pull. Nothing written: rerun with --apply.")
+    else:
+        print(f"Pulled {total} file(s). Rerunning only fetches what's new.")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(prog="chewbacca usc", add_help=True)
-    ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup"])
+    ap.add_argument("cmd", nargs="?", default="today", choices=["today", "setup", "lockin"])
+    ap.add_argument("--apply", action="store_true", help="lockin: write the ledger and pull files")
+    ap.add_argument("--out", default=str(Path(os.environ.get("COURSEWORK_DIR") or Path.home() / "coursework") / "slides"),
+                    help="lockin: where lecture files go")
+    ap.add_argument("--days", type=int, default=120, help="lockin: how far ahead to read the calendar")
     ap.add_argument("--hall", choices=HALLS)
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args()
     if a.cmd == "setup":
         return setup()
+    if a.cmd == "lockin":
+        return lockin(a.apply, Path(a.out).expanduser(), a.days)
     cfg = load_config()
     if a.hall:
         cfg["hall"] = a.hall

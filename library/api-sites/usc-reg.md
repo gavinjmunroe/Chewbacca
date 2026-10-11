@@ -9,16 +9,7 @@ Log in with: `chewbacca api login usc-reg`, which imports from whichever Chrome 
 - schedule(term) -> per course: course, sectionIds[], sections[], types[], units[], seats[], times[], days[], instructors[], locations[]
 - courseBin(term) -> same fields as schedule, read from myCourseBin
 
-term is the USC term code, YYYY then 1 spring, 2 summer, 3 fall (20271 is Spring 2027), and `usc-fees registeredTerms` lists the student's own. The ops below, pinned to one term each, came first and still work; new callers pass term.
-
-- registrationAppointmentFall2026() -> term, begins, restrictions[]
-- registrationAppointmentSpring2027() -> term, begins, restrictions[]
-- holdsFall2026() -> [{text}] (each line of the Restrictions notice; [] when the term has none)
-- holdsSpring2027() -> [{text}]
-- scheduleFall2026() -> per course: course, sectionIds[], sections[], types[], units[], seats[], times[], days[], instructors[], locations[]
-- scheduleSpring2027() -> same fields as scheduleFall2026
-- courseBinFall2026() -> same fields as scheduleFall2026, read from myCourseBin
-- courseBinSpring2027() -> same fields as scheduleFall2026
+term is the USC term code, YYYY then 1 spring, 2 summer, 3 fall (20271 is Spring 2027), and `usc-fees registeredTerms` lists the student's own. The eight ops pinned to Fall 2026 and Spring 2027 that came first were removed on 2026-10-10 once these took a term.
 
 Caveats observed on 2026-10-09:
 

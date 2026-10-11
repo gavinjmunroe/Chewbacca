@@ -75,11 +75,29 @@ def names_from_setup(text: str) -> list[str]:
     return [n for n in found if not (n in seen or seen.add(n))]
 
 
+STUB_MARK = b"# Chewbacca control. Installed by start.sh."
+
+
+def is_start_stub(path: Path) -> bool:
+    """start.sh's six-verb `chewbacca` stub, the one file this may replace.
+
+    Every start.sh install had it at ~/.local/bin/chewbacca and setup never
+    linked the real CLI over it, so `chewbacca usc` printed stub help. It is
+    ours, carries a fixed marker, and does nothing the real CLI doesn't.
+    """
+    try:
+        return path.is_file() and not path.is_symlink() and STUB_MARK in path.read_bytes()[:400]
+    except OSError:
+        return False
+
+
 def sort_tools(repo: Path, live: Path, names: list[str]) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {"linked": [], "missing": [], "absent": []}
     for name in names:
         dst = live / name
-        if dst.exists() or dst.is_symlink():
+        if is_start_stub(dst) and (repo / "bin" / name).is_file():
+            out["missing"].append(name)
+        elif dst.exists() or dst.is_symlink():
             out["linked"].append(name)
         elif (repo / "bin" / name).is_file():
             out["missing"].append(name)
@@ -142,6 +160,14 @@ def main(argv: list[str] | None = None) -> int:
         for name in state["missing"]:
             dst = live / name
             # Re-check right before writing: another session may have linked it.
+            if is_start_stub(dst):
+                tmp = live / f".{name}.stub-{os.getpid()}"
+                if tmp.is_symlink() or tmp.exists():
+                    tmp.unlink()
+                os.symlink(link_root / "bin" / name, tmp)
+                os.replace(tmp, dst)
+                made.append(name)
+                continue
             if dst.exists() or dst.is_symlink():
                 continue
             os.symlink(link_root / "bin" / name, dst)

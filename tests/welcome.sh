@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# chewbacca welcome: the five tappable questions after install, and what each
+# chewbacca welcome: the six tappable questions after install, and what each
 # answer writes. Runs on the stock macOS Python, because a fresh Mac has no
 # other one. Caleb's bar, 2026-10-09: "My grandma should be able to use this."
 set -u
@@ -58,6 +58,31 @@ p = SourceFileLoader("p", root + "/bin/chewbacca-permissions").load_module()
 known = {n[1] for n in p.SETS["chewbacca"]}
 assert all(set(g["permissions"]) <= known for g in w.GOALS.values())
 PYEOF
+
+# A USC student. Detected from a Chrome profile's cookie hosts (no values, no
+# Keychain), so skipping the question still lands on the USC path, and the
+# first thing offered is their own classes plus the free-Codex step.
+W questions | "$PY" -c 'import json,sys; assert json.load(sys.stdin)["detected"]["school"] is None' \
+  && pass "no Chrome, no school guessed" || bad "a school was detected on a Mac with no Chrome"
+mkdir -p "$T/chrome/Profile 3"
+"$PY" -c 'import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute("create table cookies(host_key text, name text)"); c.execute("insert into cookies values (?,?)", ("brightspace.usc.edu","d2lSessionVal")); c.commit()' "$T/chrome/Profile 3/Cookies"
+export CHEWBACCA_CHROME_DIR="$T/chrome"
+W questions | "$PY" -c 'import json,sys; d=json.load(sys.stdin); assert d["detected"]["school"]=="usc"; assert all(len(s)<=2 for s in d["screens"])' \
+  && pass "a Chrome profile that used Brightspace is detected as USC" || bad "USC not detected"
+out="$(W save --name Tommy --goals writing --comfort comfortable --tone short --confirm always --school skip)"
+printf '%s' "$out" | "$PY" -c '
+import json, sys
+d = json.load(sys.stdin)
+s = d["school"]
+assert d["first_try"][0] == "I need to lock in on school", d["first_try"]
+assert s["connect_command"] == "chewbacca usc lockin"
+assert s["codex_page"].startswith("https://itservices.usc.edu/"), s
+assert "Always Allow" in " ".join(d["primers"])
+assert not any(w in json.dumps(d) for w in ("/sy" + "llabus", "/lock"))
+' && pass "USC: lock in is the first try, the free Codex step points at usc.edu, the Keychain prompt is primed" \
+  || bad "USC welcome result: $out"
+grep -q "I'm a USC student" "$T/brain/YOU.md" && pass "being a USC student becomes a standing rule" || bad "USC rule missing"
+unset CHEWBACCA_CHROME_DIR
 
 grep -q 'welcome skill' "$ROOT/start.sh" && [ -f "$ROOT/skills/welcome/SKILL.md" ] \
   && pass "the install hands off to the welcome" || bad "start.sh does not start the welcome"

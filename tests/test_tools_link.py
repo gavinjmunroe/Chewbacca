@@ -46,7 +46,10 @@ class Names(unittest.TestCase):
 
     def test_real_setup_parses(self):
         names = tl.names_from_setup((ROOT / "setup.sh").read_text())
-        for expected in ("gtme-reply", "text-command", "people", "peekaboo", "hud"):
+        # chewbacca itself: start.sh's stub was never replaced, so every fresh
+        # install's `chewbacca usc` printed stub help (2026-10-10).
+        for expected in ("gtme-reply", "text-command", "people", "peekaboo", "hud", "chewbacca",
+                         "coursework", "brightspace", "brightspace-sync"):
             self.assertIn(expected, names)
         for name in names:
             self.assertTrue((ROOT / "bin" / name).exists(), f"setup links {name} but bin/{name} is missing")
@@ -84,6 +87,24 @@ class Apply(unittest.TestCase):
 
             again = self.run_tool(repo, live, "apply")
             self.assertEqual(again["linked_now"], [])
+
+    def test_start_sh_stub_is_replaced_and_nothing_else(self):
+        with tempfile.TemporaryDirectory() as raw:
+            tmp = Path(raw)
+            repo, live = tmp / "repo", tmp / "live"
+            (repo / "bin").mkdir(parents=True)
+            live.mkdir()
+            for name in ("alpha", "beta"):
+                (repo / "bin" / name).write_text("#!/bin/sh\n")
+            # The exact header start.sh writes, read from start.sh itself.
+            header = next(l for l in (ROOT / "start.sh").read_text().splitlines()
+                          if l.startswith("# Chewbacca control."))
+            (live / "alpha").write_text("#!/bin/bash\n" + header + "\n")
+            (live / "beta").write_text("#!/bin/bash\n# my own beta\n")
+            done = self.run_tool(repo, live, "apply")
+            self.assertIn("alpha", done["linked_now"])
+            self.assertTrue((live / "alpha").is_symlink())
+            self.assertEqual((live / "beta").read_text(), "#!/bin/bash\n# my own beta\n")
 
 
 if __name__ == "__main__":

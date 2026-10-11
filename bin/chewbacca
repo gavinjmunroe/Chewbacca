@@ -87,7 +87,7 @@ COMMANDS=(
   "groupme|GroupMe group chats and DMs, read inside your own signed-in GroupMe web tab"
   "chat|one inbox for every chat network: local Matrix bridges (up, down, status, link)"
   "office|Microsoft 365 mail, calendar, files, docs and Teams, read through Graph after one Microsoft device-code sign-in"
-  "usc|a USC student's day: due this week, the dining hall, events (setup signs in)"
+  "usc|a USC student's day; lockin pulls your courses, lecture files and what's due first"
   "google|find and read Google Docs, Sheets and Slides as text"
   "docs|local Word, Excel and PowerPoint files through genoffice: read, preview an edit, apply it"
   "clay|any Clay read without opening Clay, by the fastest surface (clay ops)"
@@ -178,7 +178,7 @@ whatsapp)
   exec bash "$ROOT/bin/chewbacca-whatsapp" "$@"
   ;;
 welcome|onboard|hello)
-  # The first conversation after install: five tappable questions whose
+  # The first conversation after install: six tappable questions whose
   # answers personalize every later reply. See skills/welcome/SKILL.md.
   shift
   exec python3 "$ROOT/bin/chewbacca-welcome" "$@"
@@ -309,6 +309,11 @@ update)
     python3 -I "$ROOT/tools/kit_runtime.py" update --fetch --link-bin "$HOME/.local/bin" || exit 1
     run setup.sh "$@"
     exit $?
+  fi
+  # A start.sh install is a tarball with no .git: start.sh is its updater,
+  # the same thing the stub this CLI replaced used to run.
+  if [ ! -e "$ROOT/.git" ] && [ -f "$ROOT/start.sh" ]; then
+    exec bash "$ROOT/start.sh" "$@"
   fi
   BEFORE="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo none)"
   git -C "$ROOT" pull --ff-only || {

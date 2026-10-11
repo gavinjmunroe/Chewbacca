@@ -97,9 +97,33 @@ class Forbidden(Exception):
     pass
 
 
-def chrome_cookies():
-    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+def aes_cbc_decrypt(key, data):
+    """Chrome's v10 cookie cipher, AES-128-CBC with an IV of 16 spaces.
 
+    The `cryptography` package is not on a fresh Mac: /usr/bin/python3 ships
+    without it, so on any student's machine but the one this was written on
+    every read died with ImportError before it reached Brightspace. macOS
+    ships /usr/bin/openssl (LibreSSL), which does the same decrypt, so that is
+    the fallback rather than asking a student to pip install anything.
+    """
+    try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    except ImportError:
+        openssl = "/usr/bin/openssl" if os.path.exists("/usr/bin/openssl") else "openssl"
+        return subprocess.run(
+            [openssl, "enc", "-d", "-aes-128-cbc", "-K", key.hex(), "-iv", (b" " * 16).hex(), "-nopad"],
+            input=data, capture_output=True, check=True).stdout
+    dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
+    return dec.update(data) + dec.finalize()
+
+
+class NoSession(Exception):
+    pass
+
+
+def chrome_cookies():
+    if not COOKIE_DB.is_file():
+        raise NoSession()
     with tempfile.TemporaryDirectory() as tmp:
         copy = Path(tmp) / "Cookies"
         shutil.copy(COOKIE_DB, copy)
@@ -107,14 +131,16 @@ def chrome_cookies():
             "select name, encrypted_value from cookies"
             " where host_key in ('brightspace.usc.edu', '.brightspace.usc.edu')"
         ).fetchall()
-    secret = subprocess.check_output(
-        ["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]
-    ).strip()
+    # Before the Keychain read: no Brightspace cookies anywhere is a plain
+    # answer, never a Keychain prompt for cookies that aren't there.
+    if not rows:
+        raise NoSession()
+    secret = (os.environ.get("CHEWBACCA_CHROME_SAFE_KEY", "").encode() or subprocess.check_output(
+        ["security", "find-generic-password", "-w", "-s", "Chrome Safe Storage"]).strip())
     key = hashlib.pbkdf2_hmac("sha1", secret, b"saltysalt", 1003, 16)
     cookies = {}
     for name, blob in rows:
-        dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
-        raw = dec.update(blob[3:]) + dec.finalize()
+        raw = aes_cbc_decrypt(key, blob[3:])
         raw = raw[: -raw[-1]]
         # Newer Chrome prefixes a 32-byte SHA256 of the host. Every d2l cookie
         # seen on 2026-10-03 had it, but older rows may not.
@@ -124,6 +150,23 @@ def chrome_cookies():
         except UnicodeDecodeError:
             cookies[name] = raw[32:].decode()
     return cookies
+
+
+def has_session_cookies():
+    """True when the picked profile holds any Brightspace cookie at all."""
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            copy = Path(tmp) / "Cookies"
+            shutil.copy(COOKIE_DB, copy)
+            return bool(sqlite3.connect(copy).execute(
+                "select 1 from cookies where host_key in"
+                " ('brightspace.usc.edu', '.brightspace.usc.edu') limit 1").fetchone())
+    except (OSError, sqlite3.Error):
+        return False
+
+
+NO_SESSION = ("BLOCKED: no Chrome profile on this Mac has signed in to Brightspace yet. "
+              "Sign in once at https://brightspace.usc.edu in Chrome, then rerun.")
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -165,7 +208,10 @@ class Client:
                 raise KeyError(f"fixture has no {path}")
             return self.fixture[path]
         if self.cookies is None:
-            self.cookies = chrome_cookies()
+            try:
+                self.cookies = chrome_cookies()
+            except NoSession:
+                sys.exit(NO_SESSION)
         try:
             return fetch(path, self.cookies)
         except Expired:

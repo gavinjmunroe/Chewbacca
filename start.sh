@@ -368,6 +368,9 @@ ok "$HOME_DIR"
 # `chewbacca` on PATH, so update, doctor, and uninstall are one word each and
 # nobody has to remember a path or the word "repo".
 mkdir -p "$BIN_DIR"
+# setup.sh links the real CLI here, so on a rerun this path is a symlink into
+# the kit, and `cat >` would write the stub through it over bin/chewbacca.
+rm -f "$BIN_DIR/chewbacca"
 cat > "$BIN_DIR/chewbacca" <<'LAUNCHER'
 #!/bin/bash
 # Chewbacca control. Installed by start.sh.

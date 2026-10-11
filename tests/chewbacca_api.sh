@@ -189,7 +189,11 @@ for prof, seen in (("Profile 1", 200), ("Profile 2", 100)):
     db.commit()
 PY
   : > "$T/calls"
-  CHEWBACCA_CHROME_DIR="$T/chrome" CHEWBACCA_CHROME_SAFE_KEY=fakekey \
+  # The import itself runs with `cryptography` unimportable, the way it is on
+  # a fresh Mac's /usr/bin/python3: it must decrypt through openssl instead.
+  mkdir -p "$T/nocrypto/cryptography"
+  echo 'raise ImportError("no cryptography on a fresh Mac")' > "$T/nocrypto/cryptography/__init__.py"
+  CHEWBACCA_CHROME_DIR="$T/chrome" CHEWBACCA_CHROME_SAFE_KEY=fakekey PYTHONPATH="$T/nocrypto" \
     FAKE_KEEP="$T/kept" bash -c '
       cat > "'"$T"'/bin/api-anything" <<'"'"'SH'"'"'
 #!/bin/bash
@@ -204,6 +208,7 @@ SH
   if [ -f "$T/kept.microsoftonline.com.json" ]; then
     grep -q OtherMsCookie "$T/kept.microsoftonline.com.json" && no "an unlisted Microsoft cookie was imported"
     grep -q ESTSAUTH "$T/kept.microsoftonline.com.json" || no "the Entra session cookie was dropped"
+    grep -q '"fake-ESTSAUTH"' "$T/kept.microsoftonline.com.json" || no "cookies did not decrypt without the cryptography package"
   else
     no "no identity-provider cookie file reached the engine"
   fi

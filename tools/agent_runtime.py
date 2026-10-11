@@ -72,6 +72,18 @@ def registry():
     return data
 
 
+def app_patterns(spec):
+    """The spec's bundled-binary globs. CHEWBACCA_APPLICATIONS_DIR stands in for
+    /Applications so a test can fake an installed ChatGPT.app."""
+    apps = os.environ.get('CHEWBACCA_APPLICATIONS_DIR')
+    out = []
+    for pattern in spec.get('app_binaries', []):
+        if apps and pattern.startswith('/Applications/'):
+            pattern = apps.rstrip('/') + pattern[len('/Applications'):]
+        out.append(os.path.expanduser(pattern))
+    return out
+
+
 def locate_binary(spec):
     """The runtime's executable: PATH first, then the copies apps bundle.
 
@@ -86,8 +98,8 @@ def locate_binary(spec):
     if found:
         return found
     import glob
-    for pattern in spec.get('app_binaries', []):
-        matches = [m for m in glob.glob(os.path.expanduser(pattern)) if os.access(m, os.X_OK)]
+    for pattern in app_patterns(spec):
+        matches = [m for m in glob.glob(pattern) if os.access(m, os.X_OK)]
         if matches:
             return max(matches, key=os.path.getmtime)
     return None
@@ -601,7 +613,7 @@ def status(name):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=('list', 'plan', 'setup', 'status', 'export', 'launch', 'remove', 'connect', 'which'))
+    parser.add_argument('command', choices=('list', 'plan', 'setup', 'status', 'export', 'launch', 'remove', 'connect', 'which', 'shims'))
     parser.add_argument('--new-only', action='store_true', help='connect: only hosts not connected before')
     parser.add_argument('--quiet', action='store_true', help='connect: print nothing unless a host was connected')
     parser.add_argument('--runtime', default='auto')
@@ -631,14 +643,20 @@ def main():
         if len(names) == 1:
             # Skip our own shim on PATH, or it would exec itself forever.
             import glob
-            for pattern in spec.get('app_binaries', []):
-                matches = [m for m in glob.glob(os.path.expanduser(pattern)) if os.access(m, os.X_OK)]
+            for pattern in app_patterns(spec):
+                matches = [m for m in glob.glob(pattern) if os.access(m, os.X_OK)]
                 if matches:
                     found = max(matches, key=os.path.getmtime)
                     break
         if not found:
             raise ValueError('no bundled copy of ' + args.runtime + ' found')
         print(found)
+        return 0
+    elif args.command == 'shims':
+        # setup.sh asks this before deciding a Mac has no agent: Codex from a
+        # ChatGPT or Codex app is a real agent with no `codex` on PATH.
+        for path in terminal_shims():
+            print(path)
         return 0
     elif args.command == 'connect':
         output = connect(args.new_only)

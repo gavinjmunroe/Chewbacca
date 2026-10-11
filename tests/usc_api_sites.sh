@@ -37,6 +37,12 @@ for name in ("registrationAppointment", "holds", "schedule", "courseBin"):
         bad.append(f"usc-reg.{name} has no term slot, so the engine can't tell which term answered")
     if o.get("minTier") != 3 or o.get("readOnly") is not True:
         bad.append(f"usc-reg.{name} must stay read-only at tier 3 (plain HTTP answers for the last selected term)")
+# The pinned copies were removed once the term ops existed (2026-10-10); one
+# coming back is a Fall-2026-only op a student would call in Spring.
+import re
+pinned = [n for n in reg if re.search(r"(Spring|Summer|Fall)\d{4}$", n)]
+if pinned:
+    bad.append(f"usc-reg has term-pinned ops again: {pinned}")
 # Localist search without a days window answers for today only: "music",
 # "football" and "concert" all came back [] on 2026-10-10.
 ev = {o["name"]: o for o in json.load(open(f"{S}/usc-events.json"))["operations"]}["searchEvents"]

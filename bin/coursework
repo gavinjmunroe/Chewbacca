@@ -305,7 +305,12 @@ function loadLedger() {
   if (fs.existsSync(semesterFile)) {
     semester = read(semesterFile) || {};
   }
-  if (Number.isFinite(Number(semester.assume_done_after_days))) {
+  if (
+    semester.assume_done_after_days !== undefined &&
+    semester.assume_done_after_days !== null &&
+    semester.assume_done_after_days !== "" &&
+    Number.isFinite(Number(semester.assume_done_after_days))
+  ) {
     GRACE_DAYS = Number(semester.assume_done_after_days);
   }
   const courses = [];
@@ -376,17 +381,18 @@ function iso(d) {
 
 // ── Model ────────────────────────────────────────────────────────────────────
 
-// Caleb's rule, set 2026-09-20: he either does a thing within two days of its
-// deadline or he does not do it at all. So a `todo` that is further past due
-// than GRACE_DAYS stops being an action item and is reported as `assumed-done`.
-// It is deliberately a separate word from `done`: `done` means somebody saw it
-// land, `assumed-done` means the window closed. Override per semester with
-// `assume_done_after_days` in semester.yml.
-let GRACE_DAYS = 2;
+// An opt-in rule, first set by Caleb on 2026-09-20: he either does a thing
+// within two days of its deadline or he does not do it at all. With
+// `assume_done_after_days: N` in semester.yml, a `todo` more than N days past
+// due stops being an action item and is reported as `assumed-done`, a separate
+// word from `done`: `done` means somebody saw it land, `assumed-done` means the
+// window closed. Off unless a semester asks for it (2026-10-10): a stranger's
+// ledger must never quietly drop an overdue item they may still owe.
+let GRACE_DAYS = null;
 
 function closeStatus(d, due) {
   const status = (d.status || "todo").toLowerCase();
-  if (status !== "todo" || !due) return status;
+  if (status !== "todo" || !due || GRACE_DAYS === null) return status;
   return daysBetween(today(), due) < -GRACE_DAYS ? "assumed-done" : status;
 }
 

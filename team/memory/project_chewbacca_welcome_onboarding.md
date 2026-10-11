@@ -14,3 +14,5 @@ Rules came from practitioner teardowns (Appcues on Headspace and Duolingo, Reven
 Same night: doctor stopped failing a personal install for git identity, gh, prettier and a brain folder with no git repo (tests/doctor_personal.sh). Those four red lines were the last thing a non-developer saw at the end of setup.
 
 Still not grandma-proof, on purpose: installing needs a pasted Terminal command and the repo is private. Caleb's call, 2026-10-09: B2B first, so the repo install stays ([[project_chewbacca_refactor_waits_on_b2b_b2c]]). Permission cards follow [[feedback_onboarding_like_anarlog]].
+
+Sixth question, 2026-10-10: "Are you a student?" (USC, another school, no) shares the safety screen. `detected.school` is `usc` when a Chrome profile has Brightspace cookies; a USC answer makes "I need to lock in on school" the first try, adds the free USC Codex line and a Keychain primer, and hands off to `chewbacca usc lockin`.

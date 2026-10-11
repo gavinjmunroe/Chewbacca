@@ -745,6 +745,13 @@ if should_run coding-agent; then
   # nothing else, on machines this kit does not otherwise run on.
   CLAUDE_CODE_INSTALLER="${CHEWBACCA_CLAUDE_CODE_INSTALLER:-https://claude.ai/install.sh}"
   section "Your agent"
+  # Codex that came inside ChatGPT.app or Codex.app has no `codex` on PATH, so
+  # a USC student with free ChatGPT Edu Codex looked agentless and got Claude
+  # Code plus a paid-plan warning. Put a shim on PATH first (2026-10-10).
+  if ! command -v claude &>/dev/null && ! command -v codex &>/dev/null; then
+    python3 "$SCRIPT_DIR/tools/agent_runtime.py" shims >/dev/null 2>&1 || true
+    export PATH="$HOME/.local/bin:$PATH"
+  fi
   for a in claude codex gemini; do
     if command -v "$a" &>/dev/null; then KIT_AGENT="$a"; break; fi
   done
@@ -1181,6 +1188,13 @@ if [ -f "$SCRIPT_DIR/bin/kits" ]; then
   log "kits installed to ~/.local/bin/"
 fi
 
+# The real `chewbacca` CLI. start.sh writes a six-verb stub (update, doctor,
+# setup, uninstall, where, version) so a half-finished install still has a way
+# back, and nothing ever replaced it: on every fresh install `chewbacca usc`,
+# `chewbacca api` and the `chewbacca welcome questions` start.sh hands the
+# agent printed the stub's help instead (found 2026-10-10 walking the USC
+# student path from a scratch HOME). ln -sfn replaces the stub file.
+link_tool chewbacca
 if [ -f "$SCRIPT_DIR/bin/coursework" ]; then
   link_tool coursework
   COURSEWORK_HOME="${COURSEWORK_DIR:-$HOME/coursework}"

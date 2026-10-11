@@ -344,6 +344,7 @@ if group "coursework"; then
   check  "the ics file has an event" grep -q "BEGIN:VEVENT" "$TMP/out.ics"
   expect "check finds the deliberate gap" "no attendance budget" "${C[@]}" check
   exits  "check exits non-zero when the ledger has gaps" 1 "${C[@]}" check
+  check  "assumed-done is opt-in per semester" bash "$ROOT/tests/coursework_assume_done.sh" "$ROOT"
 fi
 
 # ── doctor ────────────────────────────────────────────────────────────────────
@@ -732,6 +733,16 @@ if group "installer"; then
   # reminder, and a scan must not download anything without --apply.
   check  "brightspace-sync lists each item once and scans without writing" \
     bash "$ROOT/tests/brightspace_sync.sh" "$ROOT"
+
+  # 2026-10-10: the whole USC student path from a scratch HOME, for a student
+  # with other courses than Caleb's: install links the real CLI, welcome finds
+  # USC, lockin lists courses and pulls files, coursework due reads the result.
+  check  "a fresh USC student goes from install to slides and a due list" \
+    bash "$ROOT/tests/usc_student_e2e.sh" "$ROOT"
+  check  "tools_link links new tools and replaces only start.sh's stub" \
+    python3 "$ROOT/tests/test_tools_link.py"
+  check  "usc api sites take a term and none is pinned to one" \
+    bash "$ROOT/tests/usc_api_sites.sh" "$ROOT"
 
   # On 2026-09-30 a discussion sheet quoted bell hooks from model memory because
   # the reading was never on disk. It must flag that, and not count his own post.
@@ -1290,7 +1301,7 @@ if group "hooks"; then
   check "machine-budget refuses fan-outs on a busy Mac, agent-nice keeps agents at nice 10" bash "$ROOT/tests/machine_budget.sh"
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   check "hook modules import on the stock macOS Python" bash "$ROOT/tests/stock_python_imports.sh"
-  check "welcome: five tappable questions personalize the brain" bash "$ROOT/tests/welcome.sh"
+  check "welcome: six tappable questions personalize the brain" bash "$ROOT/tests/welcome.sh"
   check "doctor grades a personal install as personal" bash "$ROOT/tests/doctor_personal.sh"
   # A hook that outlives its watchdog ends with exit 0, never SIGKILL's 137.
   wd="$(mktemp -d)"

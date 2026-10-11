@@ -34,9 +34,13 @@ grep -q 'for a in claude codex gemini; do' "$ROOT/setup.sh" \
 BASE=/usr/bin:/bin:/usr/sbin:/sbin
 printf '#!/bin/sh\nmkdir -p "$HOME/.local/bin"; printf "#!/bin/sh\\necho claude\\n" > "$HOME/.local/bin/claude"; chmod +x "$HOME/.local/bin/claude"\n' > "$FAKE/works.sh"
 printf '#!/bin/sh\nexit 1\n' > "$FAKE/fails.sh"
+# CHEWBACCA_APPLICATIONS_DIR stands in for /Applications, empty unless a case
+# fakes an app, so a ChatGPT.app on the Mac running this never leaks in.
+mkdir -p "$FAKE/no-apps"
 run_agent() {  # home, path, installer, [profile]
   mkdir -p "$1"
   HOME="$1" PATH="$2" CHEWBACCA_CLAUDE_CODE_INSTALLER="file://$FAKE/$3" \
+    CHEWBACCA_APPLICATIONS_DIR="${APPS:-$FAKE/no-apps}" \
     bash "$ROOT/setup.sh" --only coding-agent --profile "${4:-personal}" --name CI 2>&1 | sed 's/\x1b\[[0-9;]*m//g'
 }
 
@@ -44,6 +48,17 @@ run_agent() {  # home, path, installer, [profile]
 out="$(run_agent "$FAKE/h-codex" "$FAKE:$BASE" works.sh)"
 echo "$out" | grep -q "using the agent already installed: codex" || fail "with codex on PATH setup.sh did not use it"
 [ -e "$FAKE/h-codex/.local/bin/claude" ] && fail "installed Claude Code on a Mac that already runs Codex"
+
+# Codex only inside ChatGPT.app, nothing on PATH: the free USC ChatGPT Edu
+# case. It must be found and shimmed, never answered with a Claude install
+# and a paid-plan warning (2026-10-10).
+mkdir -p "$FAKE/apps/ChatGPT.app/Contents/Resources"
+printf '#!/bin/sh\necho codex\n' > "$FAKE/apps/ChatGPT.app/Contents/Resources/codex"
+chmod +x "$FAKE/apps/ChatGPT.app/Contents/Resources/codex"
+out="$(APPS="$FAKE/apps" run_agent "$FAKE/h-app" "$BASE" works.sh)"
+echo "$out" | grep -q "using the agent already installed: codex" || fail "Codex inside ChatGPT.app was not used: $out"
+[ -e "$FAKE/h-app/.local/bin/claude" ] && fail "installed Claude Code on a Mac whose ChatGPT app carries Codex"
+[ -x "$FAKE/h-app/.local/bin/codex" ] || fail "no codex shim on PATH for the app-bundled Codex"
 
 # Bare Mac: Claude Code is installed, and the plan is named before it is.
 out="$(run_agent "$FAKE/h-bare" "$BASE" works.sh)"

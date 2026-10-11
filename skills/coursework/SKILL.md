@@ -1,6 +1,6 @@
 ---
 name: coursework
-description: Run the user's semester from a machine-readable ledger built out of their syllabi. Use when they mention a class, an assignment, an exam, a deadline, a professor, a reading, a grade, attendance, or a syllabus; when they ask what is due, what to work on, or whether they can miss a class; when they hand over a syllabus PDF; and before helping with any graded work, because each course sets its own rules about what help is allowed.
+description: Run the user's semester from a machine-readable ledger built out of their syllabi and their own Brightspace. Use when they say they need to lock in on school, want their slides or lectures pulled, are behind in class, or mention a class, an assignment, an exam, a deadline, a professor, a reading, a grade, attendance, or a syllabus; when they ask what is due, what to work on, or whether they can miss a class; when they hand over a syllabus PDF; and before helping with any graded work, because each course sets its own rules about what help is allowed.
 requires: [coursework]
 ---
 
@@ -22,9 +22,37 @@ Two failure modes to design against, both worse than being slow:
    prompt disclosure, allowed for ideation but not for the submitted artifact.
    Getting this wrong is an academic integrity referral, not a style problem.
 
-## Lecture slides: one command, no searching
+## "I need to lock in on school": the first run, for any USC student
 
-"Pull the slides", "get the lectures", "lock in on <class>" means:
+Run this yourself, first, before reading anything on disk:
+
+```bash
+chewbacca usc lockin
+```
+
+It reads their own Brightspace enrollment for the current term with the
+session already in Chrome, and prints their courses, what's due first (with
+the one to start on), which ledger files it would create, and how many lecture
+files each course has to pull. It writes nothing. Show them that, then do the
+rest in the background, because it waits 4 to 8 seconds between requests:
+
+```bash
+chewbacca jobs submit --net --title "lock in" -- chewbacca usc lockin --apply
+```
+
+`--apply` creates `~/coursework/courses/<code>.yml` for any course with no
+ledger file (never overwrites one), seeded with every dated Brightspace
+calendar item and its source, and pulls every visible file into
+`~/coursework/slides/<CODE>/`. A rerun only fetches what's new. Seeded files
+have no AI policy until the syllabus is read, so treat every course as banned
+until it is, and offer to read the syllabus from the slides folder.
+
+It works on a stranger's Mac as is: Chrome plus a Brightspace sign-in. No api
+engine, no `pip install`, no profile to name.
+
+## Lecture slides for one course
+
+"Pull the slides for <class>" means:
 
 ```bash
 brightspace-sync files "<course code>" --out ~/coursework/slides --apply
@@ -32,18 +60,14 @@ brightspace-sync files "<course code>" --out ~/coursework/slides --apply
 
 It walks the course's whole Brightspace content tree, downloads every visible
 file into `~/coursework/slides/<CODE>/`, and keeps a manifest so a rerun only
-fetches what is new. Run it in the background for every course asked about at
-once, then read what landed. Never hunt the disk first: on 2026-10-10 three
-minutes went to `find` across `~` and turned up a partial ACAD 324 folder and
-four BISC chapter notes, while the full set was one command away.
+fetches what is new. Never hunt the disk first: on 2026-10-10 three minutes
+went to `find` across `~` and turned up a partial ACAD 324 folder and four
+BISC chapter notes, while the full set was one command away.
 
-Any USC student's Mac works as is: the tools pick whichever Chrome profile used
-Brightspace last and read that student's own enrollments. On a 403, run
-`brightspace whoami` first. If it says Chrome stopped saving cookies, the
-student is signed in and only needs to quit and reopen Chrome. Only a real
-sign-out opens Brightspace, and that's the one page they see. Never open a
-tab to "renew" anything. After they sign in, run `chewbacca api login
-brightspace` and rerun.
+On a 403 or `BLOCKED:`, run `brightspace whoami` first. If it says Chrome
+stopped saving cookies, the student is signed in and only needs to quit and
+reopen Chrome. Only a real sign-out opens Brightspace, and that's the one page
+they see. Never open a tab to "renew" anything.
 
 ## The ledger
 
@@ -171,6 +195,8 @@ The ledger goes stale in exactly three ways, and all three are silent:
   mentions a change, update the ledger in the same turn and set `source` to
   "announced in class YYYY-MM-DD".
 - **Work gets done** and stays marked `todo`, so `due` keeps shouting about it.
+  (A semester can opt in to `assume_done_after_days: N` in semester.yml, which
+  reports anything N days past due as `assumed-done`. It is off by default.)
   Flip `status: done` as things land. **Before calling anything overdue, check
   the LMS rather than asking.** Most systems will say, per student, whether a
   thing was submitted and exactly when; `references/lms-ingest.md` has the D2L

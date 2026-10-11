@@ -51,7 +51,38 @@ class Stop(Exception):
     pass
 
 
+def chrome_cookie_header():
+    """The student's live d2l cookies, straight from Chrome, the way bin/brightspace reads them.
+
+    The api-anything session file is a 12 hour snapshot that only exists after
+    `chewbacca api login brightspace`, and that command first builds a Node
+    engine from GitHub. On a fresh Mac neither had happened, so the first
+    "pull my slides" stopped at "no Brightspace session" while the student had
+    Brightspace open in Chrome. Chrome's own cookie file is always the newest
+    copy, so it goes first and the snapshot is the fallback.
+    """
+    if HOST != "brightspace.usc.edu" or os.environ.get("BRIGHTSPACE_NO_CHROME"):
+        return None
+    try:
+        sys.dont_write_bytecode = True  # never litter the kit snapshot with .pyc
+        import importlib.machinery
+        import importlib.util
+        here = Path(__file__).resolve().parent / "brightspace"
+        loader = importlib.machinery.SourceFileLoader("brightspace_reader", str(here))
+        spec = importlib.util.spec_from_loader("brightspace_reader", loader)
+        mod = importlib.util.module_from_spec(spec)
+        loader.exec_module(mod)
+        jar = mod.chrome_cookies()
+    except Exception:
+        return None
+    return "; ".join(f"{k}={v}" for k, v in jar.items()) or None
+
+
 def cookie_header(host=HOST):
+    if host == HOST and "BRIGHTSPACE_SESSION" not in os.environ:
+        live = chrome_cookie_header()
+        if live:
+            return live
     session = SESSION if host == HOST else SESSION.parent / f"{host}.json"
     # `chewbacca api login brightspace` saves the session under the site name,
     # not the host, and it's the import that holds: a plain profile import loses
@@ -59,12 +90,25 @@ def cookie_header(host=HOST):
     if not session.exists() and host == HOST and "BRIGHTSPACE_SESSION" not in os.environ:
         session = SESSION.parent / "brightspace.json"
     if not session.exists():
-        raise Stop(f"no Brightspace session. Run: chewbacca api login brightspace")
+        raise Stop(f"no Brightspace session. Sign in once at https://{HOST} in Chrome, then rerun "
+                   f"(`brightspace whoami` says what it sees)")
     jar = json.load(open(session))["cookies"]
     return "; ".join(
         f"{c['name']}={c['value']}" for c in jar
         if host.endswith(c.get("domain", "").lstrip(".") or "\0")
     )
+
+
+class FixtureResponse:
+    def __init__(self, body, url):
+        self._body = body.encode() if isinstance(body, str) else json.dumps(body).encode()
+        self._url = url
+
+    def read(self):
+        return self._body
+
+    def geturl(self):
+        return self._url
 
 
 class Client:
@@ -81,6 +125,14 @@ class Client:
             time.sleep(left)
 
     def open(self, url):
+        if self.fixture is not None:
+            # Tests: a file download is served from the fixture like any read,
+            # keyed by the path after /d2l/api.
+            path = urllib.parse.urlparse(url).path.replace("/d2l/api", "", 1)
+            for k, v in self.fixture.items():
+                if path.startswith(k):
+                    return FixtureResponse(v, url)
+            raise Stop(f"fixture has no {path}")
         self._wait()
         req = urllib.request.Request(url, headers={"Cookie": self.cookie, "User-Agent": "Mozilla/5.0"})
         try:
@@ -88,12 +140,14 @@ class Client:
         except urllib.error.HTTPError as e:
             if e.code in (401, 403, 429):
                 raise Stop(f"HTTP {e.code} from {urllib.parse.urlparse(url).path}. Stopping. "
-                           f"If 401/403, sign in to {HOST} in Chrome and run: chewbacca api login brightspace")
+                           f"If 401/403, run `brightspace whoami`: it says whether Chrome only needs a restart "
+                           f"(signed in, cookies not saved) or a real sign-in")
             raise
         finally:
             self.last = time.time()
         if "/d2l/login" in resp.geturl() or "shibboleth" in resp.geturl():
-            raise Stop(f"session expired (redirected to sign-in). Sign in to {HOST} in Chrome, then run: chewbacca api login brightspace")
+            raise Stop(f"session expired (redirected to sign-in). Run `brightspace whoami` before asking "
+                       f"anyone to sign in: it says whether Chrome only needs a restart")
         return resp
 
     def json(self, path):
@@ -248,8 +302,12 @@ def cmd_links(client, a):
 
 
 def cmd_files(client, a):
-    c = pick(client, a.course)
-    since = dt.datetime.fromisoformat(a.since).replace(tzinfo=TZ) if a.since else None
+    sync_files(client, pick(client, a.course), a)
+
+
+def sync_files(client, c, a):
+    """Every visible file in course c into <a.out>/<CODE>/, mirroring the module tree."""
+    since = dt.datetime.fromisoformat(a.since).replace(tzinfo=TZ) if getattr(a, "since", None) else None
     out = Path(a.out).expanduser() / safe(c["code"])
     manifest_file = out / ".manifest.json"
     manifest = json.load(open(manifest_file)) if manifest_file.exists() else {}
@@ -259,7 +317,7 @@ def cmd_files(client, a):
             continue
         if since and t.get("LastModifiedDate") and local(t["LastModifiedDate"]) < since:
             continue
-        if a.from_chapter:
+        if getattr(a, "from_chapter", None):
             ch = re.search(r"\b(?:Chapter|Ch)\.?\s*(\d+)", t["Title"], re.I)
             keep = ch and int(ch[1]) >= a.from_chapter
             keep = keep or any(re.search(p, " / ".join(trail), re.I) for p in a.also)
@@ -272,15 +330,18 @@ def cmd_files(client, a):
         ext = Path(urllib.parse.unquote(t["Url"])).suffix
         dest = out.joinpath(*[safe(x) for x in trail]) / (safe(t["Title"]) + ext)
         if not a.apply:
-            print(f"would save  {dest.relative_to(out)}")
+            if not getattr(a, "quiet", False):
+                print(f"would save  {c['code']}/{dest.relative_to(out)}")
             continue
         resp = client.open(f"https://{HOST}/d2l/api/le/1.99/{c['id']}/content/topics/{t['TopicId']}/file")
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(resp.read())
         manifest[str(t["TopicId"])] = t.get("LastModifiedDate")
         json.dump(manifest, open(manifest_file, "w"))
-        print(f"saved       {dest.relative_to(out)}")
-    print(f"{len(picks)} files" + ("" if a.apply else " (dry run, pass --apply)"), file=sys.stderr)
+        print(f"saved       {c['code']}/{dest.relative_to(out)}")
+    if not getattr(a, "quiet", False):
+        print(f"{len(picks)} files" + ("" if a.apply else " (dry run, pass --apply)"), file=sys.stderr)
+    return len(picks)
 
 
 def srt_to_text(srt):

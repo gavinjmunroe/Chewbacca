@@ -251,7 +251,17 @@ login_from_profile() {
   if ! python3 - "$host" "$prefix" "$dir/cookies.json" "${CHEWIE_CHROME_PROFILE:-}" <<'PY'
 import hashlib, json, os, shutil, sqlite3, subprocess, sys, tempfile, time
 from pathlib import Path
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+def aes_cbc_decrypt(key, data):
+    # /usr/bin/python3 on a fresh Mac has no `cryptography`, so fall back to
+    # the openssl macOS ships (same helper as bin/brightspace).
+    try:
+        from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    except ImportError:
+        openssl = "/usr/bin/openssl" if os.path.exists("/usr/bin/openssl") else "openssl"
+        return subprocess.run([openssl, "enc", "-d", "-aes-128-cbc", "-K", key.hex(), "-iv", (b" " * 16).hex(), "-nopad"],
+                              input=data, capture_output=True, check=True).stdout
+    dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
+    return dec.update(data) + dec.finalize()
 hosts, prefix, out, profile = sys.argv[1:5]
 # "host:a|b|c" narrows one host to cookies whose names start with a, b or c.
 # login.microsoftonline.com carries his whole Microsoft 365 sign-in, so only
@@ -309,8 +319,7 @@ key = hashlib.pbkdf2_hmac("sha1", secret, b"saltysalt", 1003, 16)
 expires = int(time.time()) + 12 * 3600
 jar = []
 for hk, name, blob, path, secure, httponly, _ in rows:
-    dec = Cipher(algorithms.AES(key), modes.CBC(b" " * 16)).decryptor()
-    raw = dec.update(blob[3:]) + dec.finalize()
+    raw = aes_cbc_decrypt(key, blob[3:])
     raw = raw[: -raw[-1]]
     try:
         raw[:32].decode(); value = raw.decode()

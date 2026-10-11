@@ -1,6 +1,6 @@
 ---
 name: welcome
-description: "The first conversation after Chewbacca is installed: five tappable questions, then a personalized assistant and one thing that works right away. Use right after install, in a first session with someone new, when the brain has no welcome answers yet, or when someone says to start over, change how you talk to them, or redo their setup."
+description: "The first conversation after Chewbacca is installed: six tappable questions, then a personalized assistant and one thing that works right away (for a USC student, their own courses, lecture files and what is due). Use right after install, in a first session with someone new, when the brain has no welcome answers yet, or when someone says to start over, change how you talk to them, or redo their setup."
 license: MIT
 ---
 
@@ -15,16 +15,18 @@ pass the answers through; never reinterpret them in prose.
 
 ## The flow
 
-1. **Say hello in two sentences.** Who you are, and that five quick taps will
+1. **Say hello in two sentences.** Who you are, and that six quick taps will
    set you up for them. No feature list.
 2. **Ask the questions.** Get them with `chewbacca welcome questions`. They come
    as three screens: name and goals, then comfort and tone, then the safety
-   question. In Claude Code, show each screen with the multiple-choice question
+   question and whether they're a student. `detected.school` is `usc` when a
+   Chrome profile on this Mac has used Brightspace: put "USC student" first
+   and say you noticed it. In Claude Code, show each screen with the multiple-choice question
    tool so every answer is one click; its built-in "Other" covers a typed
    answer. In an agent without that tool, number the options and accept a
    number or words. For the name, offer no guesses: the Mac account name often
    belongs to someone else (this kit's own author uses his dad's Mac).
-3. **Save.** `chewbacca welcome save --name ... --goals a,b --comfort ... --tone ... --confirm ...`.
+3. **Save.** `chewbacca welcome save --name ... --goals a,b --comfort ... --tone ... --confirm ... --school ...`.
    A skipped question gets passed as `skip` and takes the safe default. An
    "Other" goal goes in the goals list in their own words.
 4. **Show it worked.** Read back the `summary` lines in plain words starting
@@ -34,7 +36,17 @@ pass the answers through; never reinterpret them in prose.
    the Mac asks anything, then run `permission_command` yourself if one came
    back. It opens the exact Settings screen with a card showing where to drag.
    Never ask for a permission their goals don't need.
-6. **Do one real thing.** Offer the first `first_try` line and, if they say
+6. **USC students: their classes, now.** When `school` came back, say its
+   `codex` line in one sentence with `codex_page` (Codex is free for them
+   through USC; skip it if you already are Codex), say the `primer` line, then
+   run `school.connect_command` yourself (`chewbacca usc lockin`). It lists
+   their courses from their own enrollment and what's due first, and writes
+   nothing. Show that, then pull every lecture file and build their ledger in
+   the background: `chewbacca jobs submit --net -- chewbacca usc lockin --apply`.
+   If it prints `BLOCKED:`, read them that one line; it already opened the one
+   page they need, or it says to quit and reopen Chrome. Never open anything
+   else and never ask them to type a command.
+7. **Do one real thing.** Offer the first `first_try` line and, if they say
    yes, do it now. A finished task is the proof the setup worked.
 
 ## Rules, and where they came from

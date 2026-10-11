@@ -367,7 +367,10 @@ def cmd_costs(a) -> int:
     plan = plan_of(a.client)
     pkg = package_of(plan)
     now = op.utc_now()
-    data = treg_client.month_spend(cdir(a.client) / "spend.jsonl", now)
+    try:
+        data = treg_client.month_spend(cdir(a.client) / "spend.jsonl", now)
+    except treg_client.Refused as err:
+        raise Refused(str(err))
     inboxes = pkg["mailboxes"] * pkg["mailbox_usd"]
     domains = pkg["domains"] * pkg["domain_usd_year"] / 12
     total = data + inboxes + domains

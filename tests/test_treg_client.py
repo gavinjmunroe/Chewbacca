@@ -110,6 +110,19 @@ class Paid(Solo):
         self.run_cli("find", "--client", "Dana Co", "--paid", "--spend", "1")
         self.assertEqual(CALLS, [])
 
+    def test_a_corrupt_ledger_stops_spending(self):
+        self.ready()
+        (self.d / "spend.jsonl").write_text("not json\n")
+        self.run_cli("find", "--client", "Dana Co", "--paid", "--spend", "1")
+        self.assertEqual(CALLS, [])
+
+    def test_a_missing_charge_header_counts_the_cap(self):
+        rows = []
+        f = self.tmp / "spend.jsonl"
+        treg_client._record(f, "dana-co", "treg.people.email.find", {}, self.op.utc_now(), 0.05)
+        rows = [json.loads(x) for x in f.read_text().splitlines()]
+        self.assertEqual(rows[0]["cost_micro"], 50000)
+
     def test_no_token_spends_nothing(self):
         self.ready()
         os.environ.pop("TREG_TOKEN")

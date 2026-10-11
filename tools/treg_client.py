@@ -53,14 +53,22 @@ def token() -> str:
 
 
 def month_spend(spend_file: Path, now: datetime) -> float:
+    """Fails closed. The security review of 6db53f17 caught that an unreadable
+    or corrupt ledger read as $0 spent, which reopened the whole budget. Only
+    a ledger that doesn't exist yet counts as nothing spent."""
+    if not spend_file.exists():
+        return 0.0
     total = 0
     try:
         for line in spend_file.read_text().splitlines():
+            if not line.strip():
+                continue
             r = json.loads(line)
             if r.get("at", "")[:7] == now.strftime("%Y-%m"):
-                total += int(r.get("cost_micro") or 0)
-    except (OSError, ValueError):
-        pass
+                total += int(r["cost_micro"])
+    except (OSError, ValueError, KeyError, TypeError) as err:
+        raise Refused(f"the spend ledger {spend_file} can't be read ({err}), so the budget can't be "
+                      f"checked. Nothing more is spent until it's fixed.")
     return total / 1_000_000
 
 
@@ -89,11 +97,11 @@ def call(endpoint: str, body: dict, *, customer: str, spend_file: Path, budget_u
     except urllib.error.HTTPError as err:
         heads, payload = err.headers, err.read()
         if err.code >= 400:
-            _record(spend_file, customer, endpoint, heads, now)
+            _record(spend_file, customer, endpoint, heads, now, max_cost_usd)
             raise Refused(f"treg said {err.code}: {payload[:200].decode('utf-8', 'replace')}")
     except (urllib.error.URLError, OSError) as err:
         raise Refused(f"couldn't reach treg: {err}")
-    cost = _record(spend_file, customer, endpoint, heads, now)
+    cost = _record(spend_file, customer, endpoint, heads, now, max_cost_usd)
     try:
         data = json.loads(payload or b"{}")
     except ValueError:
@@ -103,8 +111,14 @@ def call(endpoint: str, body: dict, *, customer: str, spend_file: Path, budget_u
             "served_by": heads.get("X-Treg-Served-By") or ""}
 
 
-def _record(spend_file: Path, customer: str, endpoint: str, heads, now: datetime) -> int:
-    cost = int(heads.get("X-Treg-Cost-Micro") or 0)
+def _record(spend_file: Path, customer: str, endpoint: str, heads, now: datetime,
+            cap_usd: float = 0.0) -> int:
+    # No usable charge header means treg didn't say what it billed. Count the
+    # cap, the most it could have been, so the budget never undercounts.
+    try:
+        cost = int(heads.get("X-Treg-Cost-Micro"))
+    except (TypeError, ValueError):
+        cost = int(round(cap_usd * 1_000_000))
     spend_file.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     with spend_file.open("a") as f:
         f.write(json.dumps({"at": now.isoformat(timespec="seconds"), "customer": customer,

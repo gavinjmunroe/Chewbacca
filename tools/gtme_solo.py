@@ -12,6 +12,8 @@ business has. This runs the rest on their own Mac, from their own Gmail:
     chewbacca gtme inbox  --client X        replies sorted; opt-outs and bounces suppressed
     chewbacca gtme reply  --client X --to ADDR --text "..."   a Gmail draft, never a send
     chewbacca gtme today  --client X        inbox, then the next batch
+    chewbacca gtme autosend --client X --interested "..."   the yes-reply that goes out on its own
+    chewbacca gtme share  --client X --dir PATH   keep the ledger in a shared repo both people pull
 
 The person approves every batch. `batch` prints each email exactly as it will
 go out and an id that is a hash of that text; `send` refuses any id it didn't
@@ -667,7 +669,7 @@ def cmd_inbox(a) -> int:
     for r in jsonl(d / "sent.jsonl"):
         if r.get("thread"):
             threads.setdefault(r["thread"], r)
-    needs, auto = [], 0
+    needs, answered, auto = [], [], 0
     for tid, first in threads.items():
         try:
             th = gws(["gmail", "users", "threads", "get", "--params",
@@ -690,19 +692,167 @@ def cmd_inbox(a) -> int:
                 auto += 1
             elif v["kind"] in gtme_reply.AUTO_HANDLED:
                 auto += 1
+            elif v["kind"] == "interested" and auto_answer(a.client, plan, first, tid, heads, frm, text,
+                                                          a.inbox or ""):
+                answered.append(row)
             else:
                 needs.append(row)
     if a.json:
-        print(json.dumps({"needs_you": needs, "handled": auto}, indent=1))
+        print(json.dumps({"needs_you": needs, "answered": answered, "handled": auto}, indent=1))
         return 0
     print(f"{auto} replies handled on their own (opt-outs and bounces are never emailed again; anyone who "
           f"replied gets no more follow-ups).")
+    for r in answered:
+        print(f"Answered on its own: {r['from']} said they're interested, and got your booking reply.")
     if not needs:
         print("Nobody's waiting on you.")
     for r in needs:
         print(f"\n{r['label']}: {r['from']} ({r['email']})\n  \"{gtme_reply.readable_reply(r['text'], 400)}\"\n"
               f"  Next: {r['next']}")
     return 0
+
+
+def auto_answer(client: str, plan: dict, first: dict, tid: str, heads: dict, frm: str, text: str,
+                inbox: str) -> bool:
+    """Send the person's own booking reply to an obvious yes, in the thread.
+
+    Only an "interested" reply, only with a reply the person wrote and saved
+    with `gtme autosend`, and only when every auto-send check passes: the
+    reply re-reads as interested, and the answer carries no link, number,
+    file or blank. Anything else waits for the person, as before.
+    """
+    answer = (plan.get("autosend") or {}).get("interested")
+    if not answer or os.environ.get("CHEWBACCA_NO_SEND"):
+        return False
+    me = ((plan.get("sender") or {}).get("email") or "").lower()
+    # The regex reader has no score, so confidence and threshold are pinned
+    # equal: what decides is its re-read of the reply plus the draft checks.
+    check = gtme_reply.auto_sendable({"sentiment": "interested", "confidence": 1.0, "threshold": 1.0,
+                                      "draft": answer, "reply": text, "lead_id": first["email"],
+                                      "campaign_id": client, "lead_email": first["email"], "sending_email": me})
+    if not check["ok"]:
+        return False
+    sender = plan.get("sender") or {}
+    m = {"to": frm, "subject": "Re: " + (first.get("subject") or ""),
+         "body": f"{answer}\n\n{sender.get('name') or ''}".rstrip(),
+         "message_id": heads.get("message-id", ""), "thread": tid}
+    try:
+        res = gws(["gmail", "users", "messages", "send", "--params", json.dumps({"userId": "me"}),
+                   "--json", json.dumps(mime(m, sender))], inbox)
+    except (RuntimeError, OSError, subprocess.SubprocessError, ValueError) as err:
+        print(f"Couldn't answer {frm} on its own ({err}); it's waiting for you instead.")
+        return False
+    append(cdir(client) / "sent.jsonl", {"email": first["email"], "step": "auto-reply",
+                                         "subject": first.get("subject"), "lead": first.get("lead"),
+                                         "gmail_id": res.get("id"), "thread": res.get("threadId") or tid,
+                                         "to": frm, "at": op.stamp()})
+    return True
+
+
+def cmd_autosend(a) -> int:
+    plan = plan_of(a.client)
+    if a.off:
+        plan.pop("autosend", None)
+        op.write_json(cdir(a.client) / "plan.json", plan)
+        print("Off. Every interested reply waits for you again.")
+        return 0
+    if not a.interested:
+        raise Refused('Give the reply to send when someone says yes: --interested "...", or --off.')
+    text = gtme_reply.strip_em_dashes(a.interested.strip())
+    probe = gtme_reply.auto_sendable({"sentiment": "interested", "confidence": 1.0, "threshold": 1.0,
+                                      "draft": text, "reply": "Yes, I'm interested. Let's talk.",
+                                      "lead_id": "probe", "campaign_id": a.client})
+    bad = [r for r in probe["reasons"] if r.startswith("draft")]
+    if bad:
+        raise Refused("That reply can't go out unread: " + "; ".join(bad) + ". Keep it to a short ask for a time.")
+    plan["autosend"] = {"interested": text}
+    op.write_json(cdir(a.client) / "plan.json", plan)
+    print("On. When someone replies that they're interested, this goes back in their thread, signed with your "
+          "name, and `inbox` lists it. Every other reply still waits for you.")
+    return 0
+
+
+def cmd_share(a) -> int:
+    """Keep this client's ledger in a shared folder (a git repo both people pull)."""
+    target = Path(os.path.expanduser(a.dir)).resolve()
+    old = cdir(a.client)
+    cfg = op.read_json(op.config_path(), {"clients": []})
+    if not isinstance(cfg, dict):
+        cfg = {"clients": []}
+    entry = next((c for c in cfg.setdefault("clients", []) if isinstance(c, dict)
+                  and op.slug(c.get("name", "")) == op.slug(a.client)), None)
+    if entry is None:
+        entry = {"name": a.client}
+        cfg["clients"].append(entry)
+    target.mkdir(parents=True, exist_ok=True)
+    moved = 0
+    if old.resolve() != target and old.is_dir() and not any(target.iterdir()):
+        for f in old.iterdir():
+            f.rename(target / f.name)
+            moved += 1
+    entry["state_dir"] = str(target)
+    op.write_json(op.config_path(), cfg)
+    repo = git_root(target)
+    print(f"{a.client} now keeps its ledger in {target}" + (f" ({moved} files moved there)" if moved else "") + ".")
+    if repo:
+        attrs = repo / ".gitattributes"
+        line = "*.jsonl merge=union"
+        have = attrs.read_text() if attrs.exists() else ""
+        if line not in have.splitlines():
+            attrs.write_text(have + ("" if not have or have.endswith("\n") else "\n") + line + "\n")
+        print(f"It's inside the git repo {repo}, so every command pulls first and pushes what it wrote.")
+    return 0
+
+
+# ── a shared ledger: pull before, push after ──────────────────────────────
+
+
+def git_root(path: Path):
+    try:
+        out = subprocess.run(["git", "-C", str(path), "rev-parse", "--show-toplevel"], capture_output=True,
+                             text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return Path(out.stdout.strip()) if out.returncode == 0 and out.stdout.strip() else None
+
+
+def _git(repo: Path, *args) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=60)
+
+
+def sync_pull(client: str) -> None:
+    d = cdir(client)
+    repo = git_root(d) if d.exists() else None
+    if not repo or not _git(repo, "remote").stdout.strip():
+        return
+    r = _git(repo, "pull", "--rebase", "--autostash", "-q")
+    if r.returncode != 0:
+        print(f"Couldn't pull the shared ledger ({r.stderr.strip()[:200]}); working from what's on this Mac.")
+
+
+def sync_push(client: str, what: str) -> None:
+    d = cdir(client)
+    repo = git_root(d) if d.exists() else None
+    if not repo:
+        return
+    rel = str(d.resolve().relative_to(repo.resolve()))
+    paths = [rel]
+    if (repo / ".gitattributes").exists():
+        paths.append(".gitattributes")
+    _git(repo, "add", "--", *paths)
+    if not _git(repo, "diff", "--cached", "--name-only", "--", *paths).stdout.strip():
+        return
+    c = _git(repo, "commit", "-q", "-m", f"chore: {op.slug(client)} ledger, {what}", "--", *paths)
+    if c.returncode != 0:
+        print(f"Couldn't commit the shared ledger: {c.stderr.strip()[:200]}")
+        return
+    if not _git(repo, "remote").stdout.strip():
+        return
+    for _ in range(3):
+        if _git(repo, "push", "-q").returncode == 0:
+            return
+        _git(repo, "pull", "--rebase", "-q")
+    print("Committed the ledger but couldn't push it; the next command tries again.")
 
 
 def cmd_reply(a) -> int:
@@ -786,14 +936,27 @@ def main(argv=None) -> int:
     p.add_argument("--to", required=True)
     p.add_argument("--text", required=True)
     p.add_argument("--inbox")
+    p = sub.add_parser("autosend", help="the reply that goes back on its own when someone says yes")
+    p.add_argument("--client", required=True)
+    p.add_argument("--interested", help="a short ask for a time, no links or numbers")
+    p.add_argument("--off", action="store_true")
+    p = sub.add_parser("share", help="keep this client's ledger in a shared folder, like a team repo")
+    p.add_argument("--client", required=True)
+    p.add_argument("--dir", required=True)
     a = ap.parse_args(argv)
+    shared = a.cmd not in ("share", "package", "costs")
     try:
-        return {"sender": cmd_sender, "find": cmd_find, "batch": cmd_batch, "send": cmd_send,
+        if shared:
+            sync_pull(a.client)
+        code = {"sender": cmd_sender, "find": cmd_find, "batch": cmd_batch, "send": cmd_send,
                 "inbox": cmd_inbox, "reply": cmd_reply, "today": cmd_today, "package": cmd_package,
-                "costs": cmd_costs}[a.cmd](a)
+                "costs": cmd_costs, "autosend": cmd_autosend, "share": cmd_share}[a.cmd](a)
     except Refused as err:
         print(str(err), file=sys.stderr)
         return 2
+    if shared and not getattr(a, "dry_run", False):
+        sync_push(a.client, a.cmd)
+    return code
 
 
 if __name__ == "__main__":

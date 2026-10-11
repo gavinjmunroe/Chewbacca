@@ -160,6 +160,12 @@ def config_path() -> Path:
 
 
 def client_dir(name: str) -> Path:
+    """A client's state, or the folder its clients.json entry names in
+    `state_dir`: a shared repo, so two people's Chewbaccas read one ledger."""
+    cfg = read_json(config_path(), {})
+    for c in (cfg.get("clients") or []) if isinstance(cfg, dict) else []:
+        if isinstance(c, dict) and slug(c.get("name", "")) == slug(name) and c.get("state_dir"):
+            return Path(os.path.expanduser(str(c["state_dir"])))
     return home() / "clients" / slug(name)
 
 

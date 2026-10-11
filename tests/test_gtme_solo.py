@@ -273,6 +273,80 @@ class Solo(unittest.TestCase):
         self.run_cli("inbox", "--client", "Dana Co", "--json")
         self.assertEqual(len((self.d / "replies.jsonl").read_text().splitlines()), 2)
 
+    # autosend
+
+    def sent_threads(self):
+        return {json.loads(x)["email"]: json.loads(x)["thread"]
+                for x in (self.d / "sent.jsonl").read_text().splitlines()}
+
+    def test_an_interested_reply_gets_the_saved_answer_in_its_thread_and_a_question_waits(self):
+        self.ready()
+        self.assertEqual(self.run_cli("autosend", "--client", "Dana Co", "--interested",
+                                      "Great to hear. Does Tuesday or Wednesday afternoon work for a short call?"), 0)
+        b = self.batch()
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        sent = self.sent_threads()
+        self.threads.write_text(json.dumps({
+            sent["maria@crumbcorner.test"]: [["maria@crumbcorner.test", "Yes, I'm interested. Let's chat."]],
+            sent["hello@rollhouse.test"]: [["hello@rollhouse.test", "How much does this cost per month?"]],
+        }))
+        before = len(self.sends())
+        self.assertEqual(self.run_cli("inbox", "--client", "Dana Co", "--json"), 0)
+        new = self.sends()[before:]
+        self.assertEqual(len(new), 1)
+        body = json.loads(new[0][7])
+        self.assertEqual(body["threadId"], sent["maria@crumbcorner.test"])
+        raw = base64.urlsafe_b64decode(body["raw"]).decode()
+        self.assertIn("To: maria@crumbcorner.test", raw)
+        self.assertIn("Tuesday or Wednesday", raw)
+        # a second read never answers the same yes twice
+        self.run_cli("inbox", "--client", "Dana Co", "--json")
+        self.assertEqual(len(self.sends()), before + 1)
+
+    def test_autosend_refuses_an_answer_with_a_link_or_number_and_no_send_holds_it(self):
+        self.ready()
+        self.assertEqual(self.run_cli("autosend", "--client", "Dana Co", "--interested",
+                                      "Book here: https://cal.test/dana"), 2)
+        self.assertEqual(self.run_cli("autosend", "--client", "Dana Co", "--interested",
+                                      "Want to grab a time this week?"), 0)
+        b = self.batch()
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        sent = self.sent_threads()
+        self.threads.write_text(json.dumps({
+            sent["maria@crumbcorner.test"]: [["maria@crumbcorner.test", "Yes, I'm interested. Let's chat."]]}))
+        os.environ["CHEWBACCA_NO_SEND"] = "1"
+        before = len(self.sends())
+        self.run_cli("inbox", "--client", "Dana Co", "--json")
+        self.assertEqual(len(self.sends()), before)
+
+    # share
+
+    def git(self, cwd, *args):
+        return subprocess.run(["git", "-C", str(cwd), *args], capture_output=True, text=True, check=True)
+
+    def test_a_shared_ledger_commits_and_pushes_only_its_own_folder(self):
+        remote = self.tmp / "remote.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+        repo = self.tmp / "ff"
+        subprocess.run(["git", "clone", "-q", str(remote), str(repo)], check=True, capture_output=True)
+        for k, v in (("user.name", "t"), ("user.email", "t@t.test")):
+            self.git(repo, "config", k, v)
+        (repo / "README.md").write_text("ff\n")
+        (repo / "unrelated.txt").write_text("not mine\n")
+        self.git(repo, "add", "README.md")
+        self.git(repo, "commit", "-q", "-m", "init")
+        self.git(repo, "push", "-q", "origin", "HEAD")
+        (repo / "README.md").write_text("ff, edited by someone else\n")
+        self.assertEqual(self.run_cli("share", "--client", "Dana Co", "--dir", str(repo / "ops" / "gtme" / "dana")), 0)
+        self.assertEqual(self.op.client_dir("Dana Co"), (repo / "ops" / "gtme" / "dana").resolve())
+        self.assertIn("*.jsonl merge=union", (repo / ".gitattributes").read_text())
+        self.ready()
+        log = self.git(remote, "log", "--name-only", "--format=%s").stdout
+        self.assertIn("ops/gtme/dana/plan.json", log)
+        self.assertIn(".gitattributes", log)
+        self.assertNotIn("README.md\n", log.split("init")[0])
+        self.assertNotIn("unrelated.txt", log)
+
     def test_gtme_front_door_routes_here(self):
         self.ready()
         p = subprocess.run([sys.executable, str(ROOT / "tools" / "gtme_operator.py"), "batch", "--client", "Dana Co"],

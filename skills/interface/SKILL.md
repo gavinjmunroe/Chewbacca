@@ -341,6 +341,18 @@ Read them before drafting any club or startup landing page.
   ground, one framed box under it), and at least a third of section edges
   carry something across: a sheet that overlaps, a figure that spans, or a
   change of ground. `site-gate deck <url>` must pass.
+- Every screen has one place for the eye (2026-10-10: "cognitive overload
+  mainly bc there is no visual heirachy of where to direct your attention all
+  the text looks the same"). One element is loud (the biggest text at 1.6x
+  the usual size or more, or the one royal thing), everything around it is
+  small and muted; a data figure inside a story is the quiet version with one
+  callout, never the full clickable tool. No control offers more than four
+  choices: three paths times a Before/After toggle was "6 diff options". Show
+  the before where the pain is told and the after where the build is.
+  `site-gate focus <url>` must pass.
+- A promises or mission page is drawn, not listed ("the trust page is 1
+  dimensional"): each promise gets a small drawing and a few words, the big
+  ones hang across a band's edge, and a why reads as beats on one line.
 - No flashes, no whiplash on a phone ("some of the mobile
   animations/transitions are literal whiplash and flashbangs"). `site-gate
   flash <url>` must pass. A bar that hides on scroll turns on travel (24px

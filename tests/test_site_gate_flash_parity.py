@@ -50,6 +50,13 @@ def main():
     carried = [{"crossed": 1, "sameGround": True}, {"crossed": 0, "sameGround": False}, {"crossed": 0, "sameGround": True}, {"crossed": 0, "sameGround": True}]
     check("varied sections with half their edges carried pass", sg.deck_fails(varied, carried) == [])
 
+    flat_text = {"sizes": [15.0] * 30, "choices": 3}
+    check("a screen where every line is one size has no place for the eye", any("eye" in f for f in sg.focus_fails(flat_text)))
+    led = {"sizes": [15.0] * 20 + [44.0], "choices": 3}
+    check("a screen with one big heading over small text passes", sg.focus_fails(led) == [])
+    six = {"sizes": [15.0] * 4 + [44.0], "choices": 6}
+    check("three paths times before and after is too many choices", any("choices" in f for f in sg.focus_fails(six)))
+
     print(f"site-gate flash and parity: {failures} failure(s)")
     sys.exit(1 if failures else 0)
 

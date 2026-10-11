@@ -17,6 +17,10 @@ library/crafts/website.md. Prose does not fire, so this is the half that does.
     site-gate flash <url>...           exit 1 if scrolling at phone size flashes:
                                        a frame where over a quarter of the
                                        screen swings brightness hard
+    site-gate focus <url>...           exit 1 if a screen has no place for the
+                                       eye: the biggest text under 1.6x the
+                                       usual size, over 40 lines at one size,
+                                       or one control with more than 4 choices
     site-gate deck <url>...            exit 1 if the page reads like a pitch
                                        deck: three or more sections in a row
                                        with the same shape, or every section
@@ -949,6 +953,11 @@ DECK_SHAPES = r"""() => {
     const align = h ? getComputedStyle(h).textAlign : '';
     let bg = getComputedStyle(s).backgroundColor, p = s;
     while (bg === 'rgba(0, 0, 0, 0)' && p.parentElement) { p = p.parentElement; bg = getComputedStyle(p).backgroundColor; }
+    // a ground painted by a canvas or a gradient layer behind the content is its own ground
+    for (const e of s.querySelectorAll('canvas, div')) {
+      const b = e.getBoundingClientRect(), c = getComputedStyle(e);
+      if (b.width >= 0.9 * r.width && b.height >= 0.6 * r.height && (e.tagName === 'CANVAS' || (c.backgroundImage !== 'none' && c.position === 'absolute'))) { bg = 'painted'; break; }
+    }
     // one framed box: a bordered block wider than 70% of the section holding most of its height
     let boxed = false;
     for (const e of s.querySelectorAll('div, figure, ol, ul')) {
@@ -1003,6 +1012,72 @@ def deck(pw, url):
     return got["shapes"], got["crossings"], deck_fails(got["shapes"], got["crossings"])
 
 
+# Caleb, 2026-10-10, on a screen of the Firm Foundation scene: "this whole ss
+# sequence is cognitive overload mainly bc there is no visual heirachy of where
+# to direct your attention all the text looks the same also the follow up tab
+# has 6 diff options bc 3 diff things x before and after". That screen had a
+# 15-column clickable grid, a readout column and two rows of labels at 13 to
+# 16px; on the phone demo, three path tabs times a Before/After toggle.
+FOCUS_RATIO = 1.6
+FOCUS_CROWD = 40
+FOCUS_CHOICES = 4
+
+FOCUS_SCREEN = r"""() => {
+  const H = innerHeight;
+  const shown = e => { for (let p = e; p; p = p.parentElement) { const c = getComputedStyle(p);
+    if (c.visibility === 'hidden' || c.display === 'none' || +c.opacity < 0.05) return false; } return true; };
+  const sizes = [];
+  for (const e of document.querySelectorAll('body *')) {
+    if (![...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim().length > 1)) continue;
+    const r = e.getBoundingClientRect();
+    if (r.bottom <= 0 || r.top >= H || r.width === 0 || !shown(e)) continue;
+    if (getComputedStyle(e).position === 'fixed' || e.closest('svg, footer')) continue;  // a drawing's labels are the drawing; the footer is not a screen to direct
+    sizes.push(parseFloat(getComputedStyle(e).fontSize));
+  }
+  // choices: toggles that pick one view inside one figure or section
+  const toggles = [...document.querySelectorAll('[role=tab], [role=radio], [aria-pressed], [aria-selected]')]
+    .filter(e => { const r = e.getBoundingClientRect(); return r.bottom > 0 && r.top < H && r.width > 0 && shown(e); });
+  const groups = new Map();
+  for (const t of toggles) {
+    const home = t.closest('figure, section, [role=tabpanel], [data-sg-sec]') || document.body;
+    groups.set(home, (groups.get(home) || 0) + 1);
+  }
+  return { sizes, choices: Math.max(0, ...groups.values()) };
+}"""
+
+
+def focus_fails(screen: dict) -> list[str]:
+    sizes = sorted(screen["sizes"])
+    fails = []
+    # A footer or the tail of a list is a short read, not a screen to direct; only
+    # dense screens are judged.
+    if len(sizes) >= 20:
+        median = sizes[len(sizes) // 2]
+        if max(sizes) < FOCUS_RATIO * median:
+            fails.append(f"no place for the eye: the biggest text is {max(sizes):.0f}px against a usual {median:.0f}px "
+                         f"(needs {FOCUS_RATIO}x)")
+        crowd = sum(1 for v in sizes if abs(v - median) <= 0.1 * median)
+        if crowd > FOCUS_CROWD:
+            fails.append(f"{crowd} lines of text at one size on one screen")
+    if screen["choices"] > FOCUS_CHOICES:
+        fails.append(f"one control offers {screen['choices']} choices; keep it to {FOCUS_CHOICES}")
+    return fails
+
+
+def focus(pw, url):
+    out = []
+    for W, H in SIZES:
+        b = launch(pw); pg = b.new_page(viewport={"width": W, "height": H}, is_mobile=W < 700, has_touch=W < 700)
+        pg.goto(url, wait_until="networkidle", timeout=60000); pg.wait_for_timeout(1500)
+        total = pg.evaluate("document.documentElement.scrollHeight")
+        for y in range(0, max(1, total - H + 1), H):
+            pg.evaluate(f"scrollTo(0,{y})"); pg.wait_for_timeout(900)
+            for f in focus_fails(pg.evaluate(FOCUS_SCREEN)):
+                out.append(f"{W} y={y}: {f}")
+        b.close()
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -1019,6 +1094,7 @@ def main():
     f = sub.add_parser("flash"); f.add_argument("urls", nargs="+")
     pa = sub.add_parser("parity"); pa.add_argument("urls", nargs="+")
     dk = sub.add_parser("deck"); dk.add_argument("urls", nargs="+")
+    fo = sub.add_parser("focus"); fo.add_argument("urls", nargs="+")
     i = sub.add_parser("idle"); i.add_argument("url"); i.add_argument("--ref")
     i.add_argument("--ys", help="comma separated scroll positions; default every 900px")
     r = sub.add_parser("research", help="exit 1 unless the repo holds the research receipt")
@@ -1052,6 +1128,15 @@ def main():
                 found = flash(pw, u)
                 bad += bool(found)
                 print(f"{'FAIL' if found else 'ok  '}  {u}" + (f" {len(found)} flashing frame(s): {found[:6]}" if found else ""))
+            sys.exit(1 if bad else 0)
+        if a.cmd == "focus":
+            bad = 0
+            for u in a.urls:
+                fails = focus(pw, u)
+                bad += bool(fails)
+                print(f"{'FAIL' if fails else 'ok  '}  {u}")
+                for x in fails:
+                    print(f"        {x}")
             sys.exit(1 if bad else 0)
         if a.cmd == "deck":
             bad = 0

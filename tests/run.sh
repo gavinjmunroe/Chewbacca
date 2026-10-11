@@ -878,6 +878,8 @@ if group "installer"; then
     bash "$ROOT/tests/texts_sync_lock.sh"
   check  "scope-guard refuses a self-chosen cut of scope he set as all" \
     bash "$ROOT/tests/scope_guard.sh"
+  check  "link-guard refuses a reply whose file links don't open from the session root" \
+    bash "$ROOT/tests/link_guard.sh"
 
   check  "suite-rerun-guard refuses a repeat full run on an unchanged tree" \
     bash "$ROOT/tests/suite_rerun_guard.sh"

@@ -1918,6 +1918,12 @@ _register("SessionStart", hooks_dir + "/orphan-reap.sh", timeout=10,
 _register("Stop", hooks_dir + "/scope-guard.sh", timeout=10,
           status="Checking the scope he asked for...")
 
+# Every file link in a reply has to open from the session root. 2026-10-11: a
+# render link written relative to ~/Downloads (the shell had cd'd there) gave
+# "Couldn't open that file" when Caleb clicked it.
+_register("Stop", hooks_dir + "/link-guard.sh", timeout=5,
+          status="Checking every link in the reply opens...")
+
 # One brain commit per turn, named after the turn, in place of format-and-sync's
 # one commit per write. See the hook's header for the 2026-10-05 history count.
 _register("Stop", hooks_dir + "/brain-sync.sh", timeout=15,

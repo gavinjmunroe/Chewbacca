@@ -749,6 +749,17 @@ def test_one_shots() -> None:
     check("a second turn makes it a tab", ks.meta(two)["interactive"])
     home = [user("hi", entrypoint="claude-vscode", cwd="/Users/x/code/lemma")]
     check("a fresh tab in a real folder stays", ks.meta(home)["interactive"])
+    tmp = Path(tempfile.mkdtemp()) / "s.jsonl"
+    died = [user("what is it good for", entrypoint="claude-desktop", cwd="/Users/x/code/chewbacca"),
+            assistant([{"type": "text", "text": "You've hit your weekly limit"}], stop="end_turn", isApiErrorMessage=True)]
+    tmp.write_text("\n".join(json.dumps(e) for e in died) + "\n")
+    row = ks.from_transcript(Path("/x/.claude"), tmp, tmp.stat().st_mtime + 10)
+    check("a session that failed on its first message is not a tab", row["state"] != "failed" or not row["interactive"], row)
+    tmp.write_text("\n".join(json.dumps(e) for e in [died[0], assistant([{"type": "text", "text": "ok"}], stop="end_turn"),
+                                                      user("go on", uuid="u2")] + died[1:]) + "\n")
+    ks._parsed.clear()
+    row = ks.from_transcript(Path("/x/.claude"), tmp, tmp.stat().st_mtime + 10)
+    check("one that died later is still listed", row["interactive"], row)
 
 
 def test_origin() -> None:

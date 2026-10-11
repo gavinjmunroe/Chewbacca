@@ -247,6 +247,7 @@ def meta(entries: list[dict]) -> dict:
             break
     out["interactive"] = bool(points & INTERACTIVE) or not points
     turns = sum(1 for e in entries if e.get("type") == "user" and is_turn(e) and first_text(e))
+    out["turns"] = turns
     if turns <= 1 and out["cwd"].startswith(SCRATCH_DIRS):
         # A one-shot `claude -p` (a blind image judge, an eval) inherits its
         # parent's desktop entrypoint. On 2026-10-10 two judges in
@@ -342,6 +343,13 @@ def from_transcript(config: Path, path: Path, now: float) -> dict:
     mtime = path.stat().st_mtime
     state, detail = classify(entries, now - mtime)
     m = meta(entries)
+    if state == "failed" and m.get("turns", 0) <= 1:
+        # Failed on its first message, the way tab-rescue's MIN_TURNS reads
+        # it: an eval prompt run through the desktop app, or a tab whose
+        # owner saw the error on their own screen. On 2026-10-10 five
+        # "Just cloned this repo" evals from that morning filled the agents
+        # panel as failed tabs.
+        m["interactive"] = False
     m["mode"] = effective_mode(path, m["mode"])
     cwd = m["cwd"]
     return {

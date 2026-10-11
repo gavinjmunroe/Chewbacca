@@ -88,6 +88,8 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 - project_team_memory: Where shared Amber, Chewbacca and Firm Foundation memory lives and what stays private
 
+- feedback_hud_agents_build_on_realm: HUD agent work builds on Carlton's Realm inside the HUD, any LLM or account; a parallel kyber-sessions cockpit drew "TS lame" (10/10)
+
 ## References
 
 - reference_amber_ios_eas_testflight: How to build + submit amber-ios to TestFlight via EAS (ascAppId, ASC API key...

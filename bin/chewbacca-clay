@@ -189,10 +189,25 @@ function bind(s, args) {
   return argv;
 }
 
+// The clay CLI answers for the one workspace it is signed in to and takes no
+// workspace argument. 2026-10-11: `folders ws=1149025` (BMA) came back from
+// the CLI with Jonah's workspace's folders under BMA's id, so anything built
+// on it would have landed in the wrong client. The CLI only answers when it
+// is signed in to the workspace asked for.
+let cliWs;
+function cliWorkspace() {
+  if (cliWs !== undefined) return cliWs;
+  if (FIXTURES) return (cliWs = process.env.CHEWBACCA_CLAY_CLI_WS || "any");
+  const r = spawnSync("clay", ["whoami"], { encoding: "utf8", timeout: 15000 });
+  cliWs = r.status === 0 ? String(parseOr(r.stdout, {})?.workspace?.id ?? "") || null : null;
+  return cliWs;
+}
+
 function plan(op, args, only) {
   const cands = [];
   op.surfaces.forEach((s, i) => {
     if (only && s.type !== only) return;
+    if (s.type === "cli" && args.ws !== undefined && cliWorkspace() !== "any" && cliWorkspace() !== String(args.ws)) return;
     const bound = bind(s, args);
     if (bound === null) return;
     const m = measured[op.name]?.[surfaceKey(op, s)];

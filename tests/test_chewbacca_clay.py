@@ -853,6 +853,20 @@ def test_second_session_reads_through_its_own_login():
     ok(code == 2, "session-login takes only Default or Profile N")
 
 
+def test_cli_never_answers_for_another_workspace():
+    # 2026-10-11: folders ws=<BMA> came back from the CLI, which was signed in
+    # to Jonah's workspace, labelled as BMA's.
+    fast_cli = {"tables": {"cli:tables list --limit 100": {"ms": 10}, "api-anything:listResources": {"ms": 900}}}
+    os.environ["CHEWBACCA_CLAY_CLI_WS"] = "2000002"
+    try:
+        code, route, _ = run({}, fast_cli, "route", "tables", "ws=1000001")
+        ok([r["surface"] for r in route["order"]] == ["api-anything"], "the CLI is skipped for a workspace it isn't signed in to")
+        code, route, _ = run({}, fast_cli, "route", "tables", "ws=2000002")
+        ok(route["order"][0]["surface"] == "cli", "the CLI still answers for its own workspace")
+    finally:
+        del os.environ["CHEWBACCA_CLAY_CLI_WS"]
+
+
 def test_fixtures_are_scrubbed():
     text = Path(__file__).read_text()
     import re
@@ -870,7 +884,8 @@ def main():
                test_values_that_change_when_decoded_are_refused, test_workspace_has_no_built_in_default,
                test_ui_only_prints_route, test_chat_approval_stands_in_for_the_terminal, test_campaign_build_ops_touch_drafts_only, test_a_relabelled_write_is_still_gated, test_refuses_an_unpinned_engine, test_inbox_adapter_keeps_clay_inbox_shape,
                test_query_slot_reads_build, test_new_reads_are_reads_with_a_measured_surface,
-               test_second_session_reads_through_its_own_login, test_fixtures_are_scrubbed):
+               test_second_session_reads_through_its_own_login, test_cli_never_answers_for_another_workspace,
+               test_fixtures_are_scrubbed):
         fn()
     print(f"chewbacca clay: {checks} checks passed")
 

@@ -99,8 +99,12 @@ from datetime import datetime
 from pathlib import Path
 
 import realm_client
+import session_tree
 
 from . import ACTION_PREFIX, Bind, Context, Provider, Result, SurfaceError, ago, clock, comp, note_for
+from .agent_history import History
+from .agent_ide import Ide
+from .agent_space import Space
 from .code import candidates, code_root
 
 ENGINE = Path(__file__).resolve().parents[2] / "realm-engine"
@@ -140,6 +144,9 @@ SCAN_MAX_MESSAGE = 128 * 1024 * 1024
 # once when its tile is tapped.
 SCAN_EVERY = 1800.0
 # Miller's seven plus two, the same cap the code and sessions panels use.
+# Files remembered per session for finding its repo. A long session reads a
+# few hundred; past this only its edits are added. Guessed, never measured.
+MARKS_KEPT = 4000
 MAX_SESSIONS = 9
 # Turns on the glass. Guessed, never measured on the glass: fourteen rows of
 # one-line tool calls and short prose fill a centre column at 900 points.
@@ -304,6 +311,7 @@ STATE_ORDER = {"waiting_permission": 0, "error": 1, "running": 2, "idle": 3, "en
 BUSY = ("running", "waiting_permission")
 # The pointers holding a row a press can write through.
 VERBS = ("send", "allow", "deny", "interrupt", "fork", "new", "stage", "unstage", "ship", "upstream", "run", "ctrlc",
+         "restore", "pr",
          "termopen", "mode", "go")
 MODE_WORDS = {"default": "asks before each tool", "acceptEdits": "edits without asking",
               "bypassPermissions": "never asks (full access)", "plan": "plans only"}
@@ -748,11 +756,46 @@ def kyber_sessions():
     return _KS
 
 
+# transcript path -> ((mtime, size), repo it worked in), so a tab's repo is
+# worked out once per change to its transcript, not once per refresh.
+_TAB_REPOS: dict = {}
+
+
+def tab_repo(tab: dict, home: Path, entries=None) -> str:
+    """The repo a Claude Code tab worked in when it was opened in a folder
+    that isn't one (most of Caleb's open in the home folder): the working
+    tree its Read and Edit calls touched most (session_tree.work_root). ""
+    when its folder is already a repo, or nothing it touched is in one."""
+    cwd, path = str(tab.get("cwd") or ""), str(tab.get("transcript") or "")
+    if not path or (cwd and session_tree.git_top(str(Path(cwd) / "_"), home) is not None):
+        return ""
+    try:
+        st = os.stat(path)
+    except OSError:
+        return ""
+    key = (st.st_mtime, st.st_size)
+    hit = _TAB_REPOS.get(path)
+    if hit and hit[0] == key:
+        return hit[1]
+    if entries is None:
+        entries = kyber_sessions().cached_entries(Path(path))
+    repo = session_tree.work_root(session_tree.worked_in(entries, home), home)
+    _TAB_REPOS[path] = (key, repo)
+    return repo
+
+
 def live_tabs(now: float) -> list[dict]:
     """Claude Code and Codex tabs worth a tile: kyber-sessions' interactive
-    rows, kept by its own glance (needing you, working, or recently done)."""
+    rows, kept by its own glance (needing you, working, or recently done),
+    each named for the repo it worked in rather than the folder it opened in."""
     ks = kyber_sessions()
-    return ks.glance(ks.discover(now), now)
+    tabs = ks.glance(ks.discover(now), now)
+    home = Path.home()
+    for t in tabs:
+        repo = tab_repo(t, home) if t.get("agent") != "codex" else ""
+        if repo:
+            t["repo"], t["project"] = repo, Path(repo).name
+    return tabs
 
 
 @dataclass
@@ -767,6 +810,9 @@ class Log:
     # (seq, text) of recent user_message events, for "did that send land?".
     sent: deque = field(default_factory=lambda: deque(maxlen=20))
     caught_up: bool = False
+    # Absolute path -> "read" or "edited", from its tool calls: where the
+    # session really worked (session_tree.work_root).
+    marks: dict = field(default_factory=dict)
 
     def take(self, stored) -> None:
         if not isinstance(stored, dict):
@@ -795,6 +841,7 @@ class Log:
             name = str(body.get("name") or "")
             self.items.append({"id": rid, "role": "tool", "tool": clean(name, 40),
                                "text": tool_line(name, body.get("input"))})
+            self.mark(name, body.get("input"))
         elif kind == "tool_result" and body.get("isError"):
             first = clean(str(body.get("content") or "").strip().split("\n", 1)[0], 160)
             self.items.append({"id": rid, "role": "error", "text": f"Tool failed: {first}" if first else "Tool failed"})
@@ -819,17 +866,35 @@ class Log:
         elif kind == "handoff":
             self.items.append({"id": rid, "role": "tool", "tool": "", "text": "Handed to another agent"})
 
+    def mark(self, name: str, args) -> None:
+        """Note the file a Read or an edit named, as session_tree.touched
+        does for a Claude Code transcript."""
+        if name == "Bash" and isinstance(args, dict) and len(self.marks) < MARKS_KEPT:
+            # Count each folder once per call, as a read: many sessions only
+            # ever ran Bash (session_tree.SHELL_DIR).
+            for folder in session_tree.shell_dirs(args.get("command"), Path.home()):
+                if not any(hidden(ch) for ch in folder):
+                    self.marks.setdefault(folder, "read")
+            return
+        path = args.get("file_path") or args.get("notebook_path") if isinstance(args, dict) else None
+        if not isinstance(path, str) or not path.startswith("/") or any(hidden(ch) for ch in path):
+            return
+        if name in session_tree.EDIT_TOOLS:
+            self.marks[path] = "edited"
+        elif name in session_tree.READ_TOOLS and len(self.marks) < MARKS_KEPT:
+            self.marks.setdefault(path, "read")
+
     def copy(self) -> "Log":
         """A Log that can be read on while this one is read from: a published
         Log is never extended, so the fetch and a press each work on a copy."""
         return Log(self.sid, self.seq, deque(self.items, maxlen=TRANSCRIPT_ITEMS), dict(self.pending),
-                   deque(self.sent, maxlen=20), self.caught_up)
+                   deque(self.sent, maxlen=20), self.caught_up, dict(self.marks))
 
     def landed(self, text: str, after: int) -> bool:
         return any(seq > after and sent == text for seq, sent in self.sent)
 
 
-class Agents(Provider):
+class Agents(Ide, History, Space, Provider):
     name = "agents"
     title = "AGENTS"
     region = "center"
@@ -892,6 +957,11 @@ class Agents(Provider):
         # The open agent's space's newest browser pane: (sid, at, {id, url,
         # title, count}) or (sid, at, None).
         self._browser: tuple | None = None
+        # session id -> the repo its tool calls worked in, when its own
+        # folder is not one (_place).
+        self._repos: dict = {}
+        # tab id -> repo, from the live tabs' own transcripts (live_tabs).
+        self._tab_repos: dict = {}
         # models.catalog's efforts by lowercased model name, and when read.
         self._catalog: dict = {}
         self._catalog_at = -CATALOG_EVERY
@@ -906,6 +976,9 @@ class Agents(Provider):
         self.clock = time.monotonic
         self.tabs = live_tabs
         self.wall = time.time
+        self._ide_init()
+        self._history_init()
+        self._space_init()
 
     @property
     def refresh(self) -> float:  # type: ignore[override]  the daemon reads it after every fetch
@@ -957,13 +1030,18 @@ class Agents(Provider):
                     base = self._log if self._log and self._log.sid == pinned else None
                     log = base.copy() if base else Log(pinned)
                 checkpoint = None
+                for r in rows:
+                    self._place(r, ctx)
                 row = next((r for r in rows if r["id"] == pinned), None)
                 if row is not None:
                     self.catch_up(conn, log)
+                    self._place(row, ctx, log)
                     checkpoint = self.newest_checkpoint(conn, row)
                     self.read_changes(conn, row)
                     self.read_terminal(conn, row)
                     self.read_browser(conn, row)
+                    self.read_history(conn, row, DIFF_EVERY)
+                    self.read_space(conn, row, ctx)
                     with self._lock:
                         # Published only if no press moved the pin meanwhile.
                         mine = self._log is base or self._log is None or self._log.sid != pinned
@@ -978,6 +1056,11 @@ class Agents(Provider):
             tabs = self.tabs(self.wall())
         except Exception:  # noqa: BLE001  a tab we can't read is a tile we don't draw, never a dead panel
             tabs = []
+        with self._lock:
+            self._tab_repos.update({t["id"]: t["repo"] for t in tabs if t.get("id") and t.get("repo")})
+        for r in rows:
+            if not r.get("repo") and r.get("provider_sid") in self._tab_repos:
+                self._place(r, ctx)
         self._maybe_import(ctx, rows, tabs)
         shown = next((r for r in rows if r["id"] == pinned), None)
         with self._lock:
@@ -1119,7 +1202,7 @@ class Agents(Provider):
         """The open agent's changed files, from realm's own git read
         (workspace.diff, an EXEC method: it runs git in the session's folder,
         the same read Realm's diff pane makes), every DIFF_EVERY seconds."""
-        cwd = row.get("cwd_raw") or ""
+        cwd = self.repo_of(row)
         with self._lock:
             fresh = self._changes and self._changes[0] == row["id"] and self.clock() - self._changes[1] < DIFF_EVERY
         if fresh or not cwd.startswith("/"):
@@ -1224,6 +1307,46 @@ class Agents(Provider):
             if isinstance(cp, dict) and isinstance(cp.get("id"), str) and cp.get("sessionId") == row["id"]:
                 return cp["id"]
         return None
+
+    # Shared with the mixins (agent_ide.py, agent_history.py).
+    _clean = staticmethod(clean)
+    _rpc_words = staticmethod(rpc_words)
+    _web = staticmethod(web_address)
+
+    @staticmethod
+    def _ago(ms: float, now_ms: float) -> str:
+        """Coarse on purpose, as realm's checkpoint list is: a history is
+        scanned, not read, and seconds would be noise."""
+        if not ms:
+            return ""
+        s = max(0, round((now_ms - ms) / 1000))
+        if s < 60:
+            return "just now"
+        m = round(s / 60)
+        if m < 60:
+            return f"{m}m ago"
+        h = round(m / 60)
+        return f"{h}h ago" if h < 24 else f"{round(h / 24)}d ago"
+
+    def _place(self, row: dict, ctx: Context, log: "Log | None" = None) -> None:
+        """Point a session whose own folder is not a project (a tab opened
+        in the home folder, imported with that as its cwd) at the repo its
+        tool calls worked in, from its events when they have been read and
+        else from the last time they were. Realm keeps the session's cwd;
+        this only decides where the card's files, search and git live."""
+        cwd = row.get("cwd_raw") or ""
+        if not cwd or session_tree.git_top(str(Path(cwd) / "_"), Path(ctx.home)) is not None:
+            return
+        with self._lock:
+            repo = self._repos.get(row["id"], "") or self._tab_repos.get(row.get("provider_sid") or "", "")
+        if log is not None and log.marks:
+            repo = session_tree.work_root(log.marks, Path(ctx.home)) or repo
+            with self._lock:
+                self._repos[row["id"]] = repo
+        if repo and not any(hidden(ch) for ch in repo):
+            row["repo"] = repo
+            row["folder"] = clean(Path(repo).name, 40)
+            row["cwd"] = clean(tilde(repo, Path(ctx.home)), 80)
 
     @staticmethod
     def row(s: dict, names: dict, ctx: Context) -> dict:
@@ -1337,9 +1460,15 @@ class Agents(Provider):
             card_parts: list[str] = []
             card_order: list[str] = []
             card_parts += [comp(c("head"), "Heading", text=Bind(p("head")), level=2),
-                           comp(c("meta"), "Text", value=Bind(p("meta")), tone="muted"),
-                           comp(c("transcript"), "Transcript", items=Bind(p("transcript")))]
-            card_order += ["head", "meta", "transcript"]
+                           comp(c("meta"), "Text", value=Bind(p("meta")), tone="muted")]
+            card_order += ["head", "meta"]
+            # The finder sits under the card's name: what is opened from it
+            # is the thing being worked on while it is open (agent_ide.py).
+            find_parts, find_order = self.find_parts(plan)
+            card_parts += find_parts
+            card_order += find_order
+            card_parts.append(comp(c("transcript"), "Transcript", items=Bind(p("transcript"))))
+            card_order.append("transcript")
             if plan.get("ask"):
                 card_parts.append(comp(c("ask"), "Text", value=Bind(p("ask"))))
                 card_order.append("ask")
@@ -1349,6 +1478,7 @@ class Agents(Provider):
                                 actionLabel="Deny"),
                            comp(c("draft"), "Field", label="Reply", placeholder=Bind(p("placeholder")),
                                 value=Bind(p("draft"))),
+                           *self.mention_parts(plan)[0],
                            comp(c("send"), "Events", caption="", items=Bind(p("send")), action=f"{ACTION_PREFIX}send",
                                 actionLabel="Send"),
                            comp(c("models"), "Chips", options=Bind(p("models")), value=Bind(p("modelValue")),
@@ -1363,7 +1493,7 @@ class Agents(Provider):
                                 action=f"{ACTION_PREFIX}interrupt", actionLabel="Stop"),
                            comp(c("fork"), "Events", caption="", items=Bind(p("fork")), action=f"{ACTION_PREFIX}fork",
                                 actionLabel="Fork")]
-            card_order += ["allow", "deny", "draft", "send", "models", "efforts", "modes", "mode", "interrupt", "fork"]
+            card_order += ["allow", "deny", "draft", *self.mention_parts(plan)[1], "send", "models", "efforts", "modes", "mode", "interrupt", "fork"]
             if plan.get("changed"):
                 card_parts.append(comp(c("changed"), "Events", caption=Bind(p("changedCap")), items=Bind(p("changed")),
                                        action=f"{ACTION_PREFIX}file", actionLabel="Diff"))
@@ -1390,6 +1520,12 @@ class Agents(Provider):
                 card_parts.append(comp(c("upstream"), "Events", caption="", items=Bind(p("upstream")),
                                        action=f"{ACTION_PREFIX}upstream", actionLabel="Push"))
                 card_order.append("upstream")
+            history_parts, history_order = self.history_parts(plan)
+            card_parts += history_parts
+            card_order += history_order
+            space_parts, space_order = self.space_parts(plan)
+            card_parts += space_parts
+            card_order += space_order
             if plan.get("terminal"):
                 card_parts += [comp(c("termhead"), "Text", value=Bind(p("termHead")), tone="muted"),
                                comp(c("terminal"), "Diff", text=Bind(p("terminal")), plain=True),
@@ -1432,7 +1568,7 @@ class Agents(Provider):
 
     def initial(self) -> dict:
         return {self.p("draft"): "", self.p("task"): "", self.p("agent"): "", self.p("message"): "",
-                self.p("command"): "", self.p("address"): "",
+                self.p("command"): "", self.p("address"): "", self.p("find"): "",
                 self.p("status"): "", self.p("level"): "info"}
 
     def blank(self) -> dict:
@@ -1447,7 +1583,8 @@ class Agents(Provider):
                 p("termopen"): [], p("termOn"): False,
                 p("models"): [], p("modelValue"): "", p("efforts"): [], p("effortValue"): "", p("modes"): [],
                 p("mode"): [], p("webHead"): "", p("webUrl"): "", p("go"): [], p("addressOn"): False,
-                p("placeholder"): "Typed here, sent only by Send", p("pinnedRow"): ""}
+                p("placeholder"): "Typed here, sent only by Send", p("pinnedRow"): "", **self.find_blank(),
+                **self.history_blank(), **self.space_blank()}
 
     def model(self, data, error, values, ctx) -> dict:
         out = self._model(data, error, values, ctx)
@@ -1474,7 +1611,8 @@ class Agents(Provider):
                         shipped=bool(out.get(p("shipped"))), upstream=bool(out.get(p("upstream"))),
                         terminal=bool(out.get(p("termOn"))), termopen=bool(out.get(p("termopen"))),
                         web=bool(out.get(p("webUrl"))), address=bool(out.get(p("addressOn"))),
-                        ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))))
+                        ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))), **self.find_plan(out),
+                        **self.history_plan(out), **self.space_plan(out))
         with self._lock:
             self._plan = plan
             self._shape = json.dumps(plan, sort_keys=True)
@@ -1497,7 +1635,8 @@ class Agents(Provider):
             detail = (tab.get("ask") or (doing(tab.get("detail")) if state == "running" else tab.get("detail"))) \
                 if tab else \
                 {"needs": "Waiting on you", "failed": "Stopped with an error"}.get(state, "")
-            where = (tab.get("project") if tab else "") or r["folder"] or r["space"]
+            where = (r["folder"] if r.get("repo") else "") or (tab.get("project") if tab else "") or r["folder"] \
+                or r["space"]
             out.append({"id": r["id"], "state": state, "provider": r["kind"], "name": r["agent"],
                         "title": r["title"], "detail": detail, "where": where, "last": last,
                         "open_in": (tab or {}).get("open_in", "")})
@@ -1588,9 +1727,12 @@ class Agents(Provider):
         if patch:
             out[p("patch")], out[p("patchPath")] = patch[2], clean(patch[1], 120)
         self.git_model(shown, files, changes, patch, data.get("shipped"), values, out)
+        self.history_model(shown, changes, float(data.get("now") or time.time()) * 1000, values, out)
+        self.space_model(shown, changes, float(data.get("now") or time.time()) * 1000, out)
         self.terminal_model(shown, data.get("terminal"), values, out)
         self.options_model(shown, data, values, out)
         self.browser_model(shown, data.get("browser"), values, out)
+        self.find_model(shown, values, out, ctx)
         if not data.get("caught_up"):
             out[p("meta")] += " · catching up on older turns"
         where = shown["folder"] or "its folder"
@@ -1624,6 +1766,7 @@ class Agents(Provider):
             out[p("fork")] = [{"id": f"{shown['id']}@{data['checkpoint']}", "text": f"Copies {where} as it was before your last message "
                                                            "into a new worktree, with a new session · the "
                                                            "original is untouched"}]
+        self.mention_model(shown, values, out, ctx)
         return out
 
     def git_model(self, shown: dict, files: list, changes: dict, patch, shipped, values: dict, out: dict) -> None:
@@ -1638,7 +1781,7 @@ class Agents(Provider):
                 remote = clean(push.get("remote"), 40) or "its remote"
                 out[p("upstream")] = [{"id": f"upstream:{branch}", "accent": True, "text": clean(
                     f"{branch} to {remote}, and track it there · its first push", 100)}]
-        if not files or not shown.get("cwd_raw"):
+        if not files or not self.repo_of(shown):
             return
         loose = [f["path"] for f in files if f.get("unstaged")]
         staged = [f["path"] for f in files if f.get("staged")]
@@ -1837,13 +1980,13 @@ class Agents(Provider):
             sid = self.pinned
         row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
         listed = {f["path"]: f for f in git_files((data or {}).get("changes"))}
-        if row is None or path not in listed or not row.get("cwd_raw"):
+        if row is None or path not in listed or not self.repo_of(row):
             return Result(False, "That file isn't in the open agent's changes any more.", refetch=True)
         # A file that is only staged has no unstaged patch: its staged side is the change.
         staged = bool(listed[path].get("staged")) and not listed[path].get("unstaged")
         try:
             with self.connect(ctx) as conn:
-                got = conn.call("workspace.fileDiff", {"cwd": row["cwd_raw"], "path": path, "staged": staged},
+                got = conn.call("workspace.fileDiff", {"cwd": self.repo_of(row), "path": path, "staged": staged},
                                 timeout=CALL_TIMEOUT, allow_exec=True)
         except realm_client.RealmError as err:
             return Result(False, f"Couldn't read that diff: {rpc_words(err)}", refetch=True)
@@ -1858,7 +2001,7 @@ class Agents(Provider):
         with self._lock:
             sid = self.pinned
         row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
-        if row is None or not row.get("cwd_raw"):
+        if row is None or not self.repo_of(row):
             return Result(False, "No agent's folder is open. Open one, then press.",
                           updates={self.p("level"): "error"})
         try:
@@ -1866,7 +2009,7 @@ class Agents(Provider):
         except realm_client.RealmError as err:
             return Result(False, f"Nothing was {verb}: {rpc_words(err)}.", updates={self.p("level"): "error"})
         try:
-            got = conn.call("workspace.diff", {"cwd": row["cwd_raw"]}, timeout=CALL_TIMEOUT, allow_exec=True)
+            got = conn.call("workspace.diff", {"cwd": self.repo_of(row)}, timeout=CALL_TIMEOUT, allow_exec=True)
         except realm_client.RealmError as err:
             conn.close()
             return Result(False, f"Nothing was {verb}: couldn't read its changes ({rpc_words(err)}).",
@@ -1907,7 +2050,7 @@ class Agents(Provider):
             if not self._claim("index", row["id"]):
                 return Result(False, "Still staging the last press.")
             try:
-                conn.call(f"workspace.{verb}", {"cwd": row["cwd_raw"], "paths": paths}, timeout=CALL_TIMEOUT,
+                conn.call(f"workspace.{verb}", {"cwd": self.repo_of(row), "paths": paths}, timeout=CALL_TIMEOUT,
                           write=True)
             except realm_client.RealmError as err:
                 if err.maybe_applied:
@@ -1953,7 +2096,7 @@ class Agents(Provider):
                     return Result(False, "Nothing was committed: the agent is still working. Commit once it stops.",
                                   updates=bad, refetch=True)
                 result = conn.call("workspace.ship", {
-                    "cwd": row["cwd_raw"], "commit": True, "message": message, "push": True, "setUpstream": False,
+                    "cwd": self.repo_of(row), "commit": True, "message": message, "push": True, "setUpstream": False,
                     "openPr": False, "environmentId": self._environment_at(conn, row)},
                     timeout=SHIP_TIMEOUT, write=True)
             except realm_client.RealmError as err:
@@ -1989,7 +2132,7 @@ class Agents(Provider):
                 return Result(False, "Still pushing the last press.")
             try:
                 result = conn.call("workspace.ship", {
-                    "cwd": row["cwd_raw"], "commit": False, "message": "", "push": True, "setUpstream": True,
+                    "cwd": self.repo_of(row), "commit": False, "message": "", "push": True, "setUpstream": True,
                     "openPr": False, "environmentId": None}, timeout=SHIP_TIMEOUT, write=True)
             except realm_client.RealmError as err:
                 if err.maybe_applied:
@@ -2001,8 +2144,7 @@ class Agents(Provider):
                 self._release("ship", row["id"])
         return self._shipped_result(row, result)
 
-    @staticmethod
-    def _environment_at(conn, row: dict):
+    def _environment_at(self, conn, row: dict):
         """The session's environment id when that environment is the folder
         being shipped, so realm files the ship under it; else None, since
         realm refuses a mismatch (ENVIRONMENT_MISMATCH)."""
@@ -2012,7 +2154,7 @@ class Agents(Provider):
             env = conn.call("environments.get", {"id": row["environment"]}, timeout=CALL_TIMEOUT)
         except realm_client.RealmRpcError:
             return None
-        return row["environment"] if isinstance(env, dict) and env.get("path") == row["cwd_raw"] else None
+        return row["environment"] if isinstance(env, dict) and env.get("path") == self.repo_of(row) else None
 
     def _shipped_result(self, row: dict, result) -> Result:
         with self._lock:
@@ -2310,8 +2452,9 @@ class Agents(Provider):
         with self._lock:
             moved = self.pinned != sid
             self._repin(sid)
-        # A draft typed for one session is not carried to the next.
-        cleared = {self.p("draft"): ""} if moved else {}
+        # A draft typed for one session is not carried to the next, nor
+        # a search of its checkout.
+        cleared = {self.p("draft"): "", self.p("find"): ""} if moved else {}
         return Result(True, "", updates=cleared, refetch=True)
 
     def _bring_in(self, ctx: Context, data, tab_id: str):
@@ -2392,8 +2535,10 @@ class Agents(Provider):
                 return Result(False, "That message already arrived; it wasn't sent again.",
                               updates={self.p("draft"): "", **bad}, refetch=True)
             before = log.seq
+            mentions = self.mentions_for(sid, text)
+            params = {"id": sid, "text": text, **({"mentionRefs": mentions} if mentions else {})}
             try:
-                conn.call("sessions.send", {"id": sid, "text": text}, timeout=CALL_TIMEOUT, write=True)
+                conn.call("sessions.send", params, timeout=CALL_TIMEOUT, write=True)
             except realm_client.RealmError as err:
                 if err.maybe_applied:
                     with self._lock:
@@ -2406,6 +2551,7 @@ class Agents(Provider):
             with self._lock:
                 self._unsure = None
                 self._busy = True
+            self.forget_mentions(sid)
             try:
                 self.catch_up(conn, log)
                 landed = log.landed(text, before)

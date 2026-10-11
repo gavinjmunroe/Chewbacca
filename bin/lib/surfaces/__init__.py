@@ -244,6 +244,11 @@ class Provider:
 
     def __init__(self) -> None:
         self.actions: dict[str, Callable[[Context, object, dict], Result]] = {}
+        # Redraw from the current model without a fetch. The daemon sets it
+        # when the surface opens; a provider whose answer arrives on its own
+        # thread (a search) calls it so the answer shows as it lands, not at
+        # the next refresh.
+        self.poke: Callable[[], None] = lambda: None
 
     def p(self, key: str) -> str:
         """A pointer under this surface's own prefix. Pointers are namespaced

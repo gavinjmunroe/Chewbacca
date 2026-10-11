@@ -49,7 +49,7 @@ tks.COMPONENTS.add("Transcript")
 # Launcher.swift, outside the generated vocabulary list the checker reads.
 tks.COMPONENTS.add("Avatar")
 # Tiles and Chips: hud/CLAUDE.md "Agents as tiles", AgentTiles.swift.
-tks.COMPONENTS.update({"Tiles", "Chips", "Diff", "Web"})
+tks.COMPONENTS.update({"Tiles", "Chips", "Diff", "Web", "Hits", "File"})
 BIDI = "‮"
 LINE_SEP = " "
 ZWSP = "​"
@@ -105,6 +105,21 @@ class FakeEngine:
         self.browsers: dict = {}
         # terminal id -> {run, out, programs}: realm's scrollback ring, as one string.
         self.term: dict = {}
+        # project.files answers from these repo paths; project.grep from
+        # (path, line, the line's text).
+        self.files: list = []
+        self.code: list = []
+        self.ships: list = []
+        # The space's other records (review, runs, schedules, MCP, memory),
+        # absent until a test sets them.
+        self.review = None
+        self.runs: list = []
+        self.schedules: list = []
+        self.mcp: list = []
+        self.memory_path = ""
+        # checkpoint id -> what checkpoints.preview answers; restored ids.
+        self.previews: dict = {}
+        self.restored: list = []
         # agents.probe's answer, shaped as on this Mac on 2026-10-10: Claude
         # and Gemini installed with sign-in unknown, Codex installed but not
         # runnable by the engine, Cursor absent.
@@ -151,7 +166,15 @@ class FakeEngine:
         self.upstream = tracked
         push = {"state": "pushed" if tracked else "no-upstream", "remote": "origin", "branch": self.diff["branch"],
                 "reason": None}
-        return {"commit": commit, "push": push, "pr": {"state": "skipped", "url": None, "reason": None}}
+        pr = {"state": "skipped", "url": None, "reason": None}
+        if p.get("openPr") and push["state"] == "pushed":
+            pr = {"state": "created", "url": "https://github.com/x/y/pull/7", "reason": None}
+        if push["state"] == "pushed" or commit["state"] == "committed":
+            self.ships.insert(0, {"id": self.nid("ship"), "environmentId": p.get("environmentId") or "env-none",
+                                  "spaceId": "sp1", "branch": self.diff["branch"], "sha": "3f2a1b9c0d",
+                                  "subject": p["message"] or "last commit", "prUrl": pr["url"],
+                                  "pushState": push["state"], "createdAt": NOW_MS + self.n})
+        return {"commit": commit, "push": push, "pr": pr}
 
     @property
     def writes(self):
@@ -191,6 +214,63 @@ class FakeEngine:
                          "lines": [{"kind": "context", "text": "    keep = 1", "oldLine": 1, "newLine": 1},
                                    {"kind": "del", "text": "    old" + BIDI, "oldLine": 2, "newLine": None},
                                    {"kind": "add", "text": "    new", "oldLine": None, "newLine": 2}]}]}
+        if method == "review.get":
+            return {"review": self.review}
+        if method == "review.request":
+            return {"sessionId": "s-rev", "itemId": "it"}
+        if method == "runs.list":
+            return {"runs": [dict(r) for r in self.runs if not p["states"] or r["state"] in p["states"]],
+                    "nextCursor": None}
+        if method == "runs.get":
+            r = next((r for r in self.runs if r["id"] == p["id"]), None)
+            return {"run": dict(r), "attempts": []} if r else None
+        if method == "runs.approve":
+            r = next(r for r in self.runs if r["id"] == p["id"])
+            r["state"] = "running"
+            return dict(r)
+        if method == "schedules.list":
+            return [dict(x) for x in self.schedules]
+        if method == "schedules.runNow":
+            return dict(next(x for x in self.schedules if x["id"] == p["id"]))
+        if method == "mcp.list":
+            return {"servers": [dict(m) for m in self.mcp], "secretNote": ""}
+        if method == "mcp.setEnabled":
+            next(m for m in self.mcp if m["id"] == p["id"])["enabled"] = p["enabled"]
+            return {"ok": True}
+        if method == "memory.get":
+            return {"path": self.memory_path, "doc": "", "agentsFile": {}, "profile": None}
+        if method == "ships.list":
+            return {"ships": [dict(x) for x in self.ships if x["spaceId"] == p["spaceId"]][: p["limit"]],
+                    "nextCursor": None}
+        if method == "checkpoints.preview":
+            return dict(self.previews[p["id"]])
+        if method == "checkpoints.restore":
+            prev = self.previews[p["id"]]
+            if p["acknowledge"] != {"filesChanged": prev["filesChanged"], "commitsRolledBack": prev["commitsRolledBack"]}:
+                raise rc.RealmRpcError(method, "RESTORE_UNSAFE", "the checkout changed")
+            self.restored.append(p["id"])
+            return {"environmentId": prev["environmentId"], "path": prev["path"], "undoCheckpointId": "cp-undo",
+                    "headMoved": True, "filesChanged": prev["filesChanged"], "commitsRolledBack": 0,
+                    "filesRemoved": 1, "conversationRewound": prev["rewindsConversation"]}
+        if method == "project.files":
+            q = p["query"].lower()
+            hits = [{"path": f, "score": 10, "segments": [{"text": f, "match": False}] if not q else [
+                {"text": f[:f.lower().find(q)], "match": False}, {"text": f[f.lower().find(q):][:len(q)], "match": True},
+                {"text": f[f.lower().find(q) + len(q):], "match": False}]}
+                for f in self.files if not q or q in f.lower()]
+            return {"hits": hits[: p["limit"]], "truncated": False, "source": "git"}
+        if method == "mentions.files":
+            q = p["query"].lower()
+            hits = [{"path": f, "score": 1, "segments": [{"text": f, "match": False}]}
+                    for f in self.files if q in f.lower()]
+            return {"hits": hits[: p["limit"]], "truncated": False, "source": "git"}
+        if method == "project.grep":
+            q = p["query"]
+            hits = [{"path": f, "line": n, "segments": [{"text": text[:text.find(q)], "match": False},
+                                                         {"text": q, "match": True},
+                                                         {"text": text[text.find(q) + len(q):], "match": False}]}
+                    for f, n, text in self.code if q in text]
+            return {"hits": hits[: p["limit"]], "truncated": len(hits) > p["limit"], "source": "git"}
         if method == "agents.probe":
             return [dict(x) for x in self.probe]
         if method == "models.catalog":
@@ -977,6 +1057,390 @@ def agent_card(tmp: Path) -> None:
     check("reading the card wrote nothing", e.writes == [], e.writes)
 
 
+def finder(tmp: Path) -> None:
+    """Find on the open card: file names at once, code from GREP_MIN letters,
+    each row opening that file in the card, at its line, through the engine's
+    own search, and nothing a press names outside the drawn answer."""
+    e = FakeEngine()
+    repo = tmp / "find" / "repo"
+    (repo / "hud").mkdir(parents=True)
+    (repo / "hud" / "Glass.swift").write_text("let a = 1\nlet glass = 2\n")
+    (repo / "README.md").write_text("# readme\n")
+    (repo / ".git").mkdir()
+    e.files = ["hud/Glass.swift", "README.md", "../outside.txt", "gone.py"]
+    e.code = [("hud/Glass.swift", 2, "let glass = 2")]
+    e.add_session("s1", "idle", cwd=str(repo))
+    a, ctx = world(tmp / "find", e)
+    poked = []
+    a.poke = lambda: poked.append(1)
+    data, model = view(a, ctx, open="s1")
+    check("an empty Find field searches nothing and draws no results",
+          model["/agents/findOn"] and model["/agents/findFiles"] == [] and model["/agents/findLines"] == []
+          and not any(m.startswith("project.") for m, _, _ in e.calls), [m for m, _, _ in e.calls])
+    check("the Find field sits under the card's name, before the conversation",
+          drawn_order(a).index("agents-find ") < drawn_order(a).index("agents-transcript"), drawn_order(a))
+    values = {"/agents/find": "gl"}
+    model = a.model(data, None, values, ctx)
+    check("a short word asks for file names only, as an exec read, and pokes the panel when it lands",
+          [m for m, _, _ in e.calls if m.startswith("project.")] == ["project.files"] and poked
+          and all(not w for m, _, w in e.calls if m.startswith("project.")), e.calls[-1])
+    model = a.model(data, None, values, ctx)
+    rows = model["/agents/findFiles"]
+    check("a file row is its name with the match lit, and its folder under it",
+          rows and rows[0]["segments"] == [{"text": "Gl", "match": True}, {"text": "ass.swift", "match": False}]
+          and rows[0]["where"] == "hud" and rows[0]["kind"] == "file" and model["/agents/findFilesCap"] == "Files",
+          rows)
+    check("the same word is not searched twice", sum(m == "project.files" for m, _, _ in e.calls) == 1)
+    a.layout()
+    check("results are drawn as Hits rows whose press opens", "agents-findfiles Hits" in " ".join(a.layout())
+          and "action=\"ks-open\"" in " ".join(a.layout()), [x for x in a.layout() if "Hits" in x])
+    r = a.open_hit(ctx, data, {"row": rows[0]["id"]})
+    model = a.model(data, None, values, ctx)
+    check("a file row opens that file in the card, editable, and marks its row",
+          r.ok and model["/agents/filePath"] == str((repo / "hud" / "Glass.swift").resolve())
+          and model["/agents/fileEdit"] is True and model["/agents/fileLine"] == 0
+          and model["/agents/findFiles"][0]["selected"], (r, model["/agents/filePath"]))
+    a.model(data, None, values, ctx)
+    check("the open file is a File component in the card", "agents-file File path=@/agents/filePath" in
+          " ".join(a.layout()) and "editable=true" in " ".join(a.layout()), [x for x in a.layout() if "File" in x])
+    values = {"/agents/find": "glass"}
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    check("from three letters it also searches the code, and a line row names its path and line",
+          [m for m, _, _ in e.calls if m == "project.grep"] and model["/agents/findLines"]
+          and model["/agents/findLines"][0]["where"] == "hud/Glass.swift · 2"
+          and model["/agents/findLinesCap"] == "In the code", model["/agents/findLines"])
+    r = a.open_hit(ctx, data, {"row": model["/agents/findLines"][0]["id"]})
+    model = a.model(data, None, values, ctx)
+    check("a line row opens its file at that line", r.ok and model["/agents/fileLine"] == 2
+          and r.line == "Glass.swift, line 2.", r.line)
+    stale = rows[0]["id"]
+    check("a row from an older answer refuses rather than open its neighbour",
+          not a.open_hit(ctx, data, {"row": stale}).ok)
+    values = {"/agents/find": "outside"}
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    out_row = next((x for x in model["/agents/findFiles"] if "outside" in "".join(t["text"] for t in x["segments"])),
+                   None)
+    r = a.open_hit(ctx, data, {"row": out_row["id"]}) if out_row else None
+    check("a path the engine gave that leaves the project is never opened",
+          r is not None and not r.ok and "outside" in r.line, r)
+    values = {"/agents/find": "gone"}
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    r = a.open_hit(ctx, data, {"row": model["/agents/findFiles"][0]["id"]})
+    check("a file no longer on disk says so", not r.ok and "isn't on disk" in r.line, r)
+    for bad in ("", "x", "f:0", "fz:0", "/etc/passwd", "f999:0"):
+        check(f"a forged row {bad!r} opens nothing", not a.open_hit(ctx, data, {"row": bad}).ok)
+    values = {"/agents/find": "zzzz"}
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    check("a word with no match says so in one line", model["/agents/findNote"] == "Nothing in repo matches that."
+          and model["/agents/findFiles"] == [], model["/agents/findNote"])
+    model = a.model(data, None, {"/agents/find": "gl"}, ctx)
+    close = model["/agents/fileClose"]
+    check("an open file has one Close row naming it", close and close[0]["text"].startswith("Glass.swift"), close)
+    r = a.close_file(ctx, data, {"row": "close:/etc/passwd"})
+    check("Close only closes the file it named", not r.ok)
+    r = a.close_file(ctx, data, {"row": close[0]["id"]})
+    model = a.model(data, None, {"/agents/find": "gl"}, ctx)
+    check("Close takes the file off the card", r.ok and model["/agents/filePath"] == "")
+    e.fail["project.files"] = rc.RealmUnavailable("down")
+    a.model(data, None, {"/agents/find": "readme"}, ctx)
+    model = a.model(data, None, {"/agents/find": "readme"}, ctx)
+    check("a search the engine can't answer says so, and draws no rows",
+          "Couldn't search repo" in model["/agents/findNote"] and model["/agents/findFiles"] == [],
+          model["/agents/findNote"])
+    del e.fail["project.files"]
+    a.pick(ctx, data, {"row": "s1"})
+    check("searching wrote nothing", e.writes == [], e.writes)
+
+
+def mention_picker(tmp: Path) -> None:
+    """The @ list under the reply: realm's own list for the session's files,
+    a pick puts @[name] in the text, and Send carries only the files whose
+    token is still there, never a secret."""
+    e = FakeEngine()
+    repo = tmp / "mention" / "repo"
+    (repo / "hud").mkdir(parents=True)
+    for rel in ("hud/Glass.swift", "README.md", ".env", "docs/Glass.swift"):
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text("x\n")
+    e.files = ["hud/Glass.swift", "README.md", ".env", "docs/Glass.swift"]
+    e.add_session("s1", "idle", cwd=str(repo))
+    a, ctx = world(tmp / "mention", e)
+    data, model = view(a, ctx, open="s1")
+    check("a reply with no trailing @ asks for no list", model["/agents/mentions"] == []
+          and not any(m == "mentions.files" for m, _, _ in e.calls))
+    values = {"/agents/draft": "look at @gla"}
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    rows = model["/agents/mentions"]
+    check("a trailing @word lists the session's files through realm's own @ list, as a read",
+          [m for m, _, _ in e.calls if m == "mentions.files"] == ["mentions.files"]
+          and [r["where"] for r in rows] == ["hud", "docs"] and model["/agents/mentionsCap"] == "Attach a file"
+          and "agents-mentions Hits" in " ".join(a.layout()), rows)
+    check("the @ list sits between the reply and Send",
+          drawn_order(a).index("agents-draft") < drawn_order(a).index("agents-mentions")
+          < drawn_order(a).index("agents-send"), drawn_order(a))
+    r = a.pick_mention(ctx, data, {"row": rows[0]["id"], **values})
+    check("a pick puts @[name] where the @word was", r.ok and r.updates["/agents/draft"] == "look at @[Glass.swift] ",
+          r.updates)
+    values = {"/agents/draft": r.updates["/agents/draft"] + "and @gla"}
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    r2 = a.pick_mention(ctx, data, {"row": model["/agents/mentions"][1]["id"], **values})
+    check("a second file with the same name gets its folder in its chip",
+          r2.ok and r2.updates["/agents/draft"].endswith("and @[docs/Glass.swift] "), r2.updates)
+    text = r2.updates["/agents/draft"] + "please"
+    model = a.model(data, None, {"/agents/draft": text}, ctx)
+    check("the Send row says which files go with it", "with Glass.swift, docs/Glass.swift" in
+          model["/agents/send"][0]["text"], model["/agents/send"])
+    r = a.pick_mention(ctx, data, {"row": rows[0]["id"], "/agents/draft": "no at here"})
+    check("a pick whose @word is gone does nothing", not r.ok)
+    for bad in ("", "m1", "m999:0", "f1:0"):
+        check(f"a forged pick {bad!r} does nothing",
+              not a.pick_mention(ctx, data, {"row": bad, "/agents/draft": "x @gla"}).ok)
+    dropped = text.replace("@[docs/Glass.swift] ", "")
+    a.send(ctx, data, {"row": "s1", "/agents/draft": dropped})
+    sent = [p for m, p in e.writes if m == "sessions.send"]
+    check("Send carries the files whose token is still in the text, and no other",
+          sent and sent[-1].get("mentionRefs") == [{"kind": "file", "label": "Glass.swift",
+                                                     "path": str((repo / "hud" / "Glass.swift").resolve())}], sent)
+    a.forget_mentions("s1")
+    import surfaces.agent_ide as ide  # noqa: PLC0415
+    check("a secret file is never listed", all(ide.secret_path(x) for x in
+          (".env", ".env.local", "a/.ssh/config", "k.pem", "id_ed25519", "client_secret_1.json"))
+          and not any(ide.secret_path(x) for x in (".env.example", "README.md", "keys.py")))
+    values = {"/agents/draft": "@en"}
+    a.model(data, None, values, ctx)
+    model = a.model(data, None, values, ctx)
+    check("and the @ list leaves it out even when the engine names it",
+          not any(".env" in r["segments"][0]["text"] for r in model["/agents/mentions"]), model["/agents/mentions"])
+    check("live refs drop a token whose file was a secret",
+          ide.live_refs("@[k] @[ok]", {"k": "/r/k.pem", "ok": "/r/ok.py"}) == [{"kind": "file", "label": "ok",
+                                                                                 "path": "/r/ok.py"}])
+
+
+def real_repo(tmp: Path) -> None:
+    """A tab opened in the home folder and imported with that as its cwd
+    points at the repo its tool calls worked in: the card's meta, its
+    changes, its finder and its tile all name that repo, never ~."""
+    e = FakeEngine()
+    a, ctx = world(tmp / "repo", e)
+    home = Path(ctx.home)
+    repo = home / "code" / "chewbacca"
+    (repo / "hud").mkdir(parents=True, exist_ok=True)
+    other = home / "code" / "amber" / "amber-id"
+    e.add_session("s1", "idle", title="HUD", cwd=str(home))
+    e.event("s1", "tool_call", {"name": "Read", "input": {"file_path": str(other / "README.md")}})
+    e.event("s1", "tool_call", {"name": "Read", "input": {"file_path": str(other / "src" / "a.ts")}})
+    e.event("s1", "tool_call", {"name": "Edit", "input": {"file_path": str(repo / "hud" / "Glass.swift")}})
+    e.event("s1", "tool_call", {"name": "Read", "input": {"file_path": "relative/not/counted.py"}})
+    e.diff = {"root": str(repo), "branch": "main", "totalFiles": 0, "truncated": False, "files": []}
+    data, model = view(a, ctx, open="s1")
+    data = a.fetch(ctx)
+    model = a.model(data, None, {}, ctx)
+    check("an edit outweighs two reads: the card works in the repo it changed",
+          "~/code/chewbacca" in model["/agents/meta"] and "joelnewton" not in model["/agents/meta"],
+          model["/agents/meta"])
+    diffs = [p["cwd"] for m, p, _ in e.calls if m == "workspace.diff"]
+    check("its changes are read from that repo, not the home folder",
+          diffs and diffs[-1] == str(repo.resolve()), diffs)
+    check("its tile names that repo", model["/agents/tiles"][0]["meta"].startswith("chewbacca"),
+          model["/agents/tiles"])
+    e.files = ["hud/Glass.swift"]
+    a.model(data, None, {"/agents/find": "glass"}, ctx)
+    cwds = [p["cwd"] for m, p, _ in e.calls if m == "project.files"]
+    check("the finder searches that repo", cwds and cwds[-1] == str(repo.resolve()), cwds)
+    a.model(data, None, {"/agents/draft": "@gl"}, ctx)
+    check("the @ list asks that repo, since realm's own list would walk the home folder",
+          [p["cwd"] for m, p, _ in e.calls if m == "project.files"][-1] == str(repo.resolve())
+          and not any(m == "mentions.files" for m, _, _ in e.calls), e.calls[-1])
+    e.add_session("s2", "idle", title="Native", cwd=str(other))
+    data = a.fetch(ctx)
+    row = next(r for r in data["rows"] if r["id"] == "s2")
+    check("a session already in a repo keeps it", not row.get("repo") and row["cwd_raw"] == str(other), row)
+    entries = [{"message": {"content": [{"type": "tool_use", "name": "Edit",
+                                         "input": {"file_path": str(other / "src" / "x.ts")}}]}}]
+    t = {"cwd": str(home), "transcript": str(tmp / "repo" / "t.jsonl")}
+    (tmp / "repo" / "t.jsonl").write_text("{}\n")
+    check("a live tab opened in the home folder is named for the repo it edited",
+          SA.tab_repo(t, home, entries) == str(other.resolve()), SA.tab_repo(t, home, entries))
+    check("a tab already in a repo is left alone", SA.tab_repo({"cwd": str(repo), "transcript": t["transcript"]},
+                                                               home, entries) == "")
+    e.add_session("s3", "idle", title="Bash only", cwd=str(home))
+    e.event("s3", "tool_call", {"name": "Bash", "input": {"command": f"cd {other}/src && cat a.ts; git -C {other} log -1"}})
+    e.event("s3", "tool_call", {"name": "Bash", "input": {"command": "cd $HOME/x && ls"}})
+    a.pick(ctx, a.fetch(ctx), {"row": "s3"})
+    data = a.fetch(ctx)
+    row = next(r for r in data["rows"] if r["id"] == "s3")
+    check("a session that only ran Bash is placed by the folders it cd'd into",
+          row.get("repo") == str(other.resolve()), row.get("repo"))
+    check("placing a session wrote nothing", e.writes == [], e.writes)
+
+
+def history(tmp: Path) -> None:
+    """History on the open card: checkpoints and ships together, newest
+    first; a checkpoint previews before Restore is offered, Restore sends the
+    counts shown and refuses when they moved; Open PR is realm's ship with
+    the commit leg off, and its page opens in the card."""
+    e = FakeEngine()
+    cwd = str(tmp / "hist" / "repo")
+    e.add_session("s1", "idle", cwd=cwd)
+    e.checkpoints += [{"id": "cp-2", "environmentId": "env-s1", "sessionId": "s1", "kind": "turn",
+                       "label": "make the rail glass", "createdAt": NOW_MS - 600_000},
+                      {"id": "cp-1", "environmentId": "env-s1", "sessionId": "s1", "kind": "turn",
+                       "label": "first ask", "createdAt": NOW_MS - 7_200_000}]
+    e.ships.append({"id": "ship-old", "environmentId": "env-s1", "spaceId": "sp1", "branch": "feat/rail",
+                    "sha": "abcdef1234", "subject": "feat: rail", "prUrl": "https://github.com/x/y/pull/3",
+                    "pushState": "pushed", "createdAt": NOW_MS - 3_600_000})
+    e.ships.append({"id": "ship-other", "environmentId": "env-elsewhere", "spaceId": "sp1", "branch": "main",
+                    "sha": "999", "subject": "someone else's", "prUrl": None, "pushState": "pushed", "createdAt": NOW_MS})
+    e.previews["cp-2"] = {"checkpointId": "cp-2", "environmentId": "env-s1", "path": cwd, "label": "make the rail glass",
+                          "createdAt": NOW_MS - 600_000, "filesChanged": 3, "commitsRolledBack": 0, "headMovable": True,
+                          "headReason": None, "intact": True, "rewindsConversation": True}
+    e.diff = {"root": cwd, "branch": "feat/rail", "totalFiles": 0, "truncated": False, "files": []}
+    a, ctx = world(tmp / "hist", e)
+    data, model = view(a, ctx, open="s1")
+    rows = model["/agents/history"]
+    check("History lists the session's checkpoints and its own ships together, newest first",
+          [r["id"] for r in rows] == ["c:cp-2", "s:ship-old", "c:cp-1"]
+          and rows[0]["where"] == "before a turn · 12m ago" and rows[1]["kind"] == "pr"
+          and rows[1]["where"] == "abcdef1 on feat/rail · pushed · pull request · 1h ago"
+          and model["/agents/historyCap"] == "History", rows)
+    check("nothing restores until a checkpoint is previewed", model["/agents/restore"] == [])
+    r = a.pick_history(ctx, data, {"row": "c:cp-2"})
+    model = a.model(data, None, {}, ctx)
+    check("a checkpoint row previews what restoring costs, as an exec read",
+          r.ok and model["/agents/restoreNote"].startswith("Rewrites 3 files to match it.")
+          and "conversation rewinds" in model["/agents/restoreNote"]
+          and model["/agents/restore"][0]["id"] == "restore:cp-2:3:0"
+          and model["/agents/history"][0]["selected"], (r, model["/agents/restoreNote"]))
+    e.previews["cp-2"] = dict(e.previews["cp-2"], filesChanged=4)
+    r = a.restore(ctx, data, {"row": "restore:cp-2:3:0"})
+    model = a.model(data, None, {}, ctx)
+    check("a restore whose cost moved since it was shown refuses, and the card shows the new cost",
+          not r.ok and not e.restored and model["/agents/restore"][0]["id"] == "restore:cp-2:4:0", r)
+    e.sessions["s1"]["status"] = "running"
+    r = a.restore(ctx, data, {"row": "restore:cp-2:4:0"})
+    check("nothing restores while the agent is working", not r.ok and not e.restored, r)
+    e.sessions["s1"]["status"] = "idle"
+    for bad in ("", "restore:cp-1:4:0", "restore:cp-2:x:0", "cp-2"):
+        check(f"a forged restore {bad!r} does nothing", not a.restore(ctx, data, {"row": bad}).ok and not e.restored)
+    r = a.restore(ctx, data, {"row": "restore:cp-2:4:0"})
+    check("Restore sends exactly the counts it showed, and says the undo point is in History",
+          r.ok and e.restored == ["cp-2"] and ("checkpoints.restore", {"id": "cp-2", "acknowledge": {
+              "filesChanged": 4, "commitsRolledBack": 0}}) in e.writes and "undo point" in r.line, (r, e.writes))
+    data = a.fetch(ctx)
+    model = a.model(data, None, {}, ctx)
+    check("after a restore the preview is gone", model["/agents/restore"] == [] and model["/agents/restoreNote"] == "")
+    r = a.pick_history(ctx, data, {"row": "s:ship-old"})
+    model = a.model(data, None, {}, ctx)
+    check("a ship row with a pull request opens its page in the card",
+          r.ok and model["/agents/prWeb"] == "https://github.com/x/y/pull/3" and "agents-prweb Web" in
+          " ".join(a.layout()), model["/agents/prWeb"])
+    check("Open PR is offered for a feature branch with nothing staged",
+          model["/agents/pr"] and model["/agents/pr"][0]["id"] == "pr:feat/rail", model["/agents/pr"])
+    r = a.open_pr(ctx, data, {"row": "pr:main"})
+    check("Open PR for a branch that isn't checked out does nothing", not r.ok)
+    r = a.open_pr(ctx, data, {"row": "pr:feat/rail"})
+    ships = [p for m, p in e.writes if m == "workspace.ship"]
+    model = a.model(a.fetch(ctx), None, {}, ctx)
+    check("Open PR is realm's ship with the commit leg off and the PR leg on, and its page opens",
+          r.ok and ships[-1]["commit"] is False and ships[-1]["openPr"] is True and ships[-1]["message"] == ""
+          and model["/agents/prWeb"] == "https://github.com/x/y/pull/7", (r, ships))
+    e.diff = {"root": cwd, "branch": "main", "totalFiles": 0, "truncated": False, "files": []}
+    a._changes = None
+    model = a.model(a.fetch(ctx), None, {}, ctx)
+    check("no pull request is offered from main", model["/agents/pr"] == [], model["/agents/pr"])
+    e.ships.insert(0, {"id": "ship-evil", "environmentId": "env-s1", "spaceId": "sp1", "branch": "x",
+                       "sha": "1", "subject": "x", "prUrl": "javascript:alert(1)", "pushState": "pushed",
+                       "createdAt": NOW_MS + 999})
+    a._history = None
+    data = a.fetch(ctx)
+    r = a.pick_history(ctx, data, {"row": "s:ship-evil"})
+    check("a pull request link that isn't http or https never opens", not r.ok, r)
+
+
+def this_space(tmp: Path) -> None:
+    """The space's other records on the card: one list, a press selects, and
+    the one verb for the selected row writes only from its own press."""
+    e = FakeEngine()
+    cwd = str(tmp / "space" / "repo")
+    e.add_session("s1", "idle", cwd=cwd)
+    e.diff = {"root": cwd, "branch": "feat/x", "totalFiles": 1, "truncated": False, "files": [
+        {"path": "a.py", "oldPath": None, "status": "modified", "staged": False, "unstaged": True, "binary": False,
+         "additions": 1, "deletions": 0}]}
+    e.runs = [{"id": "run1", "title": "Nightly deps bump", "state": "blocked", "attempt": 2, "spaceId": "sp1"}]
+    e.schedules = [{"id": "sch1", "title": "Morning triage", "cron": "0 9 * * *", "enabled": True,
+                    "nextRunAt": NOW_MS + 3_600_000, "lastRunAt": NOW_MS - 86_400_000}]
+    e.mcp = [{"id": "m1", "name": "linear", "enabled": True, "status": "connected", "tools": [{}, {}]}]
+    a, ctx = world(tmp / "space", e)
+    realm_home = Path(ctx.env["CHEWBACCA_REALM_HOME"])
+    (realm_home / "memory").mkdir(parents=True)
+    (realm_home / "memory" / "sp1.md").write_text("Use pnpm.\n")
+    e.memory_path = str(realm_home / "memory" / "sp1.md")
+    data, model = view(a, ctx, open="s1")
+    rows = model["/agents/space"]
+    check("This space lists a review to ask for, the blocked run, the schedule, the connection and memory",
+          [r["id"] for r in rows] == ["review", "run:run1", "sch:sch1", "mcp:m1", "memory"]
+          and rows[2]["where"] == "0 9 * * * · on · last ran 1d ago" and rows[3]["where"] == "connected · 2 tools"
+          and model["/agents/spaceCap"] == "This space", rows)
+    check("no verb is drawn until a row is picked", model["/agents/spaceDo"] == [])
+    a.pick_space(ctx, data, {"row": "run:run1"})
+    model = a.model(data, None, {}, ctx)
+    check("picking the blocked run offers Approve, naming it",
+          model["/agents/spaceDo"][0]["id"] == "run:run1:2" and model["/agents/spaceDoLabel"] == "Approve"
+          and "Nightly deps bump" in model["/agents/spaceDo"][0]["text"], model["/agents/spaceDo"])
+    r = a.space_do(ctx, data, {"row": "run:run1:1"})
+    check("an approval for an older attempt refuses", not r.ok and not any(m == "runs.approve" for m, _ in e.writes))
+    data = a.fetch(ctx)
+    a.pick_space(ctx, data, {"row": "run:run1"})
+    r = a.space_do(ctx, data, {"row": "run:run1:2"})
+    check("Approve approves that run only", r.ok and ("runs.approve", {"id": "run1", "approved": True, "note": None})
+          in e.writes, (r, e.writes))
+    data = a.fetch(ctx)
+    a.pick_space(ctx, data, {"row": "mcp:m1"})
+    model = a.model(data, None, {}, ctx)
+    check("picking a connection offers to turn it off, by name", model["/agents/spaceDo"][0]["id"] == "mcp:m1:off"
+          and model["/agents/spaceDo"][0]["text"].startswith("Turns off linear"), model["/agents/spaceDo"])
+    r = a.space_do(ctx, data, {"row": "mcp:m1:off"})
+    check("and the press turns it off in this space", r.ok and ("mcp.setEnabled", {"spaceId": "sp1", "id": "m1",
+                                                                                 "enabled": False}) in e.writes, r)
+    data = a.fetch(ctx)
+    a.pick_space(ctx, data, {"row": "sch:sch1"})
+    r = a.space_do(ctx, data, {"row": "sch:sch1"})
+    check("Run now runs the task once", r.ok and ("schedules.runNow", {"id": "sch1"}) in e.writes, r)
+    data = a.fetch(ctx)
+    a.pick_space(ctx, data, {"row": "review"})
+    model = a.model(data, None, {}, ctx)
+    check("with changes and no review, Review asks a read-only reviewer", model["/agents/spaceDo"][0]["id"] ==
+          "review:env-s1" and "can't edit or ship" in model["/agents/spaceDo"][0]["text"], model["/agents/spaceDo"])
+    r = a.space_do(ctx, data, {"row": "review:env-s1"})
+    check("and the press asks realm for one", r.ok and ("review.request", {"environmentId": "env-s1"}) in e.writes, r)
+    e.review = {"environmentId": "env-s1", "sessionId": "s-rev", "sessionTitle": "Review", "outcome": "done",
+                "text": "Two findings.\n1. a.py misses a test.", "createdAt": NOW_MS - 60_000}
+    data = a.fetch(ctx)
+    model = a.model(data, None, {}, ctx)
+    check("a finished review shows its first line", model["/agents/space"][0]["segments"][0]["text"] ==
+          "Two findings." and model["/agents/space"][0]["where"].startswith("reviewed"), model["/agents/space"][0])
+    r = a.pick_space(ctx, data, {"row": "review"})
+    check("pressing it shows the whole verdict in the card", r.ok and "misses a test" in r.updates["/agents/patch"])
+    r = a.pick_space(ctx, data, {"row": "memory"})
+    model = a.model(data, None, {}, ctx)
+    check("Memory opens the space's memory file in the editor", r.ok and model["/agents/filePath"] ==
+          str((realm_home / "memory" / "sp1.md").resolve()) and model["/agents/fileEdit"] is True, model["/agents/filePath"])
+    e.memory_path = "/etc/passwd"
+    a._space = None
+    data = a.fetch(ctx)
+    model = a.model(data, None, {}, ctx)
+    check("a memory path outside realm's home is never offered",
+          not any(r["id"] == "memory" for r in model["/agents/space"]), model["/agents/space"])
+    for bad in ("", "nope", "sch:other"):
+        check(f"a forged space press {bad!r} changes nothing", not a.space_do(ctx, data, {"row": bad}).ok)
+
+
 def ship_values(a, data, ctx, message):
     """The model a Commit and push press is drawn from, and its row id."""
     model = a.model(data, None, {"/agents/message": message}, ctx)
@@ -1355,6 +1819,18 @@ def through_the_daemon(tmp: Path) -> None:
         activity = (tmp / "activity.jsonl").read_text()
         check("the activity log has the press and never the message or title",
               '"action": "send"' in activity and "say hi" not in activity and "Rail" not in activity, activity)
+        e.files = ["hud/Glass.swift"]
+        e.sessions["s1"]["status"] = "idle"
+        a.spawn = lambda fn: None  # the search waits, as it would on its thread
+        d.handle_line('v /agents/find "glass"')
+        hud.take()
+        a._found = {"sid": "s1", "root": "/Users/x/code/chewbacca", "query": "glass", "gen": 9,
+                    "files": [{"path": "hud/Glass.swift", "segments": [{"text": "hud/Glass.swift", "match": False}]}],
+                    "lines": [], "truncated": False, "source": "git", "why": ""}
+        a.poke()
+        lines = hud.take()
+        check("a search landing on its own thread draws at once, with no fetch",
+              any(x.startswith("d /agents/findFiles ") and "Glass.swift" in x for x in lines), lines)
     finally:
         surfaces.KINDS = kinds
 
@@ -1467,6 +1943,11 @@ def main() -> int:
         any_agent(tmp)
         live_tabs_and_import(tmp)
         agent_card(tmp)
+        finder(tmp)
+        mention_picker(tmp)
+        real_repo(tmp)
+        history(tmp)
+        this_space(tmp)
         shipping(tmp)
         terminal(tmp)
         options(tmp)

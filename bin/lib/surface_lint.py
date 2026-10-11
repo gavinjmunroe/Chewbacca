@@ -35,12 +35,14 @@ SURFACE_CHARS = 1000
 # chip, a ring, an avatar, a button) breaks them up. Miller's seven.
 TEXT_RUN = 7
 # Components whose text the person opened to read.
-OPENED = {"File", "Diff", "Transcript", "Terminal", "Web", "Code"}
+# Search results (Hits) count here too: they are drawn only for a word the
+# person typed, so reading them is the job.
+OPENED = {"File", "Diff", "Transcript", "Terminal", "Web", "Code", "Hits"}
 # Text bound to a Select's options: in its menu, not on the first view.
 MENU = "Select menu"
 # Components that are not prose and break a run of text.
 VISUAL = {"Metric", "Tiles", "Chips", "Ring", "Avatar", "Sparkline", "Bars", "Segmented", "Button",
-          "Mark", "Image", "Web", "Table"}
+          "Mark", "Image", "Web", "Table", "Hits", "File"}
 # The plumbing that leaked onto the meetings panel: provenance, raw clock
 # times to the second, word ranges and model attributions belong behind a tap.
 PLUMBING = [

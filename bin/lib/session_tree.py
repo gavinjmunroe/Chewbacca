@@ -23,6 +23,7 @@ module produced, so a press can only name a row that was drawn.
 from __future__ import annotations
 
 import os
+import re
 import stat
 import subprocess
 import unicodedata
@@ -75,6 +76,101 @@ def touched(entries: list[dict]) -> dict[str, str]:
             elif name in READ_TOOLS:
                 out.setdefault(path, "read")
     return out
+
+
+# A read counts once toward a session's repo and an edit this many times:
+# the repo it changed is the one it worked in, more than one it looked at.
+# Guessed, never measured.
+EDIT_WEIGHT = 3
+
+
+def git_top(path: str, home: Path, seen: dict | None = None) -> Path | None:
+    """The working tree a path is in, found by walking up to the nearest
+    folder holding `.git` (a folder, or a worktree's file), with no git
+    process. None when that is the home folder itself, or nothing is.
+    A path that no longer exists is placed by the nearest folder that does,
+    so a removed worktree's edits count toward the repo it was cut from."""
+    seen = {} if seen is None else seen
+    try:
+        here = Path(path).expanduser()
+    except (OSError, RuntimeError):
+        return None
+    if not here.is_absolute():
+        return None
+    start = here.parent
+    while not start.is_dir() and start != start.parent:
+        start = start.parent
+    chain: list[Path] = []
+    top: Path | None = None
+    walk = start
+    while True:
+        if walk in seen:
+            top = seen[walk]
+            break
+        chain.append(walk)
+        if (walk / ".git").exists():
+            top = walk
+            break
+        if walk == walk.parent:
+            break
+        walk = walk.parent
+    for folder in chain:
+        seen[folder] = top
+    if top is None:
+        return None
+    try:
+        real = top.resolve()
+    except (OSError, RuntimeError):
+        return None
+    return None if real == Path(home).expanduser().resolve() else real
+
+
+# `cd <dir>` and `git -C <dir>` in a shell command: how a session that only
+# ran Bash said where it worked. Found live on 2026-10-11: an imported
+# session had 175 tool calls and every one was Bash (`cd ~/code/chewbacca &&
+# cat ...`), so Read and Edit alone found no repo for it.
+SHELL_DIR = re.compile(r"(?:^|[;&|(]\s*|\bgit\s+)(?:cd|-C)\s+(\"[^\"]+\"|'[^']+'|[^\s;&|)]+)")
+
+
+def shell_dirs(command: str, home: Path) -> list[str]:
+    """Absolute folders a shell command moved into or pointed git at, as
+    paths inside them (`<dir>/_`) so git_top starts at the folder itself."""
+    out = []
+    for raw in SHELL_DIR.findall(str(command or "")):
+        word = raw.strip("\"'")
+        if word.startswith("~"):
+            word = str(Path(home) / word[1:].lstrip("/"))
+        if word.startswith("/") and "$" not in word and "*" not in word:
+            out.append(str(Path(word) / "_"))
+    return out
+
+
+def worked_in(entries: list[dict], home: Path) -> dict[str, str]:
+    """touched(), plus the folders its shell commands went into, read-weight."""
+    marks = touched(entries)
+    for e in entries:
+        content = (e.get("message") or {}).get("content") if isinstance(e.get("message"), dict) else None
+        for b in content if isinstance(content, list) else []:
+            if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("name") == "Bash":
+                args = b.get("input") if isinstance(b.get("input"), dict) else {}
+                for d in shell_dirs(args.get("command"), home):
+                    marks.setdefault(d, "read")
+    return marks
+
+
+def work_root(marks: dict[str, str], home: Path) -> str:
+    """The repo a session worked in, from what its tool calls read and
+    edited (`touched`): the working tree holding the most of them, edits
+    weighted EDIT_WEIGHT. "" when none of them is in a repo."""
+    seen: dict = {}
+    score: dict[Path, int] = {}
+    for path, how in marks.items():
+        top = git_top(path, home, seen)
+        if top is not None:
+            score[top] = score.get(top, 0) + (EDIT_WEIGHT if how == "edited" else 1)
+    if not score:
+        return ""
+    return str(max(score.items(), key=lambda kv: (kv[1], str(kv[0])))[0])
 
 
 def repo_root(cwd: str, run=subprocess.run) -> Path | None:

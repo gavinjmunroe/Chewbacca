@@ -338,6 +338,7 @@ class Daemon:
                     self.close_surface(next(iter(self.open)), save=False)
                 live = Live(provider, kind, arg, self.place(name, provider.region, region))
                 self.open[name] = live
+                provider.poke = lambda n=name: self.spawn(lambda: self.repush(n))
                 fresh = True
             else:
                 fresh = False
@@ -420,6 +421,14 @@ class Daemon:
         if lines:
             self.hud.send([f"@ {p.name}"] + lines)
         return lines
+
+    def repush(self, name: str) -> None:
+        """A provider's own thread has something new: push the model as it
+        stands, with no fetch (Provider.poke)."""
+        with self.lock:
+            live = self.open.get(name)
+            if live is not None:
+                self.push(live)
 
     def close_surface(self, name: str, save: bool = True) -> str:
         with self.lock:

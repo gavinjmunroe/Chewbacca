@@ -100,6 +100,14 @@ READ_METHODS = frozenset({
 EXEC_METHODS = frozenset({
     "agents.probe", "cli.status",
     "workspace.gitInfo", "workspace.diff", "workspace.fileDiff",
+    # Added from rpc.ts at 59afd9e4 (2026-10-11) for the agent card's finder
+    # and its `@` picker: ⌘P's file names and ⌘⇧F's text search over a
+    # checkout, and the prompter's `@` list for one session's checkout. Each
+    # runs git (ls-files, grep) in a cwd, so each is exec, not a plain read.
+    "project.files", "project.grep", "mentions.files",
+    # What restoring a checkpoint would cost: read-only by contract, but
+    # asked of git in the environment's checkout at the moment of asking.
+    "checkpoints.preview",
 })
 
 

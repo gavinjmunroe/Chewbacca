@@ -1076,36 +1076,80 @@ def glance(sessions: list[dict], now: float) -> list[dict]:
     return keep
 
 
-def session_rows(sessions: list[dict], now: float) -> list[dict]:
+LANES = (("needs", "Needs u"), ("working", "Running"), ("done", "Done"))
+
+
+def lane_of(s: dict) -> str:
+    return "done" if s["state"] in ("finished", "failed") else s["state"]
+
+
+def counts(sessions: list[dict], now: float) -> dict[str, int]:
+    shown = glance(sessions, now)
+    return {k: sum(1 for s in shown if lane_of(s) == k) for k, _ in LANES}
+
+
+def pick_lane(lane: str, n: dict[str, int]) -> str:
+    """The lane asked for, or the first one with something in it."""
+    if lane in n:
+        return lane
+    return next((k for k, _ in LANES if n.get(k)), "working")
+
+
+def session_rows(sessions: list[dict], now: float, lane: str = "") -> list[dict]:
     rows = []
-    for s in glance(sessions, now)[:GLANCE_ROWS]:
+    for s in glance(sessions, now):
+        if lane and lane_of(s) != lane:
+            continue
         word = "needs u" if s["state"] == "needs" else WORDS.get(s["state"], s["state"])
         rows.append({
             "id": s["id"], "accent": s["state"] == "needs",
             "text": short_title(s.get("title") or ""),
             "time": " · ".join(b for b in (word, s.get("project") or "", age_words(now - s["last"])) if b),
         })
+        if len(rows) == GLANCE_ROWS:
+            break
     return rows
 
 
-def list_caption(sessions: list[dict], now: float) -> str:
-    shown = glance(sessions, now)
-    counts = [(sum(1 for s in shown if s["state"] == k), w) for k, w in
-              (("needs", "need u"), ("working", "running"), ("failed", "failed"), ("finished", "done"))]
-    words = [f"{n} {w}" for n, w in counts if n]
-    return " · ".join(words) if words else "Nothing running. Start one below."
+def list_caption(sessions: list[dict], now: float, lane: str = "") -> str:
+    n = counts(sessions, now)
+    if not any(n.values()):
+        return "Nothing running. Start one below."
+    if lane and not n.get(lane):
+        return {"needs": "Nothing needs u.", "working": "Nothing running.", "done": "Nothing done in the last hour."}[lane]
+    return ""
 
 
-def sessions_surface(rows: list[dict], caption: str = "") -> list[str]:
+def lane_options(n: dict[str, int]) -> list[dict]:
+    return [{"id": k, "label": label, "count": n.get(k, 0)} for k, label in LANES]
+
+
+def sessions_surface(rows: list[dict], caption: str = "", n: dict[str, int] | None = None,
+                     lane: str = "working") -> list[str]:
+    """Counts on top, lanes under them, the lane's rows, then a new task.
+    Opal's task glass was the bar (kyber-surfaces skill): numbers that say
+    what to do, and Stuck/Ready lanes as first-class states."""
+    n = n or {k: 0 for k, _ in LANES}
     return [
-        "@ sessions at=left w=360",
+        "@ sessions at=left w=380",
         'c s Screen title="AGENTS"',
         "r s",
+        "c nums Stack direction=horizontal gap=3",
+        'c mn Metric label="Need u" value=@/n/needs thresholds=[{"at":1,"tone":"bad"}]',
+        'c mw Metric label="Running" value=@/n/working',
+        'c md Metric label="Done" value=@/n/done',
+        "> nums mn mw md",
+        "c lanes Segmented value=@/lane options=@/lanes",
         'c l Events caption=@/caption action=open actionLabel="Open" items=@/rows',
+        "c new Stack direction=horizontal gap=2",
         'c task Field label="New task" placeholder="What should an agent do?" value=@/sessions/draft',
         'c start Button label="Start" action=start variant=primary',
+        "> new task start",
         "c st Status message=@/sessions/status/message level=@/sessions/status/level",
-        "> s l task start st",
+        "> s nums lanes l new st",
+        f"d /n {json.dumps(n)}",
+        f"d /lane {json.dumps(lane)}",
+        f"d /lanes {json.dumps(lane_options(n))}",
         f"d /rows {json.dumps(rows)}",
         f"d /caption {json.dumps(caption)}",
         'd /sessions/draft ""',
@@ -1256,13 +1300,17 @@ class Serve:
             return
         now = time.time()
         found = discover(now)
-        rows = session_rows(found, now)
-        caption = list_caption(found, now)
-        drawn = json.dumps([rows, caption])
+        n = counts(found, now)
+        lane = pick_lane(getattr(self, "lane", ""), n)
+        rows = session_rows(found, now, lane)
+        caption = list_caption(found, now, lane)
+        drawn = json.dumps([rows, caption, n, lane])
         if not self.rows_drawn:
-            self.send(sessions_surface(rows, caption))
+            self.send(sessions_surface(rows, caption, n, lane))
         elif drawn != self.rows_drawn:
-            self.send(["@ sessions", f"d /rows {json.dumps(rows)}", f"d /caption {json.dumps(caption)}"])
+            self.send(["@ sessions", f"d /n {json.dumps(n)}", f"d /lanes {json.dumps(lane_options(n))}",
+                       f"d /lane {json.dumps(lane)}", f"d /rows {json.dumps(rows)}",
+                       f"d /caption {json.dumps(caption)}"])
         self.rows_drawn = drawn
 
     def open_card(self, sid: str) -> None:
@@ -1378,6 +1426,13 @@ class Serve:
             return
         if ev["name"] == "open" and surface == "sessions":
             self.open_card(str(ev.get("row") or ""))
+            return
+        if ev["name"] == "select" and surface == "sessions":
+            # A lane press. Only a lane this surface drew counts.
+            if str(ev.get("row") or "") in dict(LANES):
+                self.lane = str(ev["row"])
+                self.rows_drawn = self.rows_drawn and "-"
+                self.refresh_list()
             return
         if ev["name"] == "start" and surface == "sessions":
             self.start_task(self.drafts.get("sessions", ""))

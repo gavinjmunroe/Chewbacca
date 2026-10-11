@@ -110,9 +110,16 @@ def test_meta_and_rows() -> None:
            {"id": "d", "state": "finished", "project": "p", "title": "t", "last": 400.0 - 2 * 3600}]
     check("a glance is five rows at most", len(ks.session_rows(many, 400.0)) == ks.GLANCE_ROWS)
     check("old failures and long-finished sessions are history, not rows", ks.session_rows(old, 400.0) == [])
-    check("the header counts what to act on",
-          ks.list_caption(many[:2] + [{"id": "n", "state": "needs", "last": 399.0}], 400.0) == "1 need u · 2 running")
+    mixed = many[:2] + [{"id": "n", "state": "needs", "project": "p", "title": "t", "last": 399.0}]
+    n = ks.counts(mixed, 400.0)
+    check("the numbers on top count what to act on", n == {"needs": 1, "working": 2, "done": 0}, n)
+    check("it opens on the lane that needs u", ks.pick_lane("", n) == "needs")
+    check("a lane shows only its rows", [r["id"] for r in ks.session_rows(mixed, 400.0, "needs")] == ["n"])
+    check("an empty lane says so", ks.list_caption(mixed, 400.0, "done").startswith("Nothing done"))
     check("an empty list says so", "Nothing running" in ks.list_caption([], 400.0))
+    lines = ks.sessions_surface([], "", n, "needs")
+    check("the glass has numbers, lanes, rows and a new task",
+          all(any(k in l for l in lines) for k in ("Metric", "Segmented", "Events", "action=start")), lines)
 
 
 def test_card_items() -> None:
@@ -880,6 +887,14 @@ def test_serve_start() -> None:
     srv.send = sent.append
     got: list = []
     srv.start_task = lambda words: got.append(words)
+    srv.list_open, srv.rows_drawn = True, "x"
+    saved_discover = ks.discover
+    ks.discover = lambda now=None, **kw: [{"id": "d", "state": "finished", "project": "p", "title": "t", "last": ks.time.time()}]
+    srv.handle({"name": "select", "component": "lanes", "surface": "sessions", "row": "done"})
+    check("a lane press redraws that lane", srv.lane == "done" and '"id": "d"' in "".join(sent[-1]), sent[-1:])
+    srv.handle({"name": "select", "component": "lanes", "surface": "sessions", "row": "nope"})
+    check("a lane it never drew is ignored", srv.lane == "done")
+    ks.discover = saved_discover
     srv.on_value('v /sessions/draft "in lemma: write the README"')
     srv.handle({"name": "start", "component": "start", "surface": "sessions"})
     check("Start takes what was typed in New task", got == ["in lemma: write the README"], got)

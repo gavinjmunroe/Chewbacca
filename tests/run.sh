@@ -1639,6 +1639,10 @@ if group "hud"; then
   check  "kyber-surfaces parses" python3 -m py_compile "$ROOT/bin/kyber-surfaces"
   check  "the OS graph refuses bad edges, fuses only via people, answers its questions" \
     python3 "$ROOT/tests/test_osgraph.py"
+  # The desktop home panel's feed: throwaway git repos under a temp home, so
+  # the person's own repos and git config never decide a result.
+  check  "the home feed lists his recent repos, skips chores and others' commits, and writes owner-only" \
+    python3 "$ROOT/tests/test_home_feed.py"
   check  "waiting on you: his tapback, a 1:1 or a call closes a thread, and the eval asks what the ingester asks" \
     python3 "$ROOT/tests/test_needs_you.py"
   # CHW-204. Hand-built graphs and a fixture chat.db; the replay of real days

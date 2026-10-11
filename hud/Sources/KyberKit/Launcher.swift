@@ -96,7 +96,7 @@ struct AvatarView: View {
     /// A hue from the name, so the same person is always the same colour
     /// and two people next to each other usually are not. Muted, because a
     /// row of saturated circles is louder than the rows they label.
-    static func hue(_ name: String) -> Double {
+    nonisolated static func hue(_ name: String) -> Double {
         let sum = name.unicodeScalars.reduce(UInt32(7)) { ($0 &* 31) &+ $1.value }
         return Double(sum % 360) / 360
     }

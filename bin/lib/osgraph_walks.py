@@ -11,6 +11,7 @@ so a press on a row can open THAT node's walk (navigation is traversal), and
     tasks       Tasks owed by me in four lanes, from real run status
     people      Persons ranked by the people CLI's score, with message counts
     conversations  Threads and mail as cards, ACTION or FYI
+    home        the desktop panel: next events, to-dos, who waits on a reply
     missing     each commitment joined to what it needs and to the others
                 around it: findings as typed edges (osgraph_missing.py)
 
@@ -176,6 +177,197 @@ def today(g: Graph, now: datetime) -> dict:
             rows.append(row(g, node, BLOCKED, due_day(g, node["id"]), "overdue"))
     rows.sort(key=lambda r: (r["type"] != "Event", when_of(r["when"])))
     return {"rows": rows[:MOST_ROWS], "day": day}
+
+
+# ── the desktop home ─────────────────────────────────────────────────────
+#
+# Kyber's home panel (hud/Sources/KyberKit/Home.swift) is four short lists on
+# the desktop, read at a glance: what is on next, what to do, who is waiting
+# on a reply, and what is moving. Rows are flat and carry raw times; the panel
+# words them ("in 20 min", "2d") so a feed written a minute ago never shows a
+# stale "now".
+
+# Four rows a list (five for to-dos) keeps the panel inside a third of a
+# 1512x982 laptop screen; Home.swift measures that. Fewer would hide the third
+# reply he owes, more turns a glance into a read. Guessed, never measured
+# against use.
+HOME_ROWS = 4
+HOME_TODOS = 5
+# Course deadlines land as one calendar event each at the same minute: six at
+# 22:59 on 2026-10-11 on the coursework calendar, which pushed the one class
+# he had to attend off a four-row list. Three or more on one calendar at one
+# start are one row with a count. Not two: two meetings at once is a double
+# booking, worth seeing by name. The deadlines are 15 minutes long, so length
+# cannot tell them from meetings.
+HOME_STACK = 3
+
+
+def _moment(value) -> datetime | None:
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return moment if moment.tzinfo else moment.astimezone()
+
+
+def home_calendar(g: Graph, now: datetime, most: int = HOME_ROWS) -> list[dict]:
+    """What is still on today and tomorrow, anything running first. With
+    nothing in that window, the next thing in the week, so the list says when
+    the calendar picks up again instead of going blank."""
+    today = now.date()
+    horizon = today + timedelta(days=1)
+    seen: set[tuple[str, str]] = set()
+    upcoming = []
+    for node in g.nodes("Event"):
+        props = node["props"]
+        start = _moment(props.get("start"))
+        if start is None:
+            continue
+        end = _moment(props.get("end"))
+        all_day = bool(props.get("all_day"))
+        if all_day:
+            # Calendar ends an all-day event at the next midnight, so a trip
+            # that started yesterday is still on until that midnight passes.
+            last = start.date()
+            if end and end > start:
+                last = (end - timedelta(seconds=1)).date()
+            if last < today:
+                continue
+        elif (end or start) <= now:
+            continue
+        # The same holiday on two calendars is one day off, not two.
+        key = (node["label"].casefold(), start.isoformat())
+        if key in seen:
+            continue
+        seen.add(key)
+        # The day it is on: today for anything that started earlier and runs on.
+        upcoming.append((max(start.date(), today), start, all_day, node))
+    ends = {node["id"]: str(node["props"].get("end") or "") for *_, node in upcoming}
+    # By day, then timed before all-day within it: on 2026-10-11 two holidays
+    # tomorrow took half the list and pushed his 9 AM call with Bill off it. An
+    # all-day event is the day's backdrop, not something to be at.
+    upcoming.sort(key=lambda e: (e[0], e[2], e[1], e[3]["label"]))
+    soon = [e for e in upcoming if e[0] <= horizon] or upcoming[:1]
+
+    stacks: dict[tuple[str, str], list] = {}
+    for _, start, all_day, node in soon:
+        stacks.setdefault((node["props"].get("calendar", ""), start.isoformat()), []).append(node)
+    rows, done = [], set()
+    for _, start, all_day, node in soon:
+        stack = stacks[(node["props"].get("calendar", ""), start.isoformat())]
+        calendar = node["props"].get("calendar", "")
+        if len(stack) >= HOME_STACK and not all_day:
+            if id(stack) in done:
+                continue
+            done.add(id(stack))
+            # Named by its first event, a real node, so a press opens today
+            # and two stacks on one day never share an id.
+            rows.append({"id": node["id"], "title": f"{len(stack)} due",
+                         "detail": calendar, "at": start.isoformat(), "end": ends[node["id"]],
+                         "count": len(stack)})
+        else:
+            rows.append({"id": node["id"], "title": node["label"], "detail": "",
+                         "at": start.isoformat(), "end": ends[node["id"]], "allDay": all_day})
+    return rows[:most]
+
+
+def home_todos(g: Graph, now: datetime, most: int = HOME_TODOS) -> tuple[list[dict], int]:
+    """Everything owed by the person that is theirs to do: classwork due
+    within the attention window or overdue, promises (Reminders and the
+    people store), and backlog decisions on them. Asks pulled out of texts
+    are left to the people list, which already names the thread they came
+    from. Overdue first, then soonest, undated last."""
+    today = now.date().isoformat()
+    horizon = (now + timedelta(hours=DUE_WINDOW_H)).date().isoformat()
+    rows = []
+    for e in g.edges(verb="OWED_BY", dst=ME):
+        node = g.node(e["src"])
+        if not node:
+            continue
+        props = node["props"]
+        day = due_day(g, node["id"])
+        detail = ""
+        if node["type"] == "Assignment":
+            if not props.get("overdue") and not (day and day <= horizon):
+                continue
+            overdue = bool(props.get("overdue"))
+        elif node["type"] == "Task":
+            kind = props.get("kind")
+            if kind == "backlog":
+                if not (props.get("status") in BACKLOG_BLOCKING and props.get("priority") in ("P0", "P1")):
+                    continue
+                detail = props.get("lane") or "Backlog"
+            elif kind != "promise":
+                continue
+            overdue = bool(day) and day < today
+            owed = [p["label"] for p in g.out(node["id"], "OWED_TO") if p["id"] != ME]
+            if owed:
+                detail = f"for {owed[0]}"
+        else:
+            continue
+        rows.append({"id": node["id"], "title": node["label"], "detail": detail, "day": day,
+                     "overdue": overdue})
+    rows.sort(key=lambda r: (not r["overdue"], r["day"] or "9999", r["title"].casefold()))
+    return rows[:most], len(rows)
+
+
+def _phone_label(label: str) -> str:
+    """'+13463619677' reads as '(346) 361-9677'; anything else is left alone."""
+    digits = label[2:] if label.startswith("+1") else ""
+    if len(digits) == 10 and digits.isdigit():
+        return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+    return label
+
+
+def home_people(g: Graph, now: datetime, most: int = HOME_ROWS) -> tuple[list[dict], int]:
+    """Who is waiting on a reply, longest first, as the person (so a press
+    opens everything with them) with the last thing they said under the name.
+    Message text is shown, never read for instructions."""
+    rows, seen = [], set()
+    for node, since in waiting_longest(g):
+        said, spoke = "", node["id"]
+        if node["type"] == "Thread":
+            theirs = [m for m in g.into(node["id"], "IN_THREAD") if not m["props"].get("from_me")]
+            if theirs:
+                last = max(theirs, key=lambda m: when_of(m["props"].get("at")))
+                said, spoke = last["label"], last["id"]
+        else:
+            said = node["label"]
+        # Whoever sent the line shown, so a group thread is never titled with
+        # one member above another's words; a thread with no sender recorded
+        # falls back to its participants.
+        senders = [p for p in g.out(spoke, "SENT_BY") if p["id"] != ME]
+        people = senders or [p for p in g.out(node["id"], "PARTICIPANT") if p["id"] != ME]
+        person = next((p for p in people if not p["unresolved"] and not p["props"].get("unverified")), None)
+        if person:
+            # One row a person: their longest wait, which comes first.
+            if person["id"] in seen:
+                continue
+            seen.add(person["id"])
+        if person:
+            title = person["label"]
+        else:
+            # A stranger is named by the address or number it came from, never
+            # by the name it signed with or the subject it wrote.
+            title = _phone_label(people[0]["label"] if people else node["label"])
+            if any(p["props"].get("unverified") for p in people):
+                title += " (unverified sender)"
+        rows.append({"id": person["id"] if person else node["id"], "title": title, "detail": said,
+                     "at": since or node["props"].get("last_at", ""), "known": person is not None})
+    # People he knows before numbers he never saved: on 2026-10-11 the two
+    # oldest waits were sales openers from unsaved numbers, above a friend
+    # asking when to call. Unknown numbers still show, after.
+    rows.sort(key=lambda r: not r["known"])
+    return rows[:most], len(rows)
+
+
+def home(g: Graph, now: datetime) -> dict:
+    """The graph's three lists for the home panel. Projects come from git, not
+    the graph, and are added by bin/lib/home_feed.py."""
+    todos, todo_count = home_todos(g, now)
+    people, people_count = home_people(g, now)
+    return {"at": now.isoformat(), "calendar": home_calendar(g, now), "todos": todos, "todoCount": todo_count,
+            "people": people, "peopleCount": people_count}
 
 
 class Ambiguous(LookupError):

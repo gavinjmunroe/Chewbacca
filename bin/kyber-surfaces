@@ -20,6 +20,7 @@ conversations. A row is a graph node, so a press on it opens that node's walk.
     kyber-surfaces activity [--limit N]              what the surfaces did, newest last
     kyber-surfaces ingest [--days N]                 read every source into the graph now
     kyber-surfaces walk <kind> [arg]                 print a walk's rows, no HUD needed
+    kyber-surfaces home [--write]                    the desktop home panel's feed (~/.bob/home-panel.json)
     kyber-surfaces graph                             counts, and every edge re-checked
     kyber-surfaces forget                            stop the daemon, delete what it stored
     kyber-surfaces start                             the daemon, in the background (hud-listen runs this)
@@ -70,6 +71,10 @@ CONTROL_LOCK = Path(CONTROL + ".start-lock")
 STATE = Path(os.environ.get("KYBER_SURFACES_STATE", str(BOB / "surfaces-state.json")))
 ACTIVITY = Path(os.environ.get("KYBER_SURFACES_ACTIVITY", str(BOB / "surfaces-activity.jsonl")))
 BADGES = Path(os.environ.get("KYBER_SURFACES_BADGES", str(BOB / "badges.json")))
+# The desktop home panel's feed, read by Kyber (hud/Sources/KyberKit/Home.swift)
+# from the same folder. Not home.json: that file is where he lives, for the
+# weather (bin/lib/quick.py), and a first build of this nearly wrote over it.
+HOME_PANEL = BOB / "home-panel.json"
 CONFIG = Path(os.environ.get("KYBER_SURFACES_CONFIG", str(Path.home() / ".chewbacca" / "surfaces.json")))
 LOG = Path.home() / "Library" / "Logs" / "com.calebnewton.chewbacca.surfaces.log"
 
@@ -178,12 +183,14 @@ class Live:
 class Daemon:
     def __init__(self, hud, ctx: Context | None = None, state_path: Path = STATE,
                  activity_path: Path = ACTIVITY, badges_path: Path = BADGES, spaces: dict | None = None,
-                 clock=time.monotonic, spawn=None, ingest=None, make=None):
+                 clock=time.monotonic, spawn=None, ingest=None, make=None, home_path: Path | None = None):
         self.hud = hud
         self.ctx = ctx or Context()
         self.state_path = state_path
         self.activity_path = activity_path
         self.badges_path = badges_path
+        # Beside the badge, so a test that moves the badge moves this too.
+        self.home_path = home_path or badges_path.with_name("home-panel.json")
         self.spaces = spaces if spaces is not None else spaces_config()
         self.clock = clock
         self.spawn = spawn or (lambda fn: threading.Thread(target=fn, daemon=True).start())
@@ -226,6 +233,7 @@ class Daemon:
                 for live in self.open.values():
                     live.due = 0.0
         self.write_badges()
+        self.write_home()
         return report
 
     def write_badges(self) -> None:
@@ -239,6 +247,21 @@ class Daemon:
             self.badges_path.write_text(json.dumps({"needsYou": count, "at": self.ctx.now().isoformat()}))
         except Exception as err:  # noqa: BLE001  a badge never takes the daemon down
             log(f"badge: {err}")
+
+    def write_home(self) -> None:
+        """The desktop home panel's feed (bin/lib/home_feed.py), which Kyber
+        watches and redraws on change."""
+        if self.ctx.graph is None:
+            return
+        try:
+            import home_feed  # noqa: PLC0415
+
+            now = self.ctx.now()
+            rows = home_feed.cached_projects(now, time.monotonic(), self.ctx.home)
+            body = home_feed.build(self.ctx.graph, now, rows, getattr(self.ctx, "ingest_errors", {}))
+            home_feed.write(body, self.home_path)
+        except Exception as err:  # noqa: BLE001  the panel never takes the daemon down
+            log(f"home: {err}")
 
     # ── state ────────────────────────────────────────────────────────────
 
@@ -953,9 +976,37 @@ def cmd_walk(kind: str, arg: str, as_json: bool = False) -> int:
     return 0
 
 
+def cmd_home(write: bool) -> int:
+    """The home panel's feed from the graph as it stands. It never ingests:
+    Kyber runs `home --write` when the feed is stale, and the daemon owns
+    ingesting. Stamped with when the graph was last written, so a graph
+    nobody is refreshing shows its age on the panel, and carrying the
+    sources the daemon last could not read, since only an ingest knows them."""
+    import home_feed  # noqa: PLC0415
+
+    path = osgraph.default_path()
+    if not path.exists():
+        # After `forget`, or before the first ingest: opening the graph would
+        # make a new one, and that is the daemon's call, not a refresh's.
+        print("No graph yet: the surfaces daemon writes it on its first ingest.", file=sys.stderr)
+        return 1
+    ctx = live_context()
+    now = ctx.now()
+    rows = home_feed.projects(now, ctx.home, home_feed.load_config(home_feed.config_path(ctx.home)))
+    failed = home_feed.read(HOME_PANEL).get("failed") or []
+    body = home_feed.build(ctx.graph, now, rows, [str(f) for f in failed if isinstance(f, str)],
+                           written=home_feed.graph_written(path))
+    if write:
+        home_feed.write(body, HOME_PANEL)
+        print(HOME_PANEL)
+    else:
+        print(json.dumps(body, indent=1, default=str))
+    return 0
+
+
 def cmd_forget() -> int:
     """Stop the daemon, then delete the graph (and its -wal, -shm and
-    -journal), the agent runs' task copies, and the badge. The next start
+    -journal), the agent runs' task copies, the badge and the home feed. The next start
     rebuilds the last 7 days from the sources, which is the point: the graph
     is a cache, and this is how to empty it."""
     import osgraph_runs  # noqa: PLC0415
@@ -970,9 +1021,12 @@ def cmd_forget() -> int:
         import shutil  # noqa: PLC0415
         shutil.rmtree(osgraph_runs.RUNS, ignore_errors=True)
         gone.append(str(osgraph_runs.RUNS))
-    if BADGES.exists():
-        BADGES.unlink()
-        gone.append(str(BADGES))
+    # The home feed holds names and the last line of texts, so it goes with
+    # the graph it was read from.
+    for derived in (BADGES, HOME_PANEL):
+        if derived.exists():
+            derived.unlink()
+            gone.append(str(derived))
     print("Removed:\n  " + "\n  ".join(gone) if gone else "Nothing was stored.")
     print("The surfaces daemon is stopped; it rebuilds the last 7 days when it next starts.")
     return 0
@@ -1007,6 +1061,8 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("words", nargs="+")
     w.add_argument("--json", action="store_true", help="rows for kyber-genui: {\"rows\": [...]}")
     sub.add_parser("graph", help="graph counts and an ontology check")
+    h = sub.add_parser("home", help="the desktop home panel's feed, as JSON")
+    h.add_argument("--write", action="store_true", help="write ~/.bob/home-panel.json instead of printing it")
     sub.add_parser("forget", help="stop the daemon and delete everything it stored")
     sub.add_parser("run", help="the daemon")
     sub.add_parser("start", help="start the daemon in the background if it is not running")
@@ -1026,6 +1082,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_ingest(args.days)
     if args.cmd == "graph":
         return cmd_graph()
+    if args.cmd == "home":
+        return cmd_home(args.write)
     if args.cmd == "forget":
         return cmd_forget()
     if args.cmd in ("open", "walk"):

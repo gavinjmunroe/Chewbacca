@@ -61,6 +61,11 @@ ADDRESS = re.compile(r"<([^<>@\s]+@[^<>\s]+)>|([^\s<>]+@[^\s<>]+)")
 SPACE_BY_COMPANY = {"amber": "amber", "zeutara": "amber", "togari": "amber", "medha": "amber",
                     "usc": "school", "university of southern california": "school"}
 BACKLOG_LIVE = {"open", "decision", "blocked", "verify", "proposed"}
+# Undated Reminders let into the graph. Gavin's Mac had one on 2026-10-11 and
+# Caleb's 11 open ones on 2026-10-04 were all dated, so this only stops a
+# list someone uses as an archive from flooding the tasks walk. Guessed,
+# never measured.
+UNDATED_REMINDERS = 20
 
 
 def clip(text, limit: int) -> str:
@@ -778,28 +783,37 @@ def people_tasks(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
 
 
 def reminders(graph: Graph, ctx, ids: Identities, days: int = 7) -> dict:
-    """Open Reminders due by the end of the window, as Tasks owed by me.
+    """Open Reminders due within the window either side of now, and open ones
+    with no date at all, as Tasks owed by me.
     Reminders on this Mac reach back to 2024 (2026-10-04: 11 open, the oldest
-    due 2024-08-18), so an overdue one only counts within the window."""
+    due 2024-08-18), so an overdue one only counts within the window. An
+    undated one has no window to fall out of: "Do Reagan's stuff", added by
+    voice on 2026-10-05 with no date, was on no list anywhere until it was let
+    in. They come in the order Reminders lists them, at most UNDATED_REMINDERS."""
     now = ctx.now()
-    rows = ctx.json(["mac", "reminders", "list", "--due-before",
-                     (now + timedelta(days=days)).strftime("%Y-%m-%d"), "--json"], "Reminders")
+    rows = ctx.json(["mac", "reminders", "list", "--json"], "Reminders")
     snap = Snapshot()
     me = snap.add(me_node())
+    undated = 0
     for row in rows if isinstance(rows, list) else []:
         if not isinstance(row, dict) or row.get("isCompleted") or not row.get("title"):
             continue
         due = osgraph_time(row.get("due"))
-        if due is None or due < now - timedelta(days=days):
+        if due is None:
+            if row.get("due") or undated >= UNDATED_REMINDERS:
+                continue
+            undated += 1
+        elif not now - timedelta(days=days) <= due <= now + timedelta(days=days):
             continue
         tid = snap.add(Node(osgraph.node_key("task", "reminders", row.get("id") or "", row["title"]), "Task",
                             clip(row["title"], 100),
                             {"kind": "promise", "status": "ready", "app": "Reminders",
                              "provenance": f"Reminders, {row.get('list') or 'list'}"}))
         snap.link(tid, "OWED_BY", me)
-        day = due.date().isoformat()
-        snap.add(day_node(day))
-        snap.link(tid, "DUE_ON", f"day:{day}")
+        if due is not None:
+            day = due.date().isoformat()
+            snap.add(day_node(day))
+            snap.link(tid, "DUE_ON", f"day:{day}")
     return snap.write(graph, "reminders")
 
 

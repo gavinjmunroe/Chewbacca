@@ -34,7 +34,7 @@ struct WebPaneView: View {
 
     /// The address as a URL the pane may load: http or https with a host,
     /// nothing else (no file, javascript, data or custom schemes).
-    static func allowed(_ text: String) -> URL? {
+    nonisolated static func allowed(_ text: String) -> URL? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let page = URL(string: trimmed), let scheme = page.scheme?.lowercased(),
               scheme == "http" || scheme == "https", let host = page.host, !host.isEmpty else { return nil }
@@ -43,7 +43,7 @@ struct WebPaneView: View {
 
     /// Whether a navigation inside the page may go ahead. A blank frame is
     /// how pages start; anything but the web is refused.
-    static func mayNavigate(to url: URL?) -> Bool {
+    nonisolated static func mayNavigate(to url: URL?) -> Bool {
         guard let url else { return false }
         if url.absoluteString == "about:blank" { return true }
         return allowed(url.absoluteString) != nil

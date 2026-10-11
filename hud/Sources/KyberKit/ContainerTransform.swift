@@ -144,9 +144,19 @@ struct Flight: Identifiable, Equatable {
     let returning: Bool
 }
 
+/// Spelled out rather than `@Entry`: that macro's plugin ships with Xcode, and
+/// a Mac with only the Command Line Tools (Swift 6.1.2, 2026-10-11) fails the
+/// whole build on it ("plugin for module 'SwiftUIMacros' not found").
+private struct HudSurfaceIDKey: EnvironmentKey {
+    static let defaultValue = ""
+}
+
 extension EnvironmentValues {
     /// The surface a view is drawn in, so a row can say whose row it is.
-    @Entry var hudSurfaceID: String = ""
+    var hudSurfaceID: String {
+        get { self[HudSurfaceIDKey.self] }
+        set { self[HudSurfaceIDKey.self] = newValue }
+    }
 }
 
 /// Report a keyed row's frame. Put on the row's outermost view.

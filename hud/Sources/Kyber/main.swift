@@ -12,6 +12,15 @@ import os
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let model = OverlayModel()
     var overlay: OverlayWindow?
+    /// The day on the desktop, under every window. See `HomeWindow`.
+    private var home: HomeWindow?
+    private static let homeKey = "hud.home"
+    /// On unless turned off from the menu: it replaced the battery and clock
+    /// widgets on 2026-10-11, so a first launch puts it where they were.
+    private static var homeOn: Bool {
+        UserDefaults.standard.object(forKey: homeKey) as? Bool ?? true
+    }
+    private var homeItem: NSMenuItem?
     private var server: SocketServer?
     private var statusItem: NSStatusItem?
     private var voiceMenu: NSMenu?
@@ -88,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         overlay.rim = RimWindow(content: RimView(model: model))
         self.overlay = overlay
         overlay.show()
+        setUpHome()
 
         setUpCommandBar()
         setUpChat()
@@ -214,6 +224,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Self.keys.notice("glass.suppress reason=\(reason ?? "none", privacy: .public)")
             overlay.suppress(reason)
         }
+        home?.suppress(reason != nil)
+    }
+
+    private func setUpHome() {
+        let home = HomeWindow(model: HomeModel()) { [weak self] section, row in
+            self?.openHomeRow(section, row)
+        }
+        self.home = home
+        // Before it is ever shown: a relaunch mid screen share (install.sh
+        // does one) would otherwise put names and texts on the share for the
+        // two seconds until the first timed check.
+        checkSuppression()
+        if Self.homeOn { home.show() }
+    }
+
+    /// A project opens a Terminal window in its folder. Anything else is a
+    /// graph node, and kyber-surfaces opens its walk on the glass (a person,
+    /// conversations, tasks or today) from the same `ks-pivot` line a
+    /// kyber-genui row sends.
+    private func openHomeRow(_ section: HomeSection, _ row: HomeRow) {
+        guard section == .projects else {
+            model.onEvent?(.rowAction(name: "ks-pivot", row: row.id, surface: "home"))
+            return
+        }
+        var isFolder: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: row.path, isDirectory: &isFolder), isFolder.boolValue,
+              let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal")
+        else {
+            model.fail("\(row.title) is not at \(row.path) any more.", hold: 4)
+            return
+        }
+        // Through Launch Services, never `open -a Terminal -n` from a shell:
+        // that carried this process's environment into the new window
+        // (FORCE_COLOR and CLAUDE_CODE_*) and broke every `claude` run in it.
+        NSWorkspace.shared.open(
+            [URL(fileURLWithPath: row.path, isDirectory: true)], withApplicationAt: terminal,
+            configuration: NSWorkspace.OpenConfiguration())
     }
 
     private func checkListener() {
@@ -1194,7 +1241,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in self?.overlay?.fitToScreen() }
+            Task { @MainActor in
+                self?.overlay?.fitToScreen()
+                self?.home?.refit()
+            }
         }
     }
 
@@ -1268,6 +1318,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             title: "Agent sessions", action: #selector(sessionsFromMenu), keyEquivalent: "")
         sessionsItem.target = self
         menu.addItem(sessionsItem)
+
+        let homeItem = NSMenuItem(
+            title: "Home on the desktop", action: #selector(homeFromMenu), keyEquivalent: "")
+        homeItem.target = self
+        homeItem.state = Self.homeOn ? .on : .off
+        self.homeItem = homeItem
+        menu.addItem(homeItem)
 
         // Which runtime, account and model answer, and the switch, without
         // speaking. The same pick "which account" draws on the glass.
@@ -1427,6 +1484,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         try? p.run()
     }
     @objc private func toggleFromMenu() { toggle() }
+
+    @objc private func homeFromMenu() {
+        let on = !Self.homeOn
+        UserDefaults.standard.set(on, forKey: Self.homeKey)
+        homeItem?.state = on ? .on : .off
+        if on { home?.show() } else { home?.hide() }
+    }
     @objc private func clearFromMenu() { dismissAll() }
 
     private func presentFatal(_ error: Error) {

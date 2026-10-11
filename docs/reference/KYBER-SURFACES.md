@@ -119,11 +119,40 @@ Machine with `tmutil addexclusion` when it is first made. It holds:
 - events, assignments and due days
 
 Also on disk: `~/.bob/surface-runs/<run>/task.json` (one task's snippet for an
-agent run), `~/.bob/badges.json` (a count), `~/.bob/surfaces-state.json`
-(which panels are open) and `~/.bob/surfaces-activity.jsonl` (actions and
-outcomes, never a message). `kyber-surfaces forget` stops the daemon and
-deletes the graph, the runs and the badge; the next start rebuilds the last
-7 days from the sources.
+agent run), `~/.bob/badges.json` (a count), `~/.bob/home-panel.json` (the
+desktop home panel's lists, owner-only, with the last line of each waiting
+text), `~/.bob/surfaces-state.json` (which panels are open) and
+`~/.bob/surfaces-activity.jsonl` (actions and outcomes, never a message).
+`kyber-surfaces forget` stops the daemon and deletes the graph, the runs, the
+badge and the home feed; the next start rebuilds the last 7 days from the
+sources.
+
+## Home on the desktop
+
+Kyber draws a glass panel on the desktop, under every window and on every
+Space, in place of macOS's desktop widgets (asked for 2026-10-11): what is on
+today and tomorrow, to-dos, who is waiting on a reply, and the repositories
+committed to this week. It is at most a third of the screen's width and a
+third of its area (`HomeLayout`, tested on seven screen shapes), hides during
+a screen share like the glass, and is switched off from the menu ("Home on the
+desktop").
+
+The daemon writes `~/.bob/home-panel.json` after every ingest
+(`bin/lib/home_feed.py`, walks `osgraph_walks.home*`); `kyber-surfaces home`
+prints the same body and `--write` writes it. When the file is missing or more
+than six minutes old, Kyber runs `kyber-surfaces home --write` itself, so the
+panel does not depend on which daemon is running. A row press sends
+`e action ks-pivot row=<node id> surface="home"` and the daemon opens that
+node's walk; a project row opens Terminal in its folder.
+
+Projects are git repositories directly under `~/dev`, `~/Developer`,
+`~/Projects`, `~/code` or `~/src` (plus this checkout) whose last commit by
+`git config user.email` in the last 7 days is not a `chore:`. Personal choices
+go in `~/.chewbacca/home-panel.json`, never in this repo:
+
+```json
+{"projects": {"roots": ["~/dev"], "hide": ["notes-repo"], "names": {"noah-agency": "noahstudio"}}}
+```
 
 ## Identity
 

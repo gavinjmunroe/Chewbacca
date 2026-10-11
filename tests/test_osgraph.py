@@ -435,6 +435,92 @@ def privacy(tmp: Path) -> None:
     check("forget deletes the graph and its sidecars", path in gone and not os.path.exists(path), gone)
 
 
+def home_panel(tmp: Path) -> None:
+    """The desktop home panel's three graph lists (osgraph_walks.home)."""
+    from datetime import timedelta
+    undated = {"id": "R3", "title": "Do the thing for Reagan", "due": None, "isCompleted": False,
+               "list": "Reminders"}
+    fx.REMINDERS.append(undated)
+    try:
+        g, ctx, run, report = fx.world(tmp)
+    finally:
+        fx.REMINDERS.remove(undated)
+    now = fx.NOW
+
+    def event(key: str, label: str, start, end=None, all_day=False, calendar="Home") -> Node:
+        return Node(f"event:{key}", "Event", label,
+                    {"start": start.isoformat(), "end": end.isoformat() if end else "",
+                     "all_day": all_day, "calendar": calendar})
+
+    tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    g.apply("seed-home", [
+        event("ended", "Ended an hour ago", now - timedelta(hours=2), now - timedelta(hours=1)),
+        event("running", "Running now", now - timedelta(minutes=10), now + timedelta(minutes=50)),
+        event("d1", "Lab 3", now + timedelta(hours=4), calendar="Coursework"),
+        event("d2", "Quiz 3", now + timedelta(hours=4), calendar="Coursework"),
+        event("d3", "Post 3", now + timedelta(hours=4), calendar="Coursework"),
+        event("m1", "Standup", now + timedelta(hours=2), now + timedelta(hours=3), calendar="Work"),
+        event("m2", "Dentist", now + timedelta(hours=2), now + timedelta(hours=3), calendar="Work"),
+        event("trip", "Trip", now - timedelta(days=1), now + timedelta(days=2), all_day=True),
+        event("hol1", "Holiday", tomorrow, tomorrow + timedelta(days=1), all_day=True, calendar="US Holidays"),
+        event("hol2", "Holiday", tomorrow, tomorrow + timedelta(days=1), all_day=True, calendar="Family"),
+        event("call", "Call with Bill", tomorrow + timedelta(hours=9), tomorrow + timedelta(hours=10)),
+        event("far", "Next week", now + timedelta(days=6), now + timedelta(days=6, hours=1)),
+    ], [])
+    cal = W.home_calendar(g, now, most=10)
+    titles = [r["title"] for r in cal]
+    check("home calendar drops what ended and what is past tomorrow",
+          "Ended an hour ago" not in titles and "Next week" not in titles, titles)
+    check("home calendar keeps what is running", titles[:1] == ["Running now"], titles)
+    check("three deadlines at one minute on one calendar are one row with a count",
+          any(r["title"] == "3 due" and r.get("count") == 3 and r["detail"] == "Coursework" for r in cal)
+          and "Lab 3" not in titles, cal)
+    check("two meetings at one minute keep their names", "Standup" in titles and "Dentist" in titles, titles)
+    check("every row has its own id", len({r["id"] for r in cal}) == len(cal), [r["id"] for r in cal])
+    check("an all-day event that began yesterday and runs on is still on today", "Trip" in titles, titles)
+    check("today's all-day events come before tomorrow's timed ones",
+          titles.index("Trip") < titles.index("Call with Bill"), titles)
+    check("a holiday on two calendars is one row", titles.count("Holiday") == 1, titles)
+    check("timed events come before all-day ones", titles.index("Call with Bill") < titles.index("Holiday"), titles)
+    running = next((r for r in cal if r["title"] == "Running now"), {})
+    check("a timed row carries its end, so the panel drops it when it ends",
+          running.get("end") == (now + timedelta(minutes=50)).isoformat(), running)
+    quiet = Graph(str(tmp / "quiet.sqlite"))
+    quiet.apply("seed-far", [event("far", "Next week", now + timedelta(days=6), now + timedelta(days=6, hours=1))],
+                [])
+    check("with nothing today or tomorrow, the next thing still shows",
+          [r["title"] for r in W.home_calendar(quiet, now)] == ["Next week"])
+
+    todos, count = W.home_todos(g, now, most=50)
+    labels = [r["title"] for r in todos]
+    check("an undated reminder is a to-do", "Do the thing for Reagan" in labels, labels)
+    check("a two-year-old reminder is not", "lock from high school" not in labels, labels)
+    check("to-dos run overdue first, then by day, undated last",
+          [r["overdue"] for r in todos] == sorted((r["overdue"] for r in todos), reverse=True)
+          and [bool(r["day"]) for r in todos if not r["overdue"]]
+          == sorted((bool(r["day"]) for r in todos if not r["overdue"]), reverse=True), todos)
+    check("the to-do count is all of them, not the rows shown", count == len(todos) and count >= 2, count)
+
+    people, waiting = W.home_people(g, now, most=50)
+    known = [r["known"] for r in people]
+    check("people he knows come before numbers he never saved", known == sorted(known, reverse=True), people)
+    check("a known person's row opens the person, not the thread",
+          all(r["id"].startswith("person:") for r in people if r["known"]), people)
+    check("one row a person, so no two rows share an id",
+          len({r["id"] for r in people}) == len(people), [r["id"] for r in people])
+    spoofs = [r for r in people if r["detail"].startswith("Spoof")]
+    check("an unverified sender is never a known person, and says so",
+          spoofs and all(not r["known"] and r["title"].endswith("(unverified sender)") for r in spoofs), spoofs)
+    wire = next((r for r in people if r["detail"] == "Wire the funds"), {})
+    check("a stranger is titled by the address it came from, not the name it signed with",
+          wire.get("title") == "karthik.d@evil.example", wire)
+    check("an unsaved number reads as a phone number",
+          all(not r["title"].startswith("+1") for r in people), [r["title"] for r in people])
+    body = W.home(g, now)
+    check("home carries all three lists and their counts",
+          {"at", "calendar", "todos", "todoCount", "people", "peopleCount"} <= set(body), sorted(body))
+
+
 def main() -> int:
     ontology()
     reply_rule()
@@ -450,6 +536,8 @@ def main() -> int:
         privacy(Path(d))
     with tempfile.TemporaryDirectory() as d:
         keys_and_claims(Path(d))
+    with tempfile.TemporaryDirectory() as d:
+        home_panel(Path(d))
     print("all passed" if not failed else f"{failed} failed")
     return 1 if failed else 0
 

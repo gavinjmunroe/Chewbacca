@@ -120,9 +120,7 @@ def test_shipped_file():
 def test_refusals():
     by_id = {a["id"]: a for a in APPS}
     cases = {
-        "a GPL repo": spec(repo="navidrome/navidrome"),
         "a repo not in the registry": spec(repo="nobody/nothing"),
-        "a NOASSERTION repo": spec(repo="someone/closed"),
         "an unknown key": spec(shell="rm -rf ~"),
         "a relative bin": spec(detect={"bin": ["ollama"]}, read={"args": ["list"]}),
         "args without a bin": spec(read={"args": ["list"]}),
@@ -141,14 +139,17 @@ def test_refusals():
         check(f"refused at load: {label}", E.check_spec(s, by_id) is not None)
     check("allowed: a remixable_with_caveat repo", E.check_spec(spec(repo="toeverything/affine"), by_id) is None)
     check("allowed: a plain MIT spec", E.check_spec(spec(), by_id) is None)
+    # The license is the user's call, never a reason to refuse (Caleb, 2026-10-11).
+    check("allowed: a GPL repo", E.check_spec(spec(repo="navidrome/navidrome"), by_id) is None)
+    check("allowed: a repo with no license GitHub could classify", E.check_spec(spec(repo="someone/closed"), by_id) is None)
 
-    w = World([spec(), spec(id="music", repo="navidrome/navidrome"), spec()])
+    w = World([spec(), spec(id="music", repo="navidrome/navidrome"), spec(), spec(id="ghost", repo="nobody/unlisted")])
     specs, refused = E.load_specs(w.ctx)
-    check("load: the GPL entry and the duplicate id are refused, the good one kept",
-          [s["id"] for s in specs] == ["models"] and {r["why"] for r in refused} ==
-          {"GPL-3.0 license isn't remixable", "that id is used twice"}, (specs, refused))
+    check("load: a GPL engine loads (its license is the user's call), the duplicate id is refused",
+          [s["id"] for s in specs] == ["models", "music"] and {r["why"] for r in refused} ==
+          {"that id is used twice", "its repo isn't in config/data/oss-apps/apps.json"}, (specs, refused))
     try:
-        E.EngineSurface("music").fetch(w.ctx)
+        E.EngineSurface("ghost").fetch(w.ctx)
         check("a refused engine never runs", False)
     except SurfaceError as err:
         check("a refused engine never runs, and says why", "refused" in str(err) and not w.gets, str(err))
@@ -310,7 +311,7 @@ def test_names_and_walk():
 def test_oss_surface():
     w = World([spec(), spec(id="forge", repo="tailscale/tailscale", detect={"bin": ["/nope/gitea"]},
                             read={"url": "http://127.0.0.1:3000/x"}, rows="data", install="brew install gitea"),
-               spec(id="music", repo="navidrome/navidrome")])
+               spec(id="music", repo="nobody/unlisted")])
     w.answers["http://127.0.0.1:11434/api/version"] = "{}"
     o = oss.Oss("notion")
     data = o.fetch(w.ctx)
@@ -324,7 +325,7 @@ def test_oss_surface():
     engines = {e["id"]: e["text"] for e in model["/oss/engines"]}
     check("oss: engine states in words", engines == {
         "models": "Models: running", "forge": "Models: not installed: brew install gitea",
-        "music": "music: refused: GPL-3.0 license isn't remixable"}, engines)
+        "music": "music: refused: its repo isn't in config/data/oss-apps/apps.json"}, engines)
 
     r = o.drill(w.ctx, data, {"row": "usememos/memos"})
     check("oss: More shows one entry", r.ok and r.updates == {"/oss/pick": "usememos/memos"}, r)

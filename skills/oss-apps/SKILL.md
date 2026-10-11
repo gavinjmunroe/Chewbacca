@@ -1,8 +1,8 @@
 ---
 name: oss-apps
-description: "Find the open source version of a Mac app or product and whether its license (MIT, GPL, AGPL) allows building on it. Use for open source alternatives, self-hosted replacements, or a repo to fork."
+description: "Find the open source version of a Mac app or product, with its license as a fact (MIT, GPL, AGPL). Use for open source alternatives, self-hosted replacements, or a repo to fork."
 triggers: >-
-  Find the open source version of a Mac app or proprietary product, and say whether its license lets you build on it and ship. Use when someone asks for an open source alternative to Notion, Figma, Bartender, Photoshop or any app, wants a free or self-hosted replacement, asks what open source Mac apps exist in a category, wants a repo to fork or remix into a new app, or asks whether a project's license is MIT, GPL or AGPL before reusing code.
+  Find the open source version of a Mac app or proprietary product, and name its license as a fact. Use when someone asks for an open source alternative to Notion, Figma, Bartender, Photoshop or any app, wants a free or self-hosted replacement, asks what open source Mac apps exist in a category, wants a repo to fork or remix into a new app, or asks whether a project's license is MIT, GPL or AGPL before reusing code.
 license: MIT
 requires: [oss-apps]
 ---
@@ -27,7 +27,14 @@ open-source-alternatives list, plus `config/data/oss-apps/curated.json`. Each en
 the repo, categories, the proprietary apps it replaces, a stack (Swift, Electron,
 Tauri, Flutter, Qt, Web), the license, stars and last push.
 
-## Answer the license question before suggesting a fork
+## The license is information, the choice is the user's
+
+Caleb, 2026-10-11: "Chewbacca should never care abt open source repos not
+being mit, it is open source for a reason and it is the user's choice what they
+do. Not chewbs". So never refuse, steer away from, or warn against using a
+repo because of its license, and never tell someone not to copy. Name the
+license in one line when it is relevant and let them decide. The fields below
+are there for people who ask.
 
 `remixable` is the field that matters when the plan is to build a new app on top
 of an existing one. It is true only for a permissive license GitHub detected
@@ -45,14 +52,13 @@ groups are always false on both fields:
   editor is GPL-3.0. Read the LICENSE, then record the verdict in `curated.json`.
 - **Source-available** licenses: BUSL, Elastic, SSPL, FSL, PolyForm, Sustainable Use.
 
-Say which bucket an app is in, in one line, whenever you recommend it as a base.
-An AGPL app is still fine to study, to run, or to use as a reference for a fresh
-implementation.
+Say which bucket an app is in, in one line, when it bears on the plan. That is
+the whole of Chewbacca's part; what they do with it is theirs.
 
 **Open core is permissive with holes.** AFFiNE, Stirling-PDF and Medusa are MIT
 except for named directories under commercial licenses, so they are
 `remixable_with_caveat`, never plain `remixable`. `open_core: true` and
-`remix_caveat` name the directories. Do not copy from them.
+`remix_caveat` name the directories.
 
 `remixable` reads the root LICENSE only. It says nothing about trademarks, names
 or icons: a remix ships under its own name and art.

@@ -302,8 +302,8 @@ def license_bucket(slug: str, spdx: str | None) -> tuple[str, str]:
 BUCKET_LINE = {
     "remixable": "remixable: build on it and ship it, keep the notice",
     "caveat": "usable with care",
-    "copyleft": "copyleft: usable, not remixable into a product",
-    "none": "no license GitHub could classify: read it, don't copy it",
+    "copyleft": "copyleft: GPL family, a shipped derivative carries the same license",
+    "none": "no license file GitHub could classify",
 }
 
 

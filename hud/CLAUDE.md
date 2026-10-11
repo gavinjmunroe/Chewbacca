@@ -490,9 +490,8 @@ is pretty sick bro". The first pass read its design (`theme/tokens.css`,
 `design.md` at 59afd9e4) and re-wrote it in Swift as `Realm` in
 RealmTokens.swift. Copying is allowed: Carlton told Caleb to copy his code
 (Caleb, 2026-10-11: "Carlton told me to copy them bro"), so his components,
-styles and renderer can be used directly. Credit him in the file header. The
-repo still has no LICENSE file, so anything shipped to people outside the
-team waits on him adding one. What carried over:
+styles and renderer can be used directly, credited in the file header.
+What carried over:
 
 - Type ladder, nothing under 11: 11 tiny, 12 caption, 13 small, 14 body, 15
   reading, 16, then titles 18, 20, 24, 28. Tracking per rung (-0.2 at 11 and

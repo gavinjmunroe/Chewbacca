@@ -21,6 +21,8 @@ Regenerate after any change with the script in the commit that added this file.
 
 `bd_2026-Code-jii`
 
+**Partly done 2026-10-10** in 44b885e4: `OverlayWindowTests` checks the real window's pass-through rules offscreen. A test that runs the real app and drives it is still open.
+
 Nothing tests the overlay window, click-through, scroll pass-through, the hotkeys, the command bar or the reticle. Click-through has broken twice and was caught only by using it. Items 886-899.
 
 **Done when:** A UI test target launches the app, draws a surface, and asserts click-through and scroll pass-through behaviour.
@@ -28,6 +30,8 @@ Nothing tests the overlay window, click-through, scroll pass-through, the hotkey
 ### HUD: anchor markers to content rather than to screen coordinates
 
 `bd_2026-Code-j3m`
+
+**Done 2026-10-10** in 62132c88: marks tied to the element under them follow it and go with it (`e mark.gone`). Test: `MarkAnchorTests`.
 
 Markers are absolute rectangles. They do not follow scrolling, do not invalidate when their target changes, and survive the window they described closing. The design document names stale anchors as the thing that makes an annotation layer garbage. Items 337-341, 788-791, 803-806.
 
@@ -37,6 +41,8 @@ Markers are absolute rectangles. They do not follow scrolling, do not invalidate
 
 `bd_2026-Code-gp6`
 
+**Still open 2026-10-10:** the AX API reaches Kyber's two glass windows (`chewie app windows Kyber`); driving VoiceOver through a drawn surface by hand has not been done.
+
 The overlay is a non-activating panel, which may make every surface unreachable to VoiceOver no matter how good the labels are. All the a11y work done so far assumes it is reachable and nobody has checked. Items 451-452.
 
 **Done when:** VoiceOver is turned on and driven through a drawn surface by hand. The result is written down either way: if it cannot reach it, that is a finding worth more than the labels.
@@ -45,6 +51,8 @@ The overlay is a non-activating panel, which may make every surface unreachable 
 
 `bd_2026-Code-5wa`
 
+**Done 2026-10-10** in 92e320a9: hides during a Zoom, Chromium or macOS share and over `~/.bob/hud-deny.txt`. Signatures read from the app bundles, not yet seen on a live share. Test: `ScreenShareTests`.
+
 Screen sharing is not detected, so the display stays up in a meeting, and full-screen apps get the overlay on top with no opt-out. There is no per-app rule. Items 445-447, 592-594.
 
 **Done when:** An active screen share hides the layer automatically. A per-app deny list exists.
@@ -52,6 +60,8 @@ Screen sharing is not detected, so the display stays up in a meeting, and full-s
 ### HUD: implement the accessibility contract for containers and controls
 
 `bd_2026-Code-apw`
+
+**Done 2026-10-10** in d1e694ee: `A11yContract`, checked against this vocabulary and the renderer. Test: `A11yContractTests`.
 
 Screen, Stack, Heading, Text, List, Button, Field, Select and Checkbox still declare a11y in the catalog and get nothing in the Swift renderer. Charts, Metric, Status, Diagram and markers were done on 2026-09-05; these were not.
 
@@ -63,6 +73,8 @@ Audit items 452-458, 463-464, 481-495 in hud/docs/1000-WAYS-IT-FALLS-SHORT.md.
 
 `bd_2026-Code-yw6`
 
+**Done 2026-10-10** in 1602f0e0 and 164374de: Option-Command-Return, Tab order, ring, Return, Command-W, Escape. Test: `KeyboardFocusTests`.
+
 There is no way to reach a control by keyboard, no focus ring on most things, and no defined focus order. A surface with a button is usable only with a pointer. Items 308-311, 453-456, 487-488.
 
 **Done when:** A surface can be focused by keyboard, its controls tabbed through in a defined order with a visible ring, and dismissed without the mouse.
@@ -70,6 +82,8 @@ There is no way to reach a control by keyboard, no focus ring on most things, an
 ### HUD: make file editing safe
 
 `bd_2026-Code-vz4`
+
+**Done 2026-10-10** in 90f7d74d: stamp check before writing, backups in `~/.bob/backups`, close asks then keeps the draft, Command-Z. Test: `FileSafetyTests`.
 
 Editing has no undo, no autosave, and no conflict detection: if the file changed on disk your version wins silently. Closing a surface with unsaved edits warns nobody. Items 250-256.
 
@@ -79,6 +93,8 @@ Editing has no undo, no autosave, and no conflict detection: if the file changed
 
 `bd_2026-Code-0l9`
 
+**Done 2026-10-10** in 30bee8cc: unplaced surfaces take the corner covering least of the front window; none covers all of it. Test: `OcclusionTests`.
+
 Surfaces are placed in nine fixed regions with no knowledge of what is underneath, so a panel routinely covers the content it is about. The design document calls non-occlusion a hard rule and this does not implement it. Items 571-577.
 
 **Done when:** Placement considers what is on screen and offsets to free space. A surface never fully covers the window it is describing.
@@ -86,6 +102,8 @@ Surfaces are placed in nine fixed regions with no knowledge of what is underneat
 ### HUD: surface ownership and namespacing
 
 `bd_2026-Code-9rl`
+
+**Done 2026-10-10** in 2d5397d6: `claim <namespace> token=`, refusals for everyone else, "from <namespace>" on the card. Test: `ClaimsTests`.
 
 Surface ids are global and unowned. Any process running as the user can overwrite any panel, clear the glass, or impersonate the assistant convincingly, and nothing attributes a surface to its source. Items 395-399, 838-845.
 

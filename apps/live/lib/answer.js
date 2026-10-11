@@ -224,7 +224,8 @@ async function fill(p, at, ctx) {
       case "replies_for_me": {
         const r = await togari.read(clientId, "list_replies", { days: a.days || 14, company: a.company, search: a.search });
         let list = Array.isArray(r.data) ? r.data : [];
-        if (p.view === "replies_for_me") list = list.filter((x) => isCardForClient(x.togari_did));
+        if (p.view === "replies_for_me")
+          list = list.filter((x) => isCardForClient(x.togari_did) && !C.readsAsPass(x.wrote));
         const title =
           p.view === "replies_for_me"
             ? `${list.length} ${list.length === 1 ? "person is" : "people are"} waiting on you in Slack`

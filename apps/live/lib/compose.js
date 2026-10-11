@@ -429,24 +429,24 @@ export function reconcileReplies(threads, togariRows, m, hashEmail) {
   };
   for (const t of people) {
     if (read.has(t.who)) {
-      const did = togariDid(read.get(t.who).togari_did);
-      add(
-        DID_BUCKET[did] || "Other",
-        DID_BUCKET[did] === "Waiting on you" ? "sent to you in Slack" : null,
-      );
+      const row = read.get(t.who);
+      const did = togariDid(row.togari_did);
+      let label = DID_BUCKET[did] || "Other";
+      if (label === "Waiting on you") {
+        const pass = readsAsPass(row.wrote);
+        if (pass) label = pass === "later" ? "Not now, open later" : "Said no";
+      }
+      add(label, null);
     } else {
       const tag = TAG_GROUP[t.category];
-      add(
-        tag === "Wrong person"
-          ? "Pointed to someone else"
-          : tag || "Waiting on you",
-        tag ? null : "not read yet",
-      );
+      add(tag === "Wrong person" ? "Pointed to someone else" : tag || "Not read yet", null);
     }
   }
   const order = [
     "Waiting on you",
+    "Not read yet",
     "Following up later",
+    "Not now, open later",
     "Pointed to someone else",
     "Said no",
     "Asked not to be emailed",
@@ -493,12 +493,27 @@ const DID_BUCKET = {
 };
 
 const BUCKET_SUB = {
+  "Waiting on you": "Each one is a card in your Slack, with a draft",
+  "Not read yet": "New replies that have not been sorted yet",
+  "Not now, open later": "Passed for now in their own words, and left the door open",
   "Following up later": "One follow up is scheduled for each",
   "Pointed to someone else":
     "Sent on to the person they named, or the wrong contact",
   "Asked not to be emailed": "Never emailed again",
   "Out of office": "Followed up when they are back",
 };
+
+const PASS_RX =
+  /\b(?:i|we)(?:'ll| will| have to| must| need to| are going to| am going to|'m going to|'re going to)? pass\b|\bpass(?:ing)? (?:on this|for now)\b|\bnot (?:a (?:good )?fit|interested)\b|\bno interest\b/i;
+const LATER_RX =
+  /\b(?:until then|once (?:they|you) (?:have|identify|find|close)|circle back|in the future|down the road|keep (?:me|us) posted|reach back out)\b/i;
+
+/** "pass", "later" (a pass for now that leaves the door open), or null. */
+export function readsAsPass(text) {
+  const t = cleanReply(text).slice(0, 2000);
+  if (!PASS_RX.test(t)) return null;
+  return LATER_RX.test(t) ? "later" : "pass";
+}
 
 export function notice(id, text, tone = "info") {
   return { type: "notice", id, text, tone };

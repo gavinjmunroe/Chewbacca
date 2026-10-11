@@ -164,15 +164,12 @@ test("this week's replies reconcile into one number with where each went", async
   );
   const by = Object.fromEntries(b.items.map((i) => [i.label, i.value]));
   assert.deepEqual(by, {
-    "Waiting on you": 3,
+    "Waiting on you": 1,
+    "Not read yet": 2,
     "Said no": 1,
     "Asked not to be emailed": 1,
     "Out of office": 1,
   });
-  assert.deepEqual(b.items[0].sub.split(", ").sort(), [
-    "1 sent to you in Slack",
-    "2 not read yet",
-  ]);
   const total = b.items.reduce((a, i) => a + i.value, 0);
   assert.equal(total, 6, "the parts add up to the one number in the title");
   const tone = Object.fromEntries(b.items.map((i) => [i.label, i.tone || "plain"]));
@@ -182,6 +179,24 @@ test("this week's replies reconcile into one number with where each went", async
     !JSON.stringify(b).match(/\binterested\b/i),
     "a Clay tag is never shown as interest",
   );
+});
+
+test("a carded reply that reads as a pass never sits in waiting on you", () => {
+  // 2026-10-11: Adam S. was first in "waiting on you" with "until then, I have to pass".
+  assert.equal(C.readsAsPass("Happy to chat once they identify a lead for the round, but until then, I have to pass."), "later");
+  assert.equal(C.readsAsPass("Thanks, we will pass on this one."), "pass");
+  assert.equal(C.readsAsPass("Not a fit for our fund."), "pass");
+  assert.equal(C.readsAsPass("Please send over the deck and our team will get back with next steps."), null);
+  assert.equal(C.readsAsPass("Are they revenue generating? What is their LTM revenue?"), null);
+  assert.equal(C.readsAsPass("Happy to pass this along to my partner."), null, "passing it along is not a pass");
+  const h = (e) => `h:${e}`;
+  const threads = ["p@x.vc", "q@x.vc"].map((e) => ({ who: h(e), category: null, at: "2026-10-09T10:00:00Z" }));
+  const togari = [
+    { email: "p@x.vc", togari_did: "needs_review", wrote: "Until then, I have to pass." },
+    { email: "q@x.vc", togari_did: "needs_review", wrote: "Send the deck please." },
+  ];
+  const by = Object.fromEntries(C.reconcileReplies(threads, togari, {}, h).items.map((i) => [i.label, i.value]));
+  assert.deepEqual(by, { "Waiting on you": 1, "Not now, open later": 1 });
 });
 
 test("a reply is quoted without link blobs, image tags or legal footers", () => {

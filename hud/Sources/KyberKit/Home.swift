@@ -827,6 +827,8 @@ public final class HomeWindow: NSPanel {
     public let model: HomeModel
     private var host: HomeHostingView<HomeView>?
     private static let placeKey = "hud.home.topLeft"
+    /// Just above the desktop icons, below every app window.
+    public static let desktopLevel = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
 
     public init(model: HomeModel, onOpen: @escaping (HomeSection, HomeRow) -> Void) {
         self.model = model
@@ -834,9 +836,7 @@ public final class HomeWindow: NSPanel {
             contentRect: NSRect(x: 0, y: 0, width: HomeLayout.width, height: 200),
             styleMask: [.nonactivatingPanel, .borderless, .fullSizeContentView],
             backing: .buffered, defer: false)
-        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        isFloatingPanel = false
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = true
         backgroundColor = .clear
@@ -845,6 +845,10 @@ public final class HomeWindow: NSPanel {
         isMovableByWindowBackground = true
         animationBehavior = .none
         title = "Kyber home"
+        // Last, after every NSPanel setting: `isFloatingPanel` writes the level
+        // too, and setting it after this put the panel among ordinary windows
+        // (layer 0 in the window list on 2026-10-11) instead of on the desktop.
+        level = Self.desktopLevel
 
         let view = HomeView(
             model: model, width: HomeLayout.width, onOpen: onOpen,

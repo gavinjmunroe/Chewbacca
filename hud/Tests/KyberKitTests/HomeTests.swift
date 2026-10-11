@@ -187,6 +187,16 @@ struct HomeTests {
         #expect(frame.minX == corner.x && frame.maxY == corner.y)
     }
 
+    /// On the desktop, under every app window, and it stays there.
+    @Test func sitsOnTheDesktop() {
+        let window = HomeWindow(model: HomeModel(feed: HomeFeed(), now: Self.now)) { _, _ in }
+        #expect(window.level == HomeWindow.desktopLevel)
+        #expect(window.level < .normal)
+        #expect(window.collectionBehavior.contains(.stationary))
+        #expect(window.collectionBehavior.contains(.canJoinAllSpaces))
+        #expect(!window.canBecomeKey)
+    }
+
     /// Drawn with a full feed, it is a real panel. Kept as a PNG when
     /// HUD_SNAPSHOT_DIR is set.
     @Test func renders() throws {

@@ -440,7 +440,8 @@ draws text monospaced, `+` lines on a green wash, `-` on a red one, `@@` in
 the accent, the last 600 lines. Code inside a diff line is syntax colored by
 the language its `+++` header names, or `path` when there is no header (an
 Edit call's diff); text in no known language (test output, a status) stays
-plain. `File` colors text the same way, and its `editable` editor keeps the
+plain. `plain=true` draws every line plain with no wash and no color, for
+terminal output, where a line starting with `-` is not a removal. `File` colors text the same way, and its `editable` editor keeps the
 color while typing (`Sources/KyberKit/Syntax.swift`, a line scanner, not a
 parser). **Tree** rows are `{"id","name","depth","dir"}` with optional
 `mark` (git's letters, `edited`, `read`), `collapsed` and `note`; a file row

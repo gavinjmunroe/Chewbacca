@@ -509,6 +509,9 @@
         },
         "path": {
           "type": "string"
+        },
+        "plain": {
+          "type": "boolean"
         }
       }
     },

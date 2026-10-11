@@ -595,7 +595,8 @@ public struct SurfaceView: View {
                     onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
 
         case "Diff":
-            return AnyView(DiffView(text: p["text"]?.display ?? "", path: p["path"]?.stringValue ?? ""))
+            return AnyView(DiffView(text: p["text"]?.display ?? "", path: p["path"]?.stringValue ?? "",
+                                    plain: p["plain"] == .bool(true)))
 
         case "Tree":
             let action = p["action"]?.stringValue

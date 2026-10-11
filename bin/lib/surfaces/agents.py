@@ -221,6 +221,25 @@ PUSH_WORDS = {"up-to-date": "Already up to date with its remote.", "no-remote": 
               "rejected": "Not pushed: the remote moved on. Pull it in where the code is, then push.",
               "detached": "Not pushed: no branch is checked out.", "failed": "Not pushed: git refused it."}
 
+# Terminal lines on the card: a glance at what the shell said last, the way
+# the bottom of a terminal pane is read. Guessed, never measured on the glass.
+TERM_LINES = 30
+# A terminal line's characters on the card. The card is 460 points of 11 pt
+# monospace, about 70 characters; the rest is cut. Guessed.
+TERM_LINE_CHARS = 200
+# The raw scrollback kept between reads. Realm's ring is 128 Ki characters
+# (terminals/scrollback.ts RING_CHARS at 59afd9e4); a quarter of it holds far
+# more than TERM_LINES of any shell. Guessed.
+TERM_KEEP_CHARS = 32 * 1024
+# After a Run or Ctrl-C press the panel reads the terminal every REFRESH_BUSY
+# for this long, so the command's output arrives as it prints. Guessed: most
+# commands typed from a glance answer within half a minute; a longer one keeps
+# the fast reads for as long as terminals.programs says it runs.
+TERM_WATCH_S = 30.0
+# The longest command Run types. Guessed: a long one-liner. Anything longer
+# belongs in a script.
+COMMAND_CHARS = 1000
+
 # The order Start offers what is ready: the agents the engine ships first
 # (presets.ts SELECTABLE_AGENT_KINDS order), anything else after.
 AGENT_ORDER = ("claude", "codex", "acp:cursor", "acp:gemini", "acp:opencode", "acp:copilot", "acp:goose",
@@ -251,7 +270,8 @@ STATE_WORDS = {"waiting_permission": "waiting on you", "running": "working", "er
 STATE_ORDER = {"waiting_permission": 0, "error": 1, "running": 2, "idle": 3, "ended": 4}
 BUSY = ("running", "waiting_permission")
 # The pointers holding a row a press can write through.
-VERBS = ("send", "allow", "deny", "interrupt", "fork", "new", "stage", "unstage", "ship", "upstream")
+VERBS = ("send", "allow", "deny", "interrupt", "fork", "new", "stage", "unstage", "ship", "upstream", "run", "ctrlc",
+         "termopen")
 MODE_WORDS = {"default": "asks before each tool", "acceptEdits": "edits without asking",
               "bypassPermissions": "never asks (full access)", "plan": "plans only"}
 # The input keys a one-line tool row names, in the order a reader wants them.
@@ -500,6 +520,52 @@ def patch_text(diff) -> str:
     return "\n".join(out[:PATCH_LINES])
 
 
+# Escape sequences a shell prints: OSC (titles, links) to BEL or ST, CSI
+# (colour, cursor), and the two-byte ESC forms. Dropped, not drawn.
+OSC = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)")
+CSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+ESC2 = re.compile(r"\x1b[()][0-9A-Za-z]|\x1b[@-_]")
+# A clear screen or a full reset: what came before it is gone from the
+# screen too.
+CLEAR = re.compile(r"\x1b\[[23]J|\x1bc")
+
+
+def screen_lines(raw: str) -> list[str]:
+    """A terminal's raw output as the last lines a person would read: escapes
+    dropped, a carriage return overwriting its line, backspaces applied,
+    every hidden character gone. Stripping is not emulating: a full-screen
+    program (vim, a login TUI) reads as noise here, which realm's own
+    screen.ts says of a raw tail too, so the card is for shell output."""
+    text = str(raw or "")
+    cleared = list(CLEAR.finditer(text))
+    if cleared:
+        text = text[cleared[-1].end():]
+    text = ESC2.sub("", CSI.sub("", OSC.sub("", text)))
+    out = []
+    for line in text.split("\n"):
+        line = line.rstrip("\r").rsplit("\r", 1)[-1]
+        chars: list[str] = []
+        for ch in line:
+            if ch == "\b":
+                if chars:
+                    chars.pop()
+            elif ch == "\t":
+                chars.append(" " * (8 - len(chars) % 8))
+            elif not hidden(ch):
+                chars.append(ch)
+        out.append("".join(chars).rstrip()[:TERM_LINE_CHARS])
+    while out and not out[-1]:
+        out.pop()
+    return out[-TERM_LINES:]
+
+
+def command_id(tid: str, command: str) -> str:
+    """A Run row's id: the terminal and a hash of the command, so the press
+    types exactly what was in the field when the row was drawn."""
+    digest = hashlib.sha256(command.encode("utf-8", "surrogatepass")).hexdigest()[:10]
+    return f"run:{tid}:{digest}"
+
+
 def git_files(changes) -> list[dict]:
     """workspace.diff's files whose path is safe to name and to hand back:
     a string with no hidden character."""
@@ -725,7 +791,8 @@ class Agents(Provider):
                         f"{p}deny": self.deny, f"{p}interrupt": self.interrupt, f"{p}fork": self.fork,
                         f"{p}new": self.new, f"{p}engine": self.start_engine, f"{p}agent": self.choose,
                         f"{p}file": self.show_file, f"{p}stage": self.stage, f"{p}unstage": self.unstage,
-                        f"{p}ship": self.ship, f"{p}upstream": self.upstream}
+                        f"{p}ship": self.ship, f"{p}upstream": self.upstream, f"{p}termopen": self.term_open,
+                        f"{p}run": self.run, f"{p}ctrlc": self.ctrl_c}
         self._lock = threading.Lock()
         # The session a press acts on. Set by a pick (or the first fetch, to
         # the session that needs the person most), never by a re-sort.
@@ -759,6 +826,10 @@ class Agents(Provider):
         self._patch: tuple | None = None
         # The last Commit and push on the open agent's folder: (sid, ShipResult).
         self._shipped: tuple | None = None
+        # The open agent's terminal as last read: {sid, tid, cursor, raw,
+        # program}, and until when a press keeps it read every REFRESH_BUSY.
+        self._term: dict | None = None
+        self._term_watch = 0.0
         # What layout() draws, set by each model (_replan).
         self._plan: dict = {}
         self._shape = "{}"
@@ -826,6 +897,7 @@ class Agents(Provider):
                     self.catch_up(conn, log)
                     checkpoint = self.newest_checkpoint(conn, row)
                     self.read_changes(conn, row)
+                    self.read_terminal(conn, row)
                     with self._lock:
                         # Published only if no press moved the pin meanwhile.
                         mine = self._log is base or self._log is None or self._log.sid != pinned
@@ -840,8 +912,11 @@ class Agents(Provider):
             tabs = []
         self._maybe_import(ctx, rows, tabs)
         shown = next((r for r in rows if r["id"] == pinned), None)
+        with self._lock:
+            term = dict(self._term) if self._term and self._term["sid"] == pinned else None
+            watching = self.clock() < self._term_watch
         self._busy = bool(shown and shown["status"] in BUSY) or any(
-            t.get("state") in ("needs", "working") for t in tabs)
+            t.get("state") in ("needs", "working") for t in tabs) or bool(term and (term["program"] or watching))
         with self._lock:
             if self._gen == gen:
                 self._soon = False
@@ -853,6 +928,7 @@ class Agents(Provider):
                 "changes": self._changes[2] if self._changes and self._changes[0] == pinned else None,
                 "patch": self._patch if self._patch and self._patch[0] == pinned else None,
                 "shipped": self._shipped[1] if self._shipped and self._shipped[0] == pinned else None,
+                "terminal": term,
                 "tabs": tabs, "now": self.wall()}
 
     # ── bringing tabs in ─────────────────────────────────────────────────
@@ -955,6 +1031,47 @@ class Agents(Provider):
             self._changes = (row["id"], self.clock(), got if isinstance(got, dict) else None)
 
     @staticmethod
+    def terminal_of(conn, row: dict) -> str:
+        """The terminal id of the session's own terminal panel, read from
+        realm now (the session's terminalItemId, then that item in its space),
+        or "" when it has none. Opening one is a press; this never does."""
+        if not row.get("terminal_item") or not row.get("space_id"):
+            return ""
+        items = conn.call("items.list", {"spaceId": row["space_id"]}, timeout=CALL_TIMEOUT)
+        item = next((i for i in items if isinstance(i, dict) and i.get("id") == row["terminal_item"]
+                     and i.get("kind") == "terminal") if isinstance(items, list) else iter(()), None)
+        ref = item.get("refId") if item else None
+        return ref if isinstance(ref, str) and ref and not any(hidden(ch) for ch in ref) else ""
+
+    def read_terminal(self, conn, row: dict) -> None:
+        """What the open agent's terminal printed since the last read
+        (terminals.read from a cursor, realm's own scrollback), and what it is
+        running (terminals.programs). Reads only; the pty is never written."""
+        tid = self.terminal_of(conn, row)
+        if not tid:
+            with self._lock:
+                if self._term and self._term["sid"] == row["id"]:
+                    self._term = None
+            return
+        with self._lock:
+            prev = self._term if self._term and self._term["sid"] == row["id"] and self._term["tid"] == tid else None
+        got = conn.call("terminals.read", {"terminalId": tid, "cursor": prev["cursor"] if prev else None},
+                        timeout=CALL_TIMEOUT)
+        if not isinstance(got, dict):
+            return
+        live = str(got.get("live") or "")
+        history = got.get("history") if isinstance(got.get("history"), dict) else None
+        fresh = prev is None or got.get("truncated") or got.get("runId") != prev["cursor"]["runId"] or history
+        raw = (str(history.get("data") or "") if history else "") + live if fresh else prev["raw"] + live
+        programs = conn.call("terminals.programs", {}, timeout=CALL_TIMEOUT)
+        program = programs.get(tid) if isinstance(programs, dict) else None
+        with self._lock:
+            self._term = {"sid": row["id"], "tid": tid, "raw": raw[-TERM_KEEP_CHARS:],
+                          "cursor": {"runId": str(got.get("runId") or ""), "seq": int(got.get("seq") or 0)},
+                          "program": clean(program.get("label"), 30) if isinstance(program, dict) else "",
+                          "running": bool(got.get("running"))}
+
+    @staticmethod
     def catch_up(conn, log: Log) -> None:
         for _ in range(EVENTS_PAGES):
             page = conn.call("sessions.events", {"id": log.sid, "afterSeq": log.seq, "limit": EVENTS_PAGE},
@@ -992,6 +1109,8 @@ class Agents(Provider):
                 "agent": label_of(s.get("agentKind")), "kind": clean(s.get("agentKind"), 40),
                 "mode": clean(s.get("permissionMode"), 30),
                 "environment": s.get("environmentId") if isinstance(s.get("environmentId"), str) else "",
+                "space_id": s.get("spaceId") if isinstance(s.get("spaceId"), str) else "",
+                "terminal_item": s.get("terminalItemId") if isinstance(s.get("terminalItemId"), str) else "",
                 "provider_sid": s.get("providerSessionId") if isinstance(s.get("providerSessionId"), str) else "",
                 "updated": s.get("updatedAt") if isinstance(s.get("updatedAt"), (int, float)) else 0}
 
@@ -1128,6 +1247,20 @@ class Agents(Provider):
                 parts.append(comp(c("upstream"), "Events", caption="", items=Bind(p("upstream")),
                                   action=f"{ACTION_PREFIX}upstream", actionLabel="Push"))
                 order.append("upstream")
+            if plan.get("terminal"):
+                parts += [comp(c("termhead"), "Text", value=Bind(p("termHead")), tone="muted"),
+                          comp(c("terminal"), "Diff", text=Bind(p("terminal")), plain=True),
+                          comp(c("command"), "Field", label="Terminal", placeholder=Bind(p("commandHint")),
+                               value=Bind(p("command"))),
+                          comp(c("run"), "Events", caption="", items=Bind(p("run")), action=f"{ACTION_PREFIX}run",
+                               actionLabel="Run"),
+                          comp(c("ctrlc"), "Events", caption="", items=Bind(p("ctrlc")),
+                               action=f"{ACTION_PREFIX}ctrlc", actionLabel="Ctrl-C")]
+                order += ["termhead", "terminal", "command", "run", "ctrlc"]
+            if plan.get("termopen"):
+                parts.append(comp(c("termopen"), "Events", caption="", items=Bind(p("termopen")),
+                                  action=f"{ACTION_PREFIX}termopen", actionLabel="Open"))
+                order.append("termopen")
         if plan.get("start"):
             parts += [comp(c("kinds"), "Chips", options=Bind(p("kinds")), value=Bind(p("agent")),
                            action=f"{ACTION_PREFIX}agent"),
@@ -1142,6 +1275,7 @@ class Agents(Provider):
 
     def initial(self) -> dict:
         return {self.p("draft"): "", self.p("task"): "", self.p("agent"): "", self.p("message"): "",
+                self.p("command"): "",
                 self.p("status"): "", self.p("level"): "info"}
 
     def blank(self) -> dict:
@@ -1152,6 +1286,8 @@ class Agents(Provider):
                 p("counts"): {"needs": 0, "running": 0, "done": 0}, p("changed"): [], p("changedCap"): "",
                 p("patch"): "", p("patchPath"): "", p("stage"): [], p("unstage"): [], p("ship"): [],
                 p("shipped"): "", p("upstream"): [], p("shipping"): False,
+                p("termHead"): "", p("terminal"): "", p("commandHint"): "", p("run"): [], p("ctrlc"): [],
+                p("termopen"): [], p("termOn"): False,
                 p("placeholder"): "Typed here, sent only by Send"}
 
     def model(self, data, error, values, ctx) -> dict:
@@ -1177,6 +1313,7 @@ class Agents(Provider):
                         changed=bool(out.get(p("changed"))), patch=bool(out.get(p("patch"))),
                         git=bool(out.get(p("stage")) or out.get(p("unstage"))), ship=bool(out.get(p("shipping"))),
                         shipped=bool(out.get(p("shipped"))), upstream=bool(out.get(p("upstream"))),
+                        terminal=bool(out.get(p("termOn"))), termopen=bool(out.get(p("termopen"))),
                         ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))))
         with self._lock:
             self._plan = plan
@@ -1288,6 +1425,7 @@ class Agents(Provider):
         if patch:
             out[p("patch")], out[p("patchPath")] = patch[2], clean(patch[1], 120)
         self.git_model(shown, files, changes, patch, data.get("shipped"), values, out)
+        self.terminal_model(shown, data.get("terminal"), values, out)
         if not data.get("caught_up"):
             out[p("meta")] += " · catching up on older turns"
         where = shown["folder"] or "its folder"
@@ -1361,6 +1499,31 @@ class Agents(Provider):
                 f"{plural(len(staged), 'staged file')} on {branch or 'this checkout'}, then pushed"
                 " · a push can't be taken back here", 120)}]
         out[p("shipping")] = True
+
+    def terminal_model(self, shown: dict, term, values: dict, out: dict) -> None:
+        """The agent's own terminal inside its card: the last lines it printed,
+        a field, and Run and Ctrl-C rows naming the shell they type into."""
+        p = self.p
+        where = shown["folder"] or "its folder"
+        if not term:
+            out[p("termopen")] = [{"id": f"open:{shown['id']}", "text": clean(
+                f"A shell in {where}, kept with this agent · nothing runs until you type", 100)}]
+            return
+        tid = term["tid"]
+        out[p("termOn")] = True
+        lines = screen_lines(term.get("raw"))
+        out[p("terminal")] = "\n".join(lines) if lines else "(nothing printed yet)"
+        state = f"running {term['program']}" if term.get("program") else (
+            "shell idle" if term.get("running") else "the shell exited")
+        out[p("termHead")] = clean(f"Terminal in {where} · {state}", 80)
+        out[p("commandHint")] = clean(f"A command for the shell in {where}", 60)
+        command = str(values.get(p("command")) or "")
+        if command.strip() and len(command) <= COMMAND_CHARS and not any(hidden(ch) for ch in command):
+            out[p("run")] = [{"id": command_id(tid, command), "accent": True, "text": clean(
+                f"Types it into the shell in {where} and presses Return · a command can't be taken back", 110)}]
+        if term.get("program"):
+            out[p("ctrlc")] = [{"id": f"ctrlc:{tid}", "text": clean(
+                f"Stops {term['program']} in {where} · the shell stays", 80)}]
 
     def start_model(self, data, values: dict, out: dict) -> None:
         """New agent: a chip per installed agent, one field, one Start row.
@@ -1630,6 +1793,108 @@ class Agents(Provider):
                           updates={**updates, self.p("level"): "warning"}, refetch=True)
         return Result(False, f"Nothing was committed in {where}. The card says why.",
                       updates={self.p("level"): "warning"}, refetch=True)
+
+    def _term_press(self, ctx: Context, data, values: dict, tid: str, verb: str):
+        """(row, connection) for a write to the open agent's terminal, only
+        when realm says now that tid is still that session's terminal; else a
+        Result saying why not."""
+        bad = {self.p("level"): "error"}
+        with self._lock:
+            sid = self.pinned
+        row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
+        if row is None or not tid:
+            return Result(False, f"Nothing was {verb}: no agent is open.", updates=bad)
+        try:
+            conn = self.connect(ctx)
+        except realm_client.RealmError as err:
+            return Result(False, f"Nothing was {verb}: {rpc_words(err)}.", updates=bad)
+        try:
+            fresh = self.row(self._fresh(conn, sid), {}, ctx)
+            now = self.terminal_of(conn, fresh)
+        except realm_client.RealmError as err:
+            conn.close()
+            return Result(False, f"Nothing was {verb}: couldn't read its terminal ({rpc_words(err)}).", updates=bad)
+        if now != tid:
+            conn.close()
+            return Result(False, f"Nothing was {verb}: that terminal isn't this agent's any more.", updates=bad,
+                          refetch=True)
+        return row, conn
+
+    def _write_terminal(self, ctx, data, values, tid: str, payload: str, verb: str, done: str) -> Result:
+        got = self._term_press(ctx, data, values, tid, verb)
+        if isinstance(got, Result):
+            return got
+        row, conn = got
+        if not self._claim("terminal", tid):
+            conn.close()
+            return Result(False, "Still typing the last press.")
+        try:
+            with conn:
+                conn.call("terminals.write", {"terminalId": tid, "data": payload}, timeout=CALL_TIMEOUT, write=True)
+        except realm_client.RealmError as err:
+            if err.maybe_applied:
+                return Result(False, "It may have reached the shell; the engine didn't confirm. Read the terminal "
+                                     "before pressing again.", updates={self.p("level"): "warning"}, refetch=True)
+            return Result(False, f"Nothing was {verb}: {rpc_words(err)}", updates={self.p("level"): "error"},
+                          refetch=True)
+        finally:
+            self._release("terminal", tid)
+        with self._lock:
+            self._term_watch = self.clock() + TERM_WATCH_S
+            self._soon = True
+        return Result(True, f"{done} in {row['folder'] or 'its folder'}.", updates={self.p("level"): "success"},
+                      refetch=True)
+
+    def run(self, ctx: Context, data, values: dict) -> Result:
+        """Type the field's command into the open agent's terminal and press
+        Return: terminals.write, only the command the Run row was drawn for."""
+        key = str(values.get("row") or "")
+        command = str(values.get(self.p("command")) or "")
+        bad = {self.p("level"): "error"}
+        if not command.strip() or len(command) > COMMAND_CHARS or any(hidden(ch) for ch in command):
+            return Result(False, "Type one line of command first; nothing hidden, no line breaks.", updates=bad)
+        _, _, rest = key.partition(":")
+        tid = rest.rpartition(":")[0]
+        if not key.startswith("run:") or command_id(tid, command) != key:
+            return Result(False, "Nothing was run: the command changed since that was drawn.", updates=bad)
+        result = self._write_terminal(ctx, data, values, tid, command + "\r", "run", "Ran it in the shell")
+        if result.ok:
+            result.updates[self.p("command")] = ""
+        return result
+
+    def ctrl_c(self, ctx: Context, data, values: dict) -> Result:
+        """Ctrl-C to what the open agent's terminal is running."""
+        key = str(values.get("row") or "")
+        if not key.startswith("ctrlc:"):
+            return Result(False, "That press named no terminal.", updates={self.p("level"): "error"})
+        return self._write_terminal(ctx, data, values, key[6:], "\x03", "sent", "Sent Ctrl-C")
+
+    def term_open(self, ctx: Context, data, values: dict) -> Result:
+        """Open the open agent's own terminal: sessions.openTerminal, which
+        spawns a shell in its folder the first time and returns the same one
+        after. Nothing is typed into it."""
+        key = str(values.get("row") or "")
+        row, why = self._pinned_row(data, {"row": key.removeprefix("open:")})
+        if row is None or not key.startswith("open:"):
+            return Result(False, why or "That press named no agent.", updates={self.p("level"): "error"})
+        if not self._claim("termopen", row["id"]):
+            return Result(False, "Already opening it.")
+        try:
+            with self.connect(ctx) as conn:
+                conn.call("sessions.openTerminal", {"id": row["id"]}, timeout=CALL_TIMEOUT, write=True)
+        except realm_client.RealmError as err:
+            if err.maybe_applied:
+                return Result(False, "The terminal may have opened; the engine didn't confirm.",
+                              updates={self.p("level"): "warning"}, refetch=True)
+            return Result(False, f"No terminal opened: {rpc_words(err)}", updates={self.p("level"): "error"},
+                          refetch=True)
+        finally:
+            self._release("termopen", row["id"])
+        with self._lock:
+            self._term_watch = self.clock() + TERM_WATCH_S
+            self._soon = True
+        return Result(True, f"Opened a shell in {row['folder'] or 'its folder'}.",
+                      updates={self.p("level"): "success"}, refetch=True)
 
     def choose(self, ctx: Context, data, values: dict) -> Result:
         """A chip press: which agent Start makes."""

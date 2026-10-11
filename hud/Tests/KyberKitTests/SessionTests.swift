@@ -99,6 +99,16 @@ struct SessionTests {
         #expect(h < CGFloat(DiffView.maxLines) * 20, "drew \(h) points of a 5000-line diff")
     }
 
+    @Test("terminal text is plain: a shell line starting with - or + is not a removal or an addition")
+    func plainTerminal() {
+        let lines = DiffView.lines("$ ls -la\n-rw-r--r-- a.txt\n+ set -x\n@@ not a hunk", path: "x.swift", plain: true)
+        #expect(lines.count == 4)
+        #expect(lines.allSatisfy { $0.kind == .plain })
+        let tail = DiffView.lines((0..<900).map { "line \($0)" }.joined(separator: "\n"), path: "", plain: true)
+        #expect(tail.count == DiffView.maxLines)
+        #expect(tail.last.map { String($0.body.characters) } == "line 899")
+    }
+
     @Test("the wash thickens over a light page and stays put over a dark one")
     func washFollowsGround() {
         for urgency in Urgency.allCases {

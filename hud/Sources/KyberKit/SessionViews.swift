@@ -140,6 +140,9 @@ struct TranscriptView: View {
 struct DiffView: View {
     let text: String
     var path: String = ""
+    /// Terminal output: every line plain, no wash and no syntax, since a
+    /// shell line starting with `-` or `+` is not a removal or an addition.
+    var plain: Bool = false
 
     /// Drawn lines are capped: a 20,000-line diff is not read on a HUD, and
     /// laying it out stalls the glass. The tail is kept, where a test run's
@@ -176,8 +179,16 @@ struct DiffView: View {
     /// Every drawn line with its color worked out once. A line of code in a
     /// known language becomes its marker (`+`, `-`, or the context space)
     /// followed by syntax-colored tokens.
-    static func lines(_ text: String, path: String) -> [Line] {
+    static func lines(_ text: String, path: String, plain: Bool = false) -> [Line] {
         let all = text.split(separator: "\n", omittingEmptySubsequences: false)
+        if plain {
+            let start = max(0, all.count - maxLines)
+            return all.enumerated().dropFirst(start).map { index, line in
+                var body = AttributedString(line.isEmpty ? " " : String(line))
+                body.foregroundColor = color(.plain)
+                return Line(id: index, kind: .plain, body: body)
+            }
+        }
         var language = Syntax.language(forPath: path)
         var state = Syntax.State()
         var out: [Line] = []
@@ -208,7 +219,7 @@ struct DiffView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Self.lines(text, path: path)) { line in
+            ForEach(Self.lines(text, path: path, plain: plain)) { line in
                 Text(line.body)
                     .font(.system(size: 11, design: .monospaced))
                     .lineLimit(1)

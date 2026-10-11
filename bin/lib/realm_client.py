@@ -82,6 +82,10 @@ READ_METHODS = frozenset({
     "ships.list", "schedules.list", "runs.list", "runs.get",
     "notifications.list", "review.get",
     "sessions.list", "sessions.get", "sessions.events", "failover.get",
+    # Added from rpc.ts at 59afd9e4 (2026-10-10): a terminal's scrollback from
+    # a cursor and what each terminal is running. Both read realm's own
+    # buffers; neither writes to the pty.
+    "terminals.read", "terminals.programs",
 })
 # Reads that run a process. agents.probe and cli.status take force:true and
 # spawn every agent CLI; the workspace three run git in whatever cwd the

@@ -92,6 +92,9 @@ class FakeEngine:
         self.upstream = True
         # Transcript keys import.scan finds on disk.
         self.disk: list = []
+        self.items: list = []
+        # terminal id -> {run, out, programs}: realm's scrollback ring, as one string.
+        self.term: dict = {}
         # agents.probe's answer, shaped as on this Mac on 2026-10-10: Claude
         # and Gemini installed with sign-in unknown, Codex installed but not
         # runnable by the engine, Cursor absent.
@@ -114,7 +117,7 @@ class FakeEngine:
 
     def add_session(self, sid, status="idle", space="sp1", title="Fix the rail", cwd="/Users/x/code/chewbacca",
                     updated=NOW_MS, mode="default", kind="claude"):
-        self.sessions[sid] = {"id": sid, "spaceId": space, "projectId": None, "agentKind": kind,
+        self.sessions[sid] = {"id": sid, "spaceId": space, "projectId": None, "agentKind": kind, "terminalItemId": None,
                               "permissionMode": mode, "environmentId": f"env-{sid}", "cwd": cwd, "status": status,
                               "title": title, "updatedAt": updated, "createdAt": updated}
 
@@ -180,6 +183,34 @@ class FakeEngine:
                                    {"kind": "add", "text": "    new", "oldLine": None, "newLine": 2}]}]}
         if method == "agents.probe":
             return [dict(x) for x in self.probe]
+        if method == "items.list":
+            return [dict(i) for i in self.items if i["spaceId"] == p["spaceId"]]
+        if method == "sessions.openTerminal":
+            s = self.sessions[p["id"]]
+            if not s.get("terminalItemId"):
+                tid, iid = self.nid("term"), self.nid("item")
+                self.items.append({"id": iid, "spaceId": s["spaceId"], "kind": "terminal", "title": "Terminal",
+                                   "refId": tid})
+                self.term[tid] = {"run": "run1", "out": "", "programs": None}
+                s["terminalItemId"] = iid
+            item = next(i for i in self.items if i["id"] == s["terminalItemId"])
+            return {"terminalId": item["refId"], "itemId": item["id"]}
+        if method == "terminals.read":
+            t = self.term.get(p["terminalId"])
+            if t is None:
+                return {"runId": "", "seq": 0, "live": "", "truncated": False, "running": False, "history": None}
+            cur = p["cursor"]
+            seq = len(t["out"])
+            if cur and cur["runId"] == t["run"]:
+                return {"runId": t["run"], "seq": seq, "live": t["out"][cur["seq"]:], "truncated": False,
+                        "running": True, "history": None}
+            return {"runId": t["run"], "seq": seq, "live": t["out"], "truncated": False, "running": True,
+                    "history": None}
+        if method == "terminals.programs":
+            return {tid: {"id": t["programs"], "label": t["programs"]} for tid, t in self.term.items() if t["programs"]}
+        if method == "terminals.write":
+            self.term[p["terminalId"]]["out"] += p["data"].replace("\r", "\r\n")
+            return {"ok": True}
         if method == "import.scan":
             return {"sessions": [{"key": k, "agentKind": "claude"} for k in self.disk], "memories": [], "skills": []}
         if method == "import.apply":
@@ -987,6 +1018,79 @@ def shipping(tmp: Path) -> None:
     check("no hidden character reaches the glass", glass_clean(model), model)
 
 
+def terminal(tmp: Path) -> None:
+    """The agent's terminal inside its opened card: opened by a press, read live
+    from a cursor, typed into only from Run, never a stacked panel of its own."""
+    e = FakeEngine()
+    e.add_session("s1", "idle", title="Fix the rail", cwd="/Users/x/code/chewbacca")
+    a, ctx = world(tmp / "term", e)
+    data, model = view(a, ctx, open="s1")
+    check("an agent with no terminal offers to open one, saying nothing runs yet",
+          [x["id"] for x in model["/agents/termopen"]] == ["open:s1"] and "nothing runs" in
+          model["/agents/termopen"][0]["text"] and not model["/agents/termOn"], model["/agents/termopen"])
+    check("reading the card opened no terminal", not any(m == "sessions.openTerminal" for m, _, _ in e.calls))
+    r = a.term_open(ctx, data, {"row": "open:s2"})
+    check("opening another agent's terminal is refused", not r.ok and e.writes == [], r)
+    r = a.term_open(ctx, data, {"row": "open:s1"})
+    check("Open makes the session's own terminal through realm",
+          r.ok and e.writes == [("sessions.openTerminal", {"id": "s1"})] and a.refresh == SA.REFRESH_BUSY, r)
+    tid = next(iter(e.term))
+    e.term[tid]["out"] = "\x1b]0;title\x07\x1b[1;32mjoel@mac\x1b[0m chewbacca % "
+    data, model = view(a, ctx)
+    layout = " ".join(a.layout())
+    check("the terminal draws inside the card, as plain text, after the rest of the card",
+          model["/agents/termOn"] and "agents-terminal Diff" in layout and "plain=true" in layout
+          and a.layout()[-2].index("agents-transcript") < a.layout()[-2].index("agents-terminal"), layout)
+    check("escapes are dropped and the prompt reads as text", model["/agents/terminal"] == "joel@mac chewbacca %",
+          model["/agents/terminal"])
+    check("it says where the shell is and that it's idle", model["/agents/termHead"] ==
+          "Terminal in chewbacca · shell idle", model["/agents/termHead"])
+    check("no Run until a command is typed, no Ctrl-C with nothing running",
+          model["/agents/run"] == [] and model["/agents/ctrlc"] == [], (model["/agents/run"], model["/agents/ctrlc"]))
+    values = {"/agents/command": "git status"}
+    model = a.model(data, None, values, ctx)
+    row = model["/agents/run"][0]["id"]
+    check("a typed command offers Run, naming the shell and that it can't be taken back",
+          "chewbacca" in model["/agents/run"][0]["text"] and "can't be taken back" in model["/agents/run"][0]["text"],
+          model["/agents/run"])
+    r = a.run(ctx, data, {"row": row, "/agents/command": "rm -rf ~"})
+    check("Run with a command other than the one drawn is refused", not r.ok and len(e.writes) == 1, r)
+    bad = "ls\u202e"
+    model = a.model(data, None, {"/agents/command": bad}, ctx)
+    check("a command with a hidden character gets no Run row", model["/agents/run"] == [], model["/agents/run"])
+    r = a.run(ctx, data, {"row": SA.command_id(tid, bad), "/agents/command": bad})
+    check("and its press is refused", not r.ok and len(e.writes) == 1, r)
+    r = a.run(ctx, data, {"row": "run:term-other:" + row.rsplit(":", 1)[1], "/agents/command": "git status"})
+    check("a Run naming a terminal that isn't this agent's is refused", not r.ok and len(e.writes) == 1, r)
+    r = a.run(ctx, data, {"row": row, **values})
+    check("Run types exactly the command and Return into that terminal, then clears the field",
+          r.ok and e.writes[-1] == ("terminals.write", {"terminalId": tid, "data": "git status\r"})
+          and r.updates.get("/agents/command") == "" and "git status" not in r.line, (r, e.writes[-1]))
+    e.term[tid]["out"] += "On branch main\r\nnothing to commit, working tree clean\r\n"
+    e.term[tid]["programs"] = "npm"
+    data, model = view(a, ctx)
+    reads = [p for m, p, _ in e.calls if m == "terminals.read"]
+    check("the next read carries on from the cursor, not from the top",
+          reads[-1]["cursor"] is not None and reads[-1]["cursor"]["runId"] == "run1", reads[-1])
+    check("its output shows live in the card", model["/agents/terminal"].splitlines()[-2:] ==
+          ["On branch main", "nothing to commit, working tree clean"], model["/agents/terminal"])
+    check("a running program offers Ctrl-C and keeps the reads fast",
+          model["/agents/ctrlc"][0]["id"] == f"ctrlc:{tid}" and model["/agents/termHead"].endswith("running npm")
+          and a.refresh == SA.REFRESH_BUSY, (model["/agents/ctrlc"], a.refresh))
+    r = a.ctrl_c(ctx, data, {"row": f"ctrlc:{tid}"})
+    check("Ctrl-C sends one interrupt byte to that terminal",
+          r.ok and e.writes[-1] == ("terminals.write", {"terminalId": tid, "data": "\x03"}), e.writes[-1])
+    e.term[tid]["out"] += "\x1b[2Jfresh screen\r\nprogress 10%\rprogress 99%\r\nab\bc\u202e\r\n"
+    data, model = view(a, ctx)
+    check("a clear screen, a carriage return and a backspace read as the screen would, hidden characters gone",
+          model["/agents/terminal"].splitlines() == ["fresh screen", "progress 99%", "ac"], model["/agents/terminal"])
+    check("no hidden character reaches the glass", glass_clean(model), model)
+    lines = [f"@ {a.name} at=center w={a.width}"] + a.layout() + [surfaces.data_line(k, v) for k, v in
+                                                                   {**a.initial(), **model}.items()]
+    check("the card with its terminal is valid Kyber Lines", not tks.validate(lines), tks.validate(lines))
+    check("the terminal never opens a surface of its own", sum(x.startswith("@ ") for x in lines) == 1)
+
+
 def untrusted(tmp: Path) -> None:
     e = FakeEngine()
     e.add_session("s1", "idle", title="T" + BIDI + "itle" + LINE_SEP + "x" + ESC + "[31m",
@@ -1147,6 +1251,7 @@ def main() -> int:
         live_tabs_and_import(tmp)
         agent_card(tmp)
         shipping(tmp)
+        terminal(tmp)
         untrusted(tmp)
         through_the_daemon(tmp)
         review_fixes(tmp)

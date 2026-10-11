@@ -127,6 +127,33 @@ public final class SurfaceStore {
     /// type nested several levels deep.
     public private(set) var revision = 0
 
+    /// Edited files on this surface that have not been saved, path to the
+    /// draft. Closing a surface with any of these asks first, and whatever
+    /// closes it anyway keeps the drafts in `~/.bob/drafts`.
+    public private(set) var unsaved: [String: String] = [:]
+    /// The person was told this surface has unsaved edits; the next close
+    /// goes through. Cleared when the edits are saved.
+    public var closeWarned = false
+
+    public func markUnsaved(path: String, draft: String?) {
+        let was = unsaved.isEmpty
+        if let draft { unsaved[path] = draft } else { unsaved.removeValue(forKey: path) }
+        if unsaved.isEmpty { closeWarned = false }
+        // Only when it flips: a redraw per keystroke would repaint the
+        // whole surface while the person types.
+        if was != unsaved.isEmpty { revision += 1 }
+    }
+
+    /// Keep every unsaved draft on disk, because the surface is going away.
+    /// Returns where they went.
+    @discardableResult
+    public func rescueUnsaved(in folder: URL = FileSafety.drafts) -> [URL] {
+        let kept = unsaved.compactMap { FileSafety.rescue(draft: $0.value, of: $0.key, in: folder) }
+        unsaved = [:]
+        closeWarned = false
+        return kept
+    }
+
     public init() {}
 
     public func reset() {
@@ -256,17 +283,31 @@ public final class SurfaceStore {
     /// it. No path is constructed here and none is resolved against anything.
     /// The event goes out either way, so an agent watching knows the document it
     /// put on screen has changed underneath it.
-    public func saveFile(path: String, contents: String) {
+    ///
+    /// Checked first: if the file is no longer the version the editor read
+    /// (`expecting`), nothing is written unless the person chose to
+    /// overwrite (`force`), and the version replaced is copied to
+    /// `~/.bob/backups` before anything is. See `FileSafety`.
+    @discardableResult
+    public func saveFile(
+        path: String, contents: String, expecting: FileSafety.Stamp?, force: Bool = false,
+        backups: URL = FileSafety.backups
+    ) -> FileSafety.Outcome {
         let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
-        do {
-            try contents.write(to: url, atomically: true, encoding: .utf8)
+        let outcome = FileSafety.save(
+            contents, to: url, expecting: expecting, force: force, backups: backups)
+        switch outcome {
+        case .saved(_, let backup):
+            var payload: [String: JSON] = ["path": .string(path)]
+            if let backup { payload["backup"] = .string(backup.path) }
+            onEvent?(.action(name: "file.saved", component: "File", payload: payload))
+        case .conflict:
             onEvent?(.action(
-                name: "file.saved",
-                component: "File",
-                payload: ["path": .string(path)]))
-        } catch {
-            warn("Could not save \(url.lastPathComponent)")
+                name: "file.conflict", component: "File", payload: ["path": .string(path)]))
+        case .failed(let message):
+            warn(message)
         }
+        return outcome
     }
 
     /// Tell whoever is drawing that something they sent was ignored.

@@ -257,7 +257,17 @@ public final class OverlayModel {
             // closed mid-answer and left the pill loading on its own, which
             // Caleb read as the HUD quitting on him. Escape, the close button,
             // two globe presses and the menu still close it.
-            if id.isEmpty { reset(keepChat: pill.phase == .working || pill.phase == .hearing || pill.phase == .heard) } else { close(id) }
+            if id.isEmpty {
+                reset(keepChat: pill.phase == .working || pill.phase == .hearing || pill.phase == .heard)
+            } else if holdsUnsavedEdits(id) {
+                // A sender closing a panel the person is typing in would
+                // throw their work away; the person is asked instead, and
+                // the sender is told why it is still there.
+                onEvent?(.problem(
+                    "\(id) has unsaved edits; the person was asked to save or close it"))
+            } else {
+                close(id)
+            }
 
         case .say(let text):
             say(text)
@@ -545,6 +555,9 @@ public final class OverlayModel {
         pill = PillState()
         pillHideTask?.cancel()
         pillHideTask = nil
+        // Escape always takes the glass back, edits or not; the drafts are
+        // kept on disk and offered again when that file is next opened.
+        for surface in surfaces { surface.store.rescueUnsaved() }
         surfaces = []
         files = nil
         heights = [:]
@@ -720,8 +733,21 @@ public final class OverlayModel {
         }
     }
 
-    /// The X on a card: take it down and tell whoever drew it.
+    /// Whether `id` has unsaved edits nobody has been warned about yet. If
+    /// so, the card now says so, and the next close goes through.
+    func holdsUnsavedEdits(_ id: String) -> Bool {
+        guard let store = surfaces.first(where: { $0.id == id })?.store,
+              !store.unsaved.isEmpty, !store.closeWarned else { return false }
+        store.closeWarned = true
+        revision += 1
+        return true
+    }
+
+    /// The X on a card: take it down and tell whoever drew it. A card with
+    /// unsaved edits asks first: the first press says so, the second closes
+    /// it and keeps the drafts in `~/.bob/drafts` (bd_2026-Code-vz4).
     public func dismiss(_ id: String) {
+        if holdsUnsavedEdits(id) { return }
         close(id)
         if chatTarget?.surface == id { chatTarget = nil }
         onEvent?(.closed(surface: id))
@@ -924,6 +950,8 @@ public final class OverlayModel {
 
     public func close(_ id: String) {
         if id == FilesGlass.id { files = nil }
+        // Whatever closes it, a draft nobody saved is kept on disk.
+        for surface in surfaces where surface.id == id { surface.store.rescueUnsaved() }
         glances.remove(id)
         surfaces.removeAll { $0.id == id }
         heights.removeValue(forKey: id)
@@ -1048,6 +1076,7 @@ public final class OverlayModel {
         // for is the one the person is looking for.
         if surfaces.count > Self.maxSurfaces {
             let evicted = surfaces.removeFirst()
+            evicted.store.rescueUnsaved()
             heights[evicted.id] = nil
             fullHeights[evicted.id] = nil
         }

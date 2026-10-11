@@ -411,6 +411,11 @@ struct SurfaceCard: View {
             if let owner = surface.owner, !surface.compact, !isRail {
                 OwnerLine(owner: owner)
             }
+            if surface.store.closeWarned, !surface.store.unsaved.isEmpty, !surface.compact {
+                UnsavedWarning(names: surface.store.unsaved.keys.map {
+                    ($0 as NSString).lastPathComponent
+                }.sorted())
+            }
         }
             .frame(maxHeight: surface.maxHeight)
             // Hug the content vertically.
@@ -529,6 +534,25 @@ struct SurfaceCard: View {
             // dark desktop is a white rectangle, and there is no version of that
             // which looks like anything but a bug.
             .environment(\.colorScheme, .dark)
+    }
+}
+
+/// Said on a card after its close was pressed with edits unsaved.
+struct UnsavedWarning: View {
+    let names: [String]
+
+    var body: some View {
+        Label {
+            Text("Unsaved edits to \(names.joined(separator: ", ")). Save, or close again to "
+                + "discard them; a copy is kept in ~/.bob/drafts.")
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(HUD.warn)
+        }
+        .font(.system(size: 10.5))
+        .foregroundStyle(HUD.ink.opacity(0.9))
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.updatesFrequently)
     }
 }
 

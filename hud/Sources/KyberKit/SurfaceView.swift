@@ -119,9 +119,10 @@ public struct SurfaceView: View {
                     path: path,
                     editable: p["editable"] == .bool(true),
                     page: Int(p["page"]?.doubleValue ?? 1),
-                    onSave: { [store] body in
-                        store.saveFile(path: path, contents: body)
-                    }))
+                    onSave: { [store] body, expecting, force in
+                        store.saveFile(path: path, contents: body, expecting: expecting, force: force)
+                    },
+                    onDirty: { [store] draft in store.markUnsaved(path: path, draft: draft) }))
 
         case "Diagram":
             let parts = p["parts"]?.arrayValue ?? []

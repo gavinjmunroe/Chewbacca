@@ -19,8 +19,12 @@ struct FileView: View {
     let path: String
     let editable: Bool
     let page: Int
-    /// Called with the new contents when the person saves a text file.
-    let onSave: (String) -> Void
+    /// Called with the new contents when the person saves a text file, the
+    /// version the editor last saw on disk, and whether they chose to
+    /// overwrite a file that changed since. Answers what happened.
+    let onSave: (String, FileSafety.Stamp?, Bool) -> FileSafety.Outcome
+    /// Called with the unsaved draft as the person types, nil once saved.
+    var onDirty: (String?) -> Void = { _ in }
 
     /// A ceiling on what will be read into memory.
     ///
@@ -102,12 +106,12 @@ struct FileView: View {
                 .frame(maxHeight: 420)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-        case .text(let body):
+        case .text(let body, let stamp):
             TextPane(
-                text: body, editable: editable,
+                text: body, stamp: stamp, path: url.path, editable: editable,
                 language: Syntax.language(forPath: url.path)
                     ?? Syntax.language(forShebang: String(body.prefix(200).split(separator: "\n").first ?? "")),
-                onSave: onSave)
+                onSave: onSave, onDirty: onDirty)
 
         case .opaque(let type):
             Text(type)
@@ -124,7 +128,9 @@ struct FileView: View {
         case tooBig(Int)
         case pdf
         case image(NSImage)
-        case text(String)
+        /// The text and the stamp of the bytes it came from, which a save
+        /// is checked against.
+        case text(String, FileSafety.Stamp)
         case opaque(String)
     }
 
@@ -143,8 +149,9 @@ struct FileView: View {
         // Decode as text last and by *trying*, not by extension. A file with no
         // extension is usually text and a list of known extensions is a list
         // that is always missing one.
-        if let body = try? String(contentsOf: url, encoding: .utf8) {
-            return .text(body)
+        if let data = try? Data(contentsOf: url),
+           let body = String(data: data, encoding: .utf8) {
+            return .text(body, FileSafety.Stamp(data: data))
         }
         return .opaque(type?.localizedDescription ?? "Not text")
     }
@@ -169,9 +176,13 @@ struct FileView: View {
 /// pressed save.
 private struct TextPane: View {
     let text: String
+    /// The version on disk when this was read; a save checks it first.
+    let stamp: FileSafety.Stamp
+    let path: String
     let editable: Bool
     let language: Syntax.Language?
-    let onSave: (String) -> Void
+    let onSave: (String, FileSafety.Stamp?, Bool) -> FileSafety.Outcome
+    let onDirty: (String?) -> Void
 
     /// Past this many UTF-16 units the read-only view is drawn plain:
     /// coloring a whole generated file to show its first screen stalls the
@@ -179,31 +190,58 @@ private struct TextPane: View {
     static let colorLimit = 200_000
 
     @State private var draft: String = ""
+    /// What is on disk as far as this editor knows: the text it loaded or
+    /// last saved, and that version's stamp.
+    @State private var baseline: String = ""
+    @State private var onDisk: FileSafety.Stamp?
     @State private var loaded = false
     @State private var saved = false
+    /// The file changed on disk since it was read, and the save was refused.
+    @State private var conflict = false
+    @State private var failure: String?
+    /// A draft an earlier panel on this file closed without saving.
+    @State private var rescued: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if editable {
+                if let rescued {
+                    Notice(
+                        text: "Unsaved edits from an earlier panel were kept.",
+                        tone: HUD.warn,
+                        actions: [
+                            ("Restore", { draft = rescued; self.rescued = nil; FileSafety.forget(path) }),
+                            ("Discard", { self.rescued = nil; FileSafety.forget(path) }),
+                        ])
+                }
+                if conflict {
+                    Notice(
+                        text: "Changed on disk since it was opened. Saving now would replace that change.",
+                        tone: HUD.warn,
+                        actions: [
+                            ("Overwrite", { save(force: true) }),
+                            ("Reload", reload),
+                        ])
+                }
                 CodeEditor(text: $draft, language: language)
                     .background(.black.opacity(0.28), in: RoundedRectangle(cornerRadius: 8))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                     .frame(height: 300)
                 HStack(spacing: 8) {
-                    Button("Save") {
-                        onSave(draft)
-                        saved = true
-                    }
+                    Button("Save") { save(force: false) }
                     .buttonStyle(.plain)
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(HUD.accent)
                     .keyboardShortcut("s", modifiers: .command)
-                    if saved {
+                    if let failure {
+                        Text(failure)
+                            .font(.system(size: 10))
+                            .foregroundStyle(HUD.bad)
+                    } else if saved {
                         Text("saved")
                             .font(.system(size: 10))
                             .foregroundStyle(HUD.good)
-                    }
-                    if draft != text && !saved {
+                    } else if draft != baseline {
                         Text("edited")
                             .font(.system(size: 10))
                             .foregroundStyle(HUD.warn)
@@ -228,9 +266,49 @@ private struct TextPane: View {
         .onAppear {
             guard !loaded else { return }
             draft = text
+            baseline = text
+            onDisk = stamp
             loaded = true
+            if editable, let kept = FileSafety.rescued(path), kept != text { rescued = kept }
         }
-        .onChange(of: draft) { _, _ in saved = false }
+        .onChange(of: draft) { _, next in
+            saved = false
+            failure = nil
+            onDirty(next == baseline ? nil : next)
+        }
+    }
+
+    private func save(force: Bool) {
+        switch onSave(draft, onDisk, force) {
+        case .saved(let stamp, _):
+            onDisk = stamp
+            baseline = draft
+            saved = true
+            conflict = false
+            failure = nil
+            FileSafety.forget(path)
+            onDirty(nil)
+        case .conflict:
+            conflict = true
+        case .failed(let message):
+            failure = message
+        }
+    }
+
+    /// Take what is on disk now. The draft being thrown away is kept as a
+    /// rescued draft first, so Reload is never the end of it.
+    private func reload() {
+        let url = URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+        guard let data = try? Data(contentsOf: url),
+              let body = String(data: data, encoding: .utf8) else {
+            failure = "Could not read \(url.lastPathComponent) again"
+            return
+        }
+        if draft != baseline { FileSafety.rescue(draft: draft, of: path) }
+        baseline = body
+        onDisk = FileSafety.Stamp(data: data)
+        draft = body
+        conflict = false
     }
 
     static func colored(_ text: String, _ language: Syntax.Language) -> AttributedString {
@@ -260,11 +338,17 @@ struct CodeEditor: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scroll = NSTextView.scrollableTextView()
+        let scroll = NSScrollView()
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.autohidesScrollers = true
-        guard let view = scroll.documentView as? NSTextView else { return scroll }
+        let view = EditingTextView(frame: .zero)
+        view.isVerticallyResizable = true
+        view.isHorizontallyResizable = false
+        view.autoresizingMask = [.width]
+        view.textContainer?.widthTracksTextView = true
+        view.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        scroll.documentView = view
         view.isRichText = false
         view.allowsUndo = true
         view.drawsBackground = false
@@ -307,6 +391,76 @@ struct CodeEditor: NSViewRepresentable {
                 view.selectedRanges = selected
             }
         }
+    }
+}
+
+/// One line of warning over the editor, with the buttons that answer it.
+private struct Notice: View {
+    let text: String
+    let tone: Color
+    let actions: [(String, () -> Void)]
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 9.5))
+                .foregroundStyle(tone)
+            Text(text)
+                .font(.system(size: 10.5))
+                .foregroundStyle(HUD.ink.opacity(0.9))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            ForEach(actions.indices, id: \.self) { index in
+                Button(actions[index].0, action: actions[index].1)
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(HUD.accent)
+                    .frame(minHeight: HitTarget.minimum)
+                    .contentShape(Rectangle())
+            }
+        }
+        .padding(.horizontal, 8)
+        .background(tone.opacity(0.12), in: RoundedRectangle(cornerRadius: 7))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(text)
+    }
+}
+
+/// The editor's text view, answering the editing keys itself.
+///
+/// Kyber has no main menu, and on macOS Undo, Redo, Cut, Copy, Paste and
+/// Select All reach a text view only through the Edit menu's key
+/// equivalents. So `allowsUndo` was on and Command-Z did nothing: the
+/// editor kept an undo stack nobody could reach (bd_2026-Code-vz4).
+final class EditingTextView: NSTextView {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if Self.handleEditingKey(event, in: self) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    /// The one place the editing keys are mapped, testable without a key
+    /// window. Answers whether `event` was one of them.
+    @discardableResult
+    static func handleEditingKey(_ event: NSEvent, in view: NSTextView) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        guard flags.contains(.command), !flags.contains(.control), !flags.contains(.option),
+              let key = event.charactersIgnoringModifiers?.lowercased()
+        else { return false }
+        let shift = flags.contains(.shift)
+        switch (key, shift) {
+        case ("z", false):
+            guard view.undoManager?.canUndo == true else { return true }
+            view.undoManager?.undo()
+        case ("z", true):
+            guard view.undoManager?.canRedo == true else { return true }
+            view.undoManager?.redo()
+        case ("x", false): view.cut(nil)
+        case ("c", false): view.copy(nil)
+        case ("v", false): view.paste(nil)
+        case ("a", false): view.selectAll(nil)
+        default: return false
+        }
+        return true
     }
 }
 

@@ -896,7 +896,7 @@ spaces inside them: `points=[31,28,44]`, not `points=[31, 28, 44]`.
   c d2 Diagram aspect=2 parts=[{"t":"node","x":0.5,"y":0.2,"w":0.3,"h":0.24,"label":"Request"},{"t":"arrow","x":0.44,"y":0.32,"x2":0.22,"y2":0.62},{"t":"arrow","x":0.56,"y":0.32,"x2":0.78,"y2":0.62},{"t":"node","x":0.18,"y":0.76,"w":0.28,"h":0.24,"label":"Cache","tone":"good"},{"t":"node","x":0.82,"y":0.76,"w":0.28,"h":0.24,"label":"Model","tone":"warn"}]
   ```
 
-- **File** Shows an actual file: a PDF through the system's PDF engine, an image as an image, anything that decodes as text as text. Use it when the person names a document, instead of describing the document back to them. `editable` on a text file gives a real editor whose save overwrites that exact path.
+- **File** Shows an actual file: a PDF through the system's PDF engine, an image as an image, anything that decodes as text as text. Use it when the person names a document, instead of describing the document back to them. `editable` on a text file gives a real editor whose save writes that exact path, and only when the file is still the version it read: if something else changed it since, the editor says so and offers Overwrite or Reload. The version a save replaces is copied to `~/.bob/backups` first (ten per file name). Command-Z and Command-Shift-Z undo and redo. Closing the card with unsaved edits asks first; a second close, a sender's second `- <surface>`, or Escape closes it and keeps the draft in `~/.bob/drafts`, offered back the next time that file is opened. A save sends `e file.saved File path=".." backup=".."`; a refused one sends `e file.conflict File path=".."`.
 
   ```
   c f File path="~/Downloads/resume.pdf"

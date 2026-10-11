@@ -151,6 +151,12 @@ Where it loses, which is where Kyber wins:
   instructions (`.claude/rules/untrusted-content.md`). A reply goes out only
   on Go, only to the thread's own handle from chat.db, and is read back.
   Mail is drafted, never sent.
+- **A sentence is never a press for anything that runs code.** On 2026-10-10 a
+  spoken "start an agent to X" launched a full-permission `claude -p` straight
+  away, and the commit review pointed out that any audio near the mic (a video,
+  a call) reaches the same path. Voice and typed text only fill the New task
+  box (`kyber-sessions draft`); Start on the glass runs it. Same for any new
+  verb that executes: the sentence stages it, a press runs it.
 - **Never merge on a name.** A handle becomes a person only through the
   people store. "Show me Tyler" is two people and the answer is a question.
 - **Never invent a measure.** The tasks lanes come from real process status;

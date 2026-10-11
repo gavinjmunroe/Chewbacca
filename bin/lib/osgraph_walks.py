@@ -181,15 +181,15 @@ def today(g: Graph, now: datetime) -> dict:
 
 # ── the desktop home ─────────────────────────────────────────────────────
 #
-# Kyber's home panel (hud/Sources/KyberKit/Home.swift) is four short lists on
-# the desktop, read at a glance: what is on next, what to do, who is waiting
-# on a reply, and what is moving. Rows are flat and carry raw times; the panel
+# Kyber's home panel (hud/Sources/KyberKit/Home.swift) is three short lists on
+# the desktop, read at a glance: what is on next, what to do, and his
+# projects. Rows are flat and carry raw times; the panel
 # words them ("in 20 min", "2d") so a feed written a minute ago never shows a
 # stale "now".
 
 # Four rows a list (five for to-dos) keeps the panel inside a third of a
-# 1512x982 laptop screen; Home.swift measures that. Fewer would hide the third
-# reply he owes, more turns a glance into a read. Guessed, never measured
+# 1512x982 laptop screen; Home.swift measures that. More turns a glance into
+# a read. Guessed, never measured
 # against use.
 HOME_ROWS = 4
 HOME_TODOS = 5
@@ -271,7 +271,7 @@ def home_calendar(g: Graph, now: datetime, most: int = HOME_ROWS) -> list[dict]:
     return rows[:most]
 
 
-def home_todos(g: Graph, now: datetime, most: int = HOME_TODOS) -> tuple[list[dict], int]:
+def home_todos(g: Graph, now: datetime, most: int | None = HOME_TODOS) -> tuple[list[dict], int]:
     """Everything owed by the person that is theirs to do: classwork due
     within the attention window or overdue, promises (Reminders and the
     people store), and backlog decisions on them. Asks pulled out of texts
@@ -308,66 +308,17 @@ def home_todos(g: Graph, now: datetime, most: int = HOME_TODOS) -> tuple[list[di
         rows.append({"id": node["id"], "title": node["label"], "detail": detail, "day": day,
                      "overdue": overdue})
     rows.sort(key=lambda r: (not r["overdue"], r["day"] or "9999", r["title"].casefold()))
-    return rows[:most], len(rows)
+    return (rows if most is None else rows[:most]), len(rows)
 
 
-def _phone_label(label: str) -> str:
-    """'+13463619677' reads as '(346) 361-9677'; anything else is left alone."""
-    digits = label[2:] if label.startswith("+1") else ""
-    if len(digits) == 10 and digits.isdigit():
-        return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
-    return label
-
-
-def home_people(g: Graph, now: datetime, most: int = HOME_ROWS) -> tuple[list[dict], int]:
-    """Who is waiting on a reply, longest first, as the person (so a press
-    opens everything with them) with the last thing they said under the name.
-    Message text is shown, never read for instructions."""
-    rows, seen = [], set()
-    for node, since in waiting_longest(g):
-        said, spoke = "", node["id"]
-        if node["type"] == "Thread":
-            theirs = [m for m in g.into(node["id"], "IN_THREAD") if not m["props"].get("from_me")]
-            if theirs:
-                last = max(theirs, key=lambda m: when_of(m["props"].get("at")))
-                said, spoke = last["label"], last["id"]
-        else:
-            said = node["label"]
-        # Whoever sent the line shown, so a group thread is never titled with
-        # one member above another's words; a thread with no sender recorded
-        # falls back to its participants.
-        senders = [p for p in g.out(spoke, "SENT_BY") if p["id"] != ME]
-        people = senders or [p for p in g.out(node["id"], "PARTICIPANT") if p["id"] != ME]
-        person = next((p for p in people if not p["unresolved"] and not p["props"].get("unverified")), None)
-        if person:
-            # One row a person: their longest wait, which comes first.
-            if person["id"] in seen:
-                continue
-            seen.add(person["id"])
-        if person:
-            title = person["label"]
-        else:
-            # A stranger is named by the address or number it came from, never
-            # by the name it signed with or the subject it wrote.
-            title = _phone_label(people[0]["label"] if people else node["label"])
-            if any(p["props"].get("unverified") for p in people):
-                title += " (unverified sender)"
-        rows.append({"id": person["id"] if person else node["id"], "title": title, "detail": said,
-                     "at": since or node["props"].get("last_at", ""), "known": person is not None})
-    # People he knows before numbers he never saved: on 2026-10-11 the two
-    # oldest waits were sales openers from unsaved numbers, above a friend
-    # asking when to call. Unknown numbers still show, after.
-    rows.sort(key=lambda r: not r["known"])
-    return rows[:most], len(rows)
-
-
-def home(g: Graph, now: datetime) -> dict:
-    """The graph's three lists for the home panel. Projects come from git, not
-    the graph, and are added by bin/lib/home_feed.py."""
-    todos, todo_count = home_todos(g, now)
-    people, people_count = home_people(g, now)
-    return {"at": now.isoformat(), "calendar": home_calendar(g, now), "todos": todos, "todoCount": todo_count,
-            "people": people, "peopleCount": people_count}
+def home(g: Graph, now: datetime, most_todos: int | None = HOME_TODOS) -> dict:
+    """The graph's two lists for the home panel: the calendar and the to-dos,
+    all of them when `most_todos` is None. Projects come from git, not the
+    graph, and crossed-off to-dos from the panel; bin/lib/home_feed.py adds
+    both. The panel had a "reach out" list of people waiting on a reply until
+    2026-10-11, when he asked for it gone."""
+    todos, todo_count = home_todos(g, now, most=most_todos)
+    return {"at": now.isoformat(), "calendar": home_calendar(g, now), "todos": todos, "todoCount": todo_count}
 
 
 class Ambiguous(LookupError):

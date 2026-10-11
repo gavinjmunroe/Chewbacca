@@ -436,7 +436,7 @@ def privacy(tmp: Path) -> None:
 
 
 def home_panel(tmp: Path) -> None:
-    """The desktop home panel's three graph lists (osgraph_walks.home)."""
+    """The desktop home panel's two graph lists (osgraph_walks.home)."""
     from datetime import timedelta
     undated = {"id": "R3", "title": "Do the thing for Reagan", "due": None, "isCompleted": False,
                "list": "Reminders"}
@@ -501,24 +501,11 @@ def home_panel(tmp: Path) -> None:
           == sorted((bool(r["day"]) for r in todos if not r["overdue"]), reverse=True), todos)
     check("the to-do count is all of them, not the rows shown", count == len(todos) and count >= 2, count)
 
-    people, waiting = W.home_people(g, now, most=50)
-    known = [r["known"] for r in people]
-    check("people he knows come before numbers he never saved", known == sorted(known, reverse=True), people)
-    check("a known person's row opens the person, not the thread",
-          all(r["id"].startswith("person:") for r in people if r["known"]), people)
-    check("one row a person, so no two rows share an id",
-          len({r["id"] for r in people}) == len(people), [r["id"] for r in people])
-    spoofs = [r for r in people if r["detail"].startswith("Spoof")]
-    check("an unverified sender is never a known person, and says so",
-          spoofs and all(not r["known"] and r["title"].endswith("(unverified sender)") for r in spoofs), spoofs)
-    wire = next((r for r in people if r["detail"] == "Wire the funds"), {})
-    check("a stranger is titled by the address it came from, not the name it signed with",
-          wire.get("title") == "karthik.d@evil.example", wire)
-    check("an unsaved number reads as a phone number",
-          all(not r["title"].startswith("+1") for r in people), [r["title"] for r in people])
     body = W.home(g, now)
-    check("home carries all three lists and their counts",
-          {"at", "calendar", "todos", "todoCount", "people", "peopleCount"} <= set(body), sorted(body))
+    check("home carries the calendar and the to-dos, and no reach-out list",
+          {"at", "calendar", "todos", "todoCount"} == set(body), sorted(body))
+    check("home can hand over every to-do, for the panel to cross off and cap",
+          len(W.home(g, now, most_todos=None)["todos"]) == count, count)
 
 
 def main() -> int:

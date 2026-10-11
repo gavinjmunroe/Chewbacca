@@ -4,9 +4,10 @@ import Testing
 
 @testable import KyberKit
 
-/// The desktop home panel: its feed, its words, and the third-of-the-screen
-/// promise ("this whole thing shouldnt take up more than 33% of my screen",
-/// 2026-10-11). Set `HUD_SNAPSHOT_DIR` to keep the rendered PNG.
+/// The desktop home panel: its feed, its words, crossing to-dos off, and the
+/// third-of-the-screen promise ("this whole thing shouldnt take up more than
+/// 33% of my screen", 2026-10-11) however it is resized. Set
+/// `HUD_SNAPSHOT_DIR` to keep the rendered PNG.
 @Suite("Home")
 @MainActor
 struct HomeTests {
@@ -26,21 +27,18 @@ struct HomeTests {
             "overdue": false},
            {"id": "task:r", "title": "Do Reagan's stuff", "detail": "Reminders", "day": "", "overdue": false},
            {"id": "backlog:1", "title": "GTM engineering for Jonah", "detail": "Backlog", "day": "2026-10-09",
-            "overdue": true}
+            "overdue": true},
+           {"id": "task:bank", "title": "Call the bank", "detail": "", "day": "", "overdue": false,
+            "done": true, "reopen": false}
          ],
          "todoCount": 7,
-         "people": [
-           {"id": "person:finn", "title": "Finn", "detail": "you coming tonight?", "at": "2026-10-11T08:00:00-05:00",
-            "known": true},
-           {"id": "thread:imessage:+15550100", "title": "(555) 010-0000", "detail": "Following up on the quote",
-            "at": "2026-10-08T12:00:00-05:00", "known": false}
-         ],
-         "peopleCount": 2,
          "projects": [
-           {"id": "repo:/x/firm-foundation", "title": "Firm Foundation", "detail": "Fix the audit promise",
-            "at": "2026-10-10T23:21:00-05:00", "path": "/x/firm-foundation"},
-           {"id": "repo:/x/Chewbacca", "title": "Chewbacca", "detail": "Home panel on the desktop",
-            "at": "2026-10-11T09:55:00-05:00", "path": "/x/Chewbacca"}
+           {"id": "project:Social media consult", "title": "Social media consult", "detail": "Round 3 ideas",
+            "at": "2026-10-10T15:38:00-05:00", "path": "/x/oakley"},
+           {"id": "project:Chewb", "title": "Chewb", "detail": "Home panel on the desktop",
+            "at": "2026-10-11T09:55:00-05:00", "path": "/x/Chewbacca"},
+           {"id": "project:Music prod agent", "title": "Music prod agent", "detail": "", "at": "",
+            "path": "/x/loyola-studio"}
          ],
          "failed": ["calendar"]}
         """
@@ -59,8 +57,8 @@ struct HomeTests {
         #expect(feed.calendar[1].count == 6)
         #expect(feed.todoCount == 7)
         #expect(feed.todos[2].overdue)
-        #expect(feed.people[1].known == false)
-        #expect(feed.projects[0].path == "/x/firm-foundation")
+        #expect(feed.todos[3].done && !feed.todos[3].reopen)
+        #expect(feed.projects[0].path == "/x/oakley")
         #expect(feed.failed == ["calendar"])
     }
 
@@ -69,7 +67,7 @@ struct HomeTests {
         let feed = try HomeFeed.decode(Data(#"{"todos": [{"id": "t", "title": "One"}]}"#.utf8))
         #expect(feed.calendar.isEmpty)
         #expect(feed.todoCount == 1)
-        #expect(feed.todos[0].known)
+        #expect(!feed.todos[0].done && feed.todos[0].reopen)
         #expect(feed.todos[0].day.isEmpty)
     }
 
@@ -187,6 +185,106 @@ struct HomeTests {
         #expect(frame.minX == corner.x && frame.maxY == corner.y)
     }
 
+    /// Resized, it keeps his size, held inside the display's third, and the
+    /// content no longer decides the height.
+    @Test(arguments: [
+        CGSize(width: 480, height: 640),
+        CGSize(width: 2000, height: 2000),
+        CGSize(width: 10, height: 10),
+    ])
+    func resizedStaysInsideAThird(_ asked: CGSize) {
+        let display = Self.laptop
+        let frame = HomeLayout.frame(content: 300, topLeft: nil, size: asked, displays: [display])
+        #expect(frame.width <= display.frame.width / 3 + 0.5)
+        #expect(frame.width * frame.height <= display.frame.width * display.frame.height / 3 + 1)
+        #expect(frame.width >= HomeLayout.minimum.width && frame.height >= HomeLayout.minimum.height)
+        #expect(display.visible.contains(frame))
+    }
+
+    @Test func resizedIsHisSize() {
+        let frame = HomeLayout.frame(content: 300, topLeft: nil, size: CGSize(width: 420, height: 560),
+                                     displays: [Self.laptop])
+        #expect(frame.size == CGSize(width: 420, height: 560))
+    }
+
+    final class Calls { var made: [[String]] = [] }
+
+    /// Crossing off strikes at once and waits before writing anything, so a
+    /// second press inside the wait is a clean take-back, and a press left
+    /// alone is written exactly once. That wait is the only undo a reminder
+    /// has.
+    @Test func crossingOffWaitsBeforeWriting() async throws {
+        let open = HomeRow(id: "task:a", title: "A")
+        let calls = Calls()
+        let model = HomeModel(feed: HomeFeed(), now: Self.now, grace: .milliseconds(60)) { arguments, done in
+            calls.made.append(arguments)
+            done(0, "")
+        }
+        model.toggle(open)
+        #expect(model.isDone(open))
+        model.toggle(open)
+        #expect(!model.isDone(open))
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(calls.made.isEmpty)
+
+        model.toggle(open)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(calls.made == [["home", "--done", "task:a"]])
+        #expect(model.pending.isEmpty && model.notice == nil)
+    }
+
+    /// A refused write says why on the panel, and so does a Kyber that cannot
+    /// find kyber-surfaces, instead of leaving a row struck that nothing
+    /// recorded.
+    @Test func aRefusedCrossOffSaysSo() async throws {
+        let row = HomeRow(id: "task:b", title: "B", done: true, reopen: true)
+        let model = HomeModel(feed: HomeFeed(), now: Self.now, grace: .milliseconds(10)) { _, done in
+            done(2, "No deliverable named 'B' in span-1412.yml.\n")
+        }
+        model.toggle(row)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(model.notice == "No deliverable named 'B' in span-1412.yml.")
+        #expect(model.isDone(row))
+
+        let open = HomeRow(id: "task:c", title: "C")
+        let lost = HomeModel(feed: HomeFeed(), now: Self.now, grace: .milliseconds(10))
+        lost.toggle(open)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(!lost.isDone(open))
+        #expect(lost.notice?.contains("kyber-surfaces") == true)
+    }
+
+    /// Reminders can complete a reminder and never reopen one, so a row it
+    /// finished cannot be put back from the panel.
+    @Test func aRowItsAppFinishedStaysDone() {
+        let finished = HomeRow(id: "task:r", title: "R", done: true, reopen: false)
+        let model = HomeModel(feed: HomeFeed(), now: Self.now)
+        #expect(!model.canToggle(finished))
+        model.toggle(finished)
+        #expect(model.isDone(finished))
+        #expect(model.canToggle(HomeRow(id: "task:l", title: "L", done: true, reopen: true)))
+    }
+
+    @Test func headlineIsTheDay() {
+        let line = HomeWords.dateLine(Self.now, calendar: Self.chicago)
+        #expect(line.day == "Sunday")
+        #expect(line.date.contains("11"))
+    }
+
+    /// The faces HomeType names are the ones in Fonts/, by PostScript name:
+    /// a renamed instance would quietly draw the system sans.
+    @Test func fontsAreTheOnesShipped() {
+        HomeType.register(from: Self.fonts)
+        #expect(HomeType.isAvailable)
+        for name in [HomeType.serif, HomeType.serifItalic, HomeType.sans, HomeType.sansMedium, HomeType.sansSemibold] {
+            #expect(NSFont(name: name, size: 13) != nil, "\(name)")
+        }
+    }
+
+    static let fonts = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .appendingPathComponent("Fonts")
+
     /// On the desktop, under every app window, and it stays there.
     @Test func sitsOnTheDesktop() {
         let window = HomeWindow(model: HomeModel(feed: HomeFeed(), now: Self.now)) { _, _ in }
@@ -200,6 +298,7 @@ struct HomeTests {
     /// Drawn with a full feed, it is a real panel. Kept as a PNG when
     /// HUD_SNAPSHOT_DIR is set.
     @Test func renders() throws {
+        HomeType.register(from: Self.fonts)
         let feed = try HomeFeed.decode(Data(Self.feedJSON.utf8))
         let limit = HomeLayout.limit(screen: Self.laptop.frame, visible: Self.laptop.visible)
         let view = HomeView(model: HomeModel(feed: feed, now: Self.now), width: limit.width, scrolls: false)

@@ -75,6 +75,8 @@ BADGES = Path(os.environ.get("KYBER_SURFACES_BADGES", str(BOB / "badges.json")))
 # from the same folder. Not home.json: that file is where he lives, for the
 # weather (bin/lib/quick.py), and a first build of this nearly wrote over it.
 HOME_PANEL = BOB / "home-panel.json"
+# To-dos crossed off on the panel (home_feed.cross).
+HOME_DONE = BOB / "home-done.json"
 CONFIG = Path(os.environ.get("KYBER_SURFACES_CONFIG", str(Path.home() / ".chewbacca" / "surfaces.json")))
 LOG = Path.home() / "Library" / "Logs" / "com.calebnewton.chewbacca.surfaces.log"
 
@@ -258,7 +260,8 @@ class Daemon:
 
             now = self.ctx.now()
             rows = home_feed.cached_projects(now, time.monotonic(), self.ctx.home)
-            body = home_feed.build(self.ctx.graph, now, rows, getattr(self.ctx, "ingest_errors", {}))
+            body = home_feed.build(self.ctx.graph, now, rows, getattr(self.ctx, "ingest_errors", {}),
+                                   done=home_feed.load_done(home_feed.done_path(self.home_path)))
             home_feed.write(body, self.home_path)
         except Exception as err:  # noqa: BLE001  the panel never takes the daemon down
             log(f"home: {err}")
@@ -976,12 +979,14 @@ def cmd_walk(kind: str, arg: str, as_json: bool = False) -> int:
     return 0
 
 
-def cmd_home(write: bool) -> int:
+def cmd_home(write: bool, done: str = "", undo: str = "") -> int:
     """The home panel's feed from the graph as it stands. It never ingests:
     Kyber runs `home --write` when the feed is stale, and the daemon owns
     ingesting. Stamped with when the graph was last written, so a graph
     nobody is refreshing shows its age on the panel, and carrying the
-    sources the daemon last could not read, since only an ingest knows them."""
+    sources the daemon last could not read, since only an ingest knows them.
+    `done` crosses a to-do off and `undo` puts it back (home_feed.cross),
+    then the feed is written so the panel shows it at once."""
     import home_feed  # noqa: PLC0415
 
     path = osgraph.default_path()
@@ -992,13 +997,23 @@ def cmd_home(write: bool) -> int:
         return 1
     ctx = live_context()
     now = ctx.now()
+    if done or undo:
+        try:
+            said = (home_feed.cross(ctx.graph, done, now, HOME_DONE, home=ctx.home) if done
+                    else home_feed.uncross(undo, HOME_DONE))
+        except home_feed.Refused as err:
+            print(err, file=sys.stderr)
+            return 2
+        print(said)
+        write = True
     rows = home_feed.projects(now, ctx.home, home_feed.load_config(home_feed.config_path(ctx.home)))
     failed = home_feed.read(HOME_PANEL).get("failed") or []
     body = home_feed.build(ctx.graph, now, rows, [str(f) for f in failed if isinstance(f, str)],
-                           written=home_feed.graph_written(path))
+                           written=home_feed.graph_written(path), done=home_feed.load_done(HOME_DONE))
     if write:
         home_feed.write(body, HOME_PANEL)
-        print(HOME_PANEL)
+        if not (done or undo):
+            print(HOME_PANEL)
     else:
         print(json.dumps(body, indent=1, default=str))
     return 0
@@ -1021,9 +1036,9 @@ def cmd_forget() -> int:
         import shutil  # noqa: PLC0415
         shutil.rmtree(osgraph_runs.RUNS, ignore_errors=True)
         gone.append(str(osgraph_runs.RUNS))
-    # The home feed holds names and the last line of texts, so it goes with
-    # the graph it was read from.
-    for derived in (BADGES, HOME_PANEL):
+    # The home feed and its crossed-off record hold to-do titles and names,
+    # so they go with the graph they were read from.
+    for derived in (BADGES, HOME_PANEL, HOME_DONE):
         if derived.exists():
             derived.unlink()
             gone.append(str(derived))
@@ -1063,6 +1078,9 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("graph", help="graph counts and an ontology check")
     h = sub.add_parser("home", help="the desktop home panel's feed, as JSON")
     h.add_argument("--write", action="store_true", help="write ~/.bob/home-panel.json instead of printing it")
+    crossing = h.add_mutually_exclusive_group()
+    crossing.add_argument("--done", default="", metavar="ID", help="cross a to-do off, in its own app where it can be")
+    crossing.add_argument("--undo", default="", metavar="ID", help="put a crossed-off to-do back")
     sub.add_parser("forget", help="stop the daemon and delete everything it stored")
     sub.add_parser("run", help="the daemon")
     sub.add_parser("start", help="start the daemon in the background if it is not running")
@@ -1083,7 +1101,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.cmd == "graph":
         return cmd_graph()
     if args.cmd == "home":
-        return cmd_home(args.write)
+        return cmd_home(args.write, args.done, args.undo)
     if args.cmd == "forget":
         return cmd_forget()
     if args.cmd in ("open", "walk"):

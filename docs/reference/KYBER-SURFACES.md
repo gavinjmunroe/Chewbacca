@@ -120,22 +120,28 @@ Machine with `tmutil addexclusion` when it is first made. It holds:
 
 Also on disk: `~/.bob/surface-runs/<run>/task.json` (one task's snippet for an
 agent run), `~/.bob/badges.json` (a count), `~/.bob/home-panel.json` (the
-desktop home panel's lists, owner-only, with the last line of each waiting
-text), `~/.bob/surfaces-state.json` (which panels are open) and
+desktop home panel's lists, owner-only), `~/.bob/home-done.json` (the to-dos
+crossed off on it), `~/.bob/surfaces-state.json` (which panels are open) and
 `~/.bob/surfaces-activity.jsonl` (actions and outcomes, never a message).
 `kyber-surfaces forget` stops the daemon and deletes the graph, the runs, the
-badge and the home feed; the next start rebuilds the last 7 days from the
-sources.
+badge, the home feed and its crossed-off record; the next start rebuilds the
+last 7 days from the sources.
 
 ## Home on the desktop
 
 Kyber draws a glass panel on the desktop, under every window and on every
 Space, in place of macOS's desktop widgets (asked for 2026-10-11): what is on
-today and tomorrow, to-dos, who is waiting on a reply, and the repositories
-committed to this week. It is at most a third of the screen's width and a
-third of its area (`HomeLayout`, tested on seven screen shapes), hides during
-a screen share like the glass, and is switched off from the menu ("Home on the
-desktop").
+today and tomorrow, to-dos, and his projects. It is at most a third of the
+screen's width and a third of its area however it is resized (`HomeLayout`,
+tested on seven screen shapes), hides during a screen share like the glass,
+and is closed with its X or from the menu ("Home on the desktop" brings it
+back). It is dragged by its background and resized from the bottom-right
+corner; the corner and a dragged size are kept in the `hud.home.topLeft` and
+`hud.home.size` defaults (a click on the corner with no drag saves nothing),
+and a double press on the corner goes back to the default width and the
+content's height. Type is Instrument Serif and Inter
+Tight (`HomeType`, both OFL, in `hud/Fonts`), and the mark beside "Kyber" is
+a morphing orb run by Core Animation (`HomeMark.swift`).
 
 The daemon writes `~/.bob/home-panel.json` after every ingest
 (`bin/lib/home_feed.py`, walks `osgraph_walks.home*`); `kyber-surfaces home`
@@ -145,13 +151,35 @@ panel does not depend on which daemon is running. A row press sends
 `e action ks-pivot row=<node id> surface="home"` and the daemon opens that
 node's walk; a project row opens Terminal in its folder.
 
-Projects are git repositories directly under `~/dev`, `~/Developer`,
-`~/Projects`, `~/code` or `~/src` (plus this checkout) whose last commit by
-`git config user.email` in the last 7 days is not a `chore:`. Personal choices
-go in `~/.chewbacca/home-panel.json`, never in this repo:
+A to-do's ring crosses it off. It is struck through at once, and four seconds
+later Kyber runs `kyber-surfaces home --done <id>`, so a second press inside
+that wait takes it back with nothing written. `--done` finishes it in its own
+app where that app can be written: `mac reminders complete` for a reminder,
+`people task done` for a people-store task, and `status: done` on that one
+line of the coursework ledger for an assignment. Anything else (a backlog row,
+whose file belongs to a team repository, or a promise taken from a meeting) is
+crossed off on the panel only. Every cross-off is recorded in
+`~/.bob/home-done.json` (owner-only, out of Time Machine, deleted by
+`forget`), one at a time under a lock, and the last three crossed today stay
+struck through until the day ends. After that the app is the truth for a row
+it was written to (a repeating reminder comes back with its next date), and
+the record hides a panel-only row for as long as the row exists. `--undo <id>`
+puts it back: the ledger gets its old status again, a panel-only row is
+cleared, and a finished reminder or people task is refused, because neither
+can be reopened from here; the refusal shows under the lists. A write-back
+that fails is still crossed off on the panel that day, and the row says
+"Still open in Reminders".
+
+Projects are the pinned list when there is one, in its order, each showing the
+newest non-`chore:` commit by `git config user.email` across the repositories
+named for it. Without a pinned list they are git repositories directly under
+`~/dev`, `~/Developer`, `~/Projects`, `~/code` or `~/src` (plus this checkout)
+whose last such commit is inside 7 days. Personal choices go in
+`~/.chewbacca/home-panel.json`, never in this repo:
 
 ```json
-{"projects": {"roots": ["~/dev"], "hide": ["notes-repo"], "names": {"noah-agency": "noahstudio"}}}
+{"projects": {"pinned": [{"title": "Consulting", "paths": ["~/dev/client-a", "~/dev/client-b"]}],
+              "roots": ["~/dev"], "hide": ["notes-repo"], "names": {"noah-agency": "noahstudio"}}}
 ```
 
 ## Identity

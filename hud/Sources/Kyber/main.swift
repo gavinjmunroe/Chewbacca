@@ -228,7 +228,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func setUpHome() {
-        let home = HomeWindow(model: HomeModel()) { [weak self] section, row in
+        let home = HomeWindow(model: HomeModel(), onClose: { [weak self] in self?.setHome(false) }) {
+            [weak self] section, row in
             self?.openHomeRow(section, row)
         }
         self.home = home
@@ -246,6 +247,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func openHomeRow(_ section: HomeSection, _ row: HomeRow) {
         guard section == .projects else {
             model.onEvent?(.rowAction(name: "ks-pivot", row: row.id, surface: "home"))
+            return
+        }
+        guard !row.path.isEmpty else {
+            model.fail("\(row.title) has no folder. Name one in ~/.chewbacca/home-panel.json.", hold: 4)
             return
         }
         var isFolder: ObjCBool = false
@@ -1485,8 +1490,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
     @objc private func toggleFromMenu() { toggle() }
 
-    @objc private func homeFromMenu() {
-        let on = !Self.homeOn
+    @objc private func homeFromMenu() { setHome(!Self.homeOn) }
+
+    /// The menu item and the panel's own X both land here, so the item's
+    /// tick always says whether the panel is wanted.
+    private func setHome(_ on: Bool) {
         UserDefaults.standard.set(on, forKey: Self.homeKey)
         homeItem?.state = on ? .on : .off
         if on { home?.show() } else { home?.hide() }

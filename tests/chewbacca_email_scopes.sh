@@ -11,13 +11,12 @@ ROOT="${1:-$(cd "$(dirname "$0")/.." && pwd)}"
 f="$ROOT/bin/chewbacca-email"
 fail=0
 scopes=$(grep -o '^SCOPES="[^"]*"' "$f")
-printf '%s' "$scopes" | grep -q 'auth/calendar[,"]' || { echo "FAIL: sign-in scopes lack calendar write: $scopes"; fail=1; }
-printf '%s' "$scopes" | grep -q 'calendar.readonly' && { echo "FAIL: calendar is read-only in sign-in scopes"; fail=1; }
-printf '%s' "$scopes" | grep -q 'auth/documents[,"]' || { echo "FAIL: sign-in scopes lack Docs write (documents)"; fail=1; }
-printf '%s' "$scopes" | grep -q 'auth/gmail.compose[,"]' || { echo "FAIL: sign-in scopes lack gmail.compose for drafts"; fail=1; }
-for keep in gmail.readonly gmail.send drive.readonly; do
-  printf '%s' "$scopes" | grep -q "auth/$keep[,\"]" || { echo "FAIL: re-consent would drop $keep"; fail=1; }
+# Full account access (Caleb, 2026-10-11: "CHEWBS SHOULD NEVER BE READ ONLY").
+# Every narrower scope has already cost a 403: calendar.readonly, drive.readonly.
+for need in 'mail.google.com/' 'auth/calendar' 'auth/drive' 'auth/documents' 'auth/spreadsheets' 'auth/presentations' 'auth/contacts' 'auth/tasks'; do
+  printf '%s' "$scopes" | grep -q "$need[,\"]" || { echo "FAIL: sign-in scopes lack full $need"; fail=1; }
 done
+printf '%s' "$scopes" | grep -q 'readonly' && { echo "FAIL: a read-only scope crept back in: $scopes"; fail=1; }
 # drive.file sees only files this app opened, so Drive search by name breaks.
 printf '%s' "$scopes" | grep -q 'drive.file' && { echo "FAIL: drive.file would blind chewbacca google find"; fail=1; }
 grep -q 'rm -f "$cfg/token_cache.json"' "$f" || { echo "FAIL: login no longer clears the stale token cache"; fail=1; }

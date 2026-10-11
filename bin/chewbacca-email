@@ -18,16 +18,15 @@ GWS_BIN="${CHEWBACCA_GWS:-gws}"
 gws() { command "$GWS_BIN" "$@"; }
 HOME_DIR="${CHEWBACCA_EMAIL_HOME:-$HOME/.chewbacca/email}"
 DEFAULT_CFG="$HOME/.config/gws"
-# Calendar is read-write so "put it on my calendar" works the first time. With
-# calendar.readonly, every event add 403'd, and the improvised re-login that
-# followed picked the wrong Google account and hit "Access blocked" (2026-10-09).
-# drive.readonly keeps `chewbacca google find` searching every Drive file by
-# name; drive.file would only see files this app opened, so search would go
-# blind. documents is what Docs edits need: with read-only Drive alone, Google
-# left revisionId out of documents.get and the Doc surface refused every edit
-# (2026-10-10). gmail.compose lets a meeting follow-up become a Gmail draft;
-# gmail.send alone can't create one.
-SCOPES="openid,email,profile,https://www.googleapis.com/auth/gmail.readonly,https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/gmail.compose,https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/drive.readonly,https://www.googleapis.com/auth/documents"
+# Full access to the whole Google account, on purpose. Chewbacca reads AND
+# writes everything it touches, so every narrower scope was a future 403: with
+# calendar.readonly every event add failed (2026-10-09), with read-only Drive
+# the Doc surface refused every edit (2026-10-10), and on 2026-10-11 a team
+# Google Doc couldn't be written at 12:30am before a deadline. Caleb: "CHEWBS
+# SHOULD NEVER BE READ ONLY! ... always literally just ask for full access to
+# their entire google acct." mail.google.com covers read, send, compose and
+# modify; drive covers search by name and edits to any file.
+SCOPES="openid,email,profile,https://mail.google.com/,https://www.googleapis.com/auth/calendar,https://www.googleapis.com/auth/drive,https://www.googleapis.com/auth/documents,https://www.googleapis.com/auth/spreadsheets,https://www.googleapis.com/auth/presentations,https://www.googleapis.com/auth/contacts,https://www.googleapis.com/auth/tasks"
 LOG="$HOME/Library/Logs/chewbacca-email-add.log"
 
 say() { printf '%s\n' "$*"; }

@@ -134,6 +134,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - reference_testflight_asc_api: TestFlight testers, groups and beta review straight from the App Store Connect...
 - reference_togari_auth0_tenant: Correct Auth0 tenant for all Togari repos is the dev-\* one, not bluemodern; stale...
 - reference_voice_agent_e2e_test: prove a browser voice agent works headless by feeding a spoken WAV as the fake mic; caught askforthefire's white-box WebGL bug (10/10)
+- reference_kyber_invisible_to_screenshots: Kyber's glass never shows in screencapture, so a HUD card can't be verified by screenshot; what to use instead
 - reference_watch_skill: Watch Skill (oxbshw/watch-skill) is installed globally: video/screen perception +...
 - reference_writing_toolchain: Four writing tools are installed and they overlap; which one to reach for, plus...
 
@@ -254,10 +255,15 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 - project_chewbacca_live_genui_service: Chewbacca Live (apps/live) is ours, hosted genui for clients; BMA/Amber is a customer, Togari only a data source (10/10)
 - feedback_hud_lag_is_the_mac: "HUD laggy" 10/10 was load 95 from 14 tabs + builds + Xprotect, Kyber at 1.4%; measure uptime and Kyber CPU before touching HUD code
 - project_mog_plan: The 6-step plan to prove Chewbacca learns (ledger cc438a52) + 10/10 baseline: r@5 ~55%, 49/190 enforced, 0 kept self-fixes
+- project_main_ci: bin/main-ci runs the full suite on origin/main's newest commit on this Mac, on demand only; never unattended
 - feedback_vendor_names_need_a_source: Vendor or tool names on a client site need a usage source; "X or Y or whatever" on a call is a research task (FF site, 10/10)
 - feedback_signed_in_but_403_is_chrome: 403 while he has signed-in tabs = Chrome stopped saving cookies (19h on 10/10); Cmd+Q and reopen, never "sign in"
 - reference_chewbacca_launch: `chewbacca launch` opens a named, briefed desktop tab (seed via -p --session-id, --desktop --resume under script); kickoff via send_message; LAUNCHED_BY marker
 - feedback_we_good_means_closeout_first: "we good?" = run closeout, answer once with what landed + whose files fail; a yes then no drew "Wtfffff" (10/10)
+- feedback_dev_set_must_contain_the_failure: check the dev set holds the failure before tuning; brain recall dev 80% fell to 43% sealed (10/10)
+- feedback_workers_never_wait_on_tail: a subagent waiting on `tail -f` of a backgrounded suite stalls forever; run long suites in the foreground (10/10)
+- feedback_ported_logic_fix_both_copies: reply classification lives in togari-platform reply-intent.ts and tools/gtme_reply.py; fix both the same hour, same test
+- feedback_too_many_tabs_one_goal: 13 tabs on "make chewb perfect" made it worse (load 33, push races); about four lanes, one tab each
 - feedback_land_workflow_traps: checksums.py hashes the index (add first), never chain cleanup with ;, DESTRUCTIVE_OK=1 must lead, zsh file lists need arrays (10/10)
 - feedback_site_research_pass: Every site starts with the kit pass (api-anything pulls every page, brand-grab, ux-pick, crafts, STEAL, COPY); site-gate research refuses without it (10/10)
 - feedback_never_vercel: Never deploy or set up anything on Vercel; Railway hosts everything and vercel-guard refuses vercel commands (10/10)

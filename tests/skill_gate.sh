@@ -1,6 +1,9 @@
 #!/bin/bash
-# skill-gate: an enforced skill named by skill-route refuses the first tool
-# call once, clears on loading the skill, and never loops.
+# skill-gate: an enforced skill named by skill-route nudges the first tool
+# call once, clears on loading the skill, and never loops. A nudge prints "2"
+# below (the old refusal code, so the sequences read the same); since
+# 2026-10-11 it rides on the call as context and the hook always exits 0,
+# because an exit 2 shows Caleb a red "hook error".
 # 2026-09-29: graph-engineering was named and skipped across one session.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -41,12 +44,14 @@ trap 'kill $OLLAMA_PID 2>/dev/null; rm -rf "$TMP"' EXIT
 for _ in 1 2 3 4 5 6 7 8 9 10; do [ -s "$TMP/port" ] && break; sleep 0.2; done
 export OLLAMA_HOST="http://127.0.0.1:$(cat "$TMP/port")"
 route() { jq -n --arg p "$1" '{prompt:$p, session_id:"t1", cwd:"/tmp"}' | HOME="$TMP" sh "$ROOT/.claude/hooks/skill-route.sh" >/dev/null 2>&1; }
-gate() { jq -n --arg t "$1" --arg s "${2:-}" '{session_id:"t1", tool_name:$t, tool_input:{skill:$s}}' | bash "$ROOT/.claude/hooks/skill-gate.sh" >/dev/null 2>&1; echo $?; }
+# 0 = silent pass, 2 = passed with a nudge, 9 = the hook blocked or crashed.
+verdict() { out=$(bash "$ROOT/.claude/hooks/skill-gate.sh" 2>/dev/null); rc=$?; [ "$rc" = 0 ] || { echo 9; return; }; printf '%s' "$out" | grep -q additionalContext && echo 2 || echo 0; }
+gate() { jq -n --arg t "$1" --arg s "${2:-}" '{session_id:"t1", tool_name:$t, tool_input:{skill:$s}}' | verdict; }
 
 route "fan out these independent jobs in parallel instead of running them sequentially, and dedupe the entities"
 [ -s "$CHEWBACCA_HOME/state/skill-required-t1" ] && echo "ok    router marks graph-engineering" || { echo "FAIL  no marker written"; fail=1; }
-[ "$(gate Bash)" = 2 ] && echo "ok    first non-skill tool call is refused" || { echo "FAIL  not refused"; fail=1; }
-[ "$(gate Bash)" = 0 ] && echo "ok    refuses once, never loops" || { echo "FAIL  refused twice"; fail=1; }
+[ "$(gate Bash)" = 2 ] && echo "ok    first non-skill tool call is nudged" || { echo "FAIL  not refused"; fail=1; }
+[ "$(gate Bash)" = 0 ] && echo "ok    nudges once, never loops" || { echo "FAIL  refused twice"; fail=1; }
 
 route "fan out these independent jobs in parallel instead of running them sequentially, and dedupe the entities"
 [ "$(gate Skill graph-engineering)" = 0 ] && [ "$(gate Bash)" = 0 ] && echo "ok    loading the skill clears the gate" || { echo "FAIL  skill load did not clear"; fail=1; }
@@ -107,7 +112,7 @@ route "$BIG2"
 pids=""; for i in 1 2 3 4 5 6; do gate Bash > "$TMP/par.$i" & pids="$pids $!"; done
 for p in $pids; do wait "$p"; done
 n=$(cat "$TMP"/par.* | grep -c '^2$')
-[ "$n" = 1 ] && echo "ok    six parallel calls refuse exactly once" || { echo "FAIL  parallel calls refused $n times"; fail=1; }
+[ "$n" = 1 ] && echo "ok    six parallel calls nudge exactly once" || { echo "FAIL  parallel calls refused $n times"; fail=1; }
 # 2026-10-09: a mid-turn message re-armed the gate a minute after the skill
 # loaded, and the same turn was refused twice.
 route "$BIG2"
@@ -117,15 +122,15 @@ route "$BIG2"
 
 # Behavior backstop: a third distinct file, or an agent spawn, without the
 # skill loaded is refused once.
-edit() { jq -n --arg f "$1" '{session_id:"t1", tool_name:"Edit", tool_input:{file_path:$f}}' | bash "$ROOT/.claude/hooks/skill-gate.sh" >/dev/null 2>&1; echo $?; }
+edit() { jq -n --arg f "$1" '{session_id:"t1", tool_name:"Edit", tool_input:{file_path:$f}}' | verdict; }
 rm -rf "$CHEWBACCA_HOME/state/"*-t1
 r="$(edit /a)$(edit /a)$(edit /b)$(edit /c)$(edit /d)"
-[ "$r" = "00020" ] && echo "ok    third distinct file refused once" || { echo "FAIL  edit counter gave $r"; fail=1; }
+[ "$r" = "00020" ] && echo "ok    third distinct file nudged once" || { echo "FAIL  edit counter gave $r"; fail=1; }
 rm -rf "$CHEWBACCA_HOME/state/"*-t1
-[ "$(gate Agent)$(gate Agent)" = "20" ] && echo "ok    agent spawn refused once" || { echo "FAIL  agent spawn not gated once"; fail=1; }
+[ "$(gate Agent)$(gate Agent)" = "20" ] && echo "ok    agent spawn nudged once" || { echo "FAIL  agent spawn not gated once"; fail=1; }
 rm -rf "$CHEWBACCA_HOME/state/"*-t1
 route "BIG build the onboarding flow"
-[ "$(gate Agent)$(gate Agent)" = "20" ] && echo "ok    backstop and prompt marker refuse once total" || { echo "FAIL  refused twice in a row"; fail=1; }
+[ "$(gate Agent)$(gate Agent)" = "20" ] && echo "ok    backstop and prompt marker nudge once total" || { echo "FAIL  refused twice in a row"; fail=1; }
 rm -rf "$CHEWBACCA_HOME/state/"*-t1
 r="$(edit "$HOME/second-brain/memory/x.md")$(edit /tmp/s)$(edit /a)$(edit /b)"
 [ "$r" = "0000" ] && echo "ok    notes and scratch don't count toward three" || { echo "FAIL  notes counted: $r"; fail=1; }

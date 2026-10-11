@@ -197,7 +197,7 @@ def big_work():
 # asset generation, page code and deploy prep ran strictly one after another,
 # because a once-per-session gate had nothing left to say. Caleb: "Why tf you
 # not graph engineering I should never have to say this". Loaded is not
-# applied; each big prompt needs its own task graph, so skill-gate.sh refuses
+# applied; each big prompt needs its own task graph, so skill-gate.sh nudges
 # that turn's first tool call until the skill is re-read or an agent fans out.
 if (sid_early and not question
         and not os.environ.get("SKILL_ROUTE_BUILD_CACHE") and big_work()):
@@ -515,7 +515,7 @@ for score, name, path, why in top:
     lines.append(f"  {name}  ({short})  matched on: {because}")
 
 # ENFORCED skills: a match writes a marker that skill-gate.sh turns into a
-# refusal on the first tool call, until the skill is actually loaded.
+# nudge on the first tool call, until the skill is actually loaded.
 #
 # 2026-09-29: graph-engineering was named by this router on several prompts in
 # one session and skipped every time, and Caleb had to say "Graph engineer bro,

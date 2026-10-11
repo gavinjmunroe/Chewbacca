@@ -231,8 +231,8 @@ EVERY TOOL CALL
   PreToolUse   guards that can refuse: load-guard (CPU fan-out), zsh-guard,
                chatdb-guard, submit-guard (coursework submission),
                launch-guard (outbound campaigns), suite-rerun-guard,
-               fusion-guard, browser-ux-guard, ux-guard, plan-guard,
-               skill-gate; advisory: env-guard, repo-overlap-guard
+               fusion-guard, browser-ux-guard, ux-guard, plan-guard;
+               advisory: env-guard, repo-overlap-guard, skill-gate
   PostToolUse  write-log.sh (who wrote which file), format-and-sync.sh
                (prettier, then auto-commit and push the second brain),
                untrusted-screen.sh (flags prompt injection in fetched
@@ -288,8 +288,9 @@ Skills are routed four ways, cheapest last:
 2. **`skill-route.sh`** (UserPromptSubmit). Embedding match first (a local
    model through Ollama), then a deterministic stem matcher. It prints "read
    this skill first" when something matches and stays silent otherwise.
-3. **`skill-gate.sh`** (PreToolUse). For skills marked enforced, refuses the
-   first non-Skill tool call once, so the skill is actually read.
+3. **`skill-gate.sh`** (PreToolUse). For skills marked enforced, attaches a
+   "load it now" note to the first non-Skill tool call once. The call still
+   runs: a refusal showed Caleb a red hook error (2026-10-11).
 4. **`tools/skill_match.py`.** The same matcher, used by the voice agent.
 
 Families, roughly: Mac control (`mac-*`, `hud`), school (`coursework`,

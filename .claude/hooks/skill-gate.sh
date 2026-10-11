@@ -11,9 +11,16 @@ type hook_init >/dev/null 2>&1 && hook_init skill-gate.sh 5
 # skip on 2026-09-21, and Caleb had to say it out loud both times. This turns
 # the router's line into one refusal: load the skill, or be stopped once.
 #
-# It refuses ONCE per big-work prompt and then clears the marker, so a skill
-# that truly doesn't fit costs one tool call per prompt, never a loop.
+# It nudges ONCE per big-work prompt and then clears the marker. The nudge
+# rides on the call as context and the call still runs: until 2026-10-11 it
+# refused with exit 2, which Caleb sees as a red "hook error" on a command that
+# did nothing wrong ("Fix chewb, you should never error bro", on a form fill
+# the router had misread as big work).
 set -uo pipefail
+nudge() {
+  jq -n --arg m "$1" '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $m}}'
+  exit 0
+}
 command -v jq >/dev/null 2>&1 || exit 0
 INPUT=$(cat)
 SID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' | tr -cd 'A-Za-z0-9_-')
@@ -61,8 +68,7 @@ if ! grep -qxF graph-engineering "$STATE/skill-loaded-$SID" 2>/dev/null \
   # will go through gets refused a second time by it.
   if [ -n "$WHY" ] && mkdir "$STATE/graph-asked-$SID" 2>/dev/null; then
     rm -f "$MARK"
-    echo "skill-gate: this is big work ($WHY) and nobody asked \"should I graph engineer here?\". Load graph-engineering, then decide in one line: what fans out, what verifies from ground truth, or why none of it applies. Refused once; the next call goes through." >&2
-    exit 2
+    nudge "skill-gate: this is big work ($WHY) and nobody asked \"should I graph engineer here?\". Load graph-engineering, then decide in one line: what fans out, what verifies from ground truth, or why none of it applies. This call went through; say it once and carry on."
   fi
 fi
 
@@ -96,8 +102,7 @@ if [ -n "$(find "$STATE/graph-loaded-$SID" -mmin -10 2>/dev/null)" ]; then
   exit 0
 fi
 if grep -qxF graph-engineering "$STATE/skill-loaded-$SID" 2>/dev/null; then
-  echo "skill-gate: this prompt is big work. graph-engineering was loaded earlier in the session, but loaded is not applied: draw THIS turn's task graph before acting. Re-load the skill, or fan the independent jobs out with Agent, and say in one line what runs in parallel, what verifies from ground truth, or why it is one sequential chain. Refused once; the next call goes through. Never mention skills to the user." >&2
+  nudge "skill-gate: this prompt is big work. graph-engineering was loaded earlier in the session, but loaded is not applied: draw THIS turn's task graph before acting. Re-load the skill, or fan the independent jobs out with Agent, and say in one line what runs in parallel, what verifies from ground truth, or why it is one sequential chain. This call went through. Never mention skills to the user."
 else
-  echo "skill-gate: the router named ${NEED}for this request, and it hasn't been loaded. Load it with the Skill tool before acting, and apply it: fan out independent work, verify from ground truth. If it truly doesn't fit, load it anyway and carry on silently. Never mention skills to the user." >&2
+  nudge "skill-gate: the router named ${NEED}for this request, and it hasn't been loaded. Load it with the Skill tool now, and apply it: fan out independent work, verify from ground truth. If it truly doesn't fit, carry on silently. This call went through. Never mention skills to the user."
 fi
-exit 2

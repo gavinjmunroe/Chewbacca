@@ -62,7 +62,10 @@ _GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"  # RFC 6455 section 1.3
 
 # The largest single message accepted. Guessed, never measured: sessions.events
 # defaults to 2000 events per page and a long tool result can be hundreds of
-# KB, so 32 MiB leaves room while refusing a runaway stream.
+# KB, so 32 MiB leaves room while refusing a runaway stream. A caller that
+# knows one answer is bigger raises Connection.max_message for that
+# connection only: import.scan answered with 41,039,576 bytes for 5,446
+# transcripts on 2026-10-10 (bin/lib/realm_import.py).
 MAX_MESSAGE = 32 * 1024 * 1024
 # Broadcasts kept while waiting on a response or between polls. Guessed, never
 # measured: a streaming Claude turn emits a few events per second, and a poll
@@ -240,6 +243,8 @@ class Connection:
         if not isinstance(port, int) or not 0 < port < 65536:
             raise RealmUnavailable(f"bad port {port!r}")
         self.port = port
+        # This connection's ceiling on one message; MAX_MESSAGE unless raised.
+        self.max_message = MAX_MESSAGE
         self.events: deque[dict[str, Any]] = deque(maxlen=MAX_BUFFERED_EVENTS)
         self._buf = bytearray()
         # A fragmented message in progress. Kept on the connection, not in
@@ -373,8 +378,8 @@ class Connection:
         if opcode >= 0x8:
             if n > 125 or not fin:
                 raise RealmProtocolError("bad control frame")
-        elif self._frag_size + n > MAX_MESSAGE:
-            raise RealmProtocolError(f"message over {MAX_MESSAGE} bytes")
+        elif self._frag_size + n > self.max_message:
+            raise RealmProtocolError(f"message over {self.max_message} bytes")
         if len(buf) < at + n:
             return None
         payload = bytes(buf[at:at + n])

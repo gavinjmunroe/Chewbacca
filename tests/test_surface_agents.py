@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_kyber_surfaces as tks  # noqa: E402  validate(), FakeHud and the daemon
 
 import realm_client as rc  # noqa: E402
+import realm_import  # noqa: E402
 import surfaces  # noqa: E402
 from surfaces import Context  # noqa: E402
 from surfaces import agents as SA  # noqa: E402
@@ -81,6 +82,7 @@ class FakeEngine:
         self.hold: dict = {}
         self.after: dict = {}
         self.n = 0
+        self.imported_keys: set = set()
         # agents.probe's answer, shaped as on this Mac on 2026-10-10: Claude
         # and Gemini installed with sign-in unknown, Codex installed but not
         # runnable by the engine, Cursor absent.
@@ -134,6 +136,20 @@ class FakeEngine:
     def answer(self, method, p):
         if method == "agents.probe":
             return [dict(x) for x in self.probe]
+        if method == "import.apply":
+            out = []
+            for sel in p["sessions"]:
+                if sel["key"] in self.imported_keys:
+                    out.append({"key": sel["key"], "state": "skipped", "refId": None, "detail": "already imported"})
+                    continue
+                if not sel["key"].startswith("/scanned/"):
+                    out.append({"key": sel["key"], "state": "skipped", "refId": None, "detail": "no longer on disk"})
+                    continue
+                self.imported_keys.add(sel["key"])
+                sid = self.nid("s-imp")
+                self.add_session(sid, title="Imported " + sel["key"].rsplit("/", 1)[-1])
+                out.append({"key": sel["key"], "state": "imported", "refId": sid, "detail": "imported"})
+            return {"sessions": out, "memories": [], "skills": [], "spacesCreated": []}
         if method == "spaces.list":
             return [dict(s) for s in self.spaces]
         if method == "sessions.list":
@@ -643,6 +659,161 @@ def any_agent(tmp: Path) -> None:
           cmodel["/agents/missing"] == "Checking which agents are installed…", cmodel["/agents/missing"])
 
 
+def scanned(n: int) -> dict:
+    """import.scan's answer with n offerable transcripts and one of each kind
+    the importer hides, shaped as contracts import.ts at 0ae5b8b."""
+    def cand(i, **over):
+        base = {"key": f"/scanned/{i}.jsonl", "source": "claude", "agentKind": "claude",
+                "providerSessionId": f"p{i}", "path": f"/scanned/{i}.jsonl", "cwd": f"/Users/x/code/repo{i}",
+                "cwdExists": i % 2 == 0, "title": f"Tab {i}" + (BIDI if i == 1 else ""), "messages": 10 + i,
+                "startedAt": NOW_MS - 1000 * i, "updatedAt": NOW_MS - 60_000 * i, "fromRealm": False,
+                "scratch": False, "imported": False, "duplicate": False,
+                "match": {"spaceId": None, "fallbackProfileId": "prof1", "reason": "fallback", "evidence": None}}
+        base.update(over)
+        return base
+    sessions = [cand(i) for i in range(n)]
+    sessions += [cand(100, fromRealm=True), cand(101, scratch=True), cand(102, imported=True),
+                 cand(103, duplicate=True),
+                 cand(104, match={"spaceId": None, "fallbackProfileId": None, "reason": "none", "evidence": None}),
+                 cand(105, source="codex", agentKind="codex", updatedAt=NOW_MS + 1,
+                      match={"spaceId": "sp1", "fallbackProfileId": None, "reason": "project", "evidence": "x"})]
+    return {"sessions": sessions, "memories": [], "skills": [],
+            "sources": [{"source": "claude", "root": "/x", "available": True, "sessions": n + 5, "unreadable": 1,
+                         "note": None}]}
+
+
+def bring_in_tabs(tmp: Path) -> None:
+    """Bring in my tabs: a queued read, then import.apply only for what is pressed."""
+    body = realm_import.compact(scanned(12), "tk1", NOW_MS)
+    check("the importer keeps what can come in, newest first",
+          [c["key"] for c in body["sessions"][:2]] == ["/scanned/105.jsonl", "/scanned/0.jsonl"]
+          and body["offered"] == 13 and body["found"] == 18, [c["key"] for c in body["sessions"][:3]])
+    check("and counts what it hid, by why",
+          body["hidden"] == {"fromRealm": 1, "scratch": 1, "imported": 1, "duplicate": 1, "homeless": 1},
+          body["hidden"])
+
+    class ScanConn:
+        def __init__(self, answer):
+            self.answer, self.calls, self.max_message = answer, [], 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return None
+
+        def call(self, method, params=None, timeout=10.0, write=False, allow_exec=False):
+            self.calls.append((method, write, self.max_message, timeout))
+            if isinstance(self.answer, Exception):
+                raise self.answer
+            return self.answer
+
+    out = tmp / "scan" / "file.json"
+    conn = ScanConn(scanned(3))
+    code = realm_import.scan(out, "tk2", connect=lambda: conn, clock=lambda: NOW_MS / 1000)
+    written = json.loads(out.read_text())
+    check("a scan raises this connection's ceiling, calls import.scan once, and writes the file",
+          code == 0 and conn.calls == [("import.scan", True, realm_import.SCAN_MAX_MESSAGE,
+                                        realm_import.SCAN_TIMEOUT)]
+          and written["ticket"] == "tk2" and len(written["sessions"]) == 4, (code, conn.calls))
+    check("the file is readable only by its owner", (out.stat().st_mode & 0o077) == 0, oct(out.stat().st_mode))
+    conn = ScanConn(rc.RealmRpcError("import.scan", "INTERNAL", "EACCES /Users/x/.claude/secret"))
+    realm_import.scan(out, "tk3", connect=lambda: conn)
+    written = json.loads(out.read_text())
+    check("a failed scan writes the failure in words, never the engine's message",
+          written == {"ticket": "tk3", "scannedAt": written["scannedAt"], "error": "the engine answered INTERNAL"},
+          written)
+    out.unlink()
+
+    e = FakeEngine()
+    a, ctx = world(tmp / "tabs", e)
+    ran = []
+    ctx.run = lambda argv: ran.append(argv) or (0, "1010-1 queued build Read agent tabs\n", "")
+    clock = [5000.0]
+    a.clock = lambda: clock[0]
+    data, model = view(a, ctx)
+    check("before any read, one row offers Bring in my tabs, saying it writes nothing",
+          [x["id"] for x in model["/agents/scan"]] == ["scan"] and model["/agents/scanLabel"] == "Bring in my tabs"
+          and "writes nothing" in model["/agents/scan"][0]["text"] and model["/agents/tabs"] == [],
+          model["/agents/scan"])
+    r = a.scan(ctx, data, {"row": "scan"})
+    path = SA.scan_path(ctx)
+    check("the press queues realm_import through chewbacca jobs, as a build-class job, and writes nothing",
+          r.ok and len(ran) == 1 and ran[0][1] == str(SA.JOBS) and ran[0][2:4] == ["submit", "--build"]
+          and ran[0][ran[0].index("--") + 2:ran[0].index("--") + 5] == [str(SA.IMPORTER), "scan", "--out"]
+          and str(path) in ran[0] and e.writes == [], (r, ran, e.writes))
+    r2 = a.scan(ctx, data, {"row": "scan"})
+    check("a second press before the refetch queues nothing", not r2.ok and len(ran) == 1, r2)
+    data, model = view(a, ctx)
+    check("while the read runs, the panel says so and offers no second press",
+          model["/agents/scan"] == [] and model["/agents/scanCaption"].startswith("Reading your tabs"),
+          model["/agents/scanCaption"])
+    ticket = ran[0][ran[0].index("--ticket") + 1]
+    realm_import.write(path, realm_import.compact(scanned(12), "someone-else", NOW_MS))
+    data, model = view(a, ctx)
+    check("a file from another read doesn't end this one", model["/agents/scan"] == [], model["/agents/scan"])
+    realm_import.write(path, realm_import.compact(scanned(12), ticket, NOW_MS))
+    data, model = view(a, ctx)
+    rows = model["/agents/tabs"]
+    check("the read's newest tabs are rows, nine at most", len(rows) == SA.TABS_SHOWN, len(rows))
+    check("each row says where it came from, how long, when, and where it lands",
+          rows[0]["time"].startswith("Codex · 115 turns") and rows[0]["time"].endswith("into Chewbacca")
+          and rows[1]["time"].endswith("into Imported"), [x["time"] for x in rows[:2]])
+    check("a tab whose folder is gone says it comes in as history",
+          "folder gone" in rows[0]["time"] and "folder gone" not in rows[1]["time"], [x["time"] for x in rows[:3]])
+    check("row ids name a transcript without saying anything about it",
+          all(x["id"].startswith("t") and "scanned" not in x["id"] for x in rows) and glass_clean(model), rows[0])
+    check("Bring in all names how many", model["/agents/allLabel"] == "Bring in all 9"
+          and model["/agents/taball"][0]["id"] == "all", model["/agents/taball"])
+    check("reading the list wrote nothing", e.writes == [], e.writes)
+
+    r = a.bring(ctx, data, {"row": rows[1]["id"]})
+    applied = [p for m, p in e.writes if m == "import.apply"]
+    check("Bring in sends import.apply for that one key, to the profile's catch-all space",
+          r.ok and applied == [{"sessions": [{"key": "/scanned/0.jsonl", "spaceId": None, "profileId": "prof1"}]}]
+          and all(w for m, _, w in e.calls if m == "import.apply"), (r, applied))
+    check("the result line has counts and no title", r.line == "Brought in 1 of 1." and "Tab" not in r.line, r.line)
+    data, model = view(a, ctx)
+    check("a brought-in tab leaves the list, and its session joins the panel",
+          rows[1]["id"] not in [x["id"] for x in model["/agents/tabs"]]
+          and any(rr["title"] == "Imported 0.jsonl" for rr in data["rows"]), [rr["title"] for rr in data["rows"]])
+    r = a.bring(ctx, data, {"row": rows[1]["id"]})
+    check("pressing a row that left the list brings in nothing", not r.ok and len(applied) == 1, r)
+    r = a.bring(ctx, data, {"row": "t" + "0" * 16})
+    check("a row id from nowhere brings in nothing",
+          not r.ok and sum(m == "import.apply" for m, _ in e.writes) == 1, r)
+
+    e.imported_keys.add("/scanned/1.jsonl")
+    shown = a.offered(data)
+    r = a.bring(ctx, data, {"row": "all"})
+    last = [p for m, p in e.writes if m == "import.apply"][-1]
+    check("Bring in all sends exactly the keys shown",
+          [x["key"] for x in last["sessions"]] == [t["key"] for t in shown] and len(shown) == SA.TABS_SHOWN,
+          last)
+    check("and says how many were already here", r.ok and "1 was already here" in r.line, r.line)
+    e.fail["import.apply"] = lambda: maybe(rc.RealmTimeout("t"))
+    data, _ = view(a, ctx)
+    r = a.bring(ctx, data, {"row": a.offered(data)[0]["id"]})
+    check("a maybe_applied import says may have and is not retried",
+          not r.ok and "may have" in r.line
+          and sum(m == "import.apply" for m, _, _ in e.calls) == 3, r)
+    del e.fail["import.apply"]
+
+    clock[0] += SA.SCAN_STALE + 1
+    realm_import.write(path, {"ticket": "tk-old", "scannedAt": NOW_MS, "error": "the engine isn't reachable"})
+    data, model = view(a, ctx)
+    check("a failed read says so in words and offers Try again",
+          model["/agents/scanLabel"] == "Try again" and "isn't reachable" in model["/agents/scan"][0]["text"],
+          model["/agents/scan"])
+    stale = a.model(data, "The engine stopped answering: the engine isn't reachable", {}, ctx)
+    check("with the engine not answering, nothing to bring in is offered",
+          stale["/agents/scan"] == [] and stale["/agents/tabs"] == [] and stale["/agents/taball"] == [])
+    d, dctx = world(tmp / "tabsdown", None)
+    ddata, _ = view(d, dctx)
+    r = d.scan(dctx, ddata, {"row": "scan"})
+    check("a down engine queues no read", not r.ok, r)
+
+
 def untrusted(tmp: Path) -> None:
     e = FakeEngine()
     e.add_session("s1", "idle", title="T" + BIDI + "itle" + LINE_SEP + "x" + ESC + "[31m",
@@ -800,6 +971,7 @@ def main() -> int:
         interrupt_and_fork(tmp)
         new_sessions(tmp)
         any_agent(tmp)
+        bring_in_tabs(tmp)
         untrusted(tmp)
         through_the_daemon(tmp)
         review_fixes(tmp)

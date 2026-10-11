@@ -227,9 +227,17 @@ def test_basic_call():
         mid = "y" * 300
         got = conn.call("documents.read", {"documentsId": "d", "path": mid})
         check("16-bit length frames", got["params"]["path"] == mid)
+    with unproven(fake.port) as conn:
+        conn.max_message = 1000
+        e = raises(lambda: conn.call("documents.read", {"documentsId": "d", "path": "z" * 2000}),
+                   rc.RealmProtocolError)
+        check("a connection's own max_message refuses a bigger answer", isinstance(e, rc.RealmProtocolError)
+              and "over 1000 bytes" in str(e), e)
     time.sleep(0.05)
     peer = fake.peers[0]
     check("every client frame is masked", peer.client_frames_masked)
+    with unproven(fake.port) as conn:
+        check("the default ceiling is MAX_MESSAGE", conn.max_message == rc.MAX_MESSAGE)
     check("handshake sends version 13", peer.request_headers.get("sec-websocket-version") == "13")
     check("Host is loopback", peer.request_headers.get("host", "").startswith("127.0.0.1:"))
     fake.close()

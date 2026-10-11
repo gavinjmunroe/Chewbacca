@@ -51,6 +51,18 @@ character (stripped for display), gets Deny and nothing else. The glass never
 sends allow_always, and answers only the requestId the press names, only
 while that request is still the session's pending one.
 
+BRING IN MY TABS. Sessions Caleb already has in Claude Code, Codex and
+Cursor come in through realm's own importer (apps/server/src/import), never a
+second reader. "Bring in my tabs" queues bin/lib/realm_import.py with
+`chewbacca jobs` (import.scan read 5,446 transcripts in 57 s and 41 MB on
+2026-10-10, too heavy for the daemon), which writes the newest candidates to
+kyber-import-scan.json in the realm home; the fetch reads that small file.
+Each candidate is a row whose id is a hash of its key, so a press names one
+transcript however the list moves, and Bring in runs import.apply for that
+key alone (or "all" for the rows shown). apply copies; the CLIs' own files
+are never written (contracts import.ts), and a key the engine's own scan did
+not produce is refused by the engine.
+
 UNTRUSTED TEXT. Turns, tool input, titles, space names and paths all come
 from the engine, which relays a model and whatever it read. All of it is
 stripped of Unicode category C and the line and paragraph separators before
@@ -60,6 +72,7 @@ message, a title or a tool input.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -75,10 +88,28 @@ from pathlib import Path
 
 import realm_client
 
-from . import ACTION_PREFIX, Bind, Context, Provider, Result, SurfaceError, ago, comp, note_for
+from . import ACTION_PREFIX, Bind, Context, Provider, Result, SurfaceError, ago, clock, comp, note_for
 from .code import candidates, code_root
 
 ENGINE = Path(__file__).resolve().parents[2] / "realm-engine"
+IMPORTER = Path(__file__).resolve().parents[1] / "realm_import.py"
+JOBS = Path(__file__).resolve().parents[2] / "chewbacca-jobs"
+# Where the queued read writes what the panel offers, in the realm home.
+SCAN_FILE = "kyber-import-scan.json"
+# The file is about 15 KB for 40 candidates; anything past this is not one
+# realm_import wrote, and is not read. Guessed.
+SCAN_FILE_MAX = 2 * 1024 * 1024
+# A queued read not answered in this long is treated as lost, and the press
+# is offered again. The jobs queue holds a build-class job until the Mac has
+# room, which was minutes under load on 2026-10-10. Guessed.
+SCAN_STALE = 1800.0
+# Tabs offered at once: Miller's seven plus two, as the session list.
+TABS_SHOWN = 9
+# import.apply copies every event of each transcript in one transaction per
+# session (import/service.ts importSession). Not measured; two minutes for
+# nine long sessions is a guess.
+APPLY_TIMEOUT = 120.0
+SOURCE_LABELS = {"claude": "Claude Code", "codex": "Codex", "cursor": "Cursor"}
 # Miller's seven plus two, the same cap the code and sessions panels use.
 MAX_SESSIONS = 9
 # Turns on the glass. Guessed, never measured on the glass: fourteen rows of
@@ -161,7 +192,7 @@ STATE_WORDS = {"waiting_permission": "waiting on you", "running": "working", "er
 STATE_ORDER = {"waiting_permission": 0, "error": 1, "running": 2, "idle": 3, "ended": 4}
 BUSY = ("running", "waiting_permission")
 # The pointers holding a row a press can write through.
-VERBS = ("send", "allow", "deny", "interrupt", "fork", "new")
+VERBS = ("send", "allow", "deny", "interrupt", "fork", "new", "scan", "tabs", "taball")
 MODE_WORDS = {"default": "asks before each tool", "acceptEdits": "edits without asking",
               "bypassPermissions": "never asks (full access)", "plan": "plans only"}
 # The input keys a one-line tool row names, in the order a reader wants them.
@@ -346,6 +377,35 @@ def missing_words(agents: list[dict]) -> str:
     return " ".join(parts)
 
 
+def scan_path(ctx: Context) -> Path:
+    return realm_home(ctx) / SCAN_FILE
+
+
+def read_scan(path: Path) -> dict | None:
+    """What the last queued read wrote (realm_import.compact), or None."""
+    try:
+        if path.stat().st_size > SCAN_FILE_MAX:
+            return None
+        body = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(body, dict) or not isinstance(body.get("ticket"), str):
+        return None
+    sessions = [c for c in body.get("sessions") or [] if isinstance(c, dict) and isinstance(c.get("key"), str)
+                and c["key"] and (isinstance(c.get("spaceId"), str) or isinstance(c.get("profileId"), str))]
+    return {**body, "sessions": sessions}
+
+
+def turns(n) -> str:
+    n = n if isinstance(n, int) and not isinstance(n, bool) else 0
+    return f"{n} turn" if n == 1 else f"{n} turns"
+
+
+def tab_id(key: str) -> str:
+    """A row id that names one transcript and says nothing about it."""
+    return "t" + hashlib.sha256(key.encode("utf-8", "surrogatepass")).hexdigest()[:16]
+
+
 @dataclass
 class Log:
     """What the panel has read of one session's events."""
@@ -432,7 +492,8 @@ class Agents(Provider):
         p = ACTION_PREFIX
         self.actions = {f"{p}pick": self.pick, f"{p}send": self.send, f"{p}allow": self.allow,
                         f"{p}deny": self.deny, f"{p}interrupt": self.interrupt, f"{p}fork": self.fork,
-                        f"{p}new": self.new, f"{p}engine": self.start_engine}
+                        f"{p}new": self.new, f"{p}engine": self.start_engine, f"{p}scan": self.scan,
+                        f"{p}bring": self.bring}
         self._lock = threading.Lock()
         # The session a press acts on. Set by a pick (or the first fetch, to
         # the session that needs the person most), never by a re-sort.
@@ -455,6 +516,11 @@ class Agents(Provider):
         self._probed_at = 0.0
         self._probing = False
         self._probe_error = ""
+        # The read this panel queued (its ticket and when), and the keys it
+        # has brought in since, which leave the list before a re-read.
+        self._ticket = ""
+        self._asked_at = 0.0
+        self._brought: set[str] = set()
         # Seams for the tests: a proven connection, the realm-engine runner,
         # the probe's thread, and the clock it is timed by.
         self.connect = lambda ctx: realm_client.connect(timeout=5.0, home=realm_home(ctx))
@@ -526,6 +592,11 @@ class Agents(Provider):
         except realm_client.RealmError as err:
             raise SurfaceError(f"The engine stopped answering: {why_words(err)}") from None
         self._maybe_probe(ctx)
+        tabs = read_scan(scan_path(ctx))
+        with self._lock:
+            pending = bool(self._ticket) and (tabs or {}).get("ticket") != self._ticket \
+                and self.clock() - self._asked_at < SCAN_STALE
+            asked = self._asked_at
         shown = next((r for r in rows if r["id"] == pinned), None)
         self._busy = bool(shown and shown["status"] in BUSY)
         with self._lock:
@@ -535,7 +606,9 @@ class Agents(Provider):
         # may still be drawing this one.
         return {"rows": rows, "pinned": pinned, "gone": gone, "checkpoint": checkpoint,
                 "folders": self.folders(ctx, listed), "items": list(log.items), "pending": dict(log.pending),
-                "caught_up": log.caught_up, "agents": self._agents, "probe_error": self._probe_error}
+                "caught_up": log.caught_up, "agents": self._agents, "probe_error": self._probe_error,
+                "tabs": tabs, "scan_pending": pending, "scan_waited": self.clock() - asked if pending else 0.0,
+                "space_names": names}
 
     # ── which agents ─────────────────────────────────────────────────────
 
@@ -666,7 +739,7 @@ class Agents(Provider):
     def layout(self) -> list[str]:
         p, c = self.p, self.cid
         ids = ["s", "purpose", "note", "setup", "engine", "list", "head", "meta", "transcript", "ask", "allow",
-               "deny", "draft", "send", "interrupt", "fork", "kind", "missing", "folder", "new", "status"]
+               "deny", "draft", "send", "interrupt", "fork", "kind", "missing", "folder", "new", "scan", "tabs", "taball", "status"]
         return [
             comp(c("s"), "Screen", title=self.title),
             comp(c("purpose"), "Text", value=PURPOSE, tone="muted"),
@@ -696,6 +769,12 @@ class Agents(Provider):
             comp(c("folder"), "Select", label="New session in", options=Bind(p("folders")), value=Bind(p("folder"))),
             comp(c("new"), "Events", caption="", items=Bind(p("new")), action=f"{ACTION_PREFIX}new",
                  actionLabel="Start"),
+            comp(c("scan"), "Events", caption=Bind(p("scanCaption")), items=Bind(p("scan")),
+                 action=f"{ACTION_PREFIX}scan", actionLabel=Bind(p("scanLabel"))),
+            comp(c("tabs"), "Events", caption="", items=Bind(p("tabs")), action=f"{ACTION_PREFIX}bring",
+                 actionLabel="Bring in"),
+            comp(c("taball"), "Events", caption="", items=Bind(p("taball")), action=f"{ACTION_PREFIX}bring",
+                 actionLabel=Bind(p("allLabel"))),
             comp(c("status"), "Status", message=Bind(p("status")), level=Bind(p("level"))),
             f"> {' '.join(c(i) for i in ids)}",
             f"r {c('s')}",
@@ -710,7 +789,8 @@ class Agents(Provider):
         return {p("setup"): [], p("engine"): [], p("engineLabel"): "Start the engine", p("caption"): "",
                 p("rows"): [], p("head"): "", p("meta"): "", p("transcript"): [], p("ask"): "", p("allow"): [],
                 p("deny"): [], p("send"): [], p("interrupt"): [], p("fork"): [], p("folders"): [], p("new"): [],
-                p("kinds"): [], p("missing"): "",
+                p("kinds"): [], p("missing"): "", p("scanCaption"): "", p("scan"): [],
+                p("scanLabel"): "Bring in my tabs", p("tabs"): [], p("taball"): [], p("allLabel"): "Bring in all",
                 p("placeholder"): "Typed here, sent only by Send"}
 
     def model(self, data, error, values, ctx) -> dict:
@@ -789,6 +869,7 @@ class Agents(Provider):
                 f"A {agent['label']} session in {picked}, {asks} · if the folder has no space yet, makes one, "
                 "and Realm keeps a folder of its own for it under the engine's home · nothing is sent until "
                 "you Send", 300)}]
+        out.update(self.tabs_model(data, now))
         shown = next((r for r in rows if r["id"] == pinned), None)
         if shown is None:
             out[p("placeholder")] = "Start a session first"
@@ -830,6 +911,61 @@ class Agents(Provider):
             out[p("fork")] = [{"id": shown["id"], "text": f"Copies {where} as it was before your last message "
                                                            "into a new worktree, with a new session · the "
                                                            "original is untouched"}]
+        return out
+
+    def offered(self, data) -> list[dict]:
+        """The tabs on the glass: the last read's newest candidates, less the
+        ones brought in since, each with the row id a press names."""
+        tabs = (data or {}).get("tabs") or {}
+        with self._lock:
+            brought = set(self._brought)
+        out = []
+        for cand in tabs.get("sessions") or []:
+            if cand["key"] in brought:
+                continue
+            out.append({**cand, "id": tab_id(cand["key"])})
+            if len(out) == TABS_SHOWN:
+                break
+        return out
+
+    def tabs_model(self, data, now: datetime) -> dict:
+        p = self.p
+        out: dict = {}
+        tabs = data.get("tabs")
+        if data.get("scan_pending"):
+            waited = int(data.get("scan_waited") or 0)
+            out[p("scanCaption")] = ("Reading your tabs in the background"
+                                     + (f", queued {waited // 60}m ago" if waited >= 60 else "") + "…")
+            return out
+        if tabs and tabs.get("error"):
+            out[p("scan")] = [{"id": "scan", "text": clean(f"The last read didn't finish: {tabs['error']} · "
+                                                           "reads again in the background", 200)}]
+            out[p("scanLabel")] = "Try again"
+            return out
+        if not tabs:
+            out[p("scan")] = [{"id": "scan", "accent": True, "text": "Reads your Claude Code, Codex and Cursor "
+                               "transcripts in the background · writes nothing · you pick what comes in"}]
+            return out
+        rows = self.offered(data)
+        when = stamp(tabs.get("scannedAt"))
+        found, worth = int(tabs.get("found") or 0), int(tabs.get("offered") or 0)
+        out[p("scan")] = [{"id": "scan", "text": f"Read {clock(when) if when else 'earlier'} · {found:,} "
+                                                 f"transcripts, {worth:,} worth bringing in · reads again"}]
+        out[p("scanLabel")] = "Read again"
+        out[p("scanCaption")] = "Your tabs, newest first" if rows else "Nothing new to bring in"
+        names = data.get("space_names") or {}
+        out[p("tabs")] = [{"id": t["id"], "text": clean(
+            f"{t.get('title') or 'Untitled'} · {Path(str(t.get('cwd') or '')).name or 'no folder'}", 80),
+            "time": " · ".join(x for x in (
+                SOURCE_LABELS.get(t.get("source"), clean(t.get("source"), 20)),
+                turns(t.get("messages")), ago(stamp(t.get("updatedAt")), now),
+                "" if t.get("cwdExists") else "folder gone, comes in as history",
+                f"into {names.get(t.get('spaceId')) or 'Imported'}") if x)} for t in rows]
+        if len(rows) > 1:
+            out[p("taball")] = [{"id": "all", "text": f"The {len(rows)} above · copies each transcript into the "
+                                                      "engine · the tabs themselves are untouched, and a send to "
+                                                      "one later carries on that conversation"}]
+            out[p("allLabel")] = f"Bring in all {len(rows)}"
         return out
 
     # ── presses ──────────────────────────────────────────────────────────
@@ -1173,6 +1309,76 @@ class Agents(Provider):
             if not half_made and not projects and space.get("name") == (Path(path).name or "folder"):
                 half_made = space["id"]
         return half_made, ""
+
+    def scan(self, ctx: Context, data, values: dict) -> Result:
+        """Queue a read of the agent CLIs' transcripts. Writes nothing in the
+        engine; the queue runs it when the Mac has room."""
+        if str(values.get("row") or "") != "scan" or not data or data.get("down"):
+            return Result(False, "The engine isn't up, so there's nothing to read into.", refetch=True)
+        if data.get("scan_pending"):
+            return Result(False, "Already reading your tabs. They show here when it's done.")
+        if not self._claim("scan", "scan"):
+            return Result(False, "Already queueing the read.")
+        try:
+            with self._lock:
+                # A second press before the refetch: the data it carries
+                # can't know the first one queued.
+                queued = bool(self._ticket) and self.clock() - self._asked_at < SCAN_STALE \
+                    and (data.get("tabs") or {}).get("ticket") != self._ticket
+            if queued:
+                return Result(False, "Already reading your tabs. They show here when it's done.")
+            ticket = os.urandom(6).hex()
+            argv = [sys.executable, str(JOBS), "submit", "--build", "--title", "Read agent tabs for the HUD", "--",
+                    sys.executable, str(IMPORTER), "scan", "--out", str(scan_path(ctx)), "--ticket", ticket,
+                    "--home", str(realm_home(ctx))]
+            code, _, _ = ctx.run(argv)
+            if code != 0:
+                return Result(False, f"Couldn't queue the read: the jobs queue answered exit {code}.",
+                              updates={self.p("level"): "error"})
+            with self._lock:
+                self._ticket, self._asked_at = ticket, self.clock()
+        finally:
+            self._release("scan", "scan")
+        return Result(True, "Reading your Claude Code, Codex and Cursor tabs in the background. They show here "
+                            "when it's done, and nothing comes in until you pick.", refetch=True)
+
+    def bring(self, ctx: Context, data, values: dict) -> Result:
+        """import.apply for the tab the press names, or every tab shown."""
+        row = str(values.get("row") or "")
+        bad = {self.p("level"): "error"}
+        shown = self.offered(data)
+        picked = shown if row == "all" else [t for t in shown if t["id"] == row]
+        if not picked or (row == "all" and len(shown) < 2):
+            return Result(False, "That tab isn't on the list any more. Nothing was brought in.", updates=bad)
+        if not self._claim("bring", "import"):
+            return Result(False, "Still bringing in the last ones.")
+        try:
+            params = {"sessions": [{"key": t["key"], "spaceId": t.get("spaceId"),
+                                    "profileId": None if t.get("spaceId") else t.get("profileId")} for t in picked]}
+            try:
+                with self.connect(ctx) as conn:
+                    got = conn.call("import.apply", params, timeout=APPLY_TIMEOUT, write=True)
+            except realm_client.RealmError as err:
+                if err.maybe_applied:
+                    return Result(False, "They may have come in; the engine didn't confirm. Check the list before "
+                                         "pressing again.", updates={self.p("level"): "warning"}, refetch=True)
+                return Result(False, f"Nothing brought in: {rpc_words(err)}", updates=bad, refetch=True)
+        finally:
+            self._release("bring", "import")
+        outcomes = [o for o in (got.get("sessions") if isinstance(got, dict) else None) or [] if isinstance(o, dict)]
+        done = {str(o.get("key")) for o in outcomes if o.get("state") == "imported"}
+        again = {str(o.get("key")) for o in outcomes if o.get("state") == "skipped"
+                 and o.get("detail") == "already imported"}
+        failed = len(picked) - len(done) - len(again)
+        with self._lock:
+            self._brought |= done | again
+        line = f"Brought in {len(done)} of {len(picked)}."
+        if again:
+            line += f" {len(again)} {'was' if len(again) == 1 else 'were'} already here."
+        if failed:
+            line += f" {failed} couldn't be read or had nowhere to go."
+        level = "success" if done and not failed else "warning" if done or again else "error"
+        return Result(bool(done or again), line, updates={self.p("level"): level}, refetch=True)
 
     def _run_engine(self, argv: list, env: dict, timeout: float) -> tuple[int, str, str]:
         try:

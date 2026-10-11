@@ -211,7 +211,7 @@ it off is `--session-opener none`. To write your own, add it to `OPENERS` in
 | **macOS tools**         | 9 installed alongside the kit: Anki, bd, cap, mac, Maccy, mac-use, peekaboo, summarize, yt-transcript                        |
 | **Skills and plugins**  | 49 skills (43 shipped here, 6 cloned from upstream) plus 20 plugins across 4 marketplaces         |
 | **Second brain**        | A private notes repo Claude reads at the start of every session and writes to as things change. Syncs to GitHub         |
-| **Coursework ledger**   | Your syllabi become deadlines, attendance budgets, and a per-course AI policy Claude checks before touching graded work |
+| **Coursework ledger**   | Your syllabi become deadlines, attendance budgets, and grade math Claude reads instead of guessing                      |
 | **On-device dictation** | Builds `plynn/`: hold fn to type, hold left Option to ask Chewie. Speech and cleanup run on your Mac, nothing uploaded  |
 | **Smart hooks**         | Format on save, sync your notes, warn on `.env` writes, and flag unpushed work only when there is any                   |
 | **4 subagents**         | context-keeper, code-reviewer, debugger, and explorer, each scoped to one job with its own tool set                     |
@@ -361,7 +361,7 @@ coursework today              # today's classes and today's deadlines
 coursework week               # the days ahead, one block each
 coursework attendance         # absences used against the budget
 coursework grade BISC --target 90
-coursework policy WRIT ai     # what this course allows
+coursework policy WRIT late   # the late-work rule
 coursework ics --out ~/Desktop/semester.ics
 coursework check              # validate the ledger, loudly
 ```
@@ -376,20 +376,15 @@ and a program that rewrites them can quietly disagree with the source. Claude
 and you edit the files; the tool only reads them.
 
 `coursework check` is the part that earns its place. It reports deadlines with no
-`source`, courses with no AI policy recorded, grading weights that do not sum to
+`source`, grading weights that do not sum to
 100, and past-due items still marked `todo`. None of those stop the CLI. All of
 them make it lie by omission.
 
-### The AI policy gate
+### AI use is the student's call
 
-Three courses in one term can have three different rules: banned outright,
-allowed with mandatory prompt disclosure, allowed for ideation but not for the
-submitted artifact. Getting that wrong is an academic integrity referral, not a
-style problem.
-
-So `policies.ai` is a required field, quoted verbatim from the syllabus, and the
-`coursework` skill says out loud what a course permits before helping with
-anything graded. An unrecorded policy is treated as a ban.
+Chewbacca never reads, stores, quotes or gates on a course AI policy. Those
+policies are for the student to read and decide on. `tests/no_ai_policy_gate.sh`
+fails the build if the gate comes back.
 
 ### The three skills
 
@@ -671,7 +666,7 @@ The vibe coding landscape is growing fast. **[ECOSYSTEM.md](ECOSYSTEM.md)** is o
 | [docs/guide/METHODOLOGY.md](../guide/METHODOLOGY.md)                 | The five principles of vibe coding, the D1 workflow loop, anti-patterns, measuring effectiveness                          |
 | [docs/reference/CLOUDFLARE.md](CLOUDFLARE.md)                   | D1 query patterns, migrations, Drizzle ORM, Worker routing (vanilla + Hono), D1 + KV + R2, deployment                     |
 | [docs/guide/PROMPTS.md](../guide/PROMPTS.md)                         | 20+ real prompts for scaffolding, features, debugging, database work, UI design, deployment                               |
-| [docs/guide/SCHOOL.md](../guide/SCHOOL.md)                           | Running a semester: the coursework ledger, the CLI, the three skills, and the per-course AI policy gate                   |
+| [docs/guide/SCHOOL.md](../guide/SCHOOL.md)                           | Running a semester: the coursework ledger, the CLI, the three skills, and the grade math                                   |
 | [docs/reference/SYSTEM-PROMPTS.md](SYSTEM-PROMPTS.md)           | Eight techniques for agent-governing prompts: priority order, confidence thresholds, format contracts, and what to delete |
 | [docs/reference/INTERNALS.md](INTERNALS.md)                     | How Claude Code works under the hood: CLAUDE.md loading, hooks, tools, agents, context compression                        |
 | [docs/reference/SKILLS.md](SKILLS.md)                           | What this kit ships, the four public skill registries, the licensing traps in them, and how to write your own             |
@@ -749,7 +744,7 @@ fires, which is the thing that matters most.
 | [skills/asa](../../skills/asa)                                                                                                | Skill  | Answer from the A2A Spring 2026 course, 108 hours of workshops on building a business out of…   |
 | [skills/audio-brief](../../skills/audio-brief)                                                                                | Skill  | Turn a piece of work into something the user can listen to instead of read.                     |
 | [skills/call-coach](../../skills/call-coach)                                                                                  | Skill  | Debrief a sales or client call from its transcript or recording.                                |
-| [skills/coursework](../../skills/coursework)                                                                                  | Skill  | Your syllabi as a ledger: deadlines, attendance math, per-course AI policy                      |
+| [skills/coursework](../../skills/coursework)                                                                                  | Skill  | Your syllabi as a ledger: deadlines, attendance math, grade math                                |
 | [skills/debugging](../../skills/debugging)                                                                                    | Skill  | Find the root cause of a bug instead of guessing at it.                                         |
 | [skills/deep-research](../../skills/deep-research)                                                                            | Skill  | Research a topic, market, company or claim properly, with sources that can be checked.          |
 | [skills/demo](../../skills/demo)                                                                                              | Skill  | Recording a product demo by reading the product's code, not guessing at its UI                  |
@@ -987,7 +982,7 @@ Chewbacca/
 │   ├── CLOUDFLARE.md            # D1/Workers/KV/R2 patterns and examples
 │   ├── PROMPTS.md               # Example AI prompts for every stage of dev
 │   ├── SYSTEM-PROMPTS.md        # How to write the prompt that governs an agent
-│   ├── SCHOOL.md                # Running a semester: ledger, CLI, skills, AI policy gate
+│   ├── SCHOOL.md                # Running a semester: ledger, CLI, skills
 │   ├── INTERNALS.md             # How Claude Code works under the hood
 │   ├── EXTENSIONS.md            # Skills, plugins, MCP: which layer to reach for
 │   ├── MACOS-TOOLS.md           # Screen control, Workspace, summarization, clipboard

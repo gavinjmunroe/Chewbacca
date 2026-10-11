@@ -94,9 +94,6 @@ in hand is a different activity from reading to have read it.
   bad answer is a small kindness that costs a grade later.
 - **Do not invent facts about the course.** Practice questions come from the
   actual material. When you extrapolate beyond it, label it.
-- **Respect the course's AI policy.** Studying is almost always permitted, and
-  producing the submitted artifact often is not. Check with the `coursework`
-  skill before helping with anything graded.
 - **Cramming has a real use.** It works for tomorrow and not for the final. When
   the exam is tomorrow, say that plainly and cram well: retrieval on the highest
   weighted topics, no new material after the last hour.

@@ -81,17 +81,6 @@ const TOOLS = [
     },
     run: (a) => cli("coursework", ["due", "--days", String(a.days || 14)]),
   },
-  {
-    name: "course_ai_policy",
-    description:
-      "What a specific course allows regarding AI help. One term can carry three different rules: banned outright, allowed with disclosure, or ideation only. ALWAYS call this before helping with graded work for a named course. An unrecorded policy means banned.",
-    inputSchema: {
-      type: "object",
-      properties: { course: { type: "string", description: "Course code, e.g. WRIT 150" } },
-      required: ["course"],
-    },
-    run: (a) => cli("coursework", ["policy", String(a.course), "ai"]),
-  },
 ];
 
 // ── The rest of the kit ──────────────────────────────────────────────────────
@@ -194,7 +183,7 @@ TOOLS.push(
   {
     name: "find_capability",
     description:
-      "Search everything this person's Chewbacca kit can read for them: classes, deadlines, course AI policies, grades, attendance and Brightspace; the people they know, who they owe a reply, promises, birthdays, message threads and calls; their calendar, recent meetings and decisions, and whether anything is recording; every coding agent and job on their Mac, which need them and which died; the team board and backlog; GTM clients, accounts and credits; Mac data (notes, reminders, mail, browser history) and Screen Time; Google Docs and Office files. It also finds what the kit can change: todos, notes, reminders, calendar holds, notes on people, files, and messages to send. Returns matching capability ids with what each does and its parameters. Call this first, then kit_read with a read id or kit_write with a write id.",
+      "Search everything this person's Chewbacca kit can read for them: classes, deadlines, grades, attendance and Brightspace; the people they know, who they owe a reply, promises, birthdays, message threads and calls; their calendar, recent meetings and decisions, and whether anything is recording; every coding agent and job on their Mac, which need them and which died; the team board and backlog; GTM clients, accounts and credits; Mac data (notes, reminders, mail, browser history) and Screen Time; Google Docs and Office files. It also finds what the kit can change: todos, notes, reminders, calendar holds, notes on people, files, and messages to send. Returns matching capability ids with what each does and its parameters. Call this first, then kit_read with a read id or kit_write with a write id.",
     inputSchema: {
       type: "object",
       properties: { query: { type: "string", description: "What you want to know, in plain words" } },

@@ -156,7 +156,7 @@ VENDORED = {
     "graph-engineering": "Knowledge graphs and agent task graphs, with teaching mode",
     "agent-setup": "Finishing the install steps that need a browser or a permission dialog",
     "setup": "Installing the kit by conversation instead of a terminal questionnaire",
-    "coursework": "Your syllabi as a ledger: deadlines, attendance math, per-course AI policy",
+    "coursework": "Your syllabi as a ledger: deadlines, attendance math, grade math",
     "study-system": "Retrieval practice over rereading, exam run-ups, and the four-cause postmortem",
     "life-ops": "The weekly review, life admin with real deadlines, and what to cut",
     "life-context": "Learning about someone without handing them a blank page",

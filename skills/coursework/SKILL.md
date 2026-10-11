@@ -19,10 +19,9 @@ Two failure modes to design against, both worse than being slow:
    do not know", because the user stops checking. Every date in the ledger
    carries a `source` field naming the page it came from. If you cannot cite it,
    it does not go in.
-2. **Helping in a way the course forbids.** Three courses in one semester can
-   have three different AI policies: banned outright, allowed with mandatory
-   prompt disclosure, allowed for ideation but not for the submitted artifact.
-   Getting this wrong is an academic integrity referral, not a style problem.
+2. **Policing the student.** How they use AI in their own classes is their
+   decision. Never look up, quote, store or gate on a course AI policy, and
+   never open with a line about it. Help with what they ask.
 
 ## "I need to lock in on school": the first run, for any USC student
 
@@ -45,9 +44,8 @@ chewbacca jobs submit --net --title "lock in" -- chewbacca usc lockin --apply
 `--apply` creates `~/coursework/courses/<code>.yml` for any course with no
 ledger file (never overwrites one), seeded with every dated Brightspace
 calendar item and its source, and pulls every visible file into
-`~/coursework/slides/<CODE>/`. A rerun only fetches what's new. Seeded files
-have no AI policy until the syllabus is read, so treat every course as banned
-until it is, and offer to read the syllabus from the slides folder.
+`~/coursework/slides/<CODE>/`. A rerun only fetches what's new. Offer to read
+the syllabus from the slides folder for meetings, grading and dates.
 
 It works on a stranger's Mac as is: Chrome plus a Brightspace sign-in. No api
 engine, no `pip install`, no profile to name.
@@ -89,7 +87,7 @@ coursework today              # today's classes and today's deadlines
 coursework week               # the days ahead, one block each
 coursework attendance         # absences used against the budget
 coursework grade BISC --target 90
-coursework policy WRIT ai     # what this course allows
+coursework policy WRIT late   # the late-work rule
 coursework ics --out ~/Desktop/semester.ics
 coursework check              # validate, loudly
 ```
@@ -101,34 +99,6 @@ Add `--json` when you need the values rather than the display.
 **The CLI never writes.** You and the user edit the ledger; the tool only reads
 it. That split is deliberate: deadlines are facts copied from a document, and a
 program that rewrites them can quietly disagree with the source.
-
-## Before helping with anything graded
-
-Run this first, every time, no exceptions:
-
-```bash
-coursework policy <course> ai
-```
-
-Then say what it returns, in one line, before doing the work. Not as a lecture:
-as a fact the user needs in order to decide.
-
-- **Banned:** do not draft, outline, or generate any part of the submitted
-  artifact. Everything else is still available: explain the concept, quiz them,
-  find where their reasoning broke, build a study plan, read their draft back to
-  them and point at what is unclear. Say plainly which side of the line you are
-  on.
-- **Disclosure required:** help as asked, then write the disclosure paragraph
-  with them: which tool, how it was used, the actual prompts. Leaving it off is
-  the violation, not the use.
-- **Ideation only:** brainstorm and pressure-test freely, hand over nothing that
-  could be pasted in as the deliverable.
-- **Unknown:** treat it as banned and tell them to ask the instructor. An
-  unrecorded policy is not a permissive one.
-
-This is also the user's own standard, not just the school's. The frustration to
-avoid is AI doing the work instead of them learning it. Optimize for the version
-of them that walks into the exam knowing the material.
 
 ## Graded writing: the MCQ comparison-draft method
 
@@ -153,9 +123,9 @@ deadline):
 
 - Never ask to see their handwritten draft ("Don't be intrusive and ask for
   what I wrote on paper ever").
-- Never re-argue the course AI policy after they've said what the instructor
-  told them. Flag it once if the ledger has no record, record their report in
-  the ledger, then do the work. Four refusals that night cost most of an hour.
+- Never bring up a course AI policy at all. Four refusals one night cost most
+  of an hour, and on 2026-10-11 Caleb ruled it's the user's decision, not
+  Chewbacca's.
 - Never write an AI disclosure line into a doc or a submission ("Never put an
   ai disclosure line"). The prompt log is the record; disclosing is their call.
 
@@ -171,7 +141,7 @@ Full procedure, including what to do about the fields syllabi routinely omit:
 
 The short version: read the whole PDF, never a skim of the first page. Extract
 meetings, instructor, every dated deliverable, the grading breakdown, the
-attendance arithmetic, the AI policy verbatim, and the late-work schedule. Write
+attendance arithmetic, and the late-work schedule. Skip any AI policy text. Write
 one `courses/<code>.yml`. Run `coursework check`. Report what the syllabus did
 not say, because that list is the set of questions to ask in class.
 
@@ -255,7 +225,7 @@ The ledger goes stale in exactly three ways, and all three are silent:
   nobody remembers it in November.
 
 Run `coursework check` at the start of any session that touches school. It
-reports missing AI policies, deadlines with no source, past-due items still open,
+reports deadlines with no source, past-due items still open,
 and grading weights that do not sum to 100.
 
 ## References
@@ -264,5 +234,4 @@ and grading weights that do not sum to 100.
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `references/syllabus-intake.md` | Ingesting a syllabus into the ledger                                                                                   |
 | `references/grading-models.md`  | Weighted, points-based, or labor-contract grading math                                                                 |
-| `references/integrity.md`       | Deciding what help a course actually permits, and how to disclose it                                                   |
 | `references/lms-ingest.md`      | Reading the term straight out of the LMS (Blackboard Ultra, D2L Brightspace), and checking what was actually submitted |

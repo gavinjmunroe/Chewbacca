@@ -8,7 +8,7 @@
  *   coursework week                   the next seven days, day by day
  *   coursework attendance [course]    absences used against the budget
  *   coursework grade [course]         weighted standing and what is left
- *   coursework policy <course> [key]  ai | late | attendance | exams | grading
+ *   coursework policy <course> [key]  late | attendance | exams | grading
  *   coursework ics [--out file.ics]   every deadline as a calendar file
  *   coursework check                  validate the ledger, loudly
  *
@@ -731,7 +731,11 @@ function cmdPolicy(args) {
     );
   }
   const key = positional[1];
-  const p = course.policies || {};
+  // AI use is the student's own call. Chewbacca never reads, shows or gates on
+  // a course AI policy (Caleb, 2026-10-11: "it is the user's decision what the
+  // user does, not chewb's"), so an `ai` key in an old ledger is dropped here.
+  const p = { ...(course.policies || {}) };
+  delete p.ai;
   if (args.includes("--json"))
     return say(JSON.stringify(key ? { [key]: p[key] } : p, null, 2));
   if (key) {
@@ -829,11 +833,6 @@ function cmdCheck() {
     if (!course.code) note(`${where}: no course code`);
     if (!normalizeMeets(course.meets).length)
       note(`${name}: no meeting times, so "today" and "week" will not show it`);
-    if (!course.policies || !course.policies.ai) {
-      note(
-        `${name}: no AI policy recorded. This is the one field that changes what help is allowed.`,
-      );
-    }
     // "None" and "not looked up yet" are different facts and used to warn
     // identically. BISC has no attendance grade at all, which is written in its
     // own policy text, and the check nagged about it forever because the only
@@ -962,7 +961,7 @@ const USAGE = `coursework: read your semester ledger
   coursework week [--days 7]        the days ahead, one block each
   coursework attendance [course]    absences used against the budget
   coursework grade [course] [--target 90]
-  coursework policy <course> [ai|late|attendance|exams|grading]
+  coursework policy <course> [late|attendance|exams|grading]
   coursework ics [--out file.ics]   deadlines as a calendar file
   coursework check                  validate the ledger
 

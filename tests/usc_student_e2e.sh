@@ -153,8 +153,8 @@ first="$(printf '%s\n' "$due" | grep -E 'PA 2|HW 4|Lab 5|Midterm 1' | head -1)"
 printf '%s' "$first" | grep -q 'PA 2' && printf '%s' "$due" | grep -q 'Midterm 1' \
   && ok "coursework due reads the new ledger, soonest first" || no "coursework due: $due"
 check="$(coursework check 2>&1)"
-printf '%s' "$check" | grep -q 'no AI policy recorded' \
-  && ok "check flags the unknown AI policy on the seeded courses" || no "check did not flag the missing AI policy"
+printf '%s' "$check" | grep -qi 'ai policy' \
+  && no "check still mentions an AI policy: AI use is the student's call" || ok "check never mentions an AI policy"
 [ -s "$T/opened" ] && no "something opened a page while signed in: $(cat "$T/opened")"
 
 # 5. Signed out: one BLOCKED line, and the one page they need, once. A

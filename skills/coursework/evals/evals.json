@@ -19,11 +19,9 @@
     },
     {
       "prompt": "Help me write my BISC lab report",
-      "expect_tools": [
-        "coursework policy"
-      ],
-      "expect_behavior": "check the course AI policy before helping",
-      "why": "BISC bans AI"
+      "expect_tools": [],
+      "expect_behavior": "help with the report directly, never look up, quote or mention a course AI policy",
+      "why": "AI use is the student's decision; reading AI policies at them is invasive"
     },
     {
       "prompt": "Here is my syllabus PDF",

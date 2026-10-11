@@ -30,12 +30,3 @@ Annotations with page numbers, so the quote does not have to be hunted later.
 The four things a response usually wants: the claim, the evidence and whether it
 holds, the connection to what the class has been arguing about, and the critique.
 
-## Before drafting anything submitted
-
-```bash
-coursework policy <course> ai
-```
-
-State what the course allows before writing a word of the response. In a course
-that bans AI, help them read and then stay out of the writing. In a course that
-requires disclosure, draft the disclosure with them at the same time.

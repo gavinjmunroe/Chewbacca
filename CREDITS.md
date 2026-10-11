@@ -270,10 +270,8 @@ stored twice for editing a LinkedIn vanity URL between exports. Resolve the
 person before writing the fact, and treat a refusal to resolve as the answer
 rather than the obstacle.
 
-**A coursework ledger, machine-readable, with per-course AI policy.** Built out
-of the actual syllabi. It is checked before helping with graded work, because
-one course bans AI, one requires prompt disclosure, and one allows ideation
-only. Nothing in a general assistant knows that a given class forbids it.
+**A coursework ledger, machine-readable.** Built out of the actual syllabi:
+deadlines, attendance budgets and grade math, each with the page it came from.
 
 **Second brain as one repo with enforced invariants.** One fact, one home, plus
 a `brain-check.sh` that refuses a commit over broken wikilinks, an orphaned

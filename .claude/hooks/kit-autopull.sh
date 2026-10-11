@@ -156,6 +156,18 @@ if [ -z "$RUNTIME_SHA" ] && git -c core.fsmonitor=false cat-file -e origin/main:
   [ -n "$_tl" ] && rm -rf "$_tl"
 fi
 
+# ── Retired instructions in the installed CLAUDE.md ──────────────────────────
+# The managed block only refreshes when setup reruns, so a rule removed from
+# main kept firing on every installed Mac. The course AI-policy gate was the
+# first (2026-10-11). Local, idempotent, from the ref like the syncs above.
+if git -c core.fsmonitor=false cat-file -e origin/main:tools/claude_md_scrub.py 2>/dev/null; then
+  _cs="$(mktemp -d 2>/dev/null)"
+  if [ -n "$_cs" ] && git -c core.fsmonitor=false show origin/main:tools/claude_md_scrub.py > "$_cs/claude_md_scrub.py" 2>/dev/null; then
+    note "claude-md-scrub: $(python3 -I "$_cs/claude_md_scrub.py" "${CHEWBACCA_CLAUDE_MD:-$HOME/.claude/CLAUDE.md}" 2>&1)"
+  fi
+  [ -n "$_cs" ] && rm -rf "$_cs"
+fi
+
 # ── Merge drivers ─────────────────────────────────────────────────────────────
 # SHA256SUMS.txt and README's counts block merge through drivers named in
 # .gitattributes (tools/merge_regen.py). Git config is never cloned, so a

@@ -58,7 +58,7 @@ print(json.dumps({
         "additionalContext": (
             "Coursework deadlines: " + "; ".join(bits) + ". "
             "Source: the ledger at ~/coursework. Run `coursework due`, "
-            "`coursework attendance`, or `coursework policy <course> ai` "
+            "or `coursework attendance` "
             "rather than guessing, and never state a date you did not read."
         ),
     }

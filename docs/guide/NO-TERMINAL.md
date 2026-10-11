@@ -30,7 +30,6 @@ included.
 | `person_brief`            | everything recorded about one person                       |
 | `who_am_i_overdue_with`   | who you have not contacted in longer than your own cadence |
 | `whats_due`               | real deadlines from your syllabus ledger                   |
-| `course_ai_policy`        | what a course allows regarding AI help                     |
 | `find_capability`         | searches every read and write the kit offers               |
 | `kit_read`                | runs one read from `config/data/mcp-reads.json`            |
 | `kit_write`               | runs one write from `config/data/mcp-writes.json`          |

@@ -143,6 +143,7 @@ memory (health, family, school, voice, money, private opinions) never goes here.
 
 ## Lessons
 
+- feedback_never_read_course_ai_policies: never look up, store, quote or gate on a course AI policy; the student's call, and it turned USC students away (10/11); tests/no_ai_policy_gate.sh enforces
 - feedback_3d_means_nalana: any 3D or render work starts in Nalana (live Blender + MCP), and every 3D subagent brief names it; a logo took ~12 blind headless renders (10/11)
 - feedback_a_plan_is_prose_and_prose_does_not_fail: Writing a good plan is not following it; a phase that must happen before building...
 - feedback_a_silent_guard_proves_nothing: A guard that never ran and a guard that found nothing are both silent; on...

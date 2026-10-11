@@ -37,11 +37,6 @@ course, once a term. Everything after it is a shell call.
 The shape is in [library/templates/coursework/course.yml](../../library/templates/coursework/course.yml).
 The parts that matter:
 
-**`policies.ai`, quoted verbatim.** Not summarized. "AI is restricted" is
-useless; "not permitted for assignments, exams, or other course-related work
-unless explicitly authorized by the instructor" tells you there is a door and
-where it is.
-
 **`absences`, as numbers.** `allowed`, `used`, and the penalty in the course's own
 words. This turns "can I skip Wednesday" into arithmetic.
 
@@ -80,9 +75,9 @@ contract` makes `coursework grade` print the policy instead of a number, because
 a number there would be fiction with a decimal point.
 
 **`check` fails on omissions, not just on errors.** A ledger that parses
-perfectly and has no AI policy recorded is worse than one that will not parse,
-because it looks finished. So a missing `source`, a missing AI policy, and a
-past-due item still marked `todo` are all reported.
+perfectly and has a deadline with no source is worse than one that will not
+parse, because it looks finished. So a missing `source` and a past-due item
+still marked `todo` are both reported.
 
 ## The parts Claude brings
 
@@ -90,8 +85,7 @@ The CLI answers "what" and "when". The skills handle everything that needs
 judgment.
 
 **`coursework`** owns the ledger: how to read a syllabus into it, the three
-grading models, and the integrity rules. Its first instruction before any graded
-work is to run `coursework policy <course> ai` and say what it returns.
+and the grading models.
 
 **`study-system`** exists because rereading feels like learning and mostly is
 not. It defaults to asking rather than telling, builds retrieval questions and
@@ -106,26 +100,12 @@ central rule is to plan against real capacity rather than the ideal version of
 the person, because a plan built for someone with eight hours of sleep and no
 surprises fails on Tuesday and then feels like a character flaw.
 
-## The AI policy gate
+## How AI gets used is the student's call
 
-One term can carry three different rules. A biology course that bans AI outright,
-a writing course that permits it with a mandatory paragraph disclosing the
-prompts, a design course that allows ideation but not the submitted artifact.
-
-The gate is one command run before any graded work:
-
-```bash
-coursework policy <course> ai
-```
-
-Then say what it returns, in a line, as a fact rather than a lecture. In a
-banned course the useful work is still enormous: explain the concept, quiz
-backwards, find where the reasoning broke, read their own draft back and point
-at what is unclear, build the study plan. What it does not include is producing
-the artifact.
-
-An unrecorded policy is treated as a ban. "The syllabus does not say" has never
-been a defense.
+Chewbacca never reads, stores, quotes or gates on a course's AI policy.
+Those policies are written for students to read and decide on, and an
+assistant that polices them reads as invasive and turns people away. A test
+(`tests/no_ai_policy_gate.sh`) fails the build if the gate ever comes back.
 
 ## Brightspace
 
@@ -145,9 +125,7 @@ brightspace-sync transcripts BUAD-280 --from-chapter 4 --apply
 It never writes to Brightspace, waits 4 to 8 seconds between requests, and stops
 on the first 401, 403 or 429. Scans show what they would do and change nothing
 until you pass `--apply`. Lecture transcripts come from Panopto captions and
-exist only where the instructor published them. Before you hand course files or
-transcripts to an AI tool, run `coursework policy <course> ai`: some courses ban
-it outright.
+exist only where the instructor published them.
 
 ## Privacy
 

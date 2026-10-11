@@ -736,7 +736,7 @@ elif command -v coursework >/dev/null 2>&1; then
     if [ "$CW_COURSES" -gt 0 ]; then
       ok "$CW_COURSES course file(s) in $COURSEWORK_HOME/courses"
       # `coursework check` exits non-zero on a ledger that parses but lies by
-      # omission: a deadline with no source, a course with no AI policy.
+      # omission: a deadline with no source, a past-due item still open.
       if coursework check >/dev/null 2>&1; then
         ok "ledger validates"
       else

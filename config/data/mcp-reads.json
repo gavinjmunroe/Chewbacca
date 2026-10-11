@@ -213,8 +213,8 @@
       "argv": [
         "policy"
       ],
-      "about": "A course's rules: what AI help it allows, late work, attendance, exams, grading. Call before helping with graded work.",
-      "asks": "ai policy allowed can I use chatgpt claude on this assignment late penalty",
+      "about": "A course's rules: late work, attendance, exams, grading.",
+      "asks": "late penalty attendance rule exam rules grading breakdown",
       "params": {
         "course": {
           "type": "string",

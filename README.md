@@ -270,7 +270,7 @@ with a cost ceiling.
 | -------------------------------------------------- | -------------------------------------------- |
 | [docs/reference/REFERENCE.md](docs/reference/REFERENCE.md)             | Every skill, hook, command and plugin        |
 | [docs/reference/MACOS-TOOLS.md](docs/reference/MACOS-TOOLS.md)         | Screen, apps, permissions, failure modes     |
-| [docs/guide/SCHOOL.md](docs/guide/SCHOOL.md)                   | The coursework ledger and its AI policy gate |
+| [docs/guide/SCHOOL.md](docs/guide/SCHOOL.md)                   | The coursework ledger, deadlines and grades  |
 | [docs/guide/METHODOLOGY.md](docs/guide/METHODOLOGY.md)         | Why it is built this way                     |
 | [docs/reference/ADVISING.md](docs/reference/ADVISING.md)               | Helping someone reach a goal, not write code |
 | [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) | Adding a skill or a tool                     |

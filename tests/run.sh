@@ -341,7 +341,7 @@ if group "coursework"; then
   C=("$ROOT/bin/coursework")
   expect "due reads the fixture" "Fixture Assignment" "${C[@]}" due --days 3650
   check  "due --json is valid JSON" bash -c "'$ROOT/bin/coursework' due --days 3650 --json | python3 -m json.tool"
-  expect "policy reports the AI rule" "banned" "${C[@]}" policy "TEST 101" ai
+  expect "policy reports the late rule" "10% per day" "${C[@]}" policy "TEST 101" late
   check  "attendance runs" "${C[@]}" attendance
   check  "week runs" "${C[@]}" week
   check  "grade runs" "${C[@]}" grade "TEST 101"
@@ -350,6 +350,7 @@ if group "coursework"; then
   expect "check finds the deliberate gap" "no attendance budget" "${C[@]}" check
   exits  "check exits non-zero when the ledger has gaps" 1 "${C[@]}" check
   check  "assumed-done is opt-in per semester" bash "$ROOT/tests/coursework_assume_done.sh" "$ROOT"
+  check  "never reads or gates on a course AI policy" bash "$ROOT/tests/no_ai_policy_gate.sh" "$ROOT"
 fi
 
 # ── doctor ────────────────────────────────────────────────────────────────────

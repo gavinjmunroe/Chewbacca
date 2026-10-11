@@ -73,7 +73,7 @@ public enum ChewieRouter {
           `people texts search "..."`, `people stats`. This is a local SQLite \
           file. It is NOT Medha, NOT Amber, and NOT any MCP server: do not \
           reach for those for a question about the user's own contacts.
-        - `coursework due`, `coursework today`, `coursework policy <course> ai` \
+        - `coursework due`, `coursework today`, `coursework grade <course>` \
           for anything about classes. Never state a deadline you did not read.
         - `mac` for Calendar, Reminders, Contacts, Mail, Messages, Notes.
         - The second brain at ~/second-brain for durable facts about their life.

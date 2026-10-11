@@ -22,15 +22,7 @@ reads back. Write markup only. The runtime is already written.
 ```sh
 guide list                       # extend an existing guide, do not start a rival
 guide progress                   # what they already got wrong
-coursework policy <course> ai    # what help this course actually allows
 ```
-
-The policy check is not optional and it is not a formality. Courses differ hard:
-one bans AI outright, one requires disclosing every prompt, one allows ideation
-only. A practice quiz is usually fine where a drafted essay is not, but read the
-rule for the specific course before producing anything that reaches an
-assignment. If the course bans it, say so and offer to quiz them live instead,
-which is a thing you can do with no artifact at all.
 
 If `guide progress` shows missed topics, the new guide opens on those. Do not
 rebuild the whole unit because one section was weak.

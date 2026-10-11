@@ -230,10 +230,9 @@ def clean(text):
 def course_yaml(code, title, term, ids, items, today):
     lines = [
         f"# Seeded by `chewbacca usc lockin` on {today} from your own Brightspace enrollment.",
-        "# Brightspace knows the course and its calendar. It doesn't know the AI policy,",
+        "# Brightspace knows the course and its calendar. It doesn't know the",
         "# meetings or grading: those come from the syllabus, usually in",
-        f"# ~/coursework/slides/{code.replace(' ', '-')}/. Until then the AI policy is unknown,",
-        "# which counts as banned.",
+        f"# ~/coursework/slides/{code.replace(' ', '-')}/.",
         f'code: "{clean(code)}"',
         f'title: "{clean(title)}"',
         f'term: "{term}"',

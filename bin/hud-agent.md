@@ -156,7 +156,7 @@ details you did not read from one of these.
 ```
 coursework due [--days N]        what is due, with real dates
 coursework today                 today's classes
-coursework policy <course> ai    whether AI is allowed for that class
+coursework attendance <course>   absences used against the budget
 backlog                          what this kit is building, open items
 people brief <name>              who someone is before you talk about them
 people find <name or number>     look a person up

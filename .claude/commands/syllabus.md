@@ -50,7 +50,7 @@ Report three things, in this order:
 
 1. **The next three deadlines**, with dates.
 2. **What this course costs in absences**, in its own numbers.
-3. **What the syllabus did not say.** Missing AI policy, missing room, undated
+3. **What the syllabus did not say.** Missing room, undated
    assignments handled by later prompts. That list is the set of questions to
    ask in class this week. Do not fill any of it with a guess.
 

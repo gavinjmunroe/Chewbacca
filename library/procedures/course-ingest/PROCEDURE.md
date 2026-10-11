@@ -84,22 +84,19 @@ tree is only warm after the app's own screen has asked for it.
 
 ## What to read for, not just what to read
 
-Downloading the syllabus is the part that looks like the work. The work is four
+Downloading the syllabus is the part that looks like the work. The work is three
 questions, and getting any of them wrong costs more than a missed file.
 
-1. **What does this course allow?** Quote it, do not summarize. Both ACC courses
-   ban AI outright and one of them names Claude in its banned list alongside
-   Google Translate and Grammarly. An unrecorded policy is a ban.
-2. **Where is work actually submitted?** Spanish grades almost nothing on
+1. **Where is work actually submitted?** Spanish grades almost nothing on
    Blackboard: quizzes, tests, homework, the final exam and the final project
    are all on VHL Central, and Blackboard only mirrors the dates. Submitting in
    the right system is what earns the grade.
-3. **Is the deadline on the card the real deadline?** In Anthropology it is not.
+2. **Is the deadline on the card the real deadline?** In Anthropology it is not.
    Discussions close Sunday at 11:59 and Blackboard dates the column to the
    close, but the initial post is due Wednesday and a Sunday post earns no more
    than half. One gradebook column, two deadlines, and the one the LMS shows is
    the one that is already too late.
-4. **What does the syllabus have that the gradebook does not?** Count them. If
+3. **What does the syllabus have that the gradebook does not?** Count them. If
    the syllabus says twelve discussions and the gradebook has one, the other
    eleven are the job.
 

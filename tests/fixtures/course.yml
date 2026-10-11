@@ -10,7 +10,6 @@ meets:
   - { days: [Mon, Wed], start: "10:00", end: "11:20", room: "Room 1", label: lecture }
 
 policies:
-  ai: "AI is banned on all graded work in this fixture course."
   late: "10% per day."
 
 absences:

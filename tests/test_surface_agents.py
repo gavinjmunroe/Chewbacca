@@ -89,6 +89,7 @@ class FakeEngine:
         self.n = 0
         self.imported_keys: set = set()
         self.diff = None
+        self.upstream = True
         # agents.probe's answer, shaped as on this Mac on 2026-10-10: Claude
         # and Gemini installed with sign-in unknown, Codex installed but not
         # runnable by the engine, Cursor absent.
@@ -121,6 +122,22 @@ class FakeEngine:
                                                                           "payload": payload}})
         return self.seq
 
+    def ship_result(self, p):
+        """workspace.ship as realm's git-write.ts answers: commit what is
+        staged, then push, with no-upstream until setUpstream is passed."""
+        staged = [f for f in self.diff["files"] if f["staged"]]
+        commit = {"state": "skipped", "sha": None, "subject": None, "reason": None}
+        if p["commit"]:
+            commit = {"state": "committed", "sha": "3f2a1b9c0d", "subject": p["message"], "reason": None} if staged \
+                else {"state": "nothing-to-commit", "sha": None, "subject": None, "reason": "nothing is staged"}
+            if staged:
+                self.diff["files"] = [f for f in self.diff["files"] if not f["staged"] or f["unstaged"]]
+        tracked = p["setUpstream"] or self.upstream
+        self.upstream = tracked
+        push = {"state": "pushed" if tracked else "no-upstream", "remote": "origin", "branch": self.diff["branch"],
+                "reason": None}
+        return {"commit": commit, "push": push, "pr": {"state": "skipped", "url": None, "reason": None}}
+
     @property
     def writes(self):
         # The probe runs CLIs (EXEC_METHODS) but changes no state.
@@ -142,6 +159,16 @@ class FakeEngine:
     def answer(self, method, p):
         if method == "workspace.diff":
             return self.diff
+        if method in ("workspace.stage", "workspace.unstage"):
+            for f in self.diff["files"]:
+                if f["path"] in p["paths"]:
+                    f["staged"], f["unstaged"] = method == "workspace.stage", method == "workspace.unstage"
+            return {"ok": True}
+        if method == "workspace.ship":
+            return self.ship_result(p)
+        if method == "environments.get":
+            sid = p["id"].removeprefix("env-")
+            return {"id": p["id"], "path": self.sessions[sid]["cwd"] if sid in self.sessions else "/nowhere"}
         if method == "workspace.fileDiff":
             return {"path": p["path"], "oldPath": None, "staged": False, "binary": False, "truncated": False,
                     "truncatedReason": None, "additions": 1, "deletions": 1, "hunks": [
@@ -230,6 +257,9 @@ class FakeConn:
         return self
 
     def __exit__(self, *exc):
+        return None
+
+    def close(self):
         return None
 
     def call(self, method, params=None, timeout=10.0, write=False, allow_exec=False):
@@ -820,6 +850,111 @@ def agent_card(tmp: Path) -> None:
     check("reading the card wrote nothing", e.writes == [], e.writes)
 
 
+def ship_values(a, data, ctx, message):
+    """The model a Commit and push press is drawn from, and its row id."""
+    model = a.model(data, None, {"/agents/message": message}, ctx)
+    return model, (model["/agents/ship"][0]["id"] if model["/agents/ship"] else "")
+
+
+def shipping(tmp: Path) -> None:
+    """Stage, Unstage, and Commit and push from the opened card, each a press on a
+    row that says what it touches, each going through realm's workspace.*."""
+    e = FakeEngine()
+    cwd = str(tmp / "ship" / "repo")
+    e.add_session("s1", "idle", title="Fix the rail", cwd=cwd)
+    e.diff = {"root": cwd, "branch": "feat/rail", "totalFiles": 3, "truncated": False, "files": [
+        {"path": "hud/Glass.swift", "oldPath": None, "status": "modified", "staged": False, "unstaged": True,
+         "binary": False, "additions": 3, "deletions": 1},
+        {"path": "README.md", "oldPath": None, "status": "modified", "staged": False, "unstaged": True,
+         "binary": False, "additions": 1, "deletions": 0},
+        {"path": "evil" + BIDI + ".txt", "oldPath": None, "status": "added", "staged": False, "unstaged": True,
+         "binary": False, "additions": 1, "deletions": 0}]}
+    a, ctx = world(tmp / "ship", e)
+    data, model = view(a, ctx, open="s1")
+    check("an open card with unstaged files offers Stage all, naming how many and how to undo it",
+          [r["text"] for r in model["/agents/stage"]] == ["All 2 unstaged files · Unstage takes them back"]
+          and model["/agents/unstage"] == [] and model["/agents/ship"] == [], model["/agents/stage"])
+    check("nothing staged draws no commit box", "agents-message" not in " ".join(a.layout()))
+    a.show_file(ctx, data, {"row": "hud/Glass.swift"})
+    data, model = view(a, ctx)
+    check("a file whose diff is open can be staged on its own",
+          [r["id"] for r in model["/agents/stage"]] == ["file:hud/Glass.swift", model["/agents/stage"][1]["id"]]
+          and model["/agents/stage"][0]["text"] == "Glass.swift · Unstage takes it back", model["/agents/stage"])
+    check("reading the card wrote nothing", e.writes == [], e.writes)
+
+    r = a.stage(ctx, data, {"row": "file:hud/Glass.swift"})
+    check("Stage stages exactly that file through realm",
+          r.ok and e.writes == [("workspace.stage", {"cwd": cwd, "paths": ["hud/Glass.swift"]})], (r, e.writes))
+    r = a.stage(ctx, data, {"row": "file:evil" + BIDI + ".txt"})
+    check("a path with a hidden character is never staged", not r.ok and len(e.writes) == 1, (r, e.writes))
+    r = a.stage(ctx, data, {"row": "file:/etc/passwd"})
+    check("a file not in its changes is never staged", not r.ok and len(e.writes) == 1, r)
+    stale_all = model["/agents/stage"][1]["id"]
+    r = a.stage(ctx, data, {"row": stale_all})
+    check("Stage all drawn before a file was staged is refused, since the set it named changed",
+          not r.ok and "changed since" in r.line and len(e.writes) == 1, r.line)
+
+    data, model = view(a, ctx)
+    check("a staged file says so in the list, and can be unstaged",
+          "staged" in model["/agents/changed"][0]["time"]
+          and [x["id"] for x in model["/agents/unstage"]] == ["file:hud/Glass.swift"], model["/agents/changed"])
+    check("something staged draws the commit box", "agents-message Field" in " ".join(a.layout()))
+    check("but no Commit and push row until there is a message", model["/agents/ship"] == [], model["/agents/ship"])
+    model, row = ship_values(a, data, ctx, "fix the rail glass")
+    check("a typed message offers Commit and push, naming the files, the branch and that a push stays",
+          model["/agents/ship"][0]["text"] == "1 staged file on feat/rail, then pushed · a push can't be taken back here"
+          and row.startswith("ship:"), model["/agents/ship"])
+    r = a.ship(ctx, data, {"row": row, "/agents/message": "a different message"})
+    check("Commit with a message other than the one drawn is refused", not r.ok
+          and not any(m == "workspace.ship" for m, _ in e.writes), r.line)
+    e.sessions["s1"]["status"] = "running"
+    r = a.ship(ctx, data, {"row": row, "/agents/message": "fix the rail glass"})
+    check("Commit while the agent is working is refused", not r.ok and "still working" in r.line, r.line)
+    e.sessions["s1"]["status"] = "idle"
+    e.upstream = False
+    r = a.ship(ctx, data, {"row": row, "/agents/message": "fix the rail glass"})
+    ships = [p for m, p in e.writes if m == "workspace.ship"]
+    check("Commit and push commits the staged file with the message, pushes, never opens a PR or sets upstream",
+          ships == [{"cwd": cwd, "commit": True, "message": "fix the rail glass", "push": True, "setUpstream": False,
+                     "openPr": False, "environmentId": "env-s1"}], ships)
+    check("a commit whose push had no upstream says so, and clears the message",
+          r.ok and "push didn't go" in r.line and r.updates.get("/agents/message") == "", r)
+    check("the result line names the folder and never the message", "fix the rail" not in r.line, r.line)
+    data, model = view(a, ctx)
+    check("the card says what happened in realm's words",
+          model["/agents/shipped"] == "Committed 3f2a1b9 \u201cfix the rail glass\u201d. Not pushed: this branch has "
+                                      "never been pushed.", model["/agents/shipped"])
+    check("and offers the first push of that branch, naming it",
+          [x["id"] for x in model["/agents/upstream"]] == ["upstream:feat/rail"]
+          and "feat/rail to origin" in model["/agents/upstream"][0]["text"], model["/agents/upstream"])
+    r = a.upstream(ctx, data, {"row": "upstream:main"})
+    check("a push for another branch is refused", not r.ok, r)
+    r = a.upstream(ctx, data, {"row": "upstream:feat/rail"})
+    ships = [p for m, p in e.writes if m == "workspace.ship"]
+    check("the first push sets the upstream and commits nothing",
+          r.ok and ships[-1]["commit"] is False and ships[-1]["setUpstream"] is True and len(ships) == 2, ships[-1])
+    data, model = view(a, ctx)
+    check("then the card says it pushed, and the offer is gone",
+          model["/agents/shipped"] == "Pushed to origin/feat/rail." and model["/agents/upstream"] == [],
+          model["/agents/shipped"])
+
+    e.fail["workspace.ship"] = maybe(rc.RealmTimeout("no answer"))
+    data, model = view(a, ctx)
+    loose = model["/agents/stage"]
+    a.stage(ctx, data, {"row": loose[-1]["id"]})
+    data, model = view(a, ctx)
+    model, row = ship_values(a, data, ctx, "docs")
+    before = len(e.writes)
+    r = a.ship(ctx, data, {"row": row, "/agents/message": "docs"})
+    check("a ship the engine may have run says may have, and is not retried",
+          not r.ok and "may have" in r.line and len(e.writes) == before + 1, (r.line, e.writes[before:]))
+    del e.fail["workspace.ship"]
+    lines = [f"@ {a.name} at=center w={a.width}"] + a.layout() + [surfaces.data_line(k, v) for k, v in
+                                                                   {**a.initial(), **model}.items()]
+    check("the card with its git rows is valid Kyber Lines", not tks.validate(lines), tks.validate(lines))
+    check("no hidden character reaches the glass", glass_clean(model), model)
+
+
 def untrusted(tmp: Path) -> None:
     e = FakeEngine()
     e.add_session("s1", "idle", title="T" + BIDI + "itle" + LINE_SEP + "x" + ESC + "[31m",
@@ -979,6 +1114,7 @@ def main() -> int:
         any_agent(tmp)
         live_tabs_and_import(tmp)
         agent_card(tmp)
+        shipping(tmp)
         untrusted(tmp)
         through_the_daemon(tmp)
         review_fixes(tmp)

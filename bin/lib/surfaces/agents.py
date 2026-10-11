@@ -62,7 +62,17 @@ realm's own importer (import.apply, apps/server/src/import) copies each
 recent live tab's transcript into the engine, never writing the CLI's own
 files, so a tab shows here without anything to press or read about it.
 
-UNTRUSTED TEXT. Turns,UNTRUSTED TEXT. Turns, tool input, titles, space names and paths all come
+SHIPPING. The opened card stages, unstages, commits and pushes through
+realm's own git write path (workspace.stage, workspace.unstage,
+workspace.ship), never a git of its own. Each is a row whose text names what
+the press touches: one file whose diff is open, or "all N", a row id carrying
+a hash of exactly those paths; Commit and push names the staged count and the
+branch and says a push can't be taken back, and its id hashes the branch, the
+staged files and the typed message. The press re-reads workspace.diff and
+refuses if any of that moved. No force push exists in realm, and the first
+push of a branch is offered only after realm said it had no upstream.
+
+UNTRUSTED TEXT. Turns, tool input, titles, space names and paths all come
 from the engine, which relays a model and whatever it read. All of it is
 stripped of Unicode category C and the line and paragraph separators before
 a `d` line, clipped, and never read for an action. Result lines (which the
@@ -179,6 +189,25 @@ PATCH_LINES = 600
 # workspace.diff cheap (one status, two numstats); still, git is a process
 # per call. Guessed.
 DIFF_EVERY = 10.0
+# workspace.ship commits (running the repo's own hooks), then pushes. Realm
+# gives the push GIT_NETWORK_TIMEOUT_MS, 120 s (workspace/git-exec.ts at
+# 59afd9e4); the press waits a minute past that for the commit's hooks.
+# Guessed, never measured from the glass.
+SHIP_TIMEOUT = 180.0
+# The longest commit message Commit and push takes. Guessed: a subject and a
+# short body. A longer one is written where the code is.
+MESSAGE_CHARS = 2000
+# What each ship step's state reads as on the card. ShipResultSchema in
+# realm's contracts/src/rpc.ts at 59afd9e4; a state added later shows as its
+# own word.
+COMMIT_WORDS = {"nothing-to-commit": "Nothing was staged, so nothing was committed.",
+                "no-identity": "Not committed: git has no name and email set for this Mac.",
+                "failed": "Not committed: git refused it."}
+PUSH_WORDS = {"up-to-date": "Already up to date with its remote.", "no-remote": "Not pushed: this repo has no remote.",
+              "no-upstream": "Not pushed: this branch has never been pushed.",
+              "rejected": "Not pushed: the remote moved on. Pull it in where the code is, then push.",
+              "detached": "Not pushed: no branch is checked out.", "failed": "Not pushed: git refused it."}
+
 # The order Start offers what is ready: the agents the engine ships first
 # (presets.ts SELECTABLE_AGENT_KINDS order), anything else after.
 AGENT_ORDER = ("claude", "codex", "acp:cursor", "acp:gemini", "acp:opencode", "acp:copilot", "acp:goose",
@@ -209,7 +238,7 @@ STATE_WORDS = {"waiting_permission": "waiting on you", "running": "working", "er
 STATE_ORDER = {"waiting_permission": 0, "error": 1, "running": 2, "idle": 3, "ended": 4}
 BUSY = ("running", "waiting_permission")
 # The pointers holding a row a press can write through.
-VERBS = ("send", "allow", "deny", "interrupt", "fork", "new")
+VERBS = ("send", "allow", "deny", "interrupt", "fork", "new", "stage", "unstage", "ship", "upstream")
 MODE_WORDS = {"default": "asks before each tool", "acceptEdits": "edits without asking",
               "bypassPermissions": "never asks (full access)", "plan": "plans only"}
 # The input keys a one-line tool row names, in the order a reader wants them.
@@ -458,6 +487,53 @@ def patch_text(diff) -> str:
     return "\n".join(out[:PATCH_LINES])
 
 
+def git_files(changes) -> list[dict]:
+    """workspace.diff's files whose path is safe to name and to hand back:
+    a string with no hidden character."""
+    files = (changes or {}).get("files") if isinstance(changes, dict) else None
+    return [f for f in files or [] if isinstance(f, dict) and isinstance(f.get("path"), str) and f["path"]
+            and not any(hidden(ch) for ch in f["path"])]
+
+
+def paths_key(paths) -> str:
+    """A short hash of a set of paths, so a press on "all of them" runs only
+    on the files that were on the glass when it was pressed."""
+    return hashlib.sha256("\n".join(sorted(paths)).encode("utf-8", "surrogatepass")).hexdigest()[:12]
+
+
+def ship_id(branch: str, staged, message: str) -> str:
+    """A Commit and push row's id: the branch, the staged files and the
+    message, hashed, so the press commits exactly what was drawn."""
+    text = "\x00".join([branch or "", paths_key(staged), message.strip()])
+    return "ship:" + hashlib.sha256(text.encode("utf-8", "surrogatepass")).hexdigest()[:12]
+
+
+def plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def ship_words(result) -> str:
+    """One line for what Commit and push did, from realm's own states. Only
+    the engine's words for a commit (sha and subject) are quoted; git's own
+    error text never is."""
+    if not isinstance(result, dict):
+        return ""
+    commit = result.get("commit") if isinstance(result.get("commit"), dict) else {}
+    push = result.get("push") if isinstance(result.get("push"), dict) else {}
+    out = []
+    if commit.get("state") == "committed":
+        sha = clean(commit.get("sha"), 40)[:7]
+        out.append(clean(f"Committed {sha} \u201c{clean(commit.get('subject'), 60)}\u201d.", 90))
+    elif commit.get("state") in COMMIT_WORDS:
+        out.append(COMMIT_WORDS[commit["state"]])
+    if push.get("state") == "pushed":
+        where = "/".join(clean(x, 40) for x in (push.get("remote"), push.get("branch")) if x)
+        out.append(f"Pushed to {where}." if where else "Pushed.")
+    elif push.get("state") in PUSH_WORDS:
+        out.append(PUSH_WORDS[push["state"]])
+    return " ".join(out)
+
+
 # What a working tab's last tool call is doing, as a phrase. kyber-sessions
 # hands over the raw call ("sed -n 200,212p bin/site-gate; grep ...", "Edit:
 # /x/Glass.swift"), and a shell line on a tile read as plumbing on the glass
@@ -621,7 +697,8 @@ class Agents(Provider):
         self.actions = {f"{p}pick": self.pick, f"{p}send": self.send, f"{p}allow": self.allow,
                         f"{p}deny": self.deny, f"{p}interrupt": self.interrupt, f"{p}fork": self.fork,
                         f"{p}new": self.new, f"{p}engine": self.start_engine, f"{p}agent": self.choose,
-                        f"{p}file": self.show_file}
+                        f"{p}file": self.show_file, f"{p}stage": self.stage, f"{p}unstage": self.unstage,
+                        f"{p}ship": self.ship, f"{p}upstream": self.upstream}
         self._lock = threading.Lock()
         # The session a press acts on. Set by a pick (or the first fetch, to
         # the session that needs the person most), never by a re-sort.
@@ -653,6 +730,8 @@ class Agents(Provider):
         # press opened (sid, path, text).
         self._changes: tuple | None = None
         self._patch: tuple | None = None
+        # The last Commit and push on the open agent's folder: (sid, ShipResult).
+        self._shipped: tuple | None = None
         # What layout() draws, set by each model (_replan).
         self._plan: dict = {}
         self._shape = "{}"
@@ -746,6 +825,7 @@ class Agents(Provider):
                 "caught_up": log.caught_up, "agents": self._agents, "probe_error": self._probe_error,
                 "changes": self._changes[2] if self._changes and self._changes[0] == pinned else None,
                 "patch": self._patch if self._patch and self._patch[0] == pinned else None,
+                "shipped": self._shipped[1] if self._shipped and self._shipped[0] == pinned else None,
                 "tabs": tabs, "now": self.wall()}
 
     # ── bringing tabs in ─────────────────────────────────────────────────
@@ -993,6 +1073,25 @@ class Agents(Provider):
             if plan.get("patch"):
                 parts.append(comp(c("patch"), "Diff", text=Bind(p("patch")), path=Bind(p("patchPath"))))
                 order.append("patch")
+            if plan.get("git"):
+                parts += [comp(c("stage"), "Events", caption="", items=Bind(p("stage")),
+                               action=f"{ACTION_PREFIX}stage", actionLabel="Stage"),
+                          comp(c("unstage"), "Events", caption="", items=Bind(p("unstage")),
+                               action=f"{ACTION_PREFIX}unstage", actionLabel="Unstage")]
+                order += ["stage", "unstage"]
+            if plan.get("ship"):
+                parts += [comp(c("message"), "Field", label="Commit message",
+                               placeholder="What these changes do", value=Bind(p("message"))),
+                          comp(c("ship"), "Events", caption="", items=Bind(p("ship")),
+                               action=f"{ACTION_PREFIX}ship", actionLabel="Commit and push")]
+                order += ["message", "ship"]
+            if plan.get("shipped"):
+                parts.append(comp(c("shipped"), "Text", value=Bind(p("shipped")), tone="muted"))
+                order.append("shipped")
+            if plan.get("upstream"):
+                parts.append(comp(c("upstream"), "Events", caption="", items=Bind(p("upstream")),
+                                  action=f"{ACTION_PREFIX}upstream", actionLabel="Push"))
+                order.append("upstream")
         if plan.get("start"):
             parts += [comp(c("kinds"), "Chips", options=Bind(p("kinds")), value=Bind(p("agent")),
                            action=f"{ACTION_PREFIX}agent"),
@@ -1006,7 +1105,7 @@ class Agents(Provider):
         return parts + [f"> {c('s')} " + " ".join(c(i) for i in order), f"r {c('s')}"]
 
     def initial(self) -> dict:
-        return {self.p("draft"): "", self.p("task"): "", self.p("agent"): "",
+        return {self.p("draft"): "", self.p("task"): "", self.p("agent"): "", self.p("message"): "",
                 self.p("status"): "", self.p("level"): "info"}
 
     def blank(self) -> dict:
@@ -1015,7 +1114,8 @@ class Agents(Provider):
                 p("meta"): "", p("transcript"): [], p("ask"): "", p("allow"): [], p("deny"): [], p("send"): [],
                 p("interrupt"): [], p("fork"): [], p("new"): [], p("kinds"): [], p("tiles"): [],
                 p("counts"): {"needs": 0, "running": 0, "done": 0}, p("changed"): [], p("changedCap"): "",
-                p("patch"): "", p("patchPath"): "",
+                p("patch"): "", p("patchPath"): "", p("stage"): [], p("unstage"): [], p("ship"): [],
+                p("shipped"): "", p("upstream"): [], p("shipping"): False,
                 p("placeholder"): "Typed here, sent only by Send"}
 
     def model(self, data, error, values, ctx) -> dict:
@@ -1039,6 +1139,8 @@ class Agents(Provider):
         elif data is not None:
             plan.update(tiles=bool(out.get(p("tiles"))), pinned=bool(out.get(p("head"))),
                         changed=bool(out.get(p("changed"))), patch=bool(out.get(p("patch"))),
+                        git=bool(out.get(p("stage")) or out.get(p("unstage"))), ship=bool(out.get(p("shipping"))),
+                        shipped=bool(out.get(p("shipped"))), upstream=bool(out.get(p("upstream"))),
                         ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))))
         with self._lock:
             self._plan = plan
@@ -1136,18 +1238,20 @@ class Agents(Provider):
         out[p("meta")] = " · ".join(x for x in (shown["agent"], shown["state"], shown["cwd"], mode) if x)
         out[p("transcript")] = list(data.get("items") or [])
         changes = data.get("changes") or {}
-        files = [f for f in changes.get("files") or [] if isinstance(f, dict) and isinstance(f.get("path"), str)
-                 and not any(hidden(ch) for ch in f["path"])]
+        files = git_files(changes)
         if files:
             total = int(changes.get("totalFiles") or len(files))
             out[p("changedCap")] = f"Changed, {total} file{'s' if total != 1 else ''}" + (
                 f" on {clean(changes.get('branch'), 40)}" if changes.get("branch") else "")
             out[p("changed")] = [{"id": f["path"], "text": clean(f["path"], 70), "time": " · ".join(x for x in (
                 clean(f.get("status"), 12), f"+{int(f.get('additions') or 0)} -{int(f.get('deletions') or 0)}"
-                if not f.get("binary") else "binary") if x)} for f in files[:CHANGED_SHOWN]]
+                if not f.get("binary") else "binary",
+                ("staged" if not f.get("unstaged") else "partly staged") if f.get("staged") else "") if x)}
+                for f in files[:CHANGED_SHOWN]]
         patch = data.get("patch")
         if patch:
             out[p("patch")], out[p("patchPath")] = patch[2], clean(patch[1], 120)
+        self.git_model(shown, files, changes, patch, data.get("shipped"), values, out)
         if not data.get("caught_up"):
             out[p("meta")] += " · catching up on older turns"
         where = shown["folder"] or "its folder"
@@ -1180,6 +1284,45 @@ class Agents(Provider):
                                                            "into a new worktree, with a new session · the "
                                                            "original is untouched"}]
         return out
+
+    def git_model(self, shown: dict, files: list, changes: dict, patch, shipped, values: dict, out: dict) -> None:
+        """Stage, Unstage, and Commit and push, each row saying what the
+        press touches before it is pressed. Nothing here writes."""
+        p = self.p
+        if shipped:
+            out[p("shipped")] = ship_words(shipped)
+            push = shipped.get("push") if isinstance(shipped.get("push"), dict) else {}
+            branch = clean(push.get("branch"), 60)
+            if push.get("state") == "no-upstream" and branch and shown["status"] not in BUSY:
+                remote = clean(push.get("remote"), 40) or "its remote"
+                out[p("upstream")] = [{"id": f"upstream:{branch}", "accent": True, "text": clean(
+                    f"{branch} to {remote}, and track it there · its first push", 100)}]
+        if not files or not shown.get("cwd_raw"):
+            return
+        loose = [f["path"] for f in files if f.get("unstaged")]
+        staged = [f["path"] for f in files if f.get("staged")]
+        open_file = next((f for f in files if patch and f["path"] == patch[1]), None)
+        if open_file and open_file.get("unstaged"):
+            out[p("stage")].append({"id": f"file:{open_file['path']}", "text": clean(
+                f"{Path(open_file['path']).name} · Unstage takes it back", 90)})
+        if len(loose) > 1 or (loose and not open_file):
+            out[p("stage")].append({"id": f"all:{paths_key(loose)}", "text": f"All {plural(len(loose), 'unstaged file')}"
+                                                                           " · Unstage takes them back"})
+        if open_file and open_file.get("staged"):
+            out[p("unstage")].append({"id": f"file:{open_file['path']}", "text": clean(
+                f"{Path(open_file['path']).name} · out of the commit, its edits stay", 90)})
+        if not staged or shown["status"] in BUSY:
+            return
+        # The Field shows whenever something is staged; the row only once a
+        # message is typed, and its id carries that message.
+        out[p("ship")] = []
+        message = str(values.get(p("message")) or "").strip()
+        branch = clean(changes.get("branch"), 60)
+        if message and len(message) <= MESSAGE_CHARS:
+            out[p("ship")] = [{"id": ship_id(branch, staged, message), "accent": True, "text": clean(
+                f"{plural(len(staged), 'staged file')} on {branch or 'this checkout'}, then pushed"
+                " · a push can't be taken back here", 120)}]
+        out[p("shipping")] = True
 
     def start_model(self, data, values: dict, out: dict) -> None:
         """New agent: a chip per installed agent, one field, one Start row.
@@ -1253,18 +1396,202 @@ class Agents(Provider):
         with self._lock:
             sid = self.pinned
         row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
-        listed = [f.get("path") for f in ((data or {}).get("changes") or {}).get("files") or [] if isinstance(f, dict)]
+        listed = {f["path"]: f for f in git_files((data or {}).get("changes"))}
         if row is None or path not in listed or not row.get("cwd_raw"):
             return Result(False, "That file isn't in the open agent's changes any more.", refetch=True)
+        # A file that is only staged has no unstaged patch: its staged side is the change.
+        staged = bool(listed[path].get("staged")) and not listed[path].get("unstaged")
         try:
             with self.connect(ctx) as conn:
-                got = conn.call("workspace.fileDiff", {"cwd": row["cwd_raw"], "path": path}, timeout=CALL_TIMEOUT,
-                                allow_exec=True)
+                got = conn.call("workspace.fileDiff", {"cwd": row["cwd_raw"], "path": path, "staged": staged},
+                                timeout=CALL_TIMEOUT, allow_exec=True)
         except realm_client.RealmError as err:
             return Result(False, f"Couldn't read that diff: {rpc_words(err)}", refetch=True)
         with self._lock:
             self._patch = (sid, path, patch_text(got))
         return Result(True, f"Showing the diff of {Path(path).name}.", refetch=True)
+
+    def _git_press(self, ctx: Context, data, values: dict, verb: str):
+        """(row, connection, files read now) for a Stage, Unstage or Commit
+        press on the open agent's folder, or a Result saying why not. The
+        files are read again here, never taken from the drawing."""
+        with self._lock:
+            sid = self.pinned
+        row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
+        if row is None or not row.get("cwd_raw"):
+            return Result(False, "No agent's folder is open. Open one, then press.",
+                          updates={self.p("level"): "error"})
+        try:
+            conn = self.connect(ctx)
+        except realm_client.RealmError as err:
+            return Result(False, f"Nothing was {verb}: {rpc_words(err)}.", updates={self.p("level"): "error"})
+        try:
+            got = conn.call("workspace.diff", {"cwd": row["cwd_raw"]}, timeout=CALL_TIMEOUT, allow_exec=True)
+        except realm_client.RealmError as err:
+            conn.close()
+            return Result(False, f"Nothing was {verb}: couldn't read its changes ({rpc_words(err)}).",
+                          updates={self.p("level"): "error"})
+        return row, conn, got if isinstance(got, dict) else {}
+
+    def _paths_for(self, key: str, files: list[dict], side: str) -> list[str] | None:
+        """The paths a Stage or Unstage row named, if they are still what it
+        showed: one file still on that side, or all of them, unchanged."""
+        on_side = [f["path"] for f in files if f.get(side)]
+        if key.startswith("file:") and key[5:] in on_side:
+            return [key[5:]]
+        if key.startswith("all:") and on_side and key[4:] == paths_key(on_side):
+            return on_side
+        return None
+
+    def stage(self, ctx: Context, data, values: dict) -> Result:
+        return self._index(ctx, data, values, "stage")
+
+    def unstage(self, ctx: Context, data, values: dict) -> Result:
+        return self._index(ctx, data, values, "unstage")
+
+    def _index(self, ctx: Context, data, values: dict, verb: str) -> Result:
+        """git add, or git restore --staged, on exactly the files the row
+        named, through realm (workspace.stage, workspace.unstage). Neither
+        touches a file's contents."""
+        key = str(values.get("row") or "")
+        got = self._git_press(ctx, data, values, f"{verb}d")
+        if isinstance(got, Result):
+            return got
+        row, conn, changes = got
+        bad = {self.p("level"): "error"}
+        with conn:
+            paths = self._paths_for(key, git_files(changes), "unstaged" if verb == "stage" else "staged")
+            if not paths:
+                return Result(False, f"Nothing was {verb}d: the files changed since that was drawn.", updates=bad,
+                              refetch=True)
+            if not self._claim("index", row["id"]):
+                return Result(False, "Still staging the last press.")
+            try:
+                conn.call(f"workspace.{verb}", {"cwd": row["cwd_raw"], "paths": paths}, timeout=CALL_TIMEOUT,
+                          write=True)
+            except realm_client.RealmError as err:
+                if err.maybe_applied:
+                    return Result(False, f"It may have been {verb}d; the engine didn't confirm.",
+                                  updates={self.p("level"): "warning"}, refetch=self._stale_changes())
+                return Result(False, f"Nothing was {verb}d: {rpc_words(err)}", updates=bad, refetch=True)
+            finally:
+                self._release("index", row["id"])
+        self._stale_changes()
+        word = "Staged" if verb == "stage" else "Unstaged"
+        return Result(True, f"{word} {plural(len(paths), 'file')} in {row['folder'] or 'its folder'}.",
+                      updates={self.p("level"): "success"}, refetch=True)
+
+    def _stale_changes(self) -> bool:
+        """Read the open folder's changes on the next fetch, not DIFF_EVERY later."""
+        with self._lock:
+            self._changes = None
+            self._soon = True
+        return True
+
+    def ship(self, ctx: Context, data, values: dict) -> Result:
+        """Commit what is staged with the typed message, then push, as realm's
+        workspace.ship: one press, each step reporting its own outcome. Never
+        a force push; realm has none."""
+        key = str(values.get("row") or "")
+        message = str(values.get(self.p("message")) or "").strip()
+        bad = {self.p("level"): "error"}
+        if not message or len(message) > MESSAGE_CHARS:
+            return Result(False, "Type a commit message first.", updates=bad)
+        got = self._git_press(ctx, data, values, "committed")
+        if isinstance(got, Result):
+            return got
+        row, conn, changes = got
+        with conn:
+            staged = [f["path"] for f in git_files(changes) if f.get("staged")]
+            if not staged or ship_id(clean(changes.get("branch"), 60), staged, message) != key:
+                return Result(False, "Nothing was committed: what's staged, the branch or the message changed "
+                                     "since that was drawn.", updates=bad, refetch=True)
+            if not self._claim("ship", row["id"]):
+                return Result(False, "Still committing the last press.")
+            try:
+                if self._fresh(conn, row["id"]).get("status") in BUSY:
+                    return Result(False, "Nothing was committed: the agent is still working. Commit once it stops.",
+                                  updates=bad, refetch=True)
+                result = conn.call("workspace.ship", {
+                    "cwd": row["cwd_raw"], "commit": True, "message": message, "push": True, "setUpstream": False,
+                    "openPr": False, "environmentId": self._environment_at(conn, row)},
+                    timeout=SHIP_TIMEOUT, write=True)
+            except realm_client.RealmError as err:
+                if err.maybe_applied:
+                    return Result(False, "It may have committed or pushed; the engine didn't confirm. Check its "
+                                         "changes before pressing again.", updates={self.p("level"): "warning"},
+                                  refetch=self._stale_changes())
+                return Result(False, f"Nothing was committed: {rpc_words(err)}", updates=bad, refetch=True)
+            finally:
+                self._release("ship", row["id"])
+        return self._shipped_result(row, result)
+
+    def upstream(self, ctx: Context, data, values: dict) -> Result:
+        """The first push of a branch, offered only after Commit and push said
+        it had never been pushed: realm's ship with commit off and
+        setUpstream on, the one case realm's own pane asks yes to."""
+        key = str(values.get("row") or "")
+        with self._lock:
+            sid = self.pinned
+            last = self._shipped[1] if self._shipped and self._shipped[0] == sid else None
+        push = (last or {}).get("push") if isinstance((last or {}).get("push"), dict) else {}
+        if push.get("state") != "no-upstream" or key != f"upstream:{clean(push.get('branch'), 60)}":
+            return Result(False, "That push isn't the one offered any more.", updates={self.p("level"): "error"})
+        got = self._git_press(ctx, data, values, "pushed")
+        if isinstance(got, Result):
+            return got
+        row, conn, changes = got
+        with conn:
+            if clean(changes.get("branch"), 60) != clean(push.get("branch"), 60):
+                return Result(False, "Nothing was pushed: a different branch is checked out now.",
+                              updates={self.p("level"): "error"}, refetch=True)
+            if not self._claim("ship", row["id"]):
+                return Result(False, "Still pushing the last press.")
+            try:
+                result = conn.call("workspace.ship", {
+                    "cwd": row["cwd_raw"], "commit": False, "message": "", "push": True, "setUpstream": True,
+                    "openPr": False, "environmentId": None}, timeout=SHIP_TIMEOUT, write=True)
+            except realm_client.RealmError as err:
+                if err.maybe_applied:
+                    return Result(False, "It may have pushed; the engine didn't confirm.",
+                                  updates={self.p("level"): "warning"}, refetch=self._stale_changes())
+                return Result(False, f"Nothing was pushed: {rpc_words(err)}", updates={self.p("level"): "error"},
+                              refetch=True)
+            finally:
+                self._release("ship", row["id"])
+        return self._shipped_result(row, result)
+
+    @staticmethod
+    def _environment_at(conn, row: dict):
+        """The session's environment id when that environment is the folder
+        being shipped, so realm files the ship under it; else None, since
+        realm refuses a mismatch (ENVIRONMENT_MISMATCH)."""
+        if not row.get("environment"):
+            return None
+        try:
+            env = conn.call("environments.get", {"id": row["environment"]}, timeout=CALL_TIMEOUT)
+        except realm_client.RealmRpcError:
+            return None
+        return row["environment"] if isinstance(env, dict) and env.get("path") == row["cwd_raw"] else None
+
+    def _shipped_result(self, row: dict, result) -> Result:
+        with self._lock:
+            self._shipped = (row["id"], result if isinstance(result, dict) else {})
+        self._stale_changes()
+        commit = (result or {}).get("commit") if isinstance(result, dict) else None
+        push = (result or {}).get("push") if isinstance(result, dict) else None
+        committed = isinstance(commit, dict) and commit.get("state") == "committed"
+        pushed = isinstance(push, dict) and push.get("state") in ("pushed", "up-to-date")
+        where = row["folder"] or "its folder"
+        updates = {self.p("message"): ""} if committed else {}
+        if pushed:
+            return Result(True, f"{'Committed and pushed' if committed else 'Pushed'} in {where}.",
+                          updates={**updates, self.p("level"): "success"}, refetch=True)
+        if committed:
+            return Result(True, f"Committed in {where}; the push didn't go. The card says why.",
+                          updates={**updates, self.p("level"): "warning"}, refetch=True)
+        return Result(False, f"Nothing was committed in {where}. The card says why.",
+                      updates={self.p("level"): "warning"}, refetch=True)
 
     def choose(self, ctx: Context, data, values: dict) -> Result:
         """A chip press: which agent Start makes."""

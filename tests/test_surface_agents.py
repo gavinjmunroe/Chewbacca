@@ -878,6 +878,28 @@ def live_tabs_and_import(tmp: Path) -> None:
           tile["state"] == "out" and tile["detail"] == "Out of Claude until Oct 16, 7am"
           and model["/agents/counts"]["needs"] == 0, (tile, model["/agents/counts"]))
 
+    se = FakeEngine()
+    sa, sctx = world(tmp / "tabscan", se)
+    one = dict(tabs[0], id="tab-a", transcript="/scanned/tab-a.jsonl")
+    shown = [one]
+    sa.tabs = lambda t: [dict(x) for x in shown]
+    sclock = [100.0]
+    sa.clock = lambda: sclock[0]
+    se.disk = ["/scanned/tab-a.jsonl"]
+    view(sa, sctx)
+    shown.append(dict(tabs[0], id="tab-b", transcript="/scanned/tab-b.jsonl"))
+    se.disk.append("/scanned/tab-b.jsonl")
+    sclock[0] += SA.IMPORT_EVERY
+    view(sa, sctx)
+    applied = json.dumps([p for m, p in se.writes if m == "import.apply"])
+    check("a scan is reused for half an hour: a newer tab waits for the next one, the engine isn't rescanned",
+          sum(m == "import.scan" for m, _ in se.writes) == 1 and "tab-b" not in applied, se.writes)
+    sclock[0] += SA.SCAN_EVERY
+    view(sa, sctx)
+    applied = json.dumps([p for m, p in se.writes if m == "import.apply"])
+    check("after it, a fresh scan brings the newer tab in",
+          sum(m == "import.scan" for m, _ in se.writes) == 2 and "tab-b" in applied, se.writes)
+
     b, bctx = world(tmp / "tabsfail", FakeEngine())
     b.tabs = lambda t: [dict(tabs[0])]
     b.engine = None

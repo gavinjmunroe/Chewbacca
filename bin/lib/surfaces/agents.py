@@ -133,6 +133,12 @@ IMPORT_ONLY = frozenset({"import.scan", "import.apply"})
 # 2026-10-10, over realm_client's 32 MiB cap; this connection only takes up
 # to 128 MiB, about three times that. Guessed past the one measurement.
 SCAN_MAX_MESSAGE = 128 * 1024 * 1024
+# Seconds a scan's keys are reused. One import.scan of 5,493 transcripts took
+# 31.8 s on 2026-10-10 and the engine answered nothing else meanwhile (the
+# panel read "timed out waiting for the engine"), so it runs at most every
+# half hour; a tab newer than the last scan comes in on the next one, or at
+# once when its tile is tapped.
+SCAN_EVERY = 1800.0
 # Miller's seven plus two, the same cap the code and sessions panels use.
 MAX_SESSIONS = 9
 # Turns on the glass. Guessed, never measured on the glass: fourteen rows of
@@ -867,6 +873,9 @@ class Agents(Provider):
         # it last ran.
         self._imported: set[str] = set()
         self._imported_at = -IMPORT_EVERY
+        # The last import.scan's keys, and when it ran.
+        self._scanned: set = set()
+        self._scanned_at = -SCAN_EVERY
         self._importing = False
         # The open agent's changed files (sid, at, summary) and the patch a
         # press opened (sid, path, text).
@@ -1023,8 +1032,14 @@ class Agents(Provider):
                         return
                     # Apply only what this same scan found: a tab's path is
                     # never handed to the engine on kyber-sessions' word alone.
-                    conn.max_message = SCAN_MAX_MESSAGE
-                    found = scanned_keys(import_call(conn, "import.scan", {}, APPLY_TIMEOUT))
+                    with self._lock:
+                        stale = self.clock() - self._scanned_at >= SCAN_EVERY
+                        found = set(self._scanned)
+                    if stale:
+                        conn.max_message = SCAN_MAX_MESSAGE
+                        found = scanned_keys(import_call(conn, "import.scan", {}, APPLY_TIMEOUT))
+                        with self._lock:
+                            self._scanned, self._scanned_at = found, self.clock()
                     keys = [t["transcript"] for t in want if t["transcript"] in found]
                     with self._lock:
                         # Not on disk as realm sees it yet: tried again next pass.

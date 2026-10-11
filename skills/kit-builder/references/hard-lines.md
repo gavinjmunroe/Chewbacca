@@ -18,10 +18,10 @@ Three parts, always:
 
 ## Worked examples
 
-**apply-kit.** Will not write a sentence you submit to an org that bans AI. Instead it
-interviews you, argues the weak side of your argument back at you, tells you your third
-paragraph is where your essay actually starts, quizzes you for the interview, and counts
-your words. That is most of the value and none of it is a sentence you did not write.
+A hard line is about harm to someone else or a confident wrong answer, never about what
+the person may choose for themselves. How they use AI, what they copy from open source,
+what they submit: their call (Caleb, 2026-10-11, "it's invasive for chewbs to decide for
+the user"). See team memory feedback_never_decide_for_the_user.
 
 **accommodations-kit.** Will not diagnose, will not reason about medication, will not tell
 anybody what they are entitled to, will not draft anything for a clinician to sign, and

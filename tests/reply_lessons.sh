@@ -1,21 +1,27 @@
 #!/bin/bash
-# reply-lessons refuses the chat repeats Caleb corrected twice in a fortnight:
+# reply-lessons catches the chat repeats Caleb corrected twice in a fortnight,
+# and never refuses: a hit goes to voice-flags.pending for the next reply,
+# because a Stop refusal shows him the reply twice (2026-10-11 screenshot).
+# The repeats:
 # u'll and friends (feedback_writing_as_caleb), unasked study nudges
 # (feedback_no_unasked_study_nudges), asking for his paper draft
 # (feedback_paper_draft_first_then_compare). The incident replies are the cases.
 set -u
 HOOK="$(cd "$(dirname "$0")/.." && pwd)/.claude/hooks/reply-lessons.sh"
 T="$(mktemp -d)"; trap 'rm -rf "$T"' EXIT
-export CHEWBACCA_LOG_DIR="$T/logs"
+export CHEWBACCA_LOG_DIR="$T/logs" CHEWBACCA_HOME="$T/home"
 fail=0
 transcript() {  # what he typed last
   jq -nc --arg t "$1" '{type:"user", message:{content:$t}, timestamp:"2026-10-10T23:40:00Z"}' > "$T/t.jsonl"
   jq -nc '{type:"user", message:{content:[{type:"tool_result", content:"x"}]}}' >> "$T/t.jsonl"
 }
-expect() {  # code, label, reply, [stop_hook_active]
-  got=$(jq -nc --arg m "$3" --arg p "$T/t.jsonl" --argjson a "${4:-false}" \
+expect() {  # flagged (2) or clean (0), label, reply, [stop_hook_active]
+  rm -f "$T/home/voice-flags.pending"
+  code=$(jq -nc --arg m "$3" --arg p "$T/t.jsonl" --argjson a "${4:-false}" \
           '{last_assistant_message:$m, transcript_path:$p, stop_hook_active:$a}' |
         bash "$HOOK" 2>"$T/err"; echo $?)
+  [ "$code" = 0 ] || { echo "FAIL: the hook refused ($code), which shows him the reply twice: $2"; fail=1; }
+  got=0; [ -s "$T/home/voice-flags.pending" ] && got=2
   [ "$got" = "$1" ] || { echo "FAIL: expected $1, got $got: $2"; cat "$T/err"; fail=1; }
 }
 transcript "how is the firm foundation site looking"

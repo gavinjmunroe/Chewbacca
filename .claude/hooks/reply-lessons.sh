@@ -21,9 +21,13 @@ type hook_init >/dev/null 2>&1 && hook_init reply-lessons.sh 5
 #                                   said "Bro just do it ... I talked to the
 #                                   teacher it is chill".
 #
-# One perl process, no model, at most one refusal per prompt: a Stop refusal
-# makes him see the reply twice (feedback_duplicate_replies_are_guard_rewrites),
-# so the rules stay narrow and the hook stays quiet when stop_hook_active is set.
+# One perl process, no model. It never refuses. A Stop refusal can't retract
+# a reply that's already on his screen, so exit 2 only added a rewritten copy
+# under it. 2026-10-11 4:47pm a "u're" got the whole scripture answer sent
+# twice, and he sent a screenshot of both: "Why is this still happening? We
+# have tried to fix it 10+ time". A hit goes to voice-flags.pending instead,
+# the file slop-guard already feeds forward, and voice-remind.sh puts it in
+# front of the next reply before it's written.
 set -uo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 INPUT=$(cat)
@@ -72,7 +76,14 @@ sub asked_about_school {
 }
 for my $r (@rules) {
   next if $r->[2] && $m =~ $r->[0] && asked_about_school();
-  if ($m =~ $r->[0]) { print STDERR "reply-lessons: this reply $r->[1] Rewrite it without that.\n"; exit 2; }
+  if ($m =~ $r->[0]) {
+    my $dir = $ENV{CHEWBACCA_HOME} || "$ENV{HOME}/.chewbacca";
+    mkdir $dir unless -d $dir;
+    if (open(my $fh, ">>:encoding(UTF-8)", "$dir/voice-flags.pending")) {
+      print $fh "reply-lessons: your last reply $r->[1]\n"; close $fh;
+    }
+    exit 0;
+  }
 }
 exit 0;
 PL

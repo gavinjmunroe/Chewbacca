@@ -1,6 +1,6 @@
 # Competitors
 
-For Caleb, Gavin, Jake and Semyon. Written 2026-10-05, the day Ghost launched Core, after Caleb said: "We gotta MOG ghost, instinct, etc."
+For Caleb, Gavin, Jake and Semyon. Written 2026-10-05, the day Ghost launched Core, and extended 2026-10-11 with the headless SaaS sweep, after Caleb said: "We gotta MOG ghost, instinct, etc."
 
 This covers each product that sells the same promise Chewbacca OS makes (an assistant that knows your texts, mail, calendar and meetings and acts on them), what it really does, where its data goes, what its own launch film shows, what people have actually complained about, and the bar Chewbacca has to clear to beat it. It ends with ten demo jobs taken from their films, ranked by how much of their pitch Chewbacca would take away by doing each one on a stranger's own laptop.
 
@@ -282,6 +282,68 @@ Totals raised, from search results unless a round announcement was read; "~" mea
 
 On 2026-10-02 Apple said it will add "very explicit user action" before any AI agent gets Full Disk Access, after complaints that Meta's Muse read a columnist's Messages ([capital.com](https://capital.com/en-gb/news/apple-says-it-will-flag-ai-requests-for-mac-data) [read]). Chewbacca's chat.db read depends on Full Disk Access. Onboarding has to make that grant a deliberate, explained step before Apple makes it one.
 
+## The 2026-10-11 sweep: headless SaaS and the rest of the list
+
+Run overnight after Caleb asked for every company Chewbacca should beat (ledger `competitor-mog-research-2026-10-11`). The plain-language version for him is `~/Downloads/Companies to mog.md`. Marks follow the rules at the top of this doc.
+
+### The finding
+
+In 2026 the SaaS front door moved to MCP. HockeyStack, Salesforce, HubSpot, Attio and Granola each ship a hosted MCP server, and each one sees only its own data. None of them joins the CRM, the inbox, the calendar and the texts on the user's own machine. Each new vendor MCP is one more tool behind Chewbacca's press gate (L2 in [MOG-PLAN.md](MOG-PLAN.md)), so the headless crowd are suppliers, not rivals.
+
+### HockeyStack
+
+- Ships: attribution and buyer-journey analytics, agents (Odin v3, Nova, Forecast Challenger), and an MCP server at mcp.hockeystack.com that reads and writes dashboards, reports, deals and goals over OAuth, scoped to what the user sees in the UI, one instance at a time ([MCP docs](https://docs.hockeystack.com/marketing-intelligence/mcp.md) [read]).
+- Positioning: "The Dashboard is Dead," 2026-04-15, "No dashboards. No digging. No delayed decisions." ([blog](https://www.hockeystack.com/blog-posts/the-dashboard-is-dead-now-what) [read]). The UI was not removed: the homepage still sells "Custom Reports & Dashboards" ([hockeystack.com](https://www.hockeystack.com/) [read]). "Killed its UI" is a framing, not a fact.
+- Number: 300+ customers, $50M raised, 100 people, from co-founder and CRO Emir Atli's departure post, 2026-09-23 ([fxtwitter](https://api.fxtwitter.com/emiratli_/status/2102868407410720900) [read]).
+- Loses: no inbox, texts or calendar; leadership churn in September.
+- Chewbacca only: finds who the seller already knows at a hot account in their own messages and drafts the note.
+
+### Salesforce Headless 360
+
+- Ships: every capability as API, MCP tool or CLI command, announced 2026-04-15 at TDX: 60+ new MCP tools, 30+ coding skills, an AgentExchange of 10,000 Salesforce apps and 1,000+ agents and tools ([newsroom](https://www.salesforce.com/news/stories/salesforce-headless-360-announcement/) [read]); 4,000+ APIs and 220+ CLI commands ([developer blog](https://developer.salesforce.com/blogs/2026/05/headless-360-what-it-means-for-developers) [snippet]). Parker Harris: "Why should you ever log into Salesforce again?" (newsroom [read]).
+- Price: Agentforce $2 a conversation, $500 per 100k Flex Credits, $125 to $150 a user a month add-on, Max editions from $550 a user a month ([pricing](https://www.salesforce.com/agentforce/pricing/) [read]).
+- Loses: requires Salesforce; developer edition capped at 110 API requests a month ([The Register](https://www.theregister.com/software/2026/04/15/salesforce-debuts-headless-360-agentic-platform/5226455) [read]).
+- Chewbacca only: it is the caller. A client on Salesforce gets driven from the same gate as the rest of the outbound stack and Gmail.
+
+### Cursor
+
+- Number: $3B ARR in May 2026; SpaceX bought Anysphere for $60B in stock, closed 2026-08-14 ([Wikipedia](<https://en.wikipedia.org/wiki/Cursor_(company)>) [read]).
+- Loses: stops at the repo; a July 2025 pricing change it apologized for and rolled back; a support bot that invented a login policy in April 2025 (same [read]). Cursor is itself a Granola enterprise customer ([TNW](https://thenextweb.com/news/granola-series-c-meeting-ai-enterprise-context) [read]).
+- Chewbacca only: runs inside Claude Code and Codex on the user's own plan and adds their texts, mail, calendar and meetings.
+
+### Raycast
+
+- Ships: launcher on Mac, Windows and iOS with AI Chat and Agents. Free has no AI; Pro $10, Plus $20, Max $50 a month with 500, 3,000 or 7,500 AI credits ([pricing](https://www.raycast.com/pricing) [read]).
+- Number: $30M Series B, "hundreds of thousands of Mac users," 2024-09-25 ([blog](https://raycast.com/blog/series-b) [read]). No newer count found.
+- Loses: no memory of people, threads or promises.
+- Chewbacca only: the typed graph that answers "who's waiting on me."
+
+### Eigen
+
+- Ships: "a mutual friend," mostly in stealth ([teameigen.com](https://teameigen.com) [read]). $15M seed led by Benchmark, 2026-04-20 ([Ventureburn](https://ventureburn.com/eigen-secures-15m-seed-for-mutual-friend-ai-tool/) [read]). Team of 6 per the founder on Dialectic ep 47 (team memory `project_eigen_mutual_friend`).
+- Loses: one global persona in their cloud that knows only what people tell it.
+- Chewbacca only: already knows the user's network from their own messages, nothing pooled. Amber's fight more than Chewbacca's.
+
+### OpenAI Dots
+
+- Ships: always-on agents on their own cloud computer, 4,000+ apps, through ChatGPT, Slack, Teams or a call; one Dot per Pro or Business Premium plan; announced 2026-09-29 ([9to5Google](https://9to5google.com/2026/09/29/openai-dots-agent/) [read]).
+- Loses: the user's life lives on OpenAI's computer; it reaches the Mac only by grant.
+- Chewbacca only: acts as the user on their own Mac and reads every write back.
+
+### Headless SaaS, two more
+
+- HubSpot: remote CRM MCP at mcp.hubspot.com, read and write over OAuth ([docs](https://developers.hubspot.com/docs/build-with-ai/remote-mcp-server) [read]); GA 2026-04-13 with 12 object types ([usecarly](https://www.usecarly.com/blog/hubspot-mcp/) [snippet]).
+- Attio: hosted MCP at mcp.attio.com, reads auto-approved, writes confirmed, call recordings searchable ([docs](https://docs.attio.com/mcp/overview.md) [read]); GA Feb 2026 with 37 tools ([scalekit](https://www.scalekit.com/blog/attio-mcp-vs-api) [snippet]).
+
+### Updates to sections above
+
+- Ghost: ghost.ai said "First batch open now" on 2026-10-11 [read]. A blog's "batch 1 sold out, ships Oct 31" ([cellcog](https://cellcog.ai/blog/ghost-core-personal-ai-computer/) [snippet]) is not on the site, so it is not repeated.
+- Granola: the suit is Chamberlain v. Granola, Inc. and Granola Labs Ltd. in the Northern District of California, case 3:26-cv-07926-EMC, now [read] at [PPC Land](https://ppc.land/granola-sued-for-recording-meetings-without-consent-to-train-ai-models/). Granola ships an MCP server and personal and enterprise APIs, and has not disclosed revenue or users (TNW [read]).
+- OPAL: opal.fashion still says nothing about on-device processing or where audio goes [read].
+
+### Not found
+
+Proof HockeyStack removed its UI; a 2026 user count for Granola, Cursor or Raycast; any OPAL number outside Caleb's own notes.
 ## Sources
 
 ### Read

@@ -101,6 +101,31 @@ reference only). The rules, each with where it came from:
 13. **A guess says it is a guess.** A task read out of a text by rule carries
     "(guess)" and the message it came from.
 
+## Motion and color a surface owes the person
+
+Researched 2026-10-11 (hud/CLAUDE.md motion rules 11 to 16 hold the sources
+and numbers): Material's container transform, SwiftUI's matchedGeometryEffect,
+visionOS's motion and window guidance, Lemma's shipped bundle, the T
+Combinator site's morph code and Emil Kowalski's teardown of UI animation.
+
+14. **A detail opens out of the row that asked for it.** Put the detail's
+    components in a `Stack` with `from=@/<surface>/<pointer>` and set that
+    pointer to the pressed row's id; clear it to close. Light travels from
+    the row to the card and back. Never draw a detail as a new block under
+    the list: that is the "stack of dashboards" Caleb rejected.
+15. **Keep a value's component and change its data.** A count, a state word
+    or a lane that changes is one `d` line; the renderer rolls, crossfades or
+    slides it. Re-sending the component throws the motion away.
+16. **One hue per meaning, the same everywhere.** Needs you is amber, working
+    is the accent cyan, done is green, recording is red, and nothing else
+    wears those four. Bind a Text's `tone` to `needs`, `running`, `done` or
+    `recording` instead of picking a colour. All four hold 4.5:1 on the glass.
+17. **Content is the interface; the box is not.** A card is content on the
+    glass with a lit edge while it is open, not a grey frosted panel inside
+    a grey frosted panel. Caleb, 2026-10-11: "The future of UX does not look
+    like macos." Light that exists only while something is changing beats a
+    border that is always there.
+
 ## The bar to clear: Opal's desktop, 2026-10-01
 
 Caleb sent the Chewbacca group a screenshot of Opal's desktop glass (OPAL,

@@ -49,13 +49,15 @@ enum AgentPalette {
     /// its symbol.
     static func state(_ name: String) -> (tone: Color, word: String, symbol: String) {
         switch name {
-        case "needs": return (HUD.warn, "Needs you", "exclamationmark.triangle.fill")
-        case "failed": return (HUD.warn, "Failed", "xmark.circle.fill")
-        case "running": return (HUD.accent, "Working", "circle.dotted")
+        case "needs": return (HUD.needsYou, "Needs you", "exclamationmark.triangle.fill")
+        // A failure is something that needs you, so it wears that hue; the
+        // symbol and the word say which kind.
+        case "failed": return (HUD.needsYou, "Failed", "xmark.circle.fill")
+        case "running": return (HUD.running, "Working", "circle.dotted")
         // Out of its plan's usage until a reset: nothing to do but wait, so
         // it is quiet, not loud like a failure.
         case "out": return (HUD.dim, "Paused", "moon.zzz.fill")
-        default: return (HUD.good, "Done", "checkmark.circle.fill")
+        default: return (HUD.done, "Done", "checkmark.circle.fill")
         }
     }
 
@@ -137,6 +139,8 @@ struct AgentTilesView: View {
             }
         }
         .animation(Motion.snappy(reduced: reduceMotion), value: tiles)
+        // A count that changes rolls in place even when no tile moved.
+        .animation(Motion.snappy(reduced: reduceMotion), value: counts)
     }
 }
 
@@ -167,9 +171,13 @@ struct TileView: View {
                     // word on every tile (Realm design.md, show the part that
                     // varies). It stays in the accessibility label.
                     Spacer(minLength: 4)
+                    // A state change crossfades the chip where it is; the
+                    // tile does not move (motion rule 12).
                     HStack(spacing: 3) {
                         Image(systemName: state.symbol).font(.system(size: 10, weight: .semibold))
+                            .contentTransition(.symbolEffect(.replace))
                         Text(state.word).font(.system(size: 11, weight: .semibold))
+                            .contentTransition(.opacity)
                     }
                     .foregroundStyle(state.tone)
                     .lineLimit(1)

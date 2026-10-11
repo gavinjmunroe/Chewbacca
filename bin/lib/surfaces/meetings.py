@@ -363,7 +363,9 @@ class Meetings(Provider):
         return [
             comp(self.cid("s"), "Screen", title=self.title),
             comp(self.cid("purpose"), "Text", value=PURPOSE, tone="muted"),
-            comp(self.cid("state"), "Text", value=Bind(self.p("state"))),
+            # Recording wears the recording hue on every surface (hud
+            # HUD.meaning); any other state is plain ink.
+            comp(self.cid("state"), "Text", value=Bind(self.p("state")), tone=Bind(self.p("stateTone"))),
             comp(self.cid("capture"), "Button", label=Bind(self.p("captureLabel")), action=f"{ACTION_PREFIX}capture"),
             comp(self.cid("note"), "Text", value=Bind(self.p("note")), tone="muted"),
             comp(self.cid("counts"), "Stack", direction="grid", cols=2, gap=3),
@@ -398,7 +400,7 @@ class Meetings(Provider):
         return {self.p("status"): ""}
 
     def blank(self) -> dict:
-        return {self.p("state"): "", self.p("setup"): [], self.p("rows"): [], self.p("shownRow"): "",
+        return {self.p("state"): "", self.p("stateTone"): "", self.p("setup"): [], self.p("rows"): [], self.p("shownRow"): "",
                 self.p("week"): "", self.p("owed"): "", self.p("head"): "", self.p("meta"): "",
                 self.p("summary"): [], self.p("decisions"): [], self.p("itemsCaption"): "", self.p("items"): [],
                 self.p("itemsWhy"): [], self.p("whyLabel"): "", self.p("transcript"): [], self.p("txLabel"): "",
@@ -428,6 +430,7 @@ class Meetings(Provider):
         capture = data.get("capture") or {}
         out[self.p("captureLabel")] = "Stop" if capture.get("running") else "Record now"
         out[self.p("state")] = self.state_line(capture, now)
+        out[self.p("stateTone")] = "recording" if capture.get("running") else ""
         setup = data.get("setup")
         if setup:
             out[self.p("note")] = note_for(data, error, setup["headline"], data.get("_at"))
@@ -442,6 +445,7 @@ class Meetings(Provider):
             # Anarlog recording on its own, with no end time yet.
             mins = int((now - live["start"]).total_seconds() // 60) if live["start"] else 0
             out[self.p("state")] = " · ".join(["Recording", clip(live["title"], 40)] + ([f"{mins} min"] if mins else []))
+            out[self.p("stateTone")] = "recording"
         recent = [r for r in rows if r["start"] and (now - r["start"]).days < 7]
         out[self.p("week")] = len(recent)
         out[self.p("owed")] = sum(1 for r in recent for i in r["items"] if not i["added"] and not i["done"])

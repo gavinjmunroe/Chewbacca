@@ -936,7 +936,11 @@ struct LiquidGlass: ViewModifier {
 public enum HUD {
     /// Cyan rather than the system accent, which could be anything the person
     /// picked and is usually wrong against a dark translucent card.
-    public static let accent = Color(red: 0.42, green: 0.83, blue: 0.96)
+    ///
+    /// Lifted from (0.42, 0.83, 0.96) on 2026-10-11, when it became the
+    /// working hue: that measured 4.498:1 as text on the glass's worst
+    /// ground, a hair under AA. This is 4.63:1 and looks the same.
+    public static let accent = Color(red: 0.44, green: 0.84, blue: 0.97)
     public static let ink = Color.white
 
     /// Secondary and tertiary text.
@@ -962,6 +966,28 @@ public enum HUD {
     public static let warn = Color(red: 0.99, green: 0.79, blue: 0.36)
     public static let bad = Color(red: 1.00, green: 0.45, blue: 0.42)
 
+    /// One hue per meaning, the same on every surface (2026-10-11, Caleb:
+    /// "the hud is allowed to have intentional color!!!"). Needs you, working,
+    /// done and recording are the four states a glance is for, and nothing
+    /// else wears these hues. Each holds 4.5:1 as text on the glass's worst
+    /// ground (L 0.087, Glass.swift); `MeaningTests` measures them.
+    public static let needsYou = warn
+    public static let running = accent
+    public static let done = good
+    /// Red, lifted until it holds 4.5:1 as text: `bad`'s red measures about
+    /// 2.9:1 on the same ground, which is why recording does not reuse it.
+    public static let recording = Color(red: 1.00, green: 0.71, blue: 0.68)
+    /// The meanings, by the names a sender binds a `tone` to.
+    public static func meaning(_ name: String?) -> Color? {
+        switch name {
+        case "needs", "needsYou": return needsYou
+        case "running", "working": return running
+        case "done": return done
+        case "recording": return recording
+        default: return nil
+        }
+    }
+
     /// A shape for a tone, so meaning does not depend on colour alone.
     ///
     /// Differentiate Without Color is a real setting and colour-blindness is
@@ -973,6 +999,10 @@ public enum HUD {
         case "good", "positive", "success": return "checkmark.circle.fill"
         case "warn", "warning": return "exclamationmark.triangle.fill"
         case "bad", "negative", "danger", "critical": return "xmark.octagon.fill"
+        case "needs", "needsYou": return "exclamationmark.triangle.fill"
+        case "running", "working": return "circle.dotted"
+        case "done": return "checkmark.circle.fill"
+        case "recording": return "record.circle"
         default: return nil
         }
     }
@@ -984,6 +1014,10 @@ public enum HUD {
         case "warn", "warning": return "warning"
         case "bad", "negative", "danger", "critical": return "critical"
         case "miss": return "expected here, not found"
+        case "needs", "needsYou": return "needs you"
+        case "running", "working": return "working"
+        case "done": return "done"
+        case "recording": return "recording"
         default: return nil
         }
     }
@@ -993,7 +1027,7 @@ public enum HUD {
         case "good", "positive", "success": return good
         case "warn", "warning": return warn
         case "bad", "negative", "danger", "critical", "miss": return bad
-        default: return accent
+        default: return meaning(name) ?? accent
         }
     }
 

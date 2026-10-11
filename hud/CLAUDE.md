@@ -965,6 +965,17 @@ spaces inside them: `points=[31,28,44]`, not `points=[31, 28, 44]`.
   c t Text value="Nothing is overdue." tone=muted
   ```
 
+  `tone=` also takes a meaning, and a state line should: `needs` (amber),
+  `running` (the accent cyan), `done` (green) or `recording` (red). The line
+  is set in that hue with a lit dot before it, the same four hues every
+  surface uses for those four states and for nothing else, each 4.5:1 as text
+  on the glass (`MeaningTests`). Bind it, `tone=@/meetings/stateTone`, so a
+  state change is one `d` line and crossfades in place.
+
+  ```
+  c st Text value=@/state tone=@/stateTone
+  ```
+
 - **List** Plain bullets. Prefer Events when the items happened at times, and Bars when they have magnitudes worth comparing.
 
   ```

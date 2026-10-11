@@ -277,12 +277,27 @@ public struct SurfaceView: View {
                     .padding(.top, 2))
 
         case "Text":
-            let muted = p["tone"]?.stringValue == "muted"
+            let tone = p["tone"]?.stringValue
+            let muted = tone == "muted"
+            let meaning = HUD.meaning(tone)
             return AnyView(
-                Text(p["value"]?.display ?? "")
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(muted ? HUD.faint : HUD.ink.opacity(0.9))
-                    .fixedSize(horizontal: false, vertical: true))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    // A state line in a meaning's hue carries its dot too,
+                    // so the meaning never rests on colour alone.
+                    if let meaning {
+                        Circle().fill(meaning).frame(width: 6, height: 6)
+                            .shadow(color: meaning.opacity(0.6), radius: 3)
+                            .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
+                            .transition(.opacity)
+                    }
+                    Text(p["value"]?.display ?? "")
+                        .font(.system(size: 12.5, weight: meaning == nil ? .regular : .medium))
+                        .foregroundStyle(meaning ?? (muted ? HUD.faint : HUD.ink.opacity(0.9)))
+                        // A line that changes says so in place: the old words
+                        // fade as the new ones come (motion rule 12).
+                        .contentTransition(.opacity)
+                        .fixedSize(horizontal: false, vertical: true)
+                })
 
         default:
             let items = p["items"]?.arrayValue ?? []

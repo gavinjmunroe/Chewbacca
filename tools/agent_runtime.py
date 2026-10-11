@@ -282,9 +282,31 @@ def is_teammate(target=None):
         return False
 
 
+def team_index_path():
+    return shared_home() / 'team-memory-index.md'
+
+
+def write_team_index():
+    """Regenerate the compact team index that teammates import (tools/team_index.py).
+
+    The full team/memory/MEMORY.md was 11,636 tokens of every session on
+    2026-10-11, the largest single file loaded. The compact one keeps every
+    slug and every lesson whole. Returns its path, or None when it cannot be
+    written, so the block falls back to importing the full index.
+    """
+    sys.path.insert(0, str(ROOT / 'tools'))
+    import team_index
+    try:
+        team_index.write(ROOT / 'team/memory/MEMORY.md', team_index_path())
+    except OSError:
+        return None
+    return team_index_path()
+
+
 def instruction_block(spec, team=False):
     notes = '\n'.join('- ' + note for note in spec['notes'])
-    team_memory = f'{TEAM_LINE}\n@{ROOT / "team/memory/MEMORY.md"}\n\n' if team else '\n'
+    index = team_index_path() if team_index_path().is_file() else ROOT / 'team/memory/MEMORY.md'
+    team_memory = f'{TEAM_LINE}\n@{index}\n\n' if team else '\n'
     return (f'{BEGIN}\n## Chewbacca runtime: {spec["label"]}\n\n'
             f'Read `{ROOT / "config/instructions/agent-neutral.md"}` for shared guidance.\n'
             f'Shared skills: `{shared_home() / "skills"}`.\n'
@@ -442,6 +464,8 @@ def setup(name, brain=None, import_claude_skills=False, person_name=None, team=F
                 # host added later (connect, --runtime both) gets it too.
                 saved['team'] = True
                 context.atomic_write(shared / 'context.json', json.dumps(saved) + '\n')
+            if teammate:
+                write_team_index()
             context.merge_block(target, instruction_block(spec, teammate), BEGIN, END)
         import host_mcp
         mcp_added = host_mcp.sync([key]).get(key, [])

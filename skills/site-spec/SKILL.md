@@ -1,6 +1,8 @@
 ---
 name: site-spec
-description: Build a website for a real small business (food truck, restaurant, shop, trade, local service) out of what the business has already published, in its own brand, as a private draft the owner sees before anything goes live. Use when the user asks to build, redo or pitch a site for a named business, to make a spec or portfolio site, or to "blow the owner away". Also use when a site built for a business got its facts, hours or brand wrong.
+description: "Build a site for a real small business from what it already published, in its own brand, as a private draft for the owner. Use to build, redo or pitch a named business's site, or fix its facts."
+triggers: >-
+  Build a website for a real small business (food truck, restaurant, shop, trade, local service) out of what the business has already published, in its own brand, as a private draft the owner sees before anything goes live. Use when the user asks to build, redo or pitch a site for a named business, to make a spec or portfolio site, or to "blow the owner away". Also use when a site built for a business got its facts, hours or brand wrong.
 ---
 
 # A site for a real business, from its own words

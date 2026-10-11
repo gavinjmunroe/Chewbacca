@@ -1,6 +1,8 @@
 ---
 name: mac-followups
-description: Scan the user's texts, email, or calendar for things that need a response or an action, and turn them into follow-up tasks. Use when the user asks what they are forgetting, who is waiting on them, what they owe people, to catch up on messages, to follow up on something, or to turn their inbox into a to-do list.
+description: "Scan texts, email or calendar for things that need a reply or action and turn them into follow-up tasks. Use for what am I forgetting, who's waiting on me, what I owe people, inbox to to-do."
+triggers: >-
+  Scan the user's texts, email, or calendar for things that need a response or an action, and turn them into follow-up tasks. Use when the user asks what they are forgetting, who is waiting on them, what they owe people, to catch up on messages, to follow up on something, or to turn their inbox into a to-do list.
 requires: [chewie, people]
 ---
 

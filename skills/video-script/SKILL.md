@@ -1,6 +1,8 @@
 ---
 name: video-script
-description: Brainstorm short-form video ideas and write scripts that hold viewers, using the creator's own analytics. Use when deciding what to post next, choosing a hook or angle, writing or tightening a reel, TikTok or Short script before filming, planning talking-head retention, or turning a posted video's insights and retention curve into lessons. Not for cutting footage (video-edit), animation (animated-video), or the visual craft of a short (creative-video).
+description: "Brainstorm short-form ideas and write scripts that hold viewers from the creator's analytics: hooks, angles, retention, lessons from posted videos. Not cutting footage, animation or visual craft."
+triggers: >-
+  Brainstorm short-form video ideas and write scripts that hold viewers, using the creator's own analytics. Use when deciding what to post next, choosing a hook or angle, writing or tightening a reel, TikTok or Short script before filming, planning talking-head retention, or turning a posted video's insights and retention curve into lessons. Not for cutting footage (video-edit), animation (animated-video), or the visual craft of a short (creative-video).
 ---
 
 # Video script

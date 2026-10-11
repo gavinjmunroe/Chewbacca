@@ -1,6 +1,8 @@
 ---
 name: mac-runtime
-description: Run a multi-step task on the Mac as a formal plan that is type-checked, executed, verified, and logged - instead of improvising bash step by step. Use for any task with more than two or three steps, anything that ends in an irreversible action (send, pay, post, submit), or anything the user will want to debug afterward. This is Chewbacca's agent runtime.
+description: "Run a multi-step Mac task as a typed plan that is checked, executed, verified and logged. Use for 3+ steps, anything ending in send, pay, post or submit, or work they'll want to debug later."
+triggers: >-
+  Run a multi-step task on the Mac as a formal plan that is type-checked, executed, verified, and logged - instead of improvising bash step by step. Use for any task with more than two or three steps, anything that ends in an irreversible action (send, pay, post, submit), or anything the user will want to debug afterward. This is Chewbacca's agent runtime.
 requires: [chewie]
 ---
 

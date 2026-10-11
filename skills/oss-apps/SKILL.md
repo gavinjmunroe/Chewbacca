@@ -1,6 +1,8 @@
 ---
 name: oss-apps
-description: "Find the open source version of a Mac app or proprietary product, and say whether its license lets you build on it and ship. Use when someone asks for an open source alternative to Notion, Figma, Bartender, Photoshop or any app, wants a free or self-hosted replacement, asks what open source Mac apps exist in a category, wants a repo to fork or remix into a new app, or asks whether a project's license is MIT, GPL or AGPL before reusing code."
+description: "Find the open source version of a Mac app or product and whether its license (MIT, GPL, AGPL) allows building on it. Use for open source alternatives, self-hosted replacements, or a repo to fork."
+triggers: >-
+  Find the open source version of a Mac app or proprietary product, and say whether its license lets you build on it and ship. Use when someone asks for an open source alternative to Notion, Figma, Bartender, Photoshop or any app, wants a free or self-hosted replacement, asks what open source Mac apps exist in a category, wants a repo to fork or remix into a new app, or asks whether a project's license is MIT, GPL or AGPL before reusing code.
 license: MIT
 requires: [oss-apps]
 ---

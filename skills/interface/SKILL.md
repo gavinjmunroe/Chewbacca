@@ -1,6 +1,8 @@
 ---
 name: interface
-description: "Build any interface by loading a preset instead of re-deriving one: dashboards, tables, forms, detail views, settings, wizards, feeds, HUD panels, landing pages. Use when asked to build, show, visualize, lay out or mock up a screen, dashboard, chart, UI or app, when the user wants to see data rather than be told it, and before generating any UI from a data source. Also fires on: looks bad, looks generic, ai slop, slop, ugly, redesign, restyle, make it look, landing page, hero section, component, layout, typography, spacing, visual design."
+description: "Build any interface from a preset: dashboards, tables, forms, settings, wizards, feeds, HUD panels, landing pages. Use to build, lay out or redesign UI, or when it looks generic, ugly or like slop."
+triggers: >-
+  Build any interface by loading a preset instead of re-deriving one: dashboards, tables, forms, detail views, settings, wizards, feeds, HUD panels, landing pages. Use when asked to build, show, visualize, lay out or mock up a screen, dashboard, chart, UI or app, when the user wants to see data rather than be told it, and before generating any UI from a data source. Also fires on: looks bad, looks generic, ai slop, slop, ugly, redesign, restyle, make it look, landing page, hero section, component, layout, typography, spacing, visual design.
 ---
 
 # Interface

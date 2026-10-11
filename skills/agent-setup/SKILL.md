@@ -1,6 +1,8 @@
 ---
 name: agent-setup
-description: "Finish the parts of this kit's install that need a browser or a permission dialog: screen and accessibility grants, provider keys, any step behind a web console, and verification. Use after setup.sh, when doctor.sh reports a tool installed but unusable, or when the user says to finish setting something up themselves."
+description: "Finish install steps that need a browser or a permission dialog: screen and accessibility grants, provider keys, web consoles. Use after setup.sh or when doctor finds a tool installed but unusable."
+triggers: >-
+  Finish the parts of this kit's install that need a browser or a permission dialog: screen and accessibility grants, provider keys, any step behind a web console, and verification. Use after setup.sh, when doctor.sh reports a tool installed but unusable, or when the user says to finish setting something up themselves.
 license: MIT
 requires: [chewbacca]
 ---

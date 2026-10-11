@@ -1,6 +1,8 @@
 ---
 name: call-coach
-description: Debrief a sales or client call from its transcript or recording. Use when the user shares a call transcript, mentions a call that went well or badly, asks how they did, wants to prep for a follow-up, or asks what they missed. Also use on webinar, pitch and demo transcripts, and before a meeting to build a battle card on who is on the other side.
+description: "Debrief a sales or client call from its transcript or recording. Use for a call transcript, how did I do, follow-up prep, what I missed, webinar or pitch transcripts, and battle cards before a meeting."
+triggers: >-
+  Debrief a sales or client call from its transcript or recording. Use when the user shares a call transcript, mentions a call that went well or badly, asks how they did, wants to prep for a follow-up, or asks what they missed. Also use on webinar, pitch and demo transcripts, and before a meeting to build a battle card on who is on the other side.
 ---
 
 # call-coach

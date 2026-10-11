@@ -235,13 +235,32 @@ class RuntimeTests(unittest.TestCase):
         saved = json.loads((runtime.shared_home() / 'context.json').read_text())
         self.assertEqual(saved['brain_dir'], str((self.home / 'brain').resolve()))
         self.assertIs(saved['team'], True)
-        self.assertIn('team/memory/MEMORY.md', claude.read_text())
+        compact = '@' + str(runtime.team_index_path())
+        self.assertIn(compact, claude.read_text())
         runtime.setup('claude-code')
-        self.assertIn('team/memory/MEMORY.md', claude.read_text())
+        self.assertIn(compact, claude.read_text())
         runtime.setup('claude-code', no_team=True)
-        self.assertNotIn('team/memory/MEMORY.md', claude.read_text())
+        self.assertNotIn(runtime.TEAM_LINE, claude.read_text())
         runtime.setup('claude-code')
-        self.assertNotIn('team/memory/MEMORY.md', claude.read_text())
+        self.assertNotIn(runtime.TEAM_LINE, claude.read_text())
+
+    def test_teammate_imports_compact_index_with_every_slug_and_lesson(self):
+        # 2026-10-11: the full index was 11,636 tokens of every session.
+        path = runtime.write_team_index()
+        body = path.read_text()
+        source = (ROOT / 'team/memory/MEMORY.md').read_text()
+        slugs = [line[2:].split(':', 1)[0] for line in source.splitlines() if line.startswith('- ')]
+        for slug in slugs:
+            self.assertIn('- ' + slug, body)
+        for line in source.splitlines():
+            if line.startswith('- feedback_'):
+                self.assertIn(line, body)
+        self.assertIn('never goes here', body)
+        self.assertLess(len(body), len(source))
+        spec = runtime.registry()['runtimes']['claude-code']
+        self.assertIn('@' + str(path), runtime.instruction_block(spec, True))
+        path.unlink()
+        self.assertIn('@' + str(ROOT / 'team/memory/MEMORY.md'), runtime.instruction_block(spec, True))
 
     def test_shared_guidance_is_discoverable_without_hooks_for_each_runtime(self):
         for key in ('claude-code', 'codex'):

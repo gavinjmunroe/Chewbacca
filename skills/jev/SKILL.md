@@ -1,6 +1,8 @@
 ---
 name: jev
-description: "Use Chewbacca's Jev integration for cheap typed decisions, semantic skill selection, classification, scoring, and yes/no judgments with TypeSafe. Use when routing or evaluating supplied text can replace a generative-model parsing step."
+description: "Chewbacca's Jev integration for cheap typed decisions: skill selection, classification, scoring and yes/no judgments with TypeSafe. Use when supplied text can be routed without a generative model."
+triggers: >-
+  Use Chewbacca's Jev integration for cheap typed decisions, semantic skill selection, classification, scoring, and yes/no judgments with TypeSafe. Use when routing or evaluating supplied text can replace a generative-model parsing step.
 ---
 
 # Jev in Chewbacca

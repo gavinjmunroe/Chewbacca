@@ -294,7 +294,7 @@ def frontmatter(path):
     if len(head) < 3:
         return None, None
     body = head[1]
-    name = desc = None
+    name = desc = trig = None
     key = None
     for line in body.split("\n"):
         m = re.match(r"^([a-zA-Z_-]+):\s*(.*)$", line)
@@ -304,10 +304,17 @@ def frontmatter(path):
                 name = val.strip().strip("'\"")
             elif key == "description":
                 desc = val.strip().strip("'\"")
+            elif key == "triggers":
+                trig = "" if val.strip() in (">", ">-", "|", "|-") else val.strip().strip("'\"")
             continue
         if key == "description" and line.strip():
             desc = (desc or "") + " " + line.strip().strip("'\"")
-    return name, desc
+        elif key == "triggers" and line.strip():
+            trig = ((trig or "") + " " + line.strip()).strip()
+    # `triggers:` holds a skill's full routing text. Claude Code never loads it,
+    # so the description it does load can stay near 200 characters (cut from up
+    # to 1,015 on 2026-10-11) while routing reads exactly what it read before.
+    return name, (trig or desc)
 
 skills = []
 seen = set()

@@ -1,6 +1,8 @@
 ---
 name: prospect-brief
-description: Build a brief on a person or company before a call, pitch or intro. Use when the user names someone they are about to meet, has a meeting or call with them tomorrow or later today, asks who someone is, asks what to say to them, is preparing outreach, or wants to know whether a lead is worth the hours. Also use before drafting any message to a named person.
+description: "Brief on a person or company before a call, pitch or intro. Use when they name someone they're meeting, ask who someone is or what to say, prep outreach, or ask if a lead is worth the hours."
+triggers: >-
+  Build a brief on a person or company before a call, pitch or intro. Use when the user names someone they are about to meet, has a meeting or call with them tomorrow or later today, asks who someone is, asks what to say to them, is preparing outreach, or wants to know whether a lead is worth the hours. Also use before drafting any message to a named person.
 ---
 
 # prospect-brief

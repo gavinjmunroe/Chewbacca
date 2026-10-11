@@ -1,6 +1,8 @@
 ---
 name: jev-browse
-description: "Do a narrow task on a website in the user's own Chrome in seconds, with Jev choosing each click and field instead of a model writing selectors. Use for a web task with one clear goal (find, filter, open, fill a search, navigate a web app like Clay, LinkedIn or Google Flights) when speed matters, before falling back to chrome-js or clicking by hand. Stops before any send, submit, pay, delete, sign-in, run or enrich and leaves that press to the person."
+description: "Do a narrow web task in the user's own Chrome in seconds, Jev picking each click: find, filter, open, search Clay, LinkedIn or Google Flights. Stops before any send, submit, pay, delete or sign-in."
+triggers: >-
+  Do a narrow task on a website in the user's own Chrome in seconds, with Jev choosing each click and field instead of a model writing selectors. Use for a web task with one clear goal (find, filter, open, fill a search, navigate a web app like Clay, LinkedIn or Google Flights) when speed matters, before falling back to chrome-js or clicking by hand. Stops before any send, submit, pay, delete, sign-in, run or enrich and leaves that press to the person.
 license: MIT
 requires: [chewbacca]
 ---

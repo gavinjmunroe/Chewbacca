@@ -168,6 +168,20 @@ if git -c core.fsmonitor=false cat-file -e origin/main:tools/merge_regen.py 2>/d
     note "merge drivers: install failed"
 fi
 
+# ── Compact team index ────────────────────────────────────────────────────────
+# Teammates import ~/.chewbacca/team-memory-index.md, a compact copy of
+# team/memory/MEMORY.md (tools/team_index.py), instead of the 11,636-token
+# full index. Rebuilt here from this checkout so a line another tab added
+# shows up by the next session. Only where setup already wrote one: a
+# stranger's install never imports team memory, so it never gets the file.
+_ti_dst="${CHEWBACCA_HOME:-$HOME/.chewbacca}/team-memory-index.md"
+_ti_tool="${CHEWBACCA_KIT_RUNTIME:-$HOME/.chewbacca/kit}/current/tools/team_index.py"
+[ -f "$_ti_tool" ] || _ti_tool="$REPO/tools/team_index.py"
+if [ -f "$_ti_dst" ] && [ -f "$_ti_tool" ] && [ -f "$REPO/team/memory/MEMORY.md" ]; then
+  python3 -I "$_ti_tool" write --src "$REPO/team/memory/MEMORY.md" --dst "$_ti_dst" >/dev/null 2>&1 ||
+    note "team index: rebuild failed"
+fi
+
 # ── Throttle ──────────────────────────────────────────────────────────────────
 # A fetch is a network round trip and SessionStart runs on every new session.
 # Once an hour keeps a long day current without paying for it on every window.

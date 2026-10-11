@@ -1,6 +1,8 @@
 ---
 name: welcome
-description: "The first conversation after Chewbacca is installed: six tappable questions, then a personalized assistant and one thing that works right away (for a USC student, their own courses, lecture files and what is due). Use right after install, in a first session with someone new, when the brain has no welcome answers yet, or when someone says to start over, change how you talk to them, or redo their setup."
+description: "The first conversation after install: six tappable questions, a personalized assistant, and one thing that works right away. Use right after install, with someone new, or to start over or redo setup."
+triggers: >-
+  The first conversation after Chewbacca is installed: six tappable questions, then a personalized assistant and one thing that works right away (for a USC student, their own courses, lecture files and what is due). Use right after install, in a first session with someone new, when the brain has no welcome answers yet, or when someone says to start over, change how you talk to them, or redo their setup.
 license: MIT
 ---
 

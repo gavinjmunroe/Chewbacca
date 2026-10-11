@@ -1,6 +1,8 @@
 ---
 name: handwriting
-description: "Make handwriting that a person would believe a hand wrote, on paper that looks like paper. Use for any handwritten note, list, letter, signature, label, kid's drawing, sticky note, postcard, polaroid caption, whiteboard or annotation drawn into an image, a website, a render or a prop. Also fires on: handwritten, handwriting, hand-lettered, written note, scribble, signature, sticky note, notebook page, looks like a font, too perfect, fake handwriting, paper texture."
+description: "Handwriting a person would believe a hand wrote, on real-looking paper: notes, letters, signatures, sticky notes, labels, annotations in an image, site or render. Use when it looks like a font."
+triggers: >-
+  Make handwriting that a person would believe a hand wrote, on paper that looks like paper. Use for any handwritten note, list, letter, signature, label, kid's drawing, sticky note, postcard, polaroid caption, whiteboard or annotation drawn into an image, a website, a render or a prop. Also fires on: handwritten, handwriting, hand-lettered, written note, scribble, signature, sticky note, notebook page, looks like a font, too perfect, fake handwriting, paper texture.
 ---
 
 # Handwriting

@@ -1,6 +1,8 @@
 ---
 name: rsi
-description: Test a proposed change to a skill, rule, tool or working process with a bounded before-and-after experiment, and keep it only if it wins. Use when the user says self-improve, RSI, "does this change actually help", "A/B this skill", or wants a candidate skill edit compared against the current one. Ordinary session reviews belong in reflect.
+description: "Test a proposed change to a skill, rule, tool or process with a bounded before-and-after experiment, and keep it only if it wins. Use for self-improve, RSI, A/B this skill, does this change help."
+triggers: >-
+  Test a proposed change to a skill, rule, tool or working process with a bounded before-and-after experiment, and keep it only if it wins. Use when the user says self-improve, RSI, "does this change actually help", "A/B this skill", or wants a candidate skill edit compared against the current one. Ordinary session reviews belong in reflect.
 ---
 
 # rsi

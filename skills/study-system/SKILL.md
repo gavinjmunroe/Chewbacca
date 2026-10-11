@@ -1,6 +1,8 @@
 ---
 name: study-system
-description: Turn course material into durable knowledge instead of a reread. Use when the user is studying for an exam or quiz, has lecture notes or slides to process, is assigned a reading, asks to be quizzed or tested, wants flashcards or a study plan, just got a graded exam back, or says they studied and still did badly.
+description: "Turn course material into durable knowledge instead of a reread. Use for exam or quiz prep, lecture notes or slides, readings, quiz me, flashcards, a study plan, or a bad grade after studying."
+triggers: >-
+  Turn course material into durable knowledge instead of a reread. Use when the user is studying for an exam or quiz, has lecture notes or slides to process, is assigned a reading, asks to be quizzed or tested, wants flashcards or a study plan, just got a graded exam back, or says they studied and still did badly.
 requires: [coursework]
 ---
 

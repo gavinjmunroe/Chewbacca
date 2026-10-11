@@ -1,6 +1,8 @@
 ---
 name: mac-see
-description: Read what is on the user's Mac screen - the accessibility tree, window contents, UI elements, or a screenshot. Use when the user asks what is on their screen, what an app is showing, to find a button or field, or to check the state of something before acting on it.
+description: "Read what's on the Mac screen: accessibility tree, window contents, UI elements or a screenshot. Use for what's on my screen, what an app shows, finding a button or field, or checking state first."
+triggers: >-
+  Read what is on the user's Mac screen - the accessibility tree, window contents, UI elements, or a screenshot. Use when the user asks what is on their screen, what an app is showing, to find a button or field, or to check the state of something before acting on it.
 requires: [chewie]
 ---
 

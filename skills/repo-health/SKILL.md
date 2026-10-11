@@ -1,6 +1,8 @@
 ---
 name: repo-health
-description: "Find what has rotted in a project. Use when the user asks to clean this up, find dead code, remove unused imports, check my dependencies, whether anything is out of date or vulnerable, what is safe to delete, or asks for an audit of a project or repo. Also use when a repo feels messy, before handing a project to someone else, or when env vars have drifted. Also use when asked which old or unfinished projects to pick back up, or to scan all repos for stalled work."
+description: "Find what has rotted in a project: dead code, unused imports, stale or vulnerable deps, env drift, what's safe to delete. Also for an audit, a messy repo, or which stalled projects to pick back up."
+triggers: >-
+  Find what has rotted in a project. Use when the user asks to clean this up, find dead code, remove unused imports, check my dependencies, whether anything is out of date or vulnerable, what is safe to delete, or asks for an audit of a project or repo. Also use when a repo feels messy, before handing a project to someone else, or when env vars have drifted. Also use when asked which old or unfinished projects to pick back up, or to scan all repos for stalled work.
 requires: [git]
 ---
 

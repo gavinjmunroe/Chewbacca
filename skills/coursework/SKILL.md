@@ -1,6 +1,8 @@
 ---
 name: coursework
-description: Run the user's semester from a machine-readable ledger built out of their syllabi and their own Brightspace. Use when they say they need to lock in on school, want their slides or lectures pulled, are behind in class, or mention a class, an assignment, an exam, a deadline, a professor, a reading, a grade, attendance, or a syllabus; when they ask what is due, what to work on, or whether they can miss a class; when they hand over a syllabus PDF; and before helping with any graded work, because each course sets its own rules about what help is allowed.
+description: "Run the semester from a ledger built from syllabi and Brightspace. Use for school, a class, assignment, exam, deadline, grade, attendance, reading or syllabus, what is due, and before any graded work."
+triggers: >-
+  Run the user's semester from a machine-readable ledger built out of their syllabi and their own Brightspace. Use when they say they need to lock in on school, want their slides or lectures pulled, are behind in class, or mention a class, an assignment, an exam, a deadline, a professor, a reading, a grade, attendance, or a syllabus; when they ask what is due, what to work on, or whether they can miss a class; when they hand over a syllabus PDF; and before helping with any graded work, because each course sets its own rules about what help is allowed.
 requires: [coursework]
 ---
 

@@ -1,6 +1,8 @@
 ---
 name: asa
-description: Answer from the A2A Spring 2026 course, 108 hours of workshops on building a business out of AI agents. Use when the user asks what the course said about something, references a week or module by number, asks how Callan or Carter taught a thing, or asks for the course's take on prompting, agent architecture, sales, marketing, operations, finance or building an AI employee. Also use when writing a new Chewbacca skill, to check whether the course already solved that problem.
+description: "Answer from the A2A Spring 2026 course on building a business out of AI agents. Use when asked what the course said, a week or module, how Callan or Carter taught it, or before writing a new skill."
+triggers: >-
+  Answer from the A2A Spring 2026 course, 108 hours of workshops on building a business out of AI agents. Use when the user asks what the course said about something, references a week or module by number, asks how Callan or Carter taught a thing, or asks for the course's take on prompting, agent architecture, sales, marketing, operations, finance or building an AI employee. Also use when writing a new Chewbacca skill, to check whether the course already solved that problem.
 ---
 
 # asa

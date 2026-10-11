@@ -1,6 +1,8 @@
 ---
 name: gtme-interview
-description: "Answer GTM engineer interview questions, take-home cases and Clay practicals in seconds from sourced procedures: waterfalls for work emails, hiring signals, ICP scoring formulas, deduping a list, sequence and A/B design, a table burning credits, Claygent versus an AI column, a domain-extraction formula, routing, pushing enriched contacts to HubSpot or Salesforce without duplicates, diagnosing a reply-rate drop, speed-to-lead system design, SQL and API-client coding rounds. Use when practicing for a GTME interview, drilling Clay questions, grading a practice answer, or when someone asks a Clay how-would-you question live. Also fires on: GTME interview, Clay interview, take-home, mock interview, practice question, Clay practical."
+description: "GTM engineer interview questions, take-homes and Clay practicals from sourced procedures: waterfalls, ICP scoring, dedupe, sequences, CRM pushes. Use for GTME or Clay interview practice."
+triggers: >-
+  Answer GTM engineer interview questions, take-home cases and Clay practicals in seconds from sourced procedures: waterfalls for work emails, hiring signals, ICP scoring formulas, deduping a list, sequence and A/B design, a table burning credits, Claygent versus an AI column, a domain-extraction formula, routing, pushing enriched contacts to HubSpot or Salesforce without duplicates, diagnosing a reply-rate drop, speed-to-lead system design, SQL and API-client coding rounds. Use when practicing for a GTME interview, drilling Clay questions, grading a practice answer, or when someone asks a Clay how-would-you question live. Also fires on: GTME interview, Clay interview, take-home, mock interview, practice question, Clay practical.
 ---
 
 # GTM engineer interviews

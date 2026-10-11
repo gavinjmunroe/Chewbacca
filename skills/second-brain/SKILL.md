@@ -1,6 +1,8 @@
 ---
 name: second-brain
-description: 'Read from and write to the user''s personal context repo, the private markdown store holding who they are, what they are working on, who they work with, and how their systems are wired. Use when the user asks what you know about something, states a durable fact worth persisting (new role, project shipped or died, collaborator joined, preference, infrastructure change), says "remember this", asks for a context review, or when work just changed something context should reflect. Also use before advising on anything personal.'
+description: "Read and write the user's private context repo: who they are, what they're working on, collaborators, systems. Use for what you know, remember this, a durable new fact, a context review, or personal advice."
+triggers: >-
+  Read from and write to the user's personal context repo, the private markdown store holding who they are, what they are working on, who they work with, and how their systems are wired. Use when the user asks what you know about something, states a durable fact worth persisting (new role, project shipped or died, collaborator joined, preference, infrastructure change), says "remember this", asks for a context review, or when work just changed something context should reflect. Also use before advising on anything personal.
 ---
 
 # Second brain

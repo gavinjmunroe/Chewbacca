@@ -1,6 +1,8 @@
 ---
 name: inference-engineering
-description: "Pick, measure and ship the model call inside a product: which model (or no model), where it runs, how fast it must be, and how you know it is right. Use when adding a classifier, router, gate, scorer, judge, embedding lookup or any model call to a hook, CLI, HUD or pipeline; when someone reaches for an LLM to answer a yes/no or pick-one question; when a model call is slow, costly, flaky or sends private text off the machine; when choosing a threshold or cutoff; or when asked to 'inference engineer' something. Also fires on: classifier, probe, embedding, logistic regression, threshold, cutoff, latency budget, p95, local model, Ollama, quantize, float16, which model should I use, too slow, too expensive, prompt hook calls an API."
+description: "Pick, measure and ship a model call in a product: which model or none, where it runs, latency, how you know it's right. Use for classifiers, routers, judges, embeddings, thresholds, slow or costly calls."
+triggers: >-
+  Pick, measure and ship the model call inside a product: which model (or no model), where it runs, how fast it must be, and how you know it is right. Use when adding a classifier, router, gate, scorer, judge, embedding lookup or any model call to a hook, CLI, HUD or pipeline; when someone reaches for an LLM to answer a yes/no or pick-one question; when a model call is slow, costly, flaky or sends private text off the machine; when choosing a threshold or cutoff; or when asked to 'inference engineer' something. Also fires on: classifier, probe, embedding, logistic regression, threshold, cutoff, latency budget, p95, local model, Ollama, quantize, float16, which model should I use, too slow, too expensive, prompt hook calls an API.
 ---
 
 # Inference engineering

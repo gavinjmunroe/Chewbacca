@@ -1,6 +1,8 @@
 ---
 name: agent-history
-description: "Search every past coding agent session on this Mac in one pass, Claude Code and Codex together, with secrets and personal identifiers redacted in the output. Use when asked what an earlier session did, when something was decided, which tab touched a file, what was said about a topic last week, or to find the session behind a change. Also fires on: search my transcripts, past sessions, session history, what did the agent do, which session, find the conversation where, agent logs, codex history, claude history."
+description: "Search every past Claude Code and Codex session on this Mac, redacted. Use for what an earlier session did, when something was decided, which tab touched a file, or the session behind a change."
+triggers: >-
+  Search every past coding agent session on this Mac in one pass, Claude Code and Codex together, with secrets and personal identifiers redacted in the output. Use when asked what an earlier session did, when something was decided, which tab touched a file, what was said about a topic last week, or to find the session behind a change. Also fires on: search my transcripts, past sessions, session history, what did the agent do, which session, find the conversation where, agent logs, codex history, claude history.
 ---
 
 # agent-history

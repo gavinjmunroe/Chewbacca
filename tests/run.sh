@@ -556,6 +556,7 @@ if group "tools"; then
   check  "no code reaches a folder at its pre-2026-10-05 top-level path" python3 "$ROOT/tests/test_moved_paths.py"
   check  "preflight describes setup.sh accurately" python3 "$ROOT/tests/test_preflight.py"
   check  "context cost --json is valid" bash -c "python3 '$ROOT/tools/context_cost.py' --json | python3 -m json.tool"
+  check  "context cost counts enabled plugin skills" python3 "$ROOT/tests/test_context_cost.py"
   check  "context-budget attributes a session's opening tokens by source" python3 "$ROOT/tests/test_context_budget.py"
   # Not --check: every commit made after the last regeneration invalidates it,
   # so a --check here would fail on the commit that adds a test.
@@ -630,6 +631,13 @@ if group "tools"; then
   printf -- '---\nname: long\ndescription: "%s"\n---\n\n# x\n' "$(printf 'a%.0s' $(seq 1 1100))" > "$LONG/SKILL.md"
   expect "a description over 1024 characters is caught" "the limit is 1024" \
     bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck-long/skills' 2>&1 || true"
+  # 2026-10-11: 67 of 69 kit descriptions ran past 220 characters, and the
+  # skill listing kept descriptions for 56 of 392 entries.
+  WIDE="$TMP/fmcheck-wide/skills/wide"; mkdir -p "$WIDE"
+  printf -- '---\nname: wide\ndescription: "%s"\n---\n\n# x\n' "$(printf 'a%.0s' $(seq 1 300))" > "$WIDE/SKILL.md"
+  expect "a kit description over 220 characters is caught" "triggers: >-" \
+    bash -c "python3 '$ROOT/tools/frontmatter.py' '$TMP/fmcheck-wide/skills' 2>&1 || true"
+  check  "routing reads triggers, the listing reads the short description" python3 "$ROOT/tests/test_skill_triggers.py"
   # A skill naming a file or command that is not there sends the agent down a
   # dead end with nothing failing: 13 such references sat in 5 skills on
   # 2026-10-10, including a whole corpus tool that only existed on one Mac.

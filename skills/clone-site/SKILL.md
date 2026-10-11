@@ -1,6 +1,8 @@
 ---
 name: clone-site
-description: "Rebuild an existing website faithfully: a replica, a design study, or a page that has to match a reference. Use when asked to clone, replicate, copy, match or rebuild a site, when a reference URL is given as the target to hit, when the user says make it look like <site>, and when a build is being judged against a live page. Also fires on: clone, replica, reverse engineer, match this site, like their site, fidelity, pixel perfect, same as theirs, why is theirs better."
+description: "Rebuild an existing website faithfully: a replica, design study or page matched to a reference. Use for clone, replicate, match this site, make it look like <site>, pixel perfect, why is theirs better."
+triggers: >-
+  Rebuild an existing website faithfully: a replica, a design study, or a page that has to match a reference. Use when asked to clone, replicate, copy, match or rebuild a site, when a reference URL is given as the target to hit, when the user says make it look like <site>, and when a build is being judged against a live page. Also fires on: clone, replica, reverse engineer, match this site, like their site, fidelity, pixel perfect, same as theirs, why is theirs better.
 ---
 
 # Clone site

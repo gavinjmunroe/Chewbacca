@@ -1,6 +1,8 @@
 ---
 name: demo
-description: Record a product demo video by reading the product's own code and the craft of demo-making, not by guessing at either. Use when the user asks to record a demo, make a demo video, film the product, show the product working, or produce a launch clip. Also use when a demo already recorded is wrong, boring, or missed the point of the product. Needs the repo and a running instance.
+description: "Record a product demo video from the product's own code and the craft of demos. Use to record or film a demo, show the product working, a launch clip, or fix a demo that is boring or wrong."
+triggers: >-
+  Record a product demo video by reading the product's own code and the craft of demo-making, not by guessing at either. Use when the user asks to record a demo, make a demo video, film the product, show the product working, or produce a launch clip. Also use when a demo already recorded is wrong, boring, or missed the point of the product. Needs the repo and a running instance.
 ---
 
 # Record a demo of the product, from its own source

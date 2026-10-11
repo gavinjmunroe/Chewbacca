@@ -1,6 +1,8 @@
 ---
 name: web-apis
-description: "Get data from a website as one JSON call instead of driving a browser, through `chewbacca api`. Use FIRST for any read from a site with no public API: YC companies and founders, LinkedIn people, companies and public jobs, Product Hunt launches, Luma events, Google Maps places, USC classes and sections, RateMyProfessors, Google Flights, Airbnb, Amazon, Goodreads, YouTube, X and Instagram profiles, Hacker News. Also use when asked to turn a site into an API, automate a website's lookups, or make a repeated browser task fast. Not for Clay, which has its own engine, and not for anything that sends, posts or submits."
+description: "Get website data as one JSON call via `chewbacca api` instead of a browser: YC, LinkedIn, Product Hunt, Luma, Maps, USC classes, flights and more. Use FIRST for reads. Not Clay, never sends."
+triggers: >-
+  Get data from a website as one JSON call instead of driving a browser, through `chewbacca api`. Use FIRST for any read from a site with no public API: YC companies and founders, LinkedIn people, companies and public jobs, Product Hunt launches, Luma events, Google Maps places, USC classes and sections, RateMyProfessors, Google Flights, Airbnb, Amazon, Goodreads, YouTube, X and Instagram profiles, Hacker News. Also use when asked to turn a site into an API, automate a website's lookups, or make a repeated browser task fast. Not for Clay, which has its own engine, and not for anything that sends, posts or submits.
 license: MIT
 requires: [chewbacca]
 ---

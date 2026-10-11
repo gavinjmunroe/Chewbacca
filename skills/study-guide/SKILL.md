@@ -1,6 +1,8 @@
 ---
 name: study-guide
-description: 'Build an interactive study guide, review sheet, practice quiz, walkthrough or flashcard set for a course topic, from lecture notes, slides, a transcript, a reading or a problem set. Produces one HTML file with quizzes, step-throughs and flashcards that records what was missed, so a later session picks up there. Use when asked to make or extend a guide, turn notes into practice, or review before an exam.'
+description: "Build an interactive HTML study guide, review sheet, quiz or flashcards from notes, slides, transcripts or problem sets, recording what was missed. Use to make or extend a guide or review for an exam."
+triggers: >-
+  Build an interactive study guide, review sheet, practice quiz, walkthrough or flashcard set for a course topic, from lecture notes, slides, a transcript, a reading or a problem set. Produces one HTML file with quizzes, step-throughs and flashcards that records what was missed, so a later session picks up there. Use when asked to make or extend a guide, turn notes into practice, or review before an exam.
 requires: [guide, coursework]
 ---
 

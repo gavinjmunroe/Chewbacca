@@ -1,6 +1,8 @@
 ---
 name: shipping
-description: "Get a change safely out the door. Use when the user says ship it, is this ready, push this, deploy this, put it live, run the tests, write tests for this, or asks whether something is safe to release. Also use before any deploy to production, when a build or deploy fails, and at the end of a work session to commit and push what was done."
+description: "Get a change safely out the door. Use for ship it, is this ready, push, deploy, put it live, run or write tests, safe to release, a failed build or deploy, and committing at the end of a session."
+triggers: >-
+  Get a change safely out the door. Use when the user says ship it, is this ready, push this, deploy this, put it live, run the tests, write tests for this, or asks whether something is safe to release. Also use before any deploy to production, when a build or deploy fails, and at the end of a work session to commit and push what was done.
 requires: [git]
 ---
 

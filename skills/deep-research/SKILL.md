@@ -1,6 +1,8 @@
 ---
 name: deep-research
-description: Research a topic, market, company or claim properly, with sources that can be checked. Use when the user asks you to research, look into, compare, or find out about something, when a decision needs evidence, or before writing anything aimed at an audience outside this machine. Not for a single fact lookup.
+description: "Research a topic, market, company or claim with checkable sources. Use for research, look into, compare, find out, a decision that needs evidence, or before writing for an outside audience."
+triggers: >-
+  Research a topic, market, company or claim properly, with sources that can be checked. Use when the user asks you to research, look into, compare, or find out about something, when a decision needs evidence, or before writing anything aimed at an audience outside this machine. Not for a single fact lookup.
 ---
 
 # deep-research

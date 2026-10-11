@@ -1,6 +1,8 @@
 ---
 name: creative-video
-description: Make a short vertical video for Instagram Reels, YouTube Shorts or TikTok, or a YouTube creative, from a brief written against the craft, with the pixels drawn in code, rendered headless in Blender, or generated through Higgsfield. Use when asked to make a reel, a short, a TikTok, an Instagram video, a YouTube video, a social clip, an ad creative, a 3D animation, a Blender render, a Higgsfield or Seedance video, or content for a page. Also use when a video already made is getting no views, feels boring, or got cut off by the app's buttons. Not for a product demo of an app, which is the demo skill.
+description: "Short vertical video for Reels, Shorts or TikTok, or a YouTube creative: code, Blender or Higgsfield. Use for a reel, short, ad creative, 3D render, or a video getting no views. Not product demos."
+triggers: >-
+  Make a short vertical video for Instagram Reels, YouTube Shorts or TikTok, or a YouTube creative, from a brief written against the craft, with the pixels drawn in code, rendered headless in Blender, or generated through Higgsfield. Use when asked to make a reel, a short, a TikTok, an Instagram video, a YouTube video, a social clip, an ad creative, a 3D animation, a Blender render, a Higgsfield or Seedance video, or content for a page. Also use when a video already made is getting no views, feels boring, or got cut off by the app's buttons. Not for a product demo of an app, which is the demo skill.
 ---
 
 # Make a short vertical video that follows the craft

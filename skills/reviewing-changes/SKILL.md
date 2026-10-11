@@ -1,6 +1,8 @@
 ---
 name: reviewing-changes
-description: "Review code for real problems before it goes anywhere. Use when the user asks to review this, look over my code, check this for bugs, tell me if this is any good, find what is wrong with this, review my PR, or asks whether a change is safe to merge or ready for someone else to read. Also use before opening a pull request, after finishing a feature, or when a reviewer has called something sloppy."
+description: "Review code for real problems before it goes anywhere. Use for review this, check for bugs, is this safe to merge, review my PR, before opening a PR, after a feature, or when called sloppy."
+triggers: >-
+  Review code for real problems before it goes anywhere. Use when the user asks to review this, look over my code, check this for bugs, tell me if this is any good, find what is wrong with this, review my PR, or asks whether a change is safe to merge or ready for someone else to read. Also use before opening a pull request, after finishing a feature, or when a reviewer has called something sloppy.
 requires: [git]
 ---
 

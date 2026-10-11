@@ -1,6 +1,8 @@
 ---
 name: openspec
-description: "Turn a settled plan into an OpenSpec change (proposal, requirements with WHEN/THEN scenarios, design, tasks) before any code, then build from the tasks and archive the change when it ships. Use when a feature or idea is about to be built and the plan is clear enough to write down, after a grilling session, when the user says spec it, write the spec, openspec, opsx, plan this feature before building, or when several agents will build one feature in parallel and need tasks that don't step on each other."
+description: "Turn a settled plan into an OpenSpec change (proposal, WHEN/THEN requirements, design, tasks) before code, then build and archive it. Use for spec it, openspec, opsx, or parallel agents on one feature."
+triggers: >-
+  Turn a settled plan into an OpenSpec change (proposal, requirements with WHEN/THEN scenarios, design, tasks) before any code, then build from the tasks and archive the change when it ships. Use when a feature or idea is about to be built and the plan is clear enough to write down, after a grilling session, when the user says spec it, write the spec, openspec, opsx, plan this feature before building, or when several agents will build one feature in parallel and need tasks that don't step on each other.
 requires: [openspec]
 ---
 

@@ -1,6 +1,8 @@
 ---
 name: skill-training
-description: Improve skills from real corrections and develop expertise in new domains. Use for repeated mistakes, learning how to learn, transferring procedures across tools, and verifying that learned behavior persists. Separate source reading from tested competence.
+description: "Improve skills from real corrections and build expertise in new domains: repeated mistakes, learning how to learn, transferring procedures, and verifying learned behavior persists."
+triggers: >-
+  Improve skills from real corrections and develop expertise in new domains. Use for repeated mistakes, learning how to learn, transferring procedures across tools, and verifying that learned behavior persists. Separate source reading from tested competence.
 ---
 
 # skill-training

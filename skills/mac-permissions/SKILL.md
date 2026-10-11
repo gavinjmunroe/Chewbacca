@@ -1,6 +1,8 @@
 ---
 name: mac-permissions
-description: Diagnose and fix macOS permission problems for automation - Accessibility, Screen Recording, Automation/Apple Events, Full Disk Access, TCC. Use when a Mac automation fails silently, when the user gets "not authorized" errors, when setting up Mac control for the first time, or when something worked before and stopped.
+description: "Diagnose and fix macOS automation permissions: Accessibility, Screen Recording, Automation, Full Disk Access, TCC. Use for silent failures, not authorized errors, first-time setup, or it stopped working."
+triggers: >-
+  Diagnose and fix macOS permission problems for automation - Accessibility, Screen Recording, Automation/Apple Events, Full Disk Access, TCC. Use when a Mac automation fails silently, when the user gets "not authorized" errors, when setting up Mac control for the first time, or when something worked before and stopped.
 requires: [chewie]
 ---
 

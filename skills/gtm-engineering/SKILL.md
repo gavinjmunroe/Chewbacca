@@ -66,7 +66,13 @@ they hired, through `chewbacca gtme`:
      45 to 90 seconds between emails.
    - Positive replies: write the answer and save it with `chewbacca gtme
 reply`, which makes a Gmail draft and never sends.
-     Volume starts at 5 a day and tops out at 20, because it is their primary
+     - A lead with a name but no email on its site: `chewbacca gtme find --paid`
+     prices ONE lookup through treg and stops. Show the cost, and only an
+     amount the person approves goes in `--spend`. Every call is billed to
+     that customer and capped at 5 cents. `chewbacca gtme costs` is the
+     month's real cost per customer, and `gtme package` sets the mailboxes,
+     domains, data budget and price.
+   Volume starts at 5 a day and tops out at 20, because it is their primary
      inbox. Say so if they ask for more. More volume means separate sending
      domains, which cost money and need their ok.
 5. `gtme` explains each term the first time a person meets it

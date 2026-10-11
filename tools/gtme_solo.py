@@ -52,6 +52,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gtme_operator as op  # noqa: E402
 import gtme_reply  # noqa: E402
+import treg_client  # noqa: E402
 
 # A warmed inbox ramps 5, 10, 20, 40 a day over four weeks (outbound-rules.md,
 # BMA). A primary Gmail never warmed for cold mail gets half of that ceiling:
@@ -83,6 +84,13 @@ META_RX = re.compile(r"<meta[^>]+(?:name|property)=[\"'](?:og:)?description[\"']
                      re.I)
 DASH = re.compile("[—–]")
 OPT_OUT = "If you'd rather not hear from me, reply stop and I won't email you again."
+
+
+# What one customer's package costs us each month, before anything is sold.
+# Mailforge lists about $3 a mailbox (bitscale.ai review, 2026-10-11) and a
+# .com is about $12 a year; the data budget is a cap, not a forecast.
+PACKAGE_DEFAULTS = {"data_budget_usd": 25.0, "mailboxes": 10, "mailbox_usd": 3.0, "domains": 4,
+                    "domain_usd_year": 12.0, "price_usd": None}
 
 
 class Refused(Exception):
@@ -283,6 +291,7 @@ def cmd_find(a) -> int:
         out.append({**{k: r.get(k, "") for k in op.LIST_COLUMNS}, "email": addr, "email_source": where,
                     "role_inbox": "yes" if addr and ROLE.match(addr) else "", "site_fact": fact,
                     "site_fact_source": fact_url})
+    paid = paid_lookups(a, out) if a.paid else None
     cols = op.LIST_COLUMNS + ["email_source", "role_inbox", "site_fact", "site_fact_source"]
     with (d / "leads.csv").open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=cols)
@@ -291,7 +300,92 @@ def cmd_find(a) -> int:
             w.writerow({k: op.csv_cell(str(r.get(k) or "")) for k in cols})
     print(f"Checked {len(out)} companies' own websites. Found an email for {found}, every one printed on "
           f"that company's site (the page is saved next to it). Nothing was bought or guessed.")
+    if paid:
+        print(paid)
     print(f"Saved: {d / 'leads.csv'}")
+    return 0
+
+
+def package_of(plan: dict) -> dict:
+    return {**PACKAGE_DEFAULTS, **(plan.get("package") or {})}
+
+
+def paid_lookups(a, rows: list[dict]) -> str:
+    """Emails the site didn't print, from treg's routed finder, billed to this
+    customer. With no --spend it runs ONE lookup and reports the real charge
+    and what the rest would cost (feedback_price_one_run_before_bulk); only an
+    approved --spend amount runs the rest, and the monthly budget caps both."""
+    plan = plan_of(a.client)
+    pkg = package_of(plan)
+    want = [r for r in rows if not r["email"] and r.get("name") and r.get("website")]
+    if not want:
+        return "Nobody left needs a paid lookup: every lead without an email also has no person's name."
+    spend_file = cdir(a.client) / "spend.jsonl"
+    customer = op.slug(a.client)
+    limit = a.spend if a.spend is not None else 0.0
+    spent, tried, hit = 0.0, 0, 0
+    for r in want:
+        if a.spend is None and tried == 1:
+            break
+        if a.spend is not None and spent + treg_client.FIND_MAX_USD > limit:
+            break
+        try:
+            res = treg_client.find_email(domain=domain_of(r["website"]), full_name=r["name"], customer=customer,
+                                         spend_file=spend_file, budget_usd=pkg["data_budget_usd"],
+                                         now=op.utc_now())
+        except treg_client.Refused as err:
+            return f"Paid lookups stopped: {err}"
+        tried += 1
+        spent += res["cost_usd"]
+        if res["email"] and res.get("verdict") not in ("invalid", "undeliverable"):
+            hit += 1
+            r["email"], r["email_source"] = res["email"], f"treg {res['served_by'] or 'finder'} {res['call_id']}"
+    left = len(want) - tried
+    if a.spend is None:
+        each = max(spent, 0.0001)
+        return (f"Priced one paid lookup: ${spent:.4f}, {'found' if hit else 'no email found'}. "
+                f"The other {left} would cost about ${each * left:.2f} at that rate, up to "
+                f"${treg_client.FIND_MAX_USD * left:.2f} at the per-lookup cap. Nothing more was spent; "
+                f"approve an amount with --spend.")
+    return (f"Paid lookups: {tried} tried, {hit} found, ${spent:.2f} spent of the ${limit:.2f} approved. "
+            f"{left} left.")
+
+
+def cmd_package(a) -> int:
+    plan = plan_of(a.client)
+    pkg = package_of(plan)
+    for k in ("data_budget_usd", "mailboxes", "mailbox_usd", "domains", "domain_usd_year", "price_usd"):
+        v = getattr(a, k)
+        if v is not None:
+            pkg[k] = v
+    plan["package"] = pkg
+    op.write_json(cdir(a.client) / "plan.json", plan)
+    return cmd_costs(a)
+
+
+def cmd_costs(a) -> int:
+    plan = plan_of(a.client)
+    pkg = package_of(plan)
+    now = op.utc_now()
+    data = treg_client.month_spend(cdir(a.client) / "spend.jsonl", now)
+    inboxes = pkg["mailboxes"] * pkg["mailbox_usd"]
+    domains = pkg["domains"] * pkg["domain_usd_year"] / 12
+    total = data + inboxes + domains
+    sent = sum(1 for r in jsonl(cdir(a.client) / "sent.jsonl") if r["at"][:7] == now.strftime("%Y-%m"))
+    out = {"month": now.strftime("%Y-%m"), "data_usd": round(data, 2), "data_budget_usd": pkg["data_budget_usd"],
+           "mailboxes_usd": round(inboxes, 2), "domains_usd": round(domains, 2), "total_usd": round(total, 2),
+           "emails_sent": sent, "price_usd": pkg["price_usd"],
+           "margin_usd": round(pkg["price_usd"] - total, 2) if pkg["price_usd"] is not None else None}
+    if getattr(a, "json", False):
+        print(json.dumps(out, indent=1))
+        return 0
+    print(f"{a.client}, {out['month']}: data ${data:.2f} of a ${pkg['data_budget_usd']:.2f} budget (treg's own "
+          f"charges), {pkg['mailboxes']} mailboxes ${inboxes:.2f}, {pkg['domains']} domains ${domains:.2f} a month. "
+          f"Total ${total:.2f}, {sent} emails sent.")
+    if pkg["price_usd"] is not None:
+        print(f"At ${pkg['price_usd']:.0f} a month that leaves ${out['margin_usd']:.2f}.")
+    else:
+        print("No price set yet, so no margin.")
     return 0
 
 
@@ -654,6 +748,20 @@ def main(argv=None) -> int:
     p = sub.add_parser("find", help="each company's email and a fact, from its own website")
     p.add_argument("--client", required=True)
     p.add_argument("--limit", type=int, default=200)
+    p.add_argument("--paid", action="store_true", help="look up missing emails through treg, billed to this customer")
+    p.add_argument("--spend", type=float, help="dollars approved for paid lookups (without it: price one only)")
+    p = sub.add_parser("package", help="what this customer's subscription includes, and what it costs us")
+    p.add_argument("--client", required=True)
+    p.add_argument("--data-budget", dest="data_budget_usd", type=float)
+    p.add_argument("--mailboxes", type=int)
+    p.add_argument("--mailbox-cost", dest="mailbox_usd", type=float)
+    p.add_argument("--domains", type=int)
+    p.add_argument("--domain-cost", dest="domain_usd_year", type=float, help="per domain per year")
+    p.add_argument("--price", dest="price_usd", type=float, help="what the customer pays a month")
+    p.add_argument("--json", action="store_true")
+    p = sub.add_parser("costs", help="this month's cost for one customer")
+    p.add_argument("--client", required=True)
+    p.add_argument("--json", action="store_true")
     for name, helptext in (("batch", "today's emails, frozen, for your ok"), ("today", "replies, then the batch")):
         p = sub.add_parser(name, help=helptext)
         p.add_argument("--client", required=True)
@@ -678,7 +786,8 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     try:
         return {"sender": cmd_sender, "find": cmd_find, "batch": cmd_batch, "send": cmd_send,
-                "inbox": cmd_inbox, "reply": cmd_reply, "today": cmd_today}[a.cmd](a)
+                "inbox": cmd_inbox, "reply": cmd_reply, "today": cmd_today, "package": cmd_package,
+                "costs": cmd_costs}[a.cmd](a)
     except Refused as err:
         print(str(err), file=sys.stderr)
         return 2

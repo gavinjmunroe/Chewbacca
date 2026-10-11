@@ -500,6 +500,10 @@ if group "gtme"; then
   # follow-ups, replies sorted. A fake gws; nothing reaches Gmail or the network.
   check "gtme own-inbox path finds, freezes, sends only an approved batch, sorts replies" \
     python3 "$ROOT/tests/test_gtme_solo.py"
+  # Paid lookups through treg: one priced first, every call tagged and capped,
+  # treg's own charge recorded, budget enforced. A fake treg on 127.0.0.1.
+  check "gtme paid lookups price one first, tag, cap and meter every call" \
+    python3 "$ROOT/tests/test_treg_client.py"
   check "gtme dispatches through chewbacca" bash "$ROOT/bin/chewbacca" gtme --help
   expect "gtm appears in help" "chewbacca gtm" bash "$ROOT/bin/chewbacca" --help
   # Recorded, synthetic surface answers; nothing reads Clay, the clay CLI or Chrome.

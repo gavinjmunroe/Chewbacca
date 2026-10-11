@@ -2184,7 +2184,7 @@ def cmd_why(a, t: Teacher) -> int:
 
 def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] in ("sender", "find", "batch", "send", "inbox", "reply", "today"):
+    if argv and argv[0] in ("sender", "find", "batch", "send", "inbox", "reply", "today", "package", "costs"):
         import gtme_solo
         return gtme_solo.main(argv)
     if not argv or argv[0].startswith("-") and argv[0] not in ("-h", "--help"):

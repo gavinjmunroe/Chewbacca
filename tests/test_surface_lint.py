@@ -64,5 +64,15 @@ RUN = ["@ x", 'c s Screen title="X"'] + [f'c t{i} Text value="row {i}"' for i in
 check("nine text rows with nothing visual between is a wall", any("in a row" in f for f in sl.lint(RUN)), sl.lint(RUN))
 BROKEN = RUN[:6] + ['c n Metric label="A" value=1'] + RUN[6:]
 check("a number in between breaks the run", not any("in a row" in f for f in sl.lint(BROKEN)), sl.lint(BROKEN))
+MENU = ["@ x", 'c s Screen title="X"', 'c pick Select label="Act on" options=@/names value=@/pick',
+        "d /names " + json.dumps([f"Option {i} " + "x" * 120 for i in range(12)]), 'd /pick "Option 1"']
+check("a Select's closed menu is not on the first view; its value is",
+      not any("first view" in f for f in sl.lint(MENU)), sl.lint(MENU))
+LONG_PICK = MENU[:-1] + ["d /pick " + json.dumps("y" * 130)]
+check("a chosen value that is a wall is still one", any("characters (limit" in f for f in sl.lint(LONG_PICK)),
+      sl.lint(LONG_PICK))
+PRESSES = RUN[:6] + ['c go Events caption="" items=@/go action=send actionLabel="Send"'] + RUN[6:]
+check("an uncaptioned action row is a press and breaks the run",
+      not any("in a row" in f for f in sl.lint(PRESSES)), sl.lint(PRESSES))
 print("all passed" if not failed else f"{failed} failed")
 sys.exit(1 if failed else 0)

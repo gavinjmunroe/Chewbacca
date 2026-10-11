@@ -70,20 +70,33 @@ def short_when(value: str, now: datetime) -> str:
     return ago(moment, now)
 
 
+# One line of a 420-point panel at the row size holds about 64 characters
+# (surface_lint.ROW_CHARS's measure); a row that wraps is two rows of reading.
+ROW_CHARS = 72
+# A reason short enough to be a tag ("due today", "3 days quiet") stays.
+WHY_CHARS = 28
+# "Act on" names each row again, so its option is a handle, not the row.
+PICK_CHARS = 34
+
+
 def row_text(r: dict) -> str:
     people = [c["label"] for c in r.get("chips", []) if c["id"].startswith("person:")]
     spaces = [c["label"] for c in r.get("chips", []) if c["id"].startswith("space:")]
     bits = [r["app"], linkify(r["label"])]
     if people and r["type"] != "Thread":
         bits.append("with " + ", ".join(people[:2]))
-    if r.get("why"):
-        bits.append(r["why"])
+    # Where a row came from ("from Sagar's text 11:12 PM") is provenance, and
+    # provenance lives behind the row's Open, not in it: on 2026-10-11 the
+    # tasks panel on real data was 1,765 characters on its first view, most
+    # of it these clauses (surface_lint's limit is 1,000).
+    why = r.get("why") or ""
+    if why and len(why) <= WHY_CHARS and not why.startswith("from "):
+        bits.append(why)
     if spaces:
         bits.append(spaces[0])
     text = " · ".join(b for b in bits if b)
-    if r.get("confidence", 1.0) < GUESS_BELOW:
-        text += " (guess)"
-    return clip(text, 110)
+    guess = r.get("confidence", 1.0) < GUESS_BELOW
+    return clip(text, ROW_CHARS - (8 if guess else 0)) + (" (guess)" if guess else "")
 
 
 def label_rows(rows: list[dict]) -> list[dict]:
@@ -93,10 +106,10 @@ def label_rows(rows: list[dict]) -> list[dict]:
     the list, and a press would then reach the wrong person."""
     seen: dict[str, int] = {}
     for r in rows:
-        base = clip(f"{r['app']}: {r['label']}", 56)
+        base = clip(f"{r['app']}: {r['label']}", PICK_CHARS)
         seen[base] = seen.get(base, 0) + 1
     for r in rows:
-        base = clip(f"{r['app']}: {r['label']}", 56)
+        base = clip(f"{r['app']}: {r['label']}", PICK_CHARS)
         r["pick"] = base if seen[base] == 1 else f"{base} [{r['id'][-6:]}]"
     return rows
 

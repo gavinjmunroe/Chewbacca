@@ -955,6 +955,10 @@ def agent_card(tmp: Path) -> None:
           and model["/agents/changedCap"] == "Changed, 2 files on main"
           and all(not w for m, _, w in e.calls if m == "workspace.diff"), model["/agents/changed"])
     order = drawn_order(a)
+    import surface_lint  # noqa: PLC0415  bin/lib, on the path above
+    from surfaces import data_line  # noqa: PLC0415
+    walls = surface_lint.lint(a.layout() + [data_line(k, v) for k, v in model.items()])
+    check("the open card reads at a glance, no wall of text", walls == [], walls)
     check("the card grows out of the tile it opened from", model["/agents/pinnedRow"] == "s1"
           and 'agents-card Stack gap=3 from=@/agents/pinnedRow' in " ".join(a.layout()), model["/agents/pinnedRow"])
     check("the card is conversation, reply, then changes, all under the tiles",

@@ -36,6 +36,8 @@ SURFACE_CHARS = 1000
 TEXT_RUN = 7
 # Components whose text the person opened to read.
 OPENED = {"File", "Diff", "Transcript", "Terminal", "Web", "Code"}
+# Text bound to a Select's options: in its menu, not on the first view.
+MENU = "Select menu"
 # Components that are not prose and break a run of text.
 VISUAL = {"Metric", "Tiles", "Chips", "Ring", "Avatar", "Sparkline", "Bars", "Segmented", "Button",
           "Mark", "Image", "Web", "Table"}
@@ -79,9 +81,19 @@ def lint(lines: list[str]) -> list[str]:
         if m:
             cid, ctype, rest = m.groups()
             types[cid] = ctype
-            order.append(ctype)
-            for ptr in re.findall(r"=@(\S+)", rest):
-                bound[ptr] = ctype
+            # An Events with an action and no caption is a row of buttons
+            # (the agent card's Allow once, Send, Stop, Fork), drawn as a
+            # press like a Button, so it breaks a run of prose as one does.
+            if ctype == "Events" and "action=" in rest and re.search(r'\bcaption=""', rest):
+                order.append("Button")
+            else:
+                order.append(ctype)
+            for prop, ptr in re.findall(r"\b(\w+)=@(\S+)", rest):
+                # A Select's options sit in its menu until it is opened; only
+                # its chosen value is on the glass. Counted as drawn, the
+                # tasks panel's "Act on" options were a third of its total
+                # on 2026-10-11 though none of them was visible.
+                bound[ptr] = MENU if (ctype, prop) == ("Select", "options") else ctype
             for raw in TEXT_PROPS.findall(rest):
                 try:
                     texts.append((ctype, json.loads(raw)))
@@ -99,7 +111,7 @@ def lint(lines: list[str]) -> list[str]:
             for text in _strings(value):
                 texts.append((ctype, text))
     findings: list[str] = []
-    shown = [(t, s) for t, s in texts if t not in OPENED and s.strip()]
+    shown = [(t, s) for t, s in texts if t not in OPENED and t != MENU and s.strip()]
     total = sum(len(s) for _, s in shown)
     if total > SURFACE_CHARS:
         findings.append(f"{total} characters on the first view (limit {SURFACE_CHARS}); fold the rest behind a tap")

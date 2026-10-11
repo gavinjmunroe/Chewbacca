@@ -98,8 +98,21 @@ def test_meta_and_rows() -> None:
           [r["id"] for r in ks.order(rows)] == ["a", "c", "d", "b"])
     shown = ks.session_rows([{"id": "a", "state": "needs", "project": "lemma", "title": "Ship it",
                               "model": "opus", "last": 100.0}], now=400.0)
-    check("a row says what it needs, the model and the age",
-          shown[0]["time"] == "needs you · opus · 5m" and shown[0]["accent"], shown)
+    check("a row says what it needs, where and the age, nothing else",
+          shown[0]["time"] == "needs u · lemma · 5m" and shown[0]["accent"] and shown[0]["text"] == "Ship it", shown)
+    check("a long title is its first clause, short",
+          ks.short_title("What should I automate around here? (Say which tools and skills you would use") ==
+          "What should I automate around here",
+          ks.short_title("What should I automate around here? (Say which tools and skills you would use"))
+    check("and never runs past the limit", len(ks.short_title("word " * 40)) <= ks.TITLE_CHARS + 1)
+    many = [{"id": str(i), "state": "working", "project": "p", "title": "t", "last": 390.0} for i in range(9)]
+    old = [{"id": "f", "state": "failed", "project": "p", "title": "t", "last": 400.0 - 7 * 3600},
+           {"id": "d", "state": "finished", "project": "p", "title": "t", "last": 400.0 - 2 * 3600}]
+    check("a glance is five rows at most", len(ks.session_rows(many, 400.0)) == ks.GLANCE_ROWS)
+    check("old failures and long-finished sessions are history, not rows", ks.session_rows(old, 400.0) == [])
+    check("the header counts what to act on",
+          ks.list_caption(many[:2] + [{"id": "n", "state": "needs", "last": 399.0}], 400.0) == "1 need u · 2 running")
+    check("an empty list says so", "Nothing running" in ks.list_caption([], 400.0))
 
 
 def test_card_items() -> None:
@@ -769,7 +782,7 @@ def test_origin() -> None:
     check("VS Code is named as the origin", m["origin"] == "VS Code" and m["interactive"], m)
     rows = ks.session_rows([{"id": "a", "state": "needs", "origin": "VS Code", "model": "opus", "last": 0,
                              "project": "lemma", "title": "t"}], 30)
-    check("the rail row carries it", "VS Code" in rows[0]["time"], rows)
+    check("the row stays short: no origin or model on the glance", "VS Code" not in rows[0]["time"], rows)
 
 
 def test_runs() -> None:

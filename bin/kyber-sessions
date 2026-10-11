@@ -1046,32 +1046,70 @@ def surface_name(sid: str) -> str:
     return "s-" + re.sub(r"[^A-Za-z0-9]", "", sid)[:8]
 
 
+# The list is a glance (kyber-surfaces rules 2 and 3): what needs Caleb and
+# what is running, nothing he has to read past. On 2026-10-10 nine rows of
+# full titles plus origin and model read to him as "a fat wall of text".
+GLANCE_ROWS = 5
+# A failure older than this is history, not something to act on tonight, and
+# a finished session older than FINISHED_S is done. Both guessed, never measured.
+FAILED_S = 6 * 3600.0
+FINISHED_S = 3600.0
+TITLE_CHARS = 40
+
+
+def short_title(text: str) -> str:
+    """The first clause of a title, cut on a word at TITLE_CHARS."""
+    one = " ".join(sessions_inbox.clean(text or "").split())
+    one = re.split(r"\s[(\[]|[?!.](?:\s|$)", one, maxsplit=1)[0].strip(" ,:;-") or "untitled"
+    if len(one) <= TITLE_CHARS:
+        return one
+    return one[:TITLE_CHARS].rsplit(" ", 1)[0].rstrip(" ,:;-") + "\u2026"
+
+
+def glance(sessions: list[dict], now: float) -> list[dict]:
+    keep = []
+    for s in sessions:
+        age = now - float(s.get("last") or 0)
+        if s["state"] in ("needs", "working") or (s["state"] == "failed" and age <= FAILED_S) \
+                or (s["state"] == "finished" and age <= FINISHED_S):
+            keep.append(s)
+    return keep
+
+
 def session_rows(sessions: list[dict], now: float) -> list[dict]:
     rows = []
-    for s in sessions[:MAX_ROWS]:
-        bits = [WORDS.get(s["state"], s["state"]), s.get("origin") or "", s["model"],
-                age_words(now - s["last"])]
+    for s in glance(sessions, now)[:GLANCE_ROWS]:
+        word = "needs u" if s["state"] == "needs" else WORDS.get(s["state"], s["state"])
         rows.append({
             "id": s["id"], "accent": s["state"] == "needs",
-            "text": sessions_inbox.clean(f"{s['project']}: {s['title'] or 'untitled'}")[:90],
-            "time": " · ".join(b for b in bits if b),
+            "text": short_title(s.get("title") or ""),
+            "time": " · ".join(b for b in (word, s.get("project") or "", age_words(now - s["last"])) if b),
         })
     return rows
 
 
-def sessions_surface(rows: list[dict]) -> list[str]:
+def list_caption(sessions: list[dict], now: float) -> str:
+    shown = glance(sessions, now)
+    counts = [(sum(1 for s in shown if s["state"] == k), w) for k, w in
+              (("needs", "need u"), ("working", "running"), ("failed", "failed"), ("finished", "done"))]
+    words = [f"{n} {w}" for n, w in counts if n]
+    return " · ".join(words) if words else "Nothing running. Start one below."
+
+
+def sessions_surface(rows: list[dict], caption: str = "") -> list[str]:
     return [
-        "@ sessions at=left w=400",
-        'c s Screen title="SESSIONS"',
+        "@ sessions at=left w=360",
+        'c s Screen title="AGENTS"',
         "r s",
-        'c l Events caption="What needs you first" action=open actionLabel="Open" items=@/rows',
-        'c task Field label="New task" placeholder="in chewbacca: fix the failing test" value=@/sessions/draft',
+        'c l Events caption=@/caption action=open actionLabel="Open" items=@/rows',
+        'c task Field label="New task" placeholder="What should an agent do?" value=@/sessions/draft',
         'c start Button label="Start" action=start variant=primary',
         "c st Status message=@/sessions/status/message level=@/sessions/status/level",
         "> s l task start st",
         f"d /rows {json.dumps(rows)}",
+        f"d /caption {json.dumps(caption)}",
         'd /sessions/draft ""',
-        'd /sessions/status {"message": "Start runs a new agent in the background. No window opens.", "level": "info"}',
+        'd /sessions/status {"message": "", "level": "info"}',
     ]
 
 
@@ -1217,12 +1255,14 @@ class Serve:
         if not self.list_open:
             return
         now = time.time()
-        rows = session_rows(discover(now), now)
-        drawn = json.dumps(rows)
+        found = discover(now)
+        rows = session_rows(found, now)
+        caption = list_caption(found, now)
+        drawn = json.dumps([rows, caption])
         if not self.rows_drawn:
-            self.send(sessions_surface(rows))
+            self.send(sessions_surface(rows, caption))
         elif drawn != self.rows_drawn:
-            self.send(["@ sessions", f"d /rows {drawn}"])
+            self.send(["@ sessions", f"d /rows {json.dumps(rows)}", f"d /caption {json.dumps(caption)}"])
         self.rows_drawn = drawn
 
     def open_card(self, sid: str) -> None:

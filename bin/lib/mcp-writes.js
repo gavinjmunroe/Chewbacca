@@ -14,7 +14,15 @@
 //   outward     a text, an email, a Slack post, any Clay write, anything that
 //               spends money. One call never sends: kit_write returns a draft
 //               naming what goes out and to whom, and only kit_confirm with
-//               that draft's id sends it, through the tool's own gates.
+//               that draft's id AND its approval code sends it, through the
+//               tool's own gates.
+//
+// The approval code is the press. It goes to the person on their own screen
+// (a toast on the HUD, or a macOS notification when the HUD is down) and is
+// never in anything the agent reads, so an agent, or text injected into one,
+// cannot draft and confirm by itself. The 2026-10-11 security review found
+// exactly that: kit_confirm only checked a draft id the agent already had,
+// while Caleb's rule is that only a press sends and a sentence never does.
 //
 // Every write, draft, confirm and undo is appended to log.jsonl with who asked.
 // All state is owner-only under ~/.chewbacca/mcp-writes: snapshots hold note
@@ -59,6 +67,48 @@ function writePrivate(file, data) {
 const newId = (prefix) =>
   `${prefix}_${crypto.randomBytes(12).toString("base64url")}`;
 const ID_SHAPE = /^[ud]_[A-Za-z0-9_-]{16}$/;
+// Three wrong codes burn the draft: a six-digit code against unlimited
+// guesses is no gate. Guessed, never measured.
+const MAX_CODE_TRIES = 3;
+
+// Puts the approval code in front of the person and nowhere else. Returns
+// true when some surface took it. CHEWBACCA_MCP_APPROVAL_OUT is the tests'
+// stand-in for the screen; the server's environment is set by whoever
+// configured the client, never by the agent talking to it.
+function showCode(bin, code, what) {
+  const out = process.env.CHEWBACCA_MCP_APPROVAL_OUT;
+  if (out) {
+    try {
+      fs.writeFileSync(out, `${code}\n`, { mode: 0o600 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const q = (v) => JSON.stringify(String(v));
+  const short = String(what || "").slice(0, 140);
+  const lines = [
+    "@ send-code at=top w=440 life=120",
+    'c s Screen title="SEND CODE"',
+    "r s",
+    `c code Text value=${q(code)} tone=accent`,
+    `c what Text value=${q(short)} tone=muted`,
+    `c how Text value=${q("Read this code to the assistant only if you want it sent.")} tone=muted`,
+    "> s code what how",
+  ];
+  const { spawnSync } = require("node:child_process");
+  const drawn = spawnSync(path.join(bin, "hud"), ["draw"], {
+    input: lines.join("\n") + "\n",
+    env: { ...process.env, KYBER_LIVE_OK: "1" },
+    timeout: 10000,
+  });
+  if (drawn.status === 0) return true;
+  const note = spawnSync("/usr/bin/osascript", [
+    "-e",
+    `display notification ${q(short)} with title ${q("Chewbacca send code " + code)}`,
+  ], { timeout: 10000 });
+  return note.status === 0;
+}
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
 
 // Who asked: the client that connected (from initialize), the transport, the
@@ -736,7 +786,14 @@ function createWrites({ bin, registryFile, choicesFor }) {
       for (const [k, old] of drafts)
         if (old.used || Date.now() - old.at > DRAFT_TTL_MS) drafts.delete(k);
       const id = newId("d");
+      const code = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
+      if (!showCode(bin, code, d.bind || d.preview)) {
+        logEvent({ op: "draft-refused", write: entry.id, reason: "no screen for the code" }, who);
+        return `${entry.id}: there's no way to show the person the send code on this Mac right now (no HUD, no notifications), so this can't be sent from here. Nothing was sent.`;
+      }
       drafts.set(id, {
+        codeHash: sha(code),
+        tries: 0,
         id,
         entry: entry.id,
         argv: d.argv,
@@ -759,9 +816,10 @@ function createWrites({ bin, registryFile, choicesFor }) {
         `DRAFT ${id}. Nothing has been sent.`,
         d.preview,
         "",
+        "A six-digit send code is on the person's screen now, and only there. Show them this draft; if they want it sent they'll read you the code. Never guess it or ask for it before they've seen the draft.",
         d.needsTo
-          ? `${d.needsTo} is not a saved contact. Ask the person whether that address is right; only if they say so, call kit_confirm with draft_id ${id} and to_address set to it.`
-          : `To send it, show this to the person, and once they say send, call kit_confirm with draft_id ${id}.`,
+          ? `${d.needsTo} is not a saved contact. Ask the person whether that address is right; only if they say so, call kit_confirm with draft_id ${id}, approval_code, and to_address set to it.`
+          : `Then call kit_confirm with draft_id ${id} and approval_code.`,
         `It expires in ${Math.round(DRAFT_TTL_MS / 60000)} minutes and works once.`,
       ].join("\n");
     }
@@ -815,6 +873,20 @@ function createWrites({ bin, registryFile, choicesFor }) {
     if (Date.now() - d.at > DRAFT_TTL_MS) {
       drafts.delete(id);
       return refuse("that draft expired; make a new one");
+    }
+    const given = String(a.approval_code || "").trim();
+    const ok =
+      /^\d{6}$/.test(given) &&
+      crypto.timingSafeEqual(Buffer.from(sha(given)), Buffer.from(d.codeHash));
+    if (!ok) {
+      d.tries += 1;
+      if (d.tries >= MAX_CODE_TRIES) {
+        drafts.delete(id);
+        return refuse("wrong send code three times, so the draft is gone; make a new one");
+      }
+      return refuse(
+        "that isn't the send code on the person's screen. Only they can read it to you",
+      );
     }
     if (d.needsTo && String(a.to_address || "").trim() !== d.needsTo)
       return refuse(

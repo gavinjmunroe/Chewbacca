@@ -291,16 +291,17 @@ TOOLS.push(
   {
     name: "kit_confirm",
     description:
-      "Send a draft that kit_write made. Only call this after the person has seen that draft's recipient and text and said to send it. A draft works once, expires after 15 minutes, and is refused if where it would go has changed. The kit's own gates still apply: quiet hours for that person, Caleb's ok in chat within 2 hours for Clay writes, and CHEWBACCA_NO_SEND.",
+      "Send a draft that kit_write made. Only call this after the person has seen that draft's recipient and text, and read you the six-digit send code shown on their own screen. You never see that code any other way; never guess it. A draft works once, expires after 15 minutes, and is refused if where it would go has changed. The kit's own gates still apply: quiet hours for that person, Caleb's ok in chat within 2 hours for Clay writes, and CHEWBACCA_NO_SEND.",
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
     inputSchema: {
       type: "object",
       properties: {
         draft_id: { type: "string", description: "The draft id kit_write returned, d_..." },
+        approval_code: { type: "string", description: "The six-digit send code the person read to you off their screen" },
         to_address: { type: "string", description: "Only when the draft says the address is not a saved contact: that address, once the person says it's right" },
         asked_by: { type: "string", description: "Who said to send it and where. It is logged." },
       },
-      required: ["draft_id", "asked_by"],
+      required: ["draft_id", "approval_code", "asked_by"],
     },
     run: (a) => writes.confirm(a, who(a)),
   },

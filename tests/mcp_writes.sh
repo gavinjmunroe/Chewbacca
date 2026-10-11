@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # chewbacca-mcp writes: every reversible write's undo really puts it back, and
-# nothing outward goes anywhere without kit_confirm on a live draft.
+# nothing outward goes anywhere without kit_confirm on a live draft, carrying
+# the send code that only the person's own screen shows.
 #
 # Caleb, 2026-10-11 2:46am: "Never read only, find a way to write too". The
 # safety that makes that OK is the undo and the two-step send, so those are
@@ -143,7 +144,12 @@ env = dict(os.environ,
            CHEWBACCA_MCP_BIN=FB,
            CHEWBACCA_MCP_STATE=os.path.join(T, "state"),
            CHEWBACCA_MCP_FILE_ROOTS=os.path.join(T, "files"),
+           CHEWBACCA_MCP_APPROVAL_OUT=os.path.join(T, "screen-code"),
            CHEWBACCA_NO_SEND="1")
+SCREEN = env["CHEWBACCA_MCP_APPROVAL_OUT"]
+def screen_code():
+    """What the person reads off their screen; the agent's channel never carries it."""
+    return open(SCREEN).read().strip()
 assert env["CHEWBACCA_NO_SEND"] == "1"
 
 def sh(*argv):
@@ -328,8 +334,21 @@ check(calls and all(c.startswith("people send") and c.endswith("--dry-run") for 
 # 14. Wrong, malformed and reused ids are refused; the right one sends nothing under NO_SEND.
 check("Refused" in s.call("kit_confirm", draft_id="d_AAAAAAAAAAAAAAAA", asked_by="test"), "a wrong draft id was not refused")
 check("Refused" in s.call("kit_confirm", draft_id="../../etc/passwd", asked_by="test"), "a malformed id was not refused")
-check("nothing was sent" in s.call("kit_confirm", draft_id=draft.group(1), asked_by="test"), "a confirm under CHEWBACCA_NO_SEND said it sent")
-check("already confirmed" in s.call("kit_confirm", draft_id=draft.group(1), asked_by="test"), "a draft confirmed twice")
+check(re.fullmatch(r"\d{6}", screen_code()) and screen_code() not in t, "the send code is missing, or it is in the agent's reply")
+check("isn't the send code" in s.call("kit_confirm", draft_id=draft.group(1), asked_by="test"),
+      "a confirm with no send code was not refused: an agent could send by itself")
+check("nothing was sent" in s.call("kit_confirm", draft_id=draft.group(1), approval_code=screen_code(), asked_by="test"), "a confirm under CHEWBACCA_NO_SEND said it sent")
+check("already confirmed" in s.call("kit_confirm", draft_id=draft.group(1), approval_code=screen_code(), asked_by="test"), "a draft confirmed twice")
+
+# 14b. Guessing is not a press: three wrong codes burn the draft, and the
+#      right code after that sends nothing.
+g = re.search(r"DRAFT (d_[A-Za-z0-9_-]{16})", s.write("text.send", to="Test Person", text="guess", via="imessage")).group(1)
+real = screen_code()
+wrong = "000000" if real != "000000" else "111111"
+for _ in range(2):
+    check("isn't the send code" in s.call("kit_confirm", draft_id=g, approval_code=wrong, asked_by="test"), "a wrong code was not refused")
+check("three times" in s.call("kit_confirm", draft_id=g, approval_code=wrong, asked_by="test"), "a third wrong code did not burn the draft")
+check("no draft with that id" in s.call("kit_confirm", draft_id=g, approval_code=real, asked_by="test"), "a burned draft still sent")
 calls = open(CALLS).read().splitlines()
 check(all(c.endswith("--dry-run") for c in calls), f"a confirm under CHEWBACCA_NO_SEND reached the sender: {calls}")
 
@@ -338,7 +357,7 @@ t = s.write("gtm.clay_write", op="add-rows", args={"ws": "1", "table": "t_1", "r
 draft = re.search(r"DRAFT (d_[A-Za-z0-9_-]{16})", t)
 check(draft is not None and "/v3/tables/t_1/records" in t, f"the GTM write did not draft: {t}")
 json.dump({"method": "POST", "path": "/v3/tables/t_OTHER/records", "body": {}}, open(REQ, "w"))
-check("changed since the draft" in s.call("kit_confirm", draft_id=draft.group(1), asked_by="test"), "a changed request was confirmed")
+check("changed since the draft" in s.call("kit_confirm", draft_id=draft.group(1), approval_code=screen_code(), asked_by="test"), "a changed request was confirmed")
 check("must be one of" in s.write("gtm.clay_write", op="rm-rf", args={}), "an unknown GTM op was drafted")
 check(not [c for c in open(CALLS).read().splitlines() if c.startswith("gtm") and "--dry-run" not in c],
       "a GTM write ran without --dry-run")
@@ -361,10 +380,10 @@ s4 = Server()
 t = s4.write("text.send", to="Unsaved Person", text="hey", via="whatsapp")
 d = re.search(r"DRAFT (d_[A-Za-z0-9_-]{16})", t).group(1)
 check("not a saved contact" in t and "to_address" in t, f"an unsaved address was not flagged: {t}")
-check("needs to_address" in s4.call("kit_confirm", draft_id=d, asked_by="test"), "an unsaved address confirmed without to_address")
-check("needs to_address" in s4.call("kit_confirm", draft_id=d, to_address="15559999999@s.whatsapp.net", asked_by="test"),
+check("needs to_address" in s4.call("kit_confirm", draft_id=d, approval_code=screen_code(), asked_by="test"), "an unsaved address confirmed without to_address")
+check("needs to_address" in s4.call("kit_confirm", draft_id=d, approval_code=screen_code(), to_address="15559999999@s.whatsapp.net", asked_by="test"),
       "a different to_address was accepted")
-check("nothing was sent" in s4.call("kit_confirm", draft_id=d, to_address="15550001111@s.whatsapp.net", asked_by="test"),
+check("nothing was sent" in s4.call("kit_confirm", draft_id=d, approval_code=screen_code(), to_address="15550001111@s.whatsapp.net", asked_by="test"),
       "the matching to_address was not accepted")
 s4.close()
 check(all(c.endswith("--dry-run") for c in open(CALLS).read().splitlines() if c.startswith("people send")),

@@ -653,6 +653,7 @@ struct SurfaceChrome: ViewModifier {
         case .bare: return AnyView(bare(content))
         case .bracket: return AnyView(bracket(content))
         case .window: return AnyView(window(content))
+        case .glass: return AnyView(glass(content))
         }
     }
 
@@ -828,6 +829,52 @@ struct SurfaceChrome: ViewModifier {
             .shadow(color: .black.opacity(0.7), radius: 2)
             .shadow(color: .black.opacity(0.5), radius: 6)
     }
+
+    /// An edgeless field of frosted glass under content, and no object.
+    ///
+    /// The card's material and wash, so text holds the same 4.5:1 it holds
+    /// on a card, under a mask blurred so far that the field has no corner,
+    /// no rim and no shadow pool to read as a window. The mask starts
+    /// `glassBleed` outside the content's padding and fades over
+    /// `glassFeather`, so every glyph sits on the full wash: the padding is
+    /// 16, plus 6 of bleed, is 22 points inside the fade's midpoint.
+    private func glass(_ content: Content) -> some View {
+        content
+            .background {
+                ZStack {
+                    VisualEffect(material: .hudWindow, blending: .behindWindow)
+                    SurfaceChrome.frost.opacity(Self.glassWash(urgency, over: ground))
+                        .animation(Motion.fade(0.3, reduced: false), value: ground)
+                }
+                .mask {
+                    // Inset by the feather inside a frame grown by bleed
+                    // and feather: the shape's edge is the content's edge
+                    // plus the bleed, and the blur fades it from there.
+                    RoundedRectangle(cornerRadius: 44, style: .continuous)
+                        .padding(Self.glassFeather)
+                        .blur(radius: Self.glassFeather)
+                }
+                .padding(-Self.glassBleed - Self.glassFeather)
+                .allowsHitTesting(false)
+            }
+    }
+
+    /// How far the field reaches past the content's padding, and how soft
+    /// its edge is. Guessed, never measured; the live screenshots on
+    /// 2026-10-11 are what checked that no edge reads as a box.
+    static let glassBleed: CGFloat = 6
+
+    /// The field's wash: the card's, plus `glassExtra`. With no rim and no
+    /// shadow the field alone holds the ground, and the worst case is the
+    /// one with no blur behind it (a snapshot, or a frame before the
+    /// material draws): over a white page measured at 0.97 the card's 0.64
+    /// held `HUD.faint` at 4.36:1, under AA; 0.78 holds it at 4.9:1
+    /// (`GlassGlanceTests.faintHolds`).
+    static let glassExtra = 0.14
+    static func glassWash(_ urgency: Urgency, over ground: Double?) -> Double {
+        min(0.9, urgency.wash(over: ground) + glassExtra)
+    }
+    static let glassFeather: CGFloat = 16
 
     /// Corner brackets, no fill.
     ///

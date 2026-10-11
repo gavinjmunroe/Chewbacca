@@ -63,6 +63,7 @@ public struct SurfaceView: View {
         guard let element = store.spec.elements[id],
               element.type != ComponentNode.pendingType
         else { return AnyView(PlaceholderView()) }
+        if Self.blank(element.type, store.resolved(element), in: chrome) { return AnyView(EmptyView()) }
         return AnyView(
             A11yContract.decorate(
                 element.type, store.resolved(element),
@@ -85,6 +86,38 @@ public struct SurfaceView: View {
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.97)),
                     removal: .opacity.combined(with: .scale(scale: 1.02)))))
+    }
+
+    /// A part with nothing in it draws nothing.
+    ///
+    /// Caleb's 2026-10-11 screenshot of the meetings card: an opened meeting
+    /// with no notes drew "Granola had no notes", two empty grey circles (two
+    /// Buttons whose label was "", each a capsule around nothing), a
+    /// Transcript press and "No turns yet". A Button with no label and a
+    /// Metric with no value are blank on every chrome. On the glass any part
+    /// with no content is, because there is no card to hold the empty space
+    /// and say the panel is still a panel.
+    static func blank(_ type: String, _ p: [String: JSON], in chrome: Chrome) -> Bool {
+        func empty(_ key: String) -> Bool {
+            switch p[key] {
+            case nil, .null?: return true
+            case .string(let text)?: return text.trimmingCharacters(in: .whitespaces).isEmpty
+            case .array(let items)?: return items.isEmpty
+            default: return false
+            }
+        }
+        switch type {
+        case "Button": return empty("label")
+        case "Metric": return empty("value")
+        default: break
+        }
+        guard chrome == .glass else { return false }
+        switch type {
+        case "Text": return empty("value")
+        case "Heading": return empty("text")
+        case "List", "Events", "Transcript": return empty("items")
+        default: return false
+        }
     }
 
     @ViewBuilder
@@ -172,7 +205,8 @@ public struct SurfaceView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     // No title, no line: a launcher rail has nothing to
                     // name, and an empty Text still takes 14 of gap.
-                    if let title = p["title"]?.display, !title.isEmpty {
+                    // On the glass the content names itself: no title line.
+                    if chrome != .glass, let title = p["title"]?.display, !title.isEmpty {
                         Text(chrome == .window ? title.uppercased() : title)
                             .font(chrome == .window
                                 ? Typeface.pixel(11)
@@ -270,6 +304,17 @@ public struct SurfaceView: View {
         switch element.type {
         case "Heading":
             let level = Int(p["level"]?.doubleValue ?? 2)
+            if chrome == .glass {
+                // The open thing's name, set as the largest words on the
+                // glass after the counts: it is what the light carried in.
+                return AnyView(
+                    Text(p["text"]?.display ?? "")
+                        .font(.system(size: level == 1 ? 18 : 15, weight: .semibold))
+                        .foregroundStyle(HUD.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .accessibilityAddTraits(.isHeader))
+            }
             return AnyView(
                 CaptionLabel(
                     text: p["text"]?.display ?? "", size: level == 1 ? 14 : 11.5,
@@ -278,6 +323,17 @@ public struct SurfaceView: View {
 
         case "Text":
             let tone = p["tone"]?.stringValue
+            if tone == "idle" {
+                // A standing state that is nothing happening: a small dim
+                // dot and no word on the glass (2026-10-11, "Im not in a
+                // meeting?" at a lit "Listening"). The words are for
+                // VoiceOver only.
+                return AnyView(
+                    Circle().fill(HUD.ink.opacity(0.32)).frame(width: 5, height: 5)
+                        .frame(width: 12, height: 12)
+                        .accessibilityElement()
+                        .accessibilityLabel(p["value"]?.display ?? ""))
+            }
             let muted = tone == "muted"
             let meaning = HUD.meaning(tone)
             return AnyView(
@@ -321,6 +377,12 @@ public struct SurfaceView: View {
         case "Metric":
             let value = p["value"]?.display ?? ""
             let tone = Self.threshold(p, value: p["value"]?.doubleValue, in: chrome)
+            if chrome == .glass {
+                return AnyView(
+                    GlassMetric(label: p["label"]?.display ?? "", value: value,
+                                tone: tone, number: p["value"]?.doubleValue)
+                        .animation(Motion.gentle(reduced: Motion.systemReduced), value: value))
+            }
             return AnyView(
                 MetricView(
                     label: p["label"]?.display ?? "",
@@ -406,6 +468,9 @@ public struct SurfaceView: View {
                     tone: Self.threshold(p, value: fraction, in: chrome) ?? tone))
 
         default:
+            if chrome == .glass {
+                return AnyView(GlassRail(items: p["items"]?.arrayValue ?? [], rowAction: rowAction(p, id)))
+            }
             return AnyView(
                 EventsView(
                     caption: p["caption"]?.display ?? "",
@@ -477,6 +542,11 @@ public struct SurfaceView: View {
             var payload: [String: JSON] = [:]
             if let collection = p["collection"] { payload["collection"] = collection }
             let primary = p["variant"]?.stringValue == "primary"
+            if chrome == .glass {
+                return AnyView(GlassWord(label: p["label"]?.display ?? "") {
+                    store.fire(action, from: element.id, payload: payload)
+                })
+            }
             return AnyView(
                 Button {
                     store.fire(action, from: element.id, payload: payload)
@@ -835,7 +905,11 @@ struct ListView: View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(rows) { row in
                 HStack(alignment: rowAction == nil ? .top : .center, spacing: 7) {
-                    if chrome == .window && !ordered {
+                    if chrome == .glass && !ordered {
+                        // No bullet on the glass: the indent under the name
+                        // already says these lines belong to it.
+                        EmptyView()
+                    } else if chrome == .window && !ordered {
                         // A square bullet in ink, the window's one shape.
                         // 6 of top pad centres it on a 12.5-point first line.
                         Rectangle()

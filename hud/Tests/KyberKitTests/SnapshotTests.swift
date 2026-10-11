@@ -177,10 +177,12 @@ struct SnapshotTests {
                 .split(separator: "\n").map(String.init).filter { !$0.hasPrefix("@") }
             let drawn = store(lines)
             let stem = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+            // HUD_LINES_CHROME=glass renders it the way chrome=glass draws.
+            let chrome = ProcessInfo.processInfo.environment["HUD_LINES_CHROME"].flatMap(Chrome.init) ?? .card
             for ground in Ground.allCases {
                 let covered = coverage("\(stem)-\(ground.rawValue)", size: CGSize(width: 520, height: 1180),
                                        ground: ground) {
-                    card(drawn, .card, 420)
+                    card(drawn, chrome, 420)
                 }
                 #expect(covered > 0.05, "\(stem) covered only \(covered) of the frame")
             }

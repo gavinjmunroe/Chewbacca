@@ -126,6 +126,34 @@ Combinator site's morph code and Emil Kowalski's teardown of UI animation.
     like macos." Light that exists only while something is changing beats a
     border that is always there.
 
+## Past the window: a glance is not a panel
+
+Caleb, 2026-10-11, on the meetings card: "1 dimesnional af bro", and "The
+future of UX does not look like macos". hud/CLAUDE.md "Past the window"
+holds the eleven rules with their sources (Dead Space's diegetic UI, Beyond
+the HUD, Magic Ink, visionOS ornaments and glass, Arc's command bar, and why
+Humane and Rabbit failed). What a surface owes from them:
+
+18. **Draw a glance with `chrome=glass`.** Set `chrome = "glass"` on the
+    Provider. No card, no title bar, no pills; the old card is the fallback
+    (`chrome = "card"`). Meetings is the first (bin/lib/surfaces/meetings.py).
+19. **Rows are presses.** An Events with `actionLabel="Open"` on glass makes
+    each name its own press; any other label (Go) stays a lit word at the
+    row's end. Never put a verb on every row of the glance.
+20. **Give the rail its dimensions.** Rows may carry `day` (only where the
+    day changes), `clock`, `gap` (0 to 1, the time since the row above),
+    `span` (0 to 1, how long it ran) and `tone` (a meaning). A list with a
+    time axis that draws every row the same distance apart hides the axis.
+21. **Send nothing you would draw empty.** A zero count is `""`, an empty
+    button label hides the button, a meeting with nothing in it is one quiet
+    line. The renderer hides blanks on glass; the provider should not send
+    them.
+22. **Private is a property of the row.** Health, therapy and medical titles
+    go out as "Private" in the list and stay behind a second press in the
+    detail (`PRIVATE` in meetings.py, tested with the real titles).
+23. **Decode before cleaning.** Titles from Granola and Anarlog arrive
+    HTML-escaped ("Caleb&apos;s"); `decode()` runs before `clean()`.
+
 ## The bar to clear: Opal's desktop, 2026-10-01
 
 Caleb sent the Chewbacca group a screenshot of Opal's desktop glass (OPAL,

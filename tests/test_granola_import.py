@@ -68,6 +68,34 @@ check("attendees carry over", m["participants"][0]["email"] == "jonah@zeutara.ex
 check("no action items are queued from history", m["action_items"] == [])
 twin = GI.to_meeting("g9", {"id": "g9", "title": "Twin", "date": "2026-10-01T17:00:00Z"}, [], [], used)
 check("two meetings starting the same second get two files", twin["id"] != m["id"] and MC.is_native(twin["id"]))
+# 2026-10-11, Caleb's panel: "Caleb&apos;s" on the glass, and every imported
+# meeting said "1h" because Granola's dates never parsed.
+real = GI.records(['<meeting id="g3" title="Caleb&apos;s intake &amp; plan" date="Oct 10, 2026 6:46 PM PDT">'
+                   '</meeting>'], {})
+check("tagged titles are decoded", real["g3"]["title"] == "Caleb's intake & plan", real)
+when = GI.parse_when("Oct 10, 2026 6:46 PM PDT")
+check("Granola's own date format parses, zone and all",
+      when is not None and when.isoformat() == "2026-10-10T18:46:00-07:00", when)
+check("ISO still parses", GI.parse_when("2026-10-01T17:00:00Z").year == 2026)
+check("nonsense is None, never now", GI.parse_when("soon") is None)
+dated = GI.to_meeting("g3", real["g3"], [], [], used)
+check("an imported meeting carries its own date, not the import time",
+      dated["started_at"].startswith("2026-10-11T01:46") or dated["started_at"].startswith("2026-10-10T18:46"),
+      dated["started_at"])
+check("the title lands decoded", dated["title"] == "Caleb's intake & plan", dated["title"])
+check("an empty meeting carries no 'had no notes' line", dated["summary_note"] == "", dated["summary_note"])
+# repair rewrites what the first imports got wrong, in place
+path = MC.meetings_dir(Path(tmp)) / "rc-old.json"
+MC.private_dir(path.parent)
+MC.write_private(path, {"id": "rc-old", "title": "Caleb&apos;s intake", "started_at": "2026-10-11T08:00:00+00:00",
+                        "ended_at": "2026-10-11T08:00:00+00:00", "created_at": "2026-10-11T08:00:00+00:00",
+                        "summary_note": "Granola had no notes for this meeting."})
+check("repair fixes one meeting", GI.repair(real, {"g3": "rc-old"}) == 1)
+fixed = MC.load(path)
+check("repair redates and decodes",
+      fixed["title"] == "Caleb's intake & plan" and GI.parse_when(fixed["started_at"]) == when
+      and fixed["summary_note"] == "", fixed)
+check("repair is idempotent", GI.repair(real, {"g3": "rc-old"}) == 0)
 check("the stdlib server is reachable under the name connect uses (a helper named http hid it, 10/10)",
       hasattr(GI.httpserver, "HTTPServer") and callable(GI.http))
 check("the CLI parses", compile((ROOT / "bin" / "granola-import").read_text(), "granola-import", "exec") is not None)

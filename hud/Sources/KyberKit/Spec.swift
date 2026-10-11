@@ -200,6 +200,12 @@ public enum Chrome: String, Sendable, CaseIterable {
     /// (typesafe.ai, read 2026-10-08) on Kyber's frosted material, for a panel
     /// that is a working tool rather than a glance.
     case window
+    /// Content on the glass and nothing else: no card, no title bar, no
+    /// pill buttons, no edge. Legibility comes from an edgeless frosted field
+    /// that fades out before it can read as a box, and a press lands on the
+    /// content itself (hud/CLAUDE.md, "Past the window"). Caleb, 2026-10-11:
+    /// "The future of UX does not look like macos".
+    case glass
 
     /// Whether this chrome paints a background the person can grab anywhere.
     public var isFilled: Bool { self == .card || self == .window }

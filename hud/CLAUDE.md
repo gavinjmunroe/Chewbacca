@@ -72,7 +72,7 @@ a meeting starting in one minute. A system that cries wolf gets switched off.
 
 ## How much of a window to be
 
-`chrome=` is `card` (the default), `bare`, `bracket`, or `window`.
+`chrome=` is `card` (the default), `bare`, `bracket`, `window`, or `glass`.
 
 `bare` draws no panel at all. The content sits directly on the screen with a
 halo behind it, which is what a heads-up display is actually for and what a
@@ -88,6 +88,96 @@ and they are the only colour on the panel, so spend them on what changed.
 Headings and captions become inverted chips, Diagram nodes become square
 tiles with a tone pip in the corner, and `fill:true` inverts the one node that
 matters. Sentences are set in the system mono.
+
+`glass` is a glance with no window at all: no card, no title bar, no pill
+buttons, no edge. The content sits on an edgeless frosted field that fades
+out before it can read as a box, a press lands on the content itself, and
+state is light on the thing that has it. The meetings glance draws this way
+(`KYBER_GLASS=0` brings its card back, kept as the fallback); the rules are
+below. On glass a Button is a lit word, a Metric is a figure in the text
+("6 calls this week"), Events is a time rail, and any part with nothing in
+it draws nothing. An older Kyber reads `glass` as `card`.
+
+## Past the window
+
+Caleb, 2026-10-11 01:17: "The future of UX does not look like macos", after
+"Ts does not look like the future lmao" and "Death to panels one day"; at
+01:56, on the meetings card: "1 dimesnional af bro". Researched the same
+night, under 30 minutes, from the sources named on each rule. Each rule is
+something a person can check on a screenshot.
+
+1. **No chrome on a glance.** No frame, no title bar, no fill with an edge,
+   no shadow pool. Dead Space's UI lead (Dino Ignacio, GDC 2013, "Crafting
+   Destruction") moved every readout onto Isaac's suit to keep the screen
+   clear, and Fagerholt and Lorentzon's "Beyond the HUD" (Chalmers, 2009)
+   names the axis: an element is diegetic when it lives in the world the
+   player is looking at. On the glass the world is the person's screen, so
+   a glance is content on it, never an object on it. Check: nothing in the
+   screenshot has a corner or a border.
+2. **The content is the press.** A name opens its thing; there is no "Open"
+   capsule beside it. Bret Victor, "Magic Ink" (2006): "for information
+   software, all interaction is essentially navigation around a data space",
+   and interaction "should be used judiciously and sparingly". A press that
+   only navigates is the words themselves, with a 44-point target kept
+   invisible. Check: no row on a glance repeats a verb.
+3. **A verb that changes something stays a word, and only where it acts.**
+   Go, Record, Show are lit text, not pills, and they appear on the opened
+   thing or the one live state, never on every row. Arc's Command Bar put
+   pin, duplicate and history behind one bar instead of buttons on each tab
+   (The Browser Company; Wikipedia's Arc article). Check: at most one verb on
+   the glance before anything is opened.
+4. **Space carries meaning.** When the data has a dimension, the layout
+   draws it instead of a uniform list: the meetings rail spaces each call by
+   the time since the one before it (log scale, three days fills the step)
+   and draws its length as a line of light under its name. Victor again:
+   information software design "is the design of context-sensitive
+   information graphics", "approached initially and primarily as a graphic
+   design project". Check: two rows the same distance apart mean the same
+   gap.
+5. **Colour is light, on the thing that has the state.** A state is a glow
+   on that item's own node or number, in its meaning's hue (needs you amber,
+   working cyan, done green, recording red), never a badge, a tinted box or
+   a coloured panel. Dead Space's health is the light along Isaac's spine
+   going from green to red. Nothing glows at rest that does not need the
+   person. Check: every coloured pixel answers "what state is this thing in".
+6. **Say nothing when there is nothing.** No zero counts, no empty lists,
+   no "No turns yet", no label on an empty button. A meeting with nothing in
+   it is one quiet line. Victor: "each interaction can and should result in
+   a discernible change". Check: every part on the screenshot has content.
+7. **Controls hang off the edge of the content, not inside a header.**
+   visionOS keeps a window's primary actions in a toolbar ornament anchored
+   to its bottom edge and its tab bar as an ornament on its leading edge, so
+   the content area stays unobstructed (Apple HIG, Ornaments; WWDC23
+   "Design for spatial user interfaces"). On the glass the one live state
+   and its verb are a single lit line at the top edge. Check: the state and
+   its verb are one line.
+8. **Legible over anything, with no box.** visionOS glass adapts to its
+   surroundings to keep content readable instead of going opaque (HIG,
+   Materials). Here an edgeless frosted field holds 4.5:1 for faint text
+   over a white page with no blur behind it (`GlassGlanceTests`). Humane's
+   Ai Pin is the warning: its laser-projected display was near illegible in
+   daylight (CNET, Fast Company and the WSJ's reviews, April 2024), and a
+   new surface that cannot be read is worse than the window it replaced.
+   Check: read every line over a white page.
+9. **Answer in place, at once, from what is already here.** Humane's pin
+   waited "and waits, and fails" (David Pierce, The Verge) and the Rabbit
+   R1's "large action model" missed or ignored requests (Gizmodo, Android
+   Authority). Both took the screen away and put a slow round trip where
+   the state used to be. A glance draws from local data, a press answers on
+   the way down (it scales to 0.96 before anything comes back), and the
+   answer redraws in place. Check: a press changes something on the next
+   frame.
+10. **Assume someone else can see the glass.** A meeting whose title names
+    health care (psychiatry, therapy, medication, a doctor, a clinic) is
+    "Private" in the list, and its detail opens only on a second press.
+    Check: no screenshot of a glance shows a medical title.
+11. **The light morph carries a name into its detail.** Pressing a name
+    sends light from that row, the frame it had when pressed, into the
+    detail below (motion rule 11). It stretches, the edge on the row
+    letting go late, so it never sits row-sized on a neighbour (the
+    2026-10-11 recording, where a sliding box framed the next row exactly
+    and read as the wrong row lifting). Check: the first lit frame is on
+    the row that was pressed.
 
 ## Saying it again
 

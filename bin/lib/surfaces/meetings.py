@@ -37,7 +37,10 @@ and no outcome line here quotes a meeting.
 """
 from __future__ import annotations
 
+import html
 import json
+import math
+import os
 import re
 import sqlite3
 from datetime import datetime, timedelta
@@ -69,6 +72,59 @@ PAGE_CHARS = 1400
 # the call ends, and this is how long the panel can lag it.
 REFRESH_S = 30.0
 PURPOSE = "What your calls said, and what you owe"
+
+# The glass renderer (hud chrome=glass): content on the glass with no card,
+# title bar or pill buttons. KYBER_GLASS=0 draws the old card, kept as the
+# fallback (Caleb, 2026-10-11 01:56 on the card: "1 dimesnional af bro").
+CHROME = "card" if os.environ.get("KYBER_GLASS") == "0" else "glass"
+
+# Someone else can see the glass (kyber-surfaces rule 11). On 2026-10-11 the
+# panel printed a psychiatric intake and a therapy session by name on the
+# right edge of the screen. A title that names health care shows as "Private"
+# and its detail stays behind a press. Words read off the titles on this Mac
+# that day, plus their obvious siblings; a list, so it misses things (a
+# doctor's surname alone), and it errs toward hiding.
+PRIVATE = re.compile(
+    r"\b(psychiatr\w*|psycholog\w*|therap\w*|counsel+ing|counsel+or|medica\w*|medicine|doctor|dr\.? [a-z]+|"
+    r"clinic\w*|diagnos\w*|mental health|health ?care|hospital|prescri\w*|rehab\w*|dentist\w*|dental|"
+    r"ob-?gyn|pregnan\w*|osas|accommodations?|disabilit\w*|psych|intake)\b", re.I)
+PRIVATE_LABEL = "Private"
+EMPTY_LINE = "Nothing was written down in this one."
+# A meeting's place on the rail: the gap to the one before it, on a log scale
+# so an hour and three days both read without the week running off the
+# glass; 72 h fills the full step. Guessed, never measured on the glass.
+GAP_FULL_HOURS = 72.0
+SPAN_FULL_MINUTES = 90.0
+
+
+def decode(text) -> str:
+    """Granola and Anarlog hand titles over HTML-escaped ("Caleb&apos;s",
+    2026-10-11). Decoded before cleaning, so an entity never reaches a row."""
+    return html.unescape(str(text or ""))
+
+
+def is_private(*texts: str) -> bool:
+    return any(PRIVATE.search(t or "") for t in texts)
+
+
+def gap_of(newer: datetime | None, older: datetime | None) -> float:
+    """0 to 1: how far apart two meetings are, for the rail's spacing."""
+    if not newer or not older:
+        return 0.0
+    hours = max(0.0, (newer - older).total_seconds() / 3600)
+    return round(min(1.0, math.log1p(hours) / math.log1p(GAP_FULL_HOURS)), 2)
+
+
+def day_of(moment: datetime | None, now: datetime) -> str:
+    if moment is None:
+        return ""
+    local, today = moment.astimezone(), now.astimezone()
+    days = (today.date() - local.date()).days
+    if days == 0:
+        return "Today"
+    if days == 1:
+        return "Yesterday"
+    return local.strftime("%a") if days < 6 else local.strftime("%b %-d")
 NO_MEETINGS = "No meetings recorded yet."
 # Each step is one glance: the 2026-10-10 versions ran 150 to 190 characters
 # and Caleb called the panel a wall of text (surface_lint.ROW_CHARS is 120).
@@ -114,7 +170,7 @@ def lines_of(markdown: str, most: int) -> list[str]:
         if "decision" in heading.lower():
             continue
         for line in lines:
-            out.append(clip(line, LINE_WIDTH))
+            out.append(clip(decode(line), LINE_WIDTH))
             if len(out) >= most:
                 return out
     return out
@@ -176,10 +232,12 @@ class Meetings(Provider):
     width = 420
     refresh = REFRESH_S
     replaces = "Granola"
+    chrome = CHROME
 
     def __init__(self) -> None:
         super().__init__()
         self.actions = {f"{ACTION_PREFIX}open": self.open, f"{ACTION_PREFIX}add": self.add,
+                        f"{ACTION_PREFIX}reveal": self.reveal,
                         f"{ACTION_PREFIX}act": self.act,
                         f"{ACTION_PREFIX}next": self.next_page, f"{ACTION_PREFIX}capture": self.capture,
                         f"{ACTION_PREFIX}why": self.why, f"{ACTION_PREFIX}transcript": self.transcript}
@@ -188,6 +246,8 @@ class Meetings(Provider):
         self.show_transcript = False
         # The meeting whose detail shows, by Anarlog id. Set only by open().
         self.opened = ""
+        # A private meeting whose detail was pressed open, by id.
+        self.revealed = ""
         # id -> (updated_at, meeting): an unchanged meeting is not re-read.
         self._details: dict[str, tuple[str, dict]] = {}
         # The transcript page on the glass, for one meeting id.
@@ -337,17 +397,22 @@ class Meetings(Provider):
                     owner = f"{AM.clean(assignee.get('display_name'), 24)} (unverified)"
             names = [n for n in self.who(meeting, ids, mine) if not n.endswith("(unverified)")]
             plan = MA.plan(meeting, item, lines or [], names, owner)
-            items.append({"id": tid, "text": AM.clean(item.get("text"), 100), "owner": owner, "plan": plan,
+            items.append({"id": tid, "text": AM.clean(decode(item.get("text")), 100), "owner": owner, "plan": plan,
                           "done": (done or {}).get(tid),
                           "due": AM.due_day(item.get("due_at")), "added": tid in kept,
                           "item": item})
-        return {"id": mid, "title": AM.clean(meeting.get("title"), 60) or "Untitled meeting",
+        title = AM.clean(decode(meeting.get("title")), 60) or "Untitled meeting"
+        begin, finish = AM.when(meeting.get("started_at")), AM.when(meeting.get("ended_at"))
+        minutes = int((finish - begin).total_seconds() // 60) if begin and finish and finish > begin else 0
+        return {"id": mid, "title": title, "private": is_private(title, decode(meeting.get("folder_path"))),
+                "minutes": minutes,
+                "has_lines": bool(lines),
                 "start": start, "live": AM.is_live(meeting, now), "length": duration(meeting),
                 "folder": AM.clean(meeting.get("folder_path"), 40), "who": self.who(meeting, ids, mine),
                 "summary": lines_of(AM.summary_text(meeting), SUMMARY_LINES),
-                "decisions": [clip(x, LINE_WIDTH) for x in AM.decisions(meeting)[:DECISION_LINES]],
+                "decisions": [clip(decode(x), LINE_WIDTH) for x in AM.decisions(meeting)[:DECISION_LINES]],
                 "items": items, "meeting": meeting, "native": AM.app_of(meeting) == MC.APP,
-                "summary_note": AM.clean(meeting.get("summary_note"), LINE_WIDTH)}
+                "summary_note": AM.clean(decode(meeting.get("summary_note")), LINE_WIDTH)}
 
     # ── drawing ──────────────────────────────────────────────────────────
     #
@@ -358,19 +423,26 @@ class Meetings(Provider):
     # 2026-10-10: "its just a wall of text"; surface_lint holds the line).
 
     def layout(self) -> list[str]:
-        ids = ["s", "purpose", "state", "capture", "note", "counts", "setup", "list", "detail", "status"]
-        detail = ["head", "meta", "summary", "decisions", "items", "whyBtn", "why", "txBtn", "transcript", "next"]
+        glass = self.chrome == "glass"
+        # On the glass the listening state and Record are one line of light
+        # at the top edge, not a purpose line, a state line and a pill
+        # (Caleb's 2026-10-11 screenshot stacked all three).
+        ids = ["s", "purpose", "live", "note", "counts", "setup", "list", "detail", "status"]
+        detail = ["head", "meta", "reveal", "summary", "decisions", "items", "whyBtn", "why", "txBtn", "transcript",
+                  "next"]
         return [
             comp(self.cid("s"), "Screen", title=self.title),
-            comp(self.cid("purpose"), "Text", value=PURPOSE, tone="muted"),
+            comp(self.cid("purpose"), "Text", value=Bind(self.p("purpose")), tone="muted"),
+            comp(self.cid("live"), "Stack", direction="horizontal", align="center", gap=3),
             # Recording wears the recording hue on every surface (hud
             # HUD.meaning); any other state is plain ink.
             comp(self.cid("state"), "Text", value=Bind(self.p("state")), tone=Bind(self.p("stateTone"))),
             comp(self.cid("capture"), "Button", label=Bind(self.p("captureLabel")), action=f"{ACTION_PREFIX}capture"),
             comp(self.cid("note"), "Text", value=Bind(self.p("note")), tone="muted"),
             comp(self.cid("counts"), "Stack", direction="grid", cols=2, gap=3),
-            comp(self.cid("week"), "Metric", label="This week", value=Bind(self.p("week"))),
-            comp(self.cid("owed"), "Metric", label="To look at", value=Bind(self.p("owed")),
+            comp(self.cid("week"), "Metric", label="calls this week" if glass else "This week",
+                 value=Bind(self.p("week"))),
+            comp(self.cid("owed"), "Metric", label="to look at" if glass else "To look at", value=Bind(self.p("owed")),
                  thresholds=[{"at": 1, "tone": "warn"}]),
             f"> {self.cid('counts')} {self.cid('week')} {self.cid('owed')}",
             comp(self.cid("setup"), "List", items=Bind(self.p("setup"))),
@@ -381,6 +453,7 @@ class Meetings(Provider):
             comp(self.cid("detail"), "Stack", gap=3, **{"from": Bind(self.p("shownRow"))}),
             comp(self.cid("head"), "Heading", text=Bind(self.p("head")), level=3),
             comp(self.cid("meta"), "Text", value=Bind(self.p("meta")), tone="muted"),
+            comp(self.cid("reveal"), "Button", label=Bind(self.p("revealLabel")), action=f"{ACTION_PREFIX}reveal"),
             comp(self.cid("summary"), "List", items=Bind(self.p("summary"))),
             comp(self.cid("decisions"), "List", items=Bind(self.p("decisions"))),
             comp(self.cid("items"), "Events", caption=Bind(self.p("itemsCaption")), items=Bind(self.p("items")),
@@ -391,6 +464,7 @@ class Meetings(Provider):
             comp(self.cid("transcript"), "Transcript", items=Bind(self.p("transcript"))),
             comp(self.cid("next"), "Button", label=Bind(self.p("nextLabel")), action=f"{ACTION_PREFIX}next"),
             comp(self.cid("status"), "Text", value=Bind(self.p("status")), tone="muted"),
+            f"> {self.cid('live')} {self.cid('state')} {self.cid('capture')}",
             f"> {self.cid('detail')} {' '.join(self.cid(i) for i in detail)}",
             f"> {' '.join(self.cid(i) for i in ids)}",
             f"r {self.cid('s')}",
@@ -400,11 +474,17 @@ class Meetings(Provider):
         return {self.p("status"): ""}
 
     def blank(self) -> dict:
-        return {self.p("state"): "", self.p("stateTone"): "", self.p("setup"): [], self.p("rows"): [], self.p("shownRow"): "",
+        return {self.p("purpose"): PURPOSE if self.chrome != "glass" else "", self.p("revealLabel"): "",
+                self.p("state"): "", self.p("stateTone"): "", self.p("setup"): [], self.p("rows"): [], self.p("shownRow"): "",
                 self.p("week"): "", self.p("owed"): "", self.p("head"): "", self.p("meta"): "",
                 self.p("summary"): [], self.p("decisions"): [], self.p("itemsCaption"): "", self.p("items"): [],
                 self.p("itemsWhy"): [], self.p("whyLabel"): "", self.p("transcript"): [], self.p("txLabel"): "",
-                self.p("nextLabel"): "", self.p("captureLabel"): "Record now"}
+                self.p("nextLabel"): "", self.p("captureLabel"): self.record_label(False)}
+
+    def record_label(self, running: bool) -> str:
+        if running:
+            return "Stop"
+        return "Record" if self.chrome == "glass" else "Record now"
 
     def shown(self, data) -> dict | None:
         rows = (data or {}).get("rows") or []
@@ -428,9 +508,17 @@ class Meetings(Provider):
             return out
         now = ctx.now()
         capture = data.get("capture") or {}
-        out[self.p("captureLabel")] = "Stop" if capture.get("running") else "Record now"
+        out[self.p("captureLabel")] = self.record_label(bool(capture.get("running")))
         out[self.p("state")] = self.state_line(capture, now)
         out[self.p("stateTone")] = "recording" if capture.get("running") else ""
+        if self.chrome == "glass" and not capture.get("running"):
+            # Idle is a small dim dot and no word. At 2:19 on 2026-10-11 a lit
+            # "Listening" read to Caleb as a call in progress ("Im not in a
+            # meeting?"): colour and a word belong only to a live call or a
+            # recording. The words stay for VoiceOver (tone "idle").
+            word = {"Listening for calls": "Listening"}.get(out[self.p("state")], out[self.p("state")])
+            out[self.p("state")] = word
+            out[self.p("stateTone")] = "idle"
         setup = data.get("setup")
         if setup:
             out[self.p("note")] = note_for(data, error, setup["headline"], data.get("_at"))
@@ -440,35 +528,50 @@ class Meetings(Provider):
         rows = data["rows"]
         live = data.get("live")
         if live and live["native"] and not capture.get("running"):
-            out[self.p("state")] = f"Finishing {clip(live['title'], 40)}"
+            out[self.p("state")] = f"Finishing {clip(PRIVATE_LABEL if live['private'] else live['title'], 40)}"
         elif live and not live["native"]:
             # Anarlog recording on its own, with no end time yet.
             mins = int((now - live["start"]).total_seconds() // 60) if live["start"] else 0
-            out[self.p("state")] = " · ".join(["Recording", clip(live["title"], 40)] + ([f"{mins} min"] if mins else []))
+            out[self.p("state")] = " · ".join(["Recording", clip(PRIVATE_LABEL if live["private"] else live["title"], 40)] + ([f"{mins} min"] if mins else []))
             out[self.p("stateTone")] = "recording"
         recent = [r for r in rows if r["start"] and (now - r["start"]).days < 7]
         out[self.p("week")] = len(recent)
-        out[self.p("owed")] = sum(1 for r in recent for i in r["items"] if not i["added"] and not i["done"])
+        owed = sum(1 for r in recent for i in r["items"] if not i["added"] and not i["done"])
+        # A zero says nothing (Caleb's screenshot, "0 TO LOOK AT"): the count
+        # shows only above zero, and an empty value draws nothing.
+        out[self.p("owed")] = owed if owed else ""
         out[self.p("note")] = note_for(data, error, data.get("graph_note") or "", data.get("_at"))
         shown_id = (self.shown(data) or {}).get("id")
-        out[self.p("rows")] = [{
-            "id": r["id"], "time": ago(r["start"], now) if r["start"] else "", "accent": r["id"] == shown_id,
-            "text": clip(r["title"] + (f" · {', '.join(r['who'][:2])}" if r["who"] else "")
-                         + (f" +{len(r['who']) - 2}" if len(r["who"]) > 2 else ""), ROW_WIDTH)} for r in rows]
+        out[self.p("rows")] = self.rail(rows, shown_id, now)
         r = self.shown(data)
         if r is None:
             return out
         out[self.p("shownRow")] = r["id"]
+        if r["private"] and self.revealed != r["id"]:
+            # The press opened it; a second press shows it. Nothing of what
+            # it said is on the glass until then.
+            out[self.p("head")] = PRIVATE_LABEL
+            out[self.p("meta")] = r["start"].strftime("%a %b %-d") if r["start"] else ""
+            out[self.p("revealLabel")] = "Show"
+            return out
         when_text = r["start"].strftime("%a %b %-d") if r["start"] else ""
         who = [w for w in r["who"] if not w.endswith("(unverified)")] or r["who"]
         out[self.p("head")] = clip(r["title"], 60)
         out[self.p("meta")] = clip(" · ".join(x for x in [when_text, r["length"], ", ".join(who[:3])] if x), 90)
         summary = distinct(r["summary"], r["decisions"] + [i["text"] for i in r["items"]])[:SUMMARY_LINES]
+        page_now = self._page if self._page and self._page.get("meeting_id") == r["id"] else None
+        has_transcript = r["has_lines"] if r["native"] else bool(page_now and page_now.get("text"))
         if summary:
             out[self.p("summary")] = [{"id": f"s{n}", "text": clip(t, 110)} for n, t in enumerate(summary)]
-        elif r["native"]:
-            out[self.p("summary")] = [{"id": "s0", "text": clip(r["summary_note"] or "Summary comes when the call ends.",
-                                                                  110)}]
+        elif r["native"] and r["summary_note"]:
+            out[self.p("summary")] = [{"id": "s0", "text": clip(r["summary_note"], 110)}]
+        elif r["live"]:
+            out[self.p("summary")] = [{"id": "s0", "text": "Summary comes when the call ends."}]
+        elif not (r["decisions"] or r["items"] or has_transcript):
+            # A meeting with nothing in it is one quiet line and nothing
+            # else: no empty list, no Transcript press, no "No turns yet".
+            out[self.p("summary")] = [{"id": "s0", "text": EMPTY_LINE}]
+            return out
         out[self.p("decisions")] = [{"id": f"d{n}", "text": clip(f"Decided: {t}", 110)}
                                     for n, t in enumerate(r["decisions"])]
         out[self.p("itemsCaption")] = "Action items" if r["items"] else ""
@@ -479,6 +582,8 @@ class Meetings(Provider):
             out[self.p("itemsWhy")] = [{"id": f"why-{i['id']}", "text": why_line(n + 1, i)}
                                        for n, i in enumerate(r["items"])]
         page = self._page if self._page and self._page.get("meeting_id") == r["id"] else None
+        if not has_transcript and not self.show_transcript:
+            return out
         out[self.p("txLabel")] = "Hide transcript" if self.show_transcript else "Transcript"
         if self.show_transcript:
             if page is None or page.get("error") or not page.get("text"):
@@ -489,6 +594,30 @@ class Meetings(Provider):
                 out[self.p("transcript")] = [{"id": f"t{page['offset']}-{n}", "role": "assistant", "text": part}
                                              for n, part in enumerate(sentences(clip(page["text"], PAGE_CHARS)))]
             out[self.p("nextLabel")] = "More" if page and page.get("next") else "From the start"
+        return out
+
+    def rail(self, rows: list[dict], shown_id: str | None, now: datetime) -> list[dict]:
+        """The meetings as rows of the time rail: the card renderer reads
+        `time` and `text`; the glass reads `day` (only where the day changes),
+        `clock`, `gap` (its spacing) and `tone` (its light)."""
+        out, last_day = [], None
+        for n, r in enumerate(rows):
+            who = "" if r["private"] else ((f" · {', '.join(r['who'][:2])}" if r["who"] else "")
+                                          + (f" +{len(r['who']) - 2}" if len(r["who"]) > 2 else ""))
+            day = day_of(r["start"], now)
+            owed = any(not i["added"] and not i["done"] for i in r["items"])
+            out.append({
+                "id": r["id"], "time": ago(r["start"], now) if r["start"] else "", "accent": r["id"] == shown_id,
+                "text": clip((PRIVATE_LABEL if r["private"] else r["title"]) + who, ROW_WIDTH),
+                "day": day if day != last_day else "",
+                "clock": r["start"].astimezone().strftime("%-I:%M %p") if r["start"] else "",
+                "gap": gap_of(rows[n - 1]["start"], r["start"]) if n else 0.0,
+                # How long it ran, as the length of its line of light: an
+                # hour and a half fills the row. Guessed, never measured.
+                "span": round(min(1.0, r.get("minutes", 0) / SPAN_FULL_MINUTES), 2),
+                "tone": "recording" if r["live"] else ("needs" if owed else ""),
+                "private": r["private"]})
+            last_day = day
         return out
 
     @staticmethod
@@ -574,12 +703,20 @@ class Meetings(Provider):
         if r is None:
             return Result(False, "That meeting isn't on the list any more.")
         self.opened = mid
+        self.revealed = ""
         self.show_why = self.show_transcript = False
         try:
             self._page = AM.transcript_page(ctx, mid, 0)
         except AM.AnarlogError as err:
             self._page = {"meeting_id": mid, "offset": 0, "text": "", "returned": 0, "next": None, "error": str(err)}
         return Result(True, "Opened.")
+
+    def reveal(self, ctx: Context, data, values: dict) -> Result:
+        r = self.shown(data)
+        if r is None:
+            return Result(False, "No meeting to show.")
+        self.revealed = r["id"]
+        return Result(True, "")
 
     def next_page(self, ctx: Context, data, values: dict) -> Result:
         r = self.shown(data)

@@ -362,7 +362,7 @@ def surface(tmp: Path) -> None:
     data = p.fetch(ctx)
     lines = tsm.draw(p, data, None, ctx)
     check("first run draws valid Kyber Lines", not tks.validate(lines), tks.validate(lines))
-    check("first run offers a small Record now press", tsm.value(lines, "/meetings/captureLabel") == "Record now")
+    check("first run offers a small Record press", tsm.value(lines, "/meetings/captureLabel") == "Record")
     steps = [s["text"] for s in tsm.value(lines, "/meetings/setup")]
     check("its steps never ask anyone to install or open Anarlog when it isn't there",
           not any("Anarlog" in s for s in steps) and "records itself" in steps[0], steps)

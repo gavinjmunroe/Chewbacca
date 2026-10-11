@@ -171,10 +171,10 @@ def first_run(tmp: Path) -> None:
             # first step was "Install Anarlog"; it is now the Start capture press.
             check("missing: the first step says calls record themselves, never installing a second app",
                   steps and "records itself" in steps[0] and not any(INSTALL_STEP in s for s in steps), steps)
-            check("missing: a small Record now press stays for any other call",
-                  value(lines, "/meetings/captureLabel") == "Record now", value(lines, "/meetings/captureLabel"))
-            check("missing: the state line is calm, one short phrase",
-                  value(lines, "/meetings/state") in ("Listening for calls", "Not listening for calls",
+            check("missing: a small Record press stays for any other call",
+                  value(lines, "/meetings/captureLabel") == "Record", value(lines, "/meetings/captureLabel"))
+            check("missing: the state line is one small word or phrase",
+                  value(lines, "/meetings/state") in ("Listening", "Not listening for calls",
                                                       "Auto-record is off"), value(lines, "/meetings/state"))
             check("missing: no doctor line when there is no CLI to ask", doctor == "", doctor)
         else:
@@ -212,8 +212,8 @@ def reading(tmp: Path) -> None:
     check("every call is a read, local only, with telemetry pinned off", only_reads(cli), cli.calls)
     check("no control, format or bidi character from a meeting reaches the glass", clean_glass(lines),
           [x for x in lines if BIDI in x or LINE_SEP in x])
-    check("the purpose line says what the panel is for",
-          any("What your calls said" in x for x in lines if x.startswith("c meetings-purpose")))
+    check("on the glass the purpose line is gone: the content says what the panel is for",
+          value(lines, "/meetings/purpose") == "", value(lines, "/meetings/purpose"))
     live = value(lines, "/meetings/state")
     check("a meeting with a start and no end is named as recording, at the top, in one calm line",
           live == "Recording · Zeutara wave 2 check-in · 20 min", live)
@@ -507,9 +507,83 @@ def review_fixes(d: Path) -> None:
         AM.ME_FILE = old
 
 
+def glass_bugs(tmp: Path) -> None:
+    """Caleb's screenshot of the live panel, 2026-10-11 01:56: health care by
+    name on the glass, "&apos;", a zero count, and an empty meeting drawn as
+    a stack of empty parts."""
+    import surfaces.meetings as SM
+
+    ctx = world(tmp, FakeAnarlog())
+    now = fx.NOW
+
+    def row(mid, title, hours, **kw):
+        base = {"id": mid, "title": SM.AM.clean(SM.decode(title), 60), "start": now - timedelta(hours=hours),
+                "live": False, "length": "", "who": ["Sagar Tiwari"], "summary": [], "decisions": [], "items": [],
+                "native": True, "summary_note": "", "has_lines": False, "folder": "", "meeting": {}}
+        base["private"] = SM.is_private(base["title"])
+        base.update(kw)
+        return base
+
+    rows = [row("m1", "Chewbacca", 1), row("m2", "Caleb&apos;s psychiatric intake and medication management", 2),
+            row("m3", "Therapy", 3), row("m4", "SHIPPP", 30, summary=["Ship it"])]
+    data = {"rows": rows, "capture": {"running": False, "watching": True}, "graph_note": "", "live": None}
+    p = Meetings()
+    lines = draw(p, data, None, ctx)
+    drawn = "\n".join(lines)
+    check("health and therapy titles never reach the glass",
+          "psychiatric" not in drawn and "Therapy" not in drawn and "medication" not in drawn,
+          [x for x in lines if "sychiatric" in x or "Therapy" in x])
+    texts = [r["text"] for r in value(lines, "/meetings/rows")]
+    check("they read Private, with no names after them", texts[1] == "Private" and texts[2] == "Private", texts)
+    check("no HTML entity reaches a row", not any("&apos;" in t or "&amp;" in t for t in texts), texts)
+    check("SM.decode turns entities into characters", SM.decode("Caleb&apos;s &amp; co") == "Caleb's & co")
+    check("a zero to-look-at count is not drawn", value(lines, "/meetings/owed") == "", value(lines, "/meetings/owed"))
+    check("idle is a dim dot, never a lit word that reads as a call",
+          (value(lines, "/meetings/state"), value(lines, "/meetings/stateTone")) == ("Listening", "idle"),
+          value(lines, "/meetings/stateTone"))
+    rec = draw(p, {**data, "capture": {"running": True, "since": now - timedelta(minutes=4)}}, None, ctx)
+    check("recording is the one state in colour, with its word",
+          value(rec, "/meetings/stateTone") == "recording" and value(rec, "/meetings/state").startswith("Recording"),
+          value(rec, "/meetings/state"))
+    rail = value(lines, "/meetings/rows")
+    check("the rail names a day only where it changes, and spaces by the gap",
+          [r["day"] for r in rail] == ["Today", "", "", "Yesterday"] and rail[3]["gap"] > rail[1]["gap"] > 0,
+          [(r["day"], r["gap"]) for r in rail])
+    check("the glass is the default and the card is the fallback",
+          p.chrome == "glass" and SM.CHROME in ("glass", "card"))
+    # Pressing a private meeting opens it as Private with one press to show.
+    p.open(ctx, data, {"row": "m2"})
+    lines = draw(p, data, None, ctx)
+    check("an opened private meeting shows only Private and a Show press",
+          value(lines, "/meetings/head") == "Private" and value(lines, "/meetings/revealLabel") == "Show"
+          and value(lines, "/meetings/summary") == [] and "psychiatric" not in "\n".join(lines),
+          (value(lines, "/meetings/head"), value(lines, "/meetings/revealLabel")))
+    p.reveal(ctx, data, {})
+    lines = draw(p, data, None, ctx)
+    check("Show reveals it in the card, and the list row stays Private",
+          "psychiatric" in str(value(lines, "/meetings/head")) and value(lines, "/meetings/rows")[1]["text"] == "Private",
+          value(lines, "/meetings/head"))
+    p.open(ctx, data, {"row": "m3"})
+    check("opening another meeting hides it again", p.revealed == "")
+    # A meeting with nothing in it is one quiet line.
+    p.open(ctx, data, {"row": "m1"})
+    lines = draw(p, data, None, ctx)
+    check("an empty meeting is one quiet line and no empty parts",
+          value(lines, "/meetings/summary") == [{"id": "s0", "text": SM.EMPTY_LINE}]
+          and value(lines, "/meetings/txLabel") == "" and value(lines, "/meetings/itemsCaption") == ""
+          and value(lines, "/meetings/whyLabel") == "" and value(lines, "/meetings/transcript") == [],
+          [(k, value(lines, f"/meetings/{k}")) for k in ("summary", "txLabel", "whyLabel", "transcript")])
+    p.open(ctx, data, {"row": "m4"})
+    lines = draw(p, data, None, ctx)
+    check("a meeting with a summary and no transcript offers no Transcript press",
+          value(lines, "/meetings/summary")[0]["text"] == "Ship it" and value(lines, "/meetings/txLabel") == "",
+          value(lines, "/meetings/txLabel"))
+
+
 def main() -> int:
     helpers()
-    for fn in (first_run, reading, graphing, promoting, row_limit, through_the_daemon, review_fixes):
+    for fn in (first_run, reading, graphing, promoting, row_limit, through_the_daemon, review_fixes,
+               glass_bugs):
         with tempfile.TemporaryDirectory() as d:
             fn(Path(d))
     print("all passed" if not failed else f"{failed} failed")

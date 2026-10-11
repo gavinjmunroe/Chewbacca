@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import html
 import http.server as httpserver
 import json
 import os
@@ -337,7 +338,9 @@ def records(value, out: dict) -> dict:
         # Granola may answer in tagged text rather than JSON:
         # <meeting id="..." title="..." date="...">. Read those too.
         for m in re.finditer(r"<meeting\b([^>]*)>", value):
-            attrs = dict(re.findall(r'(\w+)="([^"]*)"', m.group(1)))
+            # Attribute values arrive XML-escaped: "Caleb&apos;s" was drawn
+            # on the glass as typed on 2026-10-11.
+            attrs = {k: html.unescape(v) for k, v in re.findall(r'(\w+)="([^"]*)"', m.group(1))}
             if attrs.get("id") and attrs.get("title"):
                 out.setdefault(attrs["id"], attrs)
     return out
@@ -355,6 +358,41 @@ def next_cursor(payloads: list):
 
 
 # ── Granola meeting -> room-capture meeting ─────────────────────────────
+
+
+# Granola's list answers in tagged text with dates like "Oct 10, 2026 6:46 PM
+# PDT" (raw/list-000.json, 2026-10-11). parse_iso read none of them, so every
+# imported meeting fell back to the import time and the glass said "1h" for
+# calls from September. US zone names only: those are the ones in that file.
+ZONES = {"PST": -8, "PDT": -7, "MST": -7, "MDT": -6, "CST": -6, "CDT": -5, "EST": -5, "EDT": -4,
+         "UTC": 0, "GMT": 0}
+
+
+def parse_when(value) -> datetime | None:
+    """ISO 8601, or Granola's "Oct 10, 2026 6:46 PM PDT"."""
+    hit = MC.parse_iso(value)
+    if hit or not isinstance(value, str):
+        return hit
+    m = re.fullmatch(r"\s*([A-Z][a-z]{2,8}\.? \d{1,2}, \d{4})(?:,? (\d{1,2}:\d{2}(?::\d{2})? ?[AP]M))?"
+                     r"(?: ([A-Z]{2,4}))?\s*", value)
+    if not m:
+        return None
+    day, clock, zone = m.groups()
+    text = day.replace(".", "") + " " + (clock or "12:00 AM").replace(" ", "")
+    for fmt in ("%b %d, %Y %I:%M%p", "%B %d, %Y %I:%M%p", "%b %d, %Y %I:%M:%S%p", "%B %d, %Y %I:%M:%S%p"):
+        try:
+            naive = datetime.strptime(text, fmt)
+            break
+        except ValueError:
+            continue
+    else:
+        return None
+    if zone in ZONES:
+        return naive.replace(tzinfo=timezone(timedelta(hours=ZONES[zone])))
+    return naive.astimezone()
+
+
+DATE_KEYS = ["start", "start_time", "started_at", "date", "created_at", "createdAt"]
 
 
 def find(value, keys: list[str]):
@@ -406,8 +444,8 @@ def to_meeting(gid: str, record: dict, detail: list, transcript: list, used: set
         hit = records(p, {}).get(gid)
         if hit:
             merged.update(hit)
-    start = MC.parse_iso(find(merged, ["start", "start_time", "started_at", "date", "created_at", "createdAt"]))
-    end = MC.parse_iso(find(merged, ["end", "end_time", "ended_at"]))
+    start = parse_when(find(merged, DATE_KEYS))
+    end = parse_when(find(merged, ["end", "end_time", "ended_at"]))
     start = start or datetime.now(timezone.utc)
     stamp = start.astimezone()
     rid = f"rc-{stamp.strftime('%Y%m%d-%H%M%S')}"
@@ -415,8 +453,8 @@ def to_meeting(gid: str, record: dict, detail: list, transcript: list, used: set
         stamp += timedelta(seconds=1)
         rid = f"rc-{stamp.strftime('%Y%m%d-%H%M%S')}"
     used.add(rid)
-    notes = as_text(find(merged, ["summary", "enhanced_notes", "enhancedNotes", "notes", "ai_notes",
-                                  "notes_markdown", "content"]))
+    notes = html.unescape(as_text(find(merged, ["summary", "enhanced_notes", "enhancedNotes", "notes", "ai_notes",
+                                  "notes_markdown", "content"])))
     people = []
     for n, a in enumerate(find(merged, ["attendees", "participants", "people"]) or []):
         if isinstance(a, dict):
@@ -432,15 +470,56 @@ def to_meeting(gid: str, record: dict, detail: list, transcript: list, used: set
         if tx:
             break
     lines = transcript_lines(tx, start)
-    title = MC.clean(find(merged, TITLE_KEYS), 120) or "Granola meeting"
+    title = MC.clean(html.unescape(str(find(merged, TITLE_KEYS) or "")), 120) or "Granola meeting"
     return {"schema": 1, "id": rid, "title": title, "app": "Granola (imported)",
             "created_at": MC.iso(start), "updated_at": MC.iso(datetime.now(timezone.utc)),
             "started_at": MC.iso(start), "ended_at": MC.iso(end or start), "timezone": "",
             "calendar_event": None, "participants": people, "lines": lines,
             "summary": {"markdown": notes.strip() + "\n", "at": MC.iso(start), "by": "Granola", "guess": False}
             if notes.strip() else None,
-            "summary_note": "" if notes.strip() else "Granola had no notes for this meeting.",
+            # Nothing written down is not news: the glass shows one quiet line
+            # for an empty meeting on its own (surfaces/meetings.py).
+            "summary_note": "",
             "action_items": [], "source": {"app": "Granola", "id": gid}}
+
+
+def repair(seen: dict, imported: dict) -> int:
+    """Rewrite the date and title of meetings already imported, from what
+    Granola listed: the first imports carried the import time and escaped
+    titles. Only those fields change; ids and files stay where they are."""
+    fixed = 0
+    for gid, rid in imported.items():
+        record = seen.get(gid)
+        path = MC.meetings_dir(home()) / f"{rid}.json"
+        if not record or not path.exists():
+            continue
+        body = MC.load(path) or {}
+        start = parse_when(find(record, DATE_KEYS))
+        title = MC.clean(html.unescape(str(find(record, TITLE_KEYS) or "")), 120)
+        want = {"title": title or body.get("title")}
+        if start:
+            iso = MC.iso(start)
+            end = MC.parse_iso(body.get("ended_at"))
+            began = MC.parse_iso(body.get("started_at"))
+            length = (end - began) if end and began and end >= began else timedelta(0)
+            want.update({"started_at": iso, "created_at": iso, "ended_at": MC.iso(start + length)})
+        if body.get("summary_note") == "Granola had no notes for this meeting.":
+            want["summary_note"] = ""
+        if any(body.get(k) != v for k, v in want.items()):
+            body.update(want)
+            MC.write_private(path, body)
+            fixed += 1
+    return fixed
+
+
+def repair_saved(args) -> int:
+    """Repair from the saved raw list, without asking Granola again."""
+    seen: dict = {}
+    for f in sorted((gdir() / "raw").glob("list-*.json")):
+        records((MC.load(f) or {}).get("payloads") or [], seen)
+    fixed = repair(seen, load("imported.json") or {})
+    log(f"repaired {fixed} imported meetings from {len(seen)} listed")
+    return 0
 
 
 def run(args) -> int:
@@ -465,6 +544,8 @@ def run(args) -> int:
             break
         cursor, offset = nxt, offset + PAGE
     imported = load("imported.json") or {}
+    if (fixed := repair(seen, imported)):
+        log(f"repaired the date or title of {fixed} meetings imported before")
     todo = [gid for gid in seen if gid not in imported]
     log(f"Granola lists {len(seen)} meetings; {len(todo)} are new")
     getter, transcriber = tool_named(tools, ["get_meetings"]), tool_named(tools, ["get_meeting_transcript"])
@@ -511,10 +592,11 @@ def main(argv=None) -> int:
     c = sub.add_parser("connect")
     c.add_argument("--wait-hours", type=float, default=24.0)
     sub.add_parser("run")
+    sub.add_parser("repair")
     s = sub.add_parser("status")
     s.add_argument("--json", action="store_true")
     a = p.parse_args(argv)
-    return {"connect": connect, "run": run, "status": status}[a.cmd](a)
+    return {"connect": connect, "run": run, "repair": repair_saved, "status": status}[a.cmd](a)
 
 
 if __name__ == "__main__":

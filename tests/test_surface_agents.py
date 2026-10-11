@@ -38,13 +38,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_kyber_surfaces as tks  # noqa: E402  validate(), FakeHud and the daemon
 
 import realm_client as rc  # noqa: E402
-import realm_import  # noqa: E402
 import surfaces  # noqa: E402
 from surfaces import Context  # noqa: E402
 from surfaces import agents as SA  # noqa: E402
 from surfaces.agents import Agents  # noqa: E402
 
 tks.COMPONENTS.add("Transcript")
+# Avatar is in hud/CLAUDE.md "Lanes, avatars and the launcher rail" and
+# Launcher.swift, outside the generated vocabulary list the checker reads.
+tks.COMPONENTS.add("Avatar")
+# Tiles and Chips: hud/CLAUDE.md "Agents as tiles", AgentTiles.swift.
+tks.COMPONENTS.update({"Tiles", "Chips"})
 BIDI = "‮"
 LINE_SEP = " "
 ZWSP = "​"
@@ -244,6 +248,8 @@ def world(tmp: Path, engine: FakeEngine | None, built: bool = True):
     a = Agents()
     # The probe's thread runs inline, so a fetch's answer already holds it.
     a.spawn = lambda fn: fn()
+    a.tabs = lambda now: []
+    a.wall = lambda: NOW_MS / 1000 + 120
     if engine is None:
         def refuse(_ctx):
             raise rc.RealmUnavailable(f"engine not started ({tmp}/realm-home/engine.json missing); "
@@ -254,8 +260,12 @@ def world(tmp: Path, engine: FakeEngine | None, built: bool = True):
     return a, ctx
 
 
-def view(a, ctx, values=None):
+def view(a, ctx, values=None, open=None):
     data = a.fetch(ctx)
+    if open and a.pinned != open:
+        # Nothing is opened until a tile is pressed: press it, as Caleb would.
+        a.pick(ctx, data, {"row": open})
+        data = a.fetch(ctx)
     return data, a.model(data, None, values or {}, ctx)
 
 
@@ -329,6 +339,11 @@ def down_state(tmp: Path) -> None:
     check("Start the engine on a running engine runs nothing", not r.ok and ran == [], (r, ran))
 
 
+
+def tile_ids(model) -> list[str]:
+    return [t["id"] for t in model["/agents/tiles"]]
+
+
 def listing_and_pin(tmp: Path) -> None:
     e = FakeEngine()
     e.add_session("s-idle", "idle", title="Rail glass" + BIDI + LINE_SEP, updated=NOW_MS - 60_000)
@@ -340,38 +355,38 @@ def listing_and_pin(tmp: Path) -> None:
                                              "suggestions": []})
     a, ctx = world(tmp / "list", e)
     data, model = view(a, ctx)
-    ids = [r["id"] for r in model["/agents/rows"]]
-    check("what needs you first: waiting, then working, then idle", ids == ["s-wait", "s-work", "s-idle"], ids)
-    check("the header counts say what to do", model["/agents/note"] == "3 sessions · 1 waiting on you · 1 working",
-          model["/agents/note"])
-    check("with nothing picked, the session that needs you most is pinned", a.pinned == "s-wait", a.pinned)
-    check("rows name the state in words", model["/agents/rows"][0]["time"].startswith("waiting on you"),
-          model["/agents/rows"][0])
-    check("titles and space names reach the glass stripped", glass_clean(model), model["/agents/rows"])
+    ids = tile_ids(model)
+    check("what needs you first: waiting, then working, then done", ids == ["s-wait", "s-work", "s-idle"], ids)
+    check("the counts say what to do", model["/agents/counts"] == {"needs": 1, "running": 1, "done": 1}
+          and model["/agents/note"] == "", (model["/agents/counts"], model["/agents/note"]))
+    check("each tile says its state as a word the renderer reads",
+          [t["state"] for t in model["/agents/tiles"]] == ["needs", "running", "done"])
+    check("nothing is opened until a tile is pressed, so the glass shows agents, not a form",
+          a.pinned == "" and model["/agents/head"] == "" and "agents-draft" not in " ".join(a.layout()), a.pinned)
+    check("titles reach the glass stripped", glass_clean(model), model["/agents/tiles"])
 
     r = a.pick(ctx, data, {"row": "s-idle"})
     check("Open pins a session", r.ok and a.pinned == "s-idle", (r, a.pinned))
     e.sessions["s-idle"]["status"] = "running"
     e.sessions["s-work"]["status"] = "idle"
     data, model = view(a, ctx)
-    check("a re-sort does not move the pin", a.pinned == "s-idle" and model["/agents/rows"][1]["id"] == "s-idle"
-          and model["/agents/interrupt"][0]["id"] == "s-idle", (a.pinned, [r["id"] for r in model["/agents/rows"]]))
+    check("a re-sort does not move the pin", a.pinned == "s-idle"
+          and model["/agents/interrupt"][0]["id"] == "s-idle"
+          and next(t for t in model["/agents/tiles"] if t["id"] == "s-idle")["selected"], a.pinned)
+    check("and the open agent's conversation is drawn under the tiles",
+          "agents-transcript" in a.layout()[-2] and a.layout()[-2].index("agents-tiles")
+          < a.layout()[-2].index("agents-transcript"), a.layout()[-2])
     e.sessions["s-idle"]["status"] = "idle"
     data, model = view(a, ctx)
     check("Send's row is the pinned session and says it can't be unsent",
           model["/agents/send"][0]["id"] == "s-idle" and "can't be unsent" in model["/agents/send"][0]["text"],
           model["/agents/send"])
-    check("an idle session offers no Interrupt", model["/agents/interrupt"] == [], model["/agents/interrupt"])
+    check("an idle session offers no Stop", model["/agents/interrupt"] == [], model["/agents/interrupt"])
     check("reading the panel wrote nothing", e.writes == [], e.writes)
-    check("an idle pin refreshes slowly", a.refresh == SA.REFRESH_IDLE, a.refresh)
-    a.pick(ctx, data, {"row": "s-work"})
-    e.sessions["s-work"]["status"] = "running"
-    view(a, ctx)
-    check("a working pin refreshes fast", a.refresh == SA.REFRESH_BUSY, a.refresh)
-    del e.sessions["s-work"]
+    del e.sessions["s-idle"]
     data, model = view(a, ctx)
-    check("a pinned session that disappears is named, and the pin moves to what needs you",
-          "gone from the engine" in model["/agents/note"] and a.pinned == "s-wait", (model["/agents/note"], a.pinned))
+    check("a pinned session that disappears is named, and nothing is opened in its place",
+          "gone from the engine" in model["/agents/note"] and a.pinned == "", (model["/agents/note"], a.pinned))
 
 
 def sending(tmp: Path) -> None:
@@ -379,7 +394,7 @@ def sending(tmp: Path) -> None:
     e.add_session("s1", "idle", title="Rail", cwd="/Users/x/code/chewbacca")
     e.add_session("s2", "idle", title="Other", cwd="/Users/x/code/amber/amber-id", updated=NOW_MS - 1)
     a, ctx = world(tmp / "send", e)
-    data, model = view(a, ctx)
+    data, model = view(a, ctx, open="s1")
     check("s1 is pinned", a.pinned == "s1", a.pinned)
     r = a.send(ctx, data, {"row": "s2", "/agents/draft": "hello"})
     check("a Send naming another session than the pin refuses and writes nothing",
@@ -457,7 +472,7 @@ def permissions(tmp: Path) -> None:
                                          "input": {"command": "npm test", "description": "Run the suite"},
                                          "title": "Allow?", "suggestions": [{"type": "addRules"}]})
     a, ctx = world(tmp / "perm", e)
-    data, model = view(a, ctx)
+    data, model = view(a, ctx, open="s1")
     allow, deny = model["/agents/allow"], model["/agents/deny"]
     check("a pending request shows Allow once and Deny for its requestId",
           [x["id"] for x in allow] == ["req-1"] and [x["id"] for x in deny] == ["req-1"], (allow, deny))
@@ -509,7 +524,7 @@ def interrupt_and_fork(tmp: Path) -> None:
     e.add_session("s1", "running", title="Work", cwd="/Users/x/code/chewbacca")
     e.checkpoints.append({"id": "cp-1", "environmentId": "env-s1", "sessionId": "s1", "kind": "turn"})
     a, ctx = world(tmp / "verbs", e)
-    data, model = view(a, ctx)
+    data, model = view(a, ctx, open="s1")
     check("a working session offers Interrupt, saying what it keeps",
           model["/agents/interrupt"][0]["id"] == "s1" and "stays changed" in model["/agents/interrupt"][0]["text"],
           model["/agents/interrupt"])
@@ -530,8 +545,17 @@ def interrupt_and_fork(tmp: Path) -> None:
     e2 = FakeEngine()
     e2.add_session("s9", "idle")
     b, bctx = world(tmp / "nofork", e2)
-    bdata, bmodel = view(b, bctx)
+    bdata, bmodel = view(b, bctx, open="s9")
     check("no checkpoint, no Fork", bmodel["/agents/fork"] == [], bmodel["/agents/fork"])
+
+
+
+def start(a, data, ctx, task="", agent="claude", want=""):
+    """What a Start press carries: the row drawn for that task, and the values."""
+    values = {"/agents/task": task, "/agents/agent": agent, "/agents/want": want}
+    model = a.model(data, None, values, ctx)
+    row = model["/agents/new"][0]["id"] if model["/agents/new"] else ""
+    return a.new(ctx, data, {"row": row, **values}), model
 
 
 def new_sessions(tmp: Path) -> None:
@@ -542,51 +566,52 @@ def new_sessions(tmp: Path) -> None:
     stranger.mkdir(parents=True)
     e.add_session("s-old", "idle", cwd=str(stranger), title="Old")
     data, model = view(a, ctx)
-    labels = model["/agents/folders"]
-    check("the Select lists git repos under the code root and recent session folders",
-          "~/code/chewbacca" in labels and "~/code/amber/amber-id" in labels
-          and any(x.endswith("elsewhere/proj") for x in labels), labels)
-    check("recent session folders come first", labels[0].endswith("elsewhere/proj"), labels)
-    check("nothing picked, no Start", model["/agents/new"] == [], model["/agents/new"])
-    model = a.model(data, None, {"/agents/folder": "~/code/chewbacca"}, ctx)
-    check("a picked folder offers Start, saying what it makes", model["/agents/new"][0]["id"] == "claude|~/code/chewbacca"
-          and "makes one" in model["/agents/new"][0]["text"]
-          and "a folder of its own" in model["/agents/new"][0]["text"], model["/agents/new"])
-    r = a.new(ctx, data, {"row": "claude|~/code/chewbacca", "/agents/folder": "~/code/amber/amber-id", "/agents/agent": "Claude"})
-    check("Start for a folder that isn't the one picked refuses", not r.ok and e.writes == [], r)
-    r = a.new(ctx, data, {"row": "claude|/etc", "/agents/folder": "/etc", "/agents/agent": "Claude"})
+    check("starting is chips, one field and one press", "agents-kinds Chips" in " ".join(a.layout())
+          and "agents-task Field" in " ".join(a.layout()) and "Select" not in " ".join(a.layout()))
+    row = model["/agents/new"][0]
+    check("with nothing typed, Start names the agent and the folder worked in last",
+          row["text"] == "Claude in proj" and row["id"].startswith("claude|") and e.writes == [], row)
+    model = a.model(data, None, {"/agents/task": "in chewbacca: fix the rail"}, ctx)
+    check("a task that starts in <folder>: runs there", model["/agents/new"][0]["text"] == "Claude in chewbacca",
+          model["/agents/new"])
+    r = a.new(ctx, data, {"row": model["/agents/new"][0]["id"], "/agents/task": "in chewbacca: fix the nav",
+                          "/agents/agent": "claude"})
+    check("a press whose message changed since it was drawn runs nothing", not r.ok and e.writes == [], r)
+    r = a.new(ctx, data, {"row": "claude|/etc|0000000000", "/agents/task": "", "/agents/agent": "claude"})
     check("a folder that isn't on the list is never used", not r.ok and e.writes == [], r)
-    r = a.new(ctx, data, {"row": "codex|~/code/chewbacca", "/agents/folder": "~/code/chewbacca",
-                          "/agents/agent": "Codex"})
+    r, _ = start(a, data, ctx, "x", agent="codex")
     check("an agent the engine can't run is never started", not r.ok and e.writes == [], r)
-    r = a.new(ctx, data, {"row": "acp:gemini|~/code/chewbacca", "/agents/folder": "~/code/chewbacca",
-                          "/agents/agent": "Claude"})
-    check("a Start row for another agent than the one picked refuses", not r.ok and e.writes == [], r)
-    r = a.new(ctx, data, {"row": "claude|~/code/chewbacca", "/agents/folder": "~/code/chewbacca", "/agents/agent": "Claude"})
+    r, _ = start(a, data, ctx, "in chewbacca: fix the rail")
     made = [m for m, _ in e.writes]
-    check("Start makes a space, a project at that folder, then a claude session that asks first",
-          r.ok and made == ["spaces.create", "projects.create", "sessions.create"]
+    check("Start makes a space, a project at that folder, a claude session that asks first, and sends the task",
+          r.ok and made == ["spaces.create", "projects.create", "sessions.create", "sessions.send"]
           and e.writes[1][1]["rootPath"] == str(code / "chewbacca")
-          and e.writes[2][1]["agentKind"] == "claude" and e.writes[2][1]["permissionMode"] == "default",
-          (r, e.writes))
-    check("the new session is pinned", a.pinned.startswith("s-new"), a.pinned)
+          and e.writes[2][1]["agentKind"] == "claude" and e.writes[2][1]["permissionMode"] == "default"
+          and e.writes[3][1]["text"] == "fix the rail", (r, e.writes))
+    check("the new agent is opened and the box cleared", a.pinned.startswith("s-new")
+          and r.updates.get("/agents/task") == "", (a.pinned, r.updates))
     data, _ = view(a, ctx)
-    r = a.new(ctx, data, {"row": "claude|~/code/chewbacca", "/agents/folder": "~/code/chewbacca", "/agents/agent": "Claude"})
-    check("a second session in the same folder reuses its space and project",
-          r.ok and [m for m, _ in e.writes[3:]] == ["sessions.create"], e.writes[3:])
+    r, _ = start(a, data, ctx, "in chewbacca:")
+    check("a second agent in the same folder reuses its space and project, and an empty task sends nothing",
+          r.ok and [m for m, _ in e.writes[4:]] == ["sessions.create"], e.writes[4:])
+    r, _ = start(a, data, ctx, "summarize the week", want="amber-id")
+    check("a folder a sentence asked for is used", r.ok and e.writes[-3][0] == "projects.create"
+          and e.writes[-3][1]["rootPath"].endswith("amber/amber-id"), e.writes[-3:])
 
     e.fail["sessions.create"] = lambda: maybe(rc.RealmTimeout("t"))
+    (code / "kits" / "new-kit" / ".git").mkdir(parents=True)
     data, _ = view(a, ctx)
-    r = a.new(ctx, data, {"row": "claude|~/code/amber/amber-id", "/agents/folder": "~/code/amber/amber-id", "/agents/agent": "Claude"})
+    r, _ = start(a, data, ctx, "in new-kit: go")
     check("a maybe_applied create says it may have half run and names what was made",
           not r.ok and "may have half run" in r.line and "a space" in r.line and "a project" in r.line, r)
     e.profiles.clear()
     del e.fail["sessions.create"]
-    (code / "kits" / "new-kit" / ".git").mkdir(parents=True)
+    (code / "kits" / "other-kit" / ".git").mkdir(parents=True)
     data, _ = view(a, ctx)
-    r = a.new(ctx, data, {"row": "claude|~/code/kits/new-kit", "/agents/folder": "~/code/kits/new-kit", "/agents/agent": "Claude"})
+    r, _ = start(a, data, ctx, "in other-kit: go")
     check("a fresh engine with no profile gets one before the space", r.ok and "profiles.create" in
           [m for m, _ in e.writes], e.writes)
+
 
 
 def any_agent(tmp: Path) -> None:
@@ -596,17 +621,15 @@ def any_agent(tmp: Path) -> None:
     clock = [1000.0]
     a.clock = lambda: clock[0]
     data, model = view(a, ctx)
-    check("the Agent select lists the ready agents in the engine's order",
-          model["/agents/kinds"] == ["Claude", "Gemini"], model["/agents/kinds"])
-    check("with nothing picked, the first ready agent is picked", model.get("/agents/agent") == "Claude",
-          model.get("/agents/agent"))
-    check("what can't start is named in words, with why",
-          model["/agents/missing"] == "Can't start: Codex (installed, but the engine couldn't run it). "
-                                      "Not installed: Cursor.", model["/agents/missing"])
-    check("the scripted dev agent and a malformed kind never reach the glass",
-          "Fake" not in json.dumps(model) and "BAD" not in json.dumps(model) and glass_clean(model))
-    probes = [(w, x) for m, _, w in e.calls if m == "agents.probe" for x in [True]]
-    check("the probe is a read, never sent as a write", probes == [(False, True)], probes)
+    check("the chips are the ready agents, in the engine's order",
+          model["/agents/kinds"] == [{"id": "claude", "label": "Claude"}, {"id": "acp:gemini", "label": "Gemini"}],
+          model["/agents/kinds"])
+    check("with nothing picked, the first ready agent is picked", model.get("/agents/agent") == "claude")
+    check("an agent that isn't installed, or won't run, is never listed",
+          "Cursor" not in json.dumps(model) and "Codex" not in json.dumps(model)
+          and "Fake" not in json.dumps(model) and "BAD" not in json.dumps(model) and glass_clean(model))
+    probes = [w for m, _, w in e.calls if m == "agents.probe"]
+    check("the probe is a read, never sent as a write", probes == [False], probes)
     view(a, ctx)
     check("a second fetch inside PROBE_EVERY does not probe again",
           sum(m == "agents.probe" for m, _, _ in e.calls) == 1, e.calls)
@@ -614,204 +637,102 @@ def any_agent(tmp: Path) -> None:
     view(a, ctx)
     check("and one after it does", sum(m == "agents.probe" for m, _, _ in e.calls) == 2)
 
-    model = a.model(data, None, {"/agents/folder": "~/code/chewbacca", "/agents/agent": "Gemini"}, ctx)
-    row = model["/agents/new"][0]
-    check("Start names the agent, and doesn't claim an ACP agent asks first",
-          row["id"] == "acp:gemini|~/code/chewbacca" and "A Gemini session" in row["text"]
-          and "Realm can't set its permission level" in row["text"], row)
-    check("the picked agent is kept", "/agents/agent" not in model, model.get("/agents/agent"))
-    r = a.new(ctx, data, {"row": row["id"], "/agents/folder": "~/code/chewbacca", "/agents/agent": "Gemini"})
+    r = a.choose(ctx, data, {"row": "acp:gemini"})
+    check("a chip press picks the agent", r.ok and r.updates == {"/agents/agent": "acp:gemini"}, r)
+    check("a chip for an agent that isn't there picks nothing", not a.choose(ctx, data, {"row": "acp:cursor"}).ok)
+    r, model = start(a, data, ctx, "in chewbacca: tidy the docs", agent="acp:gemini")
     created = [p for m, p in e.writes if m == "sessions.create"]
     check("Start makes a session of the picked agent", r.ok and created and created[-1]["agentKind"] == "acp:gemini"
-          and "Gemini" in r.line, (r, created))
+          and "Gemini" in r.line and model["/agents/new"][0]["text"] == "Gemini in chewbacca", (r, created))
     data, model = view(a, ctx)
-    check("the new session's header names its agent and claims no asking it can't promise",
-          model["/agents/meta"].endswith(" · Gemini · decides when it asks"), model["/agents/meta"])
+    check("the open agent's header names its agent and claims no asking it can't promise",
+          model["/agents/meta"].startswith("Gemini · ") and model["/agents/meta"].endswith("decides when it asks"),
+          model["/agents/meta"])
+    tile = next(t for t in model["/agents/tiles"] if t["id"] == a.pinned)
+    check("its tile carries the provider, so the renderer draws Gemini's mark",
+          tile["provider"] == "acp:gemini" and tile["name"] == "Gemini" and tile["selected"], tile)
 
     e.probe[0]["loggedIn"] = False
     clock[0] += SA.PROBE_EVERY
     data, model = view(a, ctx)
-    check("an agent the engine reports signed out is not offered, and says so",
-          model["/agents/kinds"] == ["Gemini"] and "Claude (signed out)" in model["/agents/missing"],
-          (model["/agents/kinds"], model["/agents/missing"]))
-    model = a.model(data, None, {"/agents/agent": "Claude"}, ctx)
-    check("a pick that stopped being ready moves to one that is", model["/agents/agent"] == "Gemini",
-          model.get("/agents/agent"))
-
+    check("an agent the engine reports signed out is not offered",
+          [k["id"] for k in model["/agents/kinds"]] == ["acp:gemini"], model["/agents/kinds"])
+    model = a.model(data, None, {"/agents/agent": "claude"}, ctx)
+    check("a pick that stopped being ready moves to one that is", model["/agents/agent"] == "acp:gemini")
     e.probe = []
     clock[0] += SA.PROBE_EVERY
     data, model = view(a, ctx)
-    check("no ready agent: no Start, and a line that says so",
-          model["/agents/new"] == [] and model["/agents/missing"].startswith("No agent is ready"),
-          model["/agents/missing"])
-
-    e2 = FakeEngine()
-    e2.fail["agents.probe"] = rc.RealmTimeout("agents.probe was not answered in time")
-    b, bctx = world(tmp / "noprobe", e2)
-    bdata, bmodel = view(b, bctx)
-    check("a probe that fails says so and offers no Start",
-          bmodel["/agents/missing"].startswith("Couldn't ask the engine") and bmodel["/agents/kinds"] == [],
-          bmodel["/agents/missing"])
-    c, cctx = world(tmp / "slowprobe", FakeEngine())
-    c.spawn = lambda fn: None
-    cdata, cmodel = view(c, cctx)
-    check("before the first probe answers, the line says it's checking",
-          cmodel["/agents/missing"] == "Checking which agents are installed…", cmodel["/agents/missing"])
+    check("no ready agent: no chips and no Start", model["/agents/new"] == [] and model["/agents/kinds"] == []
+          and "agents-task" not in " ".join(a.layout()))
 
 
-def scanned(n: int) -> dict:
-    """import.scan's answer with n offerable transcripts and one of each kind
-    the importer hides, shaped as contracts import.ts at 0ae5b8b."""
-    def cand(i, **over):
-        base = {"key": f"/scanned/{i}.jsonl", "source": "claude", "agentKind": "claude",
-                "providerSessionId": f"p{i}", "path": f"/scanned/{i}.jsonl", "cwd": f"/Users/x/code/repo{i}",
-                "cwdExists": i % 2 == 0, "title": f"Tab {i}" + (BIDI if i == 1 else ""), "messages": 10 + i,
-                "startedAt": NOW_MS - 1000 * i, "updatedAt": NOW_MS - 60_000 * i, "fromRealm": False,
-                "scratch": False, "imported": False, "duplicate": False,
-                "match": {"spaceId": None, "fallbackProfileId": "prof1", "reason": "fallback", "evidence": None}}
-        base.update(over)
-        return base
-    sessions = [cand(i) for i in range(n)]
-    sessions += [cand(100, fromRealm=True), cand(101, scratch=True), cand(102, imported=True),
-                 cand(103, duplicate=True),
-                 cand(104, match={"spaceId": None, "fallbackProfileId": None, "reason": "none", "evidence": None}),
-                 cand(105, source="codex", agentKind="codex", updatedAt=NOW_MS + 1,
-                      match={"spaceId": "sp1", "fallbackProfileId": None, "reason": "project", "evidence": "x"})]
-    return {"sessions": sessions, "memories": [], "skills": [],
-            "sources": [{"source": "claude", "root": "/x", "available": True, "sessions": n + 5, "unreadable": 1,
-                         "note": None}]}
-
-
-def bring_in_tabs(tmp: Path) -> None:
-    """Bring in my tabs: a queued read, then import.apply only for what is pressed."""
-    body = realm_import.compact(scanned(12), "tk1", NOW_MS)
-    check("the importer keeps what can come in, newest first",
-          [c["key"] for c in body["sessions"][:2]] == ["/scanned/105.jsonl", "/scanned/0.jsonl"]
-          and body["offered"] == 13 and body["found"] == 18, [c["key"] for c in body["sessions"][:3]])
-    check("and counts what it hid, by why",
-          body["hidden"] == {"fromRealm": 1, "scratch": 1, "imported": 1, "duplicate": 1, "homeless": 1},
-          body["hidden"])
-
-    class ScanConn:
-        def __init__(self, answer):
-            self.answer, self.calls, self.max_message = answer, [], 0
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return None
-
-        def call(self, method, params=None, timeout=10.0, write=False, allow_exec=False):
-            self.calls.append((method, write, self.max_message, timeout))
-            if isinstance(self.answer, Exception):
-                raise self.answer
-            return self.answer
-
-    out = tmp / "scan" / "file.json"
-    conn = ScanConn(scanned(3))
-    code = realm_import.scan(out, "tk2", connect=lambda: conn, clock=lambda: NOW_MS / 1000)
-    written = json.loads(out.read_text())
-    check("a scan raises this connection's ceiling, calls import.scan once, and writes the file",
-          code == 0 and conn.calls == [("import.scan", True, realm_import.SCAN_MAX_MESSAGE,
-                                        realm_import.SCAN_TIMEOUT)]
-          and written["ticket"] == "tk2" and len(written["sessions"]) == 4, (code, conn.calls))
-    check("the file is readable only by its owner", (out.stat().st_mode & 0o077) == 0, oct(out.stat().st_mode))
-    conn = ScanConn(rc.RealmRpcError("import.scan", "INTERNAL", "EACCES /Users/x/.claude/secret"))
-    realm_import.scan(out, "tk3", connect=lambda: conn)
-    written = json.loads(out.read_text())
-    check("a failed scan writes the failure in words, never the engine's message",
-          written == {"ticket": "tk3", "scannedAt": written["scannedAt"], "error": "the engine answered INTERNAL"},
-          written)
-    out.unlink()
-
+def live_tabs_and_import(tmp: Path) -> None:
+    """Open Claude Code and Codex tabs are tiles at once, come into the engine
+    with no press, and keep their live state once they're in."""
     e = FakeEngine()
     a, ctx = world(tmp / "tabs", e)
-    ran = []
-    ctx.run = lambda argv: ran.append(argv) or (0, "1010-1 queued build Read agent tabs\n", "")
+    now = NOW_MS / 1000 + 120
+    tabs = [
+        {"id": "tab-wait", "agent": "claude", "transcript": "/scanned/tab-wait.jsonl", "title": "Fix the HUD rail glass",
+         "state": "needs", "ask": "Bash: npm test", "detail": "", "project": "chewbacca", "last": now - 30,
+         "open_in": "VS Code"},
+        {"id": "tab-run", "agent": "codex", "transcript": "/scanned/tab-run.jsonl", "title": "Port the importer",
+         "state": "working", "ask": "", "detail": "Edit: realm.py", "project": "realm", "last": now - 5},
+        {"id": "tab-old", "agent": "claude", "transcript": "/scanned/tab-old.jsonl", "title": "Yesterday",
+         "state": "finished", "ask": "", "detail": "", "project": "x", "last": now - 6 * 3600},
+    ]
+    a.tabs = lambda t: [dict(x) for x in tabs]
     clock = [5000.0]
     a.clock = lambda: clock[0]
     data, model = view(a, ctx)
-    check("before any read, one row offers Bring in my tabs, saying it writes nothing",
-          [x["id"] for x in model["/agents/scan"]] == ["scan"] and model["/agents/scanLabel"] == "Bring in my tabs"
-          and "writes nothing" in model["/agents/scan"][0]["text"] and model["/agents/tabs"] == [],
-          model["/agents/scan"])
-    r = a.scan(ctx, data, {"row": "scan"})
-    path = SA.scan_path(ctx)
-    check("the press queues realm_import through chewbacca jobs, as a build-class job, and writes nothing",
-          r.ok and len(ran) == 1 and ran[0][1] == str(SA.JOBS) and ran[0][2:4] == ["submit", "--build"]
-          and ran[0][ran[0].index("--") + 2:ran[0].index("--") + 5] == [str(SA.IMPORTER), "scan", "--out"]
-          and str(path) in ran[0] and e.writes == [], (r, ran, e.writes))
-    r2 = a.scan(ctx, data, {"row": "scan"})
-    check("a second press before the refetch queues nothing", not r2.ok and len(ran) == 1, r2)
-    data, model = view(a, ctx)
-    check("while the read runs, the panel says so and offers no second press",
-          model["/agents/scan"] == [] and model["/agents/scanCaption"].startswith("Reading your tabs"),
-          model["/agents/scanCaption"])
-    ticket = ran[0][ran[0].index("--ticket") + 1]
-    realm_import.write(path, realm_import.compact(scanned(12), "someone-else", NOW_MS))
-    data, model = view(a, ctx)
-    check("a file from another read doesn't end this one", model["/agents/scan"] == [], model["/agents/scan"])
-    realm_import.write(path, realm_import.compact(scanned(12), ticket, NOW_MS))
-    data, model = view(a, ctx)
-    rows = model["/agents/tabs"]
-    check("the read's newest tabs are rows, nine at most", len(rows) == SA.TABS_SHOWN, len(rows))
-    check("each row says where it came from, how long, when, and where it lands",
-          rows[0]["time"].startswith("Codex · 115 turns") and rows[0]["time"].endswith("into Chewbacca")
-          and rows[1]["time"].endswith("into Imported"), [x["time"] for x in rows[:2]])
-    check("a tab whose folder is gone says it comes in as history",
-          "folder gone" in rows[0]["time"] and "folder gone" not in rows[1]["time"], [x["time"] for x in rows[:3]])
-    check("row ids name a transcript without saying anything about it",
-          all(x["id"].startswith("t") and "scanned" not in x["id"] for x in rows) and glass_clean(model), rows[0])
-    check("Bring in all names how many", model["/agents/allLabel"] == "Bring in all 9"
-          and model["/agents/taball"][0]["id"] == "all", model["/agents/taball"])
-    check("reading the list wrote nothing", e.writes == [], e.writes)
-
-    r = a.bring(ctx, data, {"row": rows[1]["id"]})
+    check("live tabs are tiles before they're in the engine, needs-you first",
+          tile_ids(model)[:2] == ["tab:tab-wait", "tab:tab-run"], tile_ids(model))
+    first = model["/agents/tiles"][0]
+    check("a tab's tile says what it's waiting on, where, and where it's open",
+          first["detail"] == "Bash: npm test" and first["meta"] == "chewbacca · now · VS Code"
+          and first["provider"] == "claude" and model["/agents/tiles"][1]["provider"] == "codex", first)
     applied = [p for m, p in e.writes if m == "import.apply"]
-    check("Bring in sends import.apply for that one key, to the profile's catch-all space",
-          r.ok and applied == [{"sessions": [{"key": "/scanned/0.jsonl", "spaceId": None, "profileId": "prof1"}]}]
-          and all(w for m, _, w in e.calls if m == "import.apply"), (r, applied))
-    check("the result line has counts and no title", r.line == "Brought in 1 of 1." and "Tab" not in r.line, r.line)
+    check("recent tabs come in silently, in one batch, to the profile's catch-all space, never asking",
+          len(applied) == 1 and [x["key"] for x in applied[0]["sessions"]] ==
+          ["/scanned/tab-wait.jsonl", "/scanned/tab-run.jsonl"]
+          and all(x["profileId"] == "prof1" and x["spaceId"] is None for x in applied[0]["sessions"]), applied)
+    check("a tab older than the import window stays out", "tab-old" not in json.dumps(applied))
+    for sid, (_, tab) in zip(("s-imp1", "s-imp2"), [(0, tabs[0]), (1, tabs[1])]):
+        pass
+    for s in e.sessions.values():
+        s["providerSessionId"] = "tab-wait" if "tab-wait" in s["title"] else "tab-run"
     data, model = view(a, ctx)
-    check("a brought-in tab leaves the list, and its session joins the panel",
-          rows[1]["id"] not in [x["id"] for x in model["/agents/tabs"]]
-          and any(rr["title"] == "Imported 0.jsonl" for rr in data["rows"]), [rr["title"] for rr in data["rows"]])
-    r = a.bring(ctx, data, {"row": rows[1]["id"]})
-    check("pressing a row that left the list brings in nothing", not r.ok and len(applied) == 1, r)
-    r = a.bring(ctx, data, {"row": "t" + "0" * 16})
-    check("a row id from nowhere brings in nothing",
-          not r.ok and sum(m == "import.apply" for m, _ in e.writes) == 1, r)
+    check("once in, a tile is the engine's session with the tab's live state",
+          model["/agents/tiles"][0]["id"].startswith("s-imp") and model["/agents/tiles"][0]["state"] == "needs"
+          and model["/agents/tiles"][0]["detail"] == "Bash: npm test" and len(model["/agents/tiles"]) == 2,
+          model["/agents/tiles"])
+    clock[0] += SA.IMPORT_EVERY
+    view(a, ctx)
+    check("nothing comes in twice", sum(m == "import.apply" for m, _ in e.writes) == 1, e.writes)
+    r = a.pick(ctx, data, {"row": "tab:tab-old"})
+    check("a tab tile not in the engine yet says so on Open and writes nothing", not r.ok and
+          sum(m == "import.apply" for m, _ in e.writes) == 1, r)
 
-    e.imported_keys.add("/scanned/1.jsonl")
-    shown = a.offered(data)
-    r = a.bring(ctx, data, {"row": "all"})
-    last = [p for m, p in e.writes if m == "import.apply"][-1]
-    check("Bring in all sends exactly the keys shown",
-          [x["key"] for x in last["sessions"]] == [t["key"] for t in shown] and len(shown) == SA.TABS_SHOWN,
-          last)
-    check("and says how many were already here", r.ok and "1 was already here" in r.line, r.line)
-    e.fail["import.apply"] = lambda: maybe(rc.RealmTimeout("t"))
-    data, _ = view(a, ctx)
-    r = a.bring(ctx, data, {"row": a.offered(data)[0]["id"]})
-    check("a maybe_applied import says may have and is not retried",
-          not r.ok and "may have" in r.line
-          and sum(m == "import.apply" for m, _, _ in e.calls) == 3, r)
-    del e.fail["import.apply"]
-
-    clock[0] += SA.SCAN_STALE + 1
-    realm_import.write(path, {"ticket": "tk-old", "scannedAt": NOW_MS, "error": "the engine isn't reachable"})
-    data, model = view(a, ctx)
-    check("a failed read says so in words and offers Try again",
-          model["/agents/scanLabel"] == "Try again" and "isn't reachable" in model["/agents/scan"][0]["text"],
-          model["/agents/scan"])
-    stale = a.model(data, "The engine stopped answering: the engine isn't reachable", {}, ctx)
-    check("with the engine not answering, nothing to bring in is offered",
-          stale["/agents/scan"] == [] and stale["/agents/tabs"] == [] and stale["/agents/taball"] == [])
-    d, dctx = world(tmp / "tabsdown", None)
-    ddata, _ = view(d, dctx)
-    r = d.scan(dctx, ddata, {"row": "scan"})
-    check("a down engine queues no read", not r.ok, r)
+    b, bctx = world(tmp / "tabsfail", FakeEngine())
+    b.tabs = lambda t: [dict(tabs[0])]
+    b.engine = None
+    eng = FakeEngine()
+    eng.fail["import.apply"] = rc.RealmRpcError("import.apply", "INTERNAL", "x")
+    b.connect = lambda _c: FakeConn(eng)
+    tclock = [100.0]
+    b.clock = lambda: tclock[0]
+    view(b, bctx)
+    tclock[0] += SA.IMPORT_EVERY
+    view(b, bctx)
+    check("an import the engine refused is tried again on the next pass",
+          sum(m == "import.apply" for m, _, _ in eng.calls) == 2, eng.calls)
+    c, cctx = world(tmp / "tabsbroken", FakeEngine())
+    c.tabs = lambda t: (_ for _ in ()).throw(OSError("unreadable"))
+    cdata, cmodel = view(c, cctx)
+    check("tabs that can't be read draw no tiles and break nothing", cmodel["/agents/note"] == "No agents running.",
+          cmodel["/agents/note"])
+    check("an empty glass is one short line", cmodel["/agents/tiles"] == [] and "agents-tiles" not in
+          " ".join(c.layout()))
 
 
 def untrusted(tmp: Path) -> None:
@@ -826,7 +747,7 @@ def untrusted(tmp: Path) -> None:
     e.event("s1", "tool_result", {"toolUseId": "t", "content": "denied" + BIDI + "\nmore", "isError": True})
     e.event("s1", "error", {"message": "boom" + LINE_SEP + "forged line"})
     a, ctx = world(tmp / "untrusted", e)
-    data, model = view(a, ctx)
+    data, model = view(a, ctx, open="s1")
     check("no hidden character from the engine reaches any pointer", glass_clean(model), model)
     lines = [surfaces.data_line(k, v) for k, v in model.items()]
     check("every d line is one line", all("\n" not in x and "\r" not in x and LINE_SEP not in x for x in lines))
@@ -847,6 +768,7 @@ def through_the_daemon(tmp: Path) -> None:
                       badges_path=tmp / "badges.json", spaces={}, clock=lambda: 0.0, spawn=lambda fn: fn(),
                       ingest=lambda c: {}, make=lambda kind, arg="": a if kind == "agents" else surfaces.make(kind, arg))
     try:
+        a.pick(ctx, a.fetch(ctx), {"row": "s1"})
         d.open_surface("agents")
         drawn = hud.take()
         check("the daemon draws it valid", not tks.validate(drawn), tks.validate(drawn))
@@ -869,10 +791,10 @@ def review_fixes(tmp: Path) -> None:
     e = FakeEngine()
     e.add_session("s1", "idle", title="Rail", cwd="/Users/x/code/chewbacca")
     a, ctx = world(tmp / "review", e)
-    data, model = view(a, ctx)
+    data, model = view(a, ctx, open="s1")
     stale = a.model(data, "The engine stopped answering: the engine isn't reachable", {}, ctx)
     check("a failed refresh keeps the rows but offers no verb on them",
-          stale["/agents/rows"] and all(stale[f"/agents/{v}"] == [] for v in SA.VERBS)
+          stale["/agents/tiles"] and all(stale[f"/agents/{v}"] == [] for v in SA.VERBS)
           and model["/agents/send"], {v: stale[f"/agents/{v}"] for v in SA.VERBS})
 
     gate = threading.Event()
@@ -884,8 +806,7 @@ def review_fixes(tmp: Path) -> None:
         if any(m == "sessions.list" for m, _, _ in e.calls[-2:]):
             break
         threading.Event().wait(0.01)
-    model = a.model(data, None, {"/agents/folder": "~/code/amber/amber-id"}, ctx)
-    r = a.new(ctx, data, {"row": "claude|~/code/amber/amber-id", "/agents/folder": "~/code/amber/amber-id", "/agents/agent": "Claude"})
+    r, _ = start(a, data, ctx, "in amber-id:")
     fresh_pin = a.pinned
     gate.set()
     t.join(5)
@@ -912,7 +833,7 @@ def review_fixes(tmp: Path) -> None:
     long.event("s-long", "permission_request", {"requestId": "req-late", "toolName": "Bash",
                                                 "input": {"command": "ls"}, "title": "Allow?", "suggestions": []})
     b, bctx = world(tmp / "long", long)
-    bdata, bmodel = view(b, bctx)
+    bdata, bmodel = view(b, bctx, open="s-long")
     check("a session longer than one fetch reads says it is catching up", "catching up" in bmodel["/agents/meta"],
           bmodel["/agents/meta"])
     r = b.deny(bctx, bdata, {"row": "req-late"})
@@ -929,12 +850,12 @@ def review_fixes(tmp: Path) -> None:
     c, cctx = world(tmp / "half", half)
     cdata, _ = view(c, cctx)
     half.fail["projects.create"] = rc.RealmRpcError("projects.create", "INTERNAL", "disk full at /secret/path")
-    r = c.new(cctx, cdata, {"row": "claude|~/code/chewbacca", "/agents/folder": "~/code/chewbacca", "/agents/agent": "Claude"})
+    r, _ = start(c, cdata, cctx, "in chewbacca:")
     check("a refused step names its code and never the engine's own message",
           not r.ok and "INTERNAL" in r.line and "secret" not in r.line, r.line)
     del half.fail["projects.create"]
     cdata, _ = view(c, cctx)
-    r = c.new(cctx, cdata, {"row": "claude|~/code/chewbacca", "/agents/folder": "~/code/chewbacca", "/agents/agent": "Claude"})
+    r, _ = start(c, cdata, cctx, "in chewbacca:")
     made = [m for m, _ in half.writes]
     check("a second press after a half-made Start finishes it in the same space",
           r.ok and made.count("spaces.create") == 1 and made[-2:] == ["projects.create", "sessions.create"], made)
@@ -971,7 +892,7 @@ def main() -> int:
         interrupt_and_fork(tmp)
         new_sessions(tmp)
         any_agent(tmp)
-        bring_in_tabs(tmp)
+        live_tabs_and_import(tmp)
         untrusted(tmp)
         through_the_daemon(tmp)
         review_fixes(tmp)

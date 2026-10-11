@@ -232,9 +232,14 @@ def parse(said: str, resolve_person=find_person) -> Command | None:
     if m and m.group("task").strip(" .!?"):
         return Command("task", m.group("task").strip().rstrip(".!?"), m.group("folder") or "")
     if SESSIONS_CLOSE.match(s):
-        return Command("panel", "sessions", "off")
+        return Command("close", "agents")
     if SESSIONS.match(s):
-        return Command("sessions", "open")
+        # Every agent, any provider, on the realm engine's panel
+        # (bin/lib/surfaces/agents.py), which also shows the open Claude
+        # Code and Codex tabs. kyber-sessions' own panel is no longer the
+        # answer to "show my agents" (2026-10-10, "Realm is supposed to be
+        # inside the hud").
+        return Command("open", "agents")
     m = STOP.match(s)
     if m:
         return Command("stop", m.group("name").strip())
@@ -330,23 +335,22 @@ def open_sessions(open_id: str = "", spawn=subprocess.Popen) -> bool:
         return False
 
 
-def sessions_verb(command: Command, run=subprocess.run, spawn=subprocess.Popen) -> Outcome:
+def sessions_verb(command: Command, run=subprocess.run, spawn=subprocess.Popen, ask=None) -> Outcome:
     if command.verb == "sessions":
         if open_sessions(spawn=spawn):
             return Outcome(True, "Your agents are up.")
         return Outcome(False, "The agents panel didn't open.")
     if command.verb == "task":
         # A sentence is not a press. Any audio near the mic reaches this path,
-        # and a run gets the full permission mode, so the task only fills the
-        # New task box; Start on the glass runs it (commit review, 2026-10-10).
-        text = f"in {command.arg}: {command.name}" if command.arg else command.name
-        try:
-            done = run([tool(KYBER_SESSIONS), "draft", text], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
-        except (OSError, subprocess.TimeoutExpired):
-            return Outcome(False, "The agents panel didn't answer.")
-        if done.returncode != 0 or not open_sessions(spawn=spawn):
+        # so the task only fills the agents panel's New agent box (and names
+        # the folder it asked for); Start on the glass runs it (commit review,
+        # 2026-10-10, and the kyber-surfaces skill's hard line).
+        preset = {"/agents/task": command.name}
+        if command.arg:
+            preset["/agents/want"] = command.arg
+        if not open_with_preset("agents", preset, run=run, ask=ask):
             return Outcome(False, "The agents panel didn't open.")
-        return Outcome(True, "It's in the New task box. Press Start to run it.")
+        return Outcome(True, "It's in the New agent box. Press Start to run it.")
     # stop: the one live glass run whose folder or task names it
     try:
         listed = run([tool(KYBER_SESSIONS), "--json"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
@@ -371,7 +375,7 @@ def sessions_verb(command: Command, run=subprocess.run, spawn=subprocess.Popen) 
 
 def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Popen) -> Outcome:
     if command.verb in ("sessions", "task", "stop"):
-        return sessions_verb(command, run=run, spawn=spawn)
+        return sessions_verb(command, run=run, spawn=spawn, ask=ask)
     if command.verb == "walk":
         if start_walk(spawn):
             return Outcome(True, "Opening Settings. Follow the ring.")
@@ -420,5 +424,5 @@ def perform(command: Command, run=subprocess.run, ask=None, spawn=subprocess.Pop
               "missing": "Here's what you might be missing.", "person": "They're up.",
               "oss": "The alternatives are up.", "engine": "The engine's up.",
               "code": "What changed is up.", "notes": "Your notes are up.", "github": "GitHub's up.",
-              "meetings": "Your meetings are up.", "agents": "Your agent sessions are up."}
+              "meetings": "Your meetings are up.", "agents": "Your agents are up."}
     return Outcome(True, spoken.get(command.name, "It's up."))

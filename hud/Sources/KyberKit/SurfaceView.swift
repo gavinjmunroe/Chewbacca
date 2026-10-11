@@ -567,6 +567,26 @@ public struct SurfaceView: View {
                     image: p["image"]?.stringValue,
                     size: CGFloat(min(max(p["size"]?.doubleValue ?? 24, 16), 48))))
 
+        case "Tiles":
+            let action = p["action"]?.stringValue
+            var counts: [String: Int] = [:]
+            for (key, value) in p["counts"]?.objectValue ?? [:] {
+                if let n = value.doubleValue { counts[key] = Int(n) }
+            }
+            return AnyView(
+                AgentTilesView(
+                    tiles: AgentTile.parse(p["items"]?.arrayValue ?? []),
+                    counts: counts,
+                    onOpen: action.map { name in { [store] id in store.fireRow(name, row: id) } }))
+
+        case "Chips":
+            let chips = AgentChip.parse(p["options"]?.arrayValue ?? [])
+            return AnyView(
+                AgentChipsView(
+                    chips: chips,
+                    selected: p["value"]?.display ?? chips.first?.id ?? "",
+                    onPick: segmentedPick(element, p)))
+
         case "Transcript":
             let action = p["action"]?.stringValue
             return AnyView(

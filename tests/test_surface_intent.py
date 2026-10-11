@@ -58,13 +58,13 @@ def main() -> int:
         ("hide the tasks", "close", "tasks", ""),
         ("close everything", "close", "all", ""),
         ("Kyber, show my day please", "open", "today", ""),
-        ("show my agents", "sessions", "open", ""),
-        ("pull up my claude sessions", "sessions", "open", ""),
-        ("open the coding agents", "sessions", "open", ""),
-        ("show my sessions", "sessions", "open", ""),
-        ("pull up my tabs", "sessions", "open", ""),
+        ("show my agents", "open", "agents", ""),
+        ("pull up my claude sessions", "open", "agents", ""),
+        ("open the coding agents", "open", "agents", ""),
+        ("show my sessions", "open", "agents", ""),
+        ("pull up my tabs", "open", "agents", ""),
         ("show the realm sessions", "open", "agents", ""),
-        ("close the agents", "panel", "sessions", "off"),
+        ("close the agents", "close", "agents", ""),
         ("Start an agent in lemma to write the README for v2.", "task", "write the README for v2", "lemma"),
         ("new task: summarize my week", "task", "summarize my week", ""),
         ("Kyber, spin up a tab that fixes the 3 failing tests", "task", "fixes the 3 failing tests", ""),
@@ -154,17 +154,21 @@ def main() -> int:
         return Done()
 
     spawn = lambda argv, **kw: spawned.append(argv)
-    got = si.perform(si.Command("task", "write the README", "lemma"), run=fake_run, spawn=spawn)
-    check("a spoken task only fills the New task box, never runs",
-          got.ok and calls[-1][1:] == ["draft", "in lemma: write the README"]
-          and not any(c[1:2] == ["new"] for c in calls) and "Press Start" in got.line, (calls, got))
-    check("and opens the panel to press it", spawned and spawned[-1][-1] == "serve", spawned)
+    asked = []
+    got = si.perform(si.Command("task", "write the README", "lemma"), run=fake_run, spawn=spawn,
+                     ask=lambda body: asked.append(body) or {"ok": True})
+    check("a spoken task only fills the agents panel's New agent box, never runs",
+          got.ok and asked == [{"cmd": "open", "name": "agents",
+                                "preset": {"/agents/task": "write the README", "/agents/want": "lemma"}}]
+          and not any(c[1:2] in (["new"], ["draft"]) for c in calls) and "Press Start" in got.line, (asked, got))
     got = si.perform(si.Command("stop", "lemma"), run=fake_run, spawn=spawn)
     check("stop reaches only the glass's own run", got.ok and calls[-1][1:] == ["stop", "r1"], calls[-1])
     got = si.perform(si.Command("stop", "nothing"), run=fake_run, spawn=spawn)
     check("a stop that names no run says so", not got.ok and "No running agent" in got.line, got)
-    got = si.perform(si.Command("sessions", "open"), run=fake_run, spawn=spawn)
-    check("show my agents starts the panel", got.ok and spawned[-1][-1] == "serve", spawned[-1])
+    before = len(spawned)
+    got = si.perform(si.parse("show my agents"), run=fake_run, spawn=spawn)
+    check("show my agents opens the engine's agents surface, not kyber-sessions' panel",
+          got.ok and calls[-1][1:] == ["open", "agents"] and len(spawned) == before, (calls[-1], spawned[before:]))
     from pathlib import Path as _P
     gone = _P("/nonexistent/snapshot/bin/kyber-sessions")
     check("a pruned sibling falls back to the same tool on PATH",

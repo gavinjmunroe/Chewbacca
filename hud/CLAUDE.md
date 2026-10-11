@@ -267,6 +267,31 @@ its lane: it has no close button, it is never folded, and panels in its
 region are placed beside it rather than over it. Give it `w=52` and
 `chrome=bare`; it draws its own glass.
 
+### Agents as tiles
+
+```
+c t Tiles items=@/agents/tiles counts=@/agents/counts action=ks-pick
+d /agents/tiles [{"id":"s1","title":"Fix the rail","detail":"Bash: npm test","state":"needs","provider":"claude","name":"Claude","meta":"chewbacca · 2m","selected":true}]
+d /agents/counts {"needs":1,"running":2,"done":4}
+c k Chips options=@/agents/kinds value=@/agents/agent action=ks-agent
+d /agents/kinds [{"id":"claude","label":"Claude"},{"id":"acp:gemini","label":"Gemini"}]
+```
+
+**Tiles** draws agents as a two-column grid of cards (AgentTiles.swift),
+with the non-zero `counts` above it as toned numbers. Each tile has its
+provider's mark (a filled circle in that provider's colour with its initial,
+keyed by `provider`: `claude`, `codex`, `acp:gemini`, `acp:cursor` and the
+other ACP kinds), its `name`, its state as a word and symbol in the state's
+tone, a one-line `title`, up to two lines of `detail` (what it is doing or
+waiting on) and a `meta` line. `state` is `needs`, `failed`, `running` or
+`done`: a tile that needs the person gets an amber edge and glow, the loudest
+mark on the panel; text stays ink and holds 4.5:1 on the tile's dark fill. A
+press on a tile sends `e action <action> row=<id> surface=<surface>`.
+
+**Chips** is a row of small capsules, one per option, each with a dot in its
+provider's colour. A press writes the pick to `value`'s pointer and sends the
+same row-action line. Both are keyboard targets, one per tile and per chip.
+
 ## Files
 
 ```

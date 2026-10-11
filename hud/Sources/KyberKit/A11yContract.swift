@@ -75,6 +75,9 @@ enum A11yContract {
         "Diff": Entry(role: .own, name: ["path"]),
         "Tree": Entry(role: .own, name: []),
         "Rail": Entry(role: .own, name: []),
+        // Agents (AgentTiles.swift): each tile and chip names itself.
+        "Tiles": Entry(role: .own, name: []),
+        "Chips": Entry(role: .own, name: []),
     ]
 
     /// The name a component is announced by: the first of its name props

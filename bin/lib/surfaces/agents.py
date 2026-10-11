@@ -51,19 +51,18 @@ character (stripped for display), gets Deny and nothing else. The glass never
 sends allow_always, and answers only the requestId the press names, only
 while that request is still the session's pending one.
 
-BRING IN MY TABS. Sessions Caleb already has in Claude Code, Codex and
-Cursor come in through realm's own importer (apps/server/src/import), never a
-second reader. "Bring in my tabs" queues bin/lib/realm_import.py with
-`chewbacca jobs` (import.scan read 5,446 transcripts in 57 s and 41 MB on
-2026-10-10, too heavy for the daemon), which writes the newest candidates to
-kyber-import-scan.json in the realm home; the fetch reads that small file.
-Each candidate is a row whose id is a hash of its key, so a press names one
-transcript however the list moves, and Bring in runs import.apply for that
-key alone (or "all" for the rows shown). apply copies; the CLIs' own files
-are never written (contracts import.ts), and a key the engine's own scan did
-not produce is refused by the engine.
+TILES. Each agent is one tile (hud Tiles, AgentTiles.swift): its
+provider's mark, a one-line title, its state, and what it is doing now. A
+tile is a realm session, with the live state of the Claude Code or Codex tab
+it came from when that tab is still open (bin/kyber-sessions discover, the
+same filters: scripted runs, scratch folders and tabs that failed on their
+first message are left out). Open on a tile pins it and draws its
+conversation under the grid. Caleb's open tabs come in by themselves:
+realm's own importer (import.apply, apps/server/src/import) copies each
+recent live tab's transcript into the engine, never writing the CLI's own
+files, so a tab shows here without anything to press or read about it.
 
-UNTRUSTED TEXT. Turns, tool input, titles, space names and paths all come
+UNTRUSTED TEXT. Turns,UNTRUSTED TEXT. Turns, tool input, titles, space names and paths all come
 from the engine, which relays a model and whatever it read. All of it is
 stripped of Unicode category C and the line and paragraph separators before
 a `d` line, clipped, and never read for an action. Result lines (which the
@@ -92,24 +91,25 @@ from . import ACTION_PREFIX, Bind, Context, Provider, Result, SurfaceError, ago,
 from .code import candidates, code_root
 
 ENGINE = Path(__file__).resolve().parents[2] / "realm-engine"
-IMPORTER = Path(__file__).resolve().parents[1] / "realm_import.py"
-JOBS = Path(__file__).resolve().parents[2] / "chewbacca-jobs"
-# Where the queued read writes what the panel offers, in the realm home.
-SCAN_FILE = "kyber-import-scan.json"
-# The file is about 15 KB for 40 candidates; anything past this is not one
-# realm_import wrote, and is not read. Guessed.
-SCAN_FILE_MAX = 2 * 1024 * 1024
-# A queued read not answered in this long is treated as lost, and the press
-# is offered again. The jobs queue holds a build-class job until the Mac has
-# room, which was minutes under load on 2026-10-10. Guessed.
-SCAN_STALE = 1800.0
-# Tabs offered at once: Miller's seven plus two, as the session list.
-TABS_SHOWN = 9
+KYBER_SESSIONS = Path(__file__).resolve().parents[2] / "kyber-sessions"
+# The most tiles on the glass: two columns of four. What needs the person is
+# never the part cut. Guessed from a 460-point panel at about 90 points a tile.
+MAX_TILES = 8
+# A finished agent stays a tile this long after it last moved, then leaves.
+# Guessed: an afternoon's finished work, not yesterday's.
+DONE_KEEP_S = 4 * 3600.0
+# A live tab comes into the engine when it moved this recently. Guessed,
+# the same afternoon as DONE_KEEP_S.
+IMPORT_RECENT_S = 4 * 3600.0
+# Seconds between silent imports, and the most tabs one pass brings in.
+# import.apply re-lists every transcript on the Mac (import/service.ts
+# allFound, 5,450 files on 2026-10-10) before copying, so it runs at most
+# once a minute and in small batches. Guessed.
+IMPORT_EVERY = 60.0
+IMPORT_BATCH = 6
 # import.apply copies every event of each transcript in one transaction per
-# session (import/service.ts importSession). Not measured; two minutes for
-# nine long sessions is a guess.
+# session. Not measured; two minutes for six long sessions is a guess.
 APPLY_TIMEOUT = 120.0
-SOURCE_LABELS = {"claude": "Claude Code", "codex": "Codex", "cursor": "Cursor"}
 # Miller's seven plus two, the same cap the code and sessions panels use.
 MAX_SESSIONS = 9
 # Turns on the glass. Guessed, never measured on the glass: fourteen rows of
@@ -185,14 +185,22 @@ PROBE_EVERY = 300.0
 # One probe's own wait. Each adapter has a 5 s timeout (probe-cache.ts) and
 # they run in parallel; 30 s covers a Mac under load. Guessed.
 PROBE_TIMEOUT = 30.0
-PURPOSE = "Every coding agent's sessions, run by the agent engine: start one, read it, answer it"
+# A tile's title, one line in a 210-point tile at 13 pt semibold. Guessed
+# at about 7 pt a character.
+TITLE_CHARS = 30
+# What a tile says it is doing, at most two lines at 11.5 pt.
+DETAIL_CHARS = 80
+# The tile state of each realm status and each kyber-sessions state.
+REALM_STATE = {"waiting_permission": "needs", "error": "failed", "running": "running"}
+TAB_STATE = {"needs": "needs", "failed": "failed", "working": "running", "finished": "done"}
+TILE_ORDER = {"needs": 0, "failed": 1, "running": 2, "done": 3}
 STATE_WORDS = {"waiting_permission": "waiting on you", "running": "working", "error": "failed",
                "idle": "idle", "ended": "idle"}
 # What needs the person first, then what is moving, then the rest.
 STATE_ORDER = {"waiting_permission": 0, "error": 1, "running": 2, "idle": 3, "ended": 4}
 BUSY = ("running", "waiting_permission")
 # The pointers holding a row a press can write through.
-VERBS = ("send", "allow", "deny", "interrupt", "fork", "new", "scan", "tabs", "taball")
+VERBS = ("send", "allow", "deny", "interrupt", "fork", "new")
 MODE_WORDS = {"default": "asks before each tool", "acceptEdits": "edits without asking",
               "bypassPermissions": "never asks (full access)", "plan": "plans only"}
 # The input keys a one-line tool row names, in the order a reader wants them.
@@ -366,44 +374,77 @@ def agent_rows(probed) -> list[dict]:
 
 
 def missing_words(agents: list[dict]) -> str:
-    """One line naming every agent that can't start a session, and why."""
-    broken = [f"{a['label']} ({a['why']})" for a in agents if not a["ready"] and a["why"] != "not installed"]
+    """Short words for every agent that can't start a session: each broken
+    one by name and why, the not-installed ones by count past the first
+    three, so ten absent CLIs are one clause and not a wall."""
+    parts = [f"{a['label']}: {a['why']}." for a in agents if not a["ready"] and a["why"] != "not installed"]
     absent = [a["label"] for a in agents if not a["ready"] and a["why"] == "not installed"]
-    parts = []
-    if broken:
-        parts.append("Can't start: " + ", ".join(broken) + ".")
-    if absent:
-        parts.append("Not installed: " + ", ".join(absent) + ".")
+    if len(absent) == 1:
+        parts.append(f"{absent[0]} isn't installed.")
+    elif absent:
+        named = absent if len(absent) <= 3 else absent[:3] + [f"{len(absent) - 3} more"]
+        parts.append(f"{', '.join(named[:-1])} and {named[-1]} aren't installed.")
     return " ".join(parts)
 
 
-def scan_path(ctx: Context) -> Path:
-    return realm_home(ctx) / SCAN_FILE
+def short_title(text: str, limit: int = TITLE_CHARS) -> str:
+    """The first clause of a title, cut on a word."""
+    one = clean(text)
+    one = re.split(r"\s[(\[]|[?!.](?:\s|$)|\s\u00b7\s", one, maxsplit=1)[0].strip(" ,:;-") or "Untitled"
+    if len(one) <= limit:
+        return one
+    return one[:limit].rsplit(" ", 1)[0].rstrip(" ,:;-") + "\u2026"
 
 
-def read_scan(path: Path) -> dict | None:
-    """What the last queued read wrote (realm_import.compact), or None."""
-    try:
-        if path.stat().st_size > SCAN_FILE_MAX:
-            return None
-        body = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(body, dict) or not isinstance(body.get("ticket"), str):
-        return None
-    sessions = [c for c in body.get("sessions") or [] if isinstance(c, dict) and isinstance(c.get("key"), str)
-                and c["key"] and (isinstance(c.get("spaceId"), str) or isinstance(c.get("profileId"), str))]
-    return {**body, "sessions": sessions}
+# "in lemma: write the README" names the folder in the task itself.
+IN_FOLDER = re.compile(r"^\s*in\s+([A-Za-z0-9_.-]{1,64})\s*[:,]\s*(.*)$", re.S | re.I)
 
 
-def turns(n) -> str:
-    n = n if isinstance(n, int) and not isinstance(n, bool) else 0
-    return f"{n} turn" if n == 1 else f"{n} turns"
+def where_to(task: str, folders: list[dict], want: str = "") -> tuple[dict | None, str]:
+    """(the folder a new agent runs in, the message it is sent). A task that
+    starts "in <folder>:" picks that folder by name; a folder a sentence asked
+    for (`want`) comes next; else the folder worked in most recently."""
+    def named(word: str):
+        hits = [f for f in folders if Path(f["path"]).name.lower() == word.lower()]
+        return hits[0] if len(hits) == 1 else None
+
+    m = IN_FOLDER.match(task or "")
+    if m and named(m.group(1)):
+        return named(m.group(1)), m.group(2).strip()
+    if want and named(want):
+        return named(want), (task or "").strip()
+    return (folders[0] if folders else None), (task or "").strip()
 
 
-def tab_id(key: str) -> str:
-    """A row id that names one transcript and says nothing about it."""
-    return "t" + hashlib.sha256(key.encode("utf-8", "surrogatepass")).hexdigest()[:16]
+def start_id(kind: str, label: str, task: str) -> str:
+    """A Start row's id: the agent, the folder, and a hash of the message,
+    so a press runs only what was on the glass when it was pressed."""
+    digest = hashlib.sha256((task or "").strip().encode("utf-8", "surrogatepass")).hexdigest()[:10]
+    return f"{kind}|{label}|{digest}"
+
+
+_KS = None
+
+
+def kyber_sessions():
+    """bin/kyber-sessions as a module, for its discovery and filters."""
+    global _KS
+    if _KS is None:
+        import importlib.machinery  # noqa: PLC0415
+        import importlib.util  # noqa: PLC0415
+        loader = importlib.machinery.SourceFileLoader("kyber_sessions_lib", str(KYBER_SESSIONS))
+        spec = importlib.util.spec_from_loader("kyber_sessions_lib", loader)
+        mod = importlib.util.module_from_spec(spec)
+        loader.exec_module(mod)
+        _KS = mod
+    return _KS
+
+
+def live_tabs(now: float) -> list[dict]:
+    """Claude Code and Codex tabs worth a tile: kyber-sessions' interactive
+    rows, kept by its own glance (needing you, working, or recently done)."""
+    ks = kyber_sessions()
+    return ks.glance(ks.discover(now), now)
 
 
 @dataclass
@@ -492,8 +533,7 @@ class Agents(Provider):
         p = ACTION_PREFIX
         self.actions = {f"{p}pick": self.pick, f"{p}send": self.send, f"{p}allow": self.allow,
                         f"{p}deny": self.deny, f"{p}interrupt": self.interrupt, f"{p}fork": self.fork,
-                        f"{p}new": self.new, f"{p}engine": self.start_engine, f"{p}scan": self.scan,
-                        f"{p}bring": self.bring}
+                        f"{p}new": self.new, f"{p}engine": self.start_engine, f"{p}agent": self.choose}
         self._lock = threading.Lock()
         # The session a press acts on. Set by a pick (or the first fetch, to
         # the session that needs the person most), never by a re-sort.
@@ -516,17 +556,22 @@ class Agents(Provider):
         self._probed_at = 0.0
         self._probing = False
         self._probe_error = ""
-        # The read this panel queued (its ticket and when), and the keys it
-        # has brought in since, which leave the list before a re-read.
-        self._ticket = ""
-        self._asked_at = 0.0
-        self._brought: set[str] = set()
+        # Transcript keys the silent import has handed the engine, and when
+        # it last ran.
+        self._imported: set[str] = set()
+        self._imported_at = -IMPORT_EVERY
+        self._importing = False
+        # What layout() draws, set by each model (_replan).
+        self._plan: dict = {}
+        self._shape = "{}"
         # Seams for the tests: a proven connection, the realm-engine runner,
         # the probe's thread, and the clock it is timed by.
         self.connect = lambda ctx: realm_client.connect(timeout=5.0, home=realm_home(ctx))
         self.run_engine = self._run_engine
         self.spawn = lambda fn: threading.Thread(target=fn, daemon=True).start()
         self.clock = time.monotonic
+        self.tabs = live_tabs
+        self.wall = time.time
 
     @property
     def refresh(self) -> float:  # type: ignore[override]  the daemon reads it after every fetch
@@ -574,8 +619,6 @@ class Agents(Provider):
                     if current and self.pinned and not any(r["id"] == self.pinned for r in rows):
                         gone = self.pinned
                         self.pinned, self._log = "", None
-                    if current and not self.pinned and rows:
-                        self.pinned = rows[0]["id"]
                     pinned = self.pinned
                     base = self._log if self._log and self._log.sid == pinned else None
                     log = base.copy() if base else Log(pinned)
@@ -592,13 +635,14 @@ class Agents(Provider):
         except realm_client.RealmError as err:
             raise SurfaceError(f"The engine stopped answering: {why_words(err)}") from None
         self._maybe_probe(ctx)
-        tabs = read_scan(scan_path(ctx))
-        with self._lock:
-            pending = bool(self._ticket) and (tabs or {}).get("ticket") != self._ticket \
-                and self.clock() - self._asked_at < SCAN_STALE
-            asked = self._asked_at
+        try:
+            tabs = self.tabs(self.wall())
+        except Exception:  # noqa: BLE001  a tab we can't read is a tile we don't draw, never a dead panel
+            tabs = []
+        self._maybe_import(ctx, rows, tabs)
         shown = next((r for r in rows if r["id"] == pinned), None)
-        self._busy = bool(shown and shown["status"] in BUSY)
+        self._busy = bool(shown and shown["status"] in BUSY) or any(
+            t.get("state") in ("needs", "working") for t in tabs)
         with self._lock:
             if self._gen == gen:
                 self._soon = False
@@ -607,8 +651,53 @@ class Agents(Provider):
         return {"rows": rows, "pinned": pinned, "gone": gone, "checkpoint": checkpoint,
                 "folders": self.folders(ctx, listed), "items": list(log.items), "pending": dict(log.pending),
                 "caught_up": log.caught_up, "agents": self._agents, "probe_error": self._probe_error,
-                "tabs": tabs, "scan_pending": pending, "scan_waited": self.clock() - asked if pending else 0.0,
-                "space_names": names}
+                "tabs": tabs, "now": self.wall()}
+
+    # ── bringing tabs in ─────────────────────────────────────────────────
+
+    def _maybe_import(self, ctx: Context, rows: list[dict], tabs: list[dict]) -> None:
+        """Copy recent live tabs into the engine, on a thread, a few at a time.
+
+        This is the one write the panel makes without a press, and it is a
+        copy: import.apply reads the CLI's transcript and writes only realm's
+        own database; the engine refuses a key its own listing did not find
+        and skips one it already imported (contracts import.ts)."""
+        known = {r.get("provider_sid") for r in rows if r.get("provider_sid")}
+        now = self.wall()
+        with self._lock:
+            if self._importing or self.clock() - self._imported_at < IMPORT_EVERY:
+                return
+            want = [t for t in tabs if t.get("transcript") and t["id"] not in known
+                    and t["transcript"] not in self._imported and now - float(t.get("last") or 0) <= IMPORT_RECENT_S
+                    and t.get("agent") in ("claude", "codex")]
+            if not want:
+                return
+            want = want[:IMPORT_BATCH]
+            self._importing = True
+            self._imported_at = self.clock()
+            self._imported |= {t["transcript"] for t in want}
+
+        def work() -> None:
+            try:
+                with self.connect(ctx) as conn:
+                    profiles = conn.call("profiles.list", timeout=CALL_TIMEOUT)
+                    profile = next((x["id"] for x in profiles if isinstance(x, dict)
+                                    and isinstance(x.get("id"), str)), None) if isinstance(profiles, list) else None
+                    if profile is not None:
+                        conn.call("import.apply", {"sessions": [{"key": t["transcript"], "spaceId": None,
+                                                                 "profileId": profile} for t in want]},
+                                  timeout=APPLY_TIMEOUT, write=True)
+            except realm_client.RealmError as err:
+                if not err.maybe_applied:
+                    # Nothing reached the engine: let the next pass try them.
+                    with self._lock:
+                        self._imported -= {t["transcript"] for t in want}
+            finally:
+                with self._lock:
+                    self._importing = False
+                    self._soon = True
+
+        self.spawn(work)
 
     # ── which agents ─────────────────────────────────────────────────────
 
@@ -675,6 +764,7 @@ class Agents(Provider):
                 "agent": label_of(s.get("agentKind")), "kind": clean(s.get("agentKind"), 40),
                 "mode": clean(s.get("permissionMode"), 30),
                 "environment": s.get("environmentId") if isinstance(s.get("environmentId"), str) else "",
+                "provider_sid": s.get("providerSessionId") if isinstance(s.get("providerSessionId"), str) else "",
                 "updated": s.get("updatedAt") if isinstance(s.get("updatedAt"), (int, float)) else 0}
 
     def folders(self, ctx: Context, listed: list[dict]) -> list[dict]:
@@ -736,72 +826,130 @@ class Agents(Provider):
 
     # ── drawing ──────────────────────────────────────────────────────────
 
+    def shape(self) -> str:
+        """What is drawn, as set by the last model. The daemon redraws the
+        surface whole when it changes (kyber-surfaces push), so a lane that
+        empties takes its rows with it rather than leaving blank space."""
+        return self._shape
+
     def layout(self) -> list[str]:
         p, c = self.p, self.cid
-        ids = ["s", "purpose", "note", "setup", "engine", "list", "head", "meta", "transcript", "ask", "allow",
-               "deny", "draft", "send", "interrupt", "fork", "kind", "missing", "folder", "new", "scan", "tabs", "taball", "status"]
-        return [
-            comp(c("s"), "Screen", title=self.title),
-            comp(c("purpose"), "Text", value=PURPOSE, tone="muted"),
-            comp(c("note"), "Text", value=Bind(p("note")), tone="muted"),
-            comp(c("setup"), "List", items=Bind(p("setup"))),
-            comp(c("engine"), "Events", caption="", items=Bind(p("engine")), action=f"{ACTION_PREFIX}engine",
-                 actionLabel=Bind(p("engineLabel"))),
-            comp(c("list"), "Events", caption=Bind(p("caption")), items=Bind(p("rows")),
-                 action=f"{ACTION_PREFIX}pick", actionLabel="Open"),
-            comp(c("head"), "Heading", text=Bind(p("head")), level=3),
-            comp(c("meta"), "Text", value=Bind(p("meta")), tone="muted"),
-            comp(c("transcript"), "Transcript", items=Bind(p("transcript"))),
-            comp(c("ask"), "Text", value=Bind(p("ask"))),
-            comp(c("allow"), "Events", caption="", items=Bind(p("allow")), action=f"{ACTION_PREFIX}allow",
-                 actionLabel="Allow once"),
-            comp(c("deny"), "Events", caption="", items=Bind(p("deny")), action=f"{ACTION_PREFIX}deny",
-                 actionLabel="Deny"),
-            comp(c("draft"), "Field", label="Message", placeholder=Bind(p("placeholder")), value=Bind(p("draft"))),
-            comp(c("send"), "Events", caption="", items=Bind(p("send")), action=f"{ACTION_PREFIX}send",
-                 actionLabel="Send"),
-            comp(c("interrupt"), "Events", caption="", items=Bind(p("interrupt")),
-                 action=f"{ACTION_PREFIX}interrupt", actionLabel="Interrupt"),
-            comp(c("fork"), "Events", caption="", items=Bind(p("fork")), action=f"{ACTION_PREFIX}fork",
-                 actionLabel="Fork"),
-            comp(c("kind"), "Select", label="Agent", options=Bind(p("kinds")), value=Bind(p("agent"))),
-            comp(c("missing"), "Text", value=Bind(p("missing")), tone="muted"),
-            comp(c("folder"), "Select", label="New session in", options=Bind(p("folders")), value=Bind(p("folder"))),
-            comp(c("new"), "Events", caption="", items=Bind(p("new")), action=f"{ACTION_PREFIX}new",
-                 actionLabel="Start"),
-            comp(c("scan"), "Events", caption=Bind(p("scanCaption")), items=Bind(p("scan")),
-                 action=f"{ACTION_PREFIX}scan", actionLabel=Bind(p("scanLabel"))),
-            comp(c("tabs"), "Events", caption="", items=Bind(p("tabs")), action=f"{ACTION_PREFIX}bring",
-                 actionLabel="Bring in"),
-            comp(c("taball"), "Events", caption="", items=Bind(p("taball")), action=f"{ACTION_PREFIX}bring",
-                 actionLabel=Bind(p("allLabel"))),
-            comp(c("status"), "Status", message=Bind(p("status")), level=Bind(p("level"))),
-            f"> {' '.join(c(i) for i in ids)}",
-            f"r {c('s')}",
-        ]
+        plan = self._plan
+        parts = [comp(c("s"), "Screen", title=self.title)]
+        order = []
+        if plan.get("note"):
+            parts.append(comp(c("note"), "Text", value=Bind(p("note")), tone="muted"))
+            order.append("note")
+        if plan.get("down"):
+            parts += [comp(c("setup"), "List", items=Bind(p("setup"))),
+                      comp(c("engine"), "Events", caption="", items=Bind(p("engine")),
+                           action=f"{ACTION_PREFIX}engine", actionLabel=Bind(p("engineLabel")))]
+            order += ["setup", "engine"]
+        if plan.get("tiles"):
+            parts.append(comp(c("tiles"), "Tiles", items=Bind(p("tiles")), counts=Bind(p("counts")),
+                              action=f"{ACTION_PREFIX}pick"))
+            order.append("tiles")
+        if plan.get("pinned"):
+            parts += [comp(c("head"), "Heading", text=Bind(p("head")), level=2),
+                      comp(c("meta"), "Text", value=Bind(p("meta")), tone="muted"),
+                      comp(c("transcript"), "Transcript", items=Bind(p("transcript")))]
+            order += ["head", "meta", "transcript"]
+            if plan.get("ask"):
+                parts.append(comp(c("ask"), "Text", value=Bind(p("ask"))))
+                order.append("ask")
+            parts += [comp(c("allow"), "Events", caption="", items=Bind(p("allow")),
+                           action=f"{ACTION_PREFIX}allow", actionLabel="Allow once"),
+                      comp(c("deny"), "Events", caption="", items=Bind(p("deny")), action=f"{ACTION_PREFIX}deny",
+                           actionLabel="Deny"),
+                      comp(c("draft"), "Field", label="Reply", placeholder=Bind(p("placeholder")),
+                           value=Bind(p("draft"))),
+                      comp(c("send"), "Events", caption="", items=Bind(p("send")), action=f"{ACTION_PREFIX}send",
+                           actionLabel="Send"),
+                      comp(c("interrupt"), "Events", caption="", items=Bind(p("interrupt")),
+                           action=f"{ACTION_PREFIX}interrupt", actionLabel="Stop"),
+                      comp(c("fork"), "Events", caption="", items=Bind(p("fork")), action=f"{ACTION_PREFIX}fork",
+                           actionLabel="Fork")]
+            order += ["allow", "deny", "draft", "send", "interrupt", "fork"]
+        if plan.get("start"):
+            parts += [comp(c("kinds"), "Chips", options=Bind(p("kinds")), value=Bind(p("agent")),
+                           action=f"{ACTION_PREFIX}agent"),
+                      comp(c("task"), "Field", label="New agent", placeholder="Ask an agent to…",
+                           value=Bind(p("task"))),
+                      comp(c("new"), "Events", caption="", items=Bind(p("new")), action=f"{ACTION_PREFIX}new",
+                           actionLabel="Start")]
+            order += ["kinds", "task", "new"]
+        parts.append(comp(c("status"), "Status", message=Bind(p("status")), level=Bind(p("level"))))
+        order.append("status")
+        return parts + [f"> {c('s')} " + " ".join(c(i) for i in order), f"r {c('s')}"]
 
     def initial(self) -> dict:
-        return {self.p("draft"): "", self.p("folder"): "", self.p("agent"): "",
-                self.p("status"): "Nothing pressed yet.", self.p("level"): "info"}
+        return {self.p("draft"): "", self.p("task"): "", self.p("agent"): "",
+                self.p("status"): "", self.p("level"): "info"}
 
     def blank(self) -> dict:
         p = self.p
-        return {p("setup"): [], p("engine"): [], p("engineLabel"): "Start the engine", p("caption"): "",
-                p("rows"): [], p("head"): "", p("meta"): "", p("transcript"): [], p("ask"): "", p("allow"): [],
-                p("deny"): [], p("send"): [], p("interrupt"): [], p("fork"): [], p("folders"): [], p("new"): [],
-                p("kinds"): [], p("missing"): "", p("scanCaption"): "", p("scan"): [],
-                p("scanLabel"): "Bring in my tabs", p("tabs"): [], p("taball"): [], p("allLabel"): "Bring in all",
+        return {p("note"): "", p("setup"): [], p("engine"): [], p("engineLabel"): "Start the engine", p("head"): "",
+                p("meta"): "", p("transcript"): [], p("ask"): "", p("allow"): [], p("deny"): [], p("send"): [],
+                p("interrupt"): [], p("fork"): [], p("new"): [], p("kinds"): [], p("tiles"): [],
+                p("counts"): {"needs": 0, "running": 0, "done": 0},
                 p("placeholder"): "Typed here, sent only by Send"}
 
     def model(self, data, error, values, ctx) -> dict:
         out = self._model(data, error, values, ctx)
         if error and data is not None and not data.get("down"):
-            # A refresh failed after the engine had answered before: the rows
+            # A refresh failed after the engine had answered before: the tiles
             # are the last good read, kept to be read (rule 7), but no verb is
             # offered on them, since the engine those verbs need isn't answering.
             for verb in VERBS:
                 out[self.p(verb)] = []
             out[self.p("placeholder")] = "The engine isn't answering. Nothing can be sent until it does."
+        self._replan(data, out)
+        return out
+
+    def _replan(self, data, out: dict) -> None:
+        """Set what layout() draws from what the model holds."""
+        p = self.p
+        plan: dict = {"note": bool(out.get(p("note")))}
+        if data is not None and data.get("down"):
+            plan["down"] = True
+        elif data is not None:
+            plan.update(tiles=bool(out.get(p("tiles"))), pinned=bool(out.get(p("head"))),
+                        ask=bool(out.get(p("ask"))), start=bool(out.get(p("kinds"))))
+        with self._lock:
+            self._plan = plan
+            self._shape = json.dumps(plan, sort_keys=True)
+
+    def tiles(self, data) -> list[dict]:
+        """Every agent worth a tile: realm sessions, with the live state of
+        the tab each came from, then live tabs not in the engine yet. What
+        needs the person first, then what is moving, then the newest done."""
+        now = float(data.get("now") or time.time())
+        tabs = {t["id"]: t for t in data.get("tabs") or [] if isinstance(t, dict) and t.get("id")}
+        out, used = [], set()
+        for r in data["rows"]:
+            tab = tabs.get(r.get("provider_sid") or "")
+            if tab:
+                used.add(tab["id"])
+            state = TAB_STATE.get(tab["state"], "done") if tab else REALM_STATE.get(r["status"], "done")
+            last = float(tab["last"]) if tab else (r["updated"] or 0) / 1000
+            if state == "done" and now - last > DONE_KEEP_S:
+                continue
+            detail = (tab.get("ask") or tab.get("detail")) if tab else \
+                {"needs": "Waiting on you", "failed": "Stopped with an error"}.get(state, "")
+            where = (tab.get("project") if tab else "") or r["folder"] or r["space"]
+            out.append({"id": r["id"], "state": state, "provider": r["kind"], "name": r["agent"],
+                        "title": r["title"], "detail": detail, "where": where, "last": last,
+                        "open_in": (tab or {}).get("open_in", "")})
+        for t in tabs.values():
+            if t["id"] in used or (TAB_STATE.get(t.get("state")) == "done"
+                                   and now - float(t.get("last") or 0) > DONE_KEEP_S):
+                continue
+            kind = "codex" if t.get("agent") == "codex" else "claude"
+            out.append({"id": f"tab:{t['id']}", "state": TAB_STATE.get(t.get("state"), "done"), "provider": kind,
+                        "name": label_of(kind), "title": t.get("title") or "", "detail": t.get("ask") or
+                        t.get("detail") or "", "where": t.get("project") or "", "last": float(t.get("last") or 0),
+                        "open_in": t.get("open_in", "")})
+        out.sort(key=lambda x: (TILE_ORDER.get(x["state"], 9), -x["last"]))
         return out
 
     def _model(self, data, error, values, ctx) -> dict:
@@ -824,61 +972,32 @@ class Agents(Provider):
             return out
         now = ctx.now()
         rows = data["rows"]
-        waiting = sum(r["status"] == "waiting_permission" for r in rows)
-        working = sum(r["status"] == "running" for r in rows)
-        failed = sum(r["status"] == "error" for r in rows)
-        counts = [f"{len(rows)} session{'s' if len(rows) != 1 else ''}", f"{waiting} waiting on you",
-                  f"{working} working"] + ([f"{failed} failed"] if failed else [])
-        empty = " · ".join(counts) if rows else "No sessions yet. Pick a folder below and start one."
-        if data.get("gone"):
-            empty = "The session you had open is gone from the engine. " + empty
-        out[p("note")] = note_for(data, error, empty, data.get("_at"))
-        out[p("caption")] = "Sessions, what needs you first" if rows else ""
         pinned = data.get("pinned")
-        out[p("rows")] = [{"id": r["id"], "accent": r["id"] == pinned,
-                           "time": " · ".join(x for x in (r["state"], ago(stamp(r["updated"]), now)) if x),
-                           "text": clean(f"{r['title']} · {r['space']}" + (f" · {r['folder']}" if r["folder"] else ""),
-                                         90)}
-                          for r in rows[:MAX_SESSIONS]]
-        if len(rows) > MAX_SESSIONS:
-            out[p("caption")] += f" · {len(rows) - MAX_SESSIONS} more not shown"
-        folders = data.get("folders") or []
-        out[p("folders")] = [f["label"] for f in folders]
-        agents = data.get("agents")
-        ready = [a for a in agents or [] if a["ready"]]
-        out[p("kinds")] = [a["label"] for a in ready]
-        if agents is None:
-            out[p("missing")] = (f"Couldn't ask the engine which agents are installed: {data['probe_error']}"
-                                 if data.get("probe_error") else "Checking which agents are installed…")
-        elif not ready:
-            out[p("missing")] = "No agent is ready to start. " + missing_words(agents)
-        else:
-            out[p("missing")] = missing_words(agents)
-        chosen = str(values.get(p("agent")) or "")
-        if ready and chosen not in out[p("kinds")]:
-            # Nothing picked yet, or the pick stopped being ready: the first
-            # ready agent, set here so the Select shows what Start will use.
-            chosen = ready[0]["label"]
-            out[p("agent")] = chosen
-        agent = next((a for a in ready if a["label"] == chosen), None)
-        picked = str(values.get(p("folder")) or "")
-        if agent and picked and picked in out[p("folders")]:
-            asks = ("asking before each tool" if agent["kind"] in ASKS_FIRST
-                    else f"{agent['label']} decides when it asks; Realm can't set its permission level")
-            out[p("new")] = [{"id": f"{agent['kind']}|{picked}", "text": clean(
-                f"A {agent['label']} session in {picked}, {asks} · if the folder has no space yet, makes one, "
-                "and Realm keeps a folder of its own for it under the engine's home · nothing is sent until "
-                "you Send", 300)}]
-        out.update(self.tabs_model(data, now))
+        tiles = self.tiles(data)
+        counts = {"needs": 0, "running": 0, "done": 0}
+        for t in tiles:
+            counts["needs" if t["state"] in ("needs", "failed") else t["state"]] += 1
+        out[p("counts")] = counts
+        out[p("tiles")] = [{
+            "id": t["id"], "state": t["state"], "provider": t["provider"], "name": t["name"],
+            "title": short_title(t["title"]), "detail": clean(t["detail"], DETAIL_CHARS),
+            "meta": " · ".join(x for x in (clean(t["where"], 24), ago(datetime.fromtimestamp(t["last"]).astimezone()
+                                                                       if t["last"] else None, now),
+                                           clean(t["open_in"], 16)) if x),
+            "selected": t["id"] == pinned} for t in tiles[:MAX_TILES]]
+        empty = "" if tiles else "No agents running."
+        if data.get("gone"):
+            empty = ("The agent you had open is gone from the engine. " + empty).strip()
+        out[p("note")] = note_for(data, error, empty, data.get("_at"))
+        self.start_model(data, values, out)
         shown = next((r for r in rows if r["id"] == pinned), None)
         if shown is None:
-            out[p("placeholder")] = "Start a session first"
             return out
         pending = data.get("pending") or {}
-        out[p("head")] = shown["title"]
+        out[p("head")] = short_title(shown["title"], 60)
         mode = (MODE_WORDS.get(shown["mode"], shown["mode"]) if shown["kind"] in ASKS_FIRST
                 else "decides when it asks")
-        out[p("meta")] = " · ".join(x for x in (shown["state"], shown["space"], shown["cwd"], shown["agent"], mode) if x)
+        out[p("meta")] = " · ".join(x for x in (shown["agent"], shown["state"], shown["cwd"], mode) if x)
         out[p("transcript")] = list(data.get("items") or [])
         if not data.get("caught_up"):
             out[p("meta")] += " · catching up on older turns"
@@ -913,60 +1032,25 @@ class Agents(Provider):
                                                            "original is untouched"}]
         return out
 
-    def offered(self, data) -> list[dict]:
-        """The tabs on the glass: the last read's newest candidates, less the
-        ones brought in since, each with the row id a press names."""
-        tabs = (data or {}).get("tabs") or {}
-        with self._lock:
-            brought = set(self._brought)
-        out = []
-        for cand in tabs.get("sessions") or []:
-            if cand["key"] in brought:
-                continue
-            out.append({**cand, "id": tab_id(cand["key"])})
-            if len(out) == TABS_SHOWN:
-                break
-        return out
-
-    def tabs_model(self, data, now: datetime) -> dict:
+    def start_model(self, data, values: dict, out: dict) -> None:
+        """New agent: a chip per installed agent, one field, one Start row.
+        An agent that isn't installed is never listed."""
         p = self.p
-        out: dict = {}
-        tabs = data.get("tabs")
-        if data.get("scan_pending"):
-            waited = int(data.get("scan_waited") or 0)
-            out[p("scanCaption")] = ("Reading your tabs in the background"
-                                     + (f", queued {waited // 60}m ago" if waited >= 60 else "") + "…")
-            return out
-        if tabs and tabs.get("error"):
-            out[p("scan")] = [{"id": "scan", "text": clean(f"The last read didn't finish: {tabs['error']} · "
-                                                           "reads again in the background", 200)}]
-            out[p("scanLabel")] = "Try again"
-            return out
-        if not tabs:
-            out[p("scan")] = [{"id": "scan", "accent": True, "text": "Reads your Claude Code, Codex and Cursor "
-                               "transcripts in the background · writes nothing · you pick what comes in"}]
-            return out
-        rows = self.offered(data)
-        when = stamp(tabs.get("scannedAt"))
-        found, worth = int(tabs.get("found") or 0), int(tabs.get("offered") or 0)
-        out[p("scan")] = [{"id": "scan", "text": f"Read {clock(when) if when else 'earlier'} · {found:,} "
-                                                 f"transcripts, {worth:,} worth bringing in · reads again"}]
-        out[p("scanLabel")] = "Read again"
-        out[p("scanCaption")] = "Your tabs, newest first" if rows else "Nothing new to bring in"
-        names = data.get("space_names") or {}
-        out[p("tabs")] = [{"id": t["id"], "text": clean(
-            f"{t.get('title') or 'Untitled'} · {Path(str(t.get('cwd') or '')).name or 'no folder'}", 80),
-            "time": " · ".join(x for x in (
-                SOURCE_LABELS.get(t.get("source"), clean(t.get("source"), 20)),
-                turns(t.get("messages")), ago(stamp(t.get("updatedAt")), now),
-                "" if t.get("cwdExists") else "folder gone, comes in as history",
-                f"into {names.get(t.get('spaceId')) or 'Imported'}") if x)} for t in rows]
-        if len(rows) > 1:
-            out[p("taball")] = [{"id": "all", "text": f"The {len(rows)} above · copies each transcript into the "
-                                                      "engine · the tabs themselves are untouched, and a send to "
-                                                      "one later carries on that conversation"}]
-            out[p("allLabel")] = f"Bring in all {len(rows)}"
-        return out
+        ready = [a for a in data.get("agents") or [] if a["ready"]]
+        out[p("kinds")] = [{"id": a["kind"], "label": a["label"]} for a in ready]
+        chosen = str(values.get(p("agent")) or "")
+        if ready and chosen not in [a["kind"] for a in ready]:
+            # Nothing picked yet, or the pick stopped being ready: the first
+            # ready agent, set here so the chips show what Start will use.
+            chosen = ready[0]["kind"]
+            out[p("agent")] = chosen
+        agent = next((a for a in ready if a["kind"] == chosen), None)
+        folders = data.get("folders") or []
+        task = str(values.get(p("task")) or "")
+        hit, words = where_to(task, folders, str(values.get(p("want")) or ""))
+        if agent and hit:
+            out[p("new")] = [{"id": start_id(agent["kind"], hit["label"], task), "accent": True,
+                              "text": clean(f"{agent['label']} in {Path(hit['path']).name}", 60)}]
 
     # ── presses ──────────────────────────────────────────────────────────
 
@@ -1013,8 +1097,20 @@ class Agents(Provider):
             raise realm_client.RealmProtocolError("sessions.get answered for another session")
         return got
 
+    def choose(self, ctx: Context, data, values: dict) -> Result:
+        """A chip press: which agent Start makes."""
+        kind = str(values.get("row") or "")
+        ready = [a for a in (data or {}).get("agents") or [] if a["ready"]]
+        agent = next((a for a in ready if a["kind"] == kind), None)
+        if agent is None:
+            return Result(False, "That agent isn't installed any more.", refetch=True)
+        return Result(True, "", updates={self.p("agent"): kind})
+
     def pick(self, ctx: Context, data, values: dict) -> Result:
         sid = str(values.get("row") or "")
+        if sid.startswith("tab:"):
+            return Result(False, "That tab is still coming into the engine. It opens here in a moment.",
+                          refetch=True)
         row = next((r for r in (data or {}).get("rows") or [] if r["id"] == sid), None)
         if row is None:
             return Result(False, "That session isn't on the list any more.")
@@ -1210,31 +1306,33 @@ class Agents(Provider):
                             "is untouched.", updates={self.p("level"): "success", self.p("draft"): ""}, refetch=True)
 
     def new(self, ctx: Context, data, values: dict) -> Result:
-        kind, _, label = str(values.get("row") or "").partition("|")
+        row = str(values.get("row") or "")
+        kind, _, rest = row.partition("|")
+        label, _, _ = rest.rpartition("|")
         bad = {self.p("level"): "error"}
         agent = next((a for a in (data or {}).get("agents") or [] if a["kind"] == kind and a["ready"]), None)
-        if agent is None or agent["label"] != str(values.get(self.p("agent")) or ""):
-            return Result(False, "That agent isn't the one picked, or isn't ready any more. Pick it again.",
+        if agent is None or kind != str(values.get(self.p("agent")) or ""):
+            return Result(False, "That agent isn't the one picked, or isn't installed any more.", updates=bad)
+        task = str(values.get(self.p("task")) or "")
+        hit, words = where_to(task, (data or {}).get("folders") or [], str(values.get(self.p("want")) or ""))
+        if hit is None or hit["label"] != label or start_id(kind, label, task) != row:
+            return Result(False, "The message or folder changed since that was drawn. Check it and press again.",
                           updates=bad)
-        folders = (data or {}).get("folders") or []
-        hit = next((f for f in folders if f["label"] == label), None)
-        if hit is None or label != str(values.get(self.p("folder")) or ""):
-            return Result(False, "That folder isn't the one picked any more. Pick it again.", updates=bad)
         path = Path(hit["path"])
         try:
             real = path.resolve(strict=True)
         except (OSError, RuntimeError):
             return Result(False, "That folder is gone.", updates=bad)
         if str(real) != hit["path"] or not real.is_dir():
-            return Result(False, "That folder moved since the list was read. Pick it again.", updates=bad)
+            return Result(False, "That folder moved since the list was read.", updates=bad)
         if not self._claim("new", hit["path"]):
-            return Result(False, "Already starting a session there.")
+            return Result(False, "Already starting an agent there.")
         try:
-            return self._new(ctx, hit, agent)
+            return self._new(ctx, hit, agent, words)
         finally:
             self._release("new", hit["path"])
 
-    def _new(self, ctx: Context, hit: dict, agent: dict) -> Result:
+    def _new(self, ctx: Context, hit: dict, agent: dict, words: str = "") -> Result:
         name = Path(hit["path"]).name or "folder"
         made: list[str] = []
 
@@ -1284,9 +1382,24 @@ class Agents(Provider):
                           updates={self.p("level"): "warning"}, refetch=True)
         with self._lock:
             self._repin(session["id"])
-        asks = " It asks before each tool." if agent["kind"] in ASKS_FIRST else ""
-        return Result(True, f"Started a {agent['label']} session in {name}.{asks} Type, then Send.",
-                      updates={self.p("level"): "success", self.p("draft"): ""}, refetch=True)
+        done = {self.p("level"): "success", self.p("draft"): "", self.p("task"): ""}
+        if not words:
+            return Result(True, f"Started {agent['label']} in {name}. Type to it, then Send.", updates=done,
+                          refetch=True)
+        try:
+            with self.connect(ctx) as conn:
+                conn.call("sessions.send", {"id": session["id"], "text": words}, timeout=CALL_TIMEOUT, write=True)
+        except realm_client.RealmError as err:
+            if err.maybe_applied:
+                return Result(False, f"Started {agent['label']} in {name}; the message may have gone. Check its "
+                                     "conversation before sending again.", updates={self.p("level"): "warning"},
+                              refetch=True)
+            return Result(False, f"Started {agent['label']} in {name}, but the message didn't go "
+                                 f"({rpc_words(err)}). It's still in the box.",
+                          updates={self.p("level"): "warning"}, refetch=True)
+        with self._lock:
+            self._busy = True
+        return Result(True, f"Started {agent['label']} in {name} on that.", updates=done, refetch=True)
 
     @staticmethod
     def home_for(conn, path: str) -> tuple[str, str]:
@@ -1309,76 +1422,6 @@ class Agents(Provider):
             if not half_made and not projects and space.get("name") == (Path(path).name or "folder"):
                 half_made = space["id"]
         return half_made, ""
-
-    def scan(self, ctx: Context, data, values: dict) -> Result:
-        """Queue a read of the agent CLIs' transcripts. Writes nothing in the
-        engine; the queue runs it when the Mac has room."""
-        if str(values.get("row") or "") != "scan" or not data or data.get("down"):
-            return Result(False, "The engine isn't up, so there's nothing to read into.", refetch=True)
-        if data.get("scan_pending"):
-            return Result(False, "Already reading your tabs. They show here when it's done.")
-        if not self._claim("scan", "scan"):
-            return Result(False, "Already queueing the read.")
-        try:
-            with self._lock:
-                # A second press before the refetch: the data it carries
-                # can't know the first one queued.
-                queued = bool(self._ticket) and self.clock() - self._asked_at < SCAN_STALE \
-                    and (data.get("tabs") or {}).get("ticket") != self._ticket
-            if queued:
-                return Result(False, "Already reading your tabs. They show here when it's done.")
-            ticket = os.urandom(6).hex()
-            argv = [sys.executable, str(JOBS), "submit", "--build", "--title", "Read agent tabs for the HUD", "--",
-                    sys.executable, str(IMPORTER), "scan", "--out", str(scan_path(ctx)), "--ticket", ticket,
-                    "--home", str(realm_home(ctx))]
-            code, _, _ = ctx.run(argv)
-            if code != 0:
-                return Result(False, f"Couldn't queue the read: the jobs queue answered exit {code}.",
-                              updates={self.p("level"): "error"})
-            with self._lock:
-                self._ticket, self._asked_at = ticket, self.clock()
-        finally:
-            self._release("scan", "scan")
-        return Result(True, "Reading your Claude Code, Codex and Cursor tabs in the background. They show here "
-                            "when it's done, and nothing comes in until you pick.", refetch=True)
-
-    def bring(self, ctx: Context, data, values: dict) -> Result:
-        """import.apply for the tab the press names, or every tab shown."""
-        row = str(values.get("row") or "")
-        bad = {self.p("level"): "error"}
-        shown = self.offered(data)
-        picked = shown if row == "all" else [t for t in shown if t["id"] == row]
-        if not picked or (row == "all" and len(shown) < 2):
-            return Result(False, "That tab isn't on the list any more. Nothing was brought in.", updates=bad)
-        if not self._claim("bring", "import"):
-            return Result(False, "Still bringing in the last ones.")
-        try:
-            params = {"sessions": [{"key": t["key"], "spaceId": t.get("spaceId"),
-                                    "profileId": None if t.get("spaceId") else t.get("profileId")} for t in picked]}
-            try:
-                with self.connect(ctx) as conn:
-                    got = conn.call("import.apply", params, timeout=APPLY_TIMEOUT, write=True)
-            except realm_client.RealmError as err:
-                if err.maybe_applied:
-                    return Result(False, "They may have come in; the engine didn't confirm. Check the list before "
-                                         "pressing again.", updates={self.p("level"): "warning"}, refetch=True)
-                return Result(False, f"Nothing brought in: {rpc_words(err)}", updates=bad, refetch=True)
-        finally:
-            self._release("bring", "import")
-        outcomes = [o for o in (got.get("sessions") if isinstance(got, dict) else None) or [] if isinstance(o, dict)]
-        done = {str(o.get("key")) for o in outcomes if o.get("state") == "imported"}
-        again = {str(o.get("key")) for o in outcomes if o.get("state") == "skipped"
-                 and o.get("detail") == "already imported"}
-        failed = len(picked) - len(done) - len(again)
-        with self._lock:
-            self._brought |= done | again
-        line = f"Brought in {len(done)} of {len(picked)}."
-        if again:
-            line += f" {len(again)} {'was' if len(again) == 1 else 'were'} already here."
-        if failed:
-            line += f" {failed} couldn't be read or had nowhere to go."
-        level = "success" if done and not failed else "warning" if done or again else "error"
-        return Result(bool(done or again), line, updates={self.p("level"): level}, refetch=True)
 
     def _run_engine(self, argv: list, env: dict, timeout: float) -> tuple[int, str, str]:
         try:

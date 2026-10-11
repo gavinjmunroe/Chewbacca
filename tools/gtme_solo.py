@@ -724,6 +724,10 @@ def auto_answer(client: str, plan: dict, first: dict, tid: str, heads: dict, frm
     answer = (plan.get("autosend") or {}).get("interested")
     if not answer or os.environ.get("CHEWBACCA_NO_SEND"):
         return False
+    # Only the person we emailed gets an unread answer. Anyone else on the
+    # thread (a cc, a forward, a look-alike From) waits for a human.
+    if frm.lower() != (first.get("email") or "").lower():
+        return False
     me = ((plan.get("sender") or {}).get("email") or "").lower()
     # The regex reader has no score, so confidence and threshold are pinned
     # equal: what decides is its re-read of the reply plus the draft checks.

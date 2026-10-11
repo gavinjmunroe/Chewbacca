@@ -319,6 +319,18 @@ class Solo(unittest.TestCase):
         self.run_cli("inbox", "--client", "Dana Co", "--json")
         self.assertEqual(len(self.sends()), before)
 
+    def test_a_yes_from_someone_we_never_emailed_waits_for_a_person(self):
+        self.ready()
+        self.run_cli("autosend", "--client", "Dana Co", "--interested", "Want to grab a time this week?")
+        b = self.batch()
+        self.run_cli("send", "--client", "Dana Co", "--batch", b["id"], "--gap", "0")
+        sent = self.sent_threads()
+        self.threads.write_text(json.dumps({
+            sent["maria@crumbcorner.test"]: [["stranger@elsewhere.test", "Yes, I'm interested. Let's chat."]]}))
+        before = len(self.sends())
+        self.run_cli("inbox", "--client", "Dana Co", "--json")
+        self.assertEqual(len(self.sends()), before)
+
     # share
 
     def git(self, cwd, *args):

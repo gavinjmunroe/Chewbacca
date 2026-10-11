@@ -25,7 +25,9 @@ trap 'echo "launch-guard: timed out classifying the command, refusing" >&2; exit
 #     pre-send gate receipt. Nothing there is parsed from text.
 #   - This hook no longer guesses whether a command launches. Any Bash command
 #     that mentions Clay, the sequencer or a campaign runs only if, split with
-#     shlex, it is exactly a known read with no shell syntax at all. Everything
+#     shlex, it is exactly a known read with no shell syntax at all, or (since
+#     2026-10-11) known reads joined by ; && || | where every piece passes on
+#     its own and nothing else is shell syntax. Everything
 #     else that mentions Clay is refused, including curl, python, node or
 #     osascript aimed at api.clay.com. What it cannot classify, it refuses.
 #
@@ -125,7 +127,11 @@ def out(verdict, why=""):
 
 
 # Quotes and backslashes removed, so "c\lay" and 'cl''ay' still count as Clay.
-if not MENTION.search(re.sub(r"[\"'\\]", "", cmd).lower()):
+# "force" is one segment of a pipeline: it has to be a known read whether or
+# not it names Clay, because `grep clay x | sh` runs Clay text in a segment
+# that never mentions it.
+force = len(sys.argv) > 3 and sys.argv[3] == "force"
+if not force and not MENTION.search(re.sub(r"[\"'\\]", "", cmd).lower()):
     out("skip")
 
 
@@ -179,6 +185,10 @@ if argv[0] == "CHEWBACCA_NO_SEND=1":
 # assembled, and no other env prefix in front.
 if "=" in argv[0] or not re.match(re.escape(argv[0]) + r"(\s|$)", cmd.lstrip()):
     out("refuse", "the command name is quoted, escaped or behind an env prefix")
+# A write through the front door runs alone, never piped or chained, so the
+# person approving it sees exactly the one command.
+if force and "--allow-writes" in argv:
+    out("refuse", "a Clay write runs on its own, never inside a pipeline or a chain")
 
 try:
     reg = json.load(open(os.path.join(kit, "library", "clay-api", "registry.json")))
@@ -320,6 +330,52 @@ if name == "chewie" and args[:2] == ["web", "goto"] and len(args) == 3 and re.fu
 out("refuse", f"{name} is not a known Clay read (curl, wget, python -c, node -e, osascript and the like are never allowed near Clay)")
 PY
 
+# Cuts a compound command into NUL-separated pieces at ; && || |, or prints
+# nothing (the whole command goes to the classifier as one) when it holds any
+# other shell syntax or has only one piece.
+SPLIT=""
+IFS= read -r -d '' SPLIT <<'PY' || true
+import re, sys
+raw = sys.stdin.read()
+# Harmless redirections, removed before anything else is judged.
+s = re.sub(r"(?<![^\s])(2>&1|[12]?>\s*/dev/null)(?=\s|$)", " ", raw)
+stripped = s != raw
+if re.search(r"[\n\r\x00-\x08\x0b-\x1f\x7f]", s):
+    sys.exit(0)
+parts, cur, i, n = [], [], 0, len(s)
+while i < n:
+    c = s[i]
+    if c == "'":
+        j = s.find("'", i + 1)
+        if j < 0:
+            sys.exit(0)
+        cur.append(s[i:j + 1]); i = j + 1; continue
+    if c == '"':
+        j = i + 1
+        while j < n and s[j] != '"':
+            if s[j] in "$`\\!":
+                sys.exit(0)
+            j += 1
+        if j >= n:
+            sys.exit(0)
+        cur.append(s[i:j + 1]); i = j + 1; continue
+    two = s[i:i + 2]
+    if two in ("&&", "||"):
+        parts.append("".join(cur)); cur = []; i += 2; continue
+    if c in ";|":
+        parts.append("".join(cur)); cur = []; i += 1; continue
+    if c in "&`$<>(){}[]*?~!#\\":
+        sys.exit(0)
+    cur.append(c); i += 1
+parts.append("".join(cur))
+parts = [p.strip() for p in parts]
+if (len(parts) < 2 and not stripped) or any(not p for p in parts):
+    sys.exit(0)
+# One piece per line: a newline anywhere in the command already returned above,
+# and bash drops NUL bytes from a command substitution.
+sys.stdout.write("\n".join(parts) + "\n")
+PY
+
 case "$tool" in
   Bash)
     # Receipts and the grade key are written only by their own tools, and the
@@ -353,8 +409,31 @@ case "$tool" in
     done
     command -v python3 >/dev/null 2>&1 || refuse "python3 is missing, so a command that mentions Clay can't be classified."
     cwd="$(printf '%s' "$payload" | jq -r '.cwd // empty' 2>/dev/null)"
-    verdict="$(printf '%s' "$cmd" | python3 -I -c "$CLASSIFY" "${kit:-/nonexistent}" "$cwd" 2>/dev/null)" ||
-      refuse "the command classifier failed, so a command that mentions Clay is refused."
+    # A read chained or piped with other reads ("grep -n x bin/chewbacca-clay |
+    # head") used to refuse for its shell syntax alone, which on 2026-10-11 cost
+    # an overnight session a dozen workarounds through scratch scripts the guard
+    # never sees. SPLIT cuts the command at ; && || | only when nothing else in
+    # it is shell syntax (no $, backticks, parentheses, braces, redirection
+    # other than to /dev/null, globs or newlines), and then every piece has to
+    # classify as a known read on its own, mention of Clay or not.
+    segments="$(printf '%s' "$cmd" | python3 -I -c "$SPLIT" 2>/dev/null)" || segments=""
+    if [ -n "$segments" ]; then
+      # `|| [ -n "$seg" ]`: the substitution strips the last newline, and
+      # without it the final piece was never read, so `grep clay x | sh` passed
+      # on the grep alone (caught by tests/test_launch_guard_grade.py).
+      while IFS= read -r seg || [ -n "$seg" ]; do
+        v="$(printf '%s' "$seg" | python3 -I -c "$CLASSIFY" "${kit:-/nonexistent}" "$cwd" force 2>/dev/null)" ||
+          refuse "the command classifier failed, so a command that mentions Clay is refused."
+        case "$v" in
+          allow*) ;;
+          *) verdict="$v"; break ;;
+        esac
+        verdict="allow"
+      done < <(printf '%s' "$segments")
+    else
+      verdict="$(printf '%s' "$cmd" | python3 -I -c "$CLASSIFY" "${kit:-/nonexistent}" "$cwd" 2>/dev/null)" ||
+        refuse "the command classifier failed, so a command that mentions Clay is refused."
+    fi
     case "$verdict" in
       allow*|skip*) exit 0 ;;
     esac
@@ -362,7 +441,8 @@ case "$tool" in
     cat >&2 <<MSG
 launch-guard: refusing a shell command that mentions Clay: ${why:-it could not be classified}.
 
-Near Clay a shell runs only known commands with no shell syntax: the kit's front
+Near Clay a shell runs only known commands, alone or joined by ; && || | with
+every piece a known read, and no other shell syntax: the kit's front
 door (chewbacca clay <op>, bin/chewbacca-clay <op>, node bin/chewbacca-clay <op>),
 chewbacca gtm/gtme/gtme-grade, clay CLI reads, git (not config), local read tools,
 counts.py/checksums.py, code-slop, slop-check, and test runners (python3 tests/x.py,

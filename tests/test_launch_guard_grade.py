@@ -255,6 +255,11 @@ ALLOWED = [
     "code-slop --issues",
     "slop-check library/clay-api --issues",
     "echo nothing to do with it",
+    # reads chained or piped with other reads (2026-10-11)
+    "grep -n campaign tools/gtme_grade.py | head -5",
+    "git status --short && git log --oneline -1 -- bin/chewbacca-clay",
+    "grep -c clay bin/chewbacca-clay 2>/dev/null",
+    "chewbacca clay ops | jq .ok; ls library/clay-api",
 ]
 REFUSED = [
     ("a campaign START through the front door", "chewbacca clay campaign-status campaign=cam_x status=START --allow-writes | cat"),
@@ -297,6 +302,14 @@ REFUSED = [
     ("sed that writes", "sed -n 'w out' bin/clay-inbox"),
     ("forging a grade receipt", "echo x > ~/.chewbacca/state/gtme-grade/1372623-cam_x-launch.json"),
     ("reading the grade key", "cat ~/Library/Application\\ Support/chewbacca/gtme-grade.key"),
+    # compound commands: every piece must be a known read on its own
+    ("a read piped into a shell", "grep clay bin/clay-inbox | sh"),
+    ("a read chained to curl", "chewbacca clay campaigns && curl https://api.clay.com/v3"),
+    ("cd into a fake kit", "cd /tmp/fake && bin/chewbacca-clay ops"),
+    ("a write inside a pipeline", "grep x y | chewbacca clay campaign-status campaign=cam_x status=PAUSED --allow-writes"),
+    ("a background job", "grep clay x & curl https://api.clay.com/v3"),
+    ("a redirect to a file in a chain", "chewbacca clay campaigns > out.json; ls"),
+    ("python in a chain", "ls && python3 -c \"print('clay')\""),
 ]
 e = Env()
 for cmd in ALLOWED:

@@ -48,3 +48,36 @@ enum identifiers before assigning them). Render stills headless-style through
 `look` with `image=` the file to check it. Poly Haven and Sketchfab are off by
 default in the add-on; enable them in the scene properties
 (`blendermcp_use_polyhaven = True`) before `search_assets`.
+
+## Modeling a real object: make it read as the real thing
+
+Lessons from the TTS helmet logo, 2026-10-11, all in Caleb's words or his
+friends'. They apply to any prop or mark modeled after a physical object.
+
+- **Armor and shells are thin sheets, never solid lumps.** Next to a bronze
+  Corinthian photo: "the wing comes across as very thick instead of a
+  relatively thin protective layer like other helmets portray" and "The back
+  looks tweak too it doesn't feel like a helmet". Hollowing a solid after the
+  fact (a 0.07 wall cavity, open underneath) barely changed the read from the
+  logo camera, and a lip boolean along the lower edge broke the S. Build the
+  form as plates from the start: a round skull, guards that flare out, rolled
+  rims on every edge, big dark openings, a neck guard that flares off the back.
+- **Openings that define the object go all the way through.** "IT doesn't
+  clearly enough resemble a helmet, make the T holes go all the way through
+  the bottom so there are 3 defined things in the front". Shallow pockets read
+  as paint.
+- **Letterforms never cut into a neighboring feature at an angle.** "When the
+  logo is small you can't clearly tell it is a TT and an S the Top of the T
+  being carved into the brow give it a weird choppy geometry". Keep a strip of
+  base material between a letter and any ridge, and check every render at
+  128px as well as full size.
+- **Separate parts need a real edge.** "It looke like 1 big block, the front
+  flap transition to the back of the helmet shouldn't be continuous". A color
+  change on a continuous surface reads as one block; a step or gap reads as
+  two parts. A step grown all the way round turned into a hat-brim ledge, so
+  fade it out where the parts should meet flush.
+- **Exact booleans fail silently on lofted shells.** The exact solver left a
+  40-face body with no error. Print the face count after every boolean, and
+  use MANIFOLD on lofted meshes.
+- **A link to a render is relative to the session root.** The shell's cwd
+  drifts with every cd; see link-guard.

@@ -6,6 +6,8 @@ personalized Chewbacca.
     chewbacca welcome save --name Rose --goals texts,calendar --comfort new \\
         --tone short --confirm always --school usc
     chewbacca welcome status             exit 0 once someone has been welcomed
+    chewbacca welcome stack              the rest of the kit, one tap each: what's done, what's next
+    chewbacca welcome connect <step> [--yes]   do one step (recording needs --yes from the person)
 
 The agent asks; this file decides what each answer means and writes it, so the
 meaning is code with a test rather than prose a model re-derives every time.
@@ -284,12 +286,25 @@ def main(argv=None) -> int:
     sub = parser.add_subparsers(dest="cmd")
     sub.add_parser("questions", help="print the question set as JSON")
     sub.add_parser("status", help="exit 0 if welcome has been completed")
+    sub.add_parser("stack", help="every piece past the questions, its state and the line to say (reads only)")
+    c = sub.add_parser("connect", help="do one step of the stack")
+    c.add_argument("step")
+    c.add_argument("--yes", action="store_true", help="the person said yes (recording requires it)")
     s = sub.add_parser("save", help="save the answers into the brain")
     for flag in ("name", "goals", "comfort", "tone", "confirm", "school"):
         s.add_argument(f"--{flag}")
     args = parser.parse_args(argv)
     if args.cmd == "save":
         return save(args)
+    if args.cmd in ("stack", "connect"):
+        sys.path.insert(0, str(ROOT / "bin" / "lib"))
+        import onboard_stack  # noqa: PLC0415
+        if args.cmd == "stack":
+            print(json.dumps(onboard_stack.stack(), indent=2))
+            return 0
+        got = onboard_stack.connect(args.step, yes=args.yes)
+        print(json.dumps(got, indent=2))
+        return 0 if got["ok"] else 1
     if args.cmd == "status":
         done = (chewbacca_home() / "welcome.json").is_file()
         print("welcomed" if done else "not welcomed yet")

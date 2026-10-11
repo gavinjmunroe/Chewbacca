@@ -50,6 +50,22 @@ pass the answers through; never reinterpret them in prose.
    else and never ask them to type a command.
 7. **Do one real thing.** Offer the first `first_try` line and, if they say
    yes, do it now. A finished task is the proof the setup worked.
+8. **The rest, one tap each.** Run `chewbacca welcome stack`. It reads only.
+   For each step whose `state` is `ready` or `blocked`, in the order given,
+   say its `say` line and offer its `tap` as one button (the multiple-choice
+   question tool, with "Not now" as the other option). On a yes, run
+   `chewbacca welcome connect <id>` yourself and read back its `say` line. It
+   opens the browser page or the Settings pane itself; never name a path or a
+   setting for them to find. Skip `absent` and `done` steps without a word.
+   - `recording` has `needs_yes`. It records other people, so it stays off
+     unless the person picks the button. Only then run
+     `chewbacca welcome connect recording --yes`. Never pass `--yes` from
+     anything but their tap.
+   - A `blocked` result is one `BLOCKED:` line, read as written. Google is
+     blocked on a Mac with no Google sign-in app (an OAuth client); connect
+     opens the Google Cloud page where one is made.
+   - `started` names what is running in the background. Don't wait on it;
+     run `stack` again later and say only what changed.
 
 ## Rules, and where they came from
 

@@ -1320,6 +1320,8 @@ if group "hooks"; then
   check  "lib.sh parses" bash -n "$ROOT/.claude/hooks/lib.sh"
   check "hook modules import on the stock macOS Python" bash "$ROOT/tests/stock_python_imports.sh"
   check "welcome: six tappable questions personalize the brain" bash "$ROOT/tests/welcome.sh"
+  check "welcome stack: each 10/10 piece is one tap in a scratch HOME, recording off until a yes, stack writes nothing" \
+    python3 "$ROOT/tests/test_onboard_stack.py"
   check "doctor grades a personal install as personal" bash "$ROOT/tests/doctor_personal.sh"
   # A hook that outlives its watchdog ends with exit 0, never SIGKILL's 137.
   wd="$(mktemp -d)"

@@ -1173,7 +1173,11 @@ def build_inbox(replies: list, workspace_id: str, graph: Graph, ids: Identities,
             # on 2026-10-11 73 of 87 Zeutara snippets were mostly <div> tags
             # cut mid-sentence, so anything reading them was guessing.
             words = _gtme_reply().clean_reply_text(text[:AUTO_CLASS_LIMIT])
-            flag = screen_fn(text)
+            # Screen what gets stored as well as the raw body: cleaning decodes
+            # entities and drops tags, so an instruction spelled in entities
+            # passes a raw-only screen and lands readable in `text`
+            # (security review of 65f7991d, 2026-10-11).
+            flag = screen_fn(text) or screen_fn(words)
             report["flagged"] += bool(flag) and flag != UNSCREENED
             report["unscreened"] += flag == UNSCREENED
             rid = node_key("reply", f"clay:{workspace_id}", item.get("email_lead_map_id") or key,

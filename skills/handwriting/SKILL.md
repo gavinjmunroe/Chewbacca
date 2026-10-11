@@ -89,3 +89,18 @@ Run the standard's final quality gate, then these, on a zoomed crop:
 - The paper has fibre, unevenness and a lit surface, not one colour.
 - Text drawn into an image is still copy: run the strings through
   `slop-check --stdin` first.
+
+## Reading someone else's handwriting
+
+Caleb asked on 2026-10-11 whether this skill means Chewbacca can read
+handwriting too ("Check the image sagar sent"). The scripts here only draw.
+Reading is the model looking at the photo, so say that plainly, then do it:
+
+- Find the photo through `people texts <name>`: an image shows as a blank
+  line at its timestamp. Then
+  `find ~/Library/Messages/Attachments -type f -newermt "<ts>" ! -newermt "<ts+10m>"`
+  and Read the file. Raw SQL on chat.db is refused by a hook.
+- Transcribe in the note's own order and words, dates and arrows included.
+- Name every word you guessed at (brand names and tiny scribbles are the
+  usual ones) instead of smoothing it into confident text.
+- Lead with the line that's about him.

@@ -523,6 +523,38 @@
           "type": "rowaction"
         }
       }
+    },
+    "Tiles": {
+      "family": "Data",
+      "props": {
+        "items": {
+          "type": "array",
+          "items": "object"
+        },
+        "counts": {
+          "type": "object"
+        },
+        "action": {
+          "type": "rowaction"
+        }
+      }
+    },
+    "Chips": {
+      "family": "Controls",
+      "props": {
+        "value": {
+          "type": "pointer",
+          "bindable": true,
+          "view": "draft"
+        },
+        "options": {
+          "type": "array",
+          "items": "json"
+        },
+        "action": {
+          "type": "rowaction"
+        }
+      }
     }
   },
   "shapes": {

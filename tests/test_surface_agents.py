@@ -707,6 +707,13 @@ def live_tabs_and_import(tmp: Path) -> None:
           ["/scanned/tab-wait.jsonl", "/scanned/tab-run.jsonl"]
           and all(x["profileId"] == "prof1" and x["spaceId"] is None for x in applied[0]["sessions"]), applied)
     check("a tab older than the import window stays out", "tab-old" not in json.dumps(applied))
+    check("a working tile says what it is doing, not the raw call", model["/agents/tiles"][1]["detail"] == "Editing realm.py",
+          model["/agents/tiles"][1])
+    check("tool calls read as phrases", [SA.doing(x) for x in (
+        "sed -n 1,2p bin/x; grep y", "Bash: git status --short", "for i in 1 2; do curl x; done", "Skill",
+        "Edit: /a/b/Glass.swift", "swift test --filter X", "")] == [
+        "Reading files", "Running git status", "Waiting on a loop", "Using a skill", "Editing Glass.swift",
+        "Running swift", ""])
     for sid, (_, tab) in zip(("s-imp1", "s-imp2"), [(0, tabs[0]), (1, tabs[1])]):
         pass
     for s in e.sessions.values():

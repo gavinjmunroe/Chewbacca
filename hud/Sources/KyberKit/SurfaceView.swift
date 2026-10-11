@@ -975,11 +975,15 @@ struct StatusView: View {
     }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Circle().fill(tint).frame(width: 6, height: 6)
-            Text(message).font(.system(size: 12))
+        // No message, nothing drawn: a lone dot under a panel read as a stray
+        // mark on the agents panel (screenshot, 2026-10-10).
+        if !message.isEmpty {
+            HStack(spacing: 6) {
+                Circle().fill(tint).frame(width: 6, height: 6)
+                Text(message).font(.system(size: 12))
+            }
+            .accessibilityElement(children: .combine)
         }
-        .accessibilityElement(children: .combine)
     }
 }
 

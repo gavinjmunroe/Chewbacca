@@ -458,6 +458,43 @@ def patch_text(diff) -> str:
     return "\n".join(out[:PATCH_LINES])
 
 
+# What a working tab's last tool call is doing, as a phrase. kyber-sessions
+# hands over the raw call ("sed -n 200,212p bin/site-gate; grep ...", "Edit:
+# /x/Glass.swift"), and a shell line on a tile read as plumbing on the glass
+# (screenshot, 2026-10-10).
+READS = {"sed", "cat", "grep", "rg", "head", "tail", "ls", "find", "wc", "less", "awk", "jq", "tree", "stat"}
+TOOL_WORDS = {"Read": "Reading", "Edit": "Editing", "MultiEdit": "Editing", "Write": "Writing", "Glob": "Finding files",
+              "Grep": "Searching the code", "WebFetch": "Reading a page", "WebSearch": "Searching the web",
+              "Skill": "Using a skill", "Task": "Running a subagent", "Agent": "Running a subagent",
+              "TodoWrite": "Planning", "NotebookEdit": "Editing a notebook"}
+
+
+def doing(detail: str) -> str:
+    """A tool call as what it is doing: "Editing Glass.swift", "Running swift"."""
+    text = clean(detail)
+    if not text:
+        return ""
+    head, sep, rest = text.partition(":")
+    if sep and head in TOOL_WORDS:
+        name = Path(rest.strip().split()[0]).name if rest.strip() else ""
+        return f"{TOOL_WORDS[head]} {name}".strip()
+    if text in TOOL_WORDS:
+        return TOOL_WORDS[text]
+    if sep and head == "Bash":
+        text = rest.strip()
+    word = Path(text.split()[0]).name if text.split() else ""
+    if word in READS:
+        return "Reading files"
+    if word in ("for", "while", "until", "sleep"):
+        return "Waiting on a loop"
+    if word == "git":
+        sub = text.split()[1] if len(text.split()) > 1 else ""
+        return f"Running git {sub}".strip()
+    if word == "curl":
+        return "Fetching a URL"
+    return f"Running {word}" if word else ""
+
+
 _KS = None
 
 
@@ -1003,7 +1040,8 @@ class Agents(Provider):
             last = float(tab["last"]) if tab else (r["updated"] or 0) / 1000
             if state == "done" and now - last > DONE_KEEP_S:
                 continue
-            detail = (tab.get("ask") or tab.get("detail")) if tab else \
+            detail = (tab.get("ask") or (doing(tab.get("detail")) if state == "running" else tab.get("detail"))) \
+                if tab else \
                 {"needs": "Waiting on you", "failed": "Stopped with an error"}.get(state, "")
             where = (tab.get("project") if tab else "") or r["folder"] or r["space"]
             out.append({"id": r["id"], "state": state, "provider": r["kind"], "name": r["agent"],
@@ -1015,8 +1053,9 @@ class Agents(Provider):
                 continue
             kind = "codex" if t.get("agent") == "codex" else "claude"
             out.append({"id": f"tab:{t['id']}", "state": TAB_STATE.get(t.get("state"), "done"), "provider": kind,
-                        "name": label_of(kind), "title": t.get("title") or "", "detail": t.get("ask") or
-                        t.get("detail") or "", "where": t.get("project") or "", "last": float(t.get("last") or 0),
+                        "name": label_of(kind), "title": t.get("title") or "", "detail": t.get("ask") or (
+                            doing(t.get("detail")) if t.get("state") == "working" else t.get("detail") or ""),
+                        "where": t.get("project") or "", "last": float(t.get("last") or 0),
                         "open_in": t.get("open_in", "")})
         out.sort(key=lambda x: (TILE_ORDER.get(x["state"], 9), -x["last"]))
         return out

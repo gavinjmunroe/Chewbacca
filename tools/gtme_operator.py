@@ -1435,7 +1435,30 @@ def actions_for(s: dict) -> list[dict]:
                         else "read only",
                 "why": f"gtm_sync table, {row.get('ran_at')}. Without it meetings read as missing, not zero.",
             })
+    report = next((r for r in s.get("rulings") or [] if WEEKLY_REPORT.search(str(r.get("rule") or ""))), None)
+    if report and local_weekday() == 4:
+        out.append({
+            "score": 85, "client": name, "kind": "report",
+            "do": f"Send this week's numbers, per {report.get('who') or 'the client'}'s standing ruling",
+            "command": f'chewbacca gtme report --client "{name}" --week',
+            "gate": "read; it writes the summary to Downloads, and sending it is yours",
+            "why": f"Ruling {report.get('date', '')}: {report.get('rule')}",
+        })
     return sorted(hold_against_rulings(out, s.get("rulings") or []), key=lambda x: -x["score"])
+
+
+# A ruling that asks for numbers on Fridays. The first client's "weekly
+# numbers summary every Friday" sat in its DECISIONS.json with nothing that
+# ever ran it (gtme-rules audit, 2026-10-11); now Friday's brief leads with it.
+WEEKLY_REPORT = re.compile(r"\b(every|each) friday\b", re.I)
+
+
+def local_weekday() -> int:
+    """Today's weekday on this Mac (Monday 0), or GTME_TODAY=YYYY-MM-DD's in tests."""
+    pinned = os.environ.get("GTME_TODAY")
+    if pinned:
+        return datetime.strptime(pinned, "%Y-%m-%d").weekday()
+    return datetime.now().weekday()
 
 
 # ── lessons tied to the person's own numbers ──────────────────────────────

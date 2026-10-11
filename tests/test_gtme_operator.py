@@ -632,6 +632,28 @@ class ReplyTextThroughGtmeReply(unittest.TestCase):
         self.assertEqual(g.lead_names(db, ["c1"]), {"pat.rivera@fund.example": "Pat Rivera"})
 
 
+class FridayNumbersRuling(unittest.TestCase):
+    def state(self):
+        return {"name": "Acme", "workspaces": ["1"], "unanswered": [], "campaigns": [], "drop": None,
+                "credits": None, "sync": [],
+                "rulings": [{"id": "friday", "rule": "Weekly numbers summary to the client lead every Friday.",
+                             "who": "Pat", "date": "2026-10-06"}]}
+
+    def kinds(self, day):
+        import gtme_operator as g
+        os.environ["GTME_TODAY"] = day
+        try:
+            return [a["kind"] for a in g.actions_for(self.state())]
+        finally:
+            del os.environ["GTME_TODAY"]
+
+    def test_friday_brief_leads_with_the_report(self):
+        self.assertEqual(self.kinds("2026-10-16"), ["report"])
+
+    def test_other_days_stay_quiet(self):
+        self.assertEqual(self.kinds("2026-10-14"), [])
+
+
 class Generalization(unittest.TestCase):
     def test_new_files_name_no_real_client(self):
         banned = re.compile(r"caleb|jonah|zeutara|1372623|maggie|graham|bluemodern|joelnewton", re.IGNORECASE)

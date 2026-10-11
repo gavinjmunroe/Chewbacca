@@ -155,16 +155,14 @@ def main() -> int:
 
     spawn = lambda argv, **kw: spawned.append(argv)
     got = si.perform(si.Command("task", "write the README", "lemma"), run=fake_run, spawn=spawn)
-    check("a task starts through kyber-sessions new, folder as --in",
-          got.ok and calls[-1][1:] == ["new", "write the README", "--in", "lemma"] and "lemma" in got.line, (calls, got))
-    check("and opens its card on the glass", spawned and spawned[-1][-2:] == ["--open", "abc"], spawned)
+    check("a spoken task only fills the New task box, never runs",
+          got.ok and calls[-1][1:] == ["draft", "in lemma: write the README"]
+          and not any(c[1:2] == ["new"] for c in calls) and "Press Start" in got.line, (calls, got))
+    check("and opens the panel to press it", spawned and spawned[-1][-1] == "serve", spawned)
     got = si.perform(si.Command("stop", "lemma"), run=fake_run, spawn=spawn)
     check("stop reaches only the glass's own run", got.ok and calls[-1][1:] == ["stop", "r1"], calls[-1])
     got = si.perform(si.Command("stop", "nothing"), run=fake_run, spawn=spawn)
     check("a stop that names no run says so", not got.ok and "No running agent" in got.line, got)
-    refused = lambda argv, **kw: Done(rc=1, err="No single folder is named nope. Say the full path.")
-    got = si.perform(si.Command("task", "x", "nope"), run=refused, spawn=spawn)
-    check("a refused start says why", not got.ok and "No single folder" in got.line, got)
     got = si.perform(si.Command("sessions", "open"), run=fake_run, spawn=spawn)
     check("show my agents starts the panel", got.ok and spawned[-1][-1] == "serve", spawned[-1])
     print("all passed" if not failed else f"{failed} failed")

@@ -13,7 +13,9 @@
     kyber-sessions tree <id> [--json]  what it touched plus one level, the tree beside its card
     kyber-sessions route "<words>"     which session a sentence is for (the hook for hud-listen)
     kyber-sessions new "<task>" [--in <folder>]  a new background run, no window ("in lemma: ..." works too)
+    kyber-sessions draft "<task>"      put a task in the panel's New task box; only Start runs it
     kyber-sessions stop <id>           stop a run the glass started (never a VS Code tab)
+    kyber-sessions watch               one look: toast what newly needs you (launchd runs it each minute)
     kyber-sessions serve [--open <id>] draw the sessions surface and answer its presses
 
 Sessions come from Claude Code's own transcripts (~/.claude/projects/*/*.jsonl,
@@ -770,6 +772,11 @@ STOP_GRACE_S = 5.0
 # where Caleb opens a fresh VS Code tab with nothing else in mind.
 DEFAULT_RUN_DIR = Path(os.environ.get("KYBER_RUN_DIR", str(HOME)))
 CODE_ROOT = Path(os.environ.get("KYBER_CODE_ROOT", str(HOME / "code")))
+# A task said or typed to hud-listen waits here for the Start press. Speech
+# is not consent: any audio near the mic (a video, a call) reaches the same
+# path, and a run gets Caleb's full permission mode, so a sentence only ever
+# fills the New task box (commit review, 2026-10-10).
+DRAFT_FILE = Path(os.environ.get("KYBER_DRAFT_FILE", str(HOME / ".bob" / "kyber-task-draft.json")))
 # "in chewbacca: fix the tests", "in lemma, write a README". The folder is a
 # single word or hyphenated name, matched against real folder names only.
 IN_FOLDER = re.compile(r"(?is)^\s*in\s+(?P<name>[A-Za-z0-9][A-Za-z0-9_.-]{0,63})\s*[:,]\s*(?P<task>.+)$")
@@ -858,6 +865,29 @@ def plan_task(words: str, folder: str = "") -> tuple[str, Path]:
     if not found:
         raise ValueError(f"No single folder is named {folder}. Say the full path.")
     return text, found
+
+
+def queue_draft(text: str) -> None:
+    """Put `text` in the New task box of the sessions panel, unsent."""
+    DRAFT_FILE.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(DRAFT_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    with os.fdopen(fd, "w") as f:
+        json.dump({"text": sessions_inbox.clean(text)[:sessions_inbox.MAX_CHARS], "t": time.time()}, f)
+
+
+def take_draft(now: float | None = None) -> str:
+    """The queued draft, once, and only a fresh one."""
+    now = time.time() if now is None else now
+    try:
+        got = json.loads(DRAFT_FILE.read_text())
+        DRAFT_FILE.unlink()
+    except (OSError, ValueError):
+        return ""
+    # A draft older than this was meant for a panel that never opened.
+    # Guessed, never measured.
+    if not isinstance(got, dict) or now - float(got.get("t") or 0) > 120:
+        return ""
+    return str(got.get("text") or "")
 
 
 def start_run(task: str, cwd: Path, spawn: Callable = subprocess.Popen) -> tuple[dict, object]:
@@ -1358,6 +1388,23 @@ class Serve:
         elif ev["name"] == "open" and ev.get("row"):
             self.open_item(s, str(ev["row"]))
 
+    def take_queued(self) -> None:
+        """A task said to the voice: into the New task box, never run."""
+        text = take_draft()
+        if not text:
+            return
+        if not self.list_open:
+            self.list_open, self.rows_drawn = True, ""
+            self.refresh_list()
+        try:
+            _, cwd = plan_task(text)
+            where = f"in {project_of(str(cwd))}"
+        except ValueError as err:
+            where = f"once fixed ({err})"
+        self.drafts["sessions"] = text
+        self.send(["@ sessions", f"d /sessions/draft {q(text)}"])
+        self.list_status(f"Press Start to run it {where}. Nothing runs until you do.", "info")
+
     def list_status(self, message: str, level: str) -> None:
         self.send(["@ sessions", f"d /sessions/status {json.dumps({'message': sessions_inbox.clean(message), 'level': level})}"])
 
@@ -1531,9 +1578,147 @@ class Serve:
             self.open_card(open_first)
         while not self.closed and (self.list_open or self.cards):
             self.refresh_list()
+            self.take_queued()
             self.refresh_cards()
             time.sleep(every)
         return 0
+
+
+# ── Telling Caleb when an agent needs him ────────────────────────────────────
+
+# What `watch` last saw, so it says each thing once. tab-rescue's own --new
+# state belongs to its hook, which reports into whichever tab is typed in
+# next; a person working only on the glass types in no tab, so this keeps
+# its own.
+WATCH_STATE = Path(os.environ.get("KYBER_WATCH_STATE", str(HOME / ".bob" / "kyber-watch.json")))
+HUD_BIN = Path(__file__).resolve().parent / "hud"
+TAB_RESCUE = Path(__file__).resolve().parent / "tab-rescue"
+# hud-watch holds itself to 2 an hour for due dates. An agent stopped on a
+# permission or a dead tab is more urgent than a due date, so 6; one toast
+# carries every alert found in the same minute. Guessed, never measured.
+ALERTS_PER_HOUR = 6
+# Long enough to read two lines, short enough that it is gone before it
+# covers what he is studying. Guessed, never measured.
+ALERT_LIFE_S = 12
+# How long an alert that could not be said yet (over the cap, display down)
+# is still worth saying. Two hours, so a full hourly cap cannot drop one.
+# Guessed, never measured.
+PENDING_S = 7200
+# Rule 11 of the surfaces skill: someone else may see the glass.
+ALERT_CHARS = 90
+
+
+def alert_text(text: str) -> str:
+    one = " ".join(sessions_inbox.clean(text).split())
+    return one if len(one) <= ALERT_CHARS else one[:ALERT_CHARS - 1].rstrip() + "\u2026"
+
+
+def alerts(rows: list[dict], dead: list[dict], prev: dict[str, str]) -> list[tuple[str, str]]:
+    """(key, line) for each thing that newly needs Caleb: a session that
+    started waiting on him, a run the glass started that finished or failed,
+    a tab that failed mid-turn, and a tab tab-rescue found dead on a usage
+    limit. `prev` is each session's state at the last look."""
+    out: list[tuple[str, str]] = []
+    dead_ids = {str(d.get("session") or "") for d in dead}
+    for r in rows:
+        sid, state, old = r["id"], r["state"], prev.get(r["id"])
+        name = r.get("project") or "an agent"
+        if state == "needs" and old != "needs":
+            out.append((f"needs:{sid}:{r.get('ask') or r.get('detail')}",
+                        alert_text(f"{name} needs u: {r.get('ask') or r.get('detail') or 'a permission'}")))
+        elif r.get("origin") == "Kyber" and old in ("working", "needs") and state in ("finished", "failed"):
+            word = "finished" if state == "finished" else "failed: " + (r.get("detail") or "see its card")
+            out.append((f"done:{sid}:{int(r.get('last') or 0)}", alert_text(f"{name} {word}")))
+        elif state == "failed" and old in ("working", "needs") and sid not in dead_ids:
+            out.append((f"failed:{sid}:{int(r.get('last') or 0)}",
+                        alert_text(f"{name} tab failed: {r.get('detail') or 'see its card'}")))
+    for d in dead:
+        cwd = str(d.get("cwd") or "")
+        name = project_of(cwd) if cwd else "a tab"
+        resets = f", resets {d['resets']}" if d.get("resets") else ""
+        out.append((f"dead:{d.get('session')}:{d.get('died_at')}",
+                    alert_text(f"{name} tab died on a usage limit{resets}. Fork it from ur agents to keep going")))
+    return out
+
+
+def alert_lines(lines: list[str]) -> list[str]:
+    body = [f"@ agent-alert at=top w=440 life={ALERT_LIFE_S}", 'c s Screen title="AGENTS"', "r s"]
+    ids = []
+    for i, line in enumerate(lines[:3]):
+        body.append(f"c a{i} Text value={q(line)}")
+        ids.append(f"a{i}")
+    if len(lines) > 3:
+        body.append(f"c more Text value={q(f'and {len(lines) - 3} more. Say show my agents')} tone=muted")
+        ids.append("more")
+    body.append("> s " + " ".join(ids))
+    return body
+
+
+def dead_tabs() -> list[dict]:
+    try:
+        done = subprocess.run([sys.executable, str(TAB_RESCUE), "--hours", "3", "--json"],
+                              capture_output=True, text=True, timeout=60)
+        got = json.loads(done.stdout or "[]")
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return []
+    return [d for d in got if isinstance(d, dict)] if isinstance(got, list) else []
+
+
+def watch_once(rows: list[dict] | None = None, dead: list[dict] | None = None, now: float | None = None,
+               draw: Callable[[list[str]], bool] | None = None) -> list[str]:
+    """One look. Returns the lines it put on the glass. The first look ever
+    only remembers, so turning this on never replays three days of history."""
+    now = time.time() if now is None else now
+    rows = discover(now) if rows is None else rows
+    dead = dead_tabs() if dead is None else dead
+    try:
+        state = json.loads(WATCH_STATE.read_text())
+    except (OSError, ValueError):
+        state = None
+    first = not isinstance(state, dict)
+    state = state if isinstance(state, dict) else {}
+    said: dict[str, float] = {k: v for k, v in (state.get("said") or {}).items() if now - float(v) < RECENT_S}
+    shown = [t for t in state.get("shown") or [] if now - float(t) < 3600]
+    # Alerts found but not yet said (over the cap, or no display) wait here,
+    # because the state they were found from has already moved on.
+    pending: dict[str, list] = {k: v for k, v in (state.get("pending") or {}).items()
+                                if isinstance(v, list) and len(v) == 2 and now - float(v[1]) < PENDING_S}
+    for k, line in alerts(rows, dead, state.get("states") or {}):
+        if k not in said and k not in pending:
+            pending[k] = [line, now]
+    lines: list[str] = []
+    if first:
+        said.update({k: now for k in pending})
+        pending = {}
+    elif pending and len(shown) < ALERTS_PER_HOUR:
+        lines = [v[0] for v in pending.values()]
+        if (draw or draw_alert)(alert_lines(lines)):
+            shown.append(now)
+            said.update({k: now for k in pending})
+            pending = {}
+        else:
+            lines = []
+    state = {"states": {r["id"]: r["state"] for r in rows}, "said": said, "shown": shown, "pending": pending}
+    try:
+        WATCH_STATE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = WATCH_STATE.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state))
+        tmp.replace(WATCH_STATE)
+    except OSError as err:
+        print(f"kyber-sessions: watch state: {err}", file=sys.stderr)
+    return lines
+
+
+def draw_alert(lines: list[str]) -> bool:
+    """A toast on the glass through `hud draw`. It never takes focus and
+    takes itself down; with no display running it is simply not said, and
+    `said` is left alone so the next look tries again."""
+    try:
+        done = subprocess.run([str(HUD_BIN), "draw"], input="\n".join(lines) + "\n", capture_output=True,
+                              text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return done.returncode == 0
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
@@ -1645,6 +1830,13 @@ def main(argv: list[str]) -> int:
         stopped, words = stop_run(hits[0]["id"])
         print(words)
         return 0 if stopped else 1
+    if cmd == "draft" and rest:
+        queue_draft(" ".join(rest))
+        return 0
+    if cmd == "watch":
+        for line in watch_once():
+            print(line)
+        return 0
     if cmd == "route" and rest:
         print(json.dumps(route(" ".join(rest))))
         return 0

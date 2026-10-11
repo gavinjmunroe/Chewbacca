@@ -853,6 +853,71 @@ def test_serve_start() -> None:
     srv.start_task("in nowhere-at-all: x")
     check("a refused Start says why on the list and keeps the draft",
           "No single folder" in json.dumps(sent[-1]) and srv.drafts["sessions"], sent[-1])
+    saved_file = ks.DRAFT_FILE
+    ks.DRAFT_FILE = Path(tempfile.mkdtemp()) / "draft.json"
+    started: list = []
+    saved_start = ks.start_run
+    ks.start_run = lambda *a, **k: started.append(a)
+    try:
+        ks.main(["draft", "summarize", "my", "week"])
+        srv.list_open = True
+        srv.rows_drawn = "x"
+        srv.take_queued()
+        check("a spoken task fills New task and says to press Start",
+              srv.drafts["sessions"] == "summarize my week" and "Press Start" in json.dumps(sent[-1]), sent[-1])
+        check("and nothing ran", started == [], started)
+        srv.take_queued()
+        check("a draft is taken once", srv.drafts["sessions"] == "summarize my week" and not ks.DRAFT_FILE.exists())
+        ks.queue_draft("old one")
+        check("a stale draft is dropped", ks.take_draft(now=ks.time.time() + 600) == "")
+    finally:
+        ks.DRAFT_FILE, ks.start_run = saved_file, saved_start
+
+
+def test_watch() -> None:
+    print("watch: says what newly needs him, once, and only on the glass")
+    saved = ks.WATCH_STATE
+    ks.WATCH_STATE = Path(tempfile.mkdtemp()) / "watch.json"
+    drawn: list = []
+    draw = lambda lines: drawn.append(lines) or True
+    row = lambda sid, state, **kw: {"id": sid, "state": state, "project": kw.pop("project", "lemma"), "last": 1, **kw}
+    try:
+        got = ks.watch_once([row("a", "needs", ask="Bash: rm -rf build")], [], now=100, draw=draw)
+        check("the first look only remembers", got == [] and drawn == [], drawn)
+        got = ks.watch_once([row("a", "needs", ask="Bash: rm -rf build")], [], now=160, draw=draw)
+        check("something already there is not news", got == [] and drawn == [], drawn)
+        rows = [row("a", "finished"), row("b", "working", origin="Kyber", project="tts"), row("c", "working")]
+        ks.watch_once(rows, [], now=200, draw=draw)
+        rows = [row("a", "needs", ask="Bash: git push"), row("b", "finished", origin="Kyber", project="tts"),
+                row("c", "failed", detail="API error 529")]
+        got = ks.watch_once(rows, [], now=260, draw=draw)
+        check("a new wait, a glass run done and a failed tab are all said",
+              len(got) == 3 and "needs u: Bash: git push" in got[0] and got[1] == "tts finished" and "failed" in got[2], got)
+        check("in one toast that takes itself down",
+              len(drawn) == 1 and "life=" in drawn[0][0] and drawn[0][0].startswith("@ agent-alert at=top"), drawn)
+        got = ks.watch_once(rows, [], now=320, draw=draw)
+        check("nothing is said twice", got == [] and len(drawn) == 1, got)
+        dead = [{"session": "d", "cwd": "/Users/x/code/chewbacca", "died_at": "t1", "resets": "Oct 16 at 7am"}]
+        rows2 = rows + [row("d", "failed", detail="You've hit your weekly limit")]
+        got = ks.watch_once(rows2, dead, now=380, draw=draw)
+        check("a dead tab says how to keep going, once, not also as failed",
+              len(got) == 1 and "usage limit" in got[0] and "Fork" in got[0], got)
+        long = ks.alerts([row("e", "needs", ask="x" * 400)], [], {})
+        check("an alert is one short line", len(long[0][1]) <= ks.ALERT_CHARS, long)
+        state = json.loads(ks.WATCH_STATE.read_text())
+        state["shown"] = [380.0] * ks.ALERTS_PER_HOUR
+        ks.WATCH_STATE.write_text(json.dumps(state))
+        got = ks.watch_once([row("f", "needs", ask="Edit")], [], now=400, draw=draw)
+        check("past the hourly cap nothing is drawn", got == [], got)
+        got = ks.watch_once([row("f", "needs", ask="Edit")], [], now=400 + 3600, draw=draw)
+        check("and the held alert is said once the hour clears", len(got) == 1, got)
+        failing = lambda lines: False
+        ks.watch_once([row("g", "finished")], [], now=8000, draw=failing)
+        got = ks.watch_once([row("g", "needs", ask="Write")], [], now=8060, draw=failing)
+        got = ks.watch_once([row("g", "needs", ask="Write")], [], now=8120, draw=draw)
+        check("with no display, it is said when the display is back", len(got) == 1, got)
+    finally:
+        ks.WATCH_STATE = saved
 
 
 def main() -> int:
@@ -876,6 +941,7 @@ def main() -> int:
     test_origin()
     test_runs()
     test_serve_start()
+    test_watch()
     print("all passed" if not FAILED else f"{FAILED} failed")
     return 1 if FAILED else 0
 

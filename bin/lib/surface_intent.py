@@ -165,7 +165,8 @@ SESSIONS_CLOSE = re.compile(
     r"^(?:close|hide|take down|dismiss|get rid of) (?:my |the )?(?:agents|tabs|sessions|agent sessions|claude sessions)"
     r"(?: surface| panel)?$")
 # "Start an agent in lemma to write the README", "new task: summarize my
-# week", "spin up a tab to fix the nav". Read off the raw sentence, because
+# week", "spin up a tab to fix the nav": the task lands in the panel's New
+# task box and only a Start press runs it. Read off the raw sentence, because
 # _norm drops the punctuation and digits a task is made of.
 TASK = re.compile(
     r"(?is)^(?:(?:ok(?:ay)?|hey|kyber|so),?\s+)*"
@@ -321,21 +322,17 @@ def sessions_verb(command: Command, run=subprocess.run, spawn=subprocess.Popen) 
             return Outcome(True, "Your agents are up.")
         return Outcome(False, "The agents panel didn't open.")
     if command.verb == "task":
-        argv = [str(KYBER_SESSIONS), "new", command.name] + (["--in", command.arg] if command.arg else [])
+        # A sentence is not a press. Any audio near the mic reaches this path,
+        # and a run gets the full permission mode, so the task only fills the
+        # New task box; Start on the glass runs it (commit review, 2026-10-10).
+        text = f"in {command.arg}: {command.name}" if command.arg else command.name
         try:
-            done = run(argv, capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
+            done = run([str(KYBER_SESSIONS), "draft", text], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
         except (OSError, subprocess.TimeoutExpired):
-            return Outcome(False, "The agent didn't start.")
-        if done.returncode != 0:
-            why = (done.stderr or "").strip().splitlines()
-            return Outcome(False, why[-1] if why else "The agent didn't start.")
-        try:
-            started = json.loads(done.stdout)
-        except ValueError:
-            started = {}
-        where = Path(str(started.get("cwd") or "")).name or "the background"
-        open_sessions(str(started.get("session") or ""), spawn=spawn)
-        return Outcome(True, f"Started in {where}. It's on the glass.")
+            return Outcome(False, "The agents panel didn't answer.")
+        if done.returncode != 0 or not open_sessions(spawn=spawn):
+            return Outcome(False, "The agents panel didn't open.")
+        return Outcome(True, "It's in the New task box. Press Start to run it.")
     # stop: the one live glass run whose folder or task names it
     try:
         listed = run([str(KYBER_SESSIONS), "--json"], capture_output=True, text=True, timeout=CLI_TIMEOUT_S)
